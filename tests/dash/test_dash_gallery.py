@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from asks.dash_ports import answering  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
+from support.factory_index import seed_beads  # noqa: E402
 from support.look_world import looks, world  # noqa: E402
 from support.narrow import must  # noqa: E402
 from support.repos import write_repos  # noqa: E402
@@ -116,8 +117,8 @@ class Api(Case):
             with mock.patch.dict(os.environ, env):
                 dash = make_dash(home=home)
             dash.env.ports = answering(lambda repo: fake, home)
-            with mock.patch.object(dash.env.ports, "store", lambda repo: fake), \
-                    mock.patch.object(dash.beads, "beads_of", lambda r: [{"id": "tl-look", "labels": [gallery.LABEL]}]):
+            seed_beads(dash.env.config, repo, fake.beads.values(), NOW)
+            with mock.patch.object(dash.env.ports, "store", lambda repo: fake):
                 path, items = dash.looks.look_items(loop_key(repo))
                 assert (Path(path).name, [i["status"] for i in items]) == ("demo", ["open"])
                 assert dash.looks.look_shot(loop_key(repo), "docs/evidence/tl-1/m1.png") == (PNG, "image/png")

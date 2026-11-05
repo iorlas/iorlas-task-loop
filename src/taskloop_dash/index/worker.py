@@ -3,15 +3,18 @@
 import logging
 import threading
 import time
+from collections.abc import Callable
 
 from taskloop.contracts import factorydb
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.ports import Beads
 from taskloop_dash.index import Indexer
 
 
 class Worker:
-    def __init__(self, cfg: ConfigDir) -> None:
+    def __init__(self, cfg: ConfigDir, repos: Callable[[], list[str]], store_of: Callable[[str], Beads]) -> None:
         self.cfg = cfg
+        self.repos, self.store_of = repos, store_of
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self._run, name="factory-index", daemon=True)
 
@@ -25,7 +28,7 @@ class Worker:
     def _run(self) -> None:
         while not self.stop.is_set():
             try:
-                with Indexer(self.cfg) as index:
+                with Indexer(self.cfg, repos=self.repos, store_of=self.store_of) as index:
                     while not self.stop.is_set():
                         started = time.monotonic()
                         index.pass_once()

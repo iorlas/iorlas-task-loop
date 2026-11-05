@@ -1,4 +1,4 @@
-"""Schema v2 and conservative SQLite opens for the shared factory journal.
+"""Schema v3 and conservative SQLite opens for the shared factory journal.
 
 Connections belong to their caller's thread. Writers use begin_immediate for
 short transactions; unavailable databases are reported as visible errors.
@@ -18,14 +18,15 @@ from sqlite_store import SqlValue
 from taskloop.contracts import factorymigrate, factoryprune, wire
 from taskloop.contracts.run import RunManifest
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 DDL = """
 CREATE TABLE source (path TEXT PRIMARY KEY, family TEXT NOT NULL,
   dev INTEGER, ino INTEGER, size INTEGER, mtime_ns INTEGER, head TEXT,
   offset INTEGER NOT NULL DEFAULT 0, seen REAL NOT NULL, error TEXT);
 CREATE TABLE bead (id TEXT PRIMARY KEY, repo_key TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', status TEXT NOT NULL,
   priority INTEGER, type TEXT NOT NULL DEFAULT '', parent TEXT NOT NULL DEFAULT '', assignee TEXT NOT NULL DEFAULT '',
-  labels TEXT NOT NULL DEFAULT '[]', updated REAL NOT NULL, fetched REAL NOT NULL, rev INTEGER NOT NULL DEFAULT 0);
+  labels TEXT NOT NULL DEFAULT '[]', updated REAL NOT NULL, fetched REAL NOT NULL, rev INTEGER NOT NULL DEFAULT 0,
+  body TEXT NOT NULL DEFAULT '{}');
 CREATE INDEX bead_status ON bead(repo_key, status);
 CREATE TABLE run (run TEXT PRIMARY KEY, repo TEXT NOT NULL, repo_key TEXT NOT NULL, bead TEXT NOT NULL DEFAULT '',
   mode TEXT NOT NULL DEFAULT '', owner TEXT, session TEXT, loop TEXT, worktree TEXT, branch TEXT, sha TEXT,

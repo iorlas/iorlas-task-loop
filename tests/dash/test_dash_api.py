@@ -16,7 +16,7 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.dashlogs import RunScript, T, bead
-from support.factory_index import ingest
+from support.factory_index import ingest, seed_beads
 from support.fakes import FakeBeadStore
 from support.narrow import must
 from support.repos import write_repos
@@ -28,6 +28,7 @@ from taskloop.contracts.dashcost import CostPage
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus
 from taskloop.contracts.ids import BeadId, loop_key
 from taskloop.contracts.locator import RunLocator
+from taskloop.contracts.ports import BeadQuery
 from taskloop.contracts.stores import AskStore
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
@@ -83,6 +84,7 @@ class ApiFixture(Case):
         self.store.put(bead("s-a", f"slot {socket.gethostname()} a", "in_progress", labels=["slot"], assignee="tl-a"))
         self.now = NOW
         ports = Ports(store=lambda repo: self.store)
+        seed_beads(self.cfg, self.repo, self.store.find(BeadQuery(include_closed=True)), self.now)
         ingest(self.cfg, self.now)
         self.dash = Dash(Env(config=self.cfg, home=root, ports=ports, clock=lambda: self.now, version="v-test",
                              host=socket.gethostname()))

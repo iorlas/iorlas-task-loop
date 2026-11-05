@@ -6,7 +6,7 @@ from pathlib import Path
 import support.paths  # noqa: F401
 from support.case import Case
 from support.dashlogs import RunScript, T, bead
-from support.factory_index import ingest
+from support.factory_index import ingest, seed_beads
 from support.fakes import FakeBeadStore
 from support.narrow import must
 from support.repos import write_repos
@@ -35,6 +35,7 @@ class RepoIdentity(Case):
             repo.mkdir(parents=True)
             store = self.stores[str(repo)] = FakeBeadStore()
             store.put(bead("b-1", status="in_progress"))
+            seed_beads(cfg, repo, store.beads.values(), T + 200)
             script = RunScript("b-1", stamp=f"run{n}", at=n * 100).step("write", 10, 100 + n, text=f"repo {n}", end=False)
             script.write(cfg)
             manifest(cfg, script.name, "b-1", script.t0, repo=str(repo), state=RunState.RUNNING)

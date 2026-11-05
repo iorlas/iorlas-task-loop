@@ -14,7 +14,7 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.dashlogs import RunScript, T, bead
-from support.factory_index import ingest
+from support.factory_index import ingest, seed_beads
 from support.fakes import FakeBeadStore
 from support.repos import write_repos
 
@@ -70,6 +70,7 @@ class Golden(Case):
             run.write(self.cfg, repo=str(self.repo))
             self.paths[name] = str(self.cfg / "engine" / f"{run.name}.jsonl")
         ports = Ports(store=lambda r: self.store)
+        seed_beads(self.cfg, self.repo, self.store.beads.values(), NOW)
         ingest(self.cfg, NOW)
         self.dash = Dash(Env(config=self.cfg, home=root, ports=ports, clock=lambda: NOW, version="v-test", host="devbox"))
 

@@ -43,10 +43,6 @@ class ConfigDir:
     def dash_pid(self) -> Path:
         return self.root / "dash.pid"
 
-    def beads_cache(self, repo: str) -> Path:
-        """The dashboard's last read of a repo's beads (readers/beads.py), named by a hash of the repo path."""
-        return self.root / "cache" / f"beads-{hashlib.sha1(repo.encode('utf-8')).hexdigest()[:12]}.json"
-
     def engine_log(self, run: RunId | str) -> Path:
         return self.engine_dir() / (f"{run}.jsonl")
 

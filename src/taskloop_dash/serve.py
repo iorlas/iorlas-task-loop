@@ -70,7 +70,7 @@ def start(env: Env, here: Path, process: ProcessEnv,
 
 def main(env: Env, here: Path, process: ProcessEnv, argv: Sequence[str] | None = None) -> None:
     servers, addrs, port, dash = start(env, here, process, argv)
-    worker = Worker(env.config)
+    worker = Worker(env.config, dash.records.repos, env.ports.store)
     worker.start()
     for s in servers[1:]:
         threading.Thread(target=s.serve_forever, daemon=True).start()

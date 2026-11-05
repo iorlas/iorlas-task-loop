@@ -102,9 +102,11 @@ What this deletes, by file family (`tl/contracts/paths.py:22-234` names 40 of th
 `checkpoints/B.json`, `B.call.json`, `parks/`, `pauses/`, `reexec/`, `landed/`, `followups/`, `loop/K.<pid>.json`, `K.command.json`,
 `K-rest.json`, `K.jsonl`, `loop/K/exits.jsonl`, `died-<pid>.json`, `slots/K/*.json`, `seq`, `*.setup`, `slot-state/`, `worktrees/K/`,
 `events.jsonl`, `traces.jsonl`, `sessions/`, `repos.json`, `shared/`, `pinned.json`, `bad-versions.json`, `releases/`, `reflect-*.json`,
-`handoff/`, `decisions/`, `asks/`, `ask-ledger.jsonl`, `snapshots/`, `usage-history.jsonl`, `dash.json`, `dash.pid`, `cache/beads-*.json`,
+`handoff/`, `decisions/`, `asks/`, `ask-ledger.jsonl`, `snapshots/`, `usage-history.jsonl`, `dash.json`, `dash.pid`,
 `check-durations/`, `results/` (becomes the `pass` table). The `.task/engine.lock` and `.task/engine.take` in the writer's tree
 (`paths.py:276-281`) go with them: the `attempt` row with `(host, pid, start_id)` is the lock.
+
+The former dashboard bead file cache has already moved to the index-owned `bead` table in factory.db (DB-BEADS).
 
 Why SQLite and not "a locked JsonStore": the zoom-out review's Z04 proposes `JsonStore.update(fn, expected_revision)` under a per-document
 flock as a first step. That keeps 40 families and adds a lock to each. One table with a `rev` column is less code than one locked store

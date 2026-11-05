@@ -53,7 +53,7 @@ class FactoryDbTest(Case):
 
     def test_fresh_open_creates_schema_and_pragmas(self):
         con = self.rw()
-        assert con.execute("PRAGMA user_version").fetchone() == (2,)
+        assert con.execute("PRAGMA user_version").fetchone() == (3,)
         assert con.execute("PRAGMA journal_mode").fetchone() == ("wal",)
         assert con.execute("PRAGMA synchronous").fetchone() == (1,)
         assert con.execute("PRAGMA busy_timeout").fetchone() == (5000,)
@@ -82,9 +82,9 @@ class FactoryDbTest(Case):
     def test_wrong_version_is_rejected_without_replacing_it(self):
         con = self.rw()
         con.execute("PRAGMA user_version=99")
-        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v2.*update it"):
+        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v3.*update it"):
             factorydb.open_rw(self.path)
-        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v2.*update it"):
+        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v3.*update it"):
             factorydb.open_ro(self.path)
         assert con.execute("PRAGMA user_version").fetchone() == (99,)
 
@@ -103,7 +103,7 @@ class FactoryDbTest(Case):
     def test_reader_names_schema_errors_as_database_unavailable(self):
         con = self.rw()
         con.execute("PRAGMA user_version=99")
-        expected = "database unavailable: factory.db is schema v99, this code knows v2: update it"
+        expected = "database unavailable: factory.db is schema v99, this code knows v3: update it"
         assert factorydb.database_error(self.path, 1) == expected
         assert factorydb.run_rows(self.path, 1) == ([], expected)
 
@@ -193,7 +193,8 @@ class FactoryDbTest(Case):
         assert factorydb.OWNERS["bead"] == "index"
         assert con.execute("PRAGMA foreign_key_list(bead)").fetchall() == []
         con.execute("INSERT INTO bead(id,repo_key,status,updated,fetched) VALUES ('opaque.id','repo','open',1,2)")
-        assert con.execute("SELECT title,priority,type,parent,assignee,labels,rev FROM bead").fetchone() == ("", None, "", "", "", "[]", 0)
+        assert con.execute("SELECT title,priority,type,parent,assignee,labels,rev,body FROM bead").fetchone() == (
+            "", None, "", "", "", "[]", 0, "{}")
         with factorydb.begin_immediate(con):
             assert factorydb.cas_update(con, "bead", "id", "opaque.id", 0, parent="unrelated", status="closed")
             assert not factorydb.cas_update(con, "bead", "id", "opaque.id", 0, status="stale")

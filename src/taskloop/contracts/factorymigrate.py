@@ -1,8 +1,15 @@
 """Application-owned upgrade steps for authoritative factory.db schemas."""
 
+import sqlite3
+
 from sqlite_store import Step
+
+
+def bead_body(con: sqlite3.Connection) -> None:
+    """Keep v2 rows while adding the dashboard's complete bead projection."""
+    con.execute("ALTER TABLE bead ADD COLUMN body TEXT NOT NULL DEFAULT '{}'")
 
 # Keys are the version upgraded FROM. For the next schema change, add its step
 # here, increment factorydb.SCHEMA_VERSION, and update factorydb.DDL for new DBs.
 # Steps use execute, never executescript or commit: the whole chain is atomic.
-STEPS: dict[int, Step] = {}
+STEPS: dict[int, Step] = {2: bead_body}

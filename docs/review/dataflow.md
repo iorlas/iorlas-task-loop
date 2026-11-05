@@ -58,7 +58,7 @@ C/
 |-- sessions/<session>.json          session index
 |-- shared/K.json                   cross-bead notes / flakes
 |-- handoff/K.md                    bounded session-compaction handoff
-|-- cache/beads-<repo-path-hash>.json dashboard shared bead cache
+|-- factory.db                      index-owned bd projection in bead; marker and health in kv
 |-- repos.json, host.json            registered repositories / host resources
 |-- pinned.json, bad-versions.json   owner version override / refused installs
 |-- releases/last.json, suite-green.json, suite-*.log

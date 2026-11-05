@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 from support.dashlogs import bead
+from support.factory_index import seed_beads
 from support.narrow import must
 
 from dash import test_dash_api as fixtures
@@ -26,6 +27,7 @@ class FastReads(fixtures.ApiFixture):
 
     def test_cached_listing_supplies_floor_slots_and_profile_is_cached(self):
         self.store.put(bead("s-z", f"slot {socket.gethostname()} z", labels=["slot"]))
+        seed_beads(self.cfg, self.repo, self.store.beads.values(), self.now)
         with patch.object(self.dash.env.ports, "profile_error", return_value="") as profile:
             snap = self.dash.reads.snapshot()
             assert "z" in [s.id for s in snap.slots]

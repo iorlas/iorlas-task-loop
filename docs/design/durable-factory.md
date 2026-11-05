@@ -1017,7 +1017,7 @@ an atomic replace and no lock (`tl/contracts/stores.py:80-121`).
 | `results/<repo>/<sha1(check)>/<digest>.json`, `results/<repo>/base-red/` | every check runner through `RunMemo._put`; keeps 8 per check by listing and deleting (`tl/app/checks/cache.py:64`, `:217-226`) | land gate, push judge, `tl green`, dash | 80 KB | write one file per key, prune by delete | – |
 | `check-durations/<repo>.json` | check runner (per c4-task-loop.md:192) | planner | tiny | rewrite | – |
 | `snapshots/delegate.status.json`, `usage-history.jsonl` | `tl lanes`, `tl usage`, loop chores (`tl/app/wire/lanes.py:31`; prune under a lock `stores.py:191-214`) | dash (`world.py:147`) | 8 KB | rewrite / append | – |
-| `cache/beads-<hash>.json` | dash (`dash/readers/beads.py:71-78`) | dash, `tl ask list` (`beads.py:50-57`) | 1.6 MB | rewrite (a cache) | – |
+| `factory.db`: `bead`, `kv` (`beads.<repo_key>`) | dashboard indexer | dashboard readers | full typed listing | marker-gated projection; bd authoritative | DB-BEADS replaces the former JSON cache |
 | `repos.json` | every `trail.event` registers its repo under a lock (`trail.py:39`, `:53-60`; `stores.py:497-524`) | dash 4× per snapshot (H6) | 4 KB | locked rewrite | – |
 | `locks/*.lock` + `.holder` | every process (flock) | dash holder hints (`tl/adapters/locks.py:46-55`) | 44 KB | flock | – |
 | `releases/last.json`, `suite-green.json`, `suite-*.log`; `release/` clone | `dev/release.py`, `dev/suite.py` (`tl/contracts/paths.py:211-219`) | `tl status`, the release cache | **209 MB** (`releases/`), 45 MB (`release/`) | write once | – |
@@ -1091,7 +1091,7 @@ CREATE TABLE kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL, stamp TEX
 | `run` | `runs/<run>/manifest.json` and the dashboard's per-log `run_of` state fold (`dash/readers/runlogs.py:21-23`); outcome, end time and sha are state facts, while `traces.jsonl` stays a file |
 | `attempt`, `lease(kind='run')` | the manifest's `heartbeat/pid/host/attempts` and `runlife.is_lost` (`tl/contracts/runlife.py:49-52`) |
 | `step` | the checkpoint cursor and `done.json` (journal slice S4, Part A section 4) |
-| `bead` | Thin cached projection from bd, stamped by `.beads/last-touched`; delete `cache/beads-*.json`. The indexer alone writes it; bd/Dolt remains authoritative |
+| `bead` | One cached bd listing per repo, gated by `.beads/last-touched`; full dashboard row in `body`, marker and health in `kv`. The indexer alone writes it; bd/Dolt remains authoritative. No file cache |
 | `wait` (Part A) | `parks/`, `pauses/`, `reexec/`, `runs/<run>/pause.json`, `reexec.json` |
 | `signal` (Part A) | `runs/<run>/owner-request.json` + lock |
 | `effect` (Part A) | `checkpoint.applied`, `landed/<bead>.json`, `followups/<bead>.json` |
@@ -1116,8 +1116,8 @@ CREATE TABLE kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL, stamp TEX
 4. **The indexer** runs in the back end, outside the read-only dashboard. Temporary state-ingest slices write rows with
    `writer='index'` only while their family's `authority` is `'files'`; an upsert by natural key makes a restarted pass harmless.
    They extract state facts, never archive log records, and each slice is deleted when its state family flips.
-   Separately, the indexer remains the only writer of `bead`: a thin cached projection refreshed by `.beads/last-touched`,
-   with descriptions and comments loaded ad hoc from bd. Delete `cache/beads-*.json` and its writer/reader; no second cache path.
+   Separately, the indexer remains the only writer of `bead`: one cached bd listing gated by `.beads/last-touched`,
+   with the full typed dashboard row in `body`. Show and comments remain live bd calls; there is no file cache or second read path.
    Recovery through `tl doctor --reindex` restores backups and extracts state facts from retained engine logs; it does not revive deleted family readers.
 5. **Layer rule.** The dashboard may import only `taskloop.contracts` (`.importlinter:94-106`). So the schema, the row codecs and the
    read queries go in `tl/contracts/factorydb.py` (sqlite3 is not on that layer's ban list, `tl/contracts/ruff.toml`). The engine's writer
@@ -1238,7 +1238,7 @@ timing `version_of` alone. With no Mac copy, the same script over `dev/dash_fixt
 One read transaction per request, about 10 queries for the snapshot and about 4 for a bead. The World type does not change, and the views
 in `dash/views/` stay pure. `readers/` uses `DbWorlds` as the only run-state reader; the production state-file reader is deleted.
 A missing or broken DB shows the visible error page with `tl doctor --reindex`. Bead lists read the indexer-owned `bead` projection;
-`cache/beads-*.json` and its writer/reader are deleted. Descriptions and comments load ad hoc from bd.
+The former file cache and its writer/reader are deleted. The full typed list row is stored as JSON in `body`; show and comments stay live bd calls.
 
 **Change counter (DB-WAKE, tl-zej9.17).** Hold one read-only connection across polls and compare `PRAGMA data_version` only on
 that connection: its values are not comparable across connections. End each short read transaction before the next check so the held
@@ -1282,14 +1282,14 @@ Report the retained recovery window: `tl doctor --reindex` cannot reconstruct ev
 | DB-11 | Backup, check, rebuild | nightly `VACUUM INTO` keeps 7; checks detect damage; missing or truncated `factory.db` shows the visible error page; `tl doctor --reindex` rebuilds from valid backups and retained engine logs, then probes pending effects; dashboard never reads files to recover run state |
 | DB-12 | Refuse WAL on a foreign filesystem | a DB where `journal_mode` is not `wal` (or on nfs/cifs/fuse) is never written; dashboard shows the error page |
 | DB-13 | Flip one state-file family (template, one bead per family) | pre-flip fixture parity passes in release CI; engine writes state rows only; old state-file writer, state-ingest slice and state reader are deleted in the same release; affected pre-flip runs are finished or explicitly migrated; no compatibility phase; retained log files and ADRs keep their own paths |
-| tl-zej9.16 DB-BEADS | Thin cached beads projection | `bead(id, title, status, priority, labels, parent, stamp)` is refreshed by `.beads/last-touched`; indexer is its only writer; bd/Dolt remains authoritative; descriptions/comments load ad hoc; delete `cache/beads-*.json` and its writer/reader |
+| tl-zej9.16 DB-BEADS | One cached beads projection | Schema v3 adds `bead.body` for the full typed dashboard row; `.beads/last-touched`, success time and error live in `kv`; indexer alone lists bd; bd/Dolt remains authoritative; show/comments stay live; no file cache |
 | tl-zej9.17 DB-WAKE | Change counter on a held read-only connection | compare `PRAGMA data_version` on the same connection across polls, with no held read transaction; unchanged polls reuse the snapshot/304 with zero rebuilds, external commits trigger a rebuild; no rebuild every 2.5 s; file-view stamps and log cursors invalidate independently |
 | tl-zej9.18 DB-PRUNE | Age retention for state and log files | short transactions prune eligible terminal run/step/attempt state older than `KEEP_DAYS` in dependency order; live/resumable state and unresolved effects/asks/waits/leases survive; low-volume and rotated log files expire by age through their owner; ADR files survive; retained recovery window is explicit |
 
 ### Decision record 2026-11-03 (Denis, supersedes any "two files" wording above or in relayed designs)
 - END STATE: one state-only `factory.db` per host. The dashboard reads it read-only through views defined in `tl/contracts/factorydb.py`; the engine and `tl VERB` calls write authoritative state, and the back-end indexer alone writes cached bead projections. `delegate.db` stays delegate's own file (contract-only sharing).
 - No `index.db`, ever. The phase-0 indexer writes derived rows INTO `factory.db` with `writer='index'` for families whose `family.authority` is `files`; when a family flips to `db` its indexer slice is deleted. There is no ETL pipeline and no second file to migrate later.
-- Bead ids are plain text references (no foreign key to bd; bd/Dolt stays the authority). A thin projection is cached (`bead(id, title, status, priority, labels, parent, stamp)`, stamp = `.beads/last-touched`); the indexer is its only writer; delete `cache/beads-*.json`. Description and comments load ad hoc from bd (DB-BEADS, tl-zej9.16).
+- Bead ids remain plain text references to bd (no foreign key; bd/Dolt stays authoritative). The indexer alone writes one listing per repo into `bead`, with the full dashboard row in `body` and marker/health in `kv`. The storage primary key qualifies bd's id by repo; `body.id` preserves the external id. Show and comments stay live bd calls (DB-BEADS, tl-zej9.16).
 - One factory instance per host; the DB is never shared between hosts; a remote PC runs its own instance and DB, managed by the workflow. Tailscale/multi-host is out of scope. DBOS: not adopted (spike 2026-11-02, wt/SPIKE/REVIEW.md).
 - Back end owns state (tl verbs + factory.db); the DB views are the read API; dashboard writes only by spawning `tl VERB --expect ID` (no HTTP API on the engine, no write path from the dashboard process into factory.db).
 - Order unchanged: finish_run (one first-wins outcome writer) first, then DB-03 schema, indexer, reads, per-family direct writes (switch is per family, not global).
@@ -1331,6 +1331,6 @@ console, transcripts, traces, the loop log and exits log stay files behind one r
 owners. There is no `event` archive table. ADRs/decisions stay files and have no table. SINGLE PATH applies per data family:
 DB for migrated state, the reader API for retained log files, files for ADRs; a log read never substitutes for missing DB state.
 
-DB-BEADS (tl-zej9.16) adds the thin indexer-owned bead cache and deletes `cache/beads-*.json`. DB-WAKE (tl-zej9.17) compares
+DB-BEADS (tl-zej9.16) stores one indexer-owned bead projection only in factory.db, with no file cache. DB-WAKE (tl-zej9.17) compares
 `PRAGMA data_version` on a held connection instead of rebuilding every 2.5 s. DB-PRUNE (tl-zej9.18) applies age retention to
 eligible state and separately to log files, preserving live/resumable state and unresolved effect receipts.

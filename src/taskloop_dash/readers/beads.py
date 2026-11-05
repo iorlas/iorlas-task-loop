@@ -1,21 +1,16 @@
-"""bd, read only: a repo's beads (listed once, kept until bd's marker moves), one bead with its comments, and the repo a link means."""
+"""DB bead listings, live bd drawer details, and registered repository identities."""
 
-import json
 import os
-import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from pathlib import Path
-from typing import Any
 
-from taskloop.contracts.bead import Bead as TypedBead
+from taskloop.contracts import beadrows
+from taskloop.contracts.beadrows import row_of
 from taskloop.contracts.ids import BeadId, loop_key
-from taskloop.contracts.ports import BdFailure, BeadQuery
+from taskloop.contracts.ports import BdFailure
 from taskloop_dash.env import Bead, Env
 from taskloop_dash.readers.records import Records
 
-MAX_AGE = 60  # fallback lifetime when bd's last-touched marker is unavailable
-SHARED = 30  # seconds another process's listing on disk is good enough
 DETAIL_TTL = 15  # seconds a successful comments read is kept
 
 
@@ -26,14 +21,6 @@ class Observation:
     rows: list[Bead] = field(default_factory=list)
     ok_at: float | None = None
     error: str = ""
-    marker: int | None = None
-
-
-def row_of(b: TypedBead) -> dict[str, Any]:
-    """A typed bead as the dash's views read it: a dict, its dependencies as {id, type, title, status}."""
-    out = b.to_dict()
-    out["dependencies"] = [{k: d.get(k) for k in ("id", "type", "title", "status")} for d in out["dependencies"]]
-    return out
 
 
 def basename(path: object) -> str:
@@ -46,73 +33,33 @@ class Beads:
         self.observed: dict[str, Observation] = {}
 
     @staticmethod
-    def _key(repo: str, bead: str = "") -> str:
-        return f"comments:{repo}:{bead}" if bead else "beads:" + repo
+    def _key(repo: str, bead: str) -> str:
+        return f"comments:{repo}:{bead}"
 
     def health(self, repo: str, bead: str = "") -> tuple[float | None, str]:
+        if not bead:
+            _, ok_at, error = beadrows.read_repo(self.env.config.factory_db(), loop_key(repo))
+            return ok_at, error
         obs = self.observed.get(self._key(repo, bead), Observation())
         return obs.ok_at, obs.error
 
-    def _observe(self, key: str, read: Callable[[], list[Bead]], marker: int | None = None) -> Observation:
+    def _observe(self, key: str, read: Callable[[], list[Bead]]) -> Observation:
         try:
             rows = read()
         except (BdFailure, ValueError, OSError) as exc:
             obs = replace(self.observed.get(key, Observation()), error=str(exc) or type(exc).__name__)
             self.env.ttl.drop(key)
         else:
-            obs = Observation(rows, self.env.clock(), marker=marker)
+            obs = Observation(rows, self.env.clock())
             self.env.ttl.put(key, obs)
         self.observed[key] = obs
         return obs
 
     def beads_of(self, repo: str) -> list[Bead]:
-        """Keep successful listings until last-touched moves; without a marker, re-read every minute."""
-        env, clock = self.env, self.env.clock
-        try:
-            m = (Path(repo) / ".beads" / "last-touched").stat().st_mtime_ns
-        except OSError:
-            m = None
-        key = self._key(repo)
-        hit = env.ttl.peek(key)
-        if hit:
-            obs: Observation = hit[1]
-            age = clock() - obs.ok_at if obs.ok_at is not None else MAX_AGE
-            if obs.marker == m and (m is not None or age < MAX_AGE):
-                return obs.rows
-        disk = env.config.beads_cache(repo)
-        if key not in self.observed:  # reuse another process's success, preserving its original observation time
-            shared = self._shared(disk, m)
-            if shared is not None:
-                self.observed[key] = shared
-                env.ttl.put(key, shared)
-                return shared.rows
-        obs = self._observe(key, lambda: self._list(repo), m)
-        if not obs.error:
-            self._share(disk, obs)
-        return obs.rows
+        """The indexer's only cached listing; this server read never calls bd."""
+        return beadrows.read_repo(self.env.config.factory_db(), loop_key(repo))[0]
 
-    def _list(self, repo: str) -> list[Bead]:
-        return [row_of(b) for b in self.env.ports.store(repo).find(BeadQuery(include_closed=True))]
-
-    def _shared(self, disk: Path, marker: int | None) -> Observation | None:
-        try:
-            c = json.loads(disk.read_text(encoding="utf-8"))
-            if isinstance(c, dict) and self.env.clock() - float(c["t"]) < SHARED and c.get("m") == marker and isinstance(c["beads"], list):
-                return Observation(c["beads"], float(c["t"]), marker=marker)
-        except (OSError, ValueError, KeyError, TypeError):
-            pass
-        return None
-
-    def _share(self, disk: Path, obs: Observation) -> None:
-        try:
-            disk.parent.mkdir(parents=True, exist_ok=True)
-            tmp = disk.with_name(f"{disk.name}.{os.getpid()}.{threading.get_ident()}.tmp")
-            tmp.write_text(json.dumps({"t": obs.ok_at, "m": obs.marker, "beads": obs.rows}), encoding="utf-8")
-            os.replace(str(tmp), str(disk))
-        except OSError:
-            pass
-
-    def show(self, repo: str, bead: BeadId) -> dict[str, Any] | None:
+    def show(self, repo: str, bead: BeadId) -> dict[str, object] | None:
         """One bead as a row, None when bd does not know it or cannot answer."""
         try:
             found = self.env.ports.store(repo).show(bead) if repo else None
@@ -120,7 +67,7 @@ class Beads:
             return None
         return row_of(found) if found else None
 
-    def comments(self, repo: str, bead: BeadId) -> list[dict[str, Any]]:
+    def comments(self, repo: str, bead: BeadId) -> list[dict[str, object]]:
         key = self._key(repo, bead)
         hit = self.env.ttl.peek(key)
         if hit and self.env.clock() - hit[0] < DETAIL_TTL:

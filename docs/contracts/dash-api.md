@@ -40,7 +40,8 @@ The token is read before building, so a commit during a build wakes the next req
 absent/zero/invalid waits, unavailable watchers, and database health errors use the ordinary snapshot path and its existing TTL.
 Negative waits mean zero; waits above 25 seconds are capped. `If-None-Match` alone does not hold a request.
 The page sends `wait=20` after loading and retries 50 ms after completion; bead, live and cost keep their separate read patterns.
-Non-DB inputs (bd cache and transcripts) cannot wake this counter until DB-BEADS lands. The timeout bounds each wait,
+Bead listings and bd health arrive through the indexer's factory.db projection, so their commits wake this counter.
+Non-DB inputs (transcripts and delegate live lines) cannot wake it. The timeout bounds each wait,
 but an idle 304 does not refresh those inputs: they become visible on a subsequent DB wake or ordinary snapshot refresh.
 
 Verbs: `answer`, `look`, `stick`, `prune`, `cause`, `ack`, `park`, `stop`, `note`. The dashboard runs no process: a write is an

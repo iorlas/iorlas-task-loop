@@ -305,7 +305,8 @@ is kept. Crash = what a `kill -9` of a writer leaves. `C` = `~/.config/task-loop
 | `bin/tl`, `githooks/*` (14) | sh scripts | **every SessionStart of every install, `tl hooks install`; last writer wins** (`tl/app/wire/hook.py:34-77`) | git, every shim user | until rewritten | a shim pointing at a removed install: every push refused, or (exception path) allowed |
 | `pinned.json`, `bad-versions.json` | `Pin`, `BadVersions` | owner; loop on crash-after-move | loop, engine reload, delegate resolve | until cleared | fine |
 | `releases/`, `suite-green.json`, `release/<hash>/` clone | JSON, a clone | release, suite | status, release | long | a clone mid-release: next release resets it |
-| `dash.pid`, `dash.json`, `cache/beads-*.json` | JSON | **launcher and server** | launcher | process life | stale pid; old rows served on bd failure (dashboard-backend F01) |
+| `dash.pid`, `dash.json` | JSON | **launcher and server** | launcher | process life | stale pid |
+| `factory.db`: `bead`, `kv` (`beads.<repo_key>`) | cached bd projection and health | dashboard indexer | dashboard readers | marker-gated | old rows and success time retained on bd failure |
 | `host.json`, `.task-loop.json` | `HostResources`; profile (no version, `tl/contracts/config.py:248`) | owner by hand; profile also by any commit, including a writer's | loop, checks; profile: loop, engine, **push judge reads the working tree** | long | n/a |
 
 ### delegate (`D` unless noted)

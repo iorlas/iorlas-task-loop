@@ -1,7 +1,6 @@
-"""The v2 World read from this machine: registered repos, bd (the cached list, typed), the slot beads, the loops' state files, the
+"""The v2 World read from this machine: registered repos, the database bead projection, slot beads, loops' state files, the
 owner-look items, the engine logs as typed runs, the live asks, the ask ledger, the decisions in force, the landed runs and
-delegate's lane status. Read only; a poll never runs bd: the bead list and the look items
-keep to their TTLs."""
+delegate's lane status. Read only; bead listings come only from factory.db."""
 
 from collections import Counter
 from collections.abc import Sequence

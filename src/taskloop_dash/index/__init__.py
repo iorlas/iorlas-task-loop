@@ -9,9 +9,11 @@ from taskloop.contracts import factorydb, log, runfacts
 from taskloop.contracts.askrows import import_legacy_asks
 from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.ports import Beads
 from taskloop.contracts.receiptrows import import_legacy_receipts
 from taskloop.contracts.runrows import import_legacy
 from taskloop_dash import jsonl
+from taskloop_dash.index.beadpass import BeadPass
 from taskloop_dash.index.facts import Facts, append, decode, encode
 
 HEAD = 256  # digest the first min(256, previous size) bytes before trusting a cursor
@@ -22,12 +24,14 @@ class Indexer:
     """One caller thread, one writable connection; every chunk commits source and facts together."""
 
     def __init__(self, cfg: ConfigDir, *, clock: Callable[[], float] = time.time,
+                 repos: Callable[[], list[str]] = list, store_of: Callable[[str], Beads] | None = None,
                  on_record: Callable[[log.EngineLog | None], None] = lambda _: None) -> None:
         self.cfg, self.clock, self.on_record = cfg, clock, on_record
         self.locator = RunLocator(cfg)
         self.pending: list[RunBundle] | None = None
         self.found: set[str] = set()
         self.con = self._open()
+        self.beads = BeadPass(repos, store_of) if store_of is not None else None
 
     def _open(self):
         path = self.cfg.factory_db()
@@ -54,6 +58,8 @@ class Indexer:
     def pass_once(self, budget: float = 0.2) -> bool:
         """Carry unfinished logs/scans to the next pass; return whether this sweep finished."""
         deadline = time.monotonic() + budget
+        if self.beads is not None:
+            self.beads.pass_once(self.con, self.clock())
         return self._pass(deadline)
 
     def _pass(self, deadline: float) -> bool:
@@ -142,7 +148,8 @@ class Indexer:
         runfacts.write_facts(self.con, bundle.run, encode(facts), offset)
 
 
-def reindex(cfg: ConfigDir, *, clock: Callable[[], float] = time.time) -> dict[str, float | int]:
+def reindex(cfg: ConfigDir, *, clock: Callable[[], float] = time.time,
+            repos: Callable[[], list[str]] = list, store_of: Callable[[str], Beads] | None = None) -> dict[str, float | int]:
     """The doctor's full rebuild uses exactly the worker's ingestion code."""
     start = time.monotonic()
     import_legacy(cfg)
@@ -152,6 +159,10 @@ def reindex(cfg: ConfigDir, *, clock: Callable[[], float] = time.time) -> dict[s
         index.clear()
         while not index.pass_once():
             pass
+        if store_of is not None:
+            beads = BeadPass(repos, store_of)
+            for repo in repos():
+                beads.refresh(index.con, repo, clock(), force=True)
         counts = {"run": runfacts.count_runs(index.con),
                   "source": index.con.execute("SELECT count(*) FROM source WHERE family='run'").fetchone()[0]}
     return {**counts, "seconds": time.monotonic() - start}

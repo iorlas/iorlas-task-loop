@@ -13,6 +13,7 @@ from taskloop.adapters.ident import hostname
 from taskloop.app.doctor import profiles
 from taskloop.app.launch import dash_ports
 from taskloop.contracts.env import Env as ProcessEnv
+from taskloop_dash.index import Indexer
 from taskloop_dash.views import snapshot
 
 
@@ -24,13 +25,14 @@ class SnapshotStamps(fixtures.ApiFixture):
         ref.write_text("a" * 40 + "\n")
         (self.repo / ".task-loop.json").write_text('{"engine":{"base":"main"}}')
         marker = self.repo / ".beads" / "last-touched"
-        marker.parent.mkdir()
+        marker.parent.mkdir(exist_ok=True)
         marker.touch()
         return ref, marker
 
     def test_full_build_audits_processes_and_invalidates_only_matching_source(self):
         ref, marker = self.sources()
         self.store.put(bead("s-z", f"slot {hostname()} z", labels=["slot"]))
+        self.finds = 0
         original = self.store.find
 
         def spawn():
@@ -53,10 +55,13 @@ class SnapshotStamps(fixtures.ApiFixture):
         sys.addaudithook(audit)
 
         def build():
-            ingest(self.cfg, self.now)
             events.clear()
             active[0] = True
             try:
+                ingest(self.cfg, self.now)
+                with Indexer(self.dash.env.config, clock=lambda: self.now, repos=self.dash.records.repos,
+                             store_of=self.dash.env.ports.store) as index:
+                    index.pass_once()
                 return snapshot.build(self.dash.reads.worlds.world())
             finally:
                 active[0] = False
@@ -68,7 +73,7 @@ class SnapshotStamps(fixtures.ApiFixture):
             assert "z" in [s.id for s in first.slots]
             assert events
             assert (self.finds, row.call_count) == (1, 1)
-            self.now += 121  # beyond snapshot, profile, shared listing, and fallback listing TTLs
+            self.now += 121  # beyond snapshot, profile and fallback listing TTLs
             assert build().slots == first.slots
             assert events == []
             assert (self.finds, row.call_count) == (1, 1)
