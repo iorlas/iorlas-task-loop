@@ -24,7 +24,7 @@ filterwarnings = ["ignore::pytest.PytestCollectionWarning"]
 addopts = "-p no:cacheprovider --maxschedchunk=4 -m 'not real and not e2e'"
 markers = [
     "serial: runs alone, after the parallel workers (tests/conftest.py SERIAL)",
-    "live: a scenario that runs the real pieces (docker, git remote, processes); only `just test-live` / `pytest -m live` collects tests/live",
+    "live: a scenario that runs the real pieces (git remote, processes, dashboard); only `just test-live` / `pytest -m live` collects tests/live",
     "real: real git, processes or sockets; set by a real/ folder, or by @real_proc(reason) / @real_git(reason) on one test (tests/conftest.py)",
     "e2e: a whole flow (tests/e2e/); set by the folder",
     "real_proc(reason): one test starts real processes; folds into real (tests/support/procsim.py)",
