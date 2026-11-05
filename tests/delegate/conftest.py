@@ -1,4 +1,4 @@
-"""The delegate tests import their helpers (hermetic, routing_support, run_support) by flat name: this folder is on sys.path for every test below it.
+"""The delegate tests import their helpers (hermetic, routing_support, run_support) by flat name: this folder is on sys.path for them.
 Every test runs in a home of its own (hermetic.home): HOME, XDG, CODEX_HOME and DELEGATE_CONFIG_DIR point into a fresh temp dir."""
 import os
 import shutil

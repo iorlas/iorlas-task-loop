@@ -4,6 +4,7 @@
 [importlinter]
 root_packages =
     taskloop
+    delegate
     taskloop_dash
     msgspec
     re
@@ -29,12 +30,15 @@ type = forbidden
 source_modules =
     taskloop
     taskloop_dash
+    delegate
 forbidden_modules = re
 allow_indirect_imports = True
 ignore_imports =
     taskloop.adapters.** -> re
     taskloop.domain.**.matchers -> re
     taskloop.domain.matchers -> re
+    delegate.adapters.** -> re
+    delegate.domain.**.matchers -> re
 
 [importlinter:contract:contracts-no-network-or-processes]
 name = contracts never imports urllib, http or multiprocessing
@@ -144,4 +148,32 @@ source_modules =
 forbidden_modules =
     taskloop.adapters.procs
     stream_proc
+allow_indirect_imports = True
+
+[importlinter:contract:delegate-layers]
+name = Delegate layers: cli > app > adapters > domain > contracts
+type = layers
+layers =
+    delegate.cli
+    delegate.app
+    delegate.adapters
+    delegate.domain
+    delegate.contracts
+
+[importlinter:contract:delegate-is-its-own-piece]
+name = delegate imports nothing of taskloop
+type = forbidden
+source_modules = delegate
+forbidden_modules =
+    taskloop
+    taskloop_dash
+allow_indirect_imports = True
+
+[importlinter:contract:taskloop-does-not-import-delegate]
+name = taskloop and taskloop_dash import nothing of delegate (they call it as a process until delegate.api exists)
+type = forbidden
+source_modules =
+    taskloop
+    taskloop_dash
+forbidden_modules = delegate
 allow_indirect_imports = True

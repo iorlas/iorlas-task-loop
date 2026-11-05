@@ -198,18 +198,20 @@ class Replay(Case):
                 assert r["stream_tail"][-1] == lines[-1]
                 assert not self.alive()
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_a_tool_in_flight_keeps_the_long_silence_limit(self):
-        for kind, lines in (
+    @pytest.mark.parametrize(
+        ("kind", "lines"),
+        [
             ("codex", [CODEX_STARTED, j(type="item.started", item={"id": "i1", "type": "command_execution", "command": "make"})]),
             ("claude", [CLAUDE_TOOL]),
-        ):
-            with self.subTest(kind):
-                self.a.timeout = 4
-                r = self.launch(kind, self.fake(kind, lines))
-                assert r["outcome"] == "timeout"
-                assert r["stream_tail"]
-                assert not self.alive()
+        ],
+    )
+    @real_proc("delegate: a worker, git or CLI process")
+    def test_a_tool_in_flight_keeps_the_long_silence_limit(self, kind, lines):
+        self.a.timeout = 4
+        r = self.launch(kind, self.fake(kind, lines))
+        assert r["outcome"] == "timeout"
+        assert r["stream_tail"]
+        assert not self.alive()
 
     def test_turn_rules_with_an_injected_clock(self):
         now = [0.0]
