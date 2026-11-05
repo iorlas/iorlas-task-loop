@@ -2,7 +2,20 @@
 
 Bead tl-w7lt.38 (TOPOLOGY); also answers tl-w7lt.37 (DELEGATEHOME) and the lanes/Unity questions of tl-m5pw (SETUPFLOW).
 Verdicts: ✅ do, ❌ refuse. Evidence tags: *read* = read in code or docs, *help* = read from `--help` only, *untested* = no run exists.
-Premise (Denis): Mac only, no Docker, Windows later; one constitution (shelf `docs/constitution.md`); task-loop never knows which harness is underneath; delegate owns processes and lanes.
+Premise (Denis, as first given; see Status): Mac first, Windows later; one constitution (shelf `docs/constitution.md`); task-loop never knows which harness is underneath; delegate owns processes and lanes.
+
+**Status (2026-11-05, read this first).** This note was written in rounds with the owner. Where a section is overridden, the LAST section wins; the final decisions are the table "Decisions recorded" at the end. Overridden statements stay in place for their reasoning and are listed here:
+
+| Earlier statement | Now |
+|---|---|
+| delegate is called as a process (`route.py run/status`, JSON-only, worker-run contract, stdlib-only, "move with history", "split route.py first") | delegate is an imported library, `delegate.api`; plain copy of origin/main into `src/delegate`; the CLI, three skills, plugin and wire contract are retired ("Owner amendment", "Cutover decision", "Correction from the move session") |
+| the shelf loop stops at an open PR; merge approval is the owner's; PR-only land mode | PRs auto-merge unless a repo's profile says `merge: wait`; land mode is PR-and-merge ("Decisions recorded") |
+| "Mac only, no Docker, Windows later", engine refused on Windows | the engine runs natively on Windows; Linux executor first (`pix`), Windows executor next, native Windows engine after |
+| container checks, then tar to the executor | `in: linux` by git push to a mirrored persistent slot worktree |
+| ADRs written under the state dir | ADRs are landed as files through a bead |
+| D1 to D7, M, A, W open | all answered; see "Decisions recorded" |
+| "lane" means three things; "lane keeps only the check meaning" | the word is purged: account, track, loop (docs/glossary.md) |
+| "factory instance" | factory (one per machine) |
 
 ## What exists today (read)
 
@@ -89,7 +102,7 @@ Verdicts: one store per task, in the repo that does the work. ❌ a central inbo
 | | Task-loop repo | Shelf |
 |---|---|---|
 | Release drift between two repos | ends: one `dev/release.py` path, one version stream, one contract test pair | stays or worsens: a third release path |
-| Contract (`worker-run v3`, `route.py run/status` only) | stays JSON-only; enforce with an import-linter contract (no `taskloop` import of delegate and back) plus a stdlib-only test for delegate's folder | same |
+| Contract (was `worker-run v3`, `route.py run/status`; superseded by `delegate.api`) | stays JSON-only; enforce with an import-linter contract (no `taskloop` import of delegate and back) plus a stdlib-only test for delegate's folder | same |
 | Constitution fit | a product with lanes, skills and onboarding living next to the product that needs it | ❌ shelf holds generic, ownable packages (Articles VI to VII). Delegate is not generic substrate; it would need a new Kind (Denis's own note on the bead) |
 | Who may change it | the factory itself: the factory releases its own executor through `dev/release.py` | ❌ every delegate fix becomes a shelf PR that only Denis merges, behind a 10 to 17 minute host gate, for the component the factory cannot run without |
 | Direction of dependency | task-loop already vendors shelf; delegate inside task-loop adds none | task-loop would depend on shelf for its executor, and shelf's factory would work the executor's beads |
@@ -126,12 +139,12 @@ This replaces the process-boundary reading above (the `route.py run/status` rows
 | Concurrency is per repo | ✅ already so: `slots.count` is the repo's own profile key; each repo has its own slot line. | Nothing to build. Gap, untested: no cap across repos except the RAM/disk thresholds (`loop.min_ram_mb`, `loop.min_free_gb`). Two long gates at once (lifesim, shelf) are bounded only by those. If it bites, declare one `engine.resources` entry for "heavy gate"; no new monitor. |
 | Slots are reused, tracked by an index | ✅ already so: a slot is a persistent worktree, a bead labelled `slot` with a lease, plus `slot-state`; `tl prune` and `tl worktrees clean` remove owned merged clean ones. | Growing storage would be a bug in prune, not a missing index. Observation, not verified as factory-owned: `~/Workspaces` holds dozens of `iorlas-task-loop-<name>` clones; if the factory made them, prune misses them. |
 | Cross-repo filing: direct bead or through tl | ✅ through tl, always. ❌ a session writing another repo's `.beads` itself. | One entry point sets the actor, the `from:<repo>` label and refuses anything but create. |
-| Ordering | ✅ pick every ready bead not blocked by a dependency, by bd's native priority (0 to 4, P0 first), then `epic_order`, then lowest id. | That is already the pick rule (SKILL.md, "Order: priority first..."). bd's priority is the native one; use no second scale. |
+| Ordering | ✅ pick every ready bead not blocked by a dependency, by bd's native priority (0 to 4, P0 first), then `epic_order`, then lowest id. | That is already the pick rule (skills/task-loop/SKILL.md, "Order: priority first..."). bd's priority is the native one; use no second scale. |
 | Names | ✅ rename (canonical list: docs/glossary.md); ❌ keep "lane" for three things. | Today "lane" means (1) a delegate vendor connection with usage windows, (2) a parallel track of checks in one gate block, (3) a swim lane on the dashboard. "Floor" exists only in conversation; the engine's word is **slot** (a persistent worktree), so use slot. Delegate's lane is a subscription or API key with limits: call it **account**. "License" is wrong (a license permits, this meters); "supplier" and "provider" name the vendor, not the metered thing. After the rename "lane" keeps only the check-track meaning. The rename is a hard cut in delegate's contract (worker-run version bump, no alias). |
 | Pieces: delegate, task-loop, lifesim, shelf packages all segregated, tests included, thin designed interfaces | ✅ as the rule for every piece. | Each piece owns its tests, publishes one interface document and contract tests that both sides run, and imports nothing of the other. Delegate already has that interface (`worker-run v3`: `route.py run` and `status`). |
 | Delegate into shelf | ❌ still. See D1: segregation does not need the shelf. | Shelf pieces are imported or vendored; delegate is called as a process. Putting it there adds Denis's manual PR merge and a 10 to 17 minute gate to every executor fix, and it makes "one piece among pieces" mean "one repo" for lifesim too, which cannot follow. |
 
-## Decisions Denis must make
+## Decisions Denis had to make (all answered; see "Decisions recorded" at the end)
 
 **D1 (decided 2026-11-05: option A, delegate moves into this repo as `src/delegate`; Denis: "I don't mind if you would move delegate inside of it as a new folder in SRC then.") What is a piece's boundary: a folder or a repo, and so where does delegate live?** Context: bead tl-w7lt.37; his words: "I wouldn't mind merging Delegate into Task Loop repo, but keeping it isolated as a package. Maybe move it to Shelf, potentially, I don't know." and, 2026-11-05, every piece (delegate, task-loop, lifesim, shelf packages) segregated with its own tests and a thin interface. Options: (A) delegate stays a separate piece in the task-loop repo: its own folder, its own tests, its own pyproject or stdlib-only test, an import-linter contract both ways, the interface doc, so moving the folder to any repo later is a `git mv` (recommended: segregation is the same, release drift ends, route.py is split first); (B) its own repo as today, with the contract versioned and a contract test in each repo (most segregated; the two release paths and the drift remain, which is the pain that opened this bead); (C) shelf (refused above). Under A the folder is movable on purpose, so A does not close off B or C.
 
@@ -155,7 +168,7 @@ Not decisions (settled by existing rules, listed so they are not re-asked): merg
 6. lifesim: confirm `unity_slot.py` is redundant with `needs: unity`, then delete it.
 7. DELEGATEHOME steps 1 to 4 after D1.
 8. Executor port contract and the Windows backends (shelf packages first): when the migration starts.
-9. Glossary rename (docs/glossary.md): delegate `lane` to `account`, `tl lanes` to `tl accounts`, dashboard panel; worker-run major bump.
+9. Glossary rename (docs/glossary.md): delegate `lane` to `account`, `tl lanes` to `tl accounts`, dashboard panel; no wire contract to version (delegate.api is typed).
 
 ## D1 move: open check before it starts
 
@@ -176,7 +189,7 @@ Verdict: ✅ plain copy of delegate origin/main into `src/delegate` (no history,
 - ✅ Filing is a store write, not a call to a process. The factory is a config folder and a CLI; only the dashboard and the per-repo loops are processes. `tl` looks the target up by name in `repos.json` and runs the create against that repo's `.beads/` (bd is embedded Dolt, no server, *read from the repo layout; a create into a store no loop has open is untested*).
 - ✅ The target must be registered (`tl register`), not running. An unregistered or unknown name refuses with the fix. ❌ A filing path that starts a loop as a side effect.
 - Consequence: a filed bead waits in the target's backlog until that repo's loop runs, and the filer's dependent bead stays blocked meanwhile. The dashboard board shows every registered repo's beads, so the wait is visible. Loops are started by hand (`tl factory start`; no OS service, README), so a filing to a repo with no loop starts nothing by itself.
-- Open as D5: should the factory run a loop for every registered repo that has ready work, or stay manual?
+- D5 (answered): a running loop takes every ready bead; starting a loop stays manual.
 
 ## repos.json, registration and detached mode (Denis questions, 2026-11-05)
 
@@ -263,10 +276,10 @@ Ask kinds: decision, stuck, ticket, budget. With the engine on one machine and o
 
 ## Mirrored executor layout, Windows factory, ADR route (Denis, 2026-11-05)
 
-- Mirror rule (proposal, question M below): the executor keeps the same slot names, repo names and relative layout as the engine's host under one configurable root (`<root>/<repo>/<slot>`), one persistent worktree per slot, so `run_in: slot` checks and slot setup also work remotely and caches stay per slot. Identical absolute paths are possible on Linux (a created `/Users/iorlas`) and impossible on Windows, so the rule is names and layout, not absolute paths.
+- Mirror rule (proposal, row M of "Decisions recorded"): the executor keeps the same slot names, repo names and relative layout as the engine's host under one configurable root (`<root>/<repo>/<slot>`), one persistent worktree per slot, so `run_in: slot` checks and slot setup also work remotely and caches stay per slot. Identical absolute paths are possible on Linux (a created `/Users/iorlas`) and impossible on Windows, so the rule is names and layout, not absolute paths.
 - Unity on a Windows executor works: the checkout is on Windows disk and Unity opens it natively; ssh and git only deliver the commit. My earlier worry was wrong.
 - Two factories, one per OS, are consistent with the one-working-factory-per-repo rule when each repo has exactly one: task-loop and shelf on the Mac factory, lifesim on a Windows factory. They share tasks and results through the git remote (beads, branches); an ask stays on the factory that raised it. A repo whose work needs both OSes keeps one owner factory and sends the other OS's checks to an executor.
-- Why there are no ADRs: an ADR exists only when the owner picks the "ADR" outcome ("make it stick", `app/asks/stick.py`) on an answered ask in the dashboard; 13 asks were answered here and none got that outcome. By design the engine and `tl` "never write into a checkout", so ADRs are written under the state dir. Putting them in the repo needs a landing path; see question A below.
+- Why there are no ADRs: an ADR exists only when the owner picks the "ADR" outcome ("make it stick", `app/asks/stick.py`) on an answered ask in the dashboard; 13 asks were answered here and none got that outcome. By design the engine and `tl` "never write into a checkout", so ADRs are written under the state dir. Putting them in the repo needs a landing path; row A of "Decisions recorded".
 
 ## Decisions recorded (Denis, 2026-11-05) - these supersede earlier rows
 
