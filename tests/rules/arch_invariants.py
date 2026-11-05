@@ -6,11 +6,12 @@ from rules.enumtotal import bindings, qualified
 
 # The former per-slice deny contracts, expressed once as allowed direct imports.
 SLICE_IMPORTS: Final = {
+    "artifacts": frozenset(),
     "asks": frozenset(),
     "checks": frozenset(),
     "doctor": frozenset(),
     "land": frozenset({"asks", "checks", "slots"}),
-    "look": frozenset({"asks", "checks"}),
+    "look": frozenset({"artifacts", "asks", "checks"}),
     "loop": frozenset({"asks", "release", "report", "run", "slots"}),
     "plan": frozenset({"asks", "checks"}),
     "prune": frozenset({"reconcile", "release", "run", "track"}),
