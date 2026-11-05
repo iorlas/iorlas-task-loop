@@ -23,7 +23,7 @@ from support import homes
 from support.fakes import FakeBeadStore
 from taskloop.adapters import beadtools
 from taskloop.adapters.git import RealGit
-from taskloop.app.release import flow, shell, suite
+from taskloop.app.release import flow, gate, shell
 from taskloop.app.release.shell import say
 from taskloop.app.wire import closeguard
 from taskloop.contracts.env import snapshot
@@ -129,20 +129,20 @@ class World:
         """What the release is handed at its edge: the world's processes (git real, claude and the gate faked)."""
         return cast(Spawner, SimpleNamespace(run=self.spawn))
 
-    def suite(self, tool_root: Path, repo: Path, sh: shell.Shell) -> None:
-        suite.gate(repo, sh)
-        say("running the full suite in 1 workers, then the serial group")
+    def suite(self, repo: Path, sh: shell.Shell) -> None:
+        gate.gate(repo, sh)
+        say("running the tests")
         tree = {p: (repo / p).read_bytes() for p in git("ls-files", cwd=repo).splitlines()}
         self.trees.append(tree)
         if self.on_suite:
             self.on_suite(repo)
         if "tests/RED" in tree:
             out = tree["tests/RED"].decode()
-            raise suite.red(out, out.splitlines(), snapshot())
+            raise gate.red(out, "`just test`", sh)
         say("suite green")
 
-    def verify(self, tool_root: Path, repo: Path, sh: shell.Shell) -> bool:
-        return REAL_VERIFY(tool_root, repo, sh, self.suite)
+    def verify(self, repo: Path, sh: shell.Shell) -> bool:
+        return REAL_VERIFY(repo, sh, self.suite)
 
     def release(self, *args: str) -> Result:
         """flow.main on `args` in this thread; its stdout and stderr, and its exit code."""
@@ -162,11 +162,11 @@ class World:
             st.enter_context(mock.patch.dict(os.environ, env))
             for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "TL_RELEASE_REEXEC"):
                 os.environ.pop(k, None)
-            st.enter_context(mock.patch.object(flow.suite, "verify", self.verify))
+            st.enter_context(mock.patch.object(flow.gate, "verify", self.verify))
             st.enter_context(mock.patch.object(beadtools, "bd_store", lambda actor, cwd=None: self.store))
             st.enter_context(mock.patch("sys.stdout", self.stdout))
             st.enter_context(mock.patch("sys.stderr", self.stderr))
             yield self
 
 
-REAL_VERIFY = suite.verify  # taken before `active` replaces it: the cache and the command line stay the real ones
+REAL_VERIFY = gate.verify  # taken before `active` replaces it: the cache and the command line stay the real ones

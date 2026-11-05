@@ -347,7 +347,7 @@ the Night loop with `--pin`. The Mac standing pin may move only after the releas
 `uv run --script dev/release.py --devbox-ok VERSION` publishes a `devbox-ok/vVERSION` tag on origin. Both machines
 read that tag; rolling back to an older installed version needs no new acknowledgement. Releases initially enter the
 `devbox` ring; installing a release does not move the owner's standing pin. Releases have no minimum interval.
-The suite runs on pre-bump content; a cheap post-bump check permits only plugin.json and MANIFEST.sha256 changes
+The gate (`just check`, then the profile's suite check, `just test`: the tests the change can break) runs on pre-bump content; a cheap post-bump check permits only plugin.json and MANIFEST.sha256 changes
 and validates both before pushing. Three lost push races stop the release. Releases have no CI gate (D-11).
 
 1. `tl dash ensure`: starts the dashboard if it is not running (one per machine) and prints its addresses. Tell the

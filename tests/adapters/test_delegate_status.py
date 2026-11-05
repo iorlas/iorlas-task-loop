@@ -3,7 +3,6 @@ the installed delegate's own answer when there is one. A delegate release that r
 import json
 import subprocess
 import sys
-import unittest
 from pathlib import Path
 
 import pytest
@@ -94,13 +93,13 @@ def installed_route() -> str | None:
 def installed_schema() -> dict:
     route = installed_route()
     if not route:
-        raise unittest.SkipTest("no delegate installed")
+        pytest.skip("no delegate installed")
     try:
         schema = json.loads((Path(route).parent / "contract.json").read_text(encoding="utf-8")).get("status_schema")
     except (OSError, ValueError):
         schema = None
     if not isinstance(schema, dict):
-        raise unittest.SkipTest(
+        pytest.skip(
             f"the installed delegate ({route}) carries no status_schema in contract.json (older than 0.52.0): upgrade it")
     return schema
 
