@@ -78,7 +78,7 @@ class FakeGit(ScriptedGit):
         return int(self.answer("count", *include))
 
     def is_ancestor(self, d: str, a: str, b: str) -> bool:
-        return bool(self.answer("is_ancestor"))
+        return bool(self.answer("is_ancestor", a, b))
 
     def unmerged(self, d: str) -> list[str]:
         out = self.answer("unmerged")
