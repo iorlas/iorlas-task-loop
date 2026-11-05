@@ -13,9 +13,9 @@ from typing import Any
 from unittest import mock
 
 import pytest
+from any_agent.supervisor import RunHooks
 from delegate.app import answer, env, fleet, launch, status
 from delegate.app import decide as dec
-from delegate.app.supervisor import RunHooks
 from delegate.cli import verbs
 from delegate.contracts import stops
 from delegate.contracts.state import RefRecord

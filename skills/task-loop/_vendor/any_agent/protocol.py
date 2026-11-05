@@ -1,17 +1,17 @@
-"""The Harness Protocol: everything delegate knows about one agent CLI lives in one class that implements it (D8).
+"""The Harness Protocol: everything known about one agent CLI lives in one class that implements it.
 
 A harness builds the launch (argv, env, stdin), turns each line of the CLI's output into HarnessEvents ONCE, keeps the facts those lines
-established (`evidence`), finds the transcript and probes the login. It knows nothing of lanes, state, holds or the router.
+established (`evidence`), finds the transcript and probes the login. It knows nothing of lanes, state, holds or a router.
 """
 
 from dataclasses import field
 from pathlib import Path
 from typing import Protocol
 
-from delegate.contracts import events as ev
-from delegate.contracts.codec import mutable, record
-from delegate.contracts.events import HarnessEvent
-from delegate.contracts.json_types import Json
+from any_agent import events as ev
+from any_agent._json import Json, mutable, record
+from any_agent.events import HarnessEvent
+from any_agent.watch import Limits
 
 
 @record
@@ -28,14 +28,17 @@ class LaunchInputs:
     resume: str | None = None
     sandbox: str = ""  # codex
     out_file: str = ""  # codex
-    cli: list[str] = field(default_factory=list)  # codex: the router's argv for a fresh run (`codex exec -C ... -s ... -m ...`), exe first
-    access: list[str] = field(default_factory=list)  # codex: delegate's fixed sandbox and network flags
+    cli: list[str] = field(default_factory=list)  # codex: the caller's argv for a fresh run (`codex exec -C ... -s ... -m ...`), exe first
+    access: list[str] = field(default_factory=list)  # codex: the caller's fixed sandbox and network flags
     isolation: list[str] = field(default_factory=list)  # codex: skills turned off by path
     session: str = ""  # claude: the session id we fix up front (--session-id)
     system: str = ""  # claude: the appended system prompt
     settings: str = ""  # claude: --settings JSON (the PreToolUse guard)
     write: bool = False  # claude, opencode: may the worker edit
-    engine_only: tuple[str, ...] = ()  # opencode: recipes only the engine runs, denied in the bash permission rules of a write step
+    auth: str = (
+        "subscription"  # claude: "subscription" (the login; an API key in env is dropped) or "api_key" (ANTHROPIC_API_KEY must be in env)
+    )
+    engine_only: tuple[str, ...] = ()  # opencode: recipes only the caller runs, denied in the bash permission rules of a write step
 
 
 @record
@@ -108,10 +111,11 @@ class Quiet:
 
 class Harness(Protocol):
     kind: str
+    limits: Limits  # the CLI's measured first-event and silence deadlines and its answer grace
 
     @property
     def secret_event(self) -> type | None:
-        """The event delegate polices for secret paths (no PreToolUse hook under this CLI); None = the CLI blocks it itself"""
+        """The event the caller's policy checks for secret paths (no PreToolUse hook under this CLI); None = the CLI blocks it itself"""
         ...
 
     evidence: Evidence

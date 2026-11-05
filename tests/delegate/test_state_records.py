@@ -13,15 +13,16 @@ from unittest import mock
 
 import pytest
 import stream_proc
+from any_agent import reset_parse
+from any_agent.classify import Outcome
+from any_agent.harnesses.codex import CodexHarness
+from any_agent.protocol import LaunchSpec
+from any_agent.supervisor import RunHooks, Supervisor
 from delegate.adapters import agent_runs
-from delegate.adapters.harness import classify, reset_parse
-from delegate.adapters.harness.base import LaunchSpec
-from delegate.adapters.harness.codex import CodexHarness
 from delegate.app import decide as dec
-from delegate.app import env, launch, usage, watch
+from delegate.app import env, harnesses, launch, usage
 from delegate.app.fleet import apply_health
 from delegate.app.publish import LiveSink
-from delegate.app.supervisor import RunHooks, Supervisor
 from delegate.contracts import codec, stores
 from delegate.contracts import history as hist
 from delegate.domain.health import ledger as health_ledger
@@ -31,6 +32,7 @@ from support.procsim import real_proc
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
+from run_support import short_limits
 from test_route import CFG, T, argparse_ns, lanes, need, no_reader, route
 
 
@@ -92,8 +94,8 @@ class Breaker(Case):
     def test_every_opencode_lane_runs_under_the_watchdog_and_the_breaker(self):
         lanes_ = [n for n, c in CFG["lanes"].items() if c["runner"] == "opencode"]
         assert sorted(lanes_) == ["DEEPSEEK_FREE", "GROK_SUBSCRIPTION", "ZAI_CODING_SUBSCRIPTION"]
-        lim = watch.LIMITS["opencode"]
-        assert (lim["first_event_s"], lim["silence_s"] >= 900) == (120, True)
+        lim = harnesses.LIMITS["opencode"]
+        assert (lim.first_event_s, lim.silence_s >= 900) == (120, True)
         for name in lanes_:
             fam = CFG["lanes"][name]["family"]
             models = [m for m, v in CFG["models"].items() if v["family"] == fam]
@@ -202,7 +204,7 @@ class ResetTimes(Case):
             )  # inside the 40 days a stated reset may be off
             launch.settler().apply(
                 {},
-                classify.Outcome("rate_limited", f"will reset at {end:%Y-%m-%d %H:%M:%S} UTC", "event"),
+                Outcome("rate_limited", f"will reset at {end:%Y-%m-%d %H:%M:%S} UTC", "event"),
                 {"lane": "L1", "limit_reset": None},
                 time.time(),
                 "codex",
@@ -214,7 +216,7 @@ class ResetTimes(Case):
             for want_n in (0, 1, 2):  # three guesses in a row climb the ladder
                 launch.settler().apply(
                     {},
-                    classify.Outcome("rate_limited", "slow down", "event"),
+                    Outcome("rate_limited", "slow down", "event"),
                     {"lane": "L2"},
                     1_800_000_000.0,
                     "codex",
@@ -345,8 +347,8 @@ class WatchdogProc(Case):
         self.addCleanup(p.stop)
 
     def run_child(self, code, **limits):
-        with mock.patch.dict(watch.LIMITS["codex"], **limits):
-            sup = Supervisor(CodexHarness(), "codex", RunHooks(), LiveSink("codex", ""))
+        with short_limits("codex", **limits):
+            sup = Supervisor(CodexHarness(), RunHooks(), LiveSink("codex", ""), limits=harnesses.LIMITS["codex"])
         with mock.patch.object(stream_proc, "stop_tree", wraps=stream_proc.stop_tree) as st:
             t0 = time.time()
             out = sup.run(LaunchSpec(argv=[sys.executable, "-c", code], env=dict(os.environ), cwd=self.tmp.name, stdin=""), 0)

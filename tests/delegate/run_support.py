@@ -1,6 +1,7 @@
 """Shared fixture of the `route.py run` tests: fake `codex` and `claude` on PATH, a temp repo,
 a config dir of its own. Not a test module."""
 
+import dataclasses
 import io
 import json
 import os
@@ -9,9 +10,11 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from unittest import mock
 
 import pytest
-from delegate.app import env, usage, watch
+from any_agent import watch
+from delegate.app import env, harnesses, usage
 from delegate.contracts import history as hist
 from delegate.domain.health import ledger as health_ledger
 from support.case import Case
@@ -127,9 +130,11 @@ class RunBase(Case):
         )
 
     def fast_clock(self, grace=1, stall=1):
-        for name, v in (("ANSWER_GRACE_S", grace), ("STALL_S", stall)):
-            self.addCleanup(setattr, watch, name, getattr(watch, name))
-            setattr(watch, name, v)
+        self.addCleanup(setattr, watch, "STALL_S", watch.STALL_S)
+        watch.STALL_S = stall
+        p = mock.patch.dict(harnesses.LIMITS, {k: dataclasses.replace(v, grace_s=grace) for k, v in harnesses.LIMITS.items()})
+        p.start()
+        self.addCleanup(p.stop)
 
     def pid_dead(self):
         time.sleep(0.3)
@@ -191,3 +196,8 @@ class RunBase(Case):
             )
             for i in range(n)
         ]
+
+
+def short_limits(cli, **kw):
+    """A context manager: `cli`'s deadlines shortened for the run (first_event_s, silence_s, grace_s)."""
+    return mock.patch.dict(harnesses.LIMITS, {cli: dataclasses.replace(harnesses.LIMITS[cli], **kw)})

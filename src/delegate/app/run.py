@@ -13,12 +13,13 @@ import uuid
 from collections.abc import Callable
 from pathlib import Path
 
+from any_agent.supervisor import RunHooks
+
 from delegate.adapters import agent_runs, git, procs
-from delegate.app import answer, cockpit, codex_policy, decide, env, harnesses, launch, net, usage, watch
+from delegate.app import answer, cockpit, codex_policy, decide, env, harnesses, launch, net, usage
 from delegate.app.launch import how_of
 from delegate.app.lease import RunLease
 from delegate.app.run_end import file_size, history_row, transcript_info, worker_ended
-from delegate.app.supervisor import RunHooks
 from delegate.contracts import history as hist
 from delegate.contracts.json_types import Json, arr, as_num, as_opt_bool, as_opt_int, as_opt_obj, as_opt_str, as_str, obj
 from delegate.contracts.state import RefRecord, StateDoc
@@ -210,7 +211,7 @@ class Run:
         )  # a guess: the soonest reset (too early costs one refused call, too late days)
         cap = lane.slots(env.settings_of(self.cfg))
         canary_due = bool(lane.canary.get(as_str(d["model"]))) and h.kind in profiles.REGISTRY
-        silence_s = self.idle_s or watch.LIMITS[watch.CLI_OF_KIND[h.kind]]["silence_s"]
+        silence_s = self.idle_s or harnesses.LIMITS[harnesses.CLI_OF_KIND[h.kind]].silence_s
         lease = RunLease(rid, a.role, a.task, as_str(d["lane"]), as_str(d["model"]), cap, canary_due, silence_s)
         no = lease.claim()
         if no:

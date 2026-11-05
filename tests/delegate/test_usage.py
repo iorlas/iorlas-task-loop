@@ -6,8 +6,8 @@ import tempfile
 from pathlib import Path
 from typing import ClassVar
 
+from any_agent.harnesses import claude
 from delegate.adapters import codex_account
-from delegate.adapters.harness import claude
 from delegate.contracts.json_types import Json
 from delegate.domain.cost import accounting as usage
 
