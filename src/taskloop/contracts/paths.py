@@ -288,13 +288,6 @@ class RepoDirs:
         self.worktree = Path(worktree)
         self.task = self.worktree / ".task"
 
-    def engine_lock(self) -> Path:
-        return self.task / "engine.lock"
-
-    def engine_take(self) -> Path:
-        """Held (locks.hold_path) while a run checks the engine lock and writes its own: two runs starting at once cannot both win."""
-        return self.task / "engine.take"
-
     def artifacts(self, bead: str) -> Path:
         """Where a run drops screenshots, PDFs: `StepArtifacts` copies the files from here when a step ends."""
         return self.task / bead / "artifacts"

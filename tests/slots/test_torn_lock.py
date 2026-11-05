@@ -8,6 +8,7 @@ from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support import homes
 
 from taskloop.app.slots import engine_lock
 from taskloop.contracts.wire import Refused
@@ -34,3 +35,16 @@ class TornLock(Case):
     def test_read_engine_lock_refuses(self) -> None:
         with pytest.raises(Refused):
             engine_lock.read_engine_lock(self.wt)
+
+
+class OutOfTheTree(Case):
+    def test_a_taken_lock_lives_in_the_config_dir_and_the_worktree_gets_no_engine_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = Path(tmp)
+            lock = engine_lock.EngineLock(wt, "tl-1")
+            assert lock.take() == ""
+            path = engine_lock.engine_lock_path(wt)
+            assert path.is_file() and path.is_relative_to(homes.config_dir() / "locks")
+            assert not list(wt.rglob("engine.*"))
+            engine_lock.drop_engine_lock(wt)
+            assert not path.exists()

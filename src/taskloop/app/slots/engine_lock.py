@@ -1,28 +1,40 @@
-"""The engine lock: a running engine in a worktree. run-task writes <worktree>/.task/engine.lock (contracts/locks.py EngineLock: pid, start,
+"""The engine lock: a running engine in a worktree. run-task writes <config>/locks/engine-<worktree key>.lock, never a file in the worktree
+a worker can write (contracts/locks.py EngineLock: pid, start,
 bead, slot, slot_bead, by, route, workers); the loop writes one (by "loop") from its slot take until its run-task replaces it. The loop,
 `tl slot reset|release` and another run-task keep off a worktree whose lock names a live process, whatever the slot bead says. A process is
 the one in the lock only while its start time matches (pid reuse) and it is no zombie. The file is a record on a JsonStore; the check and
-the write of a take happen under `hold_path` on RepoDirs.engine_take, so two runs starting at once cannot both win."""
+the write of a take happen under `hold_path` on engine_take_path, so two runs starting at once cannot both win."""
 import contextlib
 import os
 import time
 from pathlib import Path
 
+from taskloop.adapters import ident
 from taskloop.adapters.locks import hold_path
 from taskloop.adapters.pidcheck import proc_alive, proc_start
 from taskloop.app.slots.env import stamp
 from taskloop.contracts.enums import LockWhat
-from taskloop.contracts.env import Env
+from taskloop.contracts.env import Env, snapshot
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.ids import loop_key
 from taskloop.contracts.locks import EngineLock as Lock
-from taskloop.contracts.paths import RepoDirs
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import Reexec
 from taskloop.contracts.stores import JsonStore
 from taskloop.contracts.wire import Refused
 
 
+def _locks() -> ConfigDir:
+    return ConfigDir(ident.config_dir(snapshot()))
+
+
 def engine_lock_path(wt: str | Path) -> Path:
-    return RepoDirs(wt).engine_lock()
+    return _locks().lock_record("engine", loop_key(wt))
+
+
+def engine_take_path(wt: str | Path) -> Path:
+    """Held (locks.hold_path) while a run checks the engine lock and writes its own: two runs starting at once cannot both win."""
+    return _locks().lock_record("engine-take", loop_key(wt))
 
 
 def _store(wt: str | Path) -> JsonStore[Lock]:
@@ -63,7 +75,7 @@ def lock_pid(wt: str | Path) -> int | None:
 def loop_lock(wt: str | Path, slot: str, slot_bead: str, bead: str = "") -> None:
     """The loop's lock from its slot take to its run-task's own: no hand run gets in during the slot reset. `bead`, once claimed: the
     area check sees it there."""
-    with hold_path(RepoDirs(wt).engine_take(), "loop", what=LockWhat.WORKTREE):
+    with hold_path(engine_take_path(wt), "loop", what=LockWhat.WORKTREE):
         write_engine_lock(wt, Lock(pid=os.getpid(), start=proc_start(os.getpid()), bead=bead, slot=slot or "", slot_bead=slot_bead or "",
                                    by="loop", started=time.time()))
 
@@ -102,7 +114,7 @@ def engine_busy(wt: str | Path, handoff: Env | None = None) -> str:
 
 
 class EngineLock:
-    """<worktree>/.task/engine.lock while run-task runs there (see engine_busy). A worker that outlived its stop keeps the lock (pid 0)
+    """The worktree's engine lock while run-task runs there (see engine_busy). A worker that outlived its stop keeps the lock (pid 0)
     until it is gone."""
 
     def __init__(self, wt: str | Path, bead: str, slot: str = "", env: Env | None = None) -> None:
@@ -114,7 +126,7 @@ class EngineLock:
 
     def take(self) -> str:
         """"" when this run holds the worktree now, else what holds it. Loop and reexec handoffs take over their predecessor's lock."""
-        with hold_path(RepoDirs(self.wt).engine_take(), f"pid {os.getpid()}", what=LockWhat.WORKTREE):
+        with hold_path(engine_take_path(self.wt), f"pid {os.getpid()}", what=LockWhat.WORKTREE):
             busy = engine_busy(self.wt, handoff=self.env)
             if busy:
                 return busy
