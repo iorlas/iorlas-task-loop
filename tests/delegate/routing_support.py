@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from delegate.app import cockpit, decide, env
 from delegate.app import decide as dec

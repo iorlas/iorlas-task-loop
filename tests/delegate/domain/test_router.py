@@ -10,7 +10,7 @@ from unittest import mock
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 
-ROOT = Path(__file__).resolve().parent.parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "src"))
 from delegate.app.fleet import mark_busy
 from delegate.contracts import codec
@@ -23,7 +23,7 @@ from delegate.domain.routing.router import Router
 
 HERE = Path(__file__).resolve().parent
 T = 1_000_000_000.0
-CFG = json.loads((ROOT / "skills" / "delegate" / "routing.json").read_text(encoding="utf-8"))
+CFG = json.loads((ROOT / "src" / "delegate" / "data" / "routing.json").read_text(encoding="utf-8"))
 GOLDEN = json.loads((HERE / "golden" / "decisions.json").read_text(encoding="utf-8"))
 
 

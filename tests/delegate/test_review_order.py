@@ -18,16 +18,17 @@ from delegate.app import decide as dec
 from delegate.cli import verbs
 from delegate.domain.lanes.lane import Lane
 from delegate.domain.time import spec
+from support.procsim import real_proc  # noqa: E402
 
-ROOT = Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location("route", ROOT / "skills" / "delegate" / "route.py")
+ROOT = Path(__file__).resolve().parents[2]
+spec = importlib.util.spec_from_file_location("route", ROOT / "src" / "delegate" / "entry.py")
 route = importlib.util.module_from_spec(spec)
 sys.modules["route"] = route
 spec.loader.exec_module(route)
 
 os.environ["DELEGATE_CONFIG_DIR"] = tempfile.mkdtemp()
 T = 1_000_000_000.0
-CFG = json.loads((ROOT / "skills" / "delegate" / "routing.json").read_text(encoding="utf-8"))
+CFG = json.loads((ROOT / "src" / "delegate" / "data" / "routing.json").read_text(encoding="utf-8"))
 
 NAMES = {"openai": ("OPENAI_SUBSCRIPTION", "subscription"), "xai": ("GROK_SUBSCRIPTION", "subscription"), "deepseek": ("DEEPSEEK_FREE", "free"),
          "zai": ("ZAI_CODING_SUBSCRIPTION", "subscription"), "claude": ("CLAUDE_SUBSCRIPTION", "subscription")}
@@ -65,6 +66,7 @@ class ReviewOrder(unittest.TestCase):
             self.assertNotIn("warning", d)
             self.assertNotEqual(d.get("flag"), "same_family")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_codex_writer_with_only_codex_non_claude_reviews_itself_before_claude(self):
         d = review("openai", "openai", "claude")
         self.assertEqual((d["lane"], d["flag"]), ("OPENAI_SUBSCRIPTION", "same_family"))
@@ -75,6 +77,7 @@ class ReviewOrder(unittest.TestCase):
         self.assertEqual((d["action"], self.fam(d)), ("run", "claude"))
         self.assertEqual(d["flag"], None)           # independent Claude is not a same-family review
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_claude_writer_prefers_any_non_claude_then_claude_with_warning(self):
         self.assertEqual(self.fam(review("claude", *ALL)), "openai")
         for fam in ("zai", "deepseek"):
@@ -85,6 +88,7 @@ class ReviewOrder(unittest.TestCase):
         self.assertEqual((self.fam(d), d["flag"]), ("claude", "same_family"))
         self.assertIn("reviewing claude's work with claude", d["warning"])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_zai_writer_other_families_then_zai_then_claude(self):
         d = review("zai", *ALL)
         self.assertIn(self.fam(d), ("deepseek", "openai"))
@@ -100,6 +104,7 @@ class ReviewOrder(unittest.TestCase):
         d = review("xai", "xai", "claude")                  # a Grok writer is never reviewed by Grok: next rung
         self.assertEqual((self.fam(d), d["model"]), ("claude", "sonnet-5.5"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_only_one_family_up_never_blocks_even_unattended(self):
         for who in ("openai", "claude", "zai", "deepseek"):
             d = review(who, who, unattended=True, allow_degraded=True)
@@ -108,6 +113,7 @@ class ReviewOrder(unittest.TestCase):
         self.assertEqual(review("openai")["action"], "stop")
         self.assertEqual(review("xai", "xai")["action"], "stop")        # only Grok up: no review lane at all
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_claude_stays_last_for_other_roles(self):
         for role in ("worker", "planner"):
             d = review(None, "openai", "claude", role=role)
@@ -125,6 +131,7 @@ class ReviewOrder(unittest.TestCase):
             out.append((self.fam(d), d["model"], d["flag"]))
             up.remove(self.fam(d)) if (self.fam(d) != "claude" or d["flag"] != "degraded") else up.remove("claude")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_grok_never_reviews_even_when_it_is_the_only_lane_up(self):
         for writer in (None, "openai", "claude", "zai", "deepseek", "xai"):
             self.assertEqual(review(writer, "xai")["action"], "stop", writer)
@@ -137,17 +144,20 @@ class ReviewOrder(unittest.TestCase):
         self.assertEqual(review(None, "xai", role="worker")["lane"], "GROK_SUBSCRIPTION")
         self.assertEqual(review(None, "xai", "claude", role="worker")["model"], "grok-4.7")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_order_writer_codex(self):
         self.assertEqual([x[0] for x in self.order("openai", *ALL)], ["zai", "deepseek", "openai", "claude"])
         d = review("openai", "openai", "xai", "claude")
         self.assertEqual((self.fam(d), d["flag"]), ("openai", "same_family"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_order_writer_claude(self):
         d = review("claude", *ALL)
         self.assertEqual(d["lane"], "OPENAI_SUBSCRIPTION")
         self.assertEqual([x[:2] for x in self.order("claude", *ALL)][:3], [("openai", "gpt-6.1-sol"), ("zai", "glm-5.3"), ("deepseek", "deepseek-v4.1-flash-free")])
         self.assertEqual(self.order("claude", "claude", "xai")[0][:2], ("claude", "sonnet-5.5"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_order_writer_zai_deepseek_xai(self):
         self.assertEqual(self.order("zai", *ALL)[0][0], "openai")           # Codex first wherever it is another family
         self.assertEqual(self.order("zai", "zai", "deepseek", "claude")[0][0], "deepseek")
@@ -168,6 +178,7 @@ class ReviewOrder(unittest.TestCase):
         a = {"authored_by": "claude", "failed": [], "premium": None, "allow_degraded": False}
         self.assertEqual(support.decide("reviewer", cfg, lanes(*ALL), {}, T, a)["model"], "glm-5.3")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_opus_is_never_returned_for_any_loop_role(self):
         import itertools
         fams = ("openai", "xai", "deepseek", "zai", "claude")
@@ -203,6 +214,7 @@ class ReviewOrder(unittest.TestCase):
     def test_opus_is_a_model_flag_so_an_explicit_call_can_still_name_it(self):
         self.assertIs(CFG["models"]["opus-5.5"]["loop"], False)         # the router's chains skip it; a caller naming Opus directly (outside the loop) is not routed
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_next_prints_the_warning_on_stderr_and_in_the_result(self):
         d = review("openai", "openai", "claude")
         route_decision = dec.decision

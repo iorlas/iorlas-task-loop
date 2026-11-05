@@ -9,12 +9,14 @@ import unittest
 from pathlib import Path
 
 import hermetic  # noqa: F401  (a home of its own for every test)
+from support.procsim import real_proc  # noqa: E402
 
-ROOT = Path(__file__).resolve().parent.parent
-FIX = ROOT / "tests" / "fixtures"
+ROOT = Path(__file__).resolve().parents[2]
+FIX = ROOT / "tests" / "delegate" / "fixtures"
 
 
 class StatusGolden(unittest.TestCase):
+    @real_proc("delegate: a worker, git or CLI process")
     def test_cheap_status_is_byte_equal_from_a_copy_of_the_tree(self):
         with tempfile.TemporaryDirectory() as d:
             tree, cfg = Path(d) / "plugin", Path(d) / "cfg"
@@ -23,7 +25,7 @@ class StatusGolden(unittest.TestCase):
             for sub in ("skills", "src"):
                 shutil.copytree(ROOT / sub, tree / sub, ignore=shutil.ignore_patterns("__pycache__"))
             env = dict(os.environ, DELEGATE_CONFIG_DIR=str(cfg), DELEGATE_NOW="1800000000")
-            r = subprocess.run([sys.executable, str(tree / "skills" / "delegate" / "route.py"), "status", "--json", "--cheap"], capture_output=True, text=True, env=env)
+            r = subprocess.run([sys.executable, str(tree / "src" / "delegate" / "entry.py"), "status", "--json", "--cheap"], capture_output=True, text=True, env=env)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(r.stdout, (FIX / "status_cheap.golden.json").read_text(encoding="utf-8"))
 

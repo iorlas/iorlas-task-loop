@@ -4,6 +4,7 @@ import unittest
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
 from test_route import CFG, T, lanes
+from support.procsim import real_proc  # noqa: E402
 
 
 class CodexPolicy(unittest.TestCase):
@@ -11,6 +12,7 @@ class CodexPolicy(unittest.TestCase):
         self.cfg=copy.deepcopy(CFG)
         self.args={'authored_by':None,'failed':[],'premium':None,'allow_degraded':False,'unattended':True}
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_reviewer_runs_codex_at_medium_effort_planner_stays_high(self):
         """delegate-aam: medium on every Codex step of the reviewer role (and in the launched command); planner unchanged."""
         r=self.cfg['roles']['reviewer']

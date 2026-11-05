@@ -22,7 +22,7 @@ class Contract(unittest.TestCase):
         req = wire.RunRequest(role="writer", brief_file="b.md", cwd="/w", schema_file="s.json", resume="r1", authored_by="x", timeout_s=60, idle_s=30,
                               parent="p", task="t", title="T", call_id="c1", live_file="/l.jsonl")
         flags = {a for a in req.to_argv("route.py") if a.startswith("--")}
-        self.assertLessEqual(flags, set(json.loads((ROOT / "skills/delegate/contract.json").read_text())["run_args"]))
+        self.assertLessEqual(flags, set(json.loads((ROOT / "src/delegate/data/contract.json").read_text())["run_args"]))
         self.assertIn("--idle", flags)
         self.assertEqual(req.env(), {"DELEGATE_LIVE_FILE": "/l.jsonl"})
         self.assertNotIn("--resume", wire.RunRequest(role="w", brief_file="b", cwd="/w").to_argv("route.py"))
@@ -39,5 +39,5 @@ class WorkerField(unittest.TestCase):
         self.assertEqual([procs.worker_end(stops, o).end for o in (None, "timeout")], ["worker_survived"] * 2)
 
     def test_reason_worker_survived_is_declared_with_facts(self):
-        r = json.loads((ROOT / "skills/delegate/contract.json").read_text())["reasons"]["worker_survived"]
+        r = json.loads((ROOT / "src/delegate/data/contract.json").read_text())["reasons"]["worker_survived"]
         self.assertEqual((r["scope"], r["permanence"], r["retry"]), ("machine", "needs_owner", "none"))

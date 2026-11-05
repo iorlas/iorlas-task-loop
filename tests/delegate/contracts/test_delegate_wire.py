@@ -10,7 +10,7 @@ from pathlib import Path
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 
-ROOT = Path(__file__).resolve().parent.parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "tests"))
 from delegate.app import answer
 from delegate.contracts import codec, live, schema, wire

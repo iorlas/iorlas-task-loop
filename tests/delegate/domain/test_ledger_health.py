@@ -9,7 +9,7 @@ from pathlib import Path
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 
-ROOT = Path(__file__).resolve().parent.parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "src"))
 from delegate.contracts import codec  # noqa: E402
 from delegate.contracts.history import HealthState, RefusalRow, ReleaseRow, RunRow  # noqa: E402

@@ -8,12 +8,14 @@ from test_review_order import CFG, T, lanes
 
 from delegate.contracts.routing import CallArgs
 from delegate.domain.routing.tiers import TierPlan
+from support.procsim import real_proc  # noqa: E402
 
 
 class OnlyFamilyTest(unittest.TestCase):
     def decide(self, *up, role="worker", **kw):
         return support.decide(role, copy.deepcopy(CFG), lanes(*up), {}, T, dict({"authored_by": None, "unattended": True}, **kw))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_the_answer_never_leaves_the_family_and_names_it(self):
         everything_up = ("openai", "xai", "claude")
         d = self.decide(*everything_up, only_family=["openai"])
@@ -42,6 +44,7 @@ class OnlyFamilyTest(unittest.TestCase):
         d = self.decide("openai", "xai", "claude", only_family=["nonesuch"])
         self.assertEqual((d["action"], d["reason"]), ("stop", "only_family_unready"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_without_the_flag_the_answer_is_unchanged(self):
         for up in (("openai", "xai", "claude"), ("xai", "claude"), ("claude",), ()):
             self.assertEqual(self.decide(*up), self.decide(*up, only_family=[]), up)

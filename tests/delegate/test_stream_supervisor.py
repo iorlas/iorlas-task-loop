@@ -12,7 +12,7 @@ from unittest import mock
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "delegate"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "delegate"))
 import shutil
 
 from delegate.adapters import agent_runs, codex_account
@@ -20,6 +20,7 @@ from delegate.adapters.harness import claude
 from delegate.adapters.harness.opencode import OpenCodeHarness
 from delegate.app import env, launch, watch
 from delegate.app.supervisor import RunHooks
+from support.procsim import real_proc  # noqa: E402
 
 T = 1_000_000.0
 
@@ -100,6 +101,7 @@ class Replay(unittest.TestCase):
              "claude": ([CLAUDE_TOOL, CLAUDE_TOOL_DONE, CLAUDE_FINAL, CLAUDE_RESULT], "claude answer"),
              "opencode": ([OC_STEP_TOOLS, OC_TEXT, OC_STEP_STOP], "opencode answer")}
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_stream_ending_in_its_completion_event_with_a_process_that_never_exits_is_done_in_under_40_s(self):
         for kind, (lines, text) in self.CASES.items():
             with self.subTest(kind):
@@ -112,6 +114,7 @@ class Replay(unittest.TestCase):
                 if kind != "claude":
                     self.assertEqual(r["warnings"], ["answer_done_process_alive"])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_final_message_without_the_completion_event_ends_the_run_too(self):
         r = self.launch("claude", self.fake("claude", [CLAUDE_TOOL, CLAUDE_TOOL_DONE, CLAUDE_FINAL]))
         self.assertEqual((r.get("outcome"), r["text"], r["warnings"]), (None, "the final words", ["answer_done_process_alive"]))
@@ -121,6 +124,7 @@ class Replay(unittest.TestCase):
         self.assertEqual((r.get("outcome"), r["text"]), (None, "codex answer"))
         self.assertFalse(self.alive())
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_later_event_resets_the_grace(self):
         script = self.base / "slowclaude"
         script.write_text(f"#!/bin/sh\ncat >/dev/null\necho '{CLAUDE_RESULT}'\nsleep 0.7\necho '{CLAUDE_RESULT}'\nsleep 300 & echo $! > {self.pidfile}; wait\n")
@@ -130,6 +134,7 @@ class Replay(unittest.TestCase):
         self.assertGreaterEqual(time.time() - t0, 1.5)      # the second turn's event at 0.7 s restarted the 1 s grace
         self.assertEqual((r.get("outcome"), r["text"]), (None, "claude answer"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_stalled_stream_is_killed_and_its_tail_logged(self):
         stalls = {"codex": [CODEX_STARTED, CODEX_CMD], "claude": [CLAUDE_TOOL, CLAUDE_TOOL_DONE], "opencode": [OC_STEP_TOOLS]}
         for kind, lines in stalls.items():
@@ -141,6 +146,7 @@ class Replay(unittest.TestCase):
                 self.assertEqual(r["stream_tail"][-1], lines[-1])
                 self.assertFalse(self.alive())
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_tool_in_flight_keeps_the_long_silence_limit(self):
         for kind, lines in (("codex", [CODEX_STARTED, j(type="item.started", item={"id": "i1", "type": "command_execution", "command": "make"})]),
                             ("claude", [CLAUDE_TOOL])):

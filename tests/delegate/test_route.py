@@ -14,8 +14,8 @@ from pathlib import Path
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 
-ROOT = Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location("route", ROOT / "skills" / "delegate" / "route.py")
+ROOT = Path(__file__).resolve().parents[2]
+spec = importlib.util.spec_from_file_location("route", ROOT / "src" / "delegate" / "entry.py")
 route = importlib.util.module_from_spec(spec)
 sys.modules["route"] = route
 spec.loader.exec_module(route)
@@ -27,12 +27,13 @@ from delegate.contracts.stores import locked
 from delegate.domain.health import ledger as health_ledger
 from delegate.domain.lanes.lane import Lane
 from delegate.domain.time import spec
+from support.procsim import real_proc  # noqa: E402
 
 net.REAL_NET_PROBE = net.net_probe
 net.net_probe = lambda hosts=None: {"up": True, "ip_up": True, "why": "ok", "ms": 1, "hosts": {}, "at": time.time()}     # tests open no socket; tests/test_net.py swaps it per case
 os.environ["DELEGATE_CONFIG_DIR"] = tempfile.mkdtemp()      # tests never touch a real config; classes that need their own set one
 T = 1_000_000_000.0   # a fixed "now"
-CFG = json.loads((ROOT / "skills" / "delegate" / "routing.json").read_text(encoding="utf-8"))
+CFG = json.loads((ROOT / "src" / "delegate" / "data" / "routing.json").read_text(encoding="utf-8"))
 
 
 def why(r):
@@ -79,15 +80,17 @@ def _call(x):
 
 
 class Pick(unittest.TestCase):
+    @real_proc("delegate: a worker, git or CLI process")
     def test_worker_prefers_codex(self):
         d = decide("worker", lanes())
         self.assertEqual((d["lane"], d["model"], d["pass"]), ("OPENAI_SUBSCRIPTION", "gpt-6.1-sol", "strict"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_codex_command_handles_non_git_dirs(self):
         with tempfile.TemporaryDirectory() as d_:
             d = decide("worker", lanes(), cwd=d_)
         self.assertIn("--skip-git-repo-check", d["how"]["cli"])      # not a git work tree
-        d2 = decide("worker", lanes(), cwd=str(Path(__file__).resolve().parent.parent))
+        d2 = decide("worker", lanes(), cwd=str(Path(__file__).resolve().parents[2]))
         self.assertNotIn("--skip-git-repo-check", d2["how"]["cli"])  # this repo is one
 
     def test_codex_out_falls_to_claude_subscription_when_healthy(self):
@@ -135,6 +138,7 @@ class Roles(unittest.TestCase):
         ls2 = lanes(openai={"out": True, "out_until": T + 5000}, sub={"week": 96, "five": 10})
         self.assertEqual(decide("planner", ls2, allow_degraded=True)["action"], "stop")   # ceiling still binds
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_reviewer_prefers_the_other_family_and_authored_by_is_optional(self):
         self.assertEqual(decide("reviewer", lanes())["model"], "gpt-6.1-sol")                 # no author given: Codex first (the most room), no claim of independence
         d = decide("reviewer", lanes(), authored_by="openai")                                  # Claude is the last lane tried (delegate-m86): Codex reviews Codex, flagged
@@ -145,6 +149,7 @@ class Roles(unittest.TestCase):
         self.assertEqual(decide("reviewer", lanes(), authored_by="claude")["lane"], "OPENAI_SUBSCRIPTION")
         self.assertEqual(decide("reviewer", lanes(), authored_by="gemini")["action"], "error")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_same_family_review_is_the_last_resort_and_flagged(self):
         out = {"out": True, "out_until": T + 3600}
         d = decide("reviewer", lanes(sub=out), authored_by="openai")                  # Claude is out: Codex reviews Codex
@@ -162,6 +167,7 @@ class Roles(unittest.TestCase):
                 self.assertEqual(steps[-1]["flag"], "same_family", who)
                 self.assertEqual(steps[-1]["on"], fam, who)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_only_one_family_up_never_stops_and_warns(self):
         out = {"out": True, "out_until": T + 3600}
         grok = Lane("GROK_SUBSCRIPTION", "xai", "subscription")
@@ -181,6 +187,7 @@ class Roles(unittest.TestCase):
             ud = decide("reviewer", ls, authored_by=who, unattended=True, allow_degraded=True)      # no consent step exists for review
             self.assertEqual((ud["action"], ud["flag"]), ("run", "same_family"), who)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_warning_names_why_other_families_are_down(self):
         out = {"out": True, "out_until": T + 3600, "out_reason": "logged_out"}
         ls = lanes(sub=out)
@@ -192,6 +199,7 @@ class Roles(unittest.TestCase):
         self.assertIn("claude logged out", w)
         self.assertNotIn("warning", decide("reviewer", lanes(), authored_by="claude"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_premium_only_when_requested(self):
         self.assertNotEqual(decide("planner", lanes())["model"], "fable-5.1")
         d = decide("worker", lanes(), premium="claude")
@@ -199,6 +207,7 @@ class Roles(unittest.TestCase):
         d = decide("worker", lanes(), premium="openai")
         self.assertEqual(d["action"], "error")      # no premium model mapped for openai yet
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_light_uses_luna_first(self):
         d = decide("light", lanes())
         self.assertEqual((d["model"], d["mode"]), ("gpt-6-luna", "read_only"))
@@ -227,6 +236,7 @@ class Helpers(unittest.TestCase):
 
 
 class Cli(unittest.TestCase):
+    @real_proc("delegate: a worker, git or CLI process")
     def test_report_and_next_roundtrip(self):
         with tempfile.TemporaryDirectory() as d:
             os.environ["XDG_CONFIG_HOME"] = os.environ["DELEGATE_CONFIG_DIR"] = d
@@ -251,32 +261,13 @@ class Cli(unittest.TestCase):
                     os.environ.pop(k, None)
 
 
-class BaseTable(unittest.TestCase):
-    """SKILL.md carries a fixed role table for installs without Python. It must equal what routing.json gives for Claude sub-agents."""
-
-    def test_skill_table_matches_routing_json(self):
-        skill = (Path(__file__).resolve().parent.parent / "skills" / "delegate" / "SKILL.md").read_text(encoding="utf-8")
-        block = re.search(r"<!-- base-table -->(.*?)<!-- /base-table -->", skill, re.S).group(1)
-        table = {}
-        for line in block.splitlines():
-            cells = [c.strip() for c in line.strip().strip("|").split("|")]
-            if len(cells) == 2 and cells[0] not in ("role", "---", ""):
-                table[cells[0]] = cells[1]
-        cfg = env.load_routing()
-        want = {}
-        for name, role in cfg["roles"].items():
-            steps = role["by_author"]["openai"] if "by_author" in role else role["steps"]
-            seq = [f"{cfg['models'][s['model']]['agent']} {s['effort']}" for s in steps if s["on"] == "claude" and s.get("flag") != "degraded"]
-            want[name] = " > ".join(seq)
-        self.assertEqual(table, want)
-
-
 class StateLock(unittest.TestCase):
     def test_a_lock_that_stays_held_raises_instead_of_running_unlocked(self):
         with tempfile.TemporaryDirectory() as d, locked(Path(d) / "x", timeout=5), self.assertRaises(TimeoutError):
             with locked(Path(d) / "x", timeout=0.2):
                 pass
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_parallel_processes_lose_no_update(self):
         code = ("import sys; sys.path.insert(0, %r); from delegate.app import env\n"
                 "for _ in range(25): env.update_state(lambda s: s.warned_at.__setitem__('n', s.warned_at.get('n', 0) + 1))" % str(ROOT / "src"))

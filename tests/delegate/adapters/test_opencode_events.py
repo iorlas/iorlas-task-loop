@@ -12,7 +12,7 @@ from unittest import mock
 import hermetic  # noqa: F401  (a home of its own for every test)
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent.parent / "src"))
+sys.path.insert(0, str(HERE.parents[2] / "src"))
 from delegate.adapters.harness import opencode_sandbox as box  # noqa: E402
 from delegate.adapters.harness.base import LaunchInputs  # noqa: E402
 from delegate.adapters.harness.opencode import OpenCodeHarness, Profile  # noqa: E402

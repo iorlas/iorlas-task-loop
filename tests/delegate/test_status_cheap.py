@@ -15,6 +15,7 @@ from test_route import route
 
 from delegate.adapters import procs
 from delegate.app import env, harnesses, status, usage
+from support.procsim import real_proc  # noqa: E402
 
 
 def boom(*a, **k):
@@ -61,6 +62,7 @@ class Cheap(unittest.TestCase):
         rc, d = self.cheap()
         self.assertEqual([r["run_id"] for r in d["running"]], ["r1"])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_full_status_writes_the_snapshot_and_the_cache(self):
         out = io.StringIO()
         with mock.patch.object(harnesses, "probe_login", return_value=(True, "ok")), contextlib.redirect_stdout(out):

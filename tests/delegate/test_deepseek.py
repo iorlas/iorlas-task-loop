@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import hermetic  # noqa: F401  (a home of its own for every test)
-from fakes.fake_run import replay
+from delegate_fakes.fake_run import replay
 from test_route import CFG, decide, lanes
 
 from delegate.adapters import agent_runs
@@ -19,6 +19,7 @@ from delegate.app import env, launch, usage
 from delegate.app.settle import Settler
 from delegate.app.supervisor import RunHooks
 from delegate.domain.lanes.lane import Lane
+from support.procsim import real_proc  # noqa: E402
 
 
 class DeepSeekTests(unittest.TestCase):
@@ -38,6 +39,7 @@ class DeepSeekTests(unittest.TestCase):
         ls['DEEPSEEK_FREE'].out = True
         self.assertNotEqual(decide('light', ls)['lane'], 'DEEPSEEK_FREE')
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_deepseek_author_gets_other_family_review(self):
         self.assertEqual(decide('reviewer', lanes(), authored_by='deepseek')['lane'], 'OPENAI_SUBSCRIPTION')
         steps = CFG['roles']['reviewer']['by_author']['deepseek']
@@ -50,6 +52,7 @@ class DeepSeekTests(unittest.TestCase):
         with patch.dict(usage.READERS, {k: lambda *a: None for k in usage.READERS}):
             self.assertNotIn('DEEPSEEK_FREE', dec.fleet_builder(cfg).build(env.load_state(), 1, check_config=False).lanes)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_launch_isolates_credentials_and_refuses_unverified_model(self):
         d = {'lane': 'DEEPSEEK_FREE', 'model': 'deepseek-v4.1-flash-free', 'effort': 'low', 'role': 'worker',
              'how': {'kind': 'opencode', 'model': 'opencode/deepseek-v4.1-flash-free', 'cwd': '/tmp', 'write': False}}

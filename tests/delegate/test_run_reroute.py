@@ -12,6 +12,7 @@ from delegate.contracts import history as hist
 from delegate.contracts.routing import CallArgs, Step
 from delegate.domain.holds.book import HoldBook
 from delegate.domain.routing.router import Router
+from support.procsim import real_proc  # noqa: E402
 
 
 class RunReroute(RunBase):
@@ -30,6 +31,7 @@ class RunReroute(RunBase):
     def rows(self):
         return [r for r in env.history_store().rows() if isinstance(r, hist.RunRow)]
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_schema_rejection_keeps_utf8_prefix_and_problem(self):
         with support.fleet_patches(lanes()), mock.patch.object(launch, "launch_worker", side_effect=self.fake):
             _, result = self.run_it("--schema", self.schema(), "--only-family", "openai")
@@ -40,6 +42,7 @@ class RunReroute(RunBase):
         self.assertIn(row.schema_problem, row.say or "")
         self.assertEqual(why(result), "schema_invalid")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_fresh_task_avoids_recent_timeout_and_schema_invalid(self):
         for outcome in ("timeout", "schema_invalid"):
             with self.subTest(outcome=outcome):
@@ -48,6 +51,7 @@ class RunReroute(RunBase):
                     _, result = self.run_it("--task", "T")
                 self.assertEqual(result["lane"], "CLAUDE_SUBSCRIPTION")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_avoidance_is_task_role_and_time_bounded(self):
         for override in ({"task": "other"}, {"role": "reviewer"}, {"ts": env.now() - 86400}):
             self.failure(**override)
@@ -55,6 +59,7 @@ class RunReroute(RunBase):
             _, result = self.run_it("--task", "T")
         self.assertEqual(result["lane"], "OPENAI_SUBSCRIPTION")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_no_task_and_resume_keep_the_original_choice(self):
         self.failure()
         with support.fleet_patches(lanes()):
@@ -63,6 +68,7 @@ class RunReroute(RunBase):
             _, plain = self.run_it()
         self.assertEqual((resumed["lane"], plain["lane"]), ("OPENAI_SUBSCRIPTION",) * 2)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_pinned_family_reuses_failed_pair_with_warning(self):
         self.failure()
         with support.fleet_patches(lanes()):
@@ -71,6 +77,7 @@ class RunReroute(RunBase):
         self.assertIn("no other", result["warning"])
         self.assertIn("openai", result["warning"])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_busy_alternative_explains_reuse(self):
         self.failure()
         ls = lanes()
@@ -81,6 +88,7 @@ class RunReroute(RunBase):
         self.assertIn("no other", result["warning"])
         self.assertIn("rejected, out", result["warning"])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_same_lane_can_use_a_different_model_within_pinned_family(self):
         routing = env.typed_routing(CFG)
         steps = tuple(Step(model=m, effort="high", on="openai") for m in ("gpt-6.1-sol", "gpt-6-luna"))
@@ -90,6 +98,7 @@ class RunReroute(RunBase):
                                                                avoid=frozenset({("OPENAI_SUBSCRIPTION", "gpt-6.1-sol")}))
         self.assertEqual((pick.as_dict()["lane"], pick.as_dict()["model"]), ("OPENAI_SUBSCRIPTION", "gpt-6-luna"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_second_lane_can_succeed_without_a_third_attempt(self):
         def worker(d, *args):
             res = self.fake(d, *args)
@@ -102,6 +111,7 @@ class RunReroute(RunBase):
         self.assertEqual(launched.call_count, 3)
         self.assertEqual([r.done for r in self.rows()], [False, True])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_schema_reask_failure_launches_one_fresh_different_lane(self):
         with support.fleet_patches(lanes()), mock.patch.object(launch, "launch_worker", side_effect=self.fake) as worker:
             _, result = self.run_it("--task", "T", "--schema", self.schema())
@@ -114,6 +124,7 @@ class RunReroute(RunBase):
         self.assertIsNone(worker.call_args_list[2].args[2].resume)
         self.assertEqual(why(result), "schema_invalid")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_reroute_reports_first_attempt_head_change(self):
         state = {"head": "111111111", "branch": "main"}
 
@@ -133,6 +144,7 @@ class RunReroute(RunBase):
         self.assertEqual([r.done for r in self.rows()], [False, True])
         self.assertEqual(result["git_violation"], ["HEAD 111111111 -> 222222222"])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_schema_single_lane_says_why_it_did_not_reroute(self):
         with support.fleet_patches(lanes()), mock.patch.object(launch, "launch_worker", side_effect=self.fake) as worker:
             _, result = self.run_it("--schema", self.schema(), "--only-family", "openai")

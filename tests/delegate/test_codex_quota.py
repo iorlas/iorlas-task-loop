@@ -11,6 +11,7 @@ from test_route import CFG, T, lanes
 from delegate.app import cockpit, env, usage
 from delegate.contracts.state import UsageCache
 from delegate.domain.lanes.lane import Lane
+from support.procsim import real_proc  # noqa: E402
 
 # `account/rateLimits/read` as recorded: Pro Lite, one weekly window sent as `primary`, no `secondary`, no other bucket, no credits.
 RECORDED = {"ordinaryUsageAllowed": True, "rateLimits": {
@@ -100,6 +101,7 @@ class ClaudeLast(Fresh):
         a.update(args)
         return support.decide(role, self.cfg(), ls, {}, T, a)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_all_lanes_up_a_non_claude_lane_is_picked_for_every_role(self):
         for role in CFG["roles"]:
             for who in ([None] if role != "reviewer" else [None, "openai", "claude", "xai", "deepseek", "zai"]):
@@ -125,6 +127,7 @@ class ClaudeLast(Fresh):
         ls["ZAI_CODING_SUBSCRIPTION"].out = False                                # one non-Claude lane back: it wins again
         self.assertEqual(self.pick("worker", ls)["lane"], "ZAI_CODING_SUBSCRIPTION")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_relaxed_non_claude_lane_beats_a_strict_claude_lane(self):
         ls = self.everything()
         for n in ("GROK_SUBSCRIPTION", "DEEPSEEK_FREE", "ZAI_CODING_SUBSCRIPTION"):
@@ -133,6 +136,7 @@ class ClaudeLast(Fresh):
         d = self.pick("worker", ls)
         self.assertEqual((d["lane"], d["pass"]), ("OPENAI_SUBSCRIPTION", "relaxed"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_same_family_review_by_a_non_claude_lane_still_precedes_claude(self):
         ls = self.everything()
         for n in ("GROK_SUBSCRIPTION", "DEEPSEEK_FREE", "ZAI_CODING_SUBSCRIPTION"):

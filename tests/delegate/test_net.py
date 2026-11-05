@@ -21,7 +21,7 @@ from delegate.contracts.history import RunRow
 from delegate.contracts.routing import BreakerPolicy
 from delegate.domain.health.ledger import HealthLedger, failure_fields
 
-LANES = Path(__file__).resolve().parent.parent / "src" / "delegate" / "adapters"
+LANES = Path(__file__).resolve().parents[2] / "src" / "delegate" / "adapters"
 from delegate.adapters import netprobe, procs
 from delegate.adapters.harness import classify
 from delegate.app import env, harnesses, launch, net
@@ -29,6 +29,7 @@ from delegate.app import roles as role_view
 from delegate.app.settle import Settler
 from delegate.contracts import stops
 from delegate.domain.lanes import profiles
+from support.procsim import real_proc  # noqa: E402
 
 
 @contextlib.contextmanager
@@ -244,6 +245,7 @@ class Cheap(unittest.TestCase):
             rc = route.main(["status", "--json", "--cheap"])
         return rc, json.loads(out.getvalue())
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_full_status_writes_roles_and_cheap_replays_them_with_a_fresh_net(self):
         out = io.StringIO()
         with mock.patch.object(harnesses, "probe_login", return_value=(True, "ok")), contextlib.redirect_stdout(out):

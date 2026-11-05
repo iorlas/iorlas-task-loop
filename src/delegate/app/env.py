@@ -22,7 +22,8 @@ from delegate.contracts.state import StateDoc
 from delegate.contracts.stores import ConfigStore, HistoryStore, StateStore
 
 Args = argparse.Namespace | types.SimpleNamespace      # the parsed command line (a stand-in namespace in tests)
-SKILL_DIR = Path(__file__).resolve().parents[3] / "skills" / "delegate"        # routing.json, contract.json, SKILL.md: next to src/ in the plugin tree
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"        # routing.json, contract.json
+ENTRY = Path(__file__).resolve().parents[1] / "entry.py"        # the script a worker's guard shim runs
 
 
 def now() -> float:
@@ -33,7 +34,7 @@ def now() -> float:
 def plugin_data_dir(here: Path | None = None) -> Path | None:
     """Claude Code's persistent data dir for this plugin: <plugins>/data/<plugin>-<marketplace>, derived from where this copy is installed
     (<plugins>/cache/<marketplace>/<plugin>/<version>/...). None when running from a checkout."""
-    parts = (here or SKILL_DIR).parts
+    parts = (here or DATA_DIR).parts
     for i in range(1, len(parts) - 3):
         if parts[i] == "cache" and parts[i - 1] == "plugins":
             ident = "".join(c if c.isascii() and (c.isalnum() or c in "_-") else "-" for c in f"{parts[i + 2]}@{parts[i + 1]}")
@@ -67,7 +68,7 @@ _RETIRED_WARNED: set[str] = set()
 def load_routing() -> dict:
     """routing.json with the owner's overrides (config.json, minus its `profile`) merged into `settings`, validated into contracts.routing.Routing.
     Retired settings keys are dropped with one stderr line each (stdout carries the answer); any other unknown key fails."""
-    with open(SKILL_DIR / "routing.json", encoding="utf-8") as f:
+    with open(DATA_DIR / "routing.json", encoding="utf-8") as f:
         cfg = json.load(f)
     moved = replaced_settings(cfg["lanes"])
     for k in config_store().overrides():

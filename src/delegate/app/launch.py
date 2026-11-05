@@ -41,7 +41,7 @@ def settler():
 
 def guard_settings(read_only: bool | None, engine_only: tuple[str, ...] = ()):
     """--settings for claude -p: delegate's PreToolUse hook (route.py guard), read-only for steps that may not write."""
-    argv = [sys.executable, str(env.SKILL_DIR / "route.py"), "guard"] + (["--read-only"] if read_only else [])
+    argv = [sys.executable, str(env.ENTRY), "guard"] + (["--read-only"] if read_only else [])
     argv += [f"--engine-only={x}" for x in engine_only] if not read_only else []
     argv += ["--config-dir", str(env.config_dir())]
     cmd = shlex.join(argv)

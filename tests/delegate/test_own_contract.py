@@ -24,6 +24,7 @@ from delegate.app import watch
 from delegate.app.publish import LiveSink
 from delegate.app.supervisor import RunHooks, Supervisor
 from delegate.contracts import codec, wire
+from support.procsim import real_proc  # noqa: E402
 
 FAKE = str(Path(__file__).resolve().parent / "fakes" / "fake_agent.py")
 
@@ -70,6 +71,7 @@ class RealProcesses(unittest.TestCase):
         p.stdout.readline()          # its first event: the script is past its signal setup
         return p
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_process_group_stop_takes_the_sessions_child_too(self):
         p = self.start("spawner")
         child = wait_pid(self.pidfile)
@@ -78,6 +80,7 @@ class RealProcesses(unittest.TestCase):
         self.assertTrue(dead(child), "the child in its own session survived")
         self.assertEqual((rep.end, rep.survivors, rep.term_sent, rep.kill_sent), (wire.END_OK, [], True, True))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_sigkill_escalation_when_sigterm_is_ignored(self):
         p = self.start("hang")
         t0 = time.time()
@@ -87,12 +90,14 @@ class RealProcesses(unittest.TestCase):
         self.assertGreaterEqual(time.time() - t0, 1)         # it waited the grace before SIGKILL
         self.assertLess(time.time() - t0, 10)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_worker_that_obeys_sigterm_is_never_sigkilled(self):
         p = self.start("stall")
         rep = procs.kill_tree(p, grace=5)
         self.assertEqual(p.wait(), -signal.SIGTERM)
         self.assertEqual((rep.term_sent, rep.kill_sent, rep.survivors), (True, False, []))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_worker_survived_names_the_pids_and_ends_the_run_so(self):
         p = self.start("stall")
         pid = p.pid
@@ -112,6 +117,7 @@ class RealProcesses(unittest.TestCase):
         spec = LaunchSpec(argv=[sys.executable, FAKE, scenario, self.pidfile], env=dict(os.environ), cwd=os.environ["TMPDIR"], stdin="brief")
         return sup.run(spec, timeout), hooks
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_normal_run_is_ok_and_nothing_was_stopped(self):
         out, hooks = self.run_fake("normal")
         self.assertEqual((out.rc, out.timed_out), (0, False))
@@ -120,6 +126,7 @@ class RealProcesses(unittest.TestCase):
         self.assertEqual((end.end, end.stopped), (wire.END_OK, False))
         self.assertEqual((out.worker.pgid, bool(out.worker.start)), (out.worker.pid, bool(proc_start(os.getpid()))))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_call_timeout_stops_a_worker_that_ignores_sigterm(self):
         t0 = time.time()
         out, hooks = self.run_fake("spawner", timeout=2)
@@ -130,6 +137,7 @@ class RealProcesses(unittest.TestCase):
         self.assertTrue(dead(wait_pid(self.pidfile)))
         self.assertTrue(dead(self.pid))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_idle_worker_is_stopped_by_the_watchdog_not_the_wall_clock(self):
         t0 = time.time()
         out, _ = self.run_fake("stall", timeout=60, first_event_s=5, silence_s=1)
@@ -137,10 +145,12 @@ class RealProcesses(unittest.TestCase):
         self.assertLess(time.time() - t0, 15)
         self.assertTrue(dead(self.pid))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_streaming_worker_is_never_idle(self):
         out, _ = self.run_fake("slow", timeout=60, first_event_s=5, silence_s=1)
         self.assertEqual((out.rc, out.watch.why), (0, None))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_sigterm_to_the_delegate_stops_the_worker_tree_first(self):
         code = ("import os, sys; sys.path.insert(0, %r); from delegate.adapters.harness.base import LaunchSpec; from delegate.adapters.harness.codex import CodexHarness; "
                 "from delegate.app.publish import LiveSink; from delegate.app.supervisor import RunHooks, Supervisor; "

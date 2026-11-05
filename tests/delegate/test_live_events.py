@@ -10,11 +10,12 @@ from unittest import mock
 import hermetic  # noqa: F401  (a home of its own for every test)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "skills" / "delegate"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "delegate"))
 import test_stream_supervisor as tss
 
 from delegate.adapters.harness.codex import CodexHarness
 from delegate.app.publish import LiveSink, end_status
+from support.procsim import real_proc  # noqa: E402
 
 j = tss.j
 LONG = "x" * 3000
@@ -58,6 +59,7 @@ class LiveFile(unittest.TestCase):
     def events(self, path):
         return [e for e in self.lines(path) if "k" in e]       # the first line is the WorkerStarted, which has no kind
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_codex(self):
         f = self.base / "sub" / "dir" / "live.jsonl"        # parent dirs are created
         r = self.run_kind("codex", CODEX, f)
@@ -76,6 +78,7 @@ class LiveFile(unittest.TestCase):
         self.assertEqual(ev[-1]["status"], "done")
         self.assertTrue(all(isinstance(e["t"], float) for e in ev))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_codex_lines_are_parsed_once_for_the_live_file_the_turn_and_the_evidence(self):
         f = self.base / "live.jsonl"
         real = CodexHarness.parse_line
@@ -86,6 +89,7 @@ class LiveFile(unittest.TestCase):
         self.assertEqual((r["tokens"], r["ref"]), ({"in": 100, "cached": 40, "out": 7}, "th-1"))
         self.assertEqual(self.events(f)[1]["k"], "cmd_start")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_claude(self):
         f = self.base / "live.jsonl"
         self.assertIsNone(self.run_kind("claude", CLAUDE, f).get("outcome"))
@@ -95,6 +99,7 @@ class LiveFile(unittest.TestCase):
         self.assertEqual((ev[2]["id"], ev[2]["text"], ev[5]["id"], ev[5]["out"]), ("tu2", "Edit skills/x.py", "tu2", "ok"))
         self.assertEqual(ev[-1]["cost_usd"], 0.25)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_opencode(self):
         f = self.base / "live.jsonl"
         self.assertIsNone(self.run_kind("opencode", OPENCODE, f).get("outcome"))
@@ -103,6 +108,7 @@ class LiveFile(unittest.TestCase):
         self.assertEqual((ev[1]["id"], ev[2]["id"], ev[2]["exit"], ev[2]["secs"]), ("o1", "o1", 0, 0.5))
         self.assertEqual((ev[3]["text"], ev[3]["id"], ev[4]["id"]), ("edit skills/x.py", "o2", "o2"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_env_unset_writes_nothing(self):
         for kind, lines in (("codex", CODEX), ("claude", CLAUDE), ("opencode", OPENCODE)):
             with self.subTest(kind):

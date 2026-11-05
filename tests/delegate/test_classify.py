@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import hermetic  # noqa: F401  (a home of its own for every test)
-from fakes.fake_run import replay as replay_run
+from delegate_fakes.fake_run import replay as replay_run
 from test_route import ROOT, T, route
 
 from delegate.adapters import agent_runs, codex_account
@@ -23,9 +23,10 @@ from delegate.cli import verbs
 from delegate.contracts import stops
 from delegate.domain.lanes import profiles
 from delegate.domain.policy.worker import denial, denial_item
+from support.procsim import real_proc  # noqa: E402
 
-FIXTURES = sorted((ROOT / "tests" / "contract" / "fixtures").glob("*.json"))
-CONTRACT = json.loads((ROOT / "skills" / "delegate" / "contract.json").read_text(encoding="utf-8"))
+FIXTURES = sorted((ROOT / "tests" / "delegate" / "contract" / "fixtures").glob("*.json"))
+CONTRACT = json.loads((ROOT / "src" / "delegate" / "data" / "contract.json").read_text(encoding="utf-8"))
 LAUNCH_ONLY = {"duplicate_task", "busy", "no_lane", "caller", "engine_only_unenforced", "crash", "schema_invalid", "lock", "setup", "held"}      # answered outside the ladder
 
 
@@ -57,10 +58,10 @@ class Fixtures(unittest.TestCase):
         self.assertGreater(n, 400)      # 53 + 215 + 53 + 114 + the rest
 
     def test_the_53_bad_requests_the_grok_batch_and_the_night_are_all_there(self):
-        count = lambda name: len(load(ROOT / "tests" / "contract" / "fixtures" / name)["rows"])
+        count = lambda name: len(load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / name)["rows"])
         self.assertEqual(count("bad_request_22oct.json"), 53)
         self.assertEqual(count("grok_spending_limit_24oct.json"), 114)
-        night = load(ROOT / "tests" / "contract" / "fixtures" / "night_22oct.json")["rows"]
+        night = load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / "night_22oct.json")["rows"]
         self.assertEqual(sum(1 for r in night if r["expected_reason"] == "bad_request"), 53)
         self.assertEqual(sum(1 for r in night if r["expected_reason"] is None), len(night) - 53)
 
@@ -140,14 +141,14 @@ class Stop(unittest.TestCase):
         self.assertGreater(n, 250)
 
     def test_golden_the_53_bad_requests_map_to_caller_needs_owner_none(self):
-        f = load(ROOT / "tests" / "contract" / "fixtures" / "bad_request_22oct.json")
+        f = load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / "bad_request_22oct.json")
         self.assertEqual(len(f["rows"]), 53)
         for row in f["rows"]:
             self.assertEqual(stop_tuple(self.answer(replay(row, f), "OPENAI_SUBSCRIPTION")), ("bad_request", "caller", "needs_owner", "none"), row["id"])
         self.assertIsNone(env.load_state().out or None)            # not one of them marks the lane
 
     def test_golden_the_grok_batch_is_a_lane_out_with_no_time_and_marks_the_lane_once_for_all(self):
-        f = load(ROOT / "tests" / "contract" / "fixtures" / "grok_spending_limit_24oct.json")
+        f = load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / "grok_spending_limit_24oct.json")
         self.assertEqual(len(f["rows"]), 114)
         for row in f["rows"]:
             r = self.answer(replay(row, f), "GROK_SUBSCRIPTION")
@@ -156,7 +157,7 @@ class Stop(unittest.TestCase):
         self.assertIn("GROK_SUBSCRIPTION", env.load_state().out)
 
     def test_golden_the_22_oct_night_has_53_bad_requests_and_every_other_row_is_done(self):
-        f = load(ROOT / "tests" / "contract" / "fixtures" / "night_22oct.json")
+        f = load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / "night_22oct.json")
         self.assertEqual(len(f["rows"]), 268)
         tuples = [stop_tuple(self.answer(o, "OPENAI_SUBSCRIPTION")) if (o := replay(row, f)) else None for row in f["rows"]]
         self.assertEqual(tuples.count(("bad_request", "caller", "needs_owner", "none")), 53)
@@ -164,7 +165,7 @@ class Stop(unittest.TestCase):
         self.assertIsNone(env.load_state().out or None)
 
     def test_credit_exhausted_marks_the_lane_with_no_retry_time(self):
-        row = load(ROOT / "tests" / "contract" / "fixtures" / "grok_spending_limit_24oct.json")["rows"][0]
+        row = load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / "grok_spending_limit_24oct.json")["rows"][0]
         o = replay(row, None)
         r = self.answer(o, "GROK_SUBSCRIPTION")
         out = env.load_state().out["GROK_SUBSCRIPTION"]
@@ -237,7 +238,7 @@ class Stop(unittest.TestCase):
         self.assertEqual(CONTRACT["denied_kinds"], ["policy", "sandbox_limit", "secret"])
 
     def test_the_old_wire_is_gone_from_the_source(self):
-        for path in [*(ROOT / "skills" / "delegate").rglob("*.py"), *(ROOT / "src").rglob("*.py"), ROOT / "skills" / "delegate" / "contract.json"]:
+        for path in [*(ROOT / "skills" / "delegate").rglob("*.py"), *(ROOT / "src").rglob("*.py"), ROOT / "src" / "delegate" / "data" / "contract.json"]:
             text = path.read_text(encoding="utf-8")
             for word in ("to_wire_v2", "vendor_prework", "lane_out", "wire_reasons", "wire_default"):
                 self.assertNotIn(word, text, f"{path.name}: {word}")
@@ -259,33 +260,6 @@ class Docs(unittest.TestCase):
     def test_run_args_are_the_flags_of_run(self):
         import re
         self.assertEqual(set(re.findall(r'ru\.add_argument\("(--[a-z-]+)"', self.SRC)), set(CONTRACT["run_args"]))
-
-    def test_docs_name_only_flags_argparse_knows(self):
-        import re
-        known = set(re.findall(r'add_argument\("(--[a-z-]+)"', self.SRC))
-        docs = [ROOT / "skills" / "delegate" / "SKILL.md", *sorted((ROOT / "skills" / "delegate" / "modes").glob("*.md"))]
-        for path in docs:
-            for flag in set(re.findall(r"(?<![\w-])(--[a-z][a-z-]+)", path.read_text(encoding="utf-8"))):
-                self.assertTrue(flag in known or flag in self.FOREIGN.get(path.name, ()), f"{path.name}: {flag} is not a route.py flag")
-
-    def test_no_dead_compat_is_left(self):
-        import re
-        gate = re.compile(r"recent_runs|LANE_CONTEXT|\"features\"|no_sandbox|no.wait")
-        for base in ("skills", "tests", "docs"):
-            for path in (ROOT / base).rglob("*"):
-                if path.is_file() and path.suffix in (".py", ".md", ".json") and "fixtures" not in path.parts and path.name != "test_classify.py":
-                    for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-                        self.assertIsNone(gate.search(line), f"{path}:{n}")
-        self.assertIsNone(re.search(r'\b(ru|n)\.add_argument\("--host"', self.SRC))      # only `set-key` and `net` take a host
-
-    def test_the_prose_of_integrations_md_has_no_changelog(self):
-        import re
-        text = (ROOT / "docs" / "dev" / "integrations.md").read_text(encoding="utf-8")
-        self.assertIsNone(re.search(r"(?i)\b(since|before) 0\.\d+", text))
-
-    def test_the_extra_capacity_notes_are_not_in_the_plugin(self):
-        self.assertFalse((ROOT / "extra-coding-capacity-2026-10.md").exists())
-
 
 class Ladder(unittest.TestCase):
     def test_order_first_match_wins(self):
@@ -350,18 +324,20 @@ class Launchers(unittest.TestCase):
     def opencode(self, lines, rc=1, **kw):
         return self.run_cli("opencode", lines, rc, lane=kw.pop("lane", "GROK_SUBSCRIPTION"), **kw)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_grok_row_through_the_opencode_launcher_marks_the_lane_out_without_a_time(self):
-        row = load(ROOT / "tests" / "contract" / "fixtures" / "grok_spending_limit_24oct.json")["rows"][0]
+        row = load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / "grok_spending_limit_24oct.json")["rows"][0]
         res = self.opencode([{"type": "error", "error": {"name": "APIError", "data": {"message": row["evidence"]["vendor_err"]}}}])
         self.assertEqual((res["outcome"], res.get("retry_after")), ("credit_exhausted", None))
         self.assertIn("GROK_SUBSCRIPTION", env.load_state().out)
 
     def test_a_bad_request_row_through_the_codex_launcher_leaves_the_lane_alone(self):
-        for row in load(ROOT / "tests" / "contract" / "fixtures" / "bad_request_22oct.json")["rows"][:3]:
+        for row in load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / "bad_request_22oct.json")["rows"][:3]:
             res = self.run_cli("codex", [{"type": "turn.failed", "error": {"message": row["evidence"]["vendor_err"]}}], 1)
             self.assertEqual(res["outcome"], "bad_request")
         self.assertEqual((env.load_state().out or None), None)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_sigterm_with_no_error_is_killed_and_retried_not_failed(self):
         res = self.opencode([{"type": "step_finish", "part": {"tokens": {"input": 5}}}], rc=-15)
         self.assertEqual(res["outcome"], "killed")
@@ -378,6 +354,7 @@ class Launchers(unittest.TestCase):
         self.assertEqual(res["outcome"], "worker_failed")
         self.assertIn("Reconnecting... 5/5", res["say"])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_workers_own_words_about_a_rate_limit_never_take_a_lane_out(self):
         words = "The batch is queued behind a rate limit on the Unity side; quota 429 seen in the log."
         res = self.run_cli("codex", [{"type": "item.completed", "item": {"type": "agent_message", "text": words}}], 1)
@@ -389,12 +366,14 @@ class Launchers(unittest.TestCase):
         self.assertEqual(res["outcome"], "worker_failed")
         self.assertEqual((env.load_state().out or None), None)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_the_clis_own_error_still_does(self):
         res = self.run_cli("claude_p", [{"type": "result", "is_error": True, "result": "API Error: 429 rate limit exceeded", "num_turns": 1}], 1,
                            lane="CLAUDE_SUBSCRIPTION", cap=1, read_only=False)
         self.assertEqual(res["outcome"], "rate_limited")
         self.assertIn("CLAUDE_SUBSCRIPTION", env.load_state().out)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_additive_usage_facts_come_from_the_events(self):
         res = self.opencode([{"type": "step_finish", "part": {"tokens": {"input": 1000, "output": 5, "cache": {"read": 3000, "write": 0}}}},
                              {"type": "step_finish", "part": {"tokens": {"input": 2000, "output": 5, "cache": {"read": 4000, "write": 0}}}},

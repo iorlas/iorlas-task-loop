@@ -22,6 +22,7 @@ from delegate.app import lease, usage
 from delegate.app.publish import LiveSink
 from delegate.app.supervisor import RunHooks, Supervisor
 from delegate.contracts.state import Lease
+from support.procsim import real_proc  # noqa: E402
 
 # A fake of the Codex CLI: a node-shim analogue that starts a native child in a session of its own; the child ignores SIGTERM.
 CHILD = "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(300)"
@@ -54,6 +55,7 @@ class RealTrees(unittest.TestCase):
         self.pidfile = os.path.join(self.d.name, "child.pid")
         self.addCleanup(self.d.cleanup)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_supervisor_timeout_leaves_no_process(self):
         seen = {}
         t0 = time.time()
@@ -73,6 +75,7 @@ class RealTrees(unittest.TestCase):
         self.assertTrue(gone(seen["child"], seen["child_start"]), "the shim's native child survived the timeout")
         self.assertTrue(gone(seen["shim"], seen["shim_start"]))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_reap_leaves_no_process(self):
         p = subprocess.Popen([sys.executable, "-c", SHIM, self.pidfile], start_new_session=True)
         self.addCleanup(lambda: (p.kill(), p.wait()))
@@ -85,6 +88,7 @@ class RealTrees(unittest.TestCase):
         self.assertTrue(gone(child, cstart), "the shim's native child survived reap")
         self.assertLess(time.time() - t0, 15)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_run_tree_timeout_stops_the_tree(self):
         with self.assertRaises(subprocess.TimeoutExpired):
             procs.run_capture([sys.executable, "-c", SHIM, self.pidfile], 3)
@@ -94,6 +98,7 @@ class RealTrees(unittest.TestCase):
             time.sleep(0.2)
         self.assertFalse(alive(child), "the shim's native child survived the run_tree timeout")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_stop_tree_grace_sends_term_first(self):
         code = "import signal,sys,time; signal.signal(signal.SIGTERM, lambda *a: (open(sys.argv[1],'w').write('term'), sys.exit(0))); open(sys.argv[1]+'.up','w'); time.sleep(300)"
         flag = os.path.join(self.d.name, "flag")
@@ -116,6 +121,7 @@ class KillPaths(unittest.TestCase):
         exe.chmod(0o755)
         return mock.patch.object(shutil, "which", return_value=str(exe))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_silent_app_server_is_cut_at_the_deadline_and_killed_through_the_tree_kill(self):
         with self.fake_server("time.sleep(300)"), mock.patch.object(codex_account, "APP_SERVER_S", 1), \
                 mock.patch.object(procs, "kill_tree", wraps=procs.kill_tree) as kt:
@@ -125,6 +131,7 @@ class KillPaths(unittest.TestCase):
         self.assertEqual((res, err), (None, "codex app-server did not answer"))
         kt.assert_called_once()
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_partial_line_does_not_hang_and_answers_are_read_across_chunks(self):
         body = ("sys.stdin.readline(); print('{\"id\":1,\"result\":{}}', flush=True); sys.stdin.readline(); sys.stdin.readline()\n"
                 "sys.stdout.write('{\"id\":2,\"res'); sys.stdout.flush(); time.sleep(0.3); print('ult\":{\"ok\":1}}', flush=True); time.sleep(300)")

@@ -36,8 +36,8 @@ def leftovers():
 def notes(cfg: dict):
     out: list[dict[str, str]] = [{"id": "retired_key", "key": k, "file": str(env.config_store().path), "say": f"{env.config_store().path}: '{k}' is retired and ignored; safe to delete from config.json."}
            for k in env.retired_keys_present()]
-    with open(env.SKILL_DIR / "routing.json", encoding="utf-8") as f:
-        out += [{"id": "retired_key", "key": k, "file": str(env.SKILL_DIR / "routing.json"), "say": f"{env.SKILL_DIR / 'routing.json'}: '{k}' is retired and ignored."}
+    with open(env.DATA_DIR / "routing.json", encoding="utf-8") as f:
+        out += [{"id": "retired_key", "key": k, "file": str(env.DATA_DIR / "routing.json"), "say": f"{env.DATA_DIR / 'routing.json'}: '{k}' is retired and ignored."}
                 for k in split_retired(json.load(f).get("settings") or {})[1]]
     return out + leftovers() + smoke_problems(cfg)
 

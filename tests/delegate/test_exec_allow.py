@@ -14,6 +14,7 @@ from test_route import route
 
 from delegate.app import env
 from delegate.domain.policy.shell import read_only_problem
+from support.procsim import real_proc  # noqa: E402
 
 ESCAPES = (
     "sed 'e id' f", "sed '1e id' f", "sed 's/x/id/e' f", "sed -f script f", "sed --file=script f",
@@ -140,8 +141,9 @@ class ExecAllow(unittest.TestCase):
         self.assertEqual(code, 7)
         self.assertEqual(len(self.rows()), 1)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_actual_pinned_python_runs_with_an_empty_path(self):
-        command = [sys.executable, str(env.SKILL_DIR / "route.py"), "guard", "--exec-allow", "python", "-m", "unittest", "--help"]
+        command = [sys.executable, str(env.ENTRY), "guard", "--exec-allow", "python", "-m", "unittest", "--help"]
         result = subprocess.run(command, env=os.environ | {"PATH": ""}, capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len(self.rows()), 1)

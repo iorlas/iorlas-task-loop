@@ -20,6 +20,7 @@ from delegate.contracts import stops
 from delegate.contracts.state import RefRecord
 from delegate.domain.holds.book import HoldBook
 from delegate.domain.lanes.lane import Lane
+from support.procsim import real_proc  # noqa: E402
 
 
 class Holds(unittest.TestCase):
@@ -68,6 +69,7 @@ class Holds(unittest.TestCase):
         self.assertEqual((r["transcript_status"], r["call_id"], r["stop"]["reason"]), ("not_launched", "c#9", "held"))
         self.assertIsNone(answer.schema_problem(r, stops.CONTRACT["answer_schema"]))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_hold_stops_its_roles_until_it_ends_and_the_trace_says_who(self):
         h = support.add_hold("OPENAI_SUBSCRIPTION", "+2h", "weekly budget", ["worker", "light"], t=T)
         self.assertEqual((h.set_by, h.until, h.roles), ("owner", T + 7200, ["light", "worker"]))
@@ -99,6 +101,7 @@ class Holds(unittest.TestCase):
         res = launch.launch_worker({"role": "worker", "lane": "OPENAI_SUBSCRIPTION", "how": {"kind": "codex", "sandbox": "workspace-write"}}, "b", argparse_ns("worker"), "rid", T, CFG, {}, RunHooks())
         self.assertEqual((res["retry_after"], res["outcome"]), (h.until, "held"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_release_and_status_show_the_holder_and_expiry(self):
         h = support.add_hold("OPENAI_SUBSCRIPTION", "+2d", "budget", ["worker"], "alice")
         with support.fleet_patches(lanes()):

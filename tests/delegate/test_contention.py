@@ -15,6 +15,7 @@ from stream_proc import stop_tree
 
 from delegate.contracts.state import Dwell
 from delegate.contracts.stores import StateStore
+from support.procsim import real_proc  # noqa: E402
 
 T = 1_800_000_000
 LANES = ("OPENAI_SUBSCRIPTION", "GROK_SUBSCRIPTION", "DEEPSEEK_FREE", "ZAI_CODING_SUBSCRIPTION")
@@ -31,7 +32,7 @@ from delegate.app import env, onboard, usage
 from delegate.adapters import agent_runs
 
 mode, lane, rounds = sys.argv[1], sys.argv[2], int(sys.argv[3])
-main = runpy.run_path("skills/delegate/route.py")["main"]
+main = runpy.run_path("src/delegate/entry.py")["main"]
 def call(args):
     with contextlib.redirect_stdout(io.StringIO()) as out:
         assert main(args) == 0
@@ -170,6 +171,7 @@ class Contention(unittest.TestCase):
         self.assertFalse(reader.is_alive())
         self.assertEqual(errors, [])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_parallel_report_and_next_preserve_out_marks_and_fresh_dwell(self):
         state = self.cfg / "state.json"
         with self.observing(lambda: [state]) as seen:
@@ -187,6 +189,7 @@ class Contention(unittest.TestCase):
             self.assertEqual((mark["until"], mark["at"], mark["source"]), (T + 3600, T, "manual"))
         self.assertEqual(doc["prev"], {"claude": {"lane": "CLAUDE_SUBSCRIPTION", "since": T - 1}})
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_parallel_config_cli_and_update_config_lose_no_updates(self):
         with self.observing(lambda: [self.config]) as seen:
             self.start("config")
@@ -197,6 +200,7 @@ class Contention(unittest.TestCase):
         self.assertEqual(doc["min_dwell_minutes"], 30 + N * ROUNDS)
         self.assertEqual(doc["profile"]["lanes"], dict.fromkeys(LANES, "enabled"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_parallel_agent_runs_keep_unique_runs_and_whole_lane_snapshots(self):
         root = self.base / "xdg" / "agent-runs"
         lane_path = root / "lanes" / "delegate.json"

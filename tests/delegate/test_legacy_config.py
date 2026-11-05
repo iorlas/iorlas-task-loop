@@ -12,6 +12,7 @@ from test_route import route
 
 from delegate.app import env
 from delegate.contracts.routing import RETIRED_SETTINGS, split_retired
+from support.procsim import real_proc  # noqa: E402
 
 FIXTURE = Path(__file__).parent / "fixtures" / "config_pre_0_45.json"
 ROUTE_PY = Path(route.__file__)
@@ -36,6 +37,7 @@ class LegacyConfig(unittest.TestCase):
     def run_worker(self):
         return self.run_py("run", "worker", "--cwd", self.repo, "--unattended", "--timeout", "30")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_run_loads_the_pre_0_45_config_and_warns_once_per_retired_key(self):
         self.put_config()
         p = self.run_worker()
@@ -48,12 +50,14 @@ class LegacyConfig(unittest.TestCase):
         self.assertTrue(all("config.json" in w and "safe to delete" in w for w in warned))
         self.assertEqual(json.loads(Path(self.tmp.name, "config.json").read_text())["codex_weekly_used_override"], None)   # the owner's file is never touched
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_overrides_of_the_old_config_still_apply(self):
         self.put_config()
         cfg = env.load_routing()
         self.assertEqual((cfg["settings"]["max_parallel"], cfg["settings"]["strain"]["five_hour"]), (3, 85))
         self.assertNotIn("codex_weekly_used_override", cfg["settings"])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_an_unknown_key_still_fails_and_names_file_key_and_fix(self):
         self.put_config({"codex_wekly_cap": 5})
         p = self.run_worker()
@@ -62,6 +66,7 @@ class LegacyConfig(unittest.TestCase):
         for want in ("codex_wekly_cap", str(Path(self.tmp.name, "config.json")), "delete the key"):
             self.assertIn(want, p.stderr)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_doctor_reports_retired_keys_as_notes_not_errors(self):
         self.put_config()
         p = self.run_py("doctor", "--json")
@@ -70,6 +75,7 @@ class LegacyConfig(unittest.TestCase):
         self.assertEqual(sorted(n["key"] for n in notes), ["codex_resume_after_stall", "codex_weekly_used_override", "credit"])
         self.assertTrue(all(n["file"].endswith("config.json") for n in notes))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_an_old_unversioned_state_file_is_reset_with_one_warning(self):
         self.put_config()
         Path(self.tmp.name, "state.json").write_text(json.dumps({"out": {"OPENAI_SUBSCRIPTION": {"until": 1, "why": "old"}}}), encoding="utf-8")
@@ -79,6 +85,7 @@ class LegacyConfig(unittest.TestCase):
         self.assertEqual(len([ln for ln in p.stderr.splitlines() if "state.json" in ln and "empty state" in ln]), 1)
         self.assertEqual(json.loads(Path(self.tmp.name, "state.json").read_text())["v"], 1)       # rewritten typed: the warning does not repeat
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_split_retired(self):
         kept, gone = split_retired({"max_parallel": 2, RETIRED_SETTINGS[0]: None})
         self.assertEqual((kept, gone), ({"max_parallel": 2}, [RETIRED_SETTINGS[0]]))

@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
-from fakes.fake_run import replay
+from delegate_fakes.fake_run import replay
 from test_route import CFG, T, lanes
 
 from delegate.adapters import agent_runs
@@ -18,6 +18,7 @@ from delegate.adapters.harness.opencode import OpenCodeHarness
 from delegate.app import env, launch, onboard, watch
 from delegate.app.supervisor import RunHooks
 from delegate.domain.lanes.lane import Lane
+from support.procsim import real_proc  # noqa: E402
 
 
 class ZaiTests(unittest.TestCase):
@@ -25,6 +26,7 @@ class ZaiTests(unittest.TestCase):
         cfg=copy.deepcopy(CFG)
         return support.decide(role,cfg,ls,{},T,dict(authored_by=None, premium=None, allow_degraded=False, **kwargs))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_worker_priority_and_backoff(self):
         ls=lanes()
         ls['DEEPSEEK_FREE']=Lane('DEEPSEEK_FREE','deepseek','subscription')
@@ -38,6 +40,7 @@ class ZaiTests(unittest.TestCase):
         ls['ZAI_CODING_SUBSCRIPTION'].out=True
         self.assertEqual(self.choose('worker',ls)['lane'],'OPENAI_SUBSCRIPTION')
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_zai_author_gets_other_family(self):
         cfg=copy.deepcopy(CFG)
         args=dict(authored_by='zai',premium=None,allow_degraded=False)
@@ -61,6 +64,7 @@ class ZaiTests(unittest.TestCase):
                 p.write_text(json.dumps(auth))
                 self.assertEqual(onboard.check_opencode_zai_coding(),expected)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_launch_pins_provider_and_removes_override(self):
         d=dict(lane='ZAI_CODING_SUBSCRIPTION',model='glm-5.3',effort='high',role='worker',how=dict(kind='opencode',model='zai-coding-plan/glm-5.3',cwd='/tmp',write=False))
         a=SimpleNamespace(resume=None,schema=None,timeout=10)
@@ -80,6 +84,7 @@ class ZaiTests(unittest.TestCase):
                 self.assertEqual(launch.launch_worker(d,'OK',a,'test1234',1,env.load_routing(),{},RunHooks())['outcome'],'setup')
             self.assertEqual(run.specs,[])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_both_ported_lanes_run_under_the_opencode_watchdog(self):
         a=SimpleNamespace(resume=None,schema=None,timeout=10)
         for lane,model in (('ZAI_CODING_SUBSCRIPTION','zai-coding-plan/glm-5.3'),('DEEPSEEK_FREE','opencode/deepseek-v4.1-flash-free')):

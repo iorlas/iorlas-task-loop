@@ -20,8 +20,9 @@ from delegate.app import launch
 from delegate.contracts.routing import CallArgs
 from delegate.contracts.state import RefRecord
 from delegate.contracts.wire import RECIPE_RUNNERS
+from support.procsim import real_proc  # noqa: E402
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 DENIED_BY_OPENCODE = (
     "just slow", "just slow --verbose", "just -f x/justfile slow", "just --justfile x/justfile slow", "FOO=1 just slow",
     "cd client && just slow", 'sh -c "just slow"', "bash -lc 'just slow'", "(just slow)", "make slow", "uv run slow", "pnpm slow",
@@ -96,6 +97,7 @@ class ClaudeHookTest(unittest.TestCase):
                                env={"PATH": "/usr/bin:/bin", "DELEGATE_CONFIG_DIR": tmp, "HOME": tmp})
         return r.returncode, r.stderr
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_the_generated_hook_denies_the_recipe_with_the_rule(self):
         for c in ("just slow", "cd client && just slow", "FOO=1 just slow", "just -f x slow"):
             code, why = self.hook(c)
@@ -103,6 +105,7 @@ class ClaudeHookTest(unittest.TestCase):
             self.assertIn("`just slow` is a check only the engine runs", why)
             self.assertIn("engine reruns the check", why)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_the_generated_hook_lets_other_commands_through_and_a_read_step_ignores_the_list(self):
         self.assertEqual(self.hook("just test-fast")[0], 0)
         self.assertEqual(self.hook("just slow", ())[0], 0)
@@ -113,6 +116,7 @@ class RoutingTest(unittest.TestCase):
     def decide(self, *up, role="worker", **kw):
         return support.decide(role, copy.deepcopy(CFG), lanes(*up), {}, T, dict({"authored_by": None, "unattended": True}, **kw))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_write_step_with_the_list_skips_codex_and_says_why(self):
         free = self.decide("openai", "xai", "claude")
         self.assertEqual(free["lane"], "OPENAI_SUBSCRIPTION")
@@ -138,6 +142,7 @@ class RoutingTest(unittest.TestCase):
             self.assertIn(text, d["say"])
         self.assertNotIn("over its limit", d["say"])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_advisory_runs_codex_with_or_without_a_family_pin(self):
         for pin in ([], ["openai"]):
             with self.subTest(pin=pin):
@@ -147,6 +152,7 @@ class RoutingTest(unittest.TestCase):
                     d["warning"], "OPENAI_SUBSCRIPTION cannot deny --engine-only slow, e2e: advisory only, the brief must say so")
                 self.assertFalse(any("OPENAI_SUBSCRIPTION: rejected" in x for x in d["trace"]))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_advisory_does_not_warn_when_enforcement_is_available_or_unneeded(self):
         for up, kw in (("claude", {"engine_only": ["slow"]}), ("openai", {}),
                        ("openai", {"role": "reviewer", "engine_only": ["slow"]})):
@@ -156,6 +162,7 @@ class RoutingTest(unittest.TestCase):
                 self.assertNotEqual(d["flag"], "engine_only_advisory")
                 self.assertNotIn("warning", d)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_read_only_steps_ignore_the_list(self):
         self.assertEqual(self.decide("openai", role="reviewer", engine_only=["slow"])["lane"], "OPENAI_SUBSCRIPTION")
 

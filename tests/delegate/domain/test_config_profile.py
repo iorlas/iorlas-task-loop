@@ -9,7 +9,7 @@ from unittest import mock
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 
-ROOT = Path(__file__).resolve().parent.parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "skills" / "delegate"))
 

@@ -9,6 +9,7 @@ import hermetic  # noqa: F401
 from run_support import RunBase
 
 from delegate.app import env, launch
+from support.procsim import real_proc  # noqa: E402
 
 
 class WiredOverlay(RunBase):
@@ -18,6 +19,7 @@ class WiredOverlay(RunBase):
                                                               "writer_exec_allow": [["python", "-m", "unittest"]]}))
         self.flag = ["--writer-exec-allow", '[["python","-m","unittest"]]']
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_writer_receives_overlay_and_it_is_removed_after_the_call(self):
         code, result = self.run_it(*self.flag)
         self.assertEqual((code, result["stop"]), (0, None))
@@ -30,6 +32,7 @@ class WiredOverlay(RunBase):
         self.assertIn("--exec-allow", Path(os.environ["FAKE_ARGS"] + ".brief").read_text())
         self.assertNotIn(launch.ESCALATE_RULE, Path(os.environ["FAKE_ARGS"] + ".brief").read_text())
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_empty_list_preserves_original_environment_flags_and_prompt(self):
         code, result = self.run_it("--writer-exec-allow", "[]")
         self.assertEqual((code, result["stop"]), (0, None))
@@ -39,6 +42,7 @@ class WiredOverlay(RunBase):
         self.assertIn(launch.ESCALATE_RULE, Path(os.environ["FAKE_ARGS"] + ".brief").read_text())
         self.assertFalse(list(env.config_dir().glob("codex-exec-*")))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_cleanup_on_launch_failure(self):
         roots = []
 
@@ -54,6 +58,7 @@ class WiredOverlay(RunBase):
         self.assertTrue(roots)
         self.assertTrue(all(not root.exists() for root in roots))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_read_step_and_non_codex_kind_refuse_the_grant(self):
         for role, flags in (("reviewer", []), ("worker", ["--only-family", "claude"])):
             with self.subTest(role=role, flags=flags):
@@ -61,6 +66,7 @@ class WiredOverlay(RunBase):
                 self.assertEqual(result["stop"]["reason"], "bad_request")
                 self.assertFalse(list(env.config_dir().glob("codex-exec-*")))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_resume_gets_its_own_overlay_and_rules(self):
         self.run_it()
         _, result = self.run_it(*self.flag, "--resume", "thread-123")

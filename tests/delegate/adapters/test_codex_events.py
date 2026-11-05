@@ -14,11 +14,12 @@ from unittest import mock
 import hermetic  # noqa: F401  (a home of its own for every test)
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent.parent / "src"))
+sys.path.insert(0, str(HERE.parents[2] / "src"))
 from delegate.adapters.harness.base import LaunchInputs  # noqa: E402
 from delegate.adapters.harness.codex import CodexHarness  # noqa: E402
 from delegate.app.publish import LiveSink  # noqa: E402
 from delegate.contracts import events as ev  # noqa: E402
+from support.procsim import real_proc  # noqa: E402
 
 GOLDEN = HERE / "golden"
 NAMES = sorted(p.name[len("codex_"):-len(".jsonl")] for p in GOLDEN.glob("codex_*.jsonl"))
@@ -143,6 +144,7 @@ class World(unittest.TestCase):
         self.assertTrue(h.transcript("th-7").endswith("rollout-2026-10-21T19-45-28-th-7.jsonl"))
         self.assertEqual((h.transcript("th-8"), h.transcript(None)), (None, None))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_the_login_probe_runs_the_status_command(self):
         with tempfile.TemporaryDirectory() as d:
             exe = Path(d) / "codex"

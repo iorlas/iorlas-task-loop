@@ -18,6 +18,7 @@ from delegate.adapters.harness.opencode import OpenCodeHarness
 from delegate.app import cockpit, env, harnesses, onboard, status, usage
 from delegate.domain.lanes.lane import Lane
 from delegate.domain.time import spec
+from support.procsim import real_proc  # noqa: E402
 
 HOUR = 3600
 
@@ -171,6 +172,7 @@ class LoginCheck(unittest.TestCase):
         p.write_text("#!/bin/sh\n" + body + "\n")
         p.chmod(p.stat().st_mode | stat.S_IEXEC)
 
+    @real_proc("delegate: a worker, git or CLI process")
     @unittest.skipIf(sys.platform == "win32", "shell fakes")
     def test_codex_login_status_decides_and_the_answer_is_cached(self):
         with tempfile.TemporaryDirectory() as d, patch.dict(os.environ, {"PATH": d + os.pathsep + os.environ["PATH"], "DELEGATE_CONFIG_DIR": d}):
@@ -246,6 +248,7 @@ class Command(unittest.TestCase):
             self.assertIn(k, data)
         self.assertIn(ck["next_worker"]["action"], ("run", "stop"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_stdout_gets_a_safe_encoding_for_emoji(self):
         class Narrow(io.StringIO):
             encoding = "cp1252"

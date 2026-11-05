@@ -16,6 +16,7 @@ from delegate.domain.policy import worker
 from delegate.domain.policy.matchers import heredoc_only_hit, secret_hit
 from delegate.domain.policy.shell import git_write, read_only_problem
 from delegate.domain.policy.worker import is_policy_denial
+from support.procsim import real_proc  # noqa: E402
 
 
 class SecretGuard(unittest.TestCase):
@@ -67,6 +68,7 @@ class SecretGuard(unittest.TestCase):
             self.assertEqual(self.guard({"command": c}, tool="Bash"), 2, c)
         self.assertEqual(read_only_problem("bash -lc 'rm x'"), "`rm` is not a reading command")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_heredoc_body_secret_name_gets_an_apply_patch_hint_and_real_reads_do_not(self):
         hd = "zsh -lc \"python - <<'EOF'\nif path.name == '.env':\n    pass\nEOF\""
         self.assertTrue(heredoc_only_hit(hd))
@@ -74,11 +76,11 @@ class SecretGuard(unittest.TestCase):
         for c in ("python -c \"open('.env')\"", "cat .env", "cat .env <<'EOF'\nx\nEOF"):
             self.assertFalse(heredoc_only_hit(c), c)
             self.assertTrue(secret_hit(c), c)
-        r = subprocess.run([sys.executable, str(ROOT / "skills" / "delegate" / "route.py"), "guard"], capture_output=True, text=True,
+        r = subprocess.run([sys.executable, str(ROOT / "src" / "delegate" / "entry.py"), "guard"], capture_output=True, text=True,
                            input=json.dumps({"tool_name": "Bash", "tool_input": {"command": hd}}))
         self.assertEqual(r.returncode, 2)
         self.assertIn("apply_patch", r.stderr)
-        r = subprocess.run([sys.executable, str(ROOT / "skills" / "delegate" / "route.py"), "guard"], capture_output=True, text=True,
+        r = subprocess.run([sys.executable, str(ROOT / "src" / "delegate" / "entry.py"), "guard"], capture_output=True, text=True,
                            input=json.dumps({"tool_name": "Bash", "tool_input": {"command": "cat .env"}}))
         self.assertNotIn("apply_patch", r.stderr)
 
@@ -115,12 +117,14 @@ class GitOwnership(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_editing_files_is_clean(self):
         before = git.state(self.dir)
         Path(self.dir, "f.txt").write_text("2")
         Path(self.dir, "new.txt").write_text("x")
         self.assertEqual(git.changes(before, git.state(self.dir)), [])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_branch_and_head_changes_are_reported_other_refs_and_worktrees_are_not(self):
         before = git.state(self.dir)
         wt = tempfile.mkdtemp()
@@ -133,11 +137,13 @@ class GitOwnership(unittest.TestCase):
         self.assertIn("branch", text)
         self.assertIn("HEAD", text)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_not_a_repo_is_a_no_op(self):
         with tempfile.TemporaryDirectory() as d:
             self.assertIsNone(git.state(d))
             self.assertEqual(git.changes(None, None), [])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_the_guard_blocks_every_git_write(self):
         for c in ("git commit -m x", "git push", "git checkout x", "git switch x", "git branch x", "git worktree add y", "git merge x",
                   "git rebase x", "git reset --hard", "git stash", "git cherry-pick a", "git tag v", "git revert a", "git am p", "git pull"):

@@ -42,7 +42,7 @@ def configure_writer(spec: LaunchSpec, value: object, state: Path,
     binaries, host = host_policy(json.loads((state / "host.json").read_text(encoding="utf-8")))
     rules = call_rules(value, binaries, host, engine_only)
     real_home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex").absolute()
-    shim = [sys.executable, str(env.SKILL_DIR / "route.py"), "guard", "--config-dir", str(state)]
+    shim = [sys.executable, str(env.ENTRY), "guard", "--config-dir", str(state)]
     shim += [f"--engine-only={recipe}" for recipe in engine_only]
     overlay = CodexOverlay(state, real_home, shim, rules)
     try:

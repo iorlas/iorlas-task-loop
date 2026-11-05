@@ -11,10 +11,11 @@ from unittest import mock
 import hermetic  # noqa: F401  (a home of its own for every test)
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent.parent / "src"))
+sys.path.insert(0, str(HERE.parents[2] / "src"))
 from delegate.adapters.harness.base import LaunchInputs  # noqa: E402
 from delegate.adapters.harness.claude import ClaudeHarness, stream_usage, tokens_of  # noqa: E402
 from delegate.contracts import events as ev  # noqa: E402
+from support.procsim import real_proc  # noqa: E402
 
 
 def stream(name):
@@ -110,6 +111,7 @@ class World(unittest.TestCase):
         h = ClaudeHarness()
         self.assertEqual((h.transcript("sess-1"), h.transcript("zzz"), h.transcript(None)), (str(day / "sess-1.jsonl"), None, None))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_the_login_probe_reads_auth_status(self):
         with tempfile.TemporaryDirectory() as d:
             exe = Path(d) / "claude"

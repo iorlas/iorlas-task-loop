@@ -9,9 +9,9 @@ import hermetic  # noqa: F401  (a home of its own for every test)
 from delegate.app import answer
 from delegate.contracts import codec, schema, status
 
-ROOT = Path(__file__).resolve().parent.parent.parent
-REAL = ROOT / "tests" / "fixtures" / "delegate_status_0.51.0_real.json"
-CONTRACT = json.loads((ROOT / "skills" / "delegate" / "contract.json").read_text(encoding="utf-8"))
+ROOT = Path(__file__).resolve().parents[3]
+REAL = ROOT / "tests" / "delegate" / "fixtures" / "delegate_status_0.51.0_real.json"
+CONTRACT = json.loads((ROOT / "src" / "delegate" / "data" / "contract.json").read_text(encoding="utf-8"))
 
 
 class StatusSchema(unittest.TestCase):

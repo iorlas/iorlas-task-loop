@@ -1,6 +1,6 @@
 # The root config plus what the domain never touches: the world (a clock or a path is passed in). TID251 names the one-file stdlib
 # modules import-linter cannot (see .importlinter). Imports inside a function are PLC0415, selected by the root PL.
-extend = "../../../ruff.toml"
+extend = "../ruff.toml"
 
 [lint]
 extend-select = ["TID251"]

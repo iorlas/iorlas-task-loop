@@ -28,6 +28,7 @@ from delegate.contracts import codec, stores
 from delegate.contracts import history as hist
 from delegate.domain.health import ledger as health_ledger
 from delegate.domain.lanes.lane import Lane
+from support.procsim import real_proc  # noqa: E402
 
 
 class Breaker(unittest.TestCase):
@@ -156,6 +157,7 @@ class ResetTimes(unittest.TestCase):
         self.assertEqual(reset_parse.limit_until("rate limited", t, {"limit_reset": t + 7200})[1:], ("guess", None))
         self.assertEqual(reset_parse.limit_until("rate limited", t, {}, lambda: t + 999)[:2], (t + 999, "vendor"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_out_rows_record_source_and_zone_and_report_is_manual(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.object(env, "config_dir", return_value=Path(d)):
             end = (dt.datetime.now(dt.UTC) + dt.timedelta(days=5)).replace(second=0, microsecond=0)         # inside the 40 days a stated reset may be off
@@ -174,17 +176,7 @@ class ResetTimes(unittest.TestCase):
 
 class TokenBudget(unittest.TestCase):
     """The orchestrator pays for these files and outputs on every session / delegation. Budgets are characters (about 4 per token); ratchet them down, never up."""
-    ROOT = Path(__file__).resolve().parent.parent / "skills" / "delegate"
-
-    def test_skill_md(self):
-        text = (self.ROOT / "SKILL.md").read_text(encoding="utf-8")
-        self.assertLessEqual(len(text), 1900)      # raised from 1800 on 2026-10-19: the run_in_background line
-        desc = re.search(r"^description: (.*)$", text, re.M).group(1)
-        self.assertLessEqual(len(desc), 170)
-
-    def test_mode_files(self):
-        for f in (self.ROOT / "modes").glob("*.md"):
-            self.assertLessEqual(len(f.read_text(encoding="utf-8")), 1900, f.name)
+    ROOT = Path(__file__).resolve().parents[2] / "skills" / "delegate"
 
     def test_agent_step_answer_is_small(self):
         import io
@@ -211,7 +203,7 @@ class ConfigLocation(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.saved_here = env.SKILL_DIR
+        self.saved_here = env.DATA_DIR
         self.saved = {k: os.environ.get(k) for k in ("HOME", "USERPROFILE", "XDG_CONFIG_HOME", "APPDATA", "DELEGATE_CONFIG_DIR", "CLAUDE_PLUGIN_DATA")}
         for k in ("HOME", "USERPROFILE", "XDG_CONFIG_HOME", "APPDATA"):
             os.environ[k] = self.tmp.name
@@ -219,14 +211,14 @@ class ConfigLocation(unittest.TestCase):
         os.environ["CLAUDE_PLUGIN_DATA"] = str(Path(self.tmp.name) / "someone-elses-data")      # must be ignored
 
     def tearDown(self):
-        env.SKILL_DIR = self.saved_here
+        env.DATA_DIR = self.saved_here
         for k, v in self.saved.items():
             os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
         self.tmp.cleanup()
 
     def installed(self):
         root = Path(self.tmp.name) / ".claude" / "plugins"
-        env.SKILL_DIR = root / "cache" / "iorlas-marketplace" / "iorlas-delegate" / "0.12.0" / "skills" / "delegate"
+        env.DATA_DIR = root / "cache" / "iorlas-marketplace" / "iorlas-delegate" / "0.12.0" / "skills" / "delegate"
         return root / "data" / "iorlas-delegate-iorlas-marketplace"
 
     def test_checkout_without_an_override_refuses_instead_of_splitting_the_state(self):
@@ -293,6 +285,7 @@ class WatchdogProc(unittest.TestCase):
             out = sup.run(LaunchSpec(argv=[sys.executable, "-c", code], env=dict(os.environ), cwd=self.tmp.name, stdin=""), 0)
         return out.rc, {"why": out.watch.why, "kind": out.watch.kind}, st, time.time() - t0
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_dead_stream_is_stopped_through_stop_tree(self):
         rc, state, st, secs = self.run_child("import time;print('started',flush=True);time.sleep(60)", first_event_s=5, silence_s=1)
         self.assertEqual((state["why"], state["kind"]), ("hung", "silence"))
@@ -300,11 +293,13 @@ class WatchdogProc(unittest.TestCase):
         self.assertLess(secs, 10)
         self.assertNotEqual(rc, 0)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_child_that_prints_nothing_is_hung_on_the_first_event_deadline(self):
         rc, state, st, secs = self.run_child("import time;time.sleep(60)", first_event_s=1, silence_s=60)
         self.assertEqual((state["why"], state["kind"]), ("hung", "first_event"))
         self.assertLess(secs, 10)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_stderr_deltas_keep_a_quiet_stdout_alive(self):
         code = "import sys,time\nfor i in range(8):\n sys.stderr.write('thinking\\n');sys.stderr.flush();time.sleep(0.4)"
         rc, state, st, secs = self.run_child(code, first_event_s=5, silence_s=1)

@@ -21,13 +21,16 @@ from delegate.app.fleet import Fleet
 from delegate.contracts.state import UsageCache
 from delegate.domain.lanes import leases
 from delegate.domain.lanes.lane import Lane
+from support.procsim import real_proc  # noqa: E402
 
 
 class RunCommand(RunBase):
+    @real_proc("delegate: a worker, git or CLI process")
     def test_no_timeout_unless_the_caller_passes_one(self):
         code, r = self.run_it(timeout=None)
         self.assertEqual((code, r["stop"]), (0, None))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_codex_run_reads_the_codex_usage_before_the_launch_only(self):
         """No second read after the run: the codex app-server spawn cost 1-2 s per run (delegate-2ys)."""
         from delegate.app import usage
@@ -39,6 +42,7 @@ class RunCommand(RunBase):
         route.main(["next", "worker"])
         self.assertEqual(after_run, len(calls))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_unattended_keeps_the_orchestrator_reserve(self):
         support.put_out("OPENAI_SUBSCRIPTION", env.now() + 3600)
         f = Path(self.tmp.name) / ".claude" / "state" / "max-limits.json"
@@ -52,6 +56,7 @@ class RunCommand(RunBase):
         _, r = self.run_it()
         self.assertEqual(why(r), "no_lane")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_interactive_session_gets_the_agent_step_and_the_consent_question(self):
         self.codex_out()                                                    # Codex plans first, Claude only when it is down
         _, r = self.run_it(role="planner", unattended=False)
@@ -62,6 +67,7 @@ class RunCommand(RunBase):
         self.assertEqual(why(r), "no_lane")
         self.assertIn("ask_user", r)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_busy_first_choice_waits_unless_told_not_to(self):
         for i in range(4):
             self.lease(f"r{i}", "OPENAI_SUBSCRIPTION")              # Codex, the worker's first choice, has 4 of 4 slots taken
@@ -69,6 +75,7 @@ class RunCommand(RunBase):
         self.assertEqual((why(r), r["stop"]["permanence"], r["lane"]), ("busy", "transient", "OPENAI_SUBSCRIPTION"))
         self.assertTrue(time.time() + 50 < at(r) < time.time() + 130)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_the_first_choice_is_rung_0_and_no_fallback(self):
         _, r = self.run_it()
         self.assertEqual((r["lane"], r["rung"], r["fallback"], r["fallback_reason"], r["first_lane"]), ("OPENAI_SUBSCRIPTION", 0, False, None, None))
@@ -78,18 +85,21 @@ class RunCommand(RunBase):
         _, r = self.run_it()
         self.assertEqual((r["lane"], r["fallback"], r["fallback_reason"]), ("CLAUDE_SUBSCRIPTION", True, "out"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_three_running_leave_room_for_a_fourth(self):
         for i in range(3):
             self.lease(f"r{i}", "OPENAI_SUBSCRIPTION")
         _, r = self.run_it()
         self.assertEqual(r["lane"], "OPENAI_SUBSCRIPTION")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_expired_leases_do_not_count(self):
         for i in range(4):
             self.lease(f"r{i}", "OPENAI_SUBSCRIPTION", expires=env.now() - 1)
         _, r = self.run_it()
         self.assertEqual(r["lane"], "OPENAI_SUBSCRIPTION")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_strained_lane_allows_one(self):
         f = Path(self.tmp.name) / ".claude" / "state" / "max-limits.json"
         d = json.loads(f.read_text())
@@ -105,6 +115,7 @@ class RunCommand(RunBase):
             lane.five, lane.week = five, week
         usage.READERS["codex_app_server"] = read
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_pinned_strained_lane_retries_when_its_one_slot_is_taken(self):
         self.strain_openai()
         self.lease("r0", "OPENAI_SUBSCRIPTION", task="T-busy")
@@ -127,6 +138,7 @@ class RunCommand(RunBase):
             running = json.loads(out.getvalue())["running"]
         self.assertEqual([(r["run_id"], r["task"]) for r in running], [("r0", "T-busy")])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_pinned_family_uses_a_free_lane_or_waits_for_a_busy_one(self):
         cfg = env.load_routing()
         cfg["lanes"]["OPENAI_OTHER"] = dict(cfg["lanes"]["OPENAI_SUBSCRIPTION"])
@@ -142,6 +154,7 @@ class RunCommand(RunBase):
                 self.assertEqual(why(r), "busy" if other_out else None)
                 self.assertEqual(r["lane"], "OPENAI_SUBSCRIPTION" if other_out else "OPENAI_OTHER")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_pinned_family_really_out_or_over_ceiling_does_not_poll(self):
         self.lease("r0", "OPENAI_SUBSCRIPTION")
         for out in (False, True):
@@ -155,6 +168,7 @@ class RunCommand(RunBase):
                 self.assertIn("openai out" if out else "openai over its limit", r["say"])
                 self.assertNotIn("openai busy", r["say"])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_pinned_busy_lane_on_hold_does_not_poll_for_a_slot(self):
         self.strain_openai()
         self.lease("r0", "OPENAI_SUBSCRIPTION")
@@ -163,6 +177,7 @@ class RunCommand(RunBase):
         self.assertEqual(why(r), "no_lane")
         self.assertNotEqual(r["stop"]["retry"]["kind"], "poll")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_pinned_ready_lane_with_an_unsupported_guard_is_not_over_limit(self):
         _, r = self.run_it("--only-family", "openai", "--engine-only", "release-check")
         self.assertEqual(why(r), "engine_only_unenforced")
@@ -174,24 +189,28 @@ class RunCommand(RunBase):
         self.assertEqual(r["transcript_status"], "not_launched")
         self.assertEqual(self.args_seen(), "")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_pinned_codex_writer_can_run_with_engine_only_advisory(self):
         code, r = self.run_it("--only-family", "openai", "--engine-only", "release-check", "--engine-only", "e2e", "--engine-only-advisory")
         self.assertEqual((code, r["stop"], r["lane"], r["flag"]), (0, None, "OPENAI_SUBSCRIPTION", "engine_only_advisory"))
         self.assertEqual(r["warning"], "OPENAI_SUBSCRIPTION cannot deny --engine-only release-check, e2e: advisory only, the brief must say so")
         self.assertTrue(self.args_seen())
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_unpinned_engine_only_still_uses_an_enforcing_lane(self):
         _, r = self.run_it("--engine-only", "release-check")
         self.assertEqual((r["stop"], r["lane"]), (None, "CLAUDE_SUBSCRIPTION"))
         self.assertNotEqual(r["flag"], "engine_only_advisory")
         self.assertNotIn("warning", r)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_unpinned_engine_only_without_an_enforcing_lane_keeps_no_lane(self):
         support.put_out("CLAUDE_SUBSCRIPTION", env.now() + 3600)
         _, r = self.run_it("--engine-only", "release-check")
         self.assertEqual(why(r), "no_lane")
         self.assertEqual(self.args_seen(), "")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_the_same_task_never_runs_twice_at_once(self):
         self.lease("r0", "OPENAI_SUBSCRIPTION", task="T-1")
         _, r = self.run_it("--task", "T-1")
@@ -203,6 +222,7 @@ class RunCommand(RunBase):
         _, r = self.run_it("--task", "T-1")             # a resume after the first run ended is fine
         self.assertEqual(r["stop"], None)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_final_agent_message_alone_ends_the_run_after_the_grace(self):
         """Rollout 01a177fc: the final message arrived and turn.completed never did."""
         self.fast_clock()
@@ -212,11 +232,13 @@ class RunCommand(RunBase):
         self.assertEqual((r["stop"], r["text"], r["warnings"]), (None, "final, no turn.completed", ["answer_done_process_alive"]))
         self.pid_dead()
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_running_command_keeps_the_long_silence_limit(self):
         self.fast_clock()
         _, r = self.run_it(mode="tool_open", timeout=4)
         self.assertEqual(why(r), "timeout")
 
+    @real_proc("delegate: a worker, git or CLI process")
     @unittest.skipIf(sys.platform != "darwin", "macOS only")
     def test_read_only_shell_may_write_dot_task_but_nothing_else_in_cwd(self):
         import subprocess as sp
@@ -230,6 +252,7 @@ class RunCommand(RunBase):
         self.assertNotEqual(run("touch .taskx").returncode, 0)
         self.assertNotEqual(run("cat ~/.ssh/id_rsa").returncode, 0)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_external_directory_lets_read_only_lanes_read_runs_and_temp_only(self):
         with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": "/x/cfg"}):
             ext = box.permissions(False)["external_directory"]
@@ -243,11 +266,13 @@ class RunCommand(RunBase):
         self.assertEqual(box.permissions(True)["external_directory"], "deny")
         self.assertEqual(box.permissions(False)["read"][str(Path.home() / ".ssh")], "deny")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_second_run_of_the_same_task_is_a_retry(self):
         self.lease("run-9", "OPENAI_SUBSCRIPTION", task="T-1")
         _, r = self.run_it("--task", "T-1")
         self.assertEqual((why(r), r["stop"]["permanence"]), ("duplicate_task", "transient"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_status_json_v1_shape(self):
         import io
         self.lease("run-1", "OPENAI_SUBSCRIPTION", task="T-5")
@@ -265,6 +290,7 @@ class RunCommand(RunBase):
         self.assertNotIn("recent", out)
         self.assertIn("OPENAI_SUBSCRIPTION", out["lanes"])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_timeout_kills_the_whole_process_group(self):
         code, r = self.run_it(mode="hang", timeout=2)
         self.assertEqual((code, why(r)), (0, "timeout"))
@@ -273,6 +299,7 @@ class RunCommand(RunBase):
         with self.assertRaises(OSError):
             os.kill(pid, 0)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_status_json_has_a_health_row_per_pair_with_leases_and_last_failures(self):
         import io
         self.hist(self.failed_rows(3, 60))
@@ -290,6 +317,7 @@ class RunCommand(RunBase):
         other = next(x for x in payload["health"] if (x["lane"], x["model"]) == ("OPENAI_SUBSCRIPTION", "gpt-6-luna"))
         self.assertEqual(other["state"], "up")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_suspect_lease_does_not_count_against_the_lane_cap(self):
         now = env.now()
         quiet = support.lease(lane="OPENAI_SUBSCRIPTION", role="worker", start=now - 3000, expires=now + 100, silence_s=2400, last_event=now - 2500)
@@ -302,15 +330,18 @@ class RunCommand(RunBase):
         self.assertEqual(leases.LeaseBook(st.leases).counts("OPENAI_SUBSCRIPTION", now), {"live": 2, "suspect": 1})
         self.assertEqual([r["suspect"] for r in status.running_rows(st, now)], [True, False])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_git_changes_are_reported_not_failed(self):
         code, r = self.run_it(mode="git")
         self.assertEqual((code, r["stop"]), (0, None))
         self.assertTrue(any("branch" in x for x in r["git_violation"]), r["git_violation"])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_empty_brief_is_an_error_object(self):
         code, r = self.run_it(brief="  ")
         self.assertEqual((code, why(r)), (0, "caller"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_an_orphaned_worker_of_a_dead_route_py_is_killed_before_the_task_runs_again(self):
         import subprocess as sp
         dead = sp.Popen(["true"]); dead.wait()
@@ -327,6 +358,7 @@ class RunCommand(RunBase):
         finally:
             orphan.kill()
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_live_route_py_with_an_expired_lease_keeps_its_worker(self):
         import subprocess as sp
         worker = sp.Popen(["sleep", "300"], start_new_session=True)
@@ -339,6 +371,7 @@ class RunCommand(RunBase):
         finally:
             worker.kill(); worker.wait()
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_reused_pid_is_not_killed(self):
         import subprocess as sp
         dead = sp.Popen(["true"]); dead.wait()
@@ -351,6 +384,7 @@ class RunCommand(RunBase):
         finally:
             other.kill(); other.wait()
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_resume_on_a_lane_with_all_slots_taken_waits_for_a_slot(self):
         self.run_it()
         for i in range(4):
@@ -361,6 +395,7 @@ class RunCommand(RunBase):
         last = json.loads(env.history_path().read_text().splitlines()[-1])           # refusals are in history too
         self.assertEqual((last["outcome"], last["resume"], last["kind"]), ("busy", True, "refusal"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_plan_with_only_a_weekly_window_reads_it_as_the_week(self):
         res = {"ordinaryUsageAllowed": True, "rateLimits": {"primary": {"usedPercent": 40, "windowDurationMins": 10080, "resetsAt": env.now() + 3 * 86400},
                                                             "secondary": None, "rateLimitReachedType": None}}
@@ -370,6 +405,7 @@ class RunCommand(RunBase):
         self.assertEqual((lane.five, lane.week), (None, 40.0))
         self.assertIsNotNone(lane.pace)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_resume_continues_on_the_same_lane_and_never_switches(self):
         _, first = self.run_it()
         self.assertEqual(first["ref"], "thread-123")

@@ -9,6 +9,7 @@ from pathlib import Path
 import hermetic  # noqa: F401  (a home of its own for every test)
 
 from delegate.app import decide
+from support.procsim import real_proc  # noqa: E402
 
 
 class CodexUvEnv(unittest.TestCase):
@@ -26,6 +27,7 @@ class CodexUvEnv(unittest.TestCase):
         e = decide.codex_env({}, "/w", "workspace-write", ["-c", "sandbox_workspace_write.network_access=true"])
         self.assertNotIn("UV_OFFLINE", e)
 
+    @real_proc("delegate: a worker, git or CLI process")
     @unittest.skipUnless(shutil.which("uv"), "uv is not installed")
     def test_uv_run_succeeds_with_a_cold_cache_offline(self):
         with tempfile.TemporaryDirectory() as d:

@@ -18,6 +18,7 @@ from delegate.adapters.harness.base import LaunchSpec
 from delegate.app import codex_policy, env
 from delegate.cli import parser
 from delegate.contracts import stops, wire
+from support.procsim import real_proc  # noqa: E402
 
 
 def rules_at(home):
@@ -68,6 +69,7 @@ class Overlay(unittest.TestCase):
         self.assertIn("--exec-allow", spec.stdin)
         self.assertEqual(self.spec.env, {"PATH": "/bad/path"})
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_an_allowed_argv_runs_the_real_shim_without_a_prompt(self):
         spec, overlay = self.configure([["python", "-m", "unittest"]])
         assert overlay is not None

@@ -15,6 +15,7 @@ from test_route import route
 
 from delegate.app import doctor, env
 from delegate.contracts.stores import StateStore
+from support.procsim import real_proc  # noqa: E402
 
 FIX = Path(__file__).parent / "fixtures"
 ROUTE_PY = Path(route.__file__)
@@ -32,6 +33,7 @@ class Upgrade(unittest.TestCase):
             doc = StateStore(path).load()
         return doc, err.getvalue().splitlines(), path
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_state_drops_retired_keys_and_lane_entries_keeps_live_ones(self):
         before = (FIX / "state_pre_0_48.json").read_bytes()
         doc, warned, path = self.load_state()
@@ -47,6 +49,7 @@ class Upgrade(unittest.TestCase):
         self.assertTrue(all(str(path) in w for w in warned))
         self.assertEqual(path.read_bytes(), before)            # a load alone rewrites nothing
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_state_retired_lane_in_holds_leases_and_refs_goes_too(self):
         path = Path(self.tmp.name, "state.json")
         d = json.loads((FIX / "state_pre_0_48.json").read_text())
@@ -58,6 +61,7 @@ class Upgrade(unittest.TestCase):
             doc = StateStore(path).load()
         self.assertEqual((list(doc.holds), list(doc.leases), list(doc.refs)), (["h1"], ["r-live"], []))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_state_unknown_key_that_is_not_retired_still_resets(self):
         path = Path(self.tmp.name, "state.json")
         d = json.loads((FIX / "state_pre_0_48.json").read_text())
@@ -69,6 +73,7 @@ class Upgrade(unittest.TestCase):
         self.assertEqual((doc.out, doc.holds), ({}, {}))
         self.assertIn("empty state", err.getvalue())
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_config_with_retired_keys_warns_naming_file_safe_to_delete_and_is_untouched(self):
         cfg = Path(self.tmp.name, "config.json")
         shutil.copy(FIX / "config_pre_0_45.json", cfg)
@@ -84,6 +89,7 @@ class Upgrade(unittest.TestCase):
         self.assertEqual(cfg.read_bytes(), before)
         self.assertEqual(env.profile_lanes()["CLAUDE_CREDIT"], "declined")      # a retired lane in the profile is just ignored
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_leftovers_are_listed_by_doctor_and_never_deleted(self):
         cfg = env.load_routing()
         d = Path(self.tmp.name)
@@ -102,6 +108,7 @@ class Upgrade(unittest.TestCase):
         self.assertEqual(len([ln for ln in p.stdout.splitlines() if "unused, safe to" in ln]), 3)
         self.assertEqual((d / "claude-credit.key").read_text(), "sk-secret")
 
+    @real_proc("delegate: a worker, git or CLI process")
     @unittest.skipIf(os.name == "nt", "fake codex/claude are shell scripts")
     def test_run_ignores_leftovers_and_keeps_live_state(self):
         d = Path(self.tmp.name)

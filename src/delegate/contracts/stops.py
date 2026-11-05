@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-CONTRACT_FILE = Path(__file__).resolve().parents[3] / "skills" / "delegate" / "contract.json"       # next to src/ in the plugin tree and in a copy of it
+CONTRACT_FILE = Path(__file__).resolve().parents[1] / "data" / "contract.json"
 
 
 def load_contract():

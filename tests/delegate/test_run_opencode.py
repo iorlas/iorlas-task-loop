@@ -13,9 +13,11 @@ from test_route import why
 
 from delegate.adapters.harness import opencode_sandbox as box
 from delegate.app import env, watch
+from support.procsim import real_proc  # noqa: E402
 
 
 class RunOpenCode(RunBase):
+    @real_proc("delegate: a worker, git or CLI process")
     @unittest.skipIf(sys.platform != "darwin", "the Grok lane runs commands under sandbox-exec: macOS only")
     def test_opencode_limit_in_its_log_stops_the_child_and_marks_the_lane_out_once(self):
         log = Path(self.tmp.name) / ".local" / "share" / "opencode" / "log"
@@ -31,6 +33,7 @@ class RunOpenCode(RunBase):
         self.assertLessEqual(out.until, (time.time() // 86400 + 1) * 86400 + 1)
         self.assert_child_gone(pid)
 
+    @real_proc("delegate: a worker, git or CLI process")
     @unittest.skipIf(sys.platform != "darwin", "the Grok lane runs commands under sandbox-exec: macOS only")
     def test_opencode_with_no_first_event_is_stopped_and_the_lane_marked_hung(self):
         pid = self.watchdog_fake("sleep 60")
@@ -42,6 +45,7 @@ class RunOpenCode(RunBase):
         self.assertEqual(env.load_state().out["GROK_SUBSCRIPTION"].reason, "hung")
         self.assert_child_gone(pid)
 
+    @real_proc("delegate: a worker, git or CLI process")
     @unittest.skipIf(sys.platform != "darwin", "the Grok lane runs commands under sandbox-exec: macOS only")
     def test_opencode_normal_run_is_not_touched_by_the_watchdog(self):
         log = Path(self.tmp.name) / ".local" / "share" / "opencode" / "log"
@@ -54,6 +58,7 @@ class RunOpenCode(RunBase):
         self.assertEqual((r["stop"], r["text"]), (None, "grok did it"))
         self.assertNotIn("GROK_SUBSCRIPTION", env.load_state().out)
 
+    @real_proc("delegate: a worker, git or CLI process")
     @unittest.skipIf(sys.platform != "darwin", "the Grok lane runs commands under sandbox-exec: macOS only")
     def test_grok_is_the_worker_after_codex_in_a_sandboxed_shell_without_user_config(self):
         self.grok_ready()
@@ -74,6 +79,7 @@ class RunOpenCode(RunBase):
             _, r = self.run_it("--authored-by", who, role="reviewer")
             self.assertNotEqual(r["lane"], "GROK_SUBSCRIPTION", who)
 
+    @real_proc("delegate: a worker, git or CLI process")
     @unittest.skipIf(sys.platform != "darwin", "macOS only")
     def test_the_grok_shell_has_no_network_secrets_or_writes_outside_cwd(self):
         import subprocess as sp
@@ -89,6 +95,7 @@ class RunOpenCode(RunBase):
             self.assertEqual(run("touch made").returncode == 0, write)
             self.assertNotEqual(run("touch /Users/Shared/delegate-probe-x").returncode, 0)        # writable by everyone, outside the sandbox's list
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_opencode_shell_is_offline_for_uv_and_network_refusals_are_not_denials(self):
         sh = self.base / "sh-offline"
         box.write_shell(self.repo, True, sh)
@@ -96,6 +103,7 @@ class RunOpenCode(RunBase):
         self.assertTrue(box.network_refusal("error: tcp connect error\n  Operation not permitted (os error 1)"))
         self.assertFalse(box.network_refusal("cat: /Users/x/.ssh/id_rsa: Operation not permitted"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     @unittest.skipIf(sys.platform != "darwin", "macOS only")
     def test_grok_limit_and_secret_answers(self):
         self.grok_ready()
@@ -111,6 +119,7 @@ class RunOpenCode(RunBase):
         self.assertEqual((why(r), r["stop"]["permanence"]), ("secrets", "needs_owner"))
         self.assertLess(time.time() - t0, 20)
 
+    @real_proc("delegate: a worker, git or CLI process")
     @unittest.skipIf(sys.platform != "darwin", "macOS only")
     def test_grok_step_cost_is_passed_through_per_call(self):
         self.grok_ready()

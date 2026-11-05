@@ -18,9 +18,11 @@ from delegate.app import decide as dec
 from delegate.contracts import history as hist
 from delegate.contracts import stops
 from delegate.domain.health import ledger as health_ledger
+from support.procsim import real_proc  # noqa: E402
 
 
 class RunStops(RunBase):
+    @real_proc("delegate: a worker, git or CLI process")
     def test_unattended_never_answers_agent_ask_user_or_needs_input(self):
         [support.put_out(n, env.now() + 3600) for n in ("OPENAI_SUBSCRIPTION", "CLAUDE_SUBSCRIPTION")]
         code, r = self.run_it(role="planner")
@@ -33,6 +35,7 @@ class RunStops(RunBase):
         self.assertIsNone(r.get("agent_model"))
         self.assertEqual((r["stop"], r["lane"]), (None, "CLAUDE_SUBSCRIPTION"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_every_lane_full_stops_with_a_retry_after_in_one_to_two_minutes(self):
         for i in range(4):
             self.lease(f"o{i}", "OPENAI_SUBSCRIPTION")
@@ -41,6 +44,7 @@ class RunStops(RunBase):
         self.assertEqual(why(r), "busy")
         self.assertTrue(55 <= at(r) - time.time() <= 125, at(r))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_the_lease_is_released_and_a_history_line_is_written(self):
         _, r = self.run_it("--task", "T-9")
         self.assertEqual(env.load_state().leases, {})
@@ -50,6 +54,7 @@ class RunStops(RunBase):
         self.assertNotIn("brief", json.dumps(line))
         self.assertEqual(line["overlap"], [])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_answer_done_process_alive_is_done_after_the_grace(self):
         """delegate-itn: turn.completed after the final agent message, then the process never exits: done after the grace, whole tree stopped."""
         from delegate.app import watch
@@ -67,11 +72,13 @@ class RunStops(RunBase):
         with self.assertRaises(OSError):
             os.kill(int(Path(os.environ["FAKE_PIDFILE"]).read_text()), 0)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_later_event_resets_the_answer_grace(self):
         self.fast_clock(grace=1, stall=900)
         _, r = self.run_it(mode="progress_then_work", timeout=4)
         self.assertEqual(why(r), "timeout")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_stalled_model_request_is_stopped_and_the_stream_tail_is_logged(self):
         self.fast_clock()
         _, r = self.run_it(mode="stall", timeout=20)
@@ -80,6 +87,7 @@ class RunStops(RunBase):
         self.assertTrue(any('"command_execution"' in x for x in row["stream_tail"]))
         self.pid_dead()
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_sigterm_on_route_py_stops_the_worker_too(self):
         import signal
         penv = dict(os.environ, FAKE_MODE="hang", PATH=str(self.base / "bin") + os.pathsep + os.environ["PATH"])
@@ -104,6 +112,7 @@ class RunStops(RunBase):
             os.kill(pid, 0)
         self.assertEqual(env.load_state().leases, {})
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_state_lock_timeout_is_a_stop_with_a_retry_time(self):
         import io
         from unittest import mock
@@ -117,6 +126,7 @@ class RunStops(RunBase):
         self.assertEqual((why(out), out["stop"]["permanence"]), ("lock", "transient"))
         self.assertGreater(at(out), time.time())
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_resume_with_no_rollout_subtracts_the_cumulative_the_history_kept(self):
         self.run_it()       # first call: the thread total is 100/40/7, recorded in history
         env.history_add(hist.RunRow(ts=env.now(), run_id="kept", role="worker", lane="OPENAI_SUBSCRIPTION", model="m", effort="high", done=True,
@@ -125,6 +135,7 @@ class RunStops(RunBase):
         self.assertEqual(r["tokens"], {"in": 40, "cached": 10, "out": 3})
         self.assertEqual((r["usage"]["tokens"]["in_fresh"], r["usage"]["tokens"]["cache_read"], r["usage"]["tokens"]["out"]), (30, 10, 3))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_every_answer_carries_the_stop_facts(self):
         cases = {"early_error": ("vendor_blip", "lane", "transient"), "bad_request": ("bad_request", "caller", "needs_owner"),
                  "late_error": ("network", "machine", "transient"), "secret": ("secrets", "bead", "needs_owner"),
@@ -141,11 +152,13 @@ class RunStops(RunBase):
         self.assertIn("PATH", r["context"]["env_keys"])
         self.assertNotIn("CLAUDE_FOO", r["context"]["env_keys"])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_drop_before_the_first_event_relaunches_once(self):
         _, r = self.run_it(mode="drop_early")
         self.assertEqual((r["stop"], r["text"]), (None, "second try"))
         self.assertEqual(self.launches(), 2)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_two_drops_before_the_first_event_stop_with_network_and_launch_no_third_time(self):
         _, r = self.run_it(mode="drop_early_twice")
         self.assertEqual((why(r), r["stop"]["scope"]), ("network", "machine"))
@@ -154,12 +167,14 @@ class RunStops(RunBase):
         self.assertFalse(r["stop"]["partial"])
         self.assertNotIn("OPENAI_SUBSCRIPTION", env.load_state().out)      # the network is not the lane's fault
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_drop_with_the_net_still_down_is_not_relaunched_in_the_call(self):
         with mock.patch.object(net, "net_probe", lambda hosts=None: {"up": False, "ip_up": False, "why": "offline", "ms": 1, "hosts": {}, "at": time.time()}):
             _, r = self.run_it(mode="drop_early")
         self.assertEqual((why(r), r["stop"]["scope"]), ("network", "machine"))
         self.assertEqual(self.launches(), 1)         # no in-call wait or retry loop: the engine decides
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_dropped_stream_keeps_the_ref_in_the_answer_the_stop_and_the_refs_table(self):
         _, r = self.run_it(mode="late_error")
         self.assertEqual((r["ref"], r["stop"]["ref"]), ("thread-123", "thread-123"))
@@ -170,11 +185,13 @@ class RunStops(RunBase):
         _, r = self.run_it("--resume", "thread-123")                  # the retry with that ref goes through
         self.assertEqual((r["stop"], r["ref"]), (None, "thread-123"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_every_stop_that_has_a_ref_carries_it(self):
         _, r = self.run_it(mode="limit")
         self.assertEqual((why(r), r["ref"]), ("rate_limited", "thread-123"))
         self.assertEqual(r["stop"]["ref"], "thread-123")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_network_stops_never_bench_the_pair(self):
         for _ in range(5):
             _, r = self.run_it(mode="late_error", unattended=True)
@@ -186,11 +203,13 @@ class RunStops(RunBase):
         _, r = self.run_it()
         self.assertEqual(r["stop"], None)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_stop_with_nothing_to_wait_for_is_for_the_owner(self):
         self.assertEqual(answer.result("no_lane")["stop"]["permanence"], "needs_owner")
         self.assertEqual(answer.result("no_lane", retry_after=5)["stop"]["permanence"], "transient")
         self.assertIsNone(answer.result()["stop"])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_schema_is_reasked_once_in_the_same_thread(self):
         schema = self.base / "s.json"
         schema.write_text('{"type": "object", "required": ["a"], "properties": {"a": {"type": "integer"}}}')
@@ -202,6 +221,7 @@ class RunStops(RunBase):
         self.assertEqual((why(r), r["stop"]["permanence"]), ("schema_invalid", "transient"))
         self.assertIn("$.a is missing", r["say"])
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_contract_json_names_every_reason_and_lane(self):
         import io
         real, sys.stdout = sys.stdout, io.StringIO()
@@ -217,11 +237,13 @@ class RunStops(RunBase):
         for row in c["reasons"].values():
             self.assertTrue({"scope", "permanence", "retry", "health", "wording"} <= set(row))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_request_fault_leaves_the_lane_in_state_json_alone(self):
         before = env.load_state().out
         self.run_it(mode="bad_request")
         self.assertEqual(env.load_state().out, before)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_handshake_declares_contract_4_and_the_reason_table(self):
         import io
         real, sys.stdout = sys.stdout, io.StringIO()
@@ -236,6 +258,7 @@ class RunStops(RunBase):
         self.assertNotIn("--host", c["run_args"])
         self.assertEqual(set(c["reasons"]), set(stops.CONTRACT["reasons"]))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_history_rotates_by_age_once_it_is_big(self):
         p = env.history_path()
         old = json.dumps({"ts": time.time() - 20 * 86400, "run_id": "old", "pad": "x" * 2000})
@@ -245,6 +268,7 @@ class RunStops(RunBase):
         self.assertNotIn("old", runs)
         self.assertEqual(len(runs), 1)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_gap_over_1800s_is_written_to_history_through_the_watchdog_and_the_fold_ignores_it(self):
         from delegate.app import watch
         t = [0.0]
@@ -260,17 +284,20 @@ class RunStops(RunBase):
         self.assertEqual(health_ledger.HealthLedger(env.typed_routing(CFG).settings.breaker).fold(rows).pairs, {})
         dog.flush(None, d["lane"], d["model"], True)       # never raises
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_any_stream_line_counts_as_activity_even_on_stderr(self):
         with mock.patch.dict(watch.LIMITS["codex"], silence_s=1):      # the fake prints to stderr every 0.4 s for 3 s
             _, r = self.run_it(mode="chatter", timeout=0)
         self.assertEqual(r["stop"], None)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_benched_pair_is_skipped_and_the_next_step_runs(self):
         self.hist(self.failed_rows(3, 60))
         _, r = self.run_it(unattended=True)
         self.assertNotEqual(r.get("model"), "gpt-6.1-sol")
         self.assertNotEqual(r.get("lane"), "OPENAI_SUBSCRIPTION")
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_pair_whose_bench_ended_gets_one_canary_before_the_real_call(self):
         self.hist(self.failed_rows(3, 1500))            # benched 15 min from the third failure: over 8 min ago
         _, r = self.run_it()
@@ -283,6 +310,7 @@ class RunStops(RunBase):
         _, r = self.run_it()                           # the canary passed: the ladder is reset, the next call has none
         self.assertEqual(len(self.args_seen().strip().splitlines()), 3)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_failed_canary_is_the_answer_and_starts_the_next_rung(self):
         self.hist(self.failed_rows(3, 1500))
         _, r = self.run_it(mode="early_error")
@@ -294,6 +322,7 @@ class RunStops(RunBase):
         self.assertEqual((v.state, v.rung), ("broken", 2))
         self.assertAlmostEqual(v.until - env.now(), 30 * 60, delta=5)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_bad_request_never_benches_the_pair(self):
         for _ in range(4):
             _, r = self.run_it(mode="bad_request")
@@ -301,6 +330,7 @@ class RunStops(RunBase):
         _, r = self.run_it()
         self.assertEqual((r["stop"], r["lane"], r["model"]), (None, "OPENAI_SUBSCRIPTION", "gpt-6.1-sol"))
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_workers_of_a_lane_marked_out_by_someone_else_are_stopped_within_the_poll_interval(self):
         from delegate.app.supervisor import LaneGoneWatcher
         started = time.time()
@@ -312,6 +342,7 @@ class RunStops(RunBase):
         late = LaneGoneWatcher(launch.lane_gone_check("OPENAI_SUBSCRIPTION", time.time() + 5), every=0)     # a worker that started after the mark is not affected
         self.assertIsNone(late.poll())
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_schema_is_passed_and_the_answer_parsed(self):
         schema = self.base / "s.json"
         schema.write_text('{"type": "object"}')
@@ -319,6 +350,7 @@ class RunStops(RunBase):
         self.assertEqual((r["stop"], r["data"]), (None, {"a": 1}))
         self.assertIn("--output-schema", self.args_seen())
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_limit_refusal_lasts_until_the_known_reset(self):
         soon = env.now() + 500
 
@@ -335,6 +367,7 @@ class RunStops(RunBase):
         when, source, _ = reset_parse.limit_until("the batch run is queued behind a rate limit", env.now(), {})
         self.assertEqual((source, round(when - env.now())), ("guess", 900))       # nobody said when: refusal time + 15 min
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_a_reading_with_room_after_the_refusal_clears_the_out(self):
         support.put_out("OPENAI_SUBSCRIPTION", env.now() + 5 * 86400, "limit refusal: x", at=env.now() - 60)
 
@@ -345,6 +378,7 @@ class RunStops(RunBase):
         self.assertEqual((r["stop"], r["lane"]), (None, "OPENAI_SUBSCRIPTION"))
         self.assertNotIn("OPENAI_SUBSCRIPTION", env.load_state().out)
 
+    @real_proc("delegate: a worker, git or CLI process")
     def test_the_model_saying_rate_limit_is_not_a_limit_refusal(self):
         usage.READERS["codex_app_server"] = lambda lane, S, st, t, *a: None
         _, r = self.run_it(mode="saylimit")
