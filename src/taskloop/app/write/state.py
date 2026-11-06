@@ -1,12 +1,24 @@
 """StageState: where one stage of the plan stands between its rounds: the counters a round reads and the next one changes. A round's
 step answers "" (go on to the next step) or what the round came to: AGAIN, ACCEPT or REPLAN."""
+from dataclasses import dataclass
 from typing import Any
 
+from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.plancheck import PlanData, RoundState
 
 AGAIN = "again"  # a round's answer: go round once more
 ACCEPT = "accept"  # the stage is done
 REPLAN = "replan"  # the stage cannot be done as planned
+
+
+@dataclass
+class CheckOut:
+    """What a check round hands on to the engine: the run, why the stage is stuck, the tests the task's diff added and removed, the rounds
+    it used up. The round writes it here; StageLoop applies it, so CheckRound assigns nothing on the engine."""
+    run: CheckRun | None = None
+    stuck_why: str | None = None
+    tests: tuple[int, int] | None = None
+    rounds: int = 0
 
 
 class StageState:
@@ -35,3 +47,4 @@ class StageState:
         self.wfam = ""
         self.wrote_unchecked: list[dict[str, Any]] = []
         self.run: Any = None  # this round's check run
+        self.out = CheckOut()
