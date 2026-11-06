@@ -141,9 +141,9 @@ class WriteRound:
         e.steps.move("write", "shots_contract", "a visual write named no shots and gave no reason: asked once more")
         got = e.ai("write", f"{s.name} shots contract", prompt + tip, delta=tip, resume_key="writer", write=s.n, visual=True,
                         round=s.rounds + 1, at=(s.sk, s.rounds, s.n + 500), **s.meta)
-        w2, wfam = got.data, got.family
+        w2 = got.data
         e.stats["writes"] += 1
-        s.wfam = e.writer_family = wfam
+        s.wfam = e.writer_family = got.family
         e.writer.last_stage = s.last
         e.last_summary = w2["summary"]
         if w2["question"].strip():
