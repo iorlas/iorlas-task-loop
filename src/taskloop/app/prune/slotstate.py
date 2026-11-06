@@ -46,7 +46,7 @@ def prune(cfg: ConfigDir, repos: list[str], git: SlotGit, now: float, dry_run: b
 def _old_folders(cfg: ConfigDir, now: float) -> dict[str, list[Path]]:
     """{state key: the slot folders unchanged for MIN_AGE_DAYS}, read from disk only."""
     out: dict[str, list[Path]] = {}
-    for state in sorted((cfg.root / "repos").glob("*/slot-state")):
+    for state in cfg.slot_state_roots():
         for path in sorted(state.glob("*")):
             try:
                 if path.is_dir() and path.stat().st_mtime < now - MIN_AGE_DAYS * 86400:
