@@ -3,6 +3,7 @@
 A store is a typed document, a typed append-only log, a keyed set of documents, a lock table or a ticket line. Nothing here
 names a file or a folder: where a thing lives is the real implementation's business (`taskloop.contracts.paths`).
 """
+import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from typing import Protocol
@@ -28,6 +29,9 @@ class AmendDoc[T](Doc[T], Protocol):
     """A Doc that can be rewritten from what it holds without losing another writer's change in between."""
 
     def modify(self, fn: Callable[[T], T]) -> bool: ...
+    def modify_with(self, fn: Callable[[T], T], also: Callable[[sqlite3.Connection | None], None]) -> bool:
+        """`modify`, and `also(con)` in the same transaction (con None: a store with none): both land or neither."""
+        ...
 
 
 class AmendSet[T](Protocol):

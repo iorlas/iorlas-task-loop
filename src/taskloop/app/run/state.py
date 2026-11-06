@@ -7,6 +7,7 @@ node, close at the end, keep the follow-ups, follow a rebase, drop.
 
 import contextlib
 import copy
+import sqlite3
 import time
 from collections.abc import Callable
 from typing import Any
@@ -214,6 +215,10 @@ class Checkpoints:
         """Rewrite the stored record with `fn` (a rebase moves its head, a cap grant adds an amend). False when there is none. The
         write is checked against the revision `fn` saw: another writer's change in between makes `fn` run again on the newer record."""
         return self.writer().modify(fn)
+
+    def amend_with(self, fn: Callable[[Checkpoint], Checkpoint], also: Callable[[sqlite3.Connection | None], None]) -> bool:
+        """`amend`, and `also(con)` in the same transaction: both land or neither (a record that is not there: `also` alone)."""
+        return self.writer().modify_with(fn, also)
 
     def drop(self) -> None:
         self.writer().delete()

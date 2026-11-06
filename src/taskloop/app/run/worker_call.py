@@ -14,7 +14,7 @@ from typing import Any
 from taskloop.adapters import childenv, delegate_wire
 from taskloop.adapters import delegate as dg
 from taskloop.app.checks.step_env import step_env
-from taskloop.app.run import done_memo, strays, worker_identity, worker_recovery, worker_request
+from taskloop.app.run import asked, strays, worker_identity, worker_recovery, worker_request
 from taskloop.app.run.blocked import refuse_over_cap
 from taskloop.app.run.call import Call
 from taskloop.app.run.calls import timing
@@ -323,13 +323,11 @@ class WorkerCall:
         e = self.e
         if res.git_violation:
             e.warn("{} changed git: {}".format(c.node, "; ".join(res.git_violation)))
+        c.thread = asked.thread_updates(c, res, e.fallback_lane, (e.sessions[-1] if e.sessions else {}).get("context_k"),
+                                        e.hand.seen_now() if c.resume_key and res.ref else [])  # k tokens, None = unknown
+        asked.apply(e, c.thread)
         if c.resume_key and res.ref:
-            if res.fallback is not None:  # delegate says it on every answer that picked a lane, a resumed one too
-                e.writer_fallback = res.fallback
-                e.fallback_lane = (res.first_lane or c.out_on or e.fallback_lane) if res.fallback else ""
-            e.writer.delegate = c.resume = res.ref
-            e.writer.ctx = (e.sessions[-1] if e.sessions else {}).get("context_k")  # k tokens, None = unknown
-            e.writer.seen = e.hand.seen_now()  # the brief and plan this session now holds
+            c.resume = res.ref
         return answers.sent_errors(c.node, c.visual, res.data, res.say or res.text)
 
     def refused(self, c: Call, res: DelegateResult, denied: list[Any], errs: Any = True) -> bool:
@@ -390,15 +388,13 @@ class WorkerCall:
 
     def end_call(self, c: Call, ans: dg.Answer) -> None:
         e, res = self.e, ans.res
+        done = asked.done_updates(c, res, c.thread)
+        asked.apply(e, done)
         if c.state is not None and c.prepared is not None:
-            # the memo first: a crash between the two re-recovers, never loses
-            done_memo.keep(e.run_dir, c.key, c.sha, c.state.answer_file, c.prepared.snapshot)
+            # the memo first, with the thread's fields in one transaction: a crash between this and consumed re-recovers, never loses
+            asked.settle(e, c, c.state.answer_file, c.prepared.snapshot)
             c.state.consumed()
-        if c.node == "plan" and res.ref:
-            e.planner_ref = res.ref
-        e.last_flag = res.flag  # same_family | degraded | ...: delegate could not give the usual lane
-        if c.node in READ_ONLY_NODES and c.writer_family and res.family == c.writer_family and not e.last_flag:
-            e.last_flag = "same_family"  # routed past a dead lane to the writer's own family: say so
+        e.last_flag = done.flag  # same_family | degraded | ...: delegate could not give the usual lane
         if e.last_flag == "same_family" or res.warning.strip():
             # the owner's word: when only one family is up, it reviews its own work; say so (delegate's warning when it gives one),
             # in the log, the trace and the bead, and never pause for it

@@ -4,6 +4,7 @@ the same. The contract suite runs these and the file-backed stores through one s
 import contextlib
 import json
 import os
+import sqlite3
 import threading
 import time
 from collections.abc import Callable, Generator
@@ -71,6 +72,10 @@ class MemDoc[T](AmendDoc[T]):
             return False
         self.write(fn(rec))
         return True
+
+    def modify_with(self, fn: Callable[[T], T], also: Callable[[sqlite3.Connection | None], None]) -> bool:
+        also(None)
+        return self.modify(fn)
 
     def delete(self) -> None:
         self.data = None
