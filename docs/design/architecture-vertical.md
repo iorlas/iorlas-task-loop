@@ -137,16 +137,15 @@ Shelf bar (constitution Art. VII): *"no second consumer required"*; a generic he
 The shelf is a uv workspace with per-package tests and **package-granular affected** (`tools/affected.py`, 238 lines) — it is already the model Denis describes.
 
 State: 24 packages vendored in `skills/task-loop/_vendor` (≈ 15k sloc), 14 SHELF beads still open under tl-w7lt. Most generic substrate has moved.
-Remaining candidates, judged:
+Remaining candidates, judged (SH1 reading, shelf at ~/Workspaces/shelf):
 
 | candidate | where | sloc | verdict |
 |---|---|---|---|
-| `dev/affected.py` + `importgraph.py` (file-level AST closure, ledger, string/data/discovery rules) | dev/ | 386 | ⚠️ **evolve, not duplicate**: shelf has its own `tools/affected.py` (package-level, uv graph). Two "affected" tools = Art. III redundancy. After §6 step P1 the package-level rule is trivial here too; promote the AST closure + ledger as one `any-affected` with the package layer as its coarse mode. Not before the layout stabilises |
-| `adapters/locks.py`, `landlock.py` | adapters | 127 + 92 | ⚠️ read first against vendored `process_lock`/`any_lease`; if landlock is a flock wrapper, evolve `process_lock`; else keep local |
-| `adapters/treehash.py`, `gitmemo.py`, `halt.py`, `links.py` | adapters | 77/100/56/154 | ❌ none is generic substrate on inspection of names; git-shaped helpers belong inside `git_porcelain` (already 6101 sloc vendored: that package is the kitchen sink to split on the shelf, not here) |
-| `contracts/fence.py` (113), `rotating.py` (32), `timedrows.py` (87) | contracts | | ⚠️ look: rotating/ago/timespec are 7–32-line helpers; shelf `timefmt` and `partial-time` exist — **adopt** before writing more (grep) |
+| `dev/affected.py` + `importgraph.py` (file-level AST closure, ledger, string/data/discovery rules) | dev/ | 386 | ⚠️ **evolve, not duplicate**: shelf has `tools/affected.py` (238 lines, uv-workspace package graph, pytest dirs). Two "affected" tools = Art. III redundancy, but they answer different questions (package graph vs file closure + green ledger). After the packages exist here the coarse layer is the same rule as shelf's; then promote the AST closure + ledger as `any-affected` and let `tools/affected.py` call it for the fine step. Not before S3 |
+| `adapters/locks.py` (127), `landlock.py` (92) | adapters | 219 | ❌ keep local. Both sit on the vendored `process_lock`/`any_lease`; `landlock` keys the lock by origin URL (land-specific). One finding: `locks.py` writes a `<lock>.holder` file (a `LockRecord`) next to a lock whose own file already holds a JSON holder record (`process_lock.holder()`, pid/created/label/meta, readable without the lock). That is a duplicate on our side: **adopt** `Holder` and delete the holder file (S, own bead; careful: waiters and `LockRecord` readers in `contracts/locks.py`) |
+| `RowDoc/RowDocs/JsonStore/JsonlStore` | contracts | ~450 | ❌ keep local. They are typed over our msgspec `Rec` and our `factory.db` tables; shelf `sqlite_store` has the generic half already (`Store`, `open_rw`, `cas_update`, `migrate.upgrade`, `quarantine`). Nothing to promote; a typed-doc layer would add a `Rec` dependency to the shelf package |
+| `contracts/ago.py` (7), `rotating.py` (32), `domain/timespec.py` (26) | | 65 | ❌ keep local. `ago` is `timefmt.fmt_span` plus "never"; `rotating` is a 30-line wrapper that adds `rewrite`/`append_at` use over `jsonl_log.JsonlLog` (already vendored); `timespec.parse_future` (`+2h`, `HH:MM`, ISO, epoch) has no shelf equal: `timefmt.parse_until` takes a stored value, not an owner-typed one. Small and single-consumer; promote only when a second caller appears |
 | stage packages (gate, land, release, ...) | | | ❌ they encode this factory's method; shelf holds generic substrate (Art. VI–VII; topology.md §5 already refused delegate for this reason) |
-| `taskloop_store` row layer (`RowDoc`, `JsonlStore`) over `sqlite_store` | stores | ~450 | ⚠️ the generic half (revision-guarded doc rows) may belong in `sqlite-store` (it already has "revision-guarded updates"); the rest is ours. One reading bead, no code |
 
 Verdict: **shelf is not the lever for the vertical split.** Expected gain is small; every shelf PR is a Denis-merged gate of 10–17 minutes (topology.md).
 
