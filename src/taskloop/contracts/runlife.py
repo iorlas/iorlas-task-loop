@@ -14,6 +14,7 @@ from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunManifest, RunState
 
 BEAT_EVERY: Final = 60.0  # seconds between the heartbeats of a live run (the manifest's `heartbeat`)
+SUSPECT_AFTER: Final = 2 * BEAT_EVERY  # a heartbeat this old with its process gone is shown SUSPECT: not running, not yet written lost
 STALE_AFTER: Final = 300.0  # a heartbeat older than this (5 missed) lets the reconciler look at the run's pid
 RETAIN: Final = 7 * 86400  # seconds the dashboard and `tl report` look back; it deletes nothing (the sweep is KEEP_DAYS)
 KEEP_DAYS: Final = 30  # days run data of a closed bead is kept at least (logs, check rounds, evidence); a bead not closed keeps all of it
@@ -39,6 +40,10 @@ class Liveness(StrEnum):
     LIVE = "live"
     ENDED = "ended"
     LOST = "lost"
+    SUSPECT = "suspect"  # shown only: the process is gone, the reconciler has not yet written `lost`
+
+
+GONE: Final = frozenset({Liveness.LOST, Liveness.SUSPECT})  # what a reader shows as "its process is gone"
 
 
 def liveness(m: RunManifest) -> Liveness:
@@ -52,13 +57,23 @@ def is_lost(m: RunManifest, host: str, now: float, alive: Callable[[int, str], b
     return m.state.live and m.host == host and now - m.heartbeat >= STALE_AFTER and not (m.pid > 0 and alive(m.pid, m.pid_start))
 
 
+def suspect(m: RunManifest, host: str, now: float, alive: Callable[[int, str], bool]) -> bool:
+    """A live-state run of THIS host whose heartbeat missed two beats and whose process (pid and start token) is gone: a killed engine.
+    Display only, nothing is written; `is_lost` still waits STALE_AFTER."""
+    return m.state.live and m.host == host and now - m.heartbeat >= SUSPECT_AFTER and not (m.pid > 0 and alive(m.pid, m.pid_start))
+
+
 def lost_reason(m: RunManifest, now: float) -> str:
     return f"pid {m.pid} on {m.host} is gone; last heartbeat {now - m.heartbeat:.0f} s ago while {m.state}"
 
 
 def shown(m: RunManifest, now: float) -> Liveness:
-    """What a reader that must not write displays: the recorded state, or LOST when the reconciler would mark it so now."""
-    return Liveness.LOST if is_lost(m, host_name(), now, pid_alive) else liveness(m)
+    """What a reader that must not write displays: the recorded state, LOST when the reconciler would mark it so now, or SUSPECT while
+    a killed engine's heartbeat is not yet old enough for that."""
+    host = host_name()
+    if is_lost(m, host, now, pid_alive):
+        return Liveness.LOST
+    return Liveness.SUSPECT if suspect(m, host, now, pid_alive) else liveness(m)
 
 
 def command_scope(cfg: ConfigDir, repo: str, bead: str, run: str, now: float) -> str:
