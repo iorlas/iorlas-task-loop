@@ -12,6 +12,7 @@ from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.ident import claude_dir, config_dir
 from taskloop.app.doctor import disk, ops, profiles
 from taskloop.app.release import catalog, manifest
+from taskloop.app.report.inputs import repo_traces
 from taskloop.app.slots import watchdog
 from taskloop.app.wire import hook
 from taskloop.app.wire import slots as wslots
@@ -216,6 +217,8 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
     print(f"contracts: {Path(contracts.__file__).resolve().parent}")
     print(f"engine: {pin.describe(pin.families(source[0].engine.writer_family, []))}")
     print(f"engine: {pin.describe_second(source[0].engine.second_writer_family)}")
+    if second := source[0].engine.second_writer_family:
+        print(ops.second_share_line(second, *ops.second_share(repo_traces(repo, git, ConfigDir(config_dir(env))).runs, second)))
     for w in warns:
         print("WARN " + w)
     if legacy := legacy_line(env):
