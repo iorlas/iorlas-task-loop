@@ -17,14 +17,13 @@ from taskloop.app.run.host import RunHost
 from taskloop.app.run.layout import RunLayout, finish_of, live_run, loop_id_of, loop_of, repo_of
 from taskloop.app.run.stages import run_stages
 from taskloop.app.run.state import carries_state
-from taskloop.contracts import fence
+from taskloop.contracts import fence, rundocs
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import Result
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
-from taskloop.contracts.paths import RunFiles
 from taskloop.contracts.ports import Clock, Git, Spawner
 from taskloop.contracts.run import RunReport
 from taskloop.domain import outcome as oc
@@ -100,9 +99,9 @@ class Engine(RunHost):
         self.checker = Checker(self, lambda secs: self.halt_point(wait=secs))
         self.delegation.route(quiet=True)
         if self.reexec:
-            self.reload.restore_run(RunFiles(self.run_dir).reexec())
+            self.reload.restore_run(rundocs.reexec(self.home, self.run_id))
         elif pause:
-            self.reload.restore_run(RunFiles(self.home.run_dir(pause.run)).pause())
+            self.reload.restore_run(rundocs.pause(self.home, pause.run))
             self.reload.carry_done_memo(self.home.run_dir(pause.run))
             self.log.note(f"back from the network pause of {pause.run}: continuing as run {stem}")
 

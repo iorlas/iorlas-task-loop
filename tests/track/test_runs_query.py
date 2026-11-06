@@ -1,4 +1,4 @@
-"""RUNSQ: `tl runs show` and `tl runs slow` read an engine log and print the timed items; they write nothing."""
+"""RUNSQ: `tl runs show` and `tl runs slow` print the timed rows the engine wrote while it logged; they write nothing."""
 import io
 import json
 import sys
@@ -9,8 +9,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.app.track import runs
+from taskloop.contracts import log, timedrows
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.stores import RunLog
 
 
 def row(kind: str, t: float, **kw):
@@ -39,9 +41,14 @@ def say(fn, *args):
 
 
 def home(tmp_path):
+    """The log as the engine writes it: each record through the run's log store, which adds the timed rows."""
     cfg = ConfigDir(tmp_path)
     cfg.engine_dir().mkdir()
-    cfg.engine_log("R1").write_text("\n".join(json.dumps(r) for r in FIXTURE) + "\ntorn{\n", encoding="utf-8")
+    store = RunLog(cfg, "R1")
+    for r in FIXTURE:
+        store.append(log.decode(r))
+    with cfg.engine_log("R1").open("a", encoding="utf-8") as f:
+        f.write("torn{\n")
     return cfg
 
 
@@ -95,3 +102,21 @@ def test_show_lists_the_attempts_of_the_run_from_factory_db(tmp_path):
     lines = [ln for ln in out.splitlines() if ln.strip().startswith("attempt")]
     assert len(lines) == 2 and "yielded" in lines[0] and "taken up by another process" in lines[0]
     assert "open" in lines[1]
+
+
+def test_the_rows_are_all_show_and_slow_read(tmp_path):
+    """No row, no line: with the log gone but the rows kept, the timed lines are the same; with the rows gone, there are none."""
+    cfg = home(tmp_path)
+    assert [(i.kind, i.name) for i in timedrows.of_run(cfg, "R1")] == [
+        ("step", "write"), ("check", "unit"), ("cmd", "git fetch -q origin"), ("wait", "lane")]
+    cfg.engine_log("R1").write_text("", encoding="utf-8")
+    rc, out = say(runs.show, "R1", cfg)
+    assert rc == 0 and "step   write" in out and "2.1m" in out
+
+
+def test_a_process_that_takes_the_log_up_again_pairs_the_starts_of_the_earlier_one(tmp_path):
+    cfg = ConfigDir(tmp_path)
+    cfg.engine_dir().mkdir()
+    RunLog(cfg, "R1").append(log.decode(FIXTURE[1]))  # a step starts in the first process...
+    RunLog(cfg, "R1").append(log.decode(FIXTURE[2]))  # ...and ends in the next
+    assert [(i.kind, i.name, i.exec_s) for i in timedrows.of_run(cfg, "R1")] == [("step", "write", 128.0)]
