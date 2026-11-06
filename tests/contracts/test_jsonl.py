@@ -17,7 +17,7 @@ import support.paths  # noqa: F401
 from jsonl_log import Jsonl, cursor
 
 from contracts import samples as S
-from taskloop.contracts import paths, stores, wire
+from taskloop.contracts import askstore, paths, stores, wire
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.docstore import JsonStore
 from taskloop.contracts.ids import BeadId
@@ -199,9 +199,9 @@ class StoresTest(Case):
 
     def test_each_family_lives_where_paths_says(self):
         assert stores.TraceStore(self.cfg).file.path.name == "traces.jsonl"
-        assert stores.AskStore.at(self.cfg).of(BeadId("tl-1")).path == self.cfg.factory_db()
-        stores.AskStore.at(self.cfg).of(BeadId("tl-1")).write(S.other(Ask))
-        assert stores.AskStore.at(self.cfg).of(BeadId("tl-1")).get() == S.other(Ask)
+        assert askstore.AskStore.at(self.cfg).of(BeadId("tl-1")).path == self.cfg.factory_db()
+        askstore.AskStore.at(self.cfg).of(BeadId("tl-1")).write(S.other(Ask))
+        assert askstore.AskStore.at(self.cfg).of(BeadId("tl-1")).get() == S.other(Ask)
         el = stores.EventLog(self.cfg)
         el.append(S.EVENTS["claim"])
         assert el.read_from(0).items[0].rec == S.EVENTS["claim"]

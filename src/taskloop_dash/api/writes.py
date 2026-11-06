@@ -8,6 +8,7 @@ from typing import Any, Final, assert_never
 
 from taskloop.contracts import factorydb, receipts, wire
 from taskloop.contracts.ask import Ask, AskAction
+from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.dash import (
     WRITES,
     AckReq,
@@ -24,7 +25,6 @@ from taskloop.contracts.dash import (
 )
 from taskloop.contracts.ids import is_bead_id
 from taskloop.contracts.runlife import command_scope
-from taskloop.contracts.stores import AskStore
 from taskloop_dash.api.looks import Looks
 from taskloop_dash.env import Env
 from taskloop_dash.readers.beads import Beads
