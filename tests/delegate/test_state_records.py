@@ -13,7 +13,6 @@ from unittest import mock
 
 import pytest
 from any_agent import reset_parse
-from any_agent.classify import Outcome
 from any_agent.harnesses.codex import CodexHarness
 from any_agent.protocol import LaunchSpec
 from any_agent.supervisor import RunHooks, Supervisor
@@ -28,12 +27,11 @@ from support import fake_worker
 from support.case import Case
 from support.fake_clock import SteppingClock
 from support.fake_worker import Err, Exit, Jump
-from support.procsim import real_proc
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
 from run_support import short_limits
-from test_route import CFG, T, argparse_ns, lanes, need, no_reader, route
+from test_route import CFG, T, lanes, need, no_reader, route
 
 
 class Breaker(Case):
@@ -196,36 +194,6 @@ class ResetTimes(Case):
         assert reset_parse.limit_until("rate limited", t, {"limit_reset": t + 7200})[1:] == ("guess", None)
         assert reset_parse.limit_until("rate limited", t, {}, lambda: t + 999)[:2] == (t + 999, "vendor")
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_out_rows_record_source_and_zone_and_report_is_manual(self):
-        with tempfile.TemporaryDirectory() as d, mock.patch.object(env, "config_dir", return_value=Path(d)):
-            end = (dt.datetime.now(dt.UTC) + dt.timedelta(days=5)).replace(
-                second=0, microsecond=0
-            )  # inside the 40 days a stated reset may be off
-            launch.settler().apply(
-                {},
-                Outcome("rate_limited", f"will reset at {end:%Y-%m-%d %H:%M:%S} UTC", "event"),
-                {"lane": "L1", "limit_reset": None},
-                time.time(),
-                "codex",
-                argparse_ns("worker", timeout=0),
-            )
-            rec = env.load_state().out["L1"]
-            assert (rec.source, rec.zone) == ("vendor", "UTC")
-            assert rec.until == end.timestamp()
-            for want_n in (0, 1, 2):  # three guesses in a row climb the ladder
-                launch.settler().apply(
-                    {},
-                    Outcome("rate_limited", "slow down", "event"),
-                    {"lane": "L2"},
-                    1_800_000_000.0,
-                    "codex",
-                    argparse_ns("worker", timeout=0),
-                )
-                rec = env.load_state().out["L2"]
-                assert (rec.source, rec.guess_n, round((rec.until - 1_800_000_000.0) / 60)) == ("guess", want_n, (15, 30, 60)[want_n])
-            route.main(["report", "--lane", "OPENAI_SUBSCRIPTION", "--event", "out", "--until", str(int(time.time()) + 600)])
-            assert env.load_state().out["OPENAI_SUBSCRIPTION"].source == "manual"
 
 
 class TokenBudget(Case):

@@ -5,7 +5,6 @@ No real ZAI call is made here: the goldens are recorded shapes (87-live-view-des
 
 import json
 import subprocess
-import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 from unittest import mock
@@ -20,6 +19,7 @@ from delegate.app import harnesses
 from delegate.app.publish import LiveSink
 from delegate.contracts.json_types import obj
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 HERE = Path(__file__).resolve().parent
 
@@ -151,7 +151,7 @@ class Stream:
     def test_provisional_rows_reach_the_live_file_seconds_before_the_end(self):
         """A permission line 4 s before the completed tool_use: cmd_start with prov, then cmd_end with the full text and secs >= 4."""
         h, clock = OpenCodeHarness(), [100.0]
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             sink = LiveSink("opencode", str(Path(d) / "l.jsonl"), wall=lambda: clock[0], run_id="r")
             sink.start(lane="ZAI_CODING_SUBSCRIPTION", model="m", effort="high", role="worker")
             for e in h.parse_log_line(lines("opencode_session.log")[1]):
@@ -172,7 +172,7 @@ class Stream:
 
 class World(Case):
     def spec(self, profile=None, **kw):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         h = OpenCodeHarness(profile, Path(tmp.name))
         with mock.patch.object(opencode_sandbox, "write_shell") as shell:
@@ -268,7 +268,7 @@ class World(Case):
 
     def test_the_login_probe_reads_the_auth_file(self):
         with (
-            tempfile.TemporaryDirectory() as d,
+            TemporaryDirectory() as d,
             mock.patch.dict("os.environ", {"XDG_DATA_HOME": d}),
             mock.patch.object(OpenCodeHarness, "find_exe", return_value="oc"),
         ):
