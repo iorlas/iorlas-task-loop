@@ -1,7 +1,7 @@
 """review_skip: a stage whose every changed path is mechanical (domain/review/skip.py) is accepted without a review call. The diff is
 read here; the rule is the domain's."""
 from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 from taskloop.domain.review.skip import SkipKind, decide
 
 

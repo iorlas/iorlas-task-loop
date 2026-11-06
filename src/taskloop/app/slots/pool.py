@@ -8,9 +8,9 @@ from taskloop.app.slots.marks import clear_marks, held_by, hold_of, hold_until, 
 from taskloop.app.slots.reset import check_ready, ready_for
 from taskloop.contracts.bdsafe import peek
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
 from taskloop.contracts.fence import SLOT_GEN, gen_of
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
 from taskloop.contracts.slots import Hold, SlotFail, slots_of
 
 

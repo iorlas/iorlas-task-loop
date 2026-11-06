@@ -6,7 +6,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
-from support.engine_case import CLEAN, PLAN, WRITE, EngineTest
+from support.engine_case import EngineTest
+from support.plans import CLEAN, PLAN, WRITE
 
 # isort: split
 from support.logs import records

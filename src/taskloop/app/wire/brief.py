@@ -1,5 +1,6 @@
 """The facts of `tl status --brief` and the handoff, read from the stores (LoopFiles, AskStore, the slot beads, the catalog and the pin):
 no reader of its own."""
+import hashlib
 import json
 from pathlib import Path
 
@@ -12,11 +13,12 @@ from taskloop.app.release import catalog, pins
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.bd_errors import BdCommandFailure
+from taskloop.contracts.beadsport import BdFailure
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, Git
 from taskloop.contracts.rowstores import ReposStore
 from taskloop.contracts.slots import SlotView
 from taskloop.domain.brief import AskLine, Brief, LoopLine, ResourceLine, status_json, status_lines
@@ -28,6 +30,14 @@ def running_version(plugin_root: Path) -> str:
     try:
         return str(json.loads((plugin_root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")).get("version") or "")
     except (OSError, ValueError, AttributeError):
+        return ""
+
+
+def shim_sha256(config: Path) -> str:
+    """The sha256 of <config>/bin/tl, the shim every session runs; '' when it is not there."""
+    try:
+        return hashlib.sha256((config / "bin" / "tl").read_bytes()).hexdigest()
+    except OSError:
         return ""
 
 
@@ -75,7 +85,8 @@ def build(repo: str, plugin_root: Path, now: float, env: Env, who: Identity | No
         loops=tuple(LoopLine(st.pid, st.started, st.bead or "", st.slot or "", st.version) for st in loops),
         last_beat=last_beat, last_exit=str(last.get("reason") or ""), asks=asks,
         slots=slot_lines(repo, who, now, git) if who and git else (), resources=held_resources(cfg), recent=recent,
-        version=running_version(plugin_root), installed=catalog.installed_version("task-loop", claude_dir(env)), pinned=(pin or ""))
+        version=running_version(plugin_root), installed=catalog.installed_version("task-loop", claude_dir(env)), pinned=(pin or ""),
+        shim_sha256=shim_sha256(cfg.root))
 
 
 def handoff_file(repo: str, env: Env) -> Path:
