@@ -8,7 +8,8 @@ import contextlib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
-from delegate.contracts.history import HealthState
+from any_breaker import State
+
 from delegate.contracts.json_types import Json
 from delegate.contracts.routing import LaneSpec, ModelSpec, Routing, Settings
 from delegate.contracts.state import AuthEntry, StateDoc
@@ -104,7 +105,7 @@ class FleetBuilder:
             lane.out, lane.out_until, lane.out_reason = True, o.until, o.reason
             lane.notes.append(o.why)
 
-    def _health(self, t: float) -> HealthState:
+    def _health(self, t: float) -> State:
         """The health fold over history.jsonl, continued from a cached checkpoint (a cache: no file, a damaged one or another policy = a
         full fold)."""
         pol = self.r.settings.breaker
@@ -116,7 +117,7 @@ class FleetBuilder:
         return state
 
 
-def apply_health(lane: Lane, models: Mapping[str, ModelSpec], ledger: HealthLedger, state: HealthState, t: float) -> None:
+def apply_health(lane: Lane, models: Mapping[str, ModelSpec], ledger: HealthLedger, state: State, t: float) -> None:
     """Put the breaker's view of each (lane, model) pair on the lane: `benched` (refused), `canary` (the next launch is the probe),
     `hview`."""
     for model, m in models.items():

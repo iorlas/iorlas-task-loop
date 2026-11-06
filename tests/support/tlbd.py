@@ -9,23 +9,13 @@ import subprocess
 from contextlib import contextmanager
 from unittest import mock
 
-from support.who import acting, who
+from support.who import acting
 from taskloop.adapters import bd
-from taskloop.adapters.bd import BdRun, BdStore
+from taskloop.adapters.bd import BdRun
 
 
 def done(stdout="", returncode=0, stderr=""):
     return subprocess.CompletedProcess([], returncode, stdout, stderr)
-
-
-def argv_store(fn, cwd=None):
-    """A BdStore (the actor who().actor names) whose bd process is `fn(*args, cwd=...)`: `args` without the actor and the final --json."""
-    def run(argv, where):
-        args = tuple(argv[3:-1] if argv[-1] == "--json" else argv[3:])
-        with acting(argv[2]):
-            r = fn(*args, cwd=where)
-        return BdRun(r.returncode, r.stdout or "", r.stderr or "")
-    return BdStore(who().actor, cwd, run=run)
 
 
 @contextmanager

@@ -175,7 +175,7 @@ These are source-relative module paths, not invented services. Each row states i
 | adapters/applog.py | Append handles and their lifecycle | F, close/rotation/thread behavior | U ⚠; R |
 | adapters/bd.py | bd argv/JSON/error translation | E/A/S, conditional mutation limits and multiline diagnostics | U ⚠; R |
 | adapters/childenv.py | Child environment and script argv | E/D, scrubbed identities, uv topology and exec; A.F06 | U ⚠; R |
-| adapters/container_run.py | Docker copy/run/artifact helper | C, host/container paths, cleanup and exit forwarding | U ⚠; R |
+| adapters/container_run.py (history: deleted in 0.23.403) | Docker copy/run/artifact helper | C, host/container paths, cleanup and exit forwarding | U ⚠; R |
 | adapters/delegate.py | Resolve/install/probe/call boundary | D, contract integer insufficient; A.F08 | U ⚠; R |
 | adapters/delegate_wire.py | External envelope to internal typed facts | D/W, absent/default/coerced and synthesized facts | U ⚠; R |
 | adapters/git.py | Typed git operations | S/C, pinned cwd, expected OIDs, command failure variants | U ⚠; R |

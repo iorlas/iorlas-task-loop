@@ -7,7 +7,6 @@ import re
 import shutil
 import sys
 import tempfile
-from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
 from typing import ClassVar
@@ -33,20 +32,6 @@ from test_route import ROOT, T, route
 
 FIXTURES = sorted((ROOT / "tests" / "delegate" / "contract" / "fixtures").glob("*.json"))
 CONTRACT = json.loads((ROOT / "src" / "delegate" / "data" / "contract.json").read_text(encoding="utf-8"))
-LAUNCH_ONLY = {
-    "duplicate_task",
-    "busy",
-    "no_lane",
-    "caller",
-    "engine_only_unenforced",
-    "crash",
-    "schema_invalid",
-    "lock",
-    "setup",
-    "held",
-}  # answered outside the ladder
-
-
 def load(path):
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -54,19 +39,6 @@ def load(path):
 def replay(row, f):
     ev = row["evidence"]
     return classify(ev["rc"], ev["vendor_err"], ev["stderr"], ev["timed_out"], ev["work_seen"], ev["structured"])
-
-
-def reason_of(
-    rc: int | None,
-    vendor_err: str | None = "",
-    stderr: str | None = "",
-    timed_out: bool = False,
-    work_seen: bool = False,
-    structured: Mapping[str, Json] | None = None,
-) -> str | None:
-    """The reason the ladder gives for a run, None when the run is done."""
-    o = classify(rc, vendor_err, stderr, timed_out, work_seen, structured)
-    return o.reason if o else None
 
 
 def all_rows():
