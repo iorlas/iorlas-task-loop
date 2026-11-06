@@ -13,8 +13,9 @@ from taskloop.contracts.receiptrows import DbDocSet
 from taskloop.contracts.stores import AskStore, JsonStore
 from taskloop.stores.books import CheckpointBook
 from taskloop.stores.bundle import Stores
-from taskloop.stores.files import FileDocSet, FileTickets
+from taskloop.stores.files import FileDocSet
 from taskloop.stores.profile_changes import profile_changes
+from taskloop.stores.ticketrows import TicketRows
 
 
 def real_stores(cfg: paths.ConfigDir) -> Stores:
@@ -32,4 +33,4 @@ def real_stores(cfg: paths.ConfigDir) -> Stores:
         base_red=lambda repo: DbDocSet(cfg, repo, None, "base_red", BaseRedRecord),
         durations=FileDocSet(cfg.check_durations, Durations),
         check_run=lambda run, rnd: JsonStore(cfg.check_run(run, rnd), CheckRun),
-        host=JsonStore(cfg.host(), HostResources), locks=ProcessLockTable(cfg), leases=Leases(cfg.leases()), tickets=FileTickets(cfg))
+        host=JsonStore(cfg.host(), HostResources), locks=ProcessLockTable(cfg), leases=Leases(cfg.leases()), tickets=TicketRows(cfg))
