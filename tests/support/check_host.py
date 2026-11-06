@@ -26,6 +26,8 @@ from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.plancheck import StageData
+from taskloop.contracts.ports import Clock
+from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 
 
@@ -48,15 +50,16 @@ class RecordedWaits:
 class FakeCheckHost:
     MARKERS = MARKERS
 
-    def __init__(self, wt: Path, cfg: EngineConfig, home: ConfigDir, bead: str = "t-1") -> None:
+    def __init__(self, wt: Path, cfg: EngineConfig, home: ConfigDir, bead: str = "t-1", stores: Stores | None = None,
+                 nth: int = 0, clock: Clock | None = None) -> None:
         self.bead, self.wt, self.cfg, self.home = bead, str(wt), cfg, home
-        self.run_id = "FAKERUN0000"
+        self.run_id = f"FAKERUN{nth:04d}"
         self.run_dir = Path(home.root) / "runs" / self.run_id
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.env = snapshot()
         self.spawner, self.git = real_spawner(), port_git()
-        self.stores = fake_stores()
-        self.clock = FakeClock()
+        self.stores = stores or fake_stores()
+        self.clock = clock or FakeClock()
         self.log = RunLog(self.stores.run_log(self.run_id), clock=self.clock.now, run_id=self.run_id, bead=bead, host="host")
         self.steps = Steps(self.log, self.clock.now)
         self.checklog = CheckLog(self.log)
@@ -104,8 +107,11 @@ class FakeCheckHost:
 class CheckHostCase(SlotWorld):
     """A checks test: the slot's world and a FakeCheckHost over it. `checks_engine(**cfg)` keeps the name of the EngineTest helper."""
 
-    def checks_engine(self, attrs: Mapping[str, Any] | None = None, **cfg: Any) -> FakeCheckHost:
-        host = FakeCheckHost(self.wt, cfg_with(EngineConfig(), **cfg), who().config)
+    def checks_engine(self, attrs: Mapping[str, Any] | None = None, *, clock: Clock | None = None, **cfg: Any) -> FakeCheckHost:
+        """Every host of one test shares its stores (the check cache, the run logs), as the engines of one test share a home."""
+        stores = self.__dict__.setdefault("_check_stores", fake_stores())
+        n = self.__dict__["_check_hosts"] = self.__dict__.get("_check_hosts", -1) + 1
+        host = FakeCheckHost(self.wt, cfg_with(EngineConfig(), **cfg), who().config, stores=stores, nth=n, clock=clock)
         for k, v in (attrs or {}).items():
             setattr(host, k, v)
         return host

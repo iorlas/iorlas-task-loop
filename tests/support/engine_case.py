@@ -2,12 +2,9 @@
 import collections.abc
 import contextlib
 import copy
-import functools
 import json
-import os
 import re
 import shlex
-import subprocess
 import sys
 import threading
 import time
@@ -16,10 +13,8 @@ from pathlib import Path
 from typing import Any, ClassVar
 from unittest import mock
 
-import pytest
-
 from support.case import Case  # noqa: F401
-from support.world import NO_GC, SlotWorld, copy_origin_and_clone, no_repo, real_git  # noqa: F401
+from support.world import NO_GC, SlotWorld, copy_origin_and_clone, no_repo, pid_gone, real_git  # noqa: F401
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -36,7 +31,7 @@ from support import (
 )
 from support.builders import make_engine
 from support.cfgs import argv_cfg, cfg_with
-from support.checked import run_checked
+from support.checked import run_checked  # noqa: F401
 from support.checkpoints import flat_ck, stored_ck
 from support.checks import res
 from support.fakes import FakeBeadStore
@@ -59,12 +54,12 @@ from support.plans import (  # noqa: F401  (the tests' old import point)
 )
 from support.procsim import real_proc  # noqa: F401
 from support.push_race import PushRace
+from support.shellkit import ENGINE_BASH, EXIT_127, NO_FCNTL, POSIX_CHECK, PY, pyc, sh, shown, shq, without_shims  # noqa: F401  (the tests' old import point)
 from support.spawn import port_git, real_spawner
-from support.waits import until
+from support.waits import until  # noqa: F401
 from support.who import who
 from taskloop.adapters import delegate as dl
 from taskloop.adapters import delegate as lroute  # noqa: F401
-from taskloop.adapters import halt as halting
 from taskloop.app.release import seams
 from taskloop.app.run import (
     engine,
@@ -89,61 +84,6 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-
-def pid_gone(pid):
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return True
-    return False
-
-
-def sh(*a, cwd):
-    run_checked(list(a), cwd)
-
-
-POSIX_CHECK = pytest.mark.skipif(os.name == "nt", reason="the check is bash (operators, $VAR, rm, test, grep, sleep, /dev/null); "
-                                              "on Windows the engine runs checks through cmd.exe")
-
-
-ENGINE_BASH = pytest.mark.skipif(os.name == "nt",
-                                 reason="the engine's own conflict-marker check (`! git grep ...`) is bash; cmd.exe cannot parse it")
-
-
-def without_shims(fn):
-    """A tool the machine's version manager shims but has not installed (mise: `ruff is not a valid shim`) exits 1, not 127:
-    the test means a tool that is missing, so the shim directories leave PATH."""
-    @functools.wraps(fn)
-    def run(*a, **kw):
-        keep = os.pathsep.join(d for d in os.environ.get("PATH", "").split(os.pathsep) if "shims" not in d)
-        with mock.patch.dict(os.environ, {"PATH": keep}):
-            return fn(*a, **kw)
-    return run
-
-
-EXIT_127 = pytest.mark.skipif(os.name == "nt", reason="the engine reads a missing tool as bash's exit 127; cmd.exe reports it as exit 1")
-
-
-NO_FCNTL = pytest.mark.skipif(os.name == "nt", reason="the lock is fcntl; tl has none on Windows (documented no-op)")
-
-
-def shq(text):
-    """One shell word for the engine's check runner: bash quoting on POSIX, CreateProcess quoting for cmd.exe on Windows."""
-    return shlex.quote(text) if os.name != "nt" else subprocess.list2cmdline([text])
-
-
-def shown(p):
-    """A path as git and the engine print it: forward slashes and long names on Windows."""
-    return Path(p).resolve().as_posix() if os.name == "nt" else str(p)
-
-
-PY = f'"{sys.executable}"'
-
-
-def pyc(code, *args):
-    """A check as its one-line text: this interpreter running `code`, then the arguments."""
-    return shlex.join([sys.executable, "-c", code, *args])
 
 
 def stop(reason, ref="", **kw):
@@ -303,39 +243,6 @@ class EngineTest(SlotWorld):
         assert rc == 2
         assert self.ask()["kind"] == "decision"
         assert q in self.blocked[-1]
-
-    def spawn(self, pidfile, term=False):
-        """A check that starts a child sleeping 30 s and records its pid, then waits for it (term: after sending its parent, the
-        engine, SIGTERM)."""
-        kill = "kill -TERM $PPID; " if term else ""
-        script = Path(pidfile).with_suffix(".sh")  # a script, not `sh -c`: a check is an argv, and a shell string is refused
-        script.write_text(f"sleep 30 &\necho $! > {shlex.quote(str(pidfile))}\n{kill}wait\n")
-        return shlex.join(["sh", str(script)])
-
-    def script(self, name, body):
-        """A shell script in the test's temp dir, as the one-line text of a command that runs it."""
-        path = Path(self.tmp.name, name)
-        path.write_text(body)
-        return shlex.join(["sh", str(path)])
-
-    def child_of(self, pidfile, limit=30):
-        """The pid the check recorded. A caller that waits for a loaded runner to start the check passes a long limit (the wait ends
-        the moment the pid is there; the limit is only the give-up)."""
-        if until(lambda: pidfile.exists() and pidfile.read_text().strip(), limit):
-            return int(pidfile.read_text())
-        pytest.fail("the check never started its child")
-
-    def assertDead(self, pid):
-        if not until(lambda: pid_gone(pid), 3):
-            os.kill(pid, 9)
-            pytest.fail(f"pid {pid} outlived the engine's stop")
-
-    def stoppable(self):
-        """The engine's own SIGTERM handler (run_main installs it), restored after the test."""
-        if os.name == "nt":
-            pytest.skip("POSIX signals")
-
-        return halting.halt_on_sigterm()
 
     ANCHORS: ClassVar[Any] = [{"path": "f.txt", "lines": "1", "symbol": "", "why": "the file"}]
 
