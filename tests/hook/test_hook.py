@@ -8,12 +8,12 @@ import os
 import re
 import runpy
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 HOOK = ROOT / "hooks" / "hook.py"
@@ -105,7 +105,7 @@ class Speed(Case):
     """A hook runs before every tool call: pretool imports no store, adapter, app, record or msgspec module; an unknown event fails."""
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.env = dict(os.environ, XDG_CONFIG_HOME=self.tmp.name, CLAUDE_CONFIG_DIR=self.tmp.name)
 

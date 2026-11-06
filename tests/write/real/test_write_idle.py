@@ -6,7 +6,6 @@ answer's `worker.end`, never from ps or a stderr line."""
 
 import os
 import sys
-import tempfile
 import threading
 import time
 from pathlib import Path
@@ -14,6 +13,7 @@ from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -39,7 +39,7 @@ MIN = 60.0
 @pytest.mark.skipif(not (POSIX), reason="process groups")
 class ApiRunnerCall(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.tmp = TemporaryDirectory(ignore_cleanup_errors=True)
         self.d = Path(self.tmp.name)
         self.live = str(self.d / "x.live" / "01-write.jsonl")
         for p in (mock.patch.object(runner, "POLL_S", 0.05),):

@@ -1,6 +1,5 @@
 """The ask records the page shows: the AskCard fields, the soft ask's marker, the ledger rows, the decisions in
 force, the learning series, and POST /api/stick through Ports."""
-import json
 import os
 import sys
 import time
@@ -21,6 +20,7 @@ from support.repos import write_repos
 
 from taskloop.app.asks import intake, raiser
 from taskloop.contracts import wire
+from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import SimilarRef, ThreadEntry
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import Column, Marker, OwnerCause, Result, Stick
@@ -182,8 +182,7 @@ class Decisions(Case):
         adrs.use(used.id, "b-1", "r1", NOW - 3 * DAY)
         adrs.use(used.id, "b-2", "r2", NOW - DAY)
         reuses = adrs.reuses()
-        ins = [AdrIn(a, reuses.get(a.id, (0, 0.0))[0], reuses.get(a.id, (0, 0.0))[1] or None) for a in adrs.all()]
-        assert adrs.retire(fresh.id, "denis", NOW) == ""
+        adrs.put(fresh.replace(retired_t=NOW, retired_by="denis"))
         ins = [AdrIn(a, reuses.get(a.id, (0, 0.0))[0], reuses.get(a.id, (0, 0.0))[1] or None) for a in adrs.in_force()]
         rows = {r.id: r for r in self.snap([], adrs=ins).adrs}
         assert fresh.id not in rows  # retired: no longer in force
@@ -252,13 +251,24 @@ class Stick_(Case):
     def stick(self, outcome, text=""):
         return self.post("stick", {"project": loop_key(self.repo), "ask": self.ask.id, "outcome": outcome, "text": text})
 
-    def test_adr_is_written_under_the_state_dir_and_the_planner_store_reads_it(self):
+    def adrs(self):
+        return AdrStore.at(self.dash.env.config, str(self.repo))
+
+    def adr_beads(self):
+        return [b for b in self.fake.beads.values() if "adr" in b.labels]
+
+    def plant(self, retired=False):
+        """The ADR as the cache holds it once its file is on the base commit."""
+        return self.adrs().add(Adr(id="", n=0, repo=str(self.repo), text="Rent is weekly.", question="q", answer="a", ask="x-1",
+                                   bead="x", key="k", t=NOW, retired_t=NOW if retired else None, retired_by="denis" if retired else ""))
+
+    def test_adr_files_a_bead_for_the_lane_to_land_the_file(self):
         assert self.stick("adr", "Rent is weekly.") == Result(ok=True)
-        found = list(Path(self.tmp.name, "decisions").glob("*/ADR-1.json"))
-        assert len(found) == 1
-        assert json.loads(found[0].read_text())["text"] == "Rent is weekly."
+        [made] = self.adr_beads()
+        assert (made.title, f"- Ask: {self.ask.id}\n" in made.description) == ("ADR: Rent is weekly.", True)
+        assert not Path(self.tmp.name, "decisions").exists()  # tl writes no ADR of its own
         rows = self.asks.history(self.ask.id)
-        assert (rows[-1].event, rows[-1].outcome, rows[-1].outcome_ref) == ("stick", Stick.ADR, "ADR-1")
+        assert (rows[-1].event, rows[-1].outcome, rows[-1].outcome_ref) == ("stick", Stick.ADR, made.id)
 
     def test_factory_fix_and_the_record_only_outcomes(self):
         assert self.stick("factory", "prompt: ask which bills") == Result(ok=True)
@@ -277,26 +287,29 @@ class Stick_(Case):
         assert self.asks.history(self.ask.id)[-1].event == "answer"
         assert self.post("stick", {"project": "nowhere", "ask": self.ask.id, "outcome": "adr"}).ok is False
 
-    def test_a_write_that_succeeds_drops_the_cached_decisions_and_ledger(self):
+    def test_a_stick_leaves_the_cache_to_the_files_and_a_write_drops_the_cached_read(self):
         worlds = self.dash.reads.worlds
         assert worlds.adrs(str(self.repo)) == []
         self.stick("adr", "Rent is weekly.")
+        assert worlds.adrs(str(self.repo)) == []  # pending until its file is on the base commit
+        self.plant()
+        self.post("prune", {"project": loop_key(self.repo), "adr": "ADR-1"})  # a write that succeeds drops the cached read
         assert [a.adr.id for a in worlds.adrs(str(self.repo))] == ["ADR-1"]
-        self.post("prune", {"project": loop_key(self.repo), "adr": "ADR-1"})
-        assert worlds.adrs(str(self.repo)) == []
 
-    def test_prune_retires_a_decision_and_keeps_it_in_the_store(self):
-        self.stick("adr", "Rent is weekly.")
-        res = self.post("prune", {"project": loop_key(self.repo), "adr": "ADR-1"})
-        assert res == Result(ok=True)
-        [path] = Path(self.tmp.name, "decisions").glob("*/ADR-1.json")
-        got = json.loads(path.read_text())
-        assert (got["retired_by"], got["retired_t"], got["text"]) == ("dash", NOW, "Rent is weekly.")
-        again = self.post("prune", {"project": loop_key(self.repo), "adr": "ADR-1"})
-        assert (again.ok, "already retired" in again.message) == (False, True)
+    def test_prune_files_a_retire_bead_once_and_leaves_the_cache_to_the_file(self):
+        self.plant()
+        assert self.post("prune", {"project": loop_key(self.repo), "adr": "ADR-1"}) == Result(ok=True)
+        assert self.post("prune", {"project": loop_key(self.repo), "adr": "ADR-1"}) == Result(ok=True)
+        assert [b.title for b in self.adr_beads()] == ["Retire ADR-1"]
+        assert must(self.adrs().get("ADR-1")).retired_t is None
         assert "not a decision" in self.post("prune", {"project": loop_key(self.repo), "adr": "ADR-9"}).message
         assert not self.post("prune", {"project": "nowhere", "adr": "ADR-1"}).ok
-        assert self.stick("ref", "ADR-1").ok is False  # a retired decision cannot be linked
+
+    def test_a_retired_decision_cannot_be_pruned_again_or_linked(self):
+        self.plant(retired=True)
+        again = self.post("prune", {"project": loop_key(self.repo), "adr": "ADR-1"})
+        assert (again.ok, "already retired" in again.message) == (False, True)
+        assert self.stick("ref", "ADR-1").ok is False
 
     def test_an_unanswered_ask_cannot_stick(self):
         other = must(raiser.raise_ask(self.asks, specs.missing_criteria(), raiser.Asking(

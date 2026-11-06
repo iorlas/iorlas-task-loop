@@ -1,11 +1,11 @@
 """A sweep over a real repo: a slot (and a claimed bead) whose lease ended with no live run is given back; one retaken between the look
 and the write is left alone."""
 import sys
-import tempfile
 import time
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
@@ -26,7 +26,7 @@ ENDED = "2000-01-01T00:00:00Z"
 
 class Strays(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.repo = Path(tmp.name) / "repo"
         git(tmp.name, "init", "-q", "-b", "main", str(self.repo))

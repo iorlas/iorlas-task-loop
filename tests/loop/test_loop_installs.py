@@ -4,9 +4,10 @@ import json
 import os
 import shutil
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
+
+from support.tmpdir import mkdtemp
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -33,7 +34,7 @@ class Moving(LoopBase):
 
     def setup_method(self):
         super().setup_method()
-        self.cache = Path(tempfile.mkdtemp())
+        self.cache = Path(mkdtemp())
         self.addCleanup(shutil.rmtree, self.cache, True)
         self.execs = []
 
