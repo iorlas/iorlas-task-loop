@@ -17,3 +17,12 @@ class ReviewLive:
         self.link_bad: dict[str, str] = {}
         self.link_tries: dict[str, int] = {}
         self.link_fn: Callable[..., Any] | None = None  # a test's check
+
+    def add_verified(self, u: Open, verdict: str, why: str, evidence: str) -> None:
+        """The verifier's (or the engine's) answer for one unchecked item."""
+        self.verified.append({"what": u["what"], "kind": u["kind"], "verdict": verdict, "why": why, "evidence": evidence})
+
+    def add_unverified(self, u: Open, why: str) -> None:
+        """An item that lands for the owner; once per text."""
+        if u["what"] not in {x["what"] for x in self.unverified}:
+            self.unverified.append({"what": u["what"], "kind": u["kind"], "why": why, "source": u.get("source") or ""})
