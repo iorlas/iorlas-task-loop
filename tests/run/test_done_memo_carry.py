@@ -1,6 +1,5 @@
 """A network continuation copies only consumed SQL steps after creating its run."""
 
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -8,6 +7,7 @@ from unittest.mock import patch
 import pytest
 import support.paths  # noqa: F401
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.run import done_memo
 from taskloop.app.run.reload import Reload
@@ -18,7 +18,7 @@ from taskloop.contracts.paths import ConfigDir, RunFiles
 
 class CarryDoneMemo(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.cfg = ConfigDir(Path(tmp.name))
         self.where = RunLocator(self.cfg)
