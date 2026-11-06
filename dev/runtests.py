@@ -4,7 +4,9 @@
 
 Workers: min(cpus, free RAM / 2 GB, ceil(tests / 150), 4). A selection of 150 tests or fewer runs in this one pytest process, no xdist.
 The run goes down to nice 10 first, so a box shared by many lanes keeps its editors and landing gates responsive; TL_TEST_FULL=1 (set by
-`just gate`, the landing gate) keeps the priority it was given. The worker count is NOT reduced by the load: fewer workers expose test
+`just gate`, the landing gate) keeps the priority it was given.
+TL_GREEN_LEDGER=1 (off by default): tests whose own files are unchanged since a green run are left out (dev/affected.py, the ledger), and
+a fully green run records the tests that ran. The worker count is NOT reduced by the load: fewer workers expose test
 pollution (tests/slots/real fail with `git rev-parse exited 128` at 2 workers, pass at 4 and alone).
 Isolation: the run has its own HOME, config and temp dirs (under the scratch root, src/taskloop/contracts/scratch.py; the test
 git identity, not the host's); xdist workers take one each on top
@@ -45,9 +47,26 @@ WALL_S = 3600.0      # a hang guard for one pytest run (a wide selection takes 1
 IDLE_S = 600.0       # a pytest run prints a dot per finished test: this long with none is a hung test, stopped long before WALL_S
 NO_TESTS = 5         # pytest's exit code for "no tests collected" (a selection without a serial test)
 WIDE = 0.5          # a selection above this share of all tests is a finding: the change reaches too far
+LEDGER = "TL_GREEN_LEDGER"  # set: the green-test ledger is read and written
 FULL = "TL_TEST_FULL"  # set: the landing gate, which takes the cores it is given
 NICE = 10
 DROP = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "PYTHONPATH")
+
+
+def ledger_path(environ):
+    """The ledger file when TL_GREEN_LEDGER is set, else None (the ledger is off)."""
+    return affected.ledger_path(None, environ) if environ.get(LEDGER) else None
+
+
+def pending(repo, tests, ledger, tracked=None):
+    """`tests` without the ones already green on their own files (all of them when the ledger is off)."""
+    return list(tests) if ledger is None else affected.not_green(repo, tests, ledger, tracked)
+
+
+def record(repo, tests, ledger, codes, tracked=None):
+    """After a run: its tests are green when every pytest exit code was 0 or 'no tests collected'; a red run records nothing."""
+    if ledger is not None and tests and all(code in (0, NO_TESTS) for code in codes):
+        affected.mark_green(repo, [t for t in tests if not t.startswith(affected.ALWAYS + "/")], ledger, tracked)
 
 
 def count_tests(root, paths):
@@ -133,7 +152,12 @@ def main():
     root = Path(__file__).resolve().parent.parent
     lower_priority(os.environ)
     base = affected.base_of(root)
-    tests = affected.select(affected.Repo(root), affected.changed_files(root, base))
+    repo = affected.Repo(root)
+    ledger = ledger_path(os.environ)
+    selected = affected.select(repo, affected.changed_files(root, base))
+    tests = pending(repo, selected, ledger)
+    if len(tests) < len(selected):
+        print(f"runtests: {len(selected) - len(tests)} of {len(selected)} selected test files already green (ledger)", flush=True)
     n_tests = count_tests(root, tests)
     n = workers(n_tests)
     print(f"runtests: {len(tests)} test files, {n_tests} tests, {n} worker{'s' if n > 1 else ''} (change against {base[:12]})", flush=True)
@@ -150,6 +174,7 @@ def main():
             print(summary, flush=True)
     finally:
         shutil.rmtree(home, ignore_errors=True)
+    record(repo, tests, ledger, [parallel, serial])
     return next((code for code in (parallel, serial) if code not in (0, NO_TESTS)), 0)
 
 
