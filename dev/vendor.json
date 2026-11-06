@@ -1,9 +1,9 @@
 [
   {
     "name": "any_agent",
-    "shelf_tag": "6502c1c46b24afc35e03c2a4ed381e4065d85970",
-    "shelf_commit": "6502c1c46b24afc35e03c2a4ed381e4065d85970",
-    "tree_hash": "bf0f6c554f85720205fb68bd8c9300031701816609d1d2821c45324c870dde7a"
+    "shelf_tag": "df729c9d9963ebe77d77a53ac42147d14a751911",
+    "shelf_commit": "df729c9d9963ebe77d77a53ac42147d14a751911",
+    "tree_hash": "003e425a27ce5580e001f5983086da577d2d212ab6ab558d8165b98b7935a639"
   },
   {
     "name": "any_clock",
@@ -67,9 +67,9 @@
   },
   {
     "name": "sqlite_store",
-    "shelf_tag": "sqlite-store-v0.1.0",
-    "shelf_commit": "18d3164893f95dc82e391a7226652d286d9c4663",
-    "tree_hash": "8d1a7599413f4a623f0d5b52e38a534eeb2352b9ae5e2cbdc0c182dcf7967d26"
+    "shelf_tag": "bf97aba",
+    "shelf_commit": "bf97aba8c13426f488ccb5ddd74c8432d5840781",
+    "tree_hash": "3f8163f56d3485a5f6cbe4e0df3862135760dc40c42b17e1937857df39e0565f"
   },
   {
     "name": "static_page_check",

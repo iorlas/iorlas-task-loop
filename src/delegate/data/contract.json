@@ -362,6 +362,12 @@
       "input": {
        "type": "object",
        "additionalProperties": {}
+      },
+      "reason": {
+       "type": [
+        "string",
+        "null"
+       ]
       }
      }
     }
