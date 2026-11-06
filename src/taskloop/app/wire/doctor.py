@@ -2,6 +2,7 @@
 import contextlib
 import os
 import shlex
+import shutil
 import time
 from pathlib import Path
 
@@ -9,7 +10,7 @@ from taskloop import contracts
 from taskloop.adapters import layout_migrate
 from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.ident import claude_dir, config_dir
-from taskloop.app.doctor import profiles
+from taskloop.app.doctor import disk, profiles
 from taskloop.app.release import catalog, manifest
 from taskloop.app.slots import watchdog
 from taskloop.app.wire import hook
@@ -180,6 +181,14 @@ def install_problems(plugin_root: Path, env: Env) -> list[str]:
     if installed:
         out += [f"installed task-loop {version}: {p}" for p in manifest.verify(installed)]
     return out
+
+
+def disk_run(config: ConfigDir) -> int:
+    """`tl doctor --disk`: the config folder's bytes by area and the free space of its volume. 1 when the volume runs low."""
+    root = config.root
+    lines = disk.report(root, shutil.disk_usage(root if root.is_dir() else root.parent).free)
+    print("\n".join(lines))
+    return 1 if any(ln.startswith("WARN") for ln in lines) else 0
 
 
 def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner | None = None) -> int:
