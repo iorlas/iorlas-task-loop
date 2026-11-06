@@ -17,6 +17,14 @@ from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.plancheck import PlanData
 
+# the patterns a Unity consumer's profile sets; the engine has none of its own
+PROFILE_PATTERNS = {
+    "queued_match": "(?i)unity",
+    "lock_fail": "(?i)another Unity instance|Multiple Unity instances|It looks like another Unity instance is running",
+    "slow_cmd": r"(?i)(?<![a-z])(unity|play|test[-_]all|check|build|dotnet)",
+    "project_log": "client/Logs/unity-project-files.log",
+}
+
 
 def make_engine(wt, bead="t-1", cfg=None, script=None, attrs=None, **seams):
     """An engine on `wt`. `cfg` is merged over the checkout's loaded config. Seams not given are fakes: `store`, `route`, `clock`;
@@ -62,6 +70,7 @@ def cfg_with(base=None, **changes):
     if gated and not explicit:  # a new gate replaces the base's gate steps; the base's other checks stay unless the test lists its own
         keep = [c for c in d.get("checks", []) if not (c["id"] == "gate" or c["id"].startswith("gate-only-"))]
         changes["checks"] = keep + changes.get("checks", [])
+    d.update({k: v for k, v in PROFILE_PATTERNS.items() if not d.get(k)})
     d["base_red"] = False  # an always-red command in a test would otherwise be asked again on the base; the tests of that ask turn it on
     d.update(changes)
     return wire.load(EngineConfig, d)

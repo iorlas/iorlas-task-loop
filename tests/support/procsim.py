@@ -28,6 +28,16 @@ from taskloop.adapters import procs
 Fake = Callable[[Path, Mapping[str, str]], tuple[Any, ...]]  # (exit, output) or (exit, output, seconds it would take)
 
 
+CAPABILITIES = frozenset({"process", "git", "real_clock", "long_run", "network", "thread_race"})
+
+
+def needs(capability: str, reason: str) -> Any:
+    """Declares what a test needs that a logic test does not have: one of CAPABILITIES, and `reason`, one line, what only that capability
+    can show for this test. The test folds into real (tests/conftest.py); tests/rules/needs_ratchet.py counts the declarations."""
+    assert capability in CAPABILITIES, f"unknown capability {capability!r}: one of {sorted(CAPABILITIES)}"
+    return pytest.mark.needs(capability, reason)
+
+
 def real_proc(reason: str) -> Any:
     """Marks a test whose subject is the process itself: `reason`, one line, is what only a real process can show."""
     return pytest.mark.real_proc(reason)

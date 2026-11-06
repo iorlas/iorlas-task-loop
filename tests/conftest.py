@@ -2,8 +2,9 @@
 
 A test's kind comes from its path, never from a hand marker: a file under tests/e2e/ is `e2e` (a whole flow), a file under a `real/`
 folder (tests/<slice>/real/) is `real` (real git, processes or sockets), anything else is logic (fakes, in process, fast). The older
-`@real_proc(reason)` and `@real_git(reason)` marks on a single test fold into `real`. Guards (tests/support/procsim.py): a logic test that
-spawns, forks or runs real git fails; a `real` test that never spawns fails. A test over its kind's time limit fails (LIMITS_S)."""
+A single test's `@needs(capability, reason)` (or the older `@real_proc(reason)` / `@real_git(reason)`) folds into `real`. Guards
+(tests/support/procsim.py): a logic test that spawns, forks or runs real git fails; a `real` test that never spawns fails.
+A test over its kind's time limit fails (LIMITS_S)."""
 import contextlib
 import ctypes
 import importlib
@@ -14,6 +15,7 @@ import resource
 import shutil
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -84,7 +86,7 @@ def kind_of(item) -> str:
     if parts[0] in ("e2e", "live"):  # live (tests/live, explicit-only) runs the real pieces: no guard, no limit
         return parts[0]
     func = getattr(item, "obj", None)
-    if "real" in parts[:-1] or item.get_closest_marker("real_proc") or getattr(func, "real_git", None):
+    if "real" in parts[:-1] or item.get_closest_marker("real_proc") or item.get_closest_marker("needs") or getattr(func, "real_git", None):
         return "real"
     return "logic"
 
@@ -180,7 +182,21 @@ WORK_S = pytest.StashKey[float]()
 
 
 @pytest.fixture(autouse=True)
-def case_helpers(request, procs):
+def no_leaked_threads(filesystem_cache, procs):
+    """A thread a test started and left running (a Lease heartbeat nobody stopped and joined) goes on using the stores the test's teardown
+    closes, and crashes the worker in sqlite3 later, in another test: the test that leaked it fails instead. It requests the fixtures that
+    close those stores so that it is checked before they are undone."""
+    before = set(threading.enumerate())
+    yield
+    left = [t for t in threading.enumerate() if t not in before]
+    for t in left:
+        t.join(0.5)
+    left = [t.name for t in left if t.is_alive()]
+    assert not left, f"the test left threads running: {left}; stop and join them before it ends"
+
+
+@pytest.fixture(autouse=True)
+def case_helpers(request, procs, no_leaked_threads):
     """The unittest names the plain test classes still use: self.addCleanup (runs last-in-first-out after the test and its teardown_method),
     self.enterContext, self.subTest (pytest's `subtests`), self._testMethodName and self.id(). It depends on `procs` so that the cleanups,
     which undo patches made in setup_method on top of the process sim, run before the sim is uninstalled."""

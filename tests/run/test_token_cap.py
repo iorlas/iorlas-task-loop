@@ -57,5 +57,5 @@ class TokenCap(Case):
     def test_a_wait_is_booked_outside_the_budget_and_ends_its_record(self):
         host, waits = self.waits_with([], 0)
         host.fake_clock.advance(600)
-        waits.add(120, WaitWhat.UNITY_SLOT)
+        waits.add(120, WaitWhat.CHECK_SLOT)
         assert host.budget.waited == 120

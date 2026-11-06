@@ -26,6 +26,7 @@ from taskloop.contracts.stores import ReposStore
 from taskloop.domain.beads import matchers as beadlint
 from taskloop.domain.checks.inputs import dead_globs
 from taskloop.domain.lanes import pin
+from taskloop.domain.layout import matchers as layout
 
 Source = tuple[RepoProfile, str, str]
 
@@ -57,6 +58,22 @@ def git_warnings(repo: str, source: Source | None, git: Git) -> list[str]:
     out += [f"engine.input_sets.{n} is named by no check (`inputs`, `exclude`, `when`) and not by engine.hatch: delete it."
             for n in inputsets.unused(profile.engine)]
     return out
+
+
+def layout_warnings(repo: str, source: Source | None, git: Git) -> list[str]:
+    """tl-9un.32, tl-9un.37: where the repo's checks leave tl's layout, and what of the factory sits in its tracked files. Read only."""
+    try:
+        profile = (source or cfg_source(repo, git))[0]
+        files = git.ls_files(repo)
+    except (SystemExit, OSError, ValueError, SlotGitError):  # a bad profile is the profile report's to say
+        return []
+
+    def read(path: str) -> str:
+        try:
+            return (Path(repo) / path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return ""
+    return layout.deviations(profile) + layout.leaks(files, read)
 
 
 def bead_lint_warnings(repo: str, who: Identity, store: Beads | None = None) -> list[str]:
@@ -177,7 +194,8 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
     link_line, foreign = path_link_line(env)
     if not foreign:
         print(link_line)  # a foreign `tl` is a WARN below
-    warns = git_warnings(repo, source, git) + bead_lint_warnings(repo, who) + slot_warns + ([link_line] if foreign else [])
+    warns = git_warnings(repo, source, git) + layout_warnings(repo, source, git) + bead_lint_warnings(repo, who) + slot_warns
+    warns += [link_line] if foreign else []
     warns += [f"run {r} is lost: its process is gone and it recorded no end" for r in runlife.reconcile(who.config, time.time())]
     print(f"contracts: {Path(contracts.__file__).resolve().parent}")
     print(f"engine: {pin.describe(pin.families(source[0].engine.writer_family, []))}")

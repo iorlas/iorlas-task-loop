@@ -305,7 +305,7 @@ class RunCommand(RunBase):
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_timeout_kills_the_whole_process_group(self):
-        code, r = self.run_it(mode="hang", timeout=2)
+        code, r = self.run_it(mode="hang", timeout=1)
         assert (code, why(r)) == (0, "timeout")
         pid = int(Path(os.environ["FAKE_PIDFILE"]).read_text())
         time.sleep(0.3)
