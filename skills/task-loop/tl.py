@@ -163,8 +163,9 @@ def v_land_stack(a: Any, c: Ctx) -> int:
 def owner_parsers(sp):
     sp.add_parser("actor")
     sp.add_parser("selftest", help="run one bead through the engine with a fake lane in a temp repo; exit 1 when it cannot")
-    sp.add_parser("doctor", help="warn about git settings that let a slot's git leave the slot").add_argument(
-        "--reindex", action="store_true", help="rebuild the dashboard's run index in factory.db")
+    p = sp.add_parser("doctor", help="warn about git settings that let a slot's git leave the slot")
+    p.add_argument("--reindex", action="store_true", help="rebuild the dashboard's run index in factory.db")
+    p.add_argument("--disk", action="store_true", help="where the config folder's bytes are, and the free space of its volume")
     p = sp.add_parser("register", help="add a repository to the dashboard")
     p.add_argument("directory", nargs="?", default=".", metavar="DIR",
                    help="Git working directory (default: current directory)")
@@ -419,6 +420,8 @@ def repo_of(a: Any, c: Ctx) -> str:
 def v_doctor(a: Any, c: Ctx) -> int:
     if a.reindex:
         return reindex.run(c.who.config)
+    if a.disk:
+        return doctor.disk_run(c.who.config)
     return doctor.run(c.here.parents[1], c.env, c.git, c.who, c.spawner)
 
 
