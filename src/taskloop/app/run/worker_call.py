@@ -1,6 +1,6 @@
 """WorkerCall: one AI step through delegate (contract 4). Delegate picks lane and model, limits apply, it records the run.
 
-`run` builds the request (`RunRequest`, the only argv builder is its `to_argv`), makes the call, and for a stopped call asks
+`run` builds the request (`RunRequest`; the engine builds no argv), makes the call, and for a stopped call asks
 `lanes.policy.decide` what to do and lets `LaneActs` do it; a done call's answer is validated against the node's schema, a broken
 one is asked for again (the `invalid_output` row of the RetryPlan). The call is on disk while it is in flight (CallState) so a killed
 run, a sleeping laptop or a dropped network goes on in the same thread. The worker's life is delegate's: the engine reads the live

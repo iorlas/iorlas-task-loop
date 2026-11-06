@@ -5,9 +5,7 @@ process boundaries); `worker` is the live file's first line (`WorkerStarted`), r
 Silence is delegate's (`--idle`, its own watchdog, a typed stop in the answer); the engine keeps no silence timer. A call that ends
 by itself returns a `CompletedProcess`-like; one the engine ends raises `Stopped`."""
 
-import contextlib
 import json
-import re
 import subprocess
 import threading
 import time
@@ -19,62 +17,10 @@ from delegate import api
 from taskloop.adapters import deadline, procs
 from taskloop.adapters.agent import ApiAgent
 from taskloop.adapters.delegate import Stopped
-from taskloop.contracts import wire
 from taskloop.contracts.agent import Agent
-from taskloop.contracts.delegate import DelegateResult, LiveEvent, LiveStart, WorkerStarted
+from taskloop.contracts.delegate import DelegateResult, LiveStart, WorkerStarted
 
 POLL_S = 0.5  # seconds between the looks at the live file while a call runs
-
-
-def live_lines(path: str | Path) -> list[dict[str, Any]]:
-    """The objects of a live file, in order; a torn last line and lines that are no object are passed over."""
-    out: list[dict[str, Any]] = []
-    try:
-        with open(path, "rb") as f:
-            for raw in f:
-                with contextlib.suppress(ValueError):
-                    j = json.loads(raw)
-                    if isinstance(j, dict):
-                        out.append(j)
-    except OSError:
-        pass
-    return out
-
-
-def worker_started(path: str | Path) -> WorkerStarted | None:
-    """The first line of the live file, when it is a `WorkerStarted`."""
-    lines = live_lines(path)[:1]
-    if lines and "k" not in lines[0]:
-        with contextlib.suppress(ValueError):
-            return wire.load(WorkerStarted, lines[0])
-    return None
-
-
-def live_event(j: dict[str, Any]) -> Any:
-    """The typed event of a live-file line (`k` names the kind; the file carries no `v`). ValueError for a kind we do not know."""
-    return wire.load(LiveEvent, dict({a: b for a, b in j.items() if a != "k"}, kind=j.get("k"), v=1))
-
-
-def worker_start(path: str | Path) -> LiveStart | None:
-    """The first `start` event of the live file: the harness, lane, model and effort the call ran on."""
-    for j in live_lines(path):
-        if j.get("k") == "start":
-            with contextlib.suppress(ValueError):
-                return live_event(j)
-    return None
-
-
-def live_path(live_dir: str | Path, n: int, step: str) -> str:
-    """Where delegate appends the worker's live events for call n of a run: <the run's live folder>/<NN>-<step>.jsonl."""
-    slug = re.sub(r"[^A-Za-z0-9_-]+", "-", step or "call").strip("-") or "call"
-    return f"{live_dir}/{n:02d}-{slug}.jsonl"
-
-
-def mtime(path: str | Path) -> float | None:
-    try:
-        return Path(path).stat().st_mtime
-    except OSError:
-        return None
 
 
 Completed = subprocess.CompletedProcess[str]  # what a seam call answers
@@ -123,11 +69,12 @@ class ApiRunner(Seam):
     ) -> None:
         super().__init__()
         self.log_path, self.wall, self.live, self.on_worker, self.grace = log_path, wall, live, on_worker, grace
+        self.agent: Agent | None = None
 
     @override
     def live_start(self) -> LiveStart | None:
         """The harness, lane and model the call ran on, from the live file's `start` event."""
-        return worker_start(self.live) if self.live else None
+        return self.agent.start_event() if self.agent else None
 
     def __call__(
         self,
@@ -145,13 +92,14 @@ class ApiRunner(Seam):
         self.obs.update(started_t=t0, ended_t=None, first_error_t=None, last_event_t=None, kill_t=None, why="", alive=[])
         self.stop.clear()
         self.worker = None
-        agent: Agent = ApiAgent(request, self.grace).start()
+        agent: Agent = ApiAgent(request, self.grace, live).start()
+        self.agent = agent
         limit = deadline.remaining(self.wall or timeout or 3600.0)
         why = ""
         try:
             while not agent.done(POLL_S):
                 if self.worker is None and live:
-                    self.worker = worker_started(live)
+                    self.worker = agent.worker()
                     if self.worker and self.on_worker:
                         self.on_worker(self.worker)
                 if self.outer is not None and self.outer.is_set():
@@ -169,7 +117,7 @@ class ApiRunner(Seam):
         self.secs, self.obs["ended_t"] = time.time() - t0, time.time()
         deadline.check()
         if self.worker is None and live:
-            self.worker = worker_started(live)
+            self.worker = agent.worker()
         if why:
             self.stop.update(self.obs, kind="wall" if why.startswith("timeout") else "stop")
             raise Stopped(why)

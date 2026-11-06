@@ -1,10 +1,12 @@
 """tl-auky: contract-4 writer grants are explicit, admitted, scoped and part of recovery identity."""
+import json
 from unittest import mock
 
 import pytest
 import support.paths  # noqa: F401
 from support import engine_case as te
 from support import fake_route
+from support.argv_of import argv_of
 from support.case import Case
 
 from taskloop.adapters import delegate_wire
@@ -43,9 +45,9 @@ class WriterGrant(Case):
                     call = mock.Mock(node=node, role=role, cwd="/w", title="T", resume=None, writer=None)
                     with mock.patch.object(worker_request.planref, "stage_commands", return_value=[]):
                         req = worker_request.request(host, call, "live", 60, 30)
-                    argv = req.to_argv("py", "route")
+                    argv = argv_of(req)
                     if role == "worker" and grant:
-                        assert argv[argv.index("--writer-exec-allow") + 1] == '[["just","unity-shot"],["tool","an argument"]]'
+                        assert json.loads(argv[argv.index("--writer-exec-allow") + 1]) == [["just", "unity-shot"], ["tool", "an argument"]]
                     else:
                         assert "--writer-exec-allow" not in argv
 
