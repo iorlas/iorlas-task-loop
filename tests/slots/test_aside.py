@@ -19,16 +19,18 @@ class Aside(Rig):
     def pending(self):
         self.bd.update(self.slot().slot_bead().id, BeadPatch(set_metadata={"aside_probe": "pending"}))
 
-    def test_failed_probes_exclude_slot_and_retry_without_advancing_clock(self):
+    def test_a_failed_probe_excludes_the_slot_until_the_next_interval(self):
         self.pending()
-        now = self.t[0]
         with patch.object(Slot, "ready_for", side_effect=SlotFail("slot_broken", "setup failed")) as probe:
             for _ in range(3):
                 assert self.pool.take_any("work") is None
                 assert self.slot().hold() is None
                 assert self.slot().slot_bead().status == "open"
-            assert probe.call_count == 3
-        assert self.t[0] == now
+            assert probe.call_count == 1  # the first pass probed; the others are before the 60 minutes are up
+            assert self.slot().slot_bead().metadata["aside_level"] == "1"
+            self.t[0] += 61 * 60
+            assert self.pool.take_any("work") is None
+            assert probe.call_count == 2
         assert self.slot().slot_bead().metadata["aside_probe"] == "pending"
 
     def test_successful_probe_returns_slot_immediately(self):
@@ -41,8 +43,7 @@ class Aside(Rig):
         assert setup.call_args.kwargs["force"]
         bead = self.slot().slot_bead()
         assert bead.status == "in_progress"
-        assert "aside_level" not in bead.metadata
-        assert "aside_probe" not in bead.metadata
+        assert not {"aside_level", "aside_probe", "aside_until"} & set(bead.metadata)
 
     def test_healthy_slot_does_not_probe(self):
         with patch.object(Slot, "ready_for") as probe:

@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from os import EX_CONFIG
 from pathlib import Path
 
+from taskloop.app.asks import deferral as intake
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop import waits
 from taskloop.app.loop.core import Core, prio_of
@@ -235,6 +236,7 @@ class Loop(Core):
         for line in self.env.release_dead():  # a dead run's claims and slots back to ready before the next pick
             self.say(line)
         self.env.chores()
+        self.promote_intake()
         q, rule = self.queue()
         cands = self.candidates(q)
         if self.prof.slots.count > 0:  # tl-bxk.10.33.12: the slot liveness invariants, once per EVERY s
@@ -244,6 +246,10 @@ class Loop(Core):
             self.area_wait[0] = 0.0
             return self.work(cands, rule)
         return self.idle(q)
+
+    def promote_intake(self) -> None:
+        """The deferred follow-ups the day's budget allows become open (engine.intake_per_day; off at 0)."""
+        self.intake_at = intake.promote_if_due(self.env.store, self.prof.engine.intake_per_day, self.env.now(), self.intake_at, self.say)
 
     def start_worktree(self) -> None:
         """Slots off: the loop works in its session's worktree. The pick and the state that names it, under a lock: two loops

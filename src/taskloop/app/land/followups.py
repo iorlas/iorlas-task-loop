@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from typing import Protocol
 
 from taskloop.adapters import bdcreate
+from taskloop.app.asks import deferral as intake
 from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads, NewBead
 from taskloop.contracts.ids import BeadId
 from taskloop.domain import followups as fu
@@ -34,6 +35,8 @@ class FollowUpHost(Protocol):
     def followup_ids(self) -> dict[str, str]: ...
     @property
     def checkpoints(self) -> FollowUpCheckpoints: ...
+    @property
+    def intake_per_day(self) -> int: ...
 
     def comment(self, text: str) -> None: ...
     def warn(self, text: str) -> None: ...
@@ -54,7 +57,10 @@ def file_follow_ups(e: FollowUpHost) -> list[dict[str, str]]:
             rows = e.store.find(BeadQuery(label=fu.key_label(e.bead, lo), include_closed=True))
             made, err = (str(rows[0].id), "") if rows else bdcreate.create_checked(e.store, NewBead(
                 title=lo["title"], description=lo["why"], deps=["discovered-from:" + e.bead],
-                labels=fu.labels(e.bead, e.stats["rounds"], lo), no_inherit_labels=True), e.bead, e.log.note)
+                labels=fu.labels(e.bead, e.stats["rounds"], lo) + ([intake.FROM_REVIEW] if e.intake_per_day > 0 else []),
+                no_inherit_labels=True), e.bead, e.log.note)
+            if made and not rows and e.intake_per_day > 0:
+                intake.defer(e.store, BeadId(made))
         except BdFailure as failure:
             made, err = "", failure.error.text  # an unavailable lookup is never permission to create a duplicate
         if made:
