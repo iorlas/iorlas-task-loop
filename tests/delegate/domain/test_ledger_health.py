@@ -2,7 +2,6 @@
 pre-D2 fold: every row's admit/refuse decision must be the same). Run: uv run pytest tests/delegate/domain/test_ledger_health.py"""
 
 import json
-import tempfile
 from dataclasses import replace
 from pathlib import Path
 
@@ -14,6 +13,7 @@ from delegate.contracts.stores import CheckpointStore, HistoryStore
 from delegate.domain.health.ledger import STATES, HealthLedger, combine, failure_fields, stale_usage
 from delegate.domain.health.matchers import fingerprint
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -317,7 +317,7 @@ class Fold:
             assert self.dump(fold(rows, cp)) == self.dump(fold(rows))  # rows at or before the checkpoint are skipped
 
     def test_history_skips_corrupt_and_stale_lines(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             p = Path(d) / "history.jsonl"
             h = HistoryStore(p)
             h.add(row(1000, outcome="worker_failed", say="x"))
@@ -331,7 +331,7 @@ class Fold:
             assert [r.ts for r in h.rows(since=1000)] == [1001]
 
     def test_checkpoint_file_is_only_a_cache(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             store = CheckpointStore(Path(d) / "cp.json")
             s = fold(self.rows())
             store.save(s, POL)

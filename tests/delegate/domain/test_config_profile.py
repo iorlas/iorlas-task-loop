@@ -2,13 +2,13 @@
 
 import json
 import os
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from delegate.app import env
 from delegate.contracts.json_types import obj
 from delegate.contracts.stores import ConfigStore
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -18,7 +18,7 @@ class ProfileStaysOut:
         (Path(d) / "config.json").write_text(json.dumps(doc), encoding="utf-8")
 
     def test_profile_is_not_an_override_and_not_a_setting(self):
-        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"DELEGATE_CONFIG_DIR": d}):
+        with TemporaryDirectory() as d, mock.patch.dict(os.environ, {"DELEGATE_CONFIG_DIR": d}):
             self.write(d, {"profile": {"lanes": {"X": "enabled"}, "ack": ["volumes"]}, "max_parallel": 3})
             store = ConfigStore(Path(d) / "config.json")
             assert "profile" not in store.overrides()
@@ -29,7 +29,7 @@ class ProfileStaysOut:
             assert store.profile().lanes == {"X": "enabled"}
 
     def test_choosing_a_lane_keeps_the_settings_overrides_and_writes_only_the_profile(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             self.write(d, {"max_parallel": 3})
             store = ConfigStore(Path(d) / "config.json")
             store.set_lane("DEEPSEEK_FREE", "declined")

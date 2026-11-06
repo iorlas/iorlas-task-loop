@@ -5,7 +5,6 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 from pathlib import Path
@@ -23,6 +22,7 @@ from delegate.contracts.state import Lease
 from stream_proc import alive, proc_start
 from support.case import Case
 from support.procsim import real_proc
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 
@@ -55,7 +55,7 @@ def gone(pid, start, seconds=15):
 
 class RealTrees(Case):
     def setup_method(self):
-        self.d = tempfile.TemporaryDirectory()
+        self.d = TemporaryDirectory()
         self.pidfile = os.path.join(self.d.name, "child.pid")
         self.addCleanup(self.d.cleanup)
 
@@ -133,7 +133,7 @@ class RealTrees(Case):
 class KillPaths(Case):
     def fake_server(self, body):
         """A `codex` whose app-server runs `body` (python); returns the which() patch."""
-        d = tempfile.TemporaryDirectory()
+        d = TemporaryDirectory()
         self.addCleanup(d.cleanup)
         exe = Path(d.name) / "codex"
         exe.write_text(f"#!{sys.executable}\nimport sys, time\n{body}\n")

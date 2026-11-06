@@ -5,13 +5,13 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 from delegate.adapters import git
 from delegate.domain.policy.matchers import heredoc_only_hit, secret_hit
 from delegate.domain.policy.shell import git_write
 from support.procsim import real_proc
+from support.tmpdir import TemporaryDirectory, mkdtemp
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 from test_route import ROOT, route
@@ -64,7 +64,7 @@ class GitOwnership:
 
     def setup_method(self):
         self.sp = subprocess
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.dir = self.tmp.name
 
         def run(*a):
@@ -91,7 +91,7 @@ class GitOwnership:
     @real_proc("delegate: a worker, git or CLI process")
     def test_branch_and_head_changes_are_reported_other_refs_and_worktrees_are_not(self):
         before = git.state(self.dir)
-        wt = tempfile.mkdtemp()
+        wt = mkdtemp()
         self.git("worktree", "add", "-q", os.path.join(wt, "w"), "-b", "other")  # parallel slots do this all the time
         assert git.changes(before, git.state(self.dir)) == []
         self.git("checkout", "-qb", "feature")
@@ -103,7 +103,7 @@ class GitOwnership:
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_not_a_repo_is_a_no_op(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             assert git.state(d) is None
             assert git.changes(None, None) == []
 

@@ -8,13 +8,13 @@ import json
 import os
 import stat
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from any_agent.harnesses.codex import CodexHarness
 from delegate.app.publish import LiveSink
 from support.procsim import real_proc
+from support.tmpdir import TemporaryDirectory
 
 HERE = Path(__file__).resolve().parent.parent
 
@@ -75,7 +75,7 @@ class World:
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_the_login_probe_runs_the_status_command(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             exe = Path(d) / "codex"
             exe.write_text('#!/bin/sh\n[ "$FAKE_LOGIN" = out ] && { echo "Not logged in" >&2; exit 1; }\necho "Logged in using ChatGPT"\n')
             exe.chmod(exe.stat().st_mode | stat.S_IXUSR)
@@ -91,5 +91,5 @@ if __name__ == "__main__" and "--regen" in sys.argv:
     for n in NAMES:
         h, pl = parse(n)
         (GOLDEN / f"codex_{n}.expected.json").write_text(json.dumps(as_json(h, pl), indent=1) + "\n")
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             (GOLDEN / f"codex_{n}.live.json").write_text(json.dumps(live_lines(pl, Path(d) / "l.jsonl"), indent=1) + "\n")

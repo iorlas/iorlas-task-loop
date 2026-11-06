@@ -3,7 +3,6 @@
 import json
 import shutil
 import sys
-import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,6 +17,7 @@ from delegate.app import env, launch
 from delegate.contracts.json_types import Json
 from support.case import Case
 from support.procsim import real_proc
+from support.tmpdir import TemporaryDirectory
 
 from delegate_fakes.fake_run import replay as replay_run
 from test_route import ROOT, T
@@ -93,7 +93,7 @@ class Launchers(Case):
     """The three harnesses end in the same ladder; the supervisor replays the events of a fixture row (delegate_fakes/fake_run.py)."""
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         for p in (
             patch.object(env, "config_dir", return_value=Path(self.tmp.name)),
             patch.object(shutil, "which", return_value="cli"),

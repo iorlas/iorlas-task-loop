@@ -2,7 +2,6 @@
 
 import datetime as dt
 import os
-import tempfile
 import time
 from pathlib import Path
 from unittest import mock
@@ -12,6 +11,7 @@ from any_agent.classify import Outcome
 from delegate.app import env, launch
 from support.case import Case
 from support.procsim import real_proc
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 from test_route import argparse_ns, need, route
@@ -52,7 +52,7 @@ class ResetTimes(Case):
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_out_rows_record_source_and_zone_and_report_is_manual(self):
-        with tempfile.TemporaryDirectory() as d, mock.patch.object(env, "config_dir", return_value=Path(d)):
+        with TemporaryDirectory() as d, mock.patch.object(env, "config_dir", return_value=Path(d)):
             end = (dt.datetime.now(dt.UTC) + dt.timedelta(days=5)).replace(
                 second=0, microsecond=0
             )  # inside the 40 days a stated reset may be off
