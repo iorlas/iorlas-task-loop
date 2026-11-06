@@ -28,6 +28,7 @@ from taskloop.contracts.snapshots import (
     ReleaseResult,
     RepoEntry,
     ReposIndex,
+    SharedNotes,
     StatusSnapshot,
     StatusTried,
 )
