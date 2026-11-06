@@ -21,8 +21,8 @@ from support.logs import typed  # noqa: E402
 from support.narrow import must  # noqa: E402
 from support.runs import manifest  # noqa: E402
 
+from taskloop.adapters import agent as live_agent  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
-from taskloop.adapters import runner as live_runner  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
 from taskloop_dash.api import live  # noqa: E402
@@ -206,9 +206,9 @@ class Feed(Case):
 
 class CallSite(Case):
     def test_file_name(self):
-        p = live_runner.live_path("/e/r1.live", 3, "write")
+        p = live_agent.live_path("/e/r1.live", 3, "write")
         assert p == "/e/r1.live/03-write.jsonl"
-        assert live_runner.live_path("/e/x.live", 12, "re view/2").endswith(".live/12-re-view-2.jsonl")
+        assert live_agent.live_path("/e/x.live", 12, "re view/2").endswith(".live/12-re-view-2.jsonl")
 
     def test_the_call_sets_the_env(self):
 

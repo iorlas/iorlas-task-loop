@@ -15,11 +15,12 @@ from contracts import samples as S
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.ask import Ask, AskAnswer
 from taskloop.contracts.askrows import AskRows, DbLedger, read_snapshot
+from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.dash import OwnerCause, Stick
+from taskloop.contracts.docstore import Absent, ForeignVersion, JsonStore, Present, Torn
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.ledger import LedgerEntry
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import Absent, AskStore, ForeignVersion, JsonStore, Present, Torn
 from taskloop.contracts.wire import Refused
 
 

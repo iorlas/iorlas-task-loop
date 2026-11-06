@@ -9,9 +9,9 @@ from typing import Any
 from taskloop.contracts import events, wire
 from taskloop.contracts.events import Event
 from taskloop.contracts.parks import Park
+from taskloop.contracts.rowstores import ReposStore
 from taskloop.contracts.run import NetPause
 from taskloop.contracts.runlife import RETAIN
-from taskloop.contracts.stores import ReposStore
 from taskloop.contracts.trace import RunTrace
 from taskloop.contracts.waitrows import NET_PAUSE, PARK, open_records
 from taskloop_dash.env import Env

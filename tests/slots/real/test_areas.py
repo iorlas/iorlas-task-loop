@@ -28,6 +28,7 @@ from support import (
     tlbd,
 )
 from support import slots as sl
+from support.args import Args
 from support.narrow import must
 from support.spawn import port_git, real_spawner
 from support.who import who
@@ -373,7 +374,7 @@ class ReviewFixes(AreasBase):
 
         def run(b, slot):
             f = Path(self.home, f"out-{b}.json")
-            a = entry.Args(id=b, worktree=None, slot=slot, dry_run=False, fresh=False, quiet=True,
+            a = Args(id=b, worktree=None, slot=slot, dry_run=False, fresh=False, quiet=True,
                             outcome_file=str(f), exclusive_area=True)
             entry.main(a, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
             outs[b] = json.loads(f.read_text())["outcome"]

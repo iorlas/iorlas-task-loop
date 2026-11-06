@@ -24,8 +24,8 @@ from taskloop.contracts.landed import Landed, landed_meta
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Git
 from taskloop.contracts.reponame import repo_name
+from taskloop.contracts.rowstores import ReposStore
 from taskloop.contracts.slots import SlotGitError, git_probe
-from taskloop.contracts.stores import ReposStore
 
 Guard = Callable[[BeadId, str], str]  # (bead, close reason) -> "" when the close goes on, else why it is refused (closeguard.py)
 
