@@ -28,6 +28,8 @@ One canonical name per concept. A word in the "never" column is not used for tha
 | lane | Purged. The word names no concept; use account, track or loop. | everything |
 | resource | A scarce machine tool a check declares it needs (`unity`); its limit is in the profile. | |
 | lease | One held unit of a resource, in the machine's lease table; freed when the holder dies. | lock (a lock is a mutex on one thing; a lease counts units) |
+| lookahead `planned` | The merge queue's parallelism: how many PRs it gates at once, each on main plus the PRs ahead of it. 1 is today's serial `land-stack`. Floor = lowest (1), cap = highest (default 4; 3 when the wasted-gate ratio is above 0.5 in shadow). Design: docs/design/merge-queue.md section 6. | window (an account's usage window is another thing), depth |
+| queue depth `planned` | How many PRs wait in the merge queue. Not the lookahead. | length, size |
 | executor `planned` | The machine side of a split factory: process spawn, slots, leases, `host.json`. Today the factory and executor are the same machine. | node, agent |
 | trust root | The files whose change parks a bead unless it carries `owner-approved` (`AGENTS.md`, `CLAUDE.md`, `.claude/`, `mise.toml`, `.codex/`, `.task-loop.json`, `githooks/`). | |
 
