@@ -16,10 +16,10 @@ from support.tiers import domain
 
 from taskloop.app.asks import sweeps
 from taskloop.cli import asks as cli
+from taskloop.contracts.askstore import HAD_PICK, ORPHAN, AskStore
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import HAD_PICK, ORPHAN, AskStore
 
 T = 1000.0
 

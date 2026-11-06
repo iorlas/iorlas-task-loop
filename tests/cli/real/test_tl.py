@@ -42,8 +42,8 @@ from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
+from taskloop.contracts.rowstores import ReposStore  # noqa: E402
 from taskloop.contracts.snapshots import RepoEntry, ReposIndex  # noqa: E402
-from taskloop.contracts.stores import ReposStore  # noqa: E402
 
 
 def sh(*args, cwd):

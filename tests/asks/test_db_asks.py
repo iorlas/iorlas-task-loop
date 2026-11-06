@@ -9,8 +9,8 @@ from support.tmpdir import TemporaryDirectory
 from asks import test_ask_v3
 from taskloop.app.asks.intake import Intake
 from taskloop.contracts import factorydb
+from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import AskStore
 
 
 class DatabaseAsks(Case):

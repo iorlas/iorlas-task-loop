@@ -10,7 +10,7 @@ WRITERS: Final = {
     'HostResourcesStore': {'taskloop.app.wire.setup_apply'},
     'StatusStore': {'taskloop.app.wire.lanes'},
     'StatusTriedStore': {'taskloop.app.wire.lanes'},
-    'ReposStore': {'taskloop.app.track.trail', 'taskloop.contracts.stores'},
+    'ReposStore': {'taskloop.app.track.trail', 'taskloop.contracts.rowstores'},
     'ReleaseResultStore': {'taskloop.app.release.flow'},
     'ReflectStateStore': {'taskloop.app.report.reflect'},
     'ParkStore': {'taskloop.app.asks.parks', 'taskloop.app.loop.take', 'taskloop.app.run.stages', 'taskloop.contracts.parks'},
