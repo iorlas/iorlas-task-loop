@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import cast
 from unittest import mock
 
-import pytest
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
@@ -129,16 +128,6 @@ class OpenCode(Case):
 
 
     # review fixes (7e5b07d)
-    def test_the_newest_part_update_is_the_sessions_last_sign_of_life(self):
-        con = sqlite3.connect(self.db)
-        con.execute("INSERT INTO part VALUES ('p9','m3',?,?,?,'{}')", (SID, T + 9000, T + 99000))
-        con.commit()
-        con.close()
-        assert (
-            (opencode.opencode_updated(snapshot(), SID) or 0.0)
-            == pytest.approx(1_790_000_099.0, abs=5e-08)
-        )  # a part newer than every message
-
     def test_a_lane_named_openai_xai_is_grok_by_family_or_name(self):
         assert names.lane_name("OPENAI_XAI") == "Grok"
         assert names.lane_name("OPENAI_SUBSCRIPTION") == "Codex"

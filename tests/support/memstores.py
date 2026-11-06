@@ -16,16 +16,18 @@ from jsonl_log.cursor import _parse  # shelf lacks: a public parse of in-memory 
 from taskloop.contracts import events, log, wire
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask
+from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.checks import BaseRedRecord, CheckRun, Durations, PassRecord
 from taskloop.contracts.config import HostResources
+from taskloop.contracts.docstore import Absent, ForeignVersion, Present, Read, Torn, refusal
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.followups import FollowupOutbox
 from taskloop.contracts.ledger import Adr, AdrUse, LedgerEntry
 from taskloop.contracts.locks import LockRecord, LockTimeout, Ticket, pid_alive
 from taskloop.contracts.profile_changes import ProfileChange
 from taskloop.contracts.rotating import RotatingJsonl
-from taskloop.contracts.stores import Absent, AskStore, ForeignVersion, JsonlStore, Present, Read, Torn, refusal
+from taskloop.contracts.stores import JsonlStore
 from taskloop.contracts.trace import RunTrace
 from taskloop.contracts.wire import Refused
 from taskloop.stores.api import AmendDoc, DocSet

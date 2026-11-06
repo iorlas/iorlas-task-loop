@@ -10,8 +10,8 @@ from taskloop.app.release.catalog import PLUGINS, cache_dirs, installed_version,
 from taskloop.contracts.env import Env
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Git
+from taskloop.contracts.rowstores import PinStore
 from taskloop.contracts.snapshots import Pin
-from taskloop.contracts.stores import PinStore
 
 
 def pin_store(env: Env) -> PinStore:

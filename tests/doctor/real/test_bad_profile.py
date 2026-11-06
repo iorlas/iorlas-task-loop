@@ -26,7 +26,7 @@ from taskloop.app.launch import loop_start as wstart
 from taskloop.app.wire import brief, doctor
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import ReposStore
+from taskloop.contracts.rowstores import ReposStore
 
 ROOT = Path(__file__).resolve().parents[3]
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid", "GIT_COMMITTER_NAME": "t",
