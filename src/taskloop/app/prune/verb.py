@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from taskloop.adapters.ident import hostname
-from taskloop.app.prune import retention, runs
+from taskloop.app.prune import retention, runs, slotstate
 from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.release.shell import Shell
 from taskloop.app.run import running
@@ -54,6 +54,10 @@ def run(cfg: ConfigDir, loop: LoopConfig, repos: list[str], store_of: Callable[[
     for g in logs:
         say(f"prune: {would}{g.path} ({mb(g.bytes)})")
     count += len(logs)
+    orphans = slotstate.prune(cfg, repos, sh.port, now, dry_run)
+    for g in orphans:
+        say(f"prune: {would}{g.path} ({mb(g.bytes)}): its slot is gone")
+    count += len(orphans)
     gone, stays = sweep(repos, store_of, Path(loop.build_dir).expanduser(), loop.keep_days, now, dry_run, sh.port, cfg,
                         lambda repo: running.running(repo, sh.port, who, store_of(repo)), hostname())
     for line in gone:

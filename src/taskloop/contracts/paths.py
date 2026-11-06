@@ -148,6 +148,10 @@ class ConfigDir:
         """What one slot of one repo keeps for its commands (temp, dotnet and NuGet scratch): outside the worktree, kept across reuse."""
         return self.repo_dir(repo_key) / "slot-state" / slot
 
+    def slot_state_roots(self) -> list[Path]:
+        """Every repo's slot-state folder that exists: the parent of each slot's scratch."""
+        return sorted(self.repos_dir().glob("*/slot-state"))
+
     def slot_setup_mark(self, key: str) -> Path:
         return self.root / "slots" / (f"{key}.setup")
 
