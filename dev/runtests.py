@@ -39,6 +39,7 @@ def load_scratch():
 scratch = load_scratch()
 
 CHUNK = 150          # tests per worker: a worker costs ~2 s to start and a few hundred MB, so a smaller share is not worth one
+MIN_LANE_WORKERS = 2  # a lane's selection past CHUNK tests keeps this many however busy the host is
 MAX_WORKERS = 4      # the box also runs the implementer workers; the tests must not starve them
 WORKER_MB = 2048     # RAM budget of one worker
 WALL_S = 3600.0      # a hang guard for one pytest run (a wide selection takes 15 min in 4 workers); its process tree is killed
@@ -83,11 +84,14 @@ def busy_cpus():
         return 0
 
 
-def workers(n_tests, cpus=None, mem_mb=None, busy=None):
-    """How many pytest workers this selection earns on this host right now (1: no xdist): the cores the other lanes leave free."""
+def workers(n_tests, cpus=None, mem_mb=None, busy=None, full=False):
+    """How many pytest workers this selection earns on this host right now (1: no xdist). A lane run leaves the cores the other lanes
+    keep busy (but keeps MIN_LANE_WORKERS for a selection past CHUNK: one worker made the wide runs slow); the landing gate takes them all."""
     cpu = cpus if cpus is not None else (os.cpu_count() or 1)
     ram = mem_mb if mem_mb is not None else total_mb()
-    free = cpu - (busy if busy is not None else busy_cpus())
+    free = cpu if full else cpu - (busy if busy is not None else busy_cpus())
+    if not full and n_tests > CHUNK:
+        free = max(free, MIN_LANE_WORKERS)
     return max(1, min(free, cpu if ram is None else ram // WORKER_MB, math.ceil(n_tests / CHUNK), MAX_WORKERS))
 
 
@@ -144,7 +148,7 @@ def main():
     base = affected.base_of(root)
     tests = affected.select(affected.Repo(root), affected.changed_files(root, base))
     n_tests = count_tests(root, tests)
-    n = workers(n_tests)
+    n = workers(n_tests, full=bool(os.environ.get(FULL)))
     print(f"runtests: {len(tests)} test files, {n_tests} tests, {n} worker{'s' if n > 1 else ''} (change against {base[:12]})", flush=True)
     note = wide_note(root, n_tests)
     if note:
