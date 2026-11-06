@@ -17,9 +17,9 @@ from taskloop.app.checks.round import Round
 from taskloop.contracts.checks import Check, CheckResult, CheckRun, Durations
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.plancheck import PlanCheck
-from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.durations import merged, seconds
 from taskloop.domain.checks.plan import CheckPlan

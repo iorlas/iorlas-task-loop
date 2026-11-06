@@ -6,10 +6,11 @@ from typing import Protocol
 from taskloop.app.land import cleanup
 from taskloop.app.wire.slots import profile_slots, slot_of
 from taskloop.contracts import fence
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.enums import Outcome
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Beads, Git
 from taskloop.stores.runlog import RunLog
 
 DONE = (Outcome.LANDED, Outcome.DONE)

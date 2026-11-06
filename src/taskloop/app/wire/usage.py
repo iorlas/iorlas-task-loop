@@ -6,7 +6,7 @@ from taskloop.adapters.ident import config_dir
 from taskloop.app.wire import lanes
 from taskloop.contracts.env import Env
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Spawner
+from taskloop.contracts.procport import Spawner
 
 
 def feed(windows: str, spawner: Spawner, env: Env) -> int:

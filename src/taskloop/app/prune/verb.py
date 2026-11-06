@@ -10,10 +10,10 @@ from taskloop.app.prune import retention, runs, slotstate
 from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.release.shell import Shell
 from taskloop.app.run import running
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Beads
 from taskloop.contracts.rowstores import ReposStore
 
 

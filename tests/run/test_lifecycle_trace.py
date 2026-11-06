@@ -11,7 +11,8 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import fake_route, homes, procsim
 from support.case import Case
-from support.engine_case import CLEAN, PLAN, WRITE, stop
+from support.engine_case import stop
+from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.adapters import delegate as dl
 from taskloop.app.plan.planner import Planner

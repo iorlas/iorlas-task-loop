@@ -7,10 +7,10 @@ import time
 from pathlib import Path
 
 from taskloop import contracts
-from taskloop.adapters import layout_migrate
+from taskloop.adapters import delegate, layout_migrate
 from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.ident import claude_dir, config_dir
-from taskloop.app.doctor import disk, profiles
+from taskloop.app.doctor import disk, ops, profiles
 from taskloop.app.release import catalog, manifest
 from taskloop.app.slots import watchdog
 from taskloop.app.wire import hook
@@ -18,11 +18,13 @@ from taskloop.app.wire import slots as wslots
 from taskloop.app.wire.slots import cfg_source
 from taskloop.contracts import inputsets, runlife
 from taskloop.contracts.bd_errors import BdCommandFailure
+from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
 from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git, Spawner
+from taskloop.contracts.procport import Spawner
 from taskloop.contracts.rowstores import ReposStore
 from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.beads import matchers as beadlint
@@ -208,9 +210,12 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
     warns += [link_line] if foreign else []
     warns += [] if source[0].engine.writer_exec_allow else [
         "plan check argv unrestricted: the profile lists no engine.writer_exec_allow, so a planner's own check may run any command"]
+    warns += ops.clone_warnings(config_dir(env), git)
+    warns += [gap] if (gap := ops.capability_gap(delegate.resolve().contract)) else []
     warns += [f"run {r} is lost: its process is gone and it recorded no end" for r in runlife.reconcile(who.config, time.time())]
     print(f"contracts: {Path(contracts.__file__).resolve().parent}")
     print(f"engine: {pin.describe(pin.families(source[0].engine.writer_family, []))}")
+    print(f"engine: {pin.describe_second(source[0].engine.second_writer_family)}")
     for w in warns:
         print("WARN " + w)
     if legacy := legacy_line(env):

@@ -3,8 +3,8 @@ goes to the writer for a test, an item no check can prove lands unverified for t
 plan (what it defers, what it leaves to the engine) is read before the item's kind."""
 from typing import Any
 
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.plancheck import PlanData
-from taskloop.contracts.ports import Git
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.plan.matchers import word_set
 from taskloop.domain.review import kinds

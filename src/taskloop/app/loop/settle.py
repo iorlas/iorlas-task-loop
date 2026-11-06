@@ -13,12 +13,12 @@ from taskloop.app.loop.net import NetState
 from taskloop.app.slots import aside
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BdFailure
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.enums import Result
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.loop import LoopWait
 from taskloop.contracts.parks import ParkStore
-from taskloop.contracts.ports import BdFailure
 from taskloop.contracts.slots import SlotFail, SlotGitError
 
 
@@ -48,6 +48,7 @@ class Settle:
         quick = self.c.slot_quick.setdefault(name, [])
         why = f"{len(quick)} runs failed within {t.quick_fail_min:g} min each ({', '.join(quick)}): last: {v.why[:160]}"
         self.c.slot_blocked[name] = bid
+        aside.mark(SlotPool(self.env.slot_env()).named(name))
         self.say(f"SLOT {name}: {bid} waits for a successful reset probe or a different eligible bead: {why}")
         self.env.event("slot_aside", bid, slot=name, why=why, held=False, repo=self.env.repo)
         self.c.fails = [f for f in self.c.fails if f not in quick]
