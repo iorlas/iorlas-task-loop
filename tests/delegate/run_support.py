@@ -7,7 +7,6 @@ import json
 import os
 import subprocess as sp
 import sys
-import tempfile
 import time
 from pathlib import Path
 from unittest import mock
@@ -20,6 +19,7 @@ from delegate.domain.health import ledger as health_ledger
 from support import fake_worker
 from support.case import Case
 from support.fake_clock import SteppingClock
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -37,7 +37,7 @@ class RunBase(Case):
     def setup_method(self):
         self.clock = SteppingClock(0.25)  # a silence or a grace passes in polls, not seconds
         self.enterContext(mock.patch.object(harnesses, "CLOCK", self.clock))
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         base = Path(self.tmp.name)
         self.base = base
         (base / "bin").mkdir()
