@@ -151,7 +151,7 @@ Counts from grep over `tests/` (3,123 lines match any of: tmp paths, signal, for
 | T4 | `dev/runtests.py:42,58,73` (RAM from `sysconf`, `~/.gitconfig` copy, SIGTERM trap) and `dev/affected.py` (diff against `origin/main` and import graph) | Runner for `just test` | `affected.py` is pure Python + git; runtests needs P5 and F17. | S |
 | T5 | `dev/race.py:95,120-125,156,200,255` | Writes `#!/bin/sh` fake `bd`/`claude`, `chmod 755`, `core.hooksPath` | A real-process race harness; needs fake executables as `.cmd`/python scripts. Low priority (a dev tool). | M |
 | T6 | `tests/live`, `tests/e2e` (selftest, release) | Real git remote, real processes, real tl and dashboard; `dev/release.py` | Run by a person; Windows release path is the same code as P/L/H items. | M |
-| T7 | `tests/delegate` | `TL_DELEGATE_TESTS=1`, minutes, real worker processes | Only after P7. | M |
+| T7 | `tests/delegate` | the delegate-tests switch on, minutes, real worker processes | Only after P7. | M |
 | T8 | Golden files and fixtures with `\n` | `tests/fixtures`, `tests/run/test_exchanges.py` golden `input.txt` | Compare bytes: CRLF checkout breaks them (F14). | S |
 | T9 | tl-6vb (Linux suite: 6 failures, 8 errors on the container run, 2026-10-27) | Bead text | The same fixes (macOS-assuming tests) shorten the Windows list. Do tl-6vb first: it separates "test assumes macOS" from "code is POSIX". | M |
 
