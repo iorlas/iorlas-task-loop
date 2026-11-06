@@ -245,16 +245,6 @@ class RunMemo:
             BaseRedRecord(key=key, red=red, run_id=self.run_id, host=self.host, ts=time.time()))
 
 
-def repo_green(stores: Stores, git: Git, wt: str, step: CheckId, tree: TreeSha, base: BaseSha) -> bool:
-    """Historical display query for the worktree's repo; never delivery authorization."""
-    return is_green(stores, check_files.repo_key(git, wt), step, tree, base, repo_plan_digest(wt))
-
-
-def repo_green_result(stores: Stores, git: Git, wt: str, step: CheckId, tree: TreeSha, base: BaseSha) -> CheckResult | None:
-    """Historical display evidence for the worktree's repo; never delivery authorization."""
-    return green_result(stores, check_files.repo_key(git, wt), step, tree, base, repo_plan_digest(wt))
-
-
 def is_green(stores: Stores, repo: str, step: CheckId, tree: TreeSha, base: BaseSha, plan: Digest | None = NO_DIGEST) -> bool:
     """Historical display query only. Delivery must use RunMemo.result with the resolved requirement."""
     return green_result(stores, repo, step, tree, base, plan) is not None

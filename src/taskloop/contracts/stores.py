@@ -22,13 +22,11 @@ from taskloop.contracts.reponame import repo_name
 from taskloop.contracts.rotating import RotatingJsonl
 from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.snapshots import (
-    DashState,
     Pin,
     ReflectState,
     ReleaseResult,
     RepoEntry,
     ReposIndex,
-    SharedNotes,
     StatusSnapshot,
     StatusTried,
 )
@@ -394,11 +392,6 @@ class StatusTriedStore(JsonStore[StatusTried]):
         super().__init__(cfg.snapshot("delegate", "tried"), StatusTried)
 
 
-class SharedNotesStore(JsonStore[SharedNotes]):
-    def __init__(self, cfg: paths.ConfigDir, repo_key: str) -> None:
-        super().__init__(cfg.shared(repo_key), SharedNotes)
-
-
 class ReposStore(JsonStore[ReposIndex]):
     """repos.json: every repo `tl` has seen, by name. Adding one reads and writes under a lock, so two processes never drop a repo.
     A v1 file (keyed by path) is converted on its first read; no reader of v1 stays."""
@@ -492,11 +485,6 @@ class PinStore(JsonStore[Pin]):
 class ReleaseResultStore(JsonStore[ReleaseResult]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
         super().__init__(cfg.release_result(), ReleaseResult)
-
-
-class DashStateStore(JsonStore[DashState]):
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.dash_state(), DashState)
 
 
 class BadVersionStore(JsonStore[BadVersions]):

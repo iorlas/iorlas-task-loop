@@ -16,10 +16,6 @@ def clip(text: str, n: int) -> str:
     return text[: n - 1].rsplit(" ", 1)[0].rstrip(",;:( ") + "…"
 
 
-def headline(ask: Ask) -> str:
-    return f"{KIND_TITLE[ask.kind.value]}: {ask.decision}"
-
-
 def comment(ask: Ask) -> str:
     """The note left on the bead when an ask is raised: for people reading the bead, never read back by the engine."""
     opts = "; ".join("{}{}: {}".format("*" if o.recommended else "", o.label, o.consequence) for o in ask.options)

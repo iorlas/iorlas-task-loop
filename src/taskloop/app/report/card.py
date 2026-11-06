@@ -1,10 +1,8 @@
 """`tl report`: the M2 scorecard over a time window. Reads only: traces.jsonl, the loop's log, engine/*.jsonl, the repo's git refs, bd."""
-import contextlib
 import statistics
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Final, TypedDict
 
 from taskloop.adapters import beadtools, gitrepo
@@ -20,7 +18,6 @@ from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, is_bead_id, loop_key
 from taskloop.contracts.kinds import ASKS, PAUSES, Kind, kind_named
 from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.log import EngineLog, decode
 from taskloop.contracts.ports import Git
 from taskloop.contracts.runlife import Liveness, liveness
 from taskloop.contracts.stores import LoopLog
@@ -28,15 +25,6 @@ from taskloop.contracts.trace import RunTrace
 from taskloop.domain.report import matchers
 
 M2: Final = {"beads": 10, "landed_no_ask": 7}  # at least; lost and crashes must be 0 (docs/roadmap.md)
-
-def typed_log(path: Path) -> list[EngineLog]:
-    """The engine log's records; a line that is not one is skipped."""
-    out: list[EngineLog] = []
-    for d in read_jsonl(path):
-        with contextlib.suppress(ValueError):
-            out.append(decode(d))
-    return out
-
 
 def crashes(repo: str, since: float, until: float, traces: Sequence[RunTrace], cfg: paths.ConfigDir,
             now: float | None = None) -> list[dict[str, Any]]:

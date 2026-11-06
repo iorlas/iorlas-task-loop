@@ -3,7 +3,6 @@ owner's override. The loop reads it, never writes it. A pin names a plugin cache
 import json
 import sys
 import time
-from pathlib import Path
 
 from taskloop.adapters.ident import PLUGIN_ROOT, claude_dir, config_dir
 from taskloop.app.release.canary import mac_pin_refusal
@@ -26,15 +25,6 @@ def read_pin(env: Env) -> Pin:
 
 def pin_version(pin: Pin, key: str) -> str:
     return (pin.task_loop if key == "task-loop" else pin.delegate) or ""
-
-
-def pinned_dir(key: str, env: Env) -> Path | None:
-    """The cache dir `pinned.json` names for plugin `key`, None when it pins no version of it. A pin whose dir is gone gives a path
-    that does not exist (the caller refuses; no fallback to another version)."""
-    v = pin_version(read_pin(env), key)
-    if not v:
-        return None
-    return cache_dirs(key, claude_dir(env)).get(v) or claude_dir(env) / "plugins" / "cache" / "-" / PLUGINS[key][0] / v
 
 
 def clear_pin(env: Env) -> bool:
