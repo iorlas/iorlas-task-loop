@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import looks
-from taskloop.adapters.check_files import repo_key
 from taskloop.app.artifacts import store
 from taskloop.app.artifacts.keep import Keeper
 from taskloop.app.look.host import LookHost
@@ -35,6 +34,15 @@ class Pictures:
         self.e = host
         self.git = git
         self.kept: Keeper | None = None
+
+    @property
+    def stale(self) -> bool:
+        """Code changed after the last render: the pictures show an older tree."""
+        return self.e.render_stale
+
+    def mark_stale(self) -> None:
+        """Write's one word to the look stage after a write: its pictures are old now (the flag is checkpointed)."""
+        self.e.render_stale = True
 
     def keeper(self) -> Keeper:
         """This run's evidence budget: it writes the worktree's evidence dir and the run dir's; earlier runs are only looked at."""
@@ -110,9 +118,9 @@ class Pictures:
         """The run's pictures the owner may want to see (role before, after or result), oldest first, each with its address
         `artifact:<repo>/<bead>/<run>/<stage>-<attempt>/<name>`: the store is the one record, so a crash after the land loses none."""
         e = self.e
-        e.artifact_repo = e.artifact_repo or repo_key(self.git, e.wt)
-        slot = ArtifactSlot(repo=e.artifact_repo, bead=e.bead, run=e.run_id, stage="", attempt=0)
-        return [(f"artifact:{e.artifact_repo}/{e.bead}/{e.run_id}/{f.parent.name}/{m.name}", m)
+        repo = e.ports.repo.key()
+        slot = ArtifactSlot(repo=repo, bead=e.bead, run=e.run_id, stage="", attempt=0)
+        return [(f"artifact:{repo}/{e.bead}/{e.run_id}/{f.parent.name}/{m.name}", m)
                 for f, m in store.run_listing(e.home.artifact_store(), slot) if m.kind in IMAGE_KINDS and m.role != "progress"]
 
     def before_pictures(self) -> list[tuple[Path, ArtifactMeta]]:
@@ -144,7 +152,7 @@ class Pictures:
                 self.warn_if_untracked(m, files)
         e.look.rendered = sorted({*e.look.rendered, *names})
         if names:
-            e.render_stale = False
+            e.render_stale = False  # the pictures show the tree again
         plural = "" if len(names) == 1 else "s"
         bad = f", {len(errs)} error{'' if len(errs) == 1 else 's'}" if errs else ""
         e.steps.outcome("rendered" if names else "failed", f"{len(names)} picture{plural}{bad}")
@@ -191,8 +199,7 @@ class Pictures:
         """The engine's render joins the artifact store through the one writer; a refusal is a warning (a picture is never worth a run)."""
         e = self.e
         try:
-            e.artifact_repo = e.artifact_repo or repo_key(self.git, e.wt)
-            slot = ArtifactSlot(repo=e.artifact_repo, bead=e.bead, run=e.run_id, stage="look", attempt=rnd)
+            slot = ArtifactSlot(repo=e.ports.repo.key(), bead=e.bead, run=e.run_id, stage="look", attempt=rnd)
             store.add(e.home.artifact_store(), slot, f, name=name, caption=f"engine render, round {rnd}",
                       role="result", now=e.now(), cap=int(e.cfg.evidence_cap_mb) << 20)
         except (Refused, OSError) as err:
