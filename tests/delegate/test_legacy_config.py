@@ -94,16 +94,29 @@ class LegacyConfig:
         assert all(n["file"].endswith("config.json") for n in notes)
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_an_old_unversioned_state_file_is_reset_with_one_warning(self):
+    def test_a_state_file_of_another_version_is_refused_and_left_untouched(self):
         self.put_config()
-        Path(self.tmp.name, "state.json").write_text(
-            json.dumps({"out": {"OPENAI_SUBSCRIPTION": {"until": 1, "why": "old"}}}), encoding="utf-8"
-        )
+        state = Path(self.tmp.name, "state.json")
+        old = json.dumps({"out": {"OPENAI_SUBSCRIPTION": {"until": 1, "why": "old"}}, "holds": {"keep": "me"}})
+        state.write_text(old, encoding="utf-8")
         p = self.run_worker()
         assert p.returncode == 0, p.stderr
-        assert json.loads(p.stdout)["stop"] is None
-        assert len([ln for ln in p.stderr.splitlines() if "state.json" in ln and "empty state" in ln]) == 1
-        assert json.loads(Path(self.tmp.name, "state.json").read_text())["v"] == 1  # rewritten typed: the warning does not repeat
+        r = json.loads(p.stdout)
+        assert (r["stop"]["reason"], r["stop"]["permanence"]) == ("crash", "needs_owner")
+        assert "mv state.json state.json.old" in r["say"]
+        assert state.read_text(encoding="utf-8") == old  # not wiped, not rewritten
+        state.rename(state.with_name("state.json.old"))  # the owner's fix
+        assert json.loads(self.run_worker().stdout)["stop"] is None
+
+    @real_proc("delegate: a worker, git or CLI process")
+    def test_status_of_an_unreadable_state_exits_1_with_the_fix_and_writes_nothing(self):
+        self.put_config()
+        state = Path(self.tmp.name, "state.json")
+        state.write_text("{torn", encoding="utf-8")
+        p = self.run_py("status", "--json")
+        assert p.returncode == 1
+        assert "state.json is not JSON" in p.stderr or "is not JSON" in p.stderr
+        assert state.read_text(encoding="utf-8") == "{torn"
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_split_retired(self):

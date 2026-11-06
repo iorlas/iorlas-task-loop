@@ -176,6 +176,11 @@ def current_env(env: Env, extra: Mapping[str, str] | None = None) -> dict[str, s
     return child_env_of(env.vars, extra)
 
 
+def delegate_call_env(env: Env, extra: Mapping[str, str] | None = None) -> dict[str, str]:
+    """`current_env` for a call TO delegate: without DELEGATE_DEPTH, which delegate refuses from a caller and sets itself on its workers."""
+    return without(current_env(env, extra), "DELEGATE_DEPTH")
+
+
 def identity_env(who: Identity) -> dict[str, str]:
     """What a child needs to act as `who`: its actor and, when it has one, its session (read back by the child's `ident.identity`)."""
     out = {EnvVar.TASK_LOOP_ACTOR.value: who.actor}
