@@ -13,6 +13,7 @@ from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.askrows import read_snapshot
 from taskloop.contracts.bead import Bead, Comment
+from taskloop.contracts.dashhealth import Score
 from taskloop.contracts.dashruns import ResourceLease, RunHeader
 from taskloop.contracts.delegate import LiveEvent
 from taskloop.contracts.enums import Outcome
@@ -35,6 +36,7 @@ from taskloop_dash.readers.records import Records
 from taskloop_dash.views.runfacts import Run
 from taskloop_dash.views.world import AdrIn, Landing, LookItem, ProjectIn, World
 
+SCORE_TTL = 60  # seconds the scorecard strip is kept
 LEDGER_TTL = 5  # seconds the ask ledger, the decisions and the landed runs are kept
 
 
@@ -76,7 +78,7 @@ class Worlds:
         return ProjectIn(id=id, name=basename(path), beads=rows, slots=slots, loops=states, looks=looks, adrs=self.adrs(path),
                          slot_source=slot_source,
                          bd_ok_at=bd_ok_at, bd_error=bd_error,
-                         profile_error=self.profile_error(path))
+                         profile_error=self.profile_error(path), score=self.score(path, states))
 
     def slot_source(self, path: str) -> SlotSource:
         """The slot count as the loops read it. Like the red row, the git read is kept while the profile's source files are unchanged (30
@@ -91,6 +93,13 @@ class Worlds:
             found = env.ports.slot_source(path)
             env.ttl.put(key, (stamp, found))
         return replace(found, host=env.host, dirs=env.ports.slot_dirs(found.root) if found.root else found.dirs)
+
+    def score(self, path: str, states: list[LoopState]) -> Score | None:
+        """The scorecard of `tl report` for the window since the repo's newest loop started (else 24 h), kept for a minute: it reads
+        git and bd, so it is never made twice at once (TtlCache single flight)."""
+        now = self.env.clock()
+        since = max((s.started for s in states), default=now - 24 * 3600.0)
+        return self.env.ttl.get(f"score:{path}", SCORE_TTL, lambda: self.env.ports.scorecard(path, since, now))
 
     def profile_error(self, path: str) -> str:
         """Keep the row while its source files are unchanged; unknown sources fall back to 30 seconds."""
