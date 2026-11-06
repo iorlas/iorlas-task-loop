@@ -23,6 +23,7 @@ from support import homes
 
 # isort: split
 from loop.test_loop import LoopBase, rec
+from support.args import Args
 from support.engine_locks import put_lock
 from support.spawn import port_git, real_spawner
 from support.who import who
@@ -99,7 +100,7 @@ class Slots(LoopBase):
         """entry.main as `tl run-task` calls it, with the engine itself stubbed: engine_run(eng) is its run(). flags:
         more run-task options (wait, exclusive_area)."""
         f = Path(self.home, f"out-{bead_id}.json")
-        a = entry.Args(id=bead_id, worktree=worktree, slot=slot, dry_run=False, fresh=False, quiet=True,
+        a = Args(id=bead_id, worktree=worktree, slot=slot, dry_run=False, fresh=False, quiet=True,
                         outcome_file=str(f), **(flags or {}))
         made = mock.Mock()
         made.return_value.run.side_effect = lambda **_: (engine_run or (lambda: 0))()
@@ -172,7 +173,7 @@ class RunTaskTakesItsSlot(Slots):
             raise engine.Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED)
         with mock.patch.object(entry, "admit", side_effect=stopped):
             f = Path(self.home, "o.json")
-            a = entry.Args(id="x-1", worktree=None, slot="s1", dry_run=False, fresh=False, quiet=True,
+            a = Args(id="x-1", worktree=None, slot="s1", dry_run=False, fresh=False, quiet=True,
                             outcome_file=str(f))
             with mock.patch.object(signal, "signal"), redirect_stdout(io.StringIO()):
                 rc = entry.main(a, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())

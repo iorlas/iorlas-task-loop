@@ -10,6 +10,7 @@ from typing import Any
 from jsonl_log import close_held
 
 from taskloop.adapters import childenv, ident
+from taskloop.adapters.bd import BdStore
 from taskloop.app.loop.env import ReloadNote
 from taskloop.app.reconcile import leases
 from taskloop.app.release import reexec
@@ -21,7 +22,7 @@ from taskloop.app.track import trail, verbs
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import lanes as wlanes
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import factorybackup, paths
+from taskloop.contracts import bdbackup, factorybackup, paths
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.identity import Identity
@@ -49,7 +50,7 @@ def release_dead(repo: str, store: Beads, now: float, git: Git, who: Identity) -
     return leases.release_dead(repo, store, running(repo, git, who, store), ident.hostname(), now)
 
 
-def chores(repo: str, spawner: Spawner, env: Env, git: Git, who: Identity) -> None:
+def chores(repo: str, spawner: Spawner, env: Env, git: Git, who: Identity, store: BdStore | None = None) -> None:
     wlanes.chore(console.say, spawner, env)  # delegate's lane status filed again when the snapshot is 20 min old (the dash reads the file)
     # asks of closed beads closed, unanswered ones parked, answers no run used flagged
     cfg = wslots.load_cfg(repo, git)
@@ -63,6 +64,17 @@ def chores(repo: str, spawner: Spawner, env: Env, git: Git, who: Identity) -> No
         factorybackup.backup(who.config, trail.now())
     except Exception as e:
         console.say(f"loop: db backup: {e}")
+    if store is not None:
+        try:
+            for line in bdbackup.nightly(who.config, wslots.repo_key(repo), lambda argv: _bd(store, argv), trail.now()):
+                console.say(line)
+        except Exception as e:
+            console.say(f"loop: bd backup: {e}")
+
+
+def _bd(store: BdStore, argv: list[str]) -> tuple[int, str, str]:
+    r = store.passthrough(argv)
+    return r.code, r.out, r.err
 
 
 def claim(repo: str, store: Beads, bead: BeadId, wt: str, slot: str, git: Git, who: Identity,
