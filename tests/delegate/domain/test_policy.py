@@ -43,7 +43,8 @@ class Policy:
     def test_the_denial_is_a_typed_record_with_the_matched_path(self):
         d = denial("secret", "Bash", {"command": "cat .env"})
         assert isinstance(d, ev.Denied)
-        assert denial_item(d) == {"kind": "secret", "tool": "Bash", "path": ".env", "input": {"command": "cat .env"}}
+        assert denial_item(d) == {"kind": "secret", "tool": "Bash", "path": ".env", "input": {"command": "cat .env"}, "reason": None}
+        assert denial_item(denial("policy", "Bash", {}, "reviewer said no"))["reason"] == "reviewer said no"
         assert denial_item(denial("policy", "Read", {"file_path": "/a"}))["path"] == "/a"
         assert denial("x", "Bash", None).input == {}
 
