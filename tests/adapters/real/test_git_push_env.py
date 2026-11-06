@@ -68,7 +68,7 @@ class PortPushHasNoGateAuthority(Case):
         assert sh("git", "rev-parse", "side", cwd=self.remote).stdout.strip() == oid
 
     def test_the_port_lease_push_meets_the_refusing_hook(self):
-        outcome = self.port.push_lease(str(self.repo), "origin", "HEAD:refs/heads/main")
+        outcome = self.port.push_lease(str(self.repo), "origin", "HEAD:refs/heads/main", "")
         assert not outcome.ok
         assert "refused: not green" in outcome.output
         assert sh("git", "rev-parse", "--verify", "main", cwd=self.remote, check=False).returncode != 0

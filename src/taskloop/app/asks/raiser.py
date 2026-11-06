@@ -28,6 +28,7 @@ class Asking:
     now: float
     why: str = ""
     why_code: WhyCode | None = None
+    artifacts: tuple[str, ...] = ()  # store ids of the pictures that show the owner what the stop is about
 
 
 def build(spec: AskSpec, n: int, at: Asking) -> Ask:
@@ -35,7 +36,7 @@ def build(spec: AskSpec, n: int, at: Asking) -> Ask:
                t=at.now, status=AskStatus.OPEN, tried=list(spec.tried), options=list(spec.options), detail=spec.detail,
                why_code=at.why_code, why=at.why[:WHY_CAP], parks_at=at.now + PARK_AFTER_S, brief_hash=at.brief_hash, repo=at.repo,
                title=at.title[:200], owner_cause=spec.owner_cause, blocking=spec.blocking, default=spec.default,
-               key=similar.key_of(spec.ask_class, spec.decision))
+               key=similar.key_of(spec.ask_class, spec.decision), artifacts=list(at.artifacts))
 
 
 def raise_ask(asks: AskStore, spec: AskSpec, at: Asking, adrs: AdrStore | None = None) -> tuple[Ask | None, list[str]]:

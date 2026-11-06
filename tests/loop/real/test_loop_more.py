@@ -25,6 +25,7 @@ import itertools  # noqa: E402
 from support import (  # noqa: E402
     eventlog,
     looptest,
+    netgate,
 )
 from support.checked import run_checked  # noqa: E402
 
@@ -40,7 +41,6 @@ from taskloop.contracts.config import LoopConfig  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop.contracts.loop import LoopCommand, LoopState, LoopTarget  # noqa: E402
-from taskloop.domain.lanes import netgate  # noqa: E402
 
 
 class UpAt:
