@@ -5,7 +5,6 @@ import os
 import shutil
 import stat
 import sys
-import tempfile
 import threading
 import time
 from pathlib import Path
@@ -13,6 +12,7 @@ from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
@@ -24,7 +24,7 @@ from support.spawn import port_git  # noqa: E402
 from taskloop.app.release import pins  # noqa: E402
 from taskloop.app.wire import usage as usage_cmd  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
-from taskloop.contracts.stores import PinStore  # noqa: E402
+from taskloop.contracts.stores import PinStore, ReposStore  # noqa: E402
 
 # isort: split
 import contextlib  # noqa: E402
@@ -62,7 +62,7 @@ def sh(*args, cwd):
 
 class Base(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.home = Path(self.tmp.name)
         env = {"XDG_CONFIG_HOME": str(self.home / "cfg"), "APPDATA": str(self.home / "cfg"),
                "CLAUDE_CODE_SESSION_ID": "abcdef12-3456", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
@@ -106,7 +106,7 @@ class Records(Base):
         lines = (homes.config_dir() / "events.jsonl").read_text().splitlines()
         assert [json.loads(ln)["kind"] for ln in lines] == ["claim", "close"]
         assert json.loads(lines[0])["session"] == "abcdef12-3456"
-        assert [e["path"] for e in json.loads((homes.config_dir() / "repos.json").read_text())["repos"].values()] == [str(self.home)]
+        assert ReposStore(homes.cfg()).known() == [str(self.home)]
 
     @pytest.mark.skipif(os.name == "nt", reason="the registry lock is fcntl")
     def test_writers_registering_at_once_neither_crash_nor_lose_a_repo(self):
@@ -126,7 +126,7 @@ class Records(Base):
         for p in ps:
             p.join(60)
         assert errs == []
-        repos = json.loads((homes.config_dir() / "repos.json").read_text())["repos"]
+        repos = wire.dump(ReposStore(homes.cfg()).index())["repos"]
         assert len(repos) == 50
 
     def test_prune_keeps_recent(self):
@@ -306,7 +306,7 @@ class AskCli(Case):
     """tl ask: the inbox from the terminal. An answer is a typed record on the ask, never a comment."""
 
     def test_list_answer_and_withdraw(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             d = Path(tmp)
             asks = AskStore.at(ConfigDir(d / "task-loop"))
             for bead in ("x-1", "x-2"):
@@ -335,7 +335,7 @@ class ParkStaleAsks(Case):
     """tl-bxk.8.25: an ask with no answer 3 days after it was asked is parked, once, with a comment; it still waits."""
 
     def test_parks_only_late_unanswered_open_asks(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             d = Path(tmp)
             asks = AskStore.at(ConfigDir(d / "task-loop"))
             now = time.time()

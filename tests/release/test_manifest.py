@@ -2,11 +2,11 @@
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -21,7 +21,7 @@ NAME, MARKET = "iorlas-task-loop", "iorlas-marketplace"
 
 class Manifest(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name) / "plugin"
         (self.root / "skills").mkdir(parents=True)
@@ -54,7 +54,7 @@ class Manifest(Case):
 
 class DoctorInstall(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         home = Path(self.tmp.name)
         env = mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(home / "claude"), "XDG_CONFIG_HOME": str(home / "cfg")})

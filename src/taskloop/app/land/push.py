@@ -1,5 +1,7 @@
 """The push in the lock: the pass's tree on its base, the LFS objects first, then the land command; what a rejection or a network error
 asks of the land. Nothing is pushed twice, and a stop waits for a push that is half done."""
+import time
+from collections.abc import Callable
 from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol
@@ -14,6 +16,9 @@ from taskloop.app.land.state import PUSH_TRIES, PUSH_UP_FAILS, Land, Next, Phase
 from taskloop.contracts import fence
 from taskloop.contracts.ports import Beads, Git, Sh
 from taskloop.domain.land.matchers import Push as PushText
+
+PUSH_TIMEOUT_S = 600.0  # the land command's own limit (the default is an hour: a push stuck on a remote ate 25-48 min, tl-bxk.10.33.1)
+SLOW_PUSH_S = 30.0  # a push (LFS upload plus land command) that takes longer than this says where its time went
 
 
 class PushConfig(LandedConfig, Protocol):
@@ -66,9 +71,10 @@ def stale(git: Git, wt: str, base_ref: str, gate_pass: GatePass) -> Problem | No
 
 
 class Pusher:
-    def __init__(self, host: PushHost, out: Lfs) -> None:
+    def __init__(self, host: PushHost, out: Lfs, clock: Callable[[], float] = time.monotonic) -> None:
         self.e = host
         self.out = out
+        self.clock = clock
 
     def push(self, st: Land, gate_pass: GatePass) -> str | Problem | Next:
         """-> the sha landed; Next.AGAIN rejected, try again; Next.REST a network error, rest first; a stale Problem when the tree or the
@@ -81,11 +87,14 @@ class Pusher:
         want = target(e.cfg.land)
         e.land_remote_oid = cleanup.remote_oid(e.git, e.wt, want[0], e.task_branch) if want and e.task_branch else ""
         with e.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
+            t0 = self.clock()
             lrc, ltail = self.out.lfs_push()  # the pushed ref's LFS objects first: the push must not point at objects origin lacks
+            t1 = self.clock()
             sha = e.git.rev_parse(e.wt, "HEAD")  # the commit pushed, named in the refspec
             # push_request strips diagnostics; push_refspecs also drops successful hook output and adds processes.
             # Keep configured commands here until the Git port can return the complete captured-SHA request outcome.
-            rc, tail = e.sh(pin_head(e.cfg.land, sha), pin=True) if lrc == 0 else (lrc, ltail)
+            rc, tail = e.sh(pin_head(e.cfg.land, sha), pin=True, timeout=PUSH_TIMEOUT_S) if lrc == 0 else (lrc, ltail)
+            self.say_if_slow(t1 - t0, self.clock() - t1, rc, tail)
             if rc != 0:
                 sha = ""
             else:
@@ -108,6 +117,15 @@ class Pusher:
         e.warn(f"push rejected (main moved), try {st.pushes + 1} of {PUSH_TRIES}")
         e.steps.move("land", "push_race", f"push rejected (main moved): try {st.pushes + 1} of {PUSH_TRIES}")
         return Next.AGAIN
+
+    def say_if_slow(self, lfs_s: float, land_s: float, rc: int, tail: str) -> None:
+        """A push over SLOW_PUSH_S: the seconds of the LFS upload and of the land command (hook, network and remote are inside the
+        command), and what ended it."""
+        if lfs_s + land_s <= SLOW_PUSH_S:
+            return
+        ended = ("pushed" if rc == 0 else "timed out" if rc == 124 else "rejected (main moved)" if PushText.rejected(tail)
+                 else "network error" if PushText.transient(tail) else f"failed (exit {rc})")
+        self.e.warn(f"slow push: lfs {lfs_s:.0f}s, land command {land_s:.0f}s, {ended}")
 
     def not_rejected(self, st: Land, tail: str, what: str = "land failed", why: str = "") -> None:
         """A push that failed for another reason: a network error rests, anything else is a fault."""

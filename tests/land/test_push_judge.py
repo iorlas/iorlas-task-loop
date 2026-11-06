@@ -2,11 +2,11 @@
 import json
 import re
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -27,7 +27,7 @@ from taskloop.domain.checks.specs import gate_items
 
 class PushJudge(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.repo = tmp.name
         self.profile = Path(self.repo) / ".task-loop.json"

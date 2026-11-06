@@ -9,6 +9,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final
 
+from any_failure_fp import backoff
+
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.delegate import Permanence
 from taskloop.contracts.parks import Park
@@ -171,8 +173,7 @@ def history(rec: Park | None) -> dict[str, int]:
 
 
 def delay(policy: PauseRule, attempt: int, random: Callable[[], float]) -> float:
-    """Cap the exponential before applying ±20% jitter; clamp exponent to avoid overflow after long outages."""
-    return min(policy.base_s * 2 ** min(max(attempt, 0), 63), policy.cap_s) * (0.8 + 0.4 * random())
+    return backoff(policy.base_s, policy.cap_s, attempt, random)
 
 
 def exhausted(policy: PauseRule, rec: Park | None, reason: str, attempt: int, fingerprint: str) -> bool:

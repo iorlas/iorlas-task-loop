@@ -1,12 +1,12 @@
 """The release bump is authorized by the judge's ordinary suite receipt, including cached verification."""
 import json
 import os
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
 from support.checked import run_checked
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
@@ -25,7 +25,7 @@ from taskloop.stores.real import real_stores
 class ReleaseReceipt(Case):
     def test_judge_finds_bump_receipt_after_green_suite_and_cache_hit(self):
         for cached in (False, True):
-            with self.subTest(cached=cached), tempfile.TemporaryDirectory() as tmp:
+            with self.subTest(cached=cached), TemporaryDirectory() as tmp:
                 self.exercise_release(Path(tmp), cached)
 
     def exercise_release(self, root, cached):
