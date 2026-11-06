@@ -3,7 +3,6 @@
 import copy
 import json
 import sys
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -16,6 +15,7 @@ from delegate.contracts.json_types import Json
 from delegate.domain.lanes.lane import Lane
 from support.case import Case
 from support.procsim import real_proc
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -66,7 +66,7 @@ class ZaiTests(Case):
         a = SimpleNamespace(resume=None, schema=None, timeout=10)
         env_in = {"OPENCODE_AUTH_JSON": "override", "OPENCODE_CONFIG": "override", "ZHIPU_API_KEY": "override"}
         with (
-            tempfile.TemporaryDirectory() as tmp,
+            TemporaryDirectory() as tmp,
             patch.object(env, "config_dir", return_value=Path(tmp)),
             patch.object(OpenCodeHarness, "find_exe", return_value="opencode"),
             patch.object(sys, "platform", "darwin"),
@@ -106,7 +106,7 @@ class ZaiTests(Case):
 
             with (
                 self.subTest(lane=lane),
-                tempfile.TemporaryDirectory() as tmp,
+                TemporaryDirectory() as tmp,
                 patch.object(env, "config_dir", return_value=Path(tmp)),
                 patch.object(OpenCodeHarness, "find_exe", return_value="opencode"),
                 patch.object(sys, "platform", "darwin"),

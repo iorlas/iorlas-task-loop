@@ -18,6 +18,12 @@
     "tree_hash": "5a8d73fd64cb794bbf5fe93b681bd0e543877c489f9c18149fb1e53bb9aa4328"
   },
   {
+    "name": "any_contract",
+    "shelf_tag": "0235df7ea88457944b36bf30c1b63ecde7677a85",
+    "shelf_commit": "0235df7ea88457944b36bf30c1b63ecde7677a85",
+    "tree_hash": "ed296dfe1f504dab0143350b57bd310710241ddb724d20cc32ba517841025d66"
+  },
+  {
     "name": "any_failure_fp",
     "shelf_tag": "bf97aba8c13426f488ccb5ddd74c8432d5840781",
     "shelf_commit": "bf97aba8c13426f488ccb5ddd74c8432d5840781",
@@ -64,6 +70,12 @@
     "shelf_tag": "atomic-io-v0.2.0",
     "shelf_commit": "8bc0850c3385226d0ef2f6a71f94373ad845a305",
     "tree_hash": "915889c7033b4c61f0e5657fc3f0edbe55911cd91980e2a65b06f6ac5d4f553b"
+  },
+  {
+    "name": "beads_client",
+    "shelf_tag": "be0b06fe6b8ea3758c634fa0a9896f2cb25104ad",
+    "shelf_commit": "be0b06fe6b8ea3758c634fa0a9896f2cb25104ad",
+    "tree_hash": "47b3d743d57f744f6ac65ea07e98ea0a684744f8f0ef4aa342853aa8bd59a7f9"
   },
   {
     "name": "child_env",

@@ -125,9 +125,10 @@ class OwnerGate(Case):
     def test_owner_runs_the_base_policy_and_rechecks_evidence(self):
         with (mock.patch.object(self.git, "show", return_value=self.policy),
               mock.patch.object(self.gate, "worktree", return_value="/worktree"),
-              mock.patch.object(self.gate, "red", side_effect=[["base-check"], []])):
+              mock.patch.object(self.gate, "red", side_effect=[["base-check"], ["base-check"], []])):
             assert self.gate.require("topic", "tip", profile_change=TEXT) == "base"
-        self.cmds.run.assert_called_once_with(["tl", "check", "--repo", "/worktree", "--policy-commit", "base"])
+        self.cmds.run.assert_called_once_with(["tl", "check", "--repo", "/worktree", "--policy-commit", "base"],
+                                              extra={"TL_GREEN_LEDGER": "1"})
 
     def test_stack_records_exactly_one_row_after_gate_before_push(self):
         log, forge = mock.Mock(), mock.Mock()

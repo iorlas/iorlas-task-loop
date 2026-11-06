@@ -15,6 +15,7 @@ class EnvVar(StrEnum):
     TL_WORKTREE = "TL_WORKTREE"                  # the worktree the run works in
     TL_BRANCH = "TL_BRANCH"                      # the branch checked out in it
     TL_WORKER_MB = "TL_WORKER_MB"                # address-space cap of each xdist worker (dev/runtests.py)
+    TL_GREEN_LEDGER = "TL_GREEN_LEDGER"          # 1: dev/runtests.py skips test files green on their key (the land gate sets it)
     TL_SCRATCH = "TL_SCRATCH"                    # moves the scratch root (contracts/scratch.py; dev/runtests.py reads it too)
     # handovers between two processes of the engine (one typed record each, see contracts/env.py)
     TL_REEXEC = "TL_REEXEC"                      # the run that re-execs itself after a code update

@@ -442,7 +442,7 @@ class GateCase(StackCase):
         profile = '{"engine": {"checks": [{"id": "lint", "argv": ["true"], "run": "gate"}]}}'
         self.git.profiles = dict.fromkeys([*OID.values(), "origin/main"], profile)
         self.green: set[str] = set()  # trees the store holds a pass for
-        patch = mock.patch.object(StackGate, "red", lambda gate, engine, tree, base, wt="":
+        patch = mock.patch.object(StackGate, "red", lambda gate, engine, tree, base, wt="", env=None:
                                   [] if tree in self.green else [CheckId("lint")])
         patch.start()
         self.addCleanup(patch.stop)

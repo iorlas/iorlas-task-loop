@@ -1,11 +1,11 @@
 """The supervisor's log watcher: a limit phrase in a log line quoting the worker's own command must not mark the lane out."""
 
-import tempfile
 from pathlib import Path
 
 from any_agent import vendors
 from any_agent.harnesses.opencode import OpenCodeHarness
 from any_agent.supervisor import LogWatcher
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 
@@ -18,7 +18,7 @@ REAL = "ERROR 2026-10-26T21:40:00 +9ms service=llm error=Rate limit reached for 
 
 class LogWatch:
     def run_poll(self, lines):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             (Path(d) / "a.log").write_text("old\n")
             w = LogWatcher(Path(d), vendors.words().limit.search, OpenCodeHarness().echoes_input)
             with open(Path(d) / "a.log", "a") as f:
@@ -35,6 +35,6 @@ class LogWatch:
         assert "Rate limit reached" in stop.msg
 
     def test_lines_from_before_the_launch_are_not_seen(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             (Path(d) / "a.log").write_text(REAL + "\n")
             assert LogWatcher(Path(d), vendors.words().limit.search, OpenCodeHarness().echoes_input).poll() is None
