@@ -97,8 +97,6 @@ MACHINE_FIXED: Final[frozenset[Reason]] = frozenset({
 
 
 TABLE: Final[dict[tuple[Producer, str], PauseRule]] = {
-    # Locally synthesized delegate reasons absent from delegate's recorded contract.
-    ("delegate", Reason.ONLY_FAMILY_UNREADY): PauseRule("transient", 60, 3600, 3),
     ("engine", Reason.SAME_FAMILY): PauseRule("transient", 60, 3600, 3),
     ("engine", Reason.ENGINE_CRASH): PauseRule("transient", 60, 3600, 3),
     ("engine", Reason.STAGE_REFUSED): PauseRule("needs_owner"),
