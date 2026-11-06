@@ -127,8 +127,7 @@ class FitsTheLimit(Case):
             host = SimpleNamespace(
                 cfg=SimpleNamespace(brief_kb=5, pick_label="", needs_info_label="", owner_author="a"),
                 store=store, bead="t-1", run_dir=Path(d),
-                brief_file=Path(d) / "b.md", answered=None, warn=warns.append, log=SimpleNamespace(note=notes.append),
-                planner=SimpleNamespace(cap=SimpleNamespace(answered_words=lambda: "")))
+                brief_file=Path(d) / "b.md", answered=None, warn=warns.append, log=SimpleNamespace(note=notes.append))
             with mock.patch.object(mod, "peek", lambda store, bead_id: bead):
                 Briefs(host).export()
         assert len(warns) == 1
