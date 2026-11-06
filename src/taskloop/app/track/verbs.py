@@ -12,7 +12,6 @@ from taskloop.adapters.bd import BdStore
 from taskloop.adapters.beadtools import attempt, peek
 from taskloop.adapters.gitrepo import repo_root
 from taskloop.adapters.ident import config_dir
-from taskloop.adapters.opencode import transcript_of
 from taskloop.app.track import runs as runq
 from taskloop.app.track.trail import event, provenance, prune_events, register_repo
 from taskloop.contracts import fence
@@ -208,9 +207,6 @@ def trace(bead: BeadId, last: int, as_json: bool, env: Env) -> int:
                 runs.append(r)
     if last:
         runs = runs[-last:]
-    for r in runs:
-        for s in r.get("sessions", []):
-            s["transcript"] = s.get("transcript") or transcript_of(env, s.get("family"), s.get("ref"))
     if as_json:
         print(json.dumps(runs, indent=1, ensure_ascii=False))
         return 0
