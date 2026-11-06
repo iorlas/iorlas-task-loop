@@ -2,8 +2,8 @@
 import pytest
 
 from taskloop.adapters.bd import BdRun, BdStore
+from taskloop.contracts.beadsport import BdFailure
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure
 
 RAW = "Error: failed to open database: embeddeddolt: check table wisps: Error 1105: table has unknown fields"
 

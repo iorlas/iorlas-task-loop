@@ -6,8 +6,8 @@ from taskloop.app.land.gate import Problem, ProblemKind
 from taskloop.app.land.gitcall import must
 from taskloop.app.land.parts import MoveSteps, StageCheckout
 from taskloop.contracts import plancheck
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.plancheck import PlanData
-from taskloop.contracts.ports import Git
 
 
 class FixRounds(Protocol):

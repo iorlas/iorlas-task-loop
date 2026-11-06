@@ -18,11 +18,13 @@ from taskloop.app.wire import slots as wslots
 from taskloop.app.wire.slots import cfg_source
 from taskloop.contracts import inputsets, runlife
 from taskloop.contracts.bd_errors import BdCommandFailure
+from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
 from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git, Spawner
+from taskloop.contracts.procport import Spawner
 from taskloop.contracts.rowstores import ReposStore
 from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.beads import matchers as beadlint

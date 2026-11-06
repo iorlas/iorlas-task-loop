@@ -12,8 +12,9 @@ from taskloop.app.launch import repos
 from taskloop.app.track import trail
 from taskloop.cli import loop as cli
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.ports import Git, Spawner
+from taskloop.contracts.procport import Spawner
 
 
 def cmd_next(a: Any, env: Env, spawner: Spawner, git: Git, who: Identity, here: Path = wloop.HERE, now: Callable[[],

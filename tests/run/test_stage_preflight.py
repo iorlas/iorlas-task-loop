@@ -10,7 +10,7 @@ from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.builders import cfg_with
+from support.cfgs import cfg_with
 from support.fakes import FakeBeadStore, FakeClock, FakeRouter
 from support.memstores import fake_stores
 from support.stdout import stdout_in
@@ -23,10 +23,10 @@ from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import Result, Step
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitfacts import StatusRow
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.ports import Git
 from taskloop.contracts.run import RunReport, RunState
 from taskloop.contracts.runrows import RunRows
 

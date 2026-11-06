@@ -4,7 +4,7 @@ from typing import Protocol
 from taskloop.app.land.gate import Problem, ProblemKind
 from taskloop.app.land.landed import LandedConfig
 from taskloop.app.land.parts import OutcomeSteps
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 
 
 class LandRebaseHost(Protocol):

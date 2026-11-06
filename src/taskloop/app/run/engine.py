@@ -21,10 +21,12 @@ from taskloop.contracts import fence, rundocs
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import Result
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
-from taskloop.contracts.ports import Clock, Git, Spawner
+from taskloop.contracts.ports import Clock
+from taskloop.contracts.procport import Spawner
 from taskloop.contracts.run import RunReport
 from taskloop.domain import outcome as oc
 from taskloop.stores.bundle import Stores

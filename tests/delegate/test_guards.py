@@ -36,6 +36,19 @@ class SecretGuard:
         ):
             assert self.guard(ti) == 2, ti
 
+    def test_blocks_the_engines_own_state_and_every_auth_file(self):
+        for ti in (
+            {"command": "sqlite3 ~/.config/task-loop/factory.db .dump"},
+            {"command": "cat ~/.config/task-loop/githooks/pre-push"},
+            {"file_path": "/home/x/.config/task-loop/events.jsonl"},
+            {"command": "cat $CODEX_HOME/auth.json"},
+            {"command": "cat /var/overlay-x/auth.json"},
+            {"command": "cat ~/.local/share/opencode/auth.json"},
+        ):
+            assert self.guard(ti) == 2, ti
+        for ti in ({"command": "cat docs/task-loop.md"}, {"command": "rg author.json src"}):
+            assert self.guard(ti) == 0, ti
+
     def test_read_only_steps_may_run_reading_commands_only(self):
         for c in (
             "cd /s && git diff 53cc344 -- client; git log --oneline -5",

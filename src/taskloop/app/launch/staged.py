@@ -6,8 +6,8 @@ from pathlib import Path
 
 from taskloop.adapters.base_tree import clean_tree
 from taskloop.app.checks.host import CheckoutView
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.ports import Git
 
 
 class StagedCheckout:

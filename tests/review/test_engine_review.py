@@ -11,25 +11,11 @@ from contextlib import contextmanager
 from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.engine_case import (
-    BEAD,
-    CLEAN,
-    EXIT_127,
-    FALSE,
-    PLAN,
-    STILL_OPEN,
-    WRITE,
-    EngineTest,
-    finding,
-    review,
-    sh,
-    stop,
-    verdict,
-    without_shims,
-)
+from support.engine_case import EXIT_127, EngineTest, sh, stop, without_shims
+from support.plans import BEAD, CLEAN, FALSE, PLAN, STILL_OPEN, WRITE, finding, review, verdict
 
 # isort: split
-from support.builders import cfg_with
+from support.cfgs import cfg_with
 from support.narrow import must
 from support.spawn import port_git
 

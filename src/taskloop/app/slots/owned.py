@@ -7,8 +7,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from taskloop.contracts.gitport import Git, SlotGit
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Git, SlotGit
 from taskloop.contracts.slots import SlotGitError
 from taskloop.contracts.worktreerows import WorktreeDocs
 from taskloop.contracts.worktrees import Owned

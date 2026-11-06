@@ -12,8 +12,8 @@ from support.fake_checks import FakeChecks, failed, hung, passed
 from support.procsim import real_proc
 from support.tags import contract, domain
 
+from taskloop.contracts.checksport import Checks, CheckSpec
 from taskloop.contracts.env import snapshot
-from taskloop.contracts.ports import Checks, CheckSpec
 
 
 class ChecksContract:
