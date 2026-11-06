@@ -2,11 +2,10 @@
 matches a past ask and a decision in force, and a soft ask never makes a run wait."""
 import json
 import sys
-import tempfile
 from pathlib import Path
 
 from support.case import Case
-from support.tmpdir import TemporaryDirectory
+from support.tmpdir import TemporaryDirectory, mkdtemp
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -174,7 +173,7 @@ class SoftAsks(Case):
 
     def test_a_soft_ask_is_not_parked_and_a_later_answer_is_used(self) -> None:
         raiser.raise_ask(self.asks, question("decision", "keep v1"), asking(repo="/nowhere"))
-        marker = Path(tempfile.gettempdir()) / "no-marker-x"
+        marker = Path(mkdtemp()) / "no-marker-x"
         assert sweeps.park_stale(self.asks, lambda _r: FakeBeads(), marker, T + 10 ** 7, 0) == []
         intake.Intake(self.asks, FakeBeads(), lambda: T + 9, "denis").answer(BeadId("t-1"), "text", "migrate")
         state, got = raiser.check(self.asks, BeadId("t-1"), "h", False, T + 10)

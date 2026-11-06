@@ -52,7 +52,7 @@ from taskloop.app.run import reload as run_reload  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts.env import Env, snapshot  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
-from taskloop.contracts.run import Reexec  # noqa: E402
+from taskloop.contracts.run import Reexec, ReexecNote  # noqa: E402
 from taskloop.contracts.stores import BadVersionStore  # noqa: E402
 
 PLAN_DEF = "    def plan(self, again: bool = False) -> PlanData:\n"
@@ -176,7 +176,7 @@ class Reload(te.EngineTest):
         assert rc == 0
         assert self.closed and self.closed[0].startswith("merged ")
         assert gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)) == "d2"  # pyrefly: ignore[missing-attribute]
-        assert not homes.cfg().reexec_note(BeadId("t-1")).exists()  # a run that ended is no crash after an exec
+        assert reexec.reexec_store(homes.cfg(), BeadId("t-1")).get() is None  # a run that ended is no crash after an exec
         logs = [json.loads(x) for x in eng.log_path.read_text().splitlines()]
         assert len([x for x in logs if x["kind"] == "run_start"]) == 1  # one run record for the one run
         notes = [x["text"] for x in logs if x["kind"] == "note" and x["text"].startswith("task-loop 0.")]
@@ -230,20 +230,9 @@ class Reload(te.EngineTest):
                 if len(spawned) == 2:  # the fallback run gives its outcome
                     Path(self.cmd[self.cmd.index("--outcome-file") + 1]).write_text(json.dumps({"v": 2, "outcome": "landed", "bead": "t"}))
                     return 0
-                homes.cfg().reexec_note(BeadId("t-1")).parent.mkdir(parents=True, exist_ok=True)
-                homes.cfg().reexec_note(BeadId("t-1")).write_text(
-                    json.dumps(
-                        {
-                            "v": 1,
-                            "run": "t-1-20261026-120000",
-                            "bead": "t-1",
-                            "from": "0.1.0",
-                            "to": "0.2.0",
-                            "step": "write",
-                            "from_dir": str(old),
-                            "t": time.time(),
-                        }
-                    )
+                reexec.reexec_store(homes.cfg(), BeadId("t-1")).write(
+                    ReexecNote(run="t-1-20261026-120000", bead="t-1", frm="0.1.0", to="0.2.0", step="write",
+                               from_dir=str(old), t=time.time())
                 )
                 return 1  # import error of the new image: no outcome, the note is still there
 
@@ -280,7 +269,7 @@ class Reload(te.EngineTest):
         assert [(e["old"], e["new"]) for e in fb] == [("0.2.0", "0.1.0")]
         assert "0.2.0" in [e.version for e in must(BadVersionStore(homes.cfg()).get()).entries]
         assert any("RED" in c for c in said)
-        assert not homes.cfg().reexec_note(BeadId("t-1")).exists()
+        assert reexec.reexec_store(homes.cfg(), BeadId("t-1")).get() is None
 
     # -- point 2: delegate is resolved per call, never held
     def test_delegate_route_is_resolved_again_each_call(self):

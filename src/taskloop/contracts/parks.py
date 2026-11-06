@@ -34,7 +34,7 @@ class ParkStore:
         self.cfg = cfg if isinstance(cfg, paths.ConfigDir) else paths.ConfigDir(cfg)
 
     def doc(self, bead: BeadId) -> WaitDoc[Park]:
-        return WaitDoc(self.cfg, PARK, bead, Park, self.cfg.park(bead))
+        return WaitDoc(self.cfg, PARK, bead, Park)
 
     def get(self, bead: BeadId) -> Park | None:
         return self.doc(bead).get()
