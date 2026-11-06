@@ -2,10 +2,10 @@
 from any_lease import Leases
 
 from taskloop.adapters.locks import ProcessLockTable
-from taskloop.contracts import paths, stores
+from taskloop.contracts import paths, rundocs, stores
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.checkpoint import Checkpoint
-from taskloop.contracts.checks import BaseRedRecord, CheckRun, Durations, PassRecord
+from taskloop.contracts.checks import BaseRedRecord, CheckRun, PassRecord
 from taskloop.contracts.config import HostResources
 from taskloop.contracts.docrows import RowDocs
 from taskloop.contracts.followups import FollowupOutbox
@@ -13,7 +13,6 @@ from taskloop.contracts.receiptrows import DbDocSet
 from taskloop.contracts.stores import AskStore, JsonStore
 from taskloop.stores.books import CheckpointBook
 from taskloop.stores.bundle import Stores
-from taskloop.stores.files import FileDocSet
 from taskloop.stores.profile_changes import profile_changes
 from taskloop.stores.ticketrows import TicketRows
 
@@ -31,6 +30,6 @@ def real_stores(cfg: paths.ConfigDir) -> Stores:
         loop_rest=lambda key: stores.RestStore(cfg, key),
         results=lambda repo, check: DbDocSet(cfg, repo, check, "pass", PassRecord),
         base_red=lambda repo: DbDocSet(cfg, repo, None, "base_red", BaseRedRecord),
-        durations=FileDocSet(cfg.check_durations, Durations),
+        durations=rundocs.durations(cfg),
         check_run=lambda run, rnd: JsonStore(cfg.check_run(run, rnd), CheckRun),
         host=JsonStore(cfg.host(), HostResources), locks=ProcessLockTable(cfg), leases=Leases(cfg.leases()), tickets=TicketRows(cfg))
