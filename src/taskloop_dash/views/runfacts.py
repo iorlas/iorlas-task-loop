@@ -11,13 +11,14 @@ from pathlib import Path
 
 from taskloop.contracts import log as rec
 from taskloop.contracts.dash import Phase
+from taskloop.contracts.log import CallTokens
 from taskloop.contracts.runlife import Liveness
 from taskloop.contracts.trace import Tokens
 from taskloop.contracts.wire import Rec
 from taskloop_dash.views import phases
 
 
-def fresh(t: Tokens) -> int:
+def fresh(t: Tokens | CallTokens) -> int:
     """Fresh tokens: input - cached + output."""
     return max(0, t.in_ - t.cached) + t.out
 
@@ -115,13 +116,13 @@ def spans_of(records: Sequence[rec.EngineLog]) -> tuple[Span, ...]:
 
 def calls_of(records: Sequence[rec.EngineLog]) -> tuple[Call, ...]:
     starts = {r.id: r for r in records if isinstance(r, rec.CallStart)}
-    return tuple(Call(starts[r.id].t, starts[r.id].step, r.lane, fresh(r.tokens), r.cost, cost_known(r))
+    return tuple(Call(starts[r.id].t, starts[r.id].step, r.lane, fresh(r.tokens), r.cost or 0.0, cost_known(r))
                  for r in records if isinstance(r, rec.CallEnd) and r.id in starts)
 
 
 def cost_known(r: rec.CallEnd) -> bool:
     """Harness and free are facts; 'unknown' is not. A log from before the source was recorded counts a positive cost only."""
-    return r.cost_source in ("harness", "free") or (not r.cost_source and r.cost > 0)
+    return r.cost_source in ("harness", "free") or (not r.cost_source and (r.cost or 0.0) > 0)
 
 
 def waits_of(records: Sequence[rec.EngineLog]) -> tuple[Wait, ...]:
@@ -249,7 +250,7 @@ def fold(state: FoldState, new_records: Sequence[rec.EngineLog]) -> FoldState:
         elif isinstance(r, rec.CallEnd):
             start = pending.pop(r.id, None)
             if start:
-                calls.append(Call(start.t, start.step, r.lane, fresh(r.tokens), r.cost, cost_known(r)))
+                calls.append(Call(start.t, start.step, r.lane, fresh(r.tokens), r.cost or 0.0, cost_known(r)))
         elif isinstance(r, rec.WaitStart):
             opened[r.id] = r
         elif isinstance(r, rec.WaitEnd):
