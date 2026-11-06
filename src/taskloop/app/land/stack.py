@@ -52,13 +52,13 @@ class Stack:
     def __init__(self, forge: Forge, cmds: Cmds, log: RunLog, git: Git, repo: str, lock: Path, record: Callable[[str, str], int],
                  sync: Callable[[], DoltPush], owner: str, session: str, gate: StackGate, beads: Beads, wait_min: float | None = None,
                  named: Callable[[str], None] = lambda _bead: None,
-                 is_slot: Callable[[str], bool] = lambda _path: False, slot_base: str = "", *, profile_change: str | None = None,
-                 jobs: int = 1) -> None:
+                 is_slot: Callable[[str], bool] = lambda _path: False, slot_base: str = "", *, cfg: ConfigDir,
+                 profile_change: str | None = None, jobs: int = 1) -> None:
         self.forge, self.cmds, self.log, self.git, self.repo, self.lock = forge, cmds, log, git, repo, lock
         self.record, self.sync, self.owner, self.session, self.wait_min = record, sync, owner, session, wait_min
         self.gate, self.named = gate, named  # named(bead): the run's manifest learns each bead
         self.beads, self.failure_reason = beads, ""
-        self.is_slot = is_slot
+        self.is_slot, self.cfg = is_slot, cfg
         self.slot_base = slot_base or f"origin/{forge.base}"
         self.profile_change = profile_change
         self.jobs = jobs  # gates run at once before the serial merges
@@ -87,7 +87,7 @@ class Stack:
                     self.sync_bd()
         finally:
             for row in self.pending:
-                cleanup.retry(self.git, self.log, row, self.is_slot, self.slot_base)
+                cleanup.retry(self.git, self.log, row, self.is_slot, self.slot_base, cfg=self.cfg)
         return rc
 
     def validate_beads(self, items: list[StackItem]) -> None:
