@@ -286,8 +286,9 @@ def test_keys(repo, tests, tracked=None):
     return keys
 
 
-def ledger_path(given):
-    return Path(given or Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "task-loop" / "green-tests.txt")
+def ledger_path(given, environ=None):
+    env = os.environ if environ is None else environ
+    return Path(given or Path(env.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "task-loop" / "green-tests.txt")
 
 
 def read_ledger(path):
