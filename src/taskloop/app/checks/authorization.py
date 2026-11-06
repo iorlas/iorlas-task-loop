@@ -26,7 +26,7 @@ def profile(git: Git, wt: str, tree: TreeSha) -> config.EngineConfig:
 def memo_for(stores: Stores, git: Git, wt: str, cfg: config.EngineConfig, tree: TreeSha, base: BaseSha, env: Env) -> RunMemo:
     """The memo a delivery asks: the judged tree's inputs as `wt` holds them (its gitignored files under `inputs` too), the shared
     receipt environment."""
-    memo = RunMemo(stores, check_files.repo_key(git, wt), InputKeys(git, wt, tree), base, keyed_env(env))
+    memo = RunMemo(stores, check_files.repo_key(git, wt), InputKeys(git, wt, tree, pins=cfg.pin_files), base, keyed_env(env))
     memo.checks = {c.id: repo_check(c, cfg) for c in cfg.checks}
     return memo
 

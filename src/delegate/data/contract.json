@@ -203,7 +203,8 @@
   "--engine-only-advisory",
   "--only-family",
   "--call-id",
-  "--writer-exec-allow"
+  "--writer-exec-allow",
+  "--read-root"
  ],
  "usage": {
   "tokens": "in includes cached; also per call, never cumulative: in_fresh (uncached input), cache_read, cache_write (null when the vendor does not report it), out, and cache_write_by_ttl {5m,1h} on claude",

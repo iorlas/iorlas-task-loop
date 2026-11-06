@@ -1527,6 +1527,7 @@
    "reflect": true,
    "writer_family": [],
    "writer_exec_allow": [],
+   "writer_read_roots": [],
    "planner_notes": "",
    "shot_table": "",
    "write_fresh_stage_k": 100,
@@ -1616,6 +1617,7 @@
    "queued_match": "",
    "lock_fail": "",
    "slow_cmd": "",
+   "pin_files": [],
    "project_log": "",
    "worker_rules": "",
    "test_pattern": "^\\s*(def test_|async def test_|\\[(Test|UnityTest|Fact|Theory|TestMethod|TestCase)\\b|#\\[test\\]|(it|test)\\(|func Test)",
@@ -1729,6 +1731,7 @@
    "openai"
   ],
   "writer_exec_allow": [],
+  "read_roots": [],
   "tools": [
    {
     "name": "factory",

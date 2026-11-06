@@ -138,7 +138,7 @@ class CheckExecutor:
         is the diff's: if nothing it reads changed, a host that has the resource has nothing new to verify."""
         lack = self.resources.lacking(c)
         st.changed = self.host.checkout.changed_paths() if st.changed is None else st.changed
-        changed = touched(c, st.changed)
+        changed = touched(c, st.changed, self.host.cfg.pin_files)
         said = "its inputs changed: it waits for a host that has it" if changed else "its inputs are unchanged: the land may go on"
         why = f"deferred: needs {', '.join(lack)}, which this host does not have; {said}"
         self.host.log.note(f"`{c.id}` {why}")
