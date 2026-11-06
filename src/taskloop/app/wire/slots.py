@@ -2,7 +2,6 @@
 loop's own worktree when slots are off. The composition root for `tl slot ...`, the loop and the engine."""
 import contextlib
 import functools
-import json
 import os
 import sys
 import time
@@ -10,6 +9,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from taskloop.adapters import profile_at
 from taskloop.adapters.beadtools import bd_store, peek
 from taskloop.adapters.gitrepo import repo_root
 from taskloop.adapters.ident import hostname
@@ -48,25 +48,14 @@ def profile_source(repo: str, base: str | None, git: Git) -> tuple[dict[str, Any
         commit = git.rev_parse(repo, base + "^{commit}") if base else ""
     except NotARepo:
         commit = ""  # a folder not yet initialized has only its local profile
-    path = Path(repo) / ".task-loop.json"
+    path = Path(repo) / profile_at.FILE
     if commit:
         try:
-            text = git.show(repo, commit, ".task-loop.json")
-        except SlotGitError as err:
-            try:
-                if not git.ls_tree(repo, commit, ".task-loop.json"):
-                    return {}, commit
-            except SlotGitError:
-                pass  # absence was not established: preserve the original read error
-            raise config.ProfileReadError(str(path), commit, err) from err
-        try:
-            return json.loads(text), commit
-        except ValueError as err:
+            return profile_at.raw_at(git, repo, commit) or {}, commit
+        except (SlotGitError, ValueError) as err:
             raise config.ProfileReadError(str(path), commit, err) from err
     try:
-        return json.loads(path.read_text(encoding="utf-8")), ""
-    except FileNotFoundError:
-        return {}, ""
+        return profile_at.raw_in(repo) or {}, ""
     except (OSError, ValueError) as err:
         raise config.ProfileReadError(str(path), "", err) from err
 
@@ -106,7 +95,7 @@ def profile_slots(repo: str, git: Git | None = None) -> SlotsConfig:
     if git is not None:
         return cfg_source(repo, git)[0].slots
     try:
-        return load_profile(json.loads((Path(repo) / ".task-loop.json").read_text(encoding="utf-8"))).slots
+        return load_profile(profile_at.raw_in(repo) or {}).slots
     except (OSError, ValueError):
         return SlotsConfig()
 

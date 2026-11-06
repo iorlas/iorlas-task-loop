@@ -89,9 +89,13 @@ class CheckHost(Protocol):
     @property
     def env(self) -> Env: ...  # the process environment, taken once at the edge: what the children are built from
     @property
-    def killed(self) -> bool: ...  # the last sh() of this thread was stopped by the engine
+    def killed(self) -> bool: ...  # the last sh() of this thread was stopped by the engine (an `in: linux` run sets it the same way)
+    @killed.setter
+    def killed(self, value: bool) -> None: ...
     @property
     def wall_hit(self) -> bool: ...  # ...at its wall limit
+    @wall_hit.setter
+    def wall_hit(self, value: bool) -> None: ...
     @property
     def bead_env(self) -> Mapping[str, str]: ...  # the slot's environment (sh() gives it to every command)
 
@@ -134,9 +138,17 @@ class CleanHost:
     def killed(self) -> bool:
         return self.original.killed
 
+    @killed.setter
+    def killed(self, value: bool) -> None:
+        self.original.killed = value
+
     @property
     def wall_hit(self) -> bool:
         return self.original.wall_hit
+
+    @wall_hit.setter
+    def wall_hit(self, value: bool) -> None:
+        self.original.wall_hit = value
 
     def sh(self, cmd: Sequence[str], timeout: float = 3600, check: bool = False, save: Path | None = None,
            env: Mapping[str, str] | None = None, pin: bool = False, what: str = "command", cwd: Path | None = None,
