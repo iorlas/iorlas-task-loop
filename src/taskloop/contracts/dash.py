@@ -412,6 +412,8 @@ class BeadDetail(Rec):
     description: str = ""
     acceptance: str = ""
     comments: list[Msg] = msgspec.field(default_factory=list)
+    decisions: Annotated[list[Msg], msgspec.Meta(description="Overrun and RetryDecision records of the bead's runs, oldest first")] = (
+        msgspec.field(default_factory=list))
     passes: list[Pass] = msgspec.field(default_factory=list)
     artifacts: list[Artifact] = msgspec.field(default_factory=list)
     waits_for: list[str] = msgspec.field(default_factory=list)
