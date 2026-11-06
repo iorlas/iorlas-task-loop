@@ -130,13 +130,26 @@ class HistoryStore:
     def __init__(self, path: Path) -> None:
         self.path = path
 
+    @property
+    def lost_path(self) -> Path:
+        return self.path.with_name(self.path.name + ".lost")
+
     def add(self, row: HistoryRow) -> None:
-        """Never fails a run."""
-        with contextlib.suppress(Exception), locked(self.path):
-            if self.path.exists() and self.path.stat().st_size > HISTORY_MAX:
-                self._rotate(time.time() - HISTORY_DAYS * 86400)
-            append_json(self.path, codec.to_json(row))
-            private(self.path)
+        """Never fails a run. A row that cannot be written is said on stderr and counted in `<history>.lost` (doctor shows the count)."""
+        try:
+            with locked(self.path):
+                if self.path.exists() and self.path.stat().st_size > HISTORY_MAX:
+                    self._rotate(time.time() - HISTORY_DAYS * 86400)
+                append_json(self.path, codec.to_json(row))
+                private(self.path)
+        except Exception as e:
+            self._lost(row, e)
+
+    def _lost(self, row: HistoryRow, err: Exception) -> None:
+        run = getattr(row, "run_id", "")
+        print(f"delegate: history row lost ({type(err).__name__}: {err}); kind={row.KIND} run {run}", file=sys.stderr)
+        with contextlib.suppress(Exception):
+            append_json(self.lost_path, {"ts": row.ts, "kind": row.KIND, "run_id": run, "error": f"{type(err).__name__}: {err}"})
 
     def _rotate(self, cut: float) -> None:
         keep = [r for r in self._read(0.0) if r[0].ts >= cut]
