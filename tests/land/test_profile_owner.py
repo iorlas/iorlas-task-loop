@@ -181,7 +181,7 @@ class OwnerJudge(Case):
         self.clock = FakeClock(1000)
         self.git = FakeGit(merge_base="base", symbolic_ref="", dirty=True,
                            **{"rev_parse__base^{tree}": "base-tree", "rev_parse__tip^{tree}": "tree",
-                              "rev_parse__HEAD^{tree}": "tree", "rev_parse__origin/main": "base", "rev_parse__HEAD": "tip"})
+                              "rev_parse__HEAD^{tree}": "tree", "rev_parse__origin/main": "base", "rev_parse__HEAD": "tip", "diff": ""})
         self.stores = fake_stores()
         self.profile = json.dumps({"engine": {"checks": [{"id": "base-check", "argv": ["true"], "run": "gate"}]}})
         for patch in (mock.patch.object(self.git, "ls_tree", side_effect=lambda repo, rev, path: entry(rev)),

@@ -11,7 +11,10 @@ from taskloop.contracts.env import Env
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.ports import Clock, Git
 from taskloop.contracts.runkey import BaseSha
+from taskloop.domain.matchers import secrets_added
 from taskloop.stores.bundle import Stores
+
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 
 class PushStatus(IntEnum):
@@ -128,6 +131,17 @@ class PushJudge:
             return True
         return self.green(cfg, tree, self.base_for(tip, cfg))
 
+    def credential_leaks(self, deliveries: list[tuple[PushTip, EngineConfig | None]]) -> tuple[str, ...]:
+        """One line per delivered tip whose patch against its base adds a credential."""
+        out = []
+        for tip, cfg in deliveries:
+            # no base (a first push to a fresh origin) means all of it is new
+            base = (self.base_for(tip, cfg) if cfg else self.git.rev_parse(self.repo, self.base_ref())) or EMPTY_TREE
+            kinds = secrets_added(self.git.diff(self.repo, base, tip.sha))
+            if kinds:
+                out.append(f"{tip.ref} ({tip.sha[:12]}) adds a credential ({', '.join(kinds)}); remove it (and rotate it), then push")
+        return tuple(out)
+
     def judge(self, tips: tuple[PushTip, ...]) -> PushDecision:
         try:
             policies = [self.policy_profile(tip) for tip in tips]
@@ -143,7 +157,9 @@ class PushJudge:
             for tip, _cfg in deliveries if tip.remote_sha.strip("0") and not self.git.is_ancestor(self.repo, tip.remote_sha, tip.sha))
         if rewinds:
             return PushDecision(PushStatus.REFUSED, rewinds)
-        return self.judge_delivery(deliveries)
+        decision = self.judge_delivery(deliveries)
+        leaks = self.credential_leaks(deliveries) if decision.status == PushStatus.ALLOWED else ()
+        return PushDecision(PushStatus.REFUSED, leaks) if leaks else decision
 
     def why(self, tip: PushTip, cfg: EngineConfig | None) -> dict[CheckId, str]:
         """The first differing key field per unproven step; display only, so a failure to explain never changes the verdict."""

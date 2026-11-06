@@ -36,3 +36,23 @@ class NetText:
     @staticmethod
     def down(tail: str) -> bool:
         return _NETWORK.search(tail[-600:]) is not None
+
+
+_SECRETS: Final = (
+    ("private key", re.compile(r"-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----")),
+    ("AWS access key", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
+    ("GitHub token", re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b")),
+    ("assigned secret", re.compile(r"""(?i)\b\w*(?:secret|token|passw(?:or)?d|api_?key)\w*\s*[:=]\s*["'][A-Za-z0-9/+_.-]{20,}["']""")),
+)
+
+
+def secrets_added(diff: str) -> list[str]:
+    """The kinds of credential on the lines a patch adds (a `+` line, not the `+++` header), once each, in order of first sight."""
+    found: list[str] = []
+    for line in diff.splitlines():
+        if not line.startswith("+") or line.startswith("+++"):
+            continue
+        for kind, rx in _SECRETS:
+            if kind not in found and rx.search(line):
+                found.append(kind)
+    return found
