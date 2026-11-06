@@ -8,11 +8,11 @@ from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 import support.paths  # noqa: E402, F401
+from support import netgate  # noqa: E402
 from support.narrow import must  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.app.loop.net import NetState  # noqa: E402
-from taskloop.domain.lanes import netgate  # noqa: E402
 from taskloop.stores import call_state as cs  # noqa: E402
 
 KEY = ("write", 1, 0, 2)

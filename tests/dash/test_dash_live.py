@@ -61,6 +61,23 @@ def make_run(root):
 
 
 class Feed(Case):
+    def test_a_burst_larger_than_one_page_is_delivered_in_full_across_polls(self):
+        with tempfile.TemporaryDirectory() as d:
+            _log, lf, run = self.run_of(d)
+            self.refresh(run)
+            first = live.page(run)
+            n = live.MAX_PAGE + 50
+            put(lf, [{"t": T + 10 + i / 1000, "k": "msg", "text": f"m{i}"} for i in range(n)])
+            self.refresh(run)
+            seen, cursor = [], live.decode(first["cursor"])
+            for _ in range(5):
+                got = live.page(run, cursor)
+                seen += [e["text"] for e in got["events"] if e.get("text", "").startswith("m")]
+                cursor = live.decode(got["cursor"])
+                if not got["events"]:
+                    break
+            assert seen == [f"m{i}" for i in range(n)]
+
     def run_of(self, d):
         b, lf = make_run(d)
         return str(b.log), lf, live.LiveRun(ConfigDir(Path(d) / 'task-loop'), b.run)

@@ -1,13 +1,13 @@
 """The dashboard's existing run event feed names checks executed in the slot."""
 
 from support.case import Case
+from support.memstores import fake_stores
 
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.contracts import log
 from taskloop.contracts.checks import Check
 from taskloop.contracts.ids import CheckId
 from taskloop.contracts.runlife import Liveness
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 from taskloop_dash.views import live_events, live_lines
 
