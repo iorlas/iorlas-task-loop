@@ -22,7 +22,7 @@ from taskloop.contracts.ledger import LedgerEntry
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.looprows import LoopRows
 from taskloop.contracts.run import RunState
-from taskloop.contracts.runlife import RETAIN, Liveness, shown
+from taskloop.contracts.runlife import GONE, RETAIN, Liveness, shown
 from taskloop.contracts.slots import slots_of
 from taskloop.contracts.slottable import SlotSource
 from taskloop.contracts.stores import LIVE, StatusStore
@@ -148,7 +148,7 @@ class Worlds:
             m = row.manifest
             if not m.mode or m.repo not in projects or (not m.state.live and (m.ended or m.started) < now - RETAIN):
                 continue
-            state = RunState.LOST if shown(m, now) is Liveness.LOST else m.state
+            state = RunState.LOST if shown(m, now) in GONE else m.state
             park = parks.get(m.bead)
             out.append(RunHeader(run=m.run, project=projects[m.repo], mode=m.mode, owner=m.owner, session=m.session,
                                  state=state, started=m.started, ended=m.ended, reason=m.reason, bead=m.bead,

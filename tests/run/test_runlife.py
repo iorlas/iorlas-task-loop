@@ -82,6 +82,19 @@ class Decision(Case):
         assert not runlife.is_lost(self.m(state=RunState.DONE), "h", late, dead)  # terminal stays
         assert runlife.is_lost(self.m(pid=0), "h", late, alive)  # no pid recorded
 
+    def test_a_gone_pid_is_suspect_after_two_missed_beats_not_running_until_the_reconciler_marks_it(self):
+        """A killed engine is not shown running for the five minutes before `lost`: its heartbeat is two beats old and its process
+        (pid and start token) is gone, so a reader shows it SUSPECT; the recorded state and the reconciler are untouched."""
+        dead, alive = (lambda p, start="": False), (lambda p, start="": True)
+        t = 1000.0 + runlife.SUSPECT_AFTER
+        assert runlife.suspect(self.m(), "h", t, dead)
+        assert not runlife.suspect(self.m(), "h", t - 1, dead)  # a beat or two late is normal
+        assert not runlife.suspect(self.m(), "h", t, alive)
+        assert not runlife.suspect(self.m(), "other", t, dead)
+        assert not runlife.suspect(self.m(state=RunState.DONE), "h", t, dead)
+        assert runlife.SUSPECT_AFTER < N
+        assert not runlife.is_lost(self.m(), "h", t, dead)  # lost is still written only after STALE_AFTER
+
     def test_a_pid_another_process_took_over_is_not_the_run(self):
         """After a reboot the run's pid may belong to an unrelated process: only the recorded start token says it is still the run."""
         same_start = lambda p, start="": start == "t1"  # noqa: E731
@@ -97,6 +110,9 @@ class Decision(Case):
                 manifest(cfg, run, BEAD, now - 9999, state=RunState.RUNNING, heartbeat=now - 9999, host=host_name(), pid=pid)
             before = {b.run: runlife.shown(b.manifest, now) for b in RunLocator(cfg).runs()}
             assert before == {"r-dead": Liveness.LOST, "r-live": Liveness.LIVE}
+            soon = now - 9999 + runlife.SUSPECT_AFTER
+            assert runlife.shown(RunLocator(cfg).get("r-dead").manifest, soon) is Liveness.SUSPECT  # type: ignore[union-attr]
+            assert runlife.shown(RunLocator(cfg).get("r-live").manifest, soon) is Liveness.LIVE  # type: ignore[union-attr]
             assert RunLocator(cfg).get("r-dead").manifest.state == RunState.RUNNING  # showing wrote nothing  # type: ignore[union-attr]
             assert runlife.reconcile(cfg, now) == ["r-dead"]
             after = {b.run: liveness(b.manifest) for b in RunLocator(cfg).runs()}
@@ -158,9 +174,14 @@ class Crash(Case):
         return [c["run"] for c in found]
 
     def test_a_fresh_heartbeat_reads_live_in_both(self):
-        self.now = self.t0 + 5 + N - 1
+        self.now = self.t0 + 5 + runlife.SUSPECT_AFTER - 1
         assert self.dash_says() == "live"
         assert self.report_crashes() == []
+
+    def test_a_killed_run_is_not_shown_live_before_the_reconciler_would_write_lost(self):
+        self.now = self.t0 + 5 + runlife.SUSPECT_AFTER
+        assert self.dash_says() == "lost"
+        assert self.report_crashes() == []  # nothing written: the report counts a crash only once `lost` is recorded
 
     def test_a_killed_run_reads_lost_once_its_heartbeat_is_stale(self):
         for age in (N, 2 * N):
