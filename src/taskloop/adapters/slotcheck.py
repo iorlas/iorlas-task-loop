@@ -1,5 +1,5 @@
 """Is git at a slot the slot's own checkout? A core.worktree or core.bare in the shared .git/config points every slot's git at
-another folder (lifesim-1mm); read as ambient config has it, unpinned, as a worker's or check's git would see it."""
+another folder; read as ambient config has it, unpinned, as a worker's or check's git would see it."""
 from pathlib import Path
 from typing import Any
 

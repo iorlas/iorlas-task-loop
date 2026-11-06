@@ -1,5 +1,5 @@
 """One Lease keeps beads' bd leases alive: the slot bead's and the task bead's from the slot take to the release (a slow slot
-setup, lifesim 5-12 min, outlasts a 5-minute lease), and run-task's own (the bead, and the slot bead of a loop that started it).
+setup, 5-12 min on a large consumer, outlasts a 5-minute lease), and run-task's own (the bead, and the slot bead of a loop that started it).
 Both a loop killed with SIGKILL and a run that outlives it then leave no slot free under a live run."""
 import contextlib
 import threading
