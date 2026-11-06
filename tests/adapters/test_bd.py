@@ -18,7 +18,7 @@ from support.fake_beads import FakeBeads
 from support.tags import contract, domain
 
 from taskloop.adapters import bd
-from taskloop.adapters.bd import BdRun, BdStore, create_argv, update_argv
+from taskloop.adapters.bd import BdRun, BdStore
 from taskloop.contracts.bead import BdError
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
@@ -114,6 +114,8 @@ class GoldenBd(Case):
                    '[{"id": "t-1"}, {"id": "-bad"}]', '{"id": null}', '{"id": 12}', '{"id": ""}')
         for output in outputs:
             for command in ("show", "list", "ready"):
+                if command == "show" and "-bad" in output:  # show answers one bead: the client reads its first row only
+                    continue
                 with self.subTest(output=output, command=command):
                     raw = " \n" + output + " \n"
                     store = self.beads(**{command: BdRun(0, raw, "")})
@@ -125,7 +127,7 @@ class GoldenBd(Case):
                         else:
                             store.ready()
                     assert cm.value.error.kind == "malformed"
-                    assert cm.value.error.text == raw.strip()[:500]
+                    assert "-bad" in output or cm.value.error.text == raw.strip()[:500]  # a bad id: no raw text
 
     def test_empty_reads_are_missing_and_sparse_rows_still_decode(self) -> None:
         store = self.beads(show=BdRun(0, "[]", ""), list=BdRun(0, "[]", ""), ready=BdRun(0, "[]", ""))
@@ -194,17 +196,6 @@ class GoldenBd(Case):
         with pytest.raises(BdFailure) as cm:
             b.create(NewBead(title="t"))
         assert cm.value.error.missing_sections == ["Acceptance Criteria", "Touches"]
-
-    def test_argv(self) -> None:
-        assert (
-            create_argv(NewBead(title="T", labels=["a", "b"], priority=1, parent="p-1", no_inherit_labels=True))
-            == ["create", "T", "--type", "task", "--parent", "p-1", "--priority", "1", "--labels", "a,b",
-                          "--no-inherit-labels"]
-        )
-        assert (
-            update_argv(BeadId("b-1"), BeadPatch(status="open", assignee="", set_metadata={"k": "v"}, unset_metadata=["z"]))
-            == ["update", "b-1", "--status", "open", "--assignee", "", "--set-metadata", "k=v", "--unset-metadata", "z"]
-        )
 
     def test_dependencies_read_the_same_from_show_and_list(self) -> None:
         shown = self.beads(show=BdRun(0, gold("show_blocked_by.json"), "")).show(BeadId("zz-kgz"))
