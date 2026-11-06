@@ -21,6 +21,7 @@ from taskloop.app.run.calls import timing
 from taskloop.app.run.lane_acts import LaneActs
 from taskloop.contracts import answers
 from taskloop.contracts import log as rec
+from taskloop.contracts.asked import Asked, Fallback, Updates
 from taskloop.contracts.delegate import REASON_OVERRUN, DelegateResult, RunRequest, StopFacts
 from taskloop.domain.lanes import policy as lp
 from taskloop.domain.lanes.denials import command_of, secret_false_positive
@@ -65,8 +66,8 @@ class WorkerCall:
         cwd: Any = None,
         at: tuple[int, ...] = (0, 0, 0),
         **meta: Any,
-    ) -> tuple[Any, str]:
-        """-> (the answer's data, its family)."""
+    ) -> Asked:
+        """-> the answer's data and family, and what it says about the run's threads (the caller applies them)."""
         e = self.e
         e.halt_point()
         e.waits.budget_check()
@@ -103,8 +104,8 @@ class WorkerCall:
             e.steps.move(step or node, "invalid_output", "; ".join(errs[:2]))
             c.tries += 1
             self.again(c)  # a refused or broken resume is not worth a second attempt: a new thread
-        self.end_call(c, ans)
-        return res.data, res.family or "delegate"
+        done = self.end_call(c, ans)
+        return Asked(res.data if res.data is not None else {}, res.family or "delegate", done)
 
     def start_call(
         self,
@@ -123,10 +124,11 @@ class WorkerCall:
         e = self.e
         writer = writer_family if node in READ_ONLY_NODES else None
         resume = resume_ref or (e.writer.delegate if resume_key else None)
+        reset = False
         if resume and resume_key and e.writer_fallback:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
             lane = dg.lane(e.fallback_lane) if e.fallback_lane else None
             if e.fallback_lane and lane is None:  # that lane is not configured here: no fallback
-                e.writer_fallback, e.fallback_lane = False, ""
+                reset = True
             elif lane is None or lane.usable is True:  # back again, or no lane known to wait for
                 e.steps.move(
                     step or node,
@@ -155,6 +157,7 @@ class WorkerCall:
             title,
         )
         c.visual = visual
+        c.thread = Updates(fallback=Fallback(False, "")) if reset else Updates()  # a fallback to a lane not configured here is dropped
         self.attach(c)
         return c
 
@@ -323,9 +326,9 @@ class WorkerCall:
         e = self.e
         if res.git_violation:
             e.warn("{} changed git: {}".format(c.node, "; ".join(res.git_violation)))
-        c.thread = asked.thread_updates(c, res, e.fallback_lane, (e.sessions[-1] if e.sessions else {}).get("context_k"),
-                                        e.hand.seen_now() if c.resume_key and res.ref else [])  # k tokens, None = unknown
-        asked.apply(e, c.thread)
+        ctx = (e.sessions[-1] if e.sessions else {}).get("context_k")  # k tokens, None = unknown
+        seen = e.hand.seen_now() if c.resume_key and res.ref else []
+        c.thread = asked.then(c.thread, asked.thread_updates(c, res, e.fallback_lane, ctx, seen))
         if c.resume_key and res.ref:
             c.resume = res.ref
         return answers.sent_errors(c.node, c.visual, res.data, res.say or res.text)
@@ -386,16 +389,15 @@ class WorkerCall:
         elif name:
             c.counts[name] += 1
 
-    def end_call(self, c: Call, ans: dg.Answer) -> None:
+    def end_call(self, c: Call, ans: dg.Answer) -> Updates:
+        """The call's updates to the run's threads, kept with the memo; the caller applies them to the engine."""
         e, res = self.e, ans.res
         done = asked.done_updates(c, res, c.thread)
-        asked.apply(e, done)
         if c.state is not None and c.prepared is not None:
             # the memo first, with the thread's fields in one transaction: a crash between this and consumed re-recovers, never loses
-            asked.settle(e, c, c.state.answer_file, c.prepared.snapshot)
+            asked.settle(e, c, done, c.state.answer_file, c.prepared.snapshot)
             c.state.consumed()
-        e.last_flag = done.flag  # same_family | degraded | ...: delegate could not give the usual lane
-        if e.last_flag == "same_family" or res.warning.strip():
+        if done.flag == "same_family" or res.warning.strip():
             # the owner's word: when only one family is up, it reviews its own work; say so (delegate's warning when it gives one),
             # in the log, the trace and the bead, and never pause for it
             note = "the {} step ran on the writer's own model family{}".format(
@@ -411,3 +413,4 @@ class WorkerCall:
         via = f"{res.family or 'delegate'}{(':' + model) if model else ''}"
         e.log.note(f"{c.node} → {shown}  [{via}, {int(res.secs)}s, ${res.cost:.2f}, total ${e.cost:.2f}]")
         self.ops.after(c, res)
+        return done
