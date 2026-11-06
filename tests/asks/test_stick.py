@@ -7,6 +7,7 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
+from support.memstores import fake_stores
 from support.narrow import must
 from support.tiers import domain
 
@@ -17,7 +18,6 @@ from taskloop.contracts.dash import Stick
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import Adr
 from taskloop.domain.asks import similar, specs
-from taskloop.stores.memory import fake_stores
 
 T = 1000.0
 Q = "Which save format should the engine keep for old files?"
