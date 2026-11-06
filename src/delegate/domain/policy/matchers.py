@@ -75,3 +75,8 @@ def pieces(cmd: str, bare: bool = False) -> list[list[str]] | None:
     if commands is None:
         return None
     return [[*c.assigns, *c.argv] if bare else list(c.words) for c in commands if c.words or (bare and (c.assigns or c.argv))]
+
+# A git setting passed in the environment does what `git -c` does (core.hooksPath turns the push gate off; a pager, ssh command or exec path
+# names a program), and GIT_DIR / GIT_WORK_TREE point git at another repository.
+GIT_ENV = re.compile(
+    r"(?<![\w])GIT_(?:CONFIG_\w+|EXEC_PATH|SSH(?:_COMMAND)?|ASKPASS|EXTERNAL_DIFF|PAGER|EDITOR|SEQUENCE_EDITOR|PROXY_COMMAND|DIR|WORK_TREE)=")
