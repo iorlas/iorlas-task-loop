@@ -5,12 +5,13 @@ from taskloop.app.land import cleanup
 from taskloop.app.run.finish import land_answer
 from taskloop.app.wire import closeguard
 from taskloop.app.wire.slots import load_cfg, profile_slots, slot_of
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.finish import finish_run
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.log import RunStart
-from taskloop.contracts.ports import Beads, Git
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 

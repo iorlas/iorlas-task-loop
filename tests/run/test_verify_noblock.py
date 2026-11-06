@@ -12,8 +12,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as T
-from support.builders import make_engine, plan_of
-from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict
+from support.builders import make_engine
+from support.cfgs import plan_of
+from support.engine_case import engine
+from support.plans import BEAD, CLEAN, PLAN, WRITE, verdict
 
 from taskloop.contracts import answers
 from taskloop.contracts.plancheck import PlanData

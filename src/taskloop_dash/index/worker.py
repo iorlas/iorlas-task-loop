@@ -6,8 +6,8 @@ import time
 from collections.abc import Callable
 
 from taskloop.contracts import factorydb
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Beads
 from taskloop_dash.index import Indexer
 
 

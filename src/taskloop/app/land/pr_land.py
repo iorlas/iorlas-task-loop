@@ -14,9 +14,10 @@ from taskloop.app.land.push import stale
 from taskloop.app.land.push_evidence import failure
 from taskloop.app.land.state import Land, Next
 from taskloop.contracts import fence
+from taskloop.contracts.beadsport import BeadPatch, Beads
 from taskloop.contracts.forge import CLOSED, MERGED, PR_NUMBER, PR_URL, Pr, pr_waited_on
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BeadPatch, Beads, Git
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.land.matchers import Push
