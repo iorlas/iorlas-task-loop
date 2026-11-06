@@ -5,13 +5,12 @@ and asked again; with no such worktree the gate makes one (detached at the oid, 
 command by hand. Still not green: it stops with the check's exit code. Each refused step says the first key field that differs
 from its newest receipt on the tree and base. A commit with no gate step passes. Its plan_cmd identifies the producer of planned skips."""
 import json
-import tempfile
 
 from taskloop.app.checks import authorization
 from taskloop.app.land.carry import Carry
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.profile_change import owner_refusal
-from taskloop.contracts import config
+from taskloop.contracts import config, scratch
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.env import Env
 from taskloop.contracts.ids import CheckId, TreeSha
@@ -121,6 +120,6 @@ class StackGate:
 
     def fresh(self, oid: str) -> str:
         """A clean worktree detached at `oid`, made for this gate run: a fresh checkout is what a land gate judges anyway."""
-        path = tempfile.mkdtemp(prefix="tl-land-gate-")  # an empty directory: git adds a worktree into it
+        path = str(scratch.scratch_dir(self.env.vars, "tl-land-gate-"))  # an empty directory: git adds a worktree into it
         self.cmds.port(f"git worktree add --detach {path} {oid[:12]}", lambda: self.git.add_worktree(self.repo, path, oid))
         return path
