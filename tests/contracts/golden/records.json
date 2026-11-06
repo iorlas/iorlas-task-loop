@@ -1395,6 +1395,7 @@
   "state": "done",
   "heartbeat": 1793050259.5,
   "pid": 4242,
+  "pid_start": "",
   "host": "box",
   "reason": "landed",
   "mode": "stage:land-stack",

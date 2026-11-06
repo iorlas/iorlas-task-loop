@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.builders import cfg_with
 from support.fakes import FakeBeadStore, FakeClock, FakeRouter
+from support.memstores import fake_stores
 from support.stdout import stdout_in
 from support.tlmain import tl
 
@@ -28,7 +29,6 @@ from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.ports import Git
 from taskloop.contracts.run import RunReport, RunState
 from taskloop.contracts.runrows import RunRows
-from taskloop.stores.memory import fake_stores
 
 
 @stdout_in("output")

@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 import support.paths  # noqa: F401
 from support.case import Case
+from support.memstores import MemDocSet
 
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.checks import BaseRedRecord, CheckResult, PassRecord
@@ -18,7 +19,6 @@ from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.receiptrows import DbDocSet, import_legacy_receipts
 from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 from taskloop.contracts.stores import Absent, JsonStore, Present
-from taskloop.stores.memory import MemDocSet
 from taskloop.stores.real import real_stores
 
 

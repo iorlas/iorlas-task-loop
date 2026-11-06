@@ -14,13 +14,13 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import procsim
+from support.memstores import MemDoc, MemLockTable, MemLog, fake_stores
 
 from taskloop.contracts import paths, wire
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.locks import LockRecord
 from taskloop.contracts.stores import JsonStore
 from taskloop.stores.bundle import Stores
-from taskloop.stores.memory import MemDoc, MemLockTable, MemLog, fake_stores
 from taskloop.stores.real import real_stores
 
 
