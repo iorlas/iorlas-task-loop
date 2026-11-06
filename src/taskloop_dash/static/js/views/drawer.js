@@ -102,6 +102,7 @@ function BeadTab({ d, snap, now }) {
     <h4>Acceptance</h4>${d.acceptance ? html`<${Md} text=${d.acceptance} cls="desc" />` : html`<p>—</p>`}
     ${d.waits_for.length > 0 && html`<h4>Waits for</h4>${d.waits_for.map(row)}`}
     ${d.unblocks.length > 0 && html`<h4>Unblocks</h4>${d.unblocks.map(row)}`}
+    ${d.decisions.length > 0 && html`<h4>Slow or rerouted · ${d.decisions.length}</h4>${d.decisions.map((m, i) => html`<${MsgLine} key=${i} msg=${m} now=${now} />`)}`}
     <h4>Comments · ${d.comments.length}</h4>${d.comments.map((m, i) => html`<${MsgLine} key=${i} msg=${m} now=${now} />`)}
   </div>`;
 }

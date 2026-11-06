@@ -3,6 +3,7 @@
 import os
 import subprocess
 import sys
+from dataclasses import replace
 from unittest.mock import patch
 
 from support.dashlogs import bead
@@ -69,6 +70,7 @@ class SnapshotStamps(fixtures.ApiFixture):
         self.store.find = listing
         with patch.object(dash_ports, "store", return_value=self.store), patch.object(profiles, "red_row", side_effect=red_row) as row:
             self.dash.env.ports = dash_ports.ports(ProcessEnv({"HOME": self.tmp.name, "XDG_CONFIG_HOME": self.tmp.name}))
+            self.dash.env.ports = replace(self.dash.env.ports, scorecard=lambda *_: None)  # its 60 s TTL reads git
             first = build()
             assert "z" in [s.id for s in first.slots]
             assert events
