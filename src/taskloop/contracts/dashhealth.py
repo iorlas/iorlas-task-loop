@@ -22,7 +22,7 @@ class Score(Rec):
     m2_pass: bool
     main_red: bool = False  # a revert landed on main since the window began (app/report/mainstate.py)
     retries: int = 0  # runs in the window beyond one per bead
-    kinds: dict[str, int] = msgspec.field(default_factory=dict)  # runs of the window by the outcome kind they stored (landed, ask_decision, fault_plan ...)
+    kinds: dict[str, int] = msgspec.field(default_factory=dict)  # runs by the outcome kind they stored
 
 
 @final
