@@ -6,12 +6,9 @@ import time
 from collections.abc import Callable
 
 from taskloop.contracts import factorydb, log, runfacts
-from taskloop.contracts.askrows import import_legacy_asks
 from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Beads
-from taskloop.contracts.receiptrows import import_legacy_receipts
-from taskloop.contracts.runrows import import_legacy
 from taskloop_dash import jsonl
 from taskloop_dash.index.beadpass import BeadPass
 from taskloop_dash.index.facts import Facts, append, decode, encode
@@ -152,9 +149,6 @@ def reindex(cfg: ConfigDir, *, clock: Callable[[], float] = time.time,
             repos: Callable[[], list[str]] = list, store_of: Callable[[str], Beads] | None = None) -> dict[str, float | int]:
     """The doctor's full rebuild uses exactly the worker's ingestion code."""
     start = time.monotonic()
-    import_legacy(cfg)
-    import_legacy_receipts(cfg)
-    import_legacy_asks(cfg)
     with Indexer(cfg, clock=clock) as index:
         index.clear()
         while not index.pass_once():
