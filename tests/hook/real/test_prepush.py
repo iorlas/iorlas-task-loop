@@ -130,11 +130,15 @@ class PrePush(Base):
         assert "is not green" in r.stderr
         assert self.git(self.origin, "rev-parse", "main").stdout.strip() != tip
 
-    def test_the_head_that_is_not_green_runs_the_plan_then_passes(self):
+    def test_the_head_that_is_not_green_is_refused_without_running_the_plan_then_passes_once_stamped(self):
         self.commit("b")
+        refused = self.push("HEAD:refs/heads/main")
+        assert refused.returncode != 0
+        assert "is not green" in refused.stderr
+        assert not list(self.cfg.rglob("*.json")), "the judge reads receipts and never runs the gate"
+        self.stamp("HEAD")
         assert self.push("HEAD:refs/heads/main").returncode == 0
         assert "judge-push --repo" in self.calls.read_text()
-        assert list(self.cfg.rglob("*.json")), "the application check service must retain evidence"
 
     def test_a_dirty_worktree_does_not_run_the_plan(self):
         self.commit("b")
