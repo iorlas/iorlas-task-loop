@@ -65,4 +65,3 @@ class ReposIndexFile(Case):
         if origin:
             (folder / ".git" / "config").write_text(f'[remote "origin"]\n\turl = {origin}\n', encoding="utf-8")
         return str(folder)
-

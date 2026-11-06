@@ -109,4 +109,3 @@ class FollowupRows(Case):
         box = FollowupOutbox(pending=[{"title": "t"}])
         self.docs.of("t-1").write(box)
         assert self.docs.of("t-1").get() == box and self.docs.keys() == ["t-1"]
-
