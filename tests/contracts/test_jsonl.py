@@ -20,7 +20,6 @@ from taskloop.contracts import paths, stores, wire
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.docstore import JsonStore
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.loop import LoopState
 from taskloop.contracts.snapshots import Pin
 
 
@@ -166,23 +165,6 @@ class StoresTest(Case):
         assert page.cursor == rl.file.size()
         assert [type(i.rec).__name__ for i in rl.tail(2).items] == ["Close"]  # the two before it are skipped lines
         assert rl.file.path == self.cfg.engine_log("tl-1-20261027-000000")
-
-    def test_a_json_document_is_replaced_whole(self):
-        st = stores.LoopStateStore(self.cfg, "abc123abc123")
-        assert st.get() is None
-        st.write(S.other(LoopState))
-        assert st.get() == S.other(LoopState)
-        assert list(st.path.parent.glob("*.tmp")) == []
-        assert json.loads(st.path.read_text())["v"] == 2
-        st.delete()
-        assert st.get() is None
-
-    def test_torn_stale_and_alien_files_read_as_absent(self):
-        st = stores.LoopCommandStore(self.cfg, "k")
-        st.path.parent.mkdir(parents=True)
-        for text in ('{"v": 1, "action": "stop', '{"v": 9, "action": "stop_now", "by": "d", "t": 1}', '[]', '{"v": 1, "action": "x"}'):
-            st.path.write_text(text)
-            assert st.get() is None, text
 
     def test_a_failed_write_leaves_no_temp_file_and_keeps_the_old_one(self):
         st = JsonStore(self.cfg.root / "pin.json", Pin)

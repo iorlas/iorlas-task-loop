@@ -6,7 +6,6 @@ import os
 import sys
 import threading
 from pathlib import Path
-from typing import Any, cast
 
 import pytest
 from support.case import Case
@@ -18,7 +17,6 @@ import support.paths  # noqa: F401
 # isort: split
 import jsonl_log as jsonl
 import suites
-from contracts import samples as S
 from rigs import FakeRig, RealRig
 from support.procsim import real_proc
 from support.tiers import contract
@@ -26,7 +24,6 @@ from support.tiers import contract
 from taskloop.adapters.locks import ProcessLockTable
 from taskloop.contracts import paths
 from taskloop.contracts.enums import LockWhat
-from taskloop.contracts.loop import Rest
 
 SUITES = [suites.DocContract, suites.AskContract, suites.CheckpointContract, suites.LogContract, suites.LockContract,
           suites.TicketContract]
@@ -90,29 +87,6 @@ class RealRaces(Case):
         seen += [(e.data["who"], e.data["i"]) for e in entries]
         assert len(seen) == 240
         assert len(set(seen)) == 240
-
-    def test_a_reader_never_sees_half_a_document_while_writers_replace_it(self) -> None:
-
-        doc = self.rig.stores.loop_rest("k")
-        doc.write(S.other(Rest))
-        stop = threading.Event()
-        bad: list[object] = []
-
-        def write() -> None:
-            n = 0
-            while not stop.is_set():
-                n += 1
-                doc.write(Rest(beads={f"b-{i}": float(n) for i in range(n % 40)}))
-
-        w = threading.Thread(target=write)
-        w.start()
-        for _ in range(1500):
-            if self.rig.stores.loop_rest("k").get() is None:
-                bad.append("absent")
-        stop.set()
-        w.join()
-        assert bad == []
-        assert [p.name for p in cast(Any, doc).path.parent.iterdir()] == [cast(Any, doc).path.name]  # no temp file left behind
 
     def test_holders_taking_one_lock_do_not_lose_updates(self) -> None:
         counter = self.cfg.root / "count.txt"

@@ -32,10 +32,6 @@ class ConfigDir:
     def land_push(self, stamp: int, branch: str) -> Path:
         return self.root / "land-push" / f"{stamp}-{branch}.log"
 
-    def run_manifest(self, run: RunId | str) -> Path:
-        """Legacy rollback copy, read only by runrows.import_legacy; current manifests live in factory.db."""
-        return self.run_dir(run) / "manifest.json"
-
     def hooks_dir(self) -> Path:
         """githooks/: the git hooks the engine writes at start; every subprocess tl starts gets it as core.hooksPath (adapters/childenv)."""
         return self.root / "githooks"
@@ -135,21 +131,12 @@ class ConfigDir:
     def check_durations(self, repo_key: str) -> Path:
         return self.root / "check-durations" / (f"{repo_key}.json")
 
-    def loop_state(self, repo_key: str) -> Path:
-        return self.root / "loop" / (f"{repo_key}.json")
-
-    def loop_command(self, repo_key: str) -> Path:
-        return self.root / "loop" / (f"{repo_key}.command.json")
-
     def loop_log(self, repo_key: str) -> Path:
         return self.root / "loop" / (f"{repo_key}.jsonl")
 
     def loop_runs(self, repo_key: str) -> Path:
         """The loop's own folder of the repo: run logs, outcome files, loop-<pid>.log, exits.jsonl, died-<pid>.json."""
         return self.root / "loop" / repo_key
-
-    def loop_rest(self, repo_key: str) -> Path:
-        return self.root / "loop" / (f"{repo_key}-rest.json")
 
     def slot_state(self, repo_key: str, slot: str) -> Path:
         """What one slot of one repo keeps for its commands (temp, dotnet and NuGet scratch): outside the worktree, kept across reuse."""
@@ -235,14 +222,6 @@ class RunFiles:
 
     def reexec(self) -> Path:
         return self.dir / "reexec.json"
-
-    def done_memo(self) -> Path:
-        """Legacy import only; consumed steps now live in factory.db."""
-        return self.dir / "done-memo.json"
-
-    def legacy_done_memo(self) -> Path:
-        """The earlier on-disk memo spelling, also read only by the importer."""
-        return self.dir / "done.json"
 
     def handoff(self) -> Path:
         return self.dir / "handoff.json"
