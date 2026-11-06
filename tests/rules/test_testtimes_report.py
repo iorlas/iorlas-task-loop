@@ -38,3 +38,11 @@ def test_the_table_and_the_warning_hold_ten_lines_and_count_the_rest(tmp_path):
 
 def test_no_worker_file_prints_nothing(tmp_path):
     assert report.budget_warning([str(tmp_path / "missing.json")]) == ""
+
+
+def test_a_real_test_that_waits_is_not_told_to_inject_the_clock():
+    wait = {"call_cpu": 0.1, "call_wall": 9.0}
+    assert "inject the clock" not in report.hint("tests/loop/real/test_x.py::t", wait)
+    assert "real process or socket" in report.hint("tests/loop/real/test_x.py::t", wait)
+    assert "inject the clock" in report.hint("tests/loop/test_x.py::t", wait)
+    assert report.hint("tests/loop/real/test_x.py::t", {"call_cpu": 6.0, "call_wall": 6.0}).startswith("real: keep the contract")

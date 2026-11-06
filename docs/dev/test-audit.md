@@ -68,3 +68,7 @@ The plan said 1241 tests open a real sqlite store (48 CPU s, 25%) and a seeded c
   that module is vendored, so the fix belongs in the shelf), and pathlib string building (5 s).
 - Next real levers: cache or hoist `real_env.base()` (shelf), keep gitsim refs in memory (the engine's ref memo needs a new inode per write:
   tests/support/gitsim/model.py `atomic_write`), and fewer `Path` objects per git question.
+
+## Handoff (testspeed lane, 2026-11-06)
+Done: layers and guards (#59), contract-then-consumers audit and Clock contract (#62), sleep census (#67), in-process selection (#70), sqlite template refuted, ambient env and vendored stream_proc/git_porcelain fixes (#75, #100), slowest-tests table (#80), inner loop (#81), ratchets judged on the change, no baseline files (#116), scratch root off ~/.config (#115). Suite: 4192 tests in 68 s wall on an idle 4-worker host (was 189 s loaded).
+Left: (1) tl-wnup.4, 255 `TemporaryDirectory` test sites to the `workdir` fixture: not worth the churn, #116 stops growth. (2) tl-wnup.2/.3, delegate spawners into real/ and a Spawner/procsim contract: pix-delegate. (3) land-stack phase timing in the run manifest (fetch, worktree, gate, push, judge): invisible today, pix-engine. (4) Tail by size: rules whole-tree walkers sum ~12 s CPU, `dev/affected.Repo` build is 3.1 s per worker; an on-disk AST cache was judged not worth it.
