@@ -158,7 +158,7 @@ class EngineFacts(te.EngineTest):
         assert [s.why for s in stuck] == ["same_red"]
         kinds = [type(r).__name__ for r in recs]
         assert kinds.index("Stuck") < kinds.index("Close")
-        dash = run_of(self.eng.log_path.stem, recs, recs[-1].t)
+        dash = run_of(self.eng.log_path.parent.name, recs, recs[-1].t)
         assert dash.stuck is not None
         assert passes.passes_of([dash])[-1].end == "stuck"
 

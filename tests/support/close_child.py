@@ -71,7 +71,7 @@ def main(argv: list[str]) -> None:
         eng.leftovers = [{"title": "Leftover one", "why": "later"}]
         eng.closer.close(oc.make(Kind.DONE))
     else:
-        write(journal, {"dead": eng.dead is not None, "run": eng.log_path.stem})
+        write(journal, {"dead": eng.dead is not None, "run": eng.log_path.parent.name})
         eng.run()
 
 

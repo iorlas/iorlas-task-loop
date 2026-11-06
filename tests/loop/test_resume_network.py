@@ -244,13 +244,13 @@ class Pause(NetBase):
         assert (self.blocked, self.ask()) == ([], None)
         assert not [c for c in self.bd_calls if c[:2] == ("label", "add")]  # no auto label, no engine-fault label
         assert any(c[:1] == ("update",) and "open" in c for c in self.bd_calls)
-        cost, run = first.cost, first.log_path.stem
+        cost, run = first.cost, first.log_path.parent.name
         real = time.time
         with mock.patch.object(time, "time", lambda: real() + 7200):  # the bead waited two hours for the network
             rc, s = self.run_engine({"review": [CLEAN]}, probe=Cycling(0))
             second = self.eng
             assert rc == 0, self.blocked
-            assert second.log_path.stem != run
+            assert second.log_path.parent.name != run
             before = RunLocator(first.home).get(run)
             after = RunLocator(second.home).get(second.run_id)
             assert before is not None and after is not None
@@ -274,11 +274,11 @@ class Pause(NetBase):
 
     def test_a_pause_older_than_the_longest_one_is_a_new_run(self):
         self.pause_in_review()
-        run = self.eng.log_path.stem
+        run = self.eng.log_path.parent.name
         real = time.time
         with mock.patch.object(time, "time", lambda: real() + reexec.NET_PAUSE_ADOPT_S + 60):
             self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, probe=Cycling(0))
-        assert self.eng.log_path.stem != run
+        assert self.eng.log_path.parent.name != run
 
     def test_a_lane_pause_names_the_role_the_loop_waits_for(self):
         out = stop("rate_limited", at=time.time() + 3 * 3600, lane="OPENAI_SUBSCRIPTION")
