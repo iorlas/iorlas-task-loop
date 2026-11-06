@@ -56,7 +56,7 @@ class RunLocator:
     def bundle(self, manifest: RunManifest) -> RunBundle:
         c = self.cfg
         log = c.engine_log(manifest.run)
-        return RunBundle(manifest, log, log.with_suffix(".stderr"), c.live_dir(manifest.run), c.run_dir(manifest.run))
+        return RunBundle(manifest, log, c.engine_stderr(manifest.run), c.live_dir(manifest.run), c.run_dir(manifest.run))
 
     def get(self, run: str) -> RunBundle | None:
         """The bundle of a run id; None when it has no readable manifest."""
@@ -104,14 +104,12 @@ class RunLocator:
                         pid_start=proc_start(os.getpid()) or "", host=host_name(), mode=mode, owner=owner, session=session)
         with self.rows.transaction() as con:
             self.rows.write(con, m, attempt_started=now)
-        self.cfg.engine_dir().mkdir(parents=True, exist_ok=True)
         return self.bundle(m)
 
     def take_up(self, run: str, repo: str, bead: str, now: float) -> RunBundle:
         """An engine takes an unfinished run up after exec: one more attempt, owned by this process. A resumed close keeps its terminal
         answer; a run folder with no manifest gets one. A terminal network pause continues under a new run id instead."""
         self.cfg.run_dir(run).mkdir(parents=True, exist_ok=True)
-        self.cfg.engine_dir().mkdir(parents=True, exist_ok=True)
         with self.rows.transaction() as con:
             old = self.rows.read(con, run)
             own = {"heartbeat": now, "pid": os.getpid(), "pid_start": proc_start(os.getpid()) or "", "host": host_name()}

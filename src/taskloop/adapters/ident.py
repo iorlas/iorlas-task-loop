@@ -4,11 +4,12 @@ import os
 import socket
 from pathlib import Path
 
+from taskloop.adapters import layout_migrate
 from taskloop.adapters.gitrepo import pinned_env
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.paths import default_root
+from taskloop.contracts.paths import ConfigDir, default_root
 
 
 def config_dir(env: Env) -> Path:
@@ -51,3 +52,8 @@ def plugin_version() -> str:
         return str(json.loads((PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")).get("version") or "")
     except (OSError, ValueError):
         return ""
+
+
+def layout_stop(cmd: str, config: Path) -> str:
+    """What every verb but `layout` and `doctor` says (and stops on) when the config dir is in the old layout; "" when it is not."""
+    return "" if cmd in ("layout", "doctor") else layout_migrate.stop_text(ConfigDir(config))
