@@ -174,7 +174,6 @@ def full_status(cfg: dict[str, Json], claude_usage: Json = None) -> tuple[dict[s
     t = env.now()
     st = env.load_state()
     lanes = decide.fleet_builder(cfg).build(st, t, claude_usage).lanes
-    decide.publish_lanes(lanes, st, t)
     ck = cockpit.cockpit(cfg, lanes, st, t)
     payload = status_payload(cfg, lanes, ck, st, t)
     write_snapshot(payload)
