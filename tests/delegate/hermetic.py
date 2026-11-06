@@ -50,7 +50,7 @@ def home(base):
 if "_delegate_hermetic" not in sys.modules:  # one audit hook per process, however many names this module is imported under
     sys.modules["_delegate_hermetic"] = types.ModuleType("_delegate_hermetic")
     sys.addaudithook(_audit)
-    from delegate.adapters.harness import opencode_sandbox
+    from any_agent.harnesses import opencode_sandbox
 
     opencode_sandbox._probed[:] = [None]  # no test starts a real sandbox-exec; tests of the preflight clear it
     home(ROOT)

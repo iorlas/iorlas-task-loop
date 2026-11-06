@@ -2,7 +2,8 @@
 
 from dataclasses import dataclass
 
-from delegate.contracts import events as ev
+from any_agent import events as ev
+
 from delegate.contracts.json_types import Json
 from delegate.domain.policy.matchers import heredoc_only_hit, secret_hit
 from delegate.domain.policy.shell import READ_ONLY_HELP, WRITER_RULE, git_write, read_only_problem, writer_problem

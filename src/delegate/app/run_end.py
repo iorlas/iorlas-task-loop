@@ -2,10 +2,11 @@
 
 from pathlib import Path
 
+from any_agent.supervisor import RunHooks
+
 from delegate.adapters import procs
 from delegate.app import env
 from delegate.app.lease import RunLease
-from delegate.app.supervisor import RunHooks
 from delegate.contracts import codec
 from delegate.contracts import history as hist
 from delegate.contracts.json_types import Json, arr, as_num, as_opt_int, as_opt_obj, as_opt_str, as_str, as_strs, obj

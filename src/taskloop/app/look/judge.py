@@ -83,7 +83,6 @@ class Judge:
         if summary:
             e.look_notes = [summary.strip()]
         e.pictures.persist_look()
-        e.look_prev = defects
         fresh = defects
         out_of_rounds = e.look_done >= int(e.cfg.look_rounds)
         if out_of_rounds:  # the rounds are capped: what is left is a follow-up, not another write

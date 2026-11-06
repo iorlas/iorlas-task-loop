@@ -11,8 +11,8 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from delegate.adapters.harness import opencode_sandbox as box
-from delegate.app import env, status, usage
+from any_agent.harnesses import opencode_sandbox as box
+from delegate.app import env, harnesses, status, usage
 from delegate.app.fleet import Fleet
 from delegate.contracts.routing import Settings
 from delegate.contracts.state import StateDoc, UsageCache
@@ -254,7 +254,7 @@ class RunCommand(RunBase):
     def test_read_only_shell_may_write_dot_task_but_nothing_else_in_cwd(self):
         repo = Path(self.repo)
         sh = self.base / "sh-task"
-        box.write_shell(self.repo, False, sh)
+        box.write_shell(harnesses.sandbox(), self.repo, False, sh)
 
         def run(c):
             return sp.run([str(sh), "-c", c], cwd=self.repo, capture_output=True, text=True, check=False)
@@ -268,16 +268,17 @@ class RunCommand(RunBase):
     @real_proc("delegate: a worker, git or CLI process")
     def test_external_directory_lets_read_only_lanes_read_runs_and_temp_only(self):
         with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": "/x/cfg"}):
-            ext = obj(box.permissions(False))["external_directory"]
+            ext = obj(box.permissions(harnesses.sandbox(), False))["external_directory"]
         assert ext["*"] == "deny"
         for want in ("/x/cfg/task-loop/runs/**", "/private/tmp/**", "/private/var/folders/**", "/tmp/**", "/var/folders/**"):
             assert ext[want] == "allow"
         assert len(ext) == 6
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("XDG_CONFIG_HOME", None)
-            assert str(Path.home() / ".config" / "task-loop" / "runs") + "/**" in obj(box.permissions(False))["external_directory"]
-        assert obj(box.permissions(True))["external_directory"] == "deny"
-        assert obj(box.permissions(False))["read"][str(Path.home() / ".ssh")] == "deny"
+            ext = obj(box.permissions(harnesses.sandbox(), False))["external_directory"]
+            assert str(Path.home() / ".config" / "task-loop" / "runs") + "/**" in ext
+        assert obj(box.permissions(harnesses.sandbox(), True))["external_directory"] == "deny"
+        assert obj(box.permissions(harnesses.sandbox(), False))["read"][str(Path.home() / ".ssh")] == "deny"
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_second_run_of_the_same_task_is_a_retry(self):

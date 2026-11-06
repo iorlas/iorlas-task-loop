@@ -51,6 +51,7 @@ from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.kinds import Kind
 from taskloop.contracts.landed import LandedStore
 from taskloop.domain.checks import lint
 from taskloop.domain.plan.matchers import gate_only_criteria
@@ -63,10 +64,10 @@ class EngineLand1Test(EngineTest):
         assert [c[0] for c in s.calls] == ["planner", "worker", "reviewer"]
         assert self.closed and self.closed[0].startswith("merged ")
         assert gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)) == "d2"
-        landed = LandedStore(homes.config_dir()).get(BeadId("t-1"))  # the one landed record: the sha pushed, which origin/main now is
-        assert landed is not None
         remote = gitq.git("rev-parse", "origin/main", cwd=str(self.wt))
-        assert (landed.sha, landed.base) == (remote, "origin/main")
+        # the one landed record, in the bead's metadata: the sha pushed, which origin/main now is
+        meta = [str(a) for c in self.bd_calls if c[:1] == ("update",) for a in c if "landed_sha" in str(a) or "landed_base" in str(a)]
+        assert any(remote in a for a in meta) and any("origin/main" in a for a in meta), meta
         assert any(c[:2] == ("comments", "add") and "Reflect (engine)" in c[3] for c in self.bd_calls)
         # the facets of this one run, each of which used to be a run of its own
         assert ("reviewer", None, "openai") in s.calls  # every green stage gets a cross-family review
