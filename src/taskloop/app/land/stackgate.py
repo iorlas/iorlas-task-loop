@@ -5,12 +5,12 @@ and asked again; with no such worktree the gate makes one (detached at the oid, 
 command by hand. Still not green: it stops with the check's exit code. Each refused step says the first key field that differs
 from its newest receipt on the tree and base. A commit with no gate step passes. Its plan_cmd identifies the producer of planned skips."""
 import json
-import tempfile
 
 from taskloop.app.checks import authorization
+from taskloop.app.land.carry import Carry
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.profile_change import owner_refusal
-from taskloop.contracts import config
+from taskloop.contracts import config, scratch
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.env import Env
 from taskloop.contracts.ids import CheckId, TreeSha
@@ -90,18 +90,21 @@ class StackGate:
         if profile_change is not None:
             argv.extend(["--policy-commit", base])
         try:
-            ran = self.cmds.run(argv)
-            red = self.red(engine, tree, base, wt)
+            carry = Carry(self.cmds, self.git, self.stores, self.repo, self.env)
+            if sum(carry.carried(engine, step, oid, tree, base, wt) for step in red):  # a pass on an earlier base that still holds
+                red = self.red(engine, tree, base, wt)
+            ran = self.cmds.run(argv) if red else None
+            red = self.red(engine, tree, base, wt) if ran else red
+            now = self.moved_during(branch, oid, wt, base) if red else ""  # while the gate's own checkout still exists
         finally:
             if made:
                 self.cmds.row(f"git worktree remove {made}", lambda: self.git.remove_worktree_force(self.repo, made))
         if red:
-            now = self.moved_during(branch, oid, wt, base)  # a run that judged inputs that changed under it is not a red
-            if now and regate:
+            if now and regate:  # a run that judged inputs that changed under it is not a red
                 self.cmds.log.note(f"{self.base_ref} moved from {base[:12]} to {now[:12]} while the gate ran: gating again on the new base")
                 return self.require(branch, oid, profile_change=profile_change, regate=False)
-            raise Stop(ran.exit or 1, f"{branch} ({oid[:12]}) is still not green for {self.named(red)} after "
-                                      f"`{text_of(argv)}` (exit {ran.exit})")
+            raise Stop(ran.exit if ran and ran.exit else 1, f"{branch} ({oid[:12]}) is still not green for {self.named(red)} after "
+                                                      f"`{text_of(argv)}` (exit {ran.exit if ran else 'not run'})")
         return base
 
     def moved_during(self, branch: str, oid: str, wt: str, base: str) -> str:
@@ -117,6 +120,6 @@ class StackGate:
 
     def fresh(self, oid: str) -> str:
         """A clean worktree detached at `oid`, made for this gate run: a fresh checkout is what a land gate judges anyway."""
-        path = tempfile.mkdtemp(prefix="tl-land-gate-")  # an empty directory: git adds a worktree into it
+        path = str(scratch.scratch_dir(self.env.vars, "tl-land-gate-"))  # an empty directory: git adds a worktree into it
         self.cmds.port(f"git worktree add --detach {path} {oid[:12]}", lambda: self.git.add_worktree(self.repo, path, oid))
         return path
