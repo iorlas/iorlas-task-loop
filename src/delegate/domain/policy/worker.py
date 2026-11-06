@@ -19,6 +19,7 @@ GIT_RULES = (
     "Git is the coordinator's. Stay in the current directory. Do not create or switch branches or worktrees; "
     "do not commit, amend, merge, rebase, reset, stash, tag or push. Read-only git is fine. Leave changes uncommitted."
 )
+READ_CAP_LINES = 300  # a whole-file Read of a longer file is refused: file dumps are 37% of all tokens (tl-7y6.6.13)
 CHECKED_FIELDS = ("command", "file_path", "path", "pattern", "glob")
 
 
@@ -48,6 +49,20 @@ def judge(tool_name: str | None, tool_input: dict[str, Json], read_only: bool, e
     if why:
         return Verdict(True, f"blocked by delegate: {why}; {WRITER_RULE}")
     return Verdict()
+
+
+def read_verdict(tool_name: str | None, tool_input: dict[str, Json], line_count: int | None) -> Verdict:
+    """A Read with no range (no offset, no limit) of a file longer than READ_CAP_LINES is blocked with the way out; `line_count` None
+    (not a file, unreadable) lets the tool report its own error."""
+    if tool_name != "Read" or line_count is None or line_count <= READ_CAP_LINES:
+        return Verdict()
+    if tool_input.get("offset") is not None or tool_input.get("limit") is not None:
+        return Verdict()
+    return Verdict(
+        True,
+        f"blocked by delegate: {tool_input.get('file_path')} has {line_count} lines; read it in ranges (Read with offset and limit, "
+        f"at most {READ_CAP_LINES} lines) or grep for what you need first.",
+    )
 
 
 def denial(kind: str, tool: str, inp: Json) -> ev.Denied:
