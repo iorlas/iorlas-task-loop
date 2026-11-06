@@ -18,7 +18,6 @@ from typing import Any
 from delegate import api
 from taskloop.adapters import delegate_wire
 from taskloop.contracts.delegate import REASON_TIMEOUT, DelegateResult, Permanence, RunRequest, Scope
-from taskloop.contracts.env import Env
 
 CONTRACT = delegate_wire.CONTRACT  # the contract number this engine speaks
 BACKSTOP_S = 120  # the engine stops the child at the node's limit plus this
@@ -80,16 +79,37 @@ def status_json(claude_usage: Any = None) -> dict[str, Any]:
         return {}
 
 
-def lane_status(env: Env | None = None) -> dict[str, Any]:
-    """Status `lanes` (name -> {out, out_until, ...}); {} when it cannot be read."""
-    lanes = status_json().get("lanes")
-    return lanes if isinstance(lanes, dict) else {}
+@dataclass(frozen=True)
+class Lane:
+    """One lane of delegate's fleet as the engine may ask it: usable now (None: delegate does not know the lane), why not, until when."""
+
+    name: str
+    usable: bool | None
+    why: str = ""
+    until: float = 0.0
 
 
-def role_status(env: Env | None = None) -> dict[str, Any]:
-    """Status `roles`: {role: {"usable": True | False | None, "lane", "why", "until", ...}}; {} when unreadable."""
-    roles = status_json().get("roles")
-    return roles if isinstance(roles, dict) else {}
+def lanes() -> list[Lane]:
+    """Every lane delegate knows, in its order. [] when the status cannot be read."""
+    raw = status_json().get("lanes")
+    out: list[Lane] = []
+    for name, row in (raw.items() if isinstance(raw, dict) else []):
+        v = row if isinstance(row, dict) else {}
+        usable = None if v.get("out") is None else not v["out"]
+        out.append(Lane(str(name), usable, str(v.get("reason") or ""), float(v.get("out_until") or 0.0)))
+    return out
+
+
+def lane(name: str) -> Lane | None:
+    """The lane `name`, or None when delegate has no such lane here."""
+    return next((x for x in lanes() if x.name == name), None)
+
+
+def roles_usable() -> dict[str, bool | None]:
+    """Per role: usable now (True | False), or None when delegate cannot say."""
+    raw = status_json().get("roles")
+    return {str(r): (v.get("usable") if isinstance(v, dict) and isinstance(v.get("usable"), bool) else None)
+            for r, v in (raw.items() if isinstance(raw, dict) else [])}
 
 
 def run_history(since: float = 0.0) -> list[RunRecord]:
