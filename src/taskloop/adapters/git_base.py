@@ -34,6 +34,10 @@ MISSING_REVISION = re.compile(r"fatal: (?:bad revision '.+'|Not a valid object n
 AMBIGUOUS_REVISION = re.compile(r"fatal: ambiguous argument '.+': unknown revision or path not in the working tree\.")
 
 
+# Linux says "up to mount point" where macOS says "of the parent directories".
+NOT_A_REPO = re.compile(r"fatal: not a git repository \(or any (of the )?parent (directories|up to mount point .+)\)(: \.git)?")
+
+
 def error_line(text: str) -> str:
     """The line of git's stderr that says what went wrong: the first fatal/error one, else the last."""
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
@@ -68,7 +72,7 @@ def read_failure(args: tuple[str, ...], r: subprocess.CompletedProcess[str]) -> 
     if args[:2] == ("remote", "get-url") and r.returncode == 2 and re.fullmatch(r"error: No such remote '.+'", tail):
         kind = MissingRemote
     if r.returncode == 128:
-        if (re.fullmatch(r"fatal: not a git repository \(or any (of the )?parent (directories|up to mount point .+)\)(: \.git)?", tail)
+        if (NOT_A_REPO.fullmatch(tail)
                 or re.fullmatch(r"fatal: cannot change to '.+': No such file or directory", tail)):
             kind = NotARepo
         elif tail == "fatal: this operation must be run in a work tree":

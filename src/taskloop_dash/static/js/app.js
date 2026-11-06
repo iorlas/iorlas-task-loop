@@ -101,7 +101,12 @@ function App() {
   const c = counts(snap);
   document.title = c.asks + c.stuck ? `(${c.asks + c.stuck}) task-loop` : 'task-loop';
   const red = snap.projects.filter((p) => p.profile_error).map((p) => html`<div class="ban bad">${p.profile_error}</div>`);
-  return html`<div class=${api.net.error ? 'greyed' : ''}>${red}${PHONE.matches ? html`<${Phone} snap=${snap} now=${now} />` : html`<${Desktop} snap=${snap} now=${now} />`}
+  const strip = snap.projects.filter((p) => p.score).map((p) => {
+    const s = p.score;
+    const text = `${p.name} since ${new Date(s.since * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}: ${s.beads} beads · ${s.landed} landed (${s.landed_no_ask} no ask) · ${s.asks} asks · ${s.lost} lost · ${s.crashes} engine errors`;
+    return html`<div class=${s.lost || s.crashes ? 'ban bad' : 'ban'} title="the scorecard of tl report for this window">${text}</div>`;
+  });
+  return html`<div class=${api.net.error ? 'greyed' : ''}>${red}${strip}${PHONE.matches ? html`<${Phone} snap=${snap} now=${now} />` : html`<${Desktop} snap=${snap} now=${now} />`}
     <${Toast} toast=${ui.toast} /></div>`;
 }
 

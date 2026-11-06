@@ -1,4 +1,5 @@
 """`tl claim|land|close|block`: the bead's life as the person or the engine drives it, each recorded as an event and in bd's provenance."""
+import argparse
 import json
 import sys
 import time
@@ -11,6 +12,7 @@ from taskloop.adapters.beadtools import attempt, peek
 from taskloop.adapters.gitrepo import repo_root
 from taskloop.adapters.ident import config_dir
 from taskloop.adapters.opencode import transcript_of
+from taskloop.app.track import runs as runq
 from taskloop.app.track.trail import event, provenance, prune_events, register_repo
 from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
@@ -213,3 +215,8 @@ def trace(bead: BeadId, last: int, as_json: bool, env: Env) -> int:
             print("  {:<7} {:<8} {:<6} {:<9} {}  {}".format(s.get("node"), s.get("role"), s.get("family") or "?", s.get("status"),
                                                            s.get("ref") or "-", s.get("transcript") or ""))
     return 0
+
+
+def runs(a: argparse.Namespace, cfg: ConfigDir) -> int:
+    """`tl runs show RUN | slow [--top N] [--by exec|wait] [--runs N]`: read-only queries over the engine logs."""
+    return runq.show(a.run, cfg) if a.op == "show" else runq.slow(cfg, a.top, a.by, a.runs)
