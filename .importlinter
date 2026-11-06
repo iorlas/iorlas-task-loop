@@ -183,3 +183,108 @@ forbidden_modules =
     delegate.contracts
     delegate.entry
 allow_indirect_imports = True
+
+[importlinter:contract:nobody-imports-a-root]
+name = Nobody imports a root: nodes, run's logic modules and the layers below never import launch, wire or run's composition files
+type = forbidden
+source_modules =
+    taskloop.app.artifacts
+    taskloop.app.asks
+    taskloop.app.checks
+    taskloop.app.doctor
+    taskloop.app.land
+    taskloop.app.look
+    taskloop.app.loop
+    taskloop.app.plan
+    taskloop.app.prune
+    taskloop.app.reconcile
+    taskloop.app.release
+    taskloop.app.report
+    taskloop.app.review
+    taskloop.app.slots
+    taskloop.app.track
+    taskloop.app.write
+    taskloop.app.run.ask_flow
+    taskloop.app.run.bead_env
+    taskloop.app.run.blocked
+    taskloop.app.run.budget
+    taskloop.app.run.call
+    taskloop.app.run.calls
+    taskloop.app.run.closer
+    taskloop.app.run.closer_branch
+    taskloop.app.run.closer_decide
+    taskloop.app.run.closer_host
+    taskloop.app.run.closer_notes
+    taskloop.app.run.closer_record
+    taskloop.app.run.closer_settle
+    taskloop.app.run.console
+    taskloop.app.run.crash
+    taskloop.app.run.decide
+    taskloop.app.run.delegation
+    taskloop.app.run.done_memo
+    taskloop.app.run.ended
+    taskloop.app.run.finish
+    taskloop.app.run.lane_acts
+    taskloop.app.run.outcomes
+    taskloop.app.run.preflight
+    taskloop.app.run.records
+    taskloop.app.run.reflect
+    taskloop.app.run.reload
+    taskloop.app.run.requests
+    taskloop.app.run.resume
+    taskloop.app.run.review_glue
+    taskloop.app.run.running
+    taskloop.app.run.shared
+    taskloop.app.run.shell
+    taskloop.app.run.stage_checks
+    taskloop.app.run.stage_rounds
+    taskloop.app.run.stage_run
+    taskloop.app.run.stages
+    taskloop.app.run.state
+    taskloop.app.run.steps
+    taskloop.app.run.strays
+    taskloop.app.run.stuck
+    taskloop.app.run.summaries
+    taskloop.app.run.target
+    taskloop.app.run.trace
+    taskloop.app.run.waits
+    taskloop.app.run.worker_call
+    taskloop.app.run.worker_identity
+    taskloop.app.run.worker_recovery
+    taskloop.app.run.worker_request
+    taskloop.app.run.writer_pin
+    taskloop.stores
+    taskloop.domain
+    taskloop.adapters
+    taskloop.contracts
+forbidden_modules =
+    taskloop.app.launch
+    taskloop.app.wire
+    taskloop.app.run.context
+    taskloop.app.run.engine
+    taskloop.app.run.entry
+    taskloop.app.run.fields
+    taskloop.app.run.host
+    taskloop.app.run.layout
+    taskloop.app.run.parts_land
+    taskloop.app.run.parts_plan
+    taskloop.app.run.parts_run
+    taskloop.app.run.plumbing
+    taskloop.app.run.run_once
+allow_indirect_imports = True
+ignore_imports =
+    # The baseline (tl-e5t0.30): edges that exist today. The contract fails on a new one; each removal shrinks this list, never grows it.
+    taskloop.app.run.crash -> taskloop.app.run.host
+    taskloop.app.run.stage_rounds -> taskloop.app.run.host
+    taskloop.app.run.stages -> taskloop.app.run.host
+    taskloop.app.prune.runs -> taskloop.app.run.layout
+    taskloop.app.run.ask_flow -> taskloop.app.run.layout
+    taskloop.app.run.preflight -> taskloop.app.run.layout
+    taskloop.app.run.records -> taskloop.app.run.layout
+    taskloop.app.run.stages -> taskloop.app.run.layout
+    taskloop.app.run.stages -> taskloop.app.run.run_once
+    taskloop.app.run.closer_branch -> taskloop.app.wire.slots
+    taskloop.app.run.closer_settle -> taskloop.app.wire.closeguard
+    taskloop.app.run.preflight -> taskloop.app.wire.closeguard
+    taskloop.app.run.running -> taskloop.app.wire.slots
+    taskloop.app.run.stages -> taskloop.app.wire.closeguard
