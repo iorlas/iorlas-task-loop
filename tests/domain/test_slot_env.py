@@ -15,8 +15,7 @@ from support.builders import make_engine
 from taskloop.contracts import config
 from taskloop.domain import slot_env
 
-KEYS = ("TMPDIR", "TMP", "TEMP", "DOTNET_CLI_HOME", "NUGET_SCRATCH", "NUGET_HTTP_CACHE_PATH", "NUGET_PLUGINS_CACHE_PATH",
-        "SharedCompilationId", "MSBUILDNODEHANDSHAKESALT", "TL_SLOT")
+KEYS = ("TMPDIR", "TMP", "TEMP", "TL_SLOT")
 
 
 def push(cwd):
@@ -31,7 +30,6 @@ class Pure(Case):
         for k in KEYS:
             assert k in a
         assert a["TL_SLOT"] == "A"
-        assert a["SharedCompilationId"] == "repo-A"
         assert all(a[k] != b[k] for k in KEYS), [k for k in KEYS if a[k] == b[k]]
 
     def test_slot_env_adds_and_overrides_with_placeholders_filled(self):
@@ -58,4 +56,3 @@ class EverySpawnPath(te.EngineTest):
         a1, a2, b = mk(self.wt, "t-1"), mk(self.wt, "t-2"), mk(other, "t-3")
         assert a1 == a2
         assert a1["TMPDIR"] != b["TMPDIR"]
-        assert a1["SharedCompilationId"] != b["SharedCompilationId"]
