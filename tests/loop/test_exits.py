@@ -153,3 +153,18 @@ class LaneExits(Case):
         for pid, reason in ((123, "crash"), (456, "signal"), (123, "low_disk")):
             self.files.write_exit({"pid": pid, "t": 42, "started": 40, "reason": reason})
         assert [(r["lane"], r["reason"]) for r in exits.last_by_lane(self.directory)] == [(2, "low_disk"), (456, "signal")]
+
+
+def test_exit_row_carries_config_hash_and_a_crash_never_has_empty_detail(tmp_path):
+    files = LoopFiles(ConfigDir(tmp_path), "repo", lambda _: True, lambda: 42)
+    env = Mock(pid=123, repo="/repo", version="1", code_dir="/code")
+    env.cfgdir = files.cfg
+    env.profile.return_value = RepoProfile()
+    env.now.return_value = 42
+    env.actor.return_value = "loop"
+    loop = Loop(env, files, Mock(), LoopArgs())
+    loop.write_exit()  # nothing recorded a reason: the row is a crash and says why it has no detail
+    rec = exits.rows(files.runs() / "factory.log")[-1]
+    assert rec["reason"] == "crash"
+    assert rec["detail"]
+    assert len(str(rec["config_hash"])) == 16
