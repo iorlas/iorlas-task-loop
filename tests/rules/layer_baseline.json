@@ -1,7 +1,4 @@
 {
- "adapters": {
-  "sleep": 1
- },
  "asks": {
   "sleep": 2
  },
