@@ -81,7 +81,7 @@ def status_json(claude_usage: Any = None) -> dict[str, Any]:
         return {}
 
 
-def status_snapshot(claude_usage: Any = None) -> StatusSnapshot:
+def status_snapshot(claude_usage: object = None) -> StatusSnapshot:
     """delegate's status read into the StatusSnapshot the dashboard files. ValueError when there is none or its shape is unreadable."""
     status = status_json(claude_usage)
     if not status:
