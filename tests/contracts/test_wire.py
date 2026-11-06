@@ -192,7 +192,10 @@ class Wire(Case):
         assert list(wire.dump(S.LOG["lock"]))[:3] == ["v", "kind", "t"]
 
     def test_a_tuple_is_written_as_an_array(self):
-        assert json.dumps(wire.dump(S.LOCK)["route"]) == '[10, "5"]'
+        class Pair(wire.Rec):
+            at: tuple[int, str]
+
+        assert json.dumps(wire.dump(Pair(at=(10, "5")))["at"]) == '[10, "5"]'
 
     def test_an_optional_nested_record_is_null_or_a_dict(self):
         a = S.other(Ask)

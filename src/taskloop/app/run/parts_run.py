@@ -5,7 +5,7 @@ import threading
 from functools import cached_property
 from typing import Any
 
-from taskloop.adapters import childenv, pidcheck, slotcheck
+from taskloop.adapters import childenv, slotcheck
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.runner import live_path
 from taskloop.app.run.ask_flow import AskFlow
@@ -22,7 +22,6 @@ from taskloop.app.run.shell import Shell
 from taskloop.app.run.stage_checks import StageChecks
 from taskloop.app.run.stuck import StuckTick
 from taskloop.app.run.waits import Waits
-from taskloop.app.slots import engine_lock
 from taskloop.contracts.kinds import Kind
 
 
@@ -67,16 +66,6 @@ class RunParts(Plumbing):
         if self._probe is None:
             self._probe = PathProbe(self.wt, childenv.current_env(self.env))
         return self._probe
-
-    def lock_worker(self, started: Any) -> None:
-        """The worker delegate launched (the live file's first line) goes into the engine lock, so a SIGKILLed engine leaves it findable."""
-        if engine_lock.LOCK:
-            engine_lock.LOCK.note(workers=[(started.pid, pidcheck.proc_start(started.pid) or "")])
-
-    def lock_workers(self, survivors: Any, started: Any) -> None:
-        """After a call: the pids that outlived its stop keep the slot busy; none: free."""
-        if engine_lock.LOCK:
-            engine_lock.LOCK.note(workers=[(pid, pidcheck.proc_start(pid) or "") for pid in survivors])
 
     def live(self, step: str) -> str:
         """The live file for the next delegate call (delegate appends worker events there; the dashboard's Live view reads them)."""
