@@ -99,7 +99,7 @@ class ColdRestart(Base):
     def test_a_new_process_takes_the_dead_runs_id_from_its_checkpoint(self):
         dead = self.killed_at(fx.CloseBead)
         again = self.cold()
-        assert again.log_path.stem == dead.log_path.stem
+        assert again.log_path.parent.name == dead.log_path.parent.name
         assert again.dead is not None
 
     def test_a_closed_run_leaves_nothing_to_finish(self):

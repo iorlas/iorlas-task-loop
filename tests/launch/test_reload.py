@@ -151,7 +151,7 @@ class Reload(te.EngineTest):
         eng = self.engine_for(script)
         self.run_with(eng, script, during=lambda: self.install("0.2.0"))
         assert eng.moved
-        run = eng.log_path.stem
+        run = eng.log_path.parent.name
         assert len(self.execs) == 1
         ex = self.execs[0]
         assert ex["argv"][:5] == childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py", snapshot())
