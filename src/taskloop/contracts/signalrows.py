@@ -1,15 +1,12 @@
 """The owner's requests to a live run as `signal` rows in factory.db (kind `owner_request`, one row per post, the OwnerRequest it
 adds in `payload`). `take` merges the run's untaken rows into one OwnerRequest and marks them taken, in one transaction, so a request
-posted while the run takes is never lost or taken twice. A request file an older tl left (`runs/<run>/owner-request.json`) is
-merged in and removed on the same read (dual-read, never dual-write)."""
-import contextlib
+posted while the run takes is never lost or taken twice."""
 import json
 
 from taskloop.contracts import wire
 from taskloop.contracts.looprows import LoopRows
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.requests import OwnerRequest
-from taskloop.contracts.stores import JsonStore
 
 KIND = "owner_request"
 
@@ -25,7 +22,6 @@ def merge(parts: list[OwnerRequest]) -> OwnerRequest | None:
 class SignalRows:
     def __init__(self, cfg: ConfigDir, run: str, *, quiet: bool = False) -> None:
         self.cfg, self.run, self.rows = cfg, run, LoopRows(cfg, "", quiet=quiet)
-        self.legacy = JsonStore(cfg.run_request(run), OwnerRequest)
 
     def post(self, req: OwnerRequest, now: float) -> None:
         with self.rows.transaction() as con:
@@ -33,9 +29,7 @@ class SignalRows:
                         (self.run, KIND, json.dumps(wire.dump(req), ensure_ascii=False), now))
 
     def parts(self, found: list[tuple[str, ...]]) -> list[OwnerRequest]:
-        out = [wire.load(OwnerRequest, json.loads(payload)) for _id, payload in found]
-        old = self.legacy.get()
-        return ([old] if old is not None else []) + out
+        return [wire.load(OwnerRequest, json.loads(payload)) for _id, payload in found]
 
     def peek(self) -> OwnerRequest | None:
         return merge(self.parts(self.rows.select("SELECT id, payload FROM signal WHERE run=? AND kind=? AND taken IS NULL ORDER BY id",
@@ -47,10 +41,7 @@ class SignalRows:
             found = con.execute("SELECT id, payload FROM signal WHERE run=? AND kind=? AND taken IS NULL ORDER BY id",
                                 (self.run, KIND)).fetchall()
             con.execute("UPDATE signal SET taken=? WHERE run=? AND kind=? AND taken IS NULL", (now, self.run, KIND))
-        got = merge(self.parts([tuple(r) for r in found]))
-        with contextlib.suppress(OSError):
-            self.cfg.run_request(self.run).unlink()
-        return got
+        return merge(self.parts([tuple(r) for r in found]))
 
     def drop_all(self) -> None:
         """Forget the run's requests (its logs are pruned)."""
