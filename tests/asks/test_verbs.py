@@ -3,13 +3,13 @@ with a quoted approval."""
 
 import argparse
 import sys
-import tempfile
 from datetime import datetime
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -41,7 +41,7 @@ def parse(*argv: str) -> argparse.Namespace:
 class VerbSurface(Case):
     def setup_method(self) -> None:
         self.asks = fake_stores().asks
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(self.tmp.name)
         self.store = FakeBeads()
