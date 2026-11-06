@@ -23,6 +23,7 @@ class EnvVar(StrEnum):
     TASK_LOOP_SLOT_BEAD = "TASK_LOOP_SLOT_BEAD"  # the bead whose slot this process holds
     TASK_LOOP_ACTOR = "TASK_LOOP_ACTOR"          # the loop's actor name, inherited by its run-tasks
     TASK_LOOP_SESSION = "TASK_LOOP_SESSION"      # the engine's or loop's session id
+    TASK_LOOP_LOOP_ID = "TASK_LOOP_LOOP_ID"      # the opaque id of the loop lifetime a run-task belongs to (kept across the loop's exec)
     TASK_LOOP_LOOP_PID = "TASK_LOOP_LOOP_PID"    # the pid of the loop a run-task belongs to
     TASK_LOOP_RUN_LOG = "TASK_LOOP_RUN_LOG"      # the parent's console log, projected at the run's finish
     TASK_LOOP_SLOT = "TASK_LOOP_SLOT"            # the parent's slot name for the loop history

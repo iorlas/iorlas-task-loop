@@ -38,6 +38,7 @@ def home(base):
     real = Path(REAL_HOME) / ".gitconfig"
     if real.is_file() and not (h / ".gitconfig").exists():  # tests commit with the identity it holds; HOME no longer finds it
         shutil.copyfile(real, h / ".gitconfig")
+    os.environ.pop("DELEGATE_DEPTH", None)  # `tl check` runs the suite as a worker child (depth 1); `run` refuses a caller at depth 1
     for k in ("XDG_CONFIG_HOME", "XDG_DATA_HOME"):  # unset: every path derives from HOME, which tests re-point
         os.environ.pop(k, None)
     os.environ.update(

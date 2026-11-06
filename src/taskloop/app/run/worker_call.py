@@ -228,7 +228,7 @@ class WorkerCall:
         t0, trees = time.time(), strays.worktrees(e)  # the worktrees the repo holds before the worker runs
         try:
             wenv = {**e.bead_env, **step_env(e, c.step or c.node)}
-            ans = dg.call(e.resolved, req, brief, c.schema, runner, env=childenv.current_env(e.env, wenv))
+            ans = dg.call(e.resolved, req, brief, c.schema, runner, env=childenv.delegate_call_env(e.env, wenv))
         except BaseException as exc:  # an interruption stopped the delegate inside the process seam: record that stop here
             if runner.obs.get("kill_t") or runner.stop.get("alive"):
                 self.log_kill(c, runner, exc)

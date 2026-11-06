@@ -51,4 +51,5 @@ class Policy:
         assert is_policy_denial("Bash", {"command": "git push"})
         assert is_policy_denial("Bash", {"command": "touch x"}, True)
         assert not is_policy_denial("Bash", {"command": "cat .env > x"}, True)  # a secret stays the owner's
-        assert not is_policy_denial("Read", {"command": "git push"})
+        assert is_policy_denial("shell", {"command": "git push"})  # a shell by its command, not by its name
+        assert not is_policy_denial("Read", {"file_path": "x"})
