@@ -16,13 +16,13 @@ from support.runs import manifest
 from taskloop.cli import asks as cli_asks
 from taskloop.cli import wait
 from taskloop.contracts.ask import Ask, SimilarRef, ThreadEntry
+from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.dash import OwnerCause
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locator import host_name
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunState
-from taskloop.contracts.stores import AskStore
 
 BEAD, RUN, T = "t-1", "t-1-20261026-100000", 5000.0
 

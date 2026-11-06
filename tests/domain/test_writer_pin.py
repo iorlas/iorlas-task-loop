@@ -6,6 +6,7 @@ from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.argv_of import argv_of
 
 from taskloop.contracts import delegate
 from taskloop.domain.lanes import pin, says
@@ -26,9 +27,9 @@ class Pin(Case):
 
     def test_the_flag_is_one_per_family_and_absent_without_a_pin(self):
         base = {"role": "worker", "brief_path": "b", "cwd": "/w", "schema_path": "s"}
-        argv = delegate.RunRequest(**base, only_family=["openai", "xai"]).to_argv("py", "r")
+        argv = argv_of(delegate.RunRequest(**base, only_family=["openai", "xai"]))
         assert [argv[i + 1] for i, x in enumerate(argv) if x == "--only-family"] == ["openai", "xai"]
-        assert "--only-family" not in delegate.RunRequest(**base).to_argv("py", "r")
+        assert "--only-family" not in argv_of(delegate.RunRequest(**base))
 
     def test_the_words_name_the_pin_the_reason_and_that_no_other_family_runs(self):
         why = pin.stop_why("write", ["openai"], "only_family_unready", "codex out until 21:00")

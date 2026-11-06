@@ -28,6 +28,14 @@ CREDIT_PROBE = 6 * 3600  # a lane out of credits with no stated end is looked at
 GUESS_WINDOW = 6 * 3600
 
 
+@dataclass(frozen=True)
+class Hung:
+    """A worker the watchdog stopped for silence: what it said (`words`) and when it went quiet (`kind`: first_event, or later)."""
+
+    words: str
+    kind: str
+
+
 @dataclass
 class Case:
     """One outcome being applied: the answer under construction and everything a reason's method may need."""
@@ -43,6 +51,7 @@ class Case:
     reset: Callable[[], float | None] | None = None
     login: tuple[str, str] | None = None
     answered: bool = False  # the final answer was captured before the run failed
+    hung: Hung | None = None
 
     @property
     def lane(self) -> str:
@@ -105,10 +114,9 @@ class Settler:
         tail: str = "",
         reset: Callable[[], float | None] | None = None,
         login: tuple[str, str] | None = None,
+        hung: Hung | None = None,
     ) -> dict[str, Json]:
-        c = Case(res, self.net_pass(o, d), d, t, who, a, rc, tail, reset, login, bool(res.pop("answered", False)))
-        if c.o.reason != "hung":
-            res.pop("hung_words", None), res.pop("hung_kind", None)
+        c = Case(res, self.net_pass(o, d), d, t, who, a, rc, tail, reset, login, bool(res.pop("answered", False)), hung)
         res["outcome"] = c.o.reason
         if rc is not None:
             res["exit_code"] = rc
@@ -129,7 +137,7 @@ class Settler:
         c.res.update(say=f"{c.who} did not finish within {c.a.timeout}s and was killed")
 
     def _hung(self, c: Case) -> None:
-        words, kind = c.res.pop("hung_words", "printed nothing"), c.res.pop("hung_kind", "first_event")
+        words, kind = (c.hung.words, c.hung.kind) if c.hung else ("printed nothing", "first_event")
         if (
             kind == "first_event"
         ):  # nothing came at all: the lane is the suspect, it rests; a worker that went quiet mid-run is the pair's (the breaker counts it)

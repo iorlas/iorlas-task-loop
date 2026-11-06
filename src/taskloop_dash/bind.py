@@ -9,7 +9,7 @@ from typing import Any
 from taskloop.contracts.env import Env as ProcessEnv
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import ReposStore
+from taskloop.contracts.rowstores import ReposStore
 
 CGNAT = ipaddress.ip_network("100.64.0.0/10")  # Tailscale's range
 DEFAULT_PORT = 7878

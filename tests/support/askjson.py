@@ -8,8 +8,8 @@ from asks.samples import MOCKS
 
 from taskloop.contracts import wire
 from taskloop.contracts.askrows import AskRows
+from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import AskStore
 
 
 def ask_json(bead: str, n: int = 1, **over: Any) -> dict[str, Any]:

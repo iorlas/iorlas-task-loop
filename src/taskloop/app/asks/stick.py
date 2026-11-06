@@ -94,8 +94,12 @@ def factory(fx: Effects, raised: LedgerEntry, answered: LedgerEntry, text: str) 
     tracker = fx.factory() if fx.factory is not None else None
     if tracker is None:
         return "", "no task-loop repo is registered to file the bead in"
+    marker = f"Filed from the answer to ask {raised.ask} of "
+    pending = next((b for b in tracker.find(BeadQuery(label=FACTORY_LABEL, include_closed=True)) if b.description.startswith(marker)), None)
+    if pending is not None:
+        return pending.id, ""  # the ledger write failed after the bead was filed, or the tap came twice: one bead per ask
     title = (text.splitlines() or [""])[0].strip() or f"factory: {raised.question}"
-    body = (f"Filed from the answer to ask {raised.ask} of {raised.bead}.\n\nQuestion: {raised.question}\n"
+    body = (f"{marker}{raised.bead}.\n\nQuestion: {raised.question}\n"
             f"Answer: {answered.answer or '(none)'}" + (f"\n\n{text}" if "\n" in text or len(text) > TITLE_CAP else ""))
     return tracker.create(NewBead(title=title[:TITLE_CAP], description=body[:TEXT_CAP], labels=[FACTORY_LABEL], no_inherit_labels=True)), ""
 

@@ -18,9 +18,9 @@ from support import procsim
 from support.memstores import MemDoc, MemLockTable, MemLog, fake_stores
 
 from taskloop.contracts import paths, wire
+from taskloop.contracts.docstore import JsonStore
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.locks import LockRecord
-from taskloop.contracts.stores import JsonStore
 from taskloop.stores.bundle import Stores
 from taskloop.stores.real import real_stores
 
