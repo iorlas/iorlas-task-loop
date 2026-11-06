@@ -252,10 +252,3 @@ class Deferral(Case):
     def test_another_unverified_check_keeps_the_land_a_fault(self):
         other = CheckResult(id=CheckId("r"), cmd="r", group="tests", exit=UNVERIFIED_EXIT, status="unverified")
         assert verified.kind_of(CheckRun(round=1, results=[self.deferred(True), other])) == "FAULT_LAND"
-
-
-
-
-
-
-

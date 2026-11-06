@@ -114,6 +114,3 @@ class BriefPaths(Case):
         before = (self.run_dir / "checks" / "nunit_fail.log").read_text()
         evidence.failure_brief([res(cmd="c", exit=1, log="checks/nunit_fail.log")], self.run_dir)
         assert (self.run_dir / "checks" / "nunit_fail.log").read_text() == before
-
-
-
