@@ -23,7 +23,6 @@ from taskloop.contracts.reponame import repo_name
 from taskloop.contracts.rotating import RotatingJsonl
 from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.snapshots import (
-    DashState,
     Pin,
     ReflectState,
     ReleaseResult,
@@ -508,11 +507,6 @@ class PinStore(RowDoc[Pin]):
 class ReleaseResultStore(RowDoc[ReleaseResult]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
         super().__init__(singleton(cfg, ReleaseResult, "release:last", cfg.release_result()).docs, "")
-
-
-class DashStateStore(RowDoc[DashState]):
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(singleton(cfg, DashState, "dash:state", cfg.dash_state()).docs, "")
 
 
 class BadVersionStore(RowDoc[BadVersions]):

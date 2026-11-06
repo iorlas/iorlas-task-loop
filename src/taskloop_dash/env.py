@@ -22,9 +22,6 @@ from taskloop_dash.readers import dbruns
 from taskloop_dash.tails import Tails
 
 Bead = dict[str, Any]
-LIVE_SECONDS = 90  # a transcript written within this is still running
-
-
 def _no_store(repo: str) -> Beads:
     raise OSError(2, "bd is not installed")
 

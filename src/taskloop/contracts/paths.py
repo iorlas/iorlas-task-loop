@@ -132,9 +132,6 @@ class ConfigDir:
         """The CheckRun of a round of the run; no round: the latest."""
         return self.run_dir(run) / ("engine-checks.json" if rnd is None else f"engine-checks.r{rnd}.json")
 
-    def check_logs(self, run: RunId | str) -> Path:
-        return self.run_dir(run) / "checks"
-
     def artifact_store(self) -> Path:
         """The artifact store's root: <root>/<repo>/<bead>/<run>/<stage>-<attempt>/<name> (contracts/artifact.py)."""
         return self.root / "artifacts"
@@ -227,9 +224,6 @@ class ConfigDir:
 
     def reflect_state(self) -> Path:
         return self.root / "reflect-digest.json"
-
-    def reflect_view(self) -> Path:
-        return self.root / "reflect-view.json"
 
     def handoff(self, repo_key: str) -> Path:
         return self.root / "handoff" / (f"{repo_key}.md")

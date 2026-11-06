@@ -13,6 +13,7 @@ from support.runs import manifest
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.launch.dash_ports import owner_intake, owner_writes
+from taskloop.app.run import requests
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.run import RunState
 from taskloop.contracts.runrows import RunRows
@@ -74,7 +75,7 @@ class RepoIdentity(Case):
                 assert code == 200
                 assert not out["ok"]
                 assert "repo" in out["message"].lower()
-        assert not any(self.dash.env.config.run_request(r).exists() for r in self.runs)
+        assert not any(requests.peek(self.dash.env.config, r) for r in self.runs)
         assert not any(s.show("b-1").metadata for s in self.stores.values())
 
     def test_stop_refuses_the_wrong_bead_and_an_observed_run_that_ended(self):
@@ -87,7 +88,7 @@ class RepoIdentity(Case):
         out = self.dash.writes.post("stop", body)[1]
         assert not out["ok"]
         assert "no run" in out["message"]
-        assert not cfg.run_request(self.runs[0]).exists()
+        assert requests.peek(cfg, self.runs[0]) is None
         assert not self.stores[str(self.repos[0])].show("b-1").metadata
 
     def test_stop_targets_the_observed_run_even_when_a_newer_run_exists(self):
@@ -96,8 +97,8 @@ class RepoIdentity(Case):
         manifest(cfg, "successor", "b-1", T + 150, repo=str(repo), state=RunState.RUNNING)
         code, out = self.dash.writes.post("stop", {"project": loop_key(repo), "bead": "b-1", "run": self.runs[0]})
         assert (code, out["ok"]) == (200, True)
-        assert cfg.run_request(self.runs[0]).exists()
-        assert not cfg.run_request("successor").exists()
+        assert requests.peek(cfg, self.runs[0]) is not None
+        assert requests.peek(cfg, "successor") is None
 
     def test_old_command_without_observed_run_is_a_bad_body(self):
         code, _ = self.dash.writes.post("stop", {"project": loop_key(self.repos[0]), "bead": "b-1"})
