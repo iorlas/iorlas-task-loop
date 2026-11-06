@@ -9,7 +9,6 @@ import time
 import traceback
 from pathlib import Path
 from typing import Any, Final
-from unittest import mock
 
 from taskloop.adapters import delegate as dg
 from taskloop.adapters import ident
@@ -102,18 +101,17 @@ def run_engine(home: Path, wt: Path, env: Env) -> tuple[int, Bead]:
     cfg = cfg.replace(reflect=False)
     os.chdir(wt)  # the engine reads cwd
     try:
-        with mock.patch.object(time, "sleep"):
-            rc = Engine(
-                t1,
-                str(wt),
-                cfg,
-                route=seams.FixedRoute(resolved, Runner()),
-                store=store,
-                env=env,
-                spawner=real.spawner(env),
-                git=real.git(env),
-                who=ident.identity(env),
-            ).run()
+        rc = Engine(
+            t1,
+            str(wt),
+            cfg,
+            route=seams.FixedRoute(resolved, Runner()),
+            store=store,
+            env=env,
+            spawner=real.spawner(env),
+            git=real.git(env),
+            who=ident.identity(env),
+        ).run()
     finally:
         os.chdir(home.parent)  # out of the directory that is removed next
     return rc, store.beads[t1]

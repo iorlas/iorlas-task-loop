@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fake_clock import FakeClock
 from support.fakegit import FakeGit
+from support.memstores import fake_stores
 from support.narrow_hosts import FakePushHost, Stopped
 
 from taskloop.app.land.cmds import Cmds, Stop
@@ -35,7 +36,6 @@ from taskloop.contracts.gitfacts import TreeEntry
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.profile_changes import ProfileChange
 from taskloop.contracts.runkey import BaseSha
-from taskloop.stores.memory import fake_stores
 
 TEXT = 'Denis: "I approve this profile" 2026-11-02T12:00Z'
 PATCH = 'diff --git a/.task-loop.json b/.task-loop.json\n-old\n+new\n'
@@ -82,7 +82,7 @@ class OwnerText(Case):
 
 class OwnerGate(Case):
     def setup_method(self):
-        self.git = FakeGit(**{"rev_parse__origin/main": "base", "rev_parse__tip^{tree}": "tree"})
+        self.git = FakeGit(**{"rev_parse__origin/main": "base", "rev_parse__tip^{tree}": "tree", "rev_parse__HEAD": "tip"})
         self.cmds = mock.Mock(spec=Cmds)
         self.cmds.port.side_effect = lambda text, fn: fn()
         self.stores = fake_stores()
