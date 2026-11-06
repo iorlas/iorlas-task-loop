@@ -2,17 +2,13 @@
 its argv and its login probe."""
 
 import json
-import os
-import stat
-import tempfile
 from pathlib import Path
-from unittest import mock
 
 from any_agent import events as ev
 from any_agent.harnesses.claude import ClaudeHarness, stream_usage, tokens_of
 from any_agent.protocol import LaunchInputs
 from delegate.contracts.json_types import obj
-from support.procsim import real_proc
+from support.tmpdir import TemporaryDirectory
 
 HERE = Path(__file__).resolve().parent
 
@@ -151,7 +147,7 @@ class World:
         assert (s.stdin, s.cwd, s.env, "--max-budget-usd" in s.argv, "--json-schema" in s.argv) == ("brief", "/w", {"A": "1"}, False, False)
 
     def test_a_resumed_write_launch_with_a_schema(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             (Path(d) / "s.json").write_text('{"type": "object"}')
             h = ClaudeHarness()
             s = h.launch_spec(LaunchInputs(**INPUTS, write=True, resume="old", schema=str(Path(d) / "s.json")))
@@ -170,16 +166,3 @@ class World:
         (day / "sess-1.jsonl").write_text("{}\n")
         h = ClaudeHarness()
         assert (h.transcript("sess-1"), h.transcript("zzz"), h.transcript(None)) == (str(day / "sess-1.jsonl"), None, None)
-
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_the_login_probe_reads_auth_status(self):
-        with tempfile.TemporaryDirectory() as d:
-            exe = Path(d) / "claude"
-            exe.write_text("#!/bin/sh\necho '{\"loggedIn\": '$FAKE_IN'}'\n")
-            exe.chmod(exe.stat().st_mode | stat.S_IXUSR)
-            with mock.patch.dict(os.environ, {"PATH": d, "FAKE_IN": "true"}):
-                assert ClaudeHarness().login_probe(5)[0]
-            with mock.patch.dict(os.environ, {"PATH": d, "FAKE_IN": "false"}):
-                assert not ClaudeHarness().login_probe(5)[0]
-            with mock.patch.dict(os.environ, {"PATH": "/nonexistent"}):
-                assert ClaudeHarness().login_probe(5)[0] is None

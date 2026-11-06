@@ -12,12 +12,13 @@ import time
 from collections.abc import Callable, Generator
 from pathlib import Path
 
+from any_breaker import State
 from atomic_io import atomic_write_text
 from jsonl_log import append_line, open_append
 from process_lock import LockHeldError, ProcessLock
 
 from delegate.contracts import codec
-from delegate.contracts.history import ROWS, HealthCheckpoint, HealthState, HistoryRow, RunRow
+from delegate.contracts.history import ROWS, HealthCheckpoint, HistoryRow, RunRow
 from delegate.contracts.json_types import Json
 from delegate.contracts.routing import BreakerPolicy
 from delegate.contracts.state import Profile, StateDoc, split_retired_state
@@ -179,16 +180,16 @@ class CheckpointStore:
     def __init__(self, path: Path) -> None:
         self.path = path
 
-    def load(self, policy: BreakerPolicy) -> HealthState | None:
+    def load(self, policy: BreakerPolicy) -> State | None:
         try:
             cp = codec.from_json(HealthCheckpoint, read_json(self.path))
-        except codec.CodecError:
+            return State.from_dict(cp.state) if cp.policy == policy and cp.state.keys() == {"ts", "keys", "outs"} else None
+        except (codec.CodecError, TypeError, ValueError, KeyError):
             return None
-        return cp.state if cp.policy == policy else None
 
-    def save(self, state: HealthState, policy: BreakerPolicy) -> None:
+    def save(self, state: State, policy: BreakerPolicy) -> None:
         with contextlib.suppress(OSError):
-            write_atomic(self.path, json.dumps(codec.to_json(HealthCheckpoint(policy=policy, state=state))))
+            write_atomic(self.path, json.dumps(codec.to_json(HealthCheckpoint(policy=policy, state=state.to_dict()))))
 
 
 class ConfigStore:

@@ -91,8 +91,17 @@ def kind_of(item) -> str:
     return "logic"
 
 
+def quarantined_ids():
+    path = TESTS_DIR / "quarantine.txt"
+    lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    return {s for s in (line.strip() for line in lines) if s and not s.startswith("#")}
+
+
 def pytest_collection_modifyitems(items):
+    held = quarantined_ids()
     for item in items:
+        if held and item.nodeid in held:
+            item.add_marker(pytest.mark.quarantine)
         if item.module.__name__.rpartition(".")[2] in SERIAL:
             item.add_marker(pytest.mark.serial)
         kind = kind_of(item)
@@ -222,6 +231,7 @@ def case_helpers(request, procs, no_leaked_threads):
                 sys.stdout, sys.stderr = streams
         case.subTest = sub_test
         yield
+    case.__dict__.clear()  # the item keeps its instance for the session: what a test built (stores with an open log) goes with the test
 
 
 @pytest.fixture(autouse=True)

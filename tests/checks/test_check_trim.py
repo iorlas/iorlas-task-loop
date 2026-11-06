@@ -1,10 +1,10 @@
 """tl-7y6.7.17: a check's output is trimmed before any agent prompt carries it."""
 import re
 import sys
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -85,7 +85,7 @@ class TrimFixtures(Case):
 
 class BriefPaths(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.run_dir = Path(self.tmp.name)
         (self.run_dir / "checks").mkdir()
         for f in FIX.glob("*.log"):

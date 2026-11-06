@@ -4,11 +4,11 @@ Real git in a temp repo; each case changes the repo behind the memo and asks aga
 
 import os
 import subprocess
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401
+from support.tmpdir import TemporaryDirectory
 
 # isort: split
 import pytest
@@ -29,7 +29,7 @@ def sh(*a, cwd):
 
 class GitMemoTest(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.tmp = TemporaryDirectory(ignore_cleanup_errors=True)
         self.addCleanup(self.tmp.cleanup)
         self.git = RealGit(snapshot())
         self.repo = Path(os.path.realpath(self.tmp.name)) / "r"

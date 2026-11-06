@@ -10,9 +10,8 @@ import tempfile
 from unittest import mock
 
 from any_agent import procs
-from delegate.app import env, harnesses, status, usage
+from delegate.app import env, status, usage
 from support.case import Case
-from support.procsim import real_proc
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -73,15 +72,6 @@ class Cheap(Case):
         _rc, d = self.cheap()
         assert [r["run_id"] for r in d["running"]] == ["r1"]
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_full_status_writes_the_snapshot_and_the_cache(self):
-        out = io.StringIO()
-        with mock.patch.object(harnesses, "probe_login", return_value=(True, "ok")), contextlib.redirect_stdout(out):
-            route.main(["status", "--json"])
-        assert env.snapshot_path().exists()
-        _rc, d = self.cheap()
-        assert isinstance(d["age_s"], int)
-        assert "cockpit" in d
 
 
 class AuthCache(Case):

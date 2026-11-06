@@ -1,6 +1,8 @@
 # The gate is `just gate` = `just check` (static: ruff, pyrefly, import-linter) then `just test` (the tests). The suite receipt (RunKey) is written only after both.
 # `uv run pytest <path>` is the inner loop while you edit, not a gate.
-gate: check test
+# TL_TEST_FULL: the landing gate keeps the cores; a lane's plain `just test` runs at nice 10 (dev/runtests.py).
+gate: check
+    TL_TEST_FULL=1 uv run python dev/runtests.py
 
 # The tests this change can break (dev/affected.py picks them from the diff against origin/main; tests/rules always; all kinds, one run). Each test runs once per tree.
 test:
@@ -19,6 +21,10 @@ test-full:
 # just test-live [pytest args]: the explicit-only scenarios of tests/live (real git remote, real processes, real tl and dashboard); no default run collects them
 test-live *args:
     uv run pytest -m live -s tests/live {{args}}
+
+# Vendored shelf packages: `just vendor sync NAME [--tag TAG]` copies one from the shelf tag, `just vendor check` proves no drift (shelf_vendor, itself vendored).
+vendor *args:
+    PYTHONPATH=skills/task-loop/_vendor python3 -m shelf_vendor --vendor-dir skills/task-loop/_vendor --manifest dev/vendor.json {{args}}
 
 # The delegate tests (tests/delegate; real processes, several minutes). No other run collects them unless the change touches src/delegate, tests/delegate or the vendored packages (tests/support/scope.py).
 test-delegate *args:

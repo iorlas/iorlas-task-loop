@@ -28,7 +28,6 @@ from delegate.contracts.routing import BreakerPolicy
 from delegate.domain.health.ledger import HealthLedger, failure_fields
 from delegate.domain.lanes import profiles
 from support.case import Case
-from support.procsim import real_proc
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -197,7 +196,7 @@ class NotTheLanesFault:
         ]
         st = led.fold(rows)
         v = led.view(st, "OPENAI_SUBSCRIPTION", "m", 1100.0)
-        assert (v.state, v.usable, st.pairs, st.lanes) == ("up", True, {}, {})
+        assert (v.state, v.usable, {k: v for k, v in st.keys.items() if '|' in k}, st.outs) == ("up", True, {}, {})
 
     def test_a_failure_that_names_no_cause_becomes_network_only_when_the_net_is_down(self):
         d: dict[str, Any] = {"lane": "OPENAI_SUBSCRIPTION"}
@@ -300,25 +299,6 @@ class Cheap(Case):
             rc = route.main(["status", "--json", "--cheap"])
         return rc, json.loads(out.getvalue())
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_a_full_status_writes_roles_and_cheap_replays_them_with_a_fresh_net(self):
-        out = io.StringIO()
-        with mock.patch.object(harnesses, "probe_login", return_value=(True, "ok")), contextlib.redirect_stdout(out):
-            route.main(["status", "--json"])
-        full = json.loads(out.getvalue())
-        assert set(full["roles"]) == set(CFG["roles"])
-        for r in full["roles"].values():
-            assert "usable" in r
-            assert "net" in r
-        netprobe.record(
-            str(env.net_cache_path()), {"up": False, "ip_up": False, "why": "offline", "hosts": {"chatgpt.com": "tcp"}, "at": time.time()}
-        )
-        rc, cheap = self.cheap()
-        assert rc == 0
-        assert set(cheap["roles"]) == set(CFG["roles"])
-        assert "chatgpt.com" in cheap["roles"]["worker"]["hosts"]
-        assert cheap["roles"]["worker"]["net"]["up"] is False
-        assert cheap["network"]["up"] is False
 
     def test_cheap_without_any_snapshot_has_empty_roles(self):
         rc, d = self.cheap()

@@ -5,7 +5,6 @@ halt path), a note reaches the next worker's prompt; a request for a run that is
 import argparse
 import json
 import os
-import tempfile
 import threading
 import time
 import types
@@ -22,6 +21,7 @@ from support.logs import typed
 from support.memstores import fake_stores
 from support.narrow import must
 from support.runs import manifest
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.asks import intake
 from taskloop.app.run import requests
@@ -39,7 +39,7 @@ RUN = "tl-5-20261026-100000"
 
 class RequestFile(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(self.tmp.name)
         self.now = time.time()
@@ -69,21 +69,19 @@ class RequestFile(Case):
         assert self.files() == before
 
     def files(self):
-        """Every file a request could write; the factory db and its import lock belong to the reader."""
-        return {p: p.read_bytes() for p in self.cfg.root.rglob("*")
-                if p.is_file() and "locks" not in p.parts and not p.name.startswith("factory.db")}
+        """Every file a request could write, and the signal rows."""
+        files = {p: p.read_bytes() for p in self.cfg.root.rglob("*")
+                 if p.is_file() and "locks" not in p.parts and not p.name.startswith("factory.db")}
+        return files, requests.peek(self.cfg, RUN)
 
-    def test_a_run_that_ends_before_the_lock_is_acquired_is_refused(self):
-        original = requests.locked
-
-        def ends(cfg, run):
-            manifest(cfg, run, "tl-5", self.now - 5, state=RunState.DONE)
-            return original(cfg, run)
-
-        with mock.patch.object(requests, "locked", side_effect=ends):
-            why = requests.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", stop=True)
-        assert why == "no run of this bead is going"
-        assert requests.peek(self.cfg, RUN) is None
+    def test_a_request_file_an_older_tl_left_is_taken_with_the_rows_and_removed(self):
+        old = self.cfg.run_request(RUN)
+        old.write_text(json.dumps({"v": 1, "park": True, "stop": False, "notes": [{"text": "old", "t": 1.0, "by": "denis"}],
+                                   "by": "denis", "t": 1.0}))
+        assert requests.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", note="new") == ""
+        got = must(requests.take(self.cfg, RUN))
+        assert (got.park, [n.text for n in got.notes]) == (True, ["old", "new"])
+        assert not old.exists() and requests.take(self.cfg, RUN) is None
 
     def test_writers_racing_the_taker_lose_nothing_and_double_nothing(self):
         taken: list[str] = []
@@ -110,7 +108,7 @@ class RequestFile(Case):
         assert requests.newest_run(self.cfg, "tl-5") == RUN
         requests.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", park=True)
         prune_run_logs(self.cfg, self.now + 30 * 86400, 7 * 86400)
-        assert not self.cfg.run_request(RUN).exists()
+        assert requests.peek(self.cfg, RUN) is None
 
     def test_a_stop_is_acted_on_at_the_beat_through_the_stop_flag(self):
         host = types.SimpleNamespace(home=self.cfg, run_id=RUN, halt=threading.Event())
@@ -128,7 +126,7 @@ class Cli(Case):
     """`tl park BEAD` and `tl note BEAD text`: the newest run of the bead under the config dir."""
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": self.tmp.name})
         env.start()

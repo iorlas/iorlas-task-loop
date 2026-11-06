@@ -3,11 +3,11 @@ import gc
 import os
 import socket
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -22,6 +22,7 @@ from taskloop.app.launch import dash as dash_server  # noqa: E402
 from taskloop.contracts.dash import READ_PROTOCOL  # noqa: E402
 from taskloop.contracts.env import Env as ProcessEnv  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
+from taskloop.contracts.factorydb import SCHEMA_VERSION  # noqa: E402
 from taskloop_dash import bind  # noqa: E402
 
 
@@ -44,7 +45,7 @@ def live(script, version="v1", binds=("127.0.0.1",), pid=4242, protocol=READ_PRO
 
 class StaleReason(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.script = Path(self.tmp.name) / "server.py"
         self.script.write_text("")
 
@@ -64,6 +65,13 @@ class StaleReason(Case):
     def test_a_server_speaking_another_read_protocol_is_stale_even_at_the_same_code_version(self):
         assert "protocol" in must(dash_server.stale_reason(live(self.script, protocol=READ_PROTOCOL + 1), "v1", ["127.0.0.1"]))
         assert "protocol" in must(dash_server.stale_reason(live(self.script, protocol=None), "v1", ["127.0.0.1"]))
+
+    def test_a_server_whose_schema_range_misses_the_installed_schema_is_replaced(self):
+        for rng in ([SCHEMA_VERSION + 1, SCHEMA_VERSION + 2], [0, SCHEMA_VERSION - 1]):
+            v = dict(live(self.script), schema_read=rng)
+            assert "schema" in must(dash_server.stale_reason(v, "v1", ["127.0.0.1"]))
+        ok = dict(live(self.script), schema_read=[SCHEMA_VERSION, SCHEMA_VERSION])
+        assert dash_server.stale_reason(ok, "v1", ["127.0.0.1"]) is None
 
     def test_missing_address_is_stale(self):
         r = dash_server.stale_reason(live(self.script), "v1", ["127.0.0.1", "100.1.2.3"])
@@ -85,7 +93,7 @@ class StaleReason(Case):
 
 class EnsureFlow(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.script = Path(self.tmp.name) / "server.py"
         self.script.write_text("")
         env = {"XDG_CONFIG_HOME": self.tmp.name, "APPDATA": self.tmp.name, "TASK_LOOP_DASH_PORT": "7878"}
@@ -181,21 +189,21 @@ class EnsureFlow(Case):
 
 class DevCheckout(Case):
     def test_git_worktree_is_dev(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             (Path(d) / ".git").write_text("gitdir: /x")
             sub = Path(d) / "skills" / "task-loop" / "dash"
             sub.mkdir(parents=True)
             assert bind.is_dev_checkout(sub)
 
     def test_plugin_cache_is_not_dev_even_inside_git(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             (Path(d) / ".git").mkdir()
             sub = Path(d) / "plugins" / "cache" / "mk" / "tl" / "0.17.0" / "skills" / "task-loop" / "dash"
             sub.mkdir(parents=True)
             assert not bind.is_dev_checkout(sub)
 
     def test_plain_directory_is_not_dev(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             assert not bind.is_dev_checkout(Path(d))
 
     def test_dev_defaults_to_loopback_random_port(self):

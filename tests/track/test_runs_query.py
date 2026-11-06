@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.app.track import runs
+from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 
 
@@ -22,6 +23,8 @@ FIXTURE = [
     row("step_end", 130.0, id="n1", step="write", outcome="ok", exec_seconds=128.0),
     row("check_start", 131.0, id="c1", check="unit", group="g", cmd="just test", round=1),
     row("check_end", 191.0, id="c1", exit=0, status="pass", exec_seconds=60.0, wait_seconds=12.0),
+    row("cmd_start", 191.5, id="m1", text="git fetch -q origin"),
+    row("cmd_end", 197.5, id="m1", exit=0),
     row("wait_start", 192.0, id="w1", what="lane"),
     row("wait_end", 300.0, id="w1", wait_seconds=108.0),
     row("close", 301.0, outcome="landed", why="done"),
@@ -49,7 +52,16 @@ def test_show_prints_the_run_end_to_end(tmp_path):
     assert "step   write" in out and "2.1m" in out
     assert "check  unit" in out and "wait 12s" in out
     assert "wait   lane" in out
-    assert "total exec 3.1m  wait 2.0m  -> landed: done" in out
+    assert "total exec 3.2m  wait 2.0m  -> landed: done" in out
+
+
+def test_a_command_is_timed_from_its_start_and_end_records(tmp_path):
+    """The land's fetch, rebase and push are commands of the engine log: their dated spans are the gap between the two records."""
+    cfg = home(tmp_path)
+    rc, out = say(runs.show, "R1", cfg)
+    assert rc == 0 and "cmd    git fetch -q origin" in out and "6s" in out
+    rc, out = say(runs.slow, cfg, 3, "exec", 10)
+    assert any(ln.split()[2] == "cmd" and "git fetch" in ln for ln in out.splitlines())
 
 
 def test_show_of_an_unknown_run_exits_1(tmp_path):
@@ -68,3 +80,18 @@ def test_slow_ranks_by_exec_then_by_wait(tmp_path):
 def test_slow_with_no_logs_says_so(tmp_path):
     rc, out = say(runs.slow, ConfigDir(tmp_path), 5, "exec", 10)
     assert rc == 0 and "no timed items" in out
+
+
+def test_show_lists_the_attempts_of_the_run_from_factory_db(tmp_path):
+    """A run that was taken up again (a retry inside one run id) shows each attempt: the DB rows, read-only."""
+    cfg = ConfigDir(tmp_path)
+    where = RunLocator(cfg)
+    run = where.take_up("R2", "/repo", "tl-x", 10).manifest.run
+    where.take_up("R2", "/repo", "tl-x", 20)
+    cfg.engine_log(run).parent.mkdir(parents=True, exist_ok=True)
+    cfg.engine_log(run).write_text(json.dumps(row("run_start", 1.0, worktree="/w", branch="b", run_id=run)) + "\n", encoding="utf-8")
+    rc, out = say(runs.show, run, cfg)
+    assert rc == 0
+    lines = [ln for ln in out.splitlines() if ln.strip().startswith("attempt")]
+    assert len(lines) == 2 and "yielded" in lines[0] and "taken up by another process" in lines[0]
+    assert "open" in lines[1]

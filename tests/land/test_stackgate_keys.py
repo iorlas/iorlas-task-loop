@@ -2,13 +2,13 @@
 too), and a refusal names, per step, the first key field that differs from the newest receipt on that tree and base."""
 import json
 import re
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from support.case import Case
 from support.memstores import fake_stores
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import check_files, childenv
 from taskloop.app.checks.cache import InputKeys, RunMemo
@@ -79,7 +79,7 @@ def write_receipts(stores, git: Git, wt: str) -> RunMemo:
 
 class StackGateKeys(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.repo = Checkouts(Path(tmp.name))
         self.stores = fake_stores()

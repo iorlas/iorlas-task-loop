@@ -14,7 +14,7 @@ from support.procsim import real_proc
 import hermetic  # noqa: F401  (a home of its own for every test)
 
 LIMIT_S = 30  # a cold interpreter compiles a fresh copy of the tree (no __pycache__) before it prints
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 FIX = ROOT / "tests" / "delegate" / "fixtures"
 
 

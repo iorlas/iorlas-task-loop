@@ -1,12 +1,12 @@
 """A torn reflect memory fails closed: the digest does not start from an empty memory (it would file every cluster again)."""
 import os
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -18,7 +18,7 @@ from taskloop.contracts.wire import Refused
 
 class TornReflect(Case):
     def setup_method(self) -> None:
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
         env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(root / "cfg"), "APPDATA": str(root / "cfg"), "HOME": str(root)})

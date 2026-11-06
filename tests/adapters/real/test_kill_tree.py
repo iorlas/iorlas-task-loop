@@ -3,11 +3,11 @@ called setsid. Only PIDs this test starts are stopped; no pattern kills, no real
 import os
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import mkdtemp
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -57,7 +57,7 @@ def alive(pid):
 
 class KillTree(Case):
     def setup_method(self):
-        self.tmp = tempfile.mkdtemp()
+        self.tmp = mkdtemp()
         self.started = []
 
     def teardown_method(self):  # only PIDs this test started

@@ -1,7 +1,6 @@
 """The manifest chooses one answer; concurrent finishers and every history reader see that answer."""
 import json
 import os
-import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -12,6 +11,7 @@ import support.paths  # noqa: F401
 from support import homes
 from support.case import Case
 from support.engine_case import CLEAN, PLAN, WRITE, EngineTest
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.run.finish import answer, outcome
 from taskloop.contracts import log, runlife, wire
@@ -31,7 +31,7 @@ from taskloop.domain.asks import specs
 
 class Finish(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.cfg = ConfigDir(Path(tmp.name))
         self.where = RunLocator(self.cfg)

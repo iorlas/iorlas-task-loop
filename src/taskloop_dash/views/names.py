@@ -46,17 +46,6 @@ def lane_name(lane: str | None = "", family: str | None = "") -> str:
     return "Claude" if "CLAUDE" in up or "ANTHROPIC" in up else ""
 
 
-def nice_model(model: object) -> str:
-    if not model:
-        return ""
-    m = str(model)
-    for name in ("opus", "sonnet", "haiku", "fable"):
-        if m.lower().startswith(name):
-            rest = m[len(name) :].strip("-_ ")
-            return name.capitalize() + ((" " + rest.replace("-", ".")) if rest else "")
-    return m
-
-
 def hhmm(t: float | None) -> str:
     return time.strftime("%H:%M", time.localtime(t)) if t else ""
 

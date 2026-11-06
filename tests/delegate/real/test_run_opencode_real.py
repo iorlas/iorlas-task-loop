@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from any_agent.harnesses import opencode_sandbox as box
 from delegate.app import env, harnesses
+from delegate.app.env import PUSH_REFUSED
 from support.procsim import real_proc
 
 import hermetic  # noqa: F401  (a home of its own for every test)
@@ -70,6 +71,7 @@ class RunOpenCode(RunBase):
         assert "run --pure --format json" in args
         assert "-m xai/grok-4.7 --variant medium" in args
         assert "OPENCODE_DISABLE_PROJECT_CONFIG=1" in env
+        assert f"=url.{PUSH_REFUSED}.pushInsteadOf" in env  # an OpenCode write step cannot push
         assert f"XDG_CONFIG_HOME={self.tmp.name}\n" not in env  # the user's ~/.config/opencode stays out
         perm = json.loads(
             next(ln for ln in env.splitlines() if ln.startswith("OPENCODE_CONFIG_CONTENT="))[len("OPENCODE_CONFIG_CONTENT=") :]

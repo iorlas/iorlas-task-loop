@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from taskloop.adapters import locks
+from taskloop.contracts import factorydb
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import loop_key
@@ -18,6 +19,7 @@ from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.contracts.paths import TASK_EXCLUDE, ConfigDir
 from taskloop.contracts.ports import Git
 from taskloop.contracts.run import RunFinish
+from taskloop.contracts.signalrows import SignalRows
 from taskloop.contracts.slots import git_probe
 
 
@@ -84,6 +86,8 @@ def drop_run_log(cfg: ConfigDir, b: RunBundle) -> None:
     shutil.rmtree(b.live, ignore_errors=True)
     b.err.unlink(missing_ok=True)
     cfg.run_request(b.run).unlink(missing_ok=True)
+    with contextlib.suppress(factorydb.DatabaseError):
+        SignalRows(cfg, b.run).drop_all()
     cfg.run_request_lock(b.run).unlink(missing_ok=True)
     locks.holder_file(cfg.run_request_lock(b.run)).unlink(missing_ok=True)
     b.log.unlink()

@@ -4,33 +4,22 @@ are skipped and counted."""
 
 import json
 import sys
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.dashlogs import T
 from support.narrow import must
 
-from taskloop.app.run.trace import why_code
 from taskloop.contracts import wire
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import RunId
-from taskloop.contracts.kinds import ASKS, Kind
-from taskloop.contracts.log import Close
 from taskloop.contracts.trace import RunTrace, Stats
-from taskloop.domain import outcome as oc
-from taskloop.domain.asks.spec import AskSpec
 from taskloop_dash.env import Env
 from taskloop_dash.readers.records import Records
-
-
-def close_of(kind: Kind) -> Close:
-    spec = AskSpec.__new__(AskSpec) if kind in ASKS else None  # the word needs no spec's content
-    word = oc.make(kind, "x", spec=spec).word
-    return Close(t=T, outcome=word, why_code=why_code(kind.value, word), why="x")
 
 
 def trace(run: str, outcome: Outcome, ended: float, replans: int = 0) -> RunTrace:
@@ -40,7 +29,7 @@ def trace(run: str, outcome: Outcome, ended: float, replans: int = 0) -> RunTrac
 
 class Traces(Case):
     def test_traces_of_another_version_are_skipped_and_counted(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             cfg = Path(d)
             rows = [wire.dump(trace("01KBN6Z0M4R5E8YQ2T7C9W3XA1", Outcome.LANDED, T + 100, replans=2)),
                     wire.dump(trace("01KBN6Z0M4R5E8YQ2T7C9W3XA2", Outcome.FAILED, T + 200)),

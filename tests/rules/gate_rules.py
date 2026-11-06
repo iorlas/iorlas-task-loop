@@ -37,15 +37,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import taskloop  # noqa: E402, F401  (puts the vendored shelf packages on sys.path)
 
 # isort: split
-import vendor  # noqa: E402
 from git_porcelain import GitUnavailable, Identity, RealRepo  # noqa: E402
 from git_porcelain.testing import FakeRepo, git, hermetic_env  # noqa: E402
+from shelf_vendor import Vendor, dir_files, tree_hash  # noqa: E402
 from support.procsim import real_proc  # noqa: E402
 
 SCAN = ("src", "skills", "dev", "tests")
 SKIP_DIRS = frozenset({".git", ".worktrees", ".slots", ".task", "__pycache__", "fixtures", "node_modules", ".venv"})
-# The one place the size/file-count rules skip a path (the vendored shelf copy, dev/vendor.py). Nothing else is exempt.
+# The one place the size/file-count rules skip a path (the vendored shelf copy, shelf_vendor). Nothing else is exempt.
 EXEMPT_DIRS = ("skills/task-loop/_vendor",)
+VENDOR_DIR = ROOT / "skills" / "task-loop" / "_vendor"
+VENDOR = Vendor(VENDOR_DIR, ROOT / "dev" / "vendor.json")
 FILE_CAP, TEST_FILE_CAP, FUNC_CAP = 400, 800, 80
 
 # -- per-repo constants (the only lines that differ between iorlas-task-loop and iorlas-delegate) ------------------------------------
@@ -579,56 +581,58 @@ class FolderTable(Case):
 
 
 
-# -- tests: the vendored shelf package (dev/vendor.py) ---------------------------------------------------------------------------------
+# -- tests: the vendored shelf package (shelf_vendor) ---------------------------------------------------------------------------------
 ME = Identity("Vendor Test", "vendor@example.invalid")
 
 
 class VendorGuard(Case):
     def test_vendor_is_unedited(self):
-        assert vendor.problems(None) == [], "vendored files edited; change the shelf and run dev/vendor.py sync"
+        assert VENDOR.check(None)[0] == [], "vendored files edited; change the shelf and run just vendor sync"
 
     def test_manifest_lists_the_vendored_package(self):
-        entries = vendor.load()
-        assert [e["name"] for e in entries] == sorted(p.name for p in vendor.VENDOR_DIR.iterdir() if p.is_dir() and p.name != "__pycache__")
+        entries = VENDOR.load()
+        assert [e["name"] for e in entries] == sorted(p.name for p in VENDOR_DIR.iterdir() if p.is_dir() and p.name != "__pycache__")
         for e in entries:
             assert sorted(e) == ["name", "shelf_commit", "shelf_tag", "tree_hash"]
 
     def test_every_vendored_package_imports_by_its_absolute_name(self):
-        names = [e["name"] for e in vendor.load()]
+        names = [e["name"] for e in VENDOR.load()]
         assert names == [
-            "any_agent", "any_clock", "any_json_doc", "any_lease", "any_plugin_cache", "app_dirs", "atomic_io", "child_env",
-            "git_porcelain", "jsonl_log", "process_lock", "sqlite_store", "static_page_check", "stream_proc", "timefmt",
+            "any_agent", "any_breaker", "any_clock", "any_failure_fp", "any_json_doc", "any_lease", "any_plugin_cache", "any_shell_policy",
+            "app_dirs", "atomic_io", "child_env",
+            "git_porcelain", "jsonl_log", "process_lock", "shelf_vendor", "sqlite_store", "static_page_check", "stream_proc", "timefmt",
         ]
         for name in names:
             with self.subTest(name):
                 mod = importlib.import_module(name)
-                assert Path(mod.__file__ or "").resolve().parent == (vendor.VENDOR_DIR / name).resolve()
+                assert Path(mod.__file__ or "").resolve().parent == (VENDOR_DIR / name).resolve()
                 assert (
-                    vendor.tree_hash(vendor.dir_files(vendor.VENDOR_DIR / name))
-                    == next(e["tree_hash"] for e in vendor.load() if e["name"] == name)
+                    tree_hash(dir_files(VENDOR_DIR / name))
+                    == next(e["tree_hash"] for e in VENDOR.load() if e["name"] == name)
                 )
 
     def test_an_edited_or_added_file_in_any_package_is_drift(self):
-        for e in vendor.load():
+        for e in VENDOR.load():
             with self.subTest(e["name"]):
-                files = vendor.dir_files(vendor.VENDOR_DIR / e["name"])
+                files = dir_files(VENDOR_DIR / e["name"])
                 extra = dict(files, **{"added.py": b"x = 1\n"})
-                assert vendor.tree_hash(extra) != e["tree_hash"]
+                assert tree_hash(extra) != e["tree_hash"]
                 first = sorted(files)[0]
-                assert vendor.tree_hash(dict(files, **{first: files[first] + b"#"})) != e["tree_hash"]
+                assert tree_hash(dict(files, **{first: files[first] + b"#"})) != e["tree_hash"]
 
     def test_only_the_vendor_dir_is_exempt(self):
         assert EXEMPT_DIRS == ("skills/task-loop/_vendor",)
         assert str(ROOT / EXEMPT_DIRS[0]) in sys.path  # importing taskloop put it there
 
-    @real_proc("dev/vendor.py check is the gate's own command line, run against the shelf checkout")
+    @real_proc("shelf_vendor check is the gate's own command line, run against the shelf checkout")
     def test_vendor_drift(self):
-        shelf = vendor.shelf_home()
+        homes = (os.environ.get("SHELF_HOME"), Path.home() / "Workspaces" / "shelf")
+        shelf = next((Path(c) for c in homes if c and (Path(c) / ".git").exists()), None)
         if not shelf:
-            pytest.skip("no shelf checkout ($SHELF_HOME, ../shelf, ~/Workspaces/shelf)")
-        r = subprocess.run(
-            [sys.executable, str(ROOT / "dev" / "vendor.py"), "check", "--shelf", str(shelf)], capture_output=True, text=True, check=False
-        )
+            pytest.skip("no shelf checkout ($SHELF_HOME, ~/Workspaces/shelf)")
+        cmd = [sys.executable, "-m", "shelf_vendor", "--vendor-dir", str(VENDOR_DIR), "--manifest", str(VENDOR.manifest_path)]
+        cmd += ["--shelf", str(shelf), "check"]
+        r = subprocess.run(cmd, capture_output=True, text=True, check=False)
         assert r.returncode == 0, r.stderr
 
 
