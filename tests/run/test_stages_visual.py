@@ -112,7 +112,7 @@ class VisualWork(StagesTest):
         rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [late], "review": [CLEAN]})
         assert rc == 0, self.blocked
         assert "the look judge had no lane" in self.eng.log_path.read_text()
-        assert "look judge, round 1" in self.eng.look_unjudged
+        assert "look judge, round 1" in self.eng.look.unjudged
         assert [c[0] for c in s.calls] == ["planner", "worker", "reviewer", "reviewer"]  # the judge's one try, then the review
 
     def test_a_login_or_a_crash_is_not_swallowed_by_the_look_judge(self):
@@ -124,7 +124,7 @@ class VisualWork(StagesTest):
         rc, _s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]},
                         j_extra={"look": [{"flag": "same_family"}]})
         assert rc == 0, self.blocked
-        assert "no lane for the look judge" in " ".join(self.eng.look_notes)
+        assert "no lane for the look judge" in " ".join(self.eng.look.notes)
 
     def test_the_writer_is_asked_for_shot_requests_not_screenshots(self):
         rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
@@ -330,7 +330,7 @@ class VisualWork(StagesTest):
             git=port_git(), who=who())
         again.tree.reset(must_bead(BEAD))
         again.resume.point()
-        assert (again.look_done, again.rendered_names, again.render_stale) == (1, ["a.png"], True)
+        assert (again.look.done, again.look.rendered, again.render_stale) == (1, ["a.png"], True)
 
     def test_a_non_visual_repo_gets_none_of_it(self):
         _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
@@ -578,7 +578,7 @@ class ResumeCount(StagesTest):
         gitq.git("checkout", "-q", "task/t-1", cwd=e.wt)
         e.handoff.rounds = [Round(stage="s", round=1, kind="k")]
         assert e.restart.again("x")
-        assert (e.unverified, e.handoff.rounds, e.fixes, e.replans, e.rendered_names) == ([], [], 0, 0, [])
+        assert (e.unverified, e.handoff.rounds, e.fixes, e.replans, e.look.rendered) == ([], [], 0, 0, [])
         assert e.verify_answer == "Use the old format"  # the owner's word still goes to the planner
 
 

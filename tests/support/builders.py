@@ -7,6 +7,7 @@ from support.cfgs import cfg_with
 from support.fakes import FakeBeadStore, FakeClock, FakeRouter
 from support.spawn import port_git, real_spawner
 from support.who import who
+from taskloop.app.look.state import LOOK_FIELDS
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.env import snapshot
@@ -23,5 +24,5 @@ def make_engine(wt, bead="t-1", cfg=None, script=None, attrs=None, **seams):
     seams.setdefault("clock", FakeClock())
     e = engine.Engine(BeadId(bead), str(wt), c, **seams, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
     for k, v in (attrs or {}).items():
-        setattr(e, k, v)
+        setattr(e.state if k in LOOK_FIELDS else e, k, v)  # the look stage's checkpointed fields are the run state's
     return e

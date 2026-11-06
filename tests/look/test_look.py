@@ -2,7 +2,6 @@
 (never in the repo) and files an owner-look bead for the owner's later round."""
 import sys
 from pathlib import Path
-from typing import Any, cast
 from unittest import mock
 
 import pytest
@@ -223,7 +222,7 @@ class LookTest(T.EngineTest):
                             visual_paths=VISUAL)
             assert rc == 0, self.blocked
             self.bd_calls.clear()
-            cast(Any, self.eng).look_notes, self.eng.look_filed = ["second look"], False  # a later run
+            self.eng.look.notes, self.eng.look.filed = ["second look"], False  # a later run
             self.store.put({"id": "t-9", "labels": ["owner-look"], "dependencies": [{"id": "t-1", "type": "related"}]})
             self.eng.owner_look.file_owner_look()
         assert self.creates() == []
@@ -243,7 +242,7 @@ class LookTest(T.EngineTest):
         eng2.tree.reset(must_bead(BEAD))
         eng2.bead_title = "Add f"
         eng2.resume.point()
-        assert eng2.look_notes == ["matches"]
+        assert eng2.look.notes == ["matches"]
         with kept_one(), self.store.stub(show=BEAD):  # the pictures are the store's, so a restart finds them where they were
             eng2.owner_look.file_owner_look()
         assert len(self.creates()) == 1
