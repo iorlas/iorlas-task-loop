@@ -2,7 +2,6 @@
 
 import json
 import os
-import re
 import sqlite3
 from pathlib import Path
 from urllib.parse import quote
@@ -22,7 +21,7 @@ def session_id(ref: object) -> str:
     text = str(ref or "")
     if text.startswith("opencode:"):
         text = text[9:]
-    return text if re.match(r"^ses_[A-Za-z0-9]+$", text) else ""
+    return text if text.startswith("ses_") and len(text) > 4 and text[4:].isascii() and text[4:].isalnum() else ""
 
 
 def context_k(ref: object) -> float | None:
