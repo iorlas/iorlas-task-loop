@@ -1,10 +1,10 @@
 """The owner's `look` verb (Intake.look): good, redo and undo on a look item, over the typed bd port in memory."""
 import sys
-import tempfile
 import threading
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -26,7 +26,7 @@ def intake(fake, tmp):
 
 class Look(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.config = ConfigDir(self.tmp.name)
 
