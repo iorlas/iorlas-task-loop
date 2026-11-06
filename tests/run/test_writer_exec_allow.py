@@ -95,7 +95,7 @@ class Admission(te.EngineTest):
 
     def test_admitted_grant_reaches_only_the_writer(self):
         rc, script = self.run_engine({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]},
-                                     writer_family=["openai"], writer_exec_allow=GRANT)
+                                     writer_family=["openai"], writer_exec_allow=[*GRANT, [te.HAS_F]])  # the plan's own check runs too
         assert rc == 0
         assert "write" in script.nodes
         for node, argv in zip(script.nodes, script.argvs, strict=True):
