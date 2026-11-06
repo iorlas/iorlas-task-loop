@@ -215,6 +215,7 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
     warns += [f"run {r} is lost: its process is gone and it recorded no end" for r in runlife.reconcile(who.config, time.time())]
     print(f"contracts: {Path(contracts.__file__).resolve().parent}")
     print(f"engine: {pin.describe(pin.families(source[0].engine.writer_family, []))}")
+    print(f"engine: {pin.describe_second(source[0].engine.second_writer_family)}")
     for w in warns:
         print("WARN " + w)
     if legacy := legacy_line(env):
