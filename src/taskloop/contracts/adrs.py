@@ -10,7 +10,7 @@ from taskloop.contracts.askstore import AskDocs
 from taskloop.contracts.docrows import RowDocs
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.ledger import Adr, AdrUse
-from taskloop.contracts.logstores import JsonlStore
+from taskloop.contracts.stores import JsonlStore
 
 
 def is_adr_id(text: str) -> bool:

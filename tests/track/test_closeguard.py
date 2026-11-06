@@ -21,7 +21,7 @@ from taskloop.contracts.enums import Outcome
 from taskloop.contracts.gitfacts import Ref
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.logstores import TraceStore
+from taskloop.contracts.stores import TraceStore
 
 SHA = "a" * 40
 

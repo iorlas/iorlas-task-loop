@@ -11,8 +11,8 @@ import support.paths  # noqa: F401
 from taskloop.app.track import runs
 from taskloop.contracts import log, timedrows
 from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.logstores import RunLog
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.stores import RunLog
 
 
 def row(kind: str, t: float, **kw):

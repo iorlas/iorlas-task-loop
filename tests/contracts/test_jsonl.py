@@ -17,7 +17,7 @@ import support.paths  # noqa: F401
 from jsonl_log import Jsonl, cursor
 
 from contracts import samples as S
-from taskloop.contracts import askstore, logstores, paths, wire
+from taskloop.contracts import askstore, paths, stores, wire
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.docstore import JsonStore
 from taskloop.contracts.ids import BeadId
@@ -156,7 +156,7 @@ class StoresTest(Case):
         self.cfg = paths.ConfigDir(self.tmp.name)
 
     def test_the_run_log_is_a_typed_union_and_skips_what_it_cannot_read(self):
-        rl = logstores.RunLog(self.cfg, "tl-1-20261027-000000")
+        rl = stores.RunLog(self.cfg, "tl-1-20261027-000000")
         offs = [rl.append(S.LOG["run_start"]), rl.append(S.LOG["cmd_start"])]
         rl.file.append({"v": 1, "kind": "note", "t": 1.0, "text": "old"})      # a stale v
         rl.file.append({"v": 2, "kind": "from_the_future", "t": 1.0})          # an unknown kind
@@ -174,7 +174,7 @@ class StoresTest(Case):
         rec = S.LOG["cmd_start"]
 
         def writer(who: int) -> None:
-            rl = logstores.RunLog(self.cfg, run)  # a writer of its own, as a second process is
+            rl = stores.RunLog(self.cfg, run)  # a writer of its own, as a second process is
             offsets[who] = [rl.append(msgspec.structs.replace(rec, id=f"w{who}-{i}")) for i in range(n)]
 
         threads = [threading.Thread(target=writer, args=(w,)) for w in (0, 1)]
@@ -182,7 +182,7 @@ class StoresTest(Case):
             t.start()
         for t in threads:
             t.join()
-        page = logstores.RunLog(self.cfg, run).read_from(0)
+        page = stores.RunLog(self.cfg, run).read_from(0)
         assert page.skipped == 0
         assert [i.start for i in page.items] == sorted(offsets[0] + offsets[1])  # one line each, no two at the same place
         ids = [i.rec.id for i in page.items if isinstance(i.rec, CmdStart)]
@@ -198,14 +198,14 @@ class StoresTest(Case):
         assert list(st.path.parent.glob("*.tmp")) == []
 
     def test_each_family_lives_where_paths_says(self):
-        assert logstores.TraceStore(self.cfg).file.path.name == "traces.jsonl"
+        assert stores.TraceStore(self.cfg).file.path.name == "traces.jsonl"
         assert askstore.AskStore.at(self.cfg).of(BeadId("tl-1")).path == self.cfg.factory_db()
         askstore.AskStore.at(self.cfg).of(BeadId("tl-1")).write(S.other(Ask))
         assert askstore.AskStore.at(self.cfg).of(BeadId("tl-1")).get() == S.other(Ask)
-        el = logstores.EventLog(self.cfg)
+        el = stores.EventLog(self.cfg)
         el.append(S.EVENTS["claim"])
         assert el.read_from(0).items[0].rec == S.EVENTS["claim"]
-        tr = logstores.TraceStore(self.cfg)
+        tr = stores.TraceStore(self.cfg)
         tr.append(S.TRACE)
         assert tr.read_from(0).items[0].rec == S.TRACE
         assert wire.dump(tr.read_from(0).items[0].rec) == wire.dump(S.TRACE)

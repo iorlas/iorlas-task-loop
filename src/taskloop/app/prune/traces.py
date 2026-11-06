@@ -4,8 +4,8 @@ import json
 import math
 
 from taskloop.contracts.guard import guard
-from taskloop.contracts.logstores import TraceStore
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.stores import TraceStore
 
 
 def _old(line: str, cutoff: float, keep_beads: frozenset[str]) -> bool:

@@ -4,9 +4,9 @@ from collections.abc import Callable
 from taskloop.contracts import events, log
 from taskloop.contracts.guard import guard
 from taskloop.contracts.ids import RunId
-from taskloop.contracts.logstores import EventLog, LoopLog, RunLog, TraceStore
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import LoopLogLine, RunFinish, RunManifest
+from taskloop.contracts.stores import EventLog, LoopLog, RunLog, TraceStore
 from taskloop.contracts.trace import RunTrace
 
 

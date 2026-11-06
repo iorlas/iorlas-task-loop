@@ -2,7 +2,7 @@
 from any_lease import Leases
 
 from taskloop.adapters.locks import ProcessLockTable
-from taskloop.contracts import logstores, paths, rundocs
+from taskloop.contracts import paths, rundocs, stores
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.checkpoint import Checkpoint
@@ -20,7 +20,7 @@ from taskloop.stores.ticketrows import TicketRows
 
 def real_stores(cfg: paths.ConfigDir) -> Stores:
     return Stores(
-        run_log=lambda run: logstores.RunLog(cfg, run), events=logstores.EventLog(cfg), traces=logstores.TraceStore(cfg),
+        run_log=lambda run: stores.RunLog(cfg, run), events=stores.EventLog(cfg), traces=stores.TraceStore(cfg),
         profile_changes=profile_changes(cfg),
         asks=AskStore.at(cfg), adrs=lambda repo: AdrStore.at(cfg, repo),
         checkpoints=CheckpointBook(RowDocs(cfg, Checkpoint, table="checkpoint", key_col="bead", body_col="body",

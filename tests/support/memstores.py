@@ -25,9 +25,9 @@ from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.followups import FollowupOutbox
 from taskloop.contracts.ledger import Adr, AdrUse, LedgerEntry
 from taskloop.contracts.locks import LockRecord, LockTimeout, Ticket, pid_alive
-from taskloop.contracts.logstores import JsonlStore
 from taskloop.contracts.profile_changes import ProfileChange
 from taskloop.contracts.rotating import RotatingJsonl
+from taskloop.contracts.stores import JsonlStore
 from taskloop.contracts.trace import RunTrace
 from taskloop.contracts.wire import Refused
 from taskloop.stores.api import AmendDoc, DocSet

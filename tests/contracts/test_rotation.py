@@ -9,8 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from jsonl_log import KEEP, ROTATE_BYTES
 
-from taskloop.contracts import logstores, paths
-from taskloop.contracts.logstores import JsonlStore
+from taskloop.contracts import paths, stores
+from taskloop.contracts.stores import JsonlStore
 
 
 def decode(data):
@@ -37,6 +37,6 @@ class RotationTest(Case):
 
     def test_the_real_stores_default_to_the_one_policy(self):
         cfg = paths.ConfigDir(self.tmp.name)
-        for store in (logstores.RunLog(cfg, "r"), logstores.EventLog(cfg), logstores.TraceStore(cfg), logstores.LoopLog(cfg, "k")):
+        for store in (stores.RunLog(cfg, "r"), stores.EventLog(cfg), stores.TraceStore(cfg), stores.LoopLog(cfg, "k")):
             log = store.file.log
             assert (log._rotate_bytes, log._keep) == (ROTATE_BYTES, KEEP)

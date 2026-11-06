@@ -15,9 +15,9 @@ from support.narrow import must
 from taskloop.app.wire import lanes
 from taskloop.contracts import wire
 from taskloop.contracts.dash import Snapshot
-from taskloop.contracts.logstores import UsageHistory
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.snapshots import LaneStatus, StatusSnapshot, WindowStatus
+from taskloop.contracts.stores import UsageHistory
 from taskloop.contracts.usage import USAGE_KEEP_S, UsageRow, forecast, rows_of
 from taskloop_dash.views import snapshot
 from taskloop_dash.views.lanecards import STATUS_MAX_AGE, lane_cards
