@@ -1,21 +1,18 @@
 """The ownership records of the worktrees tl made, as `kv` rows in factory.db (key `worktree:<repo key>:<worktree key>`, the Owned in `v`).
 A record says who made a worktree and is kept until the worktree is removed: evidence, not a lease. An older tl's
 `worktrees/<repo>/<key>.json` is read while there is no row, and the next write moves it (dual-read, never dual-write)."""
-import contextlib
 import json
 import time
-from pathlib import Path
 
 from taskloop.contracts import wire
 from taskloop.contracts.looprows import LoopRows
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import JsonStore
 from taskloop.contracts.worktrees import Owned
 
 
 class WorktreeDoc:
     def __init__(self, cfg: ConfigDir, repo_key: str, key: str) -> None:
-        self.rows, self.k, self.legacy = LoopRows(cfg, ""), f"worktree:{repo_key}:{key}", cfg.worktree_record(repo_key, key)
+        self.rows, self.k = LoopRows(cfg, ""), f"worktree:{repo_key}:{key}"
 
     def get(self) -> Owned | None:
         found = self.rows.select("SELECT v FROM kv WHERE k=?", (self.k,))
@@ -25,27 +22,20 @@ class WorktreeDoc:
                 return wire.load(Owned, {k: v for k, v in body.items() if k in wire.keys(Owned)})  # a newer writer's keys are read past
             except (ValueError, TypeError, AttributeError):
                 return None
-        old = JsonStore(self.legacy, Owned).get()
-        if old is not None:
-            self.write(old)
-        return old
+        return None
 
     def write(self, rec: Owned) -> None:
         with self.rows.transaction() as con:
             con.execute("INSERT INTO kv (k, v, t) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, t=excluded.t",
                         (self.k, json.dumps(wire.dump(rec), ensure_ascii=False), time.time()))
-        with contextlib.suppress(OSError):
-            self.legacy.unlink()
 
     def delete(self) -> None:
         with self.rows.transaction() as con:
             con.execute("DELETE FROM kv WHERE k=?", (self.k,))
-        with contextlib.suppress(OSError):
-            self.legacy.unlink()
 
 
 class WorktreeDocs:
-    """The records of one repo: `of(key)` one, `keys()` all (rows and an older tl's files)."""
+    """The records of one repo: `of(key)` one, `keys()` all (rows)."""
 
     def __init__(self, cfg: ConfigDir, repo_key: str) -> None:
         self.cfg, self.repo_key = cfg, repo_key
@@ -56,8 +46,4 @@ class WorktreeDocs:
     def keys(self) -> list[str]:
         prefix = f"worktree:{self.repo_key}:"
         rows = LoopRows(self.cfg, "").select("SELECT k FROM kv WHERE k >= ? AND k < ?", (prefix, prefix[:-1] + ";"))
-        names = {r[0][len(prefix):] for r in rows}
-        folder = self.cfg.worktree_record(self.repo_key, "x").parent
-        with contextlib.suppress(OSError):
-            names |= {p.stem for p in Path(folder).glob("*.json") if not p.name.startswith(".")}
-        return sorted(names)
+        return sorted({r[0][len(prefix):] for r in rows})
