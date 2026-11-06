@@ -248,3 +248,16 @@ def run_rows(path: Path, now: float, *, repo: str | None = None, bead: str | Non
         return [], "database unavailable: corrupt or unreadable run data"
     finally:
         con.close()
+
+
+def attempt_of(path: Path, run: str) -> int | None:
+    """The newest attempt number of a run (0: no row yet); None when the database cannot be read."""
+    con = open_ro(path)
+    if con is None:
+        return None
+    try:
+        return con.execute("SELECT max(n) FROM attempt WHERE run=?", (run,)).fetchone()[0] or 0
+    except sqlite3.Error:
+        return None
+    finally:
+        con.close()

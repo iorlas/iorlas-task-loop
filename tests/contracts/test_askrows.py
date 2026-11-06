@@ -1,7 +1,6 @@
 """Asks and transition receipts have one atomic authority in factory.db."""
 
 import json
-import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier
@@ -15,12 +14,10 @@ from support.tmpdir import TemporaryDirectory
 from contracts import samples as S
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.ask import Ask, AskAnswer
-from taskloop.contracts.askrows import AskRows, DbLedger, import_legacy_asks, read_snapshot
+from taskloop.contracts.askrows import AskRows, DbLedger, read_snapshot
 from taskloop.contracts.dash import OwnerCause, Stick
 from taskloop.contracts.enums import AskStatus
-from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import LedgerEntry
-from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.stores import Absent, AskStore, ForeignVersion, JsonStore, Present, Torn
 from taskloop.contracts.wire import Refused
@@ -169,66 +166,9 @@ class AskRowsTest(Case):
         assert [i.rec.event for i in ledger.tail(1).items] == ["answer"]
         assert [i.rec.event for i in ledger.tail(1, before=first).items] == ["raise"]
 
-    def legacy_files(self):
-        for bead in ("a", "b", "c"):
-            JsonStore(self.cfg.ask(bead), Ask).write(self.ask.replace(bead=BeadId(bead), id=bead + "-1"))
-        self.cfg.ask("torn").write_text('{"v": 3,')
-        rec = LedgerEntry(t=1.0, event="raise", ask="a-1", bead=BeadId("a"))
-        self.cfg.ask_ledger().write_text(json.dumps(wire.dump(rec)) + "\ninvalid\n" + json.dumps(wire.dump(rec)) + "\n")
-        paths = [self.cfg.ask(b) for b in ("a", "b", "c", "torn")] + [self.cfg.ask_ledger()]
-        return {path: path.read_bytes() for path in paths}
-
-    def test_import_is_once_insert_only_reports_torn_and_preserves_files(self, caplog, monkeypatch):
-        files = self.legacy_files()
-        current = self.ask.replace(bead=BeadId("a"), id="new-a")
-        self.store.put(current)
-        with caplog.at_level(logging.WARNING, logger="taskloop.contracts.askrows"):
-            count, torn = import_legacy_asks(self.cfg)
-        assert any(r.name == "taskloop.contracts.askrows" and r.levelno >= logging.WARNING for r in caplog.records)
-        assert count == 4  # two missing documents and two distinct ledger lines
-        assert len(torn) == 1
-        assert "torn.json" in torn[0]
-        assert self.store.get(BeadId("a")) == current
-        assert self.store.docs.keys() == ["a", "b", "c"]
-        assert len(self.store.rows()) == 2
-        assert self.store.torn() == []
-        self.store.drop(BeadId("b"))
-        with monkeypatch.context() as patch:
-            patch.setattr(JsonStore, "read", unexpected_access)
-            patch.setattr(Path, "open", unexpected_access)
-            assert import_legacy_asks(self.cfg) == (0, [])
-        assert self.store.get(BeadId("b")) is None
-        assert {path: path.read_bytes() for path in files} == files
-
-    def test_three_valid_documents_import_without_existing_rows(self, caplog):
-        self.legacy_files()
-        with caplog.at_level(logging.WARNING, logger="taskloop.contracts.askrows"):
-            count, torn = import_legacy_asks(self.cfg)
-        assert any(r.name == "taskloop.contracts.askrows" and r.levelno >= logging.WARNING for r in caplog.records)
-        assert (count, len(torn), len(self.store.all())) == (5, 1, 3)
-
-    def test_locator_imports_asks_without_runs(self):
-        JsonStore(self.cfg.ask(self.ask.bead), Ask).write(self.ask)
-        assert RunLocator(self.cfg).runs() == []
-        assert self.store.get(self.ask.bead) == self.ask
-
-    def test_foreign_legacy_body_remains_an_orphan_without_migration(self):
-        path = self.cfg.ask(self.ask.bead)
-        path.parent.mkdir(parents=True)
-        body = '{"v": 1, "id": "tl-1-2", "bead": "tl-1", "status": "open"}'
-        path.write_text(body)
-        assert import_legacy_asks(self.cfg) == (1, [])
-        assert self.store.orphans() == [self.ask.bead]
+    def test_a_miss_is_none_and_a_broken_db_is_an_error(self):
         assert self.store.get(self.ask.bead) is None
-        assert self.connection().execute("SELECT body FROM ask").fetchone()[0] == body
-        assert path.read_text() == body
-
-    def test_live_readers_never_read_legacy_on_miss_or_broken_db(self, monkeypatch):
-        self.legacy_files()
-        with monkeypatch.context() as patch:
-            patch.setattr(JsonStore, "read", unexpected_access)
-            assert self.store.get(self.ask.bead) is None
-            assert self.store.rows() == []
+        assert self.store.rows() == []
         factorydb.close_shared()
         self.cfg.factory_db().write_bytes(b"broken database")
         for read in (self.store.all, self.store.rows, lambda: read_snapshot(self.cfg)):

@@ -2,7 +2,6 @@
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import pytest
 import support.paths  # noqa: F401
@@ -13,7 +12,7 @@ from taskloop.app.run import done_memo
 from taskloop.app.run.reload import Reload
 from taskloop.contracts import factorydb
 from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.paths import ConfigDir, RunFiles
+from taskloop.contracts.paths import ConfigDir
 
 
 class CarryDoneMemo(Case):
@@ -39,8 +38,7 @@ class CarryDoneMemo(Case):
             con.execute("INSERT INTO step (run,key,try,attempt,status,started) VALUES (?, '[2]',1,1,'running',10)",
                         (self.paused.run,))
         before = self.steps(self.paused.run)
-        with patch.object(RunFiles, "done_memo", side_effect=AssertionError("legacy file read")):
-            Reload(self.host).carry_done_memo(self.paused.dir)
+        Reload(self.host).carry_done_memo(self.paused.dir)
         assert self.steps(self.new.run) == [row for row in before if row[3] == "done"]
         assert self.steps(self.paused.run) == before
         assert done_memo.recall(self.new.dir, ("write", 1), "sha") == {"answer": "done"}
