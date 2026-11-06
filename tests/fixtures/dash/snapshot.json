@@ -211,14 +211,26 @@
    "name": "lifesim",
    "profile_error": "",
    "bd_ok_at": null,
-   "bd_error": ""
+   "bd_error": "",
+   "score": {
+    "since": 1793017800.0,
+    "until": 1793050200.0,
+    "beads": 9,
+    "landed": 8,
+    "landed_no_ask": 6,
+    "asks": 3,
+    "lost": 0,
+    "crashes": 0,
+    "m2_pass": true
+   }
   },
   {
    "id": "task-loop-48643b50",
    "name": "task-loop",
    "profile_error": "",
    "bd_ok_at": null,
-   "bd_error": ""
+   "bd_error": "",
+   "score": null
   }
  ],
  "epics": [

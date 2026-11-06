@@ -9,10 +9,10 @@ from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.memstores import fake_stores
 
 from taskloop.app.run import artifacts
 from taskloop.app.run.steps import Steps
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 

@@ -20,6 +20,7 @@ from support import homes
 from run import test_stages_visual
 from support import engine_case as te
 from support import (
+    netgate,
     procsim,
     tlbd,
 )
@@ -30,7 +31,6 @@ from taskloop.app.release import reexec
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunLocator
-from taskloop.domain.lanes import netgate
 from taskloop.stores import call_state as callstate
 
 SAY = "codex: Reconnecting... waiting for network (Connection failed: error sending request)"

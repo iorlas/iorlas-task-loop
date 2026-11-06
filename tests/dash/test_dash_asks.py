@@ -15,6 +15,7 @@ from asks.dash_ports import answering
 from support.dashes import make_dash
 from support.dashlogs import T, bead
 from support.fake_beads import FakeBeads
+from support.memstores import fake_stores
 from support.narrow import must
 from support.repos import write_repos
 
@@ -27,7 +28,6 @@ from taskloop.contracts.ids import BeadId, loop_key
 from taskloop.contracts.ledger import Adr
 from taskloop.contracts.stores import AskStore
 from taskloop.domain.asks import specs
-from taskloop.stores.memory import fake_stores
 from taskloop_dash.views import bead_detail, snapshot
 from taskloop_dash.views.board import Board
 from taskloop_dash.views.world import AdrIn, Landing, ProjectIn, World
@@ -276,6 +276,14 @@ class Stick_(Case):
         assert self.stick("fix").ok is False
         assert self.asks.history(self.ask.id)[-1].event == "answer"
         assert self.post("stick", {"project": "nowhere", "ask": self.ask.id, "outcome": "adr"}).ok is False
+
+    def test_a_write_that_succeeds_drops_the_cached_decisions_and_ledger(self):
+        worlds = self.dash.reads.worlds
+        assert worlds.adrs(str(self.repo)) == []
+        self.stick("adr", "Rent is weekly.")
+        assert [a.adr.id for a in worlds.adrs(str(self.repo))] == ["ADR-1"]
+        self.post("prune", {"project": loop_key(self.repo), "adr": "ADR-1"})
+        assert worlds.adrs(str(self.repo)) == []
 
     def test_prune_retires_a_decision_and_keeps_it_in_the_store(self):
         self.stick("adr", "Rent is weekly.")

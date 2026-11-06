@@ -14,7 +14,7 @@ from typing import ClassVar
 from unittest.mock import patch
 
 import pytest
-from delegate.adapters import agent_runs, codex_account
+from delegate.adapters import codex_account
 from delegate.adapters.harness import classify
 from delegate.adapters.harness.opencode import OpenCodeHarness
 from delegate.app import answer, env, launch
@@ -375,8 +375,6 @@ class Launchers(Case):
         self.tmp = tempfile.TemporaryDirectory()
         for p in (
             patch.object(env, "config_dir", return_value=Path(self.tmp.name)),
-            patch.object(agent_runs, "run"),
-            patch.object(agent_runs, "lanes"),
             patch.object(shutil, "which", return_value="cli"),
             patch.object(OpenCodeHarness, "find_exe", return_value="opencode"),
             patch.object(sys, "platform", "darwin"),
@@ -401,7 +399,7 @@ class Launchers(Case):
             ),
         }
         with replay_run(lines, rc, err):
-            res = launch.launch_worker(d, "brief", self.a, "rid12345", T, env.load_routing(), {}, RunHooks())
+            res = launch.launch_worker(d, "brief", self.a, "rid12345", T, env.load_routing(), RunHooks())
         res.pop("stderr", None)
         return res
 

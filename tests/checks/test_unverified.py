@@ -16,6 +16,7 @@ from support.narrow import must
 from support.narrow_hosts import Stopped, table_kit
 
 # isort: split
+from support.memstores import fake_stores
 from support.spawn import port_git
 
 from taskloop.app.checks import evidence
@@ -26,7 +27,6 @@ from taskloop.contracts.checks import UNVERIFIED_EXIT, Check, CheckResult, Check
 from taskloop.contracts.enums import CheckStatus
 from taskloop.contracts.ids import BeadId, CheckId, TreeSha
 from taskloop.contracts.runkey import BaseSha
-from taskloop.stores.memory import fake_stores
 
 
 def unverified(id="render") -> CheckResult:

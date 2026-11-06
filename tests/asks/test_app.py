@@ -10,6 +10,7 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
+from support.memstores import fake_stores
 from support.narrow import must
 from support.tiers import domain
 
@@ -21,7 +22,6 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import NewBead
 from taskloop.domain.asks import specs
 from taskloop.domain.asks.lint import INFRA
-from taskloop.stores.memory import fake_stores
 
 T = 1000.0
 
@@ -207,3 +207,16 @@ class ParseTest(Case):
         for t in ("@answer right", "@hint use b", "hold this", "OVERRIDE: yes", "answer: land it", "", "Owner (tl) dance: x"):
             assert (intake.parse(t).kind in ("note", "engine")) is True, t
             assert intake.parse(t).kind not in ("answer", "hint", "hold", "override", "decision"), t
+
+
+class AskArtifacts(Case):
+    def test_the_pictures_a_stop_names_go_on_the_filed_ask(self):
+        asks = fake_stores().asks
+        at = dataclasses.replace(asking(), artifacts=("r-1/t-1/r/ask-1/skin-cheek.png",))
+        ask = must(raiser.raise_ask(asks, specs.missing_criteria(), at)[0])
+        assert ask.artifacts == ["r-1/t-1/r/ask-1/skin-cheek.png"]
+        assert must(asks.get(ask.bead)).artifacts == ask.artifacts
+
+    def test_an_ask_without_pictures_has_none(self):
+        ask = must(raiser.raise_ask(fake_stores().asks, specs.missing_criteria(), asking())[0])
+        assert ask.artifacts == []
