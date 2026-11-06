@@ -37,7 +37,8 @@ from support import (
     netgate,  # noqa: F401
     procsim,
 )
-from support.builders import argv_cfg, cfg_with, make_engine
+from support.builders import make_engine
+from support.cfgs import argv_cfg, cfg_with
 from support.checked import run_checked
 from support.checkpoints import flat_ck, stored_ck
 from support.checks import res

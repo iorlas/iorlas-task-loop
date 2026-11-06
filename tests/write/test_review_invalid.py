@@ -2,7 +2,8 @@
 from unittest import mock
 
 from support import fake_route
-from support.builders import make_engine, plan_of
+from support.builders import make_engine
+from support.cfgs import plan_of
 from support.engine_case import BEAD, CLEAN, PLAN, WRITE, EngineTest, stop
 from support.fakes import FakeClock
 from support.logs import records

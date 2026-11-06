@@ -39,7 +39,7 @@ from pathlib import Path
 from unittest import mock
 
 from support import fake_route, procsim
-from support.builders import cfg_with
+from support.cfgs import cfg_with
 from support.interrupts import Interrupter, Recovery, RecoveryRig
 from support.logs import records
 from support.narrow import must

@@ -19,7 +19,7 @@ from pathlib import Path
 from unittest import mock
 
 from support.briefs import brief_digest, linked_text
-from support.builders import cfg_with
+from support.cfgs import cfg_with
 from support.checks import ck, res, typed
 from support.fakes import as_bead, must_bead
 from support.narrow import must

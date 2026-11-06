@@ -17,7 +17,7 @@ from support.tmpdir import TemporaryDirectory
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
-from support.builders import cfg_with  # noqa: E402
+from support.cfgs import cfg_with  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from support.spawn import port_git  # noqa: E402
 

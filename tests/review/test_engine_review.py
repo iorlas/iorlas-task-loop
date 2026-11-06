@@ -29,7 +29,7 @@ from support.engine_case import (
 )
 
 # isort: split
-from support.builders import cfg_with
+from support.cfgs import cfg_with
 from support.narrow import must
 from support.spawn import port_git
 

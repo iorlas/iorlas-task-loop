@@ -5,7 +5,7 @@ from unittest import mock
 
 import pytest
 from support import procsim
-from support.builders import plan_of
+from support.cfgs import plan_of
 from support.engine_case import CLEAN, PLAN, RED_ONCE, WRITE, EngineTest
 from support.logs import records
 from support.narrow import must

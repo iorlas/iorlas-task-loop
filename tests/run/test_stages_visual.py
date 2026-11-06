@@ -16,7 +16,8 @@ from support import (
     homes,
     procsim,
 )
-from support.builders import cfg_with, make_engine, plan_of
+from support.builders import make_engine
+from support.cfgs import cfg_with, plan_of
 from support.checkpoints import read_ck
 from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: F401
 from support.fakes import (
