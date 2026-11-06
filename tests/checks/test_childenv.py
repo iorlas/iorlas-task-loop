@@ -23,9 +23,10 @@ class CheckEnvironmentTest(Case):
         for scratch in (False, True):
             with self.subTest(scratch=scratch), check_environment(pinned, scratch_home=scratch) as out:
                 config = {k: v for k, v in out.items() if k.startswith("GIT_CONFIG_")}
-                assert config == {"GIT_CONFIG_COUNT": "2", "GIT_CONFIG_KEY_0": "user.name",
+                assert config == {"GIT_CONFIG_COUNT": "3", "GIT_CONFIG_KEY_0": "user.name",
                                           "GIT_CONFIG_VALUE_0": "Suite", "GIT_CONFIG_KEY_1": "protocol.file.allow",
-                                          "GIT_CONFIG_VALUE_1": "always", "GIT_CONFIG_GLOBAL": "/suite/gitconfig",
+                                          "GIT_CONFIG_VALUE_1": "always", "GIT_CONFIG_KEY_2": "core.fsmonitor",
+                                          "GIT_CONFIG_VALUE_2": "false", "GIT_CONFIG_GLOBAL": "/suite/gitconfig",
                                           "GIT_CONFIG_NOSYSTEM": "1"}
         assert "core.hooksPath" in pinned.values()
         assert "core.hooksPath" in tool_env(base).values()
