@@ -21,7 +21,6 @@ from support.dashes import make_dash  # noqa: E402
 from support.spawn import port_git  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
-    context_size,
     opencode,
 )
 from taskloop.app.run.calls import Calls  # noqa: E402
@@ -112,11 +111,6 @@ class OpenCode(Case):
         assert opencode.transcript_of(snapshot(), "xai", "ses_zzz") == ""
         assert opencode.transcript_of(snapshot(), "xai", "") == ""
 
-    def test_context_is_the_last_assistant_message_with_tokens(self):
-        assert context_size.context_tokens("opencode:" + SID, snapshot()) == 9000 + 4000 + 700
-        assert context_size.context_tokens(SID, snapshot()) == 13700
-        assert context_size.context_tokens("opencode:ses_nope", snapshot()) is None
-
     # fresh-writer limit
     def test_xai_has_its_own_fresh_writer_limit(self):
         eng = types.SimpleNamespace(cfg=cfg_with())
@@ -150,7 +144,6 @@ class OpenCode(Case):
             sessions,
             {"tokens_in": 0, "tokens_cached": 0, "tokens_out": 0},
             opencode.opencode_id,
-            lambda path: None,
         )
         r = DelegateResult(ref=SID, secs=1, cost=0, family="xai")
         calls.end("c1", "write", "writer", 1, r)
