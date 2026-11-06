@@ -1,6 +1,7 @@
 """One reader and one writer per file family. A missing, torn or stale (foreign `v`) file reads as absent."""
 import contextlib
 import json
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final, Protocol, override
@@ -17,6 +18,7 @@ from taskloop.contracts.guard import guard
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import LedgerEntry, LedgerEvent
 from taskloop.contracts.loop import BadVersions, LoopCommand, LoopState, Rest
+from taskloop.contracts.reponame import repo_name
 from taskloop.contracts.rotating import RotatingJsonl
 from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.snapshots import (
@@ -398,7 +400,8 @@ class SharedNotesStore(JsonStore[SharedNotes]):
 
 
 class ReposStore(JsonStore[ReposIndex]):
-    """repos.json: every repo `tl` has seen. Adding one reads and writes under a lock, so two processes never drop a repo."""
+    """repos.json: every repo `tl` has seen, by name. Adding one reads and writes under a lock, so two processes never drop a repo.
+    A v1 file (keyed by path) is converted on its first read; no reader of v1 stays."""
 
     def __init__(self, cfg: paths.ConfigDir) -> None:
         super().__init__(cfg.repos(), ReposIndex)
@@ -412,24 +415,73 @@ class ReposStore(JsonStore[ReposIndex]):
             return ReposIndex()
         try:
             return wire.load(ReposIndex, json.loads(text))
+        except wire.StaleRecord as e:
+            if e.found != 1:
+                raise ValueError(self._refusal()) from None
+            return self._convert()
         except ValueError:
-            why = f"{self.path} is not a repos index of this version: delete it; every tl process registers its repo again"
-            raise ValueError(why) from None
+            raise ValueError(self._refusal()) from None
+
+    def _refusal(self) -> str:
+        return f"{self.path} is not a repos index of this version: delete it; every tl process registers its repo again"
+
+    def _convert(self) -> ReposIndex:
+        """v1 (path to added) to v2 (name to path and added). Of paths with one name the first stays; the rest are said and dropped."""
+        with guard(self.lock):
+            body = json.loads(self.path.read_text(encoding="utf-8"))
+            if body.get("v") == 2:
+                return wire.load(ReposIndex, body)
+            repos: dict[str, RepoEntry] = {}
+            for path, ent in body.get("repos", {}).items():
+                name = repo_name(path)
+                if name in repos:
+                    sys.stderr.write(f"tl: repos.json: {path} dropped, {name} is already {repos[name].path}\n")
+                    continue
+                repos[name] = RepoEntry(path=path, added=ent["added"])
+            idx = ReposIndex(repos=repos)
+            self.write(idx)
+            return idx
 
     def known(self) -> list[str]:
-        """The repo paths, oldest first."""
-        return list(self.index().repos)
+        """The repo folders, oldest first."""
+        return [e.path for e in self.index().repos.values()]
+
+    def path_of(self, name: str) -> str:
+        """The folder of repo `name`: the name, or the folder when it is one; unknown and ambiguous names are a ValueError with the fix."""
+        idx = self.index().repos
+        if name in idx:
+            return idx[name].path
+        short = [n for n in idx if n.rsplit("/", 1)[-1] == name]
+        if len(short) == 1:
+            return idx[short[0]].path
+        if short:
+            raise ValueError(f"repo {name!r} is ambiguous ({', '.join(sorted(short))}): give the full owner/name")
+        raise ValueError(f"repo {name!r} is not registered: run `tl register` in its folder; known: {', '.join(sorted(idx)) or 'none'}")
 
     def add(self, path: str, now: float) -> bool:
-        """Register `path`; False when it was known. A file in another version is an error (ValueError), never overwritten."""
+        """Register `path`; False when it was known. A name another folder holds is a ValueError. Another version is a ValueError too,
+        and the file is never overwritten."""
         if path in self.known():
             return False
+        name = repo_name(path)
         with guard(self.lock):
             idx = self.index()
-            if path in idx.repos:
+            if any(e.path == path for e in idx.repos.values()):
                 return False
-            self.write(idx.replace(repos={**idx.repos, path: RepoEntry(added=now)}))
+            if name in idx.repos:
+                held = idx.repos[name].path
+                raise ValueError(f"repo name {name!r} is taken by {held}: remove that entry (`tl prune` drops a folder that is gone)")
+            self.write(idx.replace(repos={**idx.repos, name: RepoEntry(path=path, added=now)}))
             return True
+
+    def drop_missing(self, exists: Callable[[str], bool]) -> list[str]:
+        """Drop the entries whose folder `exists` says is gone. -> their names."""
+        with guard(self.lock):
+            idx = self.index()
+            gone = [n for n, e in idx.repos.items() if not exists(e.path)]
+            if gone:
+                self.write(idx.replace(repos={n: e for n, e in idx.repos.items() if n not in gone}))
+            return gone
 
 
 class PinStore(JsonStore[Pin]):
