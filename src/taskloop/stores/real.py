@@ -7,6 +7,7 @@ from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.checks import BaseRedRecord, CheckRun, Durations, PassRecord
 from taskloop.contracts.config import HostResources
+from taskloop.contracts.docrows import RowDocs
 from taskloop.contracts.followups import FollowupOutbox
 from taskloop.contracts.receiptrows import DbDocSet
 from taskloop.contracts.stores import AskStore, JsonStore
@@ -21,8 +22,9 @@ def real_stores(cfg: paths.ConfigDir) -> Stores:
         run_log=lambda run: stores.RunLog(cfg, run), events=stores.EventLog(cfg), traces=stores.TraceStore(cfg),
         profile_changes=profile_changes(cfg),
         asks=AskStore.at(cfg), adrs=lambda repo: AdrStore.at(cfg, repo),
-        checkpoints=CheckpointBook(FileDocSet(cfg.checkpoint, Checkpoint)),
-        followups=FileDocSet(cfg.followup_outbox, FollowupOutbox),
+        checkpoints=CheckpointBook(RowDocs(cfg, Checkpoint, cfg.checkpoint, table="checkpoint", key_col="bead", body_col="body",
+                                           revisioned=True)),
+        followups=RowDocs(cfg, FollowupOutbox, cfg.followup_outbox, table="kv", key_col="k", body_col="v", prefix="followup:"),
         loop_state=lambda key: stores.LoopStateStore(cfg, key),
         loop_command=lambda key: stores.LoopCommandStore(cfg, key),
         loop_rest=lambda key: stores.RestStore(cfg, key),

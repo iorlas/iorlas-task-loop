@@ -1,9 +1,12 @@
 """domain/policy: the verdict on a worker's tool call, and the typed refusal record (D3)."""
 
-from delegate.contracts import events as ev
+from any_agent import events as ev
+from delegate.app.codex_policy import hook_verdict
+from delegate.app.launch import secret_in
+from delegate.contracts.json_types import Json
 from delegate.domain.policy.matchers import heredoc_only_hit
 from delegate.domain.policy.shell import git_write, read_only_problem
-from delegate.domain.policy.worker import denial, denial_item, is_policy_denial, judge
+from delegate.domain.policy.worker import READ_CAP_LINES, denial, denial_item, is_policy_denial, judge, read_verdict
 
 
 class Policy:
@@ -18,6 +21,12 @@ class Policy:
         assert heredoc_only_hit(hd)
         assert "apply_patch" in judge("Bash", {"command": hd}, False).reason
         assert not heredoc_only_hit("cat .env")
+
+    def test_the_codex_watcher_ignores_a_secret_name_only_in_a_heredoc_body_but_not_a_read(self):
+        hd = "zsh -lc \"python - <<'EOF'\nif path.name == '.env':\n    pass\nEOF\""
+        assert secret_in(ev.Cmd(id="1", text=hd)) is None
+        for read in ("cat .env", "cat .env <<'EOF'\nx\nEOF", "python -c \"open('.env')\""):
+            assert secret_in(ev.Cmd(id="1", text=read)) == read
 
     def test_git_writes_are_blocked_and_listings_pass(self):
         for c in ("git commit -m x", "git -C . push", "bash -lc 'git checkout -b y'", "git stash", "git branch new"):
@@ -36,7 +45,8 @@ class Policy:
     def test_the_denial_is_a_typed_record_with_the_matched_path(self):
         d = denial("secret", "Bash", {"command": "cat .env"})
         assert isinstance(d, ev.Denied)
-        assert denial_item(d) == {"kind": "secret", "tool": "Bash", "path": ".env", "input": {"command": "cat .env"}}
+        assert denial_item(d) == {"kind": "secret", "tool": "Bash", "path": ".env", "input": {"command": "cat .env"}, "reason": None}
+        assert denial_item(denial("policy", "Bash", {}, "reviewer said no"))["reason"] == "reviewer said no"
         assert denial_item(denial("policy", "Read", {"file_path": "/a"}))["path"] == "/a"
         assert denial("x", "Bash", None).input == {}
 
@@ -44,4 +54,24 @@ class Policy:
         assert is_policy_denial("Bash", {"command": "git push"})
         assert is_policy_denial("Bash", {"command": "touch x"}, True)
         assert not is_policy_denial("Bash", {"command": "cat .env > x"}, True)  # a secret stays the owner's
-        assert not is_policy_denial("Read", {"command": "git push"})
+        assert is_policy_denial("shell", {"command": "git push"})  # a shell by its command, not by its name
+        assert not is_policy_denial("Read", {"file_path": "x"})
+
+
+def test_a_whole_file_read_over_the_cap_is_blocked_with_a_pointer_to_range_reads():
+    big: dict[str, Json] = {"file_path": "/x/big.py"}
+    v = read_verdict("Read", big, READ_CAP_LINES + 1)
+    assert v.blocked and "offset" in v.reason and "limit" in v.reason
+    assert not read_verdict("Read", big, READ_CAP_LINES).blocked
+    assert not read_verdict("Read", big | {"limit": 100}, 5000).blocked
+    assert not read_verdict("Read", big | {"offset": 10}, 5000).blocked
+    assert not read_verdict("Bash", {"command": "cat x"}, 5000).blocked
+    assert not read_verdict("Read", big, None).blocked
+
+
+def test_the_hook_blocks_a_whole_file_read_of_a_long_file_and_allows_a_range(tmp_path):
+    f = tmp_path / "long.txt"
+    f.write_text("x\n" * (READ_CAP_LINES + 5))
+    assert hook_verdict({"tool_name": "Read", "tool_input": {"file_path": str(f)}}, False, ()).blocked
+    assert not hook_verdict({"tool_name": "Read", "tool_input": {"file_path": str(f), "limit": 50}}, False, ()).blocked
+    assert not hook_verdict({"tool_name": "Read", "tool_input": {"file_path": str(tmp_path / "missing")}}, False, ()).blocked

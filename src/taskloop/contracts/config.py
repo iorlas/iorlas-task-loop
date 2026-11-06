@@ -100,6 +100,9 @@ class CheckSpec(Rec):
     lane: str = ""  # checks of one lane run in order, lanes run in parallel; the first red cancels the other lanes ("": the default lane)
     needs: list[str] = msgspec.field(default_factory=list)  # engine.resources it holds a machine-wide lease on while it runs
     pass_files: bool = False  # the changed files (those matching `when`) are appended to argv; none: the check is skipped
+    # argv + `--base REV` prints the files the check's result depends on for the diff against REV, one per line (dev/affected.py --closure).
+    # A pass on an earlier base is carried to a moved base when that closure is the same in the branch and in its merge with the base.
+    closure_cmd: list[str] = msgspec.field(default_factory=list)
     # argv run in the worktree before the checks (a formatter); what it changes is checked
     fix: list[str] = msgspec.field(default_factory=list)
 
@@ -146,7 +149,7 @@ class LoopConfig(Rec):
     keep_days: float = 14  # `tl prune`: run data past this goes (30 days at least; not a bead not closed), a merged tree idle this long
     min_free_gb: float = 5  # claim nothing until the config disk has this much free space
     min_ram_mb: int = 1024  # claim nothing below this available RAM; an unknown reading does not block
-    build_dir: str = "~/Workspaces/wt"  # `tl prune` removes merged, clean worktrees under here (never a loop slot)
+    build_dir: str = ""  # `tl prune` removes merged, clean worktrees under here (never a loop slot); empty: none
 
 
 @final
@@ -155,7 +158,7 @@ class PrepareConfig(Rec):
 
     cmd: list[str]
     inputs: list[str] = msgspec.field(default_factory=list)
-    triggers: list[str] = msgspec.field(default_factory=lambda: ["restore", "project.assets.json", "NU1"])
+    triggers: list[str] = msgspec.field(default_factory=list)
     timeout_min: float = 30
 
 
@@ -182,6 +185,7 @@ class EngineConfig(Rec):
     reflect: bool = True
     writer_family: list[str] = msgspec.field(default_factory=list)  # e.g. ["openai"]: --only-family on every worker call
     writer_exec_allow: list[list[str]] = msgspec.field(default_factory=list)
+    writer_read_roots: list[str] = msgspec.field(default_factory=list)  # absolute folders an OpenCode write step may read outside its cwd
     planner_notes: str = ""
     shot_table: str = ""
     write_fresh_stage_k: float = 100
@@ -196,6 +200,12 @@ class EngineConfig(Rec):
     # added to (over) the slot's environment; {slot} {slot_dir} {repo} filled in
     slot_env: dict[str, str] = msgspec.field(default_factory=dict)
     host: bool = False
+    queued_match: str = ""  # regex over a repo check's "<id> <cmd>": the checks that queue for a scarce slot and run late (none: no group)
+    lock_fail: str = ""  # regex over a red check's output: an editor or project lock held by another run (wait, then rerun)
+    slow_cmd: str = ""  # regex over an untimed command: named like a slow run, so the engine's and not the writer's
+    pin_files: list[str] = msgspec.field(default_factory=list)  # file names at any depth a check reads besides its inputs: lockfile-like
+    # dependency and toolchain pins the repo's build uses (the engine already knows justfile, *.lock, mise.toml, .python-version, ...)
+    project_log: str = ""  # a path in the worktree: the log the toolchain wrote when the project files could not be regenerated
     worker_rules: str = ""
     test_pattern: str = TEST_PATTERN
     area_label_prefix: str = ""
@@ -223,6 +233,7 @@ class EngineConfig(Rec):
     max_total_reviews: int = 12  # reviews in all of a run, replans included: then stop and ask (0: never)
     check_wall_min: float = 60  # a check is stopped only when it runs this long; a quiet or idle one is never stopped before
     gate_timeout_min: float = 90
+    run_deadline_min: float = 45  # the whole run: past it the run parks, branch and checkpoint kept
     lane_wait_min: float = 10
     look_rounds: int = 2
     look_max_px: int = 1280
@@ -365,6 +376,8 @@ def grant_problem(eng: EngineConfig) -> str:
     """Why engine.writer_exec_allow is malformed ('' when it is not); delegate checks the binaries against its own host.json."""
     if any(not argv or any(not arg for arg in argv) for argv in eng.writer_exec_allow):
         return "engine.writer_exec_allow entries must be nonempty lists of nonempty strings"
+    if any(not root.startswith("/") for root in eng.writer_read_roots):
+        return "engine.writer_read_roots entries must be absolute paths"
     return ""
 
 

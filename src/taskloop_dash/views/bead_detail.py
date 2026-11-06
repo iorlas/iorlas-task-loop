@@ -8,12 +8,14 @@ from collections.abc import Sequence
 from taskloop.contracts.bead import Bead, Comment
 from taskloop.contracts.dash import Artifact, AskCard, BeadDetail, CheckCount, LiveBox, Marker, Msg, Phase
 from taskloop.contracts.delegate import LiveCmdEnd, LiveCmdStart, LiveEvent, LiveTokens
+from taskloop.contracts.log import Overrun, RetryDecision, VendorError
 from taskloop.contracts.runlife import Liveness
 from taskloop_dash.tails import parse_ts
 from taskloop_dash.views import ledger, passes, phases, stage_logs
 from taskloop_dash.views.artifact_files import Item, url_of
 from taskloop_dash.views.askcards import ask_card, look_card, stale_of
 from taskloop_dash.views.board import Board, blockers, is_work
+from taskloop_dash.views.names import hhmm
 from taskloop_dash.views.runfacts import Run
 from taskloop_dash.views.world import ProjectIn
 
@@ -23,6 +25,26 @@ EXITED_WHY = "the run is lost: its process is gone and it recorded no end"
 
 def comment_msg(c: Comment) -> Msg:
     return Msg(t=parse_ts(c.created_at) or 0.0, icon=COMMENT_ICON, who=c.author, md=c.text)
+
+
+def decision_msgs(runs: Sequence[Run]) -> list[Msg]:
+    """Why it was slow and why it switched: each Overrun (budget against elapsed), RetryDecision (action and reason) and VendorError
+    (lane, reason, until when it is closed) the engine recorded, oldest first."""
+    out: list[Msg] = []
+    for r in runs:
+        for x in r.records:
+            if isinstance(x, Overrun):
+                lane = f" on {x.lane}" if x.lane else ""
+                out.append(Msg(t=x.t, icon="⏱", who="engine",
+                               md=f"{x.stage}{lane} used its {x.budget_s:.0f} s budget ({x.elapsed_s:.0f} s) and was stopped"))
+            elif isinstance(x, RetryDecision):
+                lane = f" on {x.lane}" if x.lane else ""
+                why = f": {x.reason}" if x.reason else ""
+                out.append(Msg(t=x.t, icon="↪", who="engine", md=f"{x.step}{lane}: {x.action} (attempt {x.attempt}){why}"))
+            elif isinstance(x, VendorError):
+                until = f", closed until {hhmm(x.until)}" if x.until else ""
+                out.append(Msg(t=x.t, icon="⛔", who="engine", md=f"{x.lane or 'a lane'} refused: {x.reason}{until}"))
+    return sorted(out, key=lambda m: m.t)
 
 
 def artifacts_of(repo: str, bead: str, found: Sequence[Item], ps: Sequence[passes.PassView]) -> list[Artifact]:
@@ -85,6 +107,7 @@ def build(board: Board, p: ProjectIn, b: Bead, comments: Sequence[Comment], even
         ask = next((look_card(p.id, i, card.t or 0.0) for i in p.looks if i.bead == b.id), None)
     return BeadDetail(
         t=w.now, card=card, description=b.description, acceptance=b.acceptance_criteria, comments=[comment_msg(c) for c in comments],
+        decisions=decision_msgs(runs),
         passes=[passes.pass_rec(x).replace(logs=stage_logs.logs_of(x, (stage_events or {}).get(x.run.name, {}))) for x in ps],
         artifacts=artifacts_of(p.id, b.id, found, ps), waits_for=blockers(b, by_id),
         unblocks=[x.id for x in p.beads if is_work(x) and x.status != "closed" and b.id in blockers_ids(x)],

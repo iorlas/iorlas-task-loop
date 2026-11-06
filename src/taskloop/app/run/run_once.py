@@ -27,7 +27,6 @@ from taskloop.contracts.run import RunState
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.lanes import pin
-from taskloop.domain.lanes.liveness import LIVENESS
 from taskloop.domain.plan.matchers import AcceptanceText
 from taskloop.domain.review.kinds import UNCHECKED_KINDS
 
@@ -45,14 +44,14 @@ class RunOnce:
     def go(self) -> int:
         e = self.e
         end = Ended()
-        hb = Lease(e.store, e.bead, e.env.bead(EnvVar.TASK_LOOP_SLOT_BEAD), on_beat=self.beat)
+        hb = Lease(e.store, e.bead, e.env.bead(EnvVar.TASK_LOOP_SLOT_BEAD), on_beat=self.beat, on_death=self.beat_died)
         ck = e.checkpoints.read()
         e.prev_ck = ck.run if ck else ""
         try:
             if e.dead is not None:  # the last run died inside its close: this process only finishes it
                 self.finish_dead(end)
             else:
-                with deadline(LIVENESS.run_s, "run"):
+                with deadline(e.cfg.run_deadline_min * 60, "run"):
                     self.run(hb, end)
         except DeadlineExpired as err:
             end.outcome = oc.make(Kind.OWNER_PARK, f"{err}; branch and checkpoint kept")
@@ -92,6 +91,10 @@ class RunOnce:
             self.e.log.emit(Beat())
         self.e.stuck.tick()
         self.e.requests.at_beat()
+
+    def beat_died(self, err: BaseException) -> None:
+        """The heartbeat thread ended on an error: the run goes on without a beat, so the log says so before the lease lapses."""
+        self.e.log.warn("the heartbeat thread died, the lease will lapse: " + "".join(traceback.format_exception(err)))
 
     def run(self, hb: Any, end: Ended) -> None:
         e = self.e
@@ -156,7 +159,7 @@ class RunOnce:
         plan, i, state = e.resume.point()
         e.records.log_run()
         # tl-fsj: the configured checks come from the base's config, so the tree they run on must have what the base has; every
-        # resume rebases first, a plan to make or a stage to go on with (lifesim: 8 beads parked on 'just fmt-check-changed')
+        # resume rebases first, a plan to make or a stage to go on with (a consumer: 8 beads parked on 'just fmt-check-changed')
         at_land = plan is not None and (i >= len(plan["stages"]) or (state or {}).get("fix"))  # a conflict there is the writer's fix round
         moved = "" if at_land else e.rebase.onto_base(salvage=plan is not None)  # (no plan: nothing accepted to salvage)
         if moved == "conflict-fixable":

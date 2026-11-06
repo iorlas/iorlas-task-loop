@@ -2,18 +2,19 @@
 import contextlib
 import statistics
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, TypedDict
 
 from taskloop.adapters import beadtools, gitrepo
 from taskloop.app.asks import intake
 from taskloop.app.reconcile.lost import lost_work
-from taskloop.app.report.inputs import bead_status, read_jsonl, repo_traces
+from taskloop.app.report.inputs import bead_status, landed_of, read_jsonl, repo_traces
 from taskloop.app.report.planner import input_tokens
-from taskloop.contracts import paths, runlife
+from taskloop.contracts import paths, runlife, wire
 from taskloop.contracts.bead import Comment
+from taskloop.contracts.dashhealth import Score
 from taskloop.contracts.enums import Outcome, Result
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, is_bead_id, loop_key
@@ -167,6 +168,32 @@ def _tokens(runs: Sequence[RunTrace]) -> dict[str, dict[str, dict[str, int]]]:
     return tokens
 
 
+class _Count(TypedDict):
+    count: int
+
+
+_M2 = TypedDict("_M2", {"pass": bool})  # `pass` is a keyword
+
+
+class _Card(TypedDict):
+    since: float
+    until: float
+    beads: int
+    landed: int
+    landed_no_ask: int
+    asks: _Count
+    lost: int
+    crashes: int
+    m2: _M2
+
+
+def score_of(card: Mapping[str, object]) -> Score:
+    """The dashboard strip's numbers of a scorecard: nothing is recounted, so the strip and `tl report` cannot disagree."""
+    c: _Card = wire.load(_Card, card)
+    return Score(since=c["since"], until=c["until"], beads=c["beads"], landed=c["landed"], landed_no_ask=c["landed_no_ask"],
+                 asks=c["asks"]["count"], lost=c["lost"], crashes=c["crashes"], m2_pass=c["m2"]["pass"])
+
+
 def scorecard(repo: str, since: float, until: float, base: str, comments_of: Callable[[BeadId], Sequence[Comment]] | None = None,
               status_of: Callable[[BeadId],
                   str | None] | None = None, now: float | None = None, *, git: Git, who: Identity) -> dict[str, Any]:
@@ -183,7 +210,8 @@ def scorecard(repo: str, since: float, until: float, base: str, comments_of: Cal
         beads.setdefault(c["bead"], {"runs": [], "crashes": []})["crashes"].append(c)
     rows, asks = _bead_rows(beads, comments_of)
     tokens = _tokens(runs)
-    lost = [x for x in lost_work(repo, base, status_of or (lambda b: bead_status(b, repo, who)), traces, git, who.config, since=since)
+    lost = [x for x in lost_work(repo, base, status_of or (lambda b: bead_status(b, repo, who)), traces, git,
+                                 lambda b: landed_of(b, repo, who), since=since)
             if x["class"] in ("lost", "pending", "unknown")]
     mins = [x["minutes"] for x in rows if x["runs"]]
     c: dict[str, Any] = {"repo": repo, "since": since, "until": until, "beads": len(rows),

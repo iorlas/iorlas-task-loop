@@ -1,4 +1,4 @@
-"""Breaker, reset times, token budget, config location, agent-runs"""
+"""Breaker, reset times, token budget, config location"""
 
 import datetime as dt
 import inspect
@@ -12,25 +12,27 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-import stream_proc
-from delegate.adapters import agent_runs
-from delegate.adapters.harness import classify, reset_parse
-from delegate.adapters.harness.base import LaunchSpec
-from delegate.adapters.harness.codex import CodexHarness
-from delegate.app import decide as dec
-from delegate.app import env, launch, usage, watch
+from any_agent import reset_parse
+from any_agent.classify import Outcome
+from any_agent.harnesses.codex import CodexHarness
+from any_agent.protocol import LaunchSpec
+from any_agent.supervisor import RunHooks, Supervisor
+from delegate.app import env, harnesses, launch, usage
 from delegate.app.fleet import apply_health
 from delegate.app.publish import LiveSink
-from delegate.app.supervisor import RunHooks, Supervisor
 from delegate.contracts import codec, stores
 from delegate.contracts import history as hist
 from delegate.domain.health import ledger as health_ledger
 from delegate.domain.lanes.lane import Lane
+from support import fake_worker
 from support.case import Case
+from support.fake_clock import SteppingClock
+from support.fake_worker import Err, Exit, Jump
 from support.procsim import real_proc
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
+from run_support import short_limits
 from test_route import CFG, T, argparse_ns, lanes, need, no_reader, route
 
 
@@ -92,8 +94,8 @@ class Breaker(Case):
     def test_every_opencode_lane_runs_under_the_watchdog_and_the_breaker(self):
         lanes_ = [n for n, c in CFG["lanes"].items() if c["runner"] == "opencode"]
         assert sorted(lanes_) == ["DEEPSEEK_FREE", "GROK_SUBSCRIPTION", "ZAI_CODING_SUBSCRIPTION"]
-        lim = watch.LIMITS["opencode"]
-        assert (lim["first_event_s"], lim["silence_s"] >= 900) == (120, True)
+        lim = harnesses.LIMITS["opencode"]
+        assert (lim.first_event_s, lim.silence_s >= 900) == (120, True)
         for name in lanes_:
             fam = CFG["lanes"][name]["family"]
             models = [m for m, v in CFG["models"].items() if v["family"] == fam]
@@ -202,7 +204,7 @@ class ResetTimes(Case):
             )  # inside the 40 days a stated reset may be off
             launch.settler().apply(
                 {},
-                classify.Outcome("rate_limited", f"will reset at {end:%Y-%m-%d %H:%M:%S} UTC", "event"),
+                Outcome("rate_limited", f"will reset at {end:%Y-%m-%d %H:%M:%S} UTC", "event"),
                 {"lane": "L1", "limit_reset": None},
                 time.time(),
                 "codex",
@@ -214,7 +216,7 @@ class ResetTimes(Case):
             for want_n in (0, 1, 2):  # three guesses in a row climb the ladder
                 launch.settler().apply(
                     {},
-                    classify.Outcome("rate_limited", "slow down", "event"),
+                    Outcome("rate_limited", "slow down", "event"),
                     {"lane": "L2"},
                     1_800_000_000.0,
                     "codex",
@@ -297,45 +299,9 @@ class ConfigLocation(Case):
         assert env.config_dir() == Path(self.tmp.name) / "mine"
 
 
-class AgentRuns(Case):
-    """delegate publishes agent-runs v1 (iorlas-task-loop docs/contracts/agent-runs-v1.md), never its own state."""
-
-    def test_run_and_lanes_records(self):
-        saved = {k: os.environ.get(k) for k in ("XDG_CONFIG_HOME", "APPDATA")}
-        with tempfile.TemporaryDirectory() as d:
-            os.environ["XDG_CONFIG_HOME"] = d
-            os.environ["APPDATA"] = d
-            try:
-                ar = agent_runs
-                ar.run("r1", kind="claude-p", parent_session="p", cwd="/w", started=1.0, status="running", ended=None)
-                ar.run("r1", status="completed", exit=0)
-                rec = json.loads((ar.root() / "runs" / "r1.json").read_text())
-                assert (rec["v"], rec["producer"], rec["id"], rec["parent_session"], rec["status"], rec["exit"]) == (
-                    1,
-                    "delegate",
-                    "r1",
-                    "p",
-                    "completed",
-                    0,
-                )
-                assert "ended" not in rec
-                lane = Lane("OPENAI_SUBSCRIPTION", "openai", "subscription")
-                lane.five, lane.five_reset = 41, 99
-                dec.publish_lanes({"OPENAI_SUBSCRIPTION": lane}, support.doc_of({}), 5.0)
-                lr = json.loads((ar.root() / "lanes" / "delegate.json").read_text())
-                assert lr["lanes"][0]["usage"] == [{"window": "5h", "used_pct": 41, "resets_at": 99}]
-                assert lr["at"] == 5.0
-            finally:
-                for k, v in saved.items():
-                    if v is None:
-                        os.environ.pop(k, None)
-                    else:
-                        os.environ[k] = v
-
-
 class WatchdogProc(Case):
-    """delegate-go0 on a real child process (python, so it runs on Windows too): a dead stream is stopped through stop_tree,
-    a chatty one is not."""
+    """delegate-go0 on a worker that is a script (tests/support/fake_worker.py) with the fake clock: a dead stream is stopped through the
+    tree stop, a chatty one is not."""
 
     def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -344,30 +310,28 @@ class WatchdogProc(Case):
         p.start()
         self.addCleanup(p.stop)
 
-    def run_child(self, code, **limits):
-        with mock.patch.dict(watch.LIMITS["codex"], **limits):
-            sup = Supervisor(CodexHarness(), "codex", RunHooks(), LiveSink("codex", ""))
-        with mock.patch.object(stream_proc, "stop_tree", wraps=stream_proc.stop_tree) as st:
-            t0 = time.time()
-            out = sup.run(LaunchSpec(argv=[sys.executable, "-c", code], env=dict(os.environ), cwd=self.tmp.name, stdin=""), 0)
-        return out.rc, {"why": out.watch.why, "kind": out.watch.kind}, st, time.time() - t0
+    def run_worker(self, *script, **limits):
+        clock = SteppingClock(0.25)
+        with short_limits("codex", **limits):
+            sup = Supervisor(CodexHarness(), RunHooks(), LiveSink("codex", ""), limits=harnesses.LIMITS["codex"], clock=clock)
+        with fake_worker.install(list(script), clock=clock) as started:
+            out = sup.run(LaunchSpec(argv=["codex"], env=dict(os.environ), cwd=self.tmp.name, stdin=""), 0)
+        return out.rc, {"why": out.watch.why, "kind": out.watch.kind}, started[0]
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_dead_stream_is_stopped_through_stop_tree(self):
-        rc, state, st, secs = self.run_child("import time;print('started',flush=True);time.sleep(60)", first_event_s=5, silence_s=1)
+    def test_dead_stream_is_stopped_through_the_tree_stop(self):
+        rc, state, worker = self.run_worker("started", first_event_s=5, silence_s=1)
         assert (state["why"], state["kind"]) == ("hung", "silence")
-        assert st.called
-        assert secs < 10
+        assert worker.stopped
         assert rc != 0
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_a_child_that_prints_nothing_is_hung_on_the_first_event_deadline(self):
-        _rc, state, _st, secs = self.run_child("import time;time.sleep(60)", first_event_s=1, silence_s=60)
+    def test_a_worker_that_prints_nothing_is_hung_on_the_first_event_deadline(self):
+        _rc, state, _worker = self.run_worker(first_event_s=1, silence_s=60)
         assert (state["why"], state["kind"]) == ("hung", "first_event")
-        assert secs < 10
 
-    @real_proc("delegate: a worker, git or CLI process")
     def test_stderr_deltas_keep_a_quiet_stdout_alive(self):
-        code = "import sys,time\nfor i in range(8):\n sys.stderr.write('thinking\\n');sys.stderr.flush();time.sleep(0.4)"
-        rc, state, st, _secs = self.run_child(code, first_event_s=5, silence_s=1)
-        assert (rc, state["why"], st.called) == (0, None, False)
+        beat = [step for _ in range(8) for step in (Jump(0.4), Err("thinking"))]
+        rc, state, worker = self.run_worker(*beat, Exit(0), first_event_s=5, silence_s=1)
+        assert (rc, state["why"], worker.stopped) == (0, None, False)
+        quiet = [step for _ in range(8) for step in (Jump(0.4),)]  # the same gaps with nothing printed: the silence limit is real
+        _rc, state, worker = self.run_worker("started", *quiet, first_event_s=5, silence_s=1)
+        assert (state["why"], worker.stopped) == ("hung", True)

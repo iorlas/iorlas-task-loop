@@ -75,7 +75,9 @@ class Calls:
             "t": time.time(),
             "stopped": stopped,
             "tokens": {"in": tk.in_, "cached": tk.cached, "out": tk.out} if tk else None,
-            "denied": [{"kind": d.kind, "tool": d.tool, "path": d.path or "", "input": d.input} for d in res.denied],
+            "denied": [
+                {"kind": d.kind, "tool": d.tool, "path": d.path or "", "input": d.input, "reason": d.reason or ""} for d in res.denied
+            ],
             "reason": st.reason if st else None,
             "exit": res.exit_code,
             "stop": {"scope": st.scope, "permanence": st.permanence, "retry": st.retry.kind} if st else None,

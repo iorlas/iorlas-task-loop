@@ -1,9 +1,15 @@
-# The gate is two recipes: `just check` (static: ruff, pyrefly, import-linter) and `just test` (the tests). Neither runs the other's work.
+# The gate is `just gate` = `just check` (static: ruff, pyrefly, import-linter) then `just test` (the tests). The suite receipt (RunKey) is written only after both.
 # `uv run pytest <path>` is the inner loop while you edit, not a gate.
+gate: check test
 
 # The tests this change can break (dev/affected.py picks them from the diff against origin/main; tests/rules always; all kinds, one run). Each test runs once per tree.
 test:
     uv run python dev/runtests.py
+
+# INNER LOOP ONLY, never the gate: pytest-testmon reruns what the code you edited reaches in the paths you name (docs/dev/test-inner-loop.md). It follows Python imports, not
+# config or data files, so a green run here proves nothing about those: `just test` (dev/affected.py) is the gate. First run per path builds .testmondata.
+test-inner +paths:
+    uv run --with pytest-testmon pytest --testmon -o addopts="-p no:cacheprovider" --ignore=tests/e2e --ignore=tests/delegate --ignore=tests/live {{paths}}
 
 # Every test of every kind, in 4 workers then the serial group. Started by a person, never by the gate, the release, a cron or a background job.
 test-full:

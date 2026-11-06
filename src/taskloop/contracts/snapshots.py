@@ -56,12 +56,15 @@ class StatusSnapshot(Rec):
 
 @final
 class RepoEntry(Rec):
+    path: str
     added: float
 
 
 @final
 class ReposIndex(Rec):
-    V: ClassVar[int] = 1
+    """repos.json: repo name (`owner/name` of the origin, else the folder name) to its folder."""
+
+    V: ClassVar[int] = 2
     repos: dict[str, RepoEntry] = msgspec.field(default_factory=dict)
 
 
@@ -121,23 +124,6 @@ class SlotSetupMarker(Rec):
     V: ClassVar[int] = 1
     cmd_hash: str
     t: float
-
-
-@final
-class GreenRun(Rec):
-    """One green suite run: the tree it ran on and the exact command."""
-
-    tree: str
-    command: str
-    at: float
-
-
-@final
-class SuiteGreens(Rec):
-    """releases/suite-green.json: the newest green runs of the release suite (a hit needs the same tree and command)."""
-
-    V: ClassVar[int] = 1
-    greens: list[GreenRun] = msgspec.field(default_factory=list)
 
 
 @final

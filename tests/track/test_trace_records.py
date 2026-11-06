@@ -26,6 +26,7 @@ from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts import log as rec  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
+from taskloop.stores.real import real_stores  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402
 
 engine = te.engine
@@ -190,7 +191,7 @@ class TraceRecords(te.EngineTest):
     def test_a_rerun_without_a_checkpoint_is_a_retry(self):
         self.run_engine({"plan": [stop("worker_failed", say="boom")] * 2})
         first = self.eng.log_path.stem
-        assert not (homes.config_dir() / "checkpoints" / "t-1.json").exists()
+        assert real_stores(homes.cfg()).checkpoints.of("t-1").get() is None
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         run = records(self.eng, rec.RunStart)[-1]
         assert (run.started_because, run.parent_id) == ("retry", first)

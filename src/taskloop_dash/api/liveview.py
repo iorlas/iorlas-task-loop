@@ -45,4 +45,5 @@ class Live:
         except ValueError:
             hold = 0.0
         got = lr.read(since, hold)
-        return 200, wire.dump(live_lines.page(got["events"], got["cursor"], shown(logs[-1].manifest, self.env.clock())))
+        state = shown(logs[-1].manifest, self.env.clock())
+        return 200, wire.dump(live_lines.page(got["events"], got["cursor"], state, got.get("reset", False)))

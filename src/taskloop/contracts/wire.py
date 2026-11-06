@@ -65,6 +65,11 @@ def names(cls: type[Rec]) -> tuple[str, ...]:
     return tuple(f.name for f in msgspec.structs.fields(cls))
 
 
+def keys(cls: type[Rec]) -> frozenset[str]:
+    """The keys of a record class on the wire (`v` and each field under its wire name: `from` for a field renamed so)."""
+    return frozenset({"v", *(f.encode_name for f in msgspec.structs.fields(cls))})
+
+
 def _enc(obj: Any) -> Any:
     return obj.to_wire()  # RunId
 

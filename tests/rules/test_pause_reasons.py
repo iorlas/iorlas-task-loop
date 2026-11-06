@@ -9,6 +9,8 @@ from pathlib import Path
 
 from support.case import Case
 
+from rules.gate_rules import parsed
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
@@ -73,8 +75,12 @@ def synthesized(node: ast.AST) -> set[str]:
 
 
 def produced(source: str) -> set[str]:
+    return produced_in(ast.parse(source))
+
+
+def produced_in(tree: ast.Module) -> set[str]:
     found: set[str] = set()
-    for node in ast.walk(ast.parse(source)):
+    for node in ast.walk(tree):
         found.update(declaration(node) | synthesized(node))
     return found
 
@@ -83,7 +89,7 @@ class Complete(Case):
     def test_all_locally_produced_reason_ids_have_a_policy(self):
         reasons: set[str] = set()
         for path in (ROOT / "src").rglob("*.py"):
-            reasons.update(produced(path.read_text(encoding="utf-8")))
+            reasons.update(produced_in(parsed(path)[1]))
         assert missing_policies(reasons, contract_permanences()) == set()
 
     def test_all_recorded_delegate_contract_reasons_have_a_policy(self):
@@ -142,3 +148,25 @@ class Complete(Case):
             'FAULT_NEW = "fault_new"\nsynth_for(c, "new_stop", facts)\ne.pause_reason = "own"\nStopFacts(reason="wire")'
         )
         assert produced(source) == {"new", "pause_new", "fault_new", "new_stop", "own", "wire"}
+
+
+def documented() -> dict[str, tuple[str, ...]]:
+    rows: dict[str, tuple[str, ...]] = {}
+    for line in (ROOT / "docs/dev/pause-reasons.md").read_text().splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if line.startswith("|") and len(cells) == 6 and cells[0] not in ("reason", "---"):
+            rows[cells[0]] = tuple(cells[1:])
+    return rows
+
+
+class Documented(Case):
+    def test_the_doc_table_holds_every_reason_with_the_class_the_code_gives_it(self):
+        contract = contract_permanences()
+        expected: dict[str, tuple[str, ...]] = {}
+        for reason in Reason:
+            producer = "engine" if ("engine", reason) in TABLE else "delegate"
+            policy = rule(reason.value, producer, contract.get(reason.value))
+            transient = policy.permanence == "transient"
+            expected[reason.value] = (producer, policy.permanence, f"{policy.base_s:g}" if transient else "-",
+                                      f"{policy.cap_s:g}" if transient else "-", str(policy.max_attempts) if transient else "-")
+        assert documented() == expected

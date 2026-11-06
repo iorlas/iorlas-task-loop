@@ -29,7 +29,9 @@
   tl.py lanes                                   file delegate's lane status for the dashboard (the dashboard runs no delegate)
   tl.py reflect digest [--since 24h] [--dry-run]  the last day's run reflections into one bead per recurring cause
   tl.py trace [ID] [--last N] [--json]          engine runs and every worker session of each (for reflection)
-  tl.py run-task ID [--stage STEP] [--worktree DIR] [--slot S|any [--wait]] [--exclusive-area] [--dry-run] [--fresh] [--force]
+  tl.py runs show RUN | slow [--top N] [--by exec|wait] [--runs N]  one run end to end; the slowest steps, calls, checks and waits
+  tl.py run-task ID|--branch B|--pr N [--stage STEP] [--worktree DIR] [--slot S|any [--wait]] [--exclusive-area] [--dry-run] [--fresh]
+                [--force]
                                                 one bead through the engine (engine.py), no judgement here
   tl.py next [--repo DIR] [--json] [--only ID...]  the bead the loop would take next and why (claims nothing)
   tl.py queue [add|remove ID...]                the owner's queue (label `queue`): while set, the loop takes only these, in order
@@ -57,7 +59,7 @@
   tl.py ask show ID                             one ask: question, owner cause, blocking, default, similar, thread, outcome (read-only)
   tl.py handoff write|show [--repo DIR]         the <= 4 KB handoff a compaction hands to the next session (hooks/hook.py writes it)
 
-State: ~/.config/task-loop : repos.json, events.jsonl, dash.*.
+State: ~/.config/task-loop : factory.db (state); logs and transcripts stay files (docs/architecture/c4-task-loop.md, Stores).
 """
 
 import argparse
@@ -202,7 +204,9 @@ def owner_parsers(sp):
 
 def engine_parsers(sp):
     p = sp.add_parser("run-task")
-    p.add_argument("id")
+    p.add_argument("id", nargs="?", help="the bead; or name its task branch or PR instead (--branch, --pr)")
+    p.add_argument("--branch", help="the task branch (task/<bead>) of the bead to run")
+    p.add_argument("--pr", type=int, help="the PR whose head branch is the task branch of the bead to run")
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--stage", choices=list(Step), help="run exactly one engine step; default: the recorded next step")
     mode.add_argument("--loop", action="store_true", help=argparse.SUPPRESS)
@@ -230,6 +234,13 @@ def engine_parsers(sp):
     p.add_argument("id", nargs="?", default="")
     p.add_argument("--last", type=int, default=0)
     p.add_argument("--json", action="store_true")
+    p = sp.add_parser("runs", help="read-only queries over the engine logs: show one run, list the slowest items")
+    rs = p.add_subparsers(dest="op", required=True)
+    rs.add_parser("show").add_argument("run")
+    q = rs.add_parser("slow")
+    q.add_argument("--top", type=int, default=15)
+    q.add_argument("--by", choices=["exec", "wait"], default="exec")
+    q.add_argument("--runs", type=int, default=50, help="look at this many newest engine logs")
     p = sp.add_parser("reflect", help="turn the last day's run reflections into beads, one per recurring cause (tl-bl5)")
     p.add_argument("op", choices=["digest"])
     p.add_argument("--since", help="window start: 24h (default), a time, or epoch seconds")
@@ -324,7 +335,6 @@ def build_parser():
     artifact_parser(sp)
     p = sp.add_parser("judge-push", help="judge the complete Git pre-push request on stdin; unavailable refuses")
     p.add_argument("--repo", default=".", metavar="DIR")
-    p.add_argument("--no-run", action="store_true", help="read the evidence only: a missing receipt refuses, no check is started")
     cli_land_stack.add_parser(sp)
     cli_setup.add_parser(sp)
     return ap
@@ -433,6 +443,7 @@ VERBS: Final[dict[str, Handler]] = {
     "land": v_land,
     "close": v_close,
     "block": v_block,
+    "runs": lambda a, c: verbs.runs(a, c.who.config),
     "trace": lambda a, c: verbs.trace(a.id, a.last, a.json, c.env),
     "usage": lambda a, c: wire_usage.feed(a.windows, c.spawner, c.env),
     "lanes": lambda a, c: wire_lanes.refresh(c.spawner, c.env),

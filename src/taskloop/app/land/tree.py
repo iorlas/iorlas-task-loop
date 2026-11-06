@@ -88,8 +88,20 @@ class Tree:
             if old.name != "evidence":
                 shutil.rmtree(old) if old.is_dir() else old.unlink()
         e.briefs.export()
+        self.verify(branch)
         e.branch = branch
         return branch
+
+    def verify(self, branch: str) -> None:
+        """tl-9un.31: the startup check. The tree the worker will be told exists is the recorded worktree on the recorded branch;
+        any deviation fails the bead (FAULT_SLOT) before a worker is spent."""
+        e = self.e
+        there = e.git.branch(e.wt)
+        if there != branch:
+            raise e.blocked_for(f"failed: worktree {e.wt} is on branch {there or '(detached)'}, the record says {branch}", "FAULT_SLOT")
+        top = e.git.toplevel(e.wt)
+        if Path(top).resolve() != Path(e.wt).resolve():
+            raise e.blocked_for(f"failed: worktree {e.wt} is not a checkout of its own (git top level {top or '(none)'})", "FAULT_SLOT")
 
     def exclude_task_folder(self) -> None:
         e = self.e
@@ -108,7 +120,7 @@ class Tree:
 
     def keep_aside(self, branch: str) -> None:
         """tl-19i: --fresh starts the task again on the base: the old branch is kept as task/<id>-stale-<time>, never reset in place
-        and never checked out (lifesim-6pld ran --fresh on its old branch, 56 commits behind, and failed on a missing recipe)."""
+        and never checked out (a consumer's run used --fresh on its old branch, 56 commits behind, and failed on a missing recipe)."""
         e = self.e
         self.free_branch(branch)
         if e.git.count(e.wt, [branch], [e.cfg.base]) == 0:
@@ -154,7 +166,7 @@ class Tree:
         e = self.e
         e.checkout.stage_all(everything=everything)  # tl-g6a
         # --no-verify: a wip commit saves work, it does not judge it; a pre-commit hook that refused it left staged files in the
-        # slot and failed the next bead there (lifesim-6pld, then rl4s)
+        # slot and failed the next bead there
         done = e.git.try_commit(e.wt, f"wip ({e.bead}): {why}", verify=False)
         if not done.ok:
             e.warn(f"the wip commit ({why}) failed, the work stays uncommitted in {e.wt}: {done.output.strip()}")

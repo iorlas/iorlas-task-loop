@@ -16,6 +16,7 @@ REAL_HOME = os.path.realpath(os.path.expanduser("~"))
 FORBIDDEN = tuple(
     os.path.join(REAL_HOME, d) + os.sep for d in (".config", ".codex", ".claude", ".opencode", os.path.join(".local", "share"))
 )
+STDLIB = tuple(os.path.realpath(d) + os.sep for d in {sys.base_prefix, sys.prefix})  # a uv-managed Python lives under ~/.local/share
 FORBIDDEN_EXACT = tuple(os.path.join(REAL_HOME, d) for d in (".config", ".codex", ".claude", ".opencode"))
 ROOT = tempfile.mkdtemp(prefix="delegate-test-")
 _ENV = ("HOME", "USERPROFILE", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "CODEX_HOME", "DELEGATE_CONFIG_DIR", "TMPDIR")
@@ -24,7 +25,7 @@ _ENV = ("HOME", "USERPROFILE", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "CODEX_HOME",
 def _audit(event, args):
     if event == "open" and args and isinstance(args[0], (str, bytes, os.PathLike)):
         p = os.fsdecode(args[0])
-        if p.startswith(("/", REAL_HOME)) and (p.startswith(FORBIDDEN) or p in FORBIDDEN_EXACT):
+        if p.startswith(("/", REAL_HOME)) and (p.startswith(FORBIDDEN) or p in FORBIDDEN_EXACT) and not p.startswith(STDLIB):
             raise PermissionError(f"hermetic: a test opened the real {p}")
 
 
@@ -37,6 +38,7 @@ def home(base):
     real = Path(REAL_HOME) / ".gitconfig"
     if real.is_file() and not (h / ".gitconfig").exists():  # tests commit with the identity it holds; HOME no longer finds it
         shutil.copyfile(real, h / ".gitconfig")
+    os.environ.pop("DELEGATE_DEPTH", None)  # `tl check` runs the suite as a worker child (depth 1); `run` refuses a caller at depth 1
     for k in ("XDG_CONFIG_HOME", "XDG_DATA_HOME"):  # unset: every path derives from HOME, which tests re-point
         os.environ.pop(k, None)
     os.environ.update(
@@ -48,7 +50,7 @@ def home(base):
 if "_delegate_hermetic" not in sys.modules:  # one audit hook per process, however many names this module is imported under
     sys.modules["_delegate_hermetic"] = types.ModuleType("_delegate_hermetic")
     sys.addaudithook(_audit)
-    from delegate.adapters.harness import opencode_sandbox
+    from any_agent.harnesses import opencode_sandbox
 
     opencode_sandbox._probed[:] = [None]  # no test starts a real sandbox-exec; tests of the preflight clear it
     home(ROOT)

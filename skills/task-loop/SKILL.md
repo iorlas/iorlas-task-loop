@@ -127,7 +127,7 @@ added by the writer); none can be removed, since the plan is the engine's. Pictu
 copied to the run dir at close and named on the bead.
 
 A check proves the code and the tree only, never the tracker: the planner is told no check runs `bd` or reads `.beads/`
-(writers cannot run bd, so no code change satisfies one; lifesim-fld.26.12 and fld.27.9 burned 3 rounds, 2 replans and
+(writers cannot run bd, so no code change satisfies one; two consumer beads burned 3 rounds, 2 replans and
 89 min on a `bd list | jq` check for a follow-up bead). Follow-up work the plan wants filed goes in its `leftovers`
 (title, why), filed at the close with the reviews' (the Reflect `filed=` count); the checkpoint keeps the filed
 titles, so a replan in a later run that names one again files no second bead. A plan with such a check in a stage,
@@ -135,7 +135,7 @@ risk or case is sent back to the planner once naming them; a second such plan fa
 
 A plan check never runs a gate-only command either: every check of `engine.checks` that says `"run": "gate"`
 (`{"id": "unity", "argv": ["just", "unity-check"], "run": "gate", "why": "fails on uncommitted client/"}`; `why` is told to the planner),
-for commands red by design on the uncommitted tree a writer leaves (lifesim-fld.27.9: 68 min stuck on
+for commands red by design on the uncommitted tree a writer leaves (one consumer bead was stuck 68 min on
 `just unity-check`). The planner is told the list; a plan with one as a command (its argv starts with the prefix, wrappers like `env` aside;
 `["just", "check-fmt"]` is another command) is sent back once with `<cmd> runs only in the gate at land:
 <why>`, and a second such plan fails the run.
@@ -169,7 +169,7 @@ own prefixes are told apart, everything else is a `note`.
 
 Intake: a bead with no acceptance criteria is a ticket ask (class missing_criteria) before any AI step; a plan of more than
 `engine.max_stages` (3) stages is a too_big ask (answer `confirm` keeps it whole, `split` stops it). A decision or ticket ask takes the
-bead out of the unattended queue: with `engine.pick_label` set (lifesim: `auto`) the engine removes that label and adds
+bead out of the unattended queue: with `engine.pick_label` set (for example `auto`) the engine removes that label and adds
 `engine.needs_info_label` (`needs-info`); answering does not relabel it, the owner does. An ask nobody answers in 3 days is parked
 (status `parked`, a comment on the bead; it still waits and an answer un-parks it). Withdrawn, closed-bead and replaced asks are never
 listed.
@@ -186,7 +186,7 @@ plan of no stages lands.
 The writer's `unchecked` items go to the review, which reports what is still unproven after the checks.
 Unchecked items are per stage: each review is shown every item still open (earlier stages' and this writer's) and its
 list replaces them, so the last stage's review, which sees the whole tree and the acceptance cases run, decides what
-stops the land (lifesim-gfr.31.1 stopped on a stage-1 case that stage 2 ran green); a fix round at land only adds.
+stops the land (a consumer bead stopped on a stage-1 case that stage 2 ran green); a fix round at land only adds.
 Non-final stages are told a case the last stage runs is not unchecked;
 a requirement, number, deletion, link, case or tooling item stops the land with a verify ask; `other` items land and
 label the bead `needs-owner-check`. The review is told the gate runs at land and the passed checks are facts, and the
@@ -198,7 +198,7 @@ Before that verify ask, an item naming a tool (a backticked command, or a known 
 backticked or right after a run, lint, format or check verb; prose like "the biome transition" names none) that nothing
 in the tracked tree mentions (`git grep -w -I`, dot directories, CI, toolchain and agent files included), nor the
 engine's gate and checks, and that is not on PATH is dropped as `not a check here`, the grep and `which` result quoted
-in the Verify comment (transition `not_a_check`; lifesim-gfr.31.3 'nobody ran ruff', tl-bxk.10.9); an item for a
+in the Verify comment (transition `not_a_check`; 'nobody ran ruff', tl-bxk.10.9); an item for a
 tool the repo uses goes on as before. Then one verifier call (delegate role `reviewer`: read-only on every rung, `--authored-by` the
 writer's family) gets the task, the changed files, the evidence folder and the items, and answers per item: `settled`
 with the evidence quoted (the item is dropped), `wrong` with the defect (one fix round at land, counted in
@@ -207,8 +207,8 @@ it). A `settled` without quoted evidence, or an item it does not answer, is open
 review leaves unchecked, reach the owner; all settled lands. It runs once per land; if it cannot run (no lane, budget)
 every item goes to the owner as before. The checkpoint keeps what is unchecked, wrong items included until their fix
 is accepted, so a run that pauses in the fix round verifies them again on resume and never lands them. Its answers are a `Verify (engine)` comment, the trace's `verified` and the
-Reflect comment's `self-verified=` count, so the owner can audit what nobody asked him (the 2026-10-21 lifesim night:
-lifesim-d5f.46, lifesim-fld.26.15, lifesim-gfr.31.1 each waited hours on an ask settled by reading in a minute).
+Reflect comment's `self-verified=` count, so the owner can audit what nobody asked him (the 2026-10-21 night:
+three beads each waited hours on an ask settled by reading in a minute).
 
 Checks run one at a time, cheapest first: by the median of earlier runs of the same command (a small per-repo history in `~/.config/task-loop/check-durations/`; a command never run, or under 5 s, counts as free; ties go static → tests → acceptance, or static → acceptance → tests after a round red only in acceptance; a check reading `$TL_CHECK_LOG_<ID>` stays after `<ID>`). A red group skips the groups after it; any red also skips every expensive check (expected 5 s or more), after the cheap ones have run to the end. Only green runs enter the history.
 Every command (checks, gate, land, setup) is an argv list exec'd as given: no shell runs it, so there is no `&&`, pipe, redirect,
@@ -220,8 +220,11 @@ tree at land (see **The gate**). **Every push consults the delivery judge:** tl'
 `<config>/githooks/` by the engine at `loop`, `run-task` and `land-stack` start and by SessionStart, plain python3) forwards the entire Git stdin request to `tl judge-push --repo DIR`. The application reads the
 typed profile and shared check evidence, evaluates all pushed tips and their bases, and returns allowed, refused, or unavailable.
 Only allowed permits transport; an unavailable judge, invalid profile, or hook error refuses before remote mutation. A green tip
-passes; a tip without evidence runs the application's check service when it is the clean checked-out HEAD and is refused otherwise
-(`tl judge-push --no-run` reads the evidence only and never starts a check: a missing receipt refuses).
+passes; a tip without a receipt is refused with "run `tl check` in its worktree, then push": the judge reads receipts and never runs the gate. **One receipt:** the declared
+gate runs once per tree, in one place: `tl check` / `tl gate` / `tl land-stack`, the land and `dev/release.py` each write the same RunKey receipt (tree, base, check command)
+into the one result store, and the judge and the release read it; a miss prints `no green run of tree X under <cmd>`. On a push the
+order is tl's dispatcher (forwards, runs nothing), `tl judge-push` (reads the receipt, runs nothing), then the repo's own pre-push hook, which must not run a gate of its own.
+A push to the base branch must also fast-forward it (the remote's sha an ancestor of the pushed tip); a feature-branch push gets the profile-change check only.
 A lower tip of a pushed stack passes when a green tip above it is pushed with it, never alone. Generic Git push, leased push, and
 remote deletion carry no checked-delivery marker; the land pusher requires a GatePass and verifies its tree and base before transport.
 The retired `TL_LAND` marker grants no authority. An intentional owner override remains `git push --no-verify` or an explicit
@@ -397,7 +400,7 @@ Its output is verbose by default (`--quiet` for less): each step, the facts behi
 findings, unmet requirements, cost) and **⚠ lines** for what you must look at. Read the output as it comes
 (the job's output file, or the dashboard's bead page). Never do a step's work yourself; change what makes the
 engine misbehave. Never stop a live run to apply an engine fix: the fix applies to the next bead (the running
-process loaded the old engine anyway; 3 of 5 lifesim-vbo restarts on 2026-10-18 were stops for fixes, one a step before
+process loaded the old engine anyway; 3 of 5 restarts of one consumer run on 2026-10-18 were stops for fixes, one a step before
 landing). Stop a run only when it is burning a paid lane or doing damage.
 
 | ⚠ line | what to do |
@@ -512,7 +515,7 @@ The queue rule is `.task-loop.json` → `engine`; the defaults take every ready 
 
 | key | what |
 |---|---|
-| `pick_label` | only beads with this label (lifesim: `auto`) |
+| `pick_label` | only beads with this label (for example `auto`) |
 | `skip_labels` | never a bead with one of these (e.g. `["owner-taste", "needs-info"]`); epics and slots never either |
 | `epic_order` | epic ids: within one priority, beads under an earlier one (at any depth) first, beads under none last |
 | `epic_only` | `true`: beads under none of `epic_order` are not taken |
@@ -525,8 +528,8 @@ not look at `## Touches`; the land lock and the rebase before landing keep seque
 **Areas (tl-bxk.11.4):** two beads of one area never run at once (they edit the same files). A bead with no area is
 unrestricted. Running means a slot bead held for it (`held_bead` in its metadata, set by the loop and run-task) or a
 live engine lock naming it, in any slot or worktree of the repo. The queue skips a bead whose area runs elsewhere and
-`tl next` says why (`skip lifesim-2p02: area live busy: lifesim-fld.27.8 in s3`); the loop checks again and claims
-under one per-repo area lock (`<config dir>/locks/area-<repo>.lock`), so two loops never both see an area free. lifesim:
+`tl next` says why (`skip app-2p02: area live busy: app-27.8 in s3`); the loop checks again and claims
+under one per-repo area lock (`<config dir>/locks/area-<repo>.lock`), so two loops never both see an area free. Example:
 `"area_label_prefix": "lane:", "areas": {"build": ["build"]}`. A hand `tl run-task` in a busy area warns
 (`⚠ area live busy: ...: running anyway beside it`) and runs; `--exclusive-area` refuses it (`taken`) instead.
 
@@ -554,7 +557,7 @@ never committed to the repo; 'before' shots and the planner's references are the
 beads' artifacts with the same id prefix. After the land one bead is filed: label `owner-look` (not `auto`), parent = the source bead's parent, title `Look review:
 <title>`, body = each picture with a dashboard link (`/api/artifact?bead=<id>&name=<file>`) plus the reviewer's look paragraph, `related` to the source bead. No screenshots, no
 bead. The Plan tab counts `owner-look` beads as 'waits on you'; add `owner-look` to `skip_labels` where `pick_label` is
-unset. lifesim: `"visual_paths": {"include": ["client/Assets/Features/**", ...], "exclude": ["client/Assets/Tests/**",
+unset. Example: `"visual_paths": {"include": ["app/features/**", ...], "exclude": ["app/tests/**",
 "**/*.meta", "**/*.md"]}`.
 
 ## Report (the M2 scorecard)
@@ -633,15 +636,15 @@ local to one machine, hence the host in the title.
   per-repo lock with a fresh look at the slot bead: bd lets an actor re-claim its own bead, and hand runs of one
   session share its actor. The locks are the vendored ProcessLock (the kernel drops one with its process); POSIX only.
 - **Each slot has its own environment (tl-7y6.18).** Every command the engine runs for a bead (stage checks, the gate, the
-  land command, shot methods, and the workers it starts through `delegate.api.run`) gets: `TMPDIR`/`TMP`/`TEMP`,
-  `DOTNET_CLI_HOME`, `NUGET_SCRATCH`, `NUGET_HTTP_CACHE_PATH` and `NUGET_PLUGINS_CACHE_PATH` under the slot's state folder
-  (`<config dir>/slot-state/<repo>/<slot>/`: outside the worktree, made on use, kept when the slot is reused),
-  `SharedCompilationId` and `MSBUILDNODEHANDSHAKESALT` = `<repo>-<slot>` (no shared compiler server or MSBuild node), and
-  `TL_SLOT`. A run with no slot (a plain worktree) uses the worktree's name as the slot. `engine.slot_env` (str to str) adds or
+  land command, shot methods, and the workers it starts through `delegate.api.run`) gets: `TMPDIR`/`TMP`/`TEMP` under the
+  slot's state folder (`<config dir>/slot-state/<repo>/<slot>/`: outside the worktree, made on use, kept when the slot is reused) and
+  `TL_SLOT`. A run with no slot (a plain worktree) uses the worktree's name as the slot. Toolchain scratch is the repo's own:
+  `engine.slot_env` (str to str) adds or
   overrides keys; values may use `{slot}`, `{slot_dir}` (the state folder) and `{repo}`, any other `{name}` is refused when
   the profile loads.
-  **Still shared:** the Unity licence, the user's NuGet package folder (`~/.nuget/packages`), and whatever a repo's own tools keep
-  under `~/.cache` or the home folder; give those a `slot_env` key when they collide.
+  **Still shared:** a licence, a package folder, and whatever a repo's own tools keep under `~/.cache` or the home folder; give
+  those a `slot_env` key when they collide (a .NET repo: `DOTNET_CLI_HOME`, `NUGET_SCRATCH`, `SharedCompilationId`,
+  `MSBUILDNODEHANDSHAKESALT` = `{repo}-{slot}`). `engine.prepare.triggers` and `loop.build_dir` default to empty.
 - `tl slot list`: name, bead, status, holder, why (and since when, or until when for a hold), the live engine if any,
   folder.
 

@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from delegate.adapters.harness.base import LaunchSpec
+from any_agent.protocol import LaunchSpec
 from delegate.app import codex_policy, env
 from delegate.cli import parser
 from delegate.contracts import stops, wire
