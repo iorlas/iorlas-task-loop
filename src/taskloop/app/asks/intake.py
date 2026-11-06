@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Final
 
-from taskloop.app.asks import looks, stick, sweeps
+from taskloop.app.asks import ledgercomments, looks, stick, sweeps
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask, AskAction, AskAnswer, ThreadEntry
 from taskloop.contracts.bead import Comment
@@ -84,6 +84,7 @@ class Intake:
         """`adrs(repo)` is the decision store of a repo, `factory()` the tracker of the task-loop repo (None: none registered)."""
         self.asks, self.store, self.now, self.by = asks, store, now, by
         self.adrs, self.factory = adrs, factory
+        asks.before = ledgercomments.record(store)  # every row an owner verb causes is a comment on the bead first
 
     def note(self, bead: BeadId, text: str) -> None:
         with contextlib.suppress(BdFailure):  # the receipt is for people: the typed record is already written
