@@ -13,7 +13,6 @@ from taskloop.contracts.argv import argv_of
 from taskloop.contracts.checks import UNVERIFIED_EXIT, Check
 from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.paths import RepoDirs
 from taskloop.domain.checks import matchers, retry
 
 
@@ -59,7 +58,6 @@ class Attempts:
 
     def _once(self, c: Check, log: Path, env: Mapping[str, str], stop: threading.Event | None) -> tuple[int, str, str, float]:
         t0 = time.time()
-        RepoDirs(self.host.wt).artifacts(self.host.bead).mkdir(parents=True, exist_ok=True)  # the writer's folder for pictures
         rc, tail = self._exec(c, log, env, stop)
         seen = self._read(log, tail)
         took = time.time() - t0

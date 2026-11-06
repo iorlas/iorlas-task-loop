@@ -24,6 +24,8 @@ function Terminal({ card, keep = TERM_LINES, onTools }) {
     const el = ref.current;
     return api.liveTail(card.project, card.id, (page) => {
       if (page.error) return;
+      if (page.reset) el.replaceChildren();
+      el.dataset.state = page.state;
       for (const l of page.lines) {
         const row = document.createElement('button');
         row.className = `run-row new ${TONE[l.tone] || ''}`;

@@ -30,6 +30,8 @@ class Briefing:
                          ) + "".join(f"- {c}\n" for c in slow).rstrip("\n")
             if fast:
                 text += "\nYou may run these:\n" + "\n".join(f"- {c}" for c in fast)
+            if getattr(e, "branch", ""):
+                text += f"\nThe worktree {e.wt} and the branch {e.branch} exist: work here; report anything that deviates."
             return (text + "\nIf a command is refused, do not reword it to get around the refusal: say which command and "
                     "why you needed it.\nNever start a command you expect to take over a minute; never poll a running "
                     "command more than 3 times.")

@@ -125,7 +125,7 @@ PER_RUN = frozenset({EnvVar.TL_ARTIFACT_DIR, EnvVar.TL_ARTIFACT_STEP, EnvVar.TL_
                      EnvVar.TL_WORKTREE, EnvVar.TL_BRANCH,
                      EnvVar.TL_REEXEC, EnvVar.TL_LOOP_STATE,
                      EnvVar.TL_RELEASE_REEXEC, EnvVar.TASK_LOOP_SLOT_BEAD, EnvVar.TASK_LOOP_ACTOR, EnvVar.TASK_LOOP_SESSION,
-                     EnvVar.TASK_LOOP_LOOP_PID, EnvVar.TASK_LOOP_WORKER})
+                     EnvVar.TASK_LOOP_LOOP_PID, EnvVar.TASK_LOOP_LOOP_ID, EnvVar.TASK_LOOP_WORKER})
 
 
 def reaching(env: Mapping[str, str]) -> dict[str, str]:
@@ -174,6 +174,11 @@ def script_argv(script: str | Path, env: Env) -> list[str]:
 def current_env(env: Env, extra: Mapping[str, str] | None = None) -> dict[str, str]:
     """The environment of a worker started from `env` (child_env_of over the taken copy of the process's)."""
     return child_env_of(env.vars, extra)
+
+
+def delegate_call_env(env: Env, extra: Mapping[str, str] | None = None) -> dict[str, str]:
+    """`current_env` for a call TO delegate: without DELEGATE_DEPTH, which delegate refuses from a caller and sets itself on its workers."""
+    return without(current_env(env, extra), "DELEGATE_DEPTH")
 
 
 def identity_env(who: Identity) -> dict[str, str]:
