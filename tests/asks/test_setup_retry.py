@@ -9,6 +9,7 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
+from support.memstores import fake_stores
 from support.narrow import must
 
 from taskloop.app.asks import raiser, setup_retry
@@ -22,7 +23,6 @@ from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.stores import HAD_PICK
 from taskloop.domain.asks import specs
-from taskloop.stores.memory import fake_stores
 
 BEAD = BeadId("t-1")
 WHY = "failed: the configured check `unity` needs something this tree lacks: client/ is not set up"

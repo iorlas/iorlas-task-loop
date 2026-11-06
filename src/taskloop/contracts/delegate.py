@@ -63,6 +63,7 @@ class RunRequest(Rec):
     # families the call may use (--only-family once each): set on a worker call only (domain/lanes/pin.py)
     only_family: list[str] = msgspec.field(default_factory=list)
     writer_exec_allow: list[list[str]] = msgspec.field(default_factory=list)
+    read_roots: list[str] = msgspec.field(default_factory=list)  # --read-root once each: folders an OpenCode write step may read
     tools: list[ToolBinding] = msgspec.field(default_factory=list)  # not part of the route.py argv: delegate.api takes them typed
 
     def to_argv(self, python: str, route: str) -> list[str]:
@@ -80,6 +81,8 @@ class RunRequest(Rec):
             out.append("--engine-only-advisory")
         for fam in self.only_family:
             out += ["--only-family", fam]
+        for root in self.read_roots:
+            out += ["--read-root", root]
         if self.writer_exec_allow:
             out += ["--writer-exec-allow", json.dumps(self.writer_exec_allow, separators=(",", ":"))]
         return out
@@ -144,6 +147,7 @@ class Denial(Rec):
     tool: str | None = None
     path: str | None = None
     input: dict[str, Any] = msgspec.field(default_factory=dict)
+    reason: str | None = None
 
 
 @final

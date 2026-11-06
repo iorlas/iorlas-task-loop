@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     from typing import IO
 
 Kind = Literal["wall", "idle", "stopped"]
+_FIRST_NAP_S = 0.001  # the wait for a child starts short and doubles to _NAP_S: a child that ends in a few ms is seen in a few ms
+_NAP_S = 0.02
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +92,7 @@ def _wait(
     idle: float | None,
     stop: threading.Event | None,
 ) -> Kind | None:
+    nap = _FIRST_NAP_S
     while p.poll() is None:
         now = time.monotonic()
         if stop is not None and stop.is_set():
@@ -99,9 +102,12 @@ def _wait(
         if idle is not None and now - last[0] >= idle:
             return "idle"
         if stop is not None:
-            stop.wait(0.02)
+            stop.wait(nap)
         else:
-            time.sleep(0.02)
+            # returns the moment the child exits: a fixed 20 ms sleep made every short child cost 20 ms of wall
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                p.wait(nap)
+        nap = min(nap * 2, _NAP_S)
     return None
 
 

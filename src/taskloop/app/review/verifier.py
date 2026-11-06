@@ -1,7 +1,7 @@
 """Verifier: one read-only verifier call before a verify ask; returns the items that still go to the owner. Per item: settled with quoted
 evidence drops it, wrong goes to one fix round at land (max_fix_rounds; none left: to the owner, naming the defect), open goes to the
-owner. The 2026-10-21 lifesim night: lifesim-d5f.46 (a hand-written .meta against its siblings), lifesim-fld.26.15 (a call site) and
-lifesim-gfr.31.1 (an evidence file that proved it) each waited hours for an ask a supervisor settled in a minute by reading."""
+owner. The 2026-10-21 night: three beads (a hand-written .meta against its siblings, a call site and
+an evidence file that proved it) each waited hours for an ask a supervisor settled in a minute by reading."""
 from typing import Any
 
 from taskloop.contracts.answers import VERDICTS

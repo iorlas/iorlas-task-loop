@@ -15,10 +15,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.contracts import factorydb
+from taskloop.contracts.looprows import LoopRows
+from taskloop.contracts.paths import ConfigDir
 
 TABLES = {
     "source", "bead", "run", "attempt", "step", "lease", "check_pass",
-    "check_round", "ask", "ask_ledger", "kv", "effect", "wait", "signal",
+    "check_round", "ask", "ask_ledger", "kv", "effect", "wait", "signal", "checkpoint",
 }
 INDEXES = {
     "run_bead", "run_recent", "run_live", "bead_status", "check_tree", "ask_live",
@@ -53,7 +55,7 @@ class FactoryDbTest(Case):
 
     def test_fresh_open_creates_schema_and_pragmas(self):
         con = self.rw()
-        assert con.execute("PRAGMA user_version").fetchone() == (3,)
+        assert con.execute("PRAGMA user_version").fetchone() == (factorydb.SCHEMA_VERSION,)
         assert con.execute("PRAGMA journal_mode").fetchone() == ("wal",)
         assert con.execute("PRAGMA synchronous").fetchone() == (1,)
         assert con.execute("PRAGMA busy_timeout").fetchone() == (5000,)
@@ -82,9 +84,9 @@ class FactoryDbTest(Case):
     def test_wrong_version_is_rejected_without_replacing_it(self):
         con = self.rw()
         con.execute("PRAGMA user_version=99")
-        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v3.*update it"):
+        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v4.*update it"):
             factorydb.open_rw(self.path)
-        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v3.*update it"):
+        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v4.*update it"):
             factorydb.open_ro(self.path)
         assert con.execute("PRAGMA user_version").fetchone() == (99,)
 
@@ -103,7 +105,7 @@ class FactoryDbTest(Case):
     def test_reader_names_schema_errors_as_database_unavailable(self):
         con = self.rw()
         con.execute("PRAGMA user_version=99")
-        expected = "database unavailable: factory.db is schema v99, this code knows v3: update it"
+        expected = "database unavailable: factory.db is schema v99, this code knows v4: update it"
         assert factorydb.database_error(self.path, 1) == expected
         assert factorydb.run_rows(self.path, 1) == ([], expected)
 
@@ -153,7 +155,7 @@ class FactoryDbTest(Case):
         with pytest.raises(ValueError, match="transaction"):
             factorydb.cas_update(con, "ask", "bead", "b", 0, status="answered")
         with factorydb.begin_immediate(con):
-            for table in TABLES - {"run", "ask", "bead"}:
+            for table in TABLES - {"run", "ask", "bead", "checkpoint"}:
                 with self.subTest(table=table), pytest.raises(ValueError, match="unrevisioned"):
                     factorydb.cas_update(con, table, "id", "key", 0)
 
@@ -293,3 +295,13 @@ class FactoryDbTest(Case):
         for table in ("run", "attempt", "step", "effect", "check_round"):
             assert con.execute(f'SELECT count(*) FROM "{table}"').fetchone() == (1,)
         assert not con.in_transaction
+
+
+def test_a_reader_meets_a_database_a_writer_is_still_creating_as_not_there_yet(tmp_path):
+    """Two processes starting on a fresh factory.db: the file exists at user_version 0 until the first writer's DDL commits. A reader
+    (the loop's own rows, the dashboard) must see no rows, not a SchemaError (shelf sqlite-store bf97aba)."""
+    cfg = ConfigDir(tmp_path)
+    cfg.factory_db().parent.mkdir(parents=True, exist_ok=True)
+    cfg.factory_db().touch()
+    assert factorydb.open_ro(cfg.factory_db()) is None
+    assert LoopRows(cfg, "k").select("SELECT 1") == []

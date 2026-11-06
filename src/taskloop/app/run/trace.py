@@ -57,7 +57,11 @@ def ai_call(row: Mapping[str, Any]) -> t.AiCall:
         **kw,
         tokens=t.Tokens(in_=int(tk.get("in") or 0), cached=int(tk.get("cached") or 0), out=int(tk.get("out") or 0)),
         denied=[
-            t.Denied(tool=str(d.get("tool") or ""), input=d.get("input") or {}) for d in row.get("denied") or [] if isinstance(d, dict)
+            t.Denied(
+                tool=str(d.get("tool") or ""), kind=str(d.get("kind") or ""), reason=str(d.get("reason") or ""), input=d.get("input") or {}
+            )
+            for d in row.get("denied") or []
+            if isinstance(d, dict)
         ],
     )
 

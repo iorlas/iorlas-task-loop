@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 4
  },
- "version": "b3fbee9073741a5d",
+ "version": "818c9d88547afede",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Fix save corruption on quit. Part of Save system.",
@@ -100,6 +100,7 @@
    "phase": null
   }
  ],
+ "decisions": [],
  "passes": [
   {
    "n": 1,

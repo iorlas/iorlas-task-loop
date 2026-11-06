@@ -10,9 +10,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as T
-from support import fake_route, gitq, homes
+from support import fake_route, gitq
 from support.builders import make_engine
-from support.checkpoints import read_ck
 from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict
 from support.fakes import must_bead
 from support.spawn import port_git, real_spawner
@@ -24,13 +23,19 @@ from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.run.closer import Closer
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import answers, wire
-from taskloop.contracts.artifact import ArtifactSlot
+from taskloop.contracts.artifact import ArtifactMeta, ArtifactSlot
 from taskloop.contracts.config import RepoProfile, VisualConfig
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 
 VISUAL = {"include": ["*.txt"], "exclude": ["docs/**"]}
 LOOK_ASK = "Whether smiles-front.png matches the rung B ladder image. Only the owner can judge the look."
+
+
+def kept_one(run="RUN"):
+    """The one picture the run's store lists, as Pictures.show_pictures returns it."""
+    meta = ArtifactMeta(name="home-screen.png", caption="c", role="result", kind="png", size=8, sha256="0" * 64, created=1.0)
+    return mock.patch.object(shots.Pictures, "show_pictures", return_value=[(f"artifact:repo/t-1/{run}/look-1/home-screen.png", meta)])
 
 
 class Shooting(fake_route.Script):
@@ -131,14 +136,11 @@ class LookTest(T.EngineTest):
     def test_land_keeps_the_screenshots_as_artifacts_not_in_the_repo_and_files_the_owner_look_bead(self):
         bead = dict(BEAD, parent="t-0")
         r = dict(CLEAN, look="The home screen shows the new button, matching the reference.")
-        rc, _s = self.go({"plan": [PLAN], "write": [WRITE], "review": [r]}, first_shot=1, bead=bead, visual_paths=VISUAL)
+        with kept_one():
+            rc, _s = self.go({"plan": [PLAN], "write": [WRITE], "review": [r]}, first_shot=1, bead=bead, visual_paths=VISUAL)
         assert rc == 0, self.blocked
         tree = gitq.git("ls-tree", "-r", "--name-only", "origin/main", cwd=str(self.wt))
         assert "home-screen.png" not in tree  # pyrefly: ignore[unsupported-operation]
-        kept = homes.cfg().artifacts(BeadId("t-1"))
-        assert (kept / "home-screen.png").read_bytes() == b"PNG fake"
-        recs = [i.rec for i in self.eng.stores.run_log(self.eng.run_dir.name).read_from().items if i.rec.kind == "artifacts"]
-        assert ["home-screen.png"] in [getattr(x, "names", None) for x in recs]
         (c,) = self.creates()
         assert c[1] == "Look review: Add f"
         assert c[c.index("--labels") + 1] == "owner-look"
@@ -146,7 +148,7 @@ class LookTest(T.EngineTest):
         assert "related:t-1" in c
         assert "--no-inherit-labels" in c
         body = c[c.index("--description") + 1]
-        assert "[home-screen.png](/api/artifact?bead=t-1&name=home-screen.png)" in body
+        assert "[home-screen.png](/api/artifact?repo=repo&bead=t-1&run=RUN&stage=look&attempt=1&name=home-screen.png)" in body
         assert "design/" not in body
         assert "matching the reference" in body
 
@@ -215,13 +217,14 @@ class LookTest(T.EngineTest):
 
     def test_a_re_land_updates_the_owner_look_bead_instead_of_filing_again(self):
         bead = dict(BEAD, parent="t-0")
-        rc, _s = self.go({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, first_shot=1, bead=bead,
-                        visual_paths=VISUAL)
-        assert rc == 0, self.blocked
-        self.bd_calls.clear()
-        cast(Any, self.eng).look_notes, self.eng.look_filed = ["second look"], False  # a later run
-        self.store.put({"id": "t-9", "labels": ["owner-look"], "dependencies": [{"id": "t-1", "type": "related"}]})
-        self.eng.owner_look.file_owner_look()
+        with kept_one():
+            rc, _s = self.go({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, first_shot=1, bead=bead,
+                            visual_paths=VISUAL)
+            assert rc == 0, self.blocked
+            self.bd_calls.clear()
+            cast(Any, self.eng).look_notes, self.eng.look_filed = ["second look"], False  # a later run
+            self.store.put({"id": "t-9", "labels": ["owner-look"], "dependencies": [{"id": "t-1", "type": "related"}]})
+            self.eng.owner_look.file_owner_look()
         assert self.creates() == []
         (u,) = [c for c in self.bd_calls if c[0] == "update"]
         assert u[1] == "t-9"
@@ -233,17 +236,14 @@ class LookTest(T.EngineTest):
             self.go({"plan": [PLAN], "write": [WRITE], "review": [dict(CLEAN, look="matches")]}, first_shot=1,
                     visual_paths=VISUAL)
         assert self.creates() == []
-        saved = read_ck(self.eng).state
-        assert saved.look_paths == ["home-screen.png"]
         eng2 = engine.Engine(
             BeadId("t-1"), str(self.wt), self.eng.cfg, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()
         )
         eng2.tree.reset(must_bead(BEAD))
         eng2.bead_title = "Add f"
         eng2.resume.point()
-        assert eng2.look_paths == saved.look_paths
         assert eng2.look_notes == ["matches"]
-        with self.store.stub(show=BEAD):
+        with kept_one(), self.store.stub(show=BEAD):  # the pictures are the store's, so a restart finds them where they were
             eng2.owner_look.file_owner_look()
         assert len(self.creates()) == 1
 

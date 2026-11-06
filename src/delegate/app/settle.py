@@ -1,4 +1,4 @@
-"""Settler: the one place a classified outcome (adapters/harness/classify.py) is applied to the answer and, for a lane-scoped reason, to
+"""Settler: the one place a classified outcome (the shelf any_agent.classify) is applied to the answer and, for a lane-scoped reason, to
 the lane's state. All three launchers end here. `apply` is the only entry; one method per reason, found by name.
 
 `reset` is the default end of a limit when the message names no time; `login` the hint stored
@@ -9,8 +9,9 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from delegate.adapters import netprobe
-from delegate.adapters.harness import classify, reset_parse
+from any_agent import reset_parse
+from any_agent.classify import Outcome, with_network
+
 from delegate.app import answer
 from delegate.app.env import Args
 from delegate.contracts.json_types import Json, as_str
@@ -21,7 +22,6 @@ from delegate.domain.policy.matchers import heredoc_only_hit
 from delegate.domain.policy.worker import APPLY_PATCH_HINT
 from delegate.domain.time.spec import local
 
-NET_AMBIGUOUS = ("worker_failed", "vendor_blip", "hung")  # failures that name no cause of their own: the network may be it
 LOGOUT_OUT = 900  # a lane whose worker found it logged out is skipped this long, then tried again (a login in between is not seen sooner)
 HUNG_OUT_SECS = 1800  # a lane whose worker printed nothing at all rests this long
 CREDIT_PROBE = 6 * 3600  # a lane out of credits with no stated end is looked at again after this long
@@ -33,7 +33,7 @@ class Case:
     """One outcome being applied: the answer under construction and everything a reason's method may need."""
 
     res: dict[str, Json]
-    o: classify.Outcome
+    o: Outcome
     d: dict[str, Json]
     t: float
     who: str
@@ -89,19 +89,14 @@ class Settler:
             )
         )
 
-    def net_pass(self, o: classify.Outcome, d: dict[str, Json]) -> classify.Outcome:
-        """-> `o`, or the network outcome when it was the network. classify trusts network words only before the worker did anything, and a
-        silent hang is only a network drop if the net is down: so a failure with no cause of its own is checked against the words of a
-        dropped connection
-        and then against one probe (<= 3 s, sockets only). Limits, logins, bad requests, secrets and timeouts are never second-guessed."""
-        if o.reason in NET_AMBIGUOUS and (netprobe.looks_dropped(o.detail) or not self.net_up(as_str(d["lane"]))):
-            return classify.Outcome("network", o.detail, o.source)
-        return o
+    def net_pass(self, o: Outcome, d: dict[str, Json]) -> Outcome:
+        """The decision is `classify.with_network`; this only supplies the lane's one probe."""
+        return with_network(o, lambda: self.net_up(as_str(d["lane"])))
 
     def apply(
         self,
         res: dict[str, Json],
-        o: classify.Outcome,
+        o: Outcome,
         d: dict[str, Json],
         t: float,
         who: str,

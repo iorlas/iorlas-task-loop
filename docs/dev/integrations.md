@@ -1,6 +1,6 @@
 # What task-loop relies on (read before changing the dashboard, tl.py, or the skill's Workers section)
 
-A plugin install ships only `skills/` and `hooks/`, so nothing here is loaded when someone just runs the loop.
+A plugin install ships `skills/`, `hooks/` and `src/` (`MANIFEST.sha256` lists them), but not `docs/`: this document is not loaded when someone just runs the loop.
 
 task-loop reads formats it does not own. Each has one reader in a module of `src/taskloop_dash/` (or `tl.py`); when a
 format changes, only that reader changes, and a broken reader must cost one panel, never the page (the handler
@@ -15,6 +15,18 @@ returns an error for that request; parsers skip lines they cannot read).
 | OpenCode sessions, SQLite `~/.local/share/opencode/opencode.db` (`OPENCODE_DB` overrides), tables `session`, `message`, `part` only (never the credential tables); delegate's family `xai`, kind `opencode` | OpenCode | `adapters/opencode.py` (`transcript_of("xai", ses_...)` -> `opencode:ses_...`), `adapters/context_size.py` `context_tokens` | Grok lane runs; read only, short timeout, a missing DB or unknown id is empty |
 | `bd list --json`, `bd show --json`, `bd update --claim`, `bd heartbeat`, `bd unclaim`, `bd provenance record` | beads (bd 1.3+) | `adapters/bd.py` `BdStore` (the one process site); the dashboard gets it as `Ports.store` and reads and writes only through the typed `Beads` port (`taskloop_dash.readers.beads`), so no raw `bd` argv lives in `taskloop_dash` (a rules test greps for it) | the tree, claims, slots, provenance (provenance failures only warn), the dashboard's bead lists, the look gallery's writes |
 | lease table `~/.config/task-loop/leases`: `<name>.limit`, `<name>-<n>.lock` (flock + JSON holder record `label` `bead:check`, `meta` bead/check/lane) | shelf `any_lease` (vendored, `dev/vendor.py`) | `Leases` in `taskloop.app.checks.resources` (takes and waits), `adapters.locks.resource_holders` (read only: `tl status --brief`, the dashboard); manual runs use `python3 -m any_lease run --root <table>` | a resource limit or holder shown wrong; the engine and a manual run stop sharing units |
+
+## Claims across clones (measured, bd 1.3.1, tl-sqd3.9)
+
+Two clones of one beads database on one Dolt remote (`file://`), both `bd update --claim` the same bead before either syncs: **both
+claims succeed**, each clone then shows itself as assignee. A claim is exclusive per clone, not per remote. The first clone to
+`bd sync --no-adopt` pushes (exit 0). The second one's sync exits **2** (merge conflict, "the same conflict recurs on every retry
+until the two histories are reconciled by hand"); its local copy keeps the loser as owner, and `bd dolt push` alone is rejected with
+exit 1. What follows for the code: the claim is no cross-machine token; only the sync after it can say the claim was lost, and that
+is `DoltPush.code == 2` (`adapters/bd.py` `dolt_push`), which the land already turns into a stop. FENCE (tl-br2.5) therefore may not
+read "I hold the claim" from the local bd alone when a repo is worked from two hosts; one factory per repo (tl-sqd3.23) stays the
+rule. The suite blocks a real bd (`tests/support/paths.py`), so this is recorded here, not asserted; rerun the recipe (init with
+`--skip-hooks`, `bd dolt remote add`, `bd bootstrap --yes` on the second clone) after a bd upgrade.
 
 ## Commands the repo profile and the plan carry
 

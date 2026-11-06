@@ -13,6 +13,7 @@ subprocess and its JSON wire): there is no process boundary to the router any mo
 | `cancel(handle)` | the `Handle` from `started` | `WorkerEnd` (SIGTERM, SIGKILL after the grace; survivors named) |
 | `accounts()` / `set_account(lane, enabled)` | | `list[Account]` (lane, enabled, ready, fix) / the owner's choice stored |
 | `network(hosts=())` | vendor hosts, else all | reachable now (sockets only) |
+| `history(since=0.0)` | epoch seconds | the finished runs after it, oldest first, as wire objects (`ts`, `role`, `task`, `lane`, `model`, `tokens`, ...): the only read of delegate's history |
 | `contract()` | | contract.json: reasons with scope/permanence/retry, capabilities |
 | `as_json(record)` | a `RunResult` or `Status` | its wire object |
 
@@ -27,6 +28,13 @@ subprocess and its JSON wire): there is no process boundary to the router any mo
   harness yet; a spike proves injection per harness first (tl-jvpm.10).
 - `writer_exec_allow` is honored for a Codex (openai) write step only; delegate validates binaries against its `host.json`. A granted argv
   runs writer-written code on the host with network until NETISO (tl-7i9k.59) lands.
+- `read_roots` (`--read-root`, from the profile's `engine.writer_read_roots`, absolute paths) is honored for an OpenCode write step only: its
+  `external_directory` permission allows those roots and denies the rest. Other harnesses ignore it.
+
+- task-loop reads no file of delegate's: not `history.jsonl`, not `contract.json`, not the install. A new read is a new call here first.
+- `DELEGATE_DEPTH` set in the environment of a `run` is refused (`caller`): a worker never delegates further. The engine strips it from its own
+  call env (`childenv.delegate_call_env`); delegate sets it, and a push-refusing `GIT_CONFIG_*`, on every worker.
+- `state.json` of another version (or damaged) is refused (`crash`, needs_owner) and never rewritten; the owner moves it aside.
 
 ## State
 
@@ -36,6 +44,6 @@ The state is shared by every process that calls the API: a two-process test (lea
 
 ## Consumers
 
-`src/taskloop/adapters/delegate.py` (`call`, `status_json`, `accounts`, `RouteProbe`), `adapters/runner.py` (`ApiRunner`: the thread, the
+`src/taskloop/adapters/delegate.py` (`call`, `status_json`, `run_history`, `accounts`, `RouteProbe`), `adapters/runner.py` (`ApiRunner`: the thread, the
 live file, `cancel` at the wall limit or a stop of the run), `domain/lanes/policy.py` (`stop_of`, `decide`). Setup and status of accounts:
 `tl accounts`, `tl setup`.

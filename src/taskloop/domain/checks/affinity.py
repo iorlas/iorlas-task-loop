@@ -33,5 +33,5 @@ def lacking(cfg: EngineConfig, rec: HostResources | None, needs: Iterable[str]) 
 def planned(checks: Iterable[Check], changed: Iterable[str], cfg: EngineConfig, rec: HostResources | None) -> list[str]:
     """The resources this host lacks that a check hit by `changed` needs, sorted."""
     paths = list(changed)
-    hit = [n for c in checks if touched(c, paths) for n in c.needs]
+    hit = [n for c in checks if touched(c, paths, cfg.pin_files) for n in c.needs]
     return sorted(lacking(cfg, rec, hit))

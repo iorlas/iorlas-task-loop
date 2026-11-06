@@ -62,15 +62,18 @@ def provenance(store: Beads, bead: BeadId, kind: str, ref: str, ref_kind: str, p
         sys.stderr.write("tl: provenance not recorded: " + (e.error.text.strip().splitlines() or ["?"])[-1] + "\n")
 
 
-def register_repo(path: str | None, cfg: ConfigDir) -> None:
+def register_repo(path: str | None, cfg: ConfigDir) -> bool:
     """Add a repo to repos.json. Every process registers (each event does); the store reads and writes under its lock, so two at once
-    neither crash nor drop a repo. A repos.json of another version is said once per call and left alone."""
+    neither crash nor drop a repo. A repos.json of another version, or a name another folder holds, is said once per call and left
+    alone. -> whether the repo is registered."""
     if not path:
-        return
+        return False
     try:
         ReposStore(cfg).add(path, now())
     except ValueError as e:
         sys.stderr.write(f"tl: repo not registered: {e}\n")
+        return False
+    return True
 
 
 def events_lock(cfg: ConfigDir) -> Path:

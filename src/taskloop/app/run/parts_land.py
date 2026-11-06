@@ -16,7 +16,6 @@ from taskloop.app.land.tree import Tree
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.track import verbs
 from taskloop.app.write.newfiles import NewFiles
-from taskloop.contracts.landed import Landed, LandedStore
 
 
 class LandParts(Plumbing):
@@ -43,7 +42,6 @@ class LandParts(Plumbing):
     def record_land(self, sha: str) -> None:
         if verbs.land(self.who, self.bead, sha, self.store, self.git, self.wt, base=self.cfg.base, claim=self.claim):
             raise self.blocked_for("land receipt refused; branch kept", "FAULT_LAND")
-        LandedStore(self.home).put(Landed(bead=self.bead, sha=sha, base=self.cfg.base, t=self.now()))
         branch = self.task_branch or self.git.branch(self.wt)
         repo = next((co.path for co in self.git.checkouts(self.wt) if co.main), self.wt)
         pr = self.cfg.land_mode == "pr"  # the PR's merge commit is not the branch tip, and the forge owns the remote branch
