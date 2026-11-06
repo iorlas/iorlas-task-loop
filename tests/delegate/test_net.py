@@ -242,7 +242,7 @@ class NotTheLanesFault:
             hung = Hung("went quiet", kind)
             res = launch.settler().apply({}, Outcome("hung", "", "ours"), d, T, "codex", mock.Mock(schema=None, timeout=60), hung=hung)
         assert mark.called is rests
-        assert "went quiet" in res["say"]
+        assert "went quiet" in str(res["say"])
 
 
 class Roles:

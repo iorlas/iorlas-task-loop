@@ -417,7 +417,7 @@ def finish_run(hx: Harness, h: How, a: env.Args, d: dict[str, Json], t: float, o
         codex_usage(res, x)
     if out.stream_tail:
         res["stream_tail"] = out.stream_tail
-    hung = settle.Hung(w.words, w.kind) if w.why == "hung" else None
+    hung = settle.Hung(w.words or "printed nothing", w.kind or "first_event") if w.why == "hung" else None
     facts = dict(sm.facts, watchdog=w.why, msg=w.msg, secret=out.secret)
     o = classify(sm.rc, sm.vendor, sm.stderr, out.timed_out, sm.work, facts) if sm.check else None
     if (
