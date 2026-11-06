@@ -17,7 +17,7 @@ RATCHETS = {"layer": layer_ratchet.file_counts, "temp": temp_ratchet.file_counts
 
 
 def git(root, *argv):
-    subprocess.run(["git", "-C", str(root), *argv], capture_output=True, text=True, check=True)
+    subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t", *argv], capture_output=True, text=True, check=True)
 
 
 def test_this_change_raises_no_ratchet():
