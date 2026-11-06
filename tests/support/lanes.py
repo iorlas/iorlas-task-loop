@@ -20,4 +20,3 @@ def answer(lanes: dict[str, Any], **top: Any) -> dict[str, Any]:
 
 def file_status(dash: Any, j: dict[str, Any]) -> None:
     StatusStore(dash.env.config).write(snapshot_of(j))
-

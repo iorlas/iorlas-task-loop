@@ -10,4 +10,3 @@ def contract[C: type](cls: C) -> C:
 def domain[C: type](cls: C) -> C:
     cls.tier = "domain"  # type: ignore[attr-defined]
     return cls
-
