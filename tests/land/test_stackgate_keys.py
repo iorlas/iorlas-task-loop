@@ -23,7 +23,7 @@ from taskloop.contracts.gitfacts import TreeEntry
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.ports import Git, Ran
 from taskloop.contracts.runkey import BaseSha, Digest
-from taskloop.contracts.slots import Checkout
+from taskloop.contracts.slots import Checkout, NotARepo
 from taskloop.domain.checks.specs import repo_check
 from taskloop.stores.runlog import RunLog
 
@@ -51,7 +51,7 @@ class Checkouts:
         self.git.ls_files.return_value = ["src/obj/project.assets.json"]  # gitignored, under the check's inputs
         self.git.checkouts.return_value = [Checkout(path=str(self.main), branch="main", main=True),
                                            Checkout(path=str(self.wt), branch="", main=False)]
-        self.git.rev_parse.side_effect = lambda d, rev: {"HEAD": OID if d == str(self.wt) else "main-oid",
+        self.git.rev_parse.side_effect = lambda d, rev: {"HEAD": "main-oid" if d == str(self.main) else OID,
                                                          "HEAD^{tree}": TREE, f"{OID}^{{tree}}": TREE, "origin/main": BASE}[rev]
         self.git.dirty.return_value = False
 
@@ -119,6 +119,50 @@ class StackGateKeys(Case):
         changed = load({"engine": {**PROFILE["engine"], "checks": [{**PROFILE["engine"]["checks"][0], "argv": ["false"]}]}}).engine
         assert self.gate.red(changed, TREE, BASE, str(self.repo.wt)) == ["fmt"]
         assert self.gate.why[CheckId("fmt")].startswith("cmd differs (expected ")
+
+    def test_a_base_that_moves_during_the_gate_run_is_gated_again_on_the_new_base(self):
+        """The run's receipts are keyed on the base read before it: main moving mid-run makes that key stale, not the tree red."""
+        self.repo.git.checkouts.return_value = self.repo.git.checkouts.return_value[:1]  # no worktree has it out: the gate makes one
+        bases = iter([BASE, *["base-2"] * 4])
+        rev = self.repo.git.rev_parse.side_effect
+        self.repo.git.rev_parse.side_effect = lambda d, r: next(bases) if r == "origin/main" else rev(d, r)
+        self.spawner.run.return_value = Ran(exit=0)
+        with pytest.raises(Stop) as stop:
+            self.gate.require("task/lifesim-fmtfix-r3", OID)
+        assert self.spawner.run.call_count == 2  # one run on each base
+        assert "is still not green" in stop.value.why  # the second run, on the new base, is the one that is judged
+
+    def test_a_worktree_that_moves_during_the_gate_run_is_not_judged(self):
+        self.repo.git.checkouts.return_value = self.repo.git.checkouts.return_value[:1]
+        fresh = []
+        self.repo.git.add_worktree.side_effect = lambda repo, path, oid: fresh.append(path)
+        rev = self.repo.git.rev_parse.side_effect
+        self.repo.git.rev_parse.side_effect = lambda d, r: "a7025d2d" + "0" * 32 if (r == "HEAD" and d in fresh) else rev(d, r)
+        self.spawner.run.return_value = Ran(exit=1)
+        with pytest.raises(Stop) as stop:
+            self.gate.require("task/lifesim-fmtfix-r3", OID)
+        assert "moved from 1550b77c" in stop.value.why and "nothing is judged" in stop.value.why
+        assert self.spawner.run.call_count == 1
+
+    def test_a_red_gate_in_a_fresh_worktree_is_reported_though_the_worktree_is_gone_by_then(self):
+        """The gate's own checkout is removed when its run ends: the stop must name the red, not a git call into the removed path."""
+        self.repo.git.checkouts.return_value = self.repo.git.checkouts.return_value[:1]
+        fresh, gone = [], []
+        self.repo.git.add_worktree.side_effect = lambda repo, path, oid: fresh.append(path)
+        self.repo.git.remove_worktree_force.side_effect = lambda repo, path: gone.append(path)
+        rev = self.repo.git.rev_parse.side_effect
+
+        def rev_parse(d, r):
+            if d in gone:
+                raise NotARepo(f"cannot change to '{d}': No such file or directory")
+            return rev(d, r)
+
+        self.repo.git.rev_parse.side_effect = rev_parse
+        self.spawner.run.return_value = Ran(exit=1)
+        with pytest.raises(Stop) as stop:
+            self.gate.require("task/lifesim-fmtfix-r3", OID)
+        assert "is still not green for " in stop.value.why
+        assert gone == fresh
 
 
 class FirstDifference(Case):

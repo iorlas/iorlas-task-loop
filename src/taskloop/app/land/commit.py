@@ -8,12 +8,8 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import Git
 
 
-class CommitPictures(Protocol):
-    def copy_looks(self) -> object: ...
-
-
 class CommitHost(Protocol):
-    """What the commit reads of the engine: the bead, git, the pictures, the staging and the strays."""
+    """What the commit reads of the engine: the bead, git, the staging and the strays."""
 
     @property
     def bead(self) -> BeadId: ...
@@ -21,8 +17,6 @@ class CommitHost(Protocol):
     def git(self) -> Git: ...
     @property
     def wt(self) -> str: ...
-    @property
-    def pictures(self) -> CommitPictures: ...
     @property
     def checkout(self) -> StageCheckout: ...
     @property
@@ -40,7 +34,6 @@ class Commit:
         base = e.git.merge_base(e.wt, "HEAD", base_ref)
         if base:
             must(e, f"reset --soft {base}", lambda: e.git.reset(e.wt, base, "soft"))
-        e.pictures.copy_looks()
         e.checkout.stage_all(check=True)
         e.newfiles.quarantine_strays()
         if base and not e.git.staged(e.wt):

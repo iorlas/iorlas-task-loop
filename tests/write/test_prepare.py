@@ -57,7 +57,7 @@ class PrepareTests(EngineTest):
         events = []
         claim = dict(WRITE, bad_checks=[{"cmd": "has-f", "why": "Coordinator must run DOTNET RESTORE: project.assets.json stale"}])
         rc, script = self.run_engine({"plan": [PLAN], "write": [claim, WRITE], "review": [CLEAN]},
-                                     prepare={"cmd": self.command(events)}, max_replans=0)
+                                     prepare={"cmd": self.command(events), "triggers": ["restore", "NU1"]}, max_replans=0)
         assert rc == 0
         assert events == ["prepare", "prepare"]
         assert script.nodes.count("write") == 2
@@ -73,7 +73,7 @@ class PrepareTests(EngineTest):
 
         cmd = procsim.fake("assets-check", check)
         rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN]},
-                                prepare={"cmd": self.command(events)}, max_replans=0,
+                                prepare={"cmd": self.command(events), "triggers": ["restore", "NU1"]}, max_replans=0,
                                 max_check_tries=1, max_rounds=1, checks=[{"id": "assets", "cmd": cmd}])
         assert rc == 0
         assert events == ["prepare", "prepare"]
