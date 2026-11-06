@@ -163,4 +163,3 @@ class KillPaths(Case):
         with self.fake_server(body):
             res, err = usage.fetch_codex_limits()
         assert (res, err) == ({"ok": 1}, None)
-

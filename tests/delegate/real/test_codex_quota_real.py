@@ -123,6 +123,3 @@ class ClaudeLast(Fresh):
             ls[n].out, ls[n].out_until = True, T + 3600
         d = self.pick("reviewer", ls, authored_by="openai")
         assert (d["lane"], d["flag"]) == ("OPENAI_SUBSCRIPTION", "same_family")
-
-
-

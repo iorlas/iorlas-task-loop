@@ -128,5 +128,3 @@ class SecretGuard:
             {"command": "git ls-files ':!.env'"},
         ):
             assert self.guard(ti) == 0, ti
-
-

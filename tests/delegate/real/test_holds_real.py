@@ -77,9 +77,3 @@ class Holds(Case):
         assert self.main("release", h.id)[0] == 0
         assert self.main("holds")[1]["holds"] == []
         assert self.main("release", "nothing")[0] == 1
-
-
-
-
-
-

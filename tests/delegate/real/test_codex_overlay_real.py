@@ -66,11 +66,3 @@ class Overlay(Case):
         assert row["allowed"]
         assert row["resolved_argv"][0] == sys.executable
         assert "approval_policy=never" in spec.argv
-
-
-
-
-
-
-
-

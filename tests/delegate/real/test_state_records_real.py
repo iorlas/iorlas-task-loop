@@ -80,9 +80,3 @@ class ResetTimes(Case):
                 assert (rec.source, rec.guess_n, round((rec.until - 1_800_000_000.0) / 60)) == ("guess", want_n, (15, 30, 60)[want_n])
             route.main(["report", "--lane", "OPENAI_SUBSCRIPTION", "--event", "out", "--until", str(int(time.time()) + 600)])
             assert env.load_state().out["OPENAI_SUBSCRIPTION"].source == "manual"
-
-
-
-
-
-

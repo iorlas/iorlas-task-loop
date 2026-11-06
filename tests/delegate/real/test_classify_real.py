@@ -185,4 +185,3 @@ class Launchers(Case):
             rc=0,
         )
         assert (res.get("outcome"), res["turns"], res["context_k"]) == (None, 2, 6.0)
-

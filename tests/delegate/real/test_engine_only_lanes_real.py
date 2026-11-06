@@ -128,7 +128,3 @@ class RoutingTest(Case):
     @real_proc("delegate: a worker, git or CLI process")
     def test_read_only_steps_ignore_the_list(self):
         assert self.decide("openai", role="reviewer", engine_only=["slow"])["lane"] == "OPENAI_SUBSCRIPTION"
-
-
-
-

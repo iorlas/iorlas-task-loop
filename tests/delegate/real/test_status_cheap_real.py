@@ -65,5 +65,3 @@ class Cheap(Case):
         _rc, d = self.cheap()
         assert isinstance(d["age_s"], int)
         assert "cockpit" in d
-
-

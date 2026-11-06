@@ -225,4 +225,3 @@ class StateLock:
             locked(Path(d) / "x", timeout=0.2),
         ):
             pass
-

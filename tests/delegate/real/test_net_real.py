@@ -94,6 +94,3 @@ class Cheap(Case):
         assert "chatgpt.com" in cheap["roles"]["worker"]["hosts"]
         assert cheap["roles"]["worker"]["net"]["up"] is False
         assert cheap["network"]["up"] is False
-
-
-
