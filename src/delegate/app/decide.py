@@ -80,6 +80,26 @@ def repo_instructions(cwd: str) -> list[Path]:
     return found
 
 
+def base_instructions(cwd: str, ref: str) -> list[tuple[str, str, str]]:
+    """(file name, folder, text) of the instruction files as committed at `ref`, the same walk as `repo_instructions` (per folder from the
+    repo root down to cwd: AGENTS.md, else CLAUDE.md) but read from git objects, never from the work tree."""
+    root = git.repo_root(cwd)
+    found = []
+    for d in repo_dirs(cwd):
+        rel = "" if d == root else str(d.relative_to(root)) + "/"
+        for name in ("AGENTS.md", "CLAUDE.md"):
+            text = git.show(root, ref, rel + name)
+            if text is not None:
+                found.append((name, str(d), text))
+                break
+    return found
+
+
+def instruction_isolation(ref: str) -> list[str]:
+    """Codex reads AGENTS.md from the work tree by itself; with a base `ref` that is turned off and the base text is sent instead."""
+    return ["-c", "project_doc_max_bytes=0"] if ref else []
+
+
 def codex_isolation(cwd: str) -> list[str]:
     """Codex sees only what delegate sends plus the repo's instruction files: every skill it would list (its own system skills, the user's,
     the repo's .agents/skills) is turned off by path, and a repo with only CLAUDE.md is read as Claude would. Sub-agents cannot be turned
