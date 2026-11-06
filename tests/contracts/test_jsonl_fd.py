@@ -6,20 +6,27 @@ from pathlib import Path
 
 from taskloop.contracts.rotating import RotatingJsonl
 
+SCAN = 1024
 
-def lowest_free_fd() -> int:
-    """The number the next open() gets: it rises with every descriptor held below it."""
-    fd = os.open(os.devnull, os.O_RDONLY)
-    os.close(fd)
-    return fd
+
+def held(inodes: set[int]) -> int:
+    """How many open descriptors of this process are one of these files."""
+    count = 0
+    for fd in range(SCAN):
+        try:
+            count += os.fstat(fd).st_ino in inodes
+        except OSError:
+            continue
+    return count
 
 
 def test_a_dropped_store_closes_the_file_it_appended_to(workdir):
-    before = lowest_free_fd()
-    stores = [RotatingJsonl(Path(workdir, f"s{i}.jsonl")) for i in range(20)]
+    paths = [Path(workdir, f"s{i}.jsonl") for i in range(20)]
+    stores = [RotatingJsonl(p) for p in paths]
     for store in stores:
         store.append({"a": 1})
-    assert lowest_free_fd() >= before + 20
+    inodes = {p.stat().st_ino for p in paths}
+    assert held(inodes) == 20
     del stores, store
     gc.collect()
-    assert lowest_free_fd() == before
+    assert held(inodes) == 0
