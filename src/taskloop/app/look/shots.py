@@ -9,8 +9,10 @@ from taskloop.adapters import looks
 from taskloop.adapters.check_files import repo_key
 from taskloop.app.artifacts import store
 from taskloop.app.artifacts.keep import Keeper
+from taskloop.app.look.host import LookHost
 from taskloop.contracts.artifact import ArtifactMeta, ArtifactSlot
 from taskloop.contracts.gitport import Git
+from taskloop.contracts.plancheck import StageData
 from taskloop.contracts.slots import SlotGitError
 from taskloop.contracts.wire import Refused
 from taskloop.domain.checks.matchers import glob_re
@@ -29,7 +31,7 @@ def visual_hit(vp: Any, paths: Any) -> bool:
 
 
 class Pictures:
-    def __init__(self, host: Any, git: Git) -> None:
+    def __init__(self, host: LookHost, git: Git) -> None:
         self.e = host
         self.git = git
         self.kept: Keeper | None = None
@@ -74,7 +76,7 @@ class Pictures:
             out.append(rel)
         return out
 
-    def stage_visual(self, st: Any):
+    def stage_visual(self, st: StageData):
         e = self.e
         vp = self.visual_cfg()
         return bool(vp) and visual_hit(vp, list(st.get("files") or []) + e.checkout.changed_paths())
@@ -101,7 +103,7 @@ class Pictures:
         """The shot methods the repo can render, as the planner and the writer are told them."""
         return looks.table_text(self.shot_methods())
 
-    def look_ready(self, st: Any):
+    def look_ready(self, st: StageData):
         return bool(self.shot_methods()) and self.stage_visual(st)
 
     def show_pictures(self) -> list[tuple[str, ArtifactMeta]]:
@@ -167,7 +169,7 @@ class Pictures:
     def warn_if_untracked(self, m: Any, files: list[Path]) -> None:
         e = self.e
         inside = [f for f in files if str(f).startswith(str(Path(e.wt)) + os.sep)]
-        if inside and not self.git.check_ignore(str(e.wt), [str(inside[0])]):
+        if inside and not self.git.check_ignore(e.wt, [str(inside[0])]):
             e.warn(f"shot method {m['method']} writes pictures in the worktree ({m['out'] or inside[0].parent}) and that folder is not "
                    "ignored by git: they will show up as unexplained new files; add it to .gitignore")
 
@@ -182,7 +184,7 @@ class Pictures:
         if not self.keeper().keep(f, e.evidence_dir / name):
             self.note_dropped()
         self.register(f, name, rnd)
-        looks.downscale(f, base / name, int(e.cfg.look_max_px))
+        looks.downscale(f, base / name, e.cfg.look_max_px)
         return name
 
     def register(self, f: Path, name: str, rnd: int) -> None:

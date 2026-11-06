@@ -4,11 +4,11 @@ import contextlib
 import hashlib
 from collections.abc import Generator
 from pathlib import Path
-from typing import Any
 from urllib.parse import urlencode
 
 from taskloop.adapters import bdcreate, beadtools
 from taskloop.adapters.repourl import repo_url
+from taskloop.app.look.host import LookHost
 from taskloop.contracts import factorydb, gallery
 from taskloop.contracts.beadsport import BdFailure, BeadPatch, BeadQuery, NewBead
 from taskloop.contracts.gitport import Git
@@ -20,7 +20,7 @@ LOOK_LABEL = "owner-look"
 
 
 class OwnerLook:
-    def __init__(self, host: Any, git: Git) -> None:
+    def __init__(self, host: LookHost, git: Git) -> None:
         self.e = host
         self.git = git
 
@@ -93,7 +93,7 @@ class OwnerLook:
     def review_lock(self) -> Generator[None]:
         """One filer at a time per (repo, epic), across slots and sessions."""
         e = self.e
-        key = f"{repo_url(self.git, str(e.wt))}|{self.look_epic() or e.bead}"
+        key = f"{repo_url(self.git, e.wt)}|{self.look_epic() or e.bead}"
         with e.waits.locked("review_lock", e.home.root / "locks" / f"review-{hashlib.sha1(key.encode()).hexdigest()[:12]}.lock"):
             yield
 
@@ -104,7 +104,7 @@ class OwnerLook:
         made, err = have, ""
         if have:
             kept = [x for x in sections(old) if not x.startswith(head.split(":")[0] + ":")]
-            if not beadtools.attempt(e.store.update, have, BeadPatch(description="\n\n".join([*kept, section]))):
+            if not beadtools.attempt(e.store.update, BeadId(have), BeadPatch(description="\n\n".join([*kept, section]))):
                 err = "bd refused the update"
         else:
             made, err = bdcreate.create_checked(e.store, NewBead(
