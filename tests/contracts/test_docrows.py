@@ -1,13 +1,14 @@
 """Checkpoints and follow-up outboxes as database rows (tl-sqd3.26.3, read path): the Doc face of the file store, an older loop's file
 adopted once, forward- and backward-readable bodies, a torn or foreign body named as such, and a revision that refuses a stale write."""
 import json
-import tempfile
-from pathlib import Path
+import os
+import shutil
 
 import pytest
 import support.paths  # noqa: F401
 from support.case import Case
 
+from taskloop.contracts import scratch
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.docrows import RowDocs, StaleRevision
 from taskloop.contracts.docstore import Absent, ForeignVersion, JsonStore, Torn
@@ -23,9 +24,9 @@ def ck(step: str = "", closed: bool = False, bead: str = "t-1") -> Checkpoint:
 
 class CheckpointRows(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.cfg = ConfigDir(Path(tmp.name))
+        folder = scratch.scratch_dir(os.environ)
+        self.addCleanup(shutil.rmtree, folder, True)
+        self.cfg = ConfigDir(folder)
         self.stores = real_stores(self.cfg)
         self.docs = RowDocs(self.cfg, Checkpoint, self.cfg.checkpoint, table="checkpoint", key_col="bead", body_col="body", revisioned=True)
         self.doc = self.docs.of("t-1")
@@ -81,9 +82,9 @@ class CheckpointRows(Case):
 
 class FollowupRows(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.cfg = ConfigDir(Path(tmp.name))
+        folder = scratch.scratch_dir(os.environ)
+        self.addCleanup(shutil.rmtree, folder, True)
+        self.cfg = ConfigDir(folder)
         self.docs = real_stores(self.cfg).followups
 
     def test_an_outbox_round_trips_as_a_kv_row_and_an_older_file_is_adopted(self):
