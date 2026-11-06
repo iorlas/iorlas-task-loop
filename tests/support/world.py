@@ -114,4 +114,3 @@ class SlotWorld(Case):
         self.tmp.cleanup()
         if self.sim:
             self.sim.check()
-
