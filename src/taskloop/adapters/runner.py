@@ -21,7 +21,7 @@ from taskloop.adapters.agent import ApiAgent
 from taskloop.adapters.delegate import Stopped
 from taskloop.contracts import wire
 from taskloop.contracts.agent import Agent
-from taskloop.contracts.delegate import LiveEvent, LiveStart, WorkerStarted
+from taskloop.contracts.delegate import DelegateResult, LiveEvent, LiveStart, WorkerStarted
 
 POLL_S = 0.5  # seconds between the looks at the live file while a call runs
 
@@ -96,6 +96,13 @@ class Seam:
 
     def live_start(self) -> LiveStart | None:
         return None
+
+    def survivors(self, res: DelegateResult | None = None) -> list[int]:
+        """The pids that outlived the stop of this call: the ones the stop itself found alive, and the ones delegate names in the answer
+        (`worker.end` worker_survived). Empty: the tree is proven dead. The engine asks this and reads no pid itself."""
+        pids = [int(p) for p in self.stop.get("alive") or []]
+        pids += [s.pid for s in (res.worker.survivors if res and res.worker else []) if s.pid not in pids]
+        return pids
 
 
 class ApiRunner(Seam):
