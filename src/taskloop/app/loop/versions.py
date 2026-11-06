@@ -11,7 +11,7 @@ from pathlib import Path
 
 from taskloop.contracts import paths
 from taskloop.contracts.loop import BadVersion, BadVersions
-from taskloop.contracts.stores import BadVersionStore
+from taskloop.contracts.rowstores import BadVersionStore
 
 CORE = ("tl.py",)
 

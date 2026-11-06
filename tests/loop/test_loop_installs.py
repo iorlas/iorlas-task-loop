@@ -15,8 +15,8 @@ from support import homes
 
 from loop.test_loop import LoopBase
 from taskloop.contracts.env import snapshot
+from taskloop.contracts.rowstores import PinStore
 from taskloop.contracts.snapshots import Pin
-from taskloop.contracts.stores import PinStore
 
 # isort: split
 from support import (

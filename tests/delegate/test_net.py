@@ -14,13 +14,14 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+import pytest
 from any_agent import procs
 from any_agent.classify import Outcome
 from any_agent.drops import looks_dropped
 from delegate.adapters import netprobe
 from delegate.app import env, harnesses, launch, net
 from delegate.app import roles as role_view
-from delegate.app.settle import Settler
+from delegate.app.settle import Hung, Settler
 from delegate.contracts import stops
 from delegate.contracts.history import RunRow
 from delegate.contracts.routing import BreakerPolicy
@@ -225,12 +226,23 @@ class NotTheLanesFault:
         d: dict[str, Any] = {"lane": "OPENAI_SUBSCRIPTION", "model": "m"}
         a = mock.Mock(schema=None, timeout=60)
         down = {"up": False, "ip_up": False, "why": "offline", "ms": 1, "hosts": {}, "at": 1.0}
-        res: dict[str, Any] = {"hung_words": "printed nothing within 120s", "hung_kind": "first_event", "ref": None}
+        res: dict[str, Any] = {"ref": None}
+        hung = Hung("printed nothing within 120s", "first_event")
         with mock.patch.object(net, "net_probe", lambda hosts=None: down), mock.patch.object(Settler, "mark_out") as mark:
-            launch.settler().apply(res, Outcome("hung", "", "ours"), d, T, "codex", a)
+            launch.settler().apply(res, Outcome("hung", "", "ours"), d, T, "codex", a, hung=hung)
         mark.assert_not_called()
         assert (res["outcome"], res["resumable"]) == ("network", False)
-        assert "hung_words" not in res
+        assert not {"hung_words", "hung_kind", "hung"} & set(res)
+
+    @pytest.mark.parametrize(("kind", "rests"), [("first_event", True), ("mid_run", False)])
+    def test_only_a_worker_silent_from_the_start_rests_its_lane(self, kind, rests):
+        d: dict[str, Any] = {"lane": "OPENAI_SUBSCRIPTION", "model": "m"}
+        up = {"up": True, "ip_up": True, "why": None, "ms": 1, "hosts": {}, "at": 1.0}
+        with mock.patch.object(net, "net_probe", lambda hosts=None: up), mock.patch.object(Settler, "mark_out") as mark:
+            hung = Hung("went quiet", kind)
+            res = launch.settler().apply({}, Outcome("hung", "", "ours"), d, T, "codex", mock.Mock(schema=None, timeout=60), hung=hung)
+        assert mark.called is rests
+        assert "went quiet" in str(res["say"])
 
 
 class Roles:
