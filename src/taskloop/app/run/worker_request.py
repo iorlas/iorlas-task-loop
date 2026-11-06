@@ -12,12 +12,13 @@ from taskloop.app.run.blocked import Blocked, refuse_over_cap
 from taskloop.app.run.budget import Budget
 from taskloop.app.run.call import Call
 from taskloop.contracts import log as rec
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.delegate import RunRequest, ToolBinding
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.plancheck import PlanData
-from taskloop.contracts.ports import Beads, Git
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks import planref

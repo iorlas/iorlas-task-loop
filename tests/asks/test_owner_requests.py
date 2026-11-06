@@ -28,10 +28,10 @@ from taskloop.app.run import requests
 from taskloop.app.run.layout import prune_run_logs
 from taskloop.cli import asks as cli
 from taskloop.contracts import log as rec
+from taskloop.contracts.beadsport import NewBead
 from taskloop.contracts.enums import WhyCode
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import NewBead
 from taskloop.contracts.run import RunState
 
 RUN = "tl-5-20261026-100000"

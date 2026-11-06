@@ -14,7 +14,7 @@ import support.paths  # noqa: F401
 
 from taskloop.app.wire.slots import cfg_source, load_cfg, load_profile, profile_source
 from taskloop.contracts import config
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import SlotGitError
 
 

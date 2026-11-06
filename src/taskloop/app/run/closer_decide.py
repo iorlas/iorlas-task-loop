@@ -7,10 +7,11 @@ from typing import Protocol
 from taskloop.adapters import storm as storm_file
 from taskloop.adapters.repourl import repo_url
 from taskloop.app.run.console import say
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Clock, Git
+from taskloop.contracts.ports import Clock
 from taskloop.domain import outcome as oc
 from taskloop.domain import storm
 

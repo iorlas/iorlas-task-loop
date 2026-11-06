@@ -15,8 +15,8 @@ from taskloop.contracts import config, scratch
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha
 from taskloop.contracts.slots import NotARepo
 from taskloop.stores.bundle import Stores
