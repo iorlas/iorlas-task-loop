@@ -1527,6 +1527,7 @@
    "reflect": true,
    "writer_family": [],
    "writer_exec_allow": [],
+   "writer_read_roots": [],
    "planner_notes": "",
    "shot_table": "",
    "write_fresh_stage_k": 100,
@@ -1730,6 +1731,7 @@
    "openai"
   ],
   "writer_exec_allow": [],
+  "read_roots": [],
   "tools": [
    {
     "name": "factory",

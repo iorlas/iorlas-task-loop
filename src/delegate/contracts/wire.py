@@ -99,6 +99,7 @@ class RunRequest:
     engine_only_advisory: bool = False
     only_family: list[str] = field(default_factory=list)  # families the call may use, no fallback outside (a worker call only)
     writer_exec_allow: list[list[str]] = field(default_factory=list)  # Codex writers only; host.json bounds this per-call grant
+    read_roots: list[str] = field(default_factory=list)  # OpenCode write steps only: folders outside cwd it may read
     worker_env: dict[str, str] = field(default_factory=dict)  # variables the worker's environment gains (the caller's per-call values)
     tools: list[ToolServer] = field(default_factory=list)  # tool servers for this call; not wired to any harness yet
 
@@ -124,6 +125,8 @@ class RunRequest:
             out += ["--engine-only-advisory"]
         for family in self.only_family:
             out += ["--only-family", family]
+        for root in self.read_roots:
+            out += ["--read-root", root]
         if self.writer_exec_allow:
             require_writer_exec_allow(contract)
             out += ["--writer-exec-allow", json.dumps(self.writer_exec_allow)]
