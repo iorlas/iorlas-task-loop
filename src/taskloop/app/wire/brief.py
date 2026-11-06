@@ -18,8 +18,8 @@ from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Git
+from taskloop.contracts.rowstores import ReposStore
 from taskloop.contracts.slots import SlotView
-from taskloop.contracts.stores import ReposStore
 from taskloop.domain.brief import AskLine, Brief, LoopLine, ResourceLine, status_json, status_lines
 
 RECENT = 5

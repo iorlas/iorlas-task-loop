@@ -3,8 +3,8 @@ name, or `parent/name` when two share one."""
 from pathlib import Path
 
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.rowstores import ReposStore
 from taskloop.contracts.snapshots import RepoEntry, ReposIndex
-from taskloop.contracts.stores import ReposStore
 
 
 def write_repos(file: Path | str, *repos: object) -> None:

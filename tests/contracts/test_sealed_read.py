@@ -9,8 +9,8 @@ from support.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
+from taskloop.contracts.docstore import Absent, ForeignVersion, JsonStore, Present, Torn
 from taskloop.contracts.run import NetPause, Reexec
-from taskloop.contracts.stores import Absent, ForeignVersion, JsonStore, Present, Torn
 from taskloop.contracts.wire import Refused
 
 
