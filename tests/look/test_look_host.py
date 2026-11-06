@@ -2,6 +2,7 @@
 from support.builders import make_engine
 from support.engine_case import EngineTest
 from support.host_conformance import missing
+from support.look_host import FakeLook
 
 from taskloop.app.look.host import LookHost, LookPorts
 
@@ -31,3 +32,8 @@ class RenderHandOff(EngineTest):
         key = eng.ports.repo.key()
         eng.pictures.show_pictures()
         assert eng.artifact_repo == key
+
+
+def test_the_fake_look_has_every_member_the_stage_reads(workdir):
+    look = FakeLook(workdir)
+    assert (missing(look.ports, LookPorts), missing(look.hand, LookHost)) == ([], [])
