@@ -6,7 +6,7 @@ browser time elapsed since the fetch (a 304 keeps the old `t`). Ids are bd ids a
 wherever a row can come from more than one. A field with no source yet keeps its default and the doc names the
 slice that fills it.
 """
-from typing import Annotated, ClassVar, Literal, final
+from typing import Annotated, ClassVar, Final, Literal, final
 
 import msgspec
 
@@ -520,6 +520,8 @@ class Result(Rec):
     ok: bool
     message: str = ""
 
+
+READ_PROTOCOL: Final = 1  # the dashboard's HTTP read/write protocol; bump it with any change an older page or server cannot take
 
 WRITES: dict[str, type] = {
     "answer": AnswerReq,
