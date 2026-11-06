@@ -31,6 +31,7 @@ from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import paths
 from taskloop.contracts.config import HostResources, RepoProfile
+from taskloop.contracts.docstore import JsonStore
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
@@ -39,8 +40,8 @@ from taskloop.contracts.ids import BeadId, new_loop_id
 from taskloop.contracts.landed import landed_by
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.ports import Beads, Git, Spawner
+from taskloop.contracts.rowstores import ReposStore
 from taskloop.contracts.slots import SlotGitError, git_probe
-from taskloop.contracts.stores import JsonStore, ReposStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.beads import rules as beadlint
 

@@ -12,10 +12,10 @@ from support.look_world import FakeBd, world
 
 from taskloop.app.asks.intake import Intake
 from taskloop.contracts import gallery
+from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import AskStore
 
 NOW = 1_800_000_000.0
 
