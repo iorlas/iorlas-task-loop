@@ -2,9 +2,6 @@
 import json
 from functools import cached_property
 
-from taskloop.app.look.judge import Judge
-from taskloop.app.look.owner_look import OwnerLook
-from taskloop.app.look.shots import Pictures
 from taskloop.app.plan.briefs import Briefs
 from taskloop.app.plan.cases import Cases
 from taskloop.app.plan.planner import Planner
@@ -26,17 +23,8 @@ class PlanParts(Plumbing):
     planner = cached_property(Planner)
     briefing = cached_property(Briefing)
     stage_loop = cached_property(StageLoop)
-    judge = cached_property(Judge)
     link_check = cached_property(LinkCheck)
     verifier = cached_property(Verifier)
-
-    @cached_property
-    def pictures(self) -> Pictures:
-        return Pictures(self, self.git)
-
-    @cached_property
-    def owner_look(self) -> OwnerLook:
-        return OwnerLook(self, self.git)
 
     @cached_property
     def hand(self) -> Handoff:
