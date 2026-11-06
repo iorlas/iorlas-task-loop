@@ -45,4 +45,5 @@ def test_a_commit_is_pushed_run_in_the_slot_worktree_and_its_artifacts_come_back
     assert (home / "tl" / "r" / "s1" / "setup-ran").is_file()  # the slot's setup ran in its worktree before the check
     assert len(list((home / "tl" / "r" / ".setup").glob("s1-*"))) == 1  # ... once: the second run found its marker
     assert (home / "tl" / "r" / "s1" / "hello.txt").is_file()
-    assert (home / "tl" / "r.git" / "refs" / "tl" / "r1").is_file()
+    assert not list((home / "tl" / "r.git" / "refs" / "tl").glob("*"))  # the attempt's ref went with the run
+    assert not list((home / "tl" / "r" / ".artifacts").glob("*"))  # ... and its artifacts, once fetched
