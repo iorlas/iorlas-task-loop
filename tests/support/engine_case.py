@@ -11,7 +11,6 @@ import shlex
 import shutil
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import types
@@ -48,6 +47,7 @@ from support.narrow import must
 from support.procsim import real_proc  # noqa: F401
 from support.push_race import PushRace
 from support.spawn import port_git, real_spawner
+from support.tmpdir import TemporaryDirectory, mkdtemp
 from support.waits import until
 from support.who import who
 from taskloop.adapters import delegate as dl
@@ -260,7 +260,7 @@ def _template():
     """origin (o.git) + clone (wt) with one pushed commit, built once per process: on a machine where every new file and
     process costs 5-30 ms (Defender) a copy is ~4x cheaper than the 5 git calls that make it."""
     if not _TEMPLATE:
-        d = Path(tempfile.mkdtemp(prefix="tl-engine-template-"))
+        d = Path(mkdtemp(prefix="tl-engine-template-"))
         atexit.register(shutil.rmtree, d, True)
         env = {**os.environ, **NO_GC}
         env.update(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
@@ -344,7 +344,7 @@ class Recorded(collections.abc.Sequence):
 
 class EngineTest(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         home = Path(self.tmp.name)
         self.env = mock.patch.dict(
             os.environ,

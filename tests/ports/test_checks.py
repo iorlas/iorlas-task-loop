@@ -1,6 +1,5 @@
 """Checks: the shared contract on the fake and on ArgvChecks (exec'd as an argv, no shell), and logic tests on the fake."""
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -32,7 +31,7 @@ class ChecksContract:
         raise NotImplementedError
 
     def go(self, argv: list[str], **kw: object) -> object:
-        return self.make().run(CheckSpec(argv=argv, cwd=tempfile.gettempdir(), **kw))  # type: ignore[arg-type]
+        return self.make().run(CheckSpec(argv=argv, cwd=str(Path(__file__).parent), **kw))  # type: ignore[arg-type]
 
     def test_a_green_command_passes_with_its_output(self) -> None:
         r = self.go(self.PASS)

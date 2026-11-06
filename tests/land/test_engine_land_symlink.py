@@ -2,14 +2,14 @@
 conflict is still found and goes to a fix round."""
 
 import os
-import tempfile
 from unittest import mock
 
 from support.engine_case import EngineTest
+from support.tmpdir import TemporaryDirectory
 
 from land.test_engine_land_1 import EngineLand1Test
 
-REAL_TEMP = tempfile.TemporaryDirectory
+REAL_TEMP = TemporaryDirectory
 
 
 class SymlinkedTemp:
@@ -33,7 +33,7 @@ class SymlinkedTemp:
 
 class TestEngineThroughASymlink(EngineTest):
     def setup_method(self):
-        with mock.patch("support.engine_case.tempfile.TemporaryDirectory", SymlinkedTemp):
+        with mock.patch("support.engine_case.TemporaryDirectory", SymlinkedTemp):
             super().setup_method()
 
     def test_a_rebase_conflict_goes_to_a_fix_round_not_blocked(self):
