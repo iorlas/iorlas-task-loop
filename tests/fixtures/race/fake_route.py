@@ -2,6 +2,7 @@
 pause, the review passes. Each worker call appends a witness line to $FAKE_ROUTE_LOG: the worktree's branch and engine
 lock at its start and end, so a reset under a live engine shows."""
 
+import hashlib
 import json
 import os
 import random
@@ -15,9 +16,16 @@ def opt(args, flag):
     return args[args.index(flag) + 1] if flag in args else ""
 
 
+def lock_file(cwd):
+    """The engine lock of the worktree `cwd`: <config>/locks/engine-<folder>-<8 hex of sha1 of its real path>.lock."""
+    real = os.path.realpath(cwd)
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(base, "task-loop", "locks", f"engine-{os.path.basename(real)}-{hashlib.sha1(real.encode()).hexdigest()[:8]}.lock")
+
+
 def lock_pid(cwd):
     try:
-        with open(os.path.join(cwd, ".task", "engine.lock"), encoding="utf-8") as f:
+        with open(lock_file(cwd), encoding="utf-8") as f:
             return json.load(f).get("pid")
     except (OSError, ValueError):
         return None
