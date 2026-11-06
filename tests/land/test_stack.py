@@ -5,13 +5,13 @@ import hashlib
 import io
 import json
 import sys
-import tempfile
 from argparse import Namespace
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -149,7 +149,7 @@ class RepoGit(ScriptedGit):
 
 class StackCase(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(self.tmp.name)
         self.repo = Path(self.tmp.name) / "repo"

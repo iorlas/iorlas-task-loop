@@ -4,11 +4,11 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / "skills" / "task-loop"
@@ -62,7 +62,7 @@ def make_run(root):
 
 class Feed(Case):
     def test_a_burst_larger_than_one_page_is_delivered_in_full_across_polls(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             _log, lf, run = self.run_of(d)
             self.refresh(run)
             first = live.page(run)
@@ -79,7 +79,7 @@ class Feed(Case):
             assert seen == [f"m{i}" for i in range(n)]
 
     def test_a_replaced_worker_file_of_the_same_size_or_larger_starts_over_and_a_deleted_one_leaves_the_feed(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             _log, lf, run = self.run_of(d)
             self.refresh(run)
             before = [e.get("text") for e in run.events()]
@@ -96,7 +96,7 @@ class Feed(Case):
             assert "after replacement" not in [e.get("text") for e in run.events()]
 
     def test_a_cursor_of_another_run_is_a_reset_not_a_silent_skip(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             _log, _lf, run = self.run_of(d)
             self.refresh(run)
             mine = live.page(run)
@@ -117,7 +117,7 @@ class Feed(Case):
         run.refresh()
 
     def test_merge_by_time_seq_keys_and_the_cursor(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             log, lf, run = self.run_of(d)
             self.refresh(run)
             a = live.page(run)
@@ -144,7 +144,7 @@ class Feed(Case):
             assert live.decode("garbage!") is None
 
     def test_every_engine_kind_passes_through(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             log, _lf, run = self.run_of(d)
             put(
                 log,
@@ -164,7 +164,7 @@ class Feed(Case):
             assert (got["wait_end"]["wait_seconds"], got["vendor_error"]["reason"]) == (60, "hung")
 
     def test_engine_cursor_survives_a_fresh_reader(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             log, _lf, run = self.run_of(d)
             run.refresh()
             cursor = live.page(run)["cursor"]
@@ -174,14 +174,14 @@ class Feed(Case):
             assert [e["k"] for e in live.page(fresh, live.decode(cursor))["events"]] == ["warn"]
 
     def test_a_run_without_worker_files(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             _log, lf, run = self.run_of(d)
             os.remove(lf)
             self.refresh(run)
             assert {e["src"] for e in run.events()} == {"engine"}
 
     def test_long_poll_returns_when_a_file_grows_and_waits_when_none_does(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             _log, lf, run = self.run_of(d)
             assert live.poll(run, None)
             cur = live.page(run)["cursor"]
@@ -225,7 +225,7 @@ class CallSite(Case):
         assert "DELEGATE_LIVE_FILE" not in must(seen[1])
 
     def test_engine_numbers_its_calls(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             e = object.__new__(engine.Engine)
             e.live_dir, e.live_n = Path(d) / (f"{BEAD}-{STAMP}.live"), 0
             p1, p2 = e.live("plan"), e.live("write")

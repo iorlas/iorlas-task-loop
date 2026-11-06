@@ -6,7 +6,6 @@ import os
 import shutil
 import stat
 import sys
-import tempfile
 import time
 from contextlib import redirect_stdout
 from datetime import datetime
@@ -14,6 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
@@ -70,7 +70,7 @@ def commit(repo, name, text, msg, t):
 class Base(Case):
     def setup_method(self):
         self.landings: dict[str, Landed] = {}
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.home = Path(self.tmp.name)
         env = {"XDG_CONFIG_HOME": str(self.home / "cfg"), "APPDATA": str(self.home / "cfg"),
                "CLAUDE_CODE_SESSION_ID": "abcdef12-3456", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",

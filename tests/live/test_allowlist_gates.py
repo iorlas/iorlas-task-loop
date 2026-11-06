@@ -11,13 +11,13 @@ import pwd
 import re
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 import pytest
 from support.case import Case
 from support.checked import run_checked
 from support.tlmain import tl_main
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 LIFESIM = Path.home() / "Workspaces" / "lifesim"
@@ -31,7 +31,7 @@ def git(cwd: Path, *a: str) -> str:
 
 class RealGateChecks(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = str(Path(self.tmp.name, "cfg"))
 

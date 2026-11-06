@@ -2,10 +2,10 @@
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -27,7 +27,7 @@ def git(cwd, *args):
 
 class DropBranch(Case):
     def setup_method(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.repo = Path(self.tmp.name) / "repo"
         self.repo.mkdir()
