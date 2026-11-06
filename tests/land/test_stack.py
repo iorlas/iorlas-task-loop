@@ -250,6 +250,33 @@ class Delivery(StackCase):
         assert self.sim.prs[5]["state"] == "OPEN"
         assert self.sim.ran("gh pr close") == []
 
+    def test_a_head_that_moved_while_its_gate_ran_is_judged_again_not_merged(self):
+        self.sim.pr(3, "task/a", OID["task/a"])
+        judged: list[str] = []
+        real = StackGate.require
+
+        def moving(gate, branch, oid, **kw):
+            judged.append(oid)
+            if len(judged) == 1:  # the owner pushes a fix while the first gate runs
+                self.sim.prs[3]["headRefOid"] = self.sim.remote["task/a"] = "c" * 40
+            return real(gate, branch, oid, **kw)
+        with mock.patch.object(StackGate, "require", moving):
+            assert self.deliver(StackItem(pr=3)) == 0
+        assert judged == ["a" * 40, "c" * 40]
+        assert self.sim.ran("gh pr merge 3")[0].endswith("--match-head-commit " + "c" * 40)
+
+    def test_a_head_that_keeps_moving_is_refused_after_the_second_judging(self):
+        self.sim.pr(3, "task/a", OID["task/a"])
+        real = StackGate.require
+        moved = iter("cd")
+
+        def moving(gate, branch, oid, **kw):
+            self.sim.prs[3]["headRefOid"] = self.sim.remote["task/a"] = next(moved) * 40
+            return real(gate, branch, oid, **kw)
+        with mock.patch.object(StackGate, "require", moving):
+            assert self.deliver(StackItem(pr=3)) == 1
+        assert self.sim.ran("gh pr merge") == []
+
     def test_an_existing_pr_is_merged_without_a_push_or_a_new_pr(self):
         self.sim.pr(3, "task/a", OID["task/a"])
         rc = self.deliver(StackItem(pr=3))
