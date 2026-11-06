@@ -42,6 +42,10 @@ class ConfigDir:
         """What `tl layout migrate` moved, one line per move."""
         return self.root / "layout-migrate.jsonl"
 
+    def retired_dir(self) -> Path:
+        """retired/: what `tl layout migrate` set aside because no registered repo owns it (an old repo key it cannot map)."""
+        return self.root / "retired"
+
     def dash_pid(self) -> Path:
         return self.root / "dash.pid"
 

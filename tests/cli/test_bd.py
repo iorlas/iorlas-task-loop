@@ -60,7 +60,7 @@ class BdExit(Case):
         context.who.actor = "tl-session"
         store = mock.Mock()
         store.passthrough.return_value = mock.Mock(out="shown\n", err="", code=0)
-        with (mock.patch.object(tl, "Ctx", return_value=context),
+        with (mock.patch.object(tl, "Ctx", return_value=context), mock.patch.object(tl.ident, "layout_stop", return_value=""),
               mock.patch.object(beadtools, "bd_store", return_value=store) as factory,
               mock.patch.object(tl.cli_closing, "guard", return_value=mock.Mock()) as guard):
             result = tl_main("task", "show", "X", cwd=Path.cwd())
@@ -73,7 +73,7 @@ class BdExit(Case):
         context, store = mock.Mock(), mock.Mock()
         context.who.config.root = Path(self.enterContext(TemporaryDirectory()))
         refusal = mock.Mock(return_value="no land on record; use tl task close X --reason duplicate")
-        with (mock.patch.object(tl, "Ctx", return_value=context),
+        with (mock.patch.object(tl, "Ctx", return_value=context), mock.patch.object(tl.ident, "layout_stop", return_value=""),
               mock.patch.object(beadtools, "bd_store", return_value=store),
               mock.patch.object(tl.cli_closing, "guard", return_value=refusal)):
             result = tl_main("task", "close", "X", cwd=Path.cwd())

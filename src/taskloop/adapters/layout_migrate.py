@@ -12,8 +12,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from taskloop.adapters import locks
+from taskloop.adapters import key_migrate, locks
+from taskloop.contracts import factorydb
 from taskloop.contracts.paths import ConfigDir, RunFiles
+from taskloop.contracts.ports import Git
+from taskloop.contracts.stores import ReposStore
 
 COMMAND = "tl layout migrate"
 RUN_FILE = re.compile(r"(?P<run>.+?)(?P<tail>\.jsonl(?:\.\d+)?|\.stderr|\.live)")
@@ -27,8 +30,10 @@ class Move:
     dst: Path | None  # None: retired (an older loop's per-pid state file; the rows are in factory.db)
 
 
-def plan(cfg: ConfigDir) -> list[Move]:
-    """Every old place that still holds something, with where it goes. Pure listing: nothing is touched."""
+def plan(cfg: ConfigDir, keys: dict[str, str] | None = None) -> list[Move]:
+    """Every old place that still holds something, with where it goes (`keys`: old repo key -> the repo's one key, from key_migrate;
+    without them a repo key is taken as it is). Pure listing: nothing is touched."""
+    keys = keys or {}
     out: list[Move] = []
     root = cfg.root
     for f in sorted((root / "engine").glob("*")):
@@ -51,12 +56,12 @@ def plan(cfg: ConfigDir) -> list[Move]:
             out.append(Move(f, home / ("log" + tail)))
         else:
             out.append(Move(f, home / LOOP_NAME[tail]))
-    out += [Move(d, cfg.repo_dir(d.name) / "slots") for d in _dirs(root / "slots")]
-    out += [Move(d, cfg.repo_dir(d.name) / "slot-state") for d in _dirs(root / "slot-state")]
-    out += [Move(d, cfg.repo_dir(d.name) / "decisions") for d in _dirs(root / "decisions")]
-    out += [Move(f, cfg.check_durations(f.stem)) for f in sorted((root / "check-durations").glob("*.json"))]
+    for old in ("slots", "slot-state", "decisions"):
+        out += [Move(d, key_migrate.home(cfg, d.name, keys) / old) for d in _dirs(root / old)]
+    out += [Move(f, key_migrate.home(cfg, f.stem, keys) / "durations.json") for f in sorted((root / "check-durations").glob("*.json"))]
     # a run's old artifacts/ is one run attempt: its step tries are numbered apart
     out += [Move(a, RunFiles(a.parent).artifacts(1)) for a in sorted((root / "runs").glob("*/artifacts"))]
+    out += [Move(a, b) for a, b in key_migrate.moves(cfg, keys)]
     return out
 
 
@@ -66,7 +71,8 @@ def _dirs(parent: Path) -> list[Path]:
 
 def old_layout(cfg: ConfigDir) -> list[str]:
     """One line per old place found, empty when the config dir is in the target layout."""
-    return [f"{m.src.relative_to(cfg.root)} is the old layout" for m in plan(cfg)]
+    srcs = [m.src for m in plan(cfg)] + key_migrate.left_over(cfg)  # an old spelling of a repo key: which repo it is takes git
+    return [f"{p.relative_to(cfg.root)} is the old layout" for p in srcs]
 
 
 def stop_text(cfg: ConfigDir) -> str:
@@ -95,16 +101,20 @@ def manifest(path: Path) -> dict[str, str]:
     return out
 
 
-def migrate(cfg: ConfigDir, say: Callable[[str], None], now: float) -> int:
-    """Move every old place to the target tree. -> 0 done (or nothing to do), 2 a loop or run is live, 3 a target already exists."""
-    moves = plan(cfg)
-    if not moves:
+def migrate(cfg: ConfigDir, say: Callable[[str], None], now: float, git: Git) -> int:
+    """Move every old place to the target tree and give every repo its one key. -> 0 done (or nothing to do), 2 a loop or run is live,
+    3 a target already exists."""
+    keys = key_migrate.keymap(git, ReposStore(cfg, quiet=True).known())
+    moves = plan(cfg, keys)
+    rows = _rows(cfg, keys, dry=True)
+    if not moves and not rows:
         say("nothing to migrate: the config dir is in the target layout")
         return 0
     if live := live_writers(cfg):
         say("stop the loops and runs first; still holding a lock:\n  " + "\n  ".join(live))
         return 2
-    clash = [m for m in moves if m.dst is not None and m.dst.exists()]
+    dsts = [m.dst for m in moves if m.dst is not None]
+    clash = [m for m in moves if m.dst is not None and (m.dst.exists() or dsts.count(m.dst) > 1)]
     if clash:
         say("the target already exists, nothing moved:\n  " + "\n  ".join(f"{m.src} -> {m.dst}" for m in clash))
         return 3
@@ -118,12 +128,36 @@ def migrate(cfg: ConfigDir, say: Callable[[str], None], now: float) -> int:
             os.rename(m.src, m.dst)
             if manifest(m.dst) != before:
                 raise RuntimeError(f"{m.src} changed on the way to {m.dst}")
-        with open(journal, "a", encoding="utf-8") as f:
-            f.write(json.dumps({"t": now, "from": str(m.src), "to": str(m.dst) if m.dst else None, "files": len(before)}) + "\n")
-    for old in ("engine", "loop", "slot-state", "decisions", "check-durations", "slots"):
-        _drop_empty(cfg.root / old)
-    say(f"migrated {len(moves)} places; journal: {journal}")
+        _journal(journal, {"t": now, "from": str(m.src), "to": str(m.dst) if m.dst else None, "files": len(before)})
+    changed = _rows(cfg, keys, dry=False)
+    if changed:
+        _journal(journal, {"t": now, "factory.db": "repo keys", "rows": changed})
+    olds = [cfg.root / n for n in ("engine", "loop", "slot-state", "decisions", "check-durations", "slots")]
+    for old in olds + key_migrate.left_over(cfg):
+        _drop_empty(old)
+    say(f"migrated {len(moves)} places and {changed} factory.db rows; journal: {journal}")
     return 0
+
+
+def _journal(path: Path, rec: dict[str, object]) -> None:
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec) + "\n")
+
+
+def _rows(cfg: ConfigDir, keys: dict[str, str], *, dry: bool) -> int:
+    """The factory.db rows still under an old repo key (`dry`: counted, not changed); the rows changed otherwise."""
+    con = factorydb.open_rw(cfg.factory_db()) if cfg.factory_db().is_file() else None
+    if con is None:
+        return 0
+    try:
+        if dry:
+            return sum(con.execute(sql, args).fetchone()[0] for old in keys for sql, args in (
+                ("SELECT count(*) FROM kv WHERE k=?", (f"durations:{old}",)),
+                ("SELECT count(*) FROM check_pass WHERE repo_key=?", (old,))))
+        with con:
+            return key_migrate.rekey_rows(keys, lambda sql, args: con.execute(sql, args).rowcount)
+    finally:
+        con.close()
 
 
 def _drop_empty(path: Path) -> None:

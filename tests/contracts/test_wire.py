@@ -237,10 +237,6 @@ class Ids(Case):
             with pytest.raises(ValueError):
                 v(bad)
 
-    def test_repo_key_is_twelve_hex(self):
-        k = ids.repo_key("/r/.git")
-        assert (len(k), k, ids.repo_key("/r/.git")) == (12, k, k)
-
     def test_enum_members_are_their_wire_strings(self):
         for e in vars(enums).values():
             if isinstance(e, type) and issubclass(e, enum.StrEnum) and e is not enum.StrEnum:
