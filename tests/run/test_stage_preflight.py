@@ -23,10 +23,10 @@ from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import Result, Step
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitfacts import StatusRow
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.ports import Git
 from taskloop.contracts.run import RunReport, RunState
 from taskloop.contracts.runrows import RunRows
 

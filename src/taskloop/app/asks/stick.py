@@ -10,9 +10,9 @@ from typing import assert_never
 
 from taskloop.contracts import adrfiles
 from taskloop.contracts.adrs import AdrStore, is_adr_id
+from taskloop.contracts.beadsport import BeadPatch, BeadQuery, Beads, NewBead
 from taskloop.contracts.dash import Stick
 from taskloop.contracts.ledger import LedgerEntry
-from taskloop.contracts.ports import BeadPatch, BeadQuery, Beads, NewBead
 
 FACTORY_LABEL = "factory"
 TITLE_CAP = 200

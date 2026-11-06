@@ -6,10 +6,10 @@ from support.fake_beads import FakeBeads
 
 from taskloop.app.asks import intake, ledgercomments, raiser
 from taskloop.contracts.askrows import AskRows
-from taskloop.contracts.bead import Bead
+from taskloop.contracts.bead import BdError, Bead
+from taskloop.contracts.beadsport import BdFailure
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdError, BdFailure
 from taskloop.contracts.stores import AskStore
 from taskloop.domain.asks import specs
 

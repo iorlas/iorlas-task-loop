@@ -9,7 +9,7 @@ from taskloop.adapters.ident import config_dir
 from taskloop.contracts import paths
 from taskloop.contracts.delegate_status import snapshot_of
 from taskloop.contracts.env import Env
-from taskloop.contracts.ports import Spawner
+from taskloop.contracts.procport import Spawner
 from taskloop.contracts.snapshots import StatusTried
 from taskloop.contracts.stores import StatusStore, StatusTriedStore, UsageHistory
 

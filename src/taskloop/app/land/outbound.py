@@ -7,9 +7,11 @@ from typing import Protocol
 
 from taskloop.app.land.parts import BeginSteps
 from taskloop.app.land.push_evidence import failure
+from taskloop.contracts.beadsport import DoltPush
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import Clock, DoltPush, Git
+from taskloop.contracts.ports import Clock
 from taskloop.domain.land.matchers import Push, lfs_in, no_dolt_remote
 from taskloop.stores.runlog import RunLog
 

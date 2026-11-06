@@ -1,8 +1,8 @@
 """A bead the engine woke by answering its ask: open again, with the pick label the park took off given back."""
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BeadPatch, Beads
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BeadPatch, Beads
 from taskloop.contracts.stores import HAD_PICK
 
 

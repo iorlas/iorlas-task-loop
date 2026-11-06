@@ -12,10 +12,10 @@ from taskloop.app.asks import ledgercomments, looks, stick, sweeps
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask, AskAction, AskAnswer, ThreadEntry
 from taskloop.contracts.bead import Comment
+from taskloop.contracts.beadsport import BdFailure, BeadPatch, Beads
 from taskloop.contracts.dash import OwnerCause, Stick
 from taskloop.contracts.enums import AskKind
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
 from taskloop.contracts.stores import AskStore
 from taskloop.domain import timespec
 

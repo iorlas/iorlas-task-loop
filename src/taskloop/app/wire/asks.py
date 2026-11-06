@@ -9,11 +9,11 @@ from taskloop.app.land import forge
 from taskloop.app.land.cmds import Runs
 from taskloop.app.track.trail import now
 from taskloop.contracts.bd_errors import BdCommandFailure
+from taskloop.contracts.beadsport import BdFailure
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure
 from taskloop.contracts.stores import AskStore
 
 

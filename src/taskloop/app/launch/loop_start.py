@@ -17,8 +17,8 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts import paths
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.ports import Git
 from taskloop.contracts.stores import ReposStore
 
 

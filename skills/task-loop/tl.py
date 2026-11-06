@@ -102,8 +102,9 @@ from taskloop.cli import status
 from taskloop.cli import wait as cli_wait
 from taskloop.contracts.enums import Step
 from taskloop.contracts.env import Env, snapshot
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.ports import Git, Spawner
+from taskloop.contracts.procport import Spawner
 from taskloop.contracts.slots import MissingRemote
 
 HERE = Path(__file__).resolve().parent

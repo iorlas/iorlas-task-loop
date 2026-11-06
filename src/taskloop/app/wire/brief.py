@@ -12,11 +12,12 @@ from taskloop.app.release import catalog, pins
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.bd_errors import BdCommandFailure
+from taskloop.contracts.beadsport import BdFailure
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, Git
 from taskloop.contracts.slots import SlotView
 from taskloop.contracts.stores import ReposStore
 from taskloop.domain.brief import AskLine, Brief, LoopLine, ResourceLine, status_json, status_lines

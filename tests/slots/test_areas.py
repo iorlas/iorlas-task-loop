@@ -40,9 +40,9 @@ from taskloop.app.slots.pool import Slot, SlotPool
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import fence
 from taskloop.contracts.bead import BdError
+from taskloop.contracts.beadsport import BdFailure
 from taskloop.contracts.fence import SLOT_GEN
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 

@@ -22,11 +22,13 @@ from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import lanes as wlanes
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import factorybackup, paths
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import Beads, Child, Git, Hold, Spawner
+from taskloop.contracts.procport import Child, Hold, Spawner
 from taskloop.contracts.slots import SlotGitError
 
 STOP_GRACE_S = 300.0  # a stopped run-task is given this long to run its close step before stream-proc ends it

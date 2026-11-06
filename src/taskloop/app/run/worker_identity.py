@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from taskloop.contracts.delegate import RunRequest
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.run import CallIdentity
 
 

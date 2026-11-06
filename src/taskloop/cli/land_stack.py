@@ -12,14 +12,15 @@ from taskloop.app.land.stackgate import StackGate
 from taskloop.app.run.finish import land_answer
 from taskloop.app.wire import closeguard
 from taskloop.app.wire.slots import profile_slots, slot_of
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.env import Env
 from taskloop.contracts.finish import finish_run
 from taskloop.contracts.finish_projection import history
 from taskloop.contracts.forge import StackItem
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.ports import Beads, Git
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 

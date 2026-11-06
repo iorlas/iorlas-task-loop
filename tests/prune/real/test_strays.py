@@ -16,8 +16,8 @@ from prune.real.test_prune import git
 from taskloop.adapters.git import RealGit
 from taskloop.app.reconcile.apply import apply
 from taskloop.app.reconcile.observe import observe
+from taskloop.contracts.beadsport import BeadPatch, NewBead
 from taskloop.contracts.env import snapshot
-from taskloop.contracts.ports import BeadPatch, NewBead
 from taskloop.domain.reconcile.diff import diff
 from taskloop.domain.reconcile.facts import FreeSlot, ReleaseClaim
 

@@ -11,7 +11,7 @@ from taskloop.app.wire import hook, setup
 from taskloop.contracts.config import HostResources
 from taskloop.contracts.env import Env
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Ran
+from taskloop.contracts.procport import Ran
 from taskloop.contracts.stores import JsonStore
 
 BRANCH = "tl-setup-profile"

@@ -10,9 +10,9 @@ import support.paths  # noqa: F401
 from support.builders import cfg_with
 from support.engine_case import CLEAN, PLAN, WRITE, EngineTest
 
+from taskloop.contracts.checksport import TreeProbe
 from taskloop.contracts.ids import CheckId
 from taskloop.contracts.plancheck import PlanCheck, PlanData, Ref, StageData, adhoc
-from taskloop.contracts.ports import TreeProbe
 from taskloop.domain.checks import lint
 
 OUTPUT = "tests/Sim.Scenarios/bin/Debug/net10.0/Sim.Scenarios"

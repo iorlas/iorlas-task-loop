@@ -8,8 +8,8 @@ import support.paths  # noqa: F401
 from support import engine_case as T
 from support.engine_case import BEAD, CLEAN, PLAN, WRITE, verdict
 
+from taskloop.contracts.beadsport import BeadQuery
 from taskloop.contracts.config import ReviewSkipConfig
-from taskloop.contracts.ports import BeadQuery
 from taskloop.domain.review.followups import key_label, unchecked
 
 PLAIN = dict(BEAD, labels=[])  # f.txt, "f.txt exists": nothing visual about it

@@ -17,8 +17,8 @@ from taskloop.adapters import check_files, profile_at
 from taskloop.app.checks.execution import HOST_IDENTITY, LINUX_IDENTITY
 from taskloop.contracts import config, wire
 from taskloop.contracts.checks import BaseRedRecord, Check, CheckResult, PassRecord
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 from taskloop.domain.checks import inputs
 from taskloop.stores.bundle import Stores

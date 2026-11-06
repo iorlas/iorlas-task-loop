@@ -9,9 +9,10 @@ from taskloop.contracts.checks import CheckFaultKind
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Git, Spawner
+from taskloop.contracts.procport import Spawner
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 

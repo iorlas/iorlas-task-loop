@@ -27,12 +27,12 @@ from taskloop.app.slots.lease import Lease
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts import runlife, wire
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BdFailure
 from taskloop.contracts.config import ConfigError
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.loop import LoopState, LoopWait, QueueRow
 from taskloop.contracts.parks import ParkStore
-from taskloop.contracts.ports import BdFailure
 from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.slots import SlotFail
 

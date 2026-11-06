@@ -7,11 +7,12 @@ from pathlib import Path
 from taskloop.app.release import tidy
 from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.landed import Landed, landed_in
 from taskloop.contracts.lockrows import EngineLockRows
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git
 from taskloop.contracts.reconcile import Lease, SlotFact, epoch
 from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.reconcile.facts import (

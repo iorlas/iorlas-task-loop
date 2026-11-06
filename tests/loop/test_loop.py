@@ -41,7 +41,7 @@ from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import real  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.loop import Carry, LoopState  # noqa: E402
-from taskloop.contracts.ports import WaitTimeout  # noqa: E402
+from taskloop.contracts.procport import WaitTimeout  # noqa: E402
 
 
 def bead(id, priority=2, parent=None, labels=(), type="task"):

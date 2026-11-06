@@ -8,8 +8,8 @@ from support.repos import write_repos
 
 from taskloop.contracts import beadrows, factorydb
 from taskloop.contracts.bead import BdError
+from taskloop.contracts.beadsport import BdFailure
 from taskloop.contracts.ids import BeadId, loop_key
-from taskloop.contracts.ports import BdFailure
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
 from taskloop_dash.index import Indexer

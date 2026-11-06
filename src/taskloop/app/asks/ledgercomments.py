@@ -5,9 +5,9 @@ import json
 from collections.abc import Iterable
 
 from taskloop.contracts import wire
+from taskloop.contracts.beadsport import BdFailure, Beads
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import LedgerEntry
-from taskloop.contracts.ports import BdFailure, Beads
 from taskloop.contracts.stores import AskStore
 
 PREFIX = "tl-ledger "

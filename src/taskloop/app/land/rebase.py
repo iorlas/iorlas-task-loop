@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import Protocol
 
 from taskloop.contracts.checkpoint import Checkpoint, PlanStep
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import SlotGitError
 from taskloop.stores.runlog import RunLog
 

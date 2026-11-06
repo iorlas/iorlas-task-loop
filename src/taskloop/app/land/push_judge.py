@@ -8,8 +8,9 @@ from taskloop.app.checks import authorization
 from taskloop.app.land.profile_change import diff_sha
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.ports import Clock, Git
+from taskloop.contracts.ports import Clock
 from taskloop.contracts.runkey import BaseSha
 from taskloop.stores.bundle import Stores
 

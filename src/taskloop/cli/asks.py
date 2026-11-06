@@ -12,9 +12,9 @@ from taskloop.app.asks import intake, sweeps
 from taskloop.app.run import requests
 from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskAction
+from taskloop.contracts.beadsport import BdFailure, Beads
 from taskloop.contracts.ids import BeadId, parse_bead_id
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, Beads
 from taskloop.contracts.stores import AskStore
 
 Out = Callable[[str], None]

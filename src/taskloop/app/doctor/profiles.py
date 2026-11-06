@@ -8,7 +8,7 @@ from taskloop.adapters import profile_at
 from taskloop.adapters.gitmemo import ref_files
 from taskloop.adapters.gitrepo import Sig, git_dirs, is_dir_sig, sig
 from taskloop.contracts import config
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import NotARepo, SlotGitError
 from taskloop.contracts.stores import ReposStore
 
