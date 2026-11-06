@@ -105,6 +105,10 @@ class Engine(RunHost):
             self.reload.carry_done_memo(self.home.run_dir(pause.run))
             self.log.note(f"back from the network pause of {pause.run}: continuing as run {stem}")
 
+    @property
+    def intake_per_day(self) -> int:
+        return self.cfg.intake_per_day
+
     def on_path(self, name: str) -> str | None:
         return tool_on_path(name)
 
