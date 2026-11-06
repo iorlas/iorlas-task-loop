@@ -60,5 +60,6 @@
    "name": "Read",
    "arg": "Assets/Food/FoodItem.cs"
   }
- ]
+ ],
+ "reset": false
 }

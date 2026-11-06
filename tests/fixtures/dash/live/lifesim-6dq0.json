@@ -135,5 +135,6 @@
    "name": "Bash",
    "arg": "dotnet test --filter mood_rain"
   }
- ]
+ ],
+ "reset": false
 }

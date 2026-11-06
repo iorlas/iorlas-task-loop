@@ -41,7 +41,7 @@ class SameIntake(Case):
             cli_asks.run(args, tl_asks, lambda repo: tl_store, lambda: 1000.0, "dash", ConfigDir(a), lambda _line: None)
             dash = make_dash(answering(lambda repo: dash_store, b), config=b)
             req = {"project": "b", "ask": "b-1-1", "kind": "answer", "text": "go with A"}
-            assert dash.writes.post("answer", req) == (200, {"ok": True, "message": ""})
+            assert dash.writes.post("answer", req) == (200, {"ok": True, "message": "", "receipt": ""})
             assert [c.text for c in dash_store.comments(BeadId("b-1"))] == [c.text for c in tl_store.comments(BeadId("b-1"))]
             assert "Owner (tl) answer" in dash_store.comments(BeadId("b-1"))[0].text
             assert dash_store.beads[BeadId("b-1")].status == tl_store.beads[BeadId("b-1")].status

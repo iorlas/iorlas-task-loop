@@ -25,11 +25,11 @@ class RepoProfileKeys(Case):
             with self.subTest(bad=bad), pytest.raises(ConfigError):
                 load({"engine": {"checks": [{**check, "run_in": bad}]}})
 
-    def test_prepare_accepts_typed_argv_inputs_timeout_and_default_triggers(self):
+    def test_prepare_accepts_typed_argv_inputs_timeout_and_no_default_triggers(self):
         cfg = load({"engine": {"prepare": {"cmd": ["dotnet", "restore"], "inputs": ["**/*.csproj"]}}}).engine.prepare
         assert cfg is not None
         assert cfg.cmd == ["dotnet", "restore"]
-        assert cfg.triggers == ["restore", "project.assets.json", "NU1"]
+        assert cfg.triggers == []
         for bad in ({"cmd": []}, {"cmd": "dotnet restore"}, {"cmd": ["x"], "timeout_min": 0},
                     {"cmd": ["x"], "unknown": True}):
             with self.subTest(bad=bad), pytest.raises(ConfigError):

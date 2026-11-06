@@ -8,13 +8,14 @@ from collections.abc import Sequence
 from taskloop.contracts.bead import Bead, Comment
 from taskloop.contracts.dash import Artifact, AskCard, BeadDetail, CheckCount, LiveBox, Marker, Msg, Phase
 from taskloop.contracts.delegate import LiveCmdEnd, LiveCmdStart, LiveEvent, LiveTokens
-from taskloop.contracts.log import Overrun, RetryDecision
+from taskloop.contracts.log import Overrun, RetryDecision, VendorError
 from taskloop.contracts.runlife import Liveness
 from taskloop_dash.tails import parse_ts
 from taskloop_dash.views import ledger, passes, phases, stage_logs
 from taskloop_dash.views.artifact_files import Item, url_of
 from taskloop_dash.views.askcards import ask_card, look_card, stale_of
 from taskloop_dash.views.board import Board, blockers, is_work
+from taskloop_dash.views.names import hhmm
 from taskloop_dash.views.runfacts import Run
 from taskloop_dash.views.world import ProjectIn
 
@@ -27,8 +28,8 @@ def comment_msg(c: Comment) -> Msg:
 
 
 def decision_msgs(runs: Sequence[Run]) -> list[Msg]:
-    """Why it was slow and why it switched: each Overrun (budget against elapsed) and RetryDecision (action and reason) the engine
-    recorded, oldest first."""
+    """Why it was slow and why it switched: each Overrun (budget against elapsed), RetryDecision (action and reason) and VendorError
+    (lane, reason, until when it is closed) the engine recorded, oldest first."""
     out: list[Msg] = []
     for r in runs:
         for x in r.records:
@@ -40,6 +41,9 @@ def decision_msgs(runs: Sequence[Run]) -> list[Msg]:
                 lane = f" on {x.lane}" if x.lane else ""
                 why = f": {x.reason}" if x.reason else ""
                 out.append(Msg(t=x.t, icon="↪", who="engine", md=f"{x.step}{lane}: {x.action} (attempt {x.attempt}){why}"))
+            elif isinstance(x, VendorError):
+                until = f", closed until {hhmm(x.until)}" if x.until else ""
+                out.append(Msg(t=x.t, icon="⛔", who="engine", md=f"{x.lane or 'a lane'} refused: {x.reason}{until}"))
     return sorted(out, key=lambda m: m.t)
 
 
