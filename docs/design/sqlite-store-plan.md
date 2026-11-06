@@ -120,12 +120,19 @@ The transition list per slice is generated from the table's state names, so addi
   (`sqlite_store.quarantine`) and the run reports a visible error, never a silent file fallback ("only our database", CLAUDE.md).
 - A release that finds a slice broken is rolled back by `tl rollback`/pin; the next release re-lands the slice.
 
-### Stores are forward-readable
+## 6a. Compatibility across versions
 
-A row written by a newer tl must not break an older one (pix, 2026-11-06: 32 run rows with `pid_start` blocked every landing as "unreadable
-run manifest", tl-x3m0). Every store reads past keys it does not know, keeps its own known fields on a write back, and a row that
-still does not validate raises an error that says "validation", names the row and the field, and is not a `sqlite3.DatabaseError` alias
-of a database fault. A newer `user_version` stays a visible "update tl" refusal (the vendored `sqlite_store` already does that).
+The lesson (pix, 2026-11-06: 32 run rows with `pid_start` from a newer tl blocked every landing of an older one as "unreadable run
+manifest", tl-x3m0). Three rules, one test shape:
+
+- **(a) Stores are forward-readable.** Every row, manifest and `kv` read tolerates keys it does not know, from a newer writer; a write
+  back keeps the keys this tl knows. A row that still does not validate raises an error that says "validation", names the row and the
+  field, and is not an alias of a database fault.
+- **(b) A database ahead of the code parks, it does not crash and does not fall back.** A `user_version` newer than the running tl's
+  schema parks the loop (and refuses the engine and the verbs that write) with a typed reason, "factory.db is schema vN, this tl knows
+  vM: update tl" (the vendored `sqlite_store` already raises that); it never reads the old files instead ("only our database").
+- **(c) Each slice's tests carry an old-shape row and a new-shape row**: a row as the previous release wrote it (a field missing) and a
+  row as a later one will (an extra key); both read, and the old one is completed on its next write.
 
 ## 7. Risks
 
@@ -140,4 +147,5 @@ of a database fault. A newer `user_version` stays a visible "update tl" refusal 
 |---|---|---|
 | 2026-11-06 | One SQLite execution store for all authoritative state; logs and evidence stay files. | Denis |
 | 2026-11-06 | One slice per PR, strangler: dual-read, never dual-write; old store readable until the slice lands. | plan |
+| 2026-11-06 | Compatibility across versions: forward-readable stores, an ahead DB parks with a typed reason, every slice tests old and new row shapes. | lead |
 | 2026-11-06 | Kernel locks stay kernel locks; delegate's private state stays out of this DB. | plan |
