@@ -4,7 +4,7 @@ import sqlite3
 
 import sqlite_store
 
-HISTORY = ("ask_ledger", "check_round", "step", "attempt", "effect", "run")
+HISTORY = ("ask_ledger", "check_round", "step", "attempt", "effect", "timed", "run")
 ELIGIBLE = """SELECT r.run FROM run AS r
     WHERE r.ended < ? AND r.state NOT IN ('created','running')
     AND NOT EXISTS (SELECT 1 FROM temp.prune_keep_bead AS k WHERE k.bead=r.bead)
@@ -26,10 +26,12 @@ PREDICATES = {
     "step": f"run IN ({ELIGIBLE})",
     "attempt": f"run IN ({ELIGIBLE})",
     "effect": f"run IN ({ELIGIBLE})",
+    "timed": f"run IN ({ELIGIBLE})",
     "run": f"""run IN ({ELIGIBLE})
         AND NOT EXISTS (SELECT 1 FROM step WHERE step.run=run.run)
         AND NOT EXISTS (SELECT 1 FROM attempt WHERE attempt.run=run.run)
         AND NOT EXISTS (SELECT 1 FROM effect WHERE effect.run=run.run)
+        AND NOT EXISTS (SELECT 1 FROM timed WHERE timed.run=run.run)
         AND NOT EXISTS (SELECT 1 FROM check_round WHERE check_round.run=run.run)""",
 }
 

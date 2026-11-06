@@ -27,6 +27,7 @@ def seed(con: sqlite3.Connection, run: str, state: str = "done", ended: float = 
     con.execute("INSERT INTO step(run,key,try,attempt,status,started,ended) VALUES (?,'s',1,1,'done',1,2)", (run,))
     con.execute("INSERT INTO effect(key,run,name,state,intent_at,done_at) VALUES (?,?,'e','done',1,2)", (run, run))
     con.execute("INSERT INTO check_round(run,round,ts,body) VALUES (?,1,2,'{}')", (run,))
+    con.execute("INSERT INTO timed(run,bead,kind,name,exec_s,wait_s,t) VALUES (?,?,'step','s',1,0,2)", (run, run))
     con.execute("INSERT INTO ask(bead,id,status,t,body) VALUES (?,?,'answered',1,'{}')", (run, run))
     con.execute("INSERT INTO ask_ledger(t,event,ask,bead,body,origin) VALUES (2,'answer',?,?,'{}',?)", (run, run, run))
 
@@ -46,7 +47,7 @@ def test_counts_dry_run_and_exemptions(con: sqlite3.Connection) -> None:
     before = counts(con)
     snapshot = list(con.iterdump())
     planned = factorydb.prune_older_than(con, 10, keep_beads=keep, dry_run=True)
-    assert planned == {"ask_ledger": 3, "check_round": 1, "step": 1, "attempt": 1, "effect": 1, "run": 1}
+    assert planned == {"ask_ledger": 3, "check_round": 1, "step": 1, "attempt": 1, "effect": 1, "timed": 1, "run": 1}
     assert list(con.iterdump()) == snapshot
     assert not con.in_transaction
     actual = factorydb.prune_older_than(con, 10, keep_beads=keep)

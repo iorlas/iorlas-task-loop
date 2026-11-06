@@ -8,7 +8,7 @@ from typing import Any, Final, Protocol, override
 
 from jsonl_log import KEEP, ROTATE_BYTES, Entry
 
-from taskloop.contracts import docstore, events, log, paths, wire
+from taskloop.contracts import docstore, events, factorydb, log, paths, timedrows, wire
 from taskloop.contracts.ask import Ask, AskAnswer, ThreadEntry
 from taskloop.contracts.askrows import AskRows, DbDocs, DbLedger
 from taskloop.contracts.dash import OwnerCause, Stick
@@ -82,8 +82,34 @@ def _one(cls: type) -> Any:
 
 
 class RunLog(JsonlStore[log.EngineLog]):
+    """The engine log of one run. Each end record that completes a timed thing also adds its `timed` row (contracts/timedrows.py); the
+    row is best effort, the log is the record."""
+
     def __init__(self, cfg: paths.ConfigDir, run: str) -> None:
         super().__init__(cfg.engine_log(run), log.decode)
+        self.cfg, self.run = cfg, run
+        self.tracker: timedrows.Tracker | None = None
+
+    def warm(self) -> timedrows.Tracker:
+        """The pairing state of this run: a run that exec'd or took up again has the starts of its earlier process in the file."""
+        if self.tracker is None:
+            self.tracker = timedrows.Tracker(self.run)
+            for earlier in self.read_from(0).items:
+                self.tracker.feed(earlier.rec)
+        return self.tracker
+
+    @override
+    def append(self, rec: log.EngineLog) -> int:
+        tracker = None
+        with contextlib.suppress(OSError, factorydb.DatabaseError):
+            tracker = self.warm()  # read before the append: the file does not hold `rec` yet
+        at = super().append(rec)
+        if tracker is not None:
+            item = tracker.feed(rec)
+            if item is not None:
+                with contextlib.suppress(OSError, factorydb.DatabaseError, factorydb.sqlite3.Error):
+                    timedrows.add(self.cfg, item)
+        return at
 
 
 class EventLog(JsonlStore[events.Event]):

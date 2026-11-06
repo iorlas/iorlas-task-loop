@@ -1,26 +1,16 @@
-"""`tl runs show ID` and `tl runs slow`: read-only queries over the engine log (engine/<run>.jsonl); no store of their own.
+"""`tl runs show ID` and `tl runs slow`: read-only queries over factory.db.
 
-A row is one thing that ran or waited: a step, a worker call, a check, the gate or a wait. Its time is the end record's own
-`exec_seconds` (a call's `secs`) and `wait_seconds`; nothing is recounted from timestamps. A command has no seconds of its own: it is
-the gap between its start and end records. `show` also lists the run's attempts from factory.db (read-only); steps, calls, checks and
-waits are not rows there, so their timing stays in the log."""
+A row is one thing that ran or waited: a step, a worker call, a check, the gate, a wait or a command (contracts/timedrows.py: the engine
+writes it as its log's end record is appended). Its time is the end record's own `exec_seconds` (a call's `secs`) and `wait_seconds`;
+a command's is the gap between its start and end records. `show` also lists the run's attempts and, from the engine log, the head, the
+artifacts and the close, which carry no seconds."""
 import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from taskloop.contracts import factorydb, log
+from taskloop.contracts import factorydb, log, timedrows
 from taskloop.contracts.paths import ConfigDir
-
-
-@dataclass(frozen=True)
-class Item:
-    run: str
-    bead: str
-    kind: str  # step | call | check | gate | wait
-    name: str
-    exec_s: float
-    wait_s: float
-    t: float
+from taskloop.contracts.timedrows import Item
 
 
 def records(path: Path) -> list[log.EngineLog]:
@@ -39,34 +29,9 @@ def records(path: Path) -> list[log.EngineLog]:
 
 
 def items(run: str, rows: list[log.EngineLog]) -> list[Item]:
-    """The timed things of one run, in the order they ended."""
-    names: dict[str, tuple[str, str]] = {}
-    began: dict[str, float] = {}  # a command's start: its record carries no seconds, the gap to its end is the span
-    out: list[Item] = []
-    bead = ""
-    for r in rows:
-        bead = bead or r.bead
-        if isinstance(r, log.StepStart):
-            names[r.id] = ("step", r.step)
-        elif isinstance(r, log.CmdStart):
-            names[r.id], began[r.id] = ("cmd", r.text), r.t
-        elif isinstance(r, log.CmdEnd) and r.id in began:
-            out.append(Item(run, r.bead or bead, "cmd", names[r.id][1], max(0.0, r.t - began.pop(r.id)), 0.0, r.t))
-        elif isinstance(r, log.CallStart):
-            names[r.id] = ("call", f"{r.node} {r.role}".strip())
-        elif isinstance(r, log.CheckStart):
-            names[r.id] = ("check", r.check)
-        elif isinstance(r, log.WaitStart):
-            names[r.id] = ("wait", str(r.what) + (f" {r.holder}" if r.holder else ""))
-        elif isinstance(r, log.StepEnd | log.CheckEnd | log.WaitEnd):
-            kind, name = names.get(r.id, ("step" if isinstance(r, log.StepEnd) else "?", r.id))
-            out.append(Item(run, r.bead or bead, kind, name, r.exec_seconds or 0.0, r.wait_seconds or 0.0, r.t))
-        elif isinstance(r, log.CallEnd):
-            kind, name = names.get(r.id, ("call", r.id))
-            out.append(Item(run, r.bead or bead, kind, name, r.secs, r.wait_seconds or 0.0, r.t))
-        elif isinstance(r, log.GateEnd):
-            out.append(Item(run, r.bead or bead, "gate", "gate", r.exec_seconds or 0.0, r.wait_seconds or 0.0, r.t))
-    return out
+    """The timed things of a log, in the order they ended (what the engine writes as `timed` rows while it logs)."""
+    tracker = timedrows.Tracker(run)
+    return [i for r in rows if (i := tracker.feed(r)) is not None]
 
 
 @dataclass(frozen=True)
@@ -110,7 +75,7 @@ def show(run: str, cfg: ConfigDir) -> int:
     rows = records(path)
     start = next((r for r in rows if isinstance(r, log.RunStart)), None)
     close = next((r for r in reversed(rows) if isinstance(r, log.Close)), None)
-    its = items(run, rows)
+    its = timedrows.of_run(cfg, run)
     bead = (start.bead if start else "") or (its[0].bead if its else "")
     print(f"run {run}  bead {bead or '-'}  branch {(start.branch if start else '') or '-'}")
     for a in attempts_of(run, cfg):
@@ -132,18 +97,15 @@ def show(run: str, cfg: ConfigDir) -> int:
 
 
 def slow(cfg: ConfigDir, top: int, by: str, runs: int) -> int:
-    """The slowest timed items over the newest `runs` engine logs, by exec or by wait seconds."""
-    try:
-        logs = sorted(cfg.engine_dir().glob("*.jsonl"), key=lambda p: p.stat().st_mtime)[-runs:]
-    except OSError:
-        logs: list[Path] = []
-    every = [i for p in logs for i in items(p.stem, records(p))]
+    """The slowest timed items over the newest `runs` runs with timed rows, by exec or by wait seconds."""
+    seen, every = timedrows.newest(cfg, runs)
+
     def key(i: Item) -> float:
         return i.wait_s if by == "wait" else i.exec_s
 
     ranked = [i for i in sorted(every, key=key, reverse=True) if key(i) > 0][:top]
     if not ranked:
-        print(f"no timed items in the newest {len(logs)} engine logs")
+        print(f"no timed items in the newest {seen} runs")
         return 0
     for i in ranked:
         print(f"{fmt(key(i)):>7} {by:<4} {i.kind:<6} {i.name:<40} {i.bead or '-':<14} {i.run}")

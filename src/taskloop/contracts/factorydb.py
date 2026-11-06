@@ -18,7 +18,7 @@ from sqlite_store import SqlValue
 from taskloop.contracts import factorymigrate, factoryprune, wire
 from taskloop.contracts.run import RunManifest
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 SCHEMA_READ_FROM = 4  # the oldest schema a read-only opener (the dashboard) reads as it is; lower this when a step stays readable
 DDL = """
 CREATE TABLE source (path TEXT PRIMARY KEY, family TEXT NOT NULL,
@@ -71,6 +71,9 @@ CREATE TABLE wait (
   wake_at REAL, wake_on TEXT, facts TEXT, since REAL NOT NULL, cleared REAL
 );
 CREATE TABLE checkpoint (bead TEXT PRIMARY KEY, t REAL NOT NULL, rev INTEGER NOT NULL DEFAULT 0, body TEXT NOT NULL);
+CREATE TABLE timed (id INTEGER PRIMARY KEY, run TEXT NOT NULL, bead TEXT, kind TEXT NOT NULL, name TEXT NOT NULL,
+  exec_s REAL NOT NULL, wait_s REAL NOT NULL, t REAL NOT NULL);
+CREATE INDEX timed_run ON timed(run, id);
 CREATE TABLE signal (
   id INTEGER PRIMARY KEY, run TEXT, kind TEXT NOT NULL,
   payload TEXT, at REAL NOT NULL, taken REAL
@@ -97,6 +100,7 @@ OWNERS: dict[str, str] = {
     "effect": "engine",
     "wait": "loop",
     "signal": "owner",
+    "timed": "engine",  # what the engine log's end records timed: tl runs show|slow read these
     "checkpoint": "engine",  # one row per bead across runs; the engine writes it with the revision it read
 }
 REVISIONED_TABLES = frozenset({"run", "ask", "bead", "checkpoint"})
