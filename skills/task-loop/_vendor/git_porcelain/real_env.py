@@ -33,9 +33,9 @@ LEAKS: Final = (
 _GITDIR_FILE: Final = re.compile(r"gitdir:\s*(.+)")
 
 
-def base(extra: Mapping[str, str] | None = None) -> dict[str, str]:
-    """The ambient environment of a git child, plus ``extra``."""
-    env = {k: v for k, v in os.environ.items() if k not in LEAKS}
+def base(extra: Mapping[str, str] | None = None, *, source: Mapping[str, str] | None = None) -> dict[str, str]:
+    """The ambient environment of a git child (``source``, default ``os.environ`` read now), plus ``extra``."""
+    env = {k: v for k, v in (os.environ if source is None else source).items() if k not in LEAKS}
     env["GIT_TERMINAL_PROMPT"] = "0"
     env.setdefault("GIT_SSH_COMMAND", "ssh -o BatchMode=yes")
     env["LC_ALL"] = "C"
