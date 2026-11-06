@@ -82,6 +82,19 @@ class Base(Case):
             self.tmp.cleanup()
 
 
+class OldLayout(Base):
+    def test_a_command_on_an_old_config_dir_stops_and_names_the_migrate_command_and_migrate_runs(self):
+        old = self.home / "cfg" / "task-loop" / "engine"
+        old.mkdir(parents=True)
+        (old / "t-1-20261015-100000.jsonl").write_text("{}\n")
+        r = tl_main("status", cwd=self.home)
+        assert (r.returncode, "tl layout migrate" in r.stderr) == (os.EX_CONFIG, True)
+        r = tl_main("layout", "migrate", cwd=self.home)
+        assert (r.returncode, "migrated 1 places" in r.stdout) == (0, True)
+        assert (self.home / "cfg" / "task-loop" / "runs" / "t-1-20261015-100000" / "engine.jsonl").exists()
+        assert "old layout" not in tl_main("layout", "migrate", cwd=self.home).stderr
+
+
 class Identity(Base):
     def test_actor_is_per_session(self):
         assert who().actor == "tl-abcdef12"

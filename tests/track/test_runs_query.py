@@ -43,7 +43,6 @@ def say(fn, *args):
 def home(tmp_path):
     """The log as the engine writes it: each record through the run's log store, which adds the timed rows."""
     cfg = ConfigDir(tmp_path)
-    cfg.engine_dir().mkdir()
     store = RunLog(cfg, "R1")
     for r in FIXTURE:
         store.append(log.decode(r))
@@ -116,7 +115,6 @@ def test_the_rows_are_all_show_and_slow_read(tmp_path):
 
 def test_a_process_that_takes_the_log_up_again_pairs_the_starts_of_the_earlier_one(tmp_path):
     cfg = ConfigDir(tmp_path)
-    cfg.engine_dir().mkdir()
     RunLog(cfg, "R1").append(log.decode(FIXTURE[1]))  # a step starts in the first process...
     RunLog(cfg, "R1").append(log.decode(FIXTURE[2]))  # ...and ends in the next
     assert [(i.kind, i.name, i.exec_s) for i in timedrows.of_run(cfg, "R1")] == [("step", "write", 128.0)]
