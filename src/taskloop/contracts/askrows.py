@@ -1,8 +1,6 @@
 """Authoritative asks and their transition ledger; legacy files are import input only."""
 
 import json
-import logging
-import time
 from _thread import _local
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
@@ -11,7 +9,7 @@ from uuid import uuid4
 
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.ask import Ask
-from taskloop.contracts.docstore import Absent, ForeignVersion, Item, JsonStore, Page, Present, Read, Torn
+from taskloop.contracts.docstore import Absent, Item, JsonStore, Page, Read
 from taskloop.contracts.ledger import LedgerEntry
 from taskloop.contracts.paths import ConfigDir
 
@@ -153,79 +151,3 @@ def read_snapshot(cfg: ConfigDir) -> tuple[list[Ask], list[LedgerEntry]]:
         return asks, [item.rec for item in ledger.items]
     finally:
         con.close()
-
-
-def has_legacy_asks(cfg: ConfigDir) -> bool:
-    """Whether any ask file or ledger file is left to import; nothing there means nothing to open."""
-    return cfg.ask_ledger().exists() or cfg.asks_dir().exists()
-
-
-def import_legacy_asks(cfg: ConfigDir) -> tuple[int, list[str]]:
-    """Import each source once, returning inserted rows and torn-file reports. Never modify source bytes."""
-    rows = AskRows(cfg)
-    count = 0
-    torn: list[str] = []
-    with rows.transaction():
-        con = rows.connection()
-        # Mark the family as well as each file: later files are never a second source of state.
-        marker = str(cfg.asks_dir()) + "/.factory-import"
-        if con.execute("SELECT 1 FROM source WHERE path=?", (marker,)).fetchone():
-            return 0, []
-        for bead in cfg.ask_beads():
-            path = cfg.ask(bead)
-            if not con.execute("SELECT 1 FROM source WHERE path=?", (str(path),)).fetchone():
-                added, report = _import_document(rows, bead)
-                count += added
-                if report:
-                    torn.append(report)
-                    logging.getLogger(__name__).warning("Skipping torn legacy ask %s", report)
-                _mark(con, str(path))
-        count += _import_ledger(rows)
-        _mark(con, marker)
-    return count, torn
-
-
-def _import_document(rows: AskRows, bead: str) -> tuple[int, str]:
-    path = rows.cfg.ask(bead)
-    try:
-        body = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError) as error:
-        return 0, f"{path}: {error}"
-    rec = JsonStore(path, Ask).decode(body)
-    added = 0
-    if isinstance(rec, Present):
-        added = int(rows.insert(bead, rec.rec, missing_only=True))
-    elif isinstance(rec, ForeignVersion):
-        # Keep orphan identity and the original version; it has no current Ask projection.
-        cursor = rows.connection().execute(
-            "INSERT INTO ask(bead,id,status,t,body) VALUES (?,?,'foreign',0,?) ON CONFLICT(bead) DO NOTHING",
-            (bead, bead, body))
-        added = cursor.rowcount
-    return added, f"{path}: {rec.why}" if isinstance(rec, Torn) else ""
-
-
-def _mark(con: factorydb.sqlite3.Connection, path: str) -> None:
-    con.execute("INSERT INTO source(path,family,seen) VALUES (?,'ask',?)", (path, time.time()))
-
-
-def _import_ledger(rows: AskRows) -> int:
-    path = rows.cfg.ask_ledger()
-    con = rows.connection()
-    if con.execute("SELECT 1 FROM source WHERE path=?", (str(path),)).fetchone():
-        return 0
-    count, offset = 0, 0
-    try:
-        with path.open("rb") as source:
-            ledger = DbLedger(rows)
-            for line in source:
-                try:
-                    rec = wire.load(LedgerEntry, line)
-                except ValueError:
-                    pass
-                else:
-                    count += int(bool(ledger.insert(rec, f"legacy:{path}:{offset}")))
-                offset += len(line)
-    except FileNotFoundError:
-        pass
-    _mark(con, str(path))
-    return count

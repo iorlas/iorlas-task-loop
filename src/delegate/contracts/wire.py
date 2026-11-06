@@ -9,6 +9,8 @@ import sys
 from dataclasses import field
 from typing import Literal
 
+from any_contract import check_contract
+
 from delegate.contracts.codec import ABSENT, Absent, mutable, record
 from delegate.contracts.json_types import Json
 
@@ -58,8 +60,7 @@ RECIPE_RUNNERS = (
 
 def require_writer_exec_allow(contract: dict[str, Json] | None) -> None:
     """The caller must handshake before sending a host execution grant. Never silently drop one for an older delegate."""
-    caps: Json = contract.get("capabilities", []) if contract else []
-    if not contract or contract.get("contract") != CONTRACT or not isinstance(caps, (list, str)) or "writer_exec_allow" not in caps:
+    if not contract or check_contract(CONTRACT, contract, capabilities=["writer_exec_allow"]):
         raise ValueError("writer_exec_allow requires delegate contract 4 and capability writer_exec_allow")
 
 

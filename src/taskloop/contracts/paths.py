@@ -29,10 +29,6 @@ class ConfigDir:
     def land_push(self, stamp: int, branch: str) -> Path:
         return self.root / "land-push" / f"{stamp}-{branch}.log"
 
-    def run_manifest(self, run: RunId | str) -> Path:
-        """Legacy rollback copy, read only by runrows.import_legacy; current manifests live in factory.db."""
-        return self.run_dir(run) / "manifest.json"
-
     def hooks_dir(self) -> Path:
         """githooks/: the git hooks the engine writes at start; every subprocess tl starts gets it as core.hooksPath (adapters/childenv)."""
         return self.root / "githooks"
@@ -106,10 +102,6 @@ class ConfigDir:
     def adr_uses(self, repo_key: str) -> Path:
         return self.adr_dir(repo_key) / "uses.jsonl"
 
-    def park(self, bead: BeadId) -> Path:
-        """What the runs that ended on a question say of a bead (contracts/parks.py)."""
-        return self.root / "parks" / (f"{bead}.json")
-
     def checkpoint(self, bead: BeadId | str) -> Path:
         return self.root / "checkpoints" / (f"{bead}.json")
 
@@ -122,14 +114,6 @@ class ConfigDir:
 
     def run_request_lock(self, run: RunId | str) -> Path:
         return self.run_dir(run) / "owner-request.lock"
-
-    def reexec_note(self, bead: BeadId) -> Path:
-        """What an engine leaves just before it execs into a newer install (contracts/run.py ReloadNote)."""
-        return self.root / "reexec" / (f"{bead}.json")
-
-    def net_pause(self, bead: BeadId) -> Path:
-        """What a run leaves when it pauses for the network (contracts/run.py NetPause); taken once by the bead's next run."""
-        return self.root / "pauses" / (f"{bead}.json")
 
     def followup_outbox(self, bead: str) -> Path:
         """Unfiled follow-ups for a bead; survives deletion of its run checkpoint."""
@@ -165,27 +149,12 @@ class ConfigDir:
     def check_durations(self, repo_key: str) -> Path:
         return self.repo_dir(repo_key) / "durations.json"
 
-    def loop_state(self, repo_key: str) -> Path:
-        return self.loop_runs(repo_key) / "state.json"
-
-    def loop_command(self, repo_key: str) -> Path:
-        return self.loop_runs(repo_key) / "command.json"
-
     def loop_log(self, repo_key: str) -> Path:
         return self.loop_runs(repo_key) / "log.jsonl"
 
     def loop_runs(self, repo_key: str) -> Path:
         """The loop's own folder of the repo: run logs, outcome files, loop-<pid>.log, exits.jsonl, died-<pid>.json."""
         return self.repo_dir(repo_key) / "loop"
-
-    def loop_rest(self, repo_key: str) -> Path:
-        return self.loop_runs(repo_key) / "rest.json"
-
-    def ticket(self, repo_key: str, seq: int) -> Path:
-        return self.repo_dir(repo_key) / "slots" / (f"{seq:06d}.json")
-
-    def ticket_counter(self, repo_key: str) -> Path:
-        return self.repo_dir(repo_key) / "slots" / "seq"
 
     def slot_state(self, repo_key: str, slot: str) -> Path:
         """What one slot of one repo keeps for its commands (temp, dotnet and NuGet scratch): outside the worktree, kept across reuse."""
@@ -275,14 +244,6 @@ class RunFiles:
     def artifacts(self) -> Path:
         """The folders of the run's checks, one per step, each holding attempt-N/ (contracts/artifact.py)."""
         return self.dir / "artifacts"
-
-    def done_memo(self) -> Path:
-        """Legacy import only; consumed steps now live in factory.db."""
-        return self.dir / "done-memo.json"
-
-    def legacy_done_memo(self) -> Path:
-        """The earlier on-disk memo spelling, also read only by the importer."""
-        return self.dir / "done.json"
 
     def handoff(self) -> Path:
         return self.dir / "handoff.json"

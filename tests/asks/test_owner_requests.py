@@ -74,15 +74,6 @@ class RequestFile(Case):
                  if p.is_file() and "locks" not in p.parts and not p.name.startswith("factory.db")}
         return files, requests.peek(self.cfg, RUN)
 
-    def test_a_request_file_an_older_tl_left_is_taken_with_the_rows_and_removed(self):
-        old = self.cfg.run_request(RUN)
-        old.write_text(json.dumps({"v": 1, "park": True, "stop": False, "notes": [{"text": "old", "t": 1.0, "by": "denis"}],
-                                   "by": "denis", "t": 1.0}))
-        assert requests.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", note="new") == ""
-        got = must(requests.take(self.cfg, RUN))
-        assert (got.park, [n.text for n in got.notes]) == (True, ["old", "new"])
-        assert not old.exists() and requests.take(self.cfg, RUN) is None
-
     def test_writers_racing_the_taker_lose_nothing_and_double_nothing(self):
         taken: list[str] = []
         stop = threading.Event()
