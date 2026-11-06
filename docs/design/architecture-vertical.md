@@ -243,6 +243,8 @@ is one. Option 1 (stay as a top-level package in this repo): S1 moves it to `pac
 an approximation of what the gate selected then. Sloc = non-blank non-comment lines. Stage mapping by folder name (`PK` table in the scratch script; the
 doc lists it per row). The cut experiment deletes two edges from `repo.edges` in memory and re-runs `select`.
 
+Baseline of `python3 dev/reach.py` (PR #203) on origin/main at 2026-11-06: 585 tests, 109 commits measured, selected per commit median 272, mean 278, p90 585; 47 wide commits (≥ half). Re-run it after each ARCHVERT PR.
+
 ## 8. Second review (folded in)
 
 Three independent opus reviews, code only. What changed:
