@@ -9,12 +9,12 @@ from support.forgesim import ForgeSim
 # isort: split
 import pytest
 from support.case import Case
+from support.memstores import fake_stores
 
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.slots import SlotGitError
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 

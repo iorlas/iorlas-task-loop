@@ -1,5 +1,11 @@
 [
   {
+    "name": "any_agent",
+    "shelf_tag": "6502c1c46b24afc35e03c2a4ed381e4065d85970",
+    "shelf_commit": "6502c1c46b24afc35e03c2a4ed381e4065d85970",
+    "tree_hash": "bf0f6c554f85720205fb68bd8c9300031701816609d1d2821c45324c870dde7a"
+  },
+  {
     "name": "any_clock",
     "shelf_tag": "9eabbd2f191ac4d99a0ab3b969c6eba1f9526c1b",
     "shelf_commit": "9eabbd2f191ac4d99a0ab3b969c6eba1f9526c1b",
@@ -43,9 +49,9 @@
   },
   {
     "name": "git_porcelain",
-    "shelf_tag": "git-porcelain-v0.12.0",
-    "shelf_commit": "5d955b2b7801da29092b89428b5ca794616117fa",
-    "tree_hash": "ffd53e159448c69dfd412d1230b04cd851ff9dc4c6bc9f29315594b5c60d1025"
+    "shelf_tag": "427ab3e75d94055f61efcc497ccd1244760cea8e",
+    "shelf_commit": "427ab3e75d94055f61efcc497ccd1244760cea8e",
+    "tree_hash": "bb412f15b6e00222dc601ca7532b90cafba3bcd7e354908778811a51e38f0235"
   },
   {
     "name": "jsonl_log",

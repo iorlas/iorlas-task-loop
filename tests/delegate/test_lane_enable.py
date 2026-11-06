@@ -11,7 +11,7 @@ from typing import Any
 from unittest import mock
 
 import pytest
-from delegate.adapters.harness.opencode import OpenCodeHarness
+from any_agent.harnesses.opencode import OpenCodeHarness
 from delegate.app import cockpit, doctor, env, onboard, usage
 from delegate.app import decide as dec
 from delegate.contracts.routing import CallArgs

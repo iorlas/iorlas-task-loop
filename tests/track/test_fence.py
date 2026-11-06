@@ -18,6 +18,7 @@ from support.who import who
 
 # isort: split
 from support.fake_beads import FakeBeads
+from support.memstores import fake_stores
 
 from taskloop.app.run.run_once import Ended, RunOnce
 from taskloop.app.run.state import Checkpoints
@@ -27,7 +28,6 @@ from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdError, BdFailure, BeadPatch
-from taskloop.stores.memory import fake_stores
 
 ME = "tl-run00001"
 LOCKED = BdFailure(BdError(kind="other", text="locked"))

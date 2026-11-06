@@ -1,5 +1,6 @@
 """The land gate judges committed files, independently of the slot's ignored state."""
 import json
+import shutil
 import sys
 from pathlib import Path
 from unittest import mock
@@ -106,7 +107,12 @@ class CleanGate(EngineTest):
             output = {"version": 1, "base": None, "empty": False, "full": True, "full_reasons": [], "steps": []}
             return Ran(exit=0, out=json.dumps(output))
 
-        with (mock.patch("taskloop.app.checks.gateplan.shutil.which", return_value="repo-plan"),
+        real_which = shutil.which
+
+        def which(name, **kw):  # only the plan word is faked: `nice` and the rest resolve as on the host
+            return "repo-plan" if name == "repo-plan" else real_which(name, **kw)
+
+        with (mock.patch("taskloop.app.checks.gateplan.shutil.which", side_effect=which),
               mock.patch.object(eng.spawner, "run", side_effect=plan)):
             got = Gate(eng).run()
         assert isinstance(got, Problem)

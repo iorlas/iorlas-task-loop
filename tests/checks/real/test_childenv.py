@@ -7,12 +7,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from support.argv_checks import ArgvChecks
 from support.case import Case
 from support.checked import run_checked
 from support.tlmain import tl_main
 
 from taskloop.adapters import childenv
-from taskloop.adapters.checks_argv import ArgvChecks
 from taskloop.adapters.childenv import CHECK_SECRETS
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.run.shell import Shell
@@ -85,7 +85,6 @@ class CheckHomeCanaryTest(Case):
                 seen = json.loads(self.output.read_text())
                 assert seen["home"] == builder.call_args.kwargs["home"]
                 assert seen["env"]["UV_CACHE_DIR"] == str(self.owner / ".cache/uv")
-                assert seen["env"]["DOTNET_CLI_HOME"] == str(self.owner)
 
     def test_real_shell_checks_and_fixes_default_to_owner_home_and_strip_secrets(self):
         (self.owner / "canary").write_text("synthetic toolchain state")

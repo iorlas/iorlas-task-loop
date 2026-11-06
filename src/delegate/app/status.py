@@ -145,8 +145,18 @@ def cmd_status_cheap(a: env.Args, cfg: dict[str, Json]):
     running = running_rows(st, t)
     auth = usage.auth_cache().rows(st, t)
     age_s = int(t - at) if isinstance(at, (int, float)) else None
-    holds = HoldBook(st.holds).rows(t)
-    out.update(v=1, cheap=True, ts=t, age_s=age_s, running=running, holds=holds, auth=auth)
+    book = HoldBook(st.holds)
+    holds = book.rows(t)
+    lanes = snap.get("lanes")
+    used = (
+        {n: (v.get("week") if v.get("week") is not None else v.get("five")) for n, v in lanes.items() if isinstance(v, dict)}
+        if isinstance(lanes, dict)
+        else {}
+    )
+    asks = [
+        x.as_dict() for x in book.asks({n: as_num(u) for n, u in used.items()}, t)
+    ]  # the stamps are the full status's: never written here
+    out.update(v=1, cheap=True, ts=t, age_s=age_s, running=running, holds=holds, asks=asks, auth=auth)
     out.setdefault("lanes", {})
     cached = netprobe.load(str(env.net_cache_path()))  # a file, not a socket: cheap opens no connection
     out.update(roles=roles.refresh(snap.get("roles"), holds, cached, t), network=net.network_view(cached, t))
@@ -164,7 +174,6 @@ def full_status(cfg: dict[str, Json], claude_usage: Json = None) -> tuple[dict[s
     t = env.now()
     st = env.load_state()
     lanes = decide.fleet_builder(cfg).build(st, t, claude_usage).lanes
-    decide.publish_lanes(lanes, st, t)
     ck = cockpit.cockpit(cfg, lanes, st, t)
     payload = status_payload(cfg, lanes, ck, st, t)
     write_snapshot(payload)

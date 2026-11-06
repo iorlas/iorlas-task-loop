@@ -7,11 +7,11 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from delegate.adapters import netprobe, procs
-from delegate.adapters.harness.base import Evidence, LaunchInputs, LaunchSpec, Quiet, Summary
-from delegate.contracts import events as ev
-from delegate.contracts.json_types import Json
-from delegate.domain.jsonval import container, num, obj, objs, opt_int, opt_str
+from any_agent import drops, procs
+from any_agent import events as ev
+from any_agent._json import Json, container, num, obj, objs, opt_int, opt_str, text
+from any_agent.protocol import Evidence, LaunchInputs, LaunchSpec, Quiet, Summary
+from any_agent.watch import Limits
 
 ARG_KEYS = (
     "file_path",
@@ -27,24 +27,26 @@ STREAM_USAGE = ("input_tokens", "cache_read_input_tokens", "cache_creation_input
 CLAUDE_ERROR_RE = re.compile(
     r"^(API Error|Credit balance|Invalid API key|Not logged in|Please run /login|Claude (AI )?usage limit|OAuth|Failed to authenticate"
     r"|Request timed out|Error:)",
-    re.I,
+    re.IGNORECASE,
 )  # how `claude -p` words its own failures; anything else in a result is the model talking
+BAD_REQUEST_PATTERNS = (r"No conversation found with session ID",)  # a --resume session claude does not know
+LIMITS = Limits(first_event_s=120, silence_s=600, grace_s=5)  # its `result` event is an explicit end marker, so the tail after it is short
+# The launch rules, in one place. `--bare` makes claude skip OAuth and the keychain and read an API key only, so a subscription lane would
+# bill the API; and an ANTHROPIC_API_KEY left in the child's environment does the same without it.
+FORBIDDEN_FLAGS = ("--bare",)
+SCRUBBED_ENV = ("ANTHROPIC_API_KEY",)
 SUBSCRIPTION_TTL_S = 3600  # prompt-cache life: a -p main conversation on a subscription gets 1 h
 
 
-def _s(x: object) -> str:
-    return x if isinstance(x, str) else "" if x is None else str(x)
-
-
 def main_arg(inp: dict[str, Json]) -> str:
-    return next((_s(inp[k]) for k in ARG_KEYS if inp.get(k)), "")
+    return next((text(inp[k]) for k in ARG_KEYS if inp.get(k)), "")
 
 
 def text_of(c: object) -> str:
     """A tool result's content (str, or a list of {"type": "text", "text"}) as one string."""
     if isinstance(c, list):
-        return "\n".join(_s(b.get("text")) if isinstance(b, dict) else _s(b) for b in c)
-    return _s(c)
+        return "\n".join(text(b.get("text")) if isinstance(b, dict) else text(b) for b in c)
+    return text(c)
 
 
 def input_of(u: dict[str, Json]) -> int:
@@ -98,8 +100,53 @@ def vendor_error(j: dict[str, Json]) -> str:
     return ""
 
 
+AUTH_MODES = ("subscription", "api_key")
+
+
+def launch_env(env: dict[str, str], auth: str = "subscription") -> dict[str, str]:
+    """The child's environment for one auth mode. `subscription`: `env` without the variables that would move the run from the login to an
+    API key. `api_key`: `env` as given, which must carry ANTHROPIC_API_KEY (ValueError otherwise). Exactly one of the two is in force."""
+    if auth not in AUTH_MODES:
+        msg = f"claude auth is one of {', '.join(AUTH_MODES)}, not {auth!r}"
+        raise ValueError(msg)
+    if auth == "api_key":
+        if not env.get("ANTHROPIC_API_KEY"):
+            msg = "claude auth api_key needs ANTHROPIC_API_KEY in the environment"
+            raise ValueError(msg)
+        return dict(env)
+    return {k: v for k, v in env.items() if k not in SCRUBBED_ENV}
+
+
+def launch_argv(i: LaunchInputs) -> list[str]:
+    """The argv of one run. Raises ValueError for a flag the harness never passes (the caller's `exe` is never inspected)."""
+    tools = ["Read", "Glob", "Grep"] + (["Edit", "Write"] if i.write else []) + ["Bash"]  # read-only steps: Bash limited by the guard
+    argv = [i.exe, "-p", "--output-format", "stream-json", "--verbose", "--model", i.model, "--effort", i.effort]
+    argv += ["--resume", i.resume] if i.resume else ["--session-id", i.session]
+    argv += [
+        "--append-system-prompt",
+        i.system,
+        "--restricted",
+        "--tools",
+        ",".join(tools),
+        "--strict-mcp-config",
+        "--permission-mode",
+        "auto",
+        "--permission-prompts",
+        "none",
+        "--settings",
+        i.settings,
+    ]
+    argv += ["--json-schema", Path(i.schema).read_text(encoding="utf-8")] if i.schema else []
+    bad = [f for f in FORBIDDEN_FLAGS if f in argv]
+    if bad:
+        msg = f"claude is never launched with {', '.join(bad)}"
+        raise ValueError(msg)
+    return argv
+
+
 class ClaudeHarness(Quiet):
     kind = "claude"
+    limits = LIMITS
     secret_event: type | None = None  # its PreToolUse hook blocks the call
     EXE = "claude"
 
@@ -110,26 +157,9 @@ class ClaudeHarness(Quiet):
 
     # -- launch ----------------------------------------------------------------------------------------------------------------------------
     def launch_spec(self, i: LaunchInputs) -> LaunchSpec:
-        tools = ["Read", "Glob", "Grep"] + (["Edit", "Write"] if i.write else []) + ["Bash"]  # read-only steps: Bash limited by the guard
-        argv = [i.exe, "-p", "--output-format", "stream-json", "--verbose", "--model", i.model, "--effort", i.effort]
-        argv += ["--resume", i.resume] if i.resume else ["--session-id", i.session]
-        argv += [
-            "--append-system-prompt",
-            i.system,
-            "--restricted",
-            "--tools",
-            ",".join(tools),
-            "--strict-mcp-config",
-            "--permission-mode",
-            "auto",
-            "--permission-prompts",
-            "none",
-            "--settings",
-            i.settings,
-        ]
-        argv += ["--json-schema", Path(i.schema).read_text(encoding="utf-8")] if i.schema else []
+        argv = launch_argv(i)
         self.evidence.ref = i.resume or i.session  # claude takes the session id from us: known before the first event
-        return LaunchSpec(argv=argv, env=i.env, cwd=i.cwd, stdin=i.prompt)
+        return LaunchSpec(argv=argv, env=launch_env(i.env, i.auth), cwd=i.cwd, stdin=i.prompt)
 
     # -- the event stream, parsed once -----------------------------------------------------------------------------------------------------
     def parse_line(self, line: str) -> list[ev.HarnessEvent]:
@@ -139,7 +169,7 @@ class ClaudeHarness(Quiet):
             return []
         if not isinstance(raw, dict):
             return []
-        kind, e = _s(raw.get("type")), self.evidence
+        kind, e = text(raw.get("type")), self.evidence
         msg = obj(raw.get("message"))
         blocks = objs(msg.get("content"))
         if kind in ("assistant", "user", "result"):
@@ -159,12 +189,12 @@ class ClaudeHarness(Quiet):
         for b in blocks:
             kind = b.get("type")
             if kind == "text" and b.get("text"):
-                self.evidence.last = _s(b["text"])
+                self.evidence.last = text(b["text"])
                 out.append(ev.Msg(text=self.evidence.last, final=done))
             elif kind == "thinking" and b.get("thinking"):
-                out.append(ev.Think(text=_s(b["thinking"])))
+                out.append(ev.Think(text=text(b["thinking"])))
             elif kind == "tool_use":
-                out.append(self._tool(b, raw.get("cwd")))
+                out.append(self._tool_call(b, raw.get("cwd")))
         u = msg.get("usage")
         if isinstance(u, dict):  # one model request: its whole input is the context size
             self.evidence.context_k = round(input_of(u) / 1000, 1)
@@ -182,13 +212,13 @@ class ClaudeHarness(Quiet):
                 )
         return out
 
-    def _tool(self, b: dict[str, Json], cwd: object) -> ev.HarnessEvent:
+    def _tool_call(self, b: dict[str, Json], cwd: object) -> ev.HarnessEvent:
         inp, ident = obj(b.get("input")), opt_str(b.get("id"))
         if b.get("name") == "Bash":
-            self.open[ident] = (True, "Bash", _s(inp.get("command")))
-            return ev.Cmd(id=ident, text=_s(inp.get("command")), cwd=cwd if isinstance(cwd, str) else None)
-        self.open[ident] = (False, _s(b.get("name")), main_arg(inp))
-        return ev.Tool(id=ident, name=_s(b.get("name")), arg=main_arg(inp))
+            self.open[ident] = (True, "Bash", text(inp.get("command")))
+            return ev.Cmd(id=ident, text=text(inp.get("command")), cwd=cwd if isinstance(cwd, str) else None)
+        self.open[ident] = (False, text(b.get("name")), main_arg(inp))
+        return ev.Tool(id=ident, name=text(b.get("name")), arg=main_arg(inp))
 
     def _user(self, blocks: list[dict[str, Json]]) -> list[ev.HarnessEvent]:
         out: list[ev.HarnessEvent] = []
@@ -214,7 +244,7 @@ class ClaudeHarness(Quiet):
         e.turns = int(num(raw.get("num_turns")))
         out: list[ev.HarnessEvent] = [ev.TurnDone(usage=None)]
         for x in objs(raw.get("permission_denials")):  # a call the CLI's own classifier or our guard refused
-            d = ev.Denied(tool=_s(x.get("tool_name")), input=obj(x.get("tool_input")))
+            d = ev.Denied(tool=text(x.get("tool_name")), input=obj(x.get("tool_input")))
             e.denials.append(d)
             out.append(d)
         return out
@@ -244,7 +274,7 @@ class ClaudeHarness(Quiet):
             "partial": e.work,
         }
         # ae6v: the answer was in first
-        warn = ["answer_done_process_alive"] if by_message else ["net_after_answer"] if e.final and netprobe.looks_dropped(err) else []
+        warn = ["answer_done_process_alive"] if by_message else ["net_after_answer"] if e.final and drops.looks_dropped(err) else []
         return Summary(
             text=text,
             rc=(rc or 1) if failed else 0,
@@ -282,6 +312,6 @@ class ClaudeHarness(Quiet):
             return None, f"{self.EXE} login check failed: {type(x).__name__}"
         try:
             logged_in = json.loads(r.stdout).get("loggedIn")
-        except ValueError, AttributeError:
+        except (ValueError, AttributeError):
             logged_in = None
         return (logged_in if isinstance(logged_in, bool) else None), (r.stdout + r.stderr).strip()[:120]
