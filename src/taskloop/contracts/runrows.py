@@ -29,7 +29,7 @@ def manifest_of(text: str, run: str) -> RunManifest:
     try:
         body = json.loads(text)
         if isinstance(body, dict):
-            known = {"v", *wire.names(RunManifest)}
+            known = wire.keys(RunManifest)
             body = {k: v for k, v in body.items() if k in known}
         return wire.load(RunManifest, body)
     except (ValueError, TypeError) as error:
