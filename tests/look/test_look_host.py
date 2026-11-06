@@ -12,5 +12,5 @@ class LookHostConformance(EngineTest):
 
     def test_the_check_names_a_member_the_host_lacks(self):
         eng = make_engine(self.wt, store=self.store)
-        del eng.look_retried
-        assert missing(eng, LookHost) == ["look_retried"]
+        del eng.look
+        assert missing(eng, LookHost) == ["look"]
