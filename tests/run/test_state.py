@@ -15,6 +15,7 @@ from support.fakegit import ScriptedGit
 from support.memstores import fake_stores
 
 from taskloop.app.look.state import LOOK_FIELDS, LookState
+from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.resume import KEEP_FOR_ACTIVE, LATE, Resume
 from taskloop.app.run.state import Checkpoints, StateAttrs, attr_names, carries_state, state_names
 from taskloop.contracts import fence, wire
@@ -79,8 +80,10 @@ class Host(StateAttrs):
         self.store, self.claim = FakeBeads(), fence.offline(BeadId("t-1"))
         self.checkpoints = Checkpoints(self)
         self.run_id = "t-1-20260101-000000"
-        self.unchecked = [{"what": "u", "kind": "", "source": "", "why": "", "proof_round": False}]
-        self.unverified, self.filed, self.unfiled = [{"what": "v", "kind": "", "why": "", "source": ""}], [], []
+        self.review = ReviewLive()
+        self.review.unchecked = [{"what": "u", "kind": "", "source": "", "why": "", "proof_round": False}]
+        self.review.unverified = [{"what": "v", "kind": "", "why": "", "source": ""}]
+        self.filed, self.unfiled = [], []
         self.look = LookState(lambda: self.state)
         self.task_branch, self.gate_log, self.head = "task/t-1", None, "h0"
 
@@ -159,7 +162,7 @@ class Park(Case):
             want = a.state.pending_land_validation if name == "pending_land_validation" else getattr(a.state, name)
             assert getattr(b.state, name) == want, name
         assert (b.snap, b.brief_hash) == (snap, "now")  # the bead as it is now, not as it was planned
-        assert (b.unverified, b.filed, b.unfiled) == (a.unverified, a.filed, a.unfiled)  # the ReviewState folds them in
+        assert (b.review.unverified, b.filed, b.unfiled) == (a.review.unverified, a.filed, a.unfiled)  # the ReviewState folds them in
 
     def test_an_edit_from_outside_hands_back_only_what_every_resume_keeps(self):
         _a, b = self.parked()

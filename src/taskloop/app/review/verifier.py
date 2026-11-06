@@ -74,7 +74,7 @@ class Verifier:
         return asked
 
     def counts(self) -> str:
-        return ", ".join(f"{sum(x['verdict'] == k for x in self.e.verified)} {k}" for k in VERDICTS)
+        return ", ".join(f"{sum(x['verdict'] == k for x in self.e.review.verified)} {k}" for k in VERDICTS)
 
     def drop_unused(self, gaps: list[Item]) -> list[Item]:
         """Items that name a tool the repo does not use are settled as 'not a check here'."""
@@ -82,7 +82,8 @@ class Verifier:
         unused = [(u, e.settles.unused_tool(u["what"])) for u in gaps]
         for u, ev in unused:
             if ev:
-                e.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "evidence": ev, "why": "not a check here"})
+                e.review.verified.append(
+                    {"what": u["what"], "kind": u["kind"], "verdict": "settled", "evidence": ev, "why": "not a check here"})
         left = [u for u, ev in unused if not ev]
         n_drop = len(gaps) - len(left)
         if n_drop:
@@ -97,7 +98,7 @@ class Verifier:
         e.log.note(f"verify: before land: {counts}")
         if before:
             e.comment("Verify (engine): what the workers could not check, before land: " + "; ".join(
-                "{}: {}, {}".format(x["verdict"], x["what"], '"{}"'.format(x["evidence"])) for x in e.verified))
+                "{}: {}, {}".format(x["verdict"], x["what"], '"{}"'.format(x["evidence"])) for x in e.review.verified))
 
     def ask(self, gaps: list[Item]) -> dict[str, Any] | None:
         """The verifier's answer ({"items": []} when there is nothing to ask); None when no verifier could be had."""
@@ -141,7 +142,7 @@ class Verifier:
             route = ""
             if v == "open":
                 v, a, why, route = e.routing.route_open(u, a, why)
-            e.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "open" if route == "unverified" else v,
+            e.review.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "open" if route == "unverified" else v,
                                "evidence": a["evidence"], "why": why})
             if route == "proof":
                 wrong.append(dict(u, why=why, proof_round=True))
@@ -151,15 +152,16 @@ class Verifier:
         e.steps.outcome("wrong" if wrong else "open" if still else "settled", self.counts())
         e.comment("Verify (engine): what the workers could not check, self-verified read-only before land: " + "; ".join(
             "{}: {}, {}".format(x["verdict"], x["what"], ('"{}"'.format(x["evidence"])) if x["verdict"] == "settled" else x["why"])
-            for x in e.verified))
+            for x in e.review.verified))
         return still, wrong
 
     def after_clean(self, still: list[Item], counts: str) -> list[Item]:
         e = self.e
         if still:
             e.steps.move("ask", "verify_open", f"{len(still)} item{plural(len(still))} only the owner can decide")
-        elif e.unverified:
-            e.steps.move("land", "unverified", f"{len(e.unverified)} item{plural(len(e.unverified))} land unverified, for the owner")
+        elif e.review.unverified:
+            n = len(e.review.unverified)
+            e.steps.move("land", "unverified", f"{n} item{plural(n)} land unverified, for the owner")
         else:
             e.steps.move("land", "verified", counts)
         return still
@@ -187,14 +189,14 @@ class Verifier:
         fix's checkpoint: a fix round that pauses resumes at land and verifies them again, never lands them; the fix's review adds
         what it leaves unproven."""
         e = self.e
-        e.unchecked = [u for u in e.unchecked if u["kind"] not in UNCHECKED_KINDS] + still + pending
-        before = len(e.unchecked)
+        e.review.unchecked = [u for u in e.review.unchecked if u["kind"] not in UNCHECKED_KINDS] + still + pending
+        before = len(e.review.unchecked)
         pending = [dict(u, why=u.get("why") or "add a test or check that proves: {}".format(u["what"])) for u in pending]
         done = e.fixer.fix("verify", "".join("- {}: {}\n".format(u["what"], u["why"]) for u in pending))
         fixed = {u["what"] for u in pending}
         # what the fix's review added stays
-        e.unchecked = [u for u in e.unchecked[:before] if u["what"] not in fixed] + e.unchecked[before:]
-        left = [u for u in e.unchecked if u["kind"] in UNCHECKED_KINDS]
+        e.review.unchecked = [u for u in e.review.unchecked[:before] if u["what"] not in fixed] + e.review.unchecked[before:]
+        left = [u for u in e.review.unchecked if u["kind"] in UNCHECKED_KINDS]
         if done != "accept":
             left += [dict(u, why="found wrong: {}; the fix round did not pass".format(u["why"])) for u in pending]
         return e.routing.route_left(left)

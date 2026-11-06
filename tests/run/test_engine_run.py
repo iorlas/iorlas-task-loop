@@ -602,7 +602,7 @@ class EngineRunTest(EngineTest):
     def test_a_link_is_opened_twice_at_most(self):
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         eng, opened = self.eng, []
-        eng.link_fn = lambda url: (opened.append(url), (False, "HTTP 404"))[1]
+        eng.review.link_fn = lambda url: (opened.append(url), (False, "HTTP 404"))[1]
         with mock.patch.object(Checkout, "task_diff", return_value=self.RESEARCH_DIFF):
             for _ in range(4):
                 eng.link_check.link_judged({"findings": []})

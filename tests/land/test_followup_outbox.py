@@ -17,6 +17,7 @@ from support.narrow import must
 
 from taskloop.adapters.bd import BdRun, BdStore
 from taskloop.app.land.followups import file_follow_ups
+from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.closer_notes import FileNotes
 from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state
 from taskloop.contracts import fence
@@ -62,7 +63,8 @@ class Host(StateAttrs):
         self.store, self.stores = FakeBeads(), fake_stores()
         self.claim = fence.offline(self.bead)
         self.checkpoints = Checkpoints(self)
-        self.unchecked, self.unverified, self.filed, self.unfiled = [], [], [], []
+        self.review = ReviewLive()
+        self.filed, self.unfiled = [], []
         self.stats = {"rounds": 1}
         self.log = RunLog(self.stores.run_log(self.run_id))
         self.owner_look, self.judge, self.pictures = OwnerLook(), Judge(), Pictures()

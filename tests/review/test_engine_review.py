@@ -257,20 +257,20 @@ class EngineReviewTest(EngineTest):
         def fake(url):
             opened.append(url)
             return (url.startswith("https://docs."), "HTTP 403")
-        eng.link_fn = fake
+        eng.review.link_fn = fake
         with mock.patch.object(Checkout, "task_diff", return_value=self.RESEARCH_DIFF):
             review = {"findings": []}
             eng.link_check.link_judged(review)
             assert len(review["findings"]) == 1
             assert "https://fab.com/s/abc did not open from the engine's host (HTTP 403)" in review["findings"][0]["fix"]
             assert review["findings"][0]["file"] == "notes/hair.md"
-            assert [(u["kind"], u["source"]) for u in eng.unverified] == [("external_fact", "https://sketchfab.com/m/x")]
-            assert "Beards: (unverified)" in eng.unverified[0]["what"]
+            assert [(u["kind"], u["source"]) for u in eng.review.unverified] == [("external_fact", "https://sketchfab.com/m/x")]
+            assert "Beards: (unverified)" in eng.review.unverified[0]["what"]
             opened.clear()
             review = {"findings": []}
             eng.link_check.link_judged(review)  # the link that opened is not opened again; the two that did not are
             assert sorted(opened) == ["https://fab.com/s/abc", "https://sketchfab.com/m/x"]
-            assert len(eng.unverified) == 1
+            assert len(eng.review.unverified) == 1
         eng.cfg = cfg_with(eng.cfg, check_links=False)
         review = {"findings": []}
         eng.link_check.link_judged(review)
@@ -279,14 +279,14 @@ class EngineReviewTest(EngineTest):
     def test_a_host_that_reaches_nothing_makes_no_findings_and_a_raising_check_is_a_failed_link(self):
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         eng = self.eng
-        eng.link_fn = lambda url: (False, "no such host")
+        eng.review.link_fn = lambda url: (False, "no such host")
         with mock.patch.object(Checkout, "task_diff", return_value=self.RESEARCH_DIFF):
             review = {"findings": []}
             eng.link_check.link_judged(review)
-            assert (review["findings"], eng.unverified) == ([], [])  # offline: nothing the writer can fix
+            assert (review["findings"], eng.review.unverified) == ([], [])  # offline: nothing the writer can fix
             assert "looks offline" in eng.log_path.read_text()
-            eng.link_tries.clear()
-            eng.link_fn = lambda url: (_ for _ in ()).throw(RuntimeError("boom"))
+            eng.review.link_tries.clear()
+            eng.review.link_fn = lambda url: (_ for _ in ()).throw(RuntimeError("boom"))
             review = {"findings": []}
             eng.link_check.link_judged(review)
             assert len(review["findings"]) == 2  # a check that raised failed that link; the run goes on
