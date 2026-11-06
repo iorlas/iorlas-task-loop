@@ -29,6 +29,11 @@ from taskloop.stores.runlog import RunLog
 MODE = "stage:land-stack"
 LOCK_BUSY = 75
 TASK = "task/"
+HEAD_TRIES = 2  # a head that moved after the gate is judged again once: the owner pushed a fix while the gate ran
+
+
+class HeadMoved(Stop):
+    """The PR's head is no longer the commit the gate judged: nothing is merged."""
 
 
 def lock_path(home: ConfigDir, git: Git, repo: str) -> Path:
@@ -90,6 +95,16 @@ class Stack:
                 raise Stop(1, f"unknown bead {bead}: no issue found")
 
     def item(self, item: StackItem) -> None:
+        """Deliver one item. A head that moved while its gate ran is read and judged again (once), never merged unjudged."""
+        for attempt in range(1, HEAD_TRIES + 1):
+            try:
+                return self.deliver(item)
+            except HeadMoved as moved:
+                if attempt == HEAD_TRIES:
+                    raise
+                self.log.note(f"{moved.why}: judging the new head")
+
+    def deliver(self, item: StackItem) -> None:
         branch, oid, pr = self.resolve(item)
         if not item.bead and branch.startswith(TASK):  # a task branch names its bead
             item = item.replace(bead=branch.removeprefix(TASK))
@@ -176,6 +191,9 @@ class Stack:
         """Under the land lock: merge the head we saw, see MERGED, record the PR's own merge commit. -> that commit."""
         with self.locked():
             if pr.state == OPEN:
+                now = self.forge.view(pr.number)
+                if now.state == OPEN and now.head_oid != head:  # the gate judged `head`: the forge would refuse this later
+                    raise HeadMoved(1, f"PR #{pr.number} head moved from {head[:12]} to {now.head_oid[:12]} while it was gated")
                 self.forge.merge(pr, head)
                 pr = self.forge.view(pr.number)
             if pr.state != MERGED or not pr.merge_sha:

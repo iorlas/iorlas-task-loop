@@ -28,6 +28,8 @@ subprocess and its JSON wire): there is no process boundary to the router any mo
   harness yet; a spike proves injection per harness first (tl-jvpm.10).
 - `writer_exec_allow` is honored for a Codex (openai) write step only; delegate validates binaries against its `host.json`. A granted argv
   runs writer-written code on the host with network until NETISO (tl-7i9k.59) lands.
+- `read_roots` (`--read-root`, from the profile's `engine.writer_read_roots`, absolute paths) is honored for an OpenCode write step only: its
+  `external_directory` permission allows those roots and denies the rest. Other harnesses ignore it.
 
 - task-loop reads no file of delegate's: not `history.jsonl`, not `contract.json`, not the install. A new read is a new call here first.
 - `DELEGATE_DEPTH` set in the environment of a `run` is refused (`caller`): a worker never delegates further. The engine strips it from its own

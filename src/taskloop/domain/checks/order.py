@@ -12,7 +12,7 @@ RANK_ACCEPTANCE_FIRST: Final = MappingProxyType({"static": 0, "acceptance": 1, "
 
 class CheckOrder:
     """By the median of earlier runs of the same command (unknown = cheap), so a red verdict comes before the slow Unity runs;
-    `acceptance_first` puts acceptance before tests at equal cost (a round that failed only in acceptance: lifesim-fdyo reran 11
+    `acceptance_first` puts acceptance before tests at equal cost (a round that failed only in acceptance: one consumer bead reran 11
     minutes of unity tests before a 3-second verdict check failed). A check reading $TL_CHECK_LOG_X goes after X, and `late` (the
     Unity group) after every other check whose dependencies allow it. The reads are a graph validated at load (graphlib)."""
 
