@@ -29,7 +29,7 @@ from support.checked import run_checked  # noqa: E402
 
 from taskloop.app.report import planner  # noqa: E402
 from taskloop.app.report.inputs import read_jsonl  # noqa: E402
-from taskloop.domain.report import matchers  # noqa: E402
+from taskloop.domain.lifecycle import matchers  # noqa: E402
 
 T0 = datetime(2026, 10, 21, 6, 0).timestamp()  # the window's start in the fixtures: local 06:00
 MIN = 60.0
