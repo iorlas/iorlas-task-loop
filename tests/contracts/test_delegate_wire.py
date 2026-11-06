@@ -42,25 +42,3 @@ class Contract4(Case):
         body = {**wire.dump(S.other(delegate.DelegateResult)), "stop": None}
         assert delegate_wire.result_of(body).stop is None
         assert wire.load(delegate.DelegateResult, body).stop is None
-
-    def test_the_run_argv_is_built_by_the_request_alone(self):
-        req = delegate.RunRequest(role="worker", brief_path="b", cwd="/w", schema_path="s", parent="p", task="t", title="T",
-                                  timeout_s=60, idle_s=30)
-        argv = req.to_argv("py", "r")
-        assert argv[:3] == ["py", "r", "run"]
-        assert argv[argv.index("--timeout") + 1] == "60"
-        assert argv[argv.index("--idle") + 1] == "30"
-        assert delegate.RunRequest(role="worker", brief_path="b", cwd="/w", schema_path="s").to_argv("py", "r").count("--timeout") == 0
-
-    def test_engine_only_is_one_flag_per_recipe_and_none_by_default(self):
-        base = {"role": "worker", "brief_path": "b", "cwd": "/w", "schema_path": "s"}
-        argv = delegate.RunRequest(**base, engine_only=["check", "unity-tests"]).to_argv("py", "r")
-        assert [argv[i + 1] for i, x in enumerate(argv) if x == "--engine-only"] == ["check", "unity-tests"]
-        assert "--engine-only" not in delegate.RunRequest(**base).to_argv("py", "r")
-
-    def test_engine_only_advisory_is_explicit_and_absent_by_default(self):
-        req = delegate.RunRequest(role="worker", brief_path="b", cwd="/w", schema_path="s", engine_only=["check"])
-        assert "--engine-only-advisory" not in req.to_argv("py", "r")
-        argv = req.replace(engine_only_advisory=True).to_argv("py", "r")
-        assert argv.count("--engine-only-advisory") == 1
-        assert argv[argv.index("--engine-only") + 1] == "check"

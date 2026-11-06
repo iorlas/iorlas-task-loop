@@ -1,8 +1,7 @@
 """Records at the task-loop / delegate boundary (the wire is a subprocess: `route.py run` in, one JSON answer out).
 
 Mirrors of what delegate emits; delegate's generated contract.json is the authority and a later release checks these fields
-against it. `RunRequest.to_argv` is the only place that builds the `route.py run` argv."""
-import json
+against it. delegate (`delegate.api.RunRequest.to_argv`) is the only place that builds a `route.py run` argv; the engine builds none."""
 from typing import Any, ClassVar, Final, Literal, final
 
 import msgspec
@@ -66,29 +65,6 @@ class RunRequest(Rec):
     read_roots: list[str] = msgspec.field(default_factory=list)  # --read-root once each: folders an OpenCode write step may read
     instructions_ref: str = ""  # --instructions-ref: a commit whose instruction files the worker reads instead of the work tree's
     tools: list[ToolBinding] = msgspec.field(default_factory=list)  # not part of the route.py argv: delegate.api takes them typed
-
-    def to_argv(self, python: str, route: str) -> list[str]:
-        out = [python, route, "run", self.role, "--brief", self.brief_path, "--cwd", self.cwd, "--schema", self.schema_path]
-        if self.unattended:
-            out.append("--unattended")
-        out += ["--parent", self.parent, "--task", self.task, "--title", self.title[:120]]
-        for flag, value in (("--resume", self.resume), ("--authored-by", self.authored_by), ("--call-id", self.call_id),
-                            ("--timeout", self.timeout_s), ("--idle", self.idle_s)):
-            if value:
-                out += [flag, str(value)]
-        for recipe in self.engine_only:
-            out += ["--engine-only", recipe]
-        if self.engine_only_advisory:
-            out.append("--engine-only-advisory")
-        for fam in self.only_family:
-            out += ["--only-family", fam]
-        for root in self.read_roots:
-            out += ["--read-root", root]
-        if self.instructions_ref:
-            out += ["--instructions-ref", self.instructions_ref]
-        if self.writer_exec_allow:
-            out += ["--writer-exec-allow", json.dumps(self.writer_exec_allow, separators=(",", ":"))]
-        return out
 
     def env(self) -> dict[str, str]:
         return {"DELEGATE_LIVE_FILE": self.live_file} if self.live_file else {}
