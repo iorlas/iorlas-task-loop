@@ -43,7 +43,7 @@ from unittest import mock
 from support import fake_route
 from support.briefs import bead_diff, bead_snapshot, brief_digest, linked_text
 from support.builders import cfg_with
-from support.checkpoints import stored_ck
+from support.checkpoints import drop_ck, stored_ck
 from support.fakes import as_bead, as_comment, must_bead
 from support.logs import records
 from support.spawn import port_git, real_spawner
@@ -508,7 +508,8 @@ class EngineRunTest(EngineTest):
         assert "engine error RuntimeError: boom" in self.said()
 
     def test_a_denied_command_with_a_valid_answer_is_a_warning_in_the_trace(self):
-        ok = full(WRITE, "w1", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": {"command": "curl -X POST https://x"}}])
+        row = {"kind": "policy", "tool": "Bash", "path": "", "input": {"command": "curl -X POST https://x"}, "reason": ""}
+        ok = full(WRITE, "w1", denied=[row])
         rc, _s = self.run_engine({"plan": [PLAN], "write": [ok, WRITE], "review": [CLEAN]})
         assert rc == 0  # (a raw answer writes no f.txt: the stage's check sends it to a second write)
         assert "write was denied `curl -X POST https://x`" in self.eng.log_path.read_text()
@@ -571,8 +572,7 @@ class EngineRunTest(EngineTest):
             denied = [dict(x, kind="policy", path="") for x in denied0]
             stuck = stop("secrets", "w1", denied=denied) if reason else full(None, "w1", text="no", denied=denied)
             self.asks().drop(BeadId("t-1"))
-            f = homes.config_dir() / "checkpoints" / "t-1.json"
-            f.unlink() if f.exists() else None  # each case starts as a new bead: an open ask would make the run wait
+            drop_ck(BeadId("t-1"))  # each case starts as a new bead: an open ask would make the run wait
             # a secrets stop gets the one new thread told to use apply_patch (lane_policy), then the fault; the rest is not retried
             rc, s = self.run_engine({"plan": [PLAN], "write": [stuck, stuck if reason else WRITE], "review": [CLEAN]})
             assert (rc, [c[0] for c in s.calls].count("worker")) == (2, 2 if reason else 1), denied

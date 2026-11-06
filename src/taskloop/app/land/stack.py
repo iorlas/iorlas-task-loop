@@ -6,8 +6,10 @@ it replaces is closed only after the replacement merged. After the last, bd's Do
 the failing command's exit code and leaves every later item untouched. Every command is a row of the run's log (Cmds)."""
 import contextlib
 import os
+import threading
 import time
 from collections.abc import Callable, Generator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from taskloop.adapters import landlock
@@ -29,6 +31,11 @@ from taskloop.stores.runlog import RunLog
 MODE = "stage:land-stack"
 LOCK_BUSY = 75
 TASK = "task/"
+HEAD_TRIES = 2  # a head that moved after the gate is judged again once: the owner pushed a fix while the gate ran
+
+
+class HeadMoved(Stop):
+    """The PR's head is no longer the commit the gate judged: nothing is merged."""
 
 
 def lock_path(home: ConfigDir, git: Git, repo: str) -> Path:
@@ -44,7 +51,8 @@ class Stack:
     def __init__(self, forge: Forge, cmds: Cmds, log: RunLog, git: Git, repo: str, lock: Path, record: Callable[[str, str], int],
                  sync: Callable[[], DoltPush], owner: str, session: str, gate: StackGate, beads: Beads, wait_min: float | None = None,
                  named: Callable[[str], None] = lambda _bead: None,
-                 is_slot: Callable[[str], bool] = lambda _path: False, slot_base: str = "", *, profile_change: str | None = None) -> None:
+                 is_slot: Callable[[str], bool] = lambda _path: False, slot_base: str = "", *, profile_change: str | None = None,
+                 jobs: int = 1) -> None:
         self.forge, self.cmds, self.log, self.git, self.repo, self.lock = forge, cmds, log, git, repo, lock
         self.record, self.sync, self.owner, self.session, self.wait_min = record, sync, owner, session, wait_min
         self.gate, self.named = gate, named  # named(bead): the run's manifest learns each bead
@@ -52,6 +60,7 @@ class Stack:
         self.is_slot = is_slot
         self.slot_base = slot_base or f"origin/{forge.base}"
         self.profile_change = profile_change
+        self.jobs = jobs  # gates run at once before the serial merges
         self.recorded = 0
         self.synced = False  # bd sync was tried
         self.last = ""  # the merge commit of the last item delivered
@@ -64,6 +73,7 @@ class Stack:
         rc = 0
         try:
             self.validate_beads(items)
+            self.prewarm(items)
             for item in items:
                 self.item(item)
             self.sync_bd()
@@ -89,7 +99,42 @@ class Stack:
             if found is None:
                 raise Stop(1, f"unknown bead {bead}: no issue found")
 
+    def prewarm(self, items: list[StackItem]) -> None:
+        """Gate the open items at once, then merge them one by one as before: the checks of independent PRs do not wait for each other.
+        Only receipts come of it; the serial loop still asks the gate for each item, finds the pass (or carries it over the base the
+        earlier merges moved) and merges under the land lock. A failure here is not reported: the loop's own gate says it."""
+        if self.jobs < 2 or len(items) < 2 or self.profile_change is not None:
+            return
+        try:
+            self.forge.fetch()
+            todo: list[tuple[str, str]] = []
+            for item in items:
+                branch, oid, pr = self.resolve(item)
+                if (pr is None or pr.state == OPEN) and self.gate.needs_run(oid):
+                    todo.append((branch, oid))
+        except Stop:
+            return
+        if len(todo) < 2:
+            return
+        git_lock = threading.Lock()
+
+        def warm(job: tuple[str, str]) -> int:
+            return self.gate.warm(job[1], git_lock)
+        with ThreadPoolExecutor(max_workers=min(self.jobs, len(todo))) as pool:
+            for (branch, oid), code in zip(todo, pool.map(warm, todo), strict=True):
+                self.log.note(f"gated {branch} ({oid[:12]}) ahead of the merges: exit {code}")
+
     def item(self, item: StackItem) -> None:
+        """Deliver one item. A head that moved while its gate ran is read and judged again (once), never merged unjudged."""
+        for attempt in range(1, HEAD_TRIES + 1):
+            try:
+                return self.deliver(item)
+            except HeadMoved as moved:
+                if attempt == HEAD_TRIES:
+                    raise
+                self.log.note(f"{moved.why}: judging the new head")
+
+    def deliver(self, item: StackItem) -> None:
         branch, oid, pr = self.resolve(item)
         if not item.bead and branch.startswith(TASK):  # a task branch names its bead
             item = item.replace(bead=branch.removeprefix(TASK))
@@ -176,6 +221,9 @@ class Stack:
         """Under the land lock: merge the head we saw, see MERGED, record the PR's own merge commit. -> that commit."""
         with self.locked():
             if pr.state == OPEN:
+                now = self.forge.view(pr.number)
+                if now.state == OPEN and now.head_oid != head:  # the gate judged `head`: the forge would refuse this later
+                    raise HeadMoved(1, f"PR #{pr.number} head moved from {head[:12]} to {now.head_oid[:12]} while it was gated")
                 self.forge.merge(pr, head)
                 pr = self.forge.view(pr.number)
             if pr.state != MERGED or not pr.merge_sha:

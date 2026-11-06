@@ -159,7 +159,7 @@ class RunOnce:
         plan, i, state = e.resume.point()
         e.records.log_run()
         # tl-fsj: the configured checks come from the base's config, so the tree they run on must have what the base has; every
-        # resume rebases first, a plan to make or a stage to go on with (lifesim: 8 beads parked on 'just fmt-check-changed')
+        # resume rebases first, a plan to make or a stage to go on with (a consumer: 8 beads parked on 'just fmt-check-changed')
         at_land = plan is not None and (i >= len(plan["stages"]) or (state or {}).get("fix"))  # a conflict there is the writer's fix round
         moved = "" if at_land else e.rebase.onto_base(salvage=plan is not None)  # (no plan: nothing accepted to salvage)
         if moved == "conflict-fixable":

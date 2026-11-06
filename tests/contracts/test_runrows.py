@@ -155,7 +155,7 @@ class RunRowsTest(Case):
         with self.rows.transaction() as con:
             assert con.execute("SELECT key,input_digest FROM step").fetchall() == [("[2]", "current")]
 
-    def test_v1_is_quarantined_and_recreated_as_v3(self):
+    def test_v1_is_quarantined_and_recreated_at_the_current_schema(self):
         path = self.cfg.factory_db()
         with sqlite3.connect(path) as con:
             con.execute("CREATE TABLE derived (value TEXT)")
@@ -165,7 +165,7 @@ class RunRowsTest(Case):
         con = factorydb.open_rw(path)
         assert con is not None
         try:
-            assert con.execute("PRAGMA user_version").fetchone() == (3,)
+            assert con.execute("PRAGMA user_version").fetchone() == (factorydb.SCHEMA_VERSION,)
             assert con.execute("SELECT count(*) FROM run").fetchone() == (0,)
         finally:
             con.close()

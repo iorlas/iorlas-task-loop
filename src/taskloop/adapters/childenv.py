@@ -16,7 +16,7 @@ from taskloop.contracts.paths import ConfigDir, default_root
 
 # The only names (besides the registered engine ones and LC_*) a tool, a check or git inherits. Anything else is declared by the repo's
 # check (its `env`) or by the engine (`extra`), never picked up from whoever started the engine. A name is added below only when a real
-# tool needed it (tests/checks/real/test_allowlist.py runs lifesim's and task-loop's own checks), with the reason.
+# tool needed it (tests/checks/real/test_allowlist.py runs a consumer's and task-loop's own checks), with the reason.
 ALLOWED = frozenset({
     "PATH",  # cleaned of the virtualenv's bin (child_env.without_venv)
     "HOME", "USER", "LANG", "TERM", "TMPDIR", "SHELL",
