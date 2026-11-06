@@ -5,13 +5,12 @@ the merge, so a new test of main that imports the branch's changed module is in 
 bytes: the receipt is stored again under the new key, its `origin` naming the run that made it. Any difference, a conflict, a command that
 fails: no carry, the check runs. The caller owns the worktree at the judged oid; the merge is made in a throwaway one."""
 import hashlib
-import tempfile
 from pathlib import Path
 
 from taskloop.app.checks import authorization
 from taskloop.app.checks.cache import satisfied
 from taskloop.app.land.cmds import Cmds
-from taskloop.contracts import config
+from taskloop.contracts import config, scratch
 from taskloop.contracts.checks import PassRecord
 from taskloop.contracts.env import Env
 from taskloop.contracts.ids import TreeSha
@@ -54,7 +53,7 @@ class Carry:
 
     def merged(self, oid: str, base: str) -> str:
         """A throwaway worktree with `oid` merged into `base` ('' when it conflicts)."""
-        path = tempfile.mkdtemp(prefix="tl-land-merge-")
+        path = str(scratch.scratch_dir(self.env.vars, "tl-land-merge-"))
         self.cmds.port(f"git worktree add --detach {path} {base[:12]}", lambda: self.git.add_worktree(self.repo, path, base))
         if self.cmds.run([*MERGE, oid], cwd=path).exit:
             self.cmds.run(["git", "merge", "--abort"], cwd=path)
