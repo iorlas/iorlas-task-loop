@@ -50,6 +50,7 @@ class Core:
         self.log: Path | None = None
         self.rows: list[QueueRow] = []
         self.first_seen: dict[str, float] = {}
+        self.intake_at = 0.0  # when the deferred follow-ups were last looked at
         self.exit: dict[str, str] = {}
         self.exit_written = False
         if profile_error:
