@@ -67,10 +67,14 @@ def adr(fx: Effects, raised: LedgerEntry, answered: LedgerEntry, text: str, by: 
 
 
 def retire(store: Beads, adr: str) -> str:
-    """File the bead that retires a decision in force (its file's Status line). -> its id."""
+    """File the bead that retires a decision in force (its file's Status line); a second ask finds the one open. -> its id."""
+    title = f"Retire {adr}"
+    pending = next((b for b in store.find(BeadQuery(label=adrfiles.LABEL)) if b.title == title), None)
+    if pending is not None:
+        return pending.id
     body = (f"Retire {adr}: in its `{adrfiles.DIR}` file set `- Status: retired` and add the lines `- Retired-by: <who>` and "
             f"`- Retired-at: <epoch seconds>`. Leave the sections as they are.")
-    return store.create(NewBead(title=f"Retire {adr}", description=body, labels=[adrfiles.LABEL], no_inherit_labels=True))
+    return store.create(NewBead(title=title, description=body, labels=[adrfiles.LABEL], no_inherit_labels=True))
 
 
 def ref(fx: Effects, raised: LedgerEntry, text: str) -> tuple[str, str]:

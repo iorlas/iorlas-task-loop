@@ -1,21 +1,18 @@
 """An ADR as the file `docs/adr/NNNN-title.md` of the repo. The file is the record: a lane writes it and lands it like any change (the
 `tl adr` outcome files a bead whose body is `template`; tl itself never writes into a checkout). `parse` reads one file into the
 `Adr` the plan stage and the dashboard use; the number is the file name's, the rest is the `- Key: value` lines and the sections."""
-import re
 from collections.abc import Mapping
 
 from taskloop.contracts.ledger import Adr
 
 DIR = "docs/adr"
 LABEL = "adr"  # the bead that will land (or retire) an ADR carries it: a proposed ADR is "pending" while that bead is open
-HEAD = re.compile(r"^- ([A-Za-z-]+): ?(.*)$")
-FILE = re.compile(r"^(\d{4,})-.+\.md$")
 SECTIONS = ("Question", "Answer", "Decision")
 
 
 def slug(text: str) -> str:
-    words = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-    return words[:48].strip("-") or "decision"
+    kept = "".join(c if c.isascii() and c.isalnum() else " " for c in text.lower())
+    return "-".join(kept.split())[:48].strip("-") or "decision"
 
 
 def file_name(n: int, title: str) -> str:
@@ -50,10 +47,11 @@ def template(ask: str, bead: str, key: str, question: str, answer: str, text: st
 
 def parse(name: str, text: str, repo: str = "") -> Adr | None:
     """The ADR a file holds; None for a file that is not one (no number in its name)."""
-    m = FILE.match(name.rsplit("/", 1)[-1])
-    if m is None:
+    base = name.rsplit("/", 1)[-1]
+    digits, _, rest = base.partition("-")
+    if len(digits) < 4 or not digits.isascii() or not digits.isdigit() or not rest.endswith(".md"):
         return None
-    n = int(m.group(1))
+    n = int(digits)
     fields: dict[str, str] = {}
     sections: dict[str, list[str]] = {}
     current = ""
@@ -63,8 +61,9 @@ def parse(name: str, text: str, repo: str = "") -> Adr | None:
             sections[current] = []
         elif current:
             sections[current].append(line)
-        elif (h := HEAD.match(line)) is not None:
-            fields[h.group(1).lower()] = h.group(2).strip()
+        elif line.startswith("- ") and ":" in line:
+            key, _, value = line[2:].partition(":")
+            fields[key.strip().lower()] = value.strip()
     body = {k: "\n".join(v).strip() for k, v in sections.items()}
 
     def number(key: str) -> float | None:

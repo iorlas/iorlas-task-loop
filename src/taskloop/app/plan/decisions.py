@@ -16,10 +16,10 @@ class Decisions:
         self.e = host
 
     def store(self) -> AdrStore:
-        """The repo's decisions, brought up to its `docs/adr` files at the run's base commit first."""
+        """The repo's decisions, brought up to its `docs/adr` files at the base ref (cfg.base, what the run lands on) first."""
         repo = self.e.ask_flow.repo()
         store = self.e.stores.adrs(repo)
-        adrsync.refresh(self.e.git, self.e.wt, self.e.checkout.base_sha(), repo, store)
+        adrsync.refresh(self.e.git, self.e.wt, self.e.cfg.base, repo, store)
         return store
 
     def text(self) -> str:
