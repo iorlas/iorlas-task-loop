@@ -41,8 +41,8 @@ class Judge:
         # the plan's look items are for the last stage (like the cases); an earlier stage is judged on the general checks only
         prompt = looks.judge_prompt(e.cases.cases_of("look-objective") if last else [], names, befores, summary)
         try:
-            d, _ = e.ai("look", f"round {rnd}: {plural(len(names), 'picture')}", prompt,
-                        writer_family=e.writer_family, cwd=str(base), round=rnd, at=(e.at_stage, rnd, 0))
+            d = e.ai("look", f"round {rnd}: {plural(len(names), 'picture')}", prompt,
+                        writer_family=e.writer_family, cwd=str(base), round=rnd, at=(e.at_stage, rnd, 0)).data
         except e.Blocked as b:
             return self.unjudged(b, rnd)
         note = "[same family as the writer: no other lane was free] " if e.last_flag == "same_family" else ""

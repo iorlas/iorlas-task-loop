@@ -39,9 +39,9 @@ class ReviewRound:
         e.ask_flow.review_cap()
         kinds = e.newfiles.new_by_kind()
         try:
-            review, _ = e.ai("review", s.name, self.prompt(s, kinds), writer_family=s.wfam,
+            review = e.ai("review", s.name, self.prompt(s, kinds), writer_family=s.wfam,
                              visual=not s.fix and e.pictures.stage_visual(s.st),
-                             round=s.rounds + 1, at=(s.sk, s.rounds, s.n), **s.meta)
+                             round=s.rounds + 1, at=(s.sk, s.rounds, s.n), **s.meta).data
         except ReviewUnavailable:
             self.unavailable(s)
             return ACCEPT

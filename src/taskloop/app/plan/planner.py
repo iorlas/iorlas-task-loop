@@ -41,7 +41,7 @@ class Planner:
     def ask(self, prompt: str, step: str, title: str, mode: str = "plan") -> PlanData:
         """One planner answer, its checks validated before any write; the bad ones go back once."""
         e = self.e
-        data, _ = e.ai("plan", title, prompt, step=step, mode=mode, at=(e.planned, 0, 0))
+        data = e.ai("plan", title, prompt, step=step, mode=mode, at=(e.planned, 0, 0)).data
         if self.fits(data):  # keep the answer through a stop, but revalidate it before any write
             e.plan_data = copy.deepcopy(data)
             e.checkpoints.save(stage=0, rounds=0, n=0, feedback="", step="plan")

@@ -3,11 +3,12 @@ import threading
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Protocol
 
 from taskloop.adapters.looks import Methods
 from taskloop.app.look.state import LookState
 from taskloop.contracts.artifact import ArtifactMeta
+from taskloop.contracts.asked import Asked
 from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.config import EngineConfig, VisualConfig
@@ -102,7 +103,7 @@ class LookHost(Protocol):
     render_stale: bool
     look: LookState
 
-    def ai(self, node: str, title: str, prompt: str, *a: object, **kw: object) -> tuple[dict[str, Any], object]: ...
+    def ai(self, node: str, title: str, prompt: str, *a: object, **kw: object) -> Asked: ...
     def comment(self, text: str) -> None: ...
     def warn(self, text: str) -> None: ...
     def now(self) -> float: ...

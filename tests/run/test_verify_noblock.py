@@ -12,6 +12,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as T
+from support.asked import ans
 from support.builders import make_engine
 from support.cfgs import plan_of
 from support.engine_case import engine
@@ -119,7 +120,7 @@ class NoBlock(T.LandReviewBase):
             cast(Any, e).fixes += 1
             rounds.append(tail)
             return "stuck"  # the fix round did not pass its checks and review
-        with (mock.patch.object(e, "ai", return_value=(open_as("checkable"), None)), mock.patch.object(e.fixer, "fix", side_effect=fix),
+        with (mock.patch.object(e, "ai", return_value=ans(open_as("checkable"))), mock.patch.object(e.fixer, "fix", side_effect=fix),
               pytest.raises(engine.Blocked) as ctx):
             e.verifier.run([IQAD])
         assert len(rounds) == 2  # one per round of the budget, then stuck
@@ -184,7 +185,7 @@ class NoBlock(T.LandReviewBase):
         assert e.routing.engine_does("The gate runs at land")
         assert e.routing.engine_does("the engine closes the bead")
         assert not e.routing.engine_does("screenshots are copied into the repo")  # no visual paths set
-        with mock.patch.object(e, "ai", return_value=(open_as("engine_step"), None)) as ai, \
+        with mock.patch.object(e, "ai", return_value=ans(open_as("engine_step"))) as ai, \
                 mock.patch.object(e.fixer, "fix", return_value="accept") as fix:
             e.plan_data = plan_of(PLAN)
             e.verifier.run([{"what": claim, "kind": "engine_step"}])
@@ -198,7 +199,7 @@ class NoBlock(T.LandReviewBase):
         with mock.patch.object(e, "diff_text", return_value=diff):
             assert e.routing.resolve_kind(item, {"kind": "external_fact", "source": SOURCE})[0] == "checkable"
             assert e.routing.resolve_kind(dict(item, kind="taste"), {})[0] == "checkable"
-            with mock.patch.object(e, "ai", return_value=(open_as("external_fact"), None)), \
+            with mock.patch.object(e, "ai", return_value=ans(open_as("external_fact"))), \
                     mock.patch.object(e.fixer, "fix", return_value="accept") as fix:
                 e.verifier.run([item])
         fix.assert_called_once()  # a proving round, not an unverified landing
