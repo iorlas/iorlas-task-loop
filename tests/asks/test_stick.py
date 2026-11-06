@@ -1,7 +1,9 @@
 """Make it stick: each outcome of an answered ask through the Intake verb, its effect and its ledger row."""
 import sys
 from pathlib import Path
+from unittest import mock
 
+import pytest
 from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -134,3 +136,26 @@ class Stick_(Case):
         assert must(self.asks.get(BeadId("t-1"))).outcome is None  # the newer ask is untouched
         [made] = self.adr_beads()
         assert f"- Ask: {self.ask.id}\n" in made.description
+
+    def stick_with_one_ledger_failure(self, outcome: Stick) -> None:
+        """The first ledger write of the outcome fails after its effect was made; the owner taps again."""
+        real, calls = self.asks.stuck, []
+
+        def flaky(*args, **kwargs):
+            calls.append(args)
+            if len(calls) == 1:
+                raise OSError("disk")
+            return real(*args, **kwargs)
+
+        with mock.patch.object(self.asks, "stuck", flaky):
+            with pytest.raises(OSError, match="disk"):
+                self.verbs.stick(self.ask.id, outcome, "Saves stay v1.")
+            assert self.verbs.stick(self.ask.id, outcome, "Saves stay v1.") == ""
+
+    def test_an_adr_stick_retried_after_the_ledger_write_failed_files_one_bead(self) -> None:
+        self.stick_with_one_ledger_failure(Stick.ADR)
+        assert len(self.adr_beads()) == 1
+
+    def test_a_factory_stick_retried_after_the_ledger_write_failed_files_one_bead(self) -> None:
+        self.stick_with_one_ledger_failure(Stick.FACTORY)
+        assert len(self.factory.beads) == 1

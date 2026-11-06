@@ -208,6 +208,7 @@ class EngineConfig(Rec):
     epic_only: bool = False
     reflect: bool = True
     writer_family: list[str] = msgspec.field(default_factory=list)  # e.g. ["openai"]: --only-family on every worker call
+    second_writer_family: str = ""  # e.g. "claude": one light bead in ten is written by this family alone; "" is off
     writer_exec_allow: list[list[str]] = msgspec.field(default_factory=list)
     writer_read_roots: list[str] = msgspec.field(default_factory=list)  # absolute folders an OpenCode write step may read outside its cwd
     planner_notes: str = ""

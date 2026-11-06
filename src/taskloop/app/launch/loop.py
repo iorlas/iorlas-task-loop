@@ -13,6 +13,7 @@ from pathlib import Path
 from taskloop.adapters import beadtools, childenv, ident, pidcheck, ram
 from taskloop.adapters import delegate as dg
 from taskloop.adapters import storm as storm_file
+from taskloop.adapters.bd import BdStore
 from taskloop.adapters.locks import hold_path
 from taskloop.adapters.repourl import repo_url
 from taskloop.app.asks import sweeps as ask_sweeps
@@ -93,7 +94,7 @@ def roles(repo: str | Path, env: Env, git: Git) -> dict[str, bool | None] | None
     route = delegate_route(repo, env, git)
     if not route:
         return None
-    return {role: v.get("usable") if isinstance((v or {}).get("usable"), bool) else None for role, v in dg.role_status(env).items()}
+    return dg.roles_usable()
 
 
 def make_probe(repo: str | Path, env: Env, git: Git) -> dg.RouteProbe | None:
@@ -174,7 +175,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         ),
         landed_on_base=lambda wt, bead: landed_on_base(repo, cfg, store, wt, bead, git),
         reload_note=lambda bead: ops.reload_note(cfg, bead),
-        chores=lambda: ops.chores(repo, spawner, env, git, who),
+        chores=lambda: ops.chores(repo, spawner, env, git, who, store if isinstance(store, BdStore) else None),
         release_dead=lambda: ops.release_dead(repo, store, now(), git, who),
         ask_lines=lambda: ask_sweeps.orphan_lines(wasks.store(cfg)),
         storm=lambda: storm(repo, cfg, now, git=git),
