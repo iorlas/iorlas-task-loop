@@ -6,7 +6,6 @@ import io
 import json
 import os
 import sys
-import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -22,6 +21,7 @@ from delegate.contracts.state import RefRecord
 from delegate.domain.holds.book import HoldBook
 from delegate.domain.lanes.lane import Lane
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -32,7 +32,7 @@ class Holds(Case):
     """delegate-dns: an owner hold {lane, roles, set_by, set_at, until (mandatory), reason}."""
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         p = mock.patch.object(env, "config_dir", return_value=Path(self.tmp.name))
         p.start()
@@ -139,7 +139,7 @@ class StaleHolds(Case):
     """delegate-eau: a hold whose lane has gone quiet raises ONE ask (a status field)."""
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         p = mock.patch.object(env, "config_dir", return_value=Path(self.tmp.name))
         p.start()
@@ -187,7 +187,7 @@ class CheapStatusAsks(Case):
     """`status --cheap` keeps the asks of live holds and drops those of a hold that ended: it is not a frozen copy of the snapshot."""
 
     def setup_method(self):
-        self.d = tempfile.TemporaryDirectory()
+        self.d = TemporaryDirectory()
         self.addCleanup(self.d.cleanup)
         p = mock.patch.dict(os.environ, {"DELEGATE_CONFIG_DIR": self.d.name})
         p.start()

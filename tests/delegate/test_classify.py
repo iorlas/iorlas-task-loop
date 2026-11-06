@@ -6,7 +6,6 @@ import json
 import re
 import shutil
 import sys
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from typing import ClassVar
@@ -26,6 +25,7 @@ from delegate.contracts.json_types import Json, as_opt_str, obj
 from delegate.domain.lanes import profiles
 from delegate.domain.policy.worker import denial, denial_item
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from delegate_fakes.fake_run import replay as replay_run
 from test_route import ROOT, T, route
@@ -113,7 +113,7 @@ class Stop(Case):
     """settle() + result() turn a classified row into the contract 4 answer; a request or machine fault leaves the lane state as it was."""
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.patch = patch.object(env, "config_dir", return_value=Path(self.tmp.name))
         self.patch.start()
         self.addCleanup(self.patch.stop)
@@ -301,7 +301,7 @@ class Launchers(Case):
     """The three harnesses end in the same ladder; the supervisor replays the events of a fixture row (delegate_fakes/fake_run.py)."""
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         for p in (
             patch.object(env, "config_dir", return_value=Path(self.tmp.name)),
             patch.object(shutil, "which", return_value="cli"),

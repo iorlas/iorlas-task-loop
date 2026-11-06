@@ -10,7 +10,6 @@ import itertools
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -18,6 +17,7 @@ import pytest
 from delegate.app import decide as dec
 from delegate.cli import verbs
 from delegate.domain.lanes.lane import Lane
+from support.tmpdir import mkdtemp
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -31,7 +31,7 @@ route = importlib.util.module_from_spec(_entry)
 sys.modules["route"] = route
 _entry.loader.exec_module(route)
 
-os.environ["DELEGATE_CONFIG_DIR"] = tempfile.mkdtemp()
+os.environ["DELEGATE_CONFIG_DIR"] = mkdtemp()
 T = 1_000_000_000.0
 CFG = json.loads((ROOT / "src" / "delegate" / "data" / "routing.json").read_text(encoding="utf-8"))
 

@@ -4,13 +4,13 @@ import contextlib
 import re
 import shutil
 import sys
-import tempfile
 import time
 from pathlib import Path
 from unittest import mock
 
 from stream_proc import proc_start
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 from test_route import ROOT
@@ -47,7 +47,7 @@ def gone(pid, start, seconds=15):
 class KillPaths(Case):
     def fake_server(self, body):
         """A `codex` whose app-server runs `body` (python); returns the which() patch."""
-        d = tempfile.TemporaryDirectory()
+        d = TemporaryDirectory()
         self.addCleanup(d.cleanup)
         exe = Path(d.name) / "codex"
         exe.write_text(f"#!{sys.executable}\nimport sys, time\n{body}\n")

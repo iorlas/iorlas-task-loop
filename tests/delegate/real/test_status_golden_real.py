@@ -6,10 +6,10 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 from support.procsim import real_proc
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 
@@ -21,7 +21,7 @@ FIX = ROOT / "tests" / "delegate" / "fixtures"
 class StatusGolden:
     @real_proc("delegate: a worker, git or CLI process")
     def test_cheap_status_is_byte_equal_from_a_copy_of_the_tree(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             tree, cfg = Path(d) / "plugin", Path(d) / "cfg"
             shutil.copytree(FIX / "status_cheap", cfg)
             os.chmod(cfg, 0o700)

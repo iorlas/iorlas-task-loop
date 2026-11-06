@@ -3,12 +3,12 @@ the cache dirs did not exist and cannot be created from inside the sandbox, and 
 
 import json
 import re
-import tempfile
 from pathlib import Path
 
 from any_agent.harnesses.opencode import OpenCodeHarness, Profile
 from any_agent.protocol import LaunchInputs
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 
@@ -18,7 +18,7 @@ DIR_VARS = re.compile(r"^(UV_CACHE_DIR|XDG_\w+_HOME|MISE_\w*_DIR)$")
 class CacheDirs(Case):
     def test_every_dir_env_var_exists_before_any_process_and_is_writable_in_the_profile_and_none_is_under_local(self):
         for profile in (Profile(), Profile(own_data=True)):
-            with self.subTest(own_data=profile.own_data), tempfile.TemporaryDirectory() as d:
+            with self.subTest(own_data=profile.own_data), TemporaryDirectory() as d:
                 root = Path(d) / ".claude" / "plugins" / "data" / "x"  # under a SECRETS folder, like the plugin's real config dir
                 root.mkdir(parents=True)
                 h = OpenCodeHarness(profile, root)
