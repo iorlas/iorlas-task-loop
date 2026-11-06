@@ -3,6 +3,7 @@ goes to the writer for a test, an item no check can prove lands unverified for t
 plan (what it defers, what it leaves to the engine) is read before the item's kind."""
 from typing import Any
 
+from taskloop.app.review.host import ReviewHost
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.asks import specs as askspecs
@@ -16,7 +17,7 @@ AT_LAND = "the engine does this at land"
 
 
 class Routing:
-    def __init__(self, host: Any, git: Git) -> None:
+    def __init__(self, host: ReviewHost, git: Git) -> None:
         self.e = host
         self.git = git
 
@@ -91,7 +92,7 @@ class Routing:
         return out
 
     def proof_stuck(self, items: list[Item]) -> Any:
-        cap = int(self.e.cfg.max_fix_rounds)
+        cap = self.e.cfg.max_fix_rounds
         what = [u["what"] for u in items]
         why = f"the check before land: nothing proves {'; '.join(what)[:600]} after {cap} fix rounds: it needs the owner's hint"
         return self.e.blocked_for(why, "ASK_STUCK", spec=askspecs.unproven(what, cap))
@@ -107,7 +108,7 @@ class Routing:
         if k == "engine_step" or route == "engine_step":
             return "settled", dict(a, evidence=AT_LAND), AT_LAND, ""
         if k == "checkable":
-            if self.e.fixes >= int(self.e.cfg.max_fix_rounds):
+            if self.e.fixes >= self.e.cfg.max_fix_rounds:
                 raise self.proof_stuck([u])
             return "wrong", a, "add a test or check that proves: {}".format(u["what"]), "proof"
         if k in ("external_fact", "taste"):
