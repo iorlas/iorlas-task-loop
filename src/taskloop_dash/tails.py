@@ -27,12 +27,6 @@ def read_json(path: object, default: Any = None) -> Any:
         return default
 
 
-def read_dict(path: object) -> dict[str, Any]:
-    """The JSON object in the file, {} for a missing file or anything else."""
-    got = read_json(path, {})
-    return got if isinstance(got, dict) else {}
-
-
 class Tails:
     def __init__(self, tail_bytes: int = TAIL_BYTES) -> None:
         self.tail_bytes = tail_bytes
@@ -49,4 +43,3 @@ class Tails:
             return []
         lines = data.decode("utf-8", "replace").splitlines()
         return lines[1:] if size > limit else lines
-

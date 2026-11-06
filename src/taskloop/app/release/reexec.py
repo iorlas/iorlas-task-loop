@@ -14,7 +14,6 @@ from taskloop.contracts.run import NetPause, Reexec, ReexecNote
 from taskloop.contracts.waitrows import NET_PAUSE, REEXEC, WaitDoc
 from taskloop.domain.lanes import policy as lp
 
-RELOAD_FALLBACK_S = 120  # a run-task that dies this soon after an exec is put back on the version it came from (by the loop)
 NET_PAUSE_ADOPT_S = lp.KNOBS["net_pause_max_s"]  # a run paused for the network is taken up again by the next run-task within this long
 
 

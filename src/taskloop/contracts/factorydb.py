@@ -19,6 +19,7 @@ from taskloop.contracts import factorymigrate, factoryprune, wire
 from taskloop.contracts.run import RunManifest
 
 SCHEMA_VERSION = 4
+SCHEMA_READ_FROM = 4  # the oldest schema a read-only opener (the dashboard) reads as it is; lower this when a step stays readable
 DDL = """
 CREATE TABLE source (path TEXT PRIMARY KEY, family TEXT NOT NULL,
   dev INTEGER, ino INTEGER, size INTEGER, mtime_ns INTEGER, head TEXT,
@@ -107,6 +108,7 @@ SCHEMA = sqlite_store.Schema(
     name="factory.db",
     revisioned=REVISIONED_TABLES,
     quarantine_versions=frozenset({1}),
+    read_from=SCHEMA_READ_FROM,
 )
 _STORE = sqlite_store.Store(SCHEMA)
 SchemaError = sqlite_store.SchemaError

@@ -1,12 +1,14 @@
 """`tl runs show ID` and `tl runs slow`: read-only queries over the engine log (engine/<run>.jsonl); no store of their own.
 
 A row is one thing that ran or waited: a step, a worker call, a check, the gate or a wait. Its time is the end record's own
-`exec_seconds` (a call's `secs`) and `wait_seconds`; nothing is recounted from timestamps."""
+`exec_seconds` (a call's `secs`) and `wait_seconds`; nothing is recounted from timestamps. A command has no seconds of its own: it is
+the gap between its start and end records. `show` also lists the run's attempts from factory.db (read-only); steps, calls, checks and
+waits are not rows there, so their timing stays in the log."""
 import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from taskloop.contracts import log
+from taskloop.contracts import factorydb, log
 from taskloop.contracts.paths import ConfigDir
 
 
@@ -67,6 +69,34 @@ def items(run: str, rows: list[log.EngineLog]) -> list[Item]:
     return out
 
 
+@dataclass(frozen=True)
+class Attempt:
+    n: int
+    host: str
+    pid: int
+    started: float
+    ended: float | None
+    kind: str
+    reason: str
+
+
+def attempts_of(run: str, cfg: ConfigDir) -> list[Attempt]:
+    """The run's attempts (a retry or a take-up inside one run id) from factory.db, opened read-only; none when it cannot be read."""
+    try:
+        con = factorydb.open_ro(cfg.factory_db())
+    except factorydb.DatabaseError:
+        return []
+    if con is None:
+        return []
+    try:
+        rows = con.execute("SELECT n, host, pid, started, ended, end_kind, reason FROM attempt WHERE run=? ORDER BY n", (run,)).fetchall()
+    except factorydb.sqlite3.Error:
+        return []
+    finally:
+        con.close()
+    return [Attempt(r[0], r[1] or "", r[2] or 0, r[3], r[4], r[5] or "", r[6] or "") for r in rows]
+
+
 def fmt(s: float) -> str:
     return f"{s / 60:.1f}m" if s >= 90 else f"{s:.0f}s"
 
@@ -83,6 +113,10 @@ def show(run: str, cfg: ConfigDir) -> int:
     its = items(run, rows)
     bead = (start.bead if start else "") or (its[0].bead if its else "")
     print(f"run {run}  bead {bead or '-'}  branch {(start.branch if start else '') or '-'}")
+    for a in attempts_of(run, cfg):
+        end = f"{a.kind or 'ended'}: {a.reason}" if a.ended is not None else "open"
+        span = f"{fmt(a.ended - a.started)}" if a.ended is not None else "-"
+        print(f"  attempt {a.n} on {a.host or '?'} pid {a.pid}  {span}  {end}")
     for it in its:
         wait = f"  wait {fmt(it.wait_s)}" if it.wait_s else ""
         print(f"  {it.kind:<6} {it.name:<40} exec {fmt(it.exec_s):>6}{wait}")
