@@ -66,7 +66,8 @@ class Base(Case):
         tl.chmod(0o755)
         # tl's own ChildEnv builder hands git the hooks dir; the recorder path rides through `extra`.
         self.plain = base  # no hooks path: what `git lfs install` needs to write into the repo's own hooks
-        self.env = childenv.tool_env(base, {"CALLS": base["CALLS"]})
+        # the stub shim judges, not this install
+        self.env = childenv.without(childenv.tool_env(base, {"CALLS": base["CALLS"]}), "TL_JUDGE_TL")
         self.origin, self.repo = t / "origin.git", t / "repo"
         self.git(t, "init", "-q", "--bare", "-b", "main", str(self.origin))
         self.git(t, "clone", "-q", str(self.origin), str(self.repo))
@@ -74,6 +75,12 @@ class Base(Case):
         self.commit("a")
         self.git(self.repo, "push", "-q", "--no-verify", "origin", "HEAD:main")
         self.git(self.repo, "fetch", "-q")
+        self.register(self.repo)
+
+    def register(self, *repos):
+        """repos.json beside bin/tl: the hook judges only the repos listed there."""
+        known = {str(Path(r).resolve()): {"added": 1.0} for r in repos}
+        (Path(self.tmp.name) / "task-loop" / "repos.json").write_text(json.dumps({"v": 1, "repos": known}))
 
     def git(self, cwd, *args, env=None, check=True):
         r = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, env=env or self.env, check=False)
@@ -196,6 +203,52 @@ class PrePush(Base):
         assert self.git(self.origin, "branch", "--list", "x").stdout == ""
 
 
+class Foreign(Base):
+    """A repo tl does not manage (no .task-loop.json, not registered) inherits tl's core.hooksPath from a child env: its pushes pass."""
+
+    def fresh(self, name="foreign"):
+        t = Path(self.tmp.name)
+        origin, work = t / f"{name}-origin.git", t / name
+        self.git(t, "init", "-q", "--bare", "-b", "main", str(origin))
+        work.mkdir()
+        self.git(work, "init", "-q", "-b", "main")
+        (work / "a").write_text("a")
+        self.git(work, "add", "-A")
+        self.git(work, "commit", "-q", "-m", "a")
+        self.git(work, "remote", "add", "origin", str(origin))
+        return work
+
+    def test_the_first_push_to_a_fresh_origin_passes(self):
+        work = self.fresh()
+        r = self.git(work, "push", "-q", "-u", "origin", "main", check=False)
+        assert r.returncode == 0, r.stderr
+
+    def judge(self, work):
+        tip = self.git(work, "rev-parse", "HEAD").stdout.strip()
+        tl = Path(self.tmp.name) / "task-loop" / "bin" / "tl"
+        return subprocess.run([str(tl), "judge-push", "--repo", str(work)], input=f"refs/heads/main {tip} refs/heads/main {'0' * 40}\n",
+                              capture_output=True, text=True, env=self.env, check=False)
+
+    def test_the_judge_alone_allows_a_first_push_without_a_profile_or_a_base(self):
+        r = self.judge(self.fresh())
+        assert r.returncode == 0, r.stderr
+
+    def test_the_judge_refuses_a_first_push_that_carries_a_profile(self):
+        work = self.fresh("owned")
+        (work / ".task-loop.json").write_text("{}")
+        self.git(work, "add", "-A")
+        self.git(work, "commit", "-q", "-m", "profile")
+        assert self.judge(work).returncode != 0
+
+    def test_a_registered_repo_is_still_judged(self):
+        work = self.fresh("mine")
+        self.register(self.repo, work)
+        (work / ".task-loop.json").write_text("{")
+        self.git(work, "add", "-A")
+        self.git(work, "commit", "-q", "-m", "bad profile")
+        assert self.git(work, "push", "-q", "-u", "origin", "main", check=False).returncode != 0
+
+
 class Chain(Base):
     """The repo's own hooks still run behind tl's (git-lfs's shim, prek): same arguments, same stdin, the first failure's exit code."""
 
@@ -218,6 +271,15 @@ class Chain(Base):
         text = self.rec.read_text()
         assert "args: origin " in text
         assert "refs/heads/x" in text
+
+    def test_the_repos_hook_does_not_inherit_tls_hooks_path(self):
+        """A repo hook that runs a test suite must not hand tl's core.hooksPath to the tmp repos that suite pushes in."""
+        seen = Path(self.tmp.name) / "seen"
+        self.own_hook(f'git config --get core.hooksPath > {seen}\nexit 0\n')
+        self.commit("b")
+        self.stamp("HEAD")
+        assert self.push("HEAD:refs/heads/x").returncode == 0
+        assert "githooks" not in seen.read_text(), seen.read_text()
 
     def test_the_repos_hook_failing_refuses_the_push(self):
         self.recorder(rc=3)

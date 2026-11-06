@@ -20,6 +20,7 @@ class EnvVar(StrEnum):
     TL_REEXEC = "TL_REEXEC"                      # the run that re-execs itself after a code update
     TL_LOOP_STATE = "TL_LOOP_STATE"              # the loop's state across its exec
     TL_RELEASE_REEXEC = "TL_RELEASE_REEXEC"      # set in the exec'd release: it never execs again
+    TL_JUDGE_TL = "TL_JUDGE_TL"                  # the tl.py of the child's own install: judges its pushes
     TASK_LOOP_SLOT_BEAD = "TASK_LOOP_SLOT_BEAD"  # the bead whose slot this process holds
     TASK_LOOP_ACTOR = "TASK_LOOP_ACTOR"          # the loop's actor name, inherited by its run-tasks
     TASK_LOOP_SESSION = "TASK_LOOP_SESSION"      # the engine's or loop's session id

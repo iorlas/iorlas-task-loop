@@ -43,6 +43,10 @@ def allowed(name: str) -> bool:
 HANDOVERS = frozenset({EnvVar.TL_REEXEC.value, EnvVar.TL_LOOP_STATE.value, EnvVar.TL_RELEASE_REEXEC.value})
 
 
+# the tl.py of the install this code runs from
+OWN_TL = Path(__file__).resolve().parents[3] / "skills" / "task-loop" / "tl.py"
+
+
 def hooks_vars(env: Mapping[str, str], source: Mapping[str, str]) -> dict[str, str]:
     """core.hooksPath = tl's hooks dir, through git's own env config (GIT_CONFIG_COUNT/KEY_n/VALUE_n): a default for every child, not
     a lock (`git -c core.hooksPath=...` and --no-verify still beat it). A count the caller already set is extended, never replaced."""
@@ -51,7 +55,8 @@ def hooks_vars(env: Mapping[str, str], source: Mapping[str, str]) -> dict[str, s
     except ValueError:
         n = 0
     hooks = ConfigDir(default_root(Env(dict(source)))).hooks_dir()
-    return {"GIT_CONFIG_COUNT": str(n + 1), f"GIT_CONFIG_KEY_{n}": "core.hooksPath", f"GIT_CONFIG_VALUE_{n}": str(hooks)}
+    return {EnvVar.TL_JUDGE_TL.value: str(OWN_TL),
+            "GIT_CONFIG_COUNT": str(n + 1), f"GIT_CONFIG_KEY_{n}": "core.hooksPath", f"GIT_CONFIG_VALUE_{n}": str(hooks)}
 
 
 def tool_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None) -> dict[str, str]:
@@ -122,7 +127,7 @@ def check_environment(base: Mapping[str, str], extra: Mapping[str, str] | None =
 # Registered names that differ run to run without changing what a check does (paths of this run, ids of this process): not part of a
 # result's identity. Every other registered name that reaches the child is.
 PER_RUN = frozenset({EnvVar.TL_ARTIFACT_DIR, EnvVar.TL_ARTIFACT_STEP, EnvVar.TL_RUN_ID, EnvVar.TL_RUN_DIR, EnvVar.TL_ATTEMPT,
-                     EnvVar.TL_WORKTREE, EnvVar.TL_BRANCH,
+                     EnvVar.TL_WORKTREE, EnvVar.TL_BRANCH, EnvVar.TL_JUDGE_TL,
                      EnvVar.TL_REEXEC, EnvVar.TL_LOOP_STATE,
                      EnvVar.TL_RELEASE_REEXEC, EnvVar.TASK_LOOP_SLOT_BEAD, EnvVar.TASK_LOOP_ACTOR, EnvVar.TASK_LOOP_SESSION,
                      EnvVar.TASK_LOOP_LOOP_PID, EnvVar.TASK_LOOP_LOOP_ID, EnvVar.TASK_LOOP_WORKER})
