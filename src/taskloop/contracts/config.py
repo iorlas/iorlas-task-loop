@@ -207,6 +207,7 @@ class EngineConfig(Rec):
     epic_order: list[str] = msgspec.field(default_factory=list)
     epic_only: bool = False
     reflect: bool = True
+    intake_per_day: int = 0  # >0: follow-ups the engine files wait as deferred (label from-review); this many a day are promoted to open
     writer_family: list[str] = msgspec.field(default_factory=list)  # e.g. ["openai"]: --only-family on every worker call
     writer_exec_allow: list[list[str]] = msgspec.field(default_factory=list)
     writer_read_roots: list[str] = msgspec.field(default_factory=list)  # absolute folders an OpenCode write step may read outside its cwd
