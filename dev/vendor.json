@@ -6,6 +6,12 @@
     "tree_hash": "003e425a27ce5580e001f5983086da577d2d212ab6ab558d8165b98b7935a639"
   },
   {
+    "name": "any_breaker",
+    "shelf_tag": "f04f679aa9bafe51bb5e2205738d0cab641885f6",
+    "shelf_commit": "f04f679aa9bafe51bb5e2205738d0cab641885f6",
+    "tree_hash": "012c9531ece0e536c8cf98b15a37f4df6239dd04e020c0e1e9376a8849b1b189"
+  },
+  {
     "name": "any_clock",
     "shelf_tag": "9eabbd2f191ac4d99a0ab3b969c6eba1f9526c1b",
     "shelf_commit": "9eabbd2f191ac4d99a0ab3b969c6eba1f9526c1b",
@@ -55,9 +61,9 @@
   },
   {
     "name": "beads_client",
-    "shelf_tag": "f04f679aa9bafe51bb5e2205738d0cab641885f6",
-    "shelf_commit": "f04f679aa9bafe51bb5e2205738d0cab641885f6",
-    "tree_hash": "9a8ab27d8e493ba49c9d51e02b7ea931af91c94c408d8a97dd3184fa533d75d2"
+    "shelf_tag": "be0b06fe6b8ea3758c634fa0a9896f2cb25104ad",
+    "shelf_commit": "be0b06fe6b8ea3758c634fa0a9896f2cb25104ad",
+    "tree_hash": "47b3d743d57f744f6ac65ea07e98ea0a684744f8f0ef4aa342853aa8bd59a7f9"
   },
   {
     "name": "child_env",

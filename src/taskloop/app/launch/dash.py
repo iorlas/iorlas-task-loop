@@ -15,6 +15,7 @@ from taskloop.adapters.ident import PLUGIN_ROOT, config_dir
 from taskloop.contracts.dash import READ_PROTOCOL
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.factorydb import SCHEMA_VERSION
 from taskloop.contracts.ports import Spawner
 from taskloop_dash import bind as dash_bind
 from taskloop_dash.cli import dash as dash_cli
@@ -97,6 +98,17 @@ def is_dash_server(v: object) -> bool:
     return isinstance(v, dict) and all(k in v for k in ("version", "pid", "urls", "started"))
 
 
+def _wire_reason(v: dict[str, object]) -> str | None:
+    """Why the server's read protocol or factory.db schema range does not fit the installed code, else None."""
+    if v.get("protocol") != READ_PROTOCOL:
+        return f"it speaks read protocol {v.get('protocol')}, installed is {READ_PROTOCOL}"
+    rng = v.get("schema_read")  # a server that reports no range is judged by its version alone
+    lo, hi = (rng[0], rng[1]) if isinstance(rng, list) and len(rng) == 2 else (0, SCHEMA_VERSION)
+    if not lo <= SCHEMA_VERSION <= hi:
+        return f"it reads factory.db schema {lo}..{hi}, installed is {SCHEMA_VERSION}"
+    return None
+
+
 def stale_reason(v: dict[str, Any], version: str, want: list[str]) -> str | None:
     """Why a running dashboard must be replaced, else None."""
     script = v.get("script")
@@ -106,8 +118,9 @@ def stale_reason(v: dict[str, Any], version: str, want: list[str]) -> str | None
         return "its script is gone: " + script
     if v.get("version") != version:
         return f"version {v.get('version')} differs from installed {version}"
-    if v.get("protocol") != READ_PROTOCOL:
-        return f"it speaks read protocol {v.get('protocol')}, installed is {READ_PROTOCOL}"
+    wire = _wire_reason(v)
+    if wire:
+        return wire
     missing = [a for a in want if a not in (v.get("binds") or [])]
     if missing:
         return "it does not serve " + ", ".join(missing)

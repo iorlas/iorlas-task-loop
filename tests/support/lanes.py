@@ -4,7 +4,6 @@ from typing import Any
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from taskloop.contracts.delegate_status import snapshot_of
-from taskloop.contracts.snapshots import LaneStatus
 from taskloop.contracts.stores import StatusStore
 
 
@@ -21,7 +20,3 @@ def answer(lanes: dict[str, Any], **top: Any) -> dict[str, Any]:
 
 def file_status(dash: Any, j: dict[str, Any]) -> None:
     StatusStore(dash.env.config).write(snapshot_of(j))
-
-
-def lane_statuses(lanes: dict[str, Any]) -> list[LaneStatus]:
-    return snapshot_of(answer(lanes)).lanes
