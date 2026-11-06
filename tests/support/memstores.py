@@ -29,13 +29,13 @@ from taskloop.contracts.rotating import RotatingJsonl
 from taskloop.contracts.stores import Absent, AskStore, ForeignVersion, JsonlStore, Present, Read, Torn, refusal
 from taskloop.contracts.trace import RunTrace
 from taskloop.contracts.wire import Refused
-from taskloop.stores.api import Doc, DocSet
+from taskloop.stores.api import AmendDoc, DocSet
 from taskloop.stores.books import CheckpointBook
 from taskloop.stores.bundle import Stores
 from taskloop.stores.files import temp_leases
 
 
-class MemDoc[T](Doc[T]):
+class MemDoc[T](AmendDoc[T]):
     def __init__(self, cls: type[T]) -> None:
         self.cls = cls
         self.data: dict[str, Any] | None = None
@@ -64,6 +64,13 @@ class MemDoc[T](Doc[T]):
     def write(self, rec: T) -> None:
         self.data = json.loads(json.dumps(wire.dump(rec)))
 
+    def modify(self, fn: Callable[[T], T]) -> bool:
+        rec = self.get()
+        if rec is None:
+            return False
+        self.write(fn(rec))
+        return True
+
     def delete(self) -> None:
         self.data = None
 
@@ -73,7 +80,7 @@ class MemDocSet[T](DocSet[T]):
         self.cls = cls
         self.docs: dict[str, MemDoc[T]] = {}
 
-    def of(self, key: str) -> Doc[T]:
+    def of(self, key: str) -> MemDoc[T]:
         return self.docs.setdefault(key, MemDoc(self.cls))
 
     def keys(self) -> list[str]:
