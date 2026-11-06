@@ -284,3 +284,22 @@ A `packages/` move of dash costs S1a (~35 files of mechanics) + ~116 moved files
 | all folders | 553 | | 313 (57%) |
 
 Cause of the wide ones: `tests/support/engine_case.py` (596 sloc, imported by 108 tests: run 32, checks 26, land 16, review 7, write 6, plan 6), `builders.make_engine` (457 src files forward through `app/run/engine.py`), `looptest`, `slots`. T0a moved `cfg_with`, `plan_of` and `argv_cfg` to `support/cfgs.py` (reaches 8 src files); of the 32 importers of `builders`, 26 only needed those. T0b is the engine harness: the 26 checks tests and 16 land tests that subclass `EngineTest` to exercise one stage through the whole engine.
+
+## 10. Measured after T0 (2026-11-06): what is left worth doing
+
+T0a (`support/cfgs.py`) and T0b (`support/plans.py`: PLAN, WRITE, CLEAN, BEAD and the plan/review builders out of `engine_case`, 62 importers rewritten) are done. Result on 604 tests, 108 commits: selection per commit median 273, mean 264, p90 453, max 604; tests within ≤ 3 stages 316 of 557 (was 313 of 553). **The hub split alone moved reach by ~1%.** What still reaches far is the engine harness itself (checks, land, run, review, write, loop tests subclass `EngineTest`), which is a rewrite of those tests onto the stage's own fake, not a file split.
+
+Median stages reached per test folder: loop 14, checks 12, run 12, review 12, write 12, look 12, launch 11, land 10, wire 10, doctor 10, hook 10; dash 1, delegate 1, adapters 0, contracts 0.
+
+Contract hubs, files that alone select at least half the suite (commits out of 108): `contracts/paths.py` 8, `stores.py` 7, `config.py` 4, `factorydb.py` 3.
+
+| hub | verdict | number |
+|---|---|---|
+| `config.py` | ❌ do not split | 130 importers, 94 use EngineConfig/load/RepoProfile/CheckSpec (the composer); moving the six section classes off the other 36 drops one config edit from 419 to 401 tests (4%) for ~36 rewrites |
+| `factorydb.py` | ❌ do not split | the sqlite connection layer under every store, 44 importers, no section with its own audience |
+| `dash`, `delegate` path move to `packages/` | ❌ deferred | dash already selects 92 (rules + own tests); delegate is wide through 14 app importers of `adapters.delegate`, which ISOLATION addresses |
+| `paths.py` | ⏳ the one open split | held until the layout migration (#219, #232) lands; it is the single naming point |
+
+What this means for Denis's ask. Independent test bases per package are not reachable by moving directories: the width sits in two places, the engine test harness and the shared contract hubs. The contract splits that had a real audience are done (ports #217, stores #224); the rest measured at ≤ 4%. A `packages/` carve is justified only when a stage's tests stop subclassing `EngineTest`; that is the decision for Denis (below), not a mechanical step.
+
+Decision for Denis: rewrite stage tests (checks, land, review, write, loop) off `EngineTest` onto per-stage fakes (large, the only change that cuts the 10-14 stage reach), or accept 273-median selection and keep the current layout.
