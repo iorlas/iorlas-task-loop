@@ -1,6 +1,6 @@
 """`ApiAgent`: the `Agent` of `delegate.api`. `api.run` on a thread of its own; the Handle and `api.cancel` stay in here."""
 import threading
-from typing import Any, Self
+from typing import Self
 
 from delegate import api
 from taskloop.adapters import procs
@@ -27,7 +27,7 @@ class ApiAgent:
     def done(self, timeout: float) -> bool:
         return self._finished.wait(timeout)
 
-    def result(self) -> dict[str, Any]:
+    def result(self) -> dict[str, object]:
         if not self._box:
             raise ValueError("the call has no answer")
         return dict(api.as_json(self._box[0]))

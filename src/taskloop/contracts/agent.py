@@ -1,7 +1,7 @@
 """The Agent: one worker call the engine started and may only wait for or stop (docs/design/isolation.md, step A1).
 
 The engine holds an `Agent` and nothing of the harness or the process under it: no Handle, no pid. `stop` is the only way to end it."""
-from typing import Any, Protocol
+from typing import Protocol
 
 
 class Agent(Protocol):
@@ -9,7 +9,7 @@ class Agent(Protocol):
         """Wait up to `timeout` seconds; True once the call has ended (answered or stopped)."""
         ...
 
-    def result(self) -> dict[str, Any]:
+    def result(self) -> dict[str, object]:
         """The answer object (contract 4 wire form) of a call that ended by itself; ValueError when there is none."""
         ...
 
