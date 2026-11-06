@@ -434,6 +434,7 @@ class LivePage(Rec):
     state: Literal["live", "ended", "lost"]
     lines: list[TermLine] = msgspec.field(default_factory=list)
     tools: list[ToolCall] = msgspec.field(default_factory=list)
+    reset: bool = False  # the cursor was another run's or no longer fits: these lines replace what the page shows
 
 
 # ---- writes: POST /api/<verb>, JSON body, one Result back

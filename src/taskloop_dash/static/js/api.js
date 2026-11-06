@@ -109,7 +109,7 @@ const LIVE_WAIT_S = 25, LIVE_MIN_MS = 1000;
 // the live tail of a running worker: long-polls /api/live from the cursor and hands each page to onPage until the run
 // ends or stop() is called (dash-spec §11.2: no SSE)
 export function liveTail(project, id, onPage) {
-  let cursor = '', on = true;
+  let cursor = '', state = '', on = true;
   (async () => {
     while (on) {
       if (document.hidden) {
@@ -123,8 +123,9 @@ export function liveTail(project, id, onPage) {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const page = await r.json();
         if (!on) return;
-        const fresh = page.cursor !== cursor;
+        const fresh = page.cursor !== cursor || page.state !== state || page.reset;  // a lifecycle change needs no new log bytes
         cursor = page.cursor;
+        state = page.state;
         if (fresh) onPage(page);
         if (page.state !== 'live') return;
       } catch (e) {

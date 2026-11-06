@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 from unittest import mock
 
-from delegate.adapters import procs
+from any_agent import procs
 from delegate.app import env, harnesses, status, usage
 from support.case import Case
 from support.procsim import real_proc
