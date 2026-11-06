@@ -245,7 +245,7 @@ class EngineRunTest(EngineTest):
             said.append(text)
             if where == "report" and text.startswith("{"):
                 os.kill(os.getpid(), sig.SIGTERM)
-        a = mock.Mock(id="t-1", slot=None, dry_run=False, fresh=False, quiet=True, outcome_file=None)
+        a = mock.Mock(id="t-1", branch=None, pr=None, slot=None, dry_run=False, fresh=False, quiet=True, outcome_file=None)
         made = mock.Mock()
         made.return_value.run.return_value = 2
         made.return_value.result.return_value = RunReport(outcome=Result.FAILED, bead=BeadId("t-1"), why="failed: stopped (SIGTERM)")

@@ -30,7 +30,8 @@
   tl.py reflect digest [--since 24h] [--dry-run]  the last day's run reflections into one bead per recurring cause
   tl.py trace [ID] [--last N] [--json]          engine runs and every worker session of each (for reflection)
   tl.py runs show RUN | slow [--top N] [--by exec|wait] [--runs N]  one run end to end; the slowest steps, calls, checks and waits
-  tl.py run-task ID [--stage STEP] [--worktree DIR] [--slot S|any [--wait]] [--exclusive-area] [--dry-run] [--fresh] [--force]
+  tl.py run-task ID|--branch B|--pr N [--stage STEP] [--worktree DIR] [--slot S|any [--wait]] [--exclusive-area] [--dry-run] [--fresh]
+                [--force]
                                                 one bead through the engine (engine.py), no judgement here
   tl.py next [--repo DIR] [--json] [--only ID...]  the bead the loop would take next and why (claims nothing)
   tl.py queue [add|remove ID...]                the owner's queue (label `queue`): while set, the loop takes only these, in order
@@ -203,7 +204,9 @@ def owner_parsers(sp):
 
 def engine_parsers(sp):
     p = sp.add_parser("run-task")
-    p.add_argument("id")
+    p.add_argument("id", nargs="?", help="the bead; or name its task branch or PR instead (--branch, --pr)")
+    p.add_argument("--branch", help="the task branch (task/<bead>) of the bead to run")
+    p.add_argument("--pr", type=int, help="the PR whose head branch is the task branch of the bead to run")
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--stage", choices=list(Step), help="run exactly one engine step; default: the recorded next step")
     mode.add_argument("--loop", action="store_true", help=argparse.SUPPRESS)
