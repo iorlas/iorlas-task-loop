@@ -15,6 +15,7 @@ from support import homes
 from support.fake_beads import FakeBeads
 from support.fake_clock import FakeClock
 from support.fakegit import FakeGit, ScriptedGit
+from support.memstores import fake_stores
 from support.who import who
 from taskloop.app.land.commit import Commit
 from taskloop.app.land.fix_outside import FixOutside
@@ -44,7 +45,6 @@ from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes.pause_reasons import Producer
 from taskloop.stores.bundle import Stores
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 

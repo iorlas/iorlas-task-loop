@@ -141,7 +141,6 @@ class Holds(Case):
             "rid",
             T,
             CFG,
-            {},
             RunHooks(),
         )
         assert (res["retry_after"], res["outcome"]) == (h.until, "held")

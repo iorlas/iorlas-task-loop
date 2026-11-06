@@ -11,6 +11,7 @@ from unittest import mock
 
 from support import fake_route
 from support.fake_clock import FakeClock
+from support.memstores import fake_stores
 from support.push_race import seam
 from taskloop.adapters import halt, landlock
 from taskloop.app.checks import evidence as check_evidence
@@ -23,7 +24,6 @@ from taskloop.app.write.stage_loop import StageLoop
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.paths import ConfigDir
 from taskloop.stores.bundle import Stores
-from taskloop.stores.memory import fake_stores
 
 
 class IdleHeartbeat:
