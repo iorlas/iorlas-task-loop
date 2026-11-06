@@ -83,3 +83,15 @@ class FactsContract(EngineTest):
 
         assert missing(NoMove(), sf.StepBook) == ["move"]
         assert FakeRepoKey("k").key() == "k"
+
+
+class CheckHostOnFacts(EngineTest):
+    def test_the_fake_check_host_is_a_view_of_its_facts_and_ports(self):
+        from support.check_host import FakeCheckHost
+        from support.who import who
+
+        host = FakeCheckHost(self.wt, self.checks_engine().cfg, who().config)
+        f, p = host.facts, host.ports
+        assert (host.bead, host.wt, host.cfg, host.home, host.run_id, host.run_dir) == (f.bead, f.wt, f.cfg, f.home, f.run_id, f.run_dir)
+        assert host.log is p.log and host.steps is p.steps and host.checklog is p.checklog and host.stores is p.stores
+        assert host.env is p.env and host.spawner is p.spawner and host.git is p.git and host.clock is p.clock

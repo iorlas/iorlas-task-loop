@@ -8,27 +8,22 @@ from typing import Any
 
 import support.paths  # noqa: F401
 from support.cfgs import cfg_with
-from support.fake_clock import FakeClock
+from support.facts import fake_facts
 from support.memstores import fake_stores
-from support.spawn import port_git, real_spawner
 from support.who import who
 from support.world import MARKERS, SlotWorld
-from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.runner import Checker
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.run import bead_env
 from taskloop.app.run.shell import Shell
-from taskloop.app.run.steps import Steps
 from taskloop.contracts import wire
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import WaitWhat
-from taskloop.contracts.env import snapshot
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.plancheck import StageData
 from taskloop.contracts.ports import Clock
 from taskloop.stores.bundle import Stores
-from taskloop.stores.runlog import RunLog
 
 
 class RecordedWaits:
@@ -52,17 +47,13 @@ class FakeCheckHost:
 
     def __init__(self, wt: Path, cfg: EngineConfig, home: ConfigDir, bead: str = "t-1", stores: Stores | None = None,
                  nth: int = 0, clock: Clock | None = None) -> None:
-        self.bead, self.wt, self.cfg, self.home = bead, str(wt), cfg, home
-        self.run_id = f"FAKERUN{nth:04d}"
-        self.run_dir = Path(home.root) / "runs" / self.run_id
-        self.run_dir.mkdir(parents=True, exist_ok=True)
-        self.env = snapshot()
-        self.spawner, self.git = real_spawner(), port_git()
-        self.stores = stores or fake_stores()
-        self.clock = clock or FakeClock()
-        self.log = RunLog(self.stores.run_log(self.run_id), clock=self.clock.now, run_id=self.run_id, bead=bead, host="host")
-        self.steps = Steps(self.log, self.clock.now)
-        self.checklog = CheckLog(self.log)
+        # the run's facts and ports come from one place (support/facts.py, docs/design/facts.md): this host is the checks' view of them
+        run_id = f"FAKERUN{nth:04d}"
+        self.facts, self.ports = fake_facts(Path(home.root), bead, cfg, wt=wt, home=home, run_id=run_id, stores=stores, clock=clock)
+        f, p = self.facts, self.ports
+        self.bead, self.wt, self.cfg, self.home, self.run_id, self.run_dir = f.bead, f.wt, f.cfg, f.home, f.run_id, f.run_dir
+        self.env, self.spawner, self.git, self.stores, self.clock = p.env, p.spawner, p.git, p.stores, p.clock
+        self.log, self.steps, self.checklog = p.log, p.steps, p.checklog
         self.waits = RecordedWaits()
         self.halt = threading.Event()
         self.killed = False
