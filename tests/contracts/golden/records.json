@@ -1529,7 +1529,8 @@
     "Library/**",
     "Temp/**",
     "obj/**",
-    "bin/**"
+    "bin/**",
+    "**/.*cache*/**"
    ],
    "land_mode": "push",
    "base": "origin/main",
