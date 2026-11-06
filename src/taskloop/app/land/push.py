@@ -14,7 +14,9 @@ from taskloop.app.land.parts import NetWorker, OutcomeMoveSteps
 from taskloop.app.land.push_evidence import failure
 from taskloop.app.land.state import PUSH_TRIES, PUSH_UP_FAILS, Land, Next, Phase
 from taskloop.contracts import fence
-from taskloop.contracts.ports import Beads, Git, Sh
+from taskloop.contracts.beadsport import Beads
+from taskloop.contracts.gitport import Git
+from taskloop.contracts.ports import Sh
 from taskloop.domain.land.matchers import Push as PushText
 
 PUSH_TIMEOUT_S = 600.0  # the land command's own limit (the default is an hour: a push stuck on a remote ate 25-48 min, tl-bxk.10.33.1)

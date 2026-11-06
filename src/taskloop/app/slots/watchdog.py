@@ -11,7 +11,7 @@ from taskloop.app.slots.marks import hold_of
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts.bdsafe import attempt
 from taskloop.contracts.bead import Bead
-from taskloop.contracts.ports import BdFailure, BeadPatch
+from taskloop.contracts.beadsport import BdFailure, BeadPatch
 from taskloop.contracts.slots import SlotFail
 from taskloop.domain.slot_liveness import LIMITS, Kind, Limits, SlotFact, Violation, Waiter, violations
 

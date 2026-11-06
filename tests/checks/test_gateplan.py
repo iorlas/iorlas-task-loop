@@ -15,7 +15,7 @@ from taskloop.app.checks.gateplan import PlanDecision, parse, skipped
 from taskloop.contracts.config import ConfigError
 from taskloop.contracts.env import Env
 from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.ports import Ran
+from taskloop.contracts.procport import Ran
 from taskloop.contracts.runkey import BaseSha
 from taskloop.contracts.slots import GitReadFailure
 from taskloop.domain.checks.specs import gate_items

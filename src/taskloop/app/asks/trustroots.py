@@ -7,7 +7,7 @@ for unapproved changes; base-copy reviewer instructions belong to delegate.
 from typing import Final
 
 from taskloop.contracts.bead import Bead
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import GitReadFailure
 
 OWNER_APPROVED: Final = "owner-approved"

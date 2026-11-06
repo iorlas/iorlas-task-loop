@@ -24,12 +24,14 @@ from taskloop.app.track.trail import event
 from taskloop.contracts import config
 from taskloop.contracts.bd_errors import BdCommandFailure
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
 from taskloop.contracts.config import EngineConfig, RepoProfile, SlotsConfig
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ids import loop_key as repo_key
 from taskloop.contracts.paths import TASK_EXCLUDE
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git, Spawner
+from taskloop.contracts.procport import Spawner
 from taskloop.contracts.slots import NotARepo, SlotFail, SlotGitError, SlotTable
 from taskloop.contracts.slottable import WORKTREE, LiveSlot, SlotSource, build_slot_table
 from taskloop.stores.ticketrows import TicketRows

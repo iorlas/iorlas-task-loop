@@ -10,7 +10,7 @@ from taskloop.adapters.check_files import repo_key
 from taskloop.app.artifacts import store
 from taskloop.app.artifacts.keep import Keeper
 from taskloop.contracts.artifact import ArtifactMeta, ArtifactSlot
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import SlotGitError
 from taskloop.contracts.wire import Refused
 from taskloop.domain.checks.matchers import glob_re

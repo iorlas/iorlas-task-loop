@@ -501,7 +501,7 @@ class LandedOnBase(Base):
         bd = beadtools.bd_store(who().actor, str(self.repo))
 
         def landed(bead_id):
-            return wloop.landed_on_base(str(self.repo), homes.cfg(), bd, str(wt), BeadId(bead_id), port_git())
+            return wloop.ops.landed_on_base(str(self.repo), homes.cfg(), bd, str(wt), BeadId(bead_id), port_git())
         assert landed("x-1")
         # not on main
         assert not landed("x-2")

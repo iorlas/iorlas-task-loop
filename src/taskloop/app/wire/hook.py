@@ -7,8 +7,8 @@ from pathlib import Path
 from taskloop.adapters import gitrepo
 from taskloop.adapters.ident import config_dir
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.paths import ConfigDir, default_root
-from taskloop.contracts.ports import Git
 from taskloop.domain import selfdescribe
 
 

@@ -22,9 +22,9 @@ from taskloop.contracts.checks import Check, CheckResult, PassRecord
 from taskloop.contracts.config import load
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitfacts import TreeEntry
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha, Digest
 from taskloop.domain.checks.specs import diff_check, gate_items
 from taskloop.stores.real import real_stores

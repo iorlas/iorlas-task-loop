@@ -4,7 +4,7 @@ import json
 from collections.abc import Mapping
 
 from taskloop.contracts.argv import text_of
-from taskloop.contracts.ports import Ran
+from taskloop.contracts.procport import Ran
 
 
 class ForgeSim:

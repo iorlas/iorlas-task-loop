@@ -12,12 +12,14 @@ from taskloop.app.run.closer_notes import FileNotesHost, NotesCheckpoints, Refle
 from taskloop.app.run.closer_record import RecordHost, RecordRecords
 from taskloop.app.run.closer_settle import SettleHost
 from taskloop.contracts import fence
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.checkpoint import Checkpoint, EndRec
 from taskloop.contracts.delegate import Permanence
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Beads, Clock, Git
+from taskloop.contracts.ports import Clock
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes.pause_reasons import Producer

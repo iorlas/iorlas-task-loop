@@ -12,7 +12,7 @@ from taskloop.adapters import beadtools
 from taskloop.cli import bd
 from taskloop.contracts.bd_errors import BdCommandFailure
 from taskloop.contracts.bead import BdError
-from taskloop.contracts.ports import BdFailure
+from taskloop.contracts.beadsport import BdFailure
 
 
 class BdExit(Case):

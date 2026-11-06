@@ -16,9 +16,9 @@ from taskloop.adapters import childenv
 from taskloop.adapters.childenv import CHECK_SECRETS
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.run.shell import Shell
+from taskloop.contracts.checksport import CheckSpec
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.env import Env
-from taskloop.contracts.ports import CheckSpec
 
 
 class CheckHomeCanaryTest(Case):
