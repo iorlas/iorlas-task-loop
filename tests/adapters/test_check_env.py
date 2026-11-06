@@ -7,8 +7,8 @@ from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.argv_checks import ArgvChecks
 
-from taskloop.adapters.checks_argv import ArgvChecks
 from taskloop.adapters.childenv import check_env
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.procs import Ran
@@ -19,7 +19,7 @@ from taskloop.contracts.ports import CheckSpec
 class CheckEnvironment(Case):
     def test_check_runner_scrubs_parent_transport_credentials(self):
         base = {"HOME": "/owner", "SSH_AUTH_SOCK": "/agent", "GH_TOKEN": "secret", "GIT_SSH_COMMAND": "ssh custom"}
-        with mock.patch("taskloop.adapters.checks_argv.run_group", return_value=Ran(0, "", "", 0, False)) as runner:
+        with mock.patch("support.argv_checks.run_group", return_value=Ran(0, "", "", 0, False)) as runner:
             ArgvChecks(Env(base)).run(CheckSpec(argv=["true"], cwd="/repo"))
         env = runner.call_args.args[2]
         assert not {"SSH_AUTH_SOCK", "GH_TOKEN", "GIT_SSH_COMMAND"} & env.keys()

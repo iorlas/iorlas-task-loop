@@ -8,6 +8,7 @@ from unittest import mock
 
 import pytest
 from support.case import Case
+from support.memstores import fake_stores
 
 from taskloop.adapters import check_files, childenv
 from taskloop.app.checks.cache import InputKeys, RunMemo
@@ -24,7 +25,6 @@ from taskloop.contracts.ports import Git, Ran
 from taskloop.contracts.runkey import BaseSha, Digest
 from taskloop.contracts.slots import Checkout
 from taskloop.domain.checks.specs import repo_check
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 OID, TREE, BASE = "1550b77c" + "0" * 32, TreeSha("tree-1"), BaseSha("base-1")

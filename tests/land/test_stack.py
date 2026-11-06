@@ -21,6 +21,8 @@ from support.forgesim import ForgeSim
 from support.logs import records
 
 # isort: split
+from support.memstores import fake_stores
+
 from taskloop.adapters import check_files, landlock, locks
 from taskloop.app.checks.cache import InputKeys, RunMemo, plan_digest
 from taskloop.app.land.cmds import Cmds
@@ -48,7 +50,6 @@ from taskloop.contracts.ports import DoltPush
 from taskloop.contracts.runkey import BaseSha
 from taskloop.contracts.slots import Checkout, NotARepo, SlotGitError
 from taskloop.domain import outcome as oc
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 
