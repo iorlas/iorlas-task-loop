@@ -161,6 +161,7 @@ class Denied:
     tool: str | None
     path: str | None
     input: dict[str, Json]
+    reason: str | None = None
 
 
 @record

@@ -89,6 +89,8 @@
     "denied": [
      {
       "tool": "Bash",
+      "kind": "",
+      "reason": "",
       "input": {
        "command": "ls"
       }
@@ -1789,7 +1791,8 @@
     "kind": "policy",
     "tool": "Bash",
     "path": null,
-    "input": {}
+    "input": {},
+    "reason": null
    }
   ],
   "secs": 3.0,
