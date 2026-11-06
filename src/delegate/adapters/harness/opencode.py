@@ -287,9 +287,9 @@ class OpenCodeHarness(Quiet):
 
     def _denials(self, tool: str, inp: dict[str, Json], out: str) -> list[ev.HarnessEvent]:
         if "prevents you from using this specific tool call" in out:
-            d = ev.Denied(tool=tool, input=inp, kind="policy")
+            d = ev.Denied(tool=tool, input=inp, kind="policy", reason=out.strip()[:300])
         elif "Operation not permitted" in out and not box.network_refusal(out):
-            d = ev.Denied(tool=tool, input=inp, kind="sandbox_limit")
+            d = ev.Denied(tool=tool, input=inp, kind="sandbox_limit", reason=out.strip()[:300])
         else:
             return []
         self.evidence.denials.append(d)

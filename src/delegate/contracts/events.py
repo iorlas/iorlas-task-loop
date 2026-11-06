@@ -105,6 +105,8 @@ class Denied:
     input: dict[str, Json]
     # "policy" (a reviewer or classifier refused: the owner decides) or "sandbox_limit" (the sandbox blocked a system resource: noise)
     kind: str = "policy"
+    # why, in the refuser's words or ours; empty when the harness gave none
+    reason: str = ""
 
 
 @record

@@ -132,7 +132,7 @@ class CodexHarness(Quiet):
             ev.CmdEnd(id=ident, text=cmd, exit=code if isinstance(code, int) else None, out=opt_str(item.get("aggregated_output")))
         ]
         if item.get("status") == "declined":  # the reviewer refused an escalation
-            out.append(ev.Denied(tool="Bash", input={"command": item.get("command")}))
+            out.append(ev.Denied(tool="Bash", input={"command": item.get("command")}, reason="the reviewer declined the escalation"))
         return out
 
     def _item(self, kind: str, item: dict[str, Json]) -> list[ev.HarnessEvent]:

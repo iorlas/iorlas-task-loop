@@ -44,7 +44,7 @@ class Stream:
         end, tend, pend = pl[3]
         assert (end.id, end.exit, end.out, tend.out, pend.exit) == ("tu1", None, "a b", "ok", 1)
         assert pl[4][1].final
-        assert pl[5][1] == ev.Denied(tool="Bash", input={"command": "git push"})
+        assert pl[5][1] == ev.Denied(tool="Bash", input={"command": "git push"}, reason="the CLI's permission check refused the call")
 
     def test_evidence_holds_what_the_stream_established(self):
         h, _ = stream("session")

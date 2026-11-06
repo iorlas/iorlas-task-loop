@@ -144,6 +144,7 @@ class Denial(Rec):
     tool: str | None = None
     path: str | None = None
     input: dict[str, Any] = msgspec.field(default_factory=dict)
+    reason: str | None = None
 
 
 @final
