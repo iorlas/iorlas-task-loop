@@ -86,7 +86,7 @@ def busy_cpus():
 
 def workers(n_tests, cpus=None, mem_mb=None, busy=None, full=False):
     """How many pytest workers this selection earns on this host right now (1: no xdist). A lane run leaves the cores the other lanes
-    keep busy (but keeps MIN_LANE_WORKERS for a selection past CHUNK: one worker made the wide runs slow); the landing gate takes them all."""
+    keep busy (MIN_LANE_WORKERS past CHUNK tests: one worker made wide runs slow); the landing gate takes them all."""
     cpu = cpus if cpus is not None else (os.cpu_count() or 1)
     ram = mem_mb if mem_mb is not None else total_mb()
     free = cpu if full else cpu - (busy if busy is not None else busy_cpus())
