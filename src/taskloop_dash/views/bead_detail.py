@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from taskloop.contracts.bead import Bead, Comment
 from taskloop.contracts.dash import Artifact, AskCard, BeadDetail, CheckCount, LiveBox, Marker, Msg, Phase
 from taskloop.contracts.delegate import LiveCmdEnd, LiveCmdStart, LiveEvent, LiveTokens
-from taskloop.contracts.log import Overrun, RetryDecision, VendorError
+from taskloop.contracts.log import LandTry, Overrun, RetryDecision, VendorError
 from taskloop.contracts.runlife import GONE, Liveness
 from taskloop_dash.tails import parse_ts
 from taskloop_dash.views import ledger, passes, phases, stage_logs
@@ -27,9 +27,19 @@ def comment_msg(c: Comment) -> Msg:
     return Msg(t=parse_ts(c.created_at) or 0.0, icon=COMMENT_ICON, who=c.author, md=c.text)
 
 
+LAND_WHY = {"gate": "gate red, fix round", "conflict": "rebase conflict, fix round", "verify": "checks red, fix round",
+            "stale": "main moved under the gate, gate again"}
+
+
+def land_try_text(x: LandTry) -> str:
+    """One try of the land: its fetch, rebase and gate seconds, and why it went on to the push or round again."""
+    secs = f"fetch {x.fetch_s:.0f} s, rebase {x.rebase_s:.0f} s, gate {x.gate_s:.0f} s"
+    return f"land try {x.n}: {secs}: {LAND_WHY.get(x.failing, x.failing) if x.failing else 'pushing'}"
+
+
 def decision_msgs(runs: Sequence[Run]) -> list[Msg]:
     """Why it was slow and why it switched: each Overrun (budget against elapsed), RetryDecision (action and reason) and VendorError
-    (lane, reason, until when it is closed) the engine recorded, oldest first."""
+    (lane, reason, until when it is closed) and LandTry (phase seconds, why it went on or retried) the engine recorded, oldest first."""
     out: list[Msg] = []
     for r in runs:
         for x in r.records:
@@ -41,6 +51,8 @@ def decision_msgs(runs: Sequence[Run]) -> list[Msg]:
                 lane = f" on {x.lane}" if x.lane else ""
                 why = f": {x.reason}" if x.reason else ""
                 out.append(Msg(t=x.t, icon="↪", who="engine", md=f"{x.step}{lane}: {x.action} (attempt {x.attempt}){why}"))
+            elif isinstance(x, LandTry):
+                out.append(Msg(t=x.t, icon="🛬", who="engine", md=land_try_text(x)))
             elif isinstance(x, VendorError):
                 until = f", closed until {hhmm(x.until)}" if x.until else ""
                 out.append(Msg(t=x.t, icon="⛔", who="engine", md=f"{x.lane or 'a lane'} refused: {x.reason}{until}"))
