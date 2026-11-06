@@ -79,7 +79,8 @@ def print_card(c: dict[str, Any]) -> None:
             )
     main = c.get("main", {"red": False, "reverts": []})
     reverted = ", ".join(f"{x['sha'][:8]} {x['subject'][:50]}" for x in main["reverts"])
-    print("  main    {}".format(f"RED: reverted {reverted}" if main["red"] else "green"))
+    why = [x for x in (f"reverted {reverted}" if reverted else "", "the last release gate failed" if main.get("gate_red") else "") if x]
+    print("  main    {}".format("RED: " + "; ".join(why) if main["red"] else "green"))
     bad = ["{} {} (want {})".format(k, v["value"], v["want"]) for k, v in c["m2"]["checks"].items() if not v["ok"]]
     print("M2 {}{}".format("PASS" if c["m2"]["pass"] else "FAIL", ": " + "; ".join(bad) if bad else ""))
 
