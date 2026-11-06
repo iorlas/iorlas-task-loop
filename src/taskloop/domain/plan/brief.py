@@ -50,6 +50,16 @@ class Brief:
                      sections=(*self.sections, Section(name=name, start=at, end=at + len(text.encode()))))
 
 
+ENGINE_HEADS: Final = ("## Owner hint", "## Comments", "## Related beads", "## Linked beads", "## Description", "## Acceptance criteria",
+                       "## Design", "## Notes")
+
+
+def fenced(text: str) -> str:
+    """A bead field with the engine's own section headings backslash-escaped: a field cannot forge the owner hint, the comments or
+    another section of the brief."""
+    return "\n".join("\\" + ln.lstrip() if ln.lstrip().startswith(ENGINE_HEADS) else ln for ln in text.splitlines())
+
+
 def people_lines(text: str | None) -> str:
     """Notes without the lines the engine appended to it ('Engine paused: ...', 'Engine failed: ...'): the only fields it writes."""
     lines = (text or "").splitlines()
@@ -67,7 +77,7 @@ def render(bead: Bead, comments: Sequence[Comment], owner: str, hint: str = "", 
     Only the configured bd author supplies comment instructions. owner_only also leaves out `engine_labels`: the checkpoint
     compares that text, so an engine run never looks like the owner's edit. `room` is the bytes the comments may take: the oldest go
     first, the newest stays whole, and a line names how many were left out."""
-    parts: list[tuple[str, str]] = [("title", f"# {bead.id}: {bead.title}")]
+    parts: list[tuple[str, str]] = [("title", f"# {bead.id}: {' '.join(bead.title.split())}")]
     labels = [x for x in bead.labels if not (owner_only and x in engine_labels)]
     meta = [bead.issue_type, f"P{bead.priority}" if bead.priority is not None else "", ", ".join(labels)]
     if any(meta):
@@ -75,10 +85,10 @@ def render(bead: Bead, comments: Sequence[Comment], owner: str, hint: str = "", 
     for key, head in SECTION_HEADS:
         text = people_lines(bead.notes) if key == "notes" else str(getattr(bead, key)).strip()
         if text:
-            parts += [(key, ""), (key, "## " + head), (key, text)]
+            parts += [(key, ""), (key, "## " + head), (key, fenced(text))]
     if bead.dependencies:
         parts += [("related", ""), ("related", "## Related beads (titles only)")]
-        parts += [("related", f"- {d.id} {d.title} [{d.status or '?'}]") for d in bead.dependencies]
+        parts += [("related", f"- {d.id} {' '.join(d.title.split())} [{d.status or '?'}]") for d in bead.dependencies]
     if hint.strip():
         parts += [("hint", ""), ("hint", "## Owner hint"), ("hint", hint.strip())]
     people = [c for c in comments if owner_written(c, owner)]
