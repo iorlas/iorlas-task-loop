@@ -54,7 +54,7 @@ class RunParts(Plumbing):
         self.assert_tree(step)
 
     def assert_tree(self, step: str, when: str = "before") -> None:
-        """Before and after every node, and before the land: this slot's git is the slot (lifesim-1mm: a core.worktree in the shared
+        """Before and after every node, and before the land: this slot's git is the slot (a core.worktree in the shared
         .git/config pointed every slot's git at another folder). Unpinned, as a worker's or check's git would see it. A wrong tree
         stops the run with an owner ask, never a skip."""
         bad = slotcheck.tree_problem(self.wt, self.git.unpinned(), self.env)

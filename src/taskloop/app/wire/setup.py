@@ -81,7 +81,7 @@ def stacks(repo: Path) -> dict[str, str]:
     """{stack: the file that shows it} for the repo's top folder: what the setup questions are tailored by."""
     marks = {"unity": "ProjectSettings/ProjectVersion.txt", "python": "pyproject.toml", "node": "package.json", "just": "justfile"}
     found = {name: mark for name, mark in marks.items() if (repo / mark).is_file()}
-    nested = next(repo.glob("*/" + marks["unity"]), None)  # a Unity project one folder down (lifesim keeps it in client/)
+    nested = next(repo.glob("*/" + marks["unity"]), None)  # a Unity project one folder down (kept in client/ by some repos)
     return found if "unity" in found or nested is None else {**found, "unity": str(nested.relative_to(repo))}
 
 
