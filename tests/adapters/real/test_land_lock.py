@@ -8,7 +8,6 @@ import fcntl
 import os
 import signal
 import subprocess
-import tempfile
 import threading
 from pathlib import Path
 from unittest import mock
@@ -18,6 +17,7 @@ from support import homes
 from support.case import Case
 from support.procsim import real_proc
 from support.tlmain import tl_main
+from support.tmpdir import TemporaryDirectory
 from support.waits import until
 
 from taskloop.adapters import landlock, procs
@@ -47,7 +47,7 @@ class Child:
 @NO_FCNTL
 class LandLockTests(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.repo = str(Path(self.tmp.name).resolve())  # tl land-lock resolves --repo: /var is /private/var on macOS
         self.env = {"XDG_CONFIG_HOME": str(Path(self.tmp.name) / "cfg")}

@@ -4,7 +4,6 @@ import os
 import signal
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 from unittest import mock
@@ -12,6 +11,7 @@ from unittest import mock
 import pytest
 import support.paths  # noqa: F401
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import childenv, procs
 from taskloop.contracts.env import snapshot
@@ -43,7 +43,7 @@ class Capture(Case):
         assert (ran.exit, ran.out.strip(), ran.err.strip(), ran.timed_out) == (3, "out", "err", False)
 
     def test_a_timeout_stops_the_child_and_everything_it_started(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             code = ("import subprocess, sys, time\n"
                     "w = subprocess.Popen(['sleep', '60'], start_new_session=True)\n"
                     "open(sys.argv[1], 'w').write(str(w.pid)); time.sleep(60)\n")
