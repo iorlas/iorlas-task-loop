@@ -1,13 +1,12 @@
 """The untracked files of a stage: which the plan or the writer meant, which are ignored, which the review must explain,
 and where strays go."""
-import fnmatch
 import shutil
 from pathlib import Path
 from typing import Any
 
 from taskloop.contracts.gitport import Git
-from taskloop.contracts.paths import TASK_EXCLUDE
 from taskloop.domain.prompts.review import NEW_FILES_TEXT
+from taskloop.domain.write.newfiles import new_file_kind
 
 
 class NewFiles:
@@ -19,29 +18,8 @@ class NewFiles:
     STAGE_DIFF_CAP = 40000
 
     def new_file_kind(self, path: str) -> str:
-        """tl-bxk.10.24: "ignored" (engine.untracked_ignore: never staged, never listed), "meant" (a plan stage lists it or
-        its folder in files, or a review accepted it) or "unexplained" (left out of the
-        commit, listed in the review brief). A .meta follows the file it belongs to."""
         e = self.e
-        p = path.replace("\\", "/")
-        if any(fnmatch.fnmatchcase(p, g) for g in e.cfg.untracked_ignore or []):
-            return "ignored"
-        if p.startswith(TASK_EXCLUDE):
-            return "ignored"
-        for q in (p, p[:-5]) if p.endswith(".meta") else (p,):
-            if q in e.accepted_new or q + ".meta" in e.accepted_new or self.planned(q):
-                return "meant"
-        return "unexplained"
-
-    def planned(self, q: str) -> bool:
-        """A plan stage lists the file, or a folder or glob that holds it."""
-        for st in (self.e.plan_data or {}).get("stages") or []:
-            for listed in st["files"]:
-                f = listed.strip().replace("\\", "/")
-                f = "" if f in (".", "./") else f[2:] if f.startswith("./") else f
-                if f and (q == f or q.startswith(f.rstrip("/") + "/") or fnmatch.fnmatchcase(q, f)):
-                    return True
-        return False
+        return new_file_kind(path, e.cfg.untracked_ignore or [], e.accepted_new, e.plan_data)
 
     def new_by_kind(self) -> dict[str, list[str]]:
         e = self.e
