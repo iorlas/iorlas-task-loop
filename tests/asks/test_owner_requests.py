@@ -5,7 +5,6 @@ halt path), a note reaches the next worker's prompt; a request for a run that is
 import argparse
 import json
 import os
-import tempfile
 import threading
 import time
 import types
@@ -22,6 +21,7 @@ from support.logs import typed
 from support.memstores import fake_stores
 from support.narrow import must
 from support.runs import manifest
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.asks import intake
 from taskloop.app.run import requests
@@ -39,7 +39,7 @@ RUN = "tl-5-20261026-100000"
 
 class RequestFile(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(self.tmp.name)
         self.now = time.time()
@@ -128,7 +128,7 @@ class Cli(Case):
     """`tl park BEAD` and `tl note BEAD text`: the newest run of the bead under the config dir."""
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": self.tmp.name})
         env.start()

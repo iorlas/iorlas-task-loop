@@ -2,11 +2,11 @@
 write's attempt. A miss goes back to the writer once with the reason and never parks; the planner is sent back once for a visual path
 touched with no look-objective, taste or show case."""
 import sys
-import tempfile
 from pathlib import Path
 from typing import ClassVar
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -23,7 +23,7 @@ CASES = [{"criterion": "the board is shown", "check": None, "class": "show",
 
 class Missing(Case):
     def test_a_registered_name_with_its_role_is_met_and_any_other_is_a_miss(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             root, src = Path(d) / "store", Path(d) / "board.png"
             src.write_bytes(PNG)
             slot = show_check.slot_of("repo", "t-1", "run1", 1)

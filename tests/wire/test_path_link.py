@@ -1,11 +1,11 @@
 """~/.local/bin/tl links to the shim; a different `tl` there is never replaced, and the doctor says which it is."""
 import os
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.wire import doctor, hook
 from taskloop.contracts.env import Env
@@ -14,7 +14,7 @@ from taskloop.contracts.env import Env
 @pytest.mark.skipif(os.name == "nt", reason="symlinks")
 class PathLink(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.home = Path(tmp.name)
         self.env = Env({"HOME": str(self.home), "XDG_CONFIG_HOME": str(self.home / "cfg"),

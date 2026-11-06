@@ -1,16 +1,16 @@
 """Profile stamps follow Git metadata without starting Git, including linked worktrees."""
 
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.doctor import profiles
 
 
 class ProfileStamp(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         self.repo = self.root / "repo"

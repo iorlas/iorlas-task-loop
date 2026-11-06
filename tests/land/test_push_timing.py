@@ -1,6 +1,5 @@
 """Accepted-stage pushes own their elapsed time and silence limit, including time in the pre-push hook."""
 
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -10,6 +9,7 @@ import support.paths  # noqa: F401
 from support.case import Case
 from support.narrow import must
 from support.narrow_hosts import FakeOutboundHost
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.land.outbound import Outbound
 from taskloop.app.run.budget import Budget
@@ -25,7 +25,7 @@ from taskloop.stores.runlog import RunLog
 
 class PushTiming(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.path = Path(tmp.name) / "run.jsonl"
         self.host = FakeOutboundHost()

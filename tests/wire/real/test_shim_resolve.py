@@ -1,10 +1,10 @@
 """The tl shim picks the newest installed task-loop on every call (the real sh, a fake uv that prints what it was asked to run)."""
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.wire import hook
 from taskloop.contracts.env import Env
@@ -12,7 +12,7 @@ from taskloop.contracts.env import Env
 
 class ShimResolves(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name).resolve()
         self.env = Env({"XDG_CONFIG_HOME": str(self.root / "config"), "CLAUDE_CONFIG_DIR": str(self.root / "claude")})

@@ -6,12 +6,12 @@ tests/live/test_allowlist_gates.py."""
 import json
 import os
 import pwd
-import tempfile
 from pathlib import Path
 
 from support.case import Case
 from support.checked import run_checked
 from support.tlmain import tl_main
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters.childenv import CHECK_HOME_NAMES, allowed, check_caches
 
@@ -25,7 +25,7 @@ def git(cwd: Path, *a: str) -> str:
 
 class ProbeChecks(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = str(Path(self.tmp.name, "cfg"))
 

@@ -46,3 +46,10 @@ def test_a_real_test_that_waits_is_not_told_to_inject_the_clock():
     assert "real process or socket" in report.hint("tests/loop/real/test_x.py::t", wait)
     assert "inject the clock" in report.hint("tests/loop/test_x.py::t", wait)
     assert report.hint("tests/loop/real/test_x.py::t", {"call_cpu": 6.0, "call_wall": 6.0}).startswith("real: keep the contract")
+
+
+def test_a_unit_test_whose_wait_is_in_setup_is_not_told_to_inject_the_clock():
+    slow_setup = {"setup_cpu": 0.1, "setup_wall": 6.0, "call_cpu": 0.1, "call_wall": 0.1}
+    hint = report.hint("tests/loop/test_x.py::t", slow_setup)
+    assert "inject the clock" not in hint
+    assert "setup" in hint

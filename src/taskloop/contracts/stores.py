@@ -12,6 +12,7 @@ from taskloop.contracts import docstore, events, log, paths, wire
 from taskloop.contracts.ask import Ask, AskAnswer, ThreadEntry
 from taskloop.contracts.askrows import AskRows, DbDocs, DbLedger
 from taskloop.contracts.dash import OwnerCause, Stick
+from taskloop.contracts.docrows import RowDoc, singleton
 from taskloop.contracts.docstore import ForeignVersion, Item, JsonStore, Ledger, Page, Present, Torn, refusal
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.guard import guard
@@ -384,46 +385,51 @@ class RestStore(JsonStore[Rest]):
         super().__init__(cfg.loop_rest(repo_key), Rest)
 
 
-class StatusStore(JsonStore[StatusSnapshot]):
+class StatusStore(RowDoc[StatusSnapshot]):
+    def __init__(self, cfg: paths.ConfigDir, quiet: bool = False) -> None:
+        super().__init__(singleton(cfg, StatusSnapshot, "snapshot:delegate.status", cfg.snapshot("delegate", "status"), quiet).docs, "")
+
+
+class StatusTriedStore(RowDoc[StatusTried]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.snapshot("delegate", "status"), StatusSnapshot)
+        super().__init__(singleton(cfg, StatusTried, "snapshot:delegate.tried", cfg.snapshot("delegate", "tried")).docs, "")
 
 
-class StatusTriedStore(JsonStore[StatusTried]):
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.snapshot("delegate", "tried"), StatusTried)
-
-
-class SharedNotesStore(JsonStore[SharedNotes]):
+class SharedNotesStore(RowDoc[SharedNotes]):
     def __init__(self, cfg: paths.ConfigDir, repo_key: str) -> None:
-        super().__init__(cfg.shared(repo_key), SharedNotes)
+        super().__init__(singleton(cfg, SharedNotes, "shared:" + repo_key, cfg.shared(repo_key)).docs, "")
 
 
-class ReposStore(JsonStore[ReposIndex]):
-    """repos.json: every repo `tl` has seen, by name. Adding one reads and writes under a lock, so two processes never drop a repo.
-    A v1 file (keyed by path) is converted on its first read; no reader of v1 stays."""
+class ReposStore:
+    """The repos index: every repo `tl` has seen, by name, as the `kv` row `repos` of factory.db. Adding one reads and writes under a lock,
+    so two processes never drop a repo. An older tl's repos.json is adopted on the first read (a v1 file, keyed by path, is converted
+    first); no reader of v1 stays. `quiet` (the dashboard): a database that cannot be opened reads as no repos, and nothing is adopted."""
 
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.repos(), ReposIndex)
+    def __init__(self, cfg: paths.ConfigDir, quiet: bool = False) -> None:
+        self.doc = singleton(cfg, ReposIndex, "repos", cfg.repos(), quiet)
+        self.path = cfg.repos()  # the older file
         self.lock = cfg.lock_record("repos", "index")
 
+    def get(self) -> ReposIndex | None:
+        return self.doc.get()
+
+    def write(self, rec: ReposIndex) -> None:
+        self.doc.write(rec)
+
     def index(self) -> ReposIndex:
-        """The index (empty when the file is missing). A file in another version is an error (ValueError), never read as empty."""
-        try:
-            text = self.path.read_text(encoding="utf-8")
-        except FileNotFoundError:  # one read decides: a check after it races the writer that creates the file
+        """The index (empty when there is none). One of another version is an error (ValueError), never read as empty."""
+        read = self.doc.read()
+        if isinstance(read, Present):
+            return read.rec
+        if isinstance(read, Absent):
             return ReposIndex()
-        try:
-            return wire.load(ReposIndex, json.loads(text))
-        except wire.StaleRecord as e:
-            if e.found != 1:
-                raise ValueError(self._refusal()) from None
+        if isinstance(read, ForeignVersion) and read.found == 1:
             return self._convert()
-        except ValueError:
-            raise ValueError(self._refusal()) from None
+        raise ValueError(self._refusal())
 
     def _refusal(self) -> str:
-        return f"{self.path} is not a repos index of this version: delete it; every tl process registers its repo again"
+        return (f"{self.path} (or its row in factory.db) is not a repos index of this version: delete it; "
+                "every tl process registers its repo again")
 
     def _convert(self) -> ReposIndex:
         """v1 (path to added) to v2 (name to path and added). Of paths with one name the first stays; the rest are said and dropped."""
@@ -440,6 +446,8 @@ class ReposStore(JsonStore[ReposIndex]):
                 repos[name] = RepoEntry(path=path, added=ent["added"])
             idx = ReposIndex(repos=repos)
             self.write(idx)
+            with contextlib.suppress(OSError):
+                self.path.unlink()
             return idx
 
     def known(self) -> list[str]:
@@ -484,26 +492,26 @@ class ReposStore(JsonStore[ReposIndex]):
             return gone
 
 
-class PinStore(JsonStore[Pin]):
+class PinStore(RowDoc[Pin]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.pin(), Pin)
+        super().__init__(singleton(cfg, Pin, "pin", cfg.pin()).docs, "")
 
 
-class ReleaseResultStore(JsonStore[ReleaseResult]):
+class ReleaseResultStore(RowDoc[ReleaseResult]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.release_result(), ReleaseResult)
+        super().__init__(singleton(cfg, ReleaseResult, "release:last", cfg.release_result()).docs, "")
 
 
-class DashStateStore(JsonStore[DashState]):
+class DashStateStore(RowDoc[DashState]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.dash_state(), DashState)
+        super().__init__(singleton(cfg, DashState, "dash:state", cfg.dash_state()).docs, "")
 
 
-class BadVersionStore(JsonStore[BadVersions]):
+class BadVersionStore(RowDoc[BadVersions]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.bad_versions(), BadVersions)
+        super().__init__(singleton(cfg, BadVersions, "bad-versions", cfg.bad_versions()).docs, "")
 
 
-class ReflectStateStore(JsonStore[ReflectState]):
+class ReflectStateStore(RowDoc[ReflectState]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.reflect_state(), ReflectState)
+        super().__init__(singleton(cfg, ReflectState, "reflect:digest", cfg.reflect_state()).docs, "")

@@ -88,8 +88,14 @@ class CheckHost(Protocol):
     def spawner(self) -> Spawner: ...  # how a check's helper processes are started
     @property
     def env(self) -> Env: ...  # the process environment, taken once at the edge: what the children are built from
-    killed: bool  # the last sh() of this thread was stopped by the engine (an `in: linux` run sets it the same way)
-    wall_hit: bool  # ...at its wall limit
+    @property
+    def killed(self) -> bool: ...  # the last sh() of this thread was stopped by the engine (an `in: linux` run sets it the same way)
+    @killed.setter
+    def killed(self, value: bool) -> None: ...
+    @property
+    def wall_hit(self) -> bool: ...  # ...at its wall limit
+    @wall_hit.setter
+    def wall_hit(self, value: bool) -> None: ...
     @property
     def bead_env(self) -> Mapping[str, str]: ...  # the slot's environment (sh() gives it to every command)
 
