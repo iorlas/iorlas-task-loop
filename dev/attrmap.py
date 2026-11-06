@@ -86,7 +86,9 @@ def main():
         print(f"\n{c}: {len(by[c])}")
         for k in by[c]:
             v = rows[k]
-            print(f"  {k:28} w={','.join(f'{s}:{n}' for s, n in v['writes'].items()) or '-':28} r={','.join(f'{s}:{n}' for s, n in v['reads'].items())}")
+            w = ",".join(f"{s}:{n}" for s, n in v["writes"].items()) or "-"
+            r = ",".join(f"{s}:{n}" for s, n in v["reads"].items())
+            print(f"  {k:28} w={w:28} r={r}")
 
 
 if __name__ == "__main__":
