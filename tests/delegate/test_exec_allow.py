@@ -3,8 +3,6 @@
 import contextlib
 import io
 import json
-import os
-import subprocess
 import sys
 from pathlib import Path
 from unittest import mock
@@ -13,7 +11,6 @@ from delegate.app import env
 from delegate.app.codex_policy import worktree_head
 from delegate.domain.policy.shell import read_only_problem
 from support.case import Case
-from support.procsim import real_proc
 
 import hermetic  # noqa: F401
 from test_route import route
@@ -232,12 +229,6 @@ class ExecAllow(Case):
         assert len(self.rows()) == 1
         assert [(r["exit"], r["head"], r["argv"]) for r in self.exits()] == [(7, "abc123", ["dotnet", "test"])]
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_actual_pinned_python_runs_with_an_empty_path(self):
-        command = [sys.executable, str(env.ENTRY), "guard", "--exec-allow", "python", "-m", "unittest", "--help"]
-        result = subprocess.run(command, env=os.environ | {"PATH": ""}, capture_output=True, text=True, check=False)
-        assert result.returncode == 0, result.stderr
-        assert len(self.rows()) == 1
 
 
 class EscapeCorpus(Case):

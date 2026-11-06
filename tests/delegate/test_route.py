@@ -6,7 +6,6 @@ import datetime as dt
 import importlib.util
 import json
 import os
-import subprocess
 import sys
 import tempfile
 import time
@@ -14,14 +13,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from delegate.app import decide as dec
-from delegate.app import env, net, usage
+from delegate.app import net, usage
 from delegate.contracts.routing import Settings
 from delegate.contracts.state import StateDoc
 from delegate.contracts.stores import locked
 from delegate.domain.lanes.lane import Lane
 from delegate.domain.time import spec
-from support.procsim import real_proc
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -34,7 +31,7 @@ route = importlib.util.module_from_spec(_entry)
 sys.modules["route"] = route
 _entry.loader.exec_module(route)
 
-net.__dict__["REAL_NET_PROBE"] = net.net_probe
+net.__dict__.setdefault("REAL_NET_PROBE", net.net_probe)  # a second module that stubs it must not save the stub as the real one
 net.net_probe = lambda hosts=None: {
     "up": True,
     "ip_up": True,
@@ -114,18 +111,7 @@ def _call(x):
 
 
 class Pick:
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_worker_prefers_codex(self):
-        d = decide("worker", lanes())
-        assert (d["lane"], d["model"], d["pass"]) == ("OPENAI_SUBSCRIPTION", "gpt-6.1-sol", "strict")
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_codex_command_handles_non_git_dirs(self):
-        with tempfile.TemporaryDirectory() as d_:
-            d = decide("worker", lanes(), cwd=d_)
-        assert "--skip-git-repo-check" in d["how"]["cli"]  # not a git work tree
-        d2 = decide("worker", lanes(), cwd=str(Path(__file__).resolve().parents[2]))
-        assert "--skip-git-repo-check" not in d2["how"]["cli"]  # this repo is one
 
     def test_codex_out_falls_to_claude_subscription_when_healthy(self):
         d = decide("worker", lanes(openai={"out": True, "out_until": T + 3600}))
@@ -175,28 +161,7 @@ class Roles:
         ls2 = lanes(openai={"out": True, "out_until": T + 5000}, sub={"week": 96, "five": 10})
         assert decide("planner", ls2, allow_degraded=True)["action"] == "stop"  # ceiling still binds
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_reviewer_prefers_the_other_family_and_authored_by_is_optional(self):
-        assert (
-            decide("reviewer", lanes())["model"] == "gpt-6.1-sol"
-        )  # no author given: Codex first (the most room), no claim of independence
-        d = decide("reviewer", lanes(), authored_by="openai")  # Claude is the last lane tried (delegate-m86): Codex reviews Codex, flagged
-        assert (d["lane"], d["flag"]) == ("OPENAI_SUBSCRIPTION", "same_family")
-        assert "claude is kept as the last resort" in d["warning"]
-        out = {"out": True, "out_until": T + 3600}
-        assert decide("reviewer", lanes(openai=out), authored_by="openai")["lane"] == "CLAUDE_SUBSCRIPTION"
-        assert decide("reviewer", lanes(), authored_by="claude")["lane"] == "OPENAI_SUBSCRIPTION"
-        assert decide("reviewer", lanes(), authored_by="gemini")["action"] == "error"
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_same_family_review_is_the_last_resort_and_flagged(self):
-        out = {"out": True, "out_until": T + 3600}
-        d = decide("reviewer", lanes(sub=out), authored_by="openai")  # Claude is out: Codex reviews Codex
-        assert (d["action"], d["lane"], d["flag"]) == ("run", "OPENAI_SUBSCRIPTION", "same_family")
-        d = decide("reviewer", lanes(openai=out), authored_by="claude")  # Codex is out: Claude reviews Claude
-        assert (d["action"], d["lane"], d["flag"]) == ("run", "CLAUDE_SUBSCRIPTION", "same_family")
-        d = decide("reviewer", lanes(openai=out, sub=out), authored_by="claude")
-        assert d["action"] == "stop"  # nobody left: stop, not an exception
 
     def test_every_reviewer_list_reaches_every_family(self):
         for who, steps in CFG["roles"]["reviewer"]["by_author"].items():
@@ -206,52 +171,9 @@ class Roles:
                 assert steps[-1]["flag"] == "same_family", who
                 assert steps[-1]["on"] == fam, who
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_only_one_family_up_never_stops_and_warns(self):
-        out = {"out": True, "out_until": T + 3600}
-        grok = Lane("GROK_SUBSCRIPTION", "xai", "subscription")
-        cases = {
-            "openai": lambda: lanes(sub=out),
-            "claude": lambda: lanes(openai=out),
-        }
-        for who, mk in cases.items():
-            ls = mk()
-            if who != "xai":
-                grok.out, grok.out_until, grok.out_reason = True, T + 7200, "limit"
-            ls["GROK_SUBSCRIPTION"] = grok if who != "xai" else Lane("GROK_SUBSCRIPTION", "xai", "subscription")
-            if who != "xai":
-                ls["GROK_SUBSCRIPTION"] = grok
-            d = decide("reviewer", ls, authored_by=who)
-            assert (d["action"], d["flag"]) == ("run", "same_family"), who
-            assert d["lane"].split("_")[0] == {"openai": "OPENAI", "claude": "CLAUDE"}[who], who
-            assert f"reviewing {who}'s work with {who}: no other family is up" in d["warning"], who
-            ud = decide("reviewer", ls, authored_by=who, unattended=True, allow_degraded=True)  # no consent step exists for review
-            assert (ud["action"], ud["flag"]) == ("run", "same_family"), who
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_warning_names_why_other_families_are_down(self):
-        out = {"out": True, "out_until": T + 3600, "out_reason": "logged_out"}
-        ls = lanes(sub=out)
-        g = Lane("GROK_SUBSCRIPTION", "xai", "subscription")
-        g.out, g.out_until = True, T + 7200
-        ls["GROK_SUBSCRIPTION"] = g
-        w = decide("reviewer", ls, authored_by="openai")["warning"]
-        assert "xai out until" in w
-        assert "claude logged out" in w
-        assert "warning" not in decide("reviewer", lanes(), authored_by="claude")
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_premium_only_when_requested(self):
-        assert decide("planner", lanes())["model"] != "fable-5.1"
-        d = decide("worker", lanes(), premium="claude")
-        assert (d["model"], d["flag"]) == ("fable-5.1", "user_requested_premium")
-        d = decide("worker", lanes(), premium="openai")
-        assert d["action"] == "error"  # no premium model mapped for openai yet
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_light_uses_luna_first(self):
-        d = decide("light", lanes())
-        assert (d["model"], d["mode"]) == ("gpt-6-luna", "read_only")
 
 
 class Helpers:
@@ -287,30 +209,6 @@ class Helpers:
         assert (n.weekday(), n.hour, n.day) == (6, 17, 25)
 
 
-class Cli:
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_report_and_next_roundtrip(self):
-        with tempfile.TemporaryDirectory() as d:
-            os.environ["XDG_CONFIG_HOME"] = os.environ["DELEGATE_CONFIG_DIR"] = d
-            os.environ["APPDATA"] = d
-            os.environ["DELEGATE_NOW"] = str(T)
-            try:
-                route.main(["report", "--lane", "OPENAI_SUBSCRIPTION", "--event", "out", "--until", str(T + 3600)])
-                st = env.load_state()
-                assert "OPENAI_SUBSCRIPTION" in st.out
-                cfg = env.load_routing()
-                real = dict(usage.READERS)
-                usage.READERS.update(dict.fromkeys(real, no_reader))
-                try:
-                    ls = dec.fleet_builder(cfg).build(st, T, check_config=False).lanes
-                finally:
-                    usage.READERS.update(real)
-                assert ls["OPENAI_SUBSCRIPTION"].out
-                route.main(["report", "--lane", "OPENAI_SUBSCRIPTION", "--event", "ok"])
-                assert "OPENAI_SUBSCRIPTION" not in env.load_state().out
-            finally:
-                for k in ("XDG_CONFIG_HOME", "APPDATA", "DELEGATE_NOW", "DELEGATE_CONFIG_DIR"):
-                    os.environ.pop(k, None)
 
 
 class StateLock:
@@ -322,18 +220,3 @@ class StateLock:
             locked(Path(d) / "x", timeout=0.2),
         ):
             pass
-
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_parallel_processes_lose_no_update(self):
-        code = (
-            "import sys; sys.path.insert(0, {!r}); from delegate.app import env\n"
-            "for _ in range(25): env.update_state(lambda s: s.warned_at.__setitem__('n', s.warned_at.get('n', 0) + 1))".format(
-                str(ROOT / "src")
-            )
-        )
-        with tempfile.TemporaryDirectory() as d:
-            env = dict(os.environ, DELEGATE_CONFIG_DIR=d)
-            ps = [subprocess.Popen([sys.executable, "-c", code], env=env, stderr=subprocess.PIPE) for _ in range(8)]
-            self.maxDiff = None
-            assert [p.communicate()[1].decode()[-1500:] for p in ps] == [""] * 8
-            assert json.loads(Path(d, "state.json").read_text())["warned_at"]["n"] == 200

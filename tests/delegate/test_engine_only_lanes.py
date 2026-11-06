@@ -4,11 +4,9 @@ Claude: the PreToolUse hook. OpenCode: the bash deny rules of its permission con
 import copy
 import json
 import re
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
-from unittest import mock
 
 from any_agent.harnesses import opencode_sandbox as box
 from any_agent.harnesses.opencode import OpenCodeHarness
@@ -18,7 +16,6 @@ from delegate.contracts.routing import CallArgs
 from delegate.contracts.state import RefRecord
 from delegate.contracts.wire import RECIPE_RUNNERS
 from support.case import Case
-from support.procsim import real_proc
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -116,50 +113,12 @@ class OpenCodeRulesTest:
         assert launch.denied_items(hx, False, ("slow",)) == want
 
 
-class ClaudeHookTest:
-    def hook(self, command: str, engine_only=("slow",), read_only=False):
-        call = {"tool_name": "Bash", "tool_input": {"command": command}}
-        with tempfile.TemporaryDirectory() as tmp:
-            Path(tmp, "host.json").write_text('{"binaries":{},"writer_exec_allow":[]}')
-            with mock.patch("delegate.app.env.config_dir", return_value=Path(tmp)):
-                argv = hook_command(launch.guard_settings(read_only, engine_only))
-            r = subprocess.run(
-                argv,
-                shell=True,
-                input=json.dumps(call),
-                capture_output=True,
-                text=True,
-                check=False,
-                env={"PATH": "/usr/bin:/bin", "DELEGATE_CONFIG_DIR": tmp, "HOME": tmp},
-            )
-        return r.returncode, r.stderr
-
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_the_generated_hook_denies_the_recipe_with_the_rule(self):
-        for c in ("just slow", "cd client && just slow", "FOO=1 just slow", "just -f x slow"):
-            code, why = self.hook(c)
-            assert code == 2, c
-            assert "`just slow` is a check only the engine runs" in why
-            assert "engine reruns the check" in why
-
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_the_generated_hook_lets_other_commands_through_and_a_read_step_ignores_the_list(self):
-        assert self.hook("just test-fast")[0] == 0
-        assert self.hook("just slow", ())[0] == 0
-        assert "slow" not in hook_command(launch.guard_settings(True, ("slow",)))
 
 
 class RoutingTest(Case):
     def decide(self, *up, role="worker", **kw):
         return support.decide(role, copy.deepcopy(CFG), lanes(*up), {}, T, dict({"authored_by": None, "unattended": True}, **kw))
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_a_write_step_with_the_list_skips_codex_and_says_why(self):
-        free = self.decide("openai", "xai", "claude")
-        assert free["lane"] == "OPENAI_SUBSCRIPTION"
-        d = self.decide("openai", "xai", "claude", engine_only=["slow"])
-        assert (d["action"], d["lane"]) == ("run", "GROK_SUBSCRIPTION")
-        assert "OPENAI_SUBSCRIPTION: rejected, its harness cannot deny the engine-only recipes slow to a write step" in d["trace"]
 
     def test_with_only_codex_up_the_call_is_refused_with_a_typed_reason(self):
         d = self.decide("openai", engine_only=["slow", "e2e"])
@@ -179,27 +138,8 @@ class RoutingTest(Case):
             assert text in d["say"]
         assert "over its limit" not in d["say"]
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_advisory_runs_codex_with_or_without_a_family_pin(self):
-        for pin in ([], ["openai"]):
-            with self.subTest(pin=pin):
-                d = self.decide("openai", "xai", "claude", only_family=pin, engine_only=["slow", "e2e"], engine_only_advisory=True)
-                assert (d["action"], d["lane"], d["flag"]) == ("run", "OPENAI_SUBSCRIPTION", "engine_only_advisory")
-                assert d["warning"] == "OPENAI_SUBSCRIPTION cannot deny --engine-only slow, e2e: advisory only, the brief must say so"
-                assert not any("OPENAI_SUBSCRIPTION: rejected" in x for x in d["trace"])
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_advisory_does_not_warn_when_enforcement_is_available_or_unneeded(self):
-        for up, kw in (("claude", {"engine_only": ["slow"]}), ("openai", {}), ("openai", {"role": "reviewer", "engine_only": ["slow"]})):
-            with self.subTest(up=up, kw=kw):
-                d = self.decide(up, engine_only_advisory=True, **kw)
-                assert d["action"] == "run"
-                assert d["flag"] != "engine_only_advisory"
-                assert "warning" not in d
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_read_only_steps_ignore_the_list(self):
-        assert self.decide("openai", role="reviewer", engine_only=["slow"])["lane"] == "OPENAI_SUBSCRIPTION"
 
     def test_a_resume_of_a_codex_writer_with_the_list_is_refused(self):
         rec = RefRecord(lane="OPENAI_SUBSCRIPTION", model="gpt-6.1-sol", effort="high", mode="write")

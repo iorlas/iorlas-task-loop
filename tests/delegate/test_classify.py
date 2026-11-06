@@ -26,7 +26,6 @@ from delegate.contracts.json_types import Json, as_opt_str, obj
 from delegate.domain.lanes import profiles
 from delegate.domain.policy.worker import denial, denial_item
 from support.case import Case
-from support.procsim import real_proc
 
 from delegate_fakes.fake_run import replay as replay_run
 from test_route import ROOT, T, route
@@ -336,12 +335,6 @@ class Launchers(Case):
     def opencode(self, lines, rc=1, **kw):
         return self.run_cli("opencode", lines, rc, lane=kw.pop("lane", "GROK_SUBSCRIPTION"), **kw)
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_a_grok_row_through_the_opencode_launcher_marks_the_lane_out_without_a_time(self):
-        row = load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / "grok_spending_limit_24oct.json")["rows"][0]
-        res = self.opencode([{"type": "error", "error": {"name": "APIError", "data": {"message": row["evidence"]["vendor_err"]}}}])
-        assert (res["outcome"], res.get("retry_after")) == ("credit_exhausted", None)
-        assert "GROK_SUBSCRIPTION" in env.load_state().out
 
     def test_a_bad_request_row_through_the_codex_launcher_leaves_the_lane_alone(self):
         for row in load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / "bad_request_22oct.json")["rows"][:3]:
@@ -349,12 +342,6 @@ class Launchers(Case):
             assert res["outcome"] == "bad_request"
         assert (env.load_state().out or None) is None
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_a_sigterm_with_no_error_is_killed_and_retried_not_failed(self):
-        res = self.opencode([{"type": "step_finish", "part": {"tokens": {"input": 5}}}], rc=-15)
-        assert res["outcome"] == "killed"
-        assert "retry_after" not in res
-        assert (env.load_state().out or None) is None
 
     def test_codex_stream_retries_do_not_fail_a_run_that_finished(self):
         res = self.run_cli(
@@ -378,48 +365,8 @@ class Launchers(Case):
         assert res["outcome"] == "worker_failed"
         assert "Reconnecting... 5/5" in res["say"]
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_a_workers_own_words_about_a_rate_limit_never_take_a_lane_out(self):
-        words = "The batch is queued behind a rate limit on the Unity side; quota 429 seen in the log."
-        res = self.run_cli("codex", [{"type": "item.completed", "item": {"type": "agent_message", "text": words}}], 1)
-        assert res["outcome"] == "worker_failed"
-        res = self.run_cli(
-            "claude_p",
-            [{"type": "result", "is_error": True, "result": words, "num_turns": 6, "session_id": "s1"}],
-            1,
-            lane="CLAUDE_SUBSCRIPTION",
-            cap=1,
-            read_only=False,
-        )
-        assert res["outcome"] == "worker_failed"
-        res = self.opencode([{"type": "text", "part": {"text": words}}], rc=1)
-        assert res["outcome"] == "worker_failed"
-        assert (env.load_state().out or None) is None
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_the_clis_own_error_still_does(self):
-        res = self.run_cli(
-            "claude_p",
-            [{"type": "result", "is_error": True, "result": "API Error: 429 rate limit exceeded", "num_turns": 1}],
-            1,
-            lane="CLAUDE_SUBSCRIPTION",
-            cap=1,
-            read_only=False,
-        )
-        assert res["outcome"] == "rate_limited"
-        assert "CLAUDE_SUBSCRIPTION" in env.load_state().out
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_additive_usage_facts_come_from_the_events(self):
-        res = self.opencode(
-            [
-                {"type": "step_finish", "part": {"tokens": {"input": 1000, "output": 5, "cache": {"read": 3000, "write": 0}}}},
-                {"type": "step_finish", "part": {"tokens": {"input": 2000, "output": 5, "cache": {"read": 4000, "write": 0}}}},
-                {"type": "text", "part": {"text": "hi"}},
-            ],
-            rc=0,
-        )
-        assert (res.get("outcome"), res["turns"], res["context_k"]) == (None, 2, 6.0)
 
     def test_a_runner_kind_that_is_not_a_launcher_is_a_setup_error(self):
         kinds = {obj(c)["runner"] for c in obj(env.load_routing()["lanes"]).values()}

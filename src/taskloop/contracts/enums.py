@@ -135,11 +135,3 @@ class LockWhat(StrEnum):
     RELEASE = "release"
     LOOP = "loop_run"
     RESOURCE = "resource"
-
-
-class Family(StrEnum):
-    OPENAI = "openai"
-    CLAUDE = "claude"
-    XAI = "xai"
-    DEEPSEEK = "deepseek"
-    ZAI = "zai"
