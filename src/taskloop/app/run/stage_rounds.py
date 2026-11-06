@@ -58,7 +58,10 @@ def run_round_step(e: RunHost, step: Step, s: StageState) -> tuple[Step, bool]:
         s.feedback = e.judge.look_step(s.st, s.w, s.name, s.last, checks=False)
         following = Step.WRITE if s.feedback else Step.CHECKS
     elif step is Step.CHECKS:
-        flow = e.stage_loop.checking.run(s)
+        try:
+            flow = e.stage_loop.checking.run(s)
+        finally:
+            e.stage_loop.hand_on(s)
         if flow == PREPARED:
             flow = prepared_write(e, s)
             return (Step.REPLAN if flow == REPLAN else Step.WRITE if flow else Step.LOOK), False
@@ -75,7 +78,10 @@ def run_round_step(e: RunHost, step: Step, s: StageState) -> tuple[Step, bool]:
 def prepared_write(e: RunHost, s: StageState) -> str:
     """A prerequisite repair repeats the standalone write at the same attempt number."""
     while True:
-        flow = e.stage_loop.writing.run(s, look=False)
+        try:
+            flow = e.stage_loop.writing.run(s, look=False)
+        finally:
+            e.stage_loop.hand_on(s)
         if flow != PREPARED:
             return flow
 
