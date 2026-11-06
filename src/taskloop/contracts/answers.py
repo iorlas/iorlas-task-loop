@@ -29,9 +29,6 @@ ARGV_DOC: Final = CHECK_DOC  # shown with a check that is not one of the two for
 KINDS: Final = get_args(Kind)
 ROUTED_KINDS: Final = ("engine_step", "checkable", "external_fact", "taste", "owner_decision")
 LEGACY_KINDS: Final = ("requirement", "number", "deletion", "link", "case", "tooling")
-INPUT_KINDS: Final = get_args(InputKind)
-PROVED_BY: Final = get_args(ProvedBy)
-CAUSE_CLASSES: Final = get_args(Cause)
 VERDICTS: Final = get_args(Verdict)
 
 # tl-ntp (owner ruling 82 item 1): agents assume and record an Assumption; only a step that cannot be undone may ask the owner.

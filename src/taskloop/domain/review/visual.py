@@ -9,7 +9,6 @@ from taskloop.contracts.plancheck import Open
 from taskloop.domain.checks.matchers import glob_re
 from taskloop.domain.plan.matchers import word_set
 
-FOLLOW_UP_LABEL: Final = "follow-up"
 VISUAL_CLASSES: Final = frozenset({"look-objective", "taste", "show"})
 
 
