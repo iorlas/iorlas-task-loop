@@ -31,9 +31,11 @@ def own_home():
     saved = {k: os.environ.get(k) for k in ENV}
     d = tempfile.mkdtemp(prefix="t-", dir=hermetic.ROOT)
     hermetic.home(d)
+    tempfile.tempdir = None  # gettempdir caches the first answer: a test's own TMPDIR, gone with it
     try:
         yield
     finally:
+        tempfile.tempdir = None
         for k, v in saved.items():
             os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
         shutil.rmtree(d, ignore_errors=True)
