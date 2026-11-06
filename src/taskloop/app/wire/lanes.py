@@ -1,26 +1,23 @@
 """`tl lanes`: ask delegate for its status once (`route.py status --json`, spends no quota) and file it as the StatusSnapshot the
 dashboard reads, and each window's use into the usage history. `tl usage` files it too, on its way. The dashboard never runs delegate."""
-import json
 import time
 from collections.abc import Callable
 
 from taskloop.adapters import delegate as sdelegate
 from taskloop.adapters.ident import config_dir
 from taskloop.contracts import paths
-from taskloop.contracts.delegate_status import snapshot_of
 from taskloop.contracts.env import Env
 from taskloop.contracts.procport import Spawner
 from taskloop.contracts.rowstores import StatusStore, StatusTriedStore
-from taskloop.contracts.snapshots import StatusTried
+from taskloop.contracts.snapshots import StatusSnapshot, StatusTried
 from taskloop.contracts.stores import UsageHistory
 
 EVERY_S = 20 * 60  # the loop files delegate's status again when the snapshot is this old
 
 
-def file_answer(text: str, cfg: paths.ConfigDir) -> str | None:
-    """Parse one `status --json` answer and file it. None when filed, else why not."""
+def file_snapshot(snap: StatusSnapshot, cfg: paths.ConfigDir) -> str | None:
+    """File one status snapshot and its usage history. None when filed, else why not."""
     try:
-        snap = snapshot_of(json.loads(text[text.index("{"):]))
         StatusStore(cfg).write(snap)
         history = UsageHistory(cfg)  # the usage history grows with each filed snapshot and is pruned by age here, its one owner
         history.record(snap)
@@ -32,10 +29,11 @@ def file_answer(text: str, cfg: paths.ConfigDir) -> str | None:
 
 def file_status(spawner: Spawner, env: Env) -> str | None:
     """Ask delegate and file the answer. None when filed, else a line saying why not."""
-    status = sdelegate.status_json()
-    if not status:
-        return "delegate status could not be built"
-    return file_answer(json.dumps(status), paths.ConfigDir(config_dir(env)))
+    try:
+        snap = sdelegate.status_snapshot()
+    except ValueError as e:
+        return f"delegate status not filed: {e}"
+    return file_snapshot(snap, paths.ConfigDir(config_dir(env)))
 
 
 def refresh(spawner: Spawner, env: Env) -> int:

@@ -18,6 +18,8 @@ from typing import Any
 from delegate import api
 from taskloop.adapters import delegate_wire
 from taskloop.contracts.delegate import REASON_TIMEOUT, DelegateResult, Permanence, RunRequest, Scope
+from taskloop.contracts.delegate_status import snapshot_of
+from taskloop.contracts.snapshots import StatusSnapshot
 
 CONTRACT = delegate_wire.CONTRACT  # the contract number this engine speaks
 BACKSTOP_S = 120  # the engine stops the child at the node's limit plus this
@@ -77,6 +79,14 @@ def status_json(claude_usage: Any = None) -> dict[str, Any]:
         return dict(api.as_json(api.status(claude_usage)))
     except (Exception, SystemExit):  # a delegate with no config or no login is an empty status, not a crash of the caller
         return {}
+
+
+def status_snapshot(claude_usage: object = None) -> StatusSnapshot:
+    """delegate's status read into the StatusSnapshot the dashboard files. ValueError when there is none or its shape is unreadable."""
+    status = status_json(claude_usage)
+    if not status:
+        raise ValueError("delegate status could not be built")
+    return snapshot_of(status)
 
 
 @dataclass(frozen=True)
