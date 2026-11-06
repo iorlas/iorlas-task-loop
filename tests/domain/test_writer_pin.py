@@ -50,3 +50,42 @@ class Pin(Case):
             assert "CODEX: just check" in why
             assert stop.fix in why
             assert reason in why
+
+
+class SecondFamily(Case):
+    """engine.second_writer_family: one light bead in ten is written by a second family, chosen by the bead id alone (tl-7i9k.17)."""
+
+    def test_the_share_is_one_in_ten_and_the_same_for_the_same_id(self):
+        ids = [f"tl-{n:04x}" for n in range(2000)]
+        hits = [i for i in ids if pin.warm_second(i, True, "claude", [], ["openai"])]
+        assert 0.08 * len(ids) <= len(hits) <= 0.12 * len(ids)
+        assert hits == [i for i in ids if pin.warm_second(i, True, "claude", [], ["openai"])]
+
+    def test_a_chosen_bead_is_pinned_to_the_second_family_alone(self):
+        chosen = next(i for i in (f"tl-{n}" for n in range(500)) if pin.warm_second(i, True, "claude", [], ["openai"]))
+        assert pin.warm_second(chosen, True, "claude", [], ["openai"]) == ["claude"]
+
+    def test_nothing_moves_when_off_heavy_or_labelled(self):
+        chosen = next(i for i in (f"tl-{n}" for n in range(500)) if pin.warm_second(i, True, "claude", [], ["openai"]))
+        assert pin.warm_second(chosen, True, "", [], ["openai"]) == []  # unset: dark
+        assert pin.warm_second(chosen, False, "claude", [], ["openai"]) == []  # a heavy plan
+        assert pin.warm_second(chosen, True, "claude", ["writer-family:xai"], ["openai"]) == []  # the bead pins its own family
+        assert pin.warm_second(chosen, True, "claude", [], ["claude"]) == []  # already the pinned family
+
+    def test_light_is_one_stage_and_no_host_grant(self):
+        assert pin.is_light(1, False)
+        assert not pin.is_light(2, False)
+        assert not pin.is_light(1, True)
+        assert not pin.is_light(0, False)  # no plan yet: not known to be light
+
+    def test_the_effective_pin_is_the_second_family_for_a_chosen_bead_else_the_usual_one(self):
+        chosen = next(i for i in (f"tl-{n}" for n in range(500)) if pin.warm_second(i, True, "claude", [], ["openai"]))
+        other = next(i for i in (f"tl-{n}" for n in range(500)) if not pin.warm_second(i, True, "claude", [], ["openai"]))
+        assert pin.families(["openai"], [], second=pin.Warm("claude", chosen, True)) == ["claude"]
+        assert pin.families(["openai"], [], second=pin.Warm("claude", other, True)) == ["openai"]
+        assert pin.families(["openai"], []) == ["openai"]
+
+    def test_the_stop_words_say_it_is_the_warm_second_family_and_the_bead_waits(self):
+        why = pin.stop_why("write", ["claude"], "only_family_unready", "claude out", warm="claude")
+        assert "second writer family (claude)" in why
+        assert "no other family is used" in why
