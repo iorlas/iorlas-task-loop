@@ -6,7 +6,7 @@ browser time elapsed since the fetch (a 304 keeps the old `t`). Ids are bd ids a
 wherever a row can come from more than one. A field with no source yet keeps its default and the doc names the
 slice that fills it.
 """
-from typing import Annotated, ClassVar, Literal, final
+from typing import Annotated, ClassVar, Final, Literal, final
 
 import msgspec
 
@@ -476,6 +476,7 @@ class CauseReq(Rec):
     run: str
     cause: OwnerCause
     ask: str | None = None
+    key: str = ""  # idempotency key: a retry with the same key gets the first answer back
 
 
 @final
@@ -484,6 +485,7 @@ class AckReq(Rec):
     bead: WireBead
     run: str
     ack: bool
+    key: str = ""  # idempotency key: a retry with the same key gets the first answer back
 
 
 @final
@@ -499,6 +501,7 @@ class ParkReq(Rec):
     project: str
     bead: WireBead
     run: str
+    key: str = ""  # idempotency key: a retry with the same key gets the first answer back
 
 
 @final
@@ -506,6 +509,7 @@ class StopReq(Rec):
     project: str
     bead: WireBead
     run: str
+    key: str = ""  # idempotency key: a retry with the same key gets the first answer back
 
 
 @final
@@ -514,13 +518,17 @@ class NoteReq(Rec):
     bead: WireBead
     run: str
     text: str
+    key: str = ""  # idempotency key: a retry with the same key gets the first answer back
 
 
 @final
 class Result(Rec):
     ok: bool
     message: str = ""
+    receipt: Literal["", "accepted", "refused"] = ""  # set with an idempotency key; "applied" is the engine's, not reported yet
 
+
+READ_PROTOCOL: Final = 1  # the dashboard's HTTP read/write protocol; bump it with any change an older page or server cannot take
 
 WRITES: dict[str, type] = {
     "answer": AnswerReq,

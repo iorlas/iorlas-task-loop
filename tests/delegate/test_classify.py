@@ -361,11 +361,11 @@ class Ladder:
     def test_one_patterns_block_one_copy_of_each_regex(self):
         here = ROOT / "src" / "delegate" / "adapters" / "harness" / "classify.py"
         others = [p for p in (ROOT / "src" / "delegate").rglob("*.py") if p != here]
-        for name in ("LIMIT_RE", "LOGIN_RE", "NETWORK_RE", "SPEND_RE"):
+        for name in ("LIMIT_RE", "LOGIN_RE", "NETWORK_RE", "SPEND_RE", "DROP_RE"):
             assert f"\n{name} = re.compile" in here.read_text(encoding="utf-8")
             for p in others:
                 assert f"\n{name} = re.compile" not in p.read_text(encoding="utf-8"), p.name
-        assert set(classify.PATTERNS) == {"limit", "credit", "spend", "login", "network", "codex_status", "bad_request"}
+        assert set(classify.PATTERNS) == {"limit", "credit", "spend", "login", "network", "dropped", "codex_status", "bad_request"}
 
 
 class Launchers(Case):
