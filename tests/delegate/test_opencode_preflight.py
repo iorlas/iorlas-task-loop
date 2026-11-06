@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from delegate.adapters.harness import opencode_sandbox as box
-from delegate.adapters.harness.base import LaunchInputs
-from delegate.adapters.harness.opencode import OpenCodeHarness, Profile
+from any_agent.harnesses import opencode_sandbox as box
+from any_agent.harnesses.opencode import OpenCodeHarness, Profile
+from any_agent.protocol import LaunchInputs
 from delegate.app import cockpit, env, launch, onboard
 from support.case import Case
 

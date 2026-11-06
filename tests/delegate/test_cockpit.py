@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from delegate.adapters.harness.opencode import OpenCodeHarness
+from any_agent.harnesses.opencode import OpenCodeHarness
 from delegate.app import cockpit, env, harnesses, onboard, status, usage
 from delegate.domain.lanes.lane import Lane
 from delegate.domain.time import spec
