@@ -10,7 +10,7 @@ from taskloop.contracts.dash import BeadCard, Column, Marker, Phase, Totals
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop_dash.tails import parse_ts
-from taskloop_dash.views import columns, names, passes, phases
+from taskloop_dash.views import columns, floor, names, passes, phases
 from taskloop_dash.views.runfacts import Run
 from taskloop_dash.views.world import ProjectIn, World
 
@@ -76,12 +76,22 @@ class Board:
         self.w = w
         self.by_id = {p.id: {b.id: b for b in p.beads} for p in w.projects}
         self._passes: dict[tuple[str, str], list[passes.PassView]] = {}
+        self._stalled: dict[str, dict[str, str]] = {}
         self.usual = self.usual_by_lane()
 
     def passes_of(self, bead: tuple[str, str]) -> list[passes.PassView]:
         got = self._passes.get(bead)
         if got is None:
             got = self._passes[bead] = passes.passes_of(self.w.runs.get(bead, ()))
+        return got
+
+    def stalled(self, p: ProjectIn) -> dict[str, str]:
+        """{bead: why} of the beads a slot claimed and failed to start inside the startup lease (one slot table per project)."""
+        got = self._stalled.get(p.id)
+        if got is None:
+            runs = {b: rs for (key, b), rs in self.w.runs.items() if key == p.id}
+            table = floor.table_of(p, runs, self.w.now)
+            got = self._stalled[p.id] = {v.bead: v.idle_why for v in table.slots if v.bead and v.idle_why.startswith("start stalled")}
         return got
 
     def usual_by_lane(self) -> dict[str, tuple[int, int]]:
@@ -112,7 +122,8 @@ class Board:
             look=any(i.bead == b.id for i in p.looks),
             life=newest.life if newest else None, phase=cur.phase if cur else None, close=newest.close if newest else None,
             blocked=bool(blocking),
-            abandoned=abandoned.get(b.id, ""), ask_line=ask_line, step_text=cur.text if cur else "", wait=newest.wait if newest else None,
+            abandoned=abandoned.get(b.id, "") or self.stalled(p).get(b.id, ""),
+            ask_line=ask_line, step_text=cur.text if cur else "", wait=newest.wait if newest else None,
             blocker=blocking[0] if blocking else "", closed_reason=b.close_reason, assignee=b.assignee,
             stuck=bool(newest and newest.stuck), stuck_line=passes.stuck_text(newest.stuck) if newest and newest.stuck else "")
         col, mark = columns.column(f), columns.marker(f)

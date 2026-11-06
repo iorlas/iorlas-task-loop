@@ -80,11 +80,25 @@ def codex_reset_now(t: float) -> float | None:
     return min(full) if full else None
 
 
-def repo_instruction_text(cwd: str, cap: int = 32768) -> str:
+def ref_problem(kind: str, ref: str) -> str:
+    """Why a call with `instructions_ref` cannot run on this harness ('' when it can). OpenCode loads AGENTS.md itself and cannot be told
+    not to, so a call that must see only the base's text is refused there rather than run with the candidate's."""
+    return f"instructions_ref cannot be honored on {kind}: it loads the work tree's AGENTS.md itself" if ref and kind == "opencode" else ""
+
+
+def repo_instruction_text(cwd: str, cap: int = 32768, ref: str = "") -> str:
     """--restricted keeps Claude from loading the repo's CLAUDE.md; Codex reads AGENTS.md. Both lanes get the same files
     (repo_instructions),
     capped like Codex's project_doc_max_bytes."""
     out, left = "", cap
+    if ref:  # the base's files, from git objects
+        for name, folder, text in decide.base_instructions(cwd, ref):
+            body = text[:left]
+            left -= len(body)
+            out += f"\n\nRepository instructions ({name} in {folder}, as committed at {ref[:12]}):\n{body}"
+            if left <= 0:
+                break
+        return out
     for f in decide.repo_instructions(cwd):
         with contextlib.suppress(OSError):
             body = f.read_text(encoding="utf-8", errors="replace")[:left]
@@ -175,6 +189,7 @@ def prepare_codex(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: floa
     if not exe:
         return {"outcome": "setup", "say": "codex CLI not found on PATH"}
     hx = CodexHarness(a.resume)
+    ref = getattr(a, "instructions_ref", "") or ""
     spec = hx.launch_spec(
         LaunchInputs(
             exe=exe,
@@ -186,7 +201,7 @@ def prepare_codex(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: floa
             env=decide.codex_env(env.child_env(), h.cwd, h.sandbox),
             cli=h.cli,
             access=decide.CODEX_ACCESS,
-            isolation=h.isolation,
+            isolation=[*h.isolation, *decide.instruction_isolation(ref)],
             schema=a.schema,
             resume=a.resume,
             prompt=" ".join(
@@ -199,6 +214,7 @@ def prepare_codex(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: floa
                     DENIED_RULE,
                 )
             )
+            + (repo_instruction_text(h.cwd, ref=ref) if ref else "")
             + "\n\n"
             + brief,
         )
@@ -232,7 +248,7 @@ def prepare_claude(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: flo
             schema=a.schema,
             resume=a.resume,
             session=rid,
-            system=PREAMBLE + repo_instruction_text(h.cwd),
+            system=PREAMBLE + repo_instruction_text(h.cwd, ref=getattr(a, "instructions_ref", "") or ""),
             settings=json.dumps(guard_settings(h.read_only, tuple(getattr(a, "engine_only", None) or ()))),
             write=h.write,
         )
@@ -342,6 +358,8 @@ def launch_worker(
     """One worker, end to end: its harness builds the launch, the supervisor runs it, the one ladder settles it. -> dict[str, Json] of
     result fields."""
     kind = how_of(d).kind
+    if why := ref_problem(kind, getattr(a, "instructions_ref", "") or ""):
+        return {"outcome": "setup", "say": why}
     prep = PREPARE[kind](d, brief, a, rid, t, cfg)
     if isinstance(prep, dict):
         return prep
@@ -399,8 +417,7 @@ def finish_run(hx: Harness, h: How, a: env.Args, d: dict[str, Json], t: float, o
         codex_usage(res, x)
     if out.stream_tail:
         res["stream_tail"] = out.stream_tail
-    if w.why == "hung":
-        res["hung_words"], res["hung_kind"] = w.words, w.kind
+    hung = settle.Hung(w.words or "printed nothing", w.kind or "first_event") if w.why == "hung" else None
     facts = dict(sm.facts, watchdog=w.why, msg=w.msg, secret=out.secret)
     o = classify(sm.rc, sm.vendor, sm.stderr, out.timed_out, sm.work, facts) if sm.check else None
     if (
@@ -422,6 +439,7 @@ def finish_run(hx: Harness, h: How, a: env.Args, d: dict[str, Json], t: float, o
             sm.tail,
             reset=(lambda: codex_reset_now(t)) if hx.kind == "codex" else None,
             login=login_text(h.kind, lane),
+            hung=hung,
         )
     else:
         env.update_state(lane_cleared(lane))
