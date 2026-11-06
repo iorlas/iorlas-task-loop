@@ -3,7 +3,10 @@ from taskloop.contracts.delegate import DelegateResult, Retry, StopFacts
 from taskloop.domain.lanes.outcome import Done, Failed, NeedsOwner, outcome_of
 
 
-def stopped(permanence, retry=Retry(kind="none"), **kw):
+NONE = Retry(kind="none")
+
+
+def stopped(permanence, retry=NONE, **kw):
     return DelegateResult(stop=StopFacts(reason="why", scope="lane", permanence=permanence, retry=retry), **kw)
 
 
