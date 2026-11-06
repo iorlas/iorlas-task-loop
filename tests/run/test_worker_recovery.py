@@ -322,7 +322,7 @@ def test_the_memo_is_published_before_the_answer_is_marked_consumed(tmp_path):
     c = mock.Mock(state=state, key=(1,), sha="x", node="plan", writer_family=None)
     host = SimpleNamespace(run_dir=tmp_path)
     worker = worker_call.WorkerCall(host, mock.Mock())
-    keep = mock.patch.object(worker_call.done_memo, "keep", side_effect=lambda *a: order.append("keep"))
+    keep = mock.patch.object(worker_call.asked, "settle", side_effect=lambda *a: order.append("keep"))
     with keep, pytest.raises(TypeError):  # the rest of end_call needs a whole host; only the order matters here
         worker.end_call(c, mock.Mock())
     assert order == ["keep", "consumed"]

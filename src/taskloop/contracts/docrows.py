@@ -2,6 +2,7 @@
 writer that read an older revision can be told), a follow-up outbox is a `kv` row. Forward-readable: a key this tl does not know is read
 past; a body of another `v` reads as foreign, a torn one as torn, as the file store did."""
 import json
+import sqlite3
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -82,34 +83,49 @@ class RowDoc[T: Rec]:
 
     def write(self, rec: T, *, expect_rev: int | None = None) -> None:
         """Replace the row; `expect_rev` (a checkpoint's): refused with StaleRevision unless the row is still at that revision."""
+        with self.docs.rows.transaction() as con:
+            self.write_in(con, rec, expect_rev=expect_rev)
+
+    def write_in(self, con: sqlite3.Connection, rec: T, *, expect_rev: int | None = None) -> None:
+        """`write` inside the caller's transaction: opening another on the shared connection would close it (shared_rw drops a busy one)."""
         d = self.docs
         body = json.dumps(wire.dump(rec), ensure_ascii=False)
-        with d.rows.transaction() as con:
-            if expect_rev is not None and d.revisioned:
-                row = con.execute(f"SELECT rev FROM {d.table} WHERE {d.key_col}=?", (self.k,)).fetchone()
-                if row is None or row[0] != expect_rev:
-                    raise StaleRevision(self.k)
-            bump = f", rev={d.table}.rev+1" if d.revisioned else ""
-            con.execute(f"INSERT INTO {d.table} ({d.key_col}, {d.body_col}, t) VALUES (?, ?, ?) "
-                        f"ON CONFLICT({d.key_col}) DO UPDATE SET {d.body_col}=excluded.{d.body_col}, t=excluded.t{bump}",
-                        (self.k, body, time.time()))
+        if expect_rev is not None and d.revisioned:
+            row = con.execute(f"SELECT rev FROM {d.table} WHERE {d.key_col}=?", (self.k,)).fetchone()
+            if row is None or row[0] != expect_rev:
+                raise StaleRevision(self.k)
+        bump = f", rev={d.table}.rev+1" if d.revisioned else ""
+        con.execute(f"INSERT INTO {d.table} ({d.key_col}, {d.body_col}, t) VALUES (?, ?, ?) "
+                    f"ON CONFLICT({d.key_col}) DO UPDATE SET {d.body_col}=excluded.{d.body_col}, t=excluded.t{bump}",
+                    (self.k, body, time.time()))
 
     def modify(self, fn: Callable[[T], T], tries: int = 8) -> bool:
+        return self._modify(fn, None, tries)
+
+    def modify_with(self, fn: Callable[[T], T], also: Callable[[sqlite3.Connection | None], None], tries: int = 8) -> bool:
+        return self._modify(fn, also, tries)
+
+    def _modify(self, fn: Callable[[T], T], also: Callable[[sqlite3.Connection | None], None] | None, tries: int) -> bool:
         """Read-modify-write one record: `fn` sees the stored record and its result replaces it only if no other writer got in between
-        (the revision is checked in the write's transaction; a lost race re-reads and runs `fn` again). False when there is no record."""
+        (the revision is checked in the write's transaction; a lost race re-reads and runs `fn` again). False when there is no record.
+        `also(con)` runs in the same transaction, before the write: both land or neither (with no record it runs alone)."""
         for _ in range(tries):
             self.get()  # adopts an older loop's file first, so the row and its revision exist
             d = self.docs
             found = d.rows.select(f"SELECT {d.body_col}, rev FROM {d.table} WHERE {d.key_col}=?", (self.k,)) if d.revisioned else []
-            if not found:
-                return False
-            read = self.codec().decode(self.forward(found[0][0]))
+            read = self.codec().decode(self.forward(found[0][0])) if found else None
             if isinstance(read, (Torn, ForeignVersion)):
                 raise wire.Refused(refusal(read))
             if not isinstance(read, Present):
+                if also is not None:
+                    with d.rows.transaction() as con:
+                        also(con)
                 return False
             try:
-                self.write(fn(read.rec), expect_rev=int(found[0][1]))
+                with d.rows.transaction() as con:
+                    if also is not None:
+                        also(con)
+                    self.write_in(con, fn(read.rec), expect_rev=int(found[0][1]))
                 return True
             except StaleRevision:
                 continue

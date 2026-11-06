@@ -4,7 +4,9 @@ Legacy prompt-only hashes cannot match the versioned execution identity; their o
 """
 
 import json
+import sqlite3
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -61,10 +63,22 @@ def keep(
     run_dir: Path, key: tuple[Any, ...], sha: str, answer_file: str, identity: CallIdentity | None = None,
 ) -> None:
     """The answer of the call at `key` was valid and used: remember where its raw copy is."""
-    if not answer_file:
-        return
-    rows = _rows(run_dir)
-    with rows.transaction() as con:
+    memo_in(run_dir, key, sha, answer_file, identity)(None)
+
+
+def memo_in(
+    run_dir: Path, key: tuple[Any, ...], sha: str, answer_file: str, identity: CallIdentity | None = None,
+) -> Callable[[sqlite3.Connection | None], None]:
+    """`keep` as a step for a transaction that is already open (the connection), or its own when none is (None): what `settle` hands
+    to the checkpoint's write, so the memo and the thread's updates land together."""
+    def write(con: sqlite3.Connection | None) -> None:
+        if not answer_file:
+            return
+        rows = _rows(run_dir)
+        if con is None:
+            with rows.transaction() as own:
+                write(own)
+            return
         m = rows.read(con, run_dir.name)
         if m is None:
             raise factorydb.DatabaseError(f"no run for consumed step: {run_dir.name}")
@@ -75,3 +89,4 @@ def keep(
                     "attempt=excluded.attempt,status=excluded.status,started=excluded.started,ended=excluded.ended,"
                     "input_digest=excluded.input_digest,result=excluded.result,calls=excluded.calls",
                     (m.run, json.dumps(list(key)), m.attempts, now, now, sha, json.dumps(wire.dump(entry))))
+    return write
