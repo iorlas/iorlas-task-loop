@@ -106,6 +106,12 @@ reader, and how delegate connects (`delegate.api`, one table in SKILL.md).
 
 - Decisions live in docs (the design note's Decisions recorded table or the repo's ADR); beads are work only; a decision bead is closed the moment it is decided.
 
+- **Every bead you file is loop work (tl's format).** File and change beads with `tl task create|update|close ...` (bd with this session's actor), never bare `bd`, and
+  run `tl lint BEAD` on each before you hand it on. A bead has: a goal (the description); `## Acceptance` criteria, each a check; `## Touches` with at most 8
+  paths (more means split it); a type that fits (an `epic` that has children is a container, not work; a `decision` is a doc, not a bead; a `spike` names its
+  `Output:` file); and text that cites nothing outside the repo (rule R1-R6 and FACTS in `src/taskloop/domain/beads/rules.py`). A follow-up found while
+  working gets `--deps discovered-from:<id>`. A bead the loop refuses (`needs-ac`) is fixed, not worked around.
+
 - "We need to use only our database": factory.db is for state, with no file fallback. Logs (engine, worker console, transcripts) stay files behind a log reader, rotated by age.
 
 - Python 3.15+; macOS only, POSIX. Dependencies: runtime ones are declared inline in `skills/task-loop/tl.py`
