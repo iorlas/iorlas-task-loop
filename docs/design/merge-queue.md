@@ -17,8 +17,8 @@ merging main in (plain pushes, no force); landing stays squash, one commit per b
 | 2 | `land_mode` push in the queue | no; one mode per repo; push mode is an out-of-queue pusher | 8, 10 |
 | 3 | Path claims | display and queue rule only; delay dispatch within one epic after a month of overlap data | 11 |
 | 4 | Lock main | lightweight: ruleset (no force-push, no deletion) plus a pre-push judge that refuses unmarked pushes to main; `tl doctor` fails on drift; full queue-only lock stays an owner option | 8.1 |
-| 5 | Lookahead cap | floor 1, cap 4, cap 3 if wasted ratio >0.5 in shadow; "window" retired | 6 |
-| 6 | Executor slot | freed at enqueued-green; back-pressure at queue length 2 x lookahead | 10 |
+| 5 | Gates in flight: floor and cap | floor 1, cap 4, cap 3 if wasted ratio >0.5 in shadow; "window" and "lookahead" retired | 6 |
+| 6 | Executor slot | freed at enqueued-green; back-pressure at queue length 2 x gates in flight | 10 |
 | 7 | Tree mismatch | no blind revert; freeze, evidence, repair agent dispatched automatically; human only after two failed repairs | 2.1 |
 | 8 | Quarantine | none in v1 or v2; retry, main check, flake score, auto fix bead; v2 owner-approved skip, 7 days, no silent renewal | 7 |
 | 9 | Required-check set | profile is authoritative; `tl doctor` fails on drift | 8.1 |
@@ -49,7 +49,7 @@ Non-goals: batching in v1, probabilistic speculation, multiple queues per repo, 
 ## 2. Core invariant: tested tree == landed tree
 
 **Invariant.** For every PR the lander merges, `tree(main after merge) == tree(the commit that was gated)`, and the parent of the new main
-commit is the main the gate assumed. Everything else (lookahead, AIMD, ejection) is allowed to be wrong in cost; this one is not allowed to be
+commit is the main the gate assumed. Everything else (gates in flight, AIMD, ejection) is allowed to be wrong in cost; this one is not allowed to be
 wrong at all, because a silent mismatch ships untested code.
 
 Why it is the first-ranked risk:
@@ -104,8 +104,8 @@ is checked. Bead: repair dispatch (section 16).
 ## 3. Queue model
 
 ### 3.1 Semantics
-Serial in meaning: PRs land in queue order, each on exactly the main it was tested on. Parallel in execution: up to L gates run at once
-(L = lookahead, section 6). Candidate N is gated on `main + PR1..PR(N-1) + PR(N)`, assuming 1..N-1 pass. If one fails the assumption is
+Serial in meaning: PRs land in queue order, each on exactly the main it was tested on. Parallel in execution: up to G gates run at once
+(G = gates in flight, section 6). Candidate N is gated on `main + PR1..PR(N-1) + PR(N)`, assuming 1..N-1 pass. If one fails the assumption is
 repaired (section 5), never papered over.
 
 ```
@@ -186,7 +186,7 @@ Reuse    = by tree: a Result for tree T and the same check_set_hash serves any q
 | head of any PR in the list changed (push, force-push by an agent) | that PR's builds and all builds behind it are dead; PR re-enters at its position |
 | PR ahead ejected | builds containing it are dead; builds ahead of it live |
 | check set changed (profile at base) | all dead |
-| profile change PR itself (owner path) | barrier: lookahead 1 around it, everything behind rebuilt |
+| profile change PR itself (owner path) | barrier: one gate in flight around it, everything behind rebuilt |
 
 - **Relation to RunKey and Carry:** RunKey stays the receipt identity per check. QueueKey is the identity of a build, one level up. Carry
   `queue_parent` (3.3) is the single place where a receipt crosses from `base = Q(N-1)` to `base = main`. Receipts are never
@@ -228,30 +228,32 @@ Mechanics:
 - Concurrency of reset: all mutations (eject, rebuild, reorder) are one reconcile step over durable state (section 9), never edits from
   several threads.
 
-## 6. Lookahead
+## 6. Gates in flight
 
-- **Terms** (docs/glossary.md): *lookahead* L = how many PRs the queue gates in parallel, each on main plus the PRs ahead of it; L = 1 is
-  today's serial behaviour. *Floor* = minimum L, 1. *Cap* = maximum L, default 4. *Queue depth* = PRs waiting; a different number. The old
-  draft word "window" is retired here (it also names an account's usage window).
-- **Start at L = 1** per repo: the queue then equals today's serial behaviour with the new invariant and bookkeeping. This isolates
+- **Terms** (docs/glossary.md, worked example there): *gates in flight* G = how many PRs are being tested at the same time, each on main
+  plus the PRs ahead of it; G = 1 is today's serial behaviour. *Floor* = fewest in flight, 1. *Cap* = most in flight, default 4.
+  *Queue depth* = PRs waiting, a different number. G starts at 1, grows by 1 after each success, halves after a failure, and stays
+  between floor and cap. The draft words "window" and "lookahead" are retired (window also names an account's usage window; lookahead
+  told nobody anything). Suggested config key: `land.queue.max_in_flight` (the cap).
+- **Start at G = 1** per repo: the queue then equals today's serial behaviour with the new invariant and bookkeeping. This isolates
   correctness bugs from cost-tuning bugs.
 - **AIMD, Zuul style** [V for the shape; defaults unverified]: Zuul grows linear on merge (+1) and halves on failure, window 20, floor 3
   by default [unverified]. Ours: floor 1, +1 per merged PR, halve (round down, min 1) per *own gate failure or conflict eject*, not per
   flake or infra stop. Cap configurable, default 4 (the current `--jobs` default, cli/land_stack.py:102). Per repo; one queue per repo in
-  v1, so a flaky repo does not shrink another's lookahead (Zuul isolates per change queue [V]).
-- **Why lookahead is bounded.** If a gate fails with probability p, the chance a lookahead-d speculative build survives is about (1-p)^d [I,
+  v1, so a flaky repo does not shrink another's gates in flight (Zuul isolates per change queue [V]).
+- **Why gates in flight are bounded.** If a gate fails with probability p, the chance a speculative build d gates deep build survives is about (1-p)^d [I,
   not from a source]. land-speed.md shows 25 of 84 attempts gate-red, about 30%. Much of that is owners running `just test` not
   `just check` (code map), which the queue does not change for pre-queue red but which should fall once the owner gate is the same check
   set. At p = 0.3 and d = 4 only 24% of the deepest builds survive [I]: a cap of 4 is already generous, and AIMD is what will find the
   real number. Uber still builds ~2x per change after tuning [V]; expect waste.
-- **Wasted-gate accounting** (on every ejection and every lookahead change): `wasted_gate_s` = seconds of gates that were cancelled or
-  invalidated; `useful_gate_s` = seconds of gates whose result was used. Ratio over the last 20 merges above 0.5 holds L (no increase)
+- **Wasted-gate accounting** (on every ejection and every change of G): `wasted_gate_s` = seconds of gates that were cancelled or
+  invalidated; `useful_gate_s` = seconds of gates whose result was used. Ratio over the last 20 merges above 0.5 holds G (no increase)
   [threshold is a guess, tunable]; above 0.5 in shadow, the cap drops to 3. Each wasted build records its cause (culprit ahead, base moved, head changed, config change).
 - **Batching only when queue depth regularly exceeds 3** (median queue length over a week). Then: group the front K PRs as one build,
   on red bisect by halving, never retest the last (if all earlier parts pass, the last is the culprit; Mergify trick [V]). Batch only
   PRs of equal priority and no overlap (section 11). Costs: loses per-commit greenness, lengthens attribution [V Graphite caveat].
   Not v1: single owner, volume is a handful of PRs a day [I].
-- ❌ Rejected: starting at a deep lookahead. One bug in section 2 or 4 would turn into mass wasted CI and mass ejections at once.
+- ❌ Rejected: starting at many gates in flight at once. One bug in section 2 or 4 would turn into mass wasted CI and mass ejections at once.
 
 ## 7. Flakes
 
@@ -340,7 +342,7 @@ Goal: the settings that make the invariant true on GitHub are checked by the mac
 
 **State that must survive a crash:** queue list (PR, bead, head SHA, state, position, entered_ts), builds (QueueKey, `Q` sha, tree,
 state, worktree path, owner pid + start_id + lease expiry, started, finished), event log (ejections, resets, flake rows), flags (freeze,
-lookahead, last base_sha).
+gates in flight, last base_sha).
 
 **Where.** Direction: factory.db, SQLite, one transaction per state change. slot-grant.md names it for the slot family and
 sqlite-store-plan.md describes the stores; the exact family and schema are for bead (g) [I; the plan was not re-read for this doc]. Files
@@ -356,7 +358,7 @@ twice does nothing the second time. It fixes:
 - merged but not recorded (crash between `gh pr merge` and `tl land` record, stack.py `merged`): PR is MERGED on the forge and `merge_sha`
   exists -> run the post-land assertion, then record; never merge again;
 - ejected items whose bead was not notified;
-- lookahead state not matching the last events (recompute).
+- gates-in-flight state not matching the last events (recompute).
 Zuul's 2024 orphaned-changes report [S] and Tide's partial-merge TODO [V] are the failure shapes. Pattern is the slot watchdog
 (slot-grant.md (b)): a pure function plus a heal, one incident row per episode.
 
@@ -381,7 +383,7 @@ Today `land_mode` has `pr` (the loop opens a PR; `pr_land.py` never merges) and 
   queue ejects it for its own failure the bead returns as a new dispatch (slot-grant's atomic grant, a resumed worker). Holding the slot
   to merge parks slots on a wait the queue is designed to hide (goal 1, 2).
 - Risk: freeing early starts more beads, which means more PRs, deeper queue, more drift. Counter: back-pressure. When
-  `queue_len >= 2 * L` (default) the dispatcher does not start new beads for that repo. [Threshold is a guess; bead (m) tunes it.]
+  `queue_len >= 2 * G` (default) the dispatcher does not start new beads for that repo. [Threshold is a guess; bead (m) tunes it.]
 - ❌ Rejected: free at merge. Idle-slot hours are the problem statement.
 - ❌ Rejected: free at PR open (before the own gate). The own gate is the agent's feedback loop (stages.md); leaving earlier moves
   failures from a loop the agent owns to a queue it does not.
@@ -466,10 +468,10 @@ watchdog and `slot_sim` are the template.
   risk), and its wait vs actual. Shadow gates cost CI; run them niced and only for PRs enqueued by `land-stack`.
 - **Simulation harness.** land-speed.md records only aggregates for the 84 attempts (46 landed, 25 gate-red, 7 conflict, 6 head-moved),
   not the per-attempt timeline. The raw rows (arrival, gate seconds, outcome) are the `LandTry` rows [unverified that they survive].
-  Harness: replay arrivals and outcomes through the pure queue model with a fake clock, output the metrics above for L = 1, 2, 4 and AIMD,
-  and compare with the recorded serial result. Policy changes to L, cap, retry or timeouts must show their replay delta (Uber's simulator
+  Harness: replay arrivals and outcomes through the pure queue model with a fake clock, output the metrics above for G = 1, 2, 4 and AIMD,
+  and compare with the recorded serial result. Policy changes to G, cap, retry or timeouts must show their replay delta (Uber's simulator
   [V]).
-- **Staged rollout.** shadow -> L = 2 -> AIMD (cap 4) -> batching only if queue depth regularly >3 -> done. Gate to advance: replay and live
+- **Staged rollout.** shadow -> G = 2 -> AIMD (cap 4) -> batching only if queue depth regularly >3 -> done. Gate to advance: replay and live
   metrics within bounds, zero invariant incidents for a week of landed PRs [week is a guess].
 
 ## 15. Decisions (were open questions; Denis, 2026-11-07)
@@ -484,9 +486,9 @@ watchdog and `slot_sim` are the template.
 4. **Lock main, lightweight** (revised same day: Denis prefers lightweight over GitHub rules): a ruleset against force-push and deletion
    (applied), a pre-push judge that refuses unmarked pushes to main, and `tl doctor` failing on drift (section 8.1). No required PR or
    checks: push mode and release push to main directly. A full queue-only lock with owner bypass remains an option for later.
-5. **Lookahead: floor 1, cap 4.** Cap 3 if the wasted-gate ratio exceeds 0.5 in shadow. Why 4: the current `--jobs` default; at p = 0.3
+5. **Gates in flight: floor 1, cap 4.** Cap 3 if the wasted-gate ratio exceeds 0.5 in shadow. Why 4: the current `--jobs` default; at p = 0.3
    deeper builds mostly die. "Window" is retired for this (terms in section 6, docs/glossary.md).
-6. **Free the executor slot at enqueued-green**, with back-pressure at queue length 2 x lookahead. Why: idle slots are the problem
+6. **Free the executor slot at enqueued-green**, with back-pressure at queue length 2 x gates in flight. Why: idle slots are the problem
    statement; back-pressure stops the faster slots from growing drift.
 7. **Tree mismatch: no blind auto-revert; an agent repairs it, a human only after two failed repairs** (section 2.1). Why: the queue
    still verifies the repair; a person is slower and is not the dear resource to spend on a recoverable event.
@@ -507,7 +509,7 @@ m needs i, e, k, h; n (guard rails) needs k; o (repair) needs d, g, l; p (glossa
 | tl-7s2f.3 (l) | tested-tree == landed-tree assertion in today's land-stack | a |
 | tl-7s2f.4 (c) | queue ref builder, gate on main + ahead, `land.queue` key | b, l |
 | tl-7s2f.5 (d) | eject, rebuild only behind, cancellable gates | c |
-| tl-7s2f.6 (e) | AIMD lookahead, wasted-gate accounting | d |
+| tl-7s2f.6 (e) | AIMD gates in flight, wasted-gate accounting | d |
 | tl-7s2f.7 (f) | flake policy and score log | c |
 | tl-7s2f.8 (g) | durable state + reconcile loop | c |
 | tl-7s2f.9 (h) | metrics, Floor land-lock, Landing strip, Board | g |
@@ -517,7 +519,7 @@ m needs i, e, k, h; n (guard rails) needs k; o (repair) needs d, g, l; p (glossa
 | tl-7s2f.13 (m) | staged rollout, kill switch proof, slot back-pressure | i, e, k, h |
 | tl-7s2f.14 (n) | guard rails: pre-push judge refuses unmarked pushes to main, `tl doctor` fails on ruleset or hook drift (section 8.1) | k |
 | tl-7s2f.15 (o) | recovery flow: repair agent on a tree mismatch (section 2.1) | d, g, l |
-| tl-7s2f.16 (p) | glossary alignment: lookahead replaces window in code, config, views | e |
+| tl-7s2f.16 (p) | glossary alignment: gates in flight replaces window in code, config, views | e |
 | tl-7s2f.17 (q) | flake escalation: auto fix bead at more than 3 rows a week | f |
 | tl-7s2f.18 (r) | v2: owner-approved test skip, 7-day hard expiry | q, m |
 The `## Touches` paths in the beads are best guesses from the code map; each bead's first step confirms them.
