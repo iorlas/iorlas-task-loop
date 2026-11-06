@@ -91,7 +91,7 @@ it implies.
 | file store | table | note |
 |---|---|---|
 | 1 checkpoint, 8 follow-ups, 13 per-round checks, 20 run-dir state | `run` columns + `step`, `check_round`, new `checkpoint(bead PK, run, rev, body)` | the checkpoint is per bead across runs, so its own table, revisioned like `run` |
-| 2 loop state, 11 engine lock (a `lease` row `run` named `engine:<worktree key>`; the take stays under its kernel lock), 12 worktree records, 10 slot tickets | `lease` (kinds `loop`, `slot`, `run`) + new `slot_ticket(repo, seq, holder, since)` | `lease` already has host, pid, start_id (the pid-reuse fix of tl-br2.13), beat, until |
+| 2 loop state, 11 engine lock (a `lease` row `run` named `engine:<worktree key>`; the take stays under its kernel lock), 12 worktree records, 10 slot tickets | `lease` (kinds `loop`, `slot`, `run`) (slot tickets are `lease` rows `slot` named `<repo_key>/<seq>`, the counter a `kv` row: no `slot_ticket` table, no schema bump, so an older tl is not parked as behind) | `lease` already has host, pid, start_id (the pid-reuse fix of tl-br2.13), beat, until |
 | 3 loop command, 6 owner request | `signal` | taken once (`taken`), written by the owner, read by the loop or engine |
 | 4 parks, 5 pauses, reexec, 16 storm | `wait` (kind, wake_at, wake_on, facts, cleared) | the schema comment already says: park writes go through the loop-owned wait store |
 | 7 call state | `effect` (key = bead+call key, state intent/returned/consumed, receipt) | this is exactly the outbox the review asks for |
@@ -100,7 +100,7 @@ it implies.
 | 19 ADRs | `kv` read cache of `docs/adr/NNNN-title.md` | class R (2a): the file in git is the record, the verbs write it |
 | decision asks, `ask_ledger` | `ask` (open asks only) | class R (2a): the answer is a bead comment `kind=decision` |
 
-New tables beyond v3: `checkpoint`, `slot_ticket` (schema v4, one `user_version` step, DDL and version in one transaction as
+New tables beyond v3: `checkpoint` (schema v4, one `user_version` step, DDL and version in one transaction as
 `sqlite_store.migrate` does). Nothing else changes shape.
 
 ## 4. Order

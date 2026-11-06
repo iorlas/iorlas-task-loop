@@ -28,3 +28,18 @@ def read(cfg: ConfigDir, now: float, *, repo: str | None = None, bead: str | Non
                 for r in rows], error
     except (ValueError, TypeError, KeyError):
         return [], "database unavailable: unreadable run facts"
+
+
+FOREIGN = "is schema v"  # factorydb's SchemaError text for a version this code does not read
+Kept = dict[tuple[str | None, str | None], list[StoredRun]]  # the last valid read of each (repo, bead) question
+
+
+def read_kept(kept: Kept, cfg: ConfigDir, now: float, *, repo: str | None = None, bead: str | None = None) -> tuple[list[StoredRun], str]:
+    """`read`, remembering the last valid answer: a factory.db of a schema this dashboard cannot read (a producer ahead or behind it)
+    returns that observation with its error, so the foreign version shows as an error over what was last seen, not as absence. A stale
+    index or a corrupt file still drops the rows: old runs there would read as current."""
+    rows, error = read(cfg, now, repo=repo, bead=bead)
+    if not error:
+        kept[repo, bead] = rows
+        return rows, ""
+    return (kept.get((repo, bead), rows) if FOREIGN in error else rows), error
