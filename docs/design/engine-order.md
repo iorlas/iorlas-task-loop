@@ -40,7 +40,6 @@ Layer = 1 + the highest layer among the parts a part uses (construction or runti
 | 0 | `cases` | `Cases` (`plan/cases.py`) | - | - | 9 |
 | 0 | `checkout` | `Checkout` (`land/checkout.py`) | - | newfiles | 6 |
 | 0 | `delegation` | `Delegation` (`run/delegation.py`) | - | - | 9 |
-| 0 | `lander` | `lander_over` (`land/lander.py`) | - | - | 1 |
 | 0 | `records` | `Records` (`run/records.py`) | - | - | 43 |
 | 0 | `reload` | `Reload` (`run/reload.py`) | - | - | 21 |
 | 0 | `requests` | `OwnerRequests` (`run/requests.py`) | - | - | 8 |
@@ -69,6 +68,7 @@ Layer = 1 + the highest layer among the parts a part uses (construction or runti
 | 3 | `settles` | `Settles` (`review/settles.py`) | - | cases, checkout, judge | 10 |
 | 3 | `worker` | `WorkerCall` (`run/worker_call.py`) | records | bead_env, delegation, hand, waits | 34 |
 | 4 | `closer` | `Closer` (`run/closer.py`) | worker | ask_flow, records | 30 |
+| 4 | `lander` | `lander_over` (`land/lander.py`) | - | checkout, newfiles, waits, worker | 14 |
 | 4 | `verifier` | `Verifier` (`review/verifier.py`) | - | briefing, briefs, fixer, judge, routing, settles | 21 |
 
 Parts that other parts read most: `checkout` (12 readers), `cases` (6), `briefs` (5), `routing` (4). Those four are the ports the stages will declare first.
@@ -79,11 +79,11 @@ Three engine-level members are not parts and not in the table: `checker` (built 
 
 Build order for constructor injection (a layer needs only the layers above it in this list, plus the edge values of steps 1 to 6):
 
-1. Layer 0: `bead_env`, `briefing`, `briefs`, `cases`, `checkout`, `delegation`, `lander`, `records`, `reload`, `requests`, `restart`, `stage_checks`, `stuck`, `waits`.
+1. Layer 0: `bead_env`, `briefing`, `briefs`, `cases`, `checkout`, `delegation`, `records`, `reload`, `requests`, `restart`, `stage_checks`, `stuck`, `waits`.
 2. Layer 1: `ask_flow`, `newfiles`, `pictures`, `rebase`, `reflector`, `routing`, `shared`, `shell`, `stage_loop`, `tree`.
 3. Layer 2: `fixer`, `hand`, `judge`, `link_check`, `owner_look`, `planner`.
 4. Layer 3: `resume`, `salvage`, `settles`, `worker`.
-5. Layer 4: `closer`, `verifier`.
+5. Layer 4: `closer`, `lander`, `verifier`.
 
 The two cuts that make this order exist:
 
@@ -99,4 +99,4 @@ The two cuts that make this order exist:
 
 ## Method and limits
 
-`ast`-scan of the four parts files (`parts_run.py`, `parts_land.py`, `parts_plan.py`, `host.py`) for the `cached_property` parts; each part's class (or factory function, for `bead_env` and `lander_over`) located through the imports of those files. Reads counted: an attribute of the host (the first `__init__` parameter, stored as `self.e`, `self.host` or `self.h`, or a local alias of it) whose name is a part. A read in `__init__` (or in a factory's body, or in the property body that builds the object) is a construction edge; any other method's read is a runtime edge. Not seen: reads through `getattr`, through a part the host passes along as an argument, and through the four engine methods named above. The scan script is not committed with this note; slice 3 turns it into the test.
+`ast`-scan of the four parts files (`parts_run.py`, `parts_land.py`, `parts_plan.py`, `host.py`) for the `cached_property` parts; each part's class (or factory function, for `bead_env` and `lander_over`) located through the imports of those files. Reads counted: an attribute of the host (the first `__init__` parameter, stored as `self.e`, `self.host` or `self.h`, or a local alias of it) whose name is a part. A read in `__init__` (or in a factory's body, or in the property body that builds the object) is a construction edge; any other method's read is a runtime edge. Not seen: reads through `getattr`, through a part the host passes along as an argument, and through the four engine methods named above. The scan is `tests/rules/test_engine_order.py`; its LAYERS table is the layer table above.
