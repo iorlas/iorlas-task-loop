@@ -7,7 +7,7 @@ error event, or the CLI's own error result) and `stderr`; the model's answer tex
 """
 
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import NamedTuple
 
 from delegate.contracts.json_types import Json
@@ -37,7 +37,17 @@ BAD_REQUEST_RE = re.compile(
     r"|no rollout found for thread|No conversation found with session ID",
     re.I,
 )  # the vendor refused the request itself: schema, a flag its CLI no longer takes, or a --resume thread it does not know
+# What a vendor or the OS says when the connection itself broke. `max_output_tokens` after "stream disconnected" is the model's cap, not
+# the network.
+DROP_RE = re.compile(
+    r"ENOTFOUND|ECONNRESET|ECONNREFUSED|ECONNABORTED|ETIMEDOUT|EAI_AGAIN|EPIPE|getaddrinfo|could not resolve host|network is unreachable"
+    r"|cannot connect to api|unable to connect|error sending request|connection (reset|closed|refused|timed out|failed)|socket hang up"
+    r"|dns error|network error|waiting for network|(?:TLS|SSL) handshake|stream disconnected(?!.{0,200}max_output_tokens)",
+    re.I | re.S,
+)
+NET_AMBIGUOUS = ("worker_failed", "vendor_blip", "hung")  # failures that name no cause of their own: the network may be it
 PATTERNS = {
+    "dropped": DROP_RE,
     "limit": LIMIT_RE,
     "credit": CREDIT_RE,
     "spend": SPEND_RE,
@@ -129,6 +139,25 @@ def classify(
     text = vendor_event + ("\n" + (stderr or "") if code != 0 else "")
     src = "event" if vendor_event else "stderr"
     return _by_status(s.get("http_status"), text, src) or _by_text(text, src, work_seen) or _by_exit(code, vendor_event, stderr, work_seen)
+
+
+def looks_dropped(text: str | None) -> bool:
+    """True when `text` (a vendor error event or stderr, never the model's answer) says the connection broke."""
+    return bool(DROP_RE.search(text or ""))
+
+
+def with_network(o: Outcome, net_up: Callable[[], bool]) -> Outcome:
+    """`o`, or the network outcome when it was the network. `classify` trusts network words only before the worker did anything, and a
+    silent hang is only a network drop if the net is down: a failure with no cause of its own is checked against the words of a dropped
+    connection, then against one probe (`net_up`). Limits, logins, bad requests, secrets and timeouts are never second-guessed."""
+    if o.reason in NET_AMBIGUOUS and (looks_dropped(o.detail) or not net_up()):
+        return Outcome("network", o.detail, o.source)
+    return o
+
+
+def network_stop(evidence: str) -> Outcome:
+    """The outcome of a worker we stopped because the net probe stayed down: the harness's own words for a transient failure."""
+    return Outcome("network", evidence, "event")
 
 
 def says_login(text: str):

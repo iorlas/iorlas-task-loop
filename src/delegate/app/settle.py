@@ -9,7 +9,6 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from delegate.adapters import netprobe
 from delegate.adapters.harness import classify, reset_parse
 from delegate.app import answer
 from delegate.app.env import Args
@@ -21,7 +20,6 @@ from delegate.domain.policy.matchers import heredoc_only_hit
 from delegate.domain.policy.worker import APPLY_PATCH_HINT
 from delegate.domain.time.spec import local
 
-NET_AMBIGUOUS = ("worker_failed", "vendor_blip", "hung")  # failures that name no cause of their own: the network may be it
 LOGOUT_OUT = 900  # a lane whose worker found it logged out is skipped this long, then tried again (a login in between is not seen sooner)
 HUNG_OUT_SECS = 1800  # a lane whose worker printed nothing at all rests this long
 CREDIT_PROBE = 6 * 3600  # a lane out of credits with no stated end is looked at again after this long
@@ -90,13 +88,8 @@ class Settler:
         )
 
     def net_pass(self, o: classify.Outcome, d: dict[str, Json]) -> classify.Outcome:
-        """-> `o`, or the network outcome when it was the network. classify trusts network words only before the worker did anything, and a
-        silent hang is only a network drop if the net is down: so a failure with no cause of its own is checked against the words of a
-        dropped connection
-        and then against one probe (<= 3 s, sockets only). Limits, logins, bad requests, secrets and timeouts are never second-guessed."""
-        if o.reason in NET_AMBIGUOUS and (netprobe.looks_dropped(o.detail) or not self.net_up(as_str(d["lane"]))):
-            return classify.Outcome("network", o.detail, o.source)
-        return o
+        """The decision is `classify.with_network`; this only supplies the lane's one probe."""
+        return classify.with_network(o, lambda: self.net_up(as_str(d["lane"])))
 
     def apply(
         self,
