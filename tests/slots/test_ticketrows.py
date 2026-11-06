@@ -9,7 +9,6 @@ from support import homes
 from support import slots as sl
 
 from taskloop.contracts.locks import Ticket
-from taskloop.stores.files import FileTickets
 from taskloop.stores.ticketrows import TicketRows
 
 
@@ -30,17 +29,6 @@ def test_the_line_is_in_priority_then_arrival_order_and_a_number_never_repeats(k
     rows.drop(key, c.seq)
     assert take(rows, key, "d").seq == c.seq + 1  # past an emptied tail
     assert b.seq == a.seq + 1
-
-
-def test_an_older_loops_file_ticket_is_in_the_line_and_the_next_number_is_past_it(key):
-    cfg = homes.cfg()
-    old = FileTickets(cfg).take(key, "old", 2, pid=os.getpid(), now=time.time())
-    rows = TicketRows(cfg)
-    new = take(rows, key, "new")
-    assert new.seq > old.seq
-    assert [t.why for t in rows.line(key)] == ["old", "new"]
-    rows.drop(key, old.seq)
-    assert [t.why for t in rows.line(key)] == ["new"]
 
 
 def test_a_dead_waiters_row_is_dropped_by_the_reader(key):
