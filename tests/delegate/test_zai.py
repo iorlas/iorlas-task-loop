@@ -47,5 +47,3 @@ class ZaiTests(Case):
             ]:
                 p.write_text(json.dumps(auth))
                 assert onboard.check_opencode_zai_coding() == expected
-
-

@@ -39,4 +39,3 @@ class DeepSeekTests:
         env.config_store().set_lane("DEEPSEEK_FREE", "declined")
         with patch.dict(usage.READERS, {k: lambda *a: None for k in usage.READERS}):
             assert "DEEPSEEK_FREE" not in dec.fleet_builder(cfg).build(env.load_state(), 1, check_config=False).lanes
-

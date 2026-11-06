@@ -21,4 +21,3 @@ class CodexUvEnv:
     def test_offline_only_when_the_access_flags_turn_the_network_off(self):
         e = decide.codex_env({}, "/w", "workspace-write", ["-c", "sandbox_workspace_write.network_access=true"])
         assert "UV_OFFLINE" not in e
-

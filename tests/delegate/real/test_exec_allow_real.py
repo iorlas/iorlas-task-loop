@@ -118,9 +118,3 @@ class ExecAllow(Case):
         result = subprocess.run(command, env=os.environ | {"PATH": ""}, capture_output=True, text=True, check=False)
         assert result.returncode == 0, result.stderr
         assert len(self.rows()) == 1
-
-
-
-
-
-
