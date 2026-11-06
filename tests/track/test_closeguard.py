@@ -13,6 +13,7 @@ from support.who import who
 from support.case import Case
 from support.fake_beads import FakeBeads
 from support.fakegit import ScriptedGit
+from taskloop.contracts.logstores import TraceStore
 
 from taskloop.app.track import verbs
 from taskloop.app.wire import closeguard
@@ -21,7 +22,6 @@ from taskloop.contracts.enums import Outcome
 from taskloop.contracts.gitfacts import Ref
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.stores import TraceStore
 
 SHA = "a" * 40
 

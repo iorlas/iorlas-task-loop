@@ -13,10 +13,10 @@ from taskloop.app.loop import exits
 from taskloop.contracts import paths
 from taskloop.contracts.docstore import Page
 from taskloop.contracts.enums import LockWhat
+from taskloop.contracts.logstores import LoopLog
 from taskloop.contracts.loop import LoopCommand, LoopState, LoopTarget, Rest, StopRequest
 from taskloop.contracts.looprows import DIED, KvDoc, LoopRows
 from taskloop.contracts.run import LoopLogLine
-from taskloop.contracts.stores import LoopLog
 
 StopMode = Literal["now", "after", ""]
 EXIT_REASONS = (

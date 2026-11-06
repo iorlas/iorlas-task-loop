@@ -10,6 +10,7 @@ from support.case import Case
 from support.narrow import must
 from support.narrow_hosts import FakeOutboundHost
 from support.tmpdir import TemporaryDirectory
+from taskloop.contracts.logstores import JsonlStore
 
 from taskloop.app.land.outbound import Outbound
 from taskloop.app.run.budget import Budget
@@ -19,7 +20,6 @@ from taskloop.app.run.stuck import StuckTick
 from taskloop.contracts import log as rec
 from taskloop.contracts.gitfacts import GitOutcome
 from taskloop.contracts.runlife import silent_limit
-from taskloop.contracts.stores import JsonlStore
 from taskloop.stores.runlog import RunLog
 
 

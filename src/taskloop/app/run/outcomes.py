@@ -8,7 +8,7 @@ from taskloop.contracts import log as rec
 from taskloop.contracts.ask import BudgetLine
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.kinds import ASK_NAME, ASKS, FINISH, Kind
-from taskloop.contracts.stores import JsonlStore
+from taskloop.contracts.logstores import JsonlStore
 from taskloop.domain.matchers import clip
 
 
