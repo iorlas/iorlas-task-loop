@@ -68,7 +68,7 @@ def engine_only_rules(sandbox: Sandbox, engine_only: Sequence[str]) -> dict[str,
     }
 
 
-def permissions(sandbox: Sandbox, write: bool, engine_only: Sequence[str] = ()) -> dict[str, Json]:
+def permissions(sandbox: Sandbox, write: bool, engine_only: Sequence[str] = (), read_roots: Sequence[str] = ()) -> dict[str, Json]:
     reads: dict[str, Json] = {
         "*": "allow",
         ".env": "deny",
@@ -80,8 +80,12 @@ def permissions(sandbox: Sandbox, write: bool, engine_only: Sequence[str] = ()) 
     }
     for x in SECRETS:
         reads[str(Path.home() / x)] = reads[str(Path.home() / x) + "/*"] = "deny"
-    outside: Json = "deny" if write else {"*": "deny", **{x + "/**": "allow" for x in (*sandbox.readable, *TEMP_DIRS)}}
-    # a read-only step ignores the list
+    # a write step reads outside its cwd only in the caller's listed roots; a read-only step ignores the list
+    outside: Json = (
+        ({"*": "deny", **{x.rstrip("/") + "/**": "allow" for x in read_roots}} if read_roots else "deny")
+        if write
+        else {"*": "deny", **{x + "/**": "allow" for x in (*sandbox.readable, *TEMP_DIRS)}}
+    )
     bash: dict[str, Json] | None = {"*": "allow", **engine_only_rules(sandbox, engine_only)} if write and engine_only else None
     return {
         "*": "allow",
