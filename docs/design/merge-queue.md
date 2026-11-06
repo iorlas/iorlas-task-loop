@@ -417,7 +417,26 @@ watchdog and `slot_sim` are the template.
 
 ## 16. Slices (beads under the epic "MQUEUE: speculative merge queue")
 
-IDS_PLACEHOLDER
+Epic tl-7s2f. Order: a, then b and l; c needs b and l; d, f, g need c; e needs d; h needs g; i needs c, g, l; j needs c; k needs d, g;
+m needs i, e, k, h. The config key `land.queue = off|shadow|on` (kill switch) lands in c; m proves it.
+
+| Bead | Slice | Deps |
+|---|---|---|
+| tl-7s2f.1 (a) | experiment: squash tree == queue-built tree, property test + one real GitHub pair | none |
+| tl-7s2f.2 (b) | QueueKey + Carry `queue_parent` mode | a |
+| tl-7s2f.3 (l) | tested-tree == landed-tree assertion in today's land-stack | a |
+| tl-7s2f.4 (c) | queue ref builder, gate on main + ahead, `land.queue` key | b, l |
+| tl-7s2f.5 (d) | eject, rebuild only behind, cancellable gates | c |
+| tl-7s2f.6 (e) | AIMD window, wasted-gate accounting | d |
+| tl-7s2f.7 (f) | flake policy and score log | c |
+| tl-7s2f.8 (g) | durable state + reconcile loop | c |
+| tl-7s2f.9 (h) | metrics, Floor land-lock, Landing strip, Board | g |
+| tl-7s2f.10 (i) | shadow mode + replay harness | c, g, l |
+| tl-7s2f.11 (j) | bead-dep gate, cycle check, overlap check, path claims | c |
+| tl-7s2f.12 (k) | hotfix, freeze, check-set hash, timeouts | d, g |
+| tl-7s2f.13 (m) | staged rollout, kill switch proof, slot back-pressure | i, e, k, h |
+
+The `## Touches` paths in the beads are best guesses from the code map; each bead's first step confirms them.
 
 ## Unverified (collected)
 
