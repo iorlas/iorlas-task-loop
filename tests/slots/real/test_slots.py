@@ -39,7 +39,9 @@ from taskloop.app.slots import (
 )
 from taskloop.contracts.enums import Result
 from taskloop.contracts.env import snapshot
+from taskloop.contracts.ids import loop_key
 from taskloop.contracts.kinds import Kind
+from taskloop.contracts.lockrows import EngineLockRows
 from taskloop.contracts.run import RunReport
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
@@ -81,8 +83,6 @@ class Slots(LoopBase):
     def live_lock(self, n, bead="x-9"):
         k = sleeper()
         self.kids.append(k)
-        f = homes.cfg().engine_lock(self.slot(n))
-        f.parent.mkdir(parents=True, exist_ok=True)
         put_lock(self.slot(n), {"pid": k.pid, "bead": bead, "started": time.time()})
         return k
 
@@ -122,7 +122,7 @@ class RunTaskTakesItsSlot(Slots):
         def during():  # the loop starts while the hand run is mid-bead (2026-10-21 18:17)
             bd.beads["x-1"].update(status="in_progress", assignee=who().actor)  # run-task's claim (stubbed here)
             seen["slot"] = dict(bd.slots["sl-1"])
-            seen["lock"] = homes.cfg().engine_lock(self.slot("s1")).exists()
+            seen["lock"] = EngineLockRows(homes.cfg(), self.slot("s1")).exists()
             lock = engine_lock.read_engine_lock(homes.cfg(), self.slot("s1"))
             seen["env"] = lock.slot_bead if lock else None  # the run's Env names the slot bead; its lock records it
             seen["list"] = self.cli("slot", "list")[1]
@@ -138,7 +138,7 @@ class RunTaskTakesItsSlot(Slots):
         assert self.started == [("x-2", "s2")]
         # released at the end, the lock gone
         assert (bd.slots["sl-1"]["status"], bd.slots["sl-1"]["assignee"]) == ("open", "")
-        assert not homes.cfg().engine_lock(self.slot("s1")).exists()
+        assert not EngineLockRows(homes.cfg(), self.slot("s1")).exists()
 
     def test_slot_alone_runs_in_the_slots_worktree(self):
         self.beads({"x-1": []})
@@ -179,7 +179,7 @@ class RunTaskTakesItsSlot(Slots):
         assert rc != 0
         assert json.loads(f.read_text())["outcome"] == "failed"
         assert bd.slots["sl-1"]["status"] == "open"
-        assert not homes.cfg().engine_lock(self.slot("s1")).exists()
+        assert not EngineLockRows(homes.cfg(), self.slot("s1")).exists()
 
     def test_a_run_the_loop_started_does_not_take_or_release_the_slot_again(self):
         bd = self.beads({"x-1": []})
@@ -195,7 +195,7 @@ class RunTaskTakesItsSlot(Slots):
         assert r["outcome"] == "taken"
         assert f"pid {k.pid}" in r["why"]
         self.made.assert_not_called()
-        assert homes.cfg().engine_lock(self.slot("s1")).exists()  # never removes another run's lock
+        assert EngineLockRows(homes.cfg(), self.slot("s1")).exists()  # never removes another run's lock
     def test_a_dead_engines_lock_is_no_obstacle(self):
         self.beads({"x-1": []})
         k = self.live_lock("s1")
@@ -216,8 +216,6 @@ class LiveEngineBackstop(Slots):
         self.beads({"x-1": [rec("landed")]})
         k = sleeper()
         self.kids.append(k)
-        f = homes.cfg().engine_lock(self.slot("s1"))
-        f.parent.mkdir(parents=True, exist_ok=True)
         put_lock(self.slot("s1"), {"pid": 0, "bead": "x-0", "workers": [(k.pid, pidcheck.proc_start(k.pid))]})
         assert str(k.pid) in engine_lock.engine_busy(homes.cfg(), self.slot("s1"))
         self.run_loop("--max-beads", "1")
@@ -291,8 +289,6 @@ class StaleLocks(Slots):
     def test_a_reused_pid_with_another_start_time_is_dead(self):
         k = sleeper()
         self.kids.append(k)
-        f = homes.cfg().engine_lock(self.slot("s1"))
-        f.parent.mkdir(parents=True)
         put_lock(self.slot("s1"), {"pid": k.pid, "start": "Mon Jan  1 00:00:00 2001", "bead": "x-0"})
         assert engine_lock.engine_busy(homes.cfg(), self.slot("s1")) == ""
         put_lock(self.slot("s1"), {"pid": k.pid, "start": pidcheck.proc_start(k.pid), "bead": "x-0"})
@@ -307,8 +303,6 @@ class StaleLocks(Slots):
                     break
                 time.sleep(0.05)
             assert not pidcheck.pid_alive(z.pid)  # exited and not yet reaped: stream-proc reads it as gone
-            f = homes.cfg().engine_lock(self.slot("s1"))
-            f.parent.mkdir(parents=True)
             put_lock(self.slot("s1"), {"pid": z.pid, "bead": "x-0"})
             assert engine_lock.engine_busy(homes.cfg(), self.slot("s1")) == ""
         finally:
@@ -318,15 +312,15 @@ class StaleLocks(Slots):
         k = self.live_lock("s1")
         rc, out = self.cli("slot", "reset", "s1")
         assert rc == 4
-        assert str(homes.cfg().engine_lock(self.slot("s1"))) in out
+        assert "engine:" + loop_key(self.slot("s1")) in out
         assert str(k.pid) in out
         rc, out = self.cli("slot", "reset", "s1", "--force")
         assert rc != 4
         assert "FORCED" in out
-        assert not homes.cfg().engine_lock(self.slot("s1")).exists()
+        assert not EngineLockRows(homes.cfg(), self.slot("s1")).exists()
         self.live_lock("s2")
         assert self.cli("slot", "release", "s2", "--force")[0] == 0
-        assert not homes.cfg().engine_lock(self.slot("s2")).exists()
+        assert not EngineLockRows(homes.cfg(), self.slot("s2")).exists()
 
 
 class SameActor(Slots):
@@ -375,7 +369,7 @@ class SameActor(Slots):
         assert (seen["lock"].by, seen["lock"].pid, seen["lock"].slot_bead) == ("loop", os.getpid(), "sl-1")
         assert seen["hand"]["outcome"] == "taken"
         assert f"loop pid {os.getpid()}" in seen["hand"]["why"]
-        assert not homes.cfg().engine_lock(self.slot("s1")).exists()
+        assert not EngineLockRows(homes.cfg(), self.slot("s1")).exists()
 
 
 class HoldRaces(Slots):
