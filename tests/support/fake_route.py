@@ -249,6 +249,9 @@ class Script:
                    context={"instructions": ["/repo/AGENTS.md"], "env_keys": ["PATH"]})
         if self.j_extra.get(node):
             j.update(self.j_extra[node].pop(0))
+        if j.get("transcript") and isinstance(j.get("usage"), dict):  # like delegate: the last turn of the transcript is the context size
+            from delegate.adapters import transcript_size  # noqa: PLC0415  (this file also runs as route.py in a child: lazy)
+            j["usage"] = dict(j["usage"], context_k=transcript_size.context_k(j["transcript"]))
         if node == "write":
             self.writer_family = j.get("family", "")
         return self.mapped(node, prompt, j)
