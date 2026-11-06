@@ -6,9 +6,10 @@ and adds nothing (slice 1 warns, it never refuses a check)."""
 import functools
 import platform
 import shutil
-import subprocess
 from collections.abc import Callable
 from typing import NamedTuple
+
+from taskloop.adapters import procs
 
 MAC_PROFILE = '(version 1)(allow default)(deny network*)(allow network* (remote ip "localhost:*"))(allow network* (remote unix-socket))'
 LINUX_WRAPPER = 'ip link set lo up >/dev/null 2>&1; exec "$@"'  # $0 is the `sh` that follows; the check's argv is "$@"
@@ -47,8 +48,8 @@ def which(name: str) -> str | None:
 def userns_works() -> bool:
     """`unshare -rn true` exits 0 here (asked once per process)."""
     try:
-        return subprocess.run(["unshare", "-rn", "true"], capture_output=True, timeout=10, check=False).returncode == 0
-    except (OSError, subprocess.SubprocessError):
+        return procs.run(["unshare", "-rn", "true"], timeout=10).returncode == 0
+    except (OSError, TimeoutError):
         return False
 
 
