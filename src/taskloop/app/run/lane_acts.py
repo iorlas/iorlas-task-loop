@@ -5,6 +5,7 @@ timeout and the exit it was made on. The network gate (probe, backoff, the pause
 import time
 from typing import Any, Final
 
+from taskloop.app.run import writer_pin
 from taskloop.contracts import log as rec
 from taskloop.contracts.delegate import DelegateResult
 from taskloop.contracts.enums import WaitWhat
@@ -181,9 +182,10 @@ class LaneActs:
                     (" until " + time.strftime("%H:%M:%S", time.localtime(retry_after))) if retry_after else "",
                 ),
             )
-        pinned = pin.for_role(c.role, pin.families(e.cfg.writer_family, e.budget.labels))
+        pinned = writer_pin.pinned(e.cfg, str(e.bead), e.plan_data, e.budget.labels, c.role)
         if isinstance(a, lp.Yield) and pinned and stop.reason in pin.STOP_REASONS:  # the pin found no ready lane: say it
-            raise ops.blocked(pin.stop_why(c.node, pinned, stop.reason, res.say or stop.fix, stop.fix), a.kind, stop)
+            warm = writer_pin.warm(e.cfg, str(e.bead), e.plan_data, e.budget.labels) if c.role == pin.PINNED_ROLE else ""
+            raise ops.blocked(pin.stop_why(c.node, pinned, stop.reason, res.say or stop.fix, stop.fix, warm), a.kind, stop)
         why = ops.stop_why(c.node, a.kind, stop, res.say, retry_after, c.counts["crashes"] + 1, res.denied, now=e.clock.now())
         raise ops.blocked(why, a.kind, stop)
 
