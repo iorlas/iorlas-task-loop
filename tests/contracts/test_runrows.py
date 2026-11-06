@@ -1,4 +1,4 @@
-"""Authoritative run wire records, revisions, legacy import and schema retirement."""
+"""Authoritative run wire records, revisions, and schema retirement."""
 
 import json
 import sqlite3
@@ -8,16 +8,14 @@ from unittest.mock import patch
 import pytest
 import support.paths  # noqa: F401
 from support.case import Case
-from support.narrow import must
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.enums import Outcome, Result, Step, WhyCode
 from taskloop.contracts.ids import loop_key
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.paths import ConfigDir, RunFiles
-from taskloop.contracts.run import CallIdentity, DoneEntry, DoneMemo, RunFinish, RunManifest, RunState
-from taskloop.contracts.runrows import RunRows, StaleRevision, import_legacy
+from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.run import RunFinish, RunManifest, RunState
+from taskloop.contracts.runrows import RunRows, StaleRevision
 from taskloop.contracts.stores import JsonStore
 
 
@@ -75,86 +73,6 @@ class RunRowsTest(Case):
         assert [m.run for m in self.rows.of_bead("b", "/r")] == ["z"]
         assert [m.run for m in self.rows.of_repo("/r")] == ["b", "z"]
 
-    def legacy(self, m):
-        JsonStore(self.cfg.run_manifest(m.run), RunManifest).write(m)
-
-    def test_import_is_insert_only_repeatable_and_preserves_legacy_bytes(self):
-        for run in ("a", "b", "c"):
-            self.legacy(self.complete().replace(run=run))
-        torn = self.cfg.run_manifest("torn")
-        torn.parent.mkdir(parents=True)
-        torn.write_text("{")
-        files = {p: p.read_bytes() for p in self.cfg.runs_dir().glob("*/manifest.json")}
-        assert import_legacy(self.cfg) == 3
-        assert {p: p.read_bytes() for p in files} == files
-        before = self.rows.snapshot("a")
-        self.legacy(self.complete().replace(run="a", owner="stale file"))
-        assert import_legacy(self.cfg) == 0
-        assert self.rows.snapshot("a") == before
-        for path, raw in files.items():
-            if path.parent.name != "a":
-                assert path.read_bytes() == raw
-        assert must(JsonStore(self.cfg.run_manifest("a"), RunManifest).get()).owner == "stale file"
-
-    def test_locator_imports_only_once_and_never_rereads_an_imported_file(self):
-        self.legacy(self.complete())
-        first = RunLocator(self.cfg)
-        assert must(first.get("r")).manifest == self.complete()
-        self.cfg.run_manifest("r").write_text("{")
-        with patch.object(Path, "iterdir", side_effect=AssertionError("repeated directory scan")), \
-                patch.object(JsonStore, "get", side_effect=AssertionError("legacy reread")):
-            assert RunLocator(self.cfg).runs() == first.runs()
-            assert must(first.get("r")).manifest == self.complete()
-
-    def test_import_skips_a_manifest_under_another_run_id(self):
-        path = self.cfg.run_manifest("wrong")
-        JsonStore(path, RunManifest).write(self.complete())
-        before = path.read_bytes()
-        assert import_legacy(self.cfg) == 0
-        assert self.rows.all() == []
-        assert path.read_bytes() == before
-
-    def test_legacy_steps_and_one_synthetic_attempt_import_once_without_changing_files(self):
-        for name in ("valid", "torn", "old-name"):
-            self.legacy(self.complete().replace(run=name))
-        valid = RunFiles(self.cfg.run_dir("valid")).done_memo()
-        old = RunFiles(self.cfg.run_dir("old-name")).legacy_done_memo()
-        entry = DoneEntry(sha="old-prompt-sha", file="/answer", identity=CallIdentity(
-            semantics="sem", worktree="/wt", cwd="/wt", tree="tree", cwd_tree="tree", head="head", cwd_head="head"))
-        for path in (valid, old):
-            JsonStore(path, DoneMemo).write(DoneMemo(done={'["write", 1]': entry}))
-        torn = RunFiles(self.cfg.run_dir("torn")).done_memo()
-        torn.write_text("{")
-        files = {path: path.read_bytes() for path in (valid, old, torn)}
-        assert import_legacy(self.cfg) == 3
-        with self.rows.transaction() as con:
-            steps = con.execute("SELECT run,key,try,attempt,status,started,ended,input_digest,result,calls "
-                                "FROM step ORDER BY run").fetchall()
-            attempts = con.execute("SELECT run,n,started,ended,end_kind,fault_class,fingerprint "
-                                   "FROM attempt ORDER BY run").fetchall()
-        assert [r[0] for r in steps] == ["old-name", "valid"]
-        for row in steps:
-            assert row[1:8] == ('["write", 1]', 1, 4, "done", 10, 10, "old-prompt-sha")
-            assert wire.load(DoneEntry, row[8]) == entry
-            assert row[9] == 0
-        assert attempts == [(name, 4, 10, 20, None, None, None) for name in ("old-name", "torn", "valid")]
-        assert {path: path.read_bytes() for path in files} == files
-        with patch.object(JsonStore, "get", side_effect=AssertionError("legacy reread")):
-            assert import_legacy(self.cfg) == 0
-
-    def test_legacy_memo_never_replaces_existing_step_rows(self):
-        m = self.complete()
-        self.legacy(m)
-        self.rows.put(m)
-        path = RunFiles(self.cfg.run_dir(m.run)).done_memo()
-        JsonStore(path, DoneMemo).write(DoneMemo(done={'[1]': DoneEntry(sha="stale", file="/old")}))
-        with self.rows.transaction() as con:
-            con.execute("INSERT INTO step (run,key,try,attempt,status,started,input_digest) "
-                        "VALUES ('r','[2]',1,4,'done',10,'current')")
-        assert import_legacy(self.cfg) == 0
-        with self.rows.transaction() as con:
-            assert con.execute("SELECT key,input_digest FROM step").fetchall() == [("[2]", "current")]
-
     def test_v1_is_quarantined_and_recreated_at_the_current_schema(self):
         path = self.cfg.factory_db()
         with sqlite3.connect(path) as con:
@@ -174,17 +92,8 @@ class RunRowsTest(Case):
             assert old.execute("SELECT * FROM derived").fetchall() == [("old projection",)]
         old.close()
 
-    def test_corruption_is_an_error_and_never_reads_legacy(self):
-        self.legacy(self.complete())
-        self.cfg.factory_db().write_bytes(b"broken database")
-        with patch.object(JsonStore, "get", side_effect=AssertionError("file fallback")), \
-                pytest.raises(factorydb.DatabaseError):
-            RunLocator(self.cfg).get("r")
-        assert self.cfg.factory_db().read_bytes() == b"broken database"
-
-    def test_unreadable_manifest_row_is_an_error_without_a_legacy_read(self):
-        self.legacy(self.complete())
-        import_legacy(self.cfg)
+    def test_unreadable_manifest_row_is_an_error(self):
+        self.rows.put(self.complete())
         with self.rows.transaction() as con:
             con.execute("UPDATE run SET manifest='{' WHERE run='r'")
         with patch.object(JsonStore, "get", side_effect=AssertionError("file fallback")):
@@ -210,7 +119,6 @@ class ForwardReadable(RunRowsTest):
         m = self.put_raw(lambda body: body.update(pid_start_from_the_future=1.5))
         assert self.rows.get("r") == m
         assert self.rows.all() == [m]
-        assert import_legacy(self.cfg) == 0  # re-reads every row on every run: must not raise
 
     def test_a_row_that_does_not_validate_names_validation_the_run_and_the_field(self):
         self.put_raw(lambda body: body.update(started="not a number"))

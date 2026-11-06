@@ -59,10 +59,10 @@ class StopRequests(LoopBase):
         return self.files.command().get()
 
     def test_a_command_that_is_not_a_command_is_ignored(self):
-        f = looptest.command(self.repo_s)
-        f.parent.mkdir(parents=True, exist_ok=True)
         for text in ("", "after", json.dumps({"mode": "after", "time": 1}), json.dumps({"v": 2, "action": "stop_now"})):
-            f.write_text(text)
+            with self.files.rows().transaction() as con:
+                con.execute("INSERT INTO kv (k, v, t) VALUES (?, ?, 0) ON CONFLICT(k) DO UPDATE SET v=excluded.v",
+                            (f"loop-command:{self.files.key}", text))
             assert self.files.stop_for(self.old_pid, self.clock.t) == "", text
 
 class Moved(Exception):
