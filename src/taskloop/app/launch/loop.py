@@ -161,8 +161,8 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         wt_lock=lambda key: hold_path(cfg.lock_record(LockWhat.WORKTREE.value, key), f"pid {os.getpid()}", what=LockWhat.WORKTREE),
         start_worktree=lambda name: wslots.start_worktree(repo, git, who, name),
         claim=lambda b, wt, slot: ops.claim(repo, store, b, wt, slot, git, who, now),
-        loop_lock=ops.loop_lock,
-        drop_engine_lock=lambda d: engine_lock.drop_engine_lock(d, os.getpid()),
+        loop_lock=functools.partial(ops.loop_lock, cfg),
+        drop_engine_lock=lambda d: engine_lock.drop_engine_lock(cfg, d, os.getpid()),
         spawn=lambda cmd, log, extra: ops.spawn(
             spawner, cmd, log, {**extra, EnvVar.TASK_LOOP_LOOP_ID.value: loop_id, **childenv.identity_env(who)}),
         stop_now=ops.stop_now,

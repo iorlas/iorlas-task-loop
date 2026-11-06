@@ -16,6 +16,7 @@ from taskloop.adapters import landlock
 from taskloop.app.land import cleanup
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
+from taskloop.app.land.phases import phase
 from taskloop.app.land.profile_change import diff_sha
 from taskloop.app.land.stackgate import StackGate
 from taskloop.contracts import log as rec
@@ -51,13 +52,13 @@ class Stack:
     def __init__(self, forge: Forge, cmds: Cmds, log: RunLog, git: Git, repo: str, lock: Path, record: Callable[[str, str], int],
                  sync: Callable[[], DoltPush], owner: str, session: str, gate: StackGate, beads: Beads, wait_min: float | None = None,
                  named: Callable[[str], None] = lambda _bead: None,
-                 is_slot: Callable[[str], bool] = lambda _path: False, slot_base: str = "", *, profile_change: str | None = None,
-                 jobs: int = 1) -> None:
+                 is_slot: Callable[[str], bool] = lambda _path: False, slot_base: str = "", *, cfg: ConfigDir,
+                 profile_change: str | None = None, jobs: int = 1) -> None:
         self.forge, self.cmds, self.log, self.git, self.repo, self.lock = forge, cmds, log, git, repo, lock
         self.record, self.sync, self.owner, self.session, self.wait_min = record, sync, owner, session, wait_min
         self.gate, self.named = gate, named  # named(bead): the run's manifest learns each bead
         self.beads, self.failure_reason = beads, ""
-        self.is_slot = is_slot
+        self.is_slot, self.cfg = is_slot, cfg
         self.slot_base = slot_base or f"origin/{forge.base}"
         self.profile_change = profile_change
         self.jobs = jobs  # gates run at once before the serial merges
@@ -86,7 +87,7 @@ class Stack:
                     self.sync_bd()
         finally:
             for row in self.pending:
-                cleanup.retry(self.git, self.log, row, self.is_slot, self.slot_base)
+                cleanup.retry(self.git, self.log, row, self.is_slot, self.slot_base, cfg=self.cfg)
         return rc
 
     def validate_beads(self, items: list[StackItem]) -> None:
@@ -145,8 +146,10 @@ class Stack:
         self.log.emit(rec.StepStart(id=sid, step=name, text=f"land {branch}"))
         try:
             if pr is None or pr.state == OPEN:  # a PR already merged or closed is prepare's to judge
-                self.forge.fetch()  # the judged commit's profile, and the base as origin has it now
-                base = self.gate.require(branch, oid, profile_change=self.profile_change)
+                with phase(self.log, "fetch"):
+                    self.forge.fetch()  # the judged commit's profile, and the base as origin has it now
+                with phase(self.log, "gate"):
+                    base = self.gate.require(branch, oid, profile_change=self.profile_change)
                 if self.profile_change is not None:
                     self.audit_profile(branch, oid, base)
             pr = self.prepare(item, branch, oid, pr)
@@ -198,9 +201,11 @@ class Stack:
         if pr is not None and pr.state == MERGED:
             return pr
         if not item.pr:
-            self.forge.push(branch, oid)
+            with phase(self.log, "push"):  # the repo's pre-push judge runs inside git push
+                self.forge.push(branch, oid)
         if pr is None:
-            pr = self.forge.create(branch, self.title(branch, oid), f"Delivered by `tl land-stack`{self.bead_note(item)}.")
+            with phase(self.log, "pr"):
+                pr = self.forge.create(branch, self.title(branch, oid), f"Delivered by `tl land-stack`{self.bead_note(item)}.")
         elif not item.pr:
             pr = self.forge.view(pr.number)  # the push may have moved its head
         if pr.head_oid != oid:
@@ -224,13 +229,15 @@ class Stack:
                 now = self.forge.view(pr.number)
                 if now.state == OPEN and now.head_oid != head:  # the gate judged `head`: the forge would refuse this later
                     raise HeadMoved(1, f"PR #{pr.number} head moved from {head[:12]} to {now.head_oid[:12]} while it was gated")
-                self.forge.merge(pr, head)
-                pr = self.forge.view(pr.number)
+                with phase(self.log, "merge"):
+                    self.forge.merge(pr, head)
+                    pr = self.forge.view(pr.number)
             if pr.state != MERGED or not pr.merge_sha:
                 raise Stop(1, f"PR #{pr.number} is {pr.state} after the merge (merge commit {pr.merge_sha or 'none'}): not recorded")
             if item.bead:
-                self.forge.fetch()
-                rc = self.record(item.bead, pr.merge_sha)
+                with phase(self.log, "record"):
+                    self.forge.fetch()
+                    rc = self.record(item.bead, pr.merge_sha)
                 if rc:
                     raise Stop(rc, f"tl land {item.bead} {pr.merge_sha[:12]} was refused (exit {rc})")
                 self.recorded += 1
@@ -245,19 +252,24 @@ class Stack:
     def locked(self) -> Generator[None]:
         holder = f"land-stack {self.session or self.owner}"
         t0 = time.monotonic()
+        sid = self.log.next_id("s")
+        self.log.emit(rec.StepStart(id=sid, step="land:lock-wait"))
         try:
             with landlock.os_lock(self.lock, holder, self.waiting, None if self.wait_min is None else self.wait_min * 60):
+                self.log.emit(rec.StepEnd(id=sid, step="land:lock-wait", outcome="done", wait_seconds=time.monotonic() - t0))
                 self.log.emit(rec.Lock(what="land", holder=holder))
                 try:
                     yield
                 finally:
                     self.log.emit(rec.Unlock(what="land", secs=time.monotonic() - t0))
         except TimeoutError as e:
+            self.log.emit(rec.StepEnd(id=sid, step="land:lock-wait", outcome="failed", wait_seconds=time.monotonic() - t0))
             raise Stop(LOCK_BUSY, f"gave up waiting for the land lock (held by {e})") from None
 
     def after(self, item: StackItem, pr: Pr, branch: str, head: str, sha: str) -> None:
         """Landed and recorded: persist cleanup before closing a replaced PR, which can fail independently."""
-        self.tidy(branch, head, sha)
+        with phase(self.log, "cleanup"):
+            self.tidy(branch, head, sha)
         if item.supersedes:
             old = self.forge.view(item.supersedes)
             if old.state == OPEN:

@@ -2,6 +2,7 @@
 come from that process (or a child of it). Appends a line per checkout to $FAKE_CHECKOUT_LOG; always exits 0, since a
 post-checkout hook's exit is the checkout's."""
 
+import hashlib
 import json
 import os
 import subprocess
@@ -20,6 +21,13 @@ def parent(pid):
         return 0
 
 
+def lock_file(cwd):
+    """The engine lock of the worktree `cwd`: <config>/locks/engine-<folder>-<8 hex of sha1 of its real path>.lock."""
+    real = os.path.realpath(cwd)
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return os.path.join(base, "task-loop", "locks", f"engine-{os.path.basename(real)}-{hashlib.sha1(real.encode()).hexdigest()[:8]}.lock")
+
+
 def alive(pid):
     try:
         os.kill(int(pid), 0)
@@ -31,7 +39,7 @@ def alive(pid):
 def main():
     cwd = os.path.realpath(os.getcwd())
     try:
-        with open(os.path.join(cwd, ".task", "engine.lock"), encoding="utf-8") as f:
+        with open(lock_file(cwd), encoding="utf-8") as f:
             lock = json.load(f)
     except (OSError, ValueError):
         lock = {}

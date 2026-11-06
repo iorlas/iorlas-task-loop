@@ -10,6 +10,7 @@ from taskloop.app.slots import owned
 from taskloop.app.slots.engine_lock import engine_busy
 from taskloop.app.slots.env import SlotEnv, stamp
 from taskloop.app.slots.surface import SlotView
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import SlotGit
 from taskloop.contracts.slots import BranchPinned, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
 from taskloop.domain.land.matchers import NetText
@@ -189,9 +190,9 @@ def ensure_tree(slot: SlotView) -> bool:
     return True
 
 
-def leave_slot(git: SlotGit, directory: str, base: str, branch: str, *, dirty: Callable[[], bool] | None = None) -> bool:
+def leave_slot(cfg: ConfigDir, git: SlotGit, directory: str, base: str, branch: str, *, dirty: Callable[[], bool] | None = None) -> bool:
     """Leave a clean slot detached at its base; preserve work that could not be saved."""
-    if engine_busy(directory):
+    if engine_busy(cfg, directory):
         return False
     unsaved = git.dirty(directory) if dirty is None else dirty()
     if unsaved or git.branch(directory) != branch:

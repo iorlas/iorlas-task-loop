@@ -44,7 +44,7 @@ line; a message between sessions is never the guard. Clashes may happen; they mu
 | shared thing | guard | a second taker | gap |
 |---|---|---|---|
 | a bead | atomic `bd --claim`, each loop its own actor | the loop takes the next bead | |
-| a slot | slot bead + `<worktree>/.task/engine.lock` (pids with start times) + `tl slot hold`; every claim under one per-repo lock | waits in the slot line, served in ticket order (tl-bxk.11.5); a hand `--slot S` refuses | |
+| a slot | slot bead + `<config>/locks/engine-<worktree key>.lock` (pids with start times) + `tl slot hold`; every claim under one per-repo lock | waits in the slot line, served in ticket order (tl-bxk.11.5); a hand `--slot S` refuses | |
 | the base branch | land lock, rebase, retry; a fetch that loses a ref lock to a sibling worktree's is tried again | waits | |
 | Unity on the machine | the repo's OS counting locks (lifesim `tools/unity_slot.py`) | waits | |
 | a model lane | delegate's leases; busy answers `retry` | waits until `retry_after` | |
