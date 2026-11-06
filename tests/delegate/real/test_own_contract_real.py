@@ -29,7 +29,7 @@ from delegate.contracts import codec, wire
 from stream_proc import alive, proc_start
 from support.procsim import real_proc
 
-FAKE = str(Path(__file__).resolve().parent / "delegate_fakes" / "fake_agent.py")
+FAKE = str(Path(__file__).resolve().parent.parent / "delegate_fakes" / "fake_agent.py")
 
 
 def wait_pid(path, secs=10):

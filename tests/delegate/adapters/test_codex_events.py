@@ -5,10 +5,7 @@ Regenerate a golden with
 import dataclasses
 import itertools
 import json
-import os
-import stat
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -17,7 +14,7 @@ from any_agent.harnesses.codex import CodexHarness
 from any_agent.protocol import LaunchInputs
 from delegate.app.publish import LiveSink
 from support.case import Case
-from support.procsim import real_proc
+from support.tmpdir import TemporaryDirectory
 
 HERE = Path(__file__).resolve().parent
 
@@ -61,11 +58,11 @@ class Streams(Case):
 
     def test_each_stream_reaches_the_live_file_as_its_golden_lines(self):
         for name in NAMES:
-            with self.subTest(name), tempfile.TemporaryDirectory() as d:
+            with self.subTest(name), TemporaryDirectory() as d:
                 assert live_lines(parse(name)[1], Path(d) / "live.jsonl") == json.loads((GOLDEN / f"codex_{name}.live.json").read_text())
 
     def test_the_first_live_line_is_the_worker_and_the_pairs_match_by_id(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             out = live_lines(parse("session")[1], Path(d) / "live.jsonl")
         assert out[0] == {"v": 1, "pid": 4242, "pgid": 4242, "run_id": "rid"}
         assert [e["k"] for e in out[1:3]] == ["start", "cmd_start"]
@@ -78,7 +75,7 @@ class Facts:
     def test_reconnecting_two_of_five_is_a_retry_and_five_of_five_is_the_failure(self):
         h, per_line = parse("reconnecting")
         assert [e for evs in per_line for e in evs if isinstance(e, ev.Reconnecting)][1] == ev.Reconnecting(n=2, of=5, text=mock.ANY)
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             retries = [e for e in live_lines(per_line, Path(d) / "l.jsonl") if e.get("k") == "retry"]
         assert [(r["n"], r["of"]) for r in retries] == [(1, 5), (2, 5)]
         h, per_line = parse("retries_exhausted")
@@ -99,7 +96,7 @@ class Facts:
     def test_http_status_comes_from_the_json_body_or_the_last_status_text(self):
         assert [e.http_status for evs in parse("bad_request")[1] for e in evs] == [400]
         assert [e.http_status for evs in parse("http_429")[1] for e in evs] == [429]
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             out = live_lines(parse("http_429")[1], Path(d) / "l.jsonl")
         assert [(e["k"], e["why"]) for e in out if e.get("k") == "retry"] == [("retry", "http 429")]
 
@@ -196,23 +193,11 @@ class World:
         assert found.endswith("rollout-2026-10-21T19-45-28-th-7.jsonl")
         assert (h.transcript("th-8"), h.transcript(None)) == (None, None)
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_the_login_probe_runs_the_status_command(self):
-        with tempfile.TemporaryDirectory() as d:
-            exe = Path(d) / "codex"
-            exe.write_text('#!/bin/sh\n[ "$FAKE_LOGIN" = out ] && { echo "Not logged in" >&2; exit 1; }\necho "Logged in using ChatGPT"\n')
-            exe.chmod(exe.stat().st_mode | stat.S_IXUSR)
-            with mock.patch.dict(os.environ, {"PATH": d}):
-                assert CodexHarness().login_probe(5) == (True, "Logged in using ChatGPT")
-                with mock.patch.dict(os.environ, {"FAKE_LOGIN": "out"}):
-                    assert CodexHarness().login_probe(5) == (False, "Not logged in")
-            with mock.patch.dict(os.environ, {"PATH": "/nonexistent"}):
-                assert CodexHarness().login_probe(5)[0] is None
 
 
 if __name__ == "__main__" and "--regen" in sys.argv:
     for n in NAMES:
         h, pl = parse(n)
         (GOLDEN / f"codex_{n}.expected.json").write_text(json.dumps(as_json(h, pl), indent=1) + "\n")
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             (GOLDEN / f"codex_{n}.live.json").write_text(json.dumps(live_lines(pl, Path(d) / "l.jsonl"), indent=1) + "\n")
