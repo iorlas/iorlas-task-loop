@@ -33,6 +33,10 @@ class ConfigDir:
         """githooks/: the git hooks the engine writes at start; every subprocess tl starts gets it as core.hooksPath (adapters/childenv)."""
         return self.root / "githooks"
 
+    def layout_journal(self) -> Path:
+        """What `tl layout migrate` moved, one line per move."""
+        return self.root / "layout-migrate.jsonl"
+
     def dash_pid(self) -> Path:
         return self.root / "dash.pid"
 

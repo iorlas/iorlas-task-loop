@@ -13,7 +13,7 @@ import support.paths  # noqa: F401
 ROOT = Path(__file__).resolve().parents[2]
 DASH = ROOT / "src" / "taskloop_dash"
 PATHS = ROOT / "src" / "taskloop" / "contracts" / "paths.py"
-PLAIN_PYTHON = {"prepush.py"}  # the pre-push hook runs on plain python3 and imports no record (.importlinter): it joins names itself
+PLAIN_PYTHON = {"prepush.py", "layout_migrate.py"}  # the hook imports no record (.importlinter); the migrator names the OLD places
 MAKES_CONFIGDIR = {"env.py", "bind.py"}  # where the config root is taken from the process: everything else is handed a ConfigDir
 
 
