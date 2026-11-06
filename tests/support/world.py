@@ -2,16 +2,20 @@
 import atexit
 import contextlib
 import os
+import shlex
 import shutil
 from pathlib import Path
 from unittest import mock
 
+import pytest
 from jsonl_log import close_held
 
 from support import gitsim, procsim
 from support.case import Case
 from support.checked import run_checked
 from support.tmpdir import TemporaryDirectory, mkdtemp
+from support.waits import until
+from taskloop.adapters import halt as halting
 from taskloop.adapters import ident
 from taskloop.contracts.argv import text_of
 
@@ -72,6 +76,14 @@ def no_repo(fn):
     return fn
 
 
+def pid_gone(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    return False
+
+
 class SlotWorld(Case):
     """A slot's world for a test: the process env a run reads, a gitsim world (or a real origin + clone for @real_git) in `self.wt`, the
     check-markers fake. No bd, no engine."""
@@ -114,3 +126,36 @@ class SlotWorld(Case):
         self.tmp.cleanup()
         if self.sim:
             self.sim.check()
+
+    def spawn(self, pidfile, term=False):
+        """A check that starts a child sleeping 30 s and records its pid, then waits for it (term: after sending its parent, the
+        engine, SIGTERM)."""
+        kill = "kill -TERM $PPID; " if term else ""
+        script = Path(pidfile).with_suffix(".sh")  # a script, not `sh -c`: a check is an argv, and a shell string is refused
+        script.write_text(f"sleep 30 &\necho $! > {shlex.quote(str(pidfile))}\n{kill}wait\n")
+        return shlex.join(["sh", str(script)])
+
+    def script(self, name, body):
+        """A shell script in the test's temp dir, as the one-line text of a command that runs it."""
+        path = Path(self.tmp.name, name)
+        path.write_text(body)
+        return shlex.join(["sh", str(path)])
+
+    def child_of(self, pidfile, limit=30):
+        """The pid the check recorded. A caller that waits for a loaded runner to start the check passes a long limit (the wait ends
+        the moment the pid is there; the limit is only the give-up)."""
+        if until(lambda: pidfile.exists() and pidfile.read_text().strip(), limit):
+            return int(pidfile.read_text())
+        pytest.fail("the check never started its child")
+
+    def assertDead(self, pid):
+        if not until(lambda: pid_gone(pid), 3):
+            os.kill(pid, 9)
+            pytest.fail(f"pid {pid} outlived the engine's stop")
+
+    def stoppable(self):
+        """The engine's own SIGTERM handler (run_main installs it), restored after the test."""
+        if os.name == "nt":
+            pytest.skip("POSIX signals")
+
+        return halting.halt_on_sigterm()

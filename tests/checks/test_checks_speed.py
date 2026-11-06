@@ -8,11 +8,12 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import engine_case as te
 from support import procsim
 from support.cfgs import cfg_with
+from support.check_host import CheckHostCase
 from support.checks import ck, typed
-from support.engine_case import PY, engine, pyc, real_git  # noqa: F401
+from support.plans import FALSE, PLAN
+from support.shellkit import sh
 from support.spawn import port_git
 
 from taskloop.adapters import (
@@ -35,7 +36,7 @@ def ignored_paths(wt, globs, exclude=()):
     return inputs.matching(listed, globs, exclude)
 
 
-class SpeedTest(te.EngineTest):
+class SpeedTest(CheckHostCase):
     wt: Path
     tmp: Any
 
@@ -50,7 +51,7 @@ class SpeedTest(te.EngineTest):
         return procsim.fake(f"unity-run {code}", procsim.appends(n, code=int(code), out="Passed: 12")), n
 
     def notes(self, eng):
-        return [json.loads(ln).get("text", "") for ln in eng.log_path.read_text().splitlines() if '"kind": "note"' in ln]
+        return [r.get("text", "") for r in eng.records("note")]
 
 
 class InputCache(SpeedTest):
@@ -67,8 +68,8 @@ class InputCache(SpeedTest):
         (self.wt / "client" / "a.cs").write_text("1\n")
         eng.run_checks(self.ST, "s")
         (self.wt / "README.md").write_text("doc\n")  # outside the inputs
-        te.sh("git", "commit", "--allow-empty", "-qm", "x", cwd=self.wt)
-        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)  # the base moves
+        sh("git", "commit", "--allow-empty", "-qm", "x", cwd=self.wt)
+        sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)  # the base moves
         again = eng.run_checks(self.ST, "s")
         assert n.read_text() == "1"
         assert again[0].cached
@@ -106,8 +107,8 @@ class InputCache(SpeedTest):
         (self.wt / "package-lock.json").write_text("{}")
         eng.run_checks(self.ST, "s")
         assert n.read_text() == "111"
-        te.sh("git", "commit", "--allow-empty", "-qm", "x", cwd=self.wt)
-        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)  # the base moves
+        sh("git", "commit", "--allow-empty", "-qm", "x", cwd=self.wt)
+        sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)  # the base moves
         eng.run_checks(self.ST, "s")
         assert n.read_text() == "1111"
         eng2 = self.checks_engine(checks=[dict(chk, env={"A": "1"})])
@@ -207,14 +208,14 @@ class InputCache(SpeedTest):
 
     def test_doctor_reports_a_dead_inputs_glob(self):
         (self.wt / "a.cs").write_text("1\n")
-        te.sh("git", "add", "-A", cwd=self.wt)
-        te.sh("git", "commit", "-qm", "a", cwd=self.wt)
+        sh("git", "add", "-A", cwd=self.wt)
+        sh("git", "commit", "-qm", "a", cwd=self.wt)
         (self.wt / ".task-loop.json").write_text(json.dumps({"engine": {"checks": [
             {"id": "u", "argv": ["x"], "inputs": ["*.cs"]}, {"id": "v", "argv": ["y"], "inputs": ["client/{A,B}/**"]},
             {"id": "w", "argv": ["z"]}]}}))
-        te.sh("git", "add", ".task-loop.json", cwd=self.wt)
-        te.sh("git", "commit", "-qm", "doctor config", cwd=self.wt)
-        te.sh("git", "update-ref", "refs/remotes/origin/main", "HEAD", cwd=self.wt)
+        sh("git", "add", ".task-loop.json", cwd=self.wt)
+        sh("git", "commit", "-qm", "doctor config", cwd=self.wt)
+        sh("git", "update-ref", "refs/remotes/origin/main", "HEAD", cwd=self.wt)
         warns = doctor.git_warnings(str(self.wt), None, port_git())
         assert len([w for w in warns if "matches no tracked file" in w]) == 1
         assert "client/{A,B}/**" in " ".join(warns)
@@ -225,9 +226,9 @@ class InputCache(SpeedTest):
         sets = {"cs": ["*.cs"], "idle": ["*.md"]}
         (self.wt / ".task-loop.json").write_text(json.dumps({"engine": {"input_sets": sets, "checks": [
             {"id": "u", "argv": ["x"], "inputs": ["@cs"]}]}}))
-        te.sh("git", "add", "-A", cwd=self.wt)
-        te.sh("git", "commit", "-qm", "sets", cwd=self.wt)
-        te.sh("git", "update-ref", "refs/remotes/origin/main", "HEAD", cwd=self.wt)
+        sh("git", "add", "-A", cwd=self.wt)
+        sh("git", "commit", "-qm", "sets", cwd=self.wt)
+        sh("git", "update-ref", "refs/remotes/origin/main", "HEAD", cwd=self.wt)
         warns = doctor.git_warnings(str(self.wt), None, port_git())
         [idle] = [w for w in warns if "input_sets" in w]
         assert idle.startswith("engine.input_sets.idle is named by no check"), idle
@@ -242,7 +243,7 @@ class InputCache(SpeedTest):
         assert n.read_text() == "11"
 
     def test_a_red_check_with_inputs_is_not_remembered(self):
-        eng = self.checks_engine(checks=[{"id": "t", "cmd": te.FALSE, "group": "tests", "inputs": ["*.txt"]}])
+        eng = self.checks_engine(checks=[{"id": "t", "cmd": FALSE, "group": "tests", "inputs": ["*.txt"]}])
         eng.run_checks(self.ST, "s")
         assert not eng.run_checks(self.ST, "s")[0].cached
 
@@ -283,7 +284,7 @@ class CheapFirst(SpeedTest):
 
     def test_cheap_checks_all_run_before_the_stop_and_only_green_runs_are_recorded(self):
         _mark, slow, quick = self.slow_then_fast()
-        red = te.FALSE
+        red = FALSE
         eng = self.checks_engine(checks=[{"id": "a", "cmd": red, "group": "tests"}, {"id": "b", "cmd": quick, "group": "tests"},
                                          {"id": "c", "cmd": slow, "group": "tests"}])
         self.seed(eng, slow, 400)
@@ -433,7 +434,7 @@ class Schedule(SpeedTest):
         skipped = [(c.id, c.why) for c in res if c.status == "skipped"]
         assert len(skipped) == 3
         assert all("failed first" in w or "did not run" in w for _, w in skipped)
-        assert "producer unity-tests did not run" in dict(skipped)["test -r TL_CHECK_LOG_UNITY_TESTS"]
+        assert "producer unity-tests did not run" in dict(skipped)[CheckId("test -r TL_CHECK_LOG_UNITY_TESTS")]
 
     def test_replay_of_acceptance_only_red_rounds_never_relaunches_unity(self):
         # a round shaped like yxbb.3 r1 whose only red is a cheap acceptance check, replayed three times (the rounds a writer fixes)
@@ -449,5 +450,5 @@ class Schedule(SpeedTest):
         assert len(got) == 2  # an echo, an unknown recipe and `just fmt` (the repo's fmt is `just fmt-check-changed`) wrap nothing
         assert "`unity-tests`" in got[0]
         assert "`unity-play-tests`" in got[1]
-        over = typed(dict(te.PLAN, stages=[dict(te.PLAN["stages"][0], checks=["just play --timeout_ms 7200000"])]))
+        over = typed(dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["just play --timeout_ms 7200000"])]))
         assert len(lint.own_timeout_problems(over, 60)) == 1

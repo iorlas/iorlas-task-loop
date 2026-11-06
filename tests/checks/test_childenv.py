@@ -3,9 +3,9 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from support import engine_case as te
 from support import procsim
 from support.case import Case
+from support.check_host import CheckHostCase
 
 from taskloop.adapters.childenv import CHECK_SECRETS, check_env, check_environment, current_env, delegate_call_env, tool_env
 from taskloop.adapters.git import RealGit
@@ -113,7 +113,7 @@ class CheckEnvironmentTest(Case):
             assert not other.exists()
         assert not home.exists()
 
-class EngineCheckEnvironmentTest(te.EngineTest):
+class EngineCheckEnvironmentTest(CheckHostCase):
     def test_engine_checks_and_fixes_cannot_restore_host_credentials(self):
         seen = []
 
