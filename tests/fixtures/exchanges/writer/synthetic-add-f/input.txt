@@ -48,6 +48,7 @@ The stage's checks (the engine runs all of them after you; the split says which 
 You may run these:
 - has-f
 Before you say it is done, run the stage's fast checks so an error never reaches the engine; the engine reruns every check after you.
+The worktree <WT> and the branch task/t-1 exist: work here; report anything that deviates.
 If a command is refused, do not reword it to get around the refusal: say which command and why you needed it.
 Never start a command you expect to take over a minute; never poll a running command more than 3 times.
 A check that mentions $TL_CHECK_LOG_<ID> or $TL_CHECK_RC_<ID> reads the log and the exit code of a configured check the engine ran just

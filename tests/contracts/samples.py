@@ -466,7 +466,7 @@ OTHERS = {
     "Landed": landed.Landed(bead=BeadId("t-1"), sha="a" * 40, base="origin/main", t=T),
     "Park": parks.Park(bead=BeadId("t-1"), hash="b" * 40, runs=1, run="t-1-20261030-120000", t=T, fingerprint="a1b2c3d4e5f6"),
     "QueueItem": pickset.QueueItem(project="p", bead="t-1", title="queued", pos=1, state="next", why="1st of 2 chosen"),
-    "ReposIndex": snapshots.ReposIndex(repos={"/r": snapshots.RepoEntry(added=T)}),
+    "ReposIndex": snapshots.ReposIndex(repos={"o/r": snapshots.RepoEntry(path="/r", added=T)}),
     "SharedNotes": snapshots.SharedNotes(flakes={"test_x": T}, notes=["n"]),
     "Pin": snapshots.Pin(task_loop="0.23.38", delegate=None, pinned_at=T),
     "ReleaseResult": snapshots.ReleaseResult(

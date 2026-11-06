@@ -78,8 +78,7 @@ def check_caches(base: Mapping[str, str]) -> dict[str, str]:
     cache = base.get("XDG_CACHE_HOME") or str(home / ".cache")
     data = base.get("XDG_DATA_HOME") or str(home / ".local/share")
     defaults = {"XDG_CACHE_HOME": cache, "UV_CACHE_DIR": str(Path(cache) / "uv"),
-                "UV_PYTHON_INSTALL_DIR": str(Path(data) / "uv/python"), "DOTNET_CLI_HOME": str(home),
-                "NUGET_PACKAGES": str(home / ".nuget/packages"), "MISE_CACHE_DIR": str(Path(cache) / "mise"),
+                "UV_PYTHON_INSTALL_DIR": str(Path(data) / "uv/python"), "MISE_CACHE_DIR": str(Path(cache) / "mise"),
                 "MISE_DATA_DIR": str(Path(data) / "mise"), "MISE_STATE_DIR": str(home / ".local/state/mise")}
     return {k: base.get(k) or v for k, v in defaults.items()}
 
@@ -175,6 +174,11 @@ def script_argv(script: str | Path, env: Env) -> list[str]:
 def current_env(env: Env, extra: Mapping[str, str] | None = None) -> dict[str, str]:
     """The environment of a worker started from `env` (child_env_of over the taken copy of the process's)."""
     return child_env_of(env.vars, extra)
+
+
+def delegate_call_env(env: Env, extra: Mapping[str, str] | None = None) -> dict[str, str]:
+    """`current_env` for a call TO delegate: without DELEGATE_DEPTH, which delegate refuses from a caller and sets itself on its workers."""
+    return without(current_env(env, extra), "DELEGATE_DEPTH")
 
 
 def identity_env(who: Identity) -> dict[str, str]:
