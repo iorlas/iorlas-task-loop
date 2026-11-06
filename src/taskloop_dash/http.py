@@ -1,8 +1,11 @@
 """The HTTP face: the page and its modules from the static dir, the reads under /api/ (snapshot, bead, cost, live, artifact, look-shot,
-version), and POST /api/<verb>, the only writes. A broken transcript or log answers 500 with the error, never takes the page down."""
+version), and POST /api/<verb>, the only writes. A broken transcript or log answers 500 with a fixed body
+(the traceback goes to stderr), never takes the page down."""
 
 import json
 import os
+import sys
+import traceback
 from collections.abc import Sequence
 from email.message import Message
 from http.server import BaseHTTPRequestHandler
@@ -21,6 +24,13 @@ MAX_BODY = 65536
 POST_PREFIX = "/api/"  # POST /api/<verb>: the records of contracts.dash.WRITES
 
 Headers = Sequence[tuple[str, str]]
+INTERNAL = b'{"error": "internal error"}'
+
+
+def internal_error(where: str, error: Exception) -> tuple[int, bytes, str]:
+    """The answer to an unexpected failure: nothing of the exception (a path, a record, a message) reaches the client; stderr has it."""
+    print(f"dash: {where} failed\n" + "".join(traceback.format_exception(error)), file=sys.stderr, flush=True)
+    return 500, INTERNAL, "application/json"
 
 
 def authority(value: str) -> tuple[str, int] | None:
@@ -113,7 +123,7 @@ def make_handler(
                     return self.send(200, json.dumps(body).encode(), "application/json")
                 got = route(dash, static, u.path, q, self.headers.get("If-None-Match"))
             except Exception as e:  # a broken transcript must not take the page down
-                return self.send(500, json.dumps({"error": f"{type(e).__name__}: {e}"}).encode(), "application/json")
+                return self.send(*internal_error("GET " + u.path, e))
             self.send(*(got or (404, b"not found", "text/plain", [])))
 
         def do_POST(self) -> None:
@@ -126,6 +136,9 @@ def make_handler(
                 return self.send(400, b'{"error": "json"}', "application/json")
             if not u.path.startswith(POST_PREFIX):
                 return self.send(404, b"not found", "text/plain")
-            code, answer = dash.writes.post(u.path[len(POST_PREFIX):], body)
+            try:
+                code, answer = dash.writes.post(u.path[len(POST_PREFIX):], body)
+            except Exception as e:
+                return self.send(*internal_error("POST " + u.path, e))
             self.send(code, json.dumps(answer).encode(), "application/json")
     return H
