@@ -1,15 +1,15 @@
 """Parks, network pauses and re-exec notes are `wait` rows (tl-sqd3.26.2): one open row per bead and kind, an older loop's file adopted
 once, a row in an older or newer shape read (compatibility), and a database this tl cannot read answered quietly to the dashboard."""
 import json
-import tempfile
-from pathlib import Path
+import os
+import shutil
 
 import pytest
 import support.paths  # noqa: F401
 from support.case import Case
 from support.narrow import must
 
-from taskloop.contracts import factorydb
+from taskloop.contracts import factorydb, scratch
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.parks import Park, ParkStore
 from taskloop.contracts.paths import ConfigDir
@@ -22,9 +22,9 @@ B = BeadId("t-1")
 
 class WaitRows(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.cfg = ConfigDir(Path(tmp.name))
+        folder = scratch.scratch_dir(os.environ)
+        self.addCleanup(shutil.rmtree, folder, True)
+        self.cfg = ConfigDir(folder)
         self.parks = ParkStore(self.cfg)
 
     def park(self, **kw):
