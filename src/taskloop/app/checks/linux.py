@@ -5,6 +5,7 @@ TL_ARTIFACT_DIR come back. A down executor fails the check loudly: there is no r
 Every remote step is one plain argv (no shell on either side); the Linux executor's `env -C` is the change of directory.
 """
 # git-port-exempt: the git argvs below run on the executor over ssh, on its own repos; the local push goes through the Git port
+import hashlib
 import io
 import shlex
 import tarfile
@@ -23,6 +24,8 @@ from taskloop.domain.checks.matchers import safe_name
 EXECUTOR_DOWN_RC = 255  # ssh's own code for "could not connect": the check did not run
 TAIL_LINES = 40
 WALL_RC = 124
+SETUP_S = 1800  # the executor's setup (uv sync, mise install) may take this long
+SETUP_FAILED_RC = 1
 STEP_S = 120  # a prepare step (probe, init, checkout) that takes longer means the executor is not answering
 
 
@@ -30,10 +33,15 @@ class ExecutorDown(Exception):
     """A step before the check began failed: `why` is what the executor or ssh said."""
 
 
+class SetupFailed(Exception):
+    """The slot's setup on the executor exited non-zero: the check is red, its text is the setup's output."""
+
+
 class Pusher(Protocol):
     """The part of the Git port this uses: a plain push (never forced)."""
 
     def push(self, d: str, remote: str, refspec: str) -> None: ...
+    def rev_parse(self, d: str, rev: str) -> str: ...
 
 
 class Ssh(Protocol):
@@ -58,6 +66,9 @@ class LinuxRun:
             home = self._prepare(wt, repo, slot, sha, run_id)
             remote_art = f"{home}/{self.cfg.root}/{repo}/.artifacts/{attempt}"
             self._must(["mkdir", "-p", remote_art])
+        except SetupFailed as err:
+            log.write_text(f"{err}\n", encoding="utf-8")
+            return SETUP_FAILED_RC, str(err)
         except ExecutorDown as err:
             text = (f"check could not run: executor {self.cfg.host or '(none configured)'} is down: {err}\n"
                     "(a `in: linux` check never runs here instead)")
@@ -92,7 +103,27 @@ class LinuxRun:
             self._must(["git", "-C", work, "clean", "-qfd"])
         else:
             self._must(["git", "-C", bare, "worktree", "add", "-q", "--detach", work, sha])
+        self._setup(wt, sha, work, f"{home}/{cfg.root}/{repo}/.setup")
         return home
+
+    def _setup(self, wt: str, sha: str, work: str, marks: str) -> None:
+        """The profile's setup in the slot's worktree, again only when its inputs or command changed: a marker file names the state."""
+        cfg = self.cfg
+        if not cfg.setup:
+            return
+        state = hashlib.sha256()
+        state.update("\0".join(cfg.setup).encode())
+        for path in cfg.setup_inputs:
+            state.update(f"\0{path}={self.git.rev_parse(wt, f'{sha}:{path}')}".encode())
+        mark = f"{marks}/{Path(work).name}-{state.hexdigest()[:20]}"
+        if self._ssh_run(["test", "-e", mark]).exit == 0:
+            return
+        done = self.spawner.run(self._ssh(["env", "-C", work, *cfg.setup]), timeout_s=SETUP_S)
+        if done.exit != 0:
+            raise SetupFailed(f"setup {' '.join(cfg.setup)} exited {done.exit} on executor {cfg.host}:\n"
+                              + "\n".join((done.out + done.err).strip().splitlines()[-TAIL_LINES:]))
+        self._must(["mkdir", "-p", marks])
+        self._must(["touch", mark])
 
     def _ssh(self, argv: list[str]) -> list[str]:
         return [*self.cfg.ssh, self.cfg.host, shlex.join(argv)]  # ssh hands the remote one string: quoted so it splits back to argv

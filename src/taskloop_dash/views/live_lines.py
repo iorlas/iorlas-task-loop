@@ -75,7 +75,7 @@ WORKER_LINES: Final[dict[type, Callable[[Any], list[TermLine]]]] = {
 }
 
 
-def page(events: list[dict[str, Any]], cursor: str, state: Liveness, reset: bool = False) -> LivePage:
+def page(events: list[dict[str, Any]], cursor: str, state: Liveness, reset: bool = False, gap: bool = False) -> LivePage:
     lines: list[TermLine] = []
     tools: list[ToolCall] = []
     for e in events:
@@ -86,4 +86,4 @@ def page(events: list[dict[str, Any]], cursor: str, state: Liveness, reset: bool
         lines += table[type(r)](r) if type(r) in table else []
         if isinstance(r, delegate.LiveToolStart):
             tools.append(ToolCall(t=r.t, name=r.text))
-    return LivePage(cursor=cursor, state=STATE[state], lines=lines, tools=tools, reset=reset)
+    return LivePage(cursor=cursor, state=STATE[state], lines=lines, tools=tools, reset=reset, gap=gap)

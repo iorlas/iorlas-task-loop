@@ -28,6 +28,9 @@ class FakeGit:
             raise SlotGitError("ssh: connect to host pix port 22: Connection refused")
         self.pushed.append((d, remote, refspec))
 
+    def rev_parse(self, d: str, rev: str) -> str:
+        return ""
+
 
 class FakeSpawner:
     """Records every argv; the executor answers `rc` and the tar of `files` for the artifact fetch."""
@@ -98,3 +101,74 @@ class TestLinux:
 @pytest.mark.parametrize(("spec", "where"), [({}, "host"), ({"in": "linux"}, "linux")])
 def test_a_check_names_its_location_with_in(spec, where):
     assert msgspec.convert({"id": "t", "argv": ["true"], **spec}, CheckSpec).where == where
+
+
+class SetupSpawner(FakeSpawner):
+    """Answers the setup marker test (`test -e`) with `marked`, and the setup argv with `setup_rc`."""
+
+    def __init__(self, marked: bool, setup_rc: int = 0) -> None:
+        super().__init__()
+        self.marked, self.setup_rc = marked, setup_rc
+
+    def run(self, argv: list[str], *, timeout_s: float | None = None) -> Ran:
+        self.calls.append(argv)
+        words = shlex.split(argv[-1])
+        if words[:2] == ["test", "-e"]:
+            return Ran(exit=0 if self.marked else 1)
+        if words[:1] == ["env"] and "uv" in words:
+            return Ran(exit=self.setup_rc, out="resolved 3 packages\n")
+        return Ran(exit=1 if words[:2] == ["test", "-d"] else 0, out="/home/x\n")
+
+
+SETUP = ExecutorConfig(host="pix", root="tl", setup=["uv", "sync", "--locked"], setup_inputs=["uv.lock"])
+
+
+class RevGit(FakeGit):
+    def __init__(self, lock: str) -> None:
+        super().__init__()
+        self.lock = lock
+
+    def rev_parse(self, d: str, rev: str) -> str:
+        return self.lock if rev == "abc123:uv.lock" else ""
+
+
+def setup_calls(sp: FakeSpawner) -> list[list[str]]:
+    return [shlex.split(c[-1]) for c in sp.calls if "uv" in c[-1] and shlex.split(c[-1])[0] == "env" and "just" not in c[-1]]
+
+
+def run_with_setup(tmp: Path, sp: FakeSpawner, lock: str = "L1") -> tuple[int, str]:
+    art = tmp / "art"
+    art.mkdir(exist_ok=True)
+    return LinuxRun(SETUP, RevGit(lock), sp).run(
+        wt=str(tmp), repo="repo-1", slot="s1", sha="abc123", run_id="r9", step=CheckId("lint"), argv=["just", "lint"], env={},
+        log=tmp / "log", artifact_dir=art, timeout_s=60)
+
+
+class TestSetup:
+    def test_a_fresh_slot_runs_the_setup_in_its_worktree_before_the_check_and_marks_it(self, workdir):
+        sp = SetupSpawner(marked=False)
+        run_with_setup(workdir, sp)
+        assert setup_calls(sp) == [["env", "-C", "/home/x/tl/repo-1/s1", "uv", "sync", "--locked"]]
+        words = [shlex.split(c[-1]) for c in sp.calls]
+        assert words.index(["env", "-C", "/home/x/tl/repo-1/s1", "uv", "sync", "--locked"]) < next(
+            i for i, w in enumerate(words) if "just" in w)
+        assert any(w[0] == "touch" and w[1].startswith("/home/x/tl/repo-1/.setup/s1-") for w in words)
+
+    def test_an_unchanged_setup_does_not_run_again(self, workdir):
+        sp = SetupSpawner(marked=True)
+        run_with_setup(workdir, sp)
+        assert setup_calls(sp) == []
+
+    def test_the_marker_names_the_inputs_so_a_changed_lock_runs_the_setup_again(self, workdir):
+        marks = []
+        for lock in ("L1", "L2"):
+            sp = SetupSpawner(marked=False)
+            run_with_setup(workdir, sp, lock)
+            marks.append(next(shlex.split(c[-1])[-1] for c in sp.calls if shlex.split(c[-1])[0] == "touch"))
+        assert marks[0] != marks[1]
+
+    def test_a_failed_setup_is_a_red_check_that_never_runs_the_argv(self, workdir):
+        sp = SetupSpawner(marked=False, setup_rc=2)
+        rc, tail = run_with_setup(workdir, sp)
+        assert rc == 1 and "exited 2" in tail and "resolved 3 packages" in tail
+        assert not any("just" in c[-1] for c in sp.calls)

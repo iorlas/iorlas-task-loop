@@ -5,6 +5,7 @@ post-checkout hook's exit is the checkout's."""
 import hashlib
 import json
 import os
+import sqlite3
 import subprocess
 import time
 
@@ -21,11 +22,27 @@ def parent(pid):
         return 0
 
 
-def lock_file(cwd):
-    """The engine lock of the worktree `cwd`: <config>/locks/engine-<folder>-<8 hex of sha1 of its real path>.lock."""
+def read_lock(cwd):
+    """The engine lock of the worktree `cwd` as a dict: its `lease` row `run` `engine:<folder>-<8 hex of sha1 of its real path>` in
+    <config>/factory.db, else an older tl's locks/engine-<key>.lock file; {} when there is none."""
     real = os.path.realpath(cwd)
-    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
-    return os.path.join(base, "task-loop", "locks", f"engine-{os.path.basename(real)}-{hashlib.sha1(real.encode()).hexdigest()[:8]}.lock")
+    key = f"{os.path.basename(real)}-{hashlib.sha1(real.encode()).hexdigest()[:8]}"
+    base = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config"), "task-loop")
+    try:
+        con = sqlite3.connect("file:%s?mode=ro" % os.path.join(base, "factory.db"), uri=True)
+        try:
+            row = con.execute("SELECT body FROM lease WHERE kind='run' AND name=?", ("engine:" + key,)).fetchone()
+        finally:
+            con.close()
+        if row:
+            return json.loads(row[0])
+    except (sqlite3.Error, ValueError):
+        pass
+    try:
+        with open(os.path.join(base, "locks", f"engine-{key}.lock"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
 
 
 def alive(pid):
@@ -38,11 +55,7 @@ def alive(pid):
 
 def main():
     cwd = os.path.realpath(os.getcwd())
-    try:
-        with open(lock_file(cwd), encoding="utf-8") as f:
-            lock = json.load(f)
-    except (OSError, ValueError):
-        lock = {}
+    lock = read_lock(cwd)
     pid = lock.get("pid") if alive(lock.get("pid")) else None
     chain, p = [], os.getppid()
     while pid and p > 1 and len(chain) < 12:

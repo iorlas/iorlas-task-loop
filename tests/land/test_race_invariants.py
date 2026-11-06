@@ -75,6 +75,7 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.gitfacts import GitOutcome, LogRow
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.lockrows import EngineLockRows
 from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import Checkout, SlotGitError
 
@@ -578,7 +579,7 @@ class Invariants(test_loop.Base):
             assert not set(b.get("metadata") or {}) & set(marks.HELD_KEYS), b
         assert sl.ticket_names(self.repo_s) == []
         for n in slots:
-            assert not homes.cfg().engine_lock(wslots.slot_dir(self.repo_s, n, self.cfg)).exists(), n
+            assert not EngineLockRows(homes.cfg(), wslots.slot_dir(self.repo_s, n, self.cfg)).exists(), n
         for lock in (homes.config_dir() / "locks").glob("*.lock"):
             with open(str(lock), "a+") as f:
                 must(fcntl).flock(f, must(fcntl).LOCK_EX | must(fcntl).LOCK_NB)  # raises while a holder is left
