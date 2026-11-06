@@ -83,7 +83,7 @@ def _claim_view(view: Callable[..., SlotView], b: Bead, target: str, startable: 
         why = f"start stalled: no run {int((now - claimed) // 60)} min after claiming {target}"
     else:
         why = f"claimed by {b.assignee or '?'}, " + ("no live run" if dir_exists else "its folder is gone")
-    return view(state="claimed" if dir_exists else "dead", holder=b.assignee, since=since, idle_why=why)
+    return view(state="claimed" if dir_exists else "dead", holder=b.assignee, bead=target if startable else "", since=since, idle_why=why)
 
 
 def slot_view(name: str, b: Bead | None, run: LiveSlot | None, dir_exists: bool, beyond: bool, now: float, targets: set[str]) -> SlotView:

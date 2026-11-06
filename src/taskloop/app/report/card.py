@@ -25,8 +25,9 @@ from taskloop.contracts.kinds import ASKS, PAUSES, Kind, kind_named
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.log import EngineLog, decode
 from taskloop.contracts.ports import Git
+from taskloop.contracts.rowstores import ReleaseResultStore
 from taskloop.contracts.runlife import Liveness, liveness
-from taskloop.contracts.stores import LoopLog, ReleaseResultStore
+from taskloop.contracts.stores import LoopLog
 from taskloop.contracts.trace import RunTrace
 from taskloop.domain.lifecycle import matchers
 

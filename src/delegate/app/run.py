@@ -54,6 +54,8 @@ class Run:
         self.extra: dict[str, Json] = {}  # fields every answer of this call carries: warnings, notice, needs_input
         self.settler = launch.settler()
         self.git_before: dict[str, str] | None = None
+        self.attempts: list[dict[str, Json]] = []  # every launch of this call, in order
+        self.rerouted = False
         self.keep_ref: Callable[[str], None] = lambda ref: None  # replaced by _hooks, before any launch
 
     def _family(self, d: dict[str, Json]) -> Json:
@@ -147,7 +149,14 @@ class Run:
         res = self._run(d, lanes, t, who, brief)
         if isinstance(res, dict) and res.get("outcome") == "schema_invalid" and not self.a.resume:
             res = self._reroute(res, brief)
-        return self.emit(as_opt_str(res.pop("outcome", None)), **res) if isinstance(res, dict) else res
+        return self._emit_res(res)
+
+    def _emit_res(self, res: dict[str, Json] | int) -> int:
+        if not isinstance(res, dict):
+            return res
+        if len(self.attempts) > 1:
+            res["attempts"] = list(self.attempts)  # a single launch is the usual call: the field stays absent
+        return self.emit(as_opt_str(res.pop("outcome", None)), **res)
 
     def _brief(self) -> str:
         if self.given_brief is not None:
@@ -157,6 +166,8 @@ class Run:
     def _reroute(self, res: dict[str, Json], brief: str) -> dict[str, Json] | int:
         """One fresh attempt after the re-ask failed; each attempt has already kept its own history and usage."""
         pair = (as_str(res["lane"]), as_str(res["model"]))
+        if self.attempts and self.attempts[-1]["outcome"] is None:
+            self.attempts[-1]["outcome"] = "schema_invalid"  # the re-ask launched fine too; its answer is what failed
         d, lanes, warnings, t = decide.decision(self.a, self.cfg, self.unattended, frozenset((pair,)), apply=True)
         if (
             d["action"] != "run"
@@ -176,6 +187,7 @@ class Run:
             self.log("warning: " + as_str(d["warning"]))
         who = {k: d.get(k) for k in IDENTITY}
         who["family"] = self._family(d)
+        self.rerouted = True
         return self._run(d, lanes, t, who, brief)
 
     def _stopped(self, d: dict[str, Json], lanes: dict[str, Lane], t: float) -> int:
@@ -293,14 +305,26 @@ class Run:
     ) -> dict[str, Json]:
         a = self.a
 
-        def launch_one(b: str, a_: env.Args) -> dict[str, Json]:
-            return launch.launch_worker(d, b, a_, rid, t, self.cfg, hooks)
+        def launch_one(b: str, a_: env.Args, kind: str) -> dict[str, Json]:
+            t_leg = time.time()
+            leg = launch.launch_worker(d, b, a_, rid, t, self.cfg, hooks)
+            self.attempts.append(
+                {
+                    "kind": kind,
+                    "lane": as_str(d["lane"]),
+                    "model": as_str(d["model"]),
+                    "outcome": as_opt_str(leg.get("outcome")),
+                    "secs": round(time.time() - t_leg, 1),
+                    "tokens": as_opt_obj(leg.get("tokens")),
+                }
+            )
+            return leg
 
         res = self._canary(launch_one, d, a) if canary_due else None  # the one probe before full traffic; None = it passed
-        res = res or launch_one(brief, a)
+        res = res or launch_one(brief, a, "reroute" if self.rerouted else "first")
         if res.get("outcome") == "network" and not res.pop("started", False) and net.net_up(as_str(d["lane"])):
             res = launch_one(
-                brief, a
+                brief, a, "network_rerun"
             )  # dropped before the vendor had a session and the net is back: nothing to resume, nothing lost, so run it again, once
         if res.get("outcome") is None and a.schema:
             res = self._schema(res, launch_one)
@@ -308,11 +332,15 @@ class Run:
         res.pop("answered", None)
         return res
 
-    def _canary(self, launch_one: Callable[[str, env.Args], dict[str, Json]], d: dict[str, Json], a: env.Args) -> dict[str, Json] | None:
+    def _canary(
+        self, launch_one: Callable[[str, env.Args, str], dict[str, Json]], d: dict[str, Json], a: env.Args
+    ) -> dict[str, Json] | None:
         """The pair's bench ended (or its lane's limit did): one 30 s probe before full traffic. -> None when it answered (a `done` row in
         history ends
         the ladder), else the failed result, which is the answer to the caller: the run's own history row then starts the next rung."""
-        res = launch_one(CANARY_BRIEF, argparse.Namespace(**dict(vars(a), resume=None, schema=None, timeout=CANARY_TIMEOUT_S)))
+        res = launch_one(
+            CANARY_BRIEF, argparse.Namespace(**dict(vars(a), resume=None, schema=None, timeout=CANARY_TIMEOUT_S)), "canary"
+        )
         if res.get("outcome") is None:
             env.history_add(hist.CanaryRow(ts=env.now(), run_id=str(uuid.uuid4()), lane=as_str(d["lane"]), model=as_str(d["model"])))
             return None
@@ -326,7 +354,7 @@ class Run:
             res["say"] = "canary failed: " + as_str(res.get("say"))
         return res
 
-    def _schema(self, res: dict[str, Json], launch_one: Callable[[str, env.Args], dict[str, Json]]) -> dict[str, Json]:
+    def _schema(self, res: dict[str, Json], launch_one: Callable[[str, env.Args, str], dict[str, Json]]) -> dict[str, Json]:
         """delegate enforces the schema: one re-ask in the same thread, then schema_invalid."""
         a = self.a
         schema: Json = json.loads(Path(a.schema).read_text(encoding="utf-8"))
@@ -335,7 +363,10 @@ class Run:
             again = launch_one(
                 f"Your final answer does not match the required JSON schema: {why}. Reply again with only the JSON object.",
                 argparse.Namespace(**dict(vars(a), resume=res["ref"])),
+                "schema_reask",
             )
+            if self.attempts and self.attempts[-2:-1] and self.attempts[-2]["outcome"] is None:
+                self.attempts[-2]["outcome"] = "schema_invalid"  # the first leg launched fine; its answer is what failed
             tok = [x for x in (as_opt_obj(res.get("tokens")), as_opt_obj(again.get("tokens"))) if x]
             again["tokens"] = {k: sum(as_num(x.get(k)) or 0 for x in tok) for k in ("in", "cached", "out")} if tok else None
             again["acct"] = accounting.merge(as_opt_obj(res.get("acct")), as_opt_obj(again.get("acct")))

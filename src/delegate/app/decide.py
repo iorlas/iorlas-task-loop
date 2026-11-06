@@ -6,6 +6,7 @@ import json
 import os
 import random
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
@@ -200,11 +201,22 @@ def call_args(a: env.Args, unattended: bool):
 RETRY_LOOKBACK_S = 6 * 3600
 
 
-def decision(
-    a: env.Args, cfg: dict[str, Json], unattended: bool = False, avoid: frozenset[tuple[str, str]] = frozenset(), apply: bool = False
-):
-    """next and run share this: build the fleet, route, remember the lane choice. -> (d, lanes, warnings, t); d is the JSON answer of
-    `next`. Only `run` passes apply=True and writes the profile (`apply_profile`); `next` and `status` write none."""
+@dataclass(frozen=True)
+class Decided:
+    """What `decide` chose, and the two writes that would follow it (`remember`, `apply_profile`): nothing here has been written."""
+
+    d: dict[str, Json]
+    lanes: dict[str, Lane]
+    warnings: list[str]
+    t: float
+    fleet: Fleet
+    dwell: tuple[str, str, float] | None  # (family, lane, min minutes) to remember: the pick is a run, fresh, in a family of several lanes
+
+
+def decide(
+    a: env.Args, cfg: dict[str, Json], unattended: bool = False, avoid: frozenset[tuple[str, str]] = frozenset()
+) -> Decided:
+    """Build the fleet and route: the answer of `next`, as a record. Writes no state and no profile (`remember`, `apply_profile`)."""
     t = env.now()
     st = env.load_state()
     routing = env.typed_routing(cfg)
@@ -222,6 +234,7 @@ def decision(
     router = Router(routing, HoldBook(st.holds), st.prev, t)
     pick = router.route(a.role, args, lanes, st.refs.get(args.resume or ""), avoid)
     d = pick.as_dict()
+    dwell: tuple[str, str, float] | None = None
     if isinstance(pick, Run):
         step: dict[str, Json] = {"model": pick.model, "effort": pick.effort, "mode": pick.mode}
         if pick.cap is not None or pick.pass_ == "resume":
@@ -231,19 +244,37 @@ def decision(
             fam = lanes[pick.lane].family
             if args.cap:
                 d["cap"] = hw["cap"] = args.cap if hw["kind"] == "claude_p" else hw.get("cap")
-
-            def mark(s: StateDoc) -> None:
-                new = DwellMemory(s.prev, routing.settings.min_dwell_minutes).note(fam, pick.lane, t)
-                if new:
-                    s.prev[fam] = new
-
             if sum(1 for lane in lanes.values() if lane.family == fam) > 1:
-                env.update_state(mark)
-    if apply:
-        apply_profile(fleet)
+                dwell = (fam, pick.lane, routing.settings.min_dwell_minutes)
     if fleet.offers:
         d["notice"] = "not set up: " + ", ".join(fleet.offers) + " (route.py doctor)"
-    return d, lanes, warnings, t
+    return Decided(d, lanes, warnings, t, fleet, dwell)
+
+
+def remember(decided: Decided) -> None:
+    """The lane choice joins the family's dwell memory, so the next pick stays on it for a while."""
+    if decided.dwell is None:
+        return
+    fam, lane, minutes = decided.dwell
+
+    def mark(s: StateDoc) -> None:
+        new = DwellMemory(s.prev, minutes).note(fam, lane, decided.t)
+        if new:
+            s.prev[fam] = new
+
+    env.update_state(mark)
+
+
+def decision(
+    a: env.Args, cfg: dict[str, Json], unattended: bool = False, avoid: frozenset[tuple[str, str]] = frozenset(), apply: bool = False
+):
+    """next and run share this: `decide`, remember the lane choice. -> (d, lanes, warnings, t); d is the JSON answer of `next`. Only `run`
+    passes apply=True and writes the profile (`apply_profile`); `next` and `status` write none."""
+    decided = decide(a, cfg, unattended, avoid)
+    remember(decided)
+    if apply:
+        apply_profile(decided.fleet)
+    return decided.d, decided.lanes, decided.warnings, decided.t
 
 
 def apply_profile(fleet: Fleet) -> None:
