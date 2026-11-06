@@ -1284,9 +1284,10 @@
   "why": "1st of 2 chosen"
  },
  "ReposIndex": {
-  "v": 1,
+  "v": 2,
   "repos": {
-   "/r": {
+   "o/r": {
+    "path": "/r",
     "added": 1793050200.5
    }
   }
