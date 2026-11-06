@@ -52,7 +52,7 @@ from taskloop.contracts.enums import Result
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId, loop_key
 from taskloop.contracts.run import RunReport
-from taskloop.stores.files import FileTickets
+from taskloop.stores.ticketrows import TicketRows
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 
@@ -243,7 +243,7 @@ class Line(Slots):
         self.cfg = wslots.profile_slots(str(self.repo))
 
     def tickets(self):
-        return list(sl.ticket_dir(str(self.repo)).glob("*.json"))
+        return sl.ticket_names(self.repo)
 
     def waiter(self, label, served):
         def go():
@@ -264,7 +264,7 @@ class Line(Slots):
         self.beads({}, slots=1)
         k = subprocess.Popen(["sleep", "60"])  # a live pid for the first in line
         self.kids.append(k)
-        FileTickets(homes.cfg()).take(loop_key(str(self.repo)), "first", 2, pid=k.pid, now=time.time())
+        TicketRows(homes.cfg()).take(loop_key(str(self.repo)), "first", 2, pid=k.pid, now=time.time())
         tries = []
         got = wslots.wait_slot(str(self.repo), self.cfg, "second", poll=(0.01, 0.01),
                            stop=lambda: tries.append(1) or len(tries) >= 5, spawner=real_spawner(), git=port_git(), who=who())
