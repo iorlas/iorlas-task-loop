@@ -289,7 +289,7 @@ class Release(Case):
         assert self.git("log", "--format=%s", "-2", "main", cwd=self.origin).splitlines() == ["0.1.6: feature", "Add feature (tl-1)"]
         assert "Co-Authored-By: Claude" in self.git("log", "-1", "--format=%B", "main", cwd=self.origin)
         calls = self.world.store.calls  # bd's own argv: tests/adapters; the release is the bead's land, its landed record, then the close
-        assert [c[:2] for c in calls] == [("provenance", "record"), ("update", "tl-1"), ("close", "tl-1")]  # update: the landed-sha metadata
+        assert [c[:2] for c in calls] == [("provenance", "record"), ("update", "tl-1"), ("close", "tl-1")]  # update: landed sha
         assert calls[-1] == ("close", "tl-1", "--reason", "landed")
         assert self.market_versions()["iorlas-task-loop"] == "0.1.6"
         assert json.loads((self.repo / PLUGIN).read_text())["author"] == {"name": "t"}  # the rest kept
