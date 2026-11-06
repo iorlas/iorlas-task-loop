@@ -2,7 +2,7 @@
 
 import pytest
 
-from taskloop.domain.report import matchers
+from taskloop.domain.lifecycle import matchers
 
 
 @pytest.mark.parametrize(("a", "b", "same"), [
