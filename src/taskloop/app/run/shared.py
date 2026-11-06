@@ -64,7 +64,7 @@ class Shared:
             wt = there.path
             if same_dir(wt, e.wt):
                 continue
-            lock = engine_lock.peek_engine_lock(wt)
+            lock = engine_lock.peek_engine_lock(e.home, wt)
             if lock is None or not lock.bead or lock.bead == e.bead or not engine_lock.live(lock):
                 continue
             ck = e.stores.checkpoints.of(lock.bead).get()

@@ -133,7 +133,7 @@ class OwnerGate(Case):
         log, forge = mock.Mock(), mock.Mock()
         log.stamp = {}
         stack = Stack(forge, self.cmds, log, self.git, "/repo", Path("/lock"), mock.Mock(), mock.Mock(),
-                      "owner", "session", self.gate, mock.Mock(), profile_change=TEXT)
+                      "owner", "session", self.gate, mock.Mock(), cfg=mock.Mock(), profile_change=TEXT)
         pr = mock.Mock(state="OPEN", head_oid="tip")
 
         def prepared(*args):
@@ -161,7 +161,7 @@ class OwnerGate(Case):
     def test_a_failed_audit_stops_before_push_or_merge(self):
         log = mock.Mock(stamp={})
         stack = Stack(mock.Mock(), self.cmds, log, self.git, "/repo", Path("/lock"), mock.Mock(), mock.Mock(),
-                      "owner", "session", self.gate, mock.Mock(), profile_change=TEXT)
+                      "owner", "session", self.gate, mock.Mock(), cfg=mock.Mock(), profile_change=TEXT)
         with (mock.patch.object(stack, "resolve", return_value=("topic", "tip", None)),
               mock.patch.object(self.git, "show", return_value="{}"),
               mock.patch.object(self.git, "profile_diff", return_value=PATCH),

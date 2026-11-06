@@ -103,6 +103,6 @@ def exec_into(repo: str, d: Path, argv: list[str], handover: str, env: Env, who:
         raise
 
 
-def loop_lock(wt: str, slot: str, slot_bead: str | None, bead: str) -> None:
+def loop_lock(cfg: paths.ConfigDir, wt: str, slot: str, slot_bead: str | None, bead: str) -> None:
     if os.path.isdir(wt):
-        engine_lock.loop_lock(wt, slot, slot_bead or "", bead=bead)
+        engine_lock.loop_lock(cfg, wt, slot, slot_bead or "", bead=bead)

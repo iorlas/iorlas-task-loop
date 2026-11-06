@@ -27,7 +27,7 @@ def running(repo: str, git: Git, who: Identity, store: Beads | None = None) -> d
         if is_bead_id(bid) and b.status == "in_progress" and not (b.lease_expires_at and b.lease_expires_at < stamp):
             out[bid] = b.title.split()[-1]
     for wt in wslots.worktrees(repo, git, who, slots):
-        lock = engine_lock.peek_engine_lock(wt)
+        lock = engine_lock.peek_engine_lock(who.config, wt)
         if lock is not None and is_bead_id(lock.bead) and engine_lock.live(lock):
             out.setdefault(lock.bead, lock.slot or Path(wt).name)
     return out
