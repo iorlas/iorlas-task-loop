@@ -192,7 +192,7 @@ class Stack:
         with self.locked():
             if pr.state == OPEN:
                 now = self.forge.view(pr.number)
-                if now.state == OPEN and now.head_oid != head:  # the gate judged `head`; the forge would refuse it too, but later and less clearly
+                if now.state == OPEN and now.head_oid != head:  # the gate judged `head`: the forge would refuse this later
                     raise HeadMoved(1, f"PR #{pr.number} head moved from {head[:12]} to {now.head_oid[:12]} while it was gated")
                 self.forge.merge(pr, head)
                 pr = self.forge.view(pr.number)
