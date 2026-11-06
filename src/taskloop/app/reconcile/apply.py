@@ -5,8 +5,9 @@ from collections.abc import Callable
 from taskloop.app.release import tidy
 from taskloop.contracts import fence
 from taskloop.contracts.bdsafe import peek
+from taskloop.contracts.beadsport import BdFailure, BeadPatch, Beads
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Git
 from taskloop.contracts.slots import HELD_KEYS
 from taskloop.domain.reconcile.facts import (
     Action,

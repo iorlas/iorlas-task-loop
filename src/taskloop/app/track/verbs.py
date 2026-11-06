@@ -16,12 +16,13 @@ from taskloop.app.track import runs as runq
 from taskloop.app.track.trail import event, provenance, prune_events, register_repo
 from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BdFailure, BeadPatch, Beads
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import Landed, landed_meta
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Git
 from taskloop.contracts.reponame import repo_name
 from taskloop.contracts.rowstores import ReposStore
 from taskloop.contracts.slots import SlotGitError, git_probe

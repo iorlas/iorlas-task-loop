@@ -5,11 +5,11 @@ from collections.abc import Callable
 from taskloop.app.asks import release
 from taskloop.contracts.ask import AskAnswer
 from taskloop.contracts.askstore import AskStore
+from taskloop.contracts.beadsport import BdFailure, Beads
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import AskClass
 from taskloop.contracts.forge import OPEN, Pr, pr_waited_on
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, Beads
 
 
 def wake_decided(asks: AskStore, store: Beads, view: Callable[[int], Pr | None], repo: str, now: float, cfg: EngineConfig) -> list[BeadId]:

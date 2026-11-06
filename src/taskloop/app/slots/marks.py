@@ -2,9 +2,9 @@
 from taskloop.app.slots.env import SlotEnv, stamp
 from taskloop.contracts.bdsafe import attempt
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BeadPatch
 from taskloop.contracts.fence import SLOT_GEN, gen_of
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BeadPatch
 from taskloop.contracts.slots import HELD_KEYS, Hold
 
 

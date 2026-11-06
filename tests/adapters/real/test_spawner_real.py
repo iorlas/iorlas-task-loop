@@ -11,7 +11,7 @@ from support.case import Case
 
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.contracts.env import snapshot
-from taskloop.contracts.ports import WaitTimeout
+from taskloop.contracts.procport import WaitTimeout
 
 
 class RealSpawn(Case):

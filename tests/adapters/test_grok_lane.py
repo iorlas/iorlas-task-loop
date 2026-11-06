@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.builders import cfg_with
+from support.cfgs import cfg_with
 from support.spawn import port_git
 
 from taskloop.app.write.handoff import Handoff

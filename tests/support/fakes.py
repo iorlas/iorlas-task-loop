@@ -19,8 +19,8 @@ from taskloop.adapters import bd
 from taskloop.adapters import delegate as dl
 from taskloop.app.release.seams import FixedRoute
 from taskloop.contracts.bead import Bead, Comment
+from taskloop.contracts.beadsport import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
 
 _NO = object()
 
