@@ -29,11 +29,6 @@ from taskloop.contracts.plancheck import StageData
 from taskloop.stores.runlog import RunLog
 
 
-class NoNewFiles:
-    def new_file_kind(self, path: str) -> str:
-        return "meant"
-
-
 class RecordedWaits:
     """WaitsView: the waits a check reported, kept in a list."""
 
@@ -70,7 +65,8 @@ class FakeCheckHost:
         self.killed = False
         self.wall_hit = False
         self.tree_memo = None
-        self.newfiles = NoNewFiles()
+        self.accepted_new: list[str] = []
+        self.plan_data = None
         self.checkout = Checkout(self)
         self.tree_writer = self.checkout
         self.shell = Shell(self)
