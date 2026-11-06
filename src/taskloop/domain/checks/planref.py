@@ -67,13 +67,25 @@ def refusal(check: PlanCheck, cfg: EngineConfig) -> str:
                     return f"`{clip(check.text, 120)}`: reads `{r}`: {_unknown(r, reg, cfg)}"
             hit = next((k for k in reg.values() if sh.wraps(check.argv, k.argv, JUST_PLAIN_FLAGS)), None)
             if hit is None:
-                return ""
+                return _not_allowed(check, cfg)
             return (f"`{clip(check.text, 120)}`: runs the registered check `{hit.id}` (`{hit.cmd}`) again; the engine already runs it "
                     f"this round on this tree. To require it, write {{kind: ref, check: {hit.id}}}; to assert on its output, write "
                     f"{{kind: adhoc, argv: [a script that reads ${log_var(hit.id)} (its exit code is ${rc_var(hit.id)}) and the "
                     f'variable\'s name], reads: ["{hit.id}"]}}, e.g. ["python3", "tools/assert_log.py", "{log_var(hit.id)}", "passed"]')
         case _:
             assert_never(check)
+
+
+def _not_allowed(check: Adhoc, cfg: EngineConfig) -> str:
+    """Why the profile's allow-list (engine.writer_exec_allow) refuses a plan's own command ('' when it does not, or when the profile
+    lists none). The program word of a registered check passes too: the repo already runs it."""
+    allow = cfg.writer_exec_allow
+    argv = list(check.argv)
+    if not allow or any(argv[:len(p)] == p for p in allow) or any(argv[:1] == k.argv[:1] for k in cfg.checks):
+        return ""
+    listed = "; ".join(" ".join(p) for p in allow)
+    return (f"`{clip(check.text, 120)}`: not in the profile's engine.writer_exec_allow (it allows: {listed}) and not the program of a "
+            "registered check; run it through one of those, or ask the owner to list it")
 
 
 def _unknown(check_id: CheckId, reg: Mapping[CheckId, CheckSpec], cfg: EngineConfig) -> str:

@@ -39,6 +39,7 @@ CHUNK = 150          # tests per worker: a worker costs ~2 s to start and a few 
 MAX_WORKERS = 4      # the box also runs the implementer workers; the tests must not starve them
 WORKER_MB = 2048     # RAM budget of one worker
 WALL_S = 3600.0      # a hang guard for one pytest run (a wide selection takes 15 min in 4 workers); its process tree is killed
+IDLE_S = 600.0       # a pytest run prints a dot per finished test: this long with none is a hung test, stopped long before WALL_S
 NO_TESTS = 5         # pytest's exit code for "no tests collected" (a selection without a serial test)
 WIDE = 0.5          # a selection above this share of all tests is a finding: the change reaches too far
 DROP = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "PYTHONPATH")
@@ -83,17 +84,20 @@ def isolated_env(home):
 
 def pytest(root, env, mark, tests, n):
     """One pytest run in a session of its own; the wall limit, an interrupt or SIGTERM stop it with its workers (stream_proc). Exit code."""
-    argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfE", "-p", "testtimes",
+    argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rfE", "-p", "testtimes", "-o", "faulthandler_timeout=300",
             *(["-n", str(n)] if n > 1 else []), "-m", mark, *tests]
 
     def term(signum, _frame):
         raise SystemExit(128 + signum)
     old = signal.signal(signal.SIGTERM, term)
     try:
-        res = stream_proc.run(argv, cwd=root, env=env, timeout=WALL_S, on_stdout=lambda t: print(t, end="", flush=True),
+        res = stream_proc.run(argv, cwd=root, env=env, timeout=WALL_S, idle=IDLE_S, on_stdout=lambda t: print(t, end="", flush=True),
                               on_stderr=lambda t: print(t, end="", file=sys.stderr, flush=True))
     finally:
         signal.signal(signal.SIGTERM, old)
+    if res.timed_out == "idle":
+        print(f"runtests: no output for {IDLE_S:.0f} s (run {res.secs:.0f} s): a test hung; its process tree was killed", file=sys.stderr)
+        return 124
     if res.timed_out:
         print(f"runtests: stopped after {WALL_S:.0f} s; its process tree was killed", file=sys.stderr)
         return 124
