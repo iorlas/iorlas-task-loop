@@ -11,10 +11,11 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from delegate.adapters.harness import classify, reset_parse
-from delegate.app import answer, env, launch, net, usage, watch
+from any_agent import reset_parse, watch
+from any_agent.classify import classify
+from any_agent.supervisor import LaneGoneWatcher
+from delegate.app import answer, env, gaps, launch, net, usage
 from delegate.app import decide as dec
-from delegate.app.supervisor import LaneGoneWatcher
 from delegate.contracts import history as hist
 from delegate.contracts import stops
 from delegate.contracts.routing import Settings
@@ -25,7 +26,7 @@ from support.procsim import real_proc
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
-from run_support import RunBase
+from run_support import RunBase, short_limits
 from test_route import CFG, at, need, no_reader, obj, route, why
 
 LIMIT_S = 60  # each test makes several full runs, every run spawns a fake CLI and git
@@ -69,7 +70,7 @@ class RunStops(RunBase):
     def test_answer_done_process_alive_is_done_after_the_grace(self):
         """delegate-itn: turn.completed after the final agent message, then the process never exits: done after the grace,
         whole tree stopped."""
-        self.enterContext(mock.patch.object(watch, "ANSWER_GRACE_S", 1))
+        self.enterContext(short_limits("codex", grace_s=1))
         time.time()
         _, r = self.run_it(mode="answer_alive", timeout=0)
         assert (r["stop"], r["text"], r["lane"]) == (None, '{"findings": []}', "OPENAI_SUBSCRIPTION")
@@ -311,19 +312,19 @@ class RunStops(RunBase):
             t[0] = tick
             dog.touch()
         assert not dog.poll()
-        dog.flush(env.history_add, d["lane"], d["model"], True)
+        gaps.flush(dog, env.history_add, d["lane"], d["model"], True)
         rows = env.history_store().rows()
-        gaps = [r for r in rows if isinstance(r, hist.GapRow)]
-        assert len(gaps) == len(rows)
-        assert [(type(r).__name__, r.lane, r.model, r.gap_s, r.finished) for r in gaps] == [
+        got = [r for r in rows if isinstance(r, hist.GapRow)]
+        assert len(got) == len(rows)
+        assert [(type(r).__name__, r.lane, r.model, r.gap_s, r.finished) for r in got] == [
             ("GapRow", "OPENAI_SUBSCRIPTION", "gpt-6.1-sol", 2200.0, True)
         ]
         assert health_ledger.HealthLedger(env.typed_routing(CFG).settings.breaker).fold(rows).pairs == {}
-        dog.flush(obj(None), d["lane"], d["model"], True)  # never raises
+        gaps.flush(dog, obj(None), d["lane"], d["model"], True)  # never raises
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_any_stream_line_counts_as_activity_even_on_stderr(self):
-        with mock.patch.dict(watch.LIMITS["codex"], silence_s=1):  # the fake prints to stderr every 0.4 s for 3 s
+        with short_limits("codex", silence_s=1):  # the fake prints to stderr every 0.4 s for 3 s
             _, r = self.run_it(mode="chatter", timeout=0)
         assert r["stop"] is None
 
@@ -382,7 +383,7 @@ class RunStops(RunBase):
             launch.settler().mark_out("OPENAI_SUBSCRIPTION", env.now() + 3600, "other words", env.now(), reason)
             stop = need(w.poll())
             assert stop.why == reason
-            assert need(classify.classify(None, structured={"watchdog": stop.why, "msg": stop.msg})).reason == want
+            assert need(classify(None, structured={"watchdog": stop.why, "msg": stop.msg})).reason == want
         late = LaneGoneWatcher(
             launch.lane_gone_check("OPENAI_SUBSCRIPTION", time.time() + 5), every=0
         )  # a worker that started after the mark is not affected

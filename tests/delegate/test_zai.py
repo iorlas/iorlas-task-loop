@@ -9,9 +9,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from delegate.adapters.harness.opencode import OpenCodeHarness
-from delegate.app import env, launch, onboard, watch
-from delegate.app.supervisor import RunHooks
+from any_agent.harnesses import opencode_sandbox
+from any_agent.harnesses.opencode import OpenCodeHarness
+from any_agent.supervisor import RunHooks
+from delegate.app import env, harnesses, launch, onboard
 from delegate.contracts.json_types import Json
 from delegate.domain.lanes.lane import Lane
 from support.case import Case
@@ -93,7 +94,7 @@ class ZaiTests(Case):
             patch.object(env, "config_dir", return_value=Path(tmp)),
             patch.object(OpenCodeHarness, "find_exe", return_value="opencode"),
             patch.object(sys, "platform", "darwin"),
-            patch.object(OpenCodeHarness, "write_shell"),
+            patch.object(opencode_sandbox, "write_shell"),
             patch.object(env, "child_env", return_value=env_in),
         ):
             run = replay(["{}"])
@@ -133,7 +134,7 @@ class ZaiTests(Case):
                 patch.object(env, "config_dir", return_value=Path(tmp)),
                 patch.object(OpenCodeHarness, "find_exe", return_value="opencode"),
                 patch.object(sys, "platform", "darwin"),
-                patch.object(OpenCodeHarness, "write_shell"),
+                patch.object(opencode_sandbox, "write_shell"),
                 patch.object(OpenCodeHarness, "free_model_ok", return_value=True),
                 patch.object(launch.Supervisor, "__init__", spy),
                 replay(["{}"]),
@@ -141,7 +142,7 @@ class ZaiTests(Case):
             ):
                 launch.launch_worker(d, "OK", a, "test1234", 1, env.load_routing(), RunHooks())
                 assert (seen[0].dog.first_event_s, seen[0].dog.silence_s) == (
-                    watch.LIMITS["opencode"]["first_event_s"],
-                    watch.LIMITS["opencode"]["silence_s"],
+                    harnesses.LIMITS["opencode"].first_event_s,
+                    harnesses.LIMITS["opencode"].silence_s,
                 )
                 assert seen[0].log is not None, "no watch on opencode's own log"

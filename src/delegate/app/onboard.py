@@ -9,8 +9,9 @@ import sys
 from pathlib import Path
 from typing import Final
 
+from any_agent.harnesses.opencode import OpenCodeHarness
+
 from delegate.adapters import statusline
-from delegate.adapters.harness.opencode import OpenCodeHarness
 from delegate.contracts.json_types import Json, as_str, obj
 
 

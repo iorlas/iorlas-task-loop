@@ -92,12 +92,12 @@ class StackGate:
         try:
             ran = self.cmds.run(argv)
             red = self.red(engine, tree, base, wt)
+            now = self.moved_during(branch, oid, wt, base) if red else ""  # while the gate's own checkout still exists
         finally:
             if made:
                 self.cmds.row(f"git worktree remove {made}", lambda: self.git.remove_worktree_force(self.repo, made))
         if red:
-            now = self.moved_during(branch, oid, wt, base)  # a run that judged inputs that changed under it is not a red
-            if now and regate:
+            if now and regate:  # a run that judged inputs that changed under it is not a red
                 self.cmds.log.note(f"{self.base_ref} moved from {base[:12]} to {now[:12]} while the gate ran: gating again on the new base")
                 return self.require(branch, oid, profile_change=profile_change, regate=False)
             raise Stop(ran.exit or 1, f"{branch} ({oid[:12]}) is still not green for {self.named(red)} after "

@@ -6,11 +6,11 @@ import os
 from collections.abc import Callable
 from typing import Final
 
+from any_agent.harnesses.claude import ClaudeHarness
 from timefmt import fmt_span
 
 from delegate.adapters import statusline
 from delegate.adapters.codex_account import rate_limits as fetch_codex_limits
-from delegate.adapters.harness.claude import ClaudeHarness
 from delegate.app import env, harnesses
 from delegate.app.fleet import AuthCache
 from delegate.contracts.json_types import Json, as_num, as_str, obj

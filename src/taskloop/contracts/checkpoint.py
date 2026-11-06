@@ -68,7 +68,8 @@ class PlanStep(Rec):
 
 
 @final
-class RunState(Rec, frozen=False):
+# Tolerant of unknown keys while checkpoints written before the retired writer_said, look_paths and look_prev (tl-jvpm.26) are on disk.
+class RunState(Rec, frozen=False, forbid_unknown_fields=False):
     """What a run carries across a park. The only place these attributes are declared."""
 
     plan_data: PlanData | None = None
@@ -89,12 +90,9 @@ class RunState(Rec, frozen=False):
     writer_family: str | None = None
     writer_fallback: bool = False
     fallback_lane: str = ""
-    writer_said: str = ""
-    look_paths: list[str] = msgspec.field(default_factory=list)
     look_notes: list[str] = msgspec.field(default_factory=list)
     look_unjudged: dict[str, str] = msgspec.field(default_factory=dict)
     look_done: int = 0
-    look_prev: list[Defect] = msgspec.field(default_factory=list)
     rendered_names: list[str] = msgspec.field(default_factory=list)  # sorted: the pictures rendered so far
     last_reqs: list[Open] = msgspec.field(default_factory=list)
     render_stale: bool = False

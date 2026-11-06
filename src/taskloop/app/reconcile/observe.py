@@ -8,7 +8,7 @@ from taskloop.app.release import tidy
 from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId, is_bead_id
-from taskloop.contracts.landed import LandedStore
+from taskloop.contracts.landed import Landed, landed_in
 from taskloop.contracts.paths import ConfigDir, RepoDirs
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git
 from taskloop.contracts.reconcile import Lease, SlotFact, epoch
@@ -78,10 +78,10 @@ def slot_facts(beads: list[Bead], host: str, live: dict[BeadId, str]) -> tuple[S
     return tuple(out)
 
 
-def landed(repo: Path, bead: BeadId, git: Git, cfg: ConfigDir) -> bool:
+def landed(repo: Path, bead: BeadId, git: Git, landed_of: Callable[[BeadId], Landed | None]) -> bool:
     """The bead's landed record names a sha that is on the checkout's HEAD. LEGACY, only for a bead with no record (landed before
     0.23.179): its land commit (subject ends `(<bead>)`, not a revert) is on HEAD; this can go when no such bead is left."""
-    rec = LandedStore(cfg).get(bead)
+    rec = landed_of(bead)
     if rec is not None:
         return git.is_ancestor(str(repo), rec.sha, "HEAD")
     try:
@@ -121,7 +121,7 @@ def release_branches(repo: Path, git: Git) -> tuple[LocalBranch, ...]:
                  for b, oid in refs_of(repo, RELEASE, git))
 
 
-def remote_branches(repo: Path, closed: list[str], git: Git, cfg: ConfigDir) -> tuple[RemoteBranch, ...]:
+def remote_branches(repo: Path, closed: list[str], git: Git, landed_of: Callable[[BeadId], Landed | None]) -> tuple[RemoteBranch, ...]:
     """origin's task/<bead> of each closed, landed bead, at the oid ls-remote showed (one ls-remote for the lot; an origin that does
     not answer shows nothing)."""
     try:
@@ -131,7 +131,7 @@ def remote_branches(repo: Path, closed: list[str], git: Git, cfg: ConfigDir) -> 
     found: list[RemoteBranch] = []
     for bead in closed:
         ref = f"refs/heads/{TASK}{bead}"
-        if ref not in there or not is_bead_id(bead) or not landed(repo, bead, git, cfg):
+        if ref not in there or not is_bead_id(bead) or not landed(repo, bead, git, landed_of):
             continue
         oid = there[ref]
         known = git.has_commit(str(repo), oid)
@@ -178,10 +178,12 @@ def repo_view(repo: Path, store_of: Callable[[str], Beads] | None, release: bool
     except (BdFailure, SystemExit, OSError) as e:
         return replace(view, bd_down=str(getattr(e, "error", e))[:80])
     facts = tuple(bead_fact(b) for b in beads)
+    meta = {b.id: b.metadata for b in beads}
     closed = sorted({f.id for f in facts if f.status == "closed"})
     live = live_of(str(repo)) if live_of else {}
     leases = tuple(ls for b in beads if (ls := lease_of(b, live))) if live_of else ()
-    return replace(view, beads=facts, task_branches=task_branches(repo, git), remotes=remote_branches(repo, closed, git, cfg),
+    remotes = remote_branches(repo, closed, git, lambda b: landed_in(b, meta.get(b, {})))
+    return replace(view, beads=facts, task_branches=task_branches(repo, git), remotes=remotes,
                    leases=leases, slots=slot_facts(slot_beads, host, live))
 
 
