@@ -2,6 +2,7 @@
 from unittest import mock
 
 import pytest
+from support.argv_of import argv_of
 
 from taskloop.app.run import worker_identity, worker_request
 from taskloop.contracts import config
@@ -26,7 +27,7 @@ def build(role: str, node: str, resolved: str = "basesha"):
 def test_only_a_reviewer_is_given_the_base_commit(role, node, expected):
     req, host = build(role, node)
     assert req.instructions_ref == expected
-    assert ("--instructions-ref" in req.to_argv("py", "route")) == bool(expected)
+    assert ("--instructions-ref" in argv_of(req)) == bool(expected)
     if expected:
         host.git.rev_parse.assert_called_once_with(host.wt, host.cfg.base)
 

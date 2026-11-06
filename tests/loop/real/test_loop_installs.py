@@ -33,8 +33,8 @@ from taskloop.app.run import (
 from taskloop.contracts import wire
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.loop import Carry, LoopState
+from taskloop.contracts.rowstores import BadVersionStore, PinStore
 from taskloop.contracts.snapshots import Pin
-from taskloop.contracts.stores import BadVersionStore, PinStore
 
 
 class Moving(LoopBase):

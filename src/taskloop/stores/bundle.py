@@ -5,13 +5,13 @@ from collections.abc import Callable
 from any_lease import Leases
 
 from taskloop.contracts.adrs import AdrStore
+from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.checks import BaseRedRecord, CheckRun, Durations
 from taskloop.contracts.config import HostResources
 from taskloop.contracts.events import Event
 from taskloop.contracts.followups import FollowupOutbox
 from taskloop.contracts.log import EngineLog
 from taskloop.contracts.profile_changes import ProfileChange
-from taskloop.contracts.stores import AskStore
 from taskloop.contracts.trace import RunTrace
 from taskloop.stores.api import Doc, DocSet, LockTable, Log, Passes, Tickets
 from taskloop.stores.books import CheckpointBook

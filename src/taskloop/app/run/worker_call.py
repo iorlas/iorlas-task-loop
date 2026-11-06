@@ -1,6 +1,6 @@
 """WorkerCall: one AI step through delegate (contract 4). Delegate picks lane and model, limits apply, it records the run.
 
-`run` builds the request (`RunRequest`, the only argv builder is its `to_argv`), makes the call, and for a stopped call asks
+`run` builds the request (`RunRequest`; the engine builds no argv), makes the call, and for a stopped call asks
 `lanes.policy.decide` what to do and lets `LaneActs` do it; a done call's answer is validated against the node's schema, a broken
 one is asked for again (the `invalid_output` row of the RetryPlan). The call is on disk while it is in flight (CallState) so a killed
 run, a sleeping laptop or a dropped network goes on in the same thread. The worker's life is delegate's: the engine reads the live
@@ -124,10 +124,10 @@ class WorkerCall:
         writer = writer_family if node in READ_ONLY_NODES else None
         resume = resume_ref or (e.writer.delegate if resume_key else None)
         if resume and resume_key and e.writer_fallback:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
-            lane = dg.lane_status(e.env).get(e.fallback_lane) if e.fallback_lane else None
-            if e.fallback_lane and not isinstance(lane, dict):  # that lane is not configured here: no fallback
+            lane = dg.lane(e.fallback_lane) if e.fallback_lane else None
+            if e.fallback_lane and lane is None:  # that lane is not configured here: no fallback
                 e.writer_fallback, e.fallback_lane = False, ""
-            elif lane is None or lane.get("out") is False:  # back again, or no lane known to wait for
+            elif lane is None or lane.usable is True:  # back again, or no lane known to wait for
                 e.steps.move(
                     step or node,
                     "fallback_retake",
