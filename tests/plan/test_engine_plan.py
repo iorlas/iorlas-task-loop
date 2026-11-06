@@ -6,7 +6,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import homes
 from support.checks import typed
-from support.engine_case import BEAD, CAP_PARKS, CLEAN, FALSE, HAS_F, PLAN, WRITE, EngineTest, review, sh, stop
+from support.engine_case import CAP_PARKS, EngineTest, sh, stop
+from support.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, review
 
 # isort: split
 import json

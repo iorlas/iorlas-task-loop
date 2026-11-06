@@ -8,7 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, procsim
 from support.aging import age
-from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, EngineTest, no_repo, sh
+from support.engine_case import EngineTest, no_repo, sh
+from support.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE
 
 # isort: split
 import contextlib

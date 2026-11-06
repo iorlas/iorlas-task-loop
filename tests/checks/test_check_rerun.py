@@ -13,7 +13,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
 from support.cfgs import cfg_with
 from support.checks import ck, typed
-from support.engine_case import CLEAN, PLAN, WRITE
+from support.plans import CLEAN, PLAN, WRITE
 
 from checks.test_check_rules import Base
 from taskloop.contracts import answers, plancheck

@@ -13,22 +13,8 @@ from support import gitq, homes, procsim
 from support.aging import age
 from support.cfgs import PROFILE_PATTERNS
 from support.checks import ck
-from support.engine_case import (
-    BEAD,
-    CAP_PARKS,
-    CAT_ENV,
-    CLEAN,
-    FALSE,
-    PLAN,
-    WRITE,
-    EngineTest,
-    full,
-    no_repo,
-    review,
-    sh,
-    stop,
-    verdict,
-)
+from support.engine_case import CAP_PARKS, EngineTest, full, no_repo, sh, stop
+from support.plans import BEAD, CAT_ENV, CLEAN, FALSE, PLAN, WRITE, review, verdict
 
 # isort: split
 import hashlib

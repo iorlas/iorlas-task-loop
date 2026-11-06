@@ -11,23 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes
 from support.checks import typed
-from support.engine_case import (
-    CLEAN,
-    ENGINE_BASH,
-    FALSE,
-    HAS_F,
-    PLAN,
-    POSIX_CHECK,
-    WRITE,
-    EngineTest,
-    _cells,
-    finding,
-    no_repo,
-    review,
-    sh,
-    stop,
-)
+from support.engine_case import ENGINE_BASH, POSIX_CHECK, EngineTest, _cells, no_repo, sh, stop
 from support.gitsim import verbs
+from support.plans import CLEAN, FALSE, HAS_F, PLAN, WRITE, finding, review
 
 # isort: split
 import contextlib

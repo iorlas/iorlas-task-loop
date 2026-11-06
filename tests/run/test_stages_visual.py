@@ -19,12 +19,13 @@ from support import (
 from support.builders import make_engine
 from support.cfgs import cfg_with, plan_of
 from support.checkpoints import read_ck
-from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: F401
+from support.engine_case import engine
 from support.fakes import (
     FakeBeadStore,
     must_bead,
 )
 from support.imagetools import without_image_tools
+from support.plans import BEAD, CLEAN, FALSE, PLAN, WRITE
 from support.spawn import port_git, real_spawner
 from support.who import who
 
