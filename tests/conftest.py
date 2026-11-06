@@ -227,7 +227,9 @@ def procs(request):
     with contextlib.ExitStack() as stack:
         world.install(stack)
         yield world
-    world.check(must_spawn=kind == "real" and not request.node.stash.get(SKIPPED, False))
+    # a delegate test reaches its process through a worker CLI it probes (codex, claude, opencode): a host with none has nothing to spawn
+    no_cli = request.node.nodeid.startswith("tests/delegate/") and not any(map(shutil.which, ("codex", "claude", "opencode")))
+    world.check(must_spawn=kind == "real" and not request.node.stash.get(SKIPPED, False) and not no_cli)
 
 
 def cap_memory(megabytes):

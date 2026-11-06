@@ -12,7 +12,6 @@ from unittest.mock import patch
 from any_agent.harnesses import opencode_sandbox
 from any_agent.harnesses.opencode import OpenCodeHarness
 from any_agent.supervisor import RunHooks
-from delegate.adapters import agent_runs
 from delegate.app import env, harnesses, launch, onboard
 from delegate.contracts.json_types import Json
 from delegate.domain.lanes.lane import Lane
@@ -96,13 +95,11 @@ class ZaiTests(Case):
             patch.object(OpenCodeHarness, "find_exe", return_value="opencode"),
             patch.object(sys, "platform", "darwin"),
             patch.object(opencode_sandbox, "write_shell"),
-            patch.object(agent_runs, "run"),
-            patch.object(agent_runs, "lanes"),
             patch.object(env, "child_env", return_value=env_in),
         ):
             run = replay(["{}"])
             with run:
-                assert launch.launch_worker(d, "OK", a, "test1234", 1, env.load_routing(), {}, RunHooks()).get("outcome") is None
+                assert launch.launch_worker(d, "OK", a, "test1234", 1, env.load_routing(), RunHooks()).get("outcome") is None
             # Inspect the actual child process environment.
             wenv = obj(run).specs[0].env
             assert json.loads(wenv["OPENCODE_CONFIG_CONTENT"])["enabled_providers"] == ["zai-coding-plan"]
@@ -111,7 +108,7 @@ class ZaiTests(Case):
             obj(d)["how"]["model"] = "zai/glm-5.3"
             run = replay(["{}"])
             with run:
-                assert launch.launch_worker(d, "OK", a, "test1234", 1, env.load_routing(), {}, RunHooks())["outcome"] == "setup"
+                assert launch.launch_worker(d, "OK", a, "test1234", 1, env.load_routing(), RunHooks())["outcome"] == "setup"
             assert obj(run).specs == []
 
     @real_proc("delegate: a worker, git or CLI process")
@@ -141,11 +138,9 @@ class ZaiTests(Case):
                 patch.object(OpenCodeHarness, "free_model_ok", return_value=True),
                 patch.object(launch.Supervisor, "__init__", spy),
                 replay(["{}"]),
-                patch.object(agent_runs, "run"),
-                patch.object(agent_runs, "lanes"),
                 patch.object(env, "child_env", return_value={}),
             ):
-                launch.launch_worker(d, "OK", a, "test1234", 1, env.load_routing(), {}, RunHooks())
+                launch.launch_worker(d, "OK", a, "test1234", 1, env.load_routing(), RunHooks())
                 assert (seen[0].dog.first_event_s, seen[0].dog.silence_s) == (
                     harnesses.LIMITS["opencode"].first_event_s,
                     harnesses.LIMITS["opencode"].silence_s,

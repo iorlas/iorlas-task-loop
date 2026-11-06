@@ -23,7 +23,7 @@ from any_agent.protocol import Harness, LaunchInputs, LaunchSpec
 from any_agent.supervisor import LogWatcher, RunHooks, RunOutcome, Supervisor
 from any_agent.vendors import words
 
-from delegate.adapters import agent_runs, codex_account
+from delegate.adapters import codex_account
 from delegate.app import answer, codex_policy, decide, env, gaps, harnesses, net, settle
 from delegate.app.publish import LiveSink
 from delegate.contracts.json_types import Json, as_num, as_opt_obj, as_opt_str, as_str, as_strs, obj
@@ -295,8 +295,6 @@ def prepare_opencode(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: f
 
 
 PREPARE: Final = {"codex": prepare_codex, "claude_p": prepare_claude, "opencode": prepare_opencode}
-REF_FIELD: Final = {"codex": "thread", "claude_p": "session", "opencode": "session"}  # the agent-runs field the vendor's session id goes in
-AGENT_KIND: Final = {"codex": "codex", "claude_p": "claude-p", "opencode": "opencode"}
 
 
 def login_text(kind: str, lane: str) -> tuple[str, str]:
@@ -338,7 +336,7 @@ def lane_cleared(lane: str) -> Callable[[StateDoc], object]:
 
 
 def launch_worker(
-    d: dict[str, Json], brief: str, a: env.Args, rid: str, t: float, cfg: dict[str, Json], meta: dict[str, Json], hooks: RunHooks
+    d: dict[str, Json], brief: str, a: env.Args, rid: str, t: float, cfg: dict[str, Json], hooks: RunHooks
 ) -> dict[str, Json]:
     """One worker, end to end: its harness builds the launch, the supervisor runs it, the one ladder settles it. -> dict[str, Json] of
     result fields."""
@@ -347,38 +345,25 @@ def launch_worker(
     if isinstance(prep, dict):
         return prep
     try:
-        return run_prepared(prep, d, a, rid, t, meta, hooks)
+        return run_prepared(prep, d, a, rid, t, hooks)
     finally:
         prep.hx.cleanup()
 
 
 def run_prepared(
-    prep: Prep, d: dict[str, Json], a: env.Args, rid: str, t: float, meta: dict[str, Json], hooks: RunHooks
+    prep: Prep, d: dict[str, Json], a: env.Args, rid: str, t: float, hooks: RunHooks
 ) -> dict[str, Json]:
     """Use an already prepared harness; launch_worker owns cleanup even if publication or supervision raises."""
     h = how_of(d)
     lane = as_str(d["lane"])
     hx, spec, x = prep
-    field = REF_FIELD[h.kind]
 
     def on_ref(ref: str) -> None:
         if hooks.ref:
             hooks.ref(ref)
-        agent_runs.run(rid, **{field: ref})
 
     if hx.evidence.ref:
         on_ref(hx.evidence.ref)  # known before the first event: a resume, or claude's own --session-id
-    agent_runs.run(
-        rid,
-        kind=AGENT_KIND[h.kind],
-        lane=d["lane"],
-        model=d["model"],
-        cwd=h.cwd,
-        started=t,
-        status="running",
-        **({field: hx.evidence.ref} if hx.evidence.ref else {}),
-        **meta,
-    )
     live = LiveSink(hx.kind, run_id=rid)
     live.start(
         lane=as_opt_str(d.get("lane")),

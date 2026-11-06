@@ -18,7 +18,7 @@ from any_agent.classify import Outcome, classify
 from any_agent.harnesses import opencode_sandbox
 from any_agent.harnesses.opencode import OpenCodeHarness
 from any_agent.supervisor import RunHooks
-from delegate.adapters import agent_runs, codex_account
+from delegate.adapters import codex_account
 from delegate.app import answer, env, launch
 from delegate.app import decide as dec
 from delegate.cli import verbs
@@ -333,8 +333,6 @@ class Launchers(Case):
         self.tmp = tempfile.TemporaryDirectory()
         for p in (
             patch.object(env, "config_dir", return_value=Path(self.tmp.name)),
-            patch.object(agent_runs, "run"),
-            patch.object(agent_runs, "lanes"),
             patch.object(shutil, "which", return_value="cli"),
             patch.object(OpenCodeHarness, "find_exe", return_value="opencode"),
             patch.object(sys, "platform", "darwin"),
@@ -359,7 +357,7 @@ class Launchers(Case):
             ),
         }
         with replay_run(lines, rc, err):
-            res = launch.launch_worker(d, "brief", self.a, "rid12345", T, env.load_routing(), {}, RunHooks())
+            res = launch.launch_worker(d, "brief", self.a, "rid12345", T, env.load_routing(), RunHooks())
         res.pop("stderr", None)
         return res
 

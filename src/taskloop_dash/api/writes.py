@@ -69,7 +69,16 @@ class Writes:
         except ValueError as err:
             return 400, {"error": str(err)}
         self.env.touch()
-        return 200, wire.dump(self.dispatch(req))
+        out = self.dispatch(req)
+        if out.ok:
+            self.forget()
+        return 200, wire.dump(out)
+
+    def forget(self) -> None:
+        """An applied write drops what the page read of its effects (decisions, ledger, landings, looks), so the next poll sees it
+        instead of the copy kept for a few seconds."""
+        for key in [k for k in self.env.ttl.names() if k.startswith(("v2", "looks:"))]:
+            self.env.ttl.drop(key)
 
     def dispatch(self, req: DashCommand) -> Result:
         """The write a command asks for. The match is exhaustive: a new member of DashCommand with no case here is a type error."""
