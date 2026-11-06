@@ -25,6 +25,7 @@ from support import (  # noqa: E402
     fake_route,
     netgate,
 )
+from support.argv_of import argv_of  # noqa: E402
 from support.fake_clock import FakeClock  # noqa: E402
 from support.narrow import must  # noqa: E402
 
@@ -77,8 +78,8 @@ class Fake(Case):
     # --- the seam itself -------------------------------------------------------------------------------------------
 
     def test_argv_uses_only_flags_the_contract_lists(self):
-        argv = self.req(resume="r", authored_by="a", call_id="c", brief_path="b.md", schema_path="s.json",
-                        writer_exec_allow=[["just", "shot"]]).to_argv("python3", "route.py")
+        argv = argv_of(self.req(resume="r", authored_by="a", call_id="c", brief_path="b.md", schema_path="s.json",
+                        writer_exec_allow=[["just", "shot"]]))
         assert "--host" not in argv
         assert "--no-wait" not in argv
         flags = {x for x in argv if x.startswith("--")}
