@@ -10,7 +10,6 @@ from taskloop.app.run.parts_plan import PlanParts
 from taskloop.app.run.parts_run import RunParts
 from taskloop.app.run.worker_call import Ops, WorkerCall
 from taskloop.contracts import plancheck
-from taskloop.contracts.asked import Asked
 from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.lanes.says import stop_say, stop_why
 
@@ -30,7 +29,7 @@ class RunHost(LandParts, PlanParts, RunParts):
     def closer(self) -> Closer:
         return closer_over(self, self.worker.saved)
 
-    def ai(self, node: str, title: str, prompt: str, *a: Any, **kw: Any) -> Asked:
+    def ai(self, node: str, title: str, prompt: str, *a: Any, **kw: Any):
         """One AI node, then the tree check: a worker that wrote core.worktree is caught before review or land. Before it, the
         owner's requests are taken (a safe point), and the notes taken since the last call end its prompt (and its delta)."""
         self.requests.at_step(kw.get("step") or node)
