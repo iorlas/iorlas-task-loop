@@ -14,6 +14,7 @@ from taskloop.adapters import check_files, childenv
 from taskloop.app.checks.cache import InputKeys, RunMemo
 from taskloop.app.checks.execution import check_env
 from taskloop.app.checks.keydiff import first_difference
+from taskloop.app.land.carry import Carry
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.stackgate import StackGate
 from taskloop.contracts.checks import CheckResult
@@ -131,6 +132,19 @@ class StackGateKeys(Case):
             self.gate.require("task/lifesim-fmtfix-r3", OID)
         assert self.spawner.run.call_count == 2  # one run on each base
         assert "is still not green" in stop.value.why  # the second run, on the new base, is the one that is judged
+
+    def test_a_carry_is_tried_again_on_the_new_base_when_the_base_moves_during_the_run(self):
+        """The regate re-enters require(): the carry looks at the base the final gate judges, not at the stale first one."""
+        self.repo.git.checkouts.return_value = self.repo.git.checkouts.return_value[:1]
+        bases = iter([BASE, *["base-2"] * 8])
+        rev = self.repo.git.rev_parse.side_effect
+        self.repo.git.rev_parse.side_effect = lambda d, r: next(bases) if r == "origin/main" else rev(d, r)
+        self.spawner.run.return_value = Ran(exit=0)
+        seen = []
+        with (mock.patch.object(Carry, "carried", lambda carry, engine, step, oid, tree, base, wt: seen.append(base) or False),
+              pytest.raises(Stop)):
+            self.gate.require("task/lifesim-fmtfix-r3", OID)
+        assert seen[0] == BASE and seen[-1] == "base-2"
 
     def test_a_worktree_that_moves_during_the_gate_run_is_not_judged(self):
         self.repo.git.checkouts.return_value = self.repo.git.checkouts.return_value[:1]

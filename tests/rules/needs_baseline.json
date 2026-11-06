@@ -1,0 +1,40 @@
+{
+ "git": {
+  "a branch only origin has must be found with ls-remote, fetched and resolved to its oid": 1,
+  "a child engine process is killed by its pid and the reconciler probes that pid": 1,
+  "a child process is killed and a new one restarts on the same checkout and config dir": 3,
+  "a pre-push hook is git's own: the land must push past it": 1,
+  "a real pre-push hook's long stdout and refusal must survive git's footer and land's error handling": 1,
+  "a registered slot survives a real engine land, detached at base with its task branch deleted": 1,
+  "a rejected push is git's refusal and stops the delivery": 1,
+  "a remote task ref moves after the engine push checked it: force-with-lease must preserve it": 1,
+  "an already-deleted task ref is success even when the original explicit lease is stale": 1,
+  "asserts the git config of the real template and clone repos": 1,
+  "engine push to a bare origin, then leased remote deletion and linked checkout removal": 1,
+  "git runs git-lfs: the order of lfs push and push is what git does": 1,
+  "reads the user's own global git excludes file, which only a real git does": 1,
+  "the judge must reject a real committed malicious profile without creating a canary outside its worktree": 1,
+  "the land command is a child process that runs git push itself: only a real git answers it": 1,
+  "the land command is a real push": 1,
+  "the land script is a child process that runs git push itself": 4,
+  "the push must reach a bare origin and ls-remote must show it": 1
+ },
+ "process": {
+  "<not a literal>": 1,
+  "a SIGKILLed process must give its unit back: the kernel frees the flock": 1,
+  "a SIGTERM during the gate must leave no child alive: a real sleeping child is killed": 2,
+  "a SIGTERM landing in Popen still stops the new child's whole tree": 1,
+  "a lane's cancel must end its real process tree and touch no other process": 1,
+  "a real `python -m any_lease run` queues behind the engine on the same table": 1,
+  "a wall-limit kill reaches a descendant that left the process group (setsid): only a real tree shows it": 1,
+  "delegate: a git process": 1,
+  "delegate: a worker, git or CLI process": 222,
+  "delegate: two interpreters share one state dir": 1,
+  "the ArgvChecks adapter is the real process: exit codes, output, the environment, no shell, the wall kill": 1,
+  "the file locks and the append-only log hold across real processes: races, a killed holder": 1,
+  "the kernel drops the flock of a holder that is SIGKILLed (a forked child), so the next taker is not stuck": 1,
+  "the land command is a real child that signals its parent, the engine, mid-command": 2,
+  "the launcher replaces itself (os.execv) by origin/main's release.py: an exec, the lock dropped before it": 1,
+  "two real lanes write at once: each log must hold only its own lines, whole": 1
+ }
+}
