@@ -1,13 +1,15 @@
 """Stable run fingerprints and the start reasons of a run.
 
 A fingerprint is what groups failures (the storm detector, the retry escalation, the close comment): the same cause
-with different bead ids, session refs, paths, commit shas, durations or quoted payloads must produce the same string,
-while two different causes must not. It is derived from the run's `why` only, never from the run name or the clock, so it can be recomputed
-from a trace row years later.
+with different bead ids, session refs, paths, commit shas or durations must produce the same string, and a quoted payload
+keeps a short hash of its own normalised text (`authentication expired` and `quota exhausted` stay apart), while two
+different causes must not. It is derived from the run's `why` only, never from the run name or the clock, so it can be
+recomputed from a trace row years later.
 
 Pure; the regexes live here because nothing else in domain may import `re`.
 """
 
+import hashlib
 import os
 import re
 from datetime import datetime, timedelta
@@ -30,9 +32,19 @@ def normalize_started_because(value: object, prev_run: object = "") -> str:
     return "retry" if str(prev_run or "").strip() else "first"
 
 
+QUOTED: Final = re.compile(r"`[^`]*`|\"[^\"]*\"|'[^']*'")
+
+
+def _quoted(m: re.Match[str]) -> str:
+    """A quoted span as a word of its normalised inner text's hash: letters only, so no later pattern reads it as a number or a sha."""
+    inner = failure_fp.fingerprint(m.group(0)[1:-1], ids={"bead": BEAD})
+    digest = hashlib.sha1(inner.encode("utf-8"), usedforsecurity=False).digest()
+    return " quoted" + "".join("ghijklmnopqrstuv"[b & 15] for b in digest[:3]) + " "
+
+
 def fingerprint(why: object) -> str:
-    """A stable, readable slug for a failure reason ("" when there is no text)."""
-    return failure_fp.fingerprint(why, ids={"bead": BEAD})
+    """A stable, readable slug for a failure reason ("" when there is no text). Quoted text is kept as a short hash of itself."""
+    return failure_fp.fingerprint(None if why is None else QUOTED.sub(_quoted, str(why)), ids={"bead": BEAD})
 
 
 def fingerprint_head(why: object) -> str:
