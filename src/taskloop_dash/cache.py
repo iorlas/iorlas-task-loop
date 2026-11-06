@@ -36,6 +36,10 @@ class TtlCache:
         with self.lock:
             return self.items.get(key)
 
+    def names(self) -> list[str]:
+        with self.lock:
+            return [*self.items]
+
     def put(self, key: str, val: Any) -> None:
         with self.lock:
             self.items[key] = (self.clock(), val)

@@ -277,6 +277,14 @@ class Stick_(Case):
         assert self.asks.history(self.ask.id)[-1].event == "answer"
         assert self.post("stick", {"project": "nowhere", "ask": self.ask.id, "outcome": "adr"}).ok is False
 
+    def test_a_write_that_succeeds_drops_the_cached_decisions_and_ledger(self):
+        worlds = self.dash.reads.worlds
+        assert worlds.adrs(str(self.repo)) == []
+        self.stick("adr", "Rent is weekly.")
+        assert [a.adr.id for a in worlds.adrs(str(self.repo))] == ["ADR-1"]
+        self.post("prune", {"project": loop_key(self.repo), "adr": "ADR-1"})
+        assert worlds.adrs(str(self.repo)) == []
+
     def test_prune_retires_a_decision_and_keeps_it_in_the_store(self):
         self.stick("adr", "Rent is weekly.")
         res = self.post("prune", {"project": loop_key(self.repo), "adr": "ADR-1"})
