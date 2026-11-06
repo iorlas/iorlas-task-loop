@@ -80,3 +80,7 @@ Slice 1 touches `run/fields.py`, which B-LOOK slice 1 and FACTS slice 2 also edi
 ## Not verified
 
 The member counts are from an AST scan of the four files and a grep of writers, not from running anything. The scan sees reads off `e`/`host`/`self.e` only; a part reached through a local alias or `getattr` is not counted. Whether `RunState.review` is the only checkpoint record that carries review state was read from `run/review_glue.py`, not from `contracts/checkpoint.py` in full. The method lists of the ports are the verbs the four files call today; a method another caller needs later is a port change, made in that stage's PR.
+
+## Slice 1 as built (tl-e5t0.33)
+
+One object, `ReviewLive` (`app/review/state.py`), held as `engine.review`, carries `unchecked`, `unverified`, `verified`, `link_ok`, `link_bad`, `link_tries` and `link_fn` (the test hook stays an attribute, not a constructor argument: four tests set it). It is one type, not two as sketched above: the shared lists and the private ones live together, and decision 1 still holds (the engine keeps the one instance; `review_glue` converts at the two checkpoint seams, so the record on disk is unchanged). The look stage reads `unverified` through an `OwnerItems` Protocol in `look/host.py`, since the slice table forbids `look` importing `review`. `tests/support/builders.make_engine(attrs=...)` routes these names to `engine.review`; two older tests that set `unchecked` on the engine had been setting an attribute nothing read.

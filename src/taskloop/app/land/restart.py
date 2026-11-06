@@ -20,6 +20,13 @@ class RestartCheckpoints(Protocol):
     def drop(self) -> None: ...
 
 
+class RestartReview(Protocol):
+    """The engine's `review` as a restart clears it."""
+
+    unverified: list[dict[str, str]]
+    unchecked: list[dict[str, str]]
+
+
 class RestartHost(Protocol):
     """What a restart on the base reads of the engine: git, the branch, the checkpoint it drops, and the run's plan
     bookkeeping that the old attempt leaves and a restart clears."""
@@ -32,8 +39,7 @@ class RestartHost(Protocol):
     last_summary: str
     amended: bool
     state: RunState
-    unverified: list[dict[str, str]]
-    unchecked: list[dict[str, str]]
+    review: RestartReview
 
     @property
     def wt(self) -> str: ...
@@ -91,5 +97,5 @@ class Restart:
         e.old_plan, e.amend_why, e.amend_text, e.replan_first = None, "", "", False
         e.plan_summary, e.last_summary, e.amended = "", "", False
         e.state = e.state.start_again()
-        e.unverified = list[dict[str, str]]()
-        e.unchecked = list[dict[str, str]]()
+        e.review.unverified = list[dict[str, str]]()
+        e.review.unchecked = list[dict[str, str]]()

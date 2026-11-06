@@ -162,7 +162,7 @@ class Deferred(StagesTest):
         item = {"what": "Owner sign-off on the retuned knob values and the placeholder art", "kind": "owner_decision"}
         assert e.routing.backed_by_leftover(item["what"])
         assert e.routing.engine_steps([item]) == []
-        assert [u["what"] for u in e.unverified] == [item["what"]]
+        assert [u["what"] for u in e.review.unverified] == [item["what"]]
         other = {"what": "Whether the storyteller preset is the intended default", "kind": "owner_decision"}
         assert e.routing.engine_steps([other]) == [other]
         e.leftovers = [{"title": "Tune the knob values and placeholder art", "why": "later"}]  # not an owner bead
@@ -668,7 +668,7 @@ class Ledger(StagesTest):
         what = "Import the chosen prefabs and add object rows"
         left = e.routing.route_left([{"what": what, "kind": "checkable", "why": "found wrong: the rows are missing"}])
         assert [u["what"] for u in left] == [what]  # still a defect: not unverified, not settled
-        assert e.unverified == []
+        assert e.review.unverified == []
 
     def test_an_unrelated_unmet_item_still_sends_the_stage_back(self):
         _rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE, WRITE],
@@ -687,8 +687,8 @@ class Ledger(StagesTest):
         rc, s = self.run_engine({"plan": [self.plan()], "write": [WRITE], "review": [dict(CLEAN, unchecked=items)]})
         assert rc == 0, self.blocked
         assert [c[0] for c in s.calls] == ["planner", "worker", "reviewer"]  # no verify call, no fix round
-        assert [u["what"] for u in self.eng.unverified] == [items[1]["what"]]  # the deferral lands for the owner
-        assert self.eng.verified[0]["why"] == "the engine does this at land"
+        assert [u["what"] for u in self.eng.review.unverified] == [items[1]["what"]]  # the deferral lands for the owner
+        assert self.eng.review.verified[0]["why"] == "the engine does this at land"
 
     def test_an_unrelated_checkable_item_is_still_verified(self):
         item = {"what": "The volume slider saves its value across restarts on every platform", "kind": "checkable", "source": ""}

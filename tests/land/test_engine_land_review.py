@@ -111,8 +111,8 @@ class LandReview(LandReviewBase):
         with mock.patch.object(e, "ai") as ai:
             assert e.verifier.run(items) == []
         ai.assert_not_called()  # no verifier call: the engine proves them
-        assert [v["verdict"] for v in e.verified] == ["settled"] * 3
-        assert "gate" in e.verified[0]["evidence"]
+        assert [v["verdict"] for v in e.review.verified] == ["settled"] * 3
+        assert "gate" in e.review.verified[0]["evidence"]
 
     def test_scenario_items_are_settled_only_when_a_scenario_check_is_configured(self):
         item = [{"what": "just scenarios passes", "kind": "tooling"}]
@@ -162,8 +162,8 @@ class LandReview(LandReviewBase):
             assert e.verifier.run([item]) == []
         assert sh_.call_args[0][0] == ["ruff", "check", "--no-fix", "."]
         ai.assert_not_called()
-        assert e.verified[0]["verdict"] == "settled"
-        assert "exit 0" in e.verified[0]["evidence"]
+        assert e.review.verified[0]["verdict"] == "settled"
+        assert "exit 0" in e.review.verified[0]["evidence"]
 
     def test_a_linter_that_fails_is_wrong_and_one_that_cannot_start_stays_with_the_verifier(self):
         (self.wt / "justfile").write_text("lint:\n    ruff check tools\n")
@@ -178,7 +178,7 @@ class LandReview(LandReviewBase):
             assert len(left) == 1
             if rc == 1:
                 ai.assert_not_called()
-                assert e.verified[0]["verdict"] == "wrong"
+                assert e.review.verified[0]["verdict"] == "wrong"
                 assert "E501" in left[0]["why"]
             else:
                 assert ai.call_count == 1
@@ -219,7 +219,7 @@ class LandReview(LandReviewBase):
             with mock.patch.object(e, "ai") as ai:
                 assert e.verifier.run([{"what": what, "kind": "tooling"}]) == [], what
             ai.assert_not_called()
-            v = e.verified[0]
+            v = e.review.verified[0]
             assert v["verdict"] == "settled"
             assert "does not apply" in v["evidence"]
             assert v["why"] == "the engine's own check results settle it"

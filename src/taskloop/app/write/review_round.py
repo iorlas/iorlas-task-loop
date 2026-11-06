@@ -56,7 +56,7 @@ class ReviewRound:
         Keep unchecked work for verification; an unavailable reviewer has settled none of it. Other faults still stop the run.
         """
         e = self.e
-        e.unchecked = list({u["what"]: u for u in e.unchecked + s.wrote_unchecked}.values())
+        e.review.unchecked = list({u["what"]: u for u in e.review.unchecked + s.wrote_unchecked}.values())
         note = f"{s.name}: review unavailable after bounded delegate retries (schema_invalid); stage continues"
         e.steps.outcome("unavailable", "schema_invalid: delegate retries exhausted")
         e.steps.move("next", "review_unavailable", note)
@@ -74,7 +74,7 @@ class ReviewRound:
             return False
         said = SkipKind.REVIEW_OFF if m == "off" else SkipKind.REVIEW_SAMPLED
         if not s.fix:  # nobody judges the writer's unchecked items now: they stay open for verify at land, never dropped
-            e.unchecked = list({u["what"]: u for u in e.unchecked + s.wrote_unchecked}.values())
+            e.review.unchecked = list({u["what"]: u for u in e.review.unchecked + s.wrote_unchecked}.values())
         e.steps.begin("review", f"{s.name}: review skipped ({said})")
         e.steps.outcome("skipped", said)
         e.log.note(f"{s.name}: review skipped, engine.review is {m}")
@@ -86,7 +86,7 @@ class ReviewRound:
         has checked or a diff git cannot read is reviewed.
         The skip is the review step's own end: outcome `skipped`, the reasons its detail."""
         e = self.e
-        if s.fix or s.wrote_unchecked or e.unchecked:
+        if s.fix or s.wrote_unchecked or e.review.unchecked:
             return False
         why = review_skip.why(e.git, str(e.wt), e.stage_tree or e.checkout.base_sha(), e.checkout.tree_hash(), e.cfg,
                           maps_acceptance=s.last)
@@ -123,7 +123,7 @@ class ReviewRound:
 
     def open_items(self, s: StageState) -> str:
         """What nobody has checked yet: earlier stages' items and this write's; the review says what is still unproven."""
-        items = list({u["what"]: u for u in ([] if s.fix else self.e.unchecked) + s.wrote_unchecked}.values())
+        items = list({u["what"]: u for u in ([] if s.fix else self.e.review.unchecked) + s.wrote_unchecked}.values())
         if not items:
             return ""
         return ("\nNobody has checked these yet (earlier stages or the writer could not; the engine's checks above ran "
@@ -158,7 +158,7 @@ class ReviewRound:
         e = self.e
         checks = s.run.results
         judged = e.cases.out_of_scope(e.cases.engine_unproven(review.get("unchecked") or [], checks))
-        e.unchecked = e.unchecked + judged if s.fix else judged
+        e.review.unchecked = e.review.unchecked + judged if s.fix else judged
         e.judge.look_judged(review, s.st, s.w, s.fix)
         e.link_check.link_judged(review)
         same = e.last_flag == "same_family"

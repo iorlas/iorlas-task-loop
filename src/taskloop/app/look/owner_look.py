@@ -58,7 +58,7 @@ class OwnerLook:
         e = self.e
         parts = [f"## {e.bead}: {e.bead_title}"]
         kept = e.pictures.show_pictures()
-        if kept or e.look.unjudged or not e.unverified:
+        if kept or e.look.unjudged or not e.review.unverified:
             shots = "\n".join(f"- [{m.name}]({self.link(ref)})" for ref, m in kept) or "(none)"
             judged = " ".join(e.look.notes) or "(the reviewer gave no judgement)"
             unjudged = ("\n" + "\n".join(f"{w} ({u})" for u, w in e.look.unjudged.items()) + "\n") if e.look.unjudged else ""
@@ -68,7 +68,7 @@ class OwnerLook:
         if e.cases.cases_of("taste"):
             taste = "\n".join("- " + t for t in e.cases.cases_of("taste"))
             parts.append(f"Taste items (the owner decides; they never blocked the land):\n{taste}")
-        if e.unverified:
+        if e.review.unverified:
             parts.append(self.unverified_text())
         return "\n".join(parts)
 
@@ -83,7 +83,7 @@ class OwnerLook:
         """After the land: one bead per epic for the owner's later round (look and feel, and what no check could prove),
         filed once and appended to by each later bead of the epic (a re-land replaces its own section)."""
         e = self.e
-        if e.look.filed or not (e.pictures.show_pictures() or e.look.unjudged or e.unverified or e.cases.cases_of("taste")):
+        if e.look.filed or not (e.pictures.show_pictures() or e.look.unjudged or e.review.unverified or e.cases.cases_of("taste")):
             return
         section = self.section()
         with self.review_lock():  # list + create/update is one step: three beads of an epic landing together file one bead
@@ -145,7 +145,7 @@ class OwnerLook:
 
     def unverified_text(self) -> str:
         rows = []
-        for u in self.e.unverified:
+        for u in self.e.review.unverified:
             source = f", source: {u['source']}" if u.get("source") else ""
             rows.append(f"- {u['what']} ({u['kind']}{source})" + (f": {u['why']}" if u.get("why") else ""))
         return "Unverified, for the owner:\n" + "\n".join(rows)

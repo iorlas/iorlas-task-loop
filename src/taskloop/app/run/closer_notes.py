@@ -33,6 +33,17 @@ class NotesPictures(Protocol):
     def keep_evidence(self) -> list[Path]: ...
 
 
+class NotesReview(Protocol):
+    """The engine's `review` as the notes read it: what is left for the owner, what nobody checked, what the verifier answered."""
+
+    @property
+    def unverified(self) -> Sequence[object]: ...
+    @property
+    def unchecked(self) -> Sequence[Mapping[str, str]]: ...
+    @property
+    def verified(self) -> Sequence[Mapping[str, str]]: ...
+
+
 class FileNotesHost(FollowUpHost, Protocol):
     """What filing the notes reads of the engine: what filing follow-ups reads (FollowUpHost), the asks, the unverified and unchecked
     items, the owner look, the judge and the pictures."""
@@ -40,9 +51,7 @@ class FileNotesHost(FollowUpHost, Protocol):
     @property
     def stores(self) -> Stores: ...
     @property
-    def unverified(self) -> Sequence[object]: ...
-    @property
-    def unchecked(self) -> Sequence[Mapping[str, str]]: ...
+    def review(self) -> NotesReview: ...
     @property
     def owner_look(self) -> NotesOwnerLook: ...
     @property
@@ -77,9 +86,9 @@ class FileNotes:
             old = e.stores.asks.get(e.bead)
             if old:
                 e.stores.asks.close(e.bead, old.id, "the run landed", time.time())
-            if e.unverified:
+            if e.review.unverified:
                 e.comment("Land (engine): " + e.owner_look.unverified_text())
-            look = [u for u in e.unchecked if u["kind"] == "other" and not e.judge.is_look(u)]
+            look = [u for u in e.review.unchecked if u["kind"] == "other" and not e.judge.is_look(u)]
             if look:
                 beadtools.attempt(e.store.add_label, e.bead, "needs-owner-check")
                 e.comment("Look (engine): landed, but nobody checked: " + "; ".join(u["what"] for u in look))
@@ -105,7 +114,7 @@ class ReflectHost(Protocol):
     @property
     def reflection(self) -> Mapping[str, object] | None: ...
     @property
-    def verified(self) -> Sequence[Mapping[str, str]]: ...
+    def review(self) -> NotesReview: ...
     @property
     def run_id(self) -> str: ...
     @property
@@ -121,8 +130,9 @@ class Reflect:
         e = self.e
         notes = e.checkpoints.notes() or noted or Notes(filed=0, unfiled=0)  # the checkpoint's: a restart has no memory of FileNotes
         verified = ""
-        if e.verified:
-            verified = "; self-verified=" + ", ".join("{} {}".format(sum(x["verdict"] == k for x in e.verified), k) for k in VERDICTS)
+        if e.review.verified:
+            verified = "; self-verified=" + ", ".join(
+                "{} {}".format(sum(x["verdict"] == k for x in e.review.verified), k) for k in VERDICTS)
         unfiled = f" unfiled={notes.unfiled};" if notes.unfiled else ""
         text = outcomes.reflection_text(e.reflection)
         e.comment(f"Reflect (engine): outcome={outcome};{text} filed={notes.filed};{unfiled} {stats}"
