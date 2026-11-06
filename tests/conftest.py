@@ -2,8 +2,9 @@
 
 A test's kind comes from its path, never from a hand marker: a file under tests/e2e/ is `e2e` (a whole flow), a file under a `real/`
 folder (tests/<slice>/real/) is `real` (real git, processes or sockets), anything else is logic (fakes, in process, fast). The older
-`@real_proc(reason)` and `@real_git(reason)` marks on a single test fold into `real`. Guards (tests/support/procsim.py): a logic test that
-spawns, forks or runs real git fails; a `real` test that never spawns fails. A test over its kind's time limit fails (LIMITS_S)."""
+A single test's `@needs(capability, reason)` (or the older `@real_proc(reason)` / `@real_git(reason)`) folds into `real`. Guards
+(tests/support/procsim.py): a logic test that spawns, forks or runs real git fails; a `real` test that never spawns fails.
+A test over its kind's time limit fails (LIMITS_S)."""
 import contextlib
 import ctypes
 import importlib
@@ -84,7 +85,7 @@ def kind_of(item) -> str:
     if parts[0] in ("e2e", "live"):  # live (tests/live, explicit-only) runs the real pieces: no guard, no limit
         return parts[0]
     func = getattr(item, "obj", None)
-    if "real" in parts[:-1] or item.get_closest_marker("real_proc") or getattr(func, "real_git", None):
+    if "real" in parts[:-1] or item.get_closest_marker("real_proc") or item.get_closest_marker("needs") or getattr(func, "real_git", None):
         return "real"
     return "logic"
 
