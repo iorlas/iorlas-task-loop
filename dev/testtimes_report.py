@@ -47,19 +47,38 @@ def hint(node: str, row: dict[str, float]) -> str:
     return "spawns or builds a store: fake the port (procsim/gitsim) or copy a template"
 
 
-def budget_warning(files: list[str], limit: float = BUDGET_CPU_S, lines: int = BUDGET_LINES) -> str:
-    """The tests over `limit` CPU seconds in the per-worker files of one run: at most `lines` lines, then '+N more'; '' when none."""
+def load_rows(files: list[str]) -> dict[str, dict[str, float]]:
+    """The per-test rows of the per-worker files of one run (a file that does not read is skipped)."""
     rows: dict[str, dict[str, float]] = {}
     for name in files:
         try:
             rows.update(json.loads(Path(name).read_text(encoding="utf-8"))["tests"])
         except (OSError, ValueError, KeyError):
             continue
+    return rows
+
+
+def slowest(rows: dict[str, dict[str, float]], lines: int = BUDGET_LINES) -> str:
+    """The `lines` slowest tests of the run, always (so a creeping test is seen before it crosses the budget); '' when nothing ran."""
+    top = sorted(rows.items(), key=lambda kv: -total(kv[1]))[:lines]
+    if not top:
+        return ""
+    return f"slowest {len(top)} tests (CPU s, setup+call+teardown):\n" + "\n".join(f"{total(r):6.1f} s  {n}" for n, r in top)
+
+
+def over_budget(rows: dict[str, dict[str, float]], limit: float = BUDGET_CPU_S, lines: int = BUDGET_LINES) -> str:
+    """The tests over `limit` CPU seconds: at most `lines` lines, then '+N more', each with its fix class; '' when none."""
     over = sorted(((total(r), n, r) for n, r in rows.items() if total(r) > limit), key=lambda t: -t[0])
     out = [f"{cpu:6.1f} s CPU  {node}  [{hint(node, row)}]" for cpu, node, row in over[:lines]]
     if len(over) > lines:
         out.append(f"+{len(over) - lines} more")
-    return f"tests over the {limit:.0f} s CPU budget:\n" + "\n".join(out) if out else ""
+    return f"WARNING: {len(over)} tests over the {limit:.0f} s CPU budget:\n" + "\n".join(out) if out else ""
+
+
+def budget_warning(files: list[str], limit: float = BUDGET_CPU_S, lines: int = BUDGET_LINES) -> str:
+    """What the end of every `just test` prints: the slowest tests table, then the over-budget warning when there is one."""
+    rows = load_rows(files)
+    return "\n".join(part for part in (slowest(rows, lines), over_budget(rows, limit, lines)) if part)
 
 
 def main() -> None:

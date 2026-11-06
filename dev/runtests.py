@@ -124,9 +124,9 @@ def main():
         env = isolated_env(home)
         parallel = pytest(root, env, "not serial", tests, n)
         serial = pytest(root, env, "serial", tests, 1)
-        warning = testtimes_report.budget_warning(sorted(str(p) for p in home.glob("times-*.json")))
-        if warning:
-            print(warning, flush=True)
+        summary = testtimes_report.budget_warning(sorted(str(p) for p in home.glob("times-*.json")))
+        if summary:
+            print(summary, flush=True)
     finally:
         shutil.rmtree(home, ignore_errors=True)
     return next((code for code in (parallel, serial) if code not in (0, NO_TESTS)), 0)
