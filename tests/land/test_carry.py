@@ -82,12 +82,17 @@ class CarryCase(Case):
         keys = InputKeys(self.git, str(self.tdir), TREE)
         return RunMemo(self.stores, check_files.repo_key(self.git, str(self.tdir)), keys, BaseSha(base), env)
 
-    def carry(self, main: dict[str, str], listed: list[str], **kw) -> tuple[bool, Spawns]:
+    def carry(self, main: dict[str, str], listed: list[str], tree: TreeSha = TREE, **kw) -> tuple[bool, Spawns]:
         spawns = Spawns(self.tdir, main, listed, **kw)
-        log = RunLog(self.stores.run_log("land"), run_id="land", host="h")
-        carried = Carry(Cmds(spawns, log, str(self.tdir)), self.git, self.stores, str(self.tdir), Env()).carried(
-            self.engine, "suite", OID, TREE, B2, str(self.tdir))
+        self.log = RunLog(self.stores.run_log("land"), run_id="land", host="h")
+        self.notes: list[str] = []
+        self.enterContext(mock.patch.object(self.log, "note", self.notes.append))
+        carried = Carry(Cmds(spawns, self.log, str(self.tdir)), self.git, self.stores, str(self.tdir), Env()).carried(
+            self.engine, "suite", OID, tree, B2, str(self.tdir))
         return carried, spawns
+
+    def said(self) -> str:
+        return "\n".join(self.notes)
 
     def hits(self) -> bool:
         memo = self.memo_at(B2)
@@ -128,3 +133,19 @@ class CarryCase(Case):
     def test_the_throwaway_merge_worktree_is_removed(self):
         self.carry(main={}, listed=["src/a.py"])
         assert self.git.remove_worktree_force.called
+
+    def test_a_carry_says_it_carried(self):
+        self.carry(main={"docs/x.md": "news\n"}, listed=["src/a.py", "tests/test_a.py"])
+        assert "carry: suite carried" in self.said()
+
+    def test_a_miss_names_the_files_of_the_closure_that_differ(self):
+        self.carry(main={"src/a.py": "A = 2\n"}, listed=["src/a.py", "tests/test_a.py"])
+        assert "carry: suite not carried, the closure differs: src/a.py" in self.said()
+
+    def test_a_tree_with_no_earlier_pass_says_so(self):
+        self.carry(main={}, listed=["src/a.py"], tree=TreeSha("tree-other"))
+        assert "carry: suite not carried, no earlier pass of this tree" in self.said()
+
+    def test_a_conflict_says_so(self):
+        self.carry(main={}, listed=["src/a.py"], merge_exit=1)
+        assert "carry: suite not carried, the branch does not merge into the base" in self.said()
