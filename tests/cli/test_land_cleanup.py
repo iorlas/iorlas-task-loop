@@ -16,7 +16,6 @@ from taskloop.cli.land import cmd_land
 from taskloop.contracts.gitfacts import Ref
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.slots import Checkout
 from taskloop.stores.real import real_stores
@@ -63,9 +62,6 @@ class DirectCleanup(Case):
         assert self.record.call_args.args[4] == "origin/main"
         row = self.retry.call_args.args[2]
         assert (row.head, row.remote_oid, row.remote_outcome) == ("head", "wip", "pending")
-        landed = LandedStore(self.who.config).get(BeadId("a"))
-        assert landed is not None
-        assert landed.sha == "land"
         run = RunLocator(self.who.config).of_bead("a")[0].run
         rows = [item.rec.kind for item in real_stores(self.who.config).run_log(run).read_from(0).items]
         assert "land_receipt" in rows
@@ -75,7 +71,6 @@ class DirectCleanup(Case):
         self.record.return_value = 1
         assert self.land() == 1
         self.retry.assert_not_called()
-        assert LandedStore(self.who.config).get(BeadId("a")) is None
 
     def test_direct_refs_with_work_outside_the_landed_commit_are_kept(self):
         self.git.delivered = False

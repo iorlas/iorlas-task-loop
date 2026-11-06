@@ -9,6 +9,7 @@ from taskloop.adapters import beadtools
 from taskloop.adapters.bdids import prefix_of
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.landed import Landed, landed_by
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads, Git
 from taskloop.contracts.slots import git_probe
@@ -55,6 +56,11 @@ def repo_traces(repo: str, git: Git, cfg: ConfigDir) -> Traces:
 
 def prefix(bead: str | None) -> str:
     return prefix_of(bead)
+
+
+def landed_of(bead: BeadId, repo: str, who: Identity) -> Landed | None:
+    """The bead's landed record from the tracker (None: it has none, or bd did not answer)."""
+    return landed_by(beadtools.bd_store(who.actor, repo))(bead)
 
 
 def bead_status(bead: BeadId, repo: str, who: Identity, store: Beads | None = None) -> str | None:

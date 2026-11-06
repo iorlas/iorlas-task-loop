@@ -8,7 +8,6 @@ from taskloop.app.wire.slots import load_cfg, profile_slots, slot_of
 from taskloop.contracts.finish import finish_run
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.landed import Landed, LandedStore
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.log import RunStart
 from taskloop.contracts.ports import Beads, Git
@@ -35,7 +34,6 @@ def cmd_land(who: Identity, bead: BeadId, sha: str, store: Beads, git: Git, work
     if rc:
         finish_run(who.config, run, land_answer(time.time(), "land was refused", ok=False))
         return rc
-    LandedStore(who.config).put(Landed(bead=bead, sha=full, base=base, t=time.time()))
     # Direct pushes preserve ancestry. A newer task tip (local or remote) is not part of this receipt.
     checked_head = head if head and git.is_ancestor(where, head, full) else full
     checked_remote = remote_oid if remote_oid and git.is_ancestor(where, remote_oid, full) else ""
