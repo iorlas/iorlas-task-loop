@@ -17,6 +17,7 @@ from delegate.cli import parser
 from delegate.contracts import codec, wire
 from delegate.contracts import status as status_wire
 from delegate.contracts.codec import record
+from delegate.contracts.history import RunRow
 from delegate.contracts.json_types import Json, as_str
 from delegate.contracts.status import Status
 from delegate.contracts.wire import RunRequest, RunResult, ToolServer, WorkerEnd
@@ -33,6 +34,7 @@ __all__ = [
     "as_json",
     "cancel",
     "contract",
+    "history",
     "network",
     "run",
     "set_account",
@@ -92,6 +94,12 @@ class Account:
     enabled: bool
     ready: bool
     fix: str
+
+
+def history(since: float = 0.0) -> list[dict[str, Json]]:
+    """The finished worker runs after `since` (epoch seconds), oldest first, as wire objects (ts, role, task, lane, model, tokens, ...).
+    The only way to read them: the file is delegate's."""
+    return [codec.to_json(r) for r in env.history_store().rows(since) if isinstance(r, RunRow)]
 
 
 def accounts() -> list[Account]:

@@ -808,7 +808,7 @@ class Loop(LoopBase):
         self.during.append(lambda: self.main(["stop", "--repo", str(self.repo)]))
         assert self.run_loop() == 0
         assert [ln["outcome"] for ln in self.lines()] == ["landed"]
-        assert not looptest.command(str(self.repo)).exists()
+        assert not looptest.command_kept(str(self.repo))
 
     def test_stop_now_ends_the_child_and_leaves_no_held_slot_or_claimed_bead(self):
         bd = self.beads({"x-1": [], "x-2": [rec("landed")]})
@@ -905,7 +905,7 @@ class Loop(LoopBase):
         time.sleep(0.05)
         assert self.run_loop() == 0  # started after the stop: runs
         assert self.started == [("x-1", "s1")]
-        assert looptest.command(str(self.repo)).exists()  # still there for the loop it was meant for
+        assert looptest.command_kept(str(self.repo))  # still there for the loop it was meant for
 
     def test_status_shows_the_running_bead_and_the_last_lines(self):
         self.beads({"x-1": [rec("landed")], "x-2": [rec("parked")]})
