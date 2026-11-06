@@ -3,7 +3,6 @@ another machine reads the outcome from bead state. `verbs.land` writes them once
 loop read them, and each checks that the sha is an ancestor of the base they mean (a record is a claim until git confirms it). Subject
 text, committer time and a trace outcome decide nothing for a bead that has a record. A newer land of a reopened bead replaces them."""
 from collections.abc import Callable, Mapping
-from typing import Any
 
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, Beads
@@ -24,7 +23,7 @@ def landed_meta(rec: Landed) -> dict[str, str]:
     return {LANDED_SHA: rec.sha, LANDED_BASE: rec.base, LANDED_AT: repr(rec.t)}
 
 
-def landed_in(bead: BeadId, metadata: Mapping[str, Any]) -> Landed | None:
+def landed_in(bead: BeadId, metadata: Mapping[str, object]) -> Landed | None:
     """The landed record a bead's metadata holds; None when it holds none (or an unreadable one)."""
     sha, base, at = metadata.get(LANDED_SHA), metadata.get(LANDED_BASE), metadata.get(LANDED_AT)
     if not (isinstance(sha, str) and sha and isinstance(base, str) and isinstance(at, str)):
