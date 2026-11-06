@@ -33,6 +33,7 @@ class Schema:
     Steps are keyed by the version upgraded FROM and must not end transactions.
     Extra checks are SQL queries returning exactly one row containing 'ok'.
     Quarantine is opt-in for obsolete derived data, never authoritative data.
+    A read-only open accepts versions `read_from`..`version` and never upgrades.
     """
 
     version: int
@@ -42,6 +43,7 @@ class Schema:
     revisioned: frozenset[str] = frozenset()
     quarantine_versions: frozenset[int] = frozenset()
     checks: tuple[str, ...] = ()
+    read_from: int | None = None  # the oldest version a read-only open accepts as is; None: only `version`
 
 
 def _journal_mode(con: sqlite3.Connection, *, readonly: bool) -> str:
@@ -72,7 +74,7 @@ def _validate_version(version: int, schema: Schema, *, readonly: bool) -> None:
     if version > schema.version:
         message = f"{schema.name} is schema v{version}, this code knows v{schema.version}: update it"
         raise SchemaError(message)
-    if readonly and version < schema.version:
+    if readonly and version < (schema.version if schema.read_from is None else schema.read_from):
         message = f"{schema.name} is schema v{version}, this code knows v{schema.version}: the writer has not upgraded it yet"
         raise SchemaError(message)
 
@@ -95,7 +97,7 @@ def _schema_ready(con: sqlite3.Connection, schema: Schema, version: int, *, read
     if version == 0 and version != schema.version:
         message = "unsupported schema version"
         raise sqlite3.DatabaseError(message)
-    if version < schema.version:
+    if version < schema.version and not readonly:
         upgrade(con, schema.steps, version, schema.version, name=schema.name)
     return created
 
@@ -137,10 +139,13 @@ def _open(
         address = f"{resolved.as_uri()}?mode=ro" if readonly else os.fspath(path)
         con = sqlite3.connect(address, uri=readonly, isolation_level=None, timeout=5.0, check_same_thread=not shared)
         version = int(con.execute("PRAGMA user_version").fetchone()[0])
-        if readonly and version == 0 and con.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone() is None:
-            # A file a writer has created but not yet initialised is not there yet, the same as a missing file.
-            con.close()
-            return None
+        if readonly and version == 0:
+            if con.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone() is None:
+                # A file a writer has created but not yet initialised is not there yet, the same as a missing file.
+                con.close()
+                return None
+            # The creator's DDL and user_version commit together, so a non-empty schema means the first read is stale: decide on this one.
+            version = int(con.execute("PRAGMA user_version").fetchone()[0])
         _validate_version(version, schema, readonly=readonly)
         if not readonly and version < schema.version and version in schema.quarantine_versions:
             con.close()

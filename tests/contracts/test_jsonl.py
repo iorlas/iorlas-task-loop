@@ -18,6 +18,7 @@ from jsonl_log import Jsonl, cursor
 from contracts import samples as S
 from taskloop.contracts import paths, stores, wire
 from taskloop.contracts.ask import Ask
+from taskloop.contracts.docstore import JsonStore
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.snapshots import Pin
@@ -184,7 +185,7 @@ class StoresTest(Case):
             assert st.get() is None, text
 
     def test_a_failed_write_leaves_no_temp_file_and_keeps_the_old_one(self):
-        st = stores.PinStore(self.cfg)
+        st = JsonStore(self.cfg.root / "pin.json", Pin)
         st.write(S.other(Pin))
         with mock.patch.object(Path, "replace", side_effect=OSError("disk")), pytest.raises(OSError):
             st.write(S.other(Pin))
