@@ -12,13 +12,13 @@ import support.paths  # noqa: F401
 # isort: split
 import suites
 from contracts import samples as S
+from support.memstores import fake_stores
 from support.narrow import must
 from support.tiers import domain
 
 from taskloop.contracts.ask import AskAnswer
 from taskloop.contracts.enums import AskStatus, LockWhat
 from taskloop.contracts.ids import BeadId
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 

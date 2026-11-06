@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 3
  },
- "version": "afd2965aa3791c0f",
+ "version": "699fa416a58de839",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Save/load screen polish. Part of Save system.",
@@ -79,6 +79,7 @@
    "phase": null
   }
  ],
+ "decisions": [],
  "passes": [
   {
    "n": 1,

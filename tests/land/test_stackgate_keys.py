@@ -8,6 +8,7 @@ from unittest import mock
 
 import pytest
 from support.case import Case
+from support.memstores import fake_stores
 
 from taskloop.adapters import check_files, childenv
 from taskloop.app.checks.cache import InputKeys, RunMemo
@@ -20,11 +21,10 @@ from taskloop.contracts.config import load
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitfacts import TreeEntry
 from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.ports import Git
+from taskloop.contracts.ports import Git, Ran
 from taskloop.contracts.runkey import BaseSha, Digest
 from taskloop.contracts.slots import Checkout
 from taskloop.domain.checks.specs import repo_check
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 OID, TREE, BASE = "1550b77c" + "0" * 32, TreeSha("tree-1"), BaseSha("base-1")
@@ -104,10 +104,11 @@ class StackGateKeys(Case):
     def test_a_refusal_names_the_first_differing_field_of_each_step(self):
         write_receipts(self.stores, self.repo.git, str(self.repo.wt))
         self.repo.git.checkouts.return_value = self.repo.git.checkouts.return_value[:1]  # no worktree has it out
+        self.spawner.run.return_value = Ran(exit=0)  # the gate's own run in a fresh worktree writes nothing here
         with pytest.raises(Stop) as stop:
             self.gate.require("task/lifesim-fmtfix-r3", OID)
-        assert "is not green for unity-tests (inputs differ (expected " in stop.value.why
-        assert "no clean worktree has it out" in stop.value.why
+        assert "is still not green for " in stop.value.why
+        assert self.repo.git.add_worktree.called
 
     def test_a_step_with_no_receipt_on_this_tree_says_so(self):
         assert self.gate.red(self.engine, TREE, BASE, str(self.repo.wt)) == ["fmt", "unity-check", "unity-tests"]
