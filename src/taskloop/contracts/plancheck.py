@@ -120,6 +120,11 @@ def _parse_checks(items: Sequence[Open]) -> None:
         x["check"] = of(x["check"]) if x.get("check") else None
 
 
+def plan_of(raw: Open) -> PlanData:
+    """A planner's answer (the wire form, a dict) as the PlanData the engine keeps: the same keys, a shallow copy."""
+    return PlanData(**raw)
+
+
 def parse(plan: Open) -> None:
     """A planner's or writer's answer (a dict of the wire form) with every check a PlanCheck: a stage's checks, a risk's, a case's and a
     new case's. A missing check is None. In place; a PlanCheck stays as it is."""
