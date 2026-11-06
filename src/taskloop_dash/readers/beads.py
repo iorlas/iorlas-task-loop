@@ -6,8 +6,8 @@ from dataclasses import dataclass, field, replace
 
 from taskloop.contracts import beadrows
 from taskloop.contracts.beadrows import row_of
+from taskloop.contracts.beadsport import BdFailure
 from taskloop.contracts.ids import BeadId, loop_key
-from taskloop.contracts.ports import BdFailure
 from taskloop_dash.env import Bead, Env
 from taskloop_dash.readers.records import Records
 
