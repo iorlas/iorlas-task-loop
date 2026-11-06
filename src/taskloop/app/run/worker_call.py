@@ -399,8 +399,9 @@ class WorkerCall:
     def end_call(self, c: Call, ans: dg.Answer) -> None:
         e, res = self.e, ans.res
         if c.state is not None and c.prepared is not None:
-            c.state.consumed()
+            # the memo first: a crash between the two re-recovers, never loses
             done_memo.keep(e.run_dir, c.key, c.sha, c.state.answer_file, c.prepared.snapshot)
+            c.state.consumed()
         if c.node == "plan" and res.ref:
             e.planner_ref = res.ref
         e.last_flag = res.flag  # same_family | degraded | ...: delegate could not give the usual lane
