@@ -100,6 +100,7 @@ class ReleaseResult(Rec):
     message: str = ""
     tests: list[str] = msgspec.field(default_factory=list)
     log: str = ""
+    repo: str = ""  # the checkout released; empty on a row from before this field
 
 
 @final

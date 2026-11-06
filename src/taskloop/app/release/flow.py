@@ -207,13 +207,13 @@ def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, e
         if newer:  # the lock is released above: the exec'd release takes it
             selfupdate.exec_release(newer, sys.argv[1:] if argv is None else argv, repo, env)
         record(ReleaseResult(ok=True, version=version, summary="released " + version, at=clock(), branch=req.from_branch or "main",
-                             message=req.message), req, repo, who, home)
+                             message=req.message, repo=str(repo)), req, repo, who, home)
     except Abort as e:
         print("release: " + str(e), file=sys.stderr)
         message = " | ".join(str(e).strip().splitlines()) or "failed"
         summary = ((f"{e.version} was pushed but " if e.version else "nothing released: ") + message)[:500]
         record(ReleaseResult(ok=False, version=e.version, summary=summary, tests=list(e.tests), log=e.log, at=clock(),
-                             branch=req.from_branch or "main", message=req.message), req, repo, who, home)
+                             branch=req.from_branch or "main", message=req.message, repo=str(repo)), req, repo, who, home)
         print("release FAILED: " + summary + ((f" (log {e.log})") if e.log else ""), file=sys.stderr)
         return 1
     return 0
