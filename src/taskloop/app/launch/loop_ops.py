@@ -2,6 +2,7 @@
 of a quiet moment. Each is a function of ports; app/launch/loop.py closes them over a repo into the LoopEnv."""
 import contextlib
 import os
+import platform
 import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -9,7 +10,7 @@ from typing import Any
 
 from jsonl_log import close_held
 
-from taskloop.adapters import childenv, ident
+from taskloop.adapters import beadtools, childenv, ident, ram
 from taskloop.adapters.bd import BdStore
 from taskloop.app.loop.env import ReloadNote
 from taskloop.app.reconcile import leases
@@ -23,12 +24,15 @@ from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import lanes as wlanes
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import bdbackup, factorybackup, paths
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import Beads, Child, Git, Hold, Spawner
-from taskloop.contracts.slots import SlotGitError
+from taskloop.contracts.landed import landed_by
+from taskloop.contracts.procport import Child, Hold, Spawner
+from taskloop.contracts.slots import SlotGitError, git_probe
 
 STOP_GRACE_S = 300.0  # a stopped run-task is given this long to run its close step before stream-proc ends it
 
@@ -118,3 +122,37 @@ def exec_into(repo: str, d: Path, argv: list[str], handover: str, env: Env, who:
 def loop_lock(cfg: paths.ConfigDir, wt: str, slot: str, slot_bead: str | None, bead: str) -> None:
     if os.path.isdir(wt):
         engine_lock.loop_lock(cfg, wt, slot, slot_bead or "", bead=bead)
+
+
+def available_mb(spawner: Spawner) -> int | None:
+    if platform.system() != "Darwin":
+        return None  # macOS only: vm_stat is the one reader
+    try:
+        result = spawner.run(["/usr/bin/vm_stat"], timeout_s=2)
+        return ram.available_mb(result.out) if result.exit == 0 else None
+    except OSError:
+        return None
+
+
+def landed_on_base(repo: str, cfg: paths.ConfigDir, store: Beads, wt: str, bead_id: BeadId, git: Git) -> bool:
+    """True when the bead's landed record names a sha that is on the base. LEGACY, only for a bead with no record (landed before
+    0.23.179): its land commit (titled `... (<id>)`) is the tip of its branch and already on the base; this can go with them."""
+    return git_probe(lambda: _landed_on_base(repo, cfg, store, wt, bead_id, git), False)
+
+
+def _landed_on_base(repo: str, cfg: paths.ConfigDir, store: Beads, wt: str, bead_id: BeadId, git: Git) -> bool:
+    """Only positive evidence lets the loop treat a bead as landed; an unknown probe stays not ready."""
+    if not os.path.isdir(wt):
+        return False
+    base = wslots.load_cfg(repo, git).base
+    rec = landed_by(store)(bead_id)
+    if rec is not None:
+        return git.is_ancestor(wt, rec.sha, base)
+    branch = getattr(beadtools.peek(store, bead_id), "metadata", {}).get("branch") or "task/" + bead_id
+    with contextlib.suppress(SlotGitError):
+        git.fetch(wt)
+    tip = git.rev_parse(wt, "refs/heads/" + branch)
+    last = git.log(wt, [tip], limit=1) if tip else []
+    if not last or not last[0].subject.endswith(f"({bead_id})"):
+        return False
+    return git.is_ancestor(wt, tip, base)

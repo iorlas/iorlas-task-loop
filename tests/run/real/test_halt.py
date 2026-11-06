@@ -17,8 +17,8 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 # isort: split
 from support import engine_case as te
 from support import gitq
-from support.engine_case import CLEAN, PLAN, WRITE
 from support.fake_api import FakeApi
+from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.adapters import delegate, runner
 from taskloop.adapters import halt as halting

@@ -6,7 +6,7 @@ from types import MappingProxyType
 
 from taskloop.app.land.cmds import Cmds, Runs, Stop
 from taskloop.contracts.forge import MERGED, OPEN, Pr, gh_pr
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 
 FIELDS = "number,state,headRefName,headRefOid,baseRefName,mergeCommit,url,title"
 MERGE_FLAG: Mapping[str, str] = MappingProxyType({"squash": "--squash", "merge": "--merge", "rebase": "--rebase"})

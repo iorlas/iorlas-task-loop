@@ -7,7 +7,7 @@ from typing import Any
 from taskloop.app.plan.decisions import Decisions
 from taskloop.app.plan.probe import AcProbe
 from taskloop.contracts import plancheck
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 from taskloop.domain.checks import lint
 from taskloop.domain.checks.names import norm
 from taskloop.domain.prompts.plan import PLAN_PROMPT, SHOW_PLAN, VISUAL_PLAN, VISUAL_STAGES

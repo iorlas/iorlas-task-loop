@@ -12,8 +12,8 @@ from taskloop.adapters.git import RealGit
 from taskloop.app.reconcile.apply import apply
 from taskloop.app.reconcile.observe import lease_of
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BeadPatch, NewBead
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BeadPatch, NewBead
 from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.reconcile.facts import (
     Action,

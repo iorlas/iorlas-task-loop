@@ -11,10 +11,10 @@ from taskloop.app.loop import hosts
 from taskloop.app.loop.env import LoopEnv
 from taskloop.contracts import pickset
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.loop import Skip
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
 
 Key = tuple[int, int, list[tuple[int, int | str]], Bead]  # (priority, epic rank, natural id, bead)
 ORDERED = "ordered"  # the label of an epic whose children must name what they follow
