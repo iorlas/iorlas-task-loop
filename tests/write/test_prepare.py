@@ -16,7 +16,7 @@ from taskloop.app.write.prepare import Prepare
 from taskloop.app.write.state import StageState
 from taskloop.contracts import rundocs
 from taskloop.contracts.kinds import Kind
-from taskloop.contracts.ports import Ran
+from taskloop.contracts.procport import Ran
 
 
 class PrepareTests(EngineTest):

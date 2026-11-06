@@ -21,8 +21,8 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts import env as penv
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import parse_bead_id
-from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import SlotGitError
 
 # an argv list; the plan schema wraps it as an adhoc check

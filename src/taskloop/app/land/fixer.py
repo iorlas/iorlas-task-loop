@@ -10,8 +10,9 @@ from taskloop.app.land.parts import CaseChecks, StageCheckout
 from taskloop.contracts import plancheck
 from taskloop.contracts.checks import CheckResult
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.plancheck import PlanCheck, PlanData, RoundState, StageData
-from taskloop.contracts.ports import Git, Sh
+from taskloop.contracts.ports import Sh
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks import planref, trim

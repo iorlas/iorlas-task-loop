@@ -5,8 +5,8 @@ from atomic_io import atomic_write_text
 
 from taskloop.app.wire import brief
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.ports import Git
 from taskloop.domain.brief import handoff_text
 
 

@@ -50,7 +50,7 @@ from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import real  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts.config import LoopConfig  # noqa: E402
-from taskloop.contracts.ports import WaitTimeout  # noqa: E402
+from taskloop.contracts.procport import WaitTimeout  # noqa: E402
 from taskloop.contracts.slots import SlotFail  # noqa: E402
 from taskloop.domain import outcome as oc  # noqa: E402
 
@@ -551,7 +551,7 @@ class Loop(LoopBase):
         bd = self.beads({"x-1": [], "x-2": [rec("landed")]})
         self.hold["x-1"] = 3
         self.during.append(lambda: self.main(["stop", "--repo", str(self.repo), "--now"]))
-        with mock.patch.object(wloop, "landed_on_base", return_value=True):
+        with mock.patch.object(wloop.ops, "landed_on_base", return_value=True):
             self.run_loop()
         assert ("update", "x-1", "--status", "open", "--assignee", "") not in bd.calls
         assert "on the base" in self.lines()[0]["why"]

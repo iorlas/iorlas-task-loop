@@ -12,7 +12,7 @@ from support.case import Case
 from support.tags import contract  # noqa: F401  (re-exported for the subclasses)
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import BranchPinned, DirtyTree, GitReadFailure, SlotGitError
 
 _Base = Case

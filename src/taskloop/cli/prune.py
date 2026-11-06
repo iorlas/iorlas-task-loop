@@ -9,8 +9,8 @@ from taskloop.app.release import shell
 from taskloop.app.track import trail
 from taskloop.app.wire import real
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.ports import Git
 
 
 def cmd_prune(a: Any, env: Env, git: Git, who: Identity, now: Callable[[], float] = trail.now) -> int:

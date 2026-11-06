@@ -75,9 +75,9 @@ from taskloop.app.track import (
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.gitfacts import GitOutcome, LogRow
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.lockrows import EngineLockRows
-from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import Checkout, SlotGitError
 
 try:
