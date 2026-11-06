@@ -99,7 +99,8 @@ class Hardening(Case):
 
 class ShotUrl(Case):
     def test_a_picture_kept_as_an_artifact_is_served_by_the_artifact_url(self):
-        assert LOOKS.shot_url("demo", "artifact:tl-1/a b.png") == "/api/artifact?bead=tl-1&name=a%20b.png"
+        assert LOOKS.shot_url("demo", "artifact:r-1/tl-1/RUN/write-2/a b.png") == (
+            "/api/artifact?repo=r-1&bead=tl-1&run=RUN&stage=write&attempt=2&name=a+b.png")
         assert LOOKS.shot_url("demo", "docs/a.png") == "/api/look-shot?repo=demo&path=docs/a.png"
 
 
