@@ -1,5 +1,7 @@
-"""The runners route.py can launch, as data: the runner kind `route.how()` names, the CLI it drives (the key of app/watch.LIMITS), the
-executable to look for, and whether resume was tested. What a CLI does (argv, events, usage) lives in its harness class, adapters/harness/.
+"""The runners route.py can launch, as data: the runner kind `route.how()` names, the CLI it drives (the key of
+app/harnesses.LIMITS), the executable to look for, and whether resume was tested. What a CLI does (argv, events, usage) lives in its
+harness class (the shelf's any_agent).
+(the shelf's any_agent).
 
 Lane facts that are data, not code, live here too (`LANE_HOSTS`: the API hosts a lane needs, for adapters/netprobe).
 """

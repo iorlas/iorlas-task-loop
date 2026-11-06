@@ -176,7 +176,7 @@ class LoopHealth(LoopBase):
         self.beads({"x-1": [rec("landed")]})
         looptest.write_state(str(self.repo), pid=os.getpid(), started=self.clock.t)  # this process is alive
         assert "RED:" not in self.status()
-        looptest.state_path(str(self.repo), os.getpid()).unlink()
+        looptest.files(str(self.repo)).remove(os.getpid())
         self.run_loop()  # drains: a fresh exit line is a fresh beat
         assert "RED:" not in self.status()
         self.beads({"x-1": [rec("landed")]})  # the bead is ready again
@@ -267,7 +267,7 @@ class StopRequests(LoopBase):
                 self.files.command().write(LoopCommand(action="stop_after_current", by="t", t=self.clock.t - 10,
                                                   targets=[LoopTarget(pid=12345, started=1.0)]))
                 def no_command():
-                    assert not looptest.command(self.repo_s).exists()
+                    assert not looptest.command_kept(self.repo_s)
                 self.during.append(no_command)
                 assert self.run_loop() == 0
 

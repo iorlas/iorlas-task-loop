@@ -7,10 +7,10 @@ import shlex
 import sys
 from pathlib import Path
 
+from any_agent.harnesses.codex_overlay import CodexOverlay
+from any_agent.protocol import LaunchSpec
 from jsonl_log import JsonlLog
 
-from delegate.adapters.harness.base import LaunchSpec
-from delegate.adapters.harness.codex_overlay import CodexOverlay
 from delegate.app import env
 from delegate.contracts import stops, wire
 from delegate.contracts.json_types import Json

@@ -9,11 +9,12 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
-from delegate.adapters.harness.opencode import OpenCodeHarness
+from any_agent.harnesses import opencode_sandbox
+from any_agent.harnesses.opencode import OpenCodeHarness
+from any_agent.supervisor import RunHooks
 from delegate.app import decide as dec
 from delegate.app import env, launch, usage
 from delegate.app.settle import Settler
-from delegate.app.supervisor import RunHooks
 from delegate.domain.lanes.lane import Lane
 from support.procsim import real_proc
 
@@ -72,7 +73,7 @@ class DeepSeekTests:
                 patch.object(env, "config_dir", return_value=Path(tmp)),
                 patch.object(OpenCodeHarness, "find_exe", return_value="opencode"),
                 patch.object(sys, "platform", "darwin"),
-                patch.object(OpenCodeHarness, "write_shell"),
+                patch.object(opencode_sandbox, "write_shell"),
                 patch.object(OpenCodeHarness, "free_model_ok", return_value=valid) as guard,
                 replay(["{}"]),
                 patch.object(Settler, "mark_out"),

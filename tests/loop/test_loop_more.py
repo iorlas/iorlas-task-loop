@@ -24,7 +24,6 @@ from loop.test_loop import LoopBase  # noqa: E402
 
 NET = {"kind": "pause_network", "why": "paused: network on write; resume when it is back"}
 
-
 class LoopHealth(LoopBase):
     """tl-7y6.2.12: a loop that exits says why; a repo with ready beads and no loop alive is a red line; the log outlives the session."""
 
@@ -34,14 +33,12 @@ class LoopHealth(LoopBase):
             self.main(["loop", "status", "--repo", str(self.repo)])
         return out.getvalue()
 
-
-    def test_a_loop_killed_without_an_exit_line_leaves_its_state_as_died_pid_json(self):
+    def test_a_loop_killed_without_an_exit_line_leaves_its_state_as_a_died_row(self):
         self.beads({})
         looptest.write_state(str(self.repo), pid=999999, started=self.clock.t)
         assert looptest.live(str(self.repo)) == []  # no such process
-        died = looptest.files(str(self.repo)).runs() / "died-999999.json"
-        assert json.loads(died.read_text())["pid"] == 999999
-
+        assert [st.pid for st in looptest.files(str(self.repo)).died()] == [999999]
+        assert looptest.files(str(self.repo)).read(999999) is None  # no longer a live row
 
 class StopRequests(LoopBase):
     """`tl stop` writes one LoopCommand naming the live loops; a loop it does not name (started later) ignores it."""
@@ -60,7 +57,6 @@ class StopRequests(LoopBase):
             assert self.main(["stop", "--repo", self.repo_s] + (["--now"] if now else [])) == 0
         return self.files.command().get()
 
-
     def test_a_command_that_is_not_a_command_is_ignored(self):
         f = looptest.command(self.repo_s)
         f.parent.mkdir(parents=True, exist_ok=True)
@@ -68,10 +64,8 @@ class StopRequests(LoopBase):
             f.write_text(text)
             assert self.files.stop_for(self.old_pid, self.clock.t) == "", text
 
-
 class Moved(Exception):
     """What the mocked os.execve raises: the real one never returns."""
-
 
 class LoopSelfUpdate(LoopBase):
     """Between beads the loop re-execs into the newest install of the plugin (fake version trees)."""
@@ -94,7 +88,6 @@ class LoopSelfUpdate(LoopBase):
 
     def install(self, ver, tl_py="import sys\n"):
         return looptest.fake_install(self.cache, ver, tl_py)
-
 
     def pin(self, **v):
         (homes.config_dir() / "pinned.json").write_text(json.dumps(v))
