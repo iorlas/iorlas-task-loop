@@ -27,6 +27,7 @@ from delegate.domain.routing.router import Router
 # writes only the working directory; a command it blocks may ask to run outside it, and Codex's automatic reviewer (a model, no human)
 # approves or refuses that one command. Codex permission profiles would also block reads (~/.ssh), but an approved escalation there
 # stays inside the sandbox, so Unity cannot run (codex-cli 0.162.1).
+TOOL_OUTPUT_TOKENS: Final = 3000  # about 200 lines of command output: a longer tool result is cut by Codex (tl-7y6.6.13)
 CODEX_ACCESS: Final = [
     "--ignore-user-config",
     "--ignore-rules",
@@ -38,6 +39,8 @@ CODEX_ACCESS: Final = [
     "approval_policy=on-request",
     "-c",
     "approvals_reviewer=auto_review",
+    "-c",
+    f"tool_output_token_limit={TOOL_OUTPUT_TOKENS}",
 ]
 
 
