@@ -22,7 +22,6 @@ from taskloop.contracts.plancheck import Adhoc, PlanData, Ref, adhoc
 from taskloop.domain.checks import planref
 
 REPO: list[dict[str, Any]] = [{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"}]
-YXBB = "mkdir -p x && just unity-tests > x/out && grep -q passed x/out"
 UNITY = CheckId("unity-tests")
 
 

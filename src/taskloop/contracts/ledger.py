@@ -1,7 +1,7 @@
 """The ask ledger and the decision store as typed records. The ledger in factory.db is append-only: one row per
 transition of an ask, so history outlives the one-document-per-bead ask. An ADR is a decision of the owner that the plan stage
 reads; its uses (a plan cited it) are rows of their own, so a reuse counter never rewrites the ADR."""
-from typing import ClassVar, Final, Literal, final
+from typing import ClassVar, Literal, final
 
 import msgspec
 
@@ -11,9 +11,6 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.wire import Rec
 
 LedgerEvent = Literal["raise", "answer", "answer_refused", "consume", "close", "withdraw", "cause", "stick", "demote"]
-LEDGER_EVENTS: Final = ("raise", "answer", "answer_refused", "consume", "close", "withdraw", "cause", "stick", "demote")
-
-
 @final
 class LedgerEntry(Rec):
     """One transition of an ask. `question`, `key`, `repo` and `similar` are set at raise; `cause` and `outcome` are what was known at
