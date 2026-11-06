@@ -36,6 +36,14 @@ def stop(fact: str, words: str) -> dict[str, Json]:
     return {"outcome": o.reason, "say": o.detail}
 
 
+def probe_hung(lane: str, model: str, secs: float, t: float) -> dict[str, Json]:
+    """A canary probe that did not answer in time: `timeout` is never counted, `hung` is, and the ladder names it from the watchdog fact.
+    Nothing is marked out here; the pair tries again in a minute."""
+    o = classify(None, structured={"watchdog": "hung"})
+    assert o is not None
+    return {"outcome": o.reason, "retry_after": t + 60, "say": f"canary: {lane}/{model} did not answer within {secs}s"}
+
+
 @dataclass(frozen=True)
 class Hung:
     """A worker the watchdog stopped for silence: what it said (`words`) and when it went quiet (`kind`: first_event, or later)."""
