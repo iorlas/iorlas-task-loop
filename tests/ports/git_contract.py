@@ -4,13 +4,13 @@ The world: origin `o.git`, the clone `repo` with one pushed commit on main, and 
 import os
 import re
 import subprocess
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from support.case import Case
 from support.tags import contract  # noqa: F401  (re-exported for the subclasses)
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import BranchPinned, DirtyTree, GitReadFailure, SlotGitError
@@ -36,7 +36,7 @@ class GitContract(_Base):
         raise NotImplementedError
 
     def setup_method(self) -> None:
-        tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        tmp = TemporaryDirectory(ignore_cleanup_errors=True)
         self.addCleanup(tmp.cleanup)
         self.home = Path(os.path.realpath(tmp.name))
         env = mock.patch.dict(os.environ, {**IDENT, "HOME": str(self.home), "XDG_CONFIG_HOME": str(self.home / "cfg")})

@@ -4,7 +4,7 @@ from typing import Final
 
 _TRANSIENT: Final = re.compile(
     r"curl \d+|Broken pipe|Connection (?:reset|timed out|refused)|Could not resolve host|early EOF|RPC failed|"
-    r"remote end hung up|SSL_ERROR|TLS|Operation timed out|Network is unreachable|"
+    r"remote end hung up|SSL_ERROR|TLS|Operation timed out|\(timed out after|Network is unreachable|"
     r"Temporary failure in name resolution|error: 5\d\d|HTTP/\d(?:\.\d)? 5\d\d",
     re.I,
 )

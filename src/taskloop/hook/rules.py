@@ -1,44 +1,18 @@
 """What a PreToolUse hook refuses, one pure function per rule: tool name and input in, a one-line reason out ("" = allowed)."""
 from __future__ import annotations
 
-import os
-import shlex
 from collections.abc import Mapping
 from typing import Any
 
+from any_shell_policy import judge, parse
+
 KILLERS = frozenset({"pkill", "killall"})
-SHELLS = frozenset({"sh", "bash", "zsh", "dash"})
-WRAPPERS = frozenset({"sudo", "exec", "env", "nohup", "time", "command", "xargs", "nice"})
-BREAKS = frozenset({";", "&", "|", "&&", "||", "(", ")"})
 
 
-def words(command: str) -> list[str]:
-    lex = shlex.shlex(command.replace("\n", " ; "), posix=True, punctuation_chars=True)
-    lex.whitespace_split = True
-    return list(lex)
-
-
-def kills_by_name(command: str, depth: int = 0) -> bool:
-    """A pkill or killall in command position of `command`, also inside `sh -c '...'`. A command that does not parse is allowed
-    (the shell will refuse it), never guessed at."""
-    try:
-        toks = words(command)
-    except ValueError:
-        return False
-    at_start = True
-    for i, tok in enumerate(toks):
-        if tok in BREAKS:
-            at_start = True
-            continue
-        name = os.path.basename(tok)
-        if at_start and name in KILLERS:
-            return True
-        if at_start and name in SHELLS and depth < 3 and "-c" in toks[i + 1:i + 3]:
-            j = toks.index("-c", i) + 1
-            if j < len(toks) and kills_by_name(toks[j], depth + 1):
-                return True
-        at_start = at_start and name in WRAPPERS
-    return False
+def kills_by_name(command: str) -> bool:
+    """A pkill or killall in command position of `command`, also behind wrappers and inside `sh -c '...'`. A command that does not
+    parse is allowed (the shell will refuse it), never guessed at."""
+    return any(c.name in KILLERS for c in parse(command) or ())
 
 
 def no_kill_by_name(tool: str, args: Mapping[str, Any]) -> str:
@@ -51,8 +25,4 @@ RULES = (no_kill_by_name,)
 
 
 def deny_reason(tool: str, args: Mapping[str, Any]) -> str:
-    for rule in RULES:
-        why = rule(tool, args)
-        if why:
-            return why
-    return ""
+    return judge(RULES, tool, args).reason
