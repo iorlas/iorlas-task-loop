@@ -11,7 +11,7 @@ from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.contracts.ids import CheckId
 from taskloop.contracts.plancheck import Adhoc, PlanCheck
 from taskloop.contracts.runkey import Digest
-from taskloop.domain.checks.matchers import glob_re, is_build, is_unity
+from taskloop.domain.checks.matchers import glob_re, is_build, is_queued
 from taskloop.domain.checks.planref import adhocs
 
 DIFF_CHECK: Final = CheckId("diff-check")  # the engine's own check: `git diff --check <base>`, always first in every round and the gate
@@ -28,12 +28,12 @@ def diff_check(base: str, tree: str) -> Check:
     return Check(id=DIFF_CHECK, cmd=f"git diff --check {base} {tree}", group="static", wall_min=2.0, tags=["diff"])
 
 
-def tags_of(check_id: str, cmd: str) -> list[Tag]:
+def tags_of(check_id: str, cmd: str, queued_match: str = "") -> list[Tag]:
     """The tags of a repo check: read from its id and command once, here, so nothing downstream matches text again."""
     text = f"{check_id} {cmd}"
     tags: list[Tag] = []
-    if is_unity(text):
-        tags.append("unity")
+    if is_queued(text, queued_match):
+        tags.append("queued")
     if is_build(text):
         tags.append("build")
     return tags
@@ -59,7 +59,7 @@ def repo_check(k: CheckSpec, cfg: EngineConfig, phase: Phase = Phase.STAGE) -> C
                  exclude=inputsets.expand(cfg, k.exclude), env=dict(k.env), repo=True, writer=k.writer,
                  writer_max_s=k.writer_check_max_s, tail_log=k.tail_log, keep=list(k.keep), needs=list(k.needs), lane=k.lane,
                  pass_files=k.pass_files, run_in=k.run_in,
-                 fix=text_of(k.fix) if k.fix else "", reads=list(k.reads), tags=tags_of(k.id, k.cmd))
+                 fix=text_of(k.fix) if k.fix else "", reads=list(k.reads), tags=tags_of(k.id, k.cmd, cfg.queued_match))
 
 
 def adhoc_check(a: Adhoc, cfg: EngineConfig) -> Check:
