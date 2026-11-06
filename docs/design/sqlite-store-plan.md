@@ -48,6 +48,29 @@ revision, so the last writer wins (`JsonStore`/`Doc`, vendored `any_json_doc`). 
 
 Hot ranking, worst first: checkpoint (1), loop state (2), call state (7), parks (4), slot tickets (10), `repos.json` (15).
 
+### 2a. Durability class (amendment, Denis 2026-11-06)
+
+Moving a fact into `factory.db` must not make the DB its only record when the fact outlives the machine. Every family has one class:
+
+| class | meaning | on DB loss |
+|---|---|---|
+| **D** DB-only | operational, short-lived or recomputable | rebuilt or expired; nothing is owed |
+| **R** record elsewhere | the DB row is a read cache; the record is in git or the task system | re-read from the record |
+| **O** outbox | a disposable "about to do X" row, reconciled against the real world | reconciled against git, then dropped |
+
+| family | class | record |
+|---|---|---|
+| rows 1-8, 10-18, 20, 21 (checkpoint, loop, parks, call state, tickets, locks, worktrees, checks, flakes, repos, storm, snapshots, dash, run-dir state, host) | D | none: the run or the loop recomputes them |
+| 9 landed | O | **no `landed` table.** git and the receipts are the record of what landed; `effect` (`land:<bead>`) stays only as a "started merging X" outbox, reconciled against git on DB loss (merged on origin/main: done; else retry or stop) |
+| 19 ADRs | R | `docs/adr/NNNN-title.md` in the repo; the DB keeps a read cache for the dashboard and `uses.jsonl` stays a log |
+| `ask` (operational: stuck, timeout, budget) | D | none; they expire |
+| `ask` (decision) + `ask_ledger` | R | the answer is a bead comment with `kind=decision`; the DB keeps only the open asks; `ask_ledger` is bead comments, not a table of record |
+| plans | R / D | multi-PR or architectural: `docs/design/<ticket-id>/plan.md` (ticket id = the task system's id, as is); a single task: the bead body; per-run `plan.json`: DB (D) |
+
+Consequences for the rest of this note: row 9 and row 19 in the table of section 3 read "see 2a"; the legacy `ask-ledger.jsonl` importer
+(slice 9) imports into bead comments, not into the `ask_ledger` table; the `ask_ledger` table is no longer a source of record and is
+dropped by the schema step that follows the importer.
+
 ### Stays a file, by design
 
 - Logs and evidence: `engine/<run>.jsonl` and `.live/*`, `events.jsonl`, `traces.jsonl`, `loop/*.jsonl`, `usage-history.jsonl`,
@@ -72,8 +95,10 @@ it implies.
 | 3 loop command, 6 owner request | `signal` | taken once (`taken`), written by the owner, read by the loop or engine |
 | 4 parks, 5 pauses, reexec, 16 storm | `wait` (kind, wake_at, wake_on, facts, cleared) | the schema comment already says: park writes go through the loop-owned wait store |
 | 7 call state | `effect` (key = bead+call key, state intent/returned/consumed, receipt) | this is exactly the outbox the review asks for |
-| 9 landed | `effect` (`land:<bead>`) | |
-| 14, 15, 17, 18, 19, 21 | `kv` (key, value JSON, stamp) | cold singleton documents: no schema of their own; ADRs stay one row per ADR key |
+| 9 landed | `effect` (`land:<bead>`), outbox only | class O (2a): git and receipts are the record; no `landed` table |
+| 14, 15, 17, 18, 21 | `kv` (key, value JSON, stamp) | cold singleton documents: no schema of their own |
+| 19 ADRs | `kv` read cache of `docs/adr/NNNN-title.md` | class R (2a): the file in git is the record, the verbs write it |
+| decision asks, `ask_ledger` | `ask` (open asks only) | class R (2a): the answer is a bead comment `kind=decision` |
 
 New tables beyond v3: `checkpoint`, `slot_ticket` (schema v4, one `user_version` step, DDL and version in one transaction as
 `sqlite_store.migrate` does). Nothing else changes shape.
@@ -85,10 +110,10 @@ Smallest and most contended first, each slice its own PR, each readable both way
 1. **Loop state + command (2, 3)** onto `lease`/`signal`. Hot, small, one writer plus the dashboard poll; kills the phantom-loop and rename dance (`LoopFiles.live()`).
 2. **Parks, pauses, reexec (4, 5)** onto `wait`. Unlocked RMW today; the `wait` store is loop-owned, the engine submits through it.
 3. **Checkpoint (1) + follow-ups (8)** onto `checkpoint`. The most contended RMW; revision makes the lost-update impossible. Largest slice: split into read path, then write path.
-4. **Call state (7), landed (9)** onto `effect`.
+4. **Call state (7), landed (9)** onto `effect`; landed is the outbox only (2a), reconciled against git.
 5. **Slot tickets + engine lock + worktree records (10, 11, 12)** onto `lease`/`slot_ticket`. Builds on tl-sqd3.6 (PR #40).
 6. **Owner request (6), run-dir state (20), per-round checks (13)**.
-7. **Cold singletons (14-19, 21)** onto `kv`, one PR for the family.
+7. **Cold singletons (14-18, 21)** onto `kv`, one PR for the family. **ADRs (19)** follow the ADR verbs writing `docs/adr`, then the `kv` row is a cache. **Decision asks** move with their answer to a bead comment before the `ask_ledger` table is dropped.
 8. **Logs stay**: no slice; confirm the log reader and age rotation.
 9. **Delete** the legacy importers, `parks.py`, `files.py` pointers, `Stores.loop_state`, the `.holder` hints.
 
@@ -149,3 +174,4 @@ manifest", tl-x3m0). Three rules, one test shape:
 | 2026-11-06 | One slice per PR, strangler: dual-read, never dual-write; old store readable until the slice lands. | plan |
 | 2026-11-06 | Compatibility across versions: forward-readable stores, an ahead DB parks with a typed reason, every slice tests old and new row shapes. | lead |
 | 2026-11-06 | Kernel locks stay kernel locks; delegate's private state stays out of this DB. | plan |
+| 2026-11-06 | Durability classes (2a): ADRs are repo files (DB is a read cache); decision asks are answered as bead comments `kind=decision`, operational asks stay DB-only and expire; no `landed` table (git and receipts are the record, `effect` is a disposable outbox); multi-PR plans live in `docs/design/<ticket-id>/plan.md`, single-task plans in the bead body, per-run plan.json in the DB. | Denis |
