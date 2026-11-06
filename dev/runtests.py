@@ -41,7 +41,7 @@ WORKER_MB = 2048     # RAM budget of one worker
 WALL_S = 3600.0      # a hang guard for one pytest run (a wide selection takes 15 min in 4 workers); its process tree is killed
 NO_TESTS = 5         # pytest's exit code for "no tests collected" (a selection without a serial test)
 WIDE = 0.5          # a selection above this share of all tests is a finding: the change reaches too far
-DROP = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "PYTHONPATH", "VIRTUAL_ENV")
+DROP = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "PYTHONPATH")
 
 
 def count_tests(root, paths):

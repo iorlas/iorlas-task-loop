@@ -10,6 +10,7 @@ from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.memstores import fake_stores
 from support.tlmain import tl_main
 
 from taskloop.app.land.gate import Gate, Problem, ProblemKind
@@ -33,7 +34,6 @@ from taskloop.contracts.parks import Park, ParkStore
 from taskloop.contracts.run import RunManifest, RunState
 from taskloop.domain import effects
 from taskloop.domain import outcome as oc
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 

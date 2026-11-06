@@ -224,6 +224,7 @@ class RunManifest(Rec):
     state: RunState = RunState.CREATED
     heartbeat: float = 0.0
     pid: int = 0
+    pid_start: str = ""  # the start token of `pid` (stream_proc.proc_start): a pid another process took over is not this run
     host: str = ""
     reason: str = ""
     mode: str = ""  # what kind of run (stage:land-stack, ...): the board labels the run from here, not from the log
