@@ -27,6 +27,17 @@ def repo_root(cwd: str | os.PathLike[str]) -> Path:
     return Path(top).resolve() if top else wd
 
 
+def show(cwd: object, ref: str, path: str) -> str | None:
+    """The text of `path` as committed at `ref` (a commit sha), None when the commit has no such file or git cannot answer. Never reads
+    the work tree."""
+    return _git(cwd, "show", f"{ref}:{path}")
+
+
+def prefix(cwd: object) -> str:
+    """cwd's path under the repo root with a trailing slash ('' at the root or outside a repo): what `ref:<prefix>FILE` needs."""
+    return (_git(cwd, "rev-parse", "--show-prefix") or "").strip()
+
+
 def state(cwd: object) -> dict[str, str] | None:
     """HEAD and current branch of cwd, or None when cwd is not a git work tree. Other refs and worktrees change while parallel slots
     work and land, so they are not compared."""
