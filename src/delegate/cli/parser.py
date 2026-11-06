@@ -130,6 +130,12 @@ def _add_run(sub: argparse._SubParsersAction[CallParser]) -> None:
         help="allow write lanes that cannot deny engine-only recipes, with a warning; the brief must say so",
     )
     ru.add_argument(
+        "--instructions-ref",
+        default="",
+        metavar="SHA",
+        help="read the repo's instruction files as committed at this commit, not the work tree",
+    )
+    ru.add_argument(
         "--writer-exec-allow", type=json.loads, default=[], help="JSON argv list for guarded host execution; Codex writers only"
     )
     ru.add_argument(
