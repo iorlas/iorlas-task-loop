@@ -95,10 +95,12 @@ class Attempts:
         wt, git = str(self.host.wt), self.host.git
         slot = Path(wt).name if c.run_in == "slot" else "clean"
         told = {k: v for k, v in env.items() if k in c.env or k in REMOTE_ENV}
-        return LinuxRun(self.host.cfg.executor, git, self.host.spawner).run(
+        done = LinuxRun(self.host.cfg.executor, git, self.host.spawner).run(
             wt=wt, repo=check_files.repo_key(git, wt), slot=slot, sha=git.rev_parse(wt, "HEAD"), run_id=self.host.run_id,
             step=c.id, argv=argv, env=told, log=log, artifact_dir=Path(ids[EnvVar.TL_ARTIFACT_DIR.value]),
             timeout_s=c.wall_min * 60, stop=stop)
+        self.host.killed, self.host.wall_hit = done.stopped or done.wall_hit, done.wall_hit  # what host.sh says of a stopped command
+        return done.rc, done.tail
 
     @staticmethod
     def _read(log: Path, fallback: str) -> str:
