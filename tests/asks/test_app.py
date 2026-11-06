@@ -10,6 +10,7 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
+from support.memstores import fake_stores
 from support.narrow import must
 from support.tiers import domain
 
@@ -21,7 +22,6 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import NewBead
 from taskloop.domain.asks import specs
 from taskloop.domain.asks.lint import INFRA
-from taskloop.stores.memory import fake_stores
 
 T = 1000.0
 
@@ -174,6 +174,15 @@ class IntakeTest(Case):
         assert must(must(self.verbs.answer(BeadId("fk-1"), "rerun", "better", amend=True)[0]).answer).text == "better"
         assert self.verbs.answer(BeadId("nope"), "rerun")[1] == "gone"
 
+    def test_an_answer_naming_a_replaced_ask_is_refused_and_files_nothing(self) -> None:
+        old = must(self.asks.get(BeadId("fk-1"))).id
+        raiser.raise_ask(self.asks, specs.missing_criteria(), asking("fk-1"))  # the engine asked again: a new ask id
+        assert must(self.asks.get(BeadId("fk-1"))).id != old
+        _done, why = self.verbs.answer(BeadId("fk-1"), "text", "for the old one", expect=old)
+        assert (why, must(self.asks.get(BeadId("fk-1"))).answer, self.store.beads[BeadId("fk-1")].status) == ("superseded", None, "blocked")
+        current = must(self.asks.get(BeadId("fk-1"))).id
+        assert self.verbs.answer(BeadId("fk-1"), "text", "for the new one", expect=current)[1] == ""
+
     def test_hint_hold_and_override_are_metadata_never_prose(self) -> None:
         self.verbs.hint(BeadId("fk-1"), " mind the cache ")
         self.verbs.hold(BeadId("fk-1"))
@@ -207,3 +216,16 @@ class ParseTest(Case):
         for t in ("@answer right", "@hint use b", "hold this", "OVERRIDE: yes", "answer: land it", "", "Owner (tl) dance: x"):
             assert (intake.parse(t).kind in ("note", "engine")) is True, t
             assert intake.parse(t).kind not in ("answer", "hint", "hold", "override", "decision"), t
+
+
+class AskArtifacts(Case):
+    def test_the_pictures_a_stop_names_go_on_the_filed_ask(self):
+        asks = fake_stores().asks
+        at = dataclasses.replace(asking(), artifacts=("r-1/t-1/r/ask-1/skin-cheek.png",))
+        ask = must(raiser.raise_ask(asks, specs.missing_criteria(), at)[0])
+        assert ask.artifacts == ["r-1/t-1/r/ask-1/skin-cheek.png"]
+        assert must(asks.get(ask.bead)).artifacts == ask.artifacts
+
+    def test_an_ask_without_pictures_has_none(self):
+        ask = must(raiser.raise_ask(fake_stores().asks, specs.missing_criteria(), asking())[0])
+        assert ask.artifacts == []

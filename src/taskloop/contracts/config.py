@@ -149,7 +149,7 @@ class LoopConfig(Rec):
     keep_days: float = 14  # `tl prune`: run data past this goes (30 days at least; not a bead not closed), a merged tree idle this long
     min_free_gb: float = 5  # claim nothing until the config disk has this much free space
     min_ram_mb: int = 1024  # claim nothing below this available RAM; an unknown reading does not block
-    build_dir: str = "~/Workspaces/wt"  # `tl prune` removes merged, clean worktrees under here (never a loop slot)
+    build_dir: str = ""  # `tl prune` removes merged, clean worktrees under here (never a loop slot); empty: none
 
 
 @final
@@ -158,7 +158,7 @@ class PrepareConfig(Rec):
 
     cmd: list[str]
     inputs: list[str] = msgspec.field(default_factory=list)
-    triggers: list[str] = msgspec.field(default_factory=lambda: ["restore", "project.assets.json", "NU1"])
+    triggers: list[str] = msgspec.field(default_factory=list)
     timeout_min: float = 30
 
 

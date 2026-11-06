@@ -62,7 +62,7 @@ class StackGate:
                 continue
         return ""
 
-    def require(self, branch: str, oid: str, *, profile_change: str | None = None) -> str:
+    def require(self, branch: str, oid: str, *, profile_change: str | None = None, regate: bool = True) -> str:
         if why := owner_refusal(profile_change, self.env):
             raise Stop(2, why)
         base = self.cmds.port(f"git rev-parse --verify {self.base_ref}", lambda: self.git.rev_parse(self.repo, self.base_ref))
@@ -96,13 +96,28 @@ class StackGate:
                 red = self.red(engine, tree, base, wt)
             ran = self.cmds.run(argv) if red else None
             red = self.red(engine, tree, base, wt) if ran else red
+            now = self.moved_during(branch, oid, wt, base) if red else ""  # while the gate's own checkout still exists
         finally:
             if made:
                 self.cmds.row(f"git worktree remove {made}", lambda: self.git.remove_worktree_force(self.repo, made))
         if red:
+            if now and regate:  # a run that judged inputs that changed under it is not a red
+                self.cmds.log.note(f"{self.base_ref} moved from {base[:12]} to {now[:12]} while the gate ran: gating again on the new base")
+                return self.require(branch, oid, profile_change=profile_change, regate=False)
             raise Stop(ran.exit if ran and ran.exit else 1, f"{branch} ({oid[:12]}) is still not green for {self.named(red)} after "
-                                      f"`{text_of(argv)}` (exit {ran.exit if ran else 'not run'})")
+                                                      f"`{text_of(argv)}` (exit {ran.exit if ran else 'not run'})")
         return base
+
+    def moved_during(self, branch: str, oid: str, wt: str, base: str) -> str:
+        """After a red run: the worktree's HEAD or the base moved while `tl check` ran (a merge of main into the worktree, another
+        lander), so the run judged inputs other than the key read before it. A moved HEAD is another tree: nothing was judged, Stop.
+        -> the new base when it moved, else ''."""
+        head = self.cmds.port(f"git rev-parse HEAD in {wt}", lambda: self.git.rev_parse(wt, "HEAD")) if wt else oid
+        if head != oid:
+            raise Stop(1, f"{branch}: the worktree {wt} moved from {oid[:12]} to {head[:12]} while the gate ran; nothing is judged. "
+                          "Run it again once nothing else changes that worktree")
+        now = self.cmds.port(f"git rev-parse --verify {self.base_ref}", lambda: self.git.rev_parse(self.repo, self.base_ref))
+        return now if now and now != base else ""
 
     def fresh(self, oid: str) -> str:
         """A clean worktree detached at `oid`, made for this gate run: a fresh checkout is what a land gate judges anyway."""

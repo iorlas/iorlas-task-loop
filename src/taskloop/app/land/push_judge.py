@@ -1,8 +1,6 @@
 """The delivery judge for a complete Git push request, using the application's typed profile and check evidence."""
-from collections.abc import Callable
 from dataclasses import dataclass
 from enum import IntEnum
-from pathlib import Path
 
 from taskloop.adapters.clock import SystemClock
 from taskloop.app.checks import authorization
@@ -51,10 +49,9 @@ def push_tips(stdin: str) -> tuple[PushTip, ...]:
 
 
 class PushJudge:
-    def __init__(self, repo: str, stores: Stores, git: Git, check: Callable[[EngineConfig], int], env: Env,
-                 clock: Clock | None = None, note: Callable[[str], None] = lambda _: None) -> None:
-        self.repo, self.stores, self.git, self.check = repo, stores, git, check
-        self.env, self.note = env, note
+    def __init__(self, repo: str, stores: Stores, git: Git, env: Env, clock: Clock | None = None) -> None:
+        self.repo, self.stores, self.git = repo, stores, git
+        self.env = env
         self.clock = clock or SystemClock()
         self.unproven: list[CheckId] = []
 
@@ -112,26 +109,14 @@ class PushJudge:
         self.unproven = [step.id for step in cfg.gate_checks if found.get(step.id) is None]
         return not self.unproven
 
-    def green_or_checked(self, tip: PushTip, cfg: EngineConfig | None) -> bool:
+    def is_green(self, tip: PushTip, cfg: EngineConfig | None) -> bool:
+        """The receipt of the tip's tree and base, read only: the judge never runs the gate (`tl check` / `tl land-stack` do)."""
         tree = TreeSha(self.git.rev_parse(self.repo, tip.sha + "^{tree}"))
         if not tree:
             raise ValueError(f"cannot name the tree of {tip.sha}")
         if cfg is None or not cfg.gate_checks:
             return True
-        base = self.base_for(tip, cfg)
-        if self.green(cfg, tree, base):
-            return True
-        if tip.sha != self.git.rev_parse(self.repo, "HEAD") or self.git.dirty(self.repo):
-            return False
-        self.note(f"{tip.ref}: no green run of tree {tree[:12]} for {', '.join(self.unproven)}; running the declared gate")
-        if (Path(self.repo) / ".task-loop.json").read_bytes() != self.git.show(self.repo, tip.sha, ".task-loop.json").encode("utf-8"):
-            raise ValueError("worktree .task-loop.json differs from the judged profile")
-        if self.check(cfg) != 0:
-            return False
-        if (self.git.rev_parse(self.repo, "HEAD") != tip.sha or self.git.dirty(self.repo)
-                or self.git.rev_parse(self.repo, tip.sha + "^{tree}") != tree or self.base_for(tip, cfg) != base):
-            raise ValueError("tree, checkout or base changed during push checks")
-        return self.green(cfg, tree, base)
+        return self.green(cfg, tree, self.base_for(tip, cfg))
 
     def judge(self, tips: tuple[PushTip, ...]) -> PushDecision:
         try:
@@ -168,7 +153,7 @@ class PushJudge:
         named: dict[str, str] = {}
         for tip, cfg in deliveries:
             self.unproven = []
-            if self.green_or_checked(tip, cfg):
+            if self.is_green(tip, cfg):
                 stamped.add(tip.sha)
             elif self.unproven:
                 named[tip.sha] = " for " + ", ".join(f"{s} ({w})" for s, w in self.why(tip, cfg).items())
@@ -179,11 +164,10 @@ class PushJudge:
         return PushDecision(PushStatus.REFUSED if refused else PushStatus.ALLOWED, refused)
 
 
-def judge_push(repo: str, stdin: str, stores: Stores, git: Git, check: Callable[[EngineConfig], int], *,
-               env: Env, clock: Clock | None = None, note: Callable[[str], None] = lambda _: None) -> PushDecision:
+def judge_push(repo: str, stdin: str, stores: Stores, git: Git, *, env: Env, clock: Clock | None = None) -> PushDecision:
     """Only this application boundary interprets the request. Failed observations never authorize transport."""
     try:
         tips = push_tips(stdin)
-        return PushJudge(repo, stores, git, check, env, clock, note).judge(tips)
+        return PushJudge(repo, stores, git, env, clock).judge(tips)
     except Exception as err:
         return PushDecision(PushStatus.UNAVAILABLE, (f"delivery judge unavailable: {err}",))

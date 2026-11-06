@@ -13,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Final, NamedTuple
 
-from delegate.adapters import agent_runs, codex_account
+from delegate.adapters import codex_account
 from delegate.adapters.harness import classify, opencode_sandbox
 from delegate.adapters.harness.base import Harness, LaunchInputs, LaunchSpec
 from delegate.adapters.harness.claude import ClaudeHarness
@@ -128,15 +128,15 @@ def how_of(d: dict[str, Json]) -> How:
     )
 
 
-def lane_gone_check(lane: str, since: float) -> Callable[[], str | None]:
-    """-> a function: the words of a limit, credit or login mark another process set on `lane` after `since` (wall clock), else None. The
-    worker
+def lane_gone_check(lane: str, since: float) -> Callable[[], tuple[str, str] | None]:
+    """-> a function: (the mark's reason: limit | credit | logged_out, its words) of a mark another process set on `lane` after `since`
+    (wall clock), else None. The worker
     still running there is burning an exhausted lane."""
 
-    def gone() -> str | None:
+    def gone() -> tuple[str, str] | None:
         o = env.load_state().out.get(lane)
         if o and o.set >= since and o.until > env.now() and o.reason in ("limit", "credit", "logged_out"):
-            return o.why or "lane marked out"
+            return o.reason, o.why or "lane marked out"
         return None
 
     return gone
@@ -292,8 +292,6 @@ def prepare_opencode(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: f
 
 
 PREPARE: Final = {"codex": prepare_codex, "claude_p": prepare_claude, "opencode": prepare_opencode}
-REF_FIELD: Final = {"codex": "thread", "claude_p": "session", "opencode": "session"}  # the agent-runs field the vendor's session id goes in
-AGENT_KIND: Final = {"codex": "codex", "claude_p": "claude-p", "opencode": "opencode"}
 
 
 def login_text(kind: str, lane: str) -> tuple[str, str]:
@@ -335,7 +333,7 @@ def lane_cleared(lane: str) -> Callable[[StateDoc], object]:
 
 
 def launch_worker(
-    d: dict[str, Json], brief: str, a: env.Args, rid: str, t: float, cfg: dict[str, Json], meta: dict[str, Json], hooks: RunHooks
+    d: dict[str, Json], brief: str, a: env.Args, rid: str, t: float, cfg: dict[str, Json], hooks: RunHooks
 ) -> dict[str, Json]:
     """One worker, end to end: its harness builds the launch, the supervisor runs it, the one ladder settles it. -> dict[str, Json] of
     result fields."""
@@ -344,38 +342,25 @@ def launch_worker(
     if isinstance(prep, dict):
         return prep
     try:
-        return run_prepared(prep, d, a, rid, t, meta, hooks)
+        return run_prepared(prep, d, a, rid, t, hooks)
     finally:
         prep.hx.cleanup()
 
 
 def run_prepared(
-    prep: Prep, d: dict[str, Json], a: env.Args, rid: str, t: float, meta: dict[str, Json], hooks: RunHooks
+    prep: Prep, d: dict[str, Json], a: env.Args, rid: str, t: float, hooks: RunHooks
 ) -> dict[str, Json]:
     """Use an already prepared harness; launch_worker owns cleanup even if publication or supervision raises."""
     h = how_of(d)
     lane = as_str(d["lane"])
     hx, spec, x = prep
-    field = REF_FIELD[h.kind]
 
     def on_ref(ref: str) -> None:
         if hooks.ref:
             hooks.ref(ref)
-        agent_runs.run(rid, **{field: ref})
 
     if hx.evidence.ref:
         on_ref(hx.evidence.ref)  # known before the first event: a resume, or claude's own --session-id
-    agent_runs.run(
-        rid,
-        kind=AGENT_KIND[h.kind],
-        lane=d["lane"],
-        model=d["model"],
-        cwd=h.cwd,
-        started=t,
-        status="running",
-        **({field: hx.evidence.ref} if hx.evidence.ref else {}),
-        **meta,
-    )
     live = LiveSink(hx.kind, run_id=rid)
     live.start(
         lane=as_opt_str(d.get("lane")),
@@ -422,7 +407,7 @@ def finish_run(hx: Harness, h: How, a: env.Args, d: dict[str, Json], t: float, o
         o = None
         res["warnings"] = ["answer_done_process_alive"]
     if out.net and (o is None or o.reason == "killed"):  # we stopped it because the network is down
-        o = classify.Outcome("network", hx.evidence.transient, "event")
+        o = classify.network_stop(hx.evidence.transient)
     if o:  # the CLI's own error or stderr, never the model's answer
         settler().apply(
             res,

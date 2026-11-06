@@ -220,12 +220,11 @@ tree at land (see **The gate**). **Every push consults the delivery judge:** tl'
 `<config>/githooks/` by the engine at `loop`, `run-task` and `land-stack` start and by SessionStart, plain python3) forwards the entire Git stdin request to `tl judge-push --repo DIR`. The application reads the
 typed profile and shared check evidence, evaluates all pushed tips and their bases, and returns allowed, refused, or unavailable.
 Only allowed permits transport; an unavailable judge, invalid profile, or hook error refuses before remote mutation. A green tip
-passes; a tip without evidence runs the application's check service when it is the clean checked-out HEAD and is refused otherwise
-(with `TL_JUDGE_READ_ONLY` set, `tl judge-push` reads the evidence only and never starts a check: a missing receipt refuses). **One receipt:** the declared
-gate runs once per tree. `tl check`/`tl gate`, the land and `dev/release.py` each write the same RunKey receipt (tree, base, check command)
+passes; a tip without a receipt is refused with "run `tl check` in its worktree, then push": the judge reads receipts and never runs the gate. **One receipt:** the declared
+gate runs once per tree, in one place: `tl check` / `tl gate` / `tl land-stack`, the land and `dev/release.py` each write the same RunKey receipt (tree, base, check command)
 into the one result store, and the judge and the release read it; a miss prints `no green run of tree X under <cmd>`. On a push the
-order is tl's dispatcher (forwards, runs nothing), `tl judge-push` (the one runner: reads the receipt, runs the declared gate only on a
-miss), then the repo's own pre-push hook, which must not run a gate of its own: the dispatcher sets `TL_JUDGE_READ_ONLY=1` for it, so a `tl judge-push` it calls only reads the receipt.
+order is tl's dispatcher (forwards, runs nothing), `tl judge-push` (reads the receipt, runs nothing), then the repo's own pre-push hook, which must not run a gate of its own.
+A push to the base branch must also fast-forward it (the remote's sha an ancestor of the pushed tip); a feature-branch push gets the profile-change check only.
 A lower tip of a pushed stack passes when a green tip above it is pushed with it, never alone. Generic Git push, leased push, and
 remote deletion carry no checked-delivery marker; the land pusher requires a GatePass and verifies its tree and base before transport.
 The retired `TL_LAND` marker grants no authority. An intentional owner override remains `git push --no-verify` or an explicit
@@ -637,15 +636,15 @@ local to one machine, hence the host in the title.
   per-repo lock with a fresh look at the slot bead: bd lets an actor re-claim its own bead, and hand runs of one
   session share its actor. The locks are the vendored ProcessLock (the kernel drops one with its process); POSIX only.
 - **Each slot has its own environment (tl-7y6.18).** Every command the engine runs for a bead (stage checks, the gate, the
-  land command, shot methods, and the workers it starts through `delegate.api.run`) gets: `TMPDIR`/`TMP`/`TEMP`,
-  `DOTNET_CLI_HOME`, `NUGET_SCRATCH`, `NUGET_HTTP_CACHE_PATH` and `NUGET_PLUGINS_CACHE_PATH` under the slot's state folder
-  (`<config dir>/slot-state/<repo>/<slot>/`: outside the worktree, made on use, kept when the slot is reused),
-  `SharedCompilationId` and `MSBUILDNODEHANDSHAKESALT` = `<repo>-<slot>` (no shared compiler server or MSBuild node), and
-  `TL_SLOT`. A run with no slot (a plain worktree) uses the worktree's name as the slot. `engine.slot_env` (str to str) adds or
+  land command, shot methods, and the workers it starts through `delegate.api.run`) gets: `TMPDIR`/`TMP`/`TEMP` under the
+  slot's state folder (`<config dir>/slot-state/<repo>/<slot>/`: outside the worktree, made on use, kept when the slot is reused) and
+  `TL_SLOT`. A run with no slot (a plain worktree) uses the worktree's name as the slot. Toolchain scratch is the repo's own:
+  `engine.slot_env` (str to str) adds or
   overrides keys; values may use `{slot}`, `{slot_dir}` (the state folder) and `{repo}`, any other `{name}` is refused when
   the profile loads.
-  **Still shared:** the Unity licence, the user's NuGet package folder (`~/.nuget/packages`), and whatever a repo's own tools keep
-  under `~/.cache` or the home folder; give those a `slot_env` key when they collide.
+  **Still shared:** a licence, a package folder, and whatever a repo's own tools keep under `~/.cache` or the home folder; give
+  those a `slot_env` key when they collide (a .NET repo: `DOTNET_CLI_HOME`, `NUGET_SCRATCH`, `SharedCompilationId`,
+  `MSBUILDNODEHANDSHAKESALT` = `{repo}-{slot}`). `engine.prepare.triggers` and `loop.build_dir` default to empty.
 - `tl slot list`: name, bead, status, holder, why (and since when, or until when for a hold), the live engine if any,
   folder.
 

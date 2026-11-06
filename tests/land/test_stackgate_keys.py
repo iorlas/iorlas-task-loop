@@ -8,11 +8,13 @@ from unittest import mock
 
 import pytest
 from support.case import Case
+from support.memstores import fake_stores
 
 from taskloop.adapters import check_files, childenv
 from taskloop.app.checks.cache import InputKeys, RunMemo
 from taskloop.app.checks.execution import check_env
 from taskloop.app.checks.keydiff import first_difference
+from taskloop.app.land.carry import Carry
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.stackgate import StackGate
 from taskloop.contracts.checks import CheckResult
@@ -24,7 +26,6 @@ from taskloop.contracts.ports import Git, Ran
 from taskloop.contracts.runkey import BaseSha, Digest
 from taskloop.contracts.slots import Checkout
 from taskloop.domain.checks.specs import repo_check
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 OID, TREE, BASE = "1550b77c" + "0" * 32, TreeSha("tree-1"), BaseSha("base-1")
@@ -51,7 +52,7 @@ class Checkouts:
         self.git.ls_files.return_value = ["src/obj/project.assets.json"]  # gitignored, under the check's inputs
         self.git.checkouts.return_value = [Checkout(path=str(self.main), branch="main", main=True),
                                            Checkout(path=str(self.wt), branch="", main=False)]
-        self.git.rev_parse.side_effect = lambda d, rev: {"HEAD": OID if d == str(self.wt) else "main-oid",
+        self.git.rev_parse.side_effect = lambda d, rev: {"HEAD": "main-oid" if d == str(self.main) else OID,
                                                          "HEAD^{tree}": TREE, f"{OID}^{{tree}}": TREE, "origin/main": BASE}[rev]
         self.git.dirty.return_value = False
 
@@ -119,6 +120,43 @@ class StackGateKeys(Case):
         changed = load({"engine": {**PROFILE["engine"], "checks": [{**PROFILE["engine"]["checks"][0], "argv": ["false"]}]}}).engine
         assert self.gate.red(changed, TREE, BASE, str(self.repo.wt)) == ["fmt"]
         assert self.gate.why[CheckId("fmt")].startswith("cmd differs (expected ")
+
+    def test_a_base_that_moves_during_the_gate_run_is_gated_again_on_the_new_base(self):
+        """The run's receipts are keyed on the base read before it: main moving mid-run makes that key stale, not the tree red."""
+        self.repo.git.checkouts.return_value = self.repo.git.checkouts.return_value[:1]  # no worktree has it out: the gate makes one
+        bases = iter([BASE, *["base-2"] * 4])
+        rev = self.repo.git.rev_parse.side_effect
+        self.repo.git.rev_parse.side_effect = lambda d, r: next(bases) if r == "origin/main" else rev(d, r)
+        self.spawner.run.return_value = Ran(exit=0)
+        with pytest.raises(Stop) as stop:
+            self.gate.require("task/lifesim-fmtfix-r3", OID)
+        assert self.spawner.run.call_count == 2  # one run on each base
+        assert "is still not green" in stop.value.why  # the second run, on the new base, is the one that is judged
+
+    def test_a_carry_is_tried_again_on_the_new_base_when_the_base_moves_during_the_run(self):
+        """The regate re-enters require(): the carry looks at the base the final gate judges, not at the stale first one."""
+        self.repo.git.checkouts.return_value = self.repo.git.checkouts.return_value[:1]
+        bases = iter([BASE, *["base-2"] * 8])
+        rev = self.repo.git.rev_parse.side_effect
+        self.repo.git.rev_parse.side_effect = lambda d, r: next(bases) if r == "origin/main" else rev(d, r)
+        self.spawner.run.return_value = Ran(exit=0)
+        seen = []
+        with (mock.patch.object(Carry, "carried", lambda carry, engine, step, oid, tree, base, wt: seen.append(base) or False),
+              pytest.raises(Stop)):
+            self.gate.require("task/lifesim-fmtfix-r3", OID)
+        assert seen[0] == BASE and seen[-1] == "base-2"
+
+    def test_a_worktree_that_moves_during_the_gate_run_is_not_judged(self):
+        self.repo.git.checkouts.return_value = self.repo.git.checkouts.return_value[:1]
+        fresh = []
+        self.repo.git.add_worktree.side_effect = lambda repo, path, oid: fresh.append(path)
+        rev = self.repo.git.rev_parse.side_effect
+        self.repo.git.rev_parse.side_effect = lambda d, r: "a7025d2d" + "0" * 32 if (r == "HEAD" and d in fresh) else rev(d, r)
+        self.spawner.run.return_value = Ran(exit=1)
+        with pytest.raises(Stop) as stop:
+            self.gate.require("task/lifesim-fmtfix-r3", OID)
+        assert "moved from 1550b77c" in stop.value.why and "nothing is judged" in stop.value.why
+        assert self.spawner.run.call_count == 1
 
 
 class FirstDifference(Case):

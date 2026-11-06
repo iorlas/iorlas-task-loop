@@ -7,7 +7,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from delegate.adapters import netprobe, procs
+from delegate.adapters import procs
+from delegate.adapters.harness import classify
 from delegate.adapters.harness.base import Evidence, LaunchInputs, LaunchSpec, Quiet, Summary
 from delegate.contracts import events as ev
 from delegate.contracts.json_types import Json
@@ -244,7 +245,7 @@ class ClaudeHarness(Quiet):
             "partial": e.work,
         }
         # ae6v: the answer was in first
-        warn = ["answer_done_process_alive"] if by_message else ["net_after_answer"] if e.final and netprobe.looks_dropped(err) else []
+        warn = ["answer_done_process_alive"] if by_message else ["net_after_answer"] if e.final and classify.looks_dropped(err) else []
         return Summary(
             text=text,
             rc=(rc or 1) if failed else 0,

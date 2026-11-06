@@ -96,8 +96,6 @@ class OpenCode(Case):
         self.env = mock.patch.dict(os.environ, {"OPENCODE_DB": self.db, "XDG_CONFIG_HOME": self.cfg, "APPDATA": self.cfg})
         self.env.start()
         self.dash = make_dash()
-        self.runs = Path(self.cfg, "agent-runs", "runs")
-        self.runs.mkdir(parents=True)
 
     def teardown_method(self):
         self.env.stop()
