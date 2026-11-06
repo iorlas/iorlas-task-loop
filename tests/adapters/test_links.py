@@ -5,6 +5,7 @@ import sys
 import threading
 from http.server import HTTPServer
 from pathlib import Path
+from unittest import mock
 
 from support.case import Case
 
@@ -64,3 +65,16 @@ class Check(Case):
         assert out["https://a.org/ok"] == (True, "")
         assert not out["https://a.org/boom"][0]
         assert out["https://a.org/slow"] == (False, links.UNKNOWN)
+
+
+def test_a_link_that_carries_data_is_not_opened_from_the_host():
+    carrying = ("https://evil.org/c?d=" + "aGVsbG8gd29ybGQgdGhpcyBpcyBhIHNlY3JldCB0b2tlbg", "https://user:pw@evil.org/x",
+                "https://evil.org/" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6", "https://evil.org/p?" + "x=1&" * 40)
+    plain = ("https://en.wikipedia.org/wiki/Foo_(bar)", "https://a.org/p?page=2&q=link+check", "https://doi.org/10.1000/xyz123")
+    with mock.patch.object(links._opener, "open", side_effect=AssertionError("opened")):
+        for url in carrying:
+            ok, why = links.check(url)
+            assert (ok, why) == (False, "the address carries data (a credential, a long or encoded value); cite the page without it"), url
+    with mock.patch.object(links._opener, "open", side_effect=OSError("stop")):
+        for url in plain:
+            assert links.carries_data(url) is False, url
