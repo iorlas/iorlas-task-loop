@@ -4,8 +4,8 @@ loop read them, and each checks that the sha is an ancestor of the base they mea
 text, committer time and a trace outcome decide nothing for a bead that has a record. A newer land of a reopened bead replaces them."""
 from collections.abc import Callable, Mapping
 
+from taskloop.contracts.beadsport import BdFailure, Beads
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, Beads
 from taskloop.contracts.wire import Rec
 
 LANDED_SHA, LANDED_BASE, LANDED_AT = "landed_sha", "landed_base", "landed_at"

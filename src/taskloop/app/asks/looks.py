@@ -8,9 +8,9 @@ from typing import Any
 
 from taskloop.contracts import factorydb, gallery
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BdFailure, BeadPatch, BeadQuery, Beads, NewBead
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.lookrows import LookRaced, LookRows
-from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, Beads, NewBead
 
 NOTE_MAX = 2000
 VERDICTS = ("good", "redo", "undo")

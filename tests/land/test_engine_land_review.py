@@ -11,8 +11,9 @@ from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.checks import ck, res
-from support.engine_case import CLEAN, PLAN, WRITE, LandReviewBase, StrayWriteScript, verdict
+from support.engine_case import LandReviewBase, StrayWriteScript
 from support.narrow import must
+from support.plans import CLEAN, PLAN, WRITE, verdict
 
 from taskloop.app.run import engine
 from taskloop.contracts.checks import CheckRun

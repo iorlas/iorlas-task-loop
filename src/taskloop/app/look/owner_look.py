@@ -10,9 +10,10 @@ from urllib.parse import urlencode
 from taskloop.adapters import bdcreate, beadtools
 from taskloop.adapters.repourl import repo_url
 from taskloop.contracts import factorydb, gallery
+from taskloop.contracts.beadsport import BdFailure, BeadPatch, BeadQuery, NewBead
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.lookrows import LookRaced, LookRows
-from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, Git, NewBead
 from taskloop.domain.look.matchers import sections
 
 LOOK_LABEL = "owner-look"

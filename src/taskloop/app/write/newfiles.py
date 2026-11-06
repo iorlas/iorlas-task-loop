@@ -5,8 +5,8 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.paths import TASK_EXCLUDE
-from taskloop.contracts.ports import Git
 from taskloop.domain.prompts.review import NEW_FILES_TEXT
 
 

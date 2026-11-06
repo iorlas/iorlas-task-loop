@@ -21,10 +21,10 @@ from taskloop.app.run.closer_notes import FileNotes
 from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state
 from taskloop.contracts import fence
 from taskloop.contracts.bead import BdError
+from taskloop.contracts.beadsport import BdFailure
 from taskloop.contracts.checkpoint import RunState
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure
 from taskloop.domain.followups import FollowKey
 from taskloop.stores.runlog import RunLog
 
@@ -53,6 +53,8 @@ class Pictures:
 
 @carries_state
 class Host(StateAttrs):
+    intake_per_day = 0
+
     def __init__(self):
         self.state = RunState()
         self.dry = False
@@ -76,6 +78,19 @@ class FollowupOutbox(Case):
         h.leftovers = [{"title": "later", "why": "w", "category": "logic", "file": "a.py"}]
         h.checkpoints.keep_pending("review")
         return h
+
+    def test_with_an_intake_budget_the_follow_up_is_deferred_and_labelled_from_review(self):
+        h = self.host()
+        h.intake_per_day = 3
+        assert file_follow_ups(h) == []
+        (made,) = h.store.beads.values()
+        assert (made.status, "from-review" in made.labels) == ("deferred", True)
+
+    def test_without_an_intake_budget_the_follow_up_stays_open_and_unlabelled(self):
+        h = self.host()
+        assert file_follow_ups(h) == []
+        (made,) = h.store.beads.values()
+        assert (made.status, "from-review" in made.labels) == ("open", False)
 
     def test_kill_after_create_before_checkpoint_resolves_even_a_closed_bead(self):
         h = self.host()

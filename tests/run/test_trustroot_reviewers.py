@@ -5,7 +5,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 from support.case import Case
-from support.engine_case import BEAD, CLEAN, PLAN, WRITE, EngineTest
+from support.engine_case import EngineTest
+from support.plans import BEAD, CLEAN, PLAN, WRITE
 
 from taskloop.app.run.blocked import Blocked, blocked_for
 from taskloop.app.run.entry import _blocked_by_engine

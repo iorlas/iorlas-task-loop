@@ -8,7 +8,7 @@ from typing import Any
 
 from taskloop.contracts import rundocs
 from taskloop.contracts.config import FRESH_ABOVE_K
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.run import HandoffMirror, Round
 from taskloop.domain.prompts.write import DONE_SO_FAR, STAGES_DONE, WRITE_RESUME_PROMPT
 from taskloop.domain.review.findings import blocks

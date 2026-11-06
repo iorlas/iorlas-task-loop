@@ -20,7 +20,7 @@ from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Spawner
+from taskloop.contracts.procport import Spawner
 
 
 class Factory(Case):
