@@ -199,7 +199,7 @@ def digest(who: Identity, since: float, until: float, dry: bool = False, traces:
     if dry:
         return _digest(who, since, until, True, traces, repos)
     try:
-        with landlock.os_lock(who.config.root / "locks" / "reflect-digest-run.lock", f"pid {os.getpid()}", timeout=120):
+        with landlock.os_lock(who.config.lock_file("reflect-digest-run.lock"), f"pid {os.getpid()}", timeout=120):
             return _digest(who, since, until, False, traces, repos)
     except TimeoutError:
         return {"since": since, "until": until, "items": 0, "clusters": [], "actions": [], "busy": True}
@@ -233,7 +233,7 @@ def maybe_run(spawner: Spawner, env: Env, cfg: ConfigDir, now: float | None = No
     if not due(cfg, now) or not cfg.traces().is_file() or not registered(cfg):
         return ""  # nothing to read or nowhere to file
     try:
-        with landlock.os_lock(cfg.root / "locks" / "reflect-digest.lock", f"pid {os.getpid()}"):
+        with landlock.os_lock(cfg.lock_file("reflect-digest.lock"), f"pid {os.getpid()}"):
             if not due(cfg, now):
                 return ""
             pass

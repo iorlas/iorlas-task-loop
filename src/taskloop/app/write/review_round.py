@@ -9,13 +9,13 @@ from taskloop.app.checks.evidence import compact
 from taskloop.app.write import review_skip
 from taskloop.app.write.state import ACCEPT, AGAIN, REPLAN, StageState
 from taskloop.domain.asks import specs as askspecs
+from taskloop.domain.followups import FollowKey
 from taskloop.domain.lanes import caps
 from taskloop.domain.prompts.common import LATER_CASES, UNCHECKED_TEXT
 from taskloop.domain.prompts.review import acceptance_text, review_prompt
 from taskloop.domain.review import findings as fnd
 from taskloop.domain.review import switch
 from taskloop.domain.review.availability import ReviewUnavailable
-from taskloop.domain.review.followups import FollowKey
 from taskloop.domain.review.matchers import AcceptanceItems
 from taskloop.domain.review.skip import SkipKind
 

@@ -231,7 +231,7 @@ def trace(bead, outcome, start_min, end_min, why="", sha="", rounds=0, replans=0
     stem = run or str(RunId.new(started, hashlib.sha1(f"{bead}{started}".encode()).digest()[:10]))
     return {"v": 2, "run": stem, "bead": bead, "repo_url": "https://example.invalid/r.git", "worktree": worktree or "", "branch": "",
             "coordinator_session": "", "started": started, "ended": ended, "outcome": outcome, "why": why, "sha": sha,
-            "stats": {"rounds": rounds, "replans": replans}, "log": str(homes.config_dir() / "engine" / (stem + ".jsonl")),
+            "stats": {"rounds": rounds, "replans": replans}, "log": str(homes.config_dir() / "runs" / stem / "engine.jsonl"),
             "sessions": list(sessions), "stderr": stderr, "kind": kind or outcome if outcome in ("landed", "done") else kind}
 
 

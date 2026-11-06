@@ -12,7 +12,7 @@ import support.paths  # noqa: F401
 from support import engine_case as T
 from support.engine_case import CLEAN, PLAN, WRITE, finding, review
 
-from taskloop.domain.review.followups import FOLLOW_UP_CAP, FollowKey
+from taskloop.domain.followups import FOLLOW_UP_CAP, FollowKey
 
 
 def demand(n, file="f.txt", category="logic"):

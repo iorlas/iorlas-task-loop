@@ -12,7 +12,7 @@ from taskloop.contracts.slots import SlotGitError
 def release_lock_path(config: Path, url: str) -> Path:
     """The lock of the release clone: named from the clone's own directory, so every version that touches that clone takes the same
     lock (a key that changed between versions let an old caller reset the clone under a newer release mid-run, 0.23.198)."""
-    return config / "locks" / f"release-{clone.clone_dir(config, url).name}.lock"
+    return ConfigDir(config).lock_file(f"release-{clone.clone_dir(config, url).name}.lock")
 
 
 def push_main(repo: Path, message: str, version: str, base: str, bump: Callable[[], str], sh: Shell) -> str:

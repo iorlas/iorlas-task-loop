@@ -1,14 +1,12 @@
 """What may become an artifact: the checks the writer and the tool server share. Plain string and byte tests; no pattern matching.
 A refusal raises Refused with a message the model can act on."""
-import fnmatch
 import os
 from pathlib import Path
 from typing import Final
 
-from taskloop.contracts.artifact import CAPTION_MAX, ROLES, Kind, Role
+from taskloop.contracts.artifact import CAPTION_MAX, ROLES, Kind, Role, secret_name
 from taskloop.contracts.wire import Refused
 
-SECRET_NAMES: Final = (".env*", "*.pem", "*.key", "id_*", "*token*", "*secret*")
 MAX_BYTES: Final = 25 * 1024 * 1024
 NAME_MAX: Final = 100
 NAME_CHARS: Final = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._- ")
@@ -85,7 +83,7 @@ def source(cwd: Path, path: str) -> Path:
         walk = walk / part
         if walk.is_symlink():
             raise Refused(f"{path} is or passes through a symlink ({walk.name}); symlinks are refused")
-        if any(fnmatch.fnmatch(part.lower(), pat) for pat in SECRET_NAMES):
+        if secret_name(part):
             raise Refused(f"{path} looks like a secret ({part}); it will not be registered")
     if not walk.is_file():
         raise Refused(f"no such file: {path}")
