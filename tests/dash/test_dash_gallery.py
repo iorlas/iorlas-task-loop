@@ -124,7 +124,7 @@ class Api(Case):
                 assert dash.looks.look_shot(loop_key(repo), "docs/evidence/tl-1/m1.png") == (PNG, "image/png")
                 assert dash.looks.look_shot(loop_key(repo), "docs/evidence/tl-1/nope.png") is None
                 good = {"project": loop_key(repo), "bead": "tl-1#1", "verdict": "good", "note": ""}
-                assert dash.writes.post("look", good) == (200, {"ok": True, "message": ""})
+                assert dash.writes.post("look", good) == (200, {"ok": True, "message": "", "receipt": ""})
                 assert [i["status"] for i in dash.looks.look_items(loop_key(repo))[1]] == ["good"]
                 assert not dash.writes.post("look", dict(good, project="nowhere"))[1]["ok"]
                 assert not dash.writes.post("look", dict(good, verdict="redo"))[1]["ok"]  # redo needs a note

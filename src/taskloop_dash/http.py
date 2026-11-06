@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any, override
 from urllib.parse import parse_qs, urlparse, urlsplit
 
+from taskloop.contracts import factorydb
+from taskloop.contracts.dash import READ_PROTOCOL
 from taskloop_dash.app import Dash
 from taskloop_dash.assets import static_file
 from taskloop_dash.bind import urls
@@ -105,6 +107,7 @@ def make_handler(
                 if u.path == "/api/version":
                     body = {"version": dash.env.version, "pid": os.getpid(), "urls": urls(addrs, port), "started": dash.env.started,
                             "script": script, "binds": list(addrs), "port": port,
+                            "protocol": READ_PROTOCOL, "schema": factorydb.SCHEMA_VERSION,
                             "database_error": dash.reads.worlds.database_error()}
                     return self.send(200, json.dumps(body).encode(), "application/json")
                 got = route(dash, static, u.path, q, self.headers.get("If-None-Match"))

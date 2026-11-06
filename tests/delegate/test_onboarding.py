@@ -11,6 +11,7 @@ from unittest import mock
 
 from delegate.app import cockpit, doctor, env, fleet, usage
 from delegate.app import decide as dec
+from delegate.contracts.state import StateDoc
 from support.case import Case
 
 import hermetic  # noqa: F401  (a home of its own for every test)
@@ -79,11 +80,14 @@ class Onboarding(Case):
         assert lines[0].startswith("lane") and "enabled" in lines[0] and "ready" in lines[0] and "fix" in lines[0]
 
     def _gather(self, st=None):
+        return self._fleet().lanes
+
+    def _fleet(self):
         real = dict(usage.READERS)
         none_reader: Any = lambda lane, S, st_, t, *a: None  # noqa: E731  a reader that reports nothing
         usage.READERS.update(dict.fromkeys(real, none_reader))
         try:
-            return dec.fleet_builder(self.cfg).build(env.load_state(), T).lanes
+            return dec.fleet_builder(self.cfg).build(env.load_state(), T)
         finally:
             usage.READERS.update(real)
 
@@ -102,6 +106,9 @@ class Onboarding(Case):
     def test_ready_lane_is_enabled_once_and_remembered(self):
         self._make_codex_ready()
         assert "OPENAI_SUBSCRIPTION" in self._gather()
+        assert "OPENAI_SUBSCRIPTION" not in env.profile_lanes()  # a read writes nothing; `run` applies Fleet.enables
+        assert self._fleet().enables == ["OPENAI_SUBSCRIPTION"]
+        env.set_profile_lane("OPENAI_SUBSCRIPTION", "enabled")  # what `run` does with Fleet.enables
         assert env.profile_lanes()["OPENAI_SUBSCRIPTION"] == "enabled"
 
     def test_declined_lane_stays_out_even_when_ready(self):
@@ -135,12 +142,20 @@ class Onboarding(Case):
         saved = os.environ.get("CLAUDE_CODE_ENTRYPOINT")
         os.environ["CLAUDE_CODE_ENTRYPOINT"] = "cli"  # a Claude session: the Agent tool is available
         try:
-            d1 = dec.decision(a, self.cfg)[0]
+            d1 = dec.decision(a, self.cfg, apply=True)[0]
             assert d1["action"] == "run"
             assert "OPENAI_SUBSCRIPTION" in d1["notice"]
-            assert "notice" not in dec.decision(a, self.cfg)[0]  # said once
+            assert "notice" not in dec.decision(a, self.cfg, apply=True)[0]  # said once
         finally:
             os.environ.pop("CLAUDE_CODE_ENTRYPOINT", None) if saved is None else os.environ.__setitem__("CLAUDE_CODE_ENTRYPOINT", saved)
+
+    def test_next_and_status_write_no_config(self):
+        a = argparse_ns("worker")
+        path = Path(env.config_store().path)
+        before = path.read_bytes() if path.exists() else None
+        dec.decision(a, self.cfg)
+        dec.fleet_builder(self.cfg).build(StateDoc(), 1e9)
+        assert (path.read_bytes() if path.exists() else None) == before
 
     def test_config_set_and_show(self):
         doctor.config_set("burn.minutes", "60")
