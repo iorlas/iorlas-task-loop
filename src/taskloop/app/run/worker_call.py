@@ -392,7 +392,7 @@ class WorkerCall:
         asked.apply(e, done)
         if c.state is not None and c.prepared is not None:
             # the memo first, with the thread's fields in one transaction: a crash between this and consumed re-recovers, never loses
-            asked.settle(e, c, c.state, c.prepared)
+            asked.settle(e, c, c.state.answer_file, c.prepared.snapshot)
             c.state.consumed()
         e.last_flag = done.flag  # same_family | degraded | ...: delegate could not give the usual lane
         if e.last_flag == "same_family" or res.warning.strip():

@@ -1,15 +1,36 @@
 """A worker answer's updates to the run's threads: computed from the answer, applied to the engine, kept with the done-memo."""
-from typing import Any
+import sqlite3
+from collections.abc import Callable
+from pathlib import Path
+from typing import Protocol
 
 from taskloop.app.run import done_memo
 from taskloop.app.run.call import Call
-from taskloop.app.run.worker_identity import PreparedCall
 from taskloop.contracts import fence
 from taskloop.contracts.asked import Fallback, SessionUpdate, Updates
-from taskloop.contracts.checkpoint import Checkpoint
+from taskloop.contracts.checkpoint import Checkpoint, RunState, WriterSession
 from taskloop.contracts.delegate import DelegateResult
+from taskloop.contracts.run import CallIdentity
 from taskloop.domain.lanes.roles import READ_ONLY_NODES
-from taskloop.stores.call_state import CallState
+
+
+class Threads(Protocol):
+    """The engine's thread fields (RunState's, through StateField)."""
+
+    writer: WriterSession
+    writer_fallback: bool
+    fallback_lane: str
+    planner_ref: str
+
+
+class Amends(Protocol):
+    def amend_with(self, fn: Callable[[Checkpoint], Checkpoint], also: Callable[[sqlite3.Connection | None], None]) -> bool: ...
+
+
+class Settling(Threads, Protocol):
+    run_dir: Path
+    state: RunState
+    checkpoints: Amends
 
 
 def thread_updates(c: Call, res: DelegateResult, fallback_lane: str, ctx: float | None, seen: list[str]) -> Updates:
@@ -32,7 +53,7 @@ def done_updates(c: Call, res: DelegateResult, thread: Updates) -> Updates:
     return Updates(thread.session, thread.fallback, res.ref if c.node == "plan" and res.ref else "", flag)
 
 
-def apply(e: Any, u: Updates) -> None:
+def apply(e: Threads, u: Updates) -> None:
     """Assign `u` to the engine (its RunState holds the thread fields)."""
     if u.fallback is not None:
         e.writer_fallback, e.fallback_lane = u.fallback.on, u.fallback.lane
@@ -42,10 +63,10 @@ def apply(e: Any, u: Updates) -> None:
         e.planner_ref = u.planner_ref
 
 
-def settle(e: Any, c: Call, state: CallState, prepared: PreparedCall) -> None:
+def settle(e: Settling, c: Call, answer_file: str, identity: CallIdentity | None) -> None:
     """The memo of a consumed answer and the thread fields it left in RunState, in one transaction: a crash keeps both or neither.
     Only the thread fields of the stored record change (never its step, applied or ended). A run that lost its slot keeps the memo alone."""
-    memo = done_memo.memo_in(e.run_dir, c.key, c.sha, state.answer_file, prepared.snapshot)
+    memo = done_memo.memo_in(e.run_dir, c.key, c.sha, answer_file, identity)
     s = e.state
 
     def amend(ck: Checkpoint) -> Checkpoint:

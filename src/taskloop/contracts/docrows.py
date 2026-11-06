@@ -121,11 +121,12 @@ class RowDoc[T: Rec]:
                     with d.rows.transaction() as con:
                         also(con)
                 return False
+            new = fn(read.rec)  # before the transaction: `fn` may write rows of its own
             try:
                 with d.rows.transaction() as con:
                     if also is not None:
                         also(con)
-                    self.write_in(con, fn(read.rec), expect_rev=int(found[0][1]))
+                    self.write_in(con, new, expect_rev=int(found[0][1]))
                 return True
             except StaleRevision:
                 continue

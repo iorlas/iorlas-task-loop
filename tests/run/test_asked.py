@@ -1,9 +1,12 @@
 """A worker answer's updates to the run's threads: the value, and its one transaction with the done-memo."""
 import json
-from types import SimpleNamespace
+import sqlite3
+from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 import support.paths  # noqa: F401
+from support.narrow import must
 
 from taskloop.app.run import asked, done_memo
 from taskloop.app.run.call import Call
@@ -25,8 +28,10 @@ def call(node="write", resume_key=True, writer_family=None):
     (DelegateResult(ref="r1"), True, Updates(SessionUpdate("r1", 4.0, ("h",)), None)),
     (DelegateResult(ref="r1"), False, Updates()),
     (DelegateResult(), True, Updates()),
-    (DelegateResult(ref="r1", fallback=True, first_lane="grok"), True, Updates(SessionUpdate("r1", 4.0, ("h",)), Fallback(True, "grok"))),
-    (DelegateResult(ref="r1", fallback=False, first_lane="grok"), True, Updates(SessionUpdate("r1", 4.0, ("h",)), Fallback(False, ""))),
+    (DelegateResult(ref="r1", fallback=True, first_lane="grok"), True,
+     Updates(SessionUpdate("r1", 4.0, ("h",)), Fallback(True, "grok"))),
+    (DelegateResult(ref="r1", fallback=False, first_lane="grok"), True,
+     Updates(SessionUpdate("r1", 4.0, ("h",)), Fallback(False, ""))),
 ])
 def test_the_writers_thread_comes_from_the_answer(res, resume_key, want):
     assert asked.thread_updates(call(resume_key=resume_key), res, "held", 4.0, ["h"]) == want
@@ -53,6 +58,24 @@ def test_only_the_plan_node_moves_the_planner_ref():
     assert asked.done_updates(call("write"), DelegateResult(ref="p"), Updates()).planner_ref == ""
 
 
+AmendWith = Callable[[Callable[[Checkpoint], Checkpoint], Callable[[sqlite3.Connection | None], None]], bool]
+
+
+class Amender:
+    def __init__(self, amend_with: AmendWith) -> None:
+        self.amend_with = amend_with
+
+
+class Engine:
+    """What settle reads of the engine: RunState's thread fields, the run's folder and the checkpoint's writer."""
+
+    def __init__(self, run_dir: Path, state: RunState, amend_with: AmendWith) -> None:
+        self.run_dir, self.state = run_dir, state
+        self.writer: WriterSession = state.writer
+        self.writer_fallback, self.fallback_lane, self.planner_ref = state.writer_fallback, state.fallback_lane, state.planner_ref
+        self.checkpoints = Amender(amend_with)
+
+
 class Settled:
     """A run row, its checkpoint row, and an engine that holds the thread fields settle persists."""
 
@@ -68,12 +91,12 @@ class Settled:
         self.answer.write_text('{"x": 1}')
         self.state = RunState(writer=WriterSession(delegate="r2", ctx=9.0, seen=["h"]), writer_fallback=True, fallback_lane="grok",
                               planner_ref="p2")
-        self.engine = SimpleNamespace(run_dir=self.run_dir, state=self.state, checkpoints=SimpleNamespace(amend_with=self.doc.modify_with))
+        self.engine = Engine(self.run_dir, self.state, self.doc.modify_with)
         self.c = call()
         self.c.sha = "sha"
 
     def settle(self):
-        asked.settle(self.engine, self.c, SimpleNamespace(answer_file=str(self.answer)), SimpleNamespace(snapshot=None))
+        asked.settle(self.engine, self.c, str(self.answer), None)
 
     def memo(self):
         return done_memo.recall(self.run_dir, self.c.key, "sha")
@@ -85,7 +108,7 @@ class Settled:
 def test_the_memo_and_the_thread_fields_land_together_and_nothing_else_moves(workdir):
     s = Settled(workdir)
     s.settle()
-    ck = s.stored()
+    ck = must(s.stored())
     assert s.memo() == {"x": 1}
     assert (ck.state.writer.delegate, ck.state.writer.ctx, ck.state.writer_fallback, ck.state.fallback_lane, ck.state.planner_ref) == (
         "r2", 9.0, True, "grok", "p2")
@@ -111,8 +134,9 @@ def test_a_crash_after_settle_resumes_from_the_memo_without_asking_again(workdir
     again.cfg, again.run_dir, again.c = s.cfg, s.run_dir, s.c
     again.doc = RowDocs(s.cfg, Checkpoint, table="checkpoint", key_col="bead", body_col="body", revisioned=True).of("t-1")
     assert again.memo() == {"x": 1}
-    assert again.stored().state.planner_ref == "p2"
-    assert again.stored().state.writer.delegate == "r2"
+    stored = must(again.stored())
+    assert stored.state.planner_ref == "p2"
+    assert stored.state.writer.delegate == "r2"
 
 
 def test_a_missing_checkpoint_keeps_the_memo_alone(workdir):
@@ -125,11 +149,11 @@ def test_a_missing_checkpoint_keeps_the_memo_alone(workdir):
 
 def test_a_checkpoint_from_before_the_updates_still_loads(workdir):
     s = Settled(workdir)
-    old = json.loads(s.docs.of("t-1").raw())
+    old = json.loads(must(s.docs.of("t-1").raw()))
     old["state"].pop("planner_ref", None)
     with s.docs.rows.transaction() as con:
         con.execute("UPDATE checkpoint SET body=? WHERE bead='t-1'", (json.dumps(old),))
-    assert s.stored().state.planner_ref == ""
+    assert must(s.stored()).state.planner_ref == ""
 
 
 def test_the_last_flag_is_not_a_checkpoint_field():
