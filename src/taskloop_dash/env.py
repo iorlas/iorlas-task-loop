@@ -11,6 +11,7 @@ from typing import Any
 
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.dash import Result
+from taskloop.contracts.dashhealth import Score
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locks import LockRecord
 from taskloop.contracts.paths import ConfigDir
@@ -79,6 +80,10 @@ def _no_dirs(root: str) -> frozenset[str] | None:
     return None
 
 
+def _no_score(repo: str, since: float, until: float) -> Score | None:
+    return None
+
+
 def _no_resources(cfg: ConfigDir) -> list[tuple[str, LockRecord]]:
     return []
 
@@ -90,6 +95,7 @@ class Ports:
     slot_dirs: Callable[[str], frozenset[str] | None] = _no_dirs  # names of the slot folders in a folder; a listing, never a process
     slot_source: Callable[[str], SlotSource] = _no_slots  # the slot count as the loops read it (origin/main), the host and the slot folders
     resource_holders: Callable[[ConfigDir], list[tuple[str, LockRecord]]] = _no_resources
+    scorecard: Callable[[str, float, float], Score | None] = _no_score  # (repo, since, until): the numbers of `tl report`
     profile_error: Callable[[str], str] = _no_error  # the repo's red row when its .task-loop.json does not load, else ""
     profile_stamp: Callable[[str], object | None] = _no_stamp  # process-free signature of the files deciding profile_error
     store: Callable[[str], Beads] = _no_store  # the typed bd port for a repo (the engine's BdStore); the only way the dash reaches bd

@@ -199,15 +199,15 @@ class Api(ApiFixture):
                 self.now += 1 if route == "/api/bead" else 16  # comment ok time stays unchanged within its reuse window
                 assert self.get(route, {**query, "since": token})[:2] == (304, b"")
                 assert self.get(route, query, headers["ETag"])[:2] == (304, b"")
+                self.dash.reads.wait()  # the conditional reads above started refreshes; none may still be in flight at the write
                 if route == "/api/bead":
                     self.store.note("b-1", {"author": "owner", "text": "detail changed without a snapshot change"})
                 else:
                     RunScript("b-1", slot="a", at=3000).step("plan", 300, 40_000, "OC Go").close("landed").write(
                         self.cfg, repo=str(self.repo))
                 self.now += 16
-                if route == "/api/bead":
-                    self.get(route, query)
-                    self.dash.reads.wait()
+                self.get(route, query)  # a stale read serves the last build and refreshes behind it
+                self.dash.reads.wait()
                 changed, body, _ = self.get(route, {**query, "since": token})
                 assert changed == 200
                 assert json.loads(body)["version"] != token

@@ -11,6 +11,8 @@ from taskloop.adapters.ident import config_dir, hostname
 from taskloop.adapters.locks import resource_holders
 from taskloop.app.asks.intake import Intake
 from taskloop.app.doctor import profiles
+from taskloop.app.report import card as cards
+from taskloop.app.report.card import score_of
 from taskloop.app.run.requests import OwnerVerbs
 from taskloop.app.track.trail import now
 from taskloop.app.wire import asks as wire_asks
@@ -19,7 +21,9 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.dash import Result, Stick
+from taskloop.contracts.dashhealth import Score
 from taskloop.contracts.env import Env
+from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import AnswerAsk, BdFailure, Beads
@@ -147,8 +151,15 @@ def ports(env: Env) -> Ports:
     def red_row(repo: str) -> str:
         return profiles.red_row(git, repo)
 
+    def scorecard(repo: str, since: float, until: float) -> Score:
+        """`tl report --since --until` for the repo: the one scorecard, read only (no fetch, no write)."""
+        who = Identity(actor=DASH_ACTOR, home=str(home.root))
+        base = wslots.load_cfg(repo, git).base
+        return score_of(cards.scorecard(repo, since, until, base=base, git=git, who=who))
+
     return Ports(store=store, answer=answer_via(home),
                  **owner_writes(owner_intake(wire_asks.store(home), store, now, adrs=lambda repo: AdrStore.at(home, repo),
                                              factory=lambda: factory_store(home)), home),
                  slot_source=slot_source, slot_dirs=wslots.slot_dirs,
-                 resource_holders=resource_holders, profile_error=quiet(red_row, ""), profile_stamp=quiet(profiles.stamp, None))
+                 resource_holders=resource_holders, profile_error=quiet(red_row, ""), profile_stamp=quiet(profiles.stamp, None),
+                 scorecard=quiet(scorecard, None))
