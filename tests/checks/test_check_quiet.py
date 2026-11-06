@@ -11,8 +11,8 @@ from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import engine_case as te
 from support import procsim
+from support.tmpdir import TemporaryDirectory
 
 from checks.test_checks_speed import SpeedTest
 from taskloop.app.wire import slots as wslots
@@ -45,7 +45,7 @@ class RetiredKeys(Case):
     def test_a_profile_with_the_retired_keys_loads_warns_once_and_is_left_as_it_was(self):
         raw = json.dumps({"engine": {"check_idle_min": 3, "check_wall_min": 20,
                                      "checks": [{"id": "u", "argv": ["just", "u"], "idle_min": 2, "wall_min": 90}]}}, indent=1)
-        tmp = te.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         f = Path(tmp.name) / ".task-loop.json"
         f.write_text(raw)
