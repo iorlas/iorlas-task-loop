@@ -168,7 +168,7 @@ class TraceRecords(te.EngineTest):
 
     def test_the_trace_says_why_each_run_started_and_which_run_came_before(self):
         rc, _ = self.run_engine({"plan": [dict(PLAN, irreversible="push_shared", question="Old format or new?")]})
-        first = self.eng.log_path.stem
+        first = self.eng.log_path.parent.name
         with self.store.stub(comments=[{"author": "denis", "text": "Old format."}]):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         assert rc == 0
@@ -176,13 +176,13 @@ class TraceRecords(te.EngineTest):
         assert [(t["started_because"], t["prev_run"], t["ask"]) for t in traces] == [("first", "", ""), ("answer", first, "t-1-1")]
         run = records(self.eng, rec.RunStart)[-1]
         assert (run.started_because, run.parent_id, run.ask) == ("answer", first, "t-1-1")
-        assert run.run_id == self.eng.log_path.stem
+        assert run.run_id == self.eng.log_path.parent.name
 
     def test_a_run_after_a_stop_resumes_from_the_checkpoint(self):
         two = te.EngineTest.TWO
         with te.EngineTest.stop_at(self, "reviewer", 2):
             self.run_engine({"plan": [two], "write": [WRITE, WRITE], "review": [CLEAN]})
-        first = self.eng.log_path.stem
+        first = self.eng.log_path.parent.name
         rc, _ = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         assert rc == 0
         run = records(self.eng, rec.RunStart)[-1]
@@ -190,7 +190,7 @@ class TraceRecords(te.EngineTest):
 
     def test_a_rerun_without_a_checkpoint_is_a_retry(self):
         self.run_engine({"plan": [stop("worker_failed", say="boom")] * 2})
-        first = self.eng.log_path.stem
+        first = self.eng.log_path.parent.name
         assert real_stores(homes.cfg()).checkpoints.of("t-1").get() is None
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         run = records(self.eng, rec.RunStart)[-1]

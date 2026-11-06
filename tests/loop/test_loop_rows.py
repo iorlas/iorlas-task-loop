@@ -19,15 +19,6 @@ class LoopRowsTest(LoopBase):
         files.remove(1)
         assert files.read(1) is None
 
-    def test_an_older_loops_state_file_is_adopted_into_the_database_and_removed(self):
-        files = looptest.files(str(self.repo))
-        old = files.cfg.loop_state(f"{files.key}.55")
-        JsonStore(old, LoopState).write(self.state(55))
-        files.pid_alive = lambda _: True
-        assert [st.pid for st in files.live()] == [55]
-        assert not old.exists()
-        assert files.read(55) == self.state(55)
-
     def test_a_dead_pid_becomes_a_died_row_and_is_not_live_again(self):
         files = looptest.files(str(self.repo))
         files.write(self.state(7))

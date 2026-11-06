@@ -579,7 +579,7 @@ duration back (`90m`, `12h`, `2d`); default the last 24 h. `--since HH:MM` is it
   anything else the owner, none is open.
 - **Crashes:** the loop saw run-task exit with no outcome; an engine log with no `close:` and no trace, quiet 30 min
   with no live `run-task <bead>`; or a trace closed `failed: engine error ...` (an exception the engine caught). A stop
-  (`failed: stopped (SIGTERM)`) is a failure, not a crash. A run's `.stderr` is the engine's and the worker's (worker test tracebacks
+  (`failed: stopped (SIGTERM)`) is a failure, not a crash. A run's `stderr.log` is the engine's and the worker's (worker test tracebacks
   land there) and is never read.
 - **Also:** minutes per bead (median, p90; all its runs in the window), fix rounds, replans, tokens by lane (codex,
   claude) and by role.

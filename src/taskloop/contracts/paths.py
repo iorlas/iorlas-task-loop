@@ -19,9 +19,6 @@ class ConfigDir:
     def __init__(self, root: Path | str) -> None:
         self.root = Path(root)
 
-    def engine_dir(self) -> Path:
-        return self.root / "engine"
-
     def factory_db(self) -> Path:
         """The host's shared factory journal and dashboard read model."""
         return self.root / "factory.db"
@@ -43,11 +40,21 @@ class ConfigDir:
     def dash_pid(self) -> Path:
         return self.root / "dash.pid"
 
+    def repos_dir(self) -> Path:
+        """repos/<repo-key>/: what is scoped to one repo (loop, slots, slot-state, decisions, durations)."""
+        return self.root / "repos"
+
+    def repo_dir(self, repo_key: str) -> Path:
+        return self.repos_dir() / repo_key
+
     def engine_log(self, run: RunId | str) -> Path:
-        return self.engine_dir() / (f"{run}.jsonl")
+        return self.run_dir(run) / "engine.jsonl"
+
+    def engine_stderr(self, run: RunId | str) -> Path:
+        return self.run_dir(run) / "stderr.log"
 
     def live_dir(self, run: RunId | str) -> Path:
-        return self.engine_dir() / (f"{run}.live")
+        return self.run_dir(run) / "live"
 
     def events(self) -> Path:
         return self.root / "events.jsonl"
@@ -83,7 +90,7 @@ class ConfigDir:
         return self.root / "ask-ledger.jsonl"
 
     def adr_dir(self, repo_key: str) -> Path:
-        return self.root / "decisions" / repo_key
+        return self.repo_dir(repo_key) / "decisions"
 
     def adr(self, repo_key: str, adr: str) -> Path:
         return self.adr_dir(repo_key) / (f"{adr}.json")
@@ -136,6 +143,17 @@ class ConfigDir:
         """The artifact store's root: <root>/<repo>/<bead>/<run>/<stage>-<attempt>/<name> (contracts/artifact.py)."""
         return self.root / "artifacts"
 
+    def results_dir(self) -> Path:
+        """Legacy importer only: the rollback copies of check receipts."""
+        return self.root / "results"
+
+    def releases_dir(self) -> Path:
+        return self.root / "releases"
+
+    def lock_file(self, name: str) -> Path:
+        """locks/<name>: a lock of the host that is not keyed to one worktree (release, reflect, slot take)."""
+        return self.root / "locks" / name
+
     def result(self, repo_key: str, check: str, digest: str) -> Path:
         """Legacy importer only: receipt rollback copy under the hashed check ID; current receipts live in factory.db."""
         return self.root / "results" / repo_key / hashlib.sha1(check.encode("utf-8", "surrogateescape")).hexdigest()[:12] / f"{digest}.json"
@@ -145,33 +163,33 @@ class ConfigDir:
         return self.root / "results" / repo_key / "base-red" / f"{digest}.json"
 
     def check_durations(self, repo_key: str) -> Path:
-        return self.root / "check-durations" / (f"{repo_key}.json")
+        return self.repo_dir(repo_key) / "durations.json"
 
     def loop_state(self, repo_key: str) -> Path:
-        return self.root / "loop" / (f"{repo_key}.json")
+        return self.loop_runs(repo_key) / "state.json"
 
     def loop_command(self, repo_key: str) -> Path:
-        return self.root / "loop" / (f"{repo_key}.command.json")
+        return self.loop_runs(repo_key) / "command.json"
 
     def loop_log(self, repo_key: str) -> Path:
-        return self.root / "loop" / (f"{repo_key}.jsonl")
+        return self.loop_runs(repo_key) / "log.jsonl"
 
     def loop_runs(self, repo_key: str) -> Path:
         """The loop's own folder of the repo: run logs, outcome files, loop-<pid>.log, exits.jsonl, died-<pid>.json."""
-        return self.root / "loop" / repo_key
+        return self.repo_dir(repo_key) / "loop"
 
     def loop_rest(self, repo_key: str) -> Path:
-        return self.root / "loop" / (f"{repo_key}-rest.json")
+        return self.loop_runs(repo_key) / "rest.json"
 
     def ticket(self, repo_key: str, seq: int) -> Path:
-        return self.root / "slots" / repo_key / (f"{seq:06d}.json")
+        return self.repo_dir(repo_key) / "slots" / (f"{seq:06d}.json")
 
     def ticket_counter(self, repo_key: str) -> Path:
-        return self.root / "slots" / repo_key / "seq"
+        return self.repo_dir(repo_key) / "slots" / "seq"
 
     def slot_state(self, repo_key: str, slot: str) -> Path:
         """What one slot of one repo keeps for its commands (temp, dotnet and NuGet scratch): outside the worktree, kept across reuse."""
-        return self.root / "slot-state" / repo_key / slot
+        return self.repo_dir(repo_key) / "slot-state" / slot
 
     def slot_setup_mark(self, key: str) -> Path:
         return self.root / "slots" / (f"{key}.setup")
@@ -193,7 +211,7 @@ class ConfigDir:
         return self.lock_record("engine-take", loop_key(wt))
 
     def lock_record(self, what: str, ident: str) -> Path:
-        return self.root / "locks" / (f"{what}-{ident}.lock")
+        return self.lock_file(f"{what}-{ident}.lock")
 
     def leases(self) -> Path:
         """The lease table (any_lease): `<name>.limit` and `<name>-<n>.lock` for each engine.resources entry, shared with manual
@@ -216,11 +234,11 @@ class ConfigDir:
         return self.root / "bad-versions.json"
 
     def release_result(self) -> Path:
-        return self.root / "releases" / "last.json"
+        return self.releases_dir() / "last.json"
 
     def suite_logs(self) -> list[Path]:
         """The saved full output of every red release suite (releases/suite-*.log); nothing sweeps them but `tl prune`."""
-        return sorted((self.root / "releases").glob("suite-*.log"))
+        return sorted(self.releases_dir().glob("suite-*.log"))
 
     def reflect_state(self) -> Path:
         return self.root / "reflect-digest.json"
@@ -253,6 +271,10 @@ class RunFiles:
 
     def reexec(self) -> Path:
         return self.dir / "reexec.json"
+
+    def artifacts(self) -> Path:
+        """The folders of the run's checks, one per step, each holding attempt-N/ (contracts/artifact.py)."""
+        return self.dir / "artifacts"
 
     def done_memo(self) -> Path:
         """Legacy import only; consumed steps now live in factory.db."""

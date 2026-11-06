@@ -125,7 +125,7 @@ def launcher_problems(plugin_root: Path, env: Env) -> list[str]:
         return []
     root = config_dir(env)
     stale = []
-    for name, path in [("shim", root / "bin/tl"), *((n, root / "githooks" / n) for n in hook.HOOK_NAMES)]:
+    for name, path in [("shim", root / "bin/tl"), *((n, ConfigDir(root).hooks_dir() / n) for n in hook.HOOK_NAMES)]:
         try:
             text = path.read_text(encoding="utf-8")
             words = [] if hook.RESOLVING_MARK in text else shlex.split(text, comments=True)  # a resolving shim is never stale

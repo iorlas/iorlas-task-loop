@@ -5,6 +5,7 @@ import threading
 from pathlib import Path
 from unittest import mock
 
+import msgspec
 import pytest
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
@@ -20,6 +21,7 @@ from taskloop.contracts import paths, stores, wire
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.docstore import JsonStore
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.log import CmdStart
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.snapshots import Pin
 
@@ -166,6 +168,27 @@ class StoresTest(Case):
         assert page.cursor == rl.file.size()
         assert [type(i.rec).__name__ for i in rl.tail(2).items] == ["Close"]  # the two before it are skipped lines
         assert rl.file.path == self.cfg.engine_log("tl-1-20261027-000000")
+
+    def test_two_writers_of_one_run_log_keep_one_total_order_by_offset(self):
+        run, n = "tl-1-20261027-000000", 40
+        offsets: list[list[int]] = [[], []]
+        rec = S.LOG["cmd_start"]
+
+        def writer(who: int) -> None:
+            rl = stores.RunLog(self.cfg, run)  # a writer of its own, as a second process is
+            offsets[who] = [rl.append(msgspec.structs.replace(rec, id=f"w{who}-{i}")) for i in range(n)]
+
+        threads = [threading.Thread(target=writer, args=(w,)) for w in (0, 1)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        page = stores.RunLog(self.cfg, run).read_from(0)
+        assert page.skipped == 0
+        assert [i.start for i in page.items] == sorted(offsets[0] + offsets[1])  # one line each, no two at the same place
+        ids = [i.rec.id for i in page.items if isinstance(i.rec, CmdStart)]
+        for who in (0, 1):
+            assert [x for x in ids if x.startswith(f"w{who}-")] == [f"w{who}-{i}" for i in range(n)]
 
     def test_a_json_document_is_replaced_whole(self):
         st = stores.LoopStateStore(self.cfg, "abc123abc123")

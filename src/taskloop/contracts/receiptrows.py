@@ -121,7 +121,7 @@ class DbDoc[T: (PassRecord, BaseRedRecord)]:
 
 def import_legacy_receipts(cfg: ConfigDir) -> int:
     """Insert absent receipts once per source, including markers for torn files; never change source bytes."""
-    files = sorted((cfg.root / "results").glob("*/*/*.json"))
+    files = sorted(cfg.results_dir().glob("*/*/*.json"))
     if not files:
         return 0
     count = 0

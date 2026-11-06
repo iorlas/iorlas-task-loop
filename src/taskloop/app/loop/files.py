@@ -54,20 +54,8 @@ class LoopFiles:
         d.mkdir(parents=True, exist_ok=True)
         return d
 
-    def adopt_files(self) -> None:
-        """Dual-read, never dual-write: a state file an older loop left is moved into the database and removed."""
-        for f in sorted(self.cfg.loop_state(self.key).parent.glob(self.key + ".*.json")):
-            if f.name.endswith((".command.json", "-rest.json")):
-                continue
-            st = JsonStore(f, LoopState).get()
-            if st is not None:
-                self.rows().put(st)
-            with contextlib.suppress(OSError):
-                f.unlink()
-
     def live(self, but: int | None = None) -> list[LoopState]:
         """The repo's live loops (`but`: leave this pid out), oldest first. A dead loop's row is kept as evidence (renamed `died-`)."""
-        self.adopt_files()
         out: list[LoopState] = []
         for st in self.rows().rows(""):
             if not self.pid_alive(st.pid):

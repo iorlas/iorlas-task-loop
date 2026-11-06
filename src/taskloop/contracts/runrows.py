@@ -166,7 +166,7 @@ def import_once(cfg: ConfigDir) -> None:
     key = (os.getpid(), str(cfg.root.resolve()))
     if key in _IMPORTED:
         return
-    if not (any(p.exists() for p in (cfg.runs_dir(), cfg.root / "results")) or has_legacy_asks(cfg)):
+    if not (any(p.exists() for p in (cfg.runs_dir(), cfg.results_dir())) or has_legacy_asks(cfg)):
         _IMPORTED.add(key)
         return
     with guard(cfg.lock_record("run-import", "legacy")):

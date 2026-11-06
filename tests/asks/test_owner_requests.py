@@ -171,7 +171,7 @@ class EngineRequests(te.EngineTest):
 
             def planned(*a, **kw):
                 out = plan(*a, **kw)
-                assert requests.post(homes.cfg(), eng.log_path.stem, "denis", time.time(),
+                assert requests.post(homes.cfg(), eng.log_path.parent.name, "denis", time.time(),
                                                repo=str(self.wt), bead=str(eng.bead), **request) == ""
                 return out
             eng.planner.plan = planned
