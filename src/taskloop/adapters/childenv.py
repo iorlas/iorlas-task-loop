@@ -78,8 +78,7 @@ def check_caches(base: Mapping[str, str]) -> dict[str, str]:
     cache = base.get("XDG_CACHE_HOME") or str(home / ".cache")
     data = base.get("XDG_DATA_HOME") or str(home / ".local/share")
     defaults = {"XDG_CACHE_HOME": cache, "UV_CACHE_DIR": str(Path(cache) / "uv"),
-                "UV_PYTHON_INSTALL_DIR": str(Path(data) / "uv/python"), "DOTNET_CLI_HOME": str(home),
-                "NUGET_PACKAGES": str(home / ".nuget/packages"), "MISE_CACHE_DIR": str(Path(cache) / "mise"),
+                "UV_PYTHON_INSTALL_DIR": str(Path(data) / "uv/python"), "MISE_CACHE_DIR": str(Path(cache) / "mise"),
                 "MISE_DATA_DIR": str(Path(data) / "mise"), "MISE_STATE_DIR": str(home / ".local/state/mise")}
     return {k: base.get(k) or v for k, v in defaults.items()}
 
