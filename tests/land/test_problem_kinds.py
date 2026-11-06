@@ -11,7 +11,7 @@ import support.paths  # noqa: F401
 # isort: split
 from taskloop.app.land.fix_outside import CAUSE, FixOutside
 from taskloop.app.land.gate import Problem, ProblemKind
-from taskloop.domain.prompts.land import FIX_GOAL, FIX_TEXT, FIX_WHAT
+from taskloop.domain.land.fix_text import FIX_GOAL, FIX_TEXT, FIX_WHAT
 
 NO_FIX_ROUND = {ProblemKind.STALE}  # main or the tree moved under the gate: the gate runs again, nobody fixes anything
 
