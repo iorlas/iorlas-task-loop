@@ -63,12 +63,13 @@ class Cmds:
         self.log.emit(rec.CmdEnd(id=cid, exit=code, out=out))
         return code
 
-    def run(self, argv: list[str]) -> Ran:
-        """Run `argv` in the repo; the rows are written whatever it does. A program that is not there is exit 127."""
+    def run(self, argv: list[str], cwd: str | None = None) -> Ran:
+        """Run `argv` in the repo (or in `cwd`); the rows are written whatever it does. A program that is not there is exit 127."""
+        where = cwd or self.cwd
         cid = self.log.next_id("c")
-        self.log.emit(rec.CmdStart(id=cid, text=text_of(argv), cwd=self.cwd))
+        self.log.emit(rec.CmdStart(id=cid, text=text_of(argv), cwd=where))
         try:
-            ran = self.spawner.run(argv, cwd=self.cwd)
+            ran = self.spawner.run(argv, cwd=where)
         except OSError as e:
             ran = Ran(exit=NOT_FOUND, err=str(e))
         self.log.emit(rec.CmdEnd(id=cid, exit=ran.exit, out=ran.out + ran.err))
