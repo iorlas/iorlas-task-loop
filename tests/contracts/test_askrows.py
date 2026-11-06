@@ -2,7 +2,6 @@
 
 import json
 import logging
-import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier
@@ -11,6 +10,7 @@ import pytest
 import support.paths  # noqa: F401
 from support.askjson import unreadable_ask
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from contracts import samples as S
 from taskloop.contracts import factorydb, wire
@@ -32,7 +32,7 @@ def unexpected_access(*_args, **_kwargs):
 
 class AskRowsTest(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.addCleanup(factorydb.close_shared)
         self.cfg = ConfigDir(Path(tmp.name))

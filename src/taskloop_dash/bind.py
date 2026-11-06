@@ -9,6 +9,7 @@ from typing import Any
 from taskloop.contracts.env import Env as ProcessEnv
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.stores import ReposStore
 
 CGNAT = ipaddress.ip_network("100.64.0.0/10")  # Tailscale's range
 DEFAULT_PORT = 7878
@@ -88,8 +89,8 @@ def bind_refusal(addrs: list[str], port: int, here: Path | str, home: Path | str
                 "refusing to bind {}: only the installed plugin copy (under ~/.claude/plugins/cache/) may serve "
                 "a non-loopback address or port 7878; set TASK_LOOP_DASH_DEV_PUBLIC=1 to override"
             ).format(", ".join(bad) if bad else "port 7878")
-    if port == DEFAULT_PORT and not ConfigDir(state).repos().is_file():
-        return "refusing to start on port 7878: no repos.json in the state dir (run `tl register` first)"
+    if port == DEFAULT_PORT and not ReposStore(ConfigDir(state), quiet=True).known():
+        return "refusing to start on port 7878: no repos registered in the state dir (run `tl register` first)"
     return None
 
 

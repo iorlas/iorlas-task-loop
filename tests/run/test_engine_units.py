@@ -8,7 +8,6 @@ import os
 import re
 import signal
 import sys
-import tempfile
 import time
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -17,6 +16,7 @@ from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 import support.paths  # noqa: E402, F401
@@ -80,7 +80,7 @@ class FailureBriefAndDurations(Case):
     FIX = Path(__file__).parents[1] / "fixtures" / "checks"
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.home = Path(self.tmp.name)
         self.env = mock.patch.dict(os.environ, {"HOME": str(self.home), "XDG_CONFIG_HOME": str(self.home / "cfg"),
                                                 "APPDATA": str(self.home / "cfg")})

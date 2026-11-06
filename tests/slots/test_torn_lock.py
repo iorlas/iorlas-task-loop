@@ -2,11 +2,11 @@
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -22,7 +22,7 @@ from taskloop.contracts.wire import Refused
 
 class TornLock(Case):
     def setup_method(self) -> None:
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.wt = Path(tmp.name)
         self.lock = homes.cfg().engine_lock(self.wt)

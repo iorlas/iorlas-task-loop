@@ -2,11 +2,11 @@
 import importlib.util
 import json
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("record_exchange", ROOT / "dev" / "record_exchange.py")
@@ -18,7 +18,7 @@ spec.loader.exec_module(rec)
 
 class Record(Case):
     def test_a_run_folder_becomes_a_case(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             run, root = Path(tmp, "run"), Path(tmp, "ex")
             run.mkdir()
             (run / "plan.json").write_text('{"summary": "p"}')
@@ -36,7 +36,7 @@ class Record(Case):
             assert (meta["node"], meta["answer"], meta["input"]) == ("review", "real", "synthetic")
 
     def test_the_sent_prompt_is_kept_with_its_worktree_as_a_placeholder(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             run, root = Path(tmp, "run"), Path(tmp, "ex")
             run.mkdir()
             (run / "plan-1.json").write_text("{}")

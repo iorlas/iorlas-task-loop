@@ -1,11 +1,11 @@
 """tl-7y6.7.3: the loop's pick leaves a parked bead alone while its text is unchanged, with a typed skip reason."""
 
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -32,7 +32,7 @@ def bead(desc="do it"):
 
 class Pick(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(Path(self.tmp.name))
 

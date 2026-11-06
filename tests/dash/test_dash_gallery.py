@@ -3,11 +3,11 @@ them, the page's answer through POST /api/look and the `look` port. The verb its
 
 import os
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -60,7 +60,7 @@ class Items(Case):
 
 class Pictures(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.repo = Path(self.tmp.name) / "repo"
         (self.repo / "docs/evidence/tl-1").mkdir(parents=True)
         (self.repo / "docs/evidence/tl-1/m1.png").write_bytes(PNG)
@@ -107,7 +107,7 @@ class ShotUrl(Case):
 class Api(Case):
     def test_items_pictures_and_the_answer(self):
         fake = world("open")
-        with tempfile.TemporaryDirectory() as home:
+        with TemporaryDirectory() as home:
             repo = Path(home) / "demo"
             (repo / "docs/evidence/tl-1").mkdir(parents=True)
             (repo / "docs/evidence/tl-1/m1.png").write_bytes(PNG)

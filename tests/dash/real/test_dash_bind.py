@@ -3,12 +3,12 @@ import contextlib
 import io
 import os
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -21,7 +21,7 @@ from taskloop_dash.cli import dash as dash_cli  # noqa: E402
 
 class Env(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.home = Path(self.tmp.name).resolve() / "home"
         self.state = self.home / ".config" / "task-loop"
         self.state.mkdir(parents=True)

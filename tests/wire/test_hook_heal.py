@@ -1,9 +1,9 @@
 """The engine verbs recreate the git hooks dir at start; no other verb touches it."""
-import tempfile
 from pathlib import Path
 
 from support.case import Case
 from support.tlmain import tl
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.wire import hook
 from taskloop.contracts.env import Env
@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class HookHeal(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.env = Env({"HOME": tmp.name, "XDG_CONFIG_HOME": str(Path(tmp.name) / ".config")})
         self.dir = ConfigDir(Path(tmp.name) / ".config" / "task-loop").hooks_dir()
