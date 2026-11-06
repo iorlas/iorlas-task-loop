@@ -6,13 +6,13 @@ import json
 import os
 import stat
 import sys
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 from delegate.app import cockpit, env, harnesses, onboard, status, usage
 from delegate.domain.lanes.lane import Lane
 from support.procsim import real_proc
+from support.tmpdir import TemporaryDirectory
 
 import routing_support as support
 from test_route import CFG, T, route
@@ -52,7 +52,7 @@ class LoginCheck:
     @real_proc("delegate: a worker, git or CLI process")
     def test_codex_login_status_decides_and_the_answer_is_cached(self):
         with (
-            tempfile.TemporaryDirectory() as d,
+            TemporaryDirectory() as d,
             patch.dict(os.environ, {"PATH": d + os.pathsep + os.environ["PATH"], "DELEGATE_CONFIG_DIR": d}),
         ):
             os.environ.pop("DELEGATE_NOCACHE", None)
@@ -71,7 +71,7 @@ class LoginCheck:
 class Command:
     def run_status(self, *argv, state=None, ready=None):
         cfg = cfg_all()
-        with tempfile.TemporaryDirectory() as d, patch.dict(os.environ, {"DELEGATE_CONFIG_DIR": d, "CLAUDE_CODE_ENTRYPOINT": "cli"}):
+        with TemporaryDirectory() as d, patch.dict(os.environ, {"DELEGATE_CONFIG_DIR": d, "CLAUDE_CODE_ENTRYPOINT": "cli"}):
             (Path(d) / "state.json").write_text(json.dumps({"v": 1, **(state or {})}))
             (Path(d) / "config.json").write_text(json.dumps({"profile": {"lanes": {"DEEPSEEK_FREE": "enabled"}}}))
             ready = ready or dict.fromkeys(cfg["lanes"], True)

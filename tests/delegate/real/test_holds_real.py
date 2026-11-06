@@ -4,7 +4,6 @@ import copy
 import io
 import json
 import sys
-import tempfile
 import time
 from pathlib import Path
 from unittest import mock
@@ -12,6 +11,7 @@ from unittest import mock
 from delegate.app import env
 from support.case import Case
 from support.procsim import real_proc
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -22,7 +22,7 @@ class Holds(Case):
     """delegate-dns: an owner hold {lane, roles, set_by, set_at, until (mandatory), reason}."""
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         p = mock.patch.object(env, "config_dir", return_value=Path(self.tmp.name))
         p.start()

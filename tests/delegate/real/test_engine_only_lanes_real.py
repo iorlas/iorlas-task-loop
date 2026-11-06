@@ -5,13 +5,13 @@ import copy
 import json
 import re
 import subprocess
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from delegate.app import launch
 from support.case import Case
 from support.procsim import real_proc
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -62,7 +62,7 @@ def opencode_verdict(rules: dict[str, str], command: str) -> str:
 class ClaudeHookTest:
     def hook(self, command: str, engine_only=("slow",), read_only=False):
         call = {"tool_name": "Bash", "tool_input": {"command": command}}
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             Path(tmp, "host.json").write_text('{"binaries":{},"writer_exec_allow":[]}')
             with mock.patch("delegate.app.env.config_dir", return_value=Path(tmp)):
                 argv = hook_command(launch.guard_settings(read_only, engine_only))

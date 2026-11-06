@@ -7,7 +7,6 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -19,6 +18,7 @@ from delegate.contracts.state import StateDoc
 from delegate.domain.health import ledger as health_ledger
 from delegate.domain.lanes.lane import Lane
 from support.procsim import real_proc
+from support.tmpdir import TemporaryDirectory, mkdtemp
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -40,7 +40,7 @@ net.net_probe = lambda hosts=None: {
     "hosts": {},
     "at": time.time(),
 }  # tests open no socket; tests/test_net.py swaps it per case
-os.environ["DELEGATE_CONFIG_DIR"] = tempfile.mkdtemp()  # tests never touch a real config; classes that need their own set one
+os.environ["DELEGATE_CONFIG_DIR"] = mkdtemp()  # tests never touch a real config; classes that need their own set one
 T = 1_000_000_000.0  # a fixed "now"
 LIMIT_S = 30  # StateLock starts 8 interpreters that each import delegate
 CFG = json.loads((ROOT / "src" / "delegate" / "data" / "routing.json").read_text(encoding="utf-8"))
@@ -122,7 +122,7 @@ class Pick:
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_codex_command_handles_non_git_dirs(self):
-        with tempfile.TemporaryDirectory() as d_:
+        with TemporaryDirectory() as d_:
             d = decide("worker", lanes(), cwd=d_)
         assert "--skip-git-repo-check" in d["how"]["cli"]  # not a git work tree
         d2 = decide("worker", lanes(), cwd=str(Path(__file__).resolve().parents[3]))
@@ -213,7 +213,7 @@ class Roles:
 class Cli:
     @real_proc("delegate: a worker, git or CLI process")
     def test_report_and_next_roundtrip(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             os.environ["XDG_CONFIG_HOME"] = os.environ["DELEGATE_CONFIG_DIR"] = d
             os.environ["APPDATA"] = d
             os.environ["DELEGATE_NOW"] = str(T)
@@ -246,7 +246,7 @@ class StateLock:
                 str(ROOT / "src")
             )
         )
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             env = dict(os.environ, DELEGATE_CONFIG_DIR=d)
             ps = [subprocess.Popen([sys.executable, "-c", code], env=env, stderr=subprocess.PIPE) for _ in range(8)]
             self.maxDiff = None

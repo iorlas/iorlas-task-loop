@@ -2,7 +2,6 @@
 
 import json
 import sys
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -14,6 +13,7 @@ from any_agent.supervisor import RunHooks
 from delegate.app import env, launch
 from delegate.app.settle import Settler
 from support.procsim import real_proc
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 from delegate_fakes.fake_run import replay
@@ -52,7 +52,7 @@ class DeepSeekTests:
         a = SimpleNamespace(resume=None, schema=None, timeout=10)
         for valid in (False, True):
             with (
-                tempfile.TemporaryDirectory() as tmp,
+                TemporaryDirectory() as tmp,
                 patch.object(env, "config_dir", return_value=Path(tmp)),
                 patch.object(OpenCodeHarness, "find_exe", return_value="opencode"),
                 patch.object(sys, "platform", "darwin"),
