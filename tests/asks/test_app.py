@@ -174,6 +174,15 @@ class IntakeTest(Case):
         assert must(must(self.verbs.answer(BeadId("fk-1"), "rerun", "better", amend=True)[0]).answer).text == "better"
         assert self.verbs.answer(BeadId("nope"), "rerun")[1] == "gone"
 
+    def test_an_answer_naming_a_replaced_ask_is_refused_and_files_nothing(self) -> None:
+        old = must(self.asks.get(BeadId("fk-1"))).id
+        raiser.raise_ask(self.asks, specs.missing_criteria(), asking("fk-1"))  # the engine asked again: a new ask id
+        assert must(self.asks.get(BeadId("fk-1"))).id != old
+        _done, why = self.verbs.answer(BeadId("fk-1"), "text", "for the old one", expect=old)
+        assert (why, must(self.asks.get(BeadId("fk-1"))).answer, self.store.beads[BeadId("fk-1")].status) == ("superseded", None, "blocked")
+        current = must(self.asks.get(BeadId("fk-1"))).id
+        assert self.verbs.answer(BeadId("fk-1"), "text", "for the new one", expect=current)[1] == ""
+
     def test_hint_hold_and_override_are_metadata_never_prose(self) -> None:
         self.verbs.hint(BeadId("fk-1"), " mind the cache ")
         self.verbs.hold(BeadId("fk-1"))

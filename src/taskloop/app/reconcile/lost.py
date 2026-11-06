@@ -10,8 +10,7 @@ from typing import Any
 
 from taskloop.app.reconcile.commits import observe_commits
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.landed import LandedStore
-from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.landed import Landed
 from taskloop.contracts.ports import Git
 from taskloop.contracts.trace import RunTrace
 from taskloop.domain.reconcile.diff import findings
@@ -19,11 +18,10 @@ from taskloop.domain.reconcile.facts import Observed
 
 
 def lost_work(repo: str, base: str, status_of: Callable[[BeadId], str | None], traces: Sequence[RunTrace], git: Git,
-              cfg: ConfigDir, since: float | None = None) -> list[dict[str, Any]]:
+              landed_of: Callable[[BeadId], Landed | None], since: float | None = None) -> list[dict[str, Any]]:
     """Every commit on a task/<bead> or wip/* branch that is not on the base, classed. `status_of`: a bead's bd status (None: no such
     bead, "?": bd failed); `traces`: the engine's runs of this repo."""
-    store = LandedStore(cfg)
-    commits = observe_commits(git, repo, base, since, status_of, traces, store)
+    commits = observe_commits(git, repo, base, since, status_of, traces, landed_of)
     seen = Observed(now=0.0, keep_days=0.0, commits=commits)
     return [{"branch": f.commit.branch, "bead": f.commit.bead, "sha": f.commit.sha, "time": f.commit.time, "subject": f.commit.subject,
              "class": f.cls, "why": f.why} for f in findings(seen)]

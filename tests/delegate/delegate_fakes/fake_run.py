@@ -5,8 +5,8 @@ from collections.abc import Mapping, Sequence
 from types import TracebackType
 from unittest import mock
 
-from delegate.adapters.harness.base import LaunchSpec
-from delegate.app.supervisor import RunOutcome, Supervisor
+from any_agent.protocol import LaunchSpec
+from any_agent.supervisor import RunOutcome, Supervisor
 
 
 class Replay:
