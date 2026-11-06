@@ -113,8 +113,10 @@ class BranchPinned(GitUnavailable):
 
 _INDEX_LOCK = re.compile(r"index\.lock")
 _REF_STALE = re.compile(r"incorrect old value|is at \S+ but expected \S+")
-_REF_LOCK = re.compile(r"(?:cannot lock ref[^\n]*\.lock|Unable to create '[^'\n]*\.lock')[^\n]*File exists")
-_REF_RACE = re.compile(r"cannot lock ref|unable to update local ref|Unable to create '[^']*\.lock'")
+# git 2.53 words a fetch that loses the race to create a ref this way instead of naming the lock.
+_FETCH_REF_EXISTS = r"fetching ref \S+ failed: reference already exists"
+_REF_LOCK = re.compile(rf"(?:cannot lock ref[^\n]*\.lock|Unable to create '[^'\n]*\.lock')[^\n]*File exists|{_FETCH_REF_EXISTS}")
+_REF_RACE = re.compile(rf"cannot lock ref|unable to update local ref|Unable to create '[^']*\.lock'|{_FETCH_REF_EXISTS}")
 _PINNED = re.compile(r"already (?:checked out|used by worktree) at '?([^'\n]*)'?")
 _MISSING_REVISION = re.compile(r"fatal: (?:bad revision '.+'|Not a valid object name .+)")
 _AMBIGUOUS_REVISION = re.compile(r"fatal: ambiguous argument '.+': unknown revision or path not in the working tree\.")
@@ -152,6 +154,7 @@ def failure(
     elif code == 128:
         if (
             tail == "fatal: not a git repository (or any of the parent directories): .git"
+            or re.fullmatch(r"fatal: not a git repository \(or any parent up to mount point .+\)", tail)
             or re.fullmatch(r"fatal: cannot change to '.+': No such file or directory", tail)
             or tail.startswith("fatal: not a git repository:")
         ):
