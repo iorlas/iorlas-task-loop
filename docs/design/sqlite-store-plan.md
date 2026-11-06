@@ -120,6 +120,13 @@ The transition list per slice is generated from the table's state names, so addi
   (`sqlite_store.quarantine`) and the run reports a visible error, never a silent file fallback ("only our database", CLAUDE.md).
 - A release that finds a slice broken is rolled back by `tl rollback`/pin; the next release re-lands the slice.
 
+### Stores are forward-readable
+
+A row written by a newer tl must not break an older one (pix, 2026-11-06: 32 run rows with `pid_start` blocked every landing as "unreadable
+run manifest", tl-x3m0). Every store reads past keys it does not know, keeps its own known fields on a write back, and a row that
+still does not validate raises an error that says "validation", names the row and the field, and is not a `sqlite3.DatabaseError` alias
+of a database fault. A newer `user_version` stays a visible "update tl" refusal (the vendored `sqlite_store` already does that).
+
 ## 7. Risks
 
 - Hot writers (loop beat, checkpoint) on one WAL file: measured in slice 1 before the others (target: beat write < 5 ms p99 under 4 engines).
