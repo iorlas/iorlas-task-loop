@@ -9,6 +9,8 @@ from pathlib import Path
 
 from support.case import Case
 
+from rules.gate_rules import parsed
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
@@ -73,8 +75,12 @@ def synthesized(node: ast.AST) -> set[str]:
 
 
 def produced(source: str) -> set[str]:
+    return produced_in(ast.parse(source))
+
+
+def produced_in(tree: ast.Module) -> set[str]:
     found: set[str] = set()
-    for node in ast.walk(ast.parse(source)):
+    for node in ast.walk(tree):
         found.update(declaration(node) | synthesized(node))
     return found
 
@@ -83,7 +89,7 @@ class Complete(Case):
     def test_all_locally_produced_reason_ids_have_a_policy(self):
         reasons: set[str] = set()
         for path in (ROOT / "src").rglob("*.py"):
-            reasons.update(produced(path.read_text(encoding="utf-8")))
+            reasons.update(produced_in(parsed(path)[1]))
         assert missing_policies(reasons, contract_permanences()) == set()
 
     def test_all_recorded_delegate_contract_reasons_have_a_policy(self):

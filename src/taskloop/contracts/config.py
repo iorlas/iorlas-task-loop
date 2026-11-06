@@ -100,6 +100,9 @@ class CheckSpec(Rec):
     lane: str = ""  # checks of one lane run in order, lanes run in parallel; the first red cancels the other lanes ("": the default lane)
     needs: list[str] = msgspec.field(default_factory=list)  # engine.resources it holds a machine-wide lease on while it runs
     pass_files: bool = False  # the changed files (those matching `when`) are appended to argv; none: the check is skipped
+    # argv + `--base REV` prints the files the check's result depends on for the diff against REV, one per line (dev/affected.py --closure).
+    # A pass on an earlier base is carried to a moved base when that closure is the same in the branch and in its merge with the base.
+    closure_cmd: list[str] = msgspec.field(default_factory=list)
     # argv run in the worktree before the checks (a formatter); what it changes is checked
     fix: list[str] = msgspec.field(default_factory=list)
 
@@ -196,6 +199,10 @@ class EngineConfig(Rec):
     # added to (over) the slot's environment; {slot} {slot_dir} {repo} filled in
     slot_env: dict[str, str] = msgspec.field(default_factory=dict)
     host: bool = False
+    queued_match: str = ""  # regex over a repo check's "<id> <cmd>": the checks that queue for a scarce slot and run late (none: no group)
+    lock_fail: str = ""  # regex over a red check's output: an editor or project lock held by another run (wait, then rerun)
+    slow_cmd: str = ""  # regex over an untimed command: named like a slow run, so the engine's and not the writer's
+    project_log: str = ""  # a path in the worktree: the log the toolchain wrote when the project files could not be regenerated
     worker_rules: str = ""
     test_pattern: str = TEST_PATTERN
     area_label_prefix: str = ""

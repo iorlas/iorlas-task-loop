@@ -40,7 +40,8 @@ class DoctorSource(Case):
         self.env = dict(os.environ, GIT_AUTHOR_NAME="test", GIT_AUTHOR_EMAIL="test@example.invalid",
                         GIT_COMMITTER_NAME="test", GIT_COMMITTER_EMAIL="test@example.invalid",
                         GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
-                        XDG_CONFIG_HOME=str(self.root / "config"), CLAUDE_CONFIG_DIR=str(self.root / "claude"))
+                        XDG_CONFIG_HOME=str(self.root / "config"), CLAUDE_CONFIG_DIR=str(self.root / "claude"),
+                        HOME=str(self.root / "home"))  # the PATH link the doctor reports is under HOME, not the host's ~/.local/bin
         patch = mock.patch.dict(os.environ, self.env)
         patch.start()
         self.addCleanup(patch.stop)
@@ -54,7 +55,7 @@ class DoctorSource(Case):
 
     @staticmethod
     def config(name, inputs="missing/**", **extra):
-        return {"engine": dict(checks=[{"id": name, "argv": ["unused"], "inputs": [inputs]}], **extra)}
+        return {"engine": dict(checks=[{"id": name, "argv": ["unused", "$TL_ARTIFACT_DIR"], "inputs": [inputs]}], **extra)}
 
     @staticmethod
     def write_cfg(repo, data):

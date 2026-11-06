@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes, procsim
 from support.aging import age
+from support.builders import PROFILE_PATTERNS
 from support.checks import ck
 from support.engine_case import (
     BEAD,
@@ -125,7 +126,7 @@ class EngineRunTest(EngineTest):
         age(eng, 8 * 60)  # eight minutes wall
         with pytest.raises(engine.Blocked):
             eng.waits.budget_check()
-        eng.waits.add(600, WaitWhat.UNITY_SLOT)  # capped at the 8 min there are: inside the budget
+        eng.waits.add(600, WaitWhat.CHECK_SLOT)  # capped at the 8 min there are: inside the budget
         eng.waits.budget_check()
         age(eng, 16 * 60)
         with pytest.raises(engine.Blocked) as e:
@@ -143,7 +144,7 @@ class EngineRunTest(EngineTest):
         for line in self.COMPILE:
             assert check_matchers.failure_kind(line) == "deterministic", line
         for line in self.LOCK:
-            assert check_matchers.failure_kind(line) == "lock", line
+            assert check_matchers.failure_kind(line, PROFILE_PATTERNS["lock_fail"]) == "lock", line
         for line in ("AssertionError: 1 != 2", "Curl error 42", "Connection reset by peer", "", self.ECHO,
                      "error NU1301: Unable to load the service index",
                      "error MSB3021: Unable to copy file",
@@ -215,8 +216,13 @@ class EngineRunTest(EngineTest):
     def test_sigterm_between_the_run_and_its_close_still_closes(self):  # it escaped with no trace (M2 review)
         if not hasattr(sig, "SIGTERM") or os.name == "nt":
             pytest.skip("POSIX signal")
-        with self.stoppable(), mock.patch.object(Lease, "stop",
-                                                 side_effect=lambda *a: os.kill(os.getpid(), sig.SIGTERM)):
+        real_stop = Lease.stop
+
+        def stop_then_term(lease):
+            real_stop(lease)  # the heartbeat thread ends here too: a stop that only signalled would leave it running
+            os.kill(os.getpid(), sig.SIGTERM)
+
+        with self.stoppable(), mock.patch.object(Lease, "stop", stop_then_term):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         assert rc == 0
         runs = [json.loads(ln) for ln in (homes.config_dir() / "traces.jsonl").read_text().splitlines()]
