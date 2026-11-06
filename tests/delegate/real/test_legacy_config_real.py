@@ -16,7 +16,7 @@ import hermetic  # noqa: F401  (a home of its own for every test)
 import run_support as T
 from test_route import route
 
-FIXTURE = Path(__file__).parent / "fixtures" / "config_pre_0_45.json"
+FIXTURE = Path(__file__).resolve().parent.parent / "fixtures" / "config_pre_0_45.json"
 ROUTE_PY = Path(str(route.__file__))
 
 

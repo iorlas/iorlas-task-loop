@@ -108,6 +108,7 @@ def make_handler(
                     body = {"version": dash.env.version, "pid": os.getpid(), "urls": urls(addrs, port), "started": dash.env.started,
                             "script": script, "binds": list(addrs), "port": port,
                             "protocol": READ_PROTOCOL, "schema": factorydb.SCHEMA_VERSION,
+                            "schema_read": [factorydb.SCHEMA_READ_FROM, factorydb.SCHEMA_VERSION],
                             "database_error": dash.reads.worlds.database_error()}
                     return self.send(200, json.dumps(body).encode(), "application/json")
                 got = route(dash, static, u.path, q, self.headers.get("If-None-Match"))

@@ -23,7 +23,6 @@ from taskloop.contracts.reponame import repo_name
 from taskloop.contracts.rotating import RotatingJsonl
 from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.snapshots import (
-    DashState,
     Pin,
     ReflectState,
     ReleaseResult,
@@ -400,31 +399,36 @@ class SharedNotesStore(RowDoc[SharedNotes]):
         super().__init__(singleton(cfg, SharedNotes, "shared:" + repo_key, cfg.shared(repo_key)).docs, "")
 
 
-class ReposStore(JsonStore[ReposIndex]):
-    """repos.json: every repo `tl` has seen, by name. Adding one reads and writes under a lock, so two processes never drop a repo.
-    A v1 file (keyed by path) is converted on its first read; no reader of v1 stays."""
+class ReposStore:
+    """The repos index: every repo `tl` has seen, by name, as the `kv` row `repos` of factory.db. Adding one reads and writes under a lock,
+    so two processes never drop a repo. An older tl's repos.json is adopted on the first read (a v1 file, keyed by path, is converted
+    first); no reader of v1 stays. `quiet` (the dashboard): a database that cannot be opened reads as no repos, and nothing is adopted."""
 
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.repos(), ReposIndex)
+    def __init__(self, cfg: paths.ConfigDir, quiet: bool = False) -> None:
+        self.doc = singleton(cfg, ReposIndex, "repos", cfg.repos(), quiet)
+        self.path = cfg.repos()  # the older file
         self.lock = cfg.lock_record("repos", "index")
 
+    def get(self) -> ReposIndex | None:
+        return self.doc.get()
+
+    def write(self, rec: ReposIndex) -> None:
+        self.doc.write(rec)
+
     def index(self) -> ReposIndex:
-        """The index (empty when the file is missing). A file in another version is an error (ValueError), never read as empty."""
-        try:
-            text = self.path.read_text(encoding="utf-8")
-        except FileNotFoundError:  # one read decides: a check after it races the writer that creates the file
+        """The index (empty when there is none). One of another version is an error (ValueError), never read as empty."""
+        read = self.doc.read()
+        if isinstance(read, Present):
+            return read.rec
+        if isinstance(read, Absent):
             return ReposIndex()
-        try:
-            return wire.load(ReposIndex, json.loads(text))
-        except wire.StaleRecord as e:
-            if e.found != 1:
-                raise ValueError(self._refusal()) from None
+        if isinstance(read, ForeignVersion) and read.found == 1:
             return self._convert()
-        except ValueError:
-            raise ValueError(self._refusal()) from None
+        raise ValueError(self._refusal())
 
     def _refusal(self) -> str:
-        return f"{self.path} is not a repos index of this version: delete it; every tl process registers its repo again"
+        return (f"{self.path} (or its row in factory.db) is not a repos index of this version: delete it; "
+                "every tl process registers its repo again")
 
     def _convert(self) -> ReposIndex:
         """v1 (path to added) to v2 (name to path and added). Of paths with one name the first stays; the rest are said and dropped."""
@@ -441,6 +445,8 @@ class ReposStore(JsonStore[ReposIndex]):
                 repos[name] = RepoEntry(path=path, added=ent["added"])
             idx = ReposIndex(repos=repos)
             self.write(idx)
+            with contextlib.suppress(OSError):
+                self.path.unlink()
             return idx
 
     def known(self) -> list[str]:
@@ -493,11 +499,6 @@ class PinStore(RowDoc[Pin]):
 class ReleaseResultStore(RowDoc[ReleaseResult]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
         super().__init__(singleton(cfg, ReleaseResult, "release:last", cfg.release_result()).docs, "")
-
-
-class DashStateStore(RowDoc[DashState]):
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(singleton(cfg, DashState, "dash:state", cfg.dash_state()).docs, "")
 
 
 class BadVersionStore(RowDoc[BadVersions]):

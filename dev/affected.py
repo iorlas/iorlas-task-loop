@@ -2,6 +2,8 @@
 
     python3 dev/affected.py [--base REV [--head REV]] [--root DIR] [--changed PATH ...]    prints the test files, one per line
     python3 dev/affected.py ... --closure                                                    prints the files those tests depend on instead
+    python3 dev/affected.py ... --skip-green [--ledger FILE]                          prints only the tests not green on their own files
+    python3 dev/affected.py ... --mark-green TEST ... [--ledger FILE]                        records those tests as green on their files now
 
 The changed files are the diff against BASE (default: the merge base of HEAD and origin/main; no origin/main: HEAD), the working tree
 and the untracked files included, or exactly the PATHs given with --changed. The graph is read from the syntax trees under `--root`
@@ -26,10 +28,16 @@ The rules, all in this file, none of them stored or switchable:
               the justfile select tests/rules.
   deleted     a deleted src/taskloop file has no node left to follow: it selects the tests/ folder that mirrors its slice.
   always      tests/rules (they read the whole tree and take seconds), so a change that selects nothing else still runs them.
+ledger      a test file is green when the key of everything it can depend on (its closure, narrowed to the data of its own slice, plus
+            the files its code names, the config and the python version) is in the ledger, a file of keys that `--mark-green` appends to
+            after a green run. `--skip-green` leaves those out; tests/rules are never left out. A changed key (any file of the closure) is a
+            test that runs again, so a base move reruns only the tests whose own files it touched.
 tests/live is explicit-only and is never selected. There is no flag for a wider run: the full run is `just test-full`.
 """
 import argparse
 import ast
+import hashlib
+import os
 import subprocess
 import sys
 from collections import defaultdict
@@ -226,11 +234,21 @@ CONFIG_FILES = ("pyproject.toml", "uv.lock", "mise.toml", "mise.lock", ".importl
                 ".task-loop.json")
 
 
-def closure(repo, tests, tracked=None):
+def in_scope(path, scope):
+    """A data file the closure keeps for its tests/ folder: all of tests/, or only `scope`'s own."""
+    if not path.startswith("tests/"):
+        return False
+    parts = path.split("/")
+    return scope is None or parts[1:2] == [scope] or parts[1:3] == ["fixtures", scope]
+
+
+def closure(repo, tests, tracked=None, scope=None):
     """Every file the result of running `tests` can depend on, sorted: the tests (those of the always-run tests/rules folder left out: they
     read the whole tree and are a check of their own), the conftest.py above each, everything they import (forward, lazy imports too),
     every non-Python file under tests/ and every one a reached file names by basename, and the root config files. Deliberately wide: a
-    file in the closure that did not matter costs a rerun, a file that mattered and is missing is a wrong pass."""
+    file in the closure that did not matter costs a rerun, a file that mattered and is missing is a wrong pass.
+    `scope`: a slice folder name; the tests/ data kept is then that slice's (tests/<scope>/, tests/fixtures/<scope>/) and what a
+    reached file names."""
     tests = [t for t in tests if not t.startswith(ALWAYS + "/")]
     reached = set(tests)
     for t in tests:
@@ -247,8 +265,50 @@ def closure(repo, tests, tracked=None):
         listed = git(repo.root, "ls-files")
         tracked = listed.split("\n") if listed is not None else [p.relative_to(repo.root).as_posix() for p in repo.root.rglob("*")]
     data = {p for p in tracked if p and not p.endswith(".py") and not SKIP_PARTS & set(p.split("/"))
-            and (p.startswith("tests/") or Path(p).name in named or p in CONFIG_FILES)}
+            and (in_scope(p, scope) or Path(p).name in named or p in CONFIG_FILES)}
     return sorted(p for p in reached | data if (repo.root / p).is_file())
+
+
+def test_keys(repo, tests, tracked=None):
+    """{test file: sha1 of the path and bytes of every file it can depend on, and of the python version}."""
+    if tracked is None:
+        listed = git(repo.root, "ls-files")
+        tracked = listed.split("\n") if listed is not None else None
+    seen = {}
+    keys = {}
+    for test in tests:
+        files = closure(repo, [test], tracked, scope=test.split("/")[1])
+        for f in files:
+            if f not in seen:
+                seen[f] = hashlib.sha1((repo.root / f).read_bytes()).hexdigest()
+        text = "\n".join([sys.version.split()[0], test] + [f"{f} {seen[f]}" for f in files])
+        keys[test] = hashlib.sha1(text.encode()).hexdigest()
+    return keys
+
+
+def ledger_path(given, environ=None):
+    env = os.environ if environ is None else environ
+    return Path(given or Path(env.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "task-loop" / "green-tests.txt")
+
+
+def read_ledger(path):
+    return set(path.read_text(encoding="utf-8").split()) if path.is_file() else set()
+
+
+def mark_green(repo, tests, path, tracked=None):
+    """Append the keys of `tests` as they are now; the file keeps its newest 50000 keys."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    old = path.read_text(encoding="utf-8").split() if path.is_file() else []
+    new = [k for k in test_keys(repo, tests, tracked).values() if k not in set(old)]
+    path.write_text("\n".join((old + new)[-50000:]) + "\n", encoding="utf-8")
+
+
+def not_green(repo, tests, path, tracked=None):
+    """`tests` without those whose key is in the ledger; tests/rules stay (they read the whole tree)."""
+    keep = [t for t in tests if t.startswith(ALWAYS + "/")]
+    rest = [t for t in tests if t not in keep]
+    green = read_ledger(path)
+    return sorted(keep + [t for t, k in test_keys(repo, rest, tracked).items() if k not in green])
 
 
 def main(argv=None):
@@ -258,10 +318,18 @@ def main(argv=None):
     ap.add_argument("--head", help="diff BASE..HEAD instead of BASE and the working tree")
     ap.add_argument("--changed", nargs="*", help="exactly these paths, no git")
     ap.add_argument("--closure", action="store_true", help="print the files the selected tests can depend on, not the tests")
+    ap.add_argument("--skip-green", action="store_true", help="leave out the tests whose files are unchanged since a green run")
+    ap.add_argument("--mark-green", nargs="+", metavar="TEST", help="record these test files as green on their files as they are now")
+    ap.add_argument("--ledger", help="the file of green keys (default: <cache>/task-loop/green-tests.txt)")
     args = ap.parse_args(argv)
+    if args.mark_green:
+        mark_green(Repo(args.root), args.mark_green, ledger_path(args.ledger))
+        return 0
     changed = set(args.changed) if args.changed is not None else changed_files(args.root, base_of(args.root, args.base), args.head)
     repo = Repo(args.root)
     chosen = select(repo, changed)
+    if args.skip_green:
+        chosen = not_green(repo, chosen, ledger_path(args.ledger))
     print("\n".join(closure(repo, chosen) if args.closure else chosen))
     return 0
 

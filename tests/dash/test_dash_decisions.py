@@ -40,3 +40,13 @@ def test_a_vendor_error_says_the_lane_the_reason_and_until_when_it_is_closed_to_
     assert [(m.who, m.icon) for m in got] == [("engine", "⛔"), ("engine", "⛔")]
     assert "codex" in got[0].md and "quota" in got[0].md and f"until {hhmm(T + 7200.0)}" in got[0].md
     assert "claude" in got[1].md and "overloaded" in got[1].md and "until" not in got[1].md
+
+
+def test_a_land_try_says_its_phase_seconds_and_why_it_went_on_or_retried():
+    s = (RunScript("p-1").step("land", 100, 10, end=False).wait(5)
+         .add("land_try", n=1, failing="gate", gate="outside", fetch_s=2.0, rebase_s=1.0, gate_s=84.0, rebase_moved=True).wait(5)
+         .add("land_try", n=2, failing="", gate="cached", fetch_s=1.0, rebase_s=0.0, gate_s=0.0))
+    got = detail(s).decisions
+    assert [(m.icon, m.who) for m in got] == [("🛬", "engine"), ("🛬", "engine")]
+    assert "try 1" in got[0].md and "gate red" in got[0].md and "fetch 2 s" in got[0].md and "gate 84 s" in got[0].md
+    assert "try 2" in got[1].md and "pushing" in got[1].md and "fetch 1 s" in got[1].md

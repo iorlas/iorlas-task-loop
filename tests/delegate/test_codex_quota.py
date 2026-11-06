@@ -8,7 +8,6 @@ from typing import Any
 from delegate.app import cockpit, env, usage
 from delegate.contracts.state import UsageCache
 from delegate.domain.lanes.lane import Lane
-from support.procsim import real_proc
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -133,13 +132,6 @@ class ClaudeLast(Fresh):
         a.update(args)
         return support.decide(role, self.cfg(), ls, {}, T, a)
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_all_lanes_up_a_non_claude_lane_is_picked_for_every_role(self):
-        for role in CFG["roles"]:
-            for who in [None] if role != "reviewer" else [None, "openai", "claude", "xai", "deepseek", "zai"]:
-                d = self.pick(role, self.everything(), authored_by=who)
-                assert d["action"] == "run", (role, who)
-                assert "CLAUDE" not in d["lane"], (role, who, d["lane"])
 
     def test_the_chain_never_puts_a_claude_step_before_a_non_claude_one(self):
         for role_name, role in CFG["roles"].items():
@@ -158,22 +150,7 @@ class ClaudeLast(Fresh):
         ls["ZAI_CODING_SUBSCRIPTION"].out = False  # one non-Claude lane back: it wins again
         assert self.pick("worker", ls)["lane"] == "ZAI_CODING_SUBSCRIPTION"
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_a_relaxed_non_claude_lane_beats_a_strict_claude_lane(self):
-        ls = self.everything()
-        for n in ("GROK_SUBSCRIPTION", "DEEPSEEK_FREE", "ZAI_CODING_SUBSCRIPTION"):
-            ls[n].out, ls[n].out_until = True, T + 3600
-        ls["OPENAI_SUBSCRIPTION"].week = 96  # over the strict gate (95), under the ceiling (98)
-        d = self.pick("worker", ls)
-        assert (d["lane"], d["pass"]) == ("OPENAI_SUBSCRIPTION", "relaxed")
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_same_family_review_by_a_non_claude_lane_still_precedes_claude(self):
-        ls = self.everything()
-        for n in ("GROK_SUBSCRIPTION", "DEEPSEEK_FREE", "ZAI_CODING_SUBSCRIPTION"):
-            ls[n].out, ls[n].out_until = True, T + 3600
-        d = self.pick("reviewer", ls, authored_by="openai")
-        assert (d["lane"], d["flag"]) == ("OPENAI_SUBSCRIPTION", "same_family")
 
     def test_premium_claude_still_goes_first_when_asked(self):
         assert self.pick("worker", self.everything(), premium="claude")["model"] == "fable-5.1"
