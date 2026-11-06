@@ -435,6 +435,7 @@ class LivePage(Rec):
     lines: list[TermLine] = msgspec.field(default_factory=list)
     tools: list[ToolCall] = msgspec.field(default_factory=list)
     reset: bool = False  # the cursor was another run's or no longer fits: these lines replace what the page shows
+    gap: bool = False  # retention removed a file the cursor had read: lines between the cursor and these are gone
 
 
 # ---- writes: POST /api/<verb>, JSON body, one Result back

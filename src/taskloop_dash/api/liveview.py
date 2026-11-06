@@ -46,4 +46,4 @@ class Live:
             hold = 0.0
         got = lr.read(since, hold)
         state = shown(logs[-1].manifest, self.env.clock())
-        return 200, wire.dump(live_lines.page(got["events"], got["cursor"], state, got.get("reset", False)))
+        return 200, wire.dump(live_lines.page(got["events"], got["cursor"], state, got.get("reset", False), got.get("gap", False)))
