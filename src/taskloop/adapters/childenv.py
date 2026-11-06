@@ -172,7 +172,8 @@ def child_env_of(env: Mapping[str, str], extra: Mapping[str, str] | None = None)
 
 def script_argv(script: str | Path, env: Env) -> list[str]:
     """The argv that runs a script with a PEP 723 header (tl.py, dev/release.py): `uv run --script` installs its dependencies into
-    a cached environment; `--no-config` keeps the cwd's uv.toml from naming the index. `UV` of `env` is the uv that started this process, when one did."""
+    a cached environment; `--no-config` keeps the cwd's uv.toml from naming the index. `UV` of `env` is the uv that started this process,
+    when one did."""
     return [env.get("UV") or shutil.which("uv") or "uv", "run", "--quiet", "--no-config", "--script", str(script)]
 
 
