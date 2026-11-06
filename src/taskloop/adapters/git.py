@@ -38,7 +38,7 @@ class RealGit(LandGit):
     @override
     def _pool(self, d: str) -> RealRepo:
         repo = RealRepo if self.pinned else UnpinnedRepo
-        return repo(Path(d).resolve(), env=self.git_env(d), memoize=False, sleep=self.sleep)
+        return repo(Path(d).resolve(), env=self.git_env(d), ambient=self.env.vars, memoize=False, sleep=self.sleep)
 
     def branch(self, d: str) -> str:
         return self._ask(d, "symbolic-ref", "--short", "-q", "HEAD", missing=True)

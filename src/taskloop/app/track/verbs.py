@@ -2,6 +2,7 @@
 import argparse
 import json
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -18,9 +19,12 @@ from taskloop.contracts.bead import Bead
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.landed import Landed, landed_meta
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Git
+from taskloop.contracts.reponame import repo_name
 from taskloop.contracts.slots import SlotGitError, git_probe
+from taskloop.contracts.stores import ReposStore
 
 Guard = Callable[[BeadId, str], str]  # (bead, close reason) -> "" when the close goes on, else why it is refused (closeguard.py)
 
@@ -60,6 +64,13 @@ def land(who: Identity, bead: BeadId, sha: str, store: Beads, git: Git, worktree
         sys.stderr.write(f"{bead}: {full[:12]} is not on {base}: no land recorded in provenance\n")
         return 1
     provenance(st, bead, "land", full, "git-sha")
+    if base:  # the base is checked above: the bead's metadata says it landed there
+        try:
+            st.update(bead, BeadPatch(set_metadata=landed_meta(Landed(bead=bead, sha=full, base=base, t=time.time())),
+                                      if_assignee=fence.guard(claim) if claim else ""))
+        except BdFailure as e:
+            sys.stderr.write(f"{bead}: land not recorded in the bead: {e.error.text.strip()}\n")
+            return 1
     return 0
 
 
@@ -152,16 +163,20 @@ def passthrough(store: BdStore, rest: list[str], guard: Guard) -> int:
 
 
 def register(git: Git, directory: str, who: Identity) -> int:
-    """`tl register [DIR]`: add the repo of a working directory to the dashboard."""
+    """`tl register [DIR|NAME]`: add the repo of a working directory to the dashboard; a registered name stands for its folder."""
     try:
         path = repo_root(directory) if git.toplevel(directory) else None
     except (OSError, ValueError, SlotGitError):
         path = None
     if path is None:
-        print("tl: not a Git working directory: " + repr(directory), file=sys.stderr)
+        try:
+            path = ReposStore(who.config).path_of(directory)
+        except ValueError as e:
+            print(f"tl: not a Git working directory: {directory!r}; {e}", file=sys.stderr)
+            return 1
+    if not register_repo(path, who.config):
         return 1
-    register_repo(path, who.config)
-    print("REGISTERED " + path)
+    print(f"REGISTERED {repo_name(path)} {path}")
     return 0
 
 

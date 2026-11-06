@@ -3,30 +3,33 @@
 no real model is called. Grace and stall are cut to ~1 s through the supervisor constants."""
 
 import argparse
+import dataclasses
 import json
 import os
 import sys
 import tempfile
-import time
 from pathlib import Path
 from typing import ClassVar
 from unittest import mock
 
-import pytest
+from any_agent.harnesses import opencode_sandbox
 from support.case import Case
+from support.fake_clock import SteppingClock
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "delegate"))
 import shutil
 
-from delegate.adapters import codex_account
-from delegate.adapters.harness import claude
-from delegate.adapters.harness.opencode import OpenCodeHarness
-from delegate.app import env, launch, watch
-from delegate.app.supervisor import RunHooks
+from any_agent import watch
+from any_agent.harnesses import claude
+from any_agent.harnesses.opencode import OpenCodeHarness
+from any_agent.supervisor import RunHooks
+from delegate.adapters import codex_account, git
+from delegate.app import env, harnesses, launch
 from delegate.contracts.json_types import Json
-from support.procsim import real_proc
+from support import fake_worker
+from support.fake_worker import Jump
 
 T = 1_000_000.0
 LIMIT_S = 30  # replays wait out the grace and stall limits (about 4 s each)
@@ -75,7 +78,6 @@ CODEX_CMD = j(type="item.completed", item={"id": "i2", "type": "command_executio
 CODEX_DONE = j(type="turn.completed", usage={"input_tokens": 100, "cached_input_tokens": 40, "output_tokens": 7})
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fake CLIs are shell scripts")
 class Replay(Case):
     def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -84,16 +86,21 @@ class Replay(Case):
         self.pidfile = self.base / "pid"
         self.cfg = self.base / "cfg"
         self.cfg.mkdir()
-        for k, v in (("ANSWER_GRACE_S", 1), ("STALL_S", 1)):
-            self.addCleanup(setattr, watch, k, getattr(watch, k))
-            setattr(watch, k, v)
-        self.addCleanup(setattr, watch, "GRACE_OF", watch.GRACE_OF)
-        watch.GRACE_OF = {}
+        stall_patch = mock.patch.object(watch, "STALL_S", 1)
+        stall_patch.start()
+        self.addCleanup(stall_patch.stop)
+        limits = mock.patch.dict(harnesses.LIMITS, {k: dataclasses.replace(v, grace_s=1) for k, v in harnesses.LIMITS.items()})
+        limits.start()
+        self.addCleanup(limits.stop)
+        self.clock = SteppingClock(0.25)  # a silence or a grace passes in polls, not seconds
+        clock = mock.patch.object(harnesses, "CLOCK", self.clock)
+        clock.start()
+        self.addCleanup(clock.stop)
         penv = dict(os.environ, DELEGATE_CONFIG_DIR=str(self.cfg), HOME=str(self.base), CODEX_HOME=str(self.base))
         for p in (
             mock.patch.dict(os.environ, penv),
             mock.patch.object(sys, "platform", "darwin"),
-            mock.patch.object(OpenCodeHarness, "write_shell"),
+            mock.patch.object(opencode_sandbox, "write_shell"),
             mock.patch.object(env, "child_env", side_effect=lambda extra=None: dict(os.environ, **(extra or {}))),
             mock.patch.object(codex_account, "thread_total", return_value=None),
             mock.patch.object(codex_account, "child_tokens", return_value=({"in": 0, "cached": 0, "out": 0}, 0)),
@@ -102,24 +109,6 @@ class Replay(Case):
             p.start()
             self.addCleanup(p.stop)
         self.a = argparse.Namespace(resume=None, schema=None, timeout=0, role="worker")
-
-    def fake(self, name, lines, hang=True):
-        """A script that prints `lines` and then never exits (its sleep child's pid goes to self.pidfile)."""
-        body = '#!/bin/sh\n[ "$1" = export ] && exit 1\ncat > /dev/null\n'
-        emit = "".join(f"echo '{x}'\n" for x in lines)
-        body += emit + (f"sleep 300 & echo $! > {self.pidfile}; wait\n" if hang else "")
-        f = self.base / name
-        f.write_text(body)
-        f.chmod(0o755)
-        return str(f)
-
-    def alive(self):
-        time.sleep(0.3)
-        try:
-            os.kill(int(self.pidfile.read_text()), 0)
-            return True
-        except OSError:
-            return False
 
     def d(self, kind) -> dict[str, Json]:
         lane = {"codex": "OPENAI_SUBSCRIPTION", "claude": "CLAUDE_SUBSCRIPTION", "opencode": "GROK_SUBSCRIPTION"}[kind]
@@ -136,11 +125,19 @@ class Replay(Case):
         }
         return {"lane": lane, "model": "m", "effort": "high", "role": "worker", "how": how}
 
-    def launch(self, kind, exe, a=None):
+    def launch(self, kind, *script, a=None):
+        """The worker plays `script` (tests/support/fake_worker.py); -> the answer and the workers started."""
         a = a or self.a
         d = self.d(kind)
-        with mock.patch.object(shutil, "which", return_value=exe), mock.patch.object(OpenCodeHarness, "find_exe", return_value=exe):
-            return launch.launch_worker(d, "brief", a, "rid12345", T, env.load_routing(), RunHooks())
+        exe = "/fake/" + kind
+        with (
+            fake_worker.install(list(script), clock=self.clock) as started,
+            mock.patch.object(shutil, "which", return_value=exe),
+            mock.patch.object(OpenCodeHarness, "find_exe", return_value=exe),
+            mock.patch.object(git, "_git", return_value=None),  # no git here: the tree is not a repository
+        ):
+            r = launch.launch_worker(d, "brief", a, "rid12345", T, env.load_routing(), RunHooks())
+        return r, started
 
     CASES: ClassVar = {
         "codex": ([CODEX_STARTED, CODEX_CMD, CODEX_MSG, CODEX_DONE], "codex answer"),
@@ -148,58 +145,44 @@ class Replay(Case):
         "opencode": ([OC_STEP_TOOLS, OC_TEXT, OC_STEP_STOP], "opencode answer"),
     }
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_a_stream_ending_in_its_completion_event_with_a_process_that_never_exits_is_done_in_under_40_s(self):
+    def test_a_stream_ending_in_its_completion_event_with_a_process_that_never_exits_is_done(self):
         for kind, (lines, text) in self.CASES.items():
             with self.subTest(kind):
-                t0 = time.time()
-                r = self.launch(kind, self.fake(kind, lines))
-                assert time.time() - t0 < 40
+                r, started = self.launch(kind, *lines)
                 assert (r.get("outcome"), r["text"]) == (None, text), r
                 assert r["stream_tail"] and lines[-1] in r["stream_tail"][-1], r["stream_tail"]  # the tail is kept on any kill
-                assert not self.alive()
+                assert [p.stopped for p in started] == [True]  # the tree was stopped, not left running
                 if kind != "claude":
                     assert r["warnings"] == ["answer_done_process_alive"]
 
-    @real_proc("delegate: a worker, git or CLI process")
     def test_a_final_message_without_the_completion_event_ends_the_run_too(self):
-        r = self.launch("claude", self.fake("claude", [CLAUDE_TOOL, CLAUDE_TOOL_DONE, CLAUDE_FINAL]))
+        r, _ = self.launch("claude", CLAUDE_TOOL, CLAUDE_TOOL_DONE, CLAUDE_FINAL)
         assert (r.get("outcome"), r["text"], r["warnings"]) == (None, "the final words", ["answer_done_process_alive"])
         assert r["tokens"] == {"in": 55, "cached": 40, "out": 9}  # no result event: usage folded from the stream's requests
         assert (r["acct"]["in_fresh"], r["acct"]["cache_read"], r["acct"]["out"]) == (15, 40, 9)
-        r = self.launch("codex", self.fake("codex", [CODEX_STARTED, CODEX_MSG]))
+        r, started = self.launch("codex", CODEX_STARTED, CODEX_MSG)
         assert (r.get("outcome"), r["text"]) == (None, "codex answer")
-        assert not self.alive()
+        assert started[0].stopped
 
-    @real_proc("delegate: a worker, git or CLI process")
     def test_a_later_event_resets_the_grace(self):
-        script = self.base / "slowclaude"
-        script.write_text(
-            f"#!/bin/sh\ncat >/dev/null\necho '{CLAUDE_RESULT}'\nsleep 0.7\necho '{CLAUDE_RESULT}'\n"
-            f"sleep 300 & echo $! > {self.pidfile}; wait\n"
-        )
-        script.chmod(0o755)
-        t0 = time.time()
-        r = self.launch("claude", str(script))
-        assert time.time() - t0 >= 1.5  # the second turn's event at 0.7 s restarted the 1 s grace
+        r, started = self.launch("claude", CLAUDE_RESULT, Jump(0.7), CLAUDE_RESULT)
         assert (r.get("outcome"), r["text"]) == (None, "claude answer")
+        assert started[0].stopped
+        assert self.clock.t - T >= 0.7 + 1.0  # the second turn's event, 0.7 s on, restarted the 1 s grace
 
-    @real_proc("delegate: a worker, git or CLI process")
     def test_a_stalled_stream_is_killed_and_its_tail_logged(self):
         stalls = {"codex": [CODEX_STARTED, CODEX_CMD], "claude": [CLAUDE_TOOL, CLAUDE_TOOL_DONE], "opencode": [OC_STEP_TOOLS]}
         for kind, lines in stalls.items():
             with self.subTest(kind):
-                t0 = time.time()
-                r = self.launch(kind, self.fake(kind, lines))
-                assert time.time() - t0 < 40
+                r, started = self.launch(kind, *lines)
                 assert r["outcome"] == "hung", r
                 assert r["stream_tail"][-1] == lines[-1]
-                assert not self.alive()
+                assert started[0].stopped
 
     def test_a_tool_in_flight_keeps_the_long_silence_limit(self):
         now = [0.0]
         wd = watch.Watchdog(120, 3600, clock=lambda: now[0])
-        turn = watch.Turn("claude", clock=lambda: now[0])
+        turn = watch.Turn(5, clock=lambda: now[0])
         wd.touch()
         turn.more()
         turn.tool("tu1", True)
@@ -212,7 +195,7 @@ class Replay(Case):
     def test_turn_rules_with_an_injected_clock(self):
         now = [0.0]
         wd = watch.Watchdog(120, 600, clock=lambda: now[0])
-        turn = watch.Turn("codex", clock=lambda: now[0])
+        turn = watch.Turn(1, clock=lambda: now[0])
         wd.touch()
         turn.finished()
         now[0] = 0.5

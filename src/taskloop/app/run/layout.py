@@ -1,6 +1,6 @@
 """Where a run's files live (contracts/locator.py finds them, its manifest is the authority): its engine log and stderr,
 its run folder outside the worktree (brief, plan, node answers, check results,
-where no worker can write them; in lifesim-vbo a writer's sandbox runs kept in .task/ were read as engine results by four planners), and
+where no worker can write them; in a consumer run a writer's sandbox runs kept in .task/ were read as engine results by four planners), and
 the writer's scratch folder in the worktree."""
 import contextlib
 import os
@@ -106,6 +106,11 @@ def loop_of(env: Env, git: Git, wt: str) -> str | None:
     return loop_key(repo_of(git, wt)) if env.get(EnvVar.TASK_LOOP_LOOP_PID) else None
 
 
+def loop_id_of(env: Env) -> str | None:
+    """The id of the loop lifetime that started this run; a run started by hand has none."""
+    return env.get(EnvVar.TASK_LOOP_LOOP_ID) or None
+
+
 def finish_of(home: ConfigDir, run: str) -> RunFinish | None:
     """The run's recorded terminal answer, once there is one."""
     bundle = RunLocator(home).get(run)
@@ -125,12 +130,13 @@ class RunLayout:
 
     @classmethod
     def open(cls, bead: str, wt: str | Path, taken: str | None, home: ConfigDir, repo: str, now: float,
-             loop: str | None = None, *, mode: str = "task", owner: str = "", session: str = "") -> RunLayout:
+             loop: str | None = None, *, mode: str = "task", owner: str = "", session: str = "",
+             loop_id: str | None = None) -> RunLayout:
         """The layout of the run `taken` (a run that goes on after an exec or a pause), else of a new one; its folders are made and its
         manifest is written (a new run) or counts one more attempt (a run taken up)."""
         where = RunLocator(home)
         b = (where.take_up(taken, repo, bead, now) if taken else
-             where.create(repo, bead, now, loop, mode=mode, owner=owner, session=session))
+             where.create(repo, bead, now, loop, mode=mode, owner=owner, session=session, loop_id=loop_id))
         if taken:
             where.identify(b.run, mode, owner, session)
         where.worktree(b.run, str(wt))

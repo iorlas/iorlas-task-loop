@@ -13,7 +13,6 @@ from taskloop.contracts.argv import argv_of
 from taskloop.contracts.checks import UNVERIFIED_EXIT, Check
 from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.paths import RepoDirs
 from taskloop.domain.checks import matchers, retry
 
 
@@ -48,7 +47,7 @@ class Attempts:
                 self._say_stop(c, out)
                 return out
             sig = matchers.output_signature(seen)
-            kind = matchers.failure_kind(seen)
+            kind = matchers.failure_kind(seen, self.host.cfg.lock_fail)
             if kind == "lock":
                 return self._wait_lock(c, log, env, out, stop)
             if tries == 1 and c.repo and self.base.red(c, stop):
@@ -59,7 +58,6 @@ class Attempts:
 
     def _once(self, c: Check, log: Path, env: Mapping[str, str], stop: threading.Event | None) -> tuple[int, str, str, float]:
         t0 = time.time()
-        RepoDirs(self.host.wt).artifacts(self.host.bead).mkdir(parents=True, exist_ok=True)  # the writer's folder for pictures
         rc, tail = self._exec(c, log, env, stop)
         seen = self._read(log, tail)
         took = time.time() - t0
@@ -94,11 +92,11 @@ class Attempts:
             self.host.warn(f"`{c.id}` failed (exit 124), no retry: timed out after {round(out.secs / 60, 1):g} min")
 
     def _again(self, c: Check, out: Outcome, tries: int, sig: str, prior: str) -> bool:
-        if matchers.failure_kind(out.seen) == "deterministic":  # a rerun fails the same way, seconds later
+        if matchers.failure_kind(out.seen, self.host.cfg.lock_fail) == "deterministic":  # a rerun fails the same way, seconds later
             if c.retry:
                 self.host.warn(f"`{c.id}` failed (exit {out.rc}) with a compile error: not retried")
             return False
-        if not retry.retry_allowed(c.retry, tries, out.seen):
+        if not retry.retry_allowed(c.retry, tries, out.seen, self.host.cfg.lock_fail):
             return False
         if prior and sig == prior:
             self.host.warn(f"`{c.id}` failed twice with the same output: not retried")
@@ -121,9 +119,9 @@ class Attempts:
             rc, tail = self._exec(c, log, env, stop)
             seen = self._read(log, tail)
             self.host.waits.note_slot_waits(seen, time.time() - started)
-            if rc == 0 or matchers.failure_kind(seen) != "lock":
+            if rc == 0 or matchers.failure_kind(seen, self.host.cfg.lock_fail) != "lock":
                 break
-        if rc and matchers.failure_kind(seen) == "lock":
+        if rc and matchers.failure_kind(seen, self.host.cfg.lock_fail) == "lock":
             tail += f"\n(still locked after {retry.LOCK_WAIT_MAX} s of waiting)"
         return Outcome(rc, tail, seen, out.tries, out.secs, wall_hit=self.host.wall_hit,
                        stopped=stop is not None and stop.is_set() and self.host.killed and rc != 0)

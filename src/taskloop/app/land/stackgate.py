@@ -5,12 +5,13 @@ and asked again; with no such worktree the gate makes one (detached at the oid, 
 command by hand. Still not green: it stops with the check's exit code. Each refused step says the first key field that differs
 from its newest receipt on the tree and base. A commit with no gate step passes. Its plan_cmd identifies the producer of planned skips."""
 import json
-import tempfile
+import threading
 
 from taskloop.app.checks import authorization
+from taskloop.app.land.carry import Carry
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.profile_change import owner_refusal
-from taskloop.contracts import config
+from taskloop.contracts import config, scratch
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.env import Env
 from taskloop.contracts.ids import CheckId, TreeSha
@@ -61,7 +62,7 @@ class StackGate:
                 continue
         return ""
 
-    def require(self, branch: str, oid: str, *, profile_change: str | None = None) -> str:
+    def require(self, branch: str, oid: str, *, profile_change: str | None = None, regate: bool = True) -> str:
         if why := owner_refusal(profile_change, self.env):
             raise Stop(2, why)
         base = self.cmds.port(f"git rev-parse --verify {self.base_ref}", lambda: self.git.rev_parse(self.repo, self.base_ref))
@@ -90,18 +91,57 @@ class StackGate:
         if profile_change is not None:
             argv.extend(["--policy-commit", base])
         try:
-            ran = self.cmds.run(argv)
-            red = self.red(engine, tree, base, wt)
+            carry = Carry(self.cmds, self.git, self.stores, self.repo, self.env)
+            if sum(carry.carried(engine, step, oid, tree, base, wt) for step in red):  # a pass on an earlier base that still holds
+                red = self.red(engine, tree, base, wt)
+            ran = self.cmds.run(argv) if red else None
+            red = self.red(engine, tree, base, wt) if ran else red
+            now = self.moved_during(branch, oid, wt, base) if red else ""  # while the gate's own checkout still exists
         finally:
             if made:
                 self.cmds.row(f"git worktree remove {made}", lambda: self.git.remove_worktree_force(self.repo, made))
         if red:
-            raise Stop(ran.exit or 1, f"{branch} ({oid[:12]}) is still not green for {self.named(red)} after "
-                                      f"`{text_of(argv)}` (exit {ran.exit})")
+            if now and regate:  # a run that judged inputs that changed under it is not a red
+                self.cmds.log.note(f"{self.base_ref} moved from {base[:12]} to {now[:12]} while the gate ran: gating again on the new base")
+                return self.require(branch, oid, profile_change=profile_change, regate=False)
+            raise Stop(ran.exit if ran and ran.exit else 1, f"{branch} ({oid[:12]}) is still not green for {self.named(red)} after "
+                                                      f"`{text_of(argv)}` (exit {ran.exit if ran else 'not run'})")
         return base
+
+    def needs_run(self, oid: str) -> bool:
+        """True when a gate step of the base's profile has no evidence for this oid yet: a `tl check` would be run for it (a read only;
+        a profile change or a missing base is `require`'s to refuse)."""
+        base = self.cmds.port(f"git rev-parse --verify {self.base_ref}", lambda: self.git.rev_parse(self.repo, self.base_ref))
+        engine = self.profile(base) if base else None
+        if engine is None or not engine.gate_checks:
+            return False
+        tree = self.cmds.port(f"git rev-parse --verify {oid[:12]}^{{tree}}", lambda: self.git.rev_parse(self.repo, f"{oid}^{{tree}}"))
+        return bool(tree) and bool(self.red(engine, tree, base))
+
+    def warm(self, oid: str, git_lock: threading.Lock) -> int:
+        """Run `tl check` for the oid in a fresh worktree, the one `require` would make, so its receipts exist when `require` asks. Runs in
+        a worker thread: only the spawner runs outside `git_lock` and nothing here writes a log row; -> the check's exit code."""
+        with git_lock:
+            path = self.fresh(oid)
+        try:
+            return self.cmds.spawner.run([*self.tl, "check", "--repo", path], cwd=path).exit
+        finally:
+            with git_lock:
+                self.cmds.row(f"git worktree remove {path}", lambda: self.git.remove_worktree_force(self.repo, path))
+
+    def moved_during(self, branch: str, oid: str, wt: str, base: str) -> str:
+        """After a red run: the worktree's HEAD or the base moved while `tl check` ran (a merge of main into the worktree, another
+        lander), so the run judged inputs other than the key read before it. A moved HEAD is another tree: nothing was judged, Stop.
+        -> the new base when it moved, else ''."""
+        head = self.cmds.port(f"git rev-parse HEAD in {wt}", lambda: self.git.rev_parse(wt, "HEAD")) if wt else oid
+        if head != oid:
+            raise Stop(1, f"{branch}: the worktree {wt} moved from {oid[:12]} to {head[:12]} while the gate ran; nothing is judged. "
+                          "Run it again once nothing else changes that worktree")
+        now = self.cmds.port(f"git rev-parse --verify {self.base_ref}", lambda: self.git.rev_parse(self.repo, self.base_ref))
+        return now if now and now != base else ""
 
     def fresh(self, oid: str) -> str:
         """A clean worktree detached at `oid`, made for this gate run: a fresh checkout is what a land gate judges anyway."""
-        path = tempfile.mkdtemp(prefix="tl-land-gate-")  # an empty directory: git adds a worktree into it
+        path = str(scratch.scratch_dir(self.env.vars, "tl-land-gate-"))  # an empty directory: git adds a worktree into it
         self.cmds.port(f"git worktree add --detach {path} {oid[:12]}", lambda: self.git.add_worktree(self.repo, path, oid))
         return path

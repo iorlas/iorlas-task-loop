@@ -16,7 +16,6 @@ from taskloop.domain.lanes.says import stop_say, stop_why
 
 class RunHost(LandParts, PlanParts, RunParts):
     done: list[str]  # RunState fields the tests assign
-    writer_said: str
     accepted: list[int]
     stage_tree: str
     replan_first: bool

@@ -19,6 +19,7 @@ from support.spawn import real_spawner  # noqa: E402
 
 from taskloop.adapters import procs  # noqa: E402
 from taskloop.app.launch import dash as dash_server  # noqa: E402
+from taskloop.contracts.dash import READ_PROTOCOL  # noqa: E402
 from taskloop.contracts.env import Env as ProcessEnv  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop_dash import bind  # noqa: E402
@@ -36,9 +37,9 @@ def free_port():
     return p
 
 
-def live(script, version="v1", binds=("127.0.0.1",), pid=4242):
+def live(script, version="v1", binds=("127.0.0.1",), pid=4242, protocol=READ_PROTOCOL):
     return {"version": version, "pid": pid, "script": str(script), "binds": list(binds),
-            "urls": [f"http://{b}:7878" for b in binds], "started": 1.0}
+            "urls": [f"http://{b}:7878" for b in binds], "started": 1.0, "protocol": protocol}
 
 
 class StaleReason(Case):
@@ -59,6 +60,10 @@ class StaleReason(Case):
 
     def test_version_differs_is_stale(self):
         assert "version" in must(dash_server.stale_reason(live(self.script, "v0"), "v1", ["127.0.0.1"]))
+
+    def test_a_server_speaking_another_read_protocol_is_stale_even_at_the_same_code_version(self):
+        assert "protocol" in must(dash_server.stale_reason(live(self.script, protocol=READ_PROTOCOL + 1), "v1", ["127.0.0.1"]))
+        assert "protocol" in must(dash_server.stale_reason(live(self.script, protocol=None), "v1", ["127.0.0.1"]))
 
     def test_missing_address_is_stale(self):
         r = dash_server.stale_reason(live(self.script), "v1", ["127.0.0.1", "100.1.2.3"])
