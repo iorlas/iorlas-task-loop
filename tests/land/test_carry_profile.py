@@ -18,4 +18,3 @@ def suite():
 def test_the_gate_check_names_the_closure_command():
     cmd = suite().closure_cmd
     assert cmd[-1] == "--closure" and (ROOT / cmd[-2]).is_file()
-
