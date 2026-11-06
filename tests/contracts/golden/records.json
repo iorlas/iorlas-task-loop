@@ -721,7 +721,8 @@
   "pass_files": false,
   "files": [],
   "run_in": "slot",
-  "lane": ""
+  "lane": "",
+  "where": "host"
  },
  "plancheck.Ref": {
   "kind": "ref",
@@ -1544,6 +1545,7 @@
      "group": "static",
      "run": "stage",
      "run_in": "clean",
+     "in": "host",
      "when": [
       "x/**"
      ],
@@ -1575,6 +1577,7 @@
      "group": "tests",
      "run": "gate",
      "run_in": "slot",
+     "in": "host",
      "when": [],
      "retry": 0,
      "wall_min": null,
@@ -1667,6 +1670,23 @@
     "unity": {
      "limit": 2
     }
+   },
+   "executor": {
+    "host": "",
+    "root": "tl",
+    "ssh": [
+     "ssh",
+     "-o",
+     "BatchMode=yes",
+     "-o",
+     "ConnectTimeout=10",
+     "-o",
+     "ControlMaster=auto",
+     "-o",
+     "ControlPath=~/.ssh/tl-%C",
+     "-o",
+     "ControlPersist=60"
+    ]
    },
    "evidence_cap_mb": 200
   },

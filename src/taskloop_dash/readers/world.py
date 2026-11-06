@@ -22,7 +22,7 @@ from taskloop.contracts.ledger import LedgerEntry
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.looprows import LoopRows
 from taskloop.contracts.run import RunState
-from taskloop.contracts.runlife import RETAIN, Liveness, shown
+from taskloop.contracts.runlife import GONE, RETAIN, Liveness, shown
 from taskloop.contracts.slots import slots_of
 from taskloop.contracts.slottable import SlotSource
 from taskloop.contracts.stores import LIVE, StatusStore
@@ -118,7 +118,7 @@ class Worlds:
     def bead_runs(self, path: str, bead: str) -> list[Run]:
         """DB state and log-reader history for only this drawer's runs."""
         now = self.env.clock()
-        rows, _ = dbruns.read(self.env.config, now, repo=path, bead=bead)
+        rows, _ = dbruns.read_kept(self.env.kept_runs, self.env.config, now, repo=path, bead=bead)
         return [replace(r.project(now), records=self.logs.records(r.manifest.run)) for r in rows if r.has_log]
 
     def runs(self, full: tuple[str, str] | None = None, rows: list[StoredRun] | None = None) -> dict[tuple[str, str], list[Run]]:
@@ -126,7 +126,7 @@ class Worlds:
         now = self.env.clock()
         out: dict[tuple[str, str], list[Run]] = {}
         if rows is None:
-            rows, _ = dbruns.read(self.env.config, now)
+            rows, _ = dbruns.read_kept(self.env.kept_runs, self.env.config, now)
         for row in rows:
             key = (loop_key(row.manifest.repo), row.manifest.bead)
             if row.has_log and (key == full or row.manifest.state.live or row.log_mtime >= now - RETAIN):
@@ -143,12 +143,12 @@ class Worlds:
         out: list[RunHeader] = []
         parks = self.records.parks()
         if rows is None:
-            rows, _ = dbruns.read(self.env.config, now)
+            rows, _ = dbruns.read_kept(self.env.kept_runs, self.env.config, now)
         for row in reversed(rows):
             m = row.manifest
             if not m.mode or m.repo not in projects or (not m.state.live and (m.ended or m.started) < now - RETAIN):
                 continue
-            state = RunState.LOST if shown(m, now) is Liveness.LOST else m.state
+            state = RunState.LOST if shown(m, now) in GONE else m.state
             park = parks.get(m.bead)
             out.append(RunHeader(run=m.run, project=projects[m.repo], mode=m.mode, owner=m.owner, session=m.session,
                                  state=state, started=m.started, ended=m.ended, reason=m.reason, bead=m.bead,
@@ -159,7 +159,7 @@ class Worlds:
     def leases(self, now: float, rows: list[StoredRun] | None = None) -> list[ResourceLease]:
         """Join a live lease's pid to its run manifest; the holder hint itself has no run id."""
         if rows is None:
-            rows, _ = dbruns.read(self.env.config, now)
+            rows, _ = dbruns.read_kept(self.env.kept_runs, self.env.config, now)
         runs = [r.manifest for r in rows if shown(r.manifest, now) is Liveness.LIVE]
         projects = {path: project for project, path in self.repos().items()}
         out: list[ResourceLease] = []
@@ -189,7 +189,7 @@ class Worlds:
     def world(self, full: tuple[str, str] | None = None) -> World:
         env = self.env
         now = env.clock()
-        rows, database_error = dbruns.read(env.config, now)
+        rows, database_error = dbruns.read_kept(env.kept_runs, env.config, now)
         try:
             asks, ledger = read_snapshot(env.config)
         except factorydb.DatabaseError as error:

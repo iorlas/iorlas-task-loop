@@ -82,6 +82,7 @@ class Check(Rec):
     files: list[str] = msgspec.field(default_factory=list)  # those files; part of the result key
     run_in: Literal["clean", "slot"] = "clean"  # filesystem used by the committed land gate; stage rounds always use the slot
     lane: str = ""  # its lane: the checks of one run in order, the lanes in parallel
+    where: Literal["host", "linux"] = "host"  # linux: run on engine.executor over ssh, from the pushed commit
 
 
 @final

@@ -12,7 +12,8 @@ from taskloop_dash.views.live_events import ENGINE
 
 TermTone = Literal["", "err", "ok", "dim", "warn"]
 STATE: Final[dict[Liveness, Literal["live", "ended", "lost"]]] = {
-    Liveness.LIVE: "live", Liveness.ENDED: "ended", Liveness.LOST: "lost"}
+    Liveness.LIVE: "live", Liveness.ENDED: "ended", Liveness.LOST: "lost",
+    Liveness.SUSPECT: "lost"}  # its process is gone; the page does not wait for the reconciler to say so
 OUT_LINES = 12  # lines of a command's output shown after its exit
 
 
