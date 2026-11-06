@@ -31,9 +31,11 @@ from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import MODE, Stack
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.run.finish import answer
+from taskloop.app.track import runs
 from taskloop.app.track.verbs import trace
 from taskloop.app.wire import closeguard
 from taskloop.cli.land_stack import cmd_land_stack
+from taskloop.contracts import log
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.checks import Check, CheckResult
 from taskloop.contracts.config import load
@@ -177,7 +179,7 @@ class StackCase(Case):
         forge = Forge(cmds, self.git, str(self.repo), "main")
         gate = StackGate(cmds, self.git, real_stores(self.cfg), str(self.repo), "origin/main", ["tl"])
         stack = Stack(forge, cmds, log, self.git, str(self.repo), lock, self.record, lambda: self.synced, "tl-me", "sess-1", gate,
-                      FakeBeads(actor="tl-me"), named=self.beads.append, **kw)
+                      FakeBeads(actor="tl-me"), named=self.beads.append, cfg=self.cfg, **kw)
         self.rc = stack.run(list(items))
         done = oc.make(Kind.LANDED if self.rc == 0 else Kind.FAULT_LAND,
                        f"{len(items)} delivered" if self.rc == 0 else stack.failure_reason, sha=stack.last)
@@ -199,6 +201,15 @@ class Delivery(StackCase):
         assert self.sim.ran("gh pr merge 1")[0].endswith("--match-head-commit " + "a" * 40)
         assert self.git.deleted == ["task/a", "task/b"]
 
+    def test_a_land_run_shows_a_timed_step_per_phase(self):
+        phases = ["fetch", "gate", "push", "pr", "lock-wait", "merge", "record", "cleanup"]
+        self.deliver(StackItem(branch="task/a"))
+        timed = runs.items("r", [log.decode(r) for r in self.rows])
+        named = {i.name.removeprefix("land:"): i for i in timed if i.name.startswith("land:") and i.kind == "step"}
+        assert set(phases) <= set(named)
+        assert all(named[p].exec_s > 0 for p in phases if p != "lock-wait")
+        assert "land:task/a" in {i.name for i in timed}
+
     def test_every_command_is_a_row_of_the_run_and_the_run_is_labelled(self):
         self.deliver(StackItem(branch="task/a"))
         start = self.kinds("run_start")[0]
@@ -210,7 +221,7 @@ class Delivery(StackCase):
         assert len(starts) == len(self.kinds("cmd_end"))
         assert self.kinds("close")[0]["outcome"] == "landed"
         assert self.kinds("lock")[0]["what"] == "land"
-        assert [r["bead"] for r in self.kinds("step_start")] == ["a"]
+        assert [r["bead"] for r in self.kinds("step_start") if r["step"] == "land:task/a"] == ["a"]
 
     def test_a_failing_merge_stops_with_its_exit_code_and_leaves_later_prs_untouched(self):
         self.sim.fail["gh pr merge"] = 7

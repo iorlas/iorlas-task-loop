@@ -40,9 +40,12 @@ BUDGET_LINES = 10
 def hint(node: str, row: dict[str, float]) -> str:
     """The fix class of a slow test, from what the recorder knows: waiting, a real thing as a consumer, or setup work."""
     cpu, wall = total(row), row.get("call_wall", 0) + row.get("setup_wall", 0) + row.get("teardown_wall", 0)
+    real = "/real/" in node or "/e2e/" in node
     if wall > 2 * cpu + 1:
+        if real:
+            return "waits on a real process or socket: wait for its event or file (support.waits.until), not a fixed sleep or the clock"
         return "waits: inject the clock (fake_clock), no time.sleep"
-    if "/real/" in node or "/e2e/" in node:
+    if real:
         return "real: keep the contract once per port, test consumers on gitsim/procsim"
     return "spawns or builds a store: fake the port (procsim/gitsim) or copy a template"
 

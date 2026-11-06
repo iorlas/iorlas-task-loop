@@ -9,7 +9,7 @@ from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.landed import Landed, landed_in
-from taskloop.contracts.paths import ConfigDir, RepoDirs
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git
 from taskloop.contracts.reconcile import Lease, SlotFact, epoch
 from taskloop.contracts.slots import SlotGitError
@@ -155,13 +155,13 @@ def last_used(d: Path, git: Git) -> float:
     return max(stamps, default=0.0)
 
 
-def worktree(d: Path, repo: Path, git: Git) -> Worktree:
+def worktree(d: Path, repo: Path, git: Git, cfg: ConfigDir) -> Worktree:
     try:
         dirty = "uncommitted or untracked files" if git.status(str(d)) else ""
     except SlotGitError:
         dirty = "git status failed"
     here = d.resolve()
-    return Worktree(str(d), str(here), str(repo), RepoDirs(d).engine_lock().exists(), Path.cwd().resolve().is_relative_to(here),
+    return Worktree(str(d), str(here), str(repo), cfg.engine_lock(d).exists(), Path.cwd().resolve().is_relative_to(here),
                     dirty, tidy.on_base(git, str(d), "HEAD"), last_used(d, git))
 
 
@@ -199,5 +199,5 @@ def observe(repos: list[str], store_of: Callable[[str], Beads] | None, build: Pa
     for d in sorted(build.iterdir()) if build is not None and build.is_dir() else []:
         # a main checkout (a .git folder) or a worktree of a repo we never ran in is not ours to tidy
         if (d / ".git").is_file() and (repo := main_repo(d)) in known:
-            trees.append(worktree(d, repo, git))
+            trees.append(worktree(d, repo, git, cfg))
     return Observed(now, keep_days, tuple(views), tuple(trees))
