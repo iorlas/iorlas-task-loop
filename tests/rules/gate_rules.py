@@ -598,7 +598,8 @@ class VendorGuard(Case):
     def test_every_vendored_package_imports_by_its_absolute_name(self):
         names = [e["name"] for e in VENDOR.load()]
         assert names == [
-            "any_agent", "any_breaker", "any_clock", "any_failure_fp", "any_json_doc", "any_lease", "any_net", "any_plugin_cache",
+            "any_agent", "any_breaker", "any_clock", "any_contract", "any_failure_fp", "any_json_doc", "any_lease", "any_net",
+            "any_plugin_cache",
             "any_shell_policy", "app_dirs", "atomic_io", "beads_client",
             "child_env",
             "git_porcelain", "jsonl_log", "process_lock", "shelf_vendor", "sqlite_store", "static_page_check", "stream_proc", "timefmt",

@@ -3,6 +3,8 @@ that breaks the shape becomes a synthesized stop, never an exception. A status w
 here and nowhere else (`answer_status`, `answer_next`): contract 4 carries neither on the wire or in `DelegateResult`."""
 from typing import Any, Literal, get_args
 
+from any_contract import check_contract
+
 from taskloop.contracts.delegate import (
     REASON_TIMEOUT,
     Accounting,
@@ -178,8 +180,10 @@ def _dict(v: Any) -> dict[str, Any] | None:
 
 
 def result_of(j: Any) -> DelegateResult:
-    if not isinstance(j, dict) or j.get("contract") != CONTRACT or "stop" not in j:
-        return synth("contract_violation", "machine", "needs_owner", f"an answer that is not delegate contract 4: {j!r:.300}")
+    bad = check_contract(CONTRACT, j)
+    if bad or "stop" not in j:
+        why = bad.text if bad else f"a contract {CONTRACT} answer without a stop: {j!r:.300}"
+        return synth("contract_violation", "machine", "needs_owner", why)
     try:
         stop = stop_of(j["stop"])
     except ValueError as e:
