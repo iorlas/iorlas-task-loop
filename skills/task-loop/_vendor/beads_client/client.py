@@ -108,7 +108,7 @@ class Bd:
                 return None
             raise err
         found = beads_of(loads(r.out), r.out)
-        return found[0]
+        return found[0] if found else None  # `[]`: bd answered and the bead is not there
 
     def comments(self, bead: str) -> list[Comment]:
         r = self._must("comments", bead)

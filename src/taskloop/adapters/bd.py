@@ -137,14 +137,7 @@ class BdStore:
             raise BdFailure(BdError(kind="malformed", text=str(e))) from None
 
     def show(self, bead: BeadId) -> Bead | None:
-        def one() -> Bead | None:
-            b = self._bd.show(bead)
-            return _bead(b) if b else None
-
-        try:
-            return self._raising(one)
-        except IndexError:  # `[]`: bd answered and the bead is not there
-            return None
+        return self._raising(lambda: (_bead(b) if (b := self._bd.show(bead)) else None))
 
     def comments(self, bead: BeadId) -> list[Comment]:
         try:
