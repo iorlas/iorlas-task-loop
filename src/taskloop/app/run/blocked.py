@@ -2,13 +2,14 @@
 from typing import Any
 
 from taskloop.contracts.kinds import ASKS, Kind
+from taskloop.contracts.stop import Stop
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes import caps
 
 
-class Blocked(Exception):
+class Blocked(Stop):
     """A stop. kind: the outcome.Kind that says what the engine does at the close (POLICY). spec: the AskSpec of an ask kind (what
     the owner is asked, built from facts at the raise site); a stop that is no ask carries none."""
 
