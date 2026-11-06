@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from os import EX_CONFIG
 from pathlib import Path
 
-from taskloop.app.land import intake
+from taskloop.app.asks import deferral as intake
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop import waits
 from taskloop.app.loop.core import Core, prio_of

@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 
-from taskloop.app.land import intake
+from taskloop.app.asks import deferral as intake
 from taskloop.contracts.ports import BeadQuery, NewBead
 
 
@@ -22,14 +22,14 @@ def filed(store, n, priority=None):
 
 
 def status_of(store, ids):
-    return [store.show(i).status for i in ids]
+    return [b.status for b in (store.show(i) for i in ids) if b is not None]
 
 
 def test_defer_leaves_the_bead_labelled_and_out_of_ready():
     store = FakeBeads()
     (made,) = filed(store, 1)
-    assert store.show(made).status == "deferred"
-    assert intake.FROM_REVIEW in store.show(made).labels
+    got = store.show(made)
+    assert got is not None and got.status == "deferred" and intake.FROM_REVIEW in got.labels
     assert store.ready() == []
 
 
@@ -58,7 +58,7 @@ def test_higher_priority_goes_first_and_off_promotes_nothing():
     high = filed(store, 1, priority=1)
     assert intake.promote(store, 0, "2026-11-06") == []
     assert intake.promote(store, 1, "2026-11-06") == high
-    assert store.show(low[0]).status == "deferred"
+    assert status_of(store, low) == ["deferred"]
 
 
 @pytest.mark.parametrize("per_day", [0, -1])

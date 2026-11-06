@@ -1535,6 +1535,7 @@
    "epic_order": [],
    "epic_only": false,
    "reflect": true,
+   "intake_per_day": 0,
    "writer_family": [],
    "writer_exec_allow": [],
    "writer_read_roots": [],
