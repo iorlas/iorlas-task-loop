@@ -12,7 +12,8 @@ from taskloop.contracts.checkpoint import Checkpoint, StageProgress
 from taskloop.contracts.checks import Check, CheckResult, CheckRun
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.fence import Claim
-from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ids import BeadId, CheckId
+from taskloop.contracts.log import EngineLog
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.plancheck import PlanCheck
 
@@ -49,6 +50,13 @@ class Narrate(Protocol):
     def warn(self, text: str) -> int: ...
 
 
+class RunLogPort(Narrate, Protocol):
+    """The run log as a stage that writes typed records sees it (the checks): Narrate plus `emit` and `next_id`."""
+
+    def emit(self, rec: EngineLog) -> int: ...
+    def next_id(self, prefix: str) -> str: ...
+
+
 class StepBook(Protocol):
     @property
     def id(self) -> str: ...
@@ -77,6 +85,9 @@ class CheckpointsPort(Protocol):
 
 
 class CheckLogPort(Protocol):
+    env: dict[str, str]  # the environment the checks of this run were given, kept for the record
+    logged: set[CheckId]  # the checks whose start is already in the log
+
     def start(self, c: Check, rnd: int, log: str = ...) -> str: ...
     def close(self, c: Check, res: CheckResult, cid: str | None, rnd: int) -> None: ...
     def round(self, node_id: str, run: CheckRun) -> None: ...

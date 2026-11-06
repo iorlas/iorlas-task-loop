@@ -2,7 +2,6 @@
 means (a question, an accepted requirement that decides it, shots a visual stage owes) and the cases it adds."""
 from typing import Any
 
-from taskloop.adapters.check_files import repo_key
 from taskloop.app.write import show_check
 from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.state import AGAIN, REPLAN, StageState
@@ -42,7 +41,7 @@ class WriteRound:
         self.shots_contract(s, prompt)
         e.cases.add_cases(s.w.get("new_cases") or [])
         if e.pictures.shot_methods() and e.pictures.stage_visual(s.st):
-            e.render_stale = True  # a write after the last render: its pictures show an older tree
+            e.pictures.mark_stale()  # a write after the last render: its pictures show an older tree
         back = self.show_contract(s)
         if back:  # a show item lacks its artifacts: the writer registers them before any check runs
             return back
@@ -118,9 +117,8 @@ class WriteRound:
         e = self.e
         if not s.last or s.fix:
             return ""
-        e.artifact_repo = e.artifact_repo or repo_key(e.git, e.wt)
         miss = show_check.missing((e.plan_data or {}).get("cases") or [], e.home.artifact_store(),
-                                  show_check.slot_of(e.artifact_repo, e.bead, e.run_id, s.n))
+                                  show_check.slot_of(e.ports.repo.key(), e.bead, e.run_id, s.n))
         if not miss:
             return ""
         if s.show_fixed:

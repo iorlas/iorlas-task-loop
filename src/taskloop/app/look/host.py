@@ -15,6 +15,7 @@ from taskloop.contracts.config import EngineConfig, VisualConfig
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.plancheck import StageData
+from taskloop.contracts.stagefacts import RepoKey
 from taskloop.contracts.wire import Open
 from taskloop.stores.runlog import RunLog
 
@@ -66,6 +67,11 @@ class LockWaits(Protocol):
     def locked(self, what: str, path: Path | str, holder: str | None = ...) -> AbstractContextManager[Path | str]: ...
 
 
+class LookPorts(Protocol):
+    @property
+    def repo(self) -> RepoKey: ...
+
+
 class LookHost(Protocol):
     """The engine, as the look stage sees it. The look-owned state is `look` (LookState); artifact_repo and render_stale stay on the engine
     (a run fact and a hand-off from write)."""
@@ -102,6 +108,7 @@ class LookHost(Protocol):
     artifact_repo: str
     render_stale: bool
     look: LookState
+    ports: LookPorts
 
     def ai(self, node: str, title: str, prompt: str, *a: object, **kw: object) -> Asked: ...
     def comment(self, text: str) -> None: ...

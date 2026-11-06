@@ -9,9 +9,9 @@ from taskloop.contracts.gitfacts import StatusRow
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.slots import SlotGitError
+from taskloop.contracts.stagefacts import RunLogPort
 from taskloop.domain.matchers import NetText
 from taskloop.domain.write.newfiles import new_file_kind
-from taskloop.stores.runlog import RunLog
 
 
 class CheckoutConfig(Protocol):
@@ -34,7 +34,7 @@ class CheckoutHost(Protocol):
     @property
     def cfg(self) -> CheckoutConfig: ...
     @property
-    def log(self) -> RunLog: ...
+    def log(self) -> RunLogPort: ...
     @property
     def accepted_new(self) -> list[str]: ...
     @property
