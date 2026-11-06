@@ -9,7 +9,6 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
-from delegate.adapters import agent_runs
 from delegate.adapters.harness.opencode import OpenCodeHarness
 from delegate.app import decide as dec
 from delegate.app import env, launch, usage
@@ -78,11 +77,9 @@ class DeepSeekTests:
                 replay(["{}"]),
                 patch.object(Settler, "mark_out"),
                 patch.object(env, "update_state"),
-                patch.object(agent_runs, "run"),
-                patch.object(agent_runs, "lanes"),
                 patch.object(env, "child_env", return_value={"OPENCODE_CONFIG": "/private/key-config", "OPENCODE_AUTH_JSON": "secret"}),
             ):
-                result = launch.launch_worker(d, "Say OK", a, "test1234", 1, env.load_routing(), {}, RunHooks())
+                result = launch.launch_worker(d, "Say OK", a, "test1234", 1, env.load_routing(), RunHooks())
                 if valid:
                     wenv = guard.call_args.args[1]
                     assert "OPENCODE_CONFIG" not in wenv

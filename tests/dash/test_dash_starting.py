@@ -5,6 +5,8 @@ from support.dashlogs import RunScript, T, bead
 
 from taskloop.contracts.dash import Column
 from taskloop.contracts.events import Claim, SlotSetup, SlotTake, Stage
+from taskloop.contracts.ids import BeadId
+from taskloop.contracts.reconcile import Stray
 from taskloop_dash.views.floor import slot_of
 from taskloop_dash.views.snapshot import build
 from taskloop_dash.views.world import ProjectIn, World
@@ -67,3 +69,19 @@ class Starting(Case):
         snap = build(World(now=NOW, host="host", version="test", projects=[p], runs={}, asks={}))
         assert snap.slots[0].state == "starting"
         assert snap.beads[0].column == Column.WORKING
+
+
+class Abandoned(Case):
+    def snap(self, expired):
+        p = project()
+        p = ProjectIn(id=p.id, name=p.name, beads=p.beads,
+                      strays=[Stray("bead", BeadId("p-1"), "p-1", "tl-loop", 1, expired)])
+        return build(World(now=NOW, host="host", version="test", projects=[p], runs={}, asks={})).beads[0]
+
+    def test_a_claim_with_an_ended_lease_and_no_run_is_not_running(self):
+        card = self.snap(True)
+        assert (card.column, card.marker.value) == (Column.WORKING, "exited")
+        assert card.status == "claimed by tl-loop, no live run (lease ended)"
+
+    def test_a_claim_inside_its_lease_is_still_starting(self):
+        assert self.snap(False).marker.value == "run"

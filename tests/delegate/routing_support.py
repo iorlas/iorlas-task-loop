@@ -118,7 +118,6 @@ def fleet_patches(ls):
     builder = types.SimpleNamespace(build=lambda *a, **k: Fleet(ls))
     with contextlib.ExitStack() as stack:
         stack.enter_context(mock.patch.object(dec, "fleet_builder", return_value=builder))
-        stack.enter_context(mock.patch.object(dec, "publish_lanes"))
         for m in (dec, cockpit):
             stack.enter_context(mock.patch.object(m, "mark_busy", side_effect=lambda lanes, *a, **k: lanes))
         yield

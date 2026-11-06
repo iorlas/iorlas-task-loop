@@ -10,6 +10,7 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
+from support.memstores import fake_stores
 from support.narrow import must
 from support.tiers import domain
 
@@ -21,7 +22,6 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import NewBead
 from taskloop.domain.asks import specs
 from taskloop.domain.asks.lint import INFRA
-from taskloop.stores.memory import fake_stores
 
 T = 1000.0
 

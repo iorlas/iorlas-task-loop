@@ -8,11 +8,11 @@ from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.argv_checks import ArgvChecks
 from support.fake_checks import FakeChecks, failed, hung, passed
 from support.procsim import real_proc
 from support.tags import contract, domain
 
-from taskloop.adapters.checks_argv import ArgvChecks
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ports import Checks, CheckSpec
 
