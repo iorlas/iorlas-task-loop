@@ -13,11 +13,11 @@ from support.tmpdir import TemporaryDirectory
 
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.checks import BaseRedRecord, CheckResult, PassRecord
+from taskloop.contracts.docstore import Absent, Present
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.receiptrows import DbDocSet
 from taskloop.contracts.runkey import BaseSha, Digest, RunKey
-from taskloop.contracts.stores import Absent, Present
 from taskloop.stores.real import real_stores
 
 

@@ -7,8 +7,8 @@ from typing import Literal
 
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.checks import BaseRedRecord, PassRecord
+from taskloop.contracts.docstore import Absent, Present, Read
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import Absent, Present, Read
 
 type Kind = Literal["pass", "base_red"]
 

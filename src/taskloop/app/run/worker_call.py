@@ -124,10 +124,10 @@ class WorkerCall:
         writer = writer_family if node in READ_ONLY_NODES else None
         resume = resume_ref or (e.writer.delegate if resume_key else None)
         if resume and resume_key and e.writer_fallback:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
-            lane = dg.lane_status(e.env).get(e.fallback_lane) if e.fallback_lane else None
-            if e.fallback_lane and not isinstance(lane, dict):  # that lane is not configured here: no fallback
+            lane = dg.lane(e.fallback_lane) if e.fallback_lane else None
+            if e.fallback_lane and lane is None:  # that lane is not configured here: no fallback
                 e.writer_fallback, e.fallback_lane = False, ""
-            elif lane is None or lane.get("out") is False:  # back again, or no lane known to wait for
+            elif lane is None or lane.usable is True:  # back again, or no lane known to wait for
                 e.steps.move(
                     step or node,
                     "fallback_retake",

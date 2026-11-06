@@ -22,11 +22,11 @@ from taskloop.app.asks import intake, raiser
 from taskloop.contracts import wire
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import SimilarRef, ThreadEntry
+from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import Column, Marker, OwnerCause, Result, Stick
 from taskloop.contracts.ids import BeadId, loop_key
 from taskloop.contracts.ledger import Adr
-from taskloop.contracts.stores import AskStore
 from taskloop.domain.asks import specs
 from taskloop_dash.views import bead_detail, snapshot
 from taskloop_dash.views.board import Board
