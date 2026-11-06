@@ -16,11 +16,12 @@ from typing import Any
 
 from taskloop.adapters import beadtools, childenv, ident, landlock
 from taskloop.contracts import wire
+from taskloop.contracts.beadsport import BdFailure, BeadQuery, NewBead
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadQuery, NewBead, Spawner
+from taskloop.contracts.procport import Spawner
 from taskloop.contracts.rowstores import ReflectStateStore, ReposStore
 from taskloop.contracts.snapshots import ReflectState
 from taskloop.domain.lifecycle import matchers

@@ -5,9 +5,9 @@ from collections.abc import Sequence
 from typing import Final
 
 from taskloop.contracts.argv import FORM, argv_problems
+from taskloop.contracts.checksport import TreeProbe
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.plancheck import Adhoc, Ref
-from taskloop.contracts.ports import TreeProbe
 from taskloop.domain.checks import produced
 from taskloop.domain.checks.cmd import matchers as sh
 from taskloop.domain.checks.names import norm

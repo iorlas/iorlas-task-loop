@@ -14,10 +14,10 @@ from taskloop.app.loop.settle import Counters, Settle
 from taskloop.app.loop.take import Taker
 from taskloop.app.slots.pool import Slot
 from taskloop.contracts.bead import BdError, Bead
+from taskloop.contracts.beadsport import BdFailure
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.enums import Result
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure
 from taskloop.contracts.slots import SlotFail, SlotGitError
 from taskloop.domain.lanes import pauses
 

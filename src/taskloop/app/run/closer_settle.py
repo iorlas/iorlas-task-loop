@@ -7,11 +7,11 @@ from taskloop.app.asks import parks
 from taskloop.app.track import verbs as track
 from taskloop.app.wire import closeguard
 from taskloop.contracts import fence
+from taskloop.contracts.beadsport import BeadPatch, Beads
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Infra, Kind, Owner, Task
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BeadPatch, Beads
 from taskloop.domain import outcome as oc
 from taskloop.domain.land.matchers import without_prefix
 

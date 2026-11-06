@@ -3,7 +3,7 @@ import hashlib
 
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import registered
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 
 
 def owner_refusal(text: str | None, env: Env) -> str:

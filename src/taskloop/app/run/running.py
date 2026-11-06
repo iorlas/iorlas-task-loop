@@ -10,10 +10,11 @@ from taskloop.app.loop.queue import QueueRule, area_busy_text
 from taskloop.app.run import console
 from taskloop.app.slots import engine_lock
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.enums import LockWhat
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, is_bead_id
-from taskloop.contracts.ports import Beads, Git
 
 
 def running(repo: str, git: Git, who: Identity, store: Beads | None = None) -> dict[BeadId, str]:

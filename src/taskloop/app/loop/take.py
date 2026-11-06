@@ -14,11 +14,11 @@ from taskloop.app.slots.pool import SlotPool
 from taskloop.app.slots.reset import setup
 from taskloop.contracts.bdsafe import attempt
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BdFailure, BeadPatch
 from taskloop.contracts.config import ConfigError, EngineConfig, LoopConfig
 from taskloop.contracts.enums import Result
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.parks import ParkStore
-from taskloop.contracts.ports import BdFailure, BeadPatch
 from taskloop.contracts.slots import SlotFail, SlotGitError
 from taskloop.domain.lanes import pauses
 

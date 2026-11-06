@@ -5,17 +5,18 @@ from unittest import mock
 
 import pytest
 from support import procsim
-from support.builders import plan_of
-from support.engine_case import CLEAN, PLAN, RED_ONCE, WRITE, EngineTest
+from support.cfgs import plan_of
+from support.engine_case import EngineTest
 from support.logs import records
 from support.narrow import must
+from support.plans import CLEAN, PLAN, RED_ONCE, WRITE
 
 from taskloop.app.run.blocked import Blocked
 from taskloop.app.write.prepare import Prepare
 from taskloop.app.write.state import StageState
 from taskloop.contracts import rundocs
 from taskloop.contracts.kinds import Kind
-from taskloop.contracts.ports import Ran
+from taskloop.contracts.procport import Ran
 
 
 class PrepareTests(EngineTest):

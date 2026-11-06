@@ -15,8 +15,8 @@ from taskloop.app.slots.env import stamp
 from taskloop.app.slots.line import order
 from taskloop.app.slots.pool import Slot
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BeadPatch
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BeadPatch
 from taskloop.contracts.slots import SlotFail
 from taskloop.domain.slot_liveness import LIMITS, Kind
 

@@ -4,7 +4,7 @@ whether the engine ran a check is settled by the engine's own results; one that 
 import shlex
 from typing import Any, Final, NewType
 
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.checks import planref
 from taskloop.domain.plan.matchers import without_runner

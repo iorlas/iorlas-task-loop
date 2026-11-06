@@ -11,24 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes, procsim
 from support.aging import age
-from support.builders import PROFILE_PATTERNS
+from support.cfgs import PROFILE_PATTERNS
 from support.checks import ck
-from support.engine_case import (
-    BEAD,
-    CAP_PARKS,
-    CAT_ENV,
-    CLEAN,
-    FALSE,
-    PLAN,
-    WRITE,
-    EngineTest,
-    full,
-    no_repo,
-    review,
-    sh,
-    stop,
-    verdict,
-)
+from support.engine_case import CAP_PARKS, EngineTest, full, no_repo, sh, stop
+from support.plans import BEAD, CAT_ENV, CLEAN, FALSE, PLAN, WRITE, review, verdict
 
 # isort: split
 import hashlib
@@ -41,7 +27,7 @@ from unittest import mock
 
 from support import fake_route
 from support.briefs import bead_diff, bead_snapshot, brief_digest, linked_text
-from support.builders import cfg_with
+from support.cfgs import cfg_with
 from support.checkpoints import drop_ck, stored_ck
 from support.fakes import as_bead, as_comment, must_bead
 from support.logs import records

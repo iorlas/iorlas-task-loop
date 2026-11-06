@@ -7,7 +7,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, procsim
-from support.engine_case import CLEAN, PLAN, WRITE, EngineTest, pid_gone
+from support.engine_case import EngineTest, pid_gone
+from support.plans import CLEAN, PLAN, WRITE
 
 # isort: split
 import os

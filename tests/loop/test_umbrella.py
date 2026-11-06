@@ -10,9 +10,9 @@ import support.paths  # noqa: F401
 
 from taskloop.app.loop.queue import QueueRule, rank_ready
 from taskloop.contracts.bead import BdError, Bead
+from taskloop.contracts.beadsport import BdFailure, BeadQuery
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, BeadQuery
 
 
 def bead(name, status="open", parent="", issue_type="task"):

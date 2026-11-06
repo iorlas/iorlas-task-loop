@@ -4,8 +4,8 @@ from typing import Protocol
 from taskloop.app.land import cleanup
 from taskloop.app.land.outbound import target
 from taskloop.app.land.parts import FetchCheckout, OutcomeSteps
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import Git
 
 
 class LandedConfig(Protocol):

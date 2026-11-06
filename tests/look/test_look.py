@@ -12,8 +12,9 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as T
 from support import fake_route, gitq
 from support.builders import make_engine
-from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict
+from support.engine_case import engine
 from support.fakes import must_bead
+from support.plans import BEAD, CLEAN, PLAN, WRITE, verdict
 from support.spawn import port_git, real_spawner
 from support.who import who
 
