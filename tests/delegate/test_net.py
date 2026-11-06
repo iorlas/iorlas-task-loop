@@ -8,7 +8,6 @@ import os
 import re
 import socket
 import subprocess
-import tempfile
 import threading
 import time
 from pathlib import Path
@@ -28,6 +27,7 @@ from delegate.contracts.routing import BreakerPolicy
 from delegate.domain.health.ledger import HealthLedger, failure_fields
 from delegate.domain.lanes import profiles
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -64,7 +64,9 @@ class Probe:
         assert r["hosts"][host] == "ok"
 
     def test_down_when_nothing_connects(self):
-        r: Any = netprobe.probe([closed_port()], connect=lambda addr, timeout: (_ for _ in ()).throw(OSError("refused")))
+        r: Any = netprobe.probe(
+            [closed_port()], resolve=lambda name, port: name, connect=lambda addr, timeout: (_ for _ in ()).throw(OSError("refused"))
+        )
         assert (r["up"], r["why"]) == (False, "offline")
 
     def test_a_dns_outage_is_not_up_even_when_an_ip_literal_answers(self):
@@ -90,7 +92,7 @@ class Probe:
         assert "os.system" not in src
 
     def test_the_cache_keeps_since_until_up_flips(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             p = os.path.join(d, "net.json")
 
             def mk(up, at) -> dict[str, Any]:
@@ -140,7 +142,7 @@ class Words:
 
 class RouteNet(Case):
     def setup_method(self):
-        self.d = tempfile.TemporaryDirectory()
+        self.d = TemporaryDirectory()
         self.addCleanup(self.d.cleanup)
         p = mock.patch.dict(os.environ, {"DELEGATE_CONFIG_DIR": self.d.name})
         p.start()
@@ -280,7 +282,7 @@ class Roles:
 
 class Cheap(Case):
     def setup_method(self):
-        self.d = tempfile.TemporaryDirectory()
+        self.d = TemporaryDirectory()
         self.addCleanup(self.d.cleanup)
         p = mock.patch.dict(os.environ, {"DELEGATE_CONFIG_DIR": self.d.name})
         p.start()

@@ -4,7 +4,6 @@ until the profile enables it; the old `<lane>_enabled` settings keys fail loudly
 import io
 import json
 import shutil
-import tempfile
 from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any
@@ -19,6 +18,7 @@ from delegate.contracts.state import StateDoc
 from delegate.domain.holds.book import HoldBook
 from delegate.domain.routing.router import Router
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 from test_route import route
@@ -29,7 +29,7 @@ LANE = "DEEPSEEK_FREE"
 
 class LaneEnable(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         patches = [
             mock.patch.dict("os.environ", {"DELEGATE_CONFIG_DIR": self.tmp.name}),
             mock.patch.object(OpenCodeHarness, "find_exe", return_value="opencode"),

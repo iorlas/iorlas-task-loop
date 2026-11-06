@@ -1370,6 +1370,11 @@
   "bead": "tl-1",
   "t": 1793050200.5
  },
+ "PrepareStamp": {
+  "v": 1,
+  "fingerprint": "abc",
+  "ns": 1
+ },
  "RunFinish": {
   "state": "done",
   "ended": 1793050260.5,
@@ -1529,7 +1534,8 @@
     "Library/**",
     "Temp/**",
     "obj/**",
-    "bin/**"
+    "bin/**",
+    "**/.*cache*/**"
    ],
    "land_mode": "push",
    "base": "origin/main",

@@ -7,7 +7,6 @@ import importlib.util
 import json
 import os
 import sys
-import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -19,6 +18,7 @@ from delegate.contracts.state import StateDoc
 from delegate.contracts.stores import locked
 from delegate.domain.lanes.lane import Lane
 from delegate.domain.time import spec
+from support.tmpdir import TemporaryDirectory, mkdtemp
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -40,7 +40,7 @@ net.net_probe = lambda hosts=None: {
     "hosts": {},
     "at": time.time(),
 }  # tests open no socket; tests/test_net.py swaps it per case
-os.environ["DELEGATE_CONFIG_DIR"] = tempfile.mkdtemp()  # tests never touch a real config; classes that need their own set one
+os.environ["DELEGATE_CONFIG_DIR"] = mkdtemp()  # tests never touch a real config; classes that need their own set one
 T = 1_000_000_000.0  # a fixed "now"
 LIMIT_S = 30  # StateLock starts 8 interpreters that each import delegate
 CFG = json.loads((ROOT / "src" / "delegate" / "data" / "routing.json").read_text(encoding="utf-8"))
@@ -214,7 +214,7 @@ class Helpers:
 class StateLock:
     def test_a_lock_that_stays_held_raises_instead_of_running_unlocked(self):
         with (
-            tempfile.TemporaryDirectory() as d,
+            TemporaryDirectory() as d,
             locked(Path(d) / "x", timeout=5),
             pytest.raises(TimeoutError),
             locked(Path(d) / "x", timeout=0.2),

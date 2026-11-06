@@ -3,13 +3,13 @@
 import copy
 import json
 import os
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 from any_agent.harnesses.opencode import OpenCodeHarness
 from delegate.app import env, onboard
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -32,7 +32,7 @@ class ZaiTests(Case):
     def test_readiness_needs_subscription_credential(self):
         cfg = copy.deepcopy(CFG)
         with (
-            tempfile.TemporaryDirectory() as tmp,
+            TemporaryDirectory() as tmp,
             patch.dict(os.environ, {"XDG_DATA_HOME": tmp}),
             patch.object(OpenCodeHarness, "find_exe", return_value="opencode"),
             patch.object(env, "load_routing", return_value=cfg),

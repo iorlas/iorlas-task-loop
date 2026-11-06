@@ -6,12 +6,12 @@ import json
 import os
 import shutil
 import subprocess
-import tempfile
 from unittest import mock
 
 from any_agent import procs
 from delegate.app import env, status, usage
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -24,7 +24,7 @@ def boom(*a, **k):
 
 class Cheap(Case):
     def setup_method(self):
-        self.d = tempfile.TemporaryDirectory()
+        self.d = TemporaryDirectory()
         self.addCleanup(self.d.cleanup)
         p = mock.patch.dict(os.environ, {"DELEGATE_CONFIG_DIR": self.d.name})
         p.start()
@@ -76,7 +76,7 @@ class Cheap(Case):
 
 class AuthCache(Case):
     def setup_method(self):
-        self.d = tempfile.TemporaryDirectory()
+        self.d = TemporaryDirectory()
         self.addCleanup(self.d.cleanup)
         p = mock.patch.dict(os.environ, {"DELEGATE_CONFIG_DIR": self.d.name})
         p.start()

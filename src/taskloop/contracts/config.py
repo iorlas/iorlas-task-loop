@@ -194,7 +194,7 @@ class EngineConfig(Rec):
     gate_tree: Literal["clean", "slot"] = "clean"
     gate_source_globs: list[str] = msgspec.field(default_factory=lambda: ["**/*.cs", "**/*.yaml", "**/*.py", "**/*.json"])
     gate_ignored_allow: list[str] = msgspec.field(default_factory=lambda: [
-        ".venv/**", "node_modules/**", "**/__pycache__/**", "Library/**", "Temp/**", "obj/**", "bin/**"])
+        ".venv/**", "node_modules/**", "**/__pycache__/**", "Library/**", "Temp/**", "obj/**", "bin/**", "**/.*cache*/**"])
     land_mode: Literal["push", "pr"] = "push"  # pr: the land opens a PR and waits for the owner to merge it; the engine never merges
     base: str = "origin/main"
     check_links: bool = True

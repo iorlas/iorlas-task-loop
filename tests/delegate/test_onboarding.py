@@ -3,7 +3,6 @@
 import io
 import os
 import shutil
-import tempfile
 from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any
@@ -13,6 +12,7 @@ from delegate.app import cockpit, doctor, env, fleet, usage
 from delegate.app import decide as dec
 from delegate.contracts.state import StateDoc
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 from test_route import T, argparse_ns, route
@@ -27,7 +27,7 @@ class Onboarding(Case):
     """Run against an empty fake home so nothing depends on the machine's real setup."""
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.saved = {
             k: os.environ.get(k) for k in ("HOME", "USERPROFILE", "XDG_CONFIG_HOME", "APPDATA", "DELEGATE_CONFIG_DIR", "CODEX_HOME")
         }

@@ -7,7 +7,6 @@ import dataclasses
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 from typing import ClassVar
 from unittest import mock
@@ -15,6 +14,7 @@ from unittest import mock
 from any_agent.harnesses import opencode_sandbox
 from support.case import Case
 from support.fake_clock import SteppingClock
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 
@@ -80,7 +80,7 @@ CODEX_DONE = j(type="turn.completed", usage={"input_tokens": 100, "cached_input_
 
 class Replay(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.base = Path(self.tmp.name)
         self.pidfile = self.base / "pid"

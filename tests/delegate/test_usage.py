@@ -2,7 +2,6 @@
 
 import json
 import os
-import tempfile
 from pathlib import Path
 from typing import ClassVar
 
@@ -10,6 +9,7 @@ from any_agent.harnesses import claude
 from delegate.adapters import codex_account
 from delegate.contracts.json_types import Json
 from delegate.domain.cost import accounting as usage
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 from test_route import need, route
@@ -55,7 +55,7 @@ class CodexResume:
         assert usage.per_call(short(CALL1), short(CALL2)) == short(CALL1)
 
     def test_the_rollout_file_supplies_the_earlier_total(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             f = Path(d, "sessions", "2026", "10", "20")
             f.mkdir(parents=True)
             (f / "rollout-2026-10-20T16-51-32-thr-1.jsonl").write_text(tc(CALL1))
