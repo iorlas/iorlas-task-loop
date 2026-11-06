@@ -168,7 +168,7 @@ def slot_env(repo: str, store: Beads | None = None, cfg: SlotsConfig | None = No
         cfgdir=who.config,
         actor=who.actor,
         host=hostname(),
-        take_lock=lambda: os_lock(who.config.root / "locks" / f"slot-take-{repo_key(repo)}.lock", f"pid {os.getpid()}"),
+        take_lock=lambda: os_lock(who.config.lock_file(f"slot-take-{repo_key(repo)}.lock"), f"pid {os.getpid()}"),
         busy=functools.partial(engine_busy, who.config), lock_pid=functools.partial(lock_pid, who.config),
         drop_engine_lock=lambda wt, pid: drop_engine_lock(who.config, wt, pid) if pid is not None else None, event=functools.partial(event,
             who), say=print,

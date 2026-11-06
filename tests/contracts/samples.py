@@ -96,8 +96,7 @@ TRACE = trace.RunTrace(
 OUTCOME = run.RunReport(outcome=Result.PARKED, bead=BeadId("tl-1"), run=str(RUN), why_code=WhyCode.STUCK, why="stuck",
                          log="/l", minutes=3.5,
                          rounds=2, tests_added=4, asked=True, retry_after=None, cost=0.25)
-LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", start="99", slot="s1", slot_bead="slot-1",
-                        route=(10, "5"), workers=[(11, "6"), (12, "7")])
+LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", start="99", slot="s1", slot_bead="slot-1")
 CMD = {"pick_label": "auto", "skip_review": config.ReviewSkipConfig(tests=["t/**"]),
        "prepare": config.PrepareConfig(cmd=["dotnet", "restore"], inputs=["**/*.csproj"]),
        "visual_paths": config.VisualConfig(include=["a/**"]), "write_fresh_above_k": 150.0, "max_rounds": 4,
@@ -165,7 +164,7 @@ LOG = {
         model="m",
         effort="high",
         secs=229.0,
-        tokens=TOK,
+        tokens=log.CallTokens(in_=412000, cached=380000, out=5100, cache_write=1200),
         cost=0.0,
         cost_source="free",
         family="openai",

@@ -114,7 +114,7 @@ def trace(bead, outcome, start_min, end_min, why="", sha="", rounds=0, replans=0
     stem = run or "{}-{}".format(bead, time.strftime("%Y%m%d-%H%M%S", time.localtime(started)))
     return {"v": 1, "run": stem, "bead": bead, "repo": "https://example.invalid/r.git", "worktree": worktree,
             "started": started, "ended": ended, "outcome": outcome, "why": why, "sha": sha,
-            "stats": {"rounds": rounds, "replans": replans}, "log": str(homes.config_dir() / "engine" / (stem + ".jsonl")),
+            "stats": {"rounds": rounds, "replans": replans}, "log": str(homes.config_dir() / "runs" / stem / "engine.jsonl"),
             "sessions": list(sessions), "stderr": stderr, "kind": kind}
 
 
@@ -132,7 +132,7 @@ class PlannerReport(Case):
                                                 "APPDATA": str(home / "cfg")})
         self.env.start()
         self.hist = home / "history.jsonl"
-        self.eng = homes.config_dir() / "engine"
+        self.eng = homes.config_dir() / "runs"
         t = T0
         rows = [("planner", "x-1", 1000, 9000), ("planner", "x-1", 500, 4500), ("planner", "x-1", 200, 800),
                 ("planner", "x-1", 100, 100), ("worker", "x-1", 9999, 9999), ("planner", "x-2", 300, 700),

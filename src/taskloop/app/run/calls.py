@@ -6,8 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 from taskloop.contracts.delegate import DelegateResult, LiveStart, WorkerStarted
-from taskloop.contracts.log import CallEnd, CallStart
-from taskloop.contracts.trace import Tokens
+from taskloop.contracts.log import CallEnd, CallStart, CallTokens
 from taskloop.stores.runlog import RunLog
 
 KEYS = ("in", "cached", "out")
@@ -97,6 +96,7 @@ class Calls:
             self.stats["tokens_" + k] += int((row["tokens"] or {}).get(k) or 0)
         self.sessions.append(row)
         tk = row["tokens"] or {}
+        source = res.usage.cost_source if res.usage else "unknown"
         self.log.emit(
             CallEnd(
                 id=cid,
@@ -107,9 +107,10 @@ class Calls:
                 model=row["model"] or "",
                 effort=row["effort"],
                 secs=float(row["secs"]),
-                cost=float(row["cost"]),
-                cost_source=res.usage.cost_source if res.usage else "unknown",
-                tokens=Tokens(in_=int(tk.get("in") or 0), cached=int(tk.get("cached") or 0), out=int(tk.get("out") or 0)),
+                cost=float(row["cost"]) if source != "unknown" else None,
+                cost_source=source,
+                tokens=CallTokens(in_=int(tk.get("in") or 0), cached=int(tk.get("cached") or 0), out=int(tk.get("out") or 0),
+                                  cache_write=res.usage.tokens.cache_write if res.usage and res.usage.tokens else None),
                 family=row["family"] or "",
                 flag=row["flag"],
                 transcript=row["transcript"],

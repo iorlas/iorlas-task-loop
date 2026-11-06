@@ -4,6 +4,7 @@ import builtins
 import json
 import os
 import random
+import shutil
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -182,8 +183,8 @@ class FactoryIndex(Case):
                 patch("taskloop_dash.readers.logs.Logs.read", return_value=((), "")) as tail, \
                 patch("builtins.open", side_effect=AssertionError("caller opened a run log")):
             assert dash.reads.worlds.bead_runs("/repo", "b-0")
-            history.assert_called_once_with(self.paths[0].stem)
-            feed = dash.live.live_run(self.paths[0].stem)
+            history.assert_called_once_with(self.paths[0].parent.name)
+            feed = dash.live.live_run(self.paths[0].parent.name)
             feed.refresh()
             tail.assert_called_once()
 
@@ -239,15 +240,14 @@ class FactoryIndex(Case):
         self.ingest()
         assert factorydb.database_error(self.cfg.factory_db(), NOW) == ""
 
-    def test_vanished_run_folder_preserves_state_and_log_facts(self):
+    def test_vanished_run_folder_preserves_state_facts(self):
         self.ingest()
-        run = self.paths[0].stem
+        run = self.paths[0].parent.name
         before = RunRows(self.cfg).snapshot(run)
-        self.cfg.run_dir(run).rmdir()
+        shutil.rmtree(self.cfg.run_dir(run))
         self.ingest()
         assert RunRows(self.cfg).snapshot(run) == before
         assert run in [r[0] for r in self.rows()]
-        assert str(self.paths[0]) in [s[0] for s in self.sources()]
 
     def test_missing_wrong_corrupt_and_stale_db_show_no_runs(self):
         for kind in ("missing", "wrong", "corrupt", "stale"):
