@@ -89,3 +89,8 @@ class SecondFamily(Case):
         why = pin.stop_why("write", ["claude"], "only_family_unready", "claude out", warm="claude")
         assert "second writer family (claude)" in why
         assert "no other family is used" in why
+
+    def test_doctor_words_say_off_or_the_family_and_the_share(self):
+        assert pin.describe_second("") == "second_writer_family: off"
+        assert pin.describe_second("Claude") == (
+            "second_writer_family: claude (one light bead in 10, picked by bead id; that family alone, no fallback)")

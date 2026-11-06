@@ -8,6 +8,7 @@ from taskloop.adapters import delegate as dg
 from taskloop.adapters.check_files import repo_key
 from taskloop.app.asks import trustroots
 from taskloop.app.checks.runner import Checker
+from taskloop.app.run import writer_pin
 from taskloop.app.run.blocked import Blocked, refuse_over_cap
 from taskloop.app.run.budget import Budget
 from taskloop.app.run.call import Call
@@ -53,7 +54,7 @@ def request(e: RequestHost, c: Call, live: str, timeout_s: int, idle_s: int) -> 
     base_ref = e.git.rev_parse(e.wt, e.cfg.base) if c.role == "reviewer" else ""
     if c.role == "reviewer" and not base_ref:
         e.log.warn(f"the reviewer reads the work tree's instruction files: {e.cfg.base} does not resolve to a commit")
-    only_family = pin.for_role(c.role, pin.families(e.cfg.writer_family, e.budget.labels))
+    only_family = writer_pin.pinned(e.cfg, str(e.bead), e.plan_data, e.budget.labels, c.role)
     recipes = e.checker.split().engine_recipes(planref.stage_commands(e.plan_data, e.cfg)) if c.node == "write" else []
     return RunRequest(
         role=c.role,

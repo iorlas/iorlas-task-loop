@@ -11,7 +11,7 @@ from taskloop.contracts.delegate import RunRequest
 def build(role: str, node: str, resolved: str = "basesha"):
     host = mock.Mock(session="s", bead="t-1")
     host.cfg = config.EngineConfig()
-    host.budget.labels = []
+    host.budget.labels, host.plan_data = [], None
     host.git.rev_parse.return_value = resolved
     host.git.diff_entries.return_value = []
     host.checker.split.return_value.engine_recipes.return_value = []
