@@ -4,10 +4,8 @@ import contextlib
 import io
 import json
 import os
-import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -287,9 +285,8 @@ class HookFailures:
 
 
 class WorktreeHead(Case):
-    def test_head_is_read_from_the_git_files_of_a_plain_checkout_and_a_linked_worktree(self):
-        root = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, root)
+    def test_head_is_read_from_the_git_files_of_a_plain_checkout_and_a_linked_worktree(self, tmp_path):
+        root = tmp_path
         (root / "main" / ".git" / "refs" / "heads").mkdir(parents=True)
         (root / "main" / ".git" / "HEAD").write_text("ref: refs/heads/b\n")
         (root / "main" / ".git" / "refs" / "heads" / "b").write_text("c0ffee\n")
