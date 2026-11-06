@@ -154,8 +154,8 @@ class Reload(te.EngineTest):
         run = eng.log_path.parent.name
         assert len(self.execs) == 1
         ex = self.execs[0]
-        assert ex["argv"][:5] == childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py", snapshot())
-        assert ex["argv"][5:] == ["run-task", "t-1", "--outcome-file", "/x/out.json", "--worktree", str(self.wt)]  # no --fresh
+        assert ex["argv"][:6] == childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py", snapshot())
+        assert ex["argv"][6:] == ["run-task", "t-1", "--outcome-file", "/x/out.json", "--worktree", str(self.wt)]  # no --fresh
         assert ex["env"]["run"] == run
         assert ex["env"]["pid"] == os.getpid()
         assert (ex["marker"]["from"], ex["marker"]["to"], ex["marker"]["step"]) == ("0.1.0", "0.2.0", "land")
@@ -261,7 +261,7 @@ class Reload(te.EngineTest):
             leaked = os.environ.get("TL_REEXEC")
         assert r.outcome == "landed"
         assert len(spawned) == 2
-        assert spawned[1][:5] == childenv.script_argv(old / "tl.py", snapshot())
+        assert spawned[1][:6] == childenv.script_argv(old / "tl.py", snapshot())
         assert leaked is None  # the loop's own environment keeps no hand-over for its later run-tasks
         assert spawned_env[0]["run"] == "t-1-20261026-120000"  # the fallback child got it
         assert pids == [str(os.getpid())] * 2  # run-task's parent is uv: the loop names itself for the lock handoff

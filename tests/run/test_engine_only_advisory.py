@@ -30,6 +30,8 @@ class Request(Case):
                 host = mock.Mock(session="s", bead="t-1")
                 host.git.diff_entries.return_value = []
                 host.cfg.writer_family = pinned
+                host.cfg.second_writer_family = ""
+                host.plan_data = None
                 host.cfg.writer_exec_allow = []
                 host.cfg.writer_read_roots = []
                 host.budget.labels = []

@@ -54,7 +54,8 @@ class Tries(Case):
         sha, problem = lander.tries(Land())
         assert (sha, problem) == ("landed", None)
         (got,) = tries_of(host)
-        assert got == rec.LandTry(t=got.t, n=1, base_before="aaaa1111aaaa", base_after="bbbb3333bbbb", rebase_moved=True, failing="")
+        # the three *_s fields are real seconds rounded to 1 ms: a loaded host makes them nonzero, so they are not compared
+        assert (got.n, got.base_before, got.base_after, got.rebase_moved, got.failing) == (1, "aaaa1111aaaa", "bbbb3333bbbb", True, "")
         assert g.ran("rebase", "origin/main")
 
     def test_when_main_stands_still_nothing_moved(self):

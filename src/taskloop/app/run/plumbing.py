@@ -16,6 +16,7 @@ from taskloop.contracts.kinds import Kind
 from taskloop.contracts.log import Assumed, Said
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks import affinity
+from taskloop.domain.matchers import redact
 
 
 class Plumbing(RunFields):
@@ -70,6 +71,7 @@ class Plumbing(RunFields):
     def comment(self, text: str) -> None:
         """The one poster of the engine's comments on the bead: each is also a Said record, tied to the open step (or the last)."""
         if not self.dry:
+            text = redact(text)  # Dolt keeps what a bead is told: no credential from a worker's or a check's output goes in
             self.log.emit(Said(step=self.step_id(), who="engine", text=text))
             beadtools.attempt(self.store.add_comment, self.bead, text)
 

@@ -65,7 +65,7 @@ class Sessions(Case):
         assert session.start(self.event(source="startup"), self.root, snapshot(), port_git()) == ""
         assert not (self.cfg / "sessions").exists()
         shim = (self.cfg / "bin" / "tl").read_text()
-        assert "exec uv run --quiet --script " + str(self.root / "skills" / "task-loop" / "tl.py") in shim
+        assert "exec uv run --quiet --no-config --script " + str(self.root / "skills" / "task-loop" / "tl.py") in shim
         assert os.access(self.cfg / "bin" / "tl", os.X_OK)
 
     def test_session_start_never_fails_on_input_it_cannot_read(self):

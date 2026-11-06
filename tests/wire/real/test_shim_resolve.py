@@ -18,7 +18,7 @@ class ShimResolves(Case):
         self.env = Env({"XDG_CONFIG_HOME": str(self.root / "config"), "CLAUDE_CONFIG_DIR": str(self.root / "claude")})
         uv = self.root / "bin" / "uv"
         uv.parent.mkdir()
-        uv.write_text('#!/bin/sh\nshift 3\necho "$@"\n')  # `uv run --quiet --script <tl.py> args`: prints tl.py and args
+        uv.write_text('#!/bin/sh\nshift 4\necho "$@"\n')  # `uv run --quiet --no-config --script <tl.py> args`: prints tl.py and args
         uv.chmod(0o755)
         self.old = self.install("0.23.99")
         hook.write_shim(self.old, self.env)

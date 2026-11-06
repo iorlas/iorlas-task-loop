@@ -2,6 +2,7 @@
 import json
 import sys
 from pathlib import Path
+from unittest import mock
 
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
@@ -18,12 +19,13 @@ from support.repos import write_repos
 from support.runs import manifest
 
 from taskloop.app.run import requests
-from taskloop.contracts import wire
+from taskloop.contracts import factorydb, wire
 from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import Result
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.ids import BeadId, loop_key
+from taskloop.contracts.lookrows import LookRows
 from taskloop.contracts.run import RunState
 
 NOW = 1_800_000_000.0
@@ -53,6 +55,9 @@ class Writes(Case):
         code, out = self.dash.writes.post(verb, body)
         assert code == 200
         return wire.load(Result, out)
+
+    def look_items(self):
+        return LookRows(self.dash.env.config).items("tl-look") or []
 
     def meta(self, bead, key):
         raw = self.fake.beads[bead].metadata.get(key)
@@ -141,7 +146,7 @@ class Writes(Case):
     def test_a_look_is_recorded_on_its_item(self):
         res = self.post("look", {"project": loop_key(self.repo), "bead": "tl-1#1", "verdict": "good"})
         assert res == Result(ok=True)
-        assert self.fake.beads[BeadId("tl-look")].metadata["looks"][0]["status"] == "good"
+        assert self.look_items()[0]["status"] == "good"
         res = self.post("look", {"project": loop_key(self.repo), "bead": "tl-1#1", "verdict": "redo", "note": "x"})
         assert not res.ok
         assert "Already answered" in res.message
@@ -149,16 +154,16 @@ class Writes(Case):
     def test_a_redo_needs_its_note_and_files_the_follow_up_with_it(self):
         res = self.post("look", {"project": loop_key(self.repo), "bead": "tl-1#1", "verdict": "redo", "note": " "})
         assert res == Result(ok=False, message="Write what to change first.")
-        assert self.fake.beads[BeadId("tl-look")].metadata["looks"][0]["status"] == "open"
+        assert self.look_items() == []  # nothing was answered, so no row
         assert self.post("look", {"project": loop_key(self.repo), "bead": "tl-1#1", "verdict": "redo", "note": "cut off"}).ok
-        made = self.fake.beads[self.fake.beads[BeadId("tl-look")].metadata["looks"][0]["redo_bead"]]
+        made = self.fake.beads[self.look_items()[0]["redo_bead"]]
         assert "cut off" in made.description
 
-    def test_a_look_that_bd_refuses_is_a_result_not_a_crash(self):
-        self.fake.refuse = {"update-meta"}
-        res = self.post("look", {"project": loop_key(self.repo), "bead": "tl-1#1", "verdict": "good"})
+    def test_a_look_whose_row_cannot_be_saved_is_a_result_not_a_crash(self):
+        with mock.patch.object(LookRows, "_swap", side_effect=factorydb.DatabaseError("disk full")):
+            res = self.post("look", {"project": loop_key(self.repo), "bead": "tl-1#1", "verdict": "good"})
         assert not res.ok
-        assert "bd refused" in res.message
+        assert "not saved" in res.message
 
     # cause, ack
 
