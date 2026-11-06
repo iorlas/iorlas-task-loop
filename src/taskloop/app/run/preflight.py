@@ -11,10 +11,10 @@ from taskloop.app.wire.closeguard import has_land
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import Step
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, TreeSha
 from taskloop.contracts.locator import RunBundle, RunLocator
-from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import NotARepo
 from taskloop.stores.real import real_stores
 

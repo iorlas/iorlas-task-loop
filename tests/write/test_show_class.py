@@ -11,7 +11,7 @@ from support.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as T
-from support.engine_case import CLEAN, PLAN, WRITE
+from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.app.artifacts import store
 from taskloop.app.write import show_check

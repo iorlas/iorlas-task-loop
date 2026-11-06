@@ -2,7 +2,7 @@
 from support.fake_beads import FakeBeads
 from taskloop.contracts import gallery
 from taskloop.contracts.bead import BdError, Bead
-from taskloop.contracts.ports import BdFailure
+from taskloop.contracts.beadsport import BdFailure
 
 
 def shots(label="menu"):

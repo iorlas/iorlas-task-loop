@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import gitq, procsim
-from support.engine_case import CLEAN, PLAN, WRITE
+from support.plans import CLEAN, PLAN, WRITE
 
 from run.test_stages import StagesTest
 

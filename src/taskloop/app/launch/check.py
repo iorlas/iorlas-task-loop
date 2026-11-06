@@ -18,9 +18,10 @@ from taskloop.contracts.argv import text_of
 from taskloop.contracts.checks import CheckResult, Phase
 from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.ports import Git, Spawner
+from taskloop.contracts.procport import Spawner
 from taskloop.domain.checks.specs import gate_items, repo_check
 
 TAIL_LINES = 15
