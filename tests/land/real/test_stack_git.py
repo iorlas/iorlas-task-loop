@@ -1,10 +1,10 @@
 """The push and the look at the remote of a stack delivery, over real git and a bare origin."""
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
@@ -29,7 +29,7 @@ from taskloop.stores.runlog import RunLog
 
 class RealPush(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         root = Path(self.tmp.name)
         self.origin, self.repo = root / "o.git", root / "w"
