@@ -11,7 +11,7 @@ from typing import Final
 
 from delegate.adapters import git
 from delegate.app import env, onboard
-from delegate.app.fleet import FleetBuilder, drift_warnings, mark_busy, settle_holds
+from delegate.app.fleet import Fleet, FleetBuilder, drift_warnings, mark_busy, settle_holds
 from delegate.app.usage import READERS
 from delegate.contracts.history import RunRow
 from delegate.contracts.json_types import Json, as_str, obj
@@ -177,9 +177,11 @@ def call_args(a: env.Args, unattended: bool):
 RETRY_LOOKBACK_S = 6 * 3600
 
 
-def decision(a: env.Args, cfg: dict[str, Json], unattended: bool = False, avoid: frozenset[tuple[str, str]] = frozenset()):
+def decision(
+    a: env.Args, cfg: dict[str, Json], unattended: bool = False, avoid: frozenset[tuple[str, str]] = frozenset(), apply: bool = False
+):
     """next and run share this: build the fleet, route, remember the lane choice. -> (d, lanes, warnings, t); d is the JSON answer of
-    `next`."""
+    `next`. Only `run` passes apply=True and writes the profile (`apply_profile`); `next` and `status` write none."""
     t = env.now()
     st = env.load_state()
     routing = env.typed_routing(cfg)
@@ -214,7 +216,16 @@ def decision(a: env.Args, cfg: dict[str, Json], unattended: bool = False, avoid:
 
             if sum(1 for lane in lanes.values() if lane.family == fam) > 1:
                 env.update_state(mark)
+    if apply:
+        apply_profile(fleet)
     if fleet.offers:
-        env.config_store().mark_offered(fleet.offers)
         d["notice"] = "not set up: " + ", ".join(fleet.offers) + " (route.py doctor)"
     return d, lanes, warnings, t
+
+
+def apply_profile(fleet: Fleet) -> None:
+    """What a call that launches writes into the owner's profile: the ready lanes turned on, the not-ready ones remembered as offered."""
+    for name in fleet.enables:
+        env.config_store().set_lane(name, "enabled")
+    if fleet.offers:
+        env.config_store().mark_offered(fleet.offers)

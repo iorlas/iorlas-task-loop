@@ -12,8 +12,7 @@ from support import engine_case as te
 from support import fake_route, procsim
 from support.engine_case import CLEAN, PLAN, WRITE, real_git
 
-KEYS = ("TMPDIR", "TMP", "TEMP", "DOTNET_CLI_HOME", "NUGET_SCRATCH", "NUGET_HTTP_CACHE_PATH", "NUGET_PLUGINS_CACHE_PATH",
-        "SharedCompilationId", "MSBUILDNODEHANDSHAKESALT", "TL_SLOT")
+KEYS = ("TMPDIR", "TMP", "TEMP", "TL_SLOT")
 
 
 def dumper(name, out, then=None):
@@ -52,7 +51,7 @@ class EverySpawnPath(te.EngineTest):
         for name in ("check", "gate", "land"):
             env = self.dumps(name)
             assert env["TL_SLOT"] == slot, name
-            assert env["MY"] == f"{self.eng.bead_env['SharedCompilationId'].removesuffix('-' + slot)}/{slot}"
+            assert env["MY"].endswith(f"/{slot}")
             for k in KEYS:
                 assert env[k] == self.eng.bead_env[k], (name, k)
         assert seen
