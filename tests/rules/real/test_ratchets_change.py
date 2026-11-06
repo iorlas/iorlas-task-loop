@@ -49,7 +49,7 @@ def repo(workdir):
 def test_a_new_temp_site_fails_an_old_one_does_not(workdir):
     root = repo(workdir)
     assert ratchet_change.problems("temp", temp_ratchet.file_counts, root) == []
-    (root / "src" / "new.py").write_text("import tempfile\nx = mkdtemp()\n", encoding="utf-8")
+    (root / "src" / "new.py").write_text("import tempfile\nx = tempfile.mkdtemp()\n", encoding="utf-8")
     assert ratchet_change.problems("temp", temp_ratchet.file_counts, root) == ["site: +1"]
 
 
@@ -63,7 +63,7 @@ def test_a_cleanup_and_a_move_pass(workdir):
 
 def test_a_commit_line_with_a_reason_allows_a_rise(workdir):
     root = repo(workdir)
-    (root / "src" / "new.py").write_text("import tempfile\nx = mkdtemp()\n", encoding="utf-8")
+    (root / "src" / "new.py").write_text("import tempfile\nx = tempfile.mkdtemp()\n", encoding="utf-8")
     git(root, "add", "-A")
     git(root, "commit", "-qm", "add\n\nRatchet-allow: temp +1 the git sandbox needs a real system temp dir")
     assert ratchet_change.problems("temp", temp_ratchet.file_counts, root) == []
