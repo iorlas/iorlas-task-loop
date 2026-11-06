@@ -143,7 +143,7 @@ class OpenCodeHarness(Quiet):
         for r in (*roots, *caches):  # created here, before any sandboxed command: a command cannot create them
             r.mkdir(parents=True, exist_ok=True)
         box.write_shell(self.sandbox, i.cwd, i.write, self.shell, roots, caches)
-        config: dict[str, Json] = {"permission": box.permissions(self.sandbox, i.write, i.engine_only)}
+        config: dict[str, Json] = {"permission": box.permissions(self.sandbox, i.write, i.engine_only, i.read_roots)}
         if self.profile.providers:
             for key in SESSION_VARS:
                 env.pop(key, None)
@@ -305,9 +305,9 @@ class OpenCodeHarness(Quiet):
 
     def _denials(self, tool: str, inp: dict[str, Json], out: str) -> list[ev.HarnessEvent]:
         if "prevents you from using this specific tool call" in out:
-            d = ev.Denied(tool=tool, input=inp, kind="policy")
+            d = ev.Denied(tool=tool, input=inp, kind="policy", reason=out.strip()[:300])
         elif "Operation not permitted" in out and not box.network_refusal(out):
-            d = ev.Denied(tool=tool, input=inp, kind="sandbox_limit")
+            d = ev.Denied(tool=tool, input=inp, kind="sandbox_limit", reason=out.strip()[:300])
         else:
             return []
         self.evidence.denials.append(d)

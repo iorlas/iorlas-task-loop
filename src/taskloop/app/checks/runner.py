@@ -39,10 +39,10 @@ def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: Stores, env: Env,
     base = git.rev_parse(wt, cfg.base)
     start = git.merge_base(wt, "HEAD", cfg.base) or base
     items = [*([diff_check(start, tree)] if start else []), *steps]
-    keys = InputKeys(git, wt, tree, clean=clean)
+    keys = InputKeys(git, wt, tree, clean=clean, pins=cfg.pin_files)
     memo = RunMemo(stores, check_files.repo_key(git, wt), keys, BaseSha(base), keyed_env(env))
     if clean or slot_wt is not None:
-        memo.slot_keys = InputKeys(git, slot_wt or wt, tree)
+        memo.slot_keys = InputKeys(git, slot_wt or wt, tree, pins=cfg.pin_files)
     memo.checks = {c.id: repo_check(c, cfg) for c in cfg.checks}
     memo.checks.update({c.id: c for c in steps})
     changed = git.changed_paths(wt, start, tree, required=True) if planned is None and any(c.when for c in items) else []
@@ -145,7 +145,7 @@ class Checker:
         """The result store of this repo for this tree and base: the one place a round, `tl check` and the gate's question get theirs.
         Slot names and state paths do not distinguish receipts; each check's declared env still does."""
         host = self.host
-        keys = InputKeys(host.git, host.wt, tree, clean=self.clean)
+        keys = InputKeys(host.git, host.wt, tree, clean=self.clean, pins=host.cfg.pin_files)
         repo = check_files.repo_key(host.git, str(host.wt))
         memo = RunMemo(host.stores, repo, keys, BaseSha(base), keyed_env(host.env), host.run_id)
         if self.slot_host is not None:

@@ -349,7 +349,7 @@ class WorkerCall:
             and PLAN.left("denied_read", int(c.denied_retried))
             and all(d.tool in READ_TOOLS and self.ops.read_only_command(command_of(d)) for d in denied)
         ):
-            # tl-bxk.10.21: a guard refused only commands that read (lifesim-6dq0: a head+rg chain, 12 s, no answer; the next run found
+            # tl-bxk.10.21: a guard refused only commands that read (a consumer run: a head+rg chain, 12 s, no answer; the next run found
             # the work done). One retry on a fresh thread that is told what was refused; a second denial blocks
             c.denied_retried = True
             note = (

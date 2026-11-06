@@ -22,6 +22,7 @@ from delegate.contracts.routing import Settings
 from delegate.contracts.state import StateDoc
 from delegate.domain.health import ledger as health_ledger
 from delegate.domain.lanes.lane import Lane
+from support.fake_worker import Err, Exit, Jump
 from support.procsim import real_proc
 
 import hermetic  # noqa: F401  (a home of its own for every test)
@@ -29,6 +30,9 @@ import routing_support as support
 from run_support import RunBase, short_limits
 from test_route import CFG, at, need, no_reader, obj, route, why
 
+THREAD = '{"type":"thread.started","thread_id":"thread-123"}'
+ANSWER = '{"type":"item.completed","item":{"id":"i9","type":"agent_message","text":"{\\"findings\\": []}"}}'
+TURN_DONE = '{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":7}}'
 LIMIT_S = 60  # each test makes several full runs, every run spawns a fake CLI and git
 
 
@@ -66,21 +70,19 @@ class RunStops(RunBase):
         assert "brief" not in json.dumps(line)
         assert line["overlap"] == []
 
-    @real_proc("delegate: a worker, git or CLI process")
+    @real_proc("delegate: the answer-done stop is judged on a run over a real git work tree")
     def test_answer_done_process_alive_is_done_after_the_grace(self):
         """delegate-itn: turn.completed after the final agent message, then the process never exits: done after the grace,
         whole tree stopped."""
         self.enterContext(short_limits("codex", grace_s=1))
-        time.time()
-        _, r = self.run_it(mode="answer_alive", timeout=0)
+        started = self.play(THREAD, ANSWER, TURN_DONE)
+        _, r = self.run_it(timeout=0)
         assert (r["stop"], r["text"], r["lane"]) == (None, '{"findings": []}', "OPENAI_SUBSCRIPTION")
         assert r["warnings"] == ["answer_done_process_alive"]
         assert r["stop"] is None
         assert json.loads(env.history_path().read_text().splitlines()[-1])["warnings"] == ["answer_done_process_alive"]
         assert "OPENAI_SUBSCRIPTION" not in env.load_state().out
-        time.sleep(0.3)
-        with pytest.raises(OSError):
-            os.kill(int(Path(os.environ["FAKE_PIDFILE"]).read_text()), 0)
+        assert [p.stopped for p in started] == [True]  # the whole tree was stopped
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_later_event_resets_the_answer_grace(self):
@@ -323,11 +325,11 @@ class RunStops(RunBase):
         assert health_ledger.HealthLedger(env.typed_routing(CFG).settings.breaker).fold(rows).pairs == {}
         gaps.flush(dog, obj(None), d["lane"], d["model"], True)  # never raises
 
-    @real_proc("delegate: a worker, git or CLI process")
+    @real_proc("delegate: stderr chatter keeps a run alive on a real git work tree")
     def test_any_stream_line_counts_as_activity_even_on_stderr(self):
-        self.real_clock()
-        with short_limits("codex", silence_s=1):  # the fake prints to stderr every 0.4 s for 3 s
-            _, r = self.run_it(mode="chatter", timeout=0)
+        self.play(THREAD, *[s for _ in range(8) for s in (Jump(0.4), Err("thinking"))], Exit(0))  # stderr every 0.4 s for 3 s
+        with short_limits("codex", silence_s=1):
+            _, r = self.run_it(timeout=0)
         assert r["stop"] is None
 
     @real_proc("delegate: a worker, git or CLI process")

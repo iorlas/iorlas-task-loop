@@ -13,7 +13,7 @@ Dirs = tuple[Path, Path, Path]  # git dir, common dir, the `.git` entry of the c
 def pinned_env(path: str | Path) -> dict[str, str]:
     """GIT_DIR and GIT_WORK_TREE of the checkout at `path` (its nearest parent with a .git), read from its own `.git`
     (a slot's `.git` file says `gitdir: <its dir under the repo's .git/worktrees>`). With both set git ignores the
-    repo's shared config: a core.worktree written into .git/config (lifesim-1mm) pointed every slot at another folder.
+    repo's shared config: a core.worktree written into .git/config pointed every slot at another folder.
     {} when `path` is no checkout."""
     p = Path(path).resolve()
     for d in (p, *p.parents):

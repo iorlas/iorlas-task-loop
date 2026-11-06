@@ -23,7 +23,6 @@ import hermetic  # noqa: E402
 # is what the loop and slots tests build repos under), and each delegate test gets its home from own_home below
 for _k, _v in _collector_env.items():
     os.environ.pop(_k, None) if _v is None else os.environ.__setitem__(_k, _v)
-tempfile.tempdir = None
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -50,6 +49,7 @@ def own_home():
     try:
         yield
     finally:
+        tempfile.tempdir = None
         for k, v in saved.items():
             os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
         shutil.rmtree(d, ignore_errors=True)

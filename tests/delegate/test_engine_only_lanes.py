@@ -112,7 +112,7 @@ class OpenCodeRulesTest:
         refusal = "The user has specified a rule which prevents you from using this specific tool call"
         state = {"status": "error", "input": {"command": "just slow"}, "error": refusal}
         hx.parse_line(json.dumps({"type": "tool_use", "sessionID": "s", "part": {"callID": "c1", "tool": "bash", "state": state}}))
-        want = [{"kind": "policy", "tool": "bash", "path": None, "input": {"command": "just slow"}}]
+        want = [{"kind": "policy", "tool": "bash", "path": None, "input": {"command": "just slow"}, "reason": refusal}]
         assert launch.denied_items(hx, False, ("slow",)) == want
 
 
@@ -212,3 +212,17 @@ class RoutingTest(Case):
         d: Any = support.router(copy.deepcopy(CFG), T).route("worker", args, lanes("openai"), rec).as_dict()
         assert (d["action"], d["lane"], d["flag"]) == ("run", rec.lane, "engine_only_advisory")
         assert "advisory only, the brief must say so" in d["warning"]
+
+
+class OpenCodeReadRootsTest:
+    def outside(self, write: bool, roots: tuple[str, ...] = ()):
+        return box.permissions(box.Sandbox(), write, (), roots)["external_directory"]
+
+    def test_a_write_step_reads_nothing_outside_its_cwd_without_a_root(self):
+        assert self.outside(True) == "deny"
+
+    def test_a_write_step_reads_a_listed_root_and_nothing_else(self):
+        assert self.outside(True, ("/data/shots/", "/opt/ref")) == {"*": "deny", "/data/shots/**": "allow", "/opt/ref/**": "allow"}
+
+    def test_a_read_only_step_ignores_the_list(self):
+        assert self.outside(False, ("/data/shots",)) == self.outside(False)
