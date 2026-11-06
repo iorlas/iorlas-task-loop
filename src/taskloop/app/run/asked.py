@@ -28,7 +28,7 @@ class Amends(Protocol):
     def amend_with(self, fn: Callable[[Checkpoint], Checkpoint], also: Callable[[sqlite3.Connection | None], None]) -> bool: ...
 
 
-class Settling(Threads, Protocol):
+class Settling(Protocol):
     run_dir: Path
 
     @property
