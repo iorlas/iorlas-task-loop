@@ -48,6 +48,10 @@ def print_card(c: dict[str, Any]) -> None:
         )
     )
     print("  crashes {:d}   lost {:d}   pending branches {:d}".format(int(c["crashes"]), int(c["lost"]), len(c["pending_list"])))
+    if c["land"]["tries"]:
+        land = c["land"]
+        med = "  ".join(f"{k} {v:.0f}s" for k, v in land["median_s"].items())
+        print(f"  land    {land['tries']} tries, {land['retried']} retried ({', '.join(f'{k} {n}' for k, n in land['causes'].items()) or '-'})  median {med}")
     print(
         "  minutes per bead: median {}, p90 {}   fix rounds {:d}   replans {:d}".format(
             c["minutes"]["median"], c["minutes"]["p90"], int(c["rounds"]), int(c["replans"])

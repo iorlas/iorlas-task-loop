@@ -10,6 +10,7 @@ from typing import Any, Final, TypedDict
 from taskloop.adapters import beadtools, gitrepo
 from taskloop.app.asks import intake
 from taskloop.app.reconcile.lost import lost_work
+from taskloop.app.report.landphases import land_stats, tries_of
 from taskloop.app.report.inputs import bead_status, landed_of, read_jsonl, repo_traces
 from taskloop.app.report.planner import input_tokens
 from taskloop.contracts import paths, runlife, wire
@@ -224,6 +225,7 @@ def scorecard(repo: str, since: float, until: float, base: str, comments_of: Cal
          "pending_list": [x for x in lost if x["class"] in ("pending", "unknown")],
          "minutes": {"median": round(statistics.median(mins), 1) if mins else 0, "p90": pctl(mins, 90)},
          "rounds": sum(x["rounds"] for x in rows), "replans": sum(x["replans"] for x in rows),
+         "land": land_stats([t for r in runs if r.log for t in tries_of(typed_log(Path(r.log)))]),
          "tokens": tokens, "runs": len(runs), "per_bead": rows, "skipped_traces": book.skipped}
     checks = {"beads": {"value": c["beads"], "want": ">={:d}".format(M2["beads"]), "ok": c["beads"] >= M2["beads"]},
               "landed_no_ask": {"value": c["landed_no_ask"], "want": ">={:d}".format(M2["landed_no_ask"]),
