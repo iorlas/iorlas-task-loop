@@ -65,7 +65,7 @@ def prune_run_dirs(cfg: ConfigDir, days: float, exempt: Collection[str] = (), dr
 
 
 def prune_run_logs(cfg: ConfigDir, now: float, retain: float, exempt: Collection[str] = (), dry_run: bool = False) -> list[Path]:
-    """An engine log not written for `retain` seconds goes with its .live/ folder (the worker's per-call files), its .stderr and an
+    """An engine log not written for `retain` seconds goes with its live/ folder (the worker's per-call files), its stderr.log and an
     owner's request left in its run folder; the log of a bead in `exempt` stays. The dashboard only reads: `tl prune` (the loop runs it
     at its start) is the one place that deletes them. A live run beats every minute and is never old.
     -> the logs that went (would, with `dry_run`)."""
@@ -82,7 +82,7 @@ def prune_run_logs(cfg: ConfigDir, now: float, retain: float, exempt: Collection
 
 
 def drop_run_log(cfg: ConfigDir, b: RunBundle) -> None:
-    """One engine log with its .live/ folder, .stderr and an owner's request no run took (the run's close drops it too)."""
+    """One engine log with its live/ folder, stderr.log and an owner's request no run took (the run's close drops it too)."""
     shutil.rmtree(b.live, ignore_errors=True)
     b.err.unlink(missing_ok=True)
     cfg.run_request(b.run).unlink(missing_ok=True)

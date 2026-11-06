@@ -5,13 +5,13 @@ dashboard reads them. Times are seconds after T; every method moves the script's
 import dataclasses
 import json
 import os
-from pathlib import Path
 
 import support.paths  # noqa: F401
 from support.logs import typed
 from support.runs import manifest
 from taskloop.contracts import log
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunManifest, RunState
 from taskloop.contracts.runlife import liveness
 from taskloop_dash.views.runfacts import run_of
@@ -84,8 +84,8 @@ class RunScript:
 
     def write(self, config, lost=False, repo="/repo"):
         manifest(config, self.name, self.bead, self.t0, repo=repo, state=self.state(lost))
-        d = Path(config) / "engine"
-        f = d / f"{self.name}.jsonl"
+        f = ConfigDir(config).engine_log(self.name)
+        f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text("\n".join(json.dumps(r) for r in self.rows) + "\n", encoding="utf-8")
         os.utime(f, (self.t, self.t))  # the file is as old as its last record: the dashboard's retention reads the mtime
         return self
