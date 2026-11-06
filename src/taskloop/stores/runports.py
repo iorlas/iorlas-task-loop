@@ -7,7 +7,7 @@ from taskloop.contracts.env import Env
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.ports import Clock
 from taskloop.contracts.procport import Spawner
-from taskloop.contracts.stagefacts import CheckerPort, CheckLogPort, CheckpointsPort, Narrate, RepoKey, StepBook
+from taskloop.contracts.stagefacts import CheckerPort, CheckLogPort, CheckpointsPort, RepoKey, RunLogPort, StepBook
 from taskloop.stores.bundle import Stores
 
 
@@ -20,7 +20,7 @@ class RunPorts:
     git: Git
     spawner: Spawner
     steps: StepBook
-    log: Narrate
+    log: RunLogPort
     checklog: CheckLogPort
     store: Beads
     stores: Stores

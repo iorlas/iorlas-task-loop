@@ -6,8 +6,9 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from support import engine_case as te
+from support.check_host import CheckHostCase
 from support.narrow import must
+from support.plans import FALSE
 
 from taskloop.adapters.childenv import CHECK_SECRETS
 from taskloop.app.checks.cache import is_green, plan_digest
@@ -30,7 +31,7 @@ def document(steps=None, **extra):
                 steps=[step()] if steps is None else steps, **extra)
 
 
-class GatePlans(te.EngineTest):
+class GatePlans(CheckHostCase):
     def test_plan_producer_uses_the_profile_home_mode_and_always_strips_secrets(self):
         self.setup_plan()
         secrets = {**dict.fromkeys(CHECK_SECRETS, "secret"), "GIT_CREDENTIAL_HELPER": "secret"}
@@ -271,7 +272,7 @@ class GatePlans(te.EngineTest):
 
     def test_a_red_round_never_records_its_planned_skip(self):
         self.setup_plan(checks=[{"id": "coverage", "cmd": "true", "run": "gate", "group": "static"},
-                                {"id": "red", "cmd": te.FALSE, "run": "gate"}])
+                                {"id": "red", "cmd": FALSE, "run": "gate"}])
         assert self.run_gate().failed
         assert not self.green("coverage")
 

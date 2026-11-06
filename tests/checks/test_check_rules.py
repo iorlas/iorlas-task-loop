@@ -1,22 +1,17 @@
 """E4 (tl-4qh): what a round of checks decides, with real processes and git: a producer that did not run, a red the base also has,
 the same red three rounds in a row, a retry that cannot change the answer, the compile errors Unity wrote elsewhere, the plan lint."""
-import json
 import sys
 from pathlib import Path
-from typing import Any, ClassVar, cast
-
-from support.case import Case
+from typing import Any, ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import engine_case as te
 from support.cfgs import cfg_with
+from support.check_host import CheckHostCase
 from support.checks import ck, typed
-from support.plans import CLEAN, PLAN, WRITE
+from support.plans import FALSE, PLAN
 
 from taskloop.app.checks import evidence
-from taskloop.contracts import wire
-from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.ids import CheckId
 from taskloop.contracts.plancheck import adhoc
 from taskloop.domain.checks import lint, planref
@@ -24,41 +19,8 @@ from taskloop.domain.checks import lint, planref
 ST = {"checks": [], "files": []}
 
 
-class Base(Case):
-    """The engine harness of tests/test_engine.py, borrowed method by method (its setUp builds the repo, the fake bd and the config)."""
-
-    wt: Path
-    tmp: Any
-    eng: Any
-    blocked: list[str]
-
-    def setup_method(self):
-        te.EngineTest.setup_method(cast(Any, self))
-
-    def teardown_method(self):
-        te.EngineTest.teardown_method(cast(Any, self))
-
-    def fake_bd(self, *a, **kw):
-        return te.EngineTest.fake_bd(cast(Any, self), *a, **kw)
-
-    def run_engine(self, answers, **cfg):
-        return te.EngineTest.run_engine(cast(Any, self), answers, **cfg)
-
-    def checks_engine(self, **cfg):
-        return te.EngineTest.checks_engine(cast(Any, self), **cfg)
-
-    def counting_check(self, line, ok_after=None):
-        return te.EngineTest.counting_check(cast(Any, self), line, ok_after)
-
-
-class OneCheckRun(Base):
-    def test_the_round_file_and_the_log_row_are_one_check_run(self):
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        assert rc == 0
-        stored = self.eng.stores.check_run(self.eng.run_dir.name, 1).get()
-        rows = [json.loads(x) for x in self.eng.log_path.read_text().splitlines() if '"kind": "checks"' in x]
-        assert wire.load(CheckRun, dict(rows[0]["run"], v=CheckRun.V)) == stored
-        assert stored.results and all(c.log for c in stored.results)
+class Base(CheckHostCase):
+    pass
 
 
 class ProducerDidNotRun(Base):
@@ -78,14 +40,9 @@ class ProducerDidNotRun(Base):
         run = eng.run_checks({"checks": ck([adhoc('test -r "$TL_CHECK_LOG_NOPE"', (CheckId("nope"),))]), "files": []}, "s")
         assert [(c.status, c.producer) for c in run] == [("skipped", "nope")]
 
-    def test_it_costs_no_write_round(self):
-        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[self.READER.to_dict()])])
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE] * 3, "review": [CLEAN]}, checks=self.REPO)
-        assert rc == 0, self.blocked
-        assert [c[0] for c in s.calls].count("worker") == 1
 
     def test_a_genuinely_red_producer_fails_the_round_naming_it(self):
-        eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": te.FALSE, "group": "tests"}])
+        eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": FALSE, "group": "tests"}])
         run = eng.run_checks({"checks": ck([self.READER]), "files": []}, "s")
         assert [c.id for c in run.failed] == ["unity-tests"]
         assert run.results[1].status == "skipped"

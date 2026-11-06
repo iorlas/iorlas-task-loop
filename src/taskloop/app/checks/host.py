@@ -4,7 +4,6 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
-from taskloop.app.checks.checklog import CheckLog
 from taskloop.contracts.checks import CheckFaultKind
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import WaitWhat
@@ -13,8 +12,8 @@ from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.procport import Spawner
+from taskloop.contracts.stagefacts import CheckLogPort, RunLogPort
 from taskloop.stores.bundle import Stores
-from taskloop.stores.runlog import RunLog
 
 
 class CheckFault(Exception):
@@ -81,11 +80,11 @@ class CheckHost(Protocol):
     @property
     def cfg(self) -> EngineConfig: ...
     @property
-    def log(self) -> RunLog: ...
+    def log(self) -> RunLogPort: ...
     @property
     def steps(self) -> CheckSteps: ...
     @property
-    def checklog(self) -> CheckLog: ...
+    def checklog(self) -> CheckLogPort: ...
     @property
     def stores(self) -> Stores: ...
     @property

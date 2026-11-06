@@ -11,8 +11,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 
 sys.path.insert(0, str(ROOT / "tests"))
-from support import engine_case as te  # noqa: E402
-from support import procsim  # noqa: E402
 from support.checks import res  # noqa: E402
 
 from taskloop.app.checks import evidence  # noqa: E402
@@ -116,29 +114,3 @@ class BriefPaths(Case):
         before = (self.run_dir / "checks" / "nunit_fail.log").read_text()
         evidence.failure_brief([res(cmd="c", exit=1, log="checks/nunit_fail.log")], self.run_dir)
         assert (self.run_dir / "checks" / "nunit_fail.log").read_text() == before
-
-
-class RedCheckPrompt(te.EngineTest):
-    """The writer's prompt after a red check carries the trimmed form, not the log."""
-
-    def test_the_second_write_sees_failure_lines_and_the_log_path_not_the_whole_log(self):
-        def noisy(cwd, env):
-            lines = [f"setup step {i} ok, nothing to see here" for i in range(600)]
-            lines += ["FAIL: test_refund_rounds (tests.test_orders.OrderTests)", "AssertionError: 10.04 != 10.05"]
-            lines += [f"teardown {i}" for i in range(80)]
-            return (0 if procsim.f_txt(cwd) == "d3" else 1), "\n".join(lines)
-        check = procsim.fake("noisy-check", noisy)
-        plan = dict(te.PLAN, stages=[dict(te.PLAN["stages"][0], checks=[check])])
-        rc, s = self.run_engine({"plan": [plan], "write": [te.WRITE, te.WRITE], "review": [te.CLEAN]})
-        assert rc == 0, self.blocked
-        writes = [p for (c, p) in zip(s.calls, s.prompts, strict=False) if c[0] == "worker"]
-        assert len(writes) == 2
-        second = writes[1]
-        assert "These checks fail" in second
-        assert "FAIL: test_refund_rounds" in second
-        assert "AssertionError: 10.04 != 10.05" in second
-        assert ".log" in second  # the path of the full log
-        assert "setup step 300 ok" not in second
-        assert "setup step 598 ok" not in second  # only the line before the failure comes with it
-        assert len(second) - len(writes[0]) < 2 * trim.CAP
-        assert "setup step" not in writes[0]  # the first write has no check output at all

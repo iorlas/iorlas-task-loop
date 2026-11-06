@@ -101,7 +101,7 @@ class RunOnce:
         bead = self.begin(hb)
         plan, i, state = self.prepare(bead)
         self.stages(plan, i, state)
-        if e.render_stale and e.look.last_reqs and e.pictures.shot_methods() and not e.dry:
+        if e.pictures.stale and e.look.last_reqs and e.pictures.shot_methods() and not e.dry:
             # code changed after the last render (a fix round past the render rounds): the pictures that land show the tree
             e.log.note("rendering the last shots again: code changed since the pictures were made")
             e.pictures.render_shots(e.look.last_reqs, e.look.done + 1)

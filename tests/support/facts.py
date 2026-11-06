@@ -19,8 +19,11 @@ from taskloop.contracts.checks import Check, CheckResult, CheckRun
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.plancheck import PlanCheck
+from taskloop.contracts.ports import Clock
 from taskloop.contracts.stagefacts import RunFacts
+from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 from taskloop.stores.runports import RunPorts
 
@@ -89,15 +92,16 @@ class FakeRepoKey:
         return self.value
 
 
-def fake_facts(workdir: Path, bead: str = "t-1", cfg: EngineConfig | None = None, dry: bool = False,
-               fresh: bool = False) -> tuple[RunFacts, RunPorts]:
+def fake_facts(workdir: Path, bead: str = "t-1", cfg: EngineConfig | None = None, dry: bool = False, fresh: bool = False, *,
+               wt: Path | None = None, home: ConfigDir | None = None, run_id: str = "FAKERUN0000", stores: Stores | None = None,
+               clock: Clock | None = None) -> tuple[RunFacts, RunPorts]:
     """Facts and ports of a run that never ran: its folders are made under `workdir`, its log and stores are in memory, its bd is a
-    FakeBeads. `dry` and `fresh` are the two flags a test sets."""
-    run_id = "FAKERUN0000"
+    FakeBeads. `dry` and `fresh` are the two flags a test sets; `wt`, `home`, `run_id`, `stores` and `clock` are the pieces a test
+    that shares them with other fakes brings."""
     run_dir = workdir / "runs" / run_id
     for sub in ("task", "evidence"):
         (run_dir / sub).mkdir(parents=True, exist_ok=True)
-    clock, stores = FakeClock(), fake_stores()
+    clock, stores = clock or FakeClock(), stores or fake_stores()
     log = RunLog(stores.run_log(run_id), clock=clock.now, run_id=run_id, bead=bead, host="host")
     ports = RunPorts(
         clock=clock, env=snapshot(), git=port_git(), spawner=real_spawner(), steps=Steps(log, clock.now), log=log,
@@ -105,7 +109,7 @@ def fake_facts(workdir: Path, bead: str = "t-1", cfg: EngineConfig | None = None
         checker=FakeChecker(), repo=FakeRepoKey("repo-key"),
     )
     facts = RunFacts(
-        bead=BeadId(bead), wt=str(workdir / "wt"), cfg=cfg or cfg_with(EngineConfig()), home=who().config, run_id=run_id,
+        bead=BeadId(bead), wt=str(wt or workdir / "wt"), cfg=cfg or cfg_with(EngineConfig()), home=home or who().config, run_id=run_id,
         run_dir=run_dir, task_dir=run_dir / "task", brief_file=run_dir / "task" / "brief.md", evidence_dir=run_dir / "evidence",
         repo="repo-id", dry=dry, fresh=fresh, claim=fence.offline(BeadId(bead)),
     )
