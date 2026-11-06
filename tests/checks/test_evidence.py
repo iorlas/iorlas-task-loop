@@ -6,12 +6,15 @@ import os
 import shlex
 import sys
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
 from support.engine_case import EngineTest
 from support.logs import records
+
+from taskloop.app.run import worker_call
 
 CMD = "unity-like-check"
 
@@ -84,3 +87,25 @@ class Evidence(EngineTest):
         eng.run_checks({"checks": [], "files": []}, "s")
         d = eng.run_dir / "artifacts" / "w" / "attempt-1"
         assert [p.name for p in d.iterdir()] == ["check.log"]
+
+    def test_a_secret_looking_name_is_not_copied_and_a_tool_written_one_gets_no_row(self):
+        def run(cwd, env):
+            (Path(cwd) / "Logs").mkdir(exist_ok=True)
+            (Path(cwd) / "Logs" / "Editor.log").write_text("log\n")
+            (Path(cwd) / "Logs" / "api-token.log").write_text("t0k3n\n")
+            (Path(cwd) / "Logs" / ".env.log").write_text("K=V\n")
+            (Path(env["TL_ARTIFACT_DIR"]) / "id_rsa").write_text("key\n")  # a tool writes straight into its attempt directory
+            return 1, "red"
+        procsim.fake("secretive-check", run)
+        eng = self.checks_engine(checks=[{"id": "x", "cmd": "secretive-check", "keep": ["Logs/*.log", "Logs/.env.log"]}], base_red=False)
+        eng.run_checks({"checks": [], "files": []}, "s")
+        d = eng.run_dir / "artifacts" / "x" / "attempt-1"
+        copied = sorted(p.relative_to(d).as_posix() for p in d.rglob("*") if p.is_file() and p.name != "id_rsa")
+        assert copied == ["Logs/Editor.log", "check.log"]
+        rows = {r["artifact"].rsplit("/", 1)[-1] for r in records(eng, "evidence") if r["call_id"] == "x"}
+        assert rows == {"Editor.log", "check.log"}
+
+    def test_keeping_evidence_makes_no_model_call(self):
+        with mock.patch.object(worker_call.dg, "call", side_effect=AssertionError("ingest called a model")):
+            eng, _ = self.attempt()
+        assert len([r for r in records(eng, "evidence") if r["call_id"] == "u"]) == 3

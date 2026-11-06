@@ -63,7 +63,7 @@ class Routed:
 
 
 def follow_up(text: str, why: str, category: str = "", file: str = "") -> dict[str, str]:
-    """A follow-up bead to file; `category` and `file` are its key (domain/review/followups.py)."""
+    """A follow-up bead to file; `category` and `file` are its key (domain/followups.py)."""
     title = "Follow-up: " + " ".join(text.split())[:100]
     lo = {"title": title, "why": f"{why}: {' '.join(text.split())[:500]}"}
     return dict(lo, category=category, file=file) if category else lo
