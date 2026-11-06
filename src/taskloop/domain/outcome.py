@@ -14,6 +14,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Final
 
+from any_failure_fp import Event, seen_within, streak
+
 from taskloop.contracts.enums import Outcome, Result
 from taskloop.contracts.kinds import (
     ASKS,
@@ -176,16 +178,10 @@ def apply(outcome: RunOutcome, bead: str, history: Sequence[Mapping[str, Any]], 
     Pure: no clock, no IO."""
     kind, rule = outcome.kind, outcome.rule
     escalated = False
+    events = [Event(str(h.get("bead")), str(h.get("fingerprint")), float(h.get("t") or 0), str(h.get("kind", ""))) for h in history]
     if rule.escalate_to and outcome.fingerprint:
-        same = 1
-        for h in reversed([h for h in history if h.get("bead") == bead]):
-            if str(h.get("kind", "")).startswith("ask_"):
-                break  # an ask ended the run of identical faults
-            if h.get("fingerprint") == outcome.fingerprint:
-                same += 1
+        same = streak(events, bead, outcome.fingerprint, lambda e: e.kind.startswith("ask_"))  # an ask ended the run of identical faults
         if same >= rule.retries:
             kind, rule, escalated = rule.escalate_to, POLICY[rule.escalate_to], True
-    cut = now - knobs["comment_dedupe_s"]
-    said = any(h.get("bead") == bead and h.get("kind") == kind.value and h.get("fingerprint") == outcome.fingerprint
-               and float(h.get("t") or 0) >= cut for h in history)
+    said = seen_within(events, bead, kind.value, outcome.fingerprint, now=now, window_s=knobs["comment_dedupe_s"])
     return Disposition(kind, rule.bd, rule.label, rule.loop, rule.trace, rule.makes_ask, not said, escalated)

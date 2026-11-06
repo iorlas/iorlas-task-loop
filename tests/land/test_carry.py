@@ -2,13 +2,13 @@
 the branch merged into the moved base; a changed file, a new test of main that imports the changed module, a conflict, or a failing
 closure command each make it run again."""
 import json
-import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
 from support.memstores import fake_stores
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import check_files, childenv
 from taskloop.app.checks.cache import InputKeys, RunMemo
@@ -54,7 +54,7 @@ class Spawns:
 
 class CarryCase(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.tdir = Path(tmp.name) / "wt"
         for path, text in BRANCH.items():

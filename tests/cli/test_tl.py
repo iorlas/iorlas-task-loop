@@ -5,7 +5,6 @@ import os
 import shutil
 import stat
 import sys
-import tempfile
 import threading
 import time
 from pathlib import Path
@@ -13,6 +12,7 @@ from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
@@ -24,6 +24,7 @@ from support.spawn import port_git  # noqa: E402
 from taskloop.app.release import pins  # noqa: E402
 from taskloop.app.wire import usage as usage_cmd  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
+from taskloop.contracts.stores import PinStore  # noqa: E402
 
 # isort: split
 import contextlib  # noqa: E402
@@ -61,7 +62,7 @@ def sh(*args, cwd):
 
 class Base(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.home = Path(self.tmp.name)
         env = {"XDG_CONFIG_HOME": str(self.home / "cfg"), "APPDATA": str(self.home / "cfg"),
                "CLAUDE_CODE_SESSION_ID": "abcdef12-3456", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
@@ -239,7 +240,7 @@ class PinAndRollback(Base):
         return rc, out.getvalue(), err.getvalue()
 
     def pinned(self):
-        return json.loads((homes.config_dir() / "pinned.json").read_text())
+        return wire.dump(must(PinStore(homes.cfg()).get()))
 
     def test_pin_writes_both_versions_and_clear_removes_the_file(self):
         rc, out, _ = self.pin("0.2.0", "--delegate", "0.5.0")
@@ -249,7 +250,7 @@ class PinAndRollback(Base):
         assert self.pin("--delegate", "0.6.0")[0] == 0  # one side only: the other stays
         assert (self.pinned()["task-loop"], self.pinned()["delegate"]) == ("0.2.0", "0.6.0")
         assert self.pin("--clear")[0] == 0
-        assert not (homes.config_dir() / "pinned.json").exists()
+        assert PinStore(homes.cfg()).get() is None
         assert self.pin("--clear")[0] == 0  # clearing nothing is fine
 
     def test_a_pin_to_a_missing_cache_dir_is_refused_and_writes_nothing(self):
@@ -258,7 +259,7 @@ class PinAndRollback(Base):
         assert "0.3.0 is not installed" in err
         assert "0.1.0, 0.2.0, 0.10.0" in err
         assert self.pin("0.2.0", "--delegate", "9.9.9")[0] == 2
-        assert not (homes.config_dir() / "pinned.json").exists()  # not even the valid half
+        assert PinStore(homes.cfg()).get() is None  # not even the valid half
         shutil.rmtree(self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.1.0/skills")  # half-copied
         assert self.pin("0.1.0")[0] == 2
 
@@ -305,7 +306,7 @@ class AskCli(Case):
     """tl ask: the inbox from the terminal. An answer is a typed record on the ask, never a comment."""
 
     def test_list_answer_and_withdraw(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             d = Path(tmp)
             asks = AskStore.at(ConfigDir(d / "task-loop"))
             for bead in ("x-1", "x-2"):
@@ -334,7 +335,7 @@ class ParkStaleAsks(Case):
     """tl-bxk.8.25: an ask with no answer 3 days after it was asked is parked, once, with a comment; it still waits."""
 
     def test_parks_only_late_unanswered_open_asks(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             d = Path(tmp)
             asks = AskStore.at(ConfigDir(d / "task-loop"))
             now = time.time()

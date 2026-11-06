@@ -1,10 +1,10 @@
 """adapters/git.py on real git, in a throwaway repo: the same Git contract the gitsim runs."""
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
@@ -30,7 +30,7 @@ class IgnoreSpaceDoesNotDependOnTheGitVersion(Case):
     """An older git lists a whitespace-only change as M even under -w: the adapter must drop it itself."""
 
     def test_a_whitespace_only_m_row_from_git_is_dropped_and_a_real_edit_kept(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             def sh(*a: str) -> None:
                 run_checked(["git", "-C", tmp, "-c", "user.name=t", "-c", "user.email=t@t", *a], None)
             sh("init", "-q")

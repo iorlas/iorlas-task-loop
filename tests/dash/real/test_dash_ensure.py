@@ -4,12 +4,12 @@ import io
 import os
 import socket
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import mkdtemp
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -58,7 +58,7 @@ class LoudBind(Case):
 
     def test_the_server_exits_nonzero_and_serves_nothing(self):
         port = free_port()
-        cfg = tempfile.mkdtemp()
+        cfg = mkdtemp()
         err = io.StringIO()
         with mock.patch.dict(os.environ, {"TASK_LOOP_DASH_DEV_PUBLIC": "1", "XDG_CONFIG_HOME": cfg, "APPDATA": cfg}), \
                 contextlib.redirect_stderr(err), pytest.raises(SystemExit) as stop:
@@ -74,7 +74,7 @@ class DevCheckout(Case):
 
 
     def test_dev_server_listens_on_random_loopback_port(self):
-        cfg = tempfile.mkdtemp()
+        cfg = mkdtemp()
         with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": cfg, "APPDATA": cfg, "TASK_LOOP_DASH_BIND": ""}):
             servers, addrs, port, _dash = serve.start(Env(config=cfg, ports=Ports()), dash_cli.PACKAGE, snapshot(), [])
         try:

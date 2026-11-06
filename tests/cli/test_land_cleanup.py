@@ -1,10 +1,10 @@
 """The direct land verb verifies the base and records cleanup independently of its outcome."""
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -43,7 +43,7 @@ class DirectGit(ScriptedGit):
 
 class DirectCleanup(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.who = Identity(actor="tester", home=self.tmp.name)
         self.git = DirectGit()

@@ -1,7 +1,6 @@
 """Rebase integration retains conflicts, ownership checks and cherry ordering."""
 
 import subprocess
-import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -9,6 +8,7 @@ import pytest
 import support.paths  # noqa: F401
 from support.case import Case
 from support.checked import run_checked
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters.git import RealGit
 from taskloop.contracts.env import Env, snapshot
@@ -17,7 +17,7 @@ from taskloop.contracts.slots import BranchPinned
 
 class RealGitCheckoutRebaseTest(Case):
     def setup_method(self):
-        temporary = tempfile.TemporaryDirectory()
+        temporary = TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.home = Path(temporary.name).resolve()
         self.repo = self.home / "repo"
