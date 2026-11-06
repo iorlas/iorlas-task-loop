@@ -33,8 +33,8 @@ class Cases:
     def engine_unproven(self, unchecked: Any, checks: Any):
         """The unchecked items the engine does not prove itself: one that names the gate (it runs at land, and a red gate
         goes to a fix round) or a check that passed this round is dropped, and so is every case item once this round ran
-        all the plan's cases green (only the last stage and a fix run them). lifesim-5ban.3 and lifesim-fld.27.3 stopped
-        on verify asks for the gate; lifesim-gfr.31.1 on 'there is no nographics.out in evidence yet' after the case
+        all the plan's cases green (only the last stage and a fix run them). two consumer beads stopped
+        on verify asks for the gate; a third on 'there is no nographics.out in evidence yet' after the case
         that writes it passed."""
         e = self.e
         ran = [c.cmd for c in checks if c.exit == 0]
@@ -59,7 +59,7 @@ class Cases:
 
     def out_of_scope(self, items: Any):
         """tl-bxk.13.5: a checkable item a review noted that shares nothing with the bead's done-when, the plan's goals, cases
-        and risks is a follow-up, not a gap: it is filed as a leftover and the land goes on (lifesim-f2by: a note about two
+        and risks is a follow-up, not a gap: it is filed as a leftover and the land goes on (a consumer run: a note about two
         poses nobody asked for became two fix rounds, 93 min). Nothing is dropped unseen: the bead is filed. With no
         acceptance text to compare against, nothing moves."""
         e = self.e
