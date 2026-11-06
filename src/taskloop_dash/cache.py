@@ -14,20 +14,31 @@ class TtlCache:
         self.clock = clock
         self.lock = threading.Lock()
         self.items: dict[str, tuple[float, Any]] = {}
+        self.making: dict[str, threading.Lock] = {}
 
     def get(self, key: str, ttl: float, make: Callable[[], Any]) -> Any:
-        """The value made under `key` less than `ttl` seconds ago, else a fresh one."""
+        """The value made under `key` less than `ttl` seconds ago, else a fresh one; concurrent misses of a key share one `make`."""
         with self.lock:
             hit = self.items.get(key)
             if hit and self.clock() - hit[0] < ttl:
                 return hit[1]
-        val = make()
-        self.put(key, val)
-        return val
+            flight = self.making.setdefault(key, threading.Lock())
+        with flight:
+            with self.lock:
+                hit = self.items.get(key)
+                if hit and self.clock() - hit[0] < ttl:
+                    return hit[1]
+            val = make()
+            self.put(key, val)
+            return val
 
     def peek(self, key: str) -> tuple[float, Any] | None:
         with self.lock:
             return self.items.get(key)
+
+    def names(self) -> list[str]:
+        with self.lock:
+            return [*self.items]
 
     def put(self, key: str, val: Any) -> None:
         with self.lock:
