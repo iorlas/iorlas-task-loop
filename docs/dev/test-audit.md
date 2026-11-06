@@ -57,3 +57,14 @@ the wait IS the subject, with a real child process, so a fake clock needs a cloc
 delegate. Outside delegate the rest are thread race windows of 10-300 ms (asks/rmw_store, checks/resources, slots, write_idle) and real-process
 waits in `real/` (slots, loop hold e2e, adapters). The one avoidable wait outside them, `tests/adapters/test_links.py` (3.0 s, a sleep standing
 in for a hung link check), now waits on an Event (0.5 s). The clock seam for delegate's watchdog landed after this census (tl-wnup.6, #69).
+
+## sqlite template (PR4): refuted by a profile, not built
+The plan said 1241 tests open a real sqlite store (48 CPU s, 25%) and a seeded copy would make a store a file copy. Measured on pix:
+- a fresh `factorydb.open_rw` costs 1.6 ms; copying a seeded file and opening it costs 4.2 ms (WAL side files): the template is slower.
+- cProfile of all of `tests/run` outside real/ (534 tests, 49 s): every sqlite call together is 0.87 s (1.7%). The 25% in the touch table counts
+  every test that opens a store, not what the store costs: those tests are engine tests, whose time is the engine.
+- Where the time goes instead (same profile): 320k file opens (254k `Path.read_text`; gitsim's `Repo.ref` alone 100k, `common_of` 53k), 3.7M
+  `os.environ` lookups (3.4 s cumulative, 7%: `git_porcelain.real_env.base` rebuilds the child environment on every git call, 5 s cumulative;
+  that module is vendored, so the fix belongs in the shelf), and pathlib string building (5 s).
+- Next real levers: cache or hoist `real_env.base()` (shelf), keep gitsim refs in memory (the engine's ref memo needs a new inode per write:
+  tests/support/gitsim/model.py `atomic_write`), and fewer `Path` objects per git question.
