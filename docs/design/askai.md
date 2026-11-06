@@ -28,7 +28,6 @@ reuses the answer and starts the next call with a stale thread.
    - `fallback: Fallback | None`: `on: bool`, `lane: str`, set only when delegate said it on this answer (as `take_answer` does now);
    - `flag: str`: `same_family` / `degraded` / `""`, with the read-only same-family override folded in by `ask` (it has the writer family in the request);
    - `note: str`: the lane note, or `""`.
-   - `pause: Pause | None`: the stop value when the call ended on one; it goes into the close intent, not into an engine field.
 3. **`settle(asked)`** is the caller's one function (kernel, next to `done_memo`): it applies `updates` to a `RunState` copy and writes
    the done-memo row and the checkpoint row **in one `factory.db` transaction**. `done_memo.keep` gets a variant that takes the open
    connection (`RunRows.transaction`, same `shared_rw` handle the checkpoint rows use). Then `c.state.consumed()`. Order is kept:
@@ -36,8 +35,12 @@ reuses the answer and starts the next call with a stale thread.
    `calling`); after it, recall finds both.
 4. **Notes** (`warn`, `comment`, `lane_notes`) are effects, not state: `settle` returns them and the caller emits them after the
    transaction (an effect that is repeated after a crash is only a duplicate line; the dedupe on `lane_notes` stays).
-5. **`last_flag`** stays in `RunState` for now (look, verify and review read it); it becomes a field of the checkpoint written by `settle`, and
-   its readers take it from `RunFacts` later (C-WORKERS). Not decided here.
+5. **`last_flag` is not persisted.** It is a plain engine attribute today, not in the checkpoint; putting it there is an on-disk change that
+   `Rec` refuses on a rollback. It stays in memory: `Updates.flag` is applied to the engine by the host, per call. It is not in `RunFacts` (frozen).
+6. **`settle` amends only** the session (`writer.*`), `writer_fallback`/`fallback_lane` and `planner_ref` fields of the checkpoint state. It never
+   writes `step`, `applied`, `ended` or any other field.
+7. **Pause stays where it is** (`retry_after`, `pause_role`, `pause_lane` engine fields) in slices 1-2. Moving it into the close intent is the
+   last step of the close-intent work (stage-isolation.md section 7), not this bead's.
 
 ## What does not change
 
@@ -50,17 +53,23 @@ Request building, retries, stop handling (`LaneActs`) and what each stage sends.
 2. **Move the writes out.** `worker_call` returns `Asked`; the host's `ai` applies it. `grep -n "e\.\(writer\|planner_ref\|last_flag\|fallback_lane\|writer_fallback\)" worker_call.py` is empty.
 3. **Callers take `Asked`.** Six call sites; `AskAi` as a port in the stages that use it. Waits for the stage hosts (ARCHVERT-HOSTS).
 
+Order with B-LOOK: B-LOOK slice 1 lands before ASKAI slice 1 (shared `state.py` mapping); ASKAI slice 2 lands before B-LOOK slice 3 (`FakeLookPorts.ai`).
+
 Not touched: `paths.py`, ids, run layout, `policy.TABLE`/`retry.PLAN` (B2b, held for Denis).
 
 ## Acceptance criteria
 
 - No engine field is written by `worker_call` (a test greps the module for `self.e.<state field> =` and `e.<state field> =`).
-- `Asked.updates` carries session, fallback, flag, note and pause; each has a unit test from a `DelegateResult` (fallback only when delegate said it; read-only same-family override).
+- `Asked.updates` carries session, fallback, flag and note; each has a unit test from a `DelegateResult` (fallback only when delegate said it; read-only same-family override).
 - A crash test: inject a failure after `settle`'s transaction and before `consumed()`; reopen the run; the done-memo is found **and** the checkpoint holds the same session ref, fallback and planner ref. A second test fails the transaction midway (after the memo row, before the checkpoint row): neither is visible.
-- The `Pause` value of a stopped call reaches the close intent (a test of the close with a stop).
+- `settle` leaves `step`, `applied` and `ended` alone: `select_step` answers the same before and after (test).
+- `carry_done_memo` (raw SQL on the same `step` table) still finds the memo `settle` wrote (test).
+- A crash after `settle` and before `consumed()` resumes without asking the worker again (test).
+- A checkpoint written before ASKAI (no `planner_ref`) still loads (test).
+- `last_flag` is not a checkpoint field (a test of the checkpoint's wire keys).
 - Ratchets: no new `Any`, `cast`, ignore; files under 400 SLOC; unit-layer tests only (`workdir` fixture for the sqlite file).
 
 ## Open
 
 - Verified: `LoopRows` (checkpoint) and `RunRows` both open `factorydb.shared_rw(cfg.factory_db())`, so they share one per-thread connection and file. `begin_immediate` is not reentrant (a nested `BEGIN IMMEDIATE` errors), so `settle` opens one transaction and writes the checkpoint row on that connection: slice 1 adds `RowDoc.write_in(con, rec, expect_rev)`, the body of `write` without its own transaction, and `write` calls it.
-- `Updates.pause` takes whatever type the close intent takes today (`domain/lanes/pauses.py`); B2b may replace it with `NeedsOwner`, and changes both together.
+- Pause into the close intent: after the close-intent step, a separate bead.
