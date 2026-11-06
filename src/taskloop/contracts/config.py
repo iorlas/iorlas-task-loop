@@ -84,6 +84,9 @@ class ExecutorConfig(Rec):
 
     host: str = ""
     root: str = "tl"
+    # argv run in the slot's worktree on the executor when `setup_inputs` (committed paths, no globs) changed since the last setup there
+    setup: list[str] = msgspec.field(default_factory=list)
+    setup_inputs: list[str] = msgspec.field(default_factory=list)
     ssh: list[str] = msgspec.field(default_factory=lambda: [
         "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ControlMaster=auto", "-o", "ControlPath=~/.ssh/tl-%C",
         "-o", "ControlPersist=60"])  # one connection serves the steps of a run
@@ -186,6 +189,12 @@ class EngineConfig(Rec):
 
     land: list[str] = msgspec.field(default_factory=lambda: list(LAND_PUSH))
     land_optimistic_tries: int = 2  # gate re-runs outside the land lock when main moved under it, then inside (0: inside)
+    # clean: the land gate judges a fresh checkout of the commit; slot: the committed slot, under the guards of app/checks/clean.py
+    # (committed tree, no ignored source file outside `gate_ignored_allow`), and a fix round's pass is the gate's pass
+    gate_tree: Literal["clean", "slot"] = "clean"
+    gate_source_globs: list[str] = msgspec.field(default_factory=lambda: ["**/*.cs", "**/*.yaml", "**/*.py", "**/*.json"])
+    gate_ignored_allow: list[str] = msgspec.field(default_factory=lambda: [
+        ".venv/**", "node_modules/**", "**/__pycache__/**", "Library/**", "Temp/**", "obj/**", "bin/**"])
     land_mode: Literal["push", "pr"] = "push"  # pr: the land opens a PR and waits for the owner to merge it; the engine never merges
     base: str = "origin/main"
     check_links: bool = True

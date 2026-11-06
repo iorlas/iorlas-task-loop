@@ -1,11 +1,11 @@
 """Old sessions keep launchers on the newest readable numeric cache install."""
 import os
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.wire import doctor, hook
 from taskloop.contracts.env import Env
@@ -13,7 +13,7 @@ from taskloop.contracts.env import Env
 
 class ShimPin(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
         self.env = Env({"XDG_CONFIG_HOME": str(self.root / "config"),

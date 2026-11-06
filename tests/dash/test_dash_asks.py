@@ -2,11 +2,11 @@
 force, the learning series, and POST /api/stick through Ports."""
 import os
 import sys
-import tempfile
 import time
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -227,7 +227,7 @@ class Stick_(Case):
     """POST /api/stick: the dashboard's write through Ports into the Intake verb."""
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.fake = FakeBeads()
         self.fake.beads[BeadId("b-1")] = Bead(id=BeadId("b-1"), title="Bills", status="blocked", description="Pay the bills.")

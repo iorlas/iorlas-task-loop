@@ -8,7 +8,7 @@ from taskloop.app.checks import evidence, gateplan
 from taskloop.app.checks.attempts import Attempts
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.cache import InputKeys, RunMemo
-from taskloop.app.checks.clean import isolated
+from taskloop.app.checks.clean import guard_slot, isolated
 from taskloop.app.checks.execution import keyed_env
 from taskloop.app.checks.executor import CheckExecutor
 from taskloop.app.checks.fixer import Fixer
@@ -33,6 +33,7 @@ def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: Stores, env: Env,
                 tree: TreeSha, planned: gateplan.PlanDecision | None, *, clean: bool = False,
                 slot_wt: str | None = None) -> bool:
     """Read gate evidence without running checks or a plan producer."""
+    clean = clean and cfg.gate_tree == "clean"  # gate_tree slot: the gate's passes are the slot's own
     steps = gate_items(cfg)
     if not tree or not steps:
         return False
@@ -40,7 +41,7 @@ def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: Stores, env: Env,
     start = git.merge_base(wt, "HEAD", cfg.base) or base
     items = [*([diff_check(start, tree)] if start else []), *steps]
     keys = InputKeys(git, wt, tree, clean=clean, pins=cfg.pin_files)
-    memo = RunMemo(stores, check_files.repo_key(git, wt), keys, BaseSha(base), keyed_env(env))
+    memo = RunMemo(stores, check_files.repo_key(git, wt), keys, BaseSha(base), keyed_env(env), executor=cfg.executor.host)
     if clean or slot_wt is not None:
         memo.slot_keys = InputKeys(git, slot_wt or wt, tree, pins=cfg.pin_files)
     memo.checks = {c.id: repo_check(c, cfg) for c in cfg.checks}
@@ -95,6 +96,9 @@ class Checker:
         all_files: pass_files checks get every tracked file. learn: the durations of what passed are
         remembered. clean: judge committed HEAD, routing run_in=slot to the guarded slot and other checks to a fresh checkout.
         The rows are the check log's (start and end per step); no step book, no streak."""
+        if clean and self.host.cfg.gate_tree == "slot":
+            guard_slot(self.host)  # the gate runs here: the slot's passes (fix rounds too) are the gate's
+            clean = False
         if clean:
             with isolated(self.host) as clean_host:
                 checker = Checker(clean_host, self.sleep, clean=True, slot_host=self.host)
@@ -121,6 +125,7 @@ class Checker:
 
     def gate_green(self, clean: bool = False) -> bool:
         """Every gate step's run is in the memo already (the key it would have: tree or inputs, base, env), or the step is not due."""
+        clean = clean and self.host.cfg.gate_tree == "clean"
         if clean:
             try:
                 with isolated(self.host) as clean_host:
@@ -147,7 +152,7 @@ class Checker:
         host = self.host
         keys = InputKeys(host.git, host.wt, tree, clean=self.clean, pins=host.cfg.pin_files)
         repo = check_files.repo_key(host.git, str(host.wt))
-        memo = RunMemo(host.stores, repo, keys, BaseSha(base), keyed_env(host.env), host.run_id)
+        memo = RunMemo(host.stores, repo, keys, BaseSha(base), keyed_env(host.env), host.run_id, executor=host.cfg.executor.host)
         if self.slot_host is not None:
             # The mixed plan shares receipts, but slot requirements use a non-clean checker's ignored-input digests.
             slot_checker = Checker(self.slot_host, self.sleep, clean=False)

@@ -3,13 +3,13 @@ contract's fields; strict `events.decode` reads back every row."""
 import contextlib
 import os
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any, get_args
 from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -47,7 +47,7 @@ CALLS = {
 
 @contextlib.contextmanager
 def isolated_home():
-    with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": d, "APPDATA": d}):
+    with TemporaryDirectory() as d, mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": d, "APPDATA": d}):
         yield
 
 
