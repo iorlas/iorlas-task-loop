@@ -65,10 +65,10 @@ def read_verdict(tool_name: str | None, tool_input: dict[str, Json], line_count:
     )
 
 
-def denial(kind: str, tool: str, inp: Json) -> ev.Denied:
+def denial(kind: str, tool: str, inp: Json, reason: str = "") -> ev.Denied:
     """One typed refusal. kind: `policy` (a reviewer or classifier refused the call: the owner decides), `secret` (the call named a secret
     path), `sandbox_limit` (the sandbox blocked a call that needs a system resource, like ps: noise, never a failure)."""
-    return ev.Denied(tool=tool, input=inp if isinstance(inp, dict) else {}, kind=kind)
+    return ev.Denied(tool=tool, input=inp if isinstance(inp, dict) else {}, kind=kind, reason=reason)
 
 
 def denied_path(d: ev.Denied) -> Json:
@@ -82,7 +82,7 @@ def denied_path(d: ev.Denied) -> Json:
 
 def denial_item(d: ev.Denied) -> dict[str, Json]:
     """The `denied` item of a run's answer."""
-    return {"kind": d.kind, "tool": d.tool, "path": denied_path(d), "input": d.input}
+    return {"kind": d.kind, "tool": d.tool, "path": denied_path(d), "input": d.input, "reason": d.reason or None}
 
 
 def is_policy_denial(
