@@ -231,6 +231,7 @@ def case_helpers(request, procs, no_leaked_threads):
                 sys.stdout, sys.stderr = streams
         case.subTest = sub_test
         yield
+    case.__dict__.clear()  # the item keeps its instance for the session: what a test built (stores with an open log) goes with the test
 
 
 @pytest.fixture(autouse=True)
