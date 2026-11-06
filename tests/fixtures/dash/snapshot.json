@@ -222,7 +222,9 @@
     "lost": 0,
     "crashes": 0,
     "m2_pass": true,
-    "main_red": false
+    "main_red": false,
+    "retries": 0,
+    "kinds": {}
    }
   },
   {
