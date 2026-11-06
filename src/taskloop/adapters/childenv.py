@@ -43,10 +43,6 @@ def allowed(name: str) -> bool:
 HANDOVERS = frozenset({EnvVar.TL_REEXEC.value, EnvVar.TL_LOOP_STATE.value, EnvVar.TL_RELEASE_REEXEC.value})
 
 
-# the tl.py of the install this code runs from
-OWN_TL = Path(__file__).resolve().parents[3] / "skills" / "task-loop" / "tl.py"
-
-
 def hooks_vars(env: Mapping[str, str], source: Mapping[str, str]) -> dict[str, str]:
     """core.hooksPath = tl's hooks dir, through git's own env config (GIT_CONFIG_COUNT/KEY_n/VALUE_n): a default for every child, not
     a lock (`git -c core.hooksPath=...` and --no-verify still beat it). A count the caller already set is extended, never replaced."""
@@ -55,8 +51,7 @@ def hooks_vars(env: Mapping[str, str], source: Mapping[str, str]) -> dict[str, s
     except ValueError:
         n = 0
     hooks = ConfigDir(default_root(Env(dict(source)))).hooks_dir()
-    return {EnvVar.TL_JUDGE_TL.value: str(OWN_TL),
-            "GIT_CONFIG_COUNT": str(n + 1), f"GIT_CONFIG_KEY_{n}": "core.hooksPath", f"GIT_CONFIG_VALUE_{n}": str(hooks)}
+    return {"GIT_CONFIG_COUNT": str(n + 1), f"GIT_CONFIG_KEY_{n}": "core.hooksPath", f"GIT_CONFIG_VALUE_{n}": str(hooks)}
 
 
 def tool_env(base: Mapping[str, str], extra: Mapping[str, str] | None = None) -> dict[str, str]:

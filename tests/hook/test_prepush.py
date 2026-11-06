@@ -64,14 +64,14 @@ class PushClient(Case):
               redirect_stderr(io.StringIO())):
             assert prepush.githook("pre-push", ["tl"], self.request, {"TL_LAND": "1"}) != 0
 
-    def test_the_repos_own_pre_push_hook_runs_read_only(self):
+    def test_the_repos_own_pre_push_hook_runs_without_tls_hooks_path(self):
         with (mock.patch.object(prepush, "entry", return_value=0),
               mock.patch.object(prepush, "original_hooks_dir", return_value="/h"),
               mock.patch.object(prepush, "os_executable", return_value=True),
               mock.patch.object(prepush.Path, "is_file", return_value=True),
               mock.patch.object(prepush.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run):
             assert prepush.githook("pre-push", ["tl"], self.request, {"A": "b"}) == 0
-        assert "env" not in run.call_args.kwargs
+        assert run.call_args.kwargs["env"] == {"A": "b"}
 
     def test_dispatcher_refuses_unexpected_pre_push_errors(self):
         stderr = io.StringIO()
@@ -101,19 +101,3 @@ class PushClient(Case):
               redirect_stderr(stderr)):
             assert main.main(["githook", "pre-push", "tl"], self.request, Path("/plugin"), {}) == 1
         assert "prepush" in stderr.getvalue()
-
-
-class JudgedByTheEngineInstall(Case):
-    def test_the_engine_install_judges_not_the_shim(self):
-        tl = Path(__file__)  # any existing file stands for the engine's tl.py
-        assert prepush.judge_command("/shim/tl", {prepush.JUDGE_TL: str(tl)})[-2:] == ["--script", str(tl)]
-        for environ in ({}, {prepush.JUDGE_TL: "/gone/tl.py"}, {prepush.JUDGE_TL: ""}):
-            assert prepush.judge_command("/shim/tl", environ) == ["/shim/tl"]
-
-    def test_entry_runs_the_engine_install(self):
-        tl = Path(__file__)
-        result = subprocess.CompletedProcess([], 0)
-        top = subprocess.CompletedProcess([], 0, stdout="/repo\n")
-        with mock.patch.object(prepush.subprocess, "run", side_effect=[top, result]) as run:
-            assert prepush.entry(["/shim/tl", "origin", "url"], "refs", {prepush.JUDGE_TL: str(tl)}) == 0
-        assert run.call_args_list[1].args[0][-4:-2] == [str(tl), "judge-push"]
