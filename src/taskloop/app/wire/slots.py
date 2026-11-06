@@ -180,8 +180,8 @@ def slot_env(repo: str, store: Beads | None = None, cfg: SlotsConfig | None = No
         actor=who.actor,
         host=hostname(),
         take_lock=lambda: os_lock(who.config.root / "locks" / f"slot-take-{repo_key(repo)}.lock", f"pid {os.getpid()}"),
-        busy=engine_busy, lock_pid=lock_pid,
-        drop_engine_lock=lambda wt, pid: drop_engine_lock(wt, pid) if pid is not None else None, event=functools.partial(event,
+        busy=functools.partial(engine_busy, who.config), lock_pid=functools.partial(lock_pid, who.config),
+        drop_engine_lock=lambda wt, pid: drop_engine_lock(who.config, wt, pid) if pid is not None else None, event=functools.partial(event,
             who), say=print,
         warn=lambda m: print(m, file=sys.stderr), pid=os.getpid(),
         run_setup=lambda argv, d: spawner.run(argv, cwd=d, capture=False).exit,
@@ -331,7 +331,8 @@ def owned_worktrees(git: Git, who: Identity, op: str) -> int:
     cfg = profile_slots(repo, git)
     slots_dir = str(Path(slot_dir(repo, "x", cfg)).parent)
     if op == "clean":
-        return owned.clean(git, who.config, repo_key(repo), repo, slots_dir, cfg.base, cfg.count, engine_busy)
+        busy = functools.partial(engine_busy, who.config)
+        return owned.clean(git, who.config, repo_key(repo), repo, slots_dir, cfg.base, cfg.count, busy)
     for r in owned.survey(git, who.config, repo_key(repo), repo, slots_dir):
         print("\t".join([r.state, r.path, r.branch or "-", r.note + (f" since {stamp(r.rec.created)}" if r.rec else "")]))
     return 0

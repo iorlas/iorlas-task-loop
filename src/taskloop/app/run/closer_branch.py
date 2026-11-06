@@ -8,6 +8,7 @@ from taskloop.app.wire.slots import profile_slots, slot_of
 from taskloop.contracts import fence
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.identity import Identity
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Beads, Git
 from taskloop.stores.runlog import RunLog
 
@@ -73,6 +74,8 @@ class ReleaseSlotHost(Protocol):
     @property
     def log(self) -> RunLog: ...
     @property
+    def home(self) -> ConfigDir: ...
+    @property
     def who(self) -> Identity: ...
     @property
     def wt(self) -> str: ...
@@ -92,6 +95,6 @@ class ReleaseSlot:
             if outcome is Outcome.LANDED:
                 repo = next((co.path for co in e.git.checkouts(e.wt) if co.main), e.wt)
                 cleanup.retry_logged(e.git, e.log, lambda path: bool(slot_of(repo, path, e.who, e.store, strict=True)),
-                                     profile_slots(repo).base)
+                                     profile_slots(repo).base, cfg=e.home)
         except Exception as err:
             e.log.warn(f"could not release slot: {err}\n" + traceback.format_exc())

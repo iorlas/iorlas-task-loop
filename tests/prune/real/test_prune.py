@@ -140,8 +140,9 @@ class Trees(Case):
 
     def test_a_tree_a_run_holds_is_kept(self):
         d = self.tree("busy")
-        (d / ".task").mkdir()
-        (d / ".task" / "engine.lock").write_text("pid")
+        lock = homes.cfg().engine_lock(d)
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        lock.write_text("pid")
         _, kept = self.prune()
         assert d.exists()
         assert "engine lock" in kept[0]
