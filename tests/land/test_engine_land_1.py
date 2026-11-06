@@ -50,9 +50,6 @@ from taskloop.adapters import (
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
 from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.landed import LandedStore
 from taskloop.domain.checks import lint
 from taskloop.domain.plan.matchers import gate_only_criteria
 
