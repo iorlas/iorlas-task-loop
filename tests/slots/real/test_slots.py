@@ -219,7 +219,7 @@ class LiveEngineBackstop(Slots):
         put_lock(self.slot("s1"), {"pid": 0, "bead": "x-0"})
         with mock.patch.object(engine_lock, "running_for", return_value=["r1"]):  # delegate names the run whose worker k stands for
             assert "run r1" in engine_lock.engine_busy(homes.cfg(), self.slot("s1"))
-        self.run_loop("--max-beads", "1")
+            self.run_loop("--max-beads", "1")
         assert self.started == [("x-1", "s2")]
     def test_slot_reset_never_touches_a_slot_with_a_live_engine(self):
         self.beads({"x-1": []})
