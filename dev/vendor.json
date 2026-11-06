@@ -1,5 +1,11 @@
 [
   {
+    "name": "any_agent",
+    "shelf_tag": "df729c9d9963ebe77d77a53ac42147d14a751911",
+    "shelf_commit": "df729c9d9963ebe77d77a53ac42147d14a751911",
+    "tree_hash": "003e425a27ce5580e001f5983086da577d2d212ab6ab558d8165b98b7935a639"
+  },
+  {
     "name": "any_clock",
     "shelf_tag": "9eabbd2f191ac4d99a0ab3b969c6eba1f9526c1b",
     "shelf_commit": "9eabbd2f191ac4d99a0ab3b969c6eba1f9526c1b",
@@ -43,9 +49,9 @@
   },
   {
     "name": "git_porcelain",
-    "shelf_tag": "git-porcelain-v0.12.0",
-    "shelf_commit": "5d955b2b7801da29092b89428b5ca794616117fa",
-    "tree_hash": "ffd53e159448c69dfd412d1230b04cd851ff9dc4c6bc9f29315594b5c60d1025"
+    "shelf_tag": "427ab3e75d94055f61efcc497ccd1244760cea8e",
+    "shelf_commit": "427ab3e75d94055f61efcc497ccd1244760cea8e",
+    "tree_hash": "bb412f15b6e00222dc601ca7532b90cafba3bcd7e354908778811a51e38f0235"
   },
   {
     "name": "jsonl_log",
@@ -61,9 +67,9 @@
   },
   {
     "name": "sqlite_store",
-    "shelf_tag": "sqlite-store-v0.1.0",
-    "shelf_commit": "18d3164893f95dc82e391a7226652d286d9c4663",
-    "tree_hash": "8d1a7599413f4a623f0d5b52e38a534eeb2352b9ae5e2cbdc0c182dcf7967d26"
+    "shelf_tag": "bf97aba",
+    "shelf_commit": "bf97aba8c13426f488ccb5ddd74c8432d5840781",
+    "tree_hash": "3f8163f56d3485a5f6cbe4e0df3862135760dc40c42b17e1937857df39e0565f"
   },
   {
     "name": "static_page_check",
@@ -73,9 +79,9 @@
   },
   {
     "name": "stream_proc",
-    "shelf_tag": "262a5999d0fc2380b0325e910996bbb5810aa76c",
-    "shelf_commit": "262a5999d0fc2380b0325e910996bbb5810aa76c",
-    "tree_hash": "0056ff7823329e01e3707f27967d214b2e2d17d8926a55066809604da0bb2c1a"
+    "shelf_tag": "427ab3e75d94055f61efcc497ccd1244760cea8e",
+    "shelf_commit": "427ab3e75d94055f61efcc497ccd1244760cea8e",
+    "tree_hash": "6d451d56e55fb3bc38190460be4252405b02be846b61e6f0f0d1b4a35fe5f629"
   },
   {
     "name": "timefmt",

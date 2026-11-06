@@ -40,16 +40,17 @@ class ProbeChecks(Case):
         repo.mkdir()
         git(repo, "init", "-q", "-b", "main")
         out_file = Path(self.tmp.name, "seen.json")
-        probe = f"import json,os; json.dump(sorted(os.environ), open({str(out_file)!r}, 'w'))"
+        # `env -0` from the shell, not an interpreter: a loader (nix-ld) may put names like LD_LIBRARY_PATH into any python it starts
+        probe = f"env -0 > {out_file}"
         (repo / ".task-loop.json").write_text(json.dumps({"engine": {"base": "main", "checks": [
-            {"id": "probe", "argv": ["python3", "-c", probe], "env": {"DECLARED": "1"}, "run": "gate"}]}}))
+            {"id": "probe", "argv": ["sh", "-c", probe], "env": {"DECLARED": "1"}, "run": "gate"}]}}))
         git(repo, "add", "-A")
         git(repo, "commit", "-qm", "probe")
         os.environ.setdefault("NOT_ON_THE_LIST", "x")
         self.addCleanup(os.environ.pop, "NOT_ON_THE_LIST", None)
         rc, out = self.check(repo, "probe")
         assert rc == 0, out
-        seen = json.loads(out_file.read_text())
+        seen = [kv.partition("=")[0] for kv in out_file.read_text().split("\0") if kv]
         engine_marks = ("DECLARED", "DELEGATE_DEPTH", "TASK_LOOP_WORKER")  # the check's own env, and what a child of the engine is told
         admitted = (*engine_marks, *CHECK_HOME_NAMES, *check_caches({}), "PWD", "SHLVL", "_", "__CF_USER_TEXT_ENCODING")  # macOS
         stray = [k for k in seen if not allowed(k) and k not in admitted and not k.startswith("XDG_")]

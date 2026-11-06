@@ -8,7 +8,6 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.app.run.artifacts import StepArtifacts
 from taskloop.app.run.closer_branch import ReleaseSlot
 from taskloop.app.run.closer_decide import Decide
 from taskloop.app.run.records import Records
@@ -42,13 +41,6 @@ class FailureLogging(Case):
                         mock.patch("taskloop.app.run.records.finish_run", side_effect=error):
                     Records(host).settle(RunState.PARKED, "paused")
                 self.assert_traceback(host.warn.call_args.args[0], "could not settle run r1")
-
-    def test_artifact_catch_all_logs_traceback(self):
-        log = mock.Mock()
-        copier = StepArtifacts("t-1", Path("source"), Path("dest"), log)
-        with mock.patch("taskloop.app.run.artifacts.ingest", side_effect=RuntimeError("copy")):
-            copier("s1", "write")
-        self.assert_traceback(log.warn.call_args.args[0], "RuntimeError: copy")
 
     def test_reflection_catch_all_logs_traceback(self):
         host = mock.Mock()

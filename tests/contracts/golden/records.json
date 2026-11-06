@@ -89,6 +89,8 @@
     "denied": [
      {
       "tool": "Bash",
+      "kind": "",
+      "reason": "",
       "input": {
        "command": "ls"
       }
@@ -335,6 +337,11 @@
   "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "t": 1793050200.5
  },
+ "Defect": {
+  "item": "i",
+  "why": "w",
+  "where": "p.png"
+ },
  "StageProgress": {
   "write": null,
   "red": 1,
@@ -466,18 +473,9 @@
    "writer_family": null,
    "writer_fallback": false,
    "fallback_lane": "",
-   "writer_said": "",
-   "look_paths": [],
    "look_notes": [],
    "look_unjudged": {},
    "look_done": 0,
-   "look_prev": [
-    {
-     "item": "i",
-     "why": "w",
-     "where": ""
-    }
-   ],
    "rendered_names": [
     "r"
    ],
@@ -1256,7 +1254,6 @@
   ]
  },
  "Landed": {
-  "v": 1,
   "bead": "t-1",
   "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "base": "origin/main",
@@ -1284,9 +1281,10 @@
   "why": "1st of 2 chosen"
  },
  "ReposIndex": {
-  "v": 1,
+  "v": 2,
   "repos": {
-   "/r": {
+   "o/r": {
+    "path": "/r",
     "added": 1793050200.5
    }
   }
@@ -1390,10 +1388,12 @@
   "started": 1793050200.5,
   "ended": 1793050260.5,
   "loop": "L1",
+  "loop_id": null,
   "attempts": 2,
   "state": "done",
   "heartbeat": 1793050259.5,
   "pid": 4242,
+  "pid_start": "",
   "host": "box",
   "reason": "landed",
   "mode": "stage:land-stack",
@@ -1480,11 +1480,7 @@
   "inputs": [
    "**/*.csproj"
   ],
-  "triggers": [
-   "restore",
-   "project.assets.json",
-   "NU1"
-  ],
+  "triggers": [],
   "timeout_min": 20
  },
  "GatePlan": {
@@ -1531,6 +1527,7 @@
    "reflect": true,
    "writer_family": [],
    "writer_exec_allow": [],
+   "writer_read_roots": [],
    "planner_notes": "",
    "shot_table": "",
    "write_fresh_stage_k": 100,
@@ -1566,6 +1563,7 @@
      "lane": "",
      "needs": [],
      "pass_files": false,
+     "closure_cmd": [],
      "fix": []
     },
     {
@@ -1596,6 +1594,7 @@
       "unity"
      ],
      "pass_files": false,
+     "closure_cmd": [],
      "fix": []
     }
    ],
@@ -1610,15 +1609,16 @@
     "inputs": [
      "**/*.csproj"
     ],
-    "triggers": [
-     "restore",
-     "project.assets.json",
-     "NU1"
-    ],
+    "triggers": [],
     "timeout_min": 30
    },
    "slot_env": {},
    "host": false,
+   "queued_match": "",
+   "lock_fail": "",
+   "slow_cmd": "",
+   "pin_files": [],
+   "project_log": "",
    "worker_rules": "",
    "test_pattern": "^\\s*(def test_|async def test_|\\[(Test|UnityTest|Fact|Theory|TestMethod|TestCase)\\b|#\\[test\\]|(it|test)\\(|func Test)",
    "area_label_prefix": "",
@@ -1705,7 +1705,7 @@
    "keep_days": 14,
    "min_free_gb": 5,
    "min_ram_mb": 1024,
-   "build_dir": "~/Workspaces/wt"
+   "build_dir": ""
   }
  },
  "RunRequest": {
@@ -1731,6 +1731,7 @@
    "openai"
   ],
   "writer_exec_allow": [],
+  "read_roots": [],
   "tools": [
    {
     "name": "factory",
@@ -1793,7 +1794,8 @@
     "kind": "policy",
     "tool": "Bash",
     "path": null,
-    "input": {}
+    "input": {},
+    "reason": null
    }
   ],
   "secs": 3.0,

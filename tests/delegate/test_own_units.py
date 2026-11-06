@@ -2,7 +2,10 @@
 
 import json
 
+from any_agent.procs import StopReport, Survivor
 from delegate.adapters import procs
+from delegate.app import env
+from delegate.app.lease import RunLease
 from delegate.contracts import wire
 
 import hermetic  # noqa: F401
@@ -43,14 +46,29 @@ class Contract:
 
 class WorkerField:
     def test_end_by_outcome(self):
-        stop = [wire.WorkerEnd(end=wire.END_OK, stopped=True)]
+        stop = [StopReport()]
         assert [procs.worker_end(stop, o).end for o in (None, "timeout", "hung", "worker_failed")] == ["ok", "timeout", "error", "error"]
         assert not procs.worker_end([], None).stopped
 
     def test_a_survivor_beats_every_outcome(self):
-        stops = [wire.WorkerEnd(end=wire.END_SURVIVED, stopped=True, survivors=[wire.Survivor(pid=5)])]
+        stops = [StopReport(survivors=[Survivor(pid=5, start=None)])]
         assert [procs.worker_end(stops, o).end for o in (None, "timeout")] == ["worker_survived"] * 2
 
     def test_reason_worker_survived_is_declared_with_facts(self):
         r = json.loads((ROOT / "src/delegate/data/contract.json").read_text())["reasons"]["worker_survived"]
         assert (r["scope"], r["permanence"], r["retry"]) == ("machine", "needs_owner", "none")
+
+
+class LeaseEnd:
+    def claimed(self):
+        lease = RunLease("r1", "worker", "tl-1", "OPENAI_SUBSCRIPTION", "m", None, False, 60.0)
+        assert lease.claim() is None
+        return lease
+
+    def test_a_lease_goes_when_the_worker_tree_is_dead(self):
+        self.claimed().finish([StopReport()])
+        assert "r1" not in env.load_state().leases
+
+    def test_a_lease_stays_while_a_worker_survived_its_stops(self):
+        self.claimed().finish([StopReport(survivors=[Survivor(pid=5, start=None)])])
+        assert "r1" in env.load_state().leases

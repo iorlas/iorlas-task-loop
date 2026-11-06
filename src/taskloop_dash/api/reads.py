@@ -45,12 +45,14 @@ class Reads:
         self.env, self.worlds, self.artifacts = env, worlds, artifacts
         self.cache: RefreshCache[tuple[World, Snapshot]] = RefreshCache(env.clock)
         self.details: RefreshCache[BeadDetail | None] = RefreshCache(env.clock)
+        self.costs: RefreshCache[CostPage] = RefreshCache(env.clock)
         self.wake = Wake(env.config)
         self.lock = threading.Lock()
         self.refresh_lock = threading.Lock()
         self.remembered: tuple[int | None, str] | None = None
 
     def wait(self) -> None:
+        self.costs.wait()
         self.details.wait()
         self.cache.wait()
 
@@ -134,8 +136,8 @@ class Reads:
         self.env.touch()
         if self.worlds.database_error():
             return cost.build(self.worlds.world(), window, last, project)
-        return self.env.ttl.get(f"cost:{window}:{last}:{project}", SNAPSHOT_TTL,
-                                lambda: cost.build(self.worlds.world(), window, last, project))
+        return self.costs.get(f"cost:{window}:{last}:{project}", SNAPSHOT_TTL,
+                              lambda: cost.build(self.worlds.world(), window, last, project))
 
     def get(self, path: str, q: dict[str, str], if_none_match: str | None = None) -> Reply:
         """(status, body, extra headers) of a polled resource GET."""

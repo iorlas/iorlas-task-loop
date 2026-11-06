@@ -19,6 +19,7 @@ from support.case import Case
 from support.engine_case import PLAN, WRITE
 from support.fake_beads import FakeBeads
 from support.logs import typed
+from support.memstores import fake_stores
 from support.narrow import must
 from support.runs import manifest
 
@@ -32,7 +33,6 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import NewBead
 from taskloop.contracts.run import RunState
-from taskloop.stores.memory import fake_stores
 
 RUN = "tl-5-20261026-100000"
 

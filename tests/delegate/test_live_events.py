@@ -12,10 +12,9 @@ import hermetic  # noqa: F401  (a home of its own for every test)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "delegate"))
-from delegate.adapters.harness.codex import CodexHarness
-from delegate.app.publish import LiveSink, end_status
+from any_agent.harnesses.codex import CodexHarness
+from delegate.app.publish import LiveSink
 from support.case import Case
-from support.procsim import real_proc
 
 import test_stream_supervisor as tss
 
@@ -95,15 +94,15 @@ OPENCODE = [
 class LiveFile(Case):
     base: Path
     setup_method = tss.Replay.setup_method
-    d, alive = tss.Replay.d, tss.Replay.alive  # launch() reads self.d(kind)
+    d = tss.Replay.d  # launch() reads self.d(kind)
 
     def run_kind(self, kind, lines, live_path):
         env = {"DELEGATE_LIVE_FILE": str(live_path)} if live_path else {}
         with mock.patch.dict(os.environ, env):
             if not live_path:
                 os.environ.pop("DELEGATE_LIVE_FILE", None)
-            replay: Any = self  # borrows Replay's fake CLI and launcher, which only need what Replay.setup_method sets
-            return tss.Replay.launch(replay, kind, tss.Replay.fake(replay, kind, lines))
+            replay: Any = self  # borrows Replay's fake worker and launcher, which only need what Replay.setup_method sets
+            return tss.Replay.launch(replay, kind, *lines)[0]
 
     def lines(self, path):
         return [json.loads(x) for x in Path(path).read_text().splitlines()]
@@ -111,7 +110,6 @@ class LiveFile(Case):
     def events(self, path):
         return [e for e in self.lines(path) if "k" in e]  # the first line is the WorkerStarted, which has no kind
 
-    @real_proc("delegate: a worker, git or CLI process")
     def test_codex(self):
         f = self.base / "sub" / "dir" / "live.jsonl"  # parent dirs are created
         r = self.run_kind("codex", CODEX, f)
@@ -135,7 +133,6 @@ class LiveFile(Case):
         assert ev[-1]["status"] == "done"
         assert all(isinstance(e["t"], float) for e in ev)
 
-    @real_proc("delegate: a worker, git or CLI process")
     def test_codex_lines_are_parsed_once_for_the_live_file_the_turn_and_the_evidence(self):
         f = self.base / "live.jsonl"
         real = CodexHarness.parse_line
@@ -146,7 +143,6 @@ class LiveFile(Case):
         assert (r["tokens"], r["ref"]) == ({"in": 100, "cached": 40, "out": 7}, "th-1")
         assert self.events(f)[1]["k"] == "cmd_start"
 
-    @real_proc("delegate: a worker, git or CLI process")
     def test_claude(self):
         f = self.base / "live.jsonl"
         assert self.run_kind("claude", CLAUDE, f).get("outcome") is None
@@ -156,7 +152,6 @@ class LiveFile(Case):
         assert (ev[2]["id"], ev[2]["text"], ev[5]["id"], ev[5]["out"]) == ("tu2", "Edit skills/x.py", "tu2", "ok")
         assert ev[-1]["cost_usd"] == 0.25
 
-    @real_proc("delegate: a worker, git or CLI process")
     def test_opencode(self):
         f = self.base / "live.jsonl"
         assert self.run_kind("opencode", OPENCODE, f).get("outcome") is None
@@ -165,7 +160,6 @@ class LiveFile(Case):
         assert (ev[1]["id"], ev[2]["id"], ev[2]["exit"], ev[2]["secs"]) == ("o1", "o1", 0, 0.5)
         assert (ev[3]["text"], ev[3]["id"], ev[4]["id"]) == ("edit skills/x.py", "o2", "o2")
 
-    @real_proc("delegate: a worker, git or CLI process")
     def test_env_unset_writes_nothing(self):
         for kind, lines in (("codex", CODEX), ("claude", CLAUDE), ("opencode", OPENCODE)):
             with self.subTest(kind):
@@ -196,13 +190,3 @@ class LiveFile(Case):
             lv.end("done")
         ev = self.events(f)
         assert (ev[-1]["k"], lv.capped, 0 < len(ev) < 10) == ("end", True, True)
-
-    def test_end_status(self):
-        assert [
-            end_status(True, None, None, 0),
-            end_status(False, "hung", None, 0),
-            end_status(False, None, "stall", 0),
-            end_status(False, None, "answer", -9),
-            end_status(False, None, None, 0),
-            end_status(False, None, None, 1),
-        ] == ["timeout", "killed", "killed", "done", "done", "error"]

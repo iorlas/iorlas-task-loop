@@ -2,8 +2,9 @@
 
 A test's kind comes from its path, never from a hand marker: a file under tests/e2e/ is `e2e` (a whole flow), a file under a `real/`
 folder (tests/<slice>/real/) is `real` (real git, processes or sockets), anything else is logic (fakes, in process, fast). The older
-`@real_proc(reason)` and `@real_git(reason)` marks on a single test fold into `real`. Guards (tests/support/procsim.py): a logic test that
-spawns, forks or runs real git fails; a `real` test that never spawns fails. A test over its kind's time limit fails (LIMITS_S)."""
+A single test's `@needs(capability, reason)` (or the older `@real_proc(reason)` / `@real_git(reason)`) folds into `real`. Guards
+(tests/support/procsim.py): a logic test that spawns, forks or runs real git fails; a `real` test that never spawns fails.
+A test over its kind's time limit fails (LIMITS_S)."""
 import contextlib
 import ctypes
 import importlib
@@ -14,6 +15,7 @@ import resource
 import shutil
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -38,7 +40,7 @@ import support.paths  # noqa: E402, F401  (ROOT/src on sys.path; after the bytec
 from support import procsim, work  # noqa: E402
 from support.scope import delegate_wanted  # noqa: E402
 
-from taskloop.contracts import factorydb  # noqa: E402
+from taskloop.contracts import factorydb, scratch  # noqa: E402
 
 
 def preload_src():
@@ -84,7 +86,7 @@ def kind_of(item) -> str:
     if parts[0] in ("e2e", "live"):  # live (tests/live, explicit-only) runs the real pieces: no guard, no limit
         return parts[0]
     func = getattr(item, "obj", None)
-    if "real" in parts[:-1] or item.get_closest_marker("real_proc") or getattr(func, "real_git", None):
+    if "real" in parts[:-1] or item.get_closest_marker("real_proc") or item.get_closest_marker("needs") or getattr(func, "real_git", None):
         return "real"
     return "logic"
 
@@ -180,7 +182,21 @@ WORK_S = pytest.StashKey[float]()
 
 
 @pytest.fixture(autouse=True)
-def case_helpers(request, procs):
+def no_leaked_threads(filesystem_cache, procs):
+    """A thread a test started and left running (a Lease heartbeat nobody stopped and joined) goes on using the stores the test's teardown
+    closes, and crashes the worker in sqlite3 later, in another test: the test that leaked it fails instead. It requests the fixtures that
+    close those stores so that it is checked before they are undone."""
+    before = set(threading.enumerate())
+    yield
+    left = [t for t in threading.enumerate() if t not in before]
+    for t in left:
+        t.join(0.5)
+    left = [t.name for t in left if t.is_alive()]
+    assert not left, f"the test left threads running: {left}; stop and join them before it ends"
+
+
+@pytest.fixture(autouse=True)
+def case_helpers(request, procs, no_leaked_threads):
     """The unittest names the plain test classes still use: self.addCleanup (runs last-in-first-out after the test and its teardown_method),
     self.enterContext, self.subTest (pytest's `subtests`), self._testMethodName and self.id(). It depends on `procs` so that the cleanups,
     which undo patches made in setup_method on top of the process sim, run before the sim is uninstalled."""
@@ -227,7 +243,16 @@ def procs(request):
     with contextlib.ExitStack() as stack:
         world.install(stack)
         yield world
-    world.check(must_spawn=kind == "real" and not request.node.stash.get(SKIPPED, False))
+    # a delegate test reaches its process through a worker CLI it probes (codex, claude, opencode): a host with none has nothing to spawn
+    no_cli = request.node.nodeid.startswith("tests/delegate/") and not any(map(shutil.which, ("codex", "claude", "opencode")))
+    world.check(must_spawn=kind == "real" and not request.node.stash.get(SKIPPED, False) and not no_cli)
+
+
+@pytest.fixture
+def workdir():
+    """A scratch folder (contracts/scratch.py) on the checkout's disk, for the length of the test: the one place a test writes."""
+    with scratch.scratch(os.environ, "wd-") as folder:
+        yield folder
 
 
 def cap_memory(megabytes):
@@ -240,12 +265,10 @@ def cap_memory(megabytes):
 
 
 def isolate(home):
-    """Its own HOME, config dir and temp dir; the real git config is copied in, since tests commit with the identity it holds."""
+    """Its own HOME, config dir and temp dir; the test git identity (contracts/scratch.py) is written in, never the host's."""
     for sub in ("tmp", ".config"):
         (home / sub).mkdir(parents=True, exist_ok=True)
-    real = Path.home() / ".gitconfig"
-    if real.is_file():
-        (home / ".gitconfig").write_bytes(real.read_bytes())
+    scratch.write_git_config(home)
     os.environ.update(HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), TMPDIR=str(home / "tmp"))
     tempfile.tempdir = None
 
@@ -258,7 +281,7 @@ def pytest_configure(config):
         with contextlib.suppress(OSError, AttributeError):
             ctypes.CDLL(None, use_errno=True).prctl(1, 9, 0, 0, 0)  # PR_SET_PDEATHSIG, SIGKILL: a worker leaves with its controller
     cap_memory(WORKER_MB)
-    home = Path(tempfile.mkdtemp(prefix="tl-worker-")).resolve()
+    home = scratch.scratch_dir(os.environ, "tl-worker-")
     config._worker_home = home
     isolate(home)
 

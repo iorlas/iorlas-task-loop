@@ -11,7 +11,7 @@ from taskloop.domain.checks.specs import repo_check
 
 class WriterSplit:
     """A check is the engine's when its longest passing run took more than `engine.writer_check_max_s`, or it never ran and its name
-    says Unity, play, full test, check or build; the gate always is. A repo
+    matches engine.slow_cmd; the gate always is. A repo
     check overrides the rest: `writer: true` (or false), or its own `writer_check_max_s`."""
 
     def __init__(self, cfg: EngineConfig, secs: Mapping[str, float]) -> None:
@@ -30,7 +30,7 @@ class WriterSplit:
             return not spec.writer
         s = self.secs.get(norm(cmd), self.secs.get(cmd))
         cut = spec.writer_max_s if spec is not None and spec.writer_max_s is not None else float(self.cfg.writer_check_max_s)
-        return s > cut if s is not None else looks_slow(cmd)
+        return s > cut if s is not None else looks_slow(cmd, self.cfg.slow_cmd)
 
     def engine_recipes(self, stage_checks: Sequence[str] = ()) -> list[str]:
         """The bare `just` recipe names of the configured checks, the gate and the plan's stage checks (`stage_checks`) a writer must not

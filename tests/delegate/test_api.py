@@ -6,6 +6,8 @@ import time
 
 import pytest
 from delegate import api
+from delegate.app import env
+from delegate.contracts import history as hist
 from delegate.contracts.wire import RunResult
 from support.procsim import real_proc
 
@@ -76,3 +78,11 @@ def test_accounts_lists_every_lane_and_set_account_records_the_owners_choice():
 def test_an_unknown_account_is_refused():
     with pytest.raises(ValueError, match="unknown lane"):
         api.set_account("NO_SUCH_LANE", True)
+
+
+def test_history_lists_the_finished_runs_after_a_time_as_wire_objects():
+    env.history_add(hist.RunRow(ts=100.0, run_id="a", role="planner", lane="L", model="m", effort="e", done=True, task="tl-1"))
+    env.history_add(hist.CanaryRow(ts=101.0, run_id="c", lane="L", model="m"))
+    env.history_add(hist.RunRow(ts=200.0, run_id="b", role="worker", lane="L", model="m", effort="e", done=True))
+    assert [(r["run_id"], r["role"], r["task"]) for r in api.history()] == [("a", "planner", "tl-1"), ("b", "worker", "")]
+    assert [r["run_id"] for r in api.history(150.0)] == ["b"]

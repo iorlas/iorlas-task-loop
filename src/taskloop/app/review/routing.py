@@ -56,7 +56,7 @@ class Routing:
 
     def backed_by_leftover(self, what: str) -> bool:
         """True when an owner-review follow-up bead for this item is already in the leftovers (tl-bxk.13.1): the owner sees it there, so
-        it need not stop the land as well (lifesim-iqad twice)."""
+        it need not stop the land as well (it happened twice)."""
         mine = word_set(what)
         if len(mine) < 3:
             return False

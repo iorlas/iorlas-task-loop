@@ -144,8 +144,8 @@ def usage_of(raw: Any) -> Usage | None:
 def denied_of(raw: Any) -> list[Denial]:
     """`sandbox_limit` is noise, never a failure: it is not carried."""
     rows = raw if isinstance(raw, list) else []
-    return [Denial(kind=pick(d.get("kind"), ("policy", "secret"), "policy"),
-                   tool=_opt(d, "tool"), path=_opt(d, "path"), input=d["input"] if isinstance(d.get("input"), dict) else {})
+    return [Denial(kind=pick(d.get("kind"), ("policy", "secret"), "policy"), tool=_opt(d, "tool"), path=_opt(d, "path"),
+                   reason=_opt(d, "reason"), input=d["input"] if isinstance(d.get("input"), dict) else {})
             for d in rows if isinstance(d, dict) and d.get("kind") != "sandbox_limit"]
 
 

@@ -16,6 +16,7 @@ from support.dash_stage_fixtures import stage_passes
 from taskloop.contracts import dash as D
 from taskloop.contracts import dashcost as DC
 from taskloop.contracts import wire
+from taskloop.contracts.dashhealth import Score
 from taskloop.contracts.dashruns import ResourceLease, RunHeader
 from taskloop.contracts.ids import BeadId, loop_key
 from taskloop.contracts.needs import NeedRow
@@ -454,7 +455,9 @@ def build() -> dict[str, Any]:
                          session="fixture-session",
                          state=RunState.RUNNING, started=NOW - 90, branch="fixture/check")],
         leases=[ResourceLease(name="unity", holder="fixture-owner", since=NOW - 60, run="fixture-adhoc", project=PROJECTS["lifesim"])],
-        projects=[D.Project(id=PROJECTS["lifesim"], name="lifesim"), D.Project(id=PROJECTS["task-loop"], name="task-loop")],
+        projects=[D.Project(id=PROJECTS["lifesim"], name="lifesim", score=Score(
+            since=ago("9h"), until=ago("now"), beads=9, landed=8, landed_no_ask=6, asks=3, lost=0, crashes=0, m2_pass=True)),
+            D.Project(id=PROJECTS["task-loop"], name="task-loop")],
         epics=[D.Epic(id=k, project=v["project"], title=v["title"], open=v["done"] < v["total"], done=v["done"], total=v["total"])
                for k, v in epics.items()],
         runs=[RunHeader(run=f"fixture-{i}", project=PROJECTS["lifesim"], mode="stage:check", owner="fixture-owner",
