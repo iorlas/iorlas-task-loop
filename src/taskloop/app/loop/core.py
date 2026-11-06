@@ -1,5 +1,6 @@
 """The loop process itself: its log, its state file, its stop and its nap. The pass logic is in loop.py."""
 import contextlib
+import hashlib
 import threading
 import time
 from dataclasses import dataclass
@@ -133,9 +134,10 @@ class Core:
             return
         self.exit_written = True
         reason = "signal" if self.sigterm.is_set() else self.exit.get("reason") or "crash"
-        detail = self.exit.get("detail", "")
+        detail = self.exit.get("detail", "") or ("exit without a recorded reason" if reason == "crash" else "")
+        config_hash = hashlib.sha256(repr(self.prof).encode()).hexdigest()[:16]
         self.files.write_exit({"v": 1, "pid": self.env.pid, "repo": self.env.repo, "t": self.env.now(), "started": self.started,
-                               "reason": reason, "detail": detail, "log_path": str(self.log or "")})
+                               "reason": reason, "detail": detail, "config_hash": config_hash, "log_path": str(self.log or "")})
         with contextlib.suppress(OSError):
             self.env.event("loop_exit", who="loop", repo=self.env.repo, pid=self.env.pid, reason=reason, detail=detail[:200])
 
