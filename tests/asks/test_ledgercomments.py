@@ -5,6 +5,7 @@ import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 
 from taskloop.app.asks import intake, ledgercomments, raiser
+from taskloop.contracts.askrows import AskRows
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
@@ -38,9 +39,9 @@ def test_an_owner_verb_leaves_its_ledger_row_as_a_comment_first(workdir):
 def test_the_table_rebuilds_from_the_comments_to_the_same_view(workdir):
     asks, beads = world(workdir)
     before = asks.rows()
-    con = asks.ledger.rows.connection()
-    with asks.ledger.rows.transaction():
-        con.execute("DELETE FROM ask_ledger")
+    rows = AskRows(ConfigDir(workdir))  # the table lost
+    with rows.transaction():
+        rows.connection().execute("DELETE FROM ask_ledger")
     assert asks.rows() == []
     assert ledgercomments.rebuild(asks, beads, [BEAD]) == 2
     assert asks.rows() == before
