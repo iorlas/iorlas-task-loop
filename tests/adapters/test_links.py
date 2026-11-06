@@ -52,13 +52,13 @@ class Check(Case):
 
     def test_check_all_survives_a_raising_check_and_a_deadline(self):
         release = threading.Event()
-        self.addCleanup(release.set)  # the slow check waits on this, not on the clock; the deadline (0.5 s) is what ends the wait
+        self.addCleanup(release.set)  # check_all leaves the slow check running past its deadline: it ends with the test
 
         def fn(u):
             if u.endswith("boom"):
                 raise RuntimeError("x")
             if u.endswith("slow"):
-                release.wait(3)
+                release.wait(5)
             return True, ""
         out = links.check_all(["https://a.org/ok", "https://a.org/boom", "https://a.org/slow"], fn=fn, deadline=0.5)
         assert out["https://a.org/ok"] == (True, "")

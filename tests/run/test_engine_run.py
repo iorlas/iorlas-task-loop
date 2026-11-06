@@ -215,8 +215,13 @@ class EngineRunTest(EngineTest):
     def test_sigterm_between_the_run_and_its_close_still_closes(self):  # it escaped with no trace (M2 review)
         if not hasattr(sig, "SIGTERM") or os.name == "nt":
             pytest.skip("POSIX signal")
-        with self.stoppable(), mock.patch.object(Lease, "stop",
-                                                 side_effect=lambda *a: os.kill(os.getpid(), sig.SIGTERM)):
+        real_stop = Lease.stop
+
+        def stop_then_term(lease):
+            real_stop(lease)  # the heartbeat thread ends here too: a stop that only signalled would leave it running
+            os.kill(os.getpid(), sig.SIGTERM)
+
+        with self.stoppable(), mock.patch.object(Lease, "stop", stop_then_term):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         assert rc == 0
         runs = [json.loads(ln) for ln in (homes.config_dir() / "traces.jsonl").read_text().splitlines()]

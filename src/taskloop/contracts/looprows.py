@@ -18,8 +18,10 @@ DIED = "died-"
 
 
 class LoopRows:
-    def __init__(self, cfg: ConfigDir, key: str) -> None:
-        self.cfg, self.key = cfg, key
+    def __init__(self, cfg: ConfigDir, key: str, *, quiet: bool = False) -> None:
+        """`quiet`: a read that cannot open the database (corrupt, or a schema this tl does not know) answers nothing instead of
+        raising. The dashboard reads that way, and shows the database's own error; everything else sees the error."""
+        self.cfg, self.key, self.quiet = cfg, key, quiet
 
     @contextmanager
     def transaction(self) -> Generator[factorydb.sqlite3.Connection]:
@@ -34,13 +36,18 @@ class LoopRows:
         """A read, on a read-only connection (the dashboard reads this way too); none while there is no database or it cannot be opened."""
         if not self.cfg.factory_db().exists():
             return []
-        con = factorydb.open_ro(self.cfg.factory_db())
-        if con is None:
-            return []
         try:
-            return con.execute(sql, params).fetchall()
-        finally:
-            con.close()
+            con = factorydb.open_ro(self.cfg.factory_db())
+            if con is None:
+                return []
+            try:
+                return con.execute(sql, params).fetchall()
+            finally:
+                con.close()
+        except factorydb.sqlite3.Error:  # a SchemaError (a schema this tl does not know) is one
+            if self.quiet:
+                return []
+            raise
 
     def name(self, pid: int) -> str:
         return f"{self.key}.{pid}"
