@@ -181,6 +181,20 @@
    "retry": "none",
    "health": "none",
    "wording": "route.py itself failed"
+  },
+  "only_family_unready": {
+   "scope": "lane",
+   "permanence": "transient",
+   "retry": "poll",
+   "health": "none",
+   "wording": "no step of the --only-family families is ready now; no other family is used"
+  },
+  "loop_excluded": {
+   "scope": "machine",
+   "permanence": "needs_owner",
+   "retry": "none",
+   "health": "none",
+   "wording": "every step for the role is barred by the loop's exclusions; nothing is left to route"
   }
  },
  "run_args": [
@@ -204,7 +218,8 @@
   "--only-family",
   "--call-id",
   "--writer-exec-allow",
-  "--read-root"
+  "--read-root",
+  "--instructions-ref"
  ],
  "usage": {
   "tokens": "in includes cached; also per call, never cumulative: in_fresh (uncached input), cache_read, cache_write (null when the vendor does not report it), out, and cache_write_by_ttl {5m,1h} on claude",
@@ -893,6 +908,87 @@
      }
     },
     "description": "how the worker's life ended; absent when no worker was launched"
+   },
+   "attempts": {
+    "type": "array",
+    "items": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "kind",
+      "lane",
+      "model",
+      "outcome",
+      "secs",
+      "tokens"
+     ],
+     "properties": {
+      "kind": {
+       "type": "string",
+       "enum": [
+        "first",
+        "canary",
+        "network_rerun",
+        "schema_reask",
+        "reroute"
+       ]
+      },
+      "lane": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "model": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "outcome": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "secs": {
+       "type": "number"
+      },
+      "tokens": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "additionalProperties": false,
+       "required": [
+        "in",
+        "cached",
+        "out"
+       ],
+       "properties": {
+        "in": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "cached": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "out": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        }
+       }
+      }
+     }
+    },
+    "description": "every launch the call made, in order; absent when it made a single one (capability attempts)"
    }
   }
  },
@@ -1764,7 +1860,9 @@
   }
  },
  "capabilities": [
-  "writer_exec_allow"
+  "writer_exec_allow",
+  "instructions_ref",
+  "attempts"
  ],
  "request_schema": {
   "type": "object",
@@ -1855,6 +1953,10 @@
       "type": "string"
      }
     }
+   },
+   "instructions_ref": {
+    "type": "string",
+    "description": "a commit sha: the instruction files are read from it, not the work tree (capability instructions_ref)"
    }
   }
  }

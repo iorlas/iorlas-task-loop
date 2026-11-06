@@ -104,14 +104,6 @@ class ConfigDir:
     def adr(self, repo_key: str, adr: str) -> Path:
         return self.adr_dir(repo_key) / (f"{adr}.json")
 
-    def adr_ids(self, repo_key: str) -> list[str]:
-        """The ids of a repo's decisions (ADR-1, ADR-2, ...), by number."""
-        try:
-            found = [p.stem for p in self.adr_dir(repo_key).glob("*.json")]
-        except OSError:
-            return []
-        return sorted((k for k in found if k[:4] == "ADR-" and k[4:].isdigit()), key=lambda k: int(k[4:]))
-
     def adr_uses(self, repo_key: str) -> Path:
         return self.adr_dir(repo_key) / "uses.jsonl"
 
@@ -128,10 +120,6 @@ class ConfigDir:
     def run_request_lock(self, run: RunId | str) -> Path:
         return self.run_dir(run) / "owner-request.lock"
 
-    def followup_outbox(self, bead: str) -> Path:
-        """Unfiled follow-ups for a bead; survives deletion of its run checkpoint."""
-        return self.root / "followups" / (f"{bead}.json")
-
     def check_run(self, run: RunId | str, rnd: int | None = None) -> Path:
         """The CheckRun of a round of the run; no round: the latest."""
         return self.run_dir(run) / ("engine-checks.json" if rnd is None else f"engine-checks.r{rnd}.json")
@@ -139,10 +127,6 @@ class ConfigDir:
     def artifact_store(self) -> Path:
         """The artifact store's root: <root>/<repo>/<bead>/<run>/<stage>-<attempt>/<name> (contracts/artifact.py)."""
         return self.root / "artifacts"
-
-    def results_dir(self) -> Path:
-        """Legacy importer only: the rollback copies of check receipts."""
-        return self.root / "results"
 
     def releases_dir(self) -> Path:
         return self.root / "releases"
@@ -173,12 +157,12 @@ class ConfigDir:
         """What one slot of one repo keeps for its commands (temp, dotnet and NuGet scratch): outside the worktree, kept across reuse."""
         return self.repo_dir(repo_key) / "slot-state" / slot
 
+    def slot_state_roots(self) -> list[Path]:
+        """Every repo's slot-state folder that exists: the parent of each slot's scratch."""
+        return sorted(self.repos_dir().glob("*/slot-state"))
+
     def slot_setup_mark(self, key: str) -> Path:
         return self.root / "slots" / (f"{key}.setup")
-
-    def worktree_record(self, repo_key: str, key: str) -> Path:
-        """The Owned record of one worktree tl made (contracts/worktrees.py)."""
-        return self.root / "worktrees" / repo_key / (f"{key}.json")
 
     def host(self) -> Path:
         """host.json: what this machine has (the resources checks may need). A person writes it; absent: the host has every resource."""
@@ -227,9 +211,6 @@ class ConfigDir:
 
     def handoff(self, repo_key: str) -> Path:
         return self.root / "handoff" / (f"{repo_key}.md")
-
-    def dash_state(self) -> Path:
-        return self.root / "dash.json"
 
     def usage_history(self) -> Path:
         return self.root / "usage-history.jsonl"
@@ -280,20 +261,5 @@ class RunFiles:
     def prepare_stamp(self) -> Path:
         return self.dir / "prepare.stamp"
 
-    def plan_note(self, reason: str) -> Path:
-        return self.dir / f"plan-note-{hashlib.sha256(reason.encode()).hexdigest()}"
 
 TASK_EXCLUDE: Final = ".task/"  # the line a repo's info/exclude carries so the scratch folder is never committed
-
-
-@final
-class RepoDirs:
-    """The scratch folder a worktree carries (.task/, never committed)."""
-
-    def __init__(self, worktree: Path | str) -> None:
-        self.worktree = Path(worktree)
-        self.task = self.worktree / ".task"
-
-
-    def check_log(self, name: str) -> Path:
-        return self.task / "checks" / name
