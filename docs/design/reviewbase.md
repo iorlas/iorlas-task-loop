@@ -54,3 +54,11 @@ How does the caller say "use the base's files"?
 ## Size
 
 M, in four slices (contract + capability; loading function and Claude/OpenCode; Codex; task-loop review wiring), one PR each.
+
+## Built (owner chose A)
+
+Slices folded into one PR: contract + capability; `decide.base_instructions` / `launch.repo_instruction_text(ref=)`; Codex
+`project_doc_max_bytes=0` plus base text in the prompt; OpenCode refused (`launch.ref_problem`: it loads the work tree's AGENTS.md itself);
+task-loop reviewer request carries `rev_parse(wt, engine.base)` (a base that does not resolve is warned in the run log, not silent).
+The ref joins the call's identity digest only when set, so existing fingerprints are unchanged.
+Unverified here: that the installed `codex` honours `-c project_doc_max_bytes=0`; the argv is asserted, the CLI behaviour is not.
