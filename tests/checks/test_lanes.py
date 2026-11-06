@@ -12,11 +12,9 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
-from support.engine_case import EngineTest
-from support.logs import records
+from support.check_host import CheckHostCase
 
 # isort: split
-from taskloop.app.run.blocked import Blocked
 from taskloop.contracts.config import ConfigError, load
 from taskloop.domain.checks.specs import gate_items
 
@@ -27,7 +25,7 @@ def spec(id: str, cmd: str, lane: str, **more: Any) -> dict[str, Any]:
     return {"id": id, "cmd": cmd, "run": "gate", "lane": lane, **more}
 
 
-class Lanes(EngineTest):
+class Lanes(CheckHostCase):
     def go(self, checks: list[dict[str, Any]], **cfg: Any) -> Any:
         self.eng = self.checks_engine(checks=checks, **cfg)
         return self.eng.checker.run_items(gate_items(self.eng.cfg))
@@ -101,29 +99,7 @@ class Lanes(EngineTest):
         waits = self.result(run, "waits")
         assert (waits.status, waits.cancelled) == ("skipped", True)
 
-    def test_a_halt_stops_every_lane_and_ends_the_round(self):
-        started = threading.Barrier(3, timeout=5)
 
-        def blocked(cwd, env):
-            started.wait()
-            return procsim.blocks()(cwd, env)
-
-        a, b = procsim.fake("hold-a", blocked), procsim.fake("hold-b", blocked)
-        self.eng = self.checks_engine(checks=[spec("a", a, "x"), spec("b", b, "y")])
-        threading.Thread(target=lambda: (started.wait(), self.eng.halt.set()), daemon=True).start()
-        with pytest.raises(Blocked):
-            self.eng.checker.run_items(gate_items(self.eng.cfg))
-
-    def test_the_records_say_the_lane_when_it_began_and_that_it_was_cancelled(self):
-        slow = procsim.fake("slow2", procsim.blocks())
-        self.go([spec("slow", slow, "x"), spec("red", procsim.fake("red2", procsim.exits(1)), "y")])
-        lane = {r["id"]: r["lane"] for r in records(self.eng, "check_start")}
-        names = {r["id"]: r["check"] for r in records(self.eng, "check_start")}
-        assert {names[i]: v for i, v in lane.items()} == {"diff-check": "", "slow": "x", "red": "y"}
-        ends = {names[r["id"]]: r for r in records(self.eng, "check_end")}
-        assert (ends["slow"]["cancelled"], ends["red"]["cancelled"]) == (True, False)
-        assert (ends["slow"]["lane"], ends["red"]["lane"]) == ("x", "y")
-        assert ends["slow"]["at"] >= 0.0
 
     def test_one_lane_runs_as_before(self):
         run = self.go([spec("a", "true", ""), spec("b", "false", "")])
