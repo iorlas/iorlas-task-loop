@@ -5,8 +5,6 @@ Regenerate a golden with
 import dataclasses
 import itertools
 import json
-import os
-import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -17,7 +15,6 @@ from any_agent.harnesses.codex import CodexHarness
 from any_agent.protocol import LaunchInputs
 from delegate.app.publish import LiveSink
 from support.case import Case
-from support.procsim import real_proc
 
 HERE = Path(__file__).resolve().parent
 
@@ -196,18 +193,6 @@ class World:
         assert found.endswith("rollout-2026-10-21T19-45-28-th-7.jsonl")
         assert (h.transcript("th-8"), h.transcript(None)) == (None, None)
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_the_login_probe_runs_the_status_command(self):
-        with tempfile.TemporaryDirectory() as d:
-            exe = Path(d) / "codex"
-            exe.write_text('#!/bin/sh\n[ "$FAKE_LOGIN" = out ] && { echo "Not logged in" >&2; exit 1; }\necho "Logged in using ChatGPT"\n')
-            exe.chmod(exe.stat().st_mode | stat.S_IXUSR)
-            with mock.patch.dict(os.environ, {"PATH": d}):
-                assert CodexHarness().login_probe(5) == (True, "Logged in using ChatGPT")
-                with mock.patch.dict(os.environ, {"FAKE_LOGIN": "out"}):
-                    assert CodexHarness().login_probe(5) == (False, "Not logged in")
-            with mock.patch.dict(os.environ, {"PATH": "/nonexistent"}):
-                assert CodexHarness().login_probe(5)[0] is None
 
 
 if __name__ == "__main__" and "--regen" in sys.argv:

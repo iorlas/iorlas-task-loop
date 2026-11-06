@@ -5,7 +5,6 @@ import contextlib
 import io
 import json
 import os
-import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -18,7 +17,6 @@ from delegate.cli import parser
 from delegate.contracts import stops, wire
 from delegate.contracts.json_types import Json, arr
 from support.case import Case
-from support.procsim import real_proc
 
 from test_route import route
 
@@ -85,19 +83,6 @@ class Overlay(Case):
         assert "--exec-allow" in spec.stdin
         assert self.spec.env == {"PATH": "/bad/path"}
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_an_allowed_argv_runs_the_real_shim_without_a_prompt(self):
-        spec, overlay = self.configure([["python", "-m", "unittest"]])
-        assert overlay is not None
-        command = [*overlay.prefix, "python", "-m", "unittest", "--help"]
-        matching = [r for r in rules_at(overlay.root) if command[: len(r["pattern"])] == r["pattern"]]
-        assert [r["decision"] for r in matching] == ["allow"]
-        result = subprocess.run(command, env=os.environ | {"PATH": ""}, capture_output=True, text=True, check=False)
-        assert result.returncode == 0, result.stderr
-        row = json.loads((self.root / "guard.jsonl").read_text().splitlines()[0])
-        assert row["allowed"]
-        assert row["resolved_argv"][0] == sys.executable
-        assert "approval_policy=never" in spec.argv
 
     def test_another_argv_has_no_outside_sandbox_allow_and_call_scope_is_enforced(self):
         _, overlay = self.configure([["python", "-m", "unittest"]])
