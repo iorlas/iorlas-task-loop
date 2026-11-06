@@ -64,6 +64,7 @@ State: ~/.config/task-loop : factory.db (state); logs and transcripts stay files
 
 import argparse
 import importlib
+import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -166,6 +167,8 @@ def owner_parsers(sp):
     p = sp.add_parser("doctor", help="warn about git settings that let a slot's git leave the slot")
     p.add_argument("--reindex", action="store_true", help="rebuild the dashboard's run index in factory.db")
     p.add_argument("--disk", action="store_true", help="where the config folder's bytes are, and the free space of its volume")
+    sp.add_parser("layout", help="`tl layout migrate`: move an old config dir to runs/<run>/ and repos/<repo>/ once (stop the loops first)"
+                  ).add_argument("op", choices=["migrate"])
     p = sp.add_parser("register", help="add a repository to the dashboard")
     p.add_argument("directory", nargs="?", default=".", metavar="DIR",
                    help="Git working directory (default: current directory)")
@@ -401,6 +404,10 @@ def v_next(a: Any, c: Ctx) -> int:
     return importlib.import_module("taskloop.cli.loop_cmd").cmd_next(a, c.env, c.spawner, c.git, c.who, c.here, c.now)
 
 
+def v_layout(a: argparse.Namespace, c: Ctx) -> int:
+    return verbs.layout(c.who.config, c.now())
+
+
 def v_prune(a: Any, c: Ctx) -> int:
     return importlib.import_module("taskloop.cli.prune").cmd_prune(a, c.env, c.git, c.who, c.now)
 
@@ -477,6 +484,7 @@ VERBS: Final[dict[str, Handler]] = {
     "queue": lambda a, c: cli_queue.cmd_queue(a.op, a.ids, beadtools.bd_store(c.who.actor), c.now),
     "next": v_next, "loop": v_loop, "stop": v_stop,
     "prune": v_prune,
+    "layout": v_layout,
     "lint": v_lint,
     "check": lambda a, c: importlib.import_module("taskloop.app.launch.check").cmd_check(
         a, who=c.who, env=c.env, spawner=c.spawner, git=c.git),
@@ -492,6 +500,10 @@ def main(argv: list[str] | None = None, here: Path = HERE, now: Callable[[], flo
     a = build_parser().parse_args(argv)
     env = snapshot()
     ctx = Ctx(here, now, list(argv) if argv is not None else sys.argv[1:], env, real.spawner(env), real.git(env), ident.identity(env))
+    stop = ident.layout_stop(a.cmd, ctx.who.config.root)
+    if stop:
+        print(stop, file=sys.stderr)
+        return os.EX_CONFIG
     hook_wire.heal(a.cmd, here.parents[1], env)
     return cli_bd.required(VERBS[a.cmd], a, ctx)
 

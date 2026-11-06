@@ -1,0 +1,51 @@
+"""The scorecard's state of main: red when a revert landed on the base since the window began; the strip shows it."""
+
+from pathlib import Path
+
+import pytest
+
+from taskloop.app.report.card import score_of
+from taskloop.app.report.mainstate import main_state
+from taskloop.contracts.gitfacts import LogRow
+from taskloop.contracts.slots import SlotGitError
+
+T = 1793000000.0
+CARD = {"since": T, "until": T + 600, "beads": 1, "landed": 1, "landed_no_ask": 1, "asks": {"count": 0}, "lost": 0, "crashes": 0,
+        "m2": {"pass": True}}
+
+
+class FakeGit:
+    def __init__(self, rows: list[LogRow] | None) -> None:
+        self.rows = rows
+
+    def log(self, d: str, include: list[str], exclude: list[str] | None = None, limit: int = 0, grep: str = "") -> list[LogRow]:
+        if self.rows is None:
+            raise SlotGitError("no base")
+        return self.rows
+
+
+@pytest.mark.parametrize(("rows", "red"), [
+    ([], False),
+    ([LogRow(oid="a" * 40, time=int(T) - 5, subject='Revert "x"')], False),  # before the window
+    ([LogRow(oid="b" * 40, time=int(T) + 5, subject='Revert "x"')], True),
+    ([LogRow(oid="c" * 40, time=int(T) + 5, subject="Say Revert in passing")], False),
+    (None, False),  # git cannot answer: nothing is known
+])
+def test_main_is_red_only_for_a_revert_inside_the_window(rows: list[LogRow] | None, red: bool) -> None:
+    got = main_state(FakeGit(rows), "/r", "main", T)
+    assert got["red"] is red
+    assert bool(got["reverts"]) is red
+
+
+@pytest.mark.parametrize("red", [False, True])
+def test_the_strip_numbers_carry_mains_state(red: bool) -> None:
+    assert score_of({**CARD, "main": {"red": red}}).main_red is red
+
+
+def test_a_card_without_main_is_green() -> None:
+    assert score_of(CARD).main_red is False
+
+
+def test_the_strip_paints_main_red_as_a_red_banner() -> None:
+    js = (Path(__file__).resolve().parents[2] / "src" / "taskloop_dash" / "static" / "js" / "app.js").read_text()
+    assert "s.lost || s.crashes || s.main_red ? 'ban bad'" in js

@@ -29,7 +29,7 @@ from taskloop.contracts.plancheck import PlanData
 from taskloop.contracts.review import Unfiled
 from taskloop.contracts.wire import Open
 from taskloop.domain.checks import trim
-from taskloop.domain.review.followups import FollowKey
+from taskloop.domain.followups import FollowKey
 from taskloop.stores.api import AmendDoc
 from taskloop.stores.bundle import Stores
 

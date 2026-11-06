@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 from taskloop import contracts
+from taskloop.adapters import layout_migrate
 from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.ident import claude_dir, config_dir
 from taskloop.app.doctor import disk, profiles
@@ -126,7 +127,7 @@ def launcher_problems(plugin_root: Path, env: Env) -> list[str]:
         return []
     root = config_dir(env)
     stale = []
-    for name, path in [("shim", root / "bin/tl"), *((n, root / "githooks" / n) for n in hook.HOOK_NAMES)]:
+    for name, path in [("shim", root / "bin/tl"), *((n, ConfigDir(root).hooks_dir() / n) for n in hook.HOOK_NAMES)]:
         try:
             text = path.read_text(encoding="utf-8")
             words = [] if hook.RESOLVING_MARK in text else shlex.split(text, comments=True)  # a resolving shim is never stale
@@ -214,6 +215,9 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
         print("WARN " + w)
     if legacy := legacy_line(env):
         print(legacy)
+    if old := layout_migrate.old_layout(who.config):
+        print(f"WARN the config dir is in the old layout ({len(old)} places, first {old[0]}): "
+              f"stop the loops, then run `{layout_migrate.COMMAND}`")
     fails = install_problems(plugin_root, env)
     for p in fails:
         print("FAIL " + p)

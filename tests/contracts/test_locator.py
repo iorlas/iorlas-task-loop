@@ -109,7 +109,7 @@ class Locator(Case):
 
     def test_a_bundle_names_every_file_of_the_run_from_its_id(self):
         a = self.where.create("/r/x", "tl-1", T0)
-        assert (a.log, a.err, a.live, a.dir) == (self.cfg.engine_log(a.run), self.cfg.engine_log(a.run).with_suffix(".stderr"),
+        assert (a.log, a.err, a.live, a.dir) == (self.cfg.engine_log(a.run), self.cfg.engine_stderr(a.run),
                                                          self.cfg.live_dir(a.run), self.cfg.run_dir(a.run))
 
     def test_two_threads_take_up_beat_identify_and_add_beads_without_losing_changes(self):

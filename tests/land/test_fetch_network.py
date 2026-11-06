@@ -12,7 +12,8 @@ import support.paths  # noqa: F401
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.gitcall import must
 from taskloop.contracts.slots import SlotGitError
-from taskloop.domain.land.matchers import NetText, Push
+from taskloop.domain.land.matchers import Push
+from taskloop.domain.matchers import NetText
 
 DNS = "fatal: unable to access 'https://github.com/org/repo': Could not resolve host: github.com"
 
