@@ -25,7 +25,11 @@ def test_every_app_package_and_run_module_is_a_node_or_a_root():
     assert not missing, f"not classified in the {CONTRACT} contract (.importlinter): {missing}"
 
 
+def exists(module: str) -> bool:
+    base = ROOT / "src" / Path(*module.split("."))
+    return base.is_dir() or base.with_suffix(".py").exists()
+
+
 def test_the_contract_names_no_module_that_is_gone():
-    gone = [m for m in named("source_modules") | named("forbidden_modules")
-            if m.startswith("taskloop.app.") and not ((ROOT / "src" / Path(*m.split("."))).is_dir() or (ROOT / "src" / Path(*m.split("."))).with_suffix(".py").exists())]
+    gone = [m for m in named("source_modules") | named("forbidden_modules") if m.startswith("taskloop.app.") and not exists(m)]
     assert not gone, f"the contract names modules that do not exist: {gone}"
