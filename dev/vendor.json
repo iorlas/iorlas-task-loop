@@ -43,8 +43,8 @@
   },
   {
     "name": "git_porcelain",
-    "shelf_tag": "a07a6d5808c3fc8e6706c29766a5d795311430d8",
-    "shelf_commit": "a07a6d5808c3fc8e6706c29766a5d795311430d8",
+    "shelf_tag": "427ab3e",
+    "shelf_commit": "427ab3e75d94055f61efcc497ccd1244760cea8e",
     "tree_hash": "bb412f15b6e00222dc601ca7532b90cafba3bcd7e354908778811a51e38f0235"
   },
   {
@@ -73,9 +73,9 @@
   },
   {
     "name": "stream_proc",
-    "shelf_tag": "262a5999d0fc2380b0325e910996bbb5810aa76c",
-    "shelf_commit": "262a5999d0fc2380b0325e910996bbb5810aa76c",
-    "tree_hash": "0056ff7823329e01e3707f27967d214b2e2d17d8926a55066809604da0bb2c1a"
+    "shelf_tag": "427ab3e",
+    "shelf_commit": "427ab3e75d94055f61efcc497ccd1244760cea8e",
+    "tree_hash": "6d451d56e55fb3bc38190460be4252405b02be846b61e6f0f0d1b4a35fe5f629"
   },
   {
     "name": "timefmt",
