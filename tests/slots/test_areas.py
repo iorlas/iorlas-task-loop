@@ -110,7 +110,7 @@ class Line(Slots):
         self.cfg = wslots.profile_slots(str(self.repo))
 
     def tickets(self):
-        return list(sl.ticket_dir(str(self.repo)).glob("*.json"))
+        return sl.ticket_names(self.repo)
 
     def waiter(self, label, served):
         def go():
