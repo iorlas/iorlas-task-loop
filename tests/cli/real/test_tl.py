@@ -81,11 +81,11 @@ class RegisterCLI(Base):
 
     def assert_registered(self, result):
         assert result.returncode == 0, result.stderr
-        assert result.stdout == "REGISTERED " + str(self.repo.resolve()) + "\n"
+        assert result.stdout == f"REGISTERED {self.repo.name} {self.repo.resolve()}\n"
         assert result.stderr == ""
         repos = json.loads(self.registry.read_text())["repos"]
-        assert str(self.repo.resolve()) in repos
-        assert isinstance(repos[str(self.repo.resolve())]["added"], (int, float))
+        assert repos[self.repo.name]["path"] == str(self.repo.resolve())
+        assert isinstance(repos[self.repo.name]["added"], (int, float))
 
     def test_default_directory(self):
         self.assert_registered(self.cli("register", cwd=self.repo))
@@ -108,16 +108,16 @@ class RegisterCLI(Base):
 
     def test_repeated_registration_preserves_entries_and_metadata(self):
         self.config.mkdir(parents=True)
-        existing = {str(self.home / "other"): {"added": 123}}
-        self.registry.write_text(json.dumps({"v": 1, "repos": existing}))
+        existing = {"other": {"path": str(self.home / "other"), "added": 123}}
+        self.registry.write_text(json.dumps({"v": 2, "repos": existing}))
         self.assert_registered(self.cli("register", str(self.repo)))
         original = self.registry.read_bytes()
         self.assert_registered(self.cli("register", str(self.repo)))
         assert self.registry.read_bytes() == original
         repos = json.loads(original)["repos"]
         assert len(repos) == 2
-        for path, metadata in existing.items():
-            assert repos[path] == metadata
+        for name, metadata in existing.items():
+            assert repos[name] == metadata
 
     def in_process(self, *args):
         out, err, cwd = io.StringIO(), io.StringIO(), os.getcwd()

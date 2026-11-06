@@ -51,17 +51,21 @@ class Cheap(Case):
         assert d["cheap"]
 
     def test_snapshot_and_cached_logins(self):
-        now = env.now()
+        now = 1_800_000_000.0
+        with mock.patch.dict(os.environ, {"DELEGATE_NOW": str(now)}):  # a pinned clock: the ages do not depend on how slow the run is
+            self.snapshot_and_logins(now)
+
+    def snapshot_and_logins(self, now):
         status.write_snapshot(
             {"v": 1, "ts": now - 90, "lanes": {"X": {}}, "cockpit": {"v": 1}, "running": [], "recent": [], "needs_input": []}
         )
         usage.auth_cache().remember("CLAUDE_SUBSCRIPTION", False, "not logged in", now - 30)
         rc, d = self.cheap()
         assert rc == 0
-        assert 89 <= d["age_s"] <= 100
+        assert d["age_s"] == 90
         assert d["lanes"] == {"X": {}}
         assert d["auth"]["CLAUDE_SUBSCRIPTION"]["ok"] is False
-        assert 29 <= d["auth"]["CLAUDE_SUBSCRIPTION"]["age_s"] <= 40
+        assert d["auth"]["CLAUDE_SUBSCRIPTION"]["age_s"] == 30
 
     def test_running_comes_from_fresh_leases_without_ps(self):
         now = env.now()

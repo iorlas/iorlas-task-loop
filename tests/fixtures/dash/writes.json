@@ -23,13 +23,15 @@
   "bead": "lifesim-5ban.3",
   "run": "lifesim-5ban.3-fixture",
   "cause": "flaky_test",
-  "ask": null
+  "ask": null,
+  "key": ""
  },
  "ack": {
   "project": "lifesim-56f42031",
   "bead": "lifesim-5ban.3",
   "run": "lifesim-5ban.3-fixture",
-  "ack": true
+  "ack": true,
+  "key": ""
  },
  "prune": {
   "project": "lifesim-56f42031",
@@ -38,17 +40,20 @@
  "park": {
   "project": "lifesim-56f42031",
   "bead": "lifesim-6dq0",
-  "run": "lifesim-6dq0-fixture"
+  "run": "lifesim-6dq0-fixture",
+  "key": ""
  },
  "stop": {
   "project": "lifesim-56f42031",
   "bead": "lifesim-6dq0",
-  "run": "lifesim-6dq0-fixture"
+  "run": "lifesim-6dq0-fixture",
+  "key": ""
  },
  "note": {
   "project": "lifesim-56f42031",
   "bead": "lifesim-6dq0",
   "run": "lifesim-6dq0-fixture",
-  "text": "keep the old save format readable"
+  "text": "keep the old save format readable",
+  "key": ""
  }
 }

@@ -1,4 +1,4 @@
-"""Network facts (delegate-4n7, A2.5): is the machine online, and does this text say a connection dropped.
+"""Network facts (delegate-4n7, A2.5): is the machine online, and (classify.py) whether a text says a connection dropped.
 
 Pure but for sockets and the cache file it is given. stdlib only, no subprocess, no vendor call, so a probe costs no quota.
 `probe()` resolves each host and opens a TCP connection to it, all hosts at once, and gives up on the whole thing after `budget_s`
@@ -27,20 +27,6 @@ CONNECT_S = 1.5  # one TCP connect
 FRESH_S = 120  # a cached probe older than this is "unknown"
 NEUTRAL = ("one.one.one.one:443",)  # a name every resolver knows: the fallback when no vendor host is given
 IP_LITERAL = "1.1.1.1:443"  # no DNS: separates "offline" from "DNS is down"
-
-# What a vendor or the OS says when the connection itself broke. `max_output_tokens` after "stream disconnected" is the model's cap, not
-# the network.
-DROP_RE = re.compile(
-    r"ENOTFOUND|ECONNRESET|ECONNREFUSED|ECONNABORTED|ETIMEDOUT|EAI_AGAIN|EPIPE|getaddrinfo|could not resolve host|network is unreachable"
-    r"|cannot connect to api|unable to connect|error sending request|connection (reset|closed|refused|timed out|failed)|socket hang up"
-    r"|dns error|network error|waiting for network|(?:TLS|SSL) handshake|stream disconnected(?!.{0,200}max_output_tokens)",
-    re.I | re.S,
-)
-
-
-def looks_dropped(text: str | None):
-    """-> True when `text` (a vendor error event or stderr, never the model's answer) says the connection broke."""
-    return bool(DROP_RE.search(text or ""))
 
 
 def split_host(h: str, default_port: int = 443):
