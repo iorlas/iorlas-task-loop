@@ -11,7 +11,7 @@ from taskloop.contracts.config import ExecutorConfig
 from taskloop.contracts.ids import CheckId
 
 # `ssh [-o opt]... <host> <command>`: git's own ssh call has the same shape
-SHIM = '#!/bin/sh\nwhile [ "$1" = -o ]; do shift 2; done\nshift\ncd "$HOME" && exec sh -c "$1"\n'
+SHIM = '#!/bin/sh\nwhile case "$1" in -o) shift 2;; -*) shift;; *) false;; esac; do :; done\nshift\ncd "$HOME" && exec sh -c "$1"\n'
 
 
 def test_a_commit_is_pushed_run_in_the_slot_worktree_and_its_artifacts_come_back(workdir, monkeypatch):
@@ -38,7 +38,7 @@ def test_a_commit_is_pushed_run_in_the_slot_worktree_and_its_artifacts_come_back
     for _ in range(2):  # the second run reuses the slot's worktree
         art = workdir / "art"
         art.mkdir(exist_ok=True)
-        rc, tail = runner.run(wt=str(repo), repo="r", slot="s1", sha=sha, run_id="r1", step=CheckId("t"), argv=script, env={},
+        rc, tail, *_ = runner.run(wt=str(repo), repo="r", slot="s1", sha=sha, run_id="r1", step=CheckId("t"), argv=script, env={},
                               log=workdir / "log", artifact_dir=art, timeout_s=60)
         assert rc == 7 and "committed" in tail, tail
         assert (art / "out.txt").read_text() == "kept\n"
