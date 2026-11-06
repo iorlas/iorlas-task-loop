@@ -14,8 +14,8 @@ class EnvVar(StrEnum):
     TL_ATTEMPT = "TL_ATTEMPT"                    # N of this attempt (the N of TL_ARTIFACT_DIR)
     TL_WORKTREE = "TL_WORKTREE"                  # the worktree the run works in
     TL_BRANCH = "TL_BRANCH"                      # the branch checked out in it
-    TL_JUDGE_READ_ONLY = "TL_JUDGE_READ_ONLY"    # the repo hook's `tl judge-push` only reads the receipt
     TL_WORKER_MB = "TL_WORKER_MB"                # address-space cap of each xdist worker (dev/runtests.py)
+    TL_SCRATCH = "TL_SCRATCH"                    # moves the scratch root (contracts/scratch.py; dev/runtests.py reads it too)
     # handovers between two processes of the engine (one typed record each, see contracts/env.py)
     TL_REEXEC = "TL_REEXEC"                      # the run that re-execs itself after a code update
     TL_LOOP_STATE = "TL_LOOP_STATE"              # the loop's state across its exec
@@ -24,6 +24,7 @@ class EnvVar(StrEnum):
     TASK_LOOP_SLOT_BEAD = "TASK_LOOP_SLOT_BEAD"  # the bead whose slot this process holds
     TASK_LOOP_ACTOR = "TASK_LOOP_ACTOR"          # the loop's actor name, inherited by its run-tasks
     TASK_LOOP_SESSION = "TASK_LOOP_SESSION"      # the engine's or loop's session id
+    TASK_LOOP_LOOP_ID = "TASK_LOOP_LOOP_ID"      # the opaque id of the loop lifetime a run-task belongs to (kept across the loop's exec)
     TASK_LOOP_LOOP_PID = "TASK_LOOP_LOOP_PID"    # the pid of the loop a run-task belongs to
     TASK_LOOP_RUN_LOG = "TASK_LOOP_RUN_LOG"      # the parent's console log, projected at the run's finish
     TASK_LOOP_SLOT = "TASK_LOOP_SLOT"            # the parent's slot name for the loop history

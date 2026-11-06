@@ -7,15 +7,15 @@ import shlex
 import sys
 from pathlib import Path
 
+from any_agent.harnesses.codex_overlay import CodexOverlay
+from any_agent.protocol import LaunchSpec
 from jsonl_log import JsonlLog
 
-from delegate.adapters.harness.base import LaunchSpec
-from delegate.adapters.harness.codex_overlay import CodexOverlay
 from delegate.app import env
 from delegate.contracts import stops, wire
 from delegate.contracts.json_types import Json
 from delegate.domain.policy.exec_allow import allowed_argv, call_rules, host_policy
-from delegate.domain.policy.worker import Verdict, judge
+from delegate.domain.policy.worker import Verdict, judge, read_verdict
 
 
 class ExecAllowError(ValueError):
@@ -73,7 +73,21 @@ def hook_verdict(payload: object, read_only: bool, engine_only: tuple[str, ...])
         raise ValueError("invalid hook tool_input")
     if payload["tool_name"] == "Bash" and (not isinstance(inp.get("command"), str) or not inp["command"].strip()):
         raise ValueError("invalid Bash command")
-    return judge(payload["tool_name"], inp, read_only, engine_only)
+    verdict = judge(payload["tool_name"], inp, read_only, engine_only)
+    if verdict.blocked or payload["tool_name"] != "Read":
+        return verdict
+    return read_verdict("Read", inp, _line_count(inp.get("file_path")))
+
+
+def _line_count(path: object) -> int | None:
+    """Lines of a file, counted without loading it; None when it is not a readable file."""
+    if not isinstance(path, str):
+        return None
+    try:
+        with open(path, "rb") as f:
+            return sum(chunk.count(b"\n") for chunk in iter(lambda: f.read(1 << 16), b""))
+    except OSError:
+        return None
 
 
 def guard(a: env.Args) -> int:

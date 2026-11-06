@@ -9,7 +9,7 @@ from typing import override
 from git_porcelain import errors
 from git_porcelain.real import Done, RealRepo
 
-from taskloop.adapters.git_base import classify, error_line
+from taskloop.adapters.git_base import NOT_A_REPO, classify, error_line
 from taskloop.contracts.slots import (
     BranchPinned,
     DirtyTree,
@@ -63,7 +63,7 @@ def pool_error(error: errors.GitError) -> SlotGitError:
         if isinstance(error, source):
             return target(error_line(message), output=message)
     # Retain the port's classifier for otherwise untyped diagnostics.
-    translated = classify(message)
+    translated = NotARepo(error_line(message)) if NOT_A_REPO.fullmatch(error_line(message)) else classify(message)
     translated.output = message
     return translated
 

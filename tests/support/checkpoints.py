@@ -37,3 +37,8 @@ def flat_ck(ck):
 def stored_ck(bead="t-1"):
     """The stored Checkpoint of `bead` in the test's config dir, read through the real stores."""
     return real_stores(homes.cfg()).checkpoints.of(bead).get()
+
+
+def drop_ck(bead):
+    """The stored checkpoint of `bead` gone (a new bead for the next case)."""
+    real_stores(homes.cfg()).checkpoints.of(bead).delete()

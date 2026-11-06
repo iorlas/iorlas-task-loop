@@ -11,18 +11,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.fakegit import ScriptedGit
+from support.memstores import fake_stores
 
 from taskloop.app.run.resume import KEEP_FOR_ACTIVE, LATE, Resume
 from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state, state_names
 from taskloop.contracts import fence, wire
-from taskloop.contracts.checkpoint import BriefSnap, Checkpoint, Defect, Handoff, PlanStep, RunState, WriterSession
+from taskloop.contracts.checkpoint import BriefSnap, Checkpoint, Handoff, PlanStep, RunState, WriterSession
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.review import (
     ReviewState,
     Unfiled,
 )
 from taskloop.contracts.run import Round
-from taskloop.stores.memory import fake_stores
 
 ROOT = Path(__file__).resolve().parents[2]
 # a value that is not the default, for each field: the park test fails on a new field until it is listed here
@@ -45,12 +45,9 @@ SAMPLE: dict[str, Any] = {
     "writer_family": "codex",
     "writer_fallback": True,
     "fallback_lane": "L",
-    "writer_said": "said",
-    "look_paths": ["p.png"],
     "look_notes": ["n"],
     "look_unjudged": {"i": "why"},
     "look_done": 1,
-    "look_prev": [Defect(item="i", why="w")],
     "rendered_names": ["a.png"],
     "last_reqs": [{"method": "m"}],
     "render_stale": True,
@@ -82,7 +79,7 @@ class Host(StateAttrs):
         self.run_id = "t-1-20260101-000000"
         self.unchecked = [{"what": "u", "kind": "", "source": "", "why": "", "proof_round": False}]
         self.unverified, self.filed, self.unfiled = [{"what": "v", "kind": "", "why": "", "source": ""}], [], []
-        self.look_paths, self.look_notes, self.look_unjudged = [], [], {}
+        self.look_notes, self.look_unjudged = [], {}
         self.task_branch, self.gate_log, self.head = "task/t-1", None, "h0"
 
     @property
@@ -159,7 +156,6 @@ class Park(Case):
         for name in LATE:
             assert getattr(b, name) == getattr(RunState(), name), name
         assert (b.filed, b.unfiled) == ([], [])  # filed titles are the late ones too
-        assert b.look_paths == ["p.png"]
 
     def test_a_pending_land_validation_parks_at_land_verify_red(self):
         a, _ = self.parked()
@@ -218,5 +214,5 @@ class OneWriter(Case):
         assert hits == []
 
 
-OK = {"src/taskloop/app/run/state.py", "src/taskloop/stores/books.py", "src/taskloop/stores/real.py", "src/taskloop/stores/memory.py",
+OK = {"src/taskloop/app/run/state.py", "src/taskloop/stores/books.py", "src/taskloop/stores/real.py",
       "src/taskloop/app/run/shared.py"}  # shared.py: the sibling's plan is read (siblings()), never written

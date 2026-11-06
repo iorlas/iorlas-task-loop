@@ -6,8 +6,8 @@ import re
 import tempfile
 from pathlib import Path
 
-from delegate.adapters.harness.base import LaunchInputs
-from delegate.adapters.harness.opencode import OpenCodeHarness, Profile
+from any_agent.harnesses.opencode import OpenCodeHarness, Profile
+from any_agent.protocol import LaunchInputs
 from support.case import Case
 
 import hermetic  # noqa: F401  (a home of its own for every test)

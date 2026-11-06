@@ -1,7 +1,6 @@
 """What a registered file is, from its name alone: the kind it is served as, a store path part, a `<stage>-<attempt>` folder, one listed
 item and the URL that reads it. Pure; the store reader is api/artifacts.py."""
 
-import mimetypes
 from dataclasses import dataclass
 from typing import Final, Literal
 from urllib.parse import urlencode
@@ -11,13 +10,15 @@ from taskloop_dash.views import names
 Kind = Literal["image", "video", "audio", "pdf", "file"]
 Role = Literal["before", "after", "progress", "result"]
 INLINE_VIDEO: Final = ("video/mp4", "video/webm", "video/ogg")
-INLINE_AUDIO: Final = ("audio/mpeg", "audio/wav", "audio/x-wav", "audio/ogg", "audio/mp4", "audio/webm", "audio/aac", "audio/flac")
+INLINE_AUDIO: Final = (
+    "audio/mpeg", "audio/wav", "audio/x-wav", "audio/vnd.wave", "audio/ogg", "audio/mp4", "audio/webm", "audio/aac", "audio/flac",
+)
 DOWNLOAD: Final = "application/octet-stream"
 
 
 def served(name: str) -> tuple[Kind, str]:
     """(kind, content type) a file is served as: what plays inline is a fixed table of types (never HTML or SVG), the rest downloads."""
-    ctype = mimetypes.guess_type(name)[0] or ""
+    ctype = names.content_type(name)
     if ctype in names.IMAGES:
         return "image", ctype
     if ctype in INLINE_VIDEO:

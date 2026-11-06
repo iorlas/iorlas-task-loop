@@ -19,6 +19,7 @@ from support.procsim import real_proc
 
 # isort: split
 from any_lease import Leases
+from support.memstores import fake_stores
 
 from taskloop.app.checks import resources
 from taskloop.app.checks.resources import Resources
@@ -32,7 +33,6 @@ from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.ids import CheckId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.domain.checks.inputs import touched
-from taskloop.stores.memory import fake_stores
 
 ANSWERS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 UNITY = {"unity": {"limit": 1}}

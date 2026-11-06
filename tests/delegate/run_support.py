@@ -1,6 +1,7 @@
 """Shared fixture of the `route.py run` tests: fake `codex` and `claude` on PATH, a temp repo,
 a config dir of its own. Not a test module."""
 
+import dataclasses
 import io
 import json
 import os
@@ -9,12 +10,16 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from unittest import mock
 
 import pytest
-from delegate.app import env, usage, watch
+from any_agent import watch
+from delegate.app import env, harnesses, usage
 from delegate.contracts import history as hist
 from delegate.domain.health import ledger as health_ledger
+from support import fake_worker
 from support.case import Case
+from support.fake_clock import SteppingClock
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -30,6 +35,8 @@ class RunBase(Case):
     FAKE_CLAUDE = (FIX / "fake_claude.sh").read_text(encoding="utf-8")
 
     def setup_method(self):
+        self.clock = SteppingClock(0.25)  # a silence or a grace passes in polls, not seconds
+        self.enterContext(mock.patch.object(harnesses, "CLOCK", self.clock))
         self.tmp = tempfile.TemporaryDirectory()
         base = Path(self.tmp.name)
         self.base = base
@@ -126,10 +133,21 @@ class RunBase(Case):
             rid, lane=lane, role="worker", start=env.now(), task=task, expires=expires if expires is not None else env.now() + 600
         )
 
+    def play(self, *script):
+        """The worker of the next run is a script (tests/support/fake_worker.py): nothing is spawned. -> the workers started."""
+        return self.enterContext(fake_worker.install(list(script), clock=self.clock))
+
+    def real_clock(self):
+        """A test whose assertion is the real time between two events of the worker runs the watchdog on the real clock."""
+        self.enterContext(mock.patch.object(harnesses, "CLOCK", time.monotonic))
+
     def fast_clock(self, grace=1, stall=1):
-        for name, v in (("ANSWER_GRACE_S", grace), ("STALL_S", stall)):
-            self.addCleanup(setattr, watch, name, getattr(watch, name))
-            setattr(watch, name, v)
+        stall_patch = mock.patch.object(watch, "STALL_S", stall)
+        stall_patch.start()
+        self.addCleanup(stall_patch.stop)
+        p = mock.patch.dict(harnesses.LIMITS, {k: dataclasses.replace(v, grace_s=grace) for k, v in harnesses.LIMITS.items()})
+        p.start()
+        self.addCleanup(p.stop)
 
     def pid_dead(self):
         time.sleep(0.3)
@@ -191,3 +209,8 @@ class RunBase(Case):
             )
             for i in range(n)
         ]
+
+
+def short_limits(cli, **kw):
+    """A context manager: `cli`'s deadlines shortened for the run (first_event_s, silence_s, grace_s)."""
+    return mock.patch.dict(harnesses.LIMITS, {cli: dataclasses.replace(harnesses.LIMITS[cli], **kw)})

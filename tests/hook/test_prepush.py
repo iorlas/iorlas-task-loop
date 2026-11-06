@@ -71,7 +71,7 @@ class PushClient(Case):
               mock.patch.object(prepush.Path, "is_file", return_value=True),
               mock.patch.object(prepush.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)) as run):
             assert prepush.githook("pre-push", ["tl"], self.request, {"A": "b"}) == 0
-        assert run.call_args.kwargs["env"] == {"A": "b", "TL_JUDGE_READ_ONLY": "1"}
+        assert "env" not in run.call_args.kwargs
 
     def test_dispatcher_refuses_unexpected_pre_push_errors(self):
         stderr = io.StringIO()

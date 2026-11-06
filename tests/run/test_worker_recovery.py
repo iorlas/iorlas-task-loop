@@ -313,3 +313,16 @@ class Recovery(Case):
             done_memo.recall(self.root, (1,), "sha")
         with pytest.raises(factorydb.DatabaseError):
             done_memo.keep(self.root, (1,), "sha", str(answer))
+
+
+def test_the_memo_is_published_before_the_answer_is_marked_consumed(tmp_path):
+    order = []
+    state = mock.Mock()
+    state.consumed.side_effect = lambda: order.append("consumed")
+    c = mock.Mock(state=state, key=(1,), sha="x", node="plan", writer_family=None)
+    host = SimpleNamespace(run_dir=tmp_path)
+    worker = worker_call.WorkerCall(host, mock.Mock())
+    keep = mock.patch.object(worker_call.done_memo, "keep", side_effect=lambda *a: order.append("keep"))
+    with keep, pytest.raises(TypeError):  # the rest of end_call needs a whole host; only the order matters here
+        worker.end_call(c, mock.Mock())
+    assert order == ["keep", "consumed"]

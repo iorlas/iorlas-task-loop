@@ -23,6 +23,8 @@ class Cost(Rec):
 @final
 class Denied(Rec):
     tool: str
+    kind: str = ""
+    reason: str = ""
     input: dict[str, Any] = msgspec.field(default_factory=dict)
 
 

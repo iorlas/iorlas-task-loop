@@ -21,7 +21,7 @@ from taskloop.adapters import halt as halting
 from taskloop.app.asks import intake, parks, setup_retry
 from taskloop.app.loop.queue import has_areas
 from taskloop.app.reconcile import leases
-from taskloop.app.run import console, preflight, running
+from taskloop.app.run import console, preflight, running, target
 from taskloop.app.run.engine import Blocked, Engine
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import verbs
@@ -142,7 +142,7 @@ def parked(bead_id: BeadId, fresh: bool, repo: str, who: Identity, store: Beads 
 def append_output(stream: Any) -> Any:
     """Write a stream that is a file at the end of that file, wherever another writer left it: a second
     `run-task ... > log` on the same log truncates it, and a live run writing on at its old offset leaves a hole of NUL
-    bytes (lifesim-gfr.31.1). A terminal, a pipe or a stream with no descriptor is left as it is."""
+    bytes. A terminal, a pipe or a stream with no descriptor is left as it is."""
     try:
         fd = stream.fileno()
         regular = stat.S_ISREG(os.fstat(fd).st_mode)
@@ -172,6 +172,11 @@ def report(a: Any, rec: RunReport) -> Any:
 
 
 def main(a: Any, store: Any = None, *, env: Env, spawner: Spawner, git: Git, who: Identity) -> Any:
+    try:
+        a.id = target.resolve(a, spawner, gitrepo.repo_root())
+    except ValueError as err:
+        print(f"tl run-task: {err}", file=sys.stderr)
+        return 2
     try:
         rc = run_main(a, store, env=env, spawner=spawner, git=git, who=who)
     except Blocked as b:  # a stop (SIGTERM) before the engine ran: the slot and the lock are already given back

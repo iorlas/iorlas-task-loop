@@ -10,10 +10,10 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from delegate.adapters.harness import opencode_sandbox as box
-from delegate.adapters.harness.base import LaunchInputs
-from delegate.adapters.harness.opencode import OpenCodeHarness
-from delegate.app import launch
+from any_agent.harnesses import opencode_sandbox as box
+from any_agent.harnesses.opencode import OpenCodeHarness
+from any_agent.protocol import LaunchInputs
+from delegate.app import harnesses, launch
 from delegate.contracts.routing import CallArgs
 from delegate.contracts.state import RefRecord
 from delegate.contracts.wire import RECIPE_RUNNERS
@@ -66,7 +66,7 @@ def opencode_verdict(rules: dict[str, str], command: str) -> str:
 
 class OpenCodeRulesTest:
     def bash(self, write: bool = True, engine_only: tuple[str, ...] = ("slow",)):
-        return box.permissions(write, engine_only).get("bash", {})
+        return box.permissions(harnesses.sandbox(), write, engine_only).get("bash", {})
 
     def test_the_rules_for_one_runner_are_exactly_these(self):
         rules = self.bash()
@@ -104,7 +104,7 @@ class OpenCodeRulesTest:
             )
             hx.cleanup()
         perm = json.loads(spec.env["OPENCODE_CONFIG_CONTENT"])["permission"]
-        assert perm == box.permissions(True, ("slow", "e2e"))
+        assert perm == box.permissions(harnesses.sandbox(), True, ("slow", "e2e"))
         assert opencode_verdict(perm["bash"], "just e2e") == "deny"
 
     def test_the_denial_is_the_typed_policy_record(self):
@@ -112,7 +112,7 @@ class OpenCodeRulesTest:
         refusal = "The user has specified a rule which prevents you from using this specific tool call"
         state = {"status": "error", "input": {"command": "just slow"}, "error": refusal}
         hx.parse_line(json.dumps({"type": "tool_use", "sessionID": "s", "part": {"callID": "c1", "tool": "bash", "state": state}}))
-        want = [{"kind": "policy", "tool": "bash", "path": None, "input": {"command": "just slow"}}]
+        want = [{"kind": "policy", "tool": "bash", "path": None, "input": {"command": "just slow"}, "reason": refusal}]
         assert launch.denied_items(hx, False, ("slow",)) == want
 
 
@@ -212,3 +212,17 @@ class RoutingTest(Case):
         d: Any = support.router(copy.deepcopy(CFG), T).route("worker", args, lanes("openai"), rec).as_dict()
         assert (d["action"], d["lane"], d["flag"]) == ("run", rec.lane, "engine_only_advisory")
         assert "advisory only, the brief must say so" in d["warning"]
+
+
+class OpenCodeReadRootsTest:
+    def outside(self, write: bool, roots: tuple[str, ...] = ()):
+        return box.permissions(box.Sandbox(), write, (), roots)["external_directory"]
+
+    def test_a_write_step_reads_nothing_outside_its_cwd_without_a_root(self):
+        assert self.outside(True) == "deny"
+
+    def test_a_write_step_reads_a_listed_root_and_nothing_else(self):
+        assert self.outside(True, ("/data/shots/", "/opt/ref")) == {"*": "deny", "/data/shots/**": "allow", "/opt/ref/**": "allow"}
+
+    def test_a_read_only_step_ignores_the_list(self):
+        assert self.outside(False, ("/data/shots",)) == self.outside(False)

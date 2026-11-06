@@ -4,8 +4,10 @@
 from collections.abc import Sequence
 from typing import Final, NamedTuple
 
-from delegate.adapters.harness import classify
-from delegate.adapters.harness.opencode import OpenCodeHarness
+from any_agent.classify import limit_words as window_words
+from any_agent.classify import says_login, says_spend
+from any_agent.harnesses.opencode import OpenCodeHarness
+
 from delegate.app import env, harnesses, onboard, usage
 from delegate.app.decide import busy_jitter
 from delegate.app.fleet import mark_busy
@@ -113,9 +115,9 @@ def classify_out(lane: Lane, rec: OutState | None) -> str:
     reason)."""
     r = lane.out_reason
     text = " ".join([rec.why if rec else "", *lane.notes])
-    if r == "logged_out" or (r in (None, "error") and classify.says_login(text)):
+    if r == "logged_out" or (r in (None, "error") and says_login(text)):
         return "logged_out"
-    if lane.spend_blocked or classify.says_spend(text):
+    if lane.spend_blocked or says_spend(text):
         return "spend"
     if r == "hung":
         return "slow"
@@ -125,7 +127,7 @@ def classify_out(lane: Lane, rec: OutState | None) -> str:
 def limit_words(text: str, lane: Lane) -> str:
     scored = [(u, w) for w in lane.windows if (u := as_num(w["used"])) is not None]
     top = max(scored, key=lambda p: p[0], default=None)
-    return classify.limit_words(text, as_str(top[1]["name"]) if top and top[0] >= 95 else None)
+    return window_words(text, as_str(top[1]["name"]) if top and top[0] >= 95 else None)
 
 
 def window_rows(lane: Lane, S: Settings, t: float) -> tuple[list[dict[str, Json]], list[dict[str, Json]]]:

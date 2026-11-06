@@ -6,6 +6,11 @@ gate: check test
 test:
     uv run python dev/runtests.py
 
+# INNER LOOP ONLY, never the gate: pytest-testmon reruns what the code you edited reaches in the paths you name (docs/dev/test-inner-loop.md). It follows Python imports, not
+# config or data files, so a green run here proves nothing about those: `just test` (dev/affected.py) is the gate. First run per path builds .testmondata.
+test-inner +paths:
+    uv run --with pytest-testmon pytest --testmon -o addopts="-p no:cacheprovider" --ignore=tests/e2e --ignore=tests/delegate --ignore=tests/live {{paths}}
+
 # Every test of every kind, in 4 workers then the serial group. Started by a person, never by the gate, the release, a cron or a background job.
 test-full:
     uv run pytest -m "not serial" -n 4

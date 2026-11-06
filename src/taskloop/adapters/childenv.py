@@ -16,7 +16,7 @@ from taskloop.contracts.paths import ConfigDir, default_root
 
 # The only names (besides the registered engine ones and LC_*) a tool, a check or git inherits. Anything else is declared by the repo's
 # check (its `env`) or by the engine (`extra`), never picked up from whoever started the engine. A name is added below only when a real
-# tool needed it (tests/checks/real/test_allowlist.py runs lifesim's and task-loop's own checks), with the reason.
+# tool needed it (tests/checks/real/test_allowlist.py runs a consumer's and task-loop's own checks), with the reason.
 ALLOWED = frozenset({
     "PATH",  # cleaned of the virtualenv's bin (child_env.without_venv)
     "HOME", "USER", "LANG", "TERM", "TMPDIR", "SHELL",
@@ -83,8 +83,7 @@ def check_caches(base: Mapping[str, str]) -> dict[str, str]:
     cache = base.get("XDG_CACHE_HOME") or str(home / ".cache")
     data = base.get("XDG_DATA_HOME") or str(home / ".local/share")
     defaults = {"XDG_CACHE_HOME": cache, "UV_CACHE_DIR": str(Path(cache) / "uv"),
-                "UV_PYTHON_INSTALL_DIR": str(Path(data) / "uv/python"), "DOTNET_CLI_HOME": str(home),
-                "NUGET_PACKAGES": str(home / ".nuget/packages"), "MISE_CACHE_DIR": str(Path(cache) / "mise"),
+                "UV_PYTHON_INSTALL_DIR": str(Path(data) / "uv/python"), "MISE_CACHE_DIR": str(Path(cache) / "mise"),
                 "MISE_DATA_DIR": str(Path(data) / "mise"), "MISE_STATE_DIR": str(home / ".local/state/mise")}
     return {k: base.get(k) or v for k, v in defaults.items()}
 
@@ -131,7 +130,7 @@ PER_RUN = frozenset({EnvVar.TL_ARTIFACT_DIR, EnvVar.TL_ARTIFACT_STEP, EnvVar.TL_
                      EnvVar.TL_WORKTREE, EnvVar.TL_BRANCH,
                      EnvVar.TL_REEXEC, EnvVar.TL_LOOP_STATE,
                      EnvVar.TL_RELEASE_REEXEC, EnvVar.TASK_LOOP_SLOT_BEAD, EnvVar.TASK_LOOP_ACTOR, EnvVar.TASK_LOOP_SESSION,
-                     EnvVar.TASK_LOOP_LOOP_PID, EnvVar.TASK_LOOP_WORKER})
+                     EnvVar.TASK_LOOP_LOOP_PID, EnvVar.TASK_LOOP_LOOP_ID, EnvVar.TASK_LOOP_WORKER})
 
 
 def reaching(env: Mapping[str, str]) -> dict[str, str]:
@@ -180,6 +179,11 @@ def script_argv(script: str | Path, env: Env) -> list[str]:
 def current_env(env: Env, extra: Mapping[str, str] | None = None) -> dict[str, str]:
     """The environment of a worker started from `env` (child_env_of over the taken copy of the process's)."""
     return child_env_of(env.vars, extra)
+
+
+def delegate_call_env(env: Env, extra: Mapping[str, str] | None = None) -> dict[str, str]:
+    """`current_env` for a call TO delegate: without DELEGATE_DEPTH, which delegate refuses from a caller and sets itself on its workers."""
+    return without(current_env(env, extra), "DELEGATE_DEPTH")
 
 
 def identity_env(who: Identity) -> dict[str, str]:
