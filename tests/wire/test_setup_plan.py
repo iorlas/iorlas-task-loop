@@ -1,10 +1,10 @@
 """`tl setup --plan` looks at a throwaway HOME and a repo and writes nothing."""
 import argparse
 import json
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.wire import setup
 from taskloop.cli import setup as cli_setup
@@ -17,7 +17,7 @@ def tree(root: Path) -> list[str]:
 
 class SetupPlan(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.home = Path(tmp.name)
         self.env = Env({"HOME": str(self.home), "XDG_CONFIG_HOME": str(self.home / ".config")})

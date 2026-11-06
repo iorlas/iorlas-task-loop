@@ -125,7 +125,7 @@ It reads only local files: the records the engine and `tl.py` write (`~/.config/
 ```
 skills/task-loop/SKILL.md        the method (read by the orchestrating session)
 skills/task-loop/tl.py           the command line only: every verb lives in src/taskloop
-skills/task-loop/_vendor/        the shelf packages src/ imports by name (dev/vendor.py; never edited)
+skills/task-loop/_vendor/        the shelf packages src/ imports by name (`just vendor`; never edited)
 src/taskloop/                    the engine, the loop and the verbs, in layers: contracts, domain, adapters, stores, app, cli, hook
 src/taskloop/app/launch/         what tl starts: loop.py (tl loop / next / stop), selftest.py (tl selftest: one bead through the
                                  engine with a scripted lane, on this install's code), dash.py (tl dash), dash_ports.py

@@ -1515,6 +1515,22 @@
     "HEAD:main"
    ],
    "land_optimistic_tries": 2,
+   "gate_tree": "clean",
+   "gate_source_globs": [
+    "**/*.cs",
+    "**/*.yaml",
+    "**/*.py",
+    "**/*.json"
+   ],
+   "gate_ignored_allow": [
+    ".venv/**",
+    "node_modules/**",
+    "**/__pycache__/**",
+    "Library/**",
+    "Temp/**",
+    "obj/**",
+    "bin/**"
+   ],
    "land_mode": "push",
    "base": "origin/main",
    "check_links": true,

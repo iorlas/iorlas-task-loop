@@ -1,5 +1,4 @@
 """Authorization and reuse require the complete execution identity."""
-import tempfile
 from argparse import Namespace
 from pathlib import Path
 from unittest import mock
@@ -9,6 +8,7 @@ from support.case import Case
 from support.engine_case import EngineTest
 from support.memstores import fake_stores
 from support.spawn import port_git
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import check_files
 from taskloop.app.checks.cache import KEEP, InputKeys, RunMemo
@@ -100,7 +100,7 @@ class DatabaseIdentity(Identity):
 
     def setup_method(self):
         super().setup_method()
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.addCleanup(factorydb.close_shared)
         self.cfg = ConfigDir(Path(tmp.name))
@@ -178,7 +178,7 @@ class DatabaseDeliveryIdentity(DeliveryIdentity):
     """Authorization, stack gate and green queries keep their full-key checks over SQL receipts."""
 
     def stores(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.addCleanup(factorydb.close_shared)
         return real_stores(ConfigDir(Path(tmp.name)))

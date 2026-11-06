@@ -6,7 +6,6 @@ import re
 import shutil
 import stat
 import sys
-import tempfile
 import time
 from contextlib import redirect_stdout
 from datetime import datetime
@@ -15,6 +14,7 @@ from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
@@ -52,7 +52,7 @@ def commit(repo, name, text, msg, t):
 
 class Base(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.home = Path(self.tmp.name)
         env = {"XDG_CONFIG_HOME": str(self.home / "cfg"), "APPDATA": str(self.home / "cfg"),
                "CLAUDE_CODE_SESSION_ID": "abcdef12-3456", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
@@ -126,7 +126,7 @@ class PlannerReport(Case):
     """tl-bxk.10.13: planner calls per bead and their input tokens, from delegate's history and the engine logs."""
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         home = Path(self.tmp.name)
         self.env = mock.patch.dict(os.environ, {"HOME": str(home), "XDG_CONFIG_HOME": str(home / "cfg"),
                                                 "APPDATA": str(home / "cfg")})
