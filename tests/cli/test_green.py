@@ -1,12 +1,12 @@
 """`tl green`: a pass or planned skip for exactly that tree and base, with its reason; reads the result store and writes nothing."""
 import json
 import sys
-import tempfile
 from argparse import Namespace
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -54,7 +54,7 @@ def run(step="unit", tree="T1", base="B1", status: Verdict = "passed"):
 
 class GreenCase(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(self.tmp.name)
         self.git = RepoGit()

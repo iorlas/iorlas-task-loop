@@ -1,10 +1,10 @@
 """GET /api/live: the contract's LivePage over the one LiveRun reader: typed lines, the byte-offset cursor, the run-liveness state."""
 import json
 import sys
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -32,7 +32,7 @@ def put(path: Path, rows):
 
 class LivePageApi(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.now = T + 30
         self.dash = make_dash(config=self.tmp.name, clock=lambda: self.now)
