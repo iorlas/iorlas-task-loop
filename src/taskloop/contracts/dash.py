@@ -475,6 +475,7 @@ class CauseReq(Rec):
     run: str
     cause: OwnerCause
     ask: str | None = None
+    key: str = ""  # idempotency key: a retry with the same key gets the first answer back
 
 
 @final
@@ -483,6 +484,7 @@ class AckReq(Rec):
     bead: WireBead
     run: str
     ack: bool
+    key: str = ""  # idempotency key: a retry with the same key gets the first answer back
 
 
 @final
@@ -498,6 +500,7 @@ class ParkReq(Rec):
     project: str
     bead: WireBead
     run: str
+    key: str = ""  # idempotency key: a retry with the same key gets the first answer back
 
 
 @final
@@ -505,6 +508,7 @@ class StopReq(Rec):
     project: str
     bead: WireBead
     run: str
+    key: str = ""  # idempotency key: a retry with the same key gets the first answer back
 
 
 @final
@@ -513,12 +517,14 @@ class NoteReq(Rec):
     bead: WireBead
     run: str
     text: str
+    key: str = ""  # idempotency key: a retry with the same key gets the first answer back
 
 
 @final
 class Result(Rec):
     ok: bool
     message: str = ""
+    receipt: Literal["", "accepted", "refused"] = ""  # set with an idempotency key; "applied" is the engine's, not reported yet
 
 
 WRITES: dict[str, type] = {

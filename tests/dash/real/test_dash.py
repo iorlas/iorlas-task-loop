@@ -75,7 +75,7 @@ class Asks(Case):
                             return r.status, json.loads(r.read())
                     except urllib.error.HTTPError as e:
                         return e.code, None
-                assert post("new") == (200, {"ok": True, "message": ""})
+                assert post("new") == (200, {"ok": True, "message": "", "receipt": ""})
                 got = asks.get(BeadId("x-1"))
                 assert got is not None and got.answer is not None
                 assert (got.status.value, got.answer.text, got.answer.by) == ("answered", "new", "dash")

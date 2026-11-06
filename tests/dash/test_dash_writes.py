@@ -206,3 +206,32 @@ class Writes(Case):
                            ("ack", {"project": loop_key(self.repo), "bead": "t", "ack": True, "x": 1}),
                            ("look", []), ("look", {"project": loop_key(self.repo), "bead": "x", "verdict": "maybe"}), ("answer", None)):
             assert self.dash.writes.post(verb, body)[0] == 400, (verb, body)
+
+
+class Receipts(Writes):
+    def body(self, key, **more):
+        return {"project": loop_key(self.repo), "bead": "tl-5", "run": RUN, "key": key, **more}
+
+    def test_a_retried_note_with_the_same_key_acts_once_and_gets_the_first_answer(self):
+        first = self.post("note", self.body("k-1", text="use the blue one"))
+        again = self.post("note", self.body("k-1", text="use the blue one"))
+        assert first == again == Result(ok=True, message=first.message, receipt="accepted")
+        assert [n.text for n in must(self.request()).notes] == ["use the blue one"]
+        assert sum(c.startswith("Owner (tl) note") for c in self.comments("tl-5")) == 1
+
+    def test_a_refusal_at_a_terminal_race_is_kept_as_a_receipt_and_survives_a_restart(self):
+        self.dash.env.clock = lambda: NOW + 3600
+        self.dash.env.ports = answering(lambda repo: self.fake, self.tmp.name, clock=lambda: NOW + 3600)
+        manifest(self.dash.env.config, RUN, "tl-5", NOW - 5, repo=str(self.repo), state=RunState.LOST)
+        refused = self.post("stop", self.body("k-2"))
+        assert (refused.ok, refused.receipt) == (False, "refused")
+        restarted = make_dash(answering(lambda repo: self.fake, self.tmp.name, clock=lambda: NOW), config=self.tmp.name, clock=lambda: NOW)
+        code, out = restarted.writes.post("stop", self.body("k-2"))
+        assert (code, wire.load(Result, out)) == (200, refused)
+
+    def test_a_key_reused_for_another_command_is_refused_and_a_command_without_a_key_has_no_receipt(self):
+        assert self.post("park", self.body("k-3")).ok
+        other = self.post("stop", self.body("k-3"))
+        assert (other.ok, other.receipt) == (False, "refused")
+        assert not must(self.request()).stop
+        assert self.post("note", {**self.body("", text="x")}).receipt == ""
