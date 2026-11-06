@@ -1,5 +1,4 @@
 """The environment of every command a bead runs: its slot's (domain/slot_env), made once per run, the folders created on use."""
-import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +11,7 @@ def bead_env(e: Any, *, create: bool = True) -> dict[str, str]:
     origin url's name, and its state folder adds a hash of the url so two repos of one name never meet."""
     origin = git_probe(lambda: e.git.remote_url(e.wt, "origin"), "") or str(e.wt)
     repo, slot = slot_env.repo_id(origin, str(e.wt)), Path(str(e.wt)).name
-    key = f"{repo}-{hashlib.sha1(origin.encode('utf-8', 'surrogateescape')).hexdigest()[:10]}"
+    key = slot_env.state_key(origin, str(e.wt))
     state = e.home.slot_state(key, slot)
     env = slot_env.slot_env(state, repo, slot, e.cfg.slot_env)
     for folder in slot_env.folders(env, state) if create else []:
