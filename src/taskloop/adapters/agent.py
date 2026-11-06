@@ -1,6 +1,8 @@
 """`ApiAgent`: the `Agent` of `delegate.api`. `api.run` on a thread of its own; the Handle and `api.cancel` stay in here."""
 import contextlib
 import json
+import os
+import re
 import threading
 from pathlib import Path
 from typing import Any, Self
@@ -58,6 +60,30 @@ def worker_start(path: str | Path) -> LiveStart | None:
             with contextlib.suppress(ValueError):
                 return live_event(j)
     return None
+
+
+def live_path(live_dir: str | Path, n: int, step: str) -> str:
+    """Where delegate appends the worker's live events for call n of a run: <the run's live folder>/<NN>-<step>.jsonl."""
+    slug = re.sub(r"[^A-Za-z0-9_-]+", "-", step or "call").strip("-") or "call"
+    return f"{live_dir}/{n:02d}-{slug}.jsonl"
+
+
+def new_live(live_dir: str | Path, n: int, step: str) -> str:
+    """The live file for call n of a run, its folder made; "" when the folder cannot be made (the call then runs without one)."""
+    path = live_path(live_dir, n, step)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+    except OSError:
+        return ""
+    return path
+
+
+def last_event_t(path: str | Path) -> float:
+    """When the worker last wrote to its live file; 0 when there is none."""
+    try:
+        return Path(path).stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 class ApiAgent:

@@ -49,11 +49,6 @@ say = console.say
 TL_PY = Path(__file__).resolve().parents[4] / "skills" / "task-loop" / "tl.py"
 
 
-class Args:
-    def __init__(self, **kw: Any) -> None:
-        self.__dict__.update(kw)
-
-
 def release_dead(repo: Any, git: Git, who: Identity, store: Any = None) -> None:
     """The reconcile sweep's lease rules, before a run takes its bead: a dead run's claim (a crashed or paused one, a restarted session's
     old actor) is given back by the same rule `tl prune` and the loop's step use."""
