@@ -498,6 +498,7 @@ VERBS: Final[dict[str, Handler]] = {
 def main(argv: list[str] | None = None, here: Path = HERE, now: Callable[[], float] = trail.now) -> int:
     """`here`: the install this run executes from, `now`: the clock (a test runs the loop as another version, at another time)."""
     a = build_parser().parse_args(argv)
+    os.umask(0o077)  # the config dir, hooks and logs are the owner's alone (a worker's files too: it runs as the owner)
     env = snapshot()
     ctx = Ctx(here, now, list(argv) if argv is not None else sys.argv[1:], env, real.spawner(env), real.git(env), ident.identity(env))
     stop = ident.layout_stop(a.cmd, ctx.who.config.root)
