@@ -2,9 +2,10 @@
 
     python3 dev/runtests.py
 
-Workers: min(cpus, free RAM / 2 GB, ceil(tests / 150), 4, cpus - load average). A selection of 150 tests or fewer runs in this one pytest
-process, no xdist. The run goes down to nice 10 first, so a box shared by many lanes keeps its editors and landing gates responsive;
-TL_TEST_FULL=1 (set by `just gate`, the landing gate) keeps the cores: no nice, no load limit.
+Workers: min(cpus, free RAM / 2 GB, ceil(tests / 150), 4). A selection of 150 tests or fewer runs in this one pytest process, no xdist.
+The run goes down to nice 10 first, so a box shared by many lanes keeps its editors and landing gates responsive; TL_TEST_FULL=1 (set by
+`just gate`, the landing gate) keeps the priority it was given. The worker count is NOT reduced by the load: fewer workers expose test
+pollution (tests/slots/real fail with `git rev-parse exited 128` at 2 workers, pass at 4 and alone).
 Isolation: the run has its own HOME, config and temp dirs (under the scratch root, src/taskloop/contracts/scratch.py; the test
 git identity, not the host's); xdist workers take one each on top
 (tests/conftest.py). The tests marked `serial` run alone, after the parallel ones, and only those the selection holds.
@@ -65,16 +66,6 @@ def total_mb():
         return None
 
 
-def current_load(environ):
-    """The 1-minute load average, None for the landing gate (or where the platform has none)."""
-    if environ.get(FULL):
-        return None
-    try:
-        return os.getloadavg()[0]
-    except OSError:
-        return None
-
-
 def lower_priority(environ):
     """Down to nice NICE, never further (an engine-run check is there already): the lanes' runs yield to the landing gate."""
     if environ.get(FULL):
@@ -84,14 +75,11 @@ def lower_priority(environ):
         os.nice(NICE - now)
 
 
-def workers(n_tests, cpus=None, mem_mb=None, load=None):
-    """How many pytest workers this selection earns on this host (1: no xdist): not more than the cores the load leaves free."""
+def workers(n_tests, cpus=None, mem_mb=None):
+    """How many pytest workers this selection earns on this host (1: no xdist)."""
     cpu = cpus if cpus is not None else (os.cpu_count() or 1)
     ram = mem_mb if mem_mb is not None else total_mb()
-    free = cpu if load is None else int(cpu - load)
-    # a selection above CHUNK never runs in the one plain process: an xdist worker is what isolates a test's environment (tests/conftest.py)
-    least = 2 if n_tests > CHUNK else 1
-    return max(least, min(cpu, cpu if ram is None else ram // WORKER_MB, math.ceil(n_tests / CHUNK), MAX_WORKERS, free))
+    return max(1, min(cpu, cpu if ram is None else ram // WORKER_MB, math.ceil(n_tests / CHUNK), MAX_WORKERS))
 
 
 def isolated_env(home):
@@ -147,7 +135,7 @@ def main():
     base = affected.base_of(root)
     tests = affected.select(affected.Repo(root), affected.changed_files(root, base))
     n_tests = count_tests(root, tests)
-    n = workers(n_tests, load=current_load(os.environ))
+    n = workers(n_tests)
     print(f"runtests: {len(tests)} test files, {n_tests} tests, {n} worker{'s' if n > 1 else ''} (change against {base[:12]})", flush=True)
     note = wide_note(root, n_tests)
     if note:

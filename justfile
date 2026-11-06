@@ -1,6 +1,6 @@
 # The gate is `just gate` = `just check` (static: ruff, pyrefly, import-linter) then `just test` (the tests). The suite receipt (RunKey) is written only after both.
 # `uv run pytest <path>` is the inner loop while you edit, not a gate.
-# TL_TEST_FULL: the landing gate keeps the cores; a lane's plain `just test` runs at nice 10 in as many workers as the load leaves free (dev/runtests.py).
+# TL_TEST_FULL: the landing gate keeps the cores; a lane's plain `just test` runs at nice 10 (dev/runtests.py).
 gate: check
     TL_TEST_FULL=1 uv run python dev/runtests.py
 
