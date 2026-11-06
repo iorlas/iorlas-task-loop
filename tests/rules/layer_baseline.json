@@ -1,0 +1,34 @@
+{
+ "adapters": {
+  "sleep": 1
+ },
+ "asks": {
+  "sleep": 2
+ },
+ "checks": {
+  "real_mark": 2,
+  "sleep": 4
+ },
+ "delegate": {
+  "real_mark": 222,
+  "sleep": 14
+ },
+ "delegate/adapters": {
+  "real_mark": 2
+ },
+ "land": {
+  "real_mark": 6
+ },
+ "ports": {
+  "real_mark": 1
+ },
+ "run": {
+  "sleep": 1
+ },
+ "slots": {
+  "sleep": 3
+ },
+ "stores": {
+  "real_mark": 1
+ }
+}
