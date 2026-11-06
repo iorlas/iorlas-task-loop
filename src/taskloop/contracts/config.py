@@ -202,6 +202,8 @@ class EngineConfig(Rec):
     queued_match: str = ""  # regex over a repo check's "<id> <cmd>": the checks that queue for a scarce slot and run late (none: no group)
     lock_fail: str = ""  # regex over a red check's output: an editor or project lock held by another run (wait, then rerun)
     slow_cmd: str = ""  # regex over an untimed command: named like a slow run, so the engine's and not the writer's
+    pin_files: list[str] = msgspec.field(default_factory=list)  # file names at any depth a check reads besides its inputs: lockfile-like
+    # dependency and toolchain pins the repo's build uses (the engine already knows justfile, *.lock, mise.toml, .python-version, ...)
     project_log: str = ""  # a path in the worktree: the log the toolchain wrote when the project files could not be regenerated
     worker_rules: str = ""
     test_pattern: str = TEST_PATTERN
