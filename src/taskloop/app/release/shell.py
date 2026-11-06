@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Protocol
 
 from taskloop.contracts.env import Env
-from taskloop.contracts.ports import Git, Spawner
+from taskloop.contracts.gitport import Git
+from taskloop.contracts.procport import Spawner
 from taskloop.contracts.slots import SlotGitError
 
 

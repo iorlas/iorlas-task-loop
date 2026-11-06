@@ -9,7 +9,7 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import engine_case as T
-from support.engine_case import BEAD, CLEAN, PLAN, WRITE
+from support.plans import BEAD, CLEAN, PLAN, WRITE
 
 from taskloop.contracts.config import ReviewSkipConfig
 

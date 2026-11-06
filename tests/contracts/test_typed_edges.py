@@ -11,9 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.adapters import bd, delegate_wire
+from taskloop.contracts.beadsport import BdFailure, BeadQuery
 from taskloop.contracts.dash import ParkReq
 from taskloop.contracts.ids import RunId, is_bead_id, parse_bead_id
-from taskloop.contracts.ports import BdFailure, BeadQuery
 
 
 class BeadIdEdges(Case):

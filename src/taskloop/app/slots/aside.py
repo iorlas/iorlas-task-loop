@@ -5,7 +5,7 @@ import contextlib
 
 from taskloop.app.slots.reset import setup
 from taskloop.app.slots.surface import SlotView
-from taskloop.contracts.ports import BdFailure, BeadPatch
+from taskloop.contracts.beadsport import BdFailure, BeadPatch
 from taskloop.contracts.slots import SlotFail, SlotGitError
 
 STEPS_S = (1800.0, 3600.0, 7200.0)

@@ -3,8 +3,8 @@ from pathlib import Path
 
 from taskloop.app.wire import brief, handoff
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.ports import Git
 
 
 def run_status(repo: str, plugin_root: Path, now: float, as_json: bool, env: Env, who: Identity, git: Git) -> int:

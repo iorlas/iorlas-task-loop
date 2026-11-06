@@ -8,8 +8,9 @@ from taskloop.app.checks import authorization
 from taskloop.app.land.profile_change import diff_sha
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.ports import Clock, Git
+from taskloop.contracts.ports import Clock
 from taskloop.contracts.runkey import BaseSha
 from taskloop.stores.bundle import Stores
 
@@ -33,6 +34,10 @@ class PushTip:
     remote_ref: str
     remote_sha: str
 
+    @property
+    def deleting(self) -> bool:
+        return not self.sha.strip("0")
+
 
 class ProfileChanged(Exception):
     """An owner-only policy change cannot be authorized by check evidence."""
@@ -48,8 +53,7 @@ def push_tips(stdin: str) -> tuple[PushTip, ...]:
         parts = line.split()
         if len(parts) != 4:
             raise ValueError("malformed pre-push ref record")
-        if parts[1].strip("0"):
-            tips.append(PushTip(*parts))
+        tips.append(PushTip(*parts))
     return tuple(tips)
 
 
@@ -129,6 +133,13 @@ class PushJudge:
         return self.green(cfg, tree, self.base_for(tip, cfg))
 
     def judge(self, tips: tuple[PushTip, ...]) -> PushDecision:
+        """A deletion has no tree to prove: it is refused when it removes the base branch, and judged no further."""
+        base = "refs/heads/" + self.base_ref().removeprefix("origin/")
+        gone = tuple(f"{tip.remote_ref} would be deleted; the base branch is never deleted by a push"
+                     for tip in tips if tip.deleting and tip.remote_ref == base)
+        if gone:
+            return PushDecision(PushStatus.REFUSED, gone)
+        tips = tuple(tip for tip in tips if not tip.deleting)
         try:
             policies = [self.policy_profile(tip) for tip in tips]
         except ProfileChanged as err:
