@@ -4,12 +4,12 @@ import json
 import os
 import shutil
 import sys
-import tempfile
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
 import pytest
+from support.tmpdir import mkdtemp
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -292,7 +292,7 @@ class LoopSelfUpdate(LoopBase):
 
     def setup_method(self):
         super().setup_method()
-        self.cache = Path(tempfile.mkdtemp())
+        self.cache = Path(mkdtemp())
         self.addCleanup(shutil.rmtree, self.cache, True)
         self.execs = []
 

@@ -1,5 +1,4 @@
 """Origin-backed canary acknowledgements and emergency rollback."""
-import tempfile
 from dataclasses import replace
 from pathlib import Path
 from unittest import mock
@@ -8,6 +7,7 @@ import pytest
 import support.paths  # noqa: F401
 from support.case import Case
 from support.shells import quiet_shell
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.release import canary, pins
 from taskloop.app.release.shell import Abort
@@ -19,7 +19,7 @@ from taskloop.contracts.snapshots import Pin
 
 class Canary(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.config = Path(tmp.name) / "task-loop"
         self.git = mock.Mock()

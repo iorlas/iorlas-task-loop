@@ -1,16 +1,16 @@
 """A starting loop prunes the loop logs; a sibling lane's log that vanishes or dangles never crashes it (tl-nhys)."""
 import os
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.loop.core import prune_logs
 
 
 class PruneLogs(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.runs = Path(tmp.name)
 

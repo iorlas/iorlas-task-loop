@@ -17,7 +17,7 @@ def test_layer_counts_a_mark_and_a_sleep_outside_real_only():
 
 
 def test_temp_counts_tempfile_and_tmp_strings_but_not_the_helper():
-    src = tree("import tempfile\nx = tempfile.mkdtemp()\ny = '/tmp/a'\n")
+    src = tree("import tempfile\nx = mkdtemp()\ny = '/tmp/a'\n")
     assert temp_ratchet.file_counts("src/taskloop/app/x.py", src) == {"site": 2}
     assert temp_ratchet.file_counts(temp_ratchet.HOME_FILE, src) == {}
     assert temp_ratchet.file_counts("docs/x.py", src) == {}
