@@ -10,7 +10,7 @@ SHAPE_METHODS = {"split", "rsplit", "partition", "rpartition", "startswith", "en
 ID_READERS = {"bead_ids", "prefix_of", "mentioned_ids", "_bead_token"}
 ID_PATTERNS = ("(?:[.-][a-z0-9]+)", "-[A-Za-z0-9]+(?:\\.[0-9]+)")
 # This normalizer is shared by domain outcome/storm policy; moving it requires changing that dependency boundary.
-ENTANGLED = {"taskloop/domain/report/matchers.py": {"BEAD"}}
+ENTANGLED = {"taskloop/domain/lifecycle/matchers.py": {"BEAD"}}
 
 
 def id_value(node: ast.AST) -> bool:
