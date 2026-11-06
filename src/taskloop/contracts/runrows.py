@@ -22,6 +22,20 @@ class StaleRevision(ValueError):
     """The caller's revision no longer names the current row."""
 
 
+def manifest_of(text: str, run: str) -> RunManifest:
+    """The manifest in a row. Forward-readable: a top-level key this tl does not know (a newer writer's) is read past, not an error,
+    so one newer row cannot block every landing; a write back keeps only the keys this tl knows. A row that still does not
+    validate raises a DatabaseError that says so (the run and the msgspec reason), not a bare 'unreadable'."""
+    try:
+        body = json.loads(text)
+        if isinstance(body, dict):
+            known = {"v", *wire.names(RunManifest)}
+            body = {k: v for k, v in body.items() if k in known}
+        return wire.load(RunManifest, body)
+    except (ValueError, TypeError) as error:
+        raise factorydb.DatabaseError(f"run manifest {run} does not validate: {error}") from error
+
+
 class RunRows:
     """Operations reuse a thread's writer; short transactions never span external work."""
 
@@ -46,10 +60,7 @@ class RunRows:
     @staticmethod
     def read(con: factorydb.sqlite3.Connection, run: str) -> RunManifest | None:
         row = con.execute("SELECT manifest FROM run WHERE run=?", (run,)).fetchone()
-        try:
-            return wire.load(RunManifest, row[0]) if row else None
-        except (ValueError, TypeError) as error:
-            raise factorydb.DatabaseError(f"unreadable run manifest: {run}") from error
+        return manifest_of(row[0], run) if row else None
 
     def put(self, manifest: RunManifest, expect_rev: int | None = None) -> None:
         with self.transaction() as con:
@@ -87,11 +98,8 @@ class RunRows:
         if not self.cfg.factory_db().exists():
             return []
         with self.transaction() as con:
-            rows = con.execute("SELECT manifest FROM run " + where + " ORDER BY started, run", params).fetchall()
-            try:
-                return [wire.load(RunManifest, row[0]) for row in rows]
-            except (ValueError, TypeError) as error:
-                raise factorydb.DatabaseError("unreadable run manifests") from error
+            rows = con.execute("SELECT manifest, run FROM run " + where + " ORDER BY started, run", params).fetchall()
+            return [manifest_of(row[0], row[1]) for row in rows]
 
     def all(self) -> list[RunManifest]:
         return self._select()

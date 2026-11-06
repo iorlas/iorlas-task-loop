@@ -1,6 +1,7 @@
 """Identifiers: one parser each, no regex."""
 import hashlib
 import os
+import secrets
 from itertools import groupby
 from pathlib import Path
 from typing import Annotated, Final, NewType, TypeIs, final
@@ -112,6 +113,11 @@ MARKETPLACE: Final = "iorlas-marketplace"  # the only marketplace a plugin cache
 def repo_key(common_dir: str) -> str:
     """The 12-hex key of a repository: sha1 of its git common dir."""
     return hashlib.sha1(common_dir.encode("utf-8")).hexdigest()[:12]
+
+
+def new_loop_id() -> str:
+    """The opaque id of one supervisor lifetime: made once when a loop starts, handed on through its exec, recorded by its runs."""
+    return secrets.token_hex(6)
 
 
 def loop_key(repo: object) -> str:

@@ -124,7 +124,7 @@ class Words:
             "socket hang up",
             "dns error: failed to lookup address",
         ):
-            assert netprobe.looks_dropped(text), text
+            assert classify.looks_dropped(text), text
 
     def test_what_is_not_a_drop(self):
         for text in (
@@ -134,7 +134,7 @@ class Words:
             "the test suite failed: 3 errors",
             "",
         ):
-            assert not netprobe.looks_dropped(text), text
+            assert not classify.looks_dropped(text), text
 
 
 class RouteNet(Case):

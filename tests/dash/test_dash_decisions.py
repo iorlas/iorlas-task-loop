@@ -4,6 +4,7 @@ from support.dashlogs import RunScript, T, bead
 
 from taskloop_dash.views import bead_detail
 from taskloop_dash.views.board import Board
+from taskloop_dash.views.names import hhmm
 from taskloop_dash.views.world import ProjectIn, World
 
 NOW = T + 600
@@ -29,3 +30,13 @@ def test_overrun_and_retry_decisions_are_listed_oldest_first_with_time_and_reaso
 
 def test_a_bead_with_neither_has_no_decisions():
     assert detail(RunScript("p-1").step("write", 10, 1)).decisions == []
+
+
+def test_a_vendor_error_says_the_lane_the_reason_and_until_when_it_is_closed_to_us():
+    s = (RunScript("p-1").step("review", 100, 10, end=False).wait(10)
+         .add("vendor_error", node="n1", reason="quota", lane="codex", until=T + 7200.0).wait(5)
+         .add("vendor_error", node="n1", reason="overloaded", lane="claude"))
+    got = detail(s).decisions
+    assert [(m.who, m.icon) for m in got] == [("engine", "⛔"), ("engine", "⛔")]
+    assert "codex" in got[0].md and "quota" in got[0].md and f"until {hhmm(T + 7200.0)}" in got[0].md
+    assert "claude" in got[1].md and "overloaded" in got[1].md and "until" not in got[1].md

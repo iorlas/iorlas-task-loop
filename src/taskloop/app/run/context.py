@@ -8,13 +8,12 @@ from typing import Any
 
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.run import console
-from taskloop.app.run.artifacts import StepArtifacts
 from taskloop.app.run.budget import Budget
 from taskloop.app.run.calls import Calls
 from taskloop.app.run.steps import Steps
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir, RepoDirs
+from taskloop.contracts.paths import ConfigDir
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 
@@ -66,8 +65,7 @@ class RunContext:
         seen = stores.run_log(run).read_from()
         log = RunLog(stores.run_log(run), echo, console.QUIET, console.line(verbose), now, len(seen.items) + seen.skipped,
                      run_id=run, bead=str(bead), host=socket.gethostname())
-        art = StepArtifacts(bead, RepoDirs(wt).artifacts(bead), home.artifacts(bead), log, run_dir)
-        steps = Steps(log, now, guard, on_step, art)
+        steps = Steps(log, now, guard, on_step)
         return cls(
             bead,
             cfg,
