@@ -52,6 +52,14 @@ def pytest_runtest_teardown(item, nextitem):
     return (yield from _phase(item, "teardown"))
 
 
+def _rel(path):
+    """The path relative to the cwd; as it is when a test left the cwd deleted (the recorder must not hide that test's own error)."""
+    try:
+        return os.path.relpath(path)
+    except OSError:
+        return path
+
+
 @pytest.hookimpl(wrapper=True)
 def pytest_fixture_setup(fixturedef, request):
     _STACK.append([0.0, 0.0])
@@ -64,7 +72,7 @@ def pytest_fixture_setup(fixturedef, request):
         if _STACK:
             _STACK[-1][0] += spent_cpu
             _STACK[-1][1] += spent_wall
-        key = f"{os.path.relpath(fixturedef.func.__code__.co_filename)}::{fixturedef.argname}"
+        key = f"{_rel(fixturedef.func.__code__.co_filename)}::{fixturedef.argname}"
         _add(_FIXTURES, key, spent_cpu - kids[0], spent_wall - kids[1], "setup")
 
 
