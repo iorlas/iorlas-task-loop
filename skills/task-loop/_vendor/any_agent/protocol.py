@@ -38,6 +38,7 @@ class LaunchInputs:
     auth: str = (
         "subscription"  # claude: "subscription" (the login; an API key in env is dropped) or "api_key" (ANTHROPIC_API_KEY must be in env)
     )
+    read_roots: tuple[str, ...] = ()  # opencode: folders outside cwd a write step may read
     engine_only: tuple[str, ...] = ()  # opencode: recipes only the caller runs, denied in the bash permission rules of a write step
 
 
