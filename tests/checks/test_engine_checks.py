@@ -352,7 +352,8 @@ class EngineChecksTest(EngineTest):
         assert Tools.named("`mypy` was not run; nobody checked with eslint") == ["mypy", "eslint"]
 
     def test_run_task_refuses_the_main_checkout(self):
-        a = mock.Mock(id="t-1", worktree=str(self.wt), slot=None, dry_run=True, fresh=False, quiet=True, outcome_file=None)
+        a = mock.Mock(id="t-1", branch=None, pr=None, worktree=str(self.wt), slot=None, dry_run=True, fresh=False, quiet=True,
+                      outcome_file=None)
         with mock.patch.object(entry, "Engine") as made, contextlib.chdir(self.wt):
             rc = entry.main(a, self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
         assert rc == 1
