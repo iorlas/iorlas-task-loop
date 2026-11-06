@@ -86,17 +86,6 @@ def last_event_t(path: str | Path) -> float:
         return 0.0
 
 
-def running_for(task: str) -> list[str]:
-    """The runs delegate says still go for this task (the ids): a worker that outlived its engine. None when there is no task or delegate
-    cannot say."""
-    if not task:
-        return []
-    try:
-        return [a.run_id for a in api.agents() if a.task == task]
-    except (Exception, SystemExit):
-        return []
-
-
 class ApiAgent:
     def __init__(self, request: api.RunRequest, grace: float = procs.STOP_GRACE_S, live: str = "") -> None:
         self.request, self.grace = request, grace
