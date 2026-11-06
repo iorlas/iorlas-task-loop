@@ -15,7 +15,7 @@ from delegate.contracts.codec import ABSENT, Absent, mutable, record
 from delegate.contracts.json_types import Json
 
 CONTRACT = 4
-CAPABILITIES = ("writer_exec_allow", "attempts")
+CAPABILITIES = ("writer_exec_allow", "instructions_ref", "attempts")
 END_OK, END_ERROR, END_TIMEOUT, END_SURVIVED = "ok", "error", "timeout", "worker_survived"
 Scope = Literal["bead", "caller", "machine", "lane", "model"]
 Permanence = Literal["transient", "needs_owner"]
@@ -64,6 +64,12 @@ def require_writer_exec_allow(contract: dict[str, Json] | None) -> None:
         raise ValueError("writer_exec_allow requires delegate contract 4 and capability writer_exec_allow")
 
 
+def require_instructions_ref(contract: dict[str, Json] | None) -> None:
+    """The caller must handshake before sending a base ref for the instruction files. An older delegate would read the work tree's."""
+    if not contract or check_contract(CONTRACT, contract, capabilities=["instructions_ref"]):
+        raise ValueError("instructions_ref requires delegate contract 4 and capability instructions_ref")
+
+
 @record
 class ToolServer:
     """A tool server the factory provides for one worker call, bound to the bead, run, stage and attempt it serves. Carried, not wired:
@@ -101,6 +107,7 @@ class RunRequest:
     only_family: list[str] = field(default_factory=list)  # families the call may use, no fallback outside (a worker call only)
     writer_exec_allow: list[list[str]] = field(default_factory=list)  # Codex writers only; host.json bounds this per-call grant
     read_roots: list[str] = field(default_factory=list)  # OpenCode write steps only: folders outside cwd it may read
+    instructions_ref: str = ""  # a commit sha: the instruction files are read from it, not the work tree (refused on OpenCode)
     worker_env: dict[str, str] = field(default_factory=dict)  # variables the worker's environment gains (the caller's per-call values)
     tools: list[ToolServer] = field(default_factory=list)  # tool servers for this call; not wired to any harness yet
 
@@ -128,6 +135,9 @@ class RunRequest:
             out += ["--only-family", family]
         for root in self.read_roots:
             out += ["--read-root", root]
+        if self.instructions_ref:
+            require_instructions_ref(contract)
+            out += ["--instructions-ref", self.instructions_ref]
         if self.writer_exec_allow:
             require_writer_exec_allow(contract)
             out += ["--writer-exec-allow", json.dumps(self.writer_exec_allow)]
