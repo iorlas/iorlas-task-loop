@@ -56,3 +56,15 @@ def secrets_added(diff: str) -> list[str]:
             if kind not in found and rx.search(line):
                 found.append(kind)
     return found
+
+
+_BLOCK: Final = re.compile(r"-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----.*?(?:-----END (?:[A-Z]+ )*PRIVATE KEY-----|\Z)", re.S)
+
+
+def redact(text: str) -> str:
+    """`text` with every credential of the kinds `secrets_added` names replaced by `[redacted <kind>]`: a private key block whole, a key or
+    token or assigned value where it stands. What the engine writes to a bead (Dolt keeps it) passes through here (tl-7i9k.53, M-070)."""
+    text = _BLOCK.sub("[redacted private key]", text)
+    for kind, rx in _SECRETS[1:]:
+        text = rx.sub(f"[redacted {kind}]", text)
+    return text
