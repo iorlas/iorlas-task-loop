@@ -39,25 +39,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import engine_case as T  # noqa: E402
 from support import netgate  # noqa: E402
 from support.briefs import brief_digest  # noqa: E402
-from support.builders import cfg_with  # noqa: E402
+from support.cfgs import cfg_with  # noqa: E402
 from support.checks import res  # noqa: E402
-from support.engine_case import (  # noqa: E402
-    BRIEFS,
-    CLEAN,
-    PLAN,
-    WRITE,
-    finding,
-    full,
-    review,
-    sh,
-    shown,
-    stop,
-    stored_brief,
-    verdict,
-)
+from support.engine_case import BRIEFS, full, sh, shown, stop, stored_brief  # noqa: E402
 from support.fakes import as_bead, as_comment  # noqa: E402
 from support.logs import records  # noqa: E402
 from support.narrow import must  # noqa: E402
+from support.plans import CLEAN, PLAN, WRITE, finding, review, verdict  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
 from support.who import who  # noqa: E402
 

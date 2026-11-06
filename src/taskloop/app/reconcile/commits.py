@@ -3,9 +3,9 @@ Reads only, through the Git port, the landed records, bd (status_of) and the eng
 from collections.abc import Callable, Sequence
 
 from taskloop.contracts.enums import Outcome
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.landed import Landed
-from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import MissingRevision, SlotGitError
 from taskloop.contracts.trace import RunTrace
 from taskloop.domain.lifecycle import matchers

@@ -12,11 +12,12 @@ from taskloop.app.loop.env import Child, Hold, LoopEnv
 from taskloop.app.loop.files import LoopFiles, StopMode
 from taskloop.app.loop.versions import Installs
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BdFailure, BeadPatch
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.enums import Result
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, BeadPatch, WaitTimeout
+from taskloop.contracts.procport import WaitTimeout
 from taskloop.contracts.run import Reexec
 
 

@@ -21,11 +21,13 @@ from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.delegate import Permanence
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, TreeSha
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Clock, Git, Spawner
+from taskloop.contracts.ports import Clock
+from taskloop.contracts.procport import Spawner
 from taskloop.contracts.review import Unfiled
 from taskloop.contracts.run import Reexec
 from taskloop.contracts.wire import Open

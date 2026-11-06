@@ -2,8 +2,8 @@
 from collections.abc import Callable
 
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BdFailure, Beads
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, Beads
 
 
 def peek(store: Beads, bead_id: BeadId) -> Bead | None:

@@ -7,8 +7,8 @@ from taskloop.app.checks.execution import keyed_env
 from taskloop.contracts import config
 from taskloop.contracts.checks import CheckResult
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.specs import gate_items, repo_check
 from taskloop.stores.bundle import Stores

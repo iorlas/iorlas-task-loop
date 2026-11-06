@@ -7,8 +7,8 @@ from collections.abc import Callable
 from types import TracebackType
 from typing import Self
 
+from taskloop.contracts.beadsport import BdFailure, Beads
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, Beads
 from taskloop.contracts.runlife import BEAT_EVERY
 
 EVERY = BEAT_EVERY  # seconds between beats; bd leases last 5 minutes

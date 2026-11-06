@@ -8,8 +8,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import homes
 from support.checked import run_checked
-from support.engine_case import CLEAN, PLAN, WRITE, EngineTest
+from support.engine_case import EngineTest
 from support.narrow import must
+from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.app.asks import intake
 from taskloop.app.plan import adrsync

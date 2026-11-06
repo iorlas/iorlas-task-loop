@@ -1,6 +1,6 @@
 """`tl lint` over a store: one bead, or the repo's ready beads (with --fix: drop `auto` and add `needs-ac` where they fail)."""
+from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
 from taskloop.domain.beads import rules
 
 

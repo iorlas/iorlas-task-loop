@@ -9,9 +9,9 @@ import support.paths  # noqa: F401
 from support import engine_case as te
 from support.case import Case
 from support.dashlogs import RunScript
-from support.engine_case import FALSE, PLAN, WRITE
 from support.memstores import MemLog
 from support.narrow import must
+from support.plans import FALSE, PLAN, WRITE
 
 from taskloop.app.run.stuck import StuckTick
 from taskloop.contracts import log as rec

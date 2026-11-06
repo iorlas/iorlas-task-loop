@@ -12,7 +12,8 @@ from support import (
     tools,
 )
 from support.builders import make_engine
-from support.engine_case import CLEAN, HAS_F, PLAN, WRITE, lint
+from support.engine_case import lint
+from support.plans import CLEAN, HAS_F, PLAN, WRITE
 
 from taskloop.adapters import childenv
 from taskloop.adapters.check_probe import PathProbe

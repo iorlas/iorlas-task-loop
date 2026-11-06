@@ -4,7 +4,7 @@ import tempfile
 from collections.abc import Generator
 from pathlib import Path
 
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import SlotGitError
 
 
