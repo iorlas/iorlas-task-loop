@@ -34,6 +34,7 @@ from taskloop.domain.brief import (  # noqa: E402
     status_lines,
 )
 from taskloop.hook import pretool  # noqa: E402
+from taskloop.hook.main import fail_exit  # noqa: E402
 
 
 def call(tool, **args):
@@ -115,3 +116,10 @@ class Speed(Case):
                 mock.patch.dict(os.environ, self.env), contextlib.redirect_stderr(io.StringIO()), pytest.raises(SystemExit) as stop:
             runpy.run_path(str(HOOK), run_name="__main__")
         assert stop.value.code == 2
+
+
+@pytest.mark.parametrize(("argv", "code"), [
+    (["pretool"], 0), (["session-start"], 0), (["precompact"], 0), (["githook", "post-commit"], 0),
+    (["githook", "pre-push"], 1), ([], 0), (["unknown"], 0)])
+def test_fail_mode_table_fails_the_pretool_hook_open_and_the_pre_push_githook_closed(argv, code):
+    assert fail_exit(argv) == code

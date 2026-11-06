@@ -9,7 +9,7 @@ from any_shell_policy import parse, strip_excluded
 # accidents and lazy injections, not a boundary: a determined worker can spell a path so it does not match.
 SECRET_RE = re.compile(
     r"\.ssh\b|\.gnupg\b|\.aws\b|\.azure\b|\.config/gh\b|\.docker/config\.json|\.netrc\b|\.git-credentials\b|"
-    r"\.codex/auth\.json|Library/Keychains|(?<![\w.-])\.env(?:\.(?!(?:example|sample|template|dist)\b)[\w-]+)?(?![\w.-])"
+    r"\.config/task-loop\b|(?<![\w.-])auth\.json\b|Library/Keychains|(?<![\w.-])\.env(?:\.(?!(?:example|sample|template|dist)\b)[\w-]+)?(?![\w.-])"
 )
 # Arguments that keep a path OUT of a search or listing (rg --glob '!**/.env*', grep --exclude, find -not -path, git ':!x'): a worker
 # avoiding a secret must not trip the guard.
@@ -75,3 +75,8 @@ def pieces(cmd: str, bare: bool = False) -> list[list[str]] | None:
     if commands is None:
         return None
     return [[*c.assigns, *c.argv] if bare else list(c.words) for c in commands if c.words or (bare and (c.assigns or c.argv))]
+
+# A git setting passed in the environment does what `git -c` does (core.hooksPath turns the push gate off; a pager, ssh command or exec path
+# names a program), and GIT_DIR / GIT_WORK_TREE point git at another repository.
+GIT_ENV = re.compile(
+    r"(?<![\w])GIT_(?:CONFIG_\w+|EXEC_PATH|SSH(?:_COMMAND)?|ASKPASS|EXTERNAL_DIFF|PAGER|EDITOR|SEQUENCE_EDITOR|PROXY_COMMAND|DIR|WORK_TREE)=")
