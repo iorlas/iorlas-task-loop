@@ -82,7 +82,8 @@ class Verifier:
         unused = [(u, e.settles.unused_tool(u["what"])) for u in gaps]
         for u, ev in unused:
             if ev:
-                e.review.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "evidence": ev, "why": "not a check here"})
+                e.review.verified.append(
+                    {"what": u["what"], "kind": u["kind"], "verdict": "settled", "evidence": ev, "why": "not a check here"})
         left = [u for u, ev in unused if not ev]
         n_drop = len(gaps) - len(left)
         if n_drop:
@@ -159,7 +160,8 @@ class Verifier:
         if still:
             e.steps.move("ask", "verify_open", f"{len(still)} item{plural(len(still))} only the owner can decide")
         elif e.review.unverified:
-            e.steps.move("land", "unverified", f"{len(e.review.unverified)} item{plural(len(e.review.unverified))} land unverified, for the owner")
+            n = len(e.review.unverified)
+            e.steps.move("land", "unverified", f"{n} item{plural(n)} land unverified, for the owner")
         else:
             e.steps.move("land", "verified", counts)
         return still

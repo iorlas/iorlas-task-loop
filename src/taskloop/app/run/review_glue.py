@@ -13,8 +13,8 @@ def known[T: Rec](cls: type[T], items: list[dict[str, Any]]) -> list[T]:
 
 
 def review_of(e: Any) -> ReviewState:
-    return ReviewState(unchecked=known(Unchecked, e.review.unchecked), unverified=known(Unverified, e.review.unverified), filed=list(e.filed),
-                       unfiled=list(e.unfiled))
+    return ReviewState(unchecked=known(Unchecked, e.review.unchecked), unverified=known(Unverified, e.review.unverified),
+                       filed=list(e.filed), unfiled=list(e.unfiled))
 
 
 def apply_review(e: Any, review: ReviewState, *, unchecked: bool, late: bool = False) -> None:
