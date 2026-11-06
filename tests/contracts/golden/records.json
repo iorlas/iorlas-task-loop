@@ -1617,6 +1617,7 @@
    "queued_match": "",
    "lock_fail": "",
    "slow_cmd": "",
+   "pin_files": [],
    "project_log": "",
    "worker_rules": "",
    "test_pattern": "^\\s*(def test_|async def test_|\\[(Test|UnityTest|Fact|Theory|TestMethod|TestCase)\\b|#\\[test\\]|(it|test)\\(|func Test)",

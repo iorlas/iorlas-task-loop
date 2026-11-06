@@ -10,7 +10,7 @@ import json
 import os
 import platform
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from taskloop.adapters import check_files
@@ -29,8 +29,9 @@ NO_DIGEST = Digest("")
 class InputKeys:
     """What the checks of one tree read: its file list is read once, the ignored files under each set of globs once."""
 
-    def __init__(self, git: Git, wt: str | Path, tree: TreeSha, clean: bool = False) -> None:
+    def __init__(self, git: Git, wt: str | Path, tree: TreeSha, clean: bool = False, pins: Sequence[str] = ()) -> None:
         self.git, self.wt, self.tree = git, str(wt), tree
+        self.pins = tuple(pins)  # the profile's pin_files: read by every check's key and by the toolchain digest
         self.clean = clean
         self.files: dict[str, str] | None = None
         self.ignored: dict[tuple[tuple[str, ...], tuple[str, ...]], dict[str, str]] = {}
@@ -46,11 +47,11 @@ class InputKeys:
 
     def key(self, c: Check) -> str:
         """The digest of what the check reads ('' when its globs select nothing)."""
-        return inputs.reads_digest(c, self.tracked() if c.inputs else {}, self.ignored_of(c) if c.inputs else {})
+        return inputs.reads_digest(c, self.tracked() if c.inputs else {}, self.ignored_of(c) if c.inputs else {}, self.pins)
 
     def toolchain(self, host: str) -> str:
         """The toolchain pins of the tree and the host: what every key of this tree shares."""
-        return inputs.toolchain_digest(self.tracked(), host)
+        return inputs.toolchain_digest(self.tracked(), host, self.pins)
 
     def ignored_of(self, c: Check) -> dict[str, str]:
         """{path: content digest} of the gitignored files under the check's globs (tree_hash never sees them)."""
