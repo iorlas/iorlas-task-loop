@@ -2,7 +2,6 @@
 from taskloop.contracts.delegate import DelegateResult, Retry, StopFacts
 from taskloop.domain.lanes.outcome import Done, Failed, NeedsOwner, outcome_of
 
-
 NONE = Retry(kind="none")
 
 
