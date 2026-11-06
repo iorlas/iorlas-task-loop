@@ -4,9 +4,9 @@ not green is run once, as `tl check --repo W` in a clean worktree W that has the
 and asked again; with no such worktree the gate makes one (detached at the oid, removed after the run), so the caller never runs a
 command by hand. Still not green: it stops with the check's exit code. Each refused step says the first key field that differs
 from its newest receipt on the tree and base. A commit with no gate step passes. Its plan_cmd identifies the producer of planned skips."""
-import json
 import threading
 
+from taskloop.adapters import profile_at
 from taskloop.app.checks import authorization
 from taskloop.app.land.carry import Carry
 from taskloop.app.land.cmds import Cmds, Stop
@@ -28,15 +28,11 @@ class StackGate:
         self.why: dict[CheckId, str] = {}  # the last red()'s steps: the first key field that differs from their newest receipt
 
     def profile(self, oid: str) -> config.EngineConfig | None:
-        path = ".task-loop.json"
-        entries = self.cmds.port(f"git ls-tree {oid} -- {path}", lambda: self.git.ls_tree(self.repo, oid, path))
-        if not entries:
-            return None  # no profile at the base commit: no gate step
-        text = self.cmds.port(f"git show {oid}:{path}", lambda: self.git.show(self.repo, oid, path))
         try:
-            return config.load(json.loads(text)).engine
+            found = self.cmds.port(f"git show {oid}:{profile_at.FILE}", lambda: profile_at.profile_at(self.git, self.repo, oid))
         except (ValueError, config.ConfigError) as e:
-            raise Stop(1, f"cannot read the gate from {oid}:{path}: {e}") from None
+            raise Stop(1, f"cannot read the gate from {oid}:{profile_at.FILE}: {e}") from None
+        return found.engine if found else None  # no profile at the base commit: no gate step
 
     def red(self, engine: config.EngineConfig, tree: str, base: str, wt: str = "") -> list[CheckId]:
         found = authorization.results(self.stores, self.git, wt or self.repo, engine, TreeSha(tree), BaseSha(base), self.env)
@@ -68,7 +64,7 @@ class StackGate:
         base = self.cmds.port(f"git rev-parse --verify {self.base_ref}", lambda: self.git.rev_parse(self.repo, self.base_ref))
         if not base:
             raise Stop(1, f"cannot name the base {self.base_ref}")
-        path = ".task-loop.json"
+        path = profile_at.FILE
         policy = self.cmds.port(f"git ls-tree {base} -- {path}", lambda: self.git.ls_tree(self.repo, base, path))
         proposed = self.cmds.port(f"git ls-tree {oid} -- {path}", lambda: self.git.ls_tree(self.repo, oid, path))
         if [entry.oid for entry in policy] != [entry.oid for entry in proposed] and profile_change is None:

@@ -1,7 +1,6 @@
 """Delivery queries resolve the judged profile and require its complete check identities."""
-import json
 
-from taskloop.adapters import check_files
+from taskloop.adapters import check_files, profile_at
 from taskloop.app.checks import keydiff
 from taskloop.app.checks.cache import InputKeys, RunMemo, plan_digest
 from taskloop.app.checks.execution import keyed_env
@@ -17,16 +16,17 @@ from taskloop.stores.bundle import Stores
 
 def profile(git: Git, wt: str, tree: TreeSha) -> config.EngineConfig:
     """The profile of the judged tree, rather than an unrelated checkout's profile."""
-    data = json.loads(git.show(wt, tree, ".task-loop.json"))
-    if not isinstance(data, dict):
-        raise ValueError("the judged profile must be an object")
-    return config.load(data).engine
+    found = profile_at.profile_at(git, wt, tree)
+    if found is None:
+        raise ValueError(f"the judged tree {tree} has no {profile_at.FILE}")
+    return found.engine
 
 
 def memo_for(stores: Stores, git: Git, wt: str, cfg: config.EngineConfig, tree: TreeSha, base: BaseSha, env: Env) -> RunMemo:
     """The memo a delivery asks: the judged tree's inputs as `wt` holds them (its gitignored files under `inputs` too), the shared
     receipt environment."""
-    memo = RunMemo(stores, check_files.repo_key(git, wt), InputKeys(git, wt, tree, pins=cfg.pin_files), base, keyed_env(env))
+    memo = RunMemo(stores, check_files.repo_key(git, wt), InputKeys(git, wt, tree, pins=cfg.pin_files), base, keyed_env(env),
+                   executor=cfg.executor.host)
     memo.checks = {c.id: repo_check(c, cfg) for c in cfg.checks}
     return memo
 
