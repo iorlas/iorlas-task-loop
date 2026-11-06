@@ -85,9 +85,9 @@
   },
   {
     "name": "sqlite_store",
-    "shelf_tag": "bf97aba",
-    "shelf_commit": "bf97aba8c13426f488ccb5ddd74c8432d5840781",
-    "tree_hash": "3f8163f56d3485a5f6cbe4e0df3862135760dc40c42b17e1937857df39e0565f"
+    "shelf_tag": "f04f679aa9bafe51bb5e2205738d0cab641885f6",
+    "shelf_commit": "f04f679aa9bafe51bb5e2205738d0cab641885f6",
+    "tree_hash": "eb0cae1ac243f8a96b790ac41d3452e9939ddeb5c72f93dc214646ea5f576369"
   },
   {
     "name": "static_page_check",

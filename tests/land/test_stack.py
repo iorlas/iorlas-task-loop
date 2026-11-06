@@ -75,6 +75,8 @@ class RepoGit(ScriptedGit):
 
     def show(self, d, rev, path):
         self.seen("show", rev, path)
+        if rev not in self.profiles:
+            raise SlotGitError(f"fatal: path '{path}' does not exist in '{rev}'")
         return self.profiles[rev]
 
     def ask(self, *argv):

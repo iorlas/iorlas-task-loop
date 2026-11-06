@@ -59,10 +59,15 @@ def pin_refusal(env: Env, version: str, old: Pin, git: Git | None) -> str:
     return mac_pin_refusal(PLUGIN_ROOT, url, version, git)
 
 
+def on_mac() -> bool:
+    """A seam: tests pretend to be a Mac without changing sys.platform, which the database layer reads to judge the filesystem."""
+    return sys.platform == "darwin"
+
+
 def set_pin(env: Env, task_loop: str = "", delegate: str = "", git: Git | None = None) -> tuple[Pin, str]:
     """(the pin now, "" or why it is refused): a version that is not installed is refused, never pinned."""
     old = read_pin(env)
-    if sys.platform == "darwin" and task_loop and task_loop != old.task_loop:
+    if on_mac() and task_loop and task_loop != old.task_loop:
         why = pin_refusal(env, task_loop, old, git)
         if why:
             return old, why
