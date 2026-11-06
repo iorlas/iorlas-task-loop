@@ -16,7 +16,7 @@ from pathlib import Path
 from any_agent.supervisor import RunHooks
 
 from delegate.adapters import git, opencode_size, procs, transcript_size
-from delegate.app import answer, cockpit, codex_policy, decide, env, harnesses, launch, net, usage
+from delegate.app import answer, cockpit, codex_policy, decide, env, harnesses, launch, net, settle, usage
 from delegate.app.launch import how_of
 from delegate.app.lease import RunLease
 from delegate.app.run_end import file_size, history_row, transcript_info, worker_ended
@@ -238,13 +238,13 @@ class Run:
             t_from = file_size(harnesses.find_transcript(a.resume, fam)) if a.resume else 0
             res = self._launch(d, brief, rid, t, hooks, canary_due)
         except Exception as e:  # a launcher bug is an error object, not a stack trace
-            res = {"outcome": "crash", "say": f"{type(e).__name__}: {e}"}
+            res = settle.stop("crashed", f"{type(e).__name__}: {e}")
         except (
             SystemExit
         ) as e:  # SIGTERM / SIGHUP to this process: the supervisor stopped the worker's tree first; the caller still gets a typed answer
             if not isinstance(e.code, int) or e.code <= 128:
                 raise
-            res = {"outcome": "killed", "say": f"route.py got signal {e.code - 128}; its worker was stopped first"}
+            res = settle.stop("signal", f"route.py got signal {e.code - 128}; its worker was stopped first")
         finally:
             lease.finish(hooks.stops if hooks else [])
         if hooks is None:  # the setup failed: nothing was launched, so there is no run to settle
