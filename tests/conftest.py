@@ -195,7 +195,7 @@ def no_leaked_threads(filesystem_cache, procs):
 
 
 @pytest.fixture(autouse=True)
-def case_helpers(request, procs):
+def case_helpers(request, procs, no_leaked_threads):
     """The unittest names the plain test classes still use: self.addCleanup (runs last-in-first-out after the test and its teardown_method),
     self.enterContext, self.subTest (pytest's `subtests`), self._testMethodName and self.id(). It depends on `procs` so that the cleanups,
     which undo patches made in setup_method on top of the process sim, run before the sim is uninstalled."""

@@ -109,7 +109,8 @@ def checkpoint_next(ck: Checkpoint) -> Step:
 
 
 def one_stage(e: RunHost, requested: str | None, locator: RunLocator) -> int:
-    lease = Lease(e.store, e.bead, e.env.bead(EnvVar.TASK_LOOP_SLOT_BEAD), on_beat=RunOnce(e).beat, on_death=RunOnce(e).beat_died)
+    once = RunOnce(e)
+    lease = Lease(e.store, e.bead, e.env.bead(EnvVar.TASK_LOOP_SLOT_BEAD), on_beat=once.beat, on_death=once.beat_died)
     step = None
     try:
         ck = None if e.fresh else e.checkpoints.read()
