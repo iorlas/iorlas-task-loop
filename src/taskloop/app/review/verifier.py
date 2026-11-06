@@ -60,8 +60,7 @@ class Verifier:
         rest = [u for u in gaps if u not in asked]
         if rest:
             lo = followups.unchecked(e.bead, rest, followups.REVIEW_OFF if review_off else followups.NOT_VISUAL)
-            if lo["title"] not in {x["title"] for x in e.leftovers}:
-                e.leftovers.append(lo)
+            if e.routing.add_leftover(lo):
                 e.checkpoints.keep_pending("verify")
             if review_off:
                 e.steps.begin("verify", f"{len(rest)} unchecked item(s): verify skipped ({SkipKind.REVIEW_OFF})")
@@ -82,8 +81,7 @@ class Verifier:
         unused = [(u, e.settles.unused_tool(u["what"])) for u in gaps]
         for u, ev in unused:
             if ev:
-                e.review.verified.append(
-                    {"what": u["what"], "kind": u["kind"], "verdict": "settled", "evidence": ev, "why": "not a check here"})
+                e.review.add_verified(u, "settled", "not a check here", ev)
         left = [u for u, ev in unused if not ev]
         n_drop = len(gaps) - len(left)
         if n_drop:
@@ -142,8 +140,7 @@ class Verifier:
             route = ""
             if v == "open":
                 v, a, why, route = e.routing.route_open(u, a, why)
-            e.review.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "open" if route == "unverified" else v,
-                               "evidence": a["evidence"], "why": why})
+            e.review.add_verified(u, "open" if route == "unverified" else v, why, a["evidence"])
             if route == "proof":
                 wrong.append(dict(u, why=why, proof_round=True))
             elif v != "settled" and route != "unverified":
