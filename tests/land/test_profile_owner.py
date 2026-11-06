@@ -82,7 +82,7 @@ class OwnerText(Case):
 
 class OwnerGate(Case):
     def setup_method(self):
-        self.git = FakeGit(**{"rev_parse__origin/main": "base", "rev_parse__tip^{tree}": "tree"})
+        self.git = FakeGit(**{"rev_parse__origin/main": "base", "rev_parse__tip^{tree}": "tree", "rev_parse__HEAD": "tip"})
         self.cmds = mock.Mock(spec=Cmds)
         self.cmds.port.side_effect = lambda text, fn: fn()
         self.stores = fake_stores()
