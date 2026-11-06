@@ -42,6 +42,7 @@ heartbeats and terminal states. Check evidence is retained under the run directo
   cursors; the drawer reads only its bead's logs. Log rotation and age pruning belong to tl-zej9.18.
   Slot leases share the bead listing's last-touched stamp. Profile errors stay
   cached while the base-ref files and profile's base choice are unchanged; unknown Git layouts or revisions fall back to 30 seconds.
+- `/api/version` reports `protocol` (contracts.dash.READ_PROTOCOL) and the factory.db `schema` it reads. `tl dash ensure` replaces a server whose protocol differs from the installed one even when its code version matches.
 - Bind: 127.0.0.1 plus the Tailscale address when present (`TASK_LOOP_DASH_BIND` overrides, `TASK_LOOP_DASH_PORT` the port).
   No auth: the server refuses any address outside loopback and Tailscale (`bind.allowed_addr`), never 0.0.0.0; `tl dash ensure`
   deletes the old `dash.token`.
