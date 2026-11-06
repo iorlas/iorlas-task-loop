@@ -1,5 +1,6 @@
 """A worker answer's updates to the run's threads: the value, and its one transaction with the done-memo."""
 import json
+import re
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
@@ -70,12 +71,10 @@ class Amender:
 
 
 class Engine:
-    """What settle reads of the engine: RunState's thread fields, the run's folder and the checkpoint's writer."""
+    """What settle reads of the engine: the run's folder and the checkpoint's writer."""
 
-    def __init__(self, run_dir: Path, state: RunState, amend_with: AmendWith) -> None:
-        self.run_dir, self.state = run_dir, state
-        self.writer: WriterSession = state.writer
-        self.writer_fallback, self.fallback_lane, self.planner_ref = state.writer_fallback, state.fallback_lane, state.planner_ref
+    def __init__(self, run_dir: Path, amend_with: AmendWith) -> None:
+        self.run_dir = run_dir
         self.checkpoints = Amender(amend_with)
 
 
@@ -92,14 +91,13 @@ class Settled:
         self.doc.write(Checkpoint(bead="t-1", run="run-1", t=1.0, step="write", stage=2, applied=["a"]))
         self.answer = self.run_dir / "answer.json"
         self.answer.write_text('{"x": 1}')
-        self.state = RunState(writer=WriterSession(delegate="r2", ctx=9.0, seen=["h"]), writer_fallback=True, fallback_lane="grok",
-                              planner_ref="p2")
-        self.engine = Engine(self.run_dir, self.state, self.doc.modify_with)
+        self.updates = Updates(SessionUpdate("r2", 9.0, ("h",)), Fallback(True, "grok"), "p2", "same_family")
+        self.engine = Engine(self.run_dir, self.doc.modify_with)
         self.c = call()
         self.c.sha = "sha"
 
     def settle(self):
-        asked.settle(self.engine, self.c, str(self.answer), None)
+        asked.settle(self.engine, self.c, self.updates, str(self.answer), None)
 
     def memo(self):
         return done_memo.recall(self.run_dir, self.c.key, "sha")
@@ -161,3 +159,36 @@ def test_a_checkpoint_from_before_the_updates_still_loads(workdir):
 
 def test_the_last_flag_is_not_a_checkpoint_field():
     assert "last_flag" not in wire.keys(RunState)
+
+
+def test_updates_over_updates_keep_what_the_later_does_not_say():
+    first = Updates(fallback=Fallback(False, ""), flag="degraded")
+    later = Updates(session=SessionUpdate("r", None, ()), planner_ref="p")
+    assert asked.then(first, later) == Updates(later.session, first.fallback, "p", "degraded")
+
+
+def test_with_updates_sets_only_what_is_named_and_the_rest_of_the_writer_stays():
+    state = RunState(writer=WriterSession(delegate="old", last_stage=True), planner_ref="keep", fallback_lane="x")
+    got = asked.with_updates(state, Updates(session=SessionUpdate("new", 3.0, ("h",))))
+    assert (got.writer.delegate, got.writer.ctx, got.writer.seen, got.writer.last_stage) == ("new", 3.0, ["h"], True)
+    assert (got.planner_ref, got.fallback_lane) == ("keep", "x")
+
+
+class Threaded:
+    def __init__(self):
+        self.writer = WriterSession()
+        self.writer_fallback, self.fallback_lane, self.planner_ref, self.last_flag = False, "", "", "old"
+
+
+def test_apply_assigns_the_thread_fields_and_the_flag():
+    e = Threaded()
+    asked.apply(e, Updates(SessionUpdate("r", 2.0, ("h",)), Fallback(True, "grok"), "p", "same_family"))
+    assert (e.writer.delegate, e.writer.ctx, e.writer.seen, e.writer_fallback, e.fallback_lane, e.planner_ref, e.last_flag) == (
+        "r", 2.0, ["h"], True, "grok", "p", "same_family")
+    asked.apply(e, Updates())
+    assert (e.planner_ref, e.last_flag) == ("p", "")  # an update that names nothing keeps the fields; the flag is per call
+
+
+def test_worker_call_assigns_no_engine_field():
+    source = Path("src/taskloop/app/run/worker_call.py").read_text(encoding="utf-8")
+    assert re.findall(r"\be\.(?:writer\b[.\w]*|writer_fallback|fallback_lane|planner_ref|last_flag)\s*=[^=]", source) == []

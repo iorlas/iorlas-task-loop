@@ -21,6 +21,7 @@ class Threads(Protocol):
     writer_fallback: bool
     fallback_lane: str
     planner_ref: str
+    last_flag: str
 
 
 class Amends(Protocol):
@@ -29,7 +30,6 @@ class Amends(Protocol):
 
 class Settling(Threads, Protocol):
     run_dir: Path
-    state: RunState
 
     @property
     def checkpoints(self) -> Amends: ...
@@ -55,25 +55,40 @@ def done_updates(c: Call, res: DelegateResult, thread: Updates) -> Updates:
     return Updates(thread.session, thread.fallback, res.ref if c.node == "plan" and res.ref else "", flag)
 
 
+def then(a: Updates, b: Updates) -> Updates:
+    """`a`, and over it what `b` says."""
+    return Updates(b.session or a.session, b.fallback or a.fallback, b.planner_ref or a.planner_ref, b.flag or a.flag)
+
+
+def with_updates(state: RunState, u: Updates) -> RunState:
+    """`state` with the thread fields of `u` set (only the ones `u` names)."""
+    if u.fallback is not None:
+        state = state.replace(writer_fallback=u.fallback.on, fallback_lane=u.fallback.lane)
+    if u.session is not None:
+        state = state.replace(writer=state.writer.replace(delegate=u.session.ref, ctx=u.session.ctx, seen=list(u.session.seen)))
+    if u.planner_ref:
+        state = state.replace(planner_ref=u.planner_ref)
+    return state
+
+
 def apply(e: Threads, u: Updates) -> None:
-    """Assign `u` to the engine (its RunState holds the thread fields)."""
+    """Assign `u` to the engine (its RunState holds the thread fields); the flag is in memory only."""
     if u.fallback is not None:
         e.writer_fallback, e.fallback_lane = u.fallback.on, u.fallback.lane
     if u.session is not None:
         e.writer.delegate, e.writer.ctx, e.writer.seen = u.session.ref, u.session.ctx, list(u.session.seen)
     if u.planner_ref:
         e.planner_ref = u.planner_ref
+    e.last_flag = u.flag
 
 
-def settle(e: Settling, c: Call, answer_file: str, identity: CallIdentity | None) -> None:
-    """The memo of a consumed answer and the thread fields it left in RunState, in one transaction: a crash keeps both or neither.
+def settle(e: Settling, c: Call, u: Updates, answer_file: str, identity: CallIdentity | None) -> None:
+    """The memo of a consumed answer and the thread fields `u` names, in one transaction: a crash keeps both or neither.
     Only the thread fields of the stored record change (never its step, applied or ended). A run that lost its slot keeps the memo alone."""
     memo = done_memo.memo_in(e.run_dir, c.key, c.sha, answer_file, identity)
-    s = e.state
 
     def amend(ck: Checkpoint) -> Checkpoint:
-        return ck.replace(state=ck.state.replace(writer=s.writer, writer_fallback=s.writer_fallback, fallback_lane=s.fallback_lane,
-                                                planner_ref=s.planner_ref))
+        return ck.replace(state=with_updates(ck.state, u))
     try:
         e.checkpoints.amend_with(amend, memo)
     except fence.Fenced:
