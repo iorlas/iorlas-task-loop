@@ -1302,7 +1302,8 @@
   "tests": [
    "t"
   ],
-  "log": "/l"
+  "log": "/l",
+  "repo": ""
  },
  "ReflectState": {
   "v": 1,
@@ -1762,6 +1763,7 @@
   ],
   "writer_exec_allow": [],
   "read_roots": [],
+  "instructions_ref": "",
   "tools": [
    {
     "name": "factory",

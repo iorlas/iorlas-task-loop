@@ -42,6 +42,19 @@ def leftovers() -> list[dict[str, str]]:
     return out
 
 
+def history_loss_notes() -> list[dict[str, str]]:
+    """One note when history rows could not be written (the breaker's only input): how many, and where the record is."""
+    path = env.history_lost_path()
+    try:
+        n = sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+    except OSError:
+        return []
+    if not n:
+        return []
+    return [{"id": "history_lost", "file": str(path), "say": f"{n} history rows could not be written (see {path}); the lane health "
+             "may be missing them. Delete the file once read."}]
+
+
 def notes(cfg: dict[str, Json]) -> list[dict[str, str]]:
     out: list[dict[str, str]] = [
         {
@@ -62,7 +75,7 @@ def notes(cfg: dict[str, Json]) -> list[dict[str, str]]:
             }
             for k in split_retired(obj(json.load(f).get("settings")))[1]
         ]
-    return out + leftovers() + smoke_problems(cfg)
+    return out + leftovers() + history_loss_notes() + smoke_problems(cfg)
 
 
 PROFILE_VALUES = ("enabled", "declined")
