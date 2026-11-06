@@ -11,7 +11,6 @@ from typing import Final
 
 from any_agent.harnesses.opencode import OpenCodeHarness
 
-from delegate.adapters import statusline
 from delegate.contracts.json_types import Json, as_str, obj
 
 
@@ -25,10 +24,6 @@ def check_codex_cli():
 
 def check_codex_login():
     return (codex_home() / "auth.json").exists()
-
-
-def check_usage_source():
-    return statusline.path().exists()
 
 
 def check_opencode_xai():

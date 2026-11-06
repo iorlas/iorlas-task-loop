@@ -12,6 +12,7 @@ no budget, the network probe or the fault outcome's own history policy decides; 
 |---|---|---|---|---|---|
 | no_lane | delegate | needs_owner | - | - | - |
 | only_family_unready | delegate | transient | 60 | 3600 | 3 |
+| loop_excluded | delegate | needs_owner | - | - | - |
 | same_family | engine | transient | 60 | 3600 | 3 |
 | busy | delegate | transient | 30 | 1800 | 3 |
 | timeout | delegate | transient | 60 | 3600 | 3 |
