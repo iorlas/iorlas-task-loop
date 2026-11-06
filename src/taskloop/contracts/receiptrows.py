@@ -1,16 +1,14 @@
 """Authoritative check receipts in factory.db; legacy files are import input only."""
 
 import json
-import time
 from collections.abc import Generator
 from contextlib import contextmanager
-from pathlib import Path
 from typing import Literal
 
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.checks import BaseRedRecord, PassRecord
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import Absent, JsonStore, Present, Read
+from taskloop.contracts.stores import Absent, Present, Read
 
 type Kind = Literal["pass", "base_red"]
 
@@ -117,30 +115,3 @@ class DbDoc[T: (PassRecord, BaseRedRecord)]:
         if self.docs.exists():
             with self.docs.transaction() as con:
                 con.execute("DELETE FROM check_pass WHERE " + self.docs.where + " AND digest=?", (*self.docs.params, self.digest))
-
-
-def import_legacy_receipts(cfg: ConfigDir) -> int:
-    """Insert absent receipts once per source, including markers for torn files; never change source bytes."""
-    files = sorted((cfg.root / "results").glob("*/*/*.json"))
-    if not files:
-        return 0
-    count = 0
-    docs = DbDocSet(cfg, "", None, "pass", PassRecord)
-    for path in files:
-        with docs.transaction() as con:
-            if con.execute("SELECT 1 FROM source WHERE path=?", (str(path),)).fetchone():
-                continue
-            count += _import_file(con, cfg, path)
-            con.execute("INSERT INTO source(path,family,seen) VALUES (?,'check_pass',?)", (str(path), time.time()))
-    return count
-
-
-def _import_file(con: factorydb.sqlite3.Connection, cfg: ConfigDir, path: Path) -> int:
-    repo = path.parent.parent.name
-    if path.parent.name == "base-red":
-        red = JsonStore(cfg.base_red(repo, path.stem), BaseRedRecord).get()
-        return int(DbDocSet(cfg, repo, None, "base_red", BaseRedRecord).insert(con, path.stem, red, missing_only=True)) if red else 0
-    rec = JsonStore(path, PassRecord).get()
-    if rec is None or cfg.result(repo, rec.key.check, path.stem) != path:
-        return 0
-    return int(DbDocSet(cfg, repo, rec.key.check, "pass", PassRecord).insert(con, path.stem, rec, missing_only=True))

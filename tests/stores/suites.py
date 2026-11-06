@@ -15,8 +15,8 @@ from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskAnswer
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.enums import AskStatus, LockWhat
+from taskloop.contracts.followups import FollowupOutbox
 from taskloop.contracts.locks import LockTimeout
-from taskloop.contracts.loop import LoopCommand, LoopState, Rest
 
 CK = cast(Checkpoint, S.OTHERS["Checkpoint"])
 
@@ -31,32 +31,27 @@ class Base(Case):
         self.s = self.rig.stores
 
 
+def box(title: str) -> FollowupOutbox:
+    return FollowupOutbox(pending=[{"title": title}])
+
+
 class DocContract(Base):
     def test_a_missing_document_reads_as_none_and_a_write_reads_back_equal(self) -> None:
-        doc = self.s.loop_state("k")
+        doc = self.s.followups.of("k")
         assert doc.get() is None
-        doc.write(S.other(LoopState))
-        assert doc.get() == S.other(LoopState)
-        assert self.s.loop_state("k").get() == S.other(LoopState)  # a new handle sees it
-        assert self.s.loop_state("other").get() is None
+        doc.write(box("a"))
+        assert doc.get() == box("a")
+        assert self.s.followups.of("k").get() == box("a")  # a new handle sees it
+        assert self.s.followups.of("other").get() is None
 
     def test_a_write_replaces_whole_and_delete_removes(self) -> None:
-        doc = self.s.loop_rest("k")
-        doc.write(S.other(Rest))
-        doc.write(S.other(Rest).replace(beads={"b-2": 7.0}))
-        assert doc.get().beads == {"b-2": 7.0}
+        doc = self.s.followups.of("k")
+        doc.write(box("a"))
+        doc.write(box("b"))
+        assert doc.get() == box("b")
         doc.delete()
         assert doc.get() is None
         doc.delete()  # deleting nothing is fine
-
-    def test_a_document_of_another_version_or_shape_reads_as_absent(self) -> None:
-        doc = self.s.loop_command("k")
-        self.rig.poison(doc, {"v": 99, "action": "resume", "by": "x", "t": 1.0})
-        assert doc.get() is None
-        self.rig.poison(doc, {"v": 1, "action": "dance", "by": "x", "t": 1.0})
-        assert doc.get() is None
-        doc.write(S.other(LoopCommand))
-        assert doc.get() == S.other(LoopCommand)
 
 
 class AskContract(Base):

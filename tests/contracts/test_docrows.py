@@ -11,7 +11,7 @@ from support.case import Case
 from taskloop.contracts import scratch
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.docrows import RowDocs, StaleRevision
-from taskloop.contracts.docstore import Absent, ForeignVersion, JsonStore, Torn
+from taskloop.contracts.docstore import Absent, ForeignVersion, Torn
 from taskloop.contracts.followups import FollowupOutbox
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.wire import Refused
@@ -28,7 +28,7 @@ class CheckpointRows(Case):
         self.addCleanup(shutil.rmtree, folder, True)
         self.cfg = ConfigDir(folder)
         self.stores = real_stores(self.cfg)
-        self.docs = RowDocs(self.cfg, Checkpoint, self.cfg.checkpoint, table="checkpoint", key_col="bead", body_col="body", revisioned=True)
+        self.docs = RowDocs(self.cfg, Checkpoint, table="checkpoint", key_col="bead", body_col="body", revisioned=True)
         self.doc = self.docs.of("t-1")
 
     def set_body(self, body: str):
@@ -80,12 +80,6 @@ class CheckpointRows(Case):
         self.stores.checkpoints.of("t-2").write(ck(bead="t-2", closed=True))
         assert self.stores.checkpoints.open_beads() == ["t-1"]
 
-    def test_an_older_loops_file_is_adopted_once_and_removed(self):
-        JsonStore(self.cfg.checkpoint("t-1"), Checkpoint).write(ck(step="old"))
-        assert self.docs.keys() == ["t-1"]  # listed before it is read
-        assert self.doc.get() == ck(step="old") and not self.cfg.checkpoint("t-1").exists()
-        assert self.doc.get() == ck(step="old") and self.doc.revision() == 0
-
     def test_a_newer_writers_extra_key_is_read_past_and_an_older_writers_missing_field_takes_its_default(self):
         self.doc.write(ck())
         body = json.loads(self.doc.raw() or "{}")
@@ -111,9 +105,7 @@ class FollowupRows(Case):
         self.cfg = ConfigDir(folder)
         self.docs = real_stores(self.cfg).followups
 
-    def test_an_outbox_round_trips_as_a_kv_row_and_an_older_file_is_adopted(self):
+    def test_an_outbox_round_trips_as_a_kv_row(self):
         box = FollowupOutbox(pending=[{"title": "t"}])
         self.docs.of("t-1").write(box)
         assert self.docs.of("t-1").get() == box and self.docs.keys() == ["t-1"]
-        JsonStore(self.cfg.followup_outbox("t-2"), FollowupOutbox).write(box)
-        assert self.docs.keys() == ["t-1", "t-2"] and self.docs.of("t-2").get() == box and not self.cfg.followup_outbox("t-2").exists()

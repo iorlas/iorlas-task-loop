@@ -56,21 +56,13 @@ def live(repo):
     return files(repo).live()
 
 
-def command(repo):
-    return homes.cfg().loop_command(wslots.repo_key(repo))
-
-
 def command_kept(repo):
-    """Whether the repo has a stop command (a `kv` row; `command(repo)` is where an older loop kept it as a file)."""
+    """Whether the repo has a stop command (a `kv` row)."""
     return files(repo).command().get() is not None
 
 
 def rests(repo):
     return files(repo).rests()
-
-
-def rest_file(repo):
-    return homes.cfg().loop_rest(wslots.repo_key(repo))
 
 
 def last_exit(repo):
