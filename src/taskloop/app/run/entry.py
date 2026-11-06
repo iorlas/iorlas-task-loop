@@ -142,7 +142,7 @@ def parked(bead_id: BeadId, fresh: bool, repo: str, who: Identity, store: Beads 
 def append_output(stream: Any) -> Any:
     """Write a stream that is a file at the end of that file, wherever another writer left it: a second
     `run-task ... > log` on the same log truncates it, and a live run writing on at its old offset leaves a hole of NUL
-    bytes (lifesim-gfr.31.1). A terminal, a pipe or a stream with no descriptor is left as it is."""
+    bytes. A terminal, a pipe or a stream with no descriptor is left as it is."""
     try:
         fd = stream.fileno()
         regular = stat.S_ISREG(os.fstat(fd).st_mode)

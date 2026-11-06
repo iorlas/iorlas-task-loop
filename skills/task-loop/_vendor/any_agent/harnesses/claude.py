@@ -244,7 +244,9 @@ class ClaudeHarness(Quiet):
         e.turns = int(num(raw.get("num_turns")))
         out: list[ev.HarnessEvent] = [ev.TurnDone(usage=None)]
         for x in objs(raw.get("permission_denials")):  # a call the CLI's own classifier or our guard refused
-            d = ev.Denied(tool=text(x.get("tool_name")), input=obj(x.get("tool_input")))
+            d = ev.Denied(
+                tool=text(x.get("tool_name")), input=obj(x.get("tool_input")), reason="the CLI's permission check refused the call"
+            )
             e.denials.append(d)
             out.append(d)
         return out

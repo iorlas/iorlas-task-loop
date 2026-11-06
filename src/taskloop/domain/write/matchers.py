@@ -2,7 +2,7 @@
 import re
 from typing import Final
 
-GHERKIN_TEST: Final = re.compile(r"^\s*Scenario( Outline)?:")  # a use-case scenario (Reqnroll, lifesim-fld.26.10)
+GHERKIN_TEST: Final = re.compile(r"^\s*Scenario( Outline)?:")  # a use-case scenario (Reqnroll)
 
 
 def count_tests(diff: str, pattern: str) -> tuple[int, int]:

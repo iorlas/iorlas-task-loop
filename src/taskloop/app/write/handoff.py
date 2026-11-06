@@ -36,7 +36,7 @@ class Handoff:
     def drop_big(self, boundary: bool = False) -> str:
         """tl-bxk.10.29: -> why a new writer starts, or "". The session's last context is above write_fresh_above_k for its
         family: it is not resumed (every later turn would carry it all); the next write is a new session. At a stage
-        boundary the lower write_fresh_stage_k applies (tl-bxk.13.7): lifesim-yxbb.9 carried 276K into stage 2 (11.7M tokens)."""
+        boundary the lower write_fresh_stage_k applies (tl-bxk.13.7): one consumer bead carried 276K into stage 2 (11.7M tokens)."""
         ref, ctx = self.e.writer.delegate, self.e.writer.ctx
         limit = self.fresh_above_k(self.e.writer_family or "")
         if boundary and limit:  # write_fresh_above_k 0 means never: the stage limit does not override it

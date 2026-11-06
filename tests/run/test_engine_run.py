@@ -508,7 +508,8 @@ class EngineRunTest(EngineTest):
         assert "engine error RuntimeError: boom" in self.said()
 
     def test_a_denied_command_with_a_valid_answer_is_a_warning_in_the_trace(self):
-        ok = full(WRITE, "w1", denied=[{"kind": "policy", "tool": "Bash", "path": "", "input": {"command": "curl -X POST https://x"}}])
+        row = {"kind": "policy", "tool": "Bash", "path": "", "input": {"command": "curl -X POST https://x"}, "reason": ""}
+        ok = full(WRITE, "w1", denied=[row])
         rc, _s = self.run_engine({"plan": [PLAN], "write": [ok, WRITE], "review": [CLEAN]})
         assert rc == 0  # (a raw answer writes no f.txt: the stage's check sends it to a second write)
         assert "write was denied `curl -X POST https://x`" in self.eng.log_path.read_text()

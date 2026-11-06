@@ -187,7 +187,9 @@ class Supervisor:
                 hit = self.policy(e) if self.policy and self.hx.secret_event and isinstance(e, self.hx.secret_event) else None
                 if hit and not self.out.secret:
                     self.out.secret = hit
-                    self.hx.evidence.denials.append(ev.Denied(tool="Bash", input={"command": hit}, kind="secret"))
+                    self.hx.evidence.denials.append(
+                        ev.Denied(tool="Bash", input={"command": hit}, kind="secret", reason="the command names a secret path")
+                    )
                     stop = True
         return stop
 

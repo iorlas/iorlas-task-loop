@@ -15,6 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.contracts import factorydb
+from taskloop.contracts.looprows import LoopRows
+from taskloop.contracts.paths import ConfigDir
 
 TABLES = {
     "source", "bead", "run", "attempt", "step", "lease", "check_pass",
@@ -293,3 +295,13 @@ class FactoryDbTest(Case):
         for table in ("run", "attempt", "step", "effect", "check_round"):
             assert con.execute(f'SELECT count(*) FROM "{table}"').fetchone() == (1,)
         assert not con.in_transaction
+
+
+def test_a_reader_meets_a_database_a_writer_is_still_creating_as_not_there_yet(tmp_path):
+    """Two processes starting on a fresh factory.db: the file exists at user_version 0 until the first writer's DDL commits. A reader
+    (the loop's own rows, the dashboard) must see no rows, not a SchemaError (shelf sqlite-store bf97aba)."""
+    cfg = ConfigDir(tmp_path)
+    cfg.factory_db().parent.mkdir(parents=True, exist_ok=True)
+    cfg.factory_db().touch()
+    assert factorydb.open_ro(cfg.factory_db()) is None
+    assert LoopRows(cfg, "k").select("SELECT 1") == []
