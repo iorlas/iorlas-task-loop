@@ -15,7 +15,7 @@ from pathlib import Path
 
 from any_agent.supervisor import RunHooks
 
-from delegate.adapters import git, procs
+from delegate.adapters import git, opencode_size, procs, transcript_size
 from delegate.app import answer, cockpit, codex_policy, decide, env, harnesses, launch, net, usage
 from delegate.app.launch import how_of
 from delegate.app.lease import RunLease
@@ -428,7 +428,7 @@ class Run:
             "cost": res.get("cost", 0),
             "secs": secs,
             "turns": res.pop("turns", None),
-            "context_k": res.pop("context_k", None),
+            "context_k": res.pop("context_k", None) or transcript_size.context_k(transcript) or opencode_size.context_k(ref),
             "answer_bytes": len(as_str(res.get("text")).encode("utf-8")),
             **accounting.fields(ac, ref, time.time()),
         }

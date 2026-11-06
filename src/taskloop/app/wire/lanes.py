@@ -7,7 +7,7 @@ from taskloop.adapters import delegate as sdelegate
 from taskloop.adapters.ident import config_dir
 from taskloop.contracts import paths
 from taskloop.contracts.env import Env
-from taskloop.contracts.ports import Spawner
+from taskloop.contracts.procport import Spawner
 from taskloop.contracts.rowstores import StatusStore, StatusTriedStore
 from taskloop.contracts.snapshots import StatusSnapshot, StatusTried
 from taskloop.contracts.stores import UsageHistory

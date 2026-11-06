@@ -2,10 +2,12 @@
 from unittest import mock
 
 from support import fake_route
-from support.builders import make_engine, plan_of
-from support.engine_case import BEAD, CLEAN, PLAN, WRITE, EngineTest, stop
+from support.builders import make_engine
+from support.cfgs import plan_of
+from support.engine_case import EngineTest, stop
 from support.fakes import FakeClock
 from support.logs import records
+from support.plans import BEAD, CLEAN, PLAN, WRITE
 
 from taskloop.app.write.state import StageState
 from taskloop.contracts.enums import Outcome

@@ -55,6 +55,9 @@ class FakeGit(ScriptedGit):
     def common_dir(self, d: str) -> str:
         return str(self.answer("common_dir", default=""))
 
+    def diff(self, d: str, a: str, b: str, exclude: list[str] | None = None, stat: bool = False) -> str:
+        return str(self.answer("diff", a, b))
+
     # -- the reads the land asks ----------------------------------------------------------------------------------------------
     def rev_parse(self, d: str, rev: str) -> str:
         return str(self.answer("rev_parse", rev))

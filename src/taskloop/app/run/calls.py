@@ -25,10 +25,9 @@ class Calls:
         sessions: list[dict[str, Any]],
         stats: dict[str, int],
         opencode: Callable[[str], str],
-        context_tokens: Callable[[str], int | None],
     ) -> None:
         self.log, self.node_id, self.sessions, self.stats = log, node_id, sessions, stats
-        self.opencode, self.context_tokens = opencode, context_tokens  # a ref -> OpenCode's session id ('' if none); a transcript -> tokens
+        self.opencode = opencode  # a ref -> OpenCode's session id ('' if none)
 
     def start(self, step: str, node: str, role: str, resume: bool, n: int) -> str:
         """The call is about to be made: its id, which the end record carries."""
@@ -90,8 +89,8 @@ class Calls:
         if node == "write":  # where the session's context stands now: what the next round weighs against write_fresh_above_k
             if not row["transcript"] and self.opencode(row["ref"]):  # OpenCode: the session id stands for the transcript
                 row["transcript"] = "opencode:" + self.opencode(row["ref"])
-            tok = self.context_tokens(row["transcript"])
-            row["context_k"] = round(tok / 1000) if tok else None
+            told = res.usage.context_k if res.usage else None  # delegate says it, whatever the harness
+            row["context_k"] = round(told) if told else None
         for k in KEYS:
             self.stats["tokens_" + k] += int((row["tokens"] or {}).get(k) or 0)
         self.sessions.append(row)

@@ -4,9 +4,9 @@ from collections.abc import Callable
 from taskloop.app.slots.engine_lock import engine_busy
 from taskloop.app.slots.reset import leave_slot
 from taskloop.contracts import log as rec
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Git
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 

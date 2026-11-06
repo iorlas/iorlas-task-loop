@@ -6,7 +6,7 @@ from support.tags import contract  # noqa: F401  (re-exported for the subclasses
 
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.contracts.env import snapshot
-from taskloop.contracts.ports import Spawner
+from taskloop.contracts.procport import Spawner
 
 _Base = Case
 

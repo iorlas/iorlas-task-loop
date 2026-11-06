@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 import pytest
-from support.builders import cfg_with
+from support.cfgs import cfg_with
 
 from taskloop.app.checks import runner
 from taskloop.app.checks.clean import guard_slot

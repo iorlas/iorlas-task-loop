@@ -36,6 +36,30 @@ class SecretGuard:
         ):
             assert self.guard(ti) == 2, ti
 
+    def test_blocks_the_engines_own_state_and_every_auth_file(self):
+        for ti in (
+            {"command": "sqlite3 ~/.config/task-loop/factory.db .dump"},
+            {"command": "cat ~/.config/task-loop/githooks/pre-push"},
+            {"file_path": "/home/x/.config/task-loop/events.jsonl"},
+            {"command": "cat $CODEX_HOME/auth.json"},
+            {"command": "cat /var/overlay-x/auth.json"},
+            {"command": "cat ~/.local/share/opencode/auth.json"},
+        ):
+            assert self.guard(ti) == 2, ti
+        for ti in ({"command": "cat docs/task-loop.md"}, {"command": "rg author.json src"}):
+            assert self.guard(ti) == 0, ti
+
+    def test_a_worker_cannot_write_delegates_own_state(self):
+        """routing.json, history.jsonl and state.json live under the config dir; a writer edits none of them (tl-7i9k.53, M-059)."""
+        for ti in (
+            {"file_path": "/home/x/.config/task-loop/delegate/routing.json", "content": "{}"},
+            {"command": "echo '{}' > ~/.config/task-loop/delegate/history.jsonl"},
+            {"command": "sed -i s/a/b/ $HOME/.config/task-loop/delegate/state.json"},
+            {"command": "tee ~/.config/task-loop/delegate/routing.json < x"},
+            {"command": "cp x ~/.config/task-loop/delegate/"},
+        ):
+            assert self.guard(ti) == 2, ti
+
     def test_read_only_steps_may_run_reading_commands_only(self):
         for c in (
             "cd /s && git diff 53cc344 -- client; git log --oneline -5",

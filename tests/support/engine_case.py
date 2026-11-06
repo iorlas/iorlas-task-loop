@@ -1,5 +1,4 @@
 """The engine tests' shared case: the fixtures, the helpers and the base class the per-feature test files build on."""
-import atexit
 import collections.abc
 import contextlib
 import copy
@@ -8,7 +7,6 @@ import json
 import os
 import re
 import shlex
-import shutil
 import subprocess
 import sys
 import threading
@@ -19,9 +17,9 @@ from typing import Any, ClassVar
 from unittest import mock
 
 import pytest
-from jsonl_log import close_held
 
-from support.case import Case
+from support.case import Case  # noqa: F401
+from support.world import NO_GC, SlotWorld, copy_origin_and_clone, no_repo, real_git  # noqa: F401
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -33,21 +31,35 @@ from contracts import samples as S
 from support import (
     fake_route,
     gitq,
-    gitsim,
     netgate,  # noqa: F401
     procsim,
 )
-from support.builders import argv_cfg, cfg_with, make_engine
+from support.builders import make_engine
+from support.cfgs import argv_cfg, cfg_with
 from support.checked import run_checked
 from support.checkpoints import flat_ck, stored_ck
 from support.checks import res
 from support.fakes import FakeBeadStore
 from support.logs import records
 from support.narrow import must
+from support.plans import (  # noqa: F401  (the tests' old import point)
+    BEAD,
+    CAT_ENV,
+    CLEAN,
+    FALSE,
+    HAS_F,
+    PLAN,
+    RED_ONCE,
+    ROUTE,
+    STILL_OPEN,
+    WRITE,
+    finding,
+    review,
+    verdict,
+)
 from support.procsim import real_proc  # noqa: F401
 from support.push_race import PushRace
 from support.spawn import port_git, real_spawner
-from support.tmpdir import TemporaryDirectory, mkdtemp
 from support.waits import until
 from support.who import who
 from taskloop.adapters import delegate as dl
@@ -74,8 +86,6 @@ from taskloop.domain.checks import (
 from taskloop.domain.lanes import policy as lp  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[2]
-
-
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -136,78 +146,6 @@ def pyc(code, *args):
     return shlex.join([sys.executable, "-c", code, *args])
 
 
-HAS_F = "has-f"  # a procsim fake: exit 0 iff f.txt exists in the check's directory
-
-
-FALSE = "false"  # a procsim fake: exit 1
-
-
-RED_ONCE = "green-on-d3"  # a procsim fake (registered in setup_method): exit 0 iff f.txt reads d3, red until the writer wrote it
-
-
-PLAN: dict[str, Any] = {
-    "summary": "do it",
-    "stages": [
-        {
-            "goal": "add f",
-            "files": ["f.txt"],
-            "checks": [adhoc(HAS_F)],
-            "hard": False,
-            "anchors": [{"path": "f.txt", "lines": "1", "symbol": "", "why": "the file"}],
-        }
-    ],
-    "risks": [],
-    "question": "",
-    "options": [],
-    "decided": "",
-    "cases": [{"criterion": "f.txt is shown", "check": None, "class": "show", "shows": []}],  # a visual bead: verify runs
-    "leftovers": [],
-}
-
-
-WRITE = {
-    "summary": "wrote f",
-    "checks_run": [{"cmd": "test -f f.txt", "exit": 0}],
-    "question": "",
-    "options": [],
-    "decided": "",
-    "bad_checks": [],
-    "new_cases": [],
-    "unchecked": [],
-    "logic_only": "",
-}
-
-
-ROUTE = "/h/.claude/plugins/cache/iorlas-marketplace/iorlas-delegate/%s/skills/delegate/route.py"
-
-
-CLEAN = {
-    "findings": [],
-    "unmet": [],
-    "criteria": [],
-    "question": "",
-    "options": [],
-    "decided": "",
-    "leftovers": [],
-    "unchecked": [],
-    "look": "",
-}
-
-
-BEAD = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists", "labels": ["visual"]}  # visual: verify runs
-
-
-def review(unmet=(), findings=(), question="", decided=""):
-    return dict(CLEAN, unmet=list(unmet), findings=list(findings), question=question, decided=decided)
-
-
-def verdict(n, v, evidence="", why="", kind="other", source=""):
-    return {"n": n, "verdict": v, "evidence": evidence, "why": why, "kind": kind, "source": source}
-
-
-STILL_OPEN = {"items": [verdict(1, "open", why="only the owner can open it")]}
-
-
 def stop(reason, ref="", **kw):
     """A stopped answer, contract 4: the row of `reason` in delegate's contract.json (kw: at, fix, partial, say, family, lane ...)."""
     return fake_route.stop_answer(reason, ref, **kw)
@@ -219,14 +157,6 @@ def full(data, ref="w2", **kw):
                   "tokens": {"in": 1000, "cached": 800, "out": 50}, "context": {"instructions": [], "env_keys": []}}
     fields.update(kw)
     return fake_route.answer(fake_route.contract(), None, ref, False, data, **fields)
-
-
-CAT_ENV = {"kind": "policy", "tool": "shell", "path": ".env", "input": {"command": "cat .env"}}
-
-
-def finding(severity):
-    return {"file": "f.txt", "line": 1, "severity": severity, "fix": f"a {severity} fix", "axis": "standards", "category": "logic",
-            "scenario": "input x gives y" if severity == "high" else ""}
 
 
 def no_sleep_here():
@@ -247,60 +177,6 @@ def delegate_stack(script, route="/fake/route.py"):
     ):
         stack.enter_context(p)
     return stack
-
-
-_TEMPLATE = []
-# No background git: a push's receive-pack and a commit run `gc --auto` / `maintenance run --auto` detached, writing into the
-# repo (objects/maintenance.lock) while a test copytrees it. Env covers every git call, repo config covers the rest.
-NO_GC = {"GIT_CONFIG_COUNT": "2", "GIT_CONFIG_KEY_0": "maintenance.auto", "GIT_CONFIG_VALUE_0": "false",
-         "GIT_CONFIG_KEY_1": "gc.auto", "GIT_CONFIG_VALUE_1": "0"}
-
-
-def _template():
-    """origin (o.git) + clone (wt) with one pushed commit, built once per process: on a machine where every new file and
-    process costs 5-30 ms (Defender) a copy is ~4x cheaper than the 5 git calls that make it."""
-    if not _TEMPLATE:
-        d = Path(mkdtemp(prefix="tl-engine-template-"))
-        atexit.register(shutil.rmtree, d, True)
-        env = {**os.environ, **NO_GC}
-        env.update(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
-        def g(*a, cwd):
-            run_checked(list(a), cwd, env=env)
-        g("git", "init", "-q", "--bare", "-b", "main", str(d / "o.git"), cwd=d)
-        g("git", "clone", "-q", str(d / "o.git"), str(d / "wt"), cwd=d)
-        for repo in ("o.git", "wt"):
-            g("git", "config", "maintenance.auto", "false", cwd=d / repo)
-            g("git", "config", "gc.auto", "0", cwd=d / repo)
-        (d / "wt" / "a.txt").write_text("a\n")
-        g("git", "add", "-A", cwd=d / "wt")
-        g("git", "commit", "-qm", "init", cwd=d / "wt")
-        g("git", "push", "-q", "origin", "HEAD:main", cwd=d / "wt")
-        _TEMPLATE.append(d)
-    return _TEMPLATE[0]
-
-
-def copy_origin_and_clone(home):
-    """Put a fresh o.git and wt in `home` (what five git calls used to build); the clone's origin URL is rewritten to `home`."""
-    t = _template()
-    for name in ("o.git", "wt"):
-        shutil.copytree(t / name, home / name, ignore=shutil.ignore_patterns("*.sample"))
-    cfg = home / "wt" / ".git" / "config"
-    cfg.write_text(cfg.read_text().replace(str(t / "o.git"), str(home / "o.git")))
-
-
-def real_git(reason):
-    """A test that runs on a real git repo (origin + clone) instead of the gitsim: `reason`, one line, is what only real git can
-    show. The marked cells are the integration set; every other engine test runs on the sim, and a real git spawned there fails it."""
-    def mark(fn):
-        fn.real_git = reason
-        return fn
-    return mark
-
-
-def no_repo(fn):
-    """The test calls code directly and never touches the repo: setUp skips building origin and clone."""
-    fn.no_repo = True
-    return fn
 
 
 def read_ask(bead="t-1") -> Any:
@@ -342,39 +218,9 @@ class Recorded(collections.abc.Sequence):
         return repr(self.read())
 
 
-class EngineTest(Case):
+class EngineTest(SlotWorld):
     def setup_method(self):
-        self.tmp = TemporaryDirectory()
-        home = Path(self.tmp.name)
-        self.env = mock.patch.dict(
-            os.environ,
-            {
-                "XDG_CONFIG_HOME": str(home / "cfg"),
-                "APPDATA": str(home / "cfg"),
-                "CLAUDE_CODE_SESSION_ID": "sess1234-x",
-                "GIT_AUTHOR_NAME": "t",
-                "GIT_AUTHOR_EMAIL": "t@t",
-                "GIT_COMMITTER_NAME": "t",
-                "GIT_COMMITTER_EMAIL": "t@t",
-                "BEADS_DIR": str(home / "no-beads"),
-                **NO_GC,
-            },
-        )  # a bd that slips past the store finds nothing to write
-        self.env.start()
-        self.wt = home / "wt"
-        method = getattr(self, self._testMethodName)
-        self.sim = None
-        if not getattr(method, "real_git", None):
-            gitsim.reset()
-            self.sim = gitsim.Sim(self)
-            stack = contextlib.ExitStack()
-            self.addCleanup(stack.close)
-            self.sim.install(stack)
-            if not getattr(method, "no_repo", False):
-                gitsim.new_world(home)
-        elif not getattr(method, "no_repo", False):
-            copy_origin_and_clone(home)
-        procsim.fake(engine.Engine.MARKERS, procsim.markers)
+        SlotWorld.setup_method(self)  # not super(): tests borrow this method onto classes that are not EngineTests
         procsim.fake(f"{shlex.quote(sys.executable)} /fake/route.py net", procsim.exits(2, "no such file"))  # the network probe: no answer
         procsim.fake(RED_ONCE, lambda cwd, env: (0 if procsim.f_txt(cwd) == "d3" else 1, ""))
         self.store = FakeBeadStore()  # bd, show and comments of every engine this test builds (pass store=self.store)
@@ -410,11 +256,7 @@ class EngineTest(Case):
         sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
 
     def teardown_method(self):
-        close_held()  # tl-64i: the held log handles live in the temp dir that goes now
-        self.env.stop()
-        self.tmp.cleanup()
-        if self.sim:
-            self.sim.check()
+        SlotWorld.teardown_method(self)
 
     def fake_bd(self, *a, **kw):
         return mock.Mock(returncode=0, stdout="", stderr="")  # the store records the call itself
@@ -660,8 +502,6 @@ class StrayWriteScript(fake_route.Script):
             (d / "InitTestScene123.unity").write_text("scene\n")
             (d / "InitTestScene123.unity.meta").write_text("meta\n")
         return super().reply(role, prompt, schema, cwd, resume, *a, **kw)
-
-
 
 
 BRIEFS = ROOT / "tests" / "fixtures" / "briefs"

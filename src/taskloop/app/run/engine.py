@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import context_size, landlock, opencode
+from taskloop.adapters import landlock, opencode
 from taskloop.adapters.clock import SystemClock
 from taskloop.app.checks.runner import Checker
 from taskloop.app.release import reexec, seams
@@ -21,10 +21,12 @@ from taskloop.contracts import fence, rundocs
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import Result
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
-from taskloop.contracts.ports import Clock, Git, Spawner
+from taskloop.contracts.ports import Clock
+from taskloop.contracts.procport import Spawner
 from taskloop.contracts.run import RunReport
 from taskloop.domain import outcome as oc
 from taskloop.stores.bundle import Stores
@@ -92,7 +94,7 @@ class Engine(RunHost):
         self.os_lock = landlock.os_lock
         stem = self.run_id
         self.ctx = RunContext.open(bead, cfg, Path(wt), stem, self.run_dir, self.home, self.stores, store, route, self.clock, self.sessions,
-                                   self.stats, opencode.opencode_id, lambda p: context_size.context_tokens(p, self.env), say,
+                                   self.stats, opencode.opencode_id, say,
                                    verbose, dry_run, self.now, self.step_guard, self.on_step)
         c = self.ctx
         self.log, self.steps, self.budget, self.calls, self.checklog = c.log, c.steps, c.budget, c.calls, c.checklog
@@ -104,6 +106,10 @@ class Engine(RunHost):
             self.reload.restore_run(rundocs.pause(self.home, pause.run))
             self.reload.carry_done_memo(self.home.run_dir(pause.run))
             self.log.note(f"back from the network pause of {pause.run}: continuing as run {stem}")
+
+    @property
+    def intake_per_day(self) -> int:
+        return self.cfg.intake_per_day
 
     def on_path(self, name: str) -> str | None:
         return tool_on_path(name)

@@ -5,8 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.engine_case import EngineTest
-from support.logs import records
+from support.check_host import CheckHostCase
 
 # isort: split
 from support import procsim
@@ -23,7 +22,7 @@ def show(cwd, env):
 SHOW = procsim.default("show-run-id", show)
 
 
-class RunId(EngineTest):
+class RunId(CheckHostCase):
     def run_one(self):
         self.eng = self.checks_engine(checks=[{"id": "c", "cmd": SHOW}])
         res = self.eng.run_checks({"checks": [], "files": []}, "s")[0]
@@ -39,7 +38,7 @@ class RunId(EngineTest):
 
     def test_every_row_of_the_run_and_the_duration_history_carry_it(self):
         self.run_one()
-        rows = records(self.eng)
+        rows = self.eng.records()
         assert rows
         assert {r["run_id"] for r in rows} == {self.eng.run_id}
         hist = self.eng.stores.durations.of(check_files.repo_key(self.eng.git, str(self.eng.wt))).get() or Durations()
