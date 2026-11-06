@@ -14,9 +14,9 @@ from support.who import who
 from taskloop.app.prune import runs, verb
 from taskloop.app.prune.traces import prune_traces
 from taskloop.contracts import factorydb
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Beads
 from taskloop.contracts.run import RunManifest, RunState
 from taskloop.contracts.runrows import RunRows
 

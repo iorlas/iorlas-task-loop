@@ -12,7 +12,7 @@ from taskloop.contracts.config import HostResources
 from taskloop.contracts.docstore import JsonStore
 from taskloop.contracts.env import Env
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Ran
+from taskloop.contracts.procport import Ran
 
 BRANCH = "tl-setup-profile"
 REF = "repos/{owner}/{repo}/git/ref/heads/"  # gh fills {owner} and {repo} from the repo it runs in

@@ -7,8 +7,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
-from support.engine_case import CLEAN, PLAN, WRITE
 from support.engine_case import EngineTest as Base
+from support.plans import CLEAN, PLAN, WRITE
 
 N = 30
 FRAMEWORKS = ("netstandard2.1", "net8.0", "net9.0")  # MSBuild says each diagnostic once per target framework, the suffix differs

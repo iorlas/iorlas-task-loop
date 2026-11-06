@@ -16,9 +16,9 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import procsim
 from support.checks import ck
-from support.engine_case import CLEAN, PLAN, WRITE
 from support.logs import records
 from support.narrow import must
+from support.plans import CLEAN, PLAN, WRITE
 
 # isort: split
 from support.memstores import fake_stores

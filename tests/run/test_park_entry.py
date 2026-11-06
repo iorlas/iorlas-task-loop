@@ -10,9 +10,9 @@ from support import homes
 
 # isort: split
 from support import engine_case as te
-from support.engine_case import PLAN, WRITE, review
 from support.fakes import FakeBeadStore
 from support.narrow import must
+from support.plans import PLAN, WRITE, review
 from support.spawn import port_git
 from support.who import who
 

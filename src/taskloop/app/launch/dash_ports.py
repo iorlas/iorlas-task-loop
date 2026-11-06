@@ -21,13 +21,14 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.askstore import AskStore
+from taskloop.contracts.beadsport import BdFailure, Beads
 from taskloop.contracts.dash import Result, Stick
 from taskloop.contracts.dashhealth import Score
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import AnswerAsk, BdFailure, Beads
+from taskloop.contracts.ports import AnswerAsk
 from taskloop.contracts.rowstores import ReposStore
 from taskloop.contracts.slottable import SlotSource
 from taskloop_dash.env import Ports

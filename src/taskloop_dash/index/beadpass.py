@@ -5,8 +5,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 from taskloop.contracts import beadrows, factorydb
+from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
 from taskloop.contracts.ids import loop_key
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
 
 MAX_AGE = 60
 
