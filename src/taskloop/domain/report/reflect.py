@@ -6,7 +6,7 @@ from collections import Counter
 from collections.abc import Iterable
 from typing import Any, Final
 
-from taskloop.domain.report import matchers
+from taskloop.domain.lifecycle import matchers
 
 MIN_RUNS: Final = 2
 SIMILAR: Final = 0.35  # token overlap (Jaccard) that makes two went_badly items one cause

@@ -27,7 +27,7 @@ from taskloop.contracts.logstores import LoopLog
 from taskloop.contracts.ports import Git
 from taskloop.contracts.runlife import Liveness, liveness
 from taskloop.contracts.trace import RunTrace
-from taskloop.domain.report import matchers
+from taskloop.domain.lifecycle import matchers
 
 M2: Final = {"beads": 10, "landed_no_ask": 7}  # at least; lost and crashes must be 0 (docs/roadmap.md)
 

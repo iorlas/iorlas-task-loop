@@ -23,7 +23,7 @@ from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, NewBead, Spawner
 from taskloop.contracts.rowstores import ReflectStateStore, ReposStore
 from taskloop.contracts.snapshots import ReflectState
-from taskloop.domain.report import matchers
+from taskloop.domain.lifecycle import matchers
 from taskloop.domain.report.reflect import (
     OWNERS,
     TITLE_SIMILAR,
