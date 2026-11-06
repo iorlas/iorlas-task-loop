@@ -1,174 +1,25 @@
-"""One reader and one writer per file family. A missing, torn or stale (foreign `v`) file reads as absent."""
+"""The ask store: the open and parked asks of a repo, answered, amended, withdrawn and parked through one writer."""
 import contextlib
-import json
 from collections.abc import Callable
-from pathlib import Path
-from typing import Any, Final, Protocol, override
+from typing import Any, Final, Protocol
 
-from jsonl_log import KEEP, ROTATE_BYTES, Entry
-
-from taskloop.contracts import docstore, events, factorydb, log, paths, timedrows, wire
+from taskloop.contracts import paths
 from taskloop.contracts.ask import Ask, AskAnswer, ThreadEntry
 from taskloop.contracts.askrows import AskRows, DbDocs, DbLedger
 from taskloop.contracts.dash import OwnerCause, Stick
-from taskloop.contracts.docrows import RowDoc, singleton
-from taskloop.contracts.docstore import ForeignVersion, Item, JsonStore, Ledger, Page, Present, Torn, refusal  # noqa: F401
+from taskloop.contracts.docstore import ForeignVersion, Ledger, Present, Torn, refusal
 from taskloop.contracts.enums import AskStatus
-from taskloop.contracts.guard import guard
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import LedgerEntry, LedgerEvent
-from taskloop.contracts.loop import BadVersions
-from taskloop.contracts.reponame import repo_name
-from taskloop.contracts.rotating import RotatingJsonl
-from taskloop.contracts.run import LoopLogLine
-from taskloop.contracts.snapshots import (
-    Pin,
-    ReflectState,
-    ReleaseResult,
-    RepoEntry,
-    ReposIndex,
-    SharedNotes,
-    StatusSnapshot,
-    StatusTried,
-)
-from taskloop.contracts.trace import RunTrace
-from taskloop.contracts.usage import USAGE_KEEP_S, UsageRow, rows_of
 from taskloop.contracts.wire import Refused
 
 LIVE = (AskStatus.OPEN, AskStatus.PARKED)
+
+
 HAD_PICK: Final = "had_pick_label"  # bead metadata: the pick label the park took off, to give back
+
+
 ORPHAN: Final = "parked; its ask was dropped at upgrade; `tl answer --rerun` or reopen to re-ask"
-Absent = docstore.Absent
-type Read[T] = docstore.Read[T]
-
-
-class JsonlStore[T]:
-    """An append-only family: one record per line, read back by byte cursor."""
-
-    def __init__(self, path: Path, decode: Any, cls: type[Any] | None = None, rotate_bytes: int = ROTATE_BYTES, keep: int = KEEP,
-                 rotate_lock: Path | bool = False) -> None:
-        self.file = RotatingJsonl(path, rotate_bytes, keep, rotate_lock)
-        self._decode = decode
-        self._cls = cls
-
-    def append(self, rec: T) -> int:
-        return self.file.append(wire.dump(rec))
-
-    def read_from(self, offset: int = 0, limit: int | None = None) -> Page[T]:
-        entries, cursor = self.file.read_from(offset, limit)
-        return self._page(entries, cursor)
-
-    def tail(self, n: int, before: int | None = None) -> Page[T]:
-        entries = self.file.tail(n, before)
-        return self._page(entries, entries[-1].end if entries else (before or 0))
-
-    def _page(self, entries: list[Entry[dict[str, Any]]], cursor: int) -> Page[T]:
-        items: list[Item[T]] = []
-        for e in entries:
-            with contextlib.suppress(ValueError):
-                items.append(Item(e.start, e.end, self._decode(e.data)))
-        return Page(items, cursor, len(entries) - len(items))
-
-
-def _beside(path: Path, suffix: str) -> Path:
-    return path.with_name(path.name + suffix)
-
-
-def _one(cls: type) -> Any:
-    def decode(data: Any) -> Any:
-        return wire.load(cls, data)
-    return decode
-
-
-class RunLog(JsonlStore[log.EngineLog]):
-    """The engine log of one run. Each end record that completes a timed thing also adds its `timed` row (contracts/timedrows.py); the
-    row is best effort, the log is the record."""
-
-    def __init__(self, cfg: paths.ConfigDir, run: str) -> None:
-        super().__init__(cfg.engine_log(run), log.decode)
-        self.cfg, self.run = cfg, run
-        self.tracker: timedrows.Tracker | None = None
-
-    def warm(self) -> timedrows.Tracker:
-        """The pairing state of this run: a run that exec'd or took up again has the starts of its earlier process in the file."""
-        if self.tracker is None:
-            self.tracker = timedrows.Tracker(self.run)
-            for earlier in self.read_from(0).items:
-                self.tracker.feed(earlier.rec)
-        return self.tracker
-
-    @override
-    def append(self, rec: log.EngineLog) -> int:
-        tracker = None
-        with contextlib.suppress(OSError, factorydb.DatabaseError):
-            tracker = self.warm()  # read before the append: the file does not hold `rec` yet
-        at = super().append(rec)
-        if tracker is not None:
-            item = tracker.feed(rec)
-            if item is not None:
-                with contextlib.suppress(OSError, factorydb.DatabaseError, factorydb.sqlite3.Error):
-                    timedrows.add(self.cfg, item)
-        return at
-
-
-class EventLog(JsonlStore[events.Event]):
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.events(), events.decode)
-
-
-class TraceStore(JsonlStore[RunTrace]):
-    """Run traces; append and age retention share one outer lock."""
-
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.traces(), _one(RunTrace), rotate_lock=_beside(cfg.traces(), ".prune.lock"))
-
-    def lock_path(self) -> Path:
-        return self.file.path.with_name(self.file.path.name + ".prune.lock")
-
-    @override
-    def append(self, rec: RunTrace) -> int:
-        with guard(self.lock_path()):
-            return super().append(rec)
-
-
-class LoopLog(JsonlStore[LoopLogLine]):
-    """loop/<key>.jsonl: a line per bead the loop ran."""
-
-    def __init__(self, cfg: paths.ConfigDir, key: str) -> None:
-        super().__init__(cfg.loop_log(key), _one(LoopLogLine))
-
-
-class UsageHistory(JsonlStore[UsageRow]):
-    """The lane usage history: `tl lanes` is its one writer (`record`), age its only prune."""
-
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.usage_history(), _one(UsageRow), rotate_lock=_beside(cfg.usage_history(), ".lock"))
-
-    def lock_path(self) -> Path:
-        return self.file.path.with_name(self.file.path.name + ".lock")
-
-    @override
-    def append(self, rec: UsageRow) -> int:
-        with guard(self.lock_path()):  # prune rewrites the file under this lock: a line appended meanwhile is not lost
-            return super().append(rec)
-
-    def record(self, snap: StatusSnapshot) -> None:
-        for row in rows_of(snap):
-            self.append(row)
-
-    def rows(self) -> list[UsageRow]:
-        return [i.rec for i in self.read_from(0).items]
-
-    def prune(self, now: float) -> int:
-        """Drop rows older than USAGE_KEEP_S (and lines that are no row); -> how many lines went. Rewrites only when one goes."""
-        cut = now - USAGE_KEEP_S
-        return self.file.rewrite(lambda line: self._at(line) >= cut)
-
-    def _at(self, line: bytes) -> float:
-        try:
-            return self._decode(json.loads(line)).at
-        except ValueError:
-            return float("-inf")
 
 
 class LedgerStore(DbLedger):
@@ -400,107 +251,3 @@ class AskStore:
             done = a.replace(thread=[*a.thread, entry])
             self.put(done)
             return done, ""
-
-
-class StatusStore(RowDoc[StatusSnapshot]):
-    def __init__(self, cfg: paths.ConfigDir, quiet: bool = False) -> None:
-        super().__init__(singleton(cfg, StatusSnapshot, "snapshot:delegate.status", quiet).docs, "")
-
-
-class StatusTriedStore(RowDoc[StatusTried]):
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(singleton(cfg, StatusTried, "snapshot:delegate.tried").docs, "")
-
-
-class SharedNotesStore(RowDoc[SharedNotes]):
-    def __init__(self, cfg: paths.ConfigDir, repo_key: str) -> None:
-        super().__init__(singleton(cfg, SharedNotes, "shared:" + repo_key).docs, "")
-
-
-class ReposStore:
-    """The repos index: every repo `tl` has seen, by name, as the `kv` row `repos` of factory.db. Adding one reads and writes under a lock,
-    so two processes never drop a repo. `quiet` (the dashboard): a database that cannot be opened reads as no repos."""
-
-    def __init__(self, cfg: paths.ConfigDir, quiet: bool = False) -> None:
-        self.doc = singleton(cfg, ReposIndex, "repos", quiet)
-        self.lock = cfg.lock_record("repos", "index")
-
-    def get(self) -> ReposIndex | None:
-        return self.doc.get()
-
-    def write(self, rec: ReposIndex) -> None:
-        self.doc.write(rec)
-
-    def index(self) -> ReposIndex:
-        """The index (empty when there is none). One of another version is an error (ValueError), never read as empty."""
-        read = self.doc.read()
-        if isinstance(read, Present):
-            return read.rec
-        if isinstance(read, Absent):
-            return ReposIndex()
-        raise ValueError(self._refusal())
-
-    def _refusal(self) -> str:
-        return ("the repos index row in factory.db is not of this version: delete it; "
-                "every tl process registers its repo again")
-
-    def known(self) -> list[str]:
-        """The repo folders, oldest first."""
-        return [e.path for e in self.index().repos.values()]
-
-    def path_of(self, name: str) -> str:
-        """The folder of repo `name`: the name, or the folder when it is one; unknown and ambiguous names are a ValueError with the fix."""
-        idx = self.index().repos
-        if name in idx:
-            return idx[name].path
-        short = [n for n in idx if n.rsplit("/", 1)[-1] == name]
-        if len(short) == 1:
-            return idx[short[0]].path
-        if short:
-            raise ValueError(f"repo {name!r} is ambiguous ({', '.join(sorted(short))}): give the full owner/name")
-        raise ValueError(f"repo {name!r} is not registered: run `tl register` in its folder; known: {', '.join(sorted(idx)) or 'none'}")
-
-    def add(self, path: str, now: float) -> bool:
-        """Register `path`; False when it was known. A name another folder holds is a ValueError. Another version is a ValueError too,
-        and the file is never overwritten."""
-        if path in self.known():
-            return False
-        name = repo_name(path)
-        with guard(self.lock):
-            idx = self.index()
-            if any(e.path == path for e in idx.repos.values()):
-                return False
-            if name in idx.repos:
-                held = idx.repos[name].path
-                raise ValueError(f"repo name {name!r} is taken by {held}: remove that entry (`tl prune` drops a folder that is gone)")
-            self.write(idx.replace(repos={**idx.repos, name: RepoEntry(path=path, added=now)}))
-            return True
-
-    def drop_missing(self, exists: Callable[[str], bool]) -> list[str]:
-        """Drop the entries whose folder `exists` says is gone. -> their names."""
-        with guard(self.lock):
-            idx = self.index()
-            gone = [n for n, e in idx.repos.items() if not exists(e.path)]
-            if gone:
-                self.write(idx.replace(repos={n: e for n, e in idx.repos.items() if n not in gone}))
-            return gone
-
-
-class PinStore(RowDoc[Pin]):
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(singleton(cfg, Pin, "pin").docs, "")
-
-
-class ReleaseResultStore(RowDoc[ReleaseResult]):
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(singleton(cfg, ReleaseResult, "release:last").docs, "")
-
-
-class BadVersionStore(RowDoc[BadVersions]):
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(singleton(cfg, BadVersions, "bad-versions").docs, "")
-
-
-class ReflectStateStore(RowDoc[ReflectState]):
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(singleton(cfg, ReflectState, "reflect:digest").docs, "")

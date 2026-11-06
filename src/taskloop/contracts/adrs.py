@@ -6,10 +6,11 @@ from pathlib import Path
 from typing import final
 
 from taskloop.contracts import paths, wire
+from taskloop.contracts.askstore import AskDocs
 from taskloop.contracts.docrows import RowDocs
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.ledger import Adr, AdrUse
-from taskloop.contracts.stores import AskDocs, JsonlStore
+from taskloop.contracts.logstores import JsonlStore
 
 
 def is_adr_id(text: str) -> bool:

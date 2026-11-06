@@ -14,7 +14,7 @@ from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Beads
-from taskloop.contracts.stores import ReposStore
+from taskloop.contracts.rowstores import ReposStore
 
 
 def mb(n: int) -> str:

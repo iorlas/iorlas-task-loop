@@ -21,8 +21,8 @@ from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, NewBead, Spawner
+from taskloop.contracts.rowstores import ReflectStateStore, ReposStore
 from taskloop.contracts.snapshots import ReflectState
-from taskloop.contracts.stores import ReflectStateStore, ReposStore
 from taskloop.domain.report import matchers
 from taskloop.domain.report.reflect import (
     OWNERS,

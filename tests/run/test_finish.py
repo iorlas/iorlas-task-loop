@@ -21,10 +21,10 @@ from taskloop.contracts.finish import finish_run
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunLocator, host_name
+from taskloop.contracts.logstores import EventLog, LoopLog, RunLog, TraceStore
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunState
 from taskloop.contracts.runrows import RunRows
-from taskloop.contracts.stores import EventLog, LoopLog, RunLog, TraceStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs
 

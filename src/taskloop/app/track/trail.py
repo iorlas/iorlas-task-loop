@@ -17,10 +17,11 @@ from taskloop.contracts.guard import guard
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locator import RunLocator
+from taskloop.contracts.logstores import EventLog
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads
 from taskloop.contracts.rotating import NO_ROTATION
-from taskloop.contracts.stores import EventLog, ReposStore
+from taskloop.contracts.rowstores import ReposStore
 
 SOURCE: Final = "task-loop"
 RETAIN_DAYS: Final = 7

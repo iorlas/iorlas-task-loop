@@ -18,8 +18,8 @@ from taskloop.app.run.steps import Steps
 from taskloop.app.run.stuck import StuckTick
 from taskloop.contracts import log as rec
 from taskloop.contracts.gitfacts import GitOutcome
+from taskloop.contracts.logstores import JsonlStore
 from taskloop.contracts.runlife import silent_limit
-from taskloop.contracts.stores import JsonlStore
 from taskloop.stores.runlog import RunLog
 
 

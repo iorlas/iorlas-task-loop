@@ -8,8 +8,8 @@ from taskloop.app.asks import trustroots
 from taskloop.contracts import answers
 from taskloop.contracts import log as rec
 from taskloop.contracts.delegate import RunRequest
+from taskloop.contracts.logstores import JsonlStore
 from taskloop.contracts.schema import unstrict
-from taskloop.contracts.stores import JsonlStore
 from taskloop.domain.lanes import caps
 from taskloop.domain.matchers import clip
 from taskloop.domain.prompts.reflect import REFLECT_PROMPT

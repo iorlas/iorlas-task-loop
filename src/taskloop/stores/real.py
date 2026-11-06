@@ -2,15 +2,16 @@
 from any_lease import Leases
 
 from taskloop.adapters.locks import ProcessLockTable
-from taskloop.contracts import paths, rundocs, stores
+from taskloop.contracts import logstores, paths, rundocs
 from taskloop.contracts.adrs import AdrStore
+from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.checks import BaseRedRecord, CheckRun, PassRecord
 from taskloop.contracts.config import HostResources
 from taskloop.contracts.docrows import RowDocs
+from taskloop.contracts.docstore import JsonStore
 from taskloop.contracts.followups import FollowupOutbox
 from taskloop.contracts.receiptrows import DbDocSet
-from taskloop.contracts.stores import AskStore, JsonStore
 from taskloop.stores.books import CheckpointBook
 from taskloop.stores.bundle import Stores
 from taskloop.stores.profile_changes import profile_changes
@@ -19,7 +20,7 @@ from taskloop.stores.ticketrows import TicketRows
 
 def real_stores(cfg: paths.ConfigDir) -> Stores:
     return Stores(
-        run_log=lambda run: stores.RunLog(cfg, run), events=stores.EventLog(cfg), traces=stores.TraceStore(cfg),
+        run_log=lambda run: logstores.RunLog(cfg, run), events=logstores.EventLog(cfg), traces=logstores.TraceStore(cfg),
         profile_changes=profile_changes(cfg),
         asks=AskStore.at(cfg), adrs=lambda repo: AdrStore.at(cfg, repo),
         checkpoints=CheckpointBook(RowDocs(cfg, Checkpoint, table="checkpoint", key_col="bead", body_col="body",

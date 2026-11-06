@@ -10,10 +10,10 @@ from taskloop.adapters.bdids import prefix_of
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import Landed, landed_by
+from taskloop.contracts.logstores import TraceStore
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads, Git
 from taskloop.contracts.slots import git_probe
-from taskloop.contracts.stores import TraceStore
 from taskloop.contracts.trace import RunTrace
 
 
