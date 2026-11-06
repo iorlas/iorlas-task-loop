@@ -197,3 +197,30 @@ def _flat_git() -> Git:
     git.ls_tree.side_effect = Checkouts.ls_tree
     git.ls_files.return_value = []
     return git
+
+
+def ledger_receipts(stores, git, wt: str) -> None:
+    """What a ledger-assisted `tl check` leaves: the same passes under the key that names TL_GREEN_LEDGER."""
+    engine = load(PROFILE).engine
+    env = {**childenv.reaching(childenv.current_env(Env({"TL_GREEN_LEDGER": "1"}))), **check_env()}
+    memo = RunMemo(stores, check_files.repo_key(git, wt), InputKeys(git, wt, TREE), BASE, env, "check-run")
+    memo.checks = {c.id: repo_check(c, engine) for c in engine.checks}
+    for c in memo.checks.values():
+        key = memo.key(c)
+        assert key is not None
+        memo.remember(key, CheckResult(id=c.id, cmd=c.cmd, group=c.group, exit=0, status="passed"), 1, "")
+
+
+class LedgerGate(StackGateKeys):
+    def test_the_gate_runs_its_check_with_the_ledger_on(self):
+        self.repo.git.checkouts.return_value = self.repo.git.checkouts.return_value[:1]
+        self.spawner.run.return_value = Ran(exit=0)
+        with pytest.raises(Stop):
+            self.gate.require("task/lifesim-fmtfix-r3", OID)
+        assert self.spawner.run.call_args.kwargs["extra"] == {"TL_GREEN_LEDGER": "1"}
+
+    def test_a_ledger_assisted_receipt_satisfies_the_gate_but_is_no_full_receipt(self):
+        ledger_receipts(self.stores, self.repo.git, str(self.repo.wt))
+        self.gate.require("task/lifesim-fmtfix-r3", OID)  # green, no run
+        self.spawner.run.assert_not_called()
+        assert self.gate.red(self.engine, TREE, BASE, str(self.repo.wt)) != []  # the release's key (no ledger) does not see it
