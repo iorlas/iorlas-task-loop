@@ -2,7 +2,6 @@
 
 import json
 import subprocess
-import tempfile
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -12,6 +11,7 @@ from any_agent.harnesses.opencode import OpenCodeHarness, Profile
 from any_agent.protocol import LaunchInputs
 from delegate.app import cockpit, env, launch, onboard
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 from test_route import CFG
@@ -20,7 +20,7 @@ from test_route import CFG
 class XdgWritable(Case):
     def test_every_xdg_var_the_launcher_sets_is_writable_in_the_profile(self):
         for profile in (Profile(), Profile(own_data=True)):
-            with self.subTest(own_data=profile.own_data), tempfile.TemporaryDirectory() as d:
+            with self.subTest(own_data=profile.own_data), TemporaryDirectory() as d:
                 h = OpenCodeHarness(profile, Path(d))
                 spec = h.launch_spec(
                     LaunchInputs(exe="/bin/oc", cwd="/w", model="m", effort="high", prompt="p", env={}, session="rid12345", write=True)

@@ -14,6 +14,7 @@ from taskloop.app.land.profile_change import owner_refusal
 from taskloop.contracts import config, scratch
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.env import Env
+from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha
@@ -25,6 +26,8 @@ class StackGate:
     def __init__(self, cmds: Cmds, git: Git, stores: Stores, repo: str, base_ref: str, tl: list[str], env: Env | None = None) -> None:
         self.cmds, self.git, self.stores, self.repo, self.base_ref, self.tl = cmds, git, stores, repo, base_ref, tl
         self.env = env or Env()
+        self.ledger_env = self.env.with_(EnvVar.TL_GREEN_LEDGER, "1")  # the gate's own run skips test files already green (dev/runtests.py)
+        self.ledger = {EnvVar.TL_GREEN_LEDGER.value: "1"}
         self.why: dict[CheckId, str] = {}  # the last red()'s steps: the first key field that differs from their newest receipt
 
     def profile(self, oid: str) -> config.EngineConfig | None:
@@ -34,12 +37,18 @@ class StackGate:
             raise Stop(1, f"cannot read the gate from {oid}:{profile_at.FILE}: {e}") from None
         return found.engine if found else None  # no profile at the base commit: no gate step
 
-    def red(self, engine: config.EngineConfig, tree: str, base: str, wt: str = "") -> list[CheckId]:
-        found = authorization.results(self.stores, self.git, wt or self.repo, engine, TreeSha(tree), BaseSha(base), self.env)
+    def red(self, engine: config.EngineConfig, tree: str, base: str, wt: str = "", env: Env | None = None) -> list[CheckId]:
+        """The steps with no green receipt under `env` (the plain key by default; `ledger_env` is the key of a ledger-assisted run)."""
+        env = env or self.env
+        found = authorization.results(self.stores, self.git, wt or self.repo, engine, TreeSha(tree), BaseSha(base), env)
         red = [step for step, result in found.items() if result is None]
-        self.why = (authorization.explain(self.stores, self.git, wt or self.repo, engine, TreeSha(tree), BaseSha(base), self.env, red)
+        self.why = (authorization.explain(self.stores, self.git, wt or self.repo, engine, TreeSha(tree), BaseSha(base), env, red)
                     if red else {})
         return red
+
+    def unproven(self, engine: config.EngineConfig, tree: str, base: str, wt: str = "") -> list[CheckId]:
+        """The steps with neither a full receipt nor a ledger-assisted one (the gate's own kind) on this tree and base."""
+        return self.red(engine, tree, base, wt) and self.red(engine, tree, base, wt, env=self.ledger_env)
 
     def named(self, red: list[CheckId]) -> str:
         """The red steps, each with why its receipt does not count when that is known."""
@@ -78,7 +87,7 @@ class StackGate:
             raise Stop(1, f"cannot name the tree of {oid[:12]} or the base {self.base_ref} (git rev-parse --verify {oid[:12]}^{{tree}}, "
                           f"git rev-parse --verify {self.base_ref})")
         wt = self.worktree(branch, oid)
-        red = self.red(engine, tree, base, wt)
+        red = self.unproven(engine, tree, base, wt)
         if not red:
             return base
         made = "" if wt else self.fresh(oid)
@@ -89,9 +98,9 @@ class StackGate:
         try:
             carry = Carry(self.cmds, self.git, self.stores, self.repo, self.env)
             if sum(carry.carried(engine, step, oid, tree, base, wt) for step in red):  # a pass on an earlier base that still holds
-                red = self.red(engine, tree, base, wt)
-            ran = self.cmds.run(argv) if red else None
-            red = self.red(engine, tree, base, wt) if ran else red
+                red = self.unproven(engine, tree, base, wt)
+            ran = self.cmds.run(argv, extra=self.ledger) if red else None
+            red = self.unproven(engine, tree, base, wt) if ran else red
             now = self.moved_during(branch, oid, wt, base) if red else ""  # while the gate's own checkout still exists
         finally:
             if made:
@@ -112,7 +121,7 @@ class StackGate:
         if engine is None or not engine.gate_checks:
             return False
         tree = self.cmds.port(f"git rev-parse --verify {oid[:12]}^{{tree}}", lambda: self.git.rev_parse(self.repo, f"{oid}^{{tree}}"))
-        return bool(tree) and bool(self.red(engine, tree, base))
+        return bool(tree) and bool(self.unproven(engine, tree, base))
 
     def warm(self, oid: str, git_lock: threading.Lock) -> int:
         """Run `tl check` for the oid in a fresh worktree, the one `require` would make, so its receipts exist when `require` asks. Runs in
@@ -120,7 +129,7 @@ class StackGate:
         with git_lock:
             path = self.fresh(oid)
         try:
-            return self.cmds.spawner.run([*self.tl, "check", "--repo", path], cwd=path).exit
+            return self.cmds.spawner.run([*self.tl, "check", "--repo", path], cwd=path, extra=self.ledger).exit
         finally:
             with git_lock:
                 self.cmds.row(f"git worktree remove {path}", lambda: self.git.remove_worktree_force(self.repo, path))

@@ -6,7 +6,6 @@ import io
 import json
 import os
 import sys
-import tempfile
 import time
 from pathlib import Path
 from unittest import mock
@@ -27,6 +26,7 @@ from support import fake_worker
 from support.case import Case
 from support.fake_clock import SteppingClock
 from support.fake_worker import Err, Exit, Jump
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -112,7 +112,7 @@ class Breaker(Case):
             return json.dumps(codec.to_json(hist.CanaryRow(ts=ts, run_id=rid, lane="L", model="m")))
 
         with (
-            tempfile.TemporaryDirectory() as d,
+            TemporaryDirectory() as d,
             mock.patch.object(env, "config_dir", return_value=Path(d)),
             mock.patch.object(stores, "HISTORY_MAX", 100),
         ):
@@ -204,7 +204,7 @@ class TokenBudget(Case):
 
     def test_agent_step_answer_is_small(self):
         saved = {k: os.environ.get(k) for k in ("XDG_CONFIG_HOME", "DELEGATE_CONFIG_DIR", "HOME", "CLAUDE_CODE_ENTRYPOINT")}
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             os.environ["XDG_CONFIG_HOME"] = os.environ["DELEGATE_CONFIG_DIR"] = os.environ["HOME"] = d
             os.environ["CLAUDE_CODE_ENTRYPOINT"] = "cli"
             real = dict(usage.READERS)
@@ -227,7 +227,7 @@ class ConfigLocation(Case):
     """Settings, state and the key live in task-loop's folder (<config>/task-loop/delegate); the retired plugin's data is adopted once."""
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.saved_here = env.DATA_DIR
         self.saved = {
             k: os.environ.get(k) for k in ("HOME", "USERPROFILE", "XDG_CONFIG_HOME", "APPDATA", "DELEGATE_CONFIG_DIR", "CLAUDE_PLUGIN_DATA")
@@ -272,7 +272,7 @@ class WatchdogProc(Case):
     tree stop, a chatty one is not."""
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         p = mock.patch.object(env, "config_dir", return_value=Path(self.tmp.name))
         p.start()

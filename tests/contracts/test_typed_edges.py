@@ -1,4 +1,5 @@
 """The typed edges: a bead id is checked once where text becomes a BeadId, and nothing past the edge checks it again."""
+import json
 import sys
 from pathlib import Path
 
@@ -12,7 +13,7 @@ import support.paths  # noqa: F401
 from taskloop.adapters import bd, delegate_wire
 from taskloop.contracts.dash import ParkReq
 from taskloop.contracts.ids import RunId, is_bead_id, parse_bead_id
-from taskloop.contracts.ports import BdFailure
+from taskloop.contracts.ports import BdFailure, BeadQuery
 
 
 class BeadIdEdges(Case):
@@ -36,7 +37,7 @@ class BeadIdEdges(Case):
     def test_bd_rows_with_an_id_that_is_no_bead_id_fault_the_whole_read(self):
         rows = [{"id": "tl-1", "title": "a", "status": "open"}, {"id": "-x", "title": "b", "status": "open"}]
         with pytest.raises(BdFailure) as cm:
-            bd.beads_of(rows)
+            bd.BdStore("x", run=lambda argv, where: bd.BdRun(0, json.dumps(rows), "")).find(BeadQuery())
         assert cm.value.error.kind == "malformed"
 
     def test_a_run_name_is_read_once(self):
