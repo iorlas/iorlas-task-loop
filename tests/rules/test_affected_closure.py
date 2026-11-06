@@ -66,10 +66,16 @@ def green_then(tmp_path, files=None):
 
 
 def test_a_changed_dependency_conftest_data_or_config_runs_the_green_test_again(tmp_path):
-    for changed in ("src/pkg/b.py", "tests/conftest.py", "tests/x/data.json", "tests/z/data.json", "pyproject.toml"):
-        root, ledger = green_then(tmp_path / changed.replace("/", "_"), {"tests/z/data.json": "{}"})
+    for changed in ("src/pkg/b.py", "tests/conftest.py", "tests/x/data.json", "pyproject.toml"):
+        root, ledger = green_then(tmp_path / changed.replace("/", "_"))
         (root / changed).write_text("changed\n" if changed.endswith(".py") or changed.endswith(".toml") else '{"a": 1}')
         assert "tests/x/test_a.py" in pending(root, ledger, {"src/pkg/b.py"}), changed
+
+
+def test_a_changed_file_of_an_unrelated_test_folder_leaves_the_green_test_green(tmp_path):
+    root, ledger = green_then(tmp_path, {"tests/z/data.json": "{}"})
+    (root / "tests/z/data.json").write_text('{"a": 1}')
+    assert "tests/x/test_a.py" not in pending(root, ledger, {"src/pkg/b.py"})
 
 
 def test_a_red_run_marks_nothing_and_a_corrupt_ledger_means_run(tmp_path):
@@ -84,3 +90,12 @@ def test_a_red_run_marks_nothing_and_a_corrupt_ledger_means_run(tmp_path):
 def test_a_directory_in_place_of_the_ledger_means_run(tmp_path):
     root, _ = green_then(tmp_path)
     assert "tests/x/test_a.py" in pending(root, tmp_path, {"src/pkg/b.py"})
+
+
+def test_the_data_of_an_unrelated_test_folder_or_fixture_folder_is_not_in_the_closure(tmp_path):
+    files = {**BASE, "tests/y/y.json": "{}", "tests/fixtures/other/a.json": "{}", "tests/fixtures/x/b.json": "{}",
+             "tests/fixtures/n/c.json": "{}", "tests/x/test_n.py": "NAME = 'n'\n", "tests/loose.txt": ""}
+    repo = Repo(tree(tmp_path, files))
+    got = closure(repo, ["tests/x/test_a.py", "tests/x/test_n.py"], listing(tmp_path))
+    assert {"tests/x/data.json", "tests/fixtures/x/b.json", "tests/fixtures/n/c.json", "tests/loose.txt"} <= set(got)
+    assert "tests/y/y.json" not in got and "tests/fixtures/other/a.json" not in got

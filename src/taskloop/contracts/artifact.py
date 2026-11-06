@@ -2,6 +2,7 @@
 
 Layout: <config>/artifacts/<repo>/<bead>/<run>/<stage>-<attempt>/<name> with <name>.json beside it. The directory is the index
 (no table in factory.db); a file without a sidecar is not an artifact. Written by app/artifacts/store.py, read by the dashboard."""
+import fnmatch
 from typing import ClassVar, Final, Literal
 
 from taskloop.contracts.wire import Rec
@@ -35,3 +36,11 @@ class ArtifactMeta(Rec):
     size: int
     sha256: str
     created: float
+
+
+SECRET_NAMES: Final = (".env*", "*.pem", "*.key", "id_*", "*token*", "*secret*")
+
+
+def secret_name(part: str) -> bool:
+    """A file or folder name that looks like a credential: never registered as an artifact, never kept as evidence."""
+    return any(fnmatch.fnmatch(part.lower(), pat) for pat in SECRET_NAMES)

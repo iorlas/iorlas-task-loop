@@ -221,7 +221,8 @@
     "asks": 3,
     "lost": 0,
     "crashes": 0,
-    "m2_pass": true
+    "m2_pass": true,
+    "main_red": false
    }
   },
   {

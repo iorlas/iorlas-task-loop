@@ -28,7 +28,7 @@ LONG = 3 * 3600.0  # a hang guard for a whole gate run
 
 def save_output(out: str, env_dir: Path) -> Path:
     """The full gate output, in the config dir: a file inside the checkout would make the tree dirty and block the release."""
-    d = env_dir / "releases"
+    d = ConfigDir(env_dir).releases_dir()
     d.mkdir(parents=True, exist_ok=True)
     f = d / f"suite-{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}.log"
     f.write_text(out, encoding="utf-8")

@@ -222,19 +222,20 @@ class Sweep(Case):
             def make(run: str, written: float) -> None:
                 manifest(cfg, run, run.rsplit("-", 2)[0], written)
                 put(cfg.engine_log(run), [typed("beat", written)])
-                cfg.engine_log(run).with_suffix(".stderr").write_text("x")
+                cfg.engine_stderr(run).write_text("x")
                 (cfg.live_dir(run)).mkdir()
                 (cfg.live_dir(run) / "01-write.jsonl").write_text("{}\n")
-                for p in (cfg.engine_log(run), cfg.engine_log(run).with_suffix(".stderr")):
+                for p in (cfg.engine_log(run), cfg.engine_stderr(run)):
                     os.utime(p, (written, written))
 
             make("t-1-20261001-100000", now - KEEP_DAYS * 86400 - 10)  # old
             make("t-2-20261020-100000", now - KEEP_DAYS * 86400 + 3600)  # recent
             make("t-3-20261029-100000", now - 20)  # a live run
             layout.prune_run_logs(cfg, now, KEEP_DAYS * 86400)
-            left = sorted(p.name for p in (cfg.root / "engine").iterdir())
-            assert left == sorted(f"{r}.{e}" for r in ("t-2-20261020-100000", "t-3-20261029-100000")
-                                          for e in ("jsonl", "stderr", "live"))
+            left = sorted(p.relative_to(cfg.runs_dir()).as_posix() for r in cfg.runs_dir().iterdir() for p in r.iterdir()
+                          if p.name in ("engine.jsonl", "stderr.log", "live"))
+            assert left == sorted(f"{r}/{e}" for r in ("t-2-20261020-100000", "t-3-20261029-100000")
+                                  for e in ("engine.jsonl", "stderr.log", "live"))
             assert (cfg.live_dir("t-3-20261029-100000") / "01-write.jsonl").exists()
 
 

@@ -176,7 +176,7 @@ JSON documents go through `JsonStore` (atomic replace, no lock: `tl/contracts/st
 
 | Path | Record (`contracts`) | Writers | Readers | Many writers |
 |---|---|---|---|---|
-| `engine/<run>.jsonl`, `engine/<run>.live/` | `EngineLog` via `RunLog` (`stores.py:169`); live worker files | engine (`tl/app/run/context.py`, `Engine.__init__` `engine.py:161-171`) | dashboard (`readers/runlogs.py`, `readers/records.py:88`), `tl trace`, `tl wait`, `tl report` | no |
+| `runs/<run>/engine.jsonl`, `runs/<run>/live/` | `EngineLog` via `RunLog` (`stores.py:169`); live worker files | engine (`tl/app/run/context.py`, `Engine.__init__` `engine.py:161-171`) | dashboard (`readers/runlogs.py`, `readers/records.py:88`), `tl trace`, `tl wait`, `tl report` | no |
 | `runs/<run>/manifest.json` | `RunManifest` v? (`contracts/run.py:194`) via `RunLocator` | engine (create, take_up, beat, advance, end: `locator.py:104-171`); reconciler `mark_lost` from loop start, `tl wait`, `tl doctor`, `tl report`, owner requests (`runlife.py:64-75`, `cli/wait.py:33`, `wire/doctor.py:102`, `report/card.py:53`, `run/requests.py:48`) | everything that shows runs | **yes**, read-modify-write with no lock (`locator.py:104-121`) |
 | `runs/<run>/owner-request.json` (+ `.lock`) | `OwnerRequest` | `tl park/stop/note`, dashboard POST (`requests.py:52-60`, locked) | the engine at step boundaries | yes, but locked |
 | `runs/<run>/` other files: `engine-checks[.rN].json`, `checks/`, `plan.json`, `pause.json`, `reexec.json`, `done.json`, `handoff.json`, `prepare.stamp`, `plan-note-*` | `CheckRun`, plan, run hand-overs | engine; `tl check` creates standalone runs | dashboard, next run | no |
