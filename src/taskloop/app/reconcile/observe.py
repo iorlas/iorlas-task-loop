@@ -9,6 +9,7 @@ from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.landed import Landed, landed_in
+from taskloop.contracts.lockrows import EngineLockRows
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git
 from taskloop.contracts.reconcile import Lease, SlotFact, epoch
@@ -161,7 +162,7 @@ def worktree(d: Path, repo: Path, git: Git, cfg: ConfigDir) -> Worktree:
     except SlotGitError:
         dirty = "git status failed"
     here = d.resolve()
-    return Worktree(str(d), str(here), str(repo), cfg.engine_lock(d).exists(), Path.cwd().resolve().is_relative_to(here),
+    return Worktree(str(d), str(here), str(repo), EngineLockRows(cfg, d).exists(), Path.cwd().resolve().is_relative_to(here),
                     dirty, tidy.on_base(git, str(d), "HEAD"), last_used(d, git))
 
 

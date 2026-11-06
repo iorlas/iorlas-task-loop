@@ -5,6 +5,7 @@ TL_ARTIFACT_DIR come back. A down executor fails the check loudly: there is no r
 Every remote step is one plain argv (no shell on either side); the Linux executor's `env -C` is the change of directory.
 """
 # git-port-exempt: the git argvs below run on the executor over ssh, on its own repos; the local push goes through the Git port
+import hashlib
 import io
 import shlex
 import tarfile
@@ -12,7 +13,7 @@ import threading
 from collections import deque
 from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol
+from typing import NamedTuple, Protocol
 
 from taskloop.contracts.config import ExecutorConfig
 from taskloop.contracts.ids import CheckId
@@ -23,6 +24,8 @@ from taskloop.domain.checks.matchers import safe_name
 EXECUTOR_DOWN_RC = 255  # ssh's own code for "could not connect": the check did not run
 TAIL_LINES = 40
 WALL_RC = 124
+SETUP_S = 1800  # the executor's setup (uv sync, mise install) may take this long
+SETUP_FAILED_RC = 1
 STEP_S = 120  # a prepare step (probe, init, checkout) that takes longer means the executor is not answering
 
 
@@ -30,10 +33,25 @@ class ExecutorDown(Exception):
     """A step before the check began failed: `why` is what the executor or ssh said."""
 
 
+class Remote(NamedTuple):
+    """How the run ended: the exit code, the last lines of output, and whether the engine
+    stopped it (a cancelled lane) or its wall limit did."""
+
+    rc: int
+    tail: str
+    stopped: bool = False
+    wall_hit: bool = False
+
+
+class SetupFailed(Exception):
+    """The slot's setup on the executor exited non-zero: the check is red, its text is the setup's output."""
+
+
 class Pusher(Protocol):
     """The part of the Git port this uses: a plain push (never forced)."""
 
     def push(self, d: str, remote: str, refspec: str) -> None: ...
+    def rev_parse(self, d: str, rev: str) -> str: ...
 
 
 class Ssh(Protocol):
@@ -50,30 +68,36 @@ class LinuxRun:
         self.cfg, self.git, self.spawner = cfg, git, spawner
 
     def run(self, *, wt: str, repo: str, slot: str, sha: str, run_id: str, step: CheckId, argv: list[str], env: dict[str, str],
-            log: Path, artifact_dir: Path, timeout_s: float, stop: threading.Event | None = None) -> tuple[int, str]:
-        """(exit code, the last lines of the output). The whole output goes to `log`."""
+            log: Path, artifact_dir: Path, timeout_s: float, stop: threading.Event | None = None) -> Remote:
+        """How it ended; the whole output goes to `log`."""
         attempt = f"{run_id}-{safe_name(step)}"
         remote_art = ""
         try:
             home = self._prepare(wt, repo, slot, sha, run_id)
             remote_art = f"{home}/{self.cfg.root}/{repo}/.artifacts/{attempt}"
             self._must(["mkdir", "-p", remote_art])
+        except SetupFailed as err:
+            log.write_text(f"{err}\n", encoding="utf-8")
+            return Remote(SETUP_FAILED_RC, str(err))
         except ExecutorDown as err:
             text = (f"check could not run: executor {self.cfg.host or '(none configured)'} is down: {err}\n"
                     "(a `in: linux` check never runs here instead)")
             log.write_text(text + "\n", encoding="utf-8")
-            return EXECUTOR_DOWN_RC, text
+            return Remote(EXECUTOR_DOWN_RC, text)
         tail: deque[str] = deque(maxlen=TAIL_LINES)
         with open(log, "w", encoding="utf-8") as out:
             def on_output(line: str) -> None:
+                line = line.replace("\r", "")  # the pty of `ssh -tt` ends lines with CRLF
                 out.write(line)
                 tail.extend(line.splitlines())
             work = f"{home}/{self.cfg.root}/{repo}/{slot}"
+            # -tt: a pty, so the executor hangs the run up when this ssh is killed (a cancelled lane, the wall limit)
             done = self.spawner.stream(self._ssh(["env", "-C", work, f"TL_ARTIFACT_DIR={remote_art}",
-                                                  *[f"{k}={v}" for k, v in env.items()], *argv]),
+                                                  *[f"{k}={v}" for k, v in env.items()], *argv], tty=True),
                                        on_output=on_output, timeout_s=timeout_s, stop=stop)
         rc = WALL_RC if done.timed_out == "wall" else done.returncode if done.returncode is not None else -(done.signal or 1)
-        return rc, "\n".join(tail) + self._fetch(remote_art, artifact_dir)
+        return Remote(rc, "\n".join(tail) + self._fetch(remote_art, artifact_dir), stopped=done.timed_out == "stopped",
+                      wall_hit=done.timed_out == "wall")
 
     def _prepare(self, wt: str, repo: str, slot: str, sha: str, run_id: str) -> str:
         """The commit is on the executor and checked out in the slot's worktree; the executor's home directory."""
@@ -92,10 +116,31 @@ class LinuxRun:
             self._must(["git", "-C", work, "clean", "-qfd"])
         else:
             self._must(["git", "-C", bare, "worktree", "add", "-q", "--detach", work, sha])
+        self._setup(wt, sha, work, f"{home}/{cfg.root}/{repo}/.setup")
         return home
 
-    def _ssh(self, argv: list[str]) -> list[str]:
-        return [*self.cfg.ssh, self.cfg.host, shlex.join(argv)]  # ssh hands the remote one string: quoted so it splits back to argv
+    def _setup(self, wt: str, sha: str, work: str, marks: str) -> None:
+        """The profile's setup in the slot's worktree, again only when its inputs or command changed: a marker file names the state."""
+        cfg = self.cfg
+        if not cfg.setup:
+            return
+        state = hashlib.sha256()
+        state.update("\0".join(cfg.setup).encode())
+        for path in cfg.setup_inputs:
+            state.update(f"\0{path}={self.git.rev_parse(wt, f'{sha}:{path}')}".encode())
+        mark = f"{marks}/{Path(work).name}-{state.hexdigest()[:20]}"
+        if self._ssh_run(["test", "-e", mark]).exit == 0:
+            return
+        done = self.spawner.run(self._ssh(["env", "-C", work, *cfg.setup]), timeout_s=SETUP_S)
+        if done.exit != 0:
+            raise SetupFailed(f"setup {' '.join(cfg.setup)} exited {done.exit} on executor {cfg.host}:\n"
+                              + "\n".join((done.out + done.err).strip().splitlines()[-TAIL_LINES:]))
+        self._must(["mkdir", "-p", marks])
+        self._must(["touch", mark])
+
+    def _ssh(self, argv: list[str], tty: bool = False) -> list[str]:
+        # ssh hands the remote one string: quoted so it splits back to argv
+        return [*self.cfg.ssh, *(["-tt"] if tty else []), self.cfg.host, shlex.join(argv)]
 
     def _ssh_run(self, argv: list[str]) -> Ran:
         return self.spawner.run(self._ssh(argv), timeout_s=STEP_S)
