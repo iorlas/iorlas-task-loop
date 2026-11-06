@@ -41,9 +41,6 @@ Methods = dict[str, Method]
 
 DEFAULT_ARG = r"[\w.=,:@/+][\w.=,:@/+-]{0,199}"   # no space, quote or shell character, and no leading dash (never an option)
 MAX_REQUESTS = 6                        # shot requests one write may make
-CLASSES = ("test", "look-objective", "taste", "show")
-
-
 def parse_row(r: object) -> tuple[Method | None, str]:
     """(the method entry, error) of one row of the shot table."""
     if not isinstance(r, dict) or not str(r.get("method") or "").strip() or not isinstance(r.get("argv"), list) or not r["argv"] \
