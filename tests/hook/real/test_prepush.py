@@ -66,8 +66,7 @@ class Base(Case):
         tl.chmod(0o755)
         # tl's own ChildEnv builder hands git the hooks dir; the recorder path rides through `extra`.
         self.plain = base  # no hooks path: what `git lfs install` needs to write into the repo's own hooks
-        # the stub shim judges, not this install
-        self.env = childenv.without(childenv.tool_env(base, {"CALLS": base["CALLS"]}), "TL_JUDGE_TL")
+        self.env = childenv.tool_env(base, {"CALLS": base["CALLS"]})
         self.origin, self.repo = t / "origin.git", t / "repo"
         self.git(t, "init", "-q", "--bare", "-b", "main", str(self.origin))
         self.git(t, "clone", "-q", str(self.origin), str(self.repo))
