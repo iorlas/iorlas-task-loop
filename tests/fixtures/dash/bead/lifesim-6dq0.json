@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "f01745305ceea823",
+ "version": "5c60e93c96516bd7",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Rain lowers mood outdoors. Part of World.",
@@ -86,6 +86,7 @@
    "phase": null
   }
  ],
+ "decisions": [],
  "passes": [
   {
    "n": 1,

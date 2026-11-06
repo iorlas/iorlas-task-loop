@@ -17,6 +17,8 @@ from support.forgesim import ForgeSim
 from support.narrow import must
 
 # isort: split
+from support.memstores import fake_stores
+
 from taskloop.app.asks import pr_wake, raiser
 from taskloop.app.land import pr_land
 from taskloop.app.land.forge import peek
@@ -35,7 +37,6 @@ from taskloop.contracts.ids import BeadId, TreeSha
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.asks import specs
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 BEAD = BeadId("t-1")
@@ -65,12 +66,14 @@ class Git(ScriptedGit):
         self.sim, self.head = sim, HEAD
 
     def rev_parse(self, d, rev):
+        if rev.startswith("refs/remotes/"):
+            return ""
         return {"HEAD": self.head, "HEAD^{tree}": "tree", "origin/main": "base"}[rev]
 
     def log(self, d, include, exclude=None, limit=0, grep=""):
         return [LogRow(oid=self.head, time=0, subject="Do it (t-1)")]
 
-    def push_lease(self, d, remote, refspec):
+    def push_lease(self, d, remote, refspec, expect_sha):
         ran = self.sim.run(["git", "push", remote, refspec])
         return GitOutcome(ok=ran.exit == 0, output=ran.err)
 
