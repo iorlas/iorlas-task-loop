@@ -67,7 +67,6 @@ import importlib
 import os
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
 
@@ -100,26 +99,12 @@ from taskloop.cli import setup as cli_setup
 from taskloop.cli import slots as slots_cli
 from taskloop.cli import status
 from taskloop.cli import wait as cli_wait
+from taskloop.cli.ctx import Ctx
 from taskloop.contracts.enums import Step
-from taskloop.contracts.env import Env, snapshot
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.procport import Spawner
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.slots import MissingRemote
 
 HERE = Path(__file__).resolve().parent
-
-
-@dataclass(frozen=True)
-class Ctx:
-    """What a verb may need besides its arguments: the install this run executes from, the clock, the argv a loop re-execs itself with."""
-    here: Path
-    now: Callable[[], float]
-    argv: list[str]
-    env: Env  # the process environment, taken once here; everything below is handed this copy
-    spawner: Spawner  # the one way a verb starts a process, built on `env`
-    git: Git  # the one way a verb runs git, built on `env`
-    who: Identity  # the session and bd actor this process acts as, built once from `env`
 
 
 Handler = Callable[[Any, Ctx], int]

@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import check_files, treehash
+from taskloop.adapters import check_files, ident, treehash
 from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.execution import check_env
@@ -18,6 +18,7 @@ from taskloop.contracts.env import Env
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.locator import RunBundle
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.procport import Spawner
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
@@ -56,6 +57,7 @@ class CliHost:
         staged: list[str] | None = None,  # tl check --staged: the paths the commit changes, what `when` and pass_files see as changed
     ) -> None:
         self.env = env
+        self.home = ConfigDir(ident.config_dir(env))  # gateplan notes its once-per-run warnings under it
         self.spawner = spawner
         self.git = git
         self.wt = str(wt)
