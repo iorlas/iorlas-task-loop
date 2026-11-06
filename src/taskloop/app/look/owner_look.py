@@ -58,10 +58,10 @@ class OwnerLook:
         e = self.e
         parts = [f"## {e.bead}: {e.bead_title}"]
         kept = e.pictures.show_pictures()
-        if kept or e.look_unjudged or not e.unverified:
+        if kept or e.look.unjudged or not e.unverified:
             shots = "\n".join(f"- [{m.name}]({self.link(ref)})" for ref, m in kept) or "(none)"
-            judged = " ".join(e.look_notes) or "(the reviewer gave no judgement)"
-            unjudged = ("\n" + "\n".join(f"{w} ({u})" for u, w in e.look_unjudged.items()) + "\n") if e.look_unjudged else ""
+            judged = " ".join(e.look.notes) or "(the reviewer gave no judgement)"
+            unjudged = ("\n" + "\n".join(f"{w} ({u})" for u, w in e.look.unjudged.items()) + "\n") if e.look.unjudged else ""
             parts.append(f"Screenshots of {e.bead} ({e.bead_title}), kept on the dashboard (bead page {e.bead}), not in the repo:\n"
                          f"{shots}\n\nWhat the agent judged: {judged}\n"
                          f"{unjudged}\nNot automatable: the owner reviews the look and feel in a later batch.")
@@ -83,7 +83,7 @@ class OwnerLook:
         """After the land: one bead per epic for the owner's later round (look and feel, and what no check could prove),
         filed once and appended to by each later bead of the epic (a re-land replaces its own section)."""
         e = self.e
-        if e.look_filed or not (e.pictures.show_pictures() or e.look_unjudged or e.unverified or e.cases.cases_of("taste")):
+        if e.look.filed or not (e.pictures.show_pictures() or e.look.unjudged or e.unverified or e.cases.cases_of("taste")):
             return
         section = self.section()
         with self.review_lock():  # list + create/update is one step: three beads of an epic landing together file one bead
@@ -108,13 +108,13 @@ class OwnerLook:
                 err = "bd refused the update"
         else:
             made, err = bdcreate.create_checked(e.store, NewBead(
-                title=("Look review: " if e.pictures.show_pictures() or e.look_unjudged else "Owner review: ") + (e.bead_title or e.bead),
+                title=("Look review: " if e.pictures.show_pictures() or e.look.unjudged else "Owner review: ") + (e.bead_title or e.bead),
                 labels=[LOOK_LABEL], no_inherit_labels=True, description=section, deps=["related:" + e.bead],
                 parent=self.look_epic() or e.bead), e.bead, e.log.note)  # no epic: the review bead sits under the bead itself
         if err:
             e.warn(f"owner-look bead {'update' if have else 'create'} failed: {err[:300]}")
             return
-        e.look_filed = True
+        e.look.filed = True
         if e.cases.cases_of("taste"):
             if made and is_bead_id(made):
                 self.write_looks(made)
@@ -129,7 +129,7 @@ class OwnerLook:
         e = self.e
         shots = [{"path": ref, "role": "before" if m.role == "before" else "after", "label": Path(m.name).stem}
                  for ref, m in e.pictures.show_pictures()]
-        mine = [{"id": f"{e.bead}#{k}", "bead": e.bead, "title": t, "note": " ".join(e.look_notes)[:600], "shots": shots, "status": "open"}
+        mine = [{"id": f"{e.bead}#{k}", "bead": e.bead, "title": t, "note": " ".join(e.look.notes)[:600], "shots": shots, "status": "open"}
                 for k, t in enumerate(e.cases.cases_of("taste"), 1)]
         shown = beadtools.peek(e.store, bead_id)
 

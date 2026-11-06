@@ -9,6 +9,7 @@ from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.runner import Checker
+from taskloop.app.look.state import LookState
 from taskloop.app.run.budget import Budget
 from taskloop.app.run.calls import Calls
 from taskloop.app.run.context import RunContext
@@ -89,11 +90,8 @@ class RunFields(StateAttrs):
                                       "tests_removed": 0, "tokens_in": 0, "tokens_cached": 0, "tokens_out": 0}
         self.session, self.fresh = who.session, fresh
         self.bead_parent = ""  # tl-bxk.10.23
-        self.look_filed = False
         self.filed: list[str] = []
         self.unfiled: list[Unfiled] = []  # follow-ups bd refused (the ReviewState keeps both)
-        self.look_retried: set[str] = set()
-        self.shots_skipped: set[str] = set()
         self.unverified: list[Open] = []  # tl-bxk.10.28: items that land for the owner
         self.link_ok: set[str] = set()  # tl-bxk.7: links opened from this host
         self.link_bad: dict[str, str] = {}
@@ -129,13 +127,13 @@ class RunFields(StateAttrs):
         self.write_rounds: list[Open] = []  # per write round: resumed, input tokens, turns, prompt chars, context k, why fresh
         self.last_summary = ""  # the last write's summary: a fresh writer is told it
         self.state, self.checkpoints = RunState(), Checkpoints(self)  # what survives a park (contracts/checkpoint.py), and its one writer
+        self.look = LookState(lambda: self.state)  # the look stage's state (its checkpointed part views `self.state`)
         self.plan_summary, self.bead_title = "", ""
         self.reflection: Mapping[str, object] | None = None
         self.left_dirty, self.branch, self.task_branch = False, "", ""
         self.gate_log: Path | None = None
         self.salvage_tail, self.rebase_orig = "", ""
         self.rebase_pre: list[str] = []
-        self.shot_cache: dict[str, Any] | None = None
         self.artifact_repo = ""  # the repo's store key (adapters.check_files.repo_key), taken at the first registered render
         self.salvaged = False  # a resume conflict was fixed in place, not by starting again (tl-7y6.2.19)
         self.lane_notes: list[str] = []  # steps that ran on the writer's own family, with delegate's warning
