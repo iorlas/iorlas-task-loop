@@ -1,6 +1,7 @@
 """HealthLedger: lane health as a replayable fold over history rows (delegate-rdt, delegate-a9x).
 
-Pure: no clock, no I/O. `fold(rows, state)` turns finished-run rows into a `HealthState`; `view(state, lane, model, t)` answers "may this
+Pure: no clock, no I/O. `fold(rows, state)` turns finished-run rows into an `any_breaker.State`;
+`view(state, lane, model, t)` answers "may this
 (lane, model) pair launch at time t, and if not why". The same rows replayed in time order give the same answer, so a past incident is a
 regression fixture (tests/domain/test_health.py, golden/health_replay.json).
 
@@ -15,7 +16,9 @@ Never counted: bad_request (the caller's fault), network, killed, timeout, secre
 from dataclasses import dataclass
 from types import MappingProxyType
 
-from delegate.contracts.history import CanaryRow, Failure, HealthState, HistoryRow, LaneFact, PairFact, ReleaseRow, RunRow, Streak
+from any_breaker import OK, OPEN, OUT, RELEASE, Breaker, Fact, Out, Policy, Rule, State
+
+from delegate.contracts.history import CanaryRow, Failure, HistoryRow, ReleaseRow, RunRow
 from delegate.contracts.json_types import Json
 from delegate.contracts.routing import BreakerPolicy
 from delegate.domain.health.matchers import fingerprint
@@ -23,7 +26,6 @@ from delegate.domain.health.matchers import fingerprint
 LANE_KINDS = ("rate_limited", "credit_exhausted", "logged_out")
 BREAKER = MappingProxyType({"vendor_blip": {"tasks": 2}, "worker_failed": {"tasks": 3}, "hung": {"n": 2, "window_min": 30, "tasks": 1}})
 STATES = ("up", "busy", "exhausted", "logged_out", "held", "broken")
-RELEASE, DONE = "release", "done"
 
 
 def failure_fields(outcome: str | None, source: str, say: str | None, until: float | None = None) -> dict[str, Json]:
@@ -62,140 +64,67 @@ class PairView:
         }
 
 
-@dataclass(frozen=True)
-class Fact:
-    """A history row read as a health fact: what happened (done | release | an outcome name) to which pair, when."""
-
-    what: str
-    ts: float
-    lane: str
-    model: str | None = None
-    until: float | None = None
-    say: str = ""
-    fingerprint: str | None = None
-    task: str | None = None
-
-
-def fact_of(row: HistoryRow) -> Fact | None:
-    """None when the row is not a fact: a refusal, a gap, a reap, a caller fault, network, killed, timeout..."""
-    if isinstance(row, ReleaseRow):
-        return Fact(RELEASE, row.ts, row.lane)
-    if isinstance(row, CanaryRow):
-        return Fact(DONE, row.ts, row.lane, row.model)
+def fact_of(row: HistoryRow) -> list[Fact]:
+    """The facts a history row is: the lane is a key of its own and `lane|model` another; a run that worked proves both. [] when the row
+    is not a fact: a refusal, a gap, a reap, a caller fault, network, killed, timeout..."""
+    if isinstance(row, ReleaseRow):  # `route.py report --event ok`: the owner says the lane is fine
+        return [Fact(RELEASE, row.ts, row.lane), Fact(RELEASE, row.ts, row.lane + "|", prefix=True)]
+    if isinstance(row, CanaryRow) or (isinstance(row, RunRow) and row.done):
+        return [Fact(OK, row.ts, row.lane), Fact(OK, row.ts, f"{row.lane}|{row.model}")]
     if not isinstance(row, RunRow):
-        return None
-    if row.done:
-        return Fact(DONE, row.ts, row.lane, row.model)
-    o = row.outcome
-    if o in LANE_KINDS or o in BREAKER:
-        return Fact(o, row.ts, row.lane, row.model, row.until, row.say or "", row.fingerprint, row.task or row.run_id)
-    return None
+        return []
+    o, say = row.outcome, row.say or ""
+    if o in LANE_KINDS:  # a spending limit and a logout have no vendor timer: the probe time rules
+        return [Fact(o, row.ts, row.lane, until=row.until if o == "rate_limited" else None, note=say)]
+    if o in BREAKER:
+        fp = row.fingerprint or fingerprint(o, "", say)
+        return [Fact(o, row.ts, f"{row.lane}|{row.model}", fp=fp, source=row.task or row.run_id, note=say)]
+    return []
+
+
+def policy_of(pol: BreakerPolicy) -> Policy:
+    return Policy(
+        n=pol.n,
+        window_s=pol.window_min * 60,
+        ladder_s=tuple(m * 60 for m in pol.ladder_min),
+        rules={
+            k: Rule(n=r.get("n"), window_s=r["window_min"] * 60 if "window_min" in r else None, distinct=r["tasks"])
+            for k, r in BREAKER.items()
+        },
+        outs={
+            "rate_limited": Out(pol.guess_s),
+            "credit_exhausted": Out(pol.credit_probe_s, "probe"),
+            "logged_out": Out(pol.logout_s, "probe"),
+        },
+    )
 
 
 class HealthLedger:
-    """The fold, with the breaker policy it runs under."""
+    """The fold, with the breaker policy it runs under: a thin consumer of any_breaker."""
 
     def __init__(self, policy: BreakerPolicy) -> None:
         self.pol = policy
+        self.breaker = Breaker(policy_of(policy))
 
-    def step(self, state: HealthState, row: HistoryRow) -> None:
+    def step(self, state: State, row: HistoryRow) -> None:
         """Apply one history row to `state` (mutates). Rows must come in time order."""
-        state.ts = max(state.ts, row.ts)
-        f = fact_of(row)
-        if f is not None:
-            self._apply(state, f)
+        for f in fact_of(row):
+            self.breaker.step(state, f)
 
-    def _apply(self, state: HealthState, f: Fact) -> None:
-        if f.what == RELEASE:  # `route.py report --event ok`: the owner says the lane is fine
-            state.lanes.pop(f.lane, None)
-            for k in [k for k in state.pairs if k.startswith(f.lane + "|")]:
-                state.pairs.pop(k)
-        elif f.what == DONE:  # a run that worked proves the lane and resets the ladder of its pair
-            state.lanes.pop(f.lane, None)
-            p = state.pairs.setdefault(f"{f.lane}|{f.model}", PairFact())
-            p.streak = []
-            p.rung, p.until, p.kind, p.fp, p.evidence, p.source, p.last_done = 0, 0.0, None, None, "", None, f.ts
-        elif f.what in LANE_KINDS:
-            state.lanes[f.lane] = self._lane_fact(f)
-        else:
-            self._pair_fact(state.pairs.setdefault(f"{f.lane}|{f.model}", PairFact()), f)
+    def fold(self, rows: list[HistoryRow], state: State | None = None) -> State:
+        """The state after `rows` on top of `state` (a checkpoint, else empty): fold(all) == fold(tail, fold(head))."""
+        return self.breaker.fold((f for r in rows for f in fact_of(r)), state)
 
-    def _lane_fact(self, f: Fact) -> LaneFact:
-        pol = self.pol
-        if f.what == "credit_exhausted":  # a spending limit has no timer: look again after the probe time
-            until, src = f.ts + pol.credit_probe_s, "probe"
-        elif f.what == "logged_out":
-            until, src = f.ts + pol.logout_s, "probe"
-        elif f.until is not None and f.until > f.ts:
-            until, src = f.until, "vendor"
-        else:
-            until, src = f.ts + pol.guess_s, "guess"
-        return LaneFact(kind=f.what, until=float(until), source=src, evidence=f.say[:240], ts=f.ts)
-
-    def _pair_fact(self, p: PairFact, f: Fact) -> None:
-        pol, ts = self.pol, f.ts
-        p.fails = [*p.fails, Failure(ts=ts, outcome=f.what, say=f.say[:120])][-3:]
-        if ts < p.until:  # launched while benched (a call already in flight): it does not count again
-            return
-        rule = BREAKER[f.what]
-        n, win = rule.get("n", pol.n), rule.get("window_min", pol.window_min)
-        fp = f.fingerprint or fingerprint(f.what, "", f.say)
-        probation = p.rung > 0 and ts >= p.until  # the canary failed: the next rung starts at once
-        p.streak = [s for s in p.streak if ts - s.ts <= win * 60 and s.outcome == f.what] + [
-            Streak(ts=ts, outcome=f.what, fp=fp, task=f.task)
-        ]
-        same = [s for s in p.streak if s.fp == fp]
-        if probation or (len(same) >= n and len({s.task for s in same}) >= rule["tasks"]):
-            rung = min(p.rung + 1, len(pol.ladder_min))
-            p.rung, p.until, p.kind, p.fp, p.evidence, p.source = (
-                rung,
-                ts + pol.ladder_min[rung - 1] * 60,
-                f.what,
-                fp,
-                f.say[:240],
-                "breaker",
-            )
-            p.streak = []
-
-    def fold(self, rows: list[HistoryRow], state: HealthState | None = None) -> HealthState:
-        """The state after `rows` on top of `state` (a checkpoint, else empty). Rows at or before the checkpoint's ts are skipped, so
-        fold(all) == fold(tail, fold(head)): the checkpoint is a cache, never truth."""
-        state = state if state is not None else HealthState()
-        for r in sorted((r for r in rows if r.ts > state.ts), key=lambda r: r.ts):
-            self.step(state, r)
-        return state
-
-    def view(self, state: HealthState, lane: str, model: str, t: float) -> PairView:
-        L, p = state.lanes.get(lane), state.pairs.get(f"{lane}|{model}")
-        fails = tuple(p.fails) if p else ()
-        rung = p.rung if p else 0
-        if L and t < L.until:
-            return PairView(
-                state="logged_out" if L.kind == "logged_out" else "exhausted",
-                usable=False,
-                until=L.until,
-                source=L.source,
-                kind=L.kind,
-                evidence=L.evidence,
-                rung=rung,
-                last_failures=fails,
-            )
-        canary, kind, evidence = bool(L), L.kind if L else None, L.evidence if L else ""
-        if p and p.rung:
-            if t < p.until:
-                return PairView(
-                    state="broken",
-                    usable=False,
-                    canary=bool(L),
-                    until=p.until,
-                    source=p.source,
-                    kind=p.kind,
-                    evidence=p.evidence,
-                    rung=rung,
-                    last_failures=fails,
-                )
-            canary, kind, evidence = True, p.kind, p.evidence
-        return PairView(canary=canary, kind=kind, evidence=evidence, rung=rung, last_failures=fails)
+    def view(self, state: State, lane: str, model: str, t: float) -> PairView:
+        lv, pv = self.breaker.view(state, lane, t), self.breaker.view(state, f"{lane}|{model}", t)
+        last = tuple(Failure(ts=f.ts, outcome=f.kind, say=f.note) for f in pv.recent)
+        if lv.state == OUT:
+            state_word = "logged_out" if lv.kind == "logged_out" else "exhausted"
+            return PairView(state_word, False, False, lv.until, lv.source, lv.kind, lv.evidence, pv.rung, last)
+        if pv.state == OPEN:
+            return PairView("broken", False, lv.canary, pv.until, pv.source, pv.kind, pv.evidence, pv.rung, last)
+        src = pv if pv.canary else lv
+        return PairView(canary=lv.canary or pv.canary, kind=src.kind, evidence=src.evidence, rung=pv.rung, last_failures=last)
 
 
 def combine(v: PairView, held: bool = False, busy: bool = False) -> str:

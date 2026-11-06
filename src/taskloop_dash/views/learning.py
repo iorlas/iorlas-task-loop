@@ -12,7 +12,6 @@ from taskloop.contracts.ledger import LedgerEntry
 from taskloop_dash.views.ledger import by_ask
 from taskloop_dash.views.world import World
 
-WEEK_S = 7 * 86400
 WEEKS = 8
 DURABLE = (Stick.ADR, Stick.REF, Stick.FACTORY, Stick.FIX, Stick.DEMOTE)
 

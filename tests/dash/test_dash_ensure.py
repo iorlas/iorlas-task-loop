@@ -22,6 +22,7 @@ from taskloop.app.launch import dash as dash_server  # noqa: E402
 from taskloop.contracts.dash import READ_PROTOCOL  # noqa: E402
 from taskloop.contracts.env import Env as ProcessEnv  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
+from taskloop.contracts.factorydb import SCHEMA_VERSION  # noqa: E402
 from taskloop_dash import bind  # noqa: E402
 
 
@@ -64,6 +65,13 @@ class StaleReason(Case):
     def test_a_server_speaking_another_read_protocol_is_stale_even_at_the_same_code_version(self):
         assert "protocol" in must(dash_server.stale_reason(live(self.script, protocol=READ_PROTOCOL + 1), "v1", ["127.0.0.1"]))
         assert "protocol" in must(dash_server.stale_reason(live(self.script, protocol=None), "v1", ["127.0.0.1"]))
+
+    def test_a_server_whose_schema_range_misses_the_installed_schema_is_replaced(self):
+        for rng in ([SCHEMA_VERSION + 1, SCHEMA_VERSION + 2], [0, SCHEMA_VERSION - 1]):
+            v = dict(live(self.script), schema_read=rng)
+            assert "schema" in must(dash_server.stale_reason(v, "v1", ["127.0.0.1"]))
+        ok = dict(live(self.script), schema_read=[SCHEMA_VERSION, SCHEMA_VERSION])
+        assert dash_server.stale_reason(ok, "v1", ["127.0.0.1"]) is None
 
     def test_missing_address_is_stale(self):
         r = dash_server.stale_reason(live(self.script), "v1", ["127.0.0.1", "100.1.2.3"])

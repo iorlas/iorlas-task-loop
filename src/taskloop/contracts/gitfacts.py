@@ -1,9 +1,7 @@
 """What the Git port answers with: git's rows as typed records, so no caller re-parses git's text."""
-from typing import Final, final
+from typing import final
 
 from taskloop.contracts.wire import Rec
-
-DETACHED: Final = ""
 
 
 @final

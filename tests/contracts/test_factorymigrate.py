@@ -128,7 +128,7 @@ def test_older_reader_refuses_then_writer_upgrades_in_place(database):
     identity = path.stat().st_ino
     original = authoritative_rows(con)
     here = factorydb.SCHEMA_VERSION
-    schema = replace(factorydb.SCHEMA, version=here + 1, steps={**factorydb.SCHEMA.steps, here: add_summary})
+    schema = replace(factorydb.SCHEMA, version=here + 1, read_from=None, steps={**factorydb.SCHEMA.steps, here: add_summary})
     with patch.object(factorydb, "_STORE", Store(schema)):
         message = rf"factory\.db is schema v{here}.*knows v{here + 1}.*the writer has not upgraded it yet"
         with pytest.raises(factorydb.SchemaError, match=message):
