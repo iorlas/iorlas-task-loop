@@ -24,7 +24,7 @@ from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.run import LoopLogLine, RunFinish, RunManifest, RunState
 from taskloop.contracts.slots import git_probe
 from taskloop.domain import outcome as oc
-from taskloop.domain.report import matchers as lifecycle
+from taskloop.domain.lifecycle import matchers as lifecycle
 from taskloop.domain.review import switch
 
 
