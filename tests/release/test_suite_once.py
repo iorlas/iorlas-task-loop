@@ -76,3 +76,19 @@ class SuiteOnce(Case):
         (self.root / flow.manifest.NAME).write_text("")
         with pytest.raises(Abort, match="version or manifest"):
             flow.check_bump(self.root, "tested", "1.2.5", sh)
+
+    def test_the_release_gate_runs_with_the_green_test_ledger_off(self):
+        repo = self.root / "repo"
+        repo.mkdir()
+        (repo / "justfile").write_text("gate:\n")
+        port = mock.Mock()
+        port.ls_tree.return_value = []
+        seen = {}
+
+        def run(cmd, cwd, check=True, *, extra=None, **_):
+            seen.update(extra or {})
+            return mock.Mock(returncode=0, stdout="", stderr="")
+
+        sh = replace(quiet_shell(), port=port, env=Env({"TL_GREEN_LEDGER": "1"}), run=run)
+        flow.gate.gate(repo, sh)
+        assert seen["TL_GREEN_LEDGER"] == ""

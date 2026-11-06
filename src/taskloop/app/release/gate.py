@@ -15,6 +15,7 @@ from taskloop.app.checks.cache import RunMemo
 from taskloop.app.release.shell import Abort, Shell, say
 from taskloop.contracts.checks import Check, CheckResult
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.runkey import BaseSha, RunKey
@@ -66,7 +67,8 @@ def gate(repo: Path, sh: Shell) -> None:
     if not (repo / "justfile").is_file():  # a bare repo (the tests' fakes) has no gate of its own
         return
     home = os.path.expanduser("~")
-    trusted = {"MISE_TRUSTED_CONFIG_PATHS": os.pathsep.join([home + "/.config/mise", home + "/Workspaces"])}
+    trusted = {"MISE_TRUSTED_CONFIG_PATHS": os.pathsep.join([home + "/.config/mise", home + "/Workspaces"]),
+               EnvVar.TL_GREEN_LEDGER.value: ""}  # the release runs every selected test, ledger off
     found = suite_check(repo, sh)
     profile = shlex.split(found[0].cmd) if found else []
     cmd = just(*profile[1:]) if profile[:1] == ["just"] else profile or just("check")
