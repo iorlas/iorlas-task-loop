@@ -31,5 +31,3 @@ def test_a_newer_writers_extra_key_is_read_past_and_a_repo_key_keeps_its_own_row
     with notes.docs.rows.transaction() as con:
         con.execute("UPDATE kv SET v=? WHERE k='pin'", (json.dumps(dict(wire.dump(Pin(task_loop="0.2.0")), future=1)),))
     assert must(PinStore(cfg).get()).task_loop == "0.2.0"
-
-
