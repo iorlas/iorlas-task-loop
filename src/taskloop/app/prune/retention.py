@@ -1,6 +1,7 @@
 """The one retention table for the config folder's logs that no other prune owns: a file past its area's age goes, by mtime.
 Run data, factory history and traces have their own (app/prune/runs.py); a loop's `log.jsonl` and `exits.jsonl` are evidence and stay,
 and its `loop-<pid>.log` files are kept by count (app/loop/core.py)."""
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -37,4 +38,26 @@ def prune(cfg: ConfigDir, keep_days: float, now: float, dry_run: bool) -> list[G
             except OSError:
                 continue
             gone.append(Gone(Path(path), size))
+    return gone
+
+
+SCRATCH_PREFIXES: Final = ("tl-land-gate-", "tl-land-merge-", "tl-check-home-")
+SCRATCH_DAYS: Final = 1.0  # a land or a check lives minutes; a folder a day old belongs to a run that died
+
+
+def prune_scratch(root: Path, now: float, dry_run: bool) -> list[Gone]:
+    """The engine's own scratch folders (contracts/scratch.py) under `root` older than SCRATCH_DAYS: what a crashed land or check left
+    (751 gate and 262 merge folders on one host, tl-7i9k.24). Other names, and any file, stay."""
+    cut = now - SCRATCH_DAYS * 86400
+    gone: list[Gone] = []
+    for path in sorted(root.glob("tl-*")):
+        try:
+            if not path.name.startswith(SCRATCH_PREFIXES) or path.is_symlink() or not path.is_dir() or path.stat().st_mtime >= cut:
+                continue
+            size = size_of(path)
+            if not dry_run:
+                shutil.rmtree(path, ignore_errors=True)
+        except OSError:
+            continue
+        gone.append(Gone(path, size))
     return gone
