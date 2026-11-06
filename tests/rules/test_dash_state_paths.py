@@ -13,6 +13,7 @@ import support.paths  # noqa: F401
 ROOT = Path(__file__).resolve().parents[2]
 DASH = ROOT / "src" / "taskloop_dash"
 PATHS = ROOT / "src" / "taskloop" / "contracts" / "paths.py"
+PLAIN_PYTHON = {"prepush.py", "layout_migrate.py"}  # the hook imports no record (.importlinter); the migrator names the OLD places
 MAKES_CONFIGDIR = {"env.py", "bind.py"}  # where the config root is taken from the process: everything else is handed a ConfigDir
 
 
@@ -68,7 +69,7 @@ def problems() -> list[str]:
 class DashReadsThroughTheLocator(Case):
     def test_the_state_names_are_the_ones_configdir_joins(self):
         names = state_names()
-        assert {"engine", "runs", "dash.pid", "repos.json"} <= names, names
+        assert {"repos", "runs", "dash.pid", "repos.json"} <= names, names
 
     def test_no_dashboard_module_hardcodes_a_state_path(self):
         assert problems() == []
@@ -76,3 +77,12 @@ class DashReadsThroughTheLocator(Case):
     def test_the_rule_sees_a_hardcoded_path(self):
         bad = ast.parse('x = cfg.root / "engine" / "a.jsonl"\ny = os.path.join(root, "runs")\nz = p.parent.parent\nConfigDir(r)\n')
         assert sorted(t for _, t in path_operands(bad)) == ["a.jsonl", "engine", "runs"]
+
+
+class PathsIsTheOnlyNamingPoint(Case):
+    def test_no_taskloop_module_but_paths_names_a_state_folder_of_ours(self):
+        names = state_names()
+        found = [f"{f.relative_to(ROOT)}:{line}: names the state path {text!r}: add a method to contracts/paths.py"
+                 for f in sorted((ROOT / "src" / "taskloop").rglob("*.py")) if f != PATHS and f.name not in PLAIN_PYTHON
+                 for line, text in path_operands(ast.parse(f.read_text(encoding="utf-8"))) if text in names]
+        assert found == []

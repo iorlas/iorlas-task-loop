@@ -230,7 +230,7 @@ class WorkerCall:
             wenv = {**e.bead_env, **step_env(e, c.step or c.node)}
             ans = dg.call(e.resolved, req, brief, c.schema, runner, env=childenv.delegate_call_env(e.env, wenv))
         except BaseException as exc:  # an interruption stopped the delegate inside the process seam: record that stop here
-            if runner.obs.get("kill_t") or runner.stop.get("alive"):
+            if runner.obs.get("kill_t") or runner.survivors():
                 self.log_kill(c, runner, exc)
             e.log.emit(rec.CallEnd(id=cid, status="stopped", reason="interrupted"))
             raise
@@ -238,7 +238,7 @@ class WorkerCall:
         res = ans.res
         e.cost += res.cost
         stopped = runner.stop.get("why") or ""
-        survivors = self.survivors(runner, res)
+        survivors = runner.survivors(res)
         e.calls.end(cid, c.node, c.role, c.tries, res, stopped, bool(c.resume), len(brief), runner.worker, runner.live_start())
         if stopped or survivors:  # the actual stop path, including a worker that outlived every signal
             self.log_kill(c, runner, survivors=survivors)
@@ -255,13 +255,6 @@ class WorkerCall:
         strays.check(e, trees, self.ops.blocked)  # tl-7y6.24: a worker that went outside its slot fails the bead; nothing is repaired
         self.note_result(c, ans, runner)
         return ans
-
-    def survivors(self, runner: Any, res: DelegateResult) -> list[int]:
-        """Pids that outlived the stop of this call: stream-proc's proof of the route.py tree, and the worker pids delegate names as
-        survivors in its own answer (`worker.end` worker_survived)."""
-        pids = [int(p) for p in runner.stop.get("alive") or []]
-        pids += [s.pid for s in (res.worker.survivors if res.worker else []) if s.pid not in pids]
-        return pids
 
     def overrun(self, c: Call, ans: dg.Answer, runner: Any, elapsed: float) -> dg.Answer:
         """A reviewer call that used its budget (delegate stopped its worker at --timeout, or the engine's backstop did): an Overrun record,
@@ -319,7 +312,7 @@ class WorkerCall:
                 what=c.node,
                 why=why,
                 secs=round(time.time() - started) if started else 0,
-                alive=list(survivors if survivors is not None else [int(p) for p in st.get("alive") or []]),
+                alive=list(survivors if survivors is not None else runner.survivors()),
                 observed_t=o.get("kill_t") or o.get("ended_t"),
                 **timing(o),
             )
