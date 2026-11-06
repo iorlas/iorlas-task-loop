@@ -25,7 +25,7 @@ from support.spawn import (  # noqa: E402
     port_git,
     real_spawner,
 )
-from support.who import who
+from support.who import who  # noqa: E402
 from support.world import _template  # noqa: E402
 
 from taskloop.adapters import delegate as lroute  # noqa: E402
