@@ -399,8 +399,7 @@ def finish_run(hx: Harness, h: How, a: env.Args, d: dict[str, Json], t: float, o
         codex_usage(res, x)
     if out.stream_tail:
         res["stream_tail"] = out.stream_tail
-    if w.why == "hung":
-        res["hung_words"], res["hung_kind"] = w.words, w.kind
+    hung = settle.Hung(w.words, w.kind) if w.why == "hung" else None
     facts = dict(sm.facts, watchdog=w.why, msg=w.msg, secret=out.secret)
     o = classify(sm.rc, sm.vendor, sm.stderr, out.timed_out, sm.work, facts) if sm.check else None
     if (
@@ -422,6 +421,7 @@ def finish_run(hx: Harness, h: How, a: env.Args, d: dict[str, Json], t: float, o
             sm.tail,
             reset=(lambda: codex_reset_now(t)) if hx.kind == "codex" else None,
             login=login_text(h.kind, lane),
+            hung=hung,
         )
     else:
         env.update_state(lane_cleared(lane))
