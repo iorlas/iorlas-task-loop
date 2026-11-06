@@ -74,17 +74,27 @@ class Carry:
         key = memo.key(check)
         found = earlier_pass(check.id, key, memo.repo, self.stores) if key is not None else None
         if found is None or key is None:
-            return False
+            return self.miss(step, "no earlier pass of this tree")
         merged = self.merged(oid, base)
         if not merged:
-            return False
+            return self.miss(step, "the branch does not merge into the base")
         try:
             mine = self.closure(spec.closure_cmd, wt, self.git.merge_base(self.repo, oid, base) or base)
             theirs = self.closure(spec.closure_cmd, merged, base)
         finally:
             self.drop(merged)
-        if mine is None or theirs is None or mine != theirs:
-            return False
+        if mine is None or theirs is None:
+            return self.miss(step, "the closure command failed")
+        if mine != theirs:
+            differ = sorted(p for p in mine.keys() | theirs.keys() if mine.get(p) != theirs.get(p))
+            more = f" (+{len(differ) - 3} more)" if len(differ) > 3 else ""
+            return self.miss(step, f"the closure differs: {', '.join(differ[:3])}{more}")
         memo.run_id = "carry"
         memo.carry_over(key, found)
+        self.cmds.log.note(f"carry: {step} carried, the closure of {len(mine)} files is the same on the moved base")
         return True
+
+    def miss(self, step: str, why: str) -> bool:
+        """The land runs the step; the note says why it did not carry."""
+        self.cmds.log.note(f"carry: {step} not carried, {why}")
+        return False

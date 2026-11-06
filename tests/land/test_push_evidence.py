@@ -1,10 +1,10 @@
 """Commands without runs keep push evidence under the explicitly supplied config directory."""
-import tempfile
 from pathlib import Path
 
 import support.paths  # noqa: F401
 from support.fakegit import ScriptedGit
 from support.forgesim import ForgeSim
+from support.tmpdir import TemporaryDirectory
 
 # isort: split
 import pytest
@@ -25,7 +25,7 @@ class RefusingGit(ScriptedGit):
 
 class Evidence(Case):
     def test_no_run_uses_timestamp_and_branch_under_config_land_push(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             config = ConfigDir(tmp)
             log = RunLog(fake_stores().run_log("r"))
             cmds = Cmds(ForgeSim(), log, tmp, config=config)
