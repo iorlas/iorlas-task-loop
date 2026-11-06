@@ -62,5 +62,5 @@ Not touched: `paths.py`, ids, run layout, `policy.TABLE`/`retry.PLAN` (B2b, held
 
 ## Open
 
-- Whether `LoopRows` (checkpoint) and `RunRows` share one connection per thread today (`factorydb.shared_rw`): slice 1 verifies it first; if they do not, `settle` moves both onto one handle.
+- Verified: `LoopRows` (checkpoint) and `RunRows` both open `factorydb.shared_rw(cfg.factory_db())`, so they share one per-thread connection and file. `begin_immediate` is not reentrant (a nested `BEGIN IMMEDIATE` errors), so `settle` opens one transaction and writes the checkpoint row on that connection: slice 1 adds `RowDoc.write_in(con, rec, expect_rev)`, the body of `write` without its own transaction, and `write` calls it.
 - `Updates.pause` takes whatever type the close intent takes today (`domain/lanes/pauses.py`); B2b may replace it with `NeedsOwner`, and changes both together.
