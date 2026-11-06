@@ -11,19 +11,19 @@ from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir, RunFiles
 from taskloop.contracts.run import NetPause, Reexec, ReexecNote
-from taskloop.contracts.stores import JsonStore
+from taskloop.contracts.waitrows import NET_PAUSE, REEXEC, WaitDoc
 from taskloop.domain.lanes import policy as lp
 
 RELOAD_FALLBACK_S = 120  # a run-task that dies this soon after an exec is put back on the version it came from (by the loop)
 NET_PAUSE_ADOPT_S = lp.KNOBS["net_pause_max_s"]  # a run paused for the network is taken up again by the next run-task within this long
 
 
-def reexec_store(home: ConfigDir, bead: BeadId) -> JsonStore[ReexecNote]:
-    return JsonStore(home.reexec_note(bead), ReexecNote)
+def reexec_store(home: ConfigDir, bead: BeadId) -> WaitDoc[ReexecNote]:
+    return WaitDoc(home, REEXEC, bead, ReexecNote, home.reexec_note(bead))
 
 
-def net_pause_store(home: ConfigDir, bead: BeadId) -> JsonStore[NetPause]:
-    return JsonStore(home.net_pause(bead), NetPause)
+def net_pause_store(home: ConfigDir, bead: BeadId) -> WaitDoc[NetPause]:
+    return WaitDoc(home, NET_PAUSE, bead, NetPause, home.net_pause(bead))
 
 
 def read_reexec(home: ConfigDir, bead: BeadId) -> ReexecNote | None:

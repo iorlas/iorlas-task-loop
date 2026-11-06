@@ -13,7 +13,7 @@ from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 from taskloop.contracts.wire import Rec
 
 Group = Literal["static", "tests", "acceptance"]
-Tag = Literal["diff", "unity", "build"]  # diff: the engine's own; unity: queues for a slot; build: a conflict fix keeps it
+Tag = Literal["diff", "queued", "build"]  # diff: the engine's own; queued: engine.queued_match, runs late; build: a conflict fix keeps it
 Verdict = Literal["passed", "failed", "skipped", "unverified"]
 
 
