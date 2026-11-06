@@ -1284,9 +1284,10 @@
   "why": "1st of 2 chosen"
  },
  "ReposIndex": {
-  "v": 1,
+  "v": 2,
   "repos": {
-   "/r": {
+   "o/r": {
+    "path": "/r",
     "added": 1793050200.5
    }
   }
@@ -1394,6 +1395,7 @@
   "state": "done",
   "heartbeat": 1793050259.5,
   "pid": 4242,
+  "pid_start": "",
   "host": "box",
   "reason": "landed",
   "mode": "stage:land-stack",
@@ -1480,11 +1482,7 @@
   "inputs": [
    "**/*.csproj"
   ],
-  "triggers": [
-   "restore",
-   "project.assets.json",
-   "NU1"
-  ],
+  "triggers": [],
   "timeout_min": 20
  },
  "GatePlan": {
@@ -1610,11 +1608,7 @@
     "inputs": [
      "**/*.csproj"
     ],
-    "triggers": [
-     "restore",
-     "project.assets.json",
-     "NU1"
-    ],
+    "triggers": [],
     "timeout_min": 30
    },
    "slot_env": {},
@@ -1705,7 +1699,7 @@
    "keep_days": 14,
    "min_free_gb": 5,
    "min_ram_mb": 1024,
-   "build_dir": "~/Workspaces/wt"
+   "build_dir": ""
   }
  },
  "RunRequest": {

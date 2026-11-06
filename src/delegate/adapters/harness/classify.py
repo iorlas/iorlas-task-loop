@@ -61,6 +61,10 @@ def _ours(s: Mapping[str, Json], timed_out: bool) -> Outcome | None:
     if s.get("watchdog") == "limit":
         msg = str(s.get("msg") or "")
         return Outcome("credit_exhausted" if CREDIT_RE.search(msg) else "rate_limited", msg, "ours")
+    if s.get("watchdog") == "credit":  # another process marked the lane out for credit / login: its own words, not a guess from text
+        return Outcome("credit_exhausted", str(s.get("msg") or ""), "ours")
+    if s.get("watchdog") == "logged_out":
+        return Outcome("logged_out", str(s.get("msg") or ""), "ours")
     if s.get("watchdog") == "hung":
         return Outcome("network" if s.get("net_up") is False else "hung", "", "ours")
     return Outcome("timeout", "", "ours") if timed_out else None
@@ -116,7 +120,7 @@ def classify(
 
     rc: exit code (negative = a signal); vendor_err: the vendor's error text from its event stream; stderr: the CLI's stderr; timed_out: our
     --timeout fired; work_seen: the worker did something before it failed; structured: facts we measured ourselves:
-    {"secret": cmd, "watchdog": "limit"|"hung", "msg": log line, "http_status": int, "net_up": False}."""
+    {"secret": cmd, "watchdog": "limit"|"credit"|"logged_out"|"hung", "msg": log line, "http_status": int, "net_up": False}."""
     s = structured or {}
     vendor_event, code = (vendor_err or "").strip(), rc or 0
     ours = _ours(s, timed_out)

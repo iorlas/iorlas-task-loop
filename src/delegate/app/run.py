@@ -6,13 +6,14 @@ JSON answer. Every outcome, including a crash, is an answer; exit 0 whenever it 
 import argparse
 import contextlib
 import json
+import os
 import sys
 import time
 import uuid
 from collections.abc import Callable
 from pathlib import Path
 
-from delegate.adapters import agent_runs, git, procs
+from delegate.adapters import git, procs
 from delegate.app import answer, cockpit, codex_policy, decide, env, harnesses, launch, net, usage, watch
 from delegate.app.launch import how_of
 from delegate.app.lease import RunLease
@@ -21,6 +22,7 @@ from delegate.app.supervisor import RunHooks
 from delegate.contracts import history as hist
 from delegate.contracts.json_types import Json, arr, as_num, as_opt_bool, as_opt_int, as_opt_obj, as_opt_str, as_str, obj
 from delegate.contracts.state import RefRecord, StateDoc
+from delegate.contracts.stores import StateUnreadable
 from delegate.domain.cost import accounting
 from delegate.domain.health import ledger as health_ledger
 from delegate.domain.holds.book import HoldBook
@@ -90,6 +92,8 @@ class Run:
     # -- the call --------------------------------------------------------------------------------------------------------------------------
     def go(self) -> int:
         try:
+            if os.environ.get("DELEGATE_DEPTH"):
+                return self.refuse("caller", "DELEGATE_DEPTH is set: a delegated worker never delegates further", None)
             try:
                 codex_policy.admit_request(getattr(self.a, "writer_exec_allow", []), tuple(getattr(self.a, "engine_only", None) or ()))
             except (ValueError, OSError) as error:
@@ -97,11 +101,13 @@ class Run:
             return self._go()
         except codex_policy.ExecAllowError as error:
             return self.refuse("bad_request", str(error), None)
+        except StateUnreadable as e:  # a state file from another version: needs the owner, and nothing was launched
+            return self.refuse("crash", str(e), None)
         except TimeoutError as e:  # state lock held too long: transient, so stop with a retry time (error means permanent)
             return self.refuse("lock", str(e), env.now() + decide.busy_jitter())
 
     def _go(self) -> int:
-        d, lanes, warnings, t = decide.decision(self.a, self.cfg, self.unattended)
+        d, lanes, warnings, t = decide.decision(self.a, self.cfg, self.unattended, apply=True)
         if warnings:
             self.extra["warnings"] = warnings
         for key in ("notice", "warning"):
@@ -150,7 +156,7 @@ class Run:
     def _reroute(self, res: dict[str, Json], brief: str) -> dict[str, Json] | int:
         """One fresh attempt after the re-ask failed; each attempt has already kept its own history and usage."""
         pair = (as_str(res["lane"]), as_str(res["model"]))
-        d, lanes, warnings, t = decide.decision(self.a, self.cfg, self.unattended, frozenset((pair,)))
+        d, lanes, warnings, t = decide.decision(self.a, self.cfg, self.unattended, frozenset((pair,)), apply=True)
         if (
             d["action"] != "run"
             or (d["lane"], d["model"]) == pair
@@ -211,15 +217,12 @@ class Run:
             return self.refuse(no[0], no[1], env.now() + decide.busy_jitter(), **who)
         lease.keep_alive()
         hooks, launched = self._hooks(rid, lease, d)
-        meta: dict[str, Json] = {"parent_session": a.parent or "", "title": a.title or brief.strip().splitlines()[0][:120]}
-        if a.task:
-            meta["task"] = a.task
         fam = as_str(who["family"])
         git_before, t0 = self.git_before, time.time()
         t_from = file_size(harnesses.find_transcript(a.resume, fam)) if a.resume else 0
         res: dict[str, Json]
         try:
-            res = self._launch(d, brief, rid, t, meta, hooks, canary_due)
+            res = self._launch(d, brief, rid, t, hooks, canary_due)
         except Exception as e:  # a launcher bug is an error object, not a stack trace
             res = {"outcome": "crash", "say": f"{type(e).__name__}: {e}"}
         except (
@@ -229,7 +232,7 @@ class Run:
                 raise
             res = {"outcome": "killed", "say": f"route.py got signal {e.code - 128}; its worker was stopped first"}
         finally:
-            lease.release()
+            lease.finish(hooks.stops)
         return self._finish(res, d, lane, who, rid, lease, hooks, launched, cap, (t0, t_from, git_before))
 
     def _hooks(self, rid: str, lease: RunLease, d: dict[str, Json]) -> tuple[RunHooks, dict[str, Json]]:
@@ -282,12 +285,12 @@ class Run:
     # -- the launch ladder: canary, network retry, schema re-ask
     # ------------------------------------------------------------------------------
     def _launch(
-        self, d: dict[str, Json], brief: str, rid: str, t: float, meta: dict[str, Json], hooks: RunHooks, canary_due: bool
+        self, d: dict[str, Json], brief: str, rid: str, t: float, hooks: RunHooks, canary_due: bool
     ) -> dict[str, Json]:
         a = self.a
 
         def launch_one(b: str, a_: env.Args) -> dict[str, Json]:
-            return launch.launch_worker(d, b, a_, rid, t, self.cfg, meta, hooks)
+            return launch.launch_worker(d, b, a_, rid, t, self.cfg, hooks)
 
         res = self._canary(launch_one, d, a) if canary_due else None  # the one probe before full traffic; None = it passed
         res = res or launch_one(brief, a)
@@ -372,7 +375,6 @@ class Run:
         lane_name, ref = as_str(d["lane"]), as_opt_str(res.get("ref"))
         if done and lane_name in ("CLAUDE_SUBSCRIPTION", "OPENAI_SUBSCRIPTION"):
             usage.auth_cache().remember(lane_name, True, "a worker run succeeded", env.now())
-        agent_runs.run(rid, ended=env.now(), status="completed" if done else "failed", transcript=harnesses.find_transcript(ref, fam))
         if ref:  # every outcome: a stop, a failure and a timeout can all be resumed
             with contextlib.suppress(Exception):
                 self.keep_ref(ref)

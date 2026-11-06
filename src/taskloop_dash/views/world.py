@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.dashhealth import Score
 from taskloop.contracts.dashruns import ResourceLease, RunHeader
 from taskloop.contracts.events import Event
 from taskloop.contracts.ledger import Adr, LedgerEntry
@@ -59,6 +60,7 @@ class ProjectIn:
     events: Sequence[Event] = ()  # this repo's events of the last week (events.jsonl), oldest first
     bd_ok_at: float | None = None
     bd_error: str = ""
+    score: Score | None = None  # the M2 scorecard of the loop's window (since it started, else the last day)
 
 
 @dataclass(frozen=True)

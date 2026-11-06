@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "13cc482840d48f30",
+ "version": "f755152ea0f87e70",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "NPC daily schedule pathing. Part of World.",
@@ -86,6 +86,7 @@
    "phase": null
   }
  ],
+ "decisions": [],
  "passes": [
   {
    "n": 1,

@@ -4,6 +4,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from stream_proc import proc_start
+
 from taskloop.contracts.enums import Step
 from taskloop.contracts.finish import FinishResult, finish_run, previous_finish
 from taskloop.contracts.ids import RunId
@@ -106,8 +108,8 @@ class RunLocator:
             except FileExistsError:
                 continue
             break
-        m = RunManifest(run=run, repo=repo, bead=bead, started=now, loop=loop, heartbeat=now, pid=os.getpid(), host=host_name(),
-                        mode=mode, owner=owner, session=session)
+        m = RunManifest(run=run, repo=repo, bead=bead, started=now, loop=loop, heartbeat=now, pid=os.getpid(),
+                        pid_start=proc_start(os.getpid()) or "", host=host_name(), mode=mode, owner=owner, session=session)
         self._ready()
         with self.rows.transaction() as con:
             self.rows.write(con, m, attempt_started=now)
@@ -122,7 +124,7 @@ class RunLocator:
         self._ready()
         with self.rows.transaction() as con:
             old = self.rows.read(con, run)
-            own = {"heartbeat": now, "pid": os.getpid(), "host": host_name()}
+            own = {"heartbeat": now, "pid": os.getpid(), "pid_start": proc_start(os.getpid()) or "", "host": host_name()}
             m = (old.replace(attempts=old.attempts + 1, **(own if old.state.live else {})) if old
                  else RunManifest(run=run, repo=repo, bead=bead, started=now, **own))
             self.rows.write(con, m, attempt_started=now)

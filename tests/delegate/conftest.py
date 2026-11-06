@@ -13,9 +13,15 @@ HERE = str(Path(__file__).resolve().parent)
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
+ENV = ("HOME", "USERPROFILE", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "CODEX_HOME", "DELEGATE_CONFIG_DIR", "TMPDIR")
+_collector_env = {k: os.environ.get(k) for k in ENV}
 import hermetic  # noqa: E402
 
-ENV = ("HOME", "USERPROFILE", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "CODEX_HOME", "DELEGATE_CONFIG_DIR", "TMPDIR")
+# hermetic points the process at its own home on import; the other slices collected in this worker keep the worker's (their temp dir
+# is what the loop and slots tests build repos under), and each delegate test gets its home from own_home below
+for _k, _v in _collector_env.items():
+    os.environ.pop(_k, None) if _v is None else os.environ.__setitem__(_k, _v)
+tempfile.tempdir = None
 
 
 @pytest.fixture(scope="session", autouse=True)

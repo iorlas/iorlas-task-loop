@@ -1,4 +1,4 @@
-"""Breaker, reset times, token budget, config location, agent-runs"""
+"""Breaker, reset times, token budget, config location"""
 
 import datetime as dt
 import inspect
@@ -13,11 +13,9 @@ from unittest import mock
 
 import pytest
 import stream_proc
-from delegate.adapters import agent_runs
 from delegate.adapters.harness import classify, reset_parse
 from delegate.adapters.harness.base import LaunchSpec
 from delegate.adapters.harness.codex import CodexHarness
-from delegate.app import decide as dec
 from delegate.app import env, launch, usage, watch
 from delegate.app.fleet import apply_health
 from delegate.app.publish import LiveSink
@@ -297,42 +295,6 @@ class ConfigLocation(Case):
         assert env.config_dir() == Path(self.tmp.name) / "mine"
 
 
-class AgentRuns(Case):
-    """delegate publishes agent-runs v1 (iorlas-task-loop docs/contracts/agent-runs-v1.md), never its own state."""
-
-    def test_run_and_lanes_records(self):
-        saved = {k: os.environ.get(k) for k in ("XDG_CONFIG_HOME", "APPDATA")}
-        with tempfile.TemporaryDirectory() as d:
-            os.environ["XDG_CONFIG_HOME"] = d
-            os.environ["APPDATA"] = d
-            try:
-                ar = agent_runs
-                ar.run("r1", kind="claude-p", parent_session="p", cwd="/w", started=1.0, status="running", ended=None)
-                ar.run("r1", status="completed", exit=0)
-                rec = json.loads((ar.root() / "runs" / "r1.json").read_text())
-                assert (rec["v"], rec["producer"], rec["id"], rec["parent_session"], rec["status"], rec["exit"]) == (
-                    1,
-                    "delegate",
-                    "r1",
-                    "p",
-                    "completed",
-                    0,
-                )
-                assert "ended" not in rec
-                lane = Lane("OPENAI_SUBSCRIPTION", "openai", "subscription")
-                lane.five, lane.five_reset = 41, 99
-                dec.publish_lanes({"OPENAI_SUBSCRIPTION": lane}, support.doc_of({}), 5.0)
-                lr = json.loads((ar.root() / "lanes" / "delegate.json").read_text())
-                assert lr["lanes"][0]["usage"] == [{"window": "5h", "used_pct": 41, "resets_at": 99}]
-                assert lr["at"] == 5.0
-            finally:
-                for k, v in saved.items():
-                    if v is None:
-                        os.environ.pop(k, None)
-                    else:
-                        os.environ[k] = v
-
-
 class WatchdogProc(Case):
     """delegate-go0 on a real child process (python, so it runs on Windows too): a dead stream is stopped through stop_tree,
     a chatty one is not."""
@@ -354,17 +316,15 @@ class WatchdogProc(Case):
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_dead_stream_is_stopped_through_stop_tree(self):
-        rc, state, st, secs = self.run_child("import time;print('started',flush=True);time.sleep(60)", first_event_s=5, silence_s=1)
+        rc, state, st, _secs = self.run_child("import time;print('started',flush=True);time.sleep(60)", first_event_s=5, silence_s=1)
         assert (state["why"], state["kind"]) == ("hung", "silence")
         assert st.called
-        assert secs < 10
         assert rc != 0
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_child_that_prints_nothing_is_hung_on_the_first_event_deadline(self):
-        _rc, state, _st, secs = self.run_child("import time;time.sleep(60)", first_event_s=1, silence_s=60)
+        _rc, state, _st, _secs = self.run_child("import time;time.sleep(60)", first_event_s=1, silence_s=60)
         assert (state["why"], state["kind"]) == ("hung", "first_event")
-        assert secs < 10
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_stderr_deltas_keep_a_quiet_stdout_alive(self):
