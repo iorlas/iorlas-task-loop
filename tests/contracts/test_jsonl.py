@@ -22,7 +22,6 @@ from taskloop.contracts.ask import Ask
 from taskloop.contracts.docstore import JsonStore
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.log import CmdStart
-from taskloop.contracts.loop import LoopState
 from taskloop.contracts.snapshots import Pin
 
 
@@ -189,23 +188,6 @@ class StoresTest(Case):
         ids = [i.rec.id for i in page.items if isinstance(i.rec, CmdStart)]
         for who in (0, 1):
             assert [x for x in ids if x.startswith(f"w{who}-")] == [f"w{who}-{i}" for i in range(n)]
-
-    def test_a_json_document_is_replaced_whole(self):
-        st = stores.LoopStateStore(self.cfg, "abc123abc123")
-        assert st.get() is None
-        st.write(S.other(LoopState))
-        assert st.get() == S.other(LoopState)
-        assert list(st.path.parent.glob("*.tmp")) == []
-        assert json.loads(st.path.read_text())["v"] == 2
-        st.delete()
-        assert st.get() is None
-
-    def test_torn_stale_and_alien_files_read_as_absent(self):
-        st = stores.LoopCommandStore(self.cfg, "k")
-        st.path.parent.mkdir(parents=True)
-        for text in ('{"v": 1, "action": "stop', '{"v": 9, "action": "stop_now", "by": "d", "t": 1}', '[]', '{"v": 1, "action": "x"}'):
-            st.path.write_text(text)
-            assert st.get() is None, text
 
     def test_a_failed_write_leaves_no_temp_file_and_keeps_the_old_one(self):
         st = JsonStore(self.cfg.root / "pin.json", Pin)

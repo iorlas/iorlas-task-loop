@@ -8,7 +8,6 @@ from typing import Any
 
 from taskloop.contracts import events, wire
 from taskloop.contracts.events import Event
-from taskloop.contracts.ids import BeadId
 from taskloop.contracts.parks import Park
 from taskloop.contracts.run import NetPause
 from taskloop.contracts.runlife import RETAIN
@@ -54,11 +53,11 @@ class Records:
 
     def parks(self) -> dict[str, Park]:
         """bead -> its Park record (left by runs that ended on a question; the loop skips the bead while its text is the same)."""
-        return open_records(self.env.config, PARK, Park, self.env.config.park(BeadId("x")).parent)
+        return open_records(self.env.config, PARK, Park)
 
     def net_pauses(self) -> dict[str, NetPause]:
         """bead -> the NetPause a run left when it paused for the network and no run has taken up yet."""
-        return open_records(self.env.config, NET_PAUSE, NetPause, self.env.config.net_pause(BeadId("x")).parent)
+        return open_records(self.env.config, NET_PAUSE, NetPause)
 
     def repos(self) -> list[str]:
         known = ReposStore(self.env.config, quiet=True).known()
