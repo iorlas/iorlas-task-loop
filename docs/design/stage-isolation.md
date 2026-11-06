@@ -1,0 +1,136 @@
+# Stage isolation: hosts, roots, persistence, tests
+
+Status: design draft for review, 2026-11-06 (ARCHVERT; owner directive: isolation of tests, functionality and data, for large-scale parallel development. Installable packages and shelf are NOT goals). Extends docs/design/nodes-and-roots.md. Numbers are from the import graph and an AST scan of `src/taskloop/app` on this date.
+
+## 0. What "isolated" means here (the acceptance test)
+
+A stage is isolated when all five hold, each checked by a tool and not by review:
+
+1. **Imports**: it imports only the kernel and the stages it declares; import-linter fails otherwise.
+2. **Behaviour**: it reaches the rest of the run only through ports it declares (small Protocols), never through an engine object it can read any attribute of.
+3. **State**: the run state it needs between calls is a type it owns, saved in its own checkpoint section.
+4. **Data**: the tables and record types it persists are its own, registered by it, versioned by it.
+5. **Tests**: its tests build the stage from its own fakes of those ports, import nothing of the other stages' internals, and run alone (`just test-pkg <stage>`) in seconds.
+
+Lightweight is a number: a stage's forward import closure and the time to import it are capped per stage in the linter (ratchet; today checks 112 files, review 68, write 128, plan 158, land 247, the engine 465).
+
+## 1. Hosts: the problem measured
+
+The engine (`Engine`, a mix of Plumbing, RunParts, LandParts, ...) exposes **232 distinct attributes** that stage code reads as `e.x` / `self.e.x` / `host.x` (AST scan of `src/taskloop/app`). They fall in four groups:
+
+| group | count | meaning | example |
+|---|---|---|---|
+| used by exactly one stage | 111 (run 68, land 15, review 7, plan 6, look 5, write 3, others 5) | **stage-owned state or handle that lives on the engine** | `look_done`, `look_notes`, `rendered_names`, `shot_cache` |
+| used by 4 or more stages | 37 | **shared run context** | `log`, `warn`, `wt`, `cfg`, `run_dir`, `bead`, `steps`, `run_id`, `stores`, `checkpoints`, `comment`, `git`, `home` |
+| used by 2-3 stages | ~84 | **cross-stage hand-offs written as attribute reads** | `leftovers`, `plan_data`, `briefs`, `cases`, `unverified` |
+
+The import graph cannot see any of this. Stage code that takes `host: Any` is coupled to the whole engine, and every one of those attributes is an undeclared contract. PR #295 (LookHost) proves the point: look needs 40 members; typing them as one Protocol only makes a typed god object. It is a useful inventory, not the design.
+
+### 1.1 Design: context, ports, owned state
+
+Replace "the stage gets the engine" with three things, each explicit:
+
+**(a) `RunFacts`** (kernel, frozen dataclass): `bead, wt, run_id, run_dir, evidence_dir, home, cfg, dry`, the ~8 facts nearly every stage reads and nobody writes. Built once by the root.
+
+**(b) Ports**: each stage declares in `app/<stage>/ports.py` the verbs it needs, as small Protocols, named for the capability and not for the engine: `Narrate` (note/warn/comment), `StepBook` (begin/outcome/move), `AskAi` (one worker call -> typed answer or a typed refusal), `ChecksRunner`, `TreeView` (changed paths), `Locking`, `Bd`. Rule of thumb: a stage declares at most ~8 ports, and a port has at most ~6 methods. Shared ports that 4+ stages need (`Narrate`, `StepBook`, `RunFacts`) live in the kernel once. The 37 "shared context" attributes become these.
+
+**(c) Owned state**: the 111 single-stage attributes become a `<Stage>State` dataclass in `app/<stage>/state.py`. The root creates it and keeps it in a map keyed by stage; the stage gets only its own. It is saved in the checkpoint as that stage's section (today `run/state.py` and `contracts/checkpoint.py` list `look_notes`, `look_done`, `rendered_names`, ... as engine fields): each stage defines `<Stage>Checkpoint`, the Checkpoint record holds `sections: dict[str, bytes-typed]` decoded by the stage that owns it. Old checkpoints read through a migration owned by the stage.
+
+**(d) Hand-offs** (the ~84): a value one stage produces and another consumes becomes a **return value or an event**, not a field both read. `retry_after`/`pause_role`/`pause_lane` written by look into the engine become a `Pause` value look returns and the pipeline records. `leftovers` becomes `Leftover` records returned by the stage and appended by the pipeline. The consumer's port names what it needs (`FollowupSink.add(leftover)`).
+
+Stage entry becomes constructor injection: `Judge(facts, ports, state)`, not `Judge(engine)`. No `Any` host survives; `except e.Blocked` becomes a typed result or exception owned by the stage.
+
+### 1.2 Look as the worked example (40 members of PR #295 classified)
+
+| | members | goes to |
+|---|---|---|
+| owned state (11) | look_done, look_notes, look_filed, look_retried, look_unjudged, rendered_names, shots_skipped, shot_cache, artifact_repo, last_reqs, render_stale | `LookState` + `LookCheckpoint` |
+| run facts (13) | bead, bead_parent, bead_title, wt, run_id, run_dir, evidence_dir, home, cfg, dry, at_stage, writer_family, last_flag | `RunFacts` (+ writer family passed as an argument) |
+| ports (11) | log, steps, budget.labels, store, ai, comment, warn, now, sh, checkout, checkpoints, waits.locked | `Narrate`, `StepBook`, `AskAi`, `Bd`, `Locking`, `TreeView`, `Clock` |
+| hand-offs (5) | cases (from plan), stage_checks, leftovers, unverified, retry_after/pause_* | arguments, return values, `Pause` |
+
+After this, `look` takes about 7 ports and a state object; the Engine root builds them. The look test builds `Judge` with fakes of those ports (the pilot of CheckHost in #285 is this idea for checks).
+
+## 2. Roots: making them thin, and keeping them thin
+
+Definition: a root only **constructs and binds**. It may import any node; nothing imports a root; it holds no rule, no branching on domain data, no loop over domain data.
+
+Today's shell is fat: `run` + `loop` + `launch` + `wire` + `prune` = 113 files / 10,157 sloc, about 4,060 wiring and about 6,100 logic. Split:
+
+- **node `pipeline`**: `stages`, `closer*`, `steps`, `budget`, `blocked`, `waits`, `reload`, `reflect`, `requests`, `resume`, `stuck`. It sequences the stages through their ports; it owns the run's step order and the close. It imports the stage ports, never the Engine.
+- **node `workers`**: `worker_call`, `worker_request`, `delegation` (the AI-call machinery and delegate glue, today about 14 app importers of `adapters.delegate`): the one node that talks to the delegate library; every stage gets it as `AskAi`.
+- **node `loop`**, **node `prune`**: stay, each with its own ports (`Claim`, `Take`, ...). `loop/take.py` imports 3 stages today and is a root-shaped file inside a node: it moves to the root or takes ports.
+- **roots**: `engine` (construct pipeline + stages + states, bind ports), `entry`, `run_once`, `launch/*`, `wire/*`, `cli`, `hook`, `tl.py`.
+
+Keeping them thin, mechanically:
+
+1. import-linter: nodes never import roots; roots are leaves of the graph (a `forbidden` contract per root package).
+2. A root-lint test (AST): in root modules, no `if/for/while/try/match` outside a small allow-list of construction helpers, no function over ~25 sloc, and a **ratcheted total** (today 4,060 wiring sloc; goal under ~1,500). A branch on domain data in a root fails with "this is a rule: move it to a node".
+3. Root files may hold no class with behaviour: dataclasses and factories only.
+
+## 3. Persistence: stages own data, the db package routes and checks
+
+Directive: entities, DTOs and schemas belong to the stages; one db package routes to sqlite and projects; the app **fails on launch** if anything changed.
+
+### 3.1 Ownership
+
+Each stage owns, in `app/<stage>/store.py`: its record types (msgspec), its tables (DDL), its migration steps, its prune rule, its read API. Examples (from the opus read of `writer_invariants` and the stores, to be verified per stage in the PRs): gate: check_pass, check_round, durations, check_run; asks: ask, ask_ledger, park; slots: locks, tickets, worktrees, leases; release: pins, results; report: reflect state; work: adr; land: followups; pipeline: run, attempt, effects, signals, waits, checkpoints, run log, traces; workers/lanes: status, usage; dash: source, bead, events. `kv` stops being a shared prefix grab-bag: each user gets a table or a typed `Doc`. `ParkStore`, written by asks, loop.take and run.stages, gets one writer (asks) and the others call its port.
+
+### 3.2 The db package (`taskloop_db`, a kernel)
+
+It knows nothing of any record. It provides: connection (open, WAL, `begin_immediate`, `cas_update`, quarantine), the generic doc/log primitives, a **part registry**, a migration runner, a prune runner, and **projections**. One sqlite file stays (single-transaction prune and the dashboard's joins need it).
+
+```
+Part(name, version, ddl, steps: {to_version: fn}, records: [RecordType], prune: [Predicate], read_from: int)
+register(part)        # at import of the stage's store module
+open(path)            # the launch gate below
+```
+
+### 3.3 Fail on launch
+
+`open()` runs before anything else touches the db (engine, loop, dashboard). For every registered part it compares three things with the `schema_part` table (name, version, ddl_fingerprint, record_fingerprint):
+
+| state | action |
+|---|---|
+| part not in db | create its tables, write its row |
+| db version < code version | run the part's migration steps in order, in one transaction, then update the row |
+| db version > code version | **refuse to start** ("this code is older than the data of part X") |
+| same version, `ddl_fingerprint` differs from `sqlite_master` | **refuse** ("table T changed without a version bump") |
+| same version, `record_fingerprint` differs | **refuse** ("record R changed without a version bump") |
+
+`ddl_fingerprint` = hash of the normalised DDL of the part's tables. `record_fingerprint` = hash of `msgspec.json.schema` of the part's registered record types. A second, earlier guard runs in the test suite: each part commits a golden `fingerprint.json` per version; a test fails when the code's fingerprints differ from the golden of its declared version, so a schema or DTO change cannot reach `main` without a version bump and a step. The dashboard declares which parts it reads and from which version (`needs = {"gate": 2, "pipeline": 4}`); it refuses to start against a part below that, replacing the global `SCHEMA_READ_FROM`.
+
+Existing database: the first launch of the new code seeds `schema_part` from `PRAGMA user_version = 5` as version 1 of every part at today's shape; the global `user_version` is then frozen.
+
+### 3.4 Projections
+
+A read model that crosses stages (the dashboard's run list; `run_rows` today sits in the kernel as the engine's published read model) is a **projection** registered by its owner over the parts' public row views: it names the parts and versions it reads, so the same launch check covers it. The projection code lives with the reader (dash), not in the db package.
+
+### 3.5 Hard parts
+
+- Cross-part transactions (`factoryprune`: ask_ledger by run eligibility, run delete checks attempt): the prune runner takes each part's predicates plus declared dependencies (`attempt` before `run`) and runs them in one transaction.
+- The single-writer ratchet (`tests/rules/writer_invariants.py`) hard-codes `taskloop.app.*` paths and wrong owners for four stores; it is rewritten with the moves, in the same PRs.
+- The vendored `sqlite_store/migrate.py` keys on one version; a per-part runner is new code (here, or a shelf change if the shelf wants it).
+
+## 4. Tests: independent bases
+
+- Each stage has `tests/<stage>/` plus a `testing.py` shipped by the stage with fakes of **its own ports** (FakeCheckHost is the first). Other stages' tests import `testing.py` of a dependency, never its internals.
+- Contract, then consumers (already the rule): one conformance test per port runs the Engine's adapter and the stage's fake through the same probes; a mutation of the fake must fail it (the #285 gate).
+- `just test-pkg <stage>`: the stage's tests plus its declared dependencies' contract tests, nothing else. `dev/affected.py` stops being the only gate for stage changes: a stage change runs its own base and its dependents' contract tests. The engine/e2e base stays small (10 tests max by the existing rule).
+- Per-stage budgets: closure size and import time ratcheted; a stage whose closure grows fails with a name.
+
+## 5. Order of work (each PR small, measured, reversible; none moves `paths.py`, ids or the run layout before #219/#232 land)
+
+1. **Inventory and conformance** (done for look, #295; checks pilot #285). Keep `host_conformance` as a ratchet.
+2. **Kernel pieces**: `RunFacts`, shared ports (`Narrate`, `StepBook`), the checkpoint `sections` mechanism with old-checkpoint read, root-lint test (report only, then ratchet).
+3. **Per stage, in this order: look, review, write, plan, land**: introduce ports + `<Stage>State`/`Checkpoint` section, change the stage to constructor injection, delete the stage's attributes from the engine, convert its tests to its fakes. One PR per stage, reach reported (stage closure and number of engine attributes removed).
+4. **Split the shell**: `pipeline`, `workers` out of `run/`; `loop/take.py` onto ports; root-lint ratchet on. The import-linter node/root contracts land in the same PR.
+5. **Persistence**: `taskloop_db` kernel with the part registry and the launch check first (behaviour-preserving: every table registered as part `legacy` v1, the golden fingerprints committed); then one stage's tables per PR (gate, asks, slots, release, report, work, land, pipeline, dash), each moving its records, DDL, steps and prune rule; `kv` decomposed last.
+6. **Packages**: only now `packages/<stage>` moves, mechanical, because each stage is already closed.
+
+## 6. Open points for the owner
+
+- The checkpoint becoming a map of stage sections changes the on-disk format (with a read migration). OK?
+- Is a 5-line "port" file per stage acceptable overhead, or should shared ports be consolidated at the cost of wider interfaces?
+- Root-lint strictness: forbid all branching in roots (clean, but may force small helper nodes), or ratchet branch count? Proposed: ratchet.
+- Persistence step 5 touches `paths.py`-adjacent names (`ConfigDir`, run locations): sequence after #219/#232.
