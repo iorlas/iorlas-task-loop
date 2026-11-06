@@ -28,8 +28,11 @@ from support.release_world import IDENTITY, MARKET, PLUGIN, World, git
 
 from taskloop.adapters import childenv, landlock
 from taskloop.app.release import canary, clone, manifest, publish, selfupdate, shell
+from taskloop.contracts import wire
 from taskloop.contracts.env import Env, snapshot
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.stores import ReleaseResultStore
 
 ROOT = Path(__file__).resolve().parents[2]
 RELEASE = ROOT / "dev" / "release.py"
@@ -129,7 +132,7 @@ class Release(Case):
             result = self.release("second")
         assert result.returncode == 0, result.stdout + result.stderr
         assert self.version(self.origin)["version"] == "0.1.2"
-        assert (other / "task-loop/releases/last.json").exists()
+        assert ReleaseResultStore(ConfigDir(other / "task-loop")).get() is not None
         assert self.world.store.said("comments", "add") == []
 
     def test_another_release_during_the_suite_retries_with_the_next_version(self):
@@ -528,7 +531,7 @@ class Release(Case):
         assert len(self.world.trees) == 2  # the first suite, then the one after the land it let in
 
     def last(self):
-        return json.loads((self.home / "cfg" / "task-loop" / "releases" / "last.json").read_text())
+        return wire.dump(must(ReleaseResultStore(ConfigDir(self.home / "cfg" / "task-loop")).get()))
 
     def tags(self, bare):
         return self.git("tag", "-l", cwd=bare).split()
