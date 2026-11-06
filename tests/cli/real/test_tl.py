@@ -40,6 +40,10 @@ from taskloop.adapters import (  # noqa: E402
 )
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
+from taskloop.contracts import wire  # noqa: E402
+from taskloop.contracts.paths import ConfigDir  # noqa: E402
+from taskloop.contracts.snapshots import RepoEntry, ReposIndex  # noqa: E402
+from taskloop.contracts.stores import ReposStore  # noqa: E402
 
 
 def sh(*args, cwd):
@@ -74,7 +78,11 @@ class RegisterCLI(Base):
         self.repo = self.home / "repo"
         sh("git", "init", "-q", str(self.repo), cwd=self.home)
         self.config = self.home / "cfg" / "task-loop"
-        self.registry = self.config / "repos.json"
+        self.store = ReposStore(ConfigDir(self.config))
+
+    def registry(self):
+        """The repos index as text: what a later run compares to see that nothing changed."""
+        return json.dumps(wire.dump(self.store.index()), sort_keys=True)
 
     def cli(self, *args, cwd=None):
         return tl_main(*args, cwd=cwd or self.home)
@@ -83,13 +91,13 @@ class RegisterCLI(Base):
         assert result.returncode == 0, result.stderr
         assert result.stdout == f"REGISTERED {self.repo.name} {self.repo.resolve()}\n"
         assert result.stderr == ""
-        repos = json.loads(self.registry.read_text())["repos"]
+        repos = wire.dump(self.store.index())["repos"]
         assert repos[self.repo.name]["path"] == str(self.repo.resolve())
         assert isinstance(repos[self.repo.name]["added"], (int, float))
 
     def test_default_directory(self):
         self.assert_registered(self.cli("register", cwd=self.repo))
-        assert [p for p in self.config.iterdir() if p.name != "locks"] == [self.registry]  # no tmp left
+        assert self.store.known() == [str(self.repo.resolve())]
 
     def test_explicit_relative_subdirectory(self):
         (self.repo / "nested dir").mkdir()
@@ -100,20 +108,20 @@ class RegisterCLI(Base):
         worktree = self.home / "linked"
         sh("git", "worktree", "add", "-q", "--detach", str(worktree), cwd=self.repo)
         self.assert_registered(self.cli("register", str(self.repo)))
-        original = self.registry.read_bytes()
+        original = self.registry()
         self.assert_registered(self.cli("register", cwd=worktree))
         self.assert_registered(self.cli("register", str(worktree)))
-        assert self.registry.read_bytes() == original
+        assert self.registry() == original
         assert len(json.loads(original)["repos"]) == 1
 
     def test_repeated_registration_preserves_entries_and_metadata(self):
         self.config.mkdir(parents=True)
         existing = {"other": {"path": str(self.home / "other"), "added": 123}}
-        self.registry.write_text(json.dumps({"v": 2, "repos": existing}))
+        self.store.write(ReposIndex(repos={n: RepoEntry(path=m["path"], added=m["added"]) for n, m in existing.items()}))
         self.assert_registered(self.cli("register", str(self.repo)))
-        original = self.registry.read_bytes()
+        original = self.registry()
         self.assert_registered(self.cli("register", str(self.repo)))
-        assert self.registry.read_bytes() == original
+        assert self.registry() == original
         repos = json.loads(original)["repos"]
         assert len(repos) == 2
         for name, metadata in existing.items():
@@ -138,8 +146,8 @@ class RegisterCLI(Base):
         for configured in (False, True):
             if configured:
                 self.config.mkdir(parents=True)
-                self.registry.write_text('{"existing": {"added": 123}}\n')
-                original = self.registry.read_bytes()
+                self.store.write(ReposIndex(repos={"existing": RepoEntry(path="/x", added=123.0)}))
+                original = self.registry()
             cases = [("register",), ("register", str(ordinary)),
                      ("register", str(self.home / "missing")), ("register", str(file)),
                      ("register", str(self.home / "missing\nwith newline"))]
@@ -151,8 +159,7 @@ class RegisterCLI(Base):
                     assert len(err.splitlines()) == 1
                     assert err.startswith("tl: "), err
                     if configured:
-                        assert self.registry.read_bytes() == original
-                        assert [p for p in self.config.iterdir() if p.name != "locks"] == [self.registry]  # no tmp left
+                        assert self.registry() == original
                     else:
                         assert not self.config.parent.exists()
 

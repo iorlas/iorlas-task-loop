@@ -3,6 +3,9 @@
     python3 dev/runtests.py
 
 Workers: min(cpus, free RAM / 2 GB, ceil(tests / 150), 4). A selection of 150 tests or fewer runs in this one pytest process, no xdist.
+The run goes down to nice 10 first, so a box shared by many lanes keeps its editors and landing gates responsive; TL_TEST_FULL=1 (set by
+`just gate`, the landing gate) keeps the priority it was given. The worker count is NOT reduced by the load: fewer workers expose test
+pollution (tests/slots/real fail with `git rev-parse exited 128` at 2 workers, pass at 4 and alone).
 Isolation: the run has its own HOME, config and temp dirs (under the scratch root, src/taskloop/contracts/scratch.py; the test
 git identity, not the host's); xdist workers take one each on top
 (tests/conftest.py). The tests marked `serial` run alone, after the parallel ones, and only those the selection holds.
@@ -42,6 +45,8 @@ WALL_S = 3600.0      # a hang guard for one pytest run (a wide selection takes 1
 IDLE_S = 600.0       # a pytest run prints a dot per finished test: this long with none is a hung test, stopped long before WALL_S
 NO_TESTS = 5         # pytest's exit code for "no tests collected" (a selection without a serial test)
 WIDE = 0.5          # a selection above this share of all tests is a finding: the change reaches too far
+FULL = "TL_TEST_FULL"  # set: the landing gate, which takes the cores it is given
+NICE = 10
 DROP = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "PYTHONPATH")
 
 
@@ -59,6 +64,15 @@ def total_mb():
         return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") // (1024 * 1024)
     except (OSError, ValueError):
         return None
+
+
+def lower_priority(environ):
+    """Down to nice NICE, never further (an engine-run check is there already): the lanes' runs yield to the landing gate."""
+    if environ.get(FULL):
+        return
+    now = os.nice(0)
+    if now < NICE:
+        os.nice(NICE - now)
 
 
 def workers(n_tests, cpus=None, mem_mb=None):
@@ -117,6 +131,7 @@ def wide_note(root, n_tests):
 
 def main():
     root = Path(__file__).resolve().parent.parent
+    lower_priority(os.environ)
     base = affected.base_of(root)
     tests = affected.select(affected.Repo(root), affected.changed_files(root, base))
     n_tests = count_tests(root, tests)
@@ -128,8 +143,11 @@ def main():
     home = scratch.scratch_dir(os.environ, "tl-run-")
     try:
         env = isolated_env(home)
-        parallel = pytest(root, env, "not serial", tests, n)
-        serial = pytest(root, env, "serial", tests, 1)
+        parallel = pytest(root, env, "not serial and not quarantine", tests, n)
+        serial = pytest(root, env, "serial and not quarantine", tests, 1)
+        held = pytest(root, env, "quarantine", tests, 1)  # apart: a red one is said, never the run's verdict (tests/quarantine.txt)
+        if held not in (0, NO_TESTS):
+            print(f"runtests: quarantined tests are red (exit {held}); not blocking", flush=True)
         summary = testtimes_report.budget_warning(sorted(str(p) for p in home.glob("times-*.json")))
         if summary:
             print(summary, flush=True)
