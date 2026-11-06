@@ -29,9 +29,9 @@ The rules, all in this file, none of them stored or switchable:
   deleted     a deleted src/taskloop file has no node left to follow: it selects the tests/ folder that mirrors its slice.
   always      tests/rules (they read the whole tree and take seconds), so a change that selects nothing else still runs them.
 ledger      a test file is green when the key of everything it can depend on (its whole closure: imports, conftests, every data file
-            under tests/, the files its code names, the config, and the python version) is in the ledger, a file of keys that `--mark-green` appends to
-            after a green run. `--skip-green` leaves those out; tests/rules are never left out. A changed key (any file of the closure) is a
-            test that runs again, so a base move reruns only the tests whose own files it touched.
+            under tests/, the files its code names, the config, and the python version) is in the ledger, a file of keys that
+            `--mark-green` appends to after a green run. `--skip-green` leaves those out; tests/rules are never left out. A changed key
+            (any file of the closure) is a test that runs again, so a base move reruns only the tests whose own files it touched.
 tests/live is explicit-only and is never selected. There is no flag for a wider run: the full run is `just test-full`.
 """
 import argparse
@@ -282,7 +282,7 @@ def ledger_path(given, environ=None):
 
 
 def ledger_keys(path):
-    """The keys in the ledger, oldest first: a file that is missing, unreadable or torn gives the whole ones (a word that is no sha is dropped)."""
+    """The keys in the ledger, oldest first: a file that is missing, unreadable or torn gives the whole ones (no-sha words are dropped)."""
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
