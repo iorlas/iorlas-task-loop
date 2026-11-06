@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real kill -9 at every point of the close's effects: the crash matrix with a process that dies, not a fake.
+"""Real kill -9 at every point of the close and land effects: the crash matrix with a process that dies, not a fake.
 
     uv run python dev/killpoints.py [--only I:PHASE] [--keep]
 
@@ -16,11 +16,12 @@ import shutil
 import signal
 import subprocess
 import sys
-import tempfile
+import time
 from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+SCRATCH = Path(os.environ.get("TL_KILLPOINTS_DIR") or Path.home() / ".cache" / "task-loop" / "killpoints")
 PHASES = ("before", "after_effect", "after_mark")
 BEAD, RUN = "t-1", "r1"
 
@@ -36,6 +37,7 @@ def child(config: str, kill: str, seed: bool) -> int:
     from taskloop.domain.interpret import CheckpointLedger, interpret  # noqa: PLC0415
     from taskloop.stores.real import real_stores  # noqa: PLC0415
 
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)  # only SIGKILL ends it: no handler, no cleanup, no finally
     at, _, phase = kill.partition(":")
     doc = real_stores(ConfigDir(config)).checkpoints.of(BEAD)
     if seed:
@@ -49,7 +51,8 @@ def child(config: str, kill: str, seed: bool) -> int:
 
     def die(where: str) -> None:
         if kill and where == phase and here[0] == int(at):
-            os.kill(os.getpid(), signal.SIGKILL)
+            Path(config, "armed").write_text("1", encoding="utf-8")  # the parent kills this process, with SIGKILL, from here
+            time.sleep(120)
 
     class Keys:
         def applied(self) -> frozenset[str]:
@@ -85,9 +88,26 @@ def plan_names() -> list[str]:
     return [fx.name_of(e) for e in plan]
 
 
-def run_child(config: str, kill: str, seed: bool) -> int:
-    argv = [sys.executable, str(Path(__file__).resolve()), "--child", config, "--kill", kill] + (["--seed"] if seed else [])
-    return subprocess.run(argv, check=False, capture_output=True, text=True, timeout=120).returncode
+def argv_of(config: str, kill: str, seed: bool) -> list[str]:
+    return [sys.executable, str(Path(__file__).resolve()), "--child", config, "--kill", kill] + (["--seed"] if seed else [])
+
+
+def killed(config: str, kill: str) -> int:
+    """Start the child and, when it says it stands at the kill point, stop it with stream_proc (SIGTERM is ignored: SIGKILL follows at
+    once). -> its exit code (-9)."""
+    sys.path.insert(0, str(ROOT / "skills" / "task-loop" / "_vendor"))
+    from stream_proc import stop_tree  # noqa: PLC0415
+
+    child_proc = subprocess.Popen(argv_of(config, kill, True), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    end = time.monotonic() + 60
+    while not Path(config, "armed").exists() and child_proc.poll() is None and time.monotonic() < end:
+        time.sleep(0.01)
+    stop_tree(child_proc, grace=0.05)
+    return child_proc.wait(timeout=10)
+
+
+def resume(config: str) -> int:
+    return subprocess.run(argv_of(config, "", False), check=False, capture_output=True, text=True, timeout=120).returncode
 
 
 def verdict(names: list[str], world: list[str], at: int, phase: str) -> str:
@@ -106,12 +126,15 @@ def verdict(names: list[str], world: list[str], at: int, phase: str) -> str:
 
 
 def one(names: list[str], at: int, phase: str, keep: bool) -> str:
-    config = tempfile.mkdtemp(prefix="killpoints-")
+    SCRATCH.mkdir(parents=True, exist_ok=True)
+    config = str(SCRATCH / f"{os.getpid()}-{at}-{phase}")
+    shutil.rmtree(config, ignore_errors=True)
+    Path(config).mkdir()
     try:
-        first = run_child(config, f"{at}:{phase}", seed=True)
+        first = killed(config, f"{at}:{phase}")
         if first != -signal.SIGKILL:
             return f"the child was not killed (exit {first})"
-        if run_child(config, "", seed=False):
+        if resume(config):
             return "the resume failed"
         log = Path(config) / "world.log"
         return verdict(names, log.read_text(encoding="utf-8").split() if log.is_file() else [], at, phase)
