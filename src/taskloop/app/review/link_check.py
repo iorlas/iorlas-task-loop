@@ -2,6 +2,7 @@
 from typing import Any
 
 from taskloop.adapters import links
+from taskloop.app.review.host import ReviewHost
 from taskloop.domain.matchers import clip
 from taskloop.domain.review.findings import engine_finding
 from taskloop.domain.review.matchers import Wording
@@ -10,7 +11,7 @@ LINK_CAP = 200  # links opened per review
 
 
 class LinkCheck:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: ReviewHost) -> None:
         self.e = host
 
     def link_judged(self, review: Any) -> None:

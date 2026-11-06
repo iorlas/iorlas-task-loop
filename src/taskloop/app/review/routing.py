@@ -3,6 +3,7 @@ goes to the writer for a test, an item no check can prove lands unverified for t
 plan (what it defers, what it leaves to the engine) is read before the item's kind."""
 from typing import Any
 
+from taskloop.app.review.host import ReviewHost
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.asks import specs as askspecs
@@ -16,7 +17,7 @@ AT_LAND = "the engine does this at land"
 
 
 class Routing:
-    def __init__(self, host: Any, git: Git) -> None:
+    def __init__(self, host: ReviewHost, git: Git) -> None:
         self.e = host
         self.git = git
 
@@ -48,11 +49,17 @@ class Routing:
                                   lambda: self.names_code(u["what"])), source
 
     def settle_engine_step(self, u: Item) -> None:
-        self.e.review.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "why": AT_LAND, "evidence": AT_LAND})
+        self.e.review.add_verified(u, "settled", AT_LAND, AT_LAND)
 
     def add_unverified(self, u: Item, why: str) -> None:
-        if u["what"] not in {x["what"] for x in self.e.review.unverified}:
-            self.e.review.unverified.append({"what": u["what"], "kind": u["kind"], "why": why, "source": u.get("source") or ""})
+        self.e.review.add_unverified(u, why)
+
+    def add_leftover(self, lo: Item) -> bool:
+        """File a follow-up bead at the close, once per title; True when it was new."""
+        if lo["title"] in {x["title"] for x in self.e.leftovers}:
+            return False
+        self.e.leftovers.append(lo)
+        return True
 
     def backed_by_leftover(self, what: str) -> bool:
         """True when an owner-review follow-up bead for this item is already in the leftovers (tl-bxk.13.1): the owner sees it there, so
@@ -85,7 +92,7 @@ class Routing:
         return out
 
     def proof_stuck(self, items: list[Item]) -> Any:
-        cap = int(self.e.cfg.max_fix_rounds)
+        cap = self.e.cfg.max_fix_rounds
         what = [u["what"] for u in items]
         why = f"the check before land: nothing proves {'; '.join(what)[:600]} after {cap} fix rounds: it needs the owner's hint"
         return self.e.blocked_for(why, "ASK_STUCK", spec=askspecs.unproven(what, cap))
@@ -101,7 +108,7 @@ class Routing:
         if k == "engine_step" or route == "engine_step":
             return "settled", dict(a, evidence=AT_LAND), AT_LAND, ""
         if k == "checkable":
-            if self.e.fixes >= int(self.e.cfg.max_fix_rounds):
+            if self.e.fixes >= self.e.cfg.max_fix_rounds:
                 raise self.proof_stuck([u])
             return "wrong", a, "add a test or check that proves: {}".format(u["what"]), "proof"
         if k in ("external_fact", "taste"):
