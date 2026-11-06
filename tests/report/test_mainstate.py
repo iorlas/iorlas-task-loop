@@ -67,3 +67,9 @@ def release(ok: bool = False, branch: str = "main", repo: str = "/r") -> Release
 def test_main_is_red_when_the_last_release_gate_on_main_failed(last: ReleaseResult | None, red: bool) -> None:
     got = main_state(FakeGit([]), "/r", "main", T, last)
     assert (got["red"], got["gate_red"]) == (red, red)
+
+
+def test_the_strip_numbers_carry_retries_and_the_stored_outcome_kinds() -> None:
+    got = score_of({**CARD, "runs": 4, "kinds": {"landed": 1, "ask_decision": 2, "fault_plan": 1}})
+    assert (got.retries, got.kinds) == (3, {"landed": 1, "ask_decision": 2, "fault_plan": 1})
+    assert score_of(CARD).kinds == {} and score_of(CARD).retries == 0

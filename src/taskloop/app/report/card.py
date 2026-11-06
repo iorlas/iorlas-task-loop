@@ -2,6 +2,7 @@
 import contextlib
 import statistics
 import time
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -192,6 +193,8 @@ class _Card(TypedDict):
     crashes: int
     m2: _M2
     main: NotRequired[_Main]
+    runs: NotRequired[int]
+    kinds: NotRequired[dict[str, int]]
 
 
 def score_of(card: Mapping[str, object]) -> Score:
@@ -199,7 +202,8 @@ def score_of(card: Mapping[str, object]) -> Score:
     c: _Card = wire.load(_Card, card)
     return Score(since=c["since"], until=c["until"], beads=c["beads"], landed=c["landed"], landed_no_ask=c["landed_no_ask"],
                  asks=c["asks"]["count"], lost=c["lost"], crashes=c["crashes"], m2_pass=c["m2"]["pass"],
-                 main_red=c.get("main", {"red": False})["red"])
+                 main_red=c.get("main", {"red": False})["red"], retries=max(0, c.get("runs", c["beads"]) - c["beads"]),
+                 kinds=c.get("kinds", {}))
 
 
 def scorecard(repo: str, since: float, until: float, base: str, comments_of: Callable[[BeadId], Sequence[Comment]] | None = None,
@@ -234,7 +238,8 @@ def scorecard(repo: str, since: float, until: float, base: str, comments_of: Cal
          "rounds": sum(x["rounds"] for x in rows), "replans": sum(x["replans"] for x in rows),
          "land": land_stats([t for r in runs if r.log for t in tries_of(typed_log(Path(r.log)))]),
          "main": main_state(git, repo, base, since, ReleaseResultStore(who.config).get()),
-         "tokens": tokens, "runs": len(runs), "per_bead": rows, "skipped_traces": book.skipped}
+         "tokens": tokens, "runs": len(runs),
+         "kinds": dict(Counter(r.kind for r in runs if r.kind)), "per_bead": rows, "skipped_traces": book.skipped}
     checks = {"beads": {"value": c["beads"], "want": ">={:d}".format(M2["beads"]), "ok": c["beads"] >= M2["beads"]},
               "landed_no_ask": {"value": c["landed_no_ask"], "want": ">={:d}".format(M2["landed_no_ask"]),
                                 "ok": c["landed_no_ask"] >= M2["landed_no_ask"]},
