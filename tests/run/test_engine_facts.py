@@ -10,6 +10,7 @@ from support import engine_case as te
 from support.case import Case
 from support.dashlogs import RunScript
 from support.engine_case import FALSE, PLAN, WRITE
+from support.memstores import MemLog
 from support.narrow import must
 
 from taskloop.app.run.stuck import StuckTick
@@ -20,7 +21,6 @@ from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.ids import CheckId
 from taskloop.contracts.runlife import SAME_RED, silent_limit
 from taskloop.domain.stuck import StuckWatch
-from taskloop.stores.memory import MemLog
 from taskloop.stores.runlog import RunLog
 from taskloop_dash.views import columns, passes
 from taskloop_dash.views.runfacts import run_of

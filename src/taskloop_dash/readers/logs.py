@@ -124,10 +124,17 @@ class LiveRun:
 
 
 def page(run: LiveRun, since: dict[str, int] | None = None, limit: int = PAGE) -> Json:
-    """{events, cursor}: what is new after `since`, else the newest `limit` events."""
+    """{events, cursor}: the first MAX_PAGE events after `since`, else the newest `limit` events. A burst past one page is not cut:
+    the cursor stops at the first event left over, so the next poll carries on from it."""
     got = run.select(lambda t, off: since is None or off >= since.get(t, 0))
-    return {"events": [e for _, _, e in got[-(MAX_PAGE if since is not None else max(1, min(limit, MAX_PAGE))):]],
-            "cursor": encode(run.offsets())}
+    cursor = run.offsets()
+    if since is None:
+        got = got[-max(1, min(limit, MAX_PAGE)):]
+    else:
+        for tag, off, _ in reversed(got[MAX_PAGE:]):
+            cursor[tag] = off
+        got = got[:MAX_PAGE]
+    return {"events": [e for _, _, e in got], "cursor": encode(cursor)}
 
 
 def poll(

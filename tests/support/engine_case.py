@@ -31,7 +31,13 @@ from support import homes
 # isort: split
 from contracts import samples as S
 
-from support import fake_route, gitq, gitsim, procsim
+from support import (
+    fake_route,
+    gitq,
+    gitsim,
+    netgate,  # noqa: F401
+    procsim,
+)
 from support.builders import argv_cfg, cfg_with, make_engine
 from support.checked import run_checked
 from support.checkpoints import flat_ck, stored_ck
@@ -65,7 +71,6 @@ from taskloop.contracts.stores import AskStore
 from taskloop.domain.checks import (
     lint,  # noqa: F401
 )
-from taskloop.domain.lanes import netgate  # noqa: F401
 from taskloop.domain.lanes import policy as lp  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[2]

@@ -29,6 +29,7 @@
   tl.py lanes                                   file delegate's lane status for the dashboard (the dashboard runs no delegate)
   tl.py reflect digest [--since 24h] [--dry-run]  the last day's run reflections into one bead per recurring cause
   tl.py trace [ID] [--last N] [--json]          engine runs and every worker session of each (for reflection)
+  tl.py runs show RUN | slow [--top N] [--by exec|wait] [--runs N]  one run end to end; the slowest steps, calls, checks and waits
   tl.py run-task ID [--stage STEP] [--worktree DIR] [--slot S|any [--wait]] [--exclusive-area] [--dry-run] [--fresh] [--force]
                                                 one bead through the engine (engine.py), no judgement here
   tl.py next [--repo DIR] [--json] [--only ID...]  the bead the loop would take next and why (claims nothing)
@@ -230,6 +231,13 @@ def engine_parsers(sp):
     p.add_argument("id", nargs="?", default="")
     p.add_argument("--last", type=int, default=0)
     p.add_argument("--json", action="store_true")
+    p = sp.add_parser("runs", help="read-only queries over the engine logs: show one run, list the slowest items")
+    rs = p.add_subparsers(dest="op", required=True)
+    rs.add_parser("show").add_argument("run")
+    q = rs.add_parser("slow")
+    q.add_argument("--top", type=int, default=15)
+    q.add_argument("--by", choices=["exec", "wait"], default="exec")
+    q.add_argument("--runs", type=int, default=50, help="look at this many newest engine logs")
     p = sp.add_parser("reflect", help="turn the last day's run reflections into beads, one per recurring cause (tl-bl5)")
     p.add_argument("op", choices=["digest"])
     p.add_argument("--since", help="window start: 24h (default), a time, or epoch seconds")
@@ -432,6 +440,7 @@ VERBS: Final[dict[str, Handler]] = {
     "land": v_land,
     "close": v_close,
     "block": v_block,
+    "runs": lambda a, c: verbs.runs(a, c.who.config),
     "trace": lambda a, c: verbs.trace(a.id, a.last, a.json, c.env),
     "usage": lambda a, c: wire_usage.feed(a.windows, c.spawner, c.env),
     "lanes": lambda a, c: wire_lanes.refresh(c.spawner, c.env),

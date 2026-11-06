@@ -12,7 +12,7 @@ import uuid
 from collections.abc import Callable
 from pathlib import Path
 
-from delegate.adapters import agent_runs, git, procs
+from delegate.adapters import git, procs
 from delegate.app import answer, cockpit, codex_policy, decide, env, harnesses, launch, net, usage, watch
 from delegate.app.launch import how_of
 from delegate.app.lease import RunLease
@@ -211,15 +211,12 @@ class Run:
             return self.refuse(no[0], no[1], env.now() + decide.busy_jitter(), **who)
         lease.keep_alive()
         hooks, launched = self._hooks(rid, lease, d)
-        meta: dict[str, Json] = {"parent_session": a.parent or "", "title": a.title or brief.strip().splitlines()[0][:120]}
-        if a.task:
-            meta["task"] = a.task
         fam = as_str(who["family"])
         git_before, t0 = self.git_before, time.time()
         t_from = file_size(harnesses.find_transcript(a.resume, fam)) if a.resume else 0
         res: dict[str, Json]
         try:
-            res = self._launch(d, brief, rid, t, meta, hooks, canary_due)
+            res = self._launch(d, brief, rid, t, hooks, canary_due)
         except Exception as e:  # a launcher bug is an error object, not a stack trace
             res = {"outcome": "crash", "say": f"{type(e).__name__}: {e}"}
         except (
@@ -282,12 +279,12 @@ class Run:
     # -- the launch ladder: canary, network retry, schema re-ask
     # ------------------------------------------------------------------------------
     def _launch(
-        self, d: dict[str, Json], brief: str, rid: str, t: float, meta: dict[str, Json], hooks: RunHooks, canary_due: bool
+        self, d: dict[str, Json], brief: str, rid: str, t: float, hooks: RunHooks, canary_due: bool
     ) -> dict[str, Json]:
         a = self.a
 
         def launch_one(b: str, a_: env.Args) -> dict[str, Json]:
-            return launch.launch_worker(d, b, a_, rid, t, self.cfg, meta, hooks)
+            return launch.launch_worker(d, b, a_, rid, t, self.cfg, hooks)
 
         res = self._canary(launch_one, d, a) if canary_due else None  # the one probe before full traffic; None = it passed
         res = res or launch_one(brief, a)
@@ -372,7 +369,6 @@ class Run:
         lane_name, ref = as_str(d["lane"]), as_opt_str(res.get("ref"))
         if done and lane_name in ("CLAUDE_SUBSCRIPTION", "OPENAI_SUBSCRIPTION"):
             usage.auth_cache().remember(lane_name, True, "a worker run succeeded", env.now())
-        agent_runs.run(rid, ended=env.now(), status="completed" if done else "failed", transcript=harnesses.find_transcript(ref, fam))
         if ref:  # every outcome: a stop, a failure and a timeout can all be resumed
             with contextlib.suppress(Exception):
                 self.keep_ref(ref)
