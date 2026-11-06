@@ -46,3 +46,15 @@ An edit under `app/run`, `app/launch`, `app/loop`, `app/wire` (the shell, ~half 
 - A fake host drifts from `Engine`: the contract test is the guard; without it do not start.
 - `Any`-typed hosts in write/review need Protocols first (ruff/pyrefly: no new `Any`); that is the larger part of those two stages.
 - Tests today also assert engine side effects (bd comments, closes) through `EngineTest.store`; those stay engine tests.
+
+## Pilot result (checks, 4 test files)
+
+`tests/support/check_host.py` (`FakeCheckHost`, `CheckHostCase`) and `tests/support/world.py` (`SlotWorld`: the temp dir, env and gitsim world that `EngineTest` used to build, now a base without the engine). Converted: `test_check_spawn`, `test_run_id`, `test_run_env`, `test_keyed_env`.
+
+| | before | after |
+|---|---|---|
+| src files a converted test reaches | 488, 488, 488, 493 | 212, 144, 144, 156 |
+| `engine.py` in the closure | yes | no |
+| median tests selected per commit (`dev/reach.py`, 107 commits) | 287 | 285 |
+
+The per-test closure falls by two thirds; the median selection barely moves because 4 of 617 tests is 0.6% and the contract test (`tests/checks/test_check_host_contract.py`) must itself reach the Engine. The fake uses the real `Shell`, `Steps`, `Checkout` and `Checker` (no re-implementation, so no drift there); it replaces the Engine's `Waits` with a recorder. The contract test compares results, process env, log row kinds and host facts of the fake and an Engine; four mutations of the fake (empty `bead_env`, a checklog on another log, a set `killed` flag, a wrong `MARKERS`) each fail it.
