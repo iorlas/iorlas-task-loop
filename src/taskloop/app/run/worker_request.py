@@ -49,6 +49,10 @@ def request(e: RequestHost, c: Call, live: str, timeout_s: int, idle_s: int) -> 
         why = trustroots.refusal(e.git, e.wt, e.cfg.base, e.store.show(e.bead))
         if why:
             raise e.blocked_for(why, "ASK_DECISION", spec=askspecs.open_question(why, None, "decision"))
+    # the reviewer is judged by the base's rules, not the branch's
+    base_ref = e.git.rev_parse(e.wt, e.cfg.base) if c.role == "reviewer" else ""
+    if c.role == "reviewer" and not base_ref:
+        e.log.warn(f"the reviewer reads the work tree's instruction files: {e.cfg.base} does not resolve to a commit")
     only_family = pin.for_role(c.role, pin.families(e.cfg.writer_family, e.budget.labels))
     recipes = e.checker.split().engine_recipes(planref.stage_commands(e.plan_data, e.cfg)) if c.node == "write" else []
     return RunRequest(
@@ -68,6 +72,7 @@ def request(e: RequestHost, c: Call, live: str, timeout_s: int, idle_s: int) -> 
         writer_exec_allow=e.cfg.writer_exec_allow if c.role == pin.PINNED_ROLE else [],
         engine_only=recipes,
         read_roots=list(e.cfg.writer_read_roots) if c.node == "write" else [],
+        instructions_ref=base_ref,
         engine_only_advisory=bool(only_family and recipes),
     )
 

@@ -79,7 +79,8 @@ class Admission(te.EngineTest):
         assert "capability" in self.said()
 
     def test_empty_grant_does_not_require_capability(self):
-        with mock.patch.dict(fake_route.CONTRACT, {**fake_route.CONTRACT, "capabilities": []}, clear=True):
+        only_reviewers_cap = {**fake_route.CONTRACT, "capabilities": ["instructions_ref"]}  # reviewer calls need it
+        with mock.patch.dict(fake_route.CONTRACT, only_reviewers_cap, clear=True):
             rc, script = self.run_engine({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         assert rc == 0
         assert "write" in script.nodes
