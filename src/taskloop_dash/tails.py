@@ -43,4 +43,3 @@ class Tails:
             return []
         lines = data.decode("utf-8", "replace").splitlines()
         return lines[1:] if size > limit else lines
-

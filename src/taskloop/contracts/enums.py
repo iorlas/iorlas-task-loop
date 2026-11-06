@@ -135,4 +135,3 @@ class LockWhat(StrEnum):
     RELEASE = "release"
     LOOP = "loop_run"
     RESOURCE = "resource"
-

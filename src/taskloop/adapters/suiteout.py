@@ -29,4 +29,3 @@ def failure_report(out: str) -> str:
 def failing_tests(out: str) -> list[str]:
     """The node ids pytest's short summary lists as failed or errored."""
     return re.findall(r"^(?:FAILED|ERROR|SUBFAILED\S*) (\S+)", out, re.M)
-
