@@ -398,7 +398,7 @@ class Invariants(test_loop.Base):
         put_lock(
             s1, {"pid": OTHER_ENGINE, "start": f"T{int(OTHER_ENGINE)}", "bead": "w-9", "started": self.clock.now()}
         )
-        assert f"pid {int(OTHER_ENGINE)} runs w-9" in engine_lock.engine_busy(s1)
+        assert f"pid {int(OTHER_ENGINE)} runs w-9" in engine_lock.engine_busy(homes.cfg(), s1)
         assert bd.slots["sl-1"]["status"] == "open"  # the slot bead says free
         assert must(sl.take_slot(self.repo_s, self.cfg, "loop"))[0] == "s2"  # a loop passes over s1
         assert "busy" in wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand", spawner=real_spawner(),
@@ -415,9 +415,9 @@ class Invariants(test_loop.Base):
                 "runs w-9"
                 in reset.free_branch(sl.pool(self.repo_s, cfg=self.cfg).named("s2"), listing)
             )  # its branch is not taken from it
-        assert getattr(engine_lock.read_engine_lock(s1), "pid", None) == OTHER_ENGINE  # and its lock is still there
+        assert getattr(engine_lock.read_engine_lock(homes.cfg(), s1), "pid", None) == OTHER_ENGINE  # and its lock is still there
         self.live.discard(OTHER_ENGINE)  # the engine died: its lock is no obstacle
-        assert engine_lock.engine_busy(s1) == ""
+        assert engine_lock.engine_busy(homes.cfg(), s1) == ""
         assert wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand", spawner=real_spawner(),
             git=port_git(), who=support_who.who())[1] == ""
 
@@ -579,7 +579,7 @@ class Invariants(test_loop.Base):
             assert not set(b.get("metadata") or {}) & set(marks.HELD_KEYS), b
         assert list(sl.ticket_dir(self.repo_s).glob("*.json")) == []
         for n in slots:
-            assert not engine_lock.engine_lock_path(wslots.slot_dir(self.repo_s, n, self.cfg)).exists(), n
+            assert not homes.cfg().engine_lock(wslots.slot_dir(self.repo_s, n, self.cfg)).exists(), n
         for lock in (homes.config_dir() / "locks").glob("*.lock"):
             with open(str(lock), "a+") as f:
                 must(fcntl).flock(f, must(fcntl).LOCK_EX | must(fcntl).LOCK_NB)  # raises while a holder is left
@@ -596,8 +596,8 @@ class Invariants(test_loop.Base):
             def go():
                 got = sl.take_slot(repo, cfg, "tl loop", bead=bead)
                 if got:
-                    engine_lock.loop_lock(got[1], got[0], got[2], bead=bead)
-                    engine_lock.drop_engine_lock(got[1], os.getpid())
+                    engine_lock.loop_lock(homes.cfg(), got[1], got[0], got[2], bead=bead)
+                    engine_lock.drop_engine_lock(homes.cfg(), got[1], os.getpid())
                     wslots.release_slot(repo, got[0], mine=True, spawner=real_spawner(), git=port_git(), who=support_who.who())
             return go
 
@@ -633,5 +633,5 @@ class Invariants(test_loop.Base):
             assert sb, name  # the expired hold and the dead engine's lock are no obstacle
             wslots.release_slot(repo, name, mine=True, spawner=real_spawner(), git=port_git(), who=support_who.who())
         assert wslots.waiting_line(repo, support_who.who()) == []
-        engine_lock.drop_engine_lock(d2, 5252)
+        engine_lock.drop_engine_lock(homes.cfg(), d2, 5252)
         self.nothing_held(names)
