@@ -1,6 +1,6 @@
 """Where a run's files live (contracts/locator.py finds them, its manifest is the authority): its engine log and stderr,
 its run folder outside the worktree (brief, plan, node answers, check results,
-where no worker can write them; in lifesim-vbo a writer's sandbox runs kept in .task/ were read as engine results by four planners), and
+where no worker can write them; in a consumer run a writer's sandbox runs kept in .task/ were read as engine results by four planners), and
 the writer's scratch folder in the worktree."""
 import contextlib
 import os
