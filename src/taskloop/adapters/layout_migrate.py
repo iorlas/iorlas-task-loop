@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from taskloop.adapters import locks
-from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.paths import ConfigDir, RunFiles
 
 COMMAND = "tl layout migrate"
 RUN_FILE = re.compile(r"(?P<run>.+?)(?P<tail>\.jsonl(?:\.\d+)?|\.stderr|\.live)")
@@ -55,6 +55,8 @@ def plan(cfg: ConfigDir) -> list[Move]:
     out += [Move(d, cfg.repo_dir(d.name) / "slot-state") for d in _dirs(root / "slot-state")]
     out += [Move(d, cfg.repo_dir(d.name) / "decisions") for d in _dirs(root / "decisions")]
     out += [Move(f, cfg.check_durations(f.stem)) for f in sorted((root / "check-durations").glob("*.json"))]
+    # a run's old artifacts/ is one run attempt: its step tries are numbered apart
+    out += [Move(a, RunFiles(a.parent).artifacts(1)) for a in sorted((root / "runs").glob("*/artifacts"))]
     return out
 
 

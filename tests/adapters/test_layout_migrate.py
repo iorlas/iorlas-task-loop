@@ -26,6 +26,7 @@ OLD = {
     f"decisions/{KEY}/ADR-1.json": "{}",
     "check-durations/repo-1234567890.json": "{}",
     f"runs/{RUN}/plan.json": "{}",
+    f"runs/{RUN}/artifacts/u/attempt-1/check.log": "log\n",
 }
 
 
@@ -53,6 +54,7 @@ def test_migrate_yields_the_target_tree_with_the_same_bytes_and_a_second_run_cha
         f"runs/{RUN}/stderr.log": "boom\n",
         f"runs/{RUN}/live/01-write.jsonl": "{}\n",
         f"runs/{RUN}/plan.json": "{}",
+        f"runs/{RUN}/attempts/{RUN}-attempt-1/artifacts/u/attempt-1/check.log": "log\n",
         f"repos/{KEY}/loop/state.json": "{}",
         f"repos/{KEY}/loop/command.json": "{}",
         f"repos/{KEY}/loop/rest.json": "{}",

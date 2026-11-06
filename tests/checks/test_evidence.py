@@ -1,6 +1,6 @@
 """EVIDENCE (tl-9un.21): after each attempt of a check, its log and the files its `keep` names are copied (never linked) into
-<run folder>/artifacts/<check>/attempt-N/, one directory per attempt, read-only, with a row of sha256 and bytes; the originals can then
-be overwritten by the next attempt or the slot's reset and the evidence stays readable."""
+<run folder>/attempts/<run>-attempt-R/artifacts/<check>/attempt-N/, one directory per attempt, read-only, with a row of sha256 and
+bytes; the originals can then be overwritten by the next attempt or the slot's reset and the evidence stays readable."""
 import hashlib
 import os
 import shlex
@@ -15,6 +15,7 @@ from support.engine_case import EngineTest
 from support.logs import records
 
 from taskloop.app.run import worker_call
+from taskloop.contracts.paths import RunFiles
 
 CMD = "unity-like-check"
 
@@ -38,7 +39,7 @@ class Evidence(EngineTest):
 
     def test_the_log_and_the_kept_files_are_copied_with_hash_and_bytes_before_anything_can_overwrite_them(self):
         eng, res = self.attempt()
-        d = eng.run_dir / "artifacts" / "u" / "attempt-1"
+        d = RunFiles(eng.run_dir).artifacts(1) / "u" / "attempt-1"
         assert (
             sorted(p.relative_to(d).as_posix() for p in d.rglob("*") if p.is_file())
             == ["Logs/Editor.log", "Logs/results.xml", "check.log"]
@@ -57,7 +58,7 @@ class Evidence(EngineTest):
     def test_a_copy_is_a_file_of_its_own_and_read_only(self):
         eng, _ = self.attempt()
         src = Path(eng.wt) / "Logs" / "Editor.log"
-        copy = eng.run_dir / "artifacts" / "u" / "attempt-1" / "Logs" / "Editor.log"
+        copy = RunFiles(eng.run_dir).artifacts(1) / "u" / "attempt-1" / "Logs" / "Editor.log"
         assert os.stat(src).st_ino != os.stat(copy).st_ino
         assert os.stat(copy).st_nlink == 1
         assert copy.stat().st_mode & 0o222 == 0
@@ -67,7 +68,7 @@ class Evidence(EngineTest):
     def test_a_second_attempt_gets_its_own_directory_and_the_first_stays_as_it_was(self):
         eng, _ = self.attempt()
         eng.run_checks({"checks": [], "files": []}, "s")
-        root = eng.run_dir / "artifacts" / "u"
+        root = RunFiles(eng.run_dir).artifacts(1) / "u"
         assert sorted(p.name for p in root.iterdir()) == ["attempt-1", "attempt-2"]
         assert (root / "attempt-1" / "Logs/Editor.log").read_text() == "editor log of run 1\n"
         assert (root / "attempt-2" / "Logs/Editor.log").read_text() == "editor log of run 2\n"
@@ -75,7 +76,7 @@ class Evidence(EngineTest):
     def test_a_glob_that_names_nothing_leaves_the_log_alone(self):
         eng = self.checks_engine(checks=[{"id": "v", "cmd": CMD, "keep": ["nothing/*.xml"]}], base_red=False)
         eng.run_checks({"checks": [], "files": []}, "s")
-        d = eng.run_dir / "artifacts" / "v" / "attempt-1"
+        d = RunFiles(eng.run_dir).artifacts(1) / "v" / "attempt-1"
         assert [p.name for p in d.iterdir()] == ["check.log"]
 
     def test_a_symlink_out_of_the_tree_is_not_followed(self):
@@ -85,7 +86,7 @@ class Evidence(EngineTest):
         (Path(eng.wt) / "Logs").mkdir(exist_ok=True)
         (Path(eng.wt) / "Logs" / "link.xml").symlink_to(outside)
         eng.run_checks({"checks": [], "files": []}, "s")
-        d = eng.run_dir / "artifacts" / "w" / "attempt-1"
+        d = RunFiles(eng.run_dir).artifacts(1) / "w" / "attempt-1"
         assert [p.name for p in d.iterdir()] == ["check.log"]
 
     def test_a_secret_looking_name_is_not_copied_and_a_tool_written_one_gets_no_row(self):
@@ -99,7 +100,7 @@ class Evidence(EngineTest):
         procsim.fake("secretive-check", run)
         eng = self.checks_engine(checks=[{"id": "x", "cmd": "secretive-check", "keep": ["Logs/*.log", "Logs/.env.log"]}], base_red=False)
         eng.run_checks({"checks": [], "files": []}, "s")
-        d = eng.run_dir / "artifacts" / "x" / "attempt-1"
+        d = RunFiles(eng.run_dir).artifacts(1) / "x" / "attempt-1"
         copied = sorted(p.relative_to(d).as_posix() for p in d.rglob("*") if p.is_file() and p.name != "id_rsa")
         assert copied == ["Logs/Editor.log", "check.log"]
         rows = {r["artifact"].rsplit("/", 1)[-1] for r in records(eng, "evidence") if r["call_id"] == "x"}

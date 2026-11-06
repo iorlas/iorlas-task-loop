@@ -19,6 +19,11 @@ class ConfigDir:
     def __init__(self, root: Path | str) -> None:
         self.root = Path(root)
 
+    @classmethod
+    def holding(cls, run_dir: Path | str) -> ConfigDir:
+        """The config dir a run folder (runs/<run>/) lives in."""
+        return cls(Path(run_dir).parent.parent)
+
     def factory_db(self) -> Path:
         """The host's shared factory journal and dashboard read model."""
         return self.root / "factory.db"
@@ -245,9 +250,25 @@ class RunFiles:
     def reexec(self) -> Path:
         return self.dir / "reexec.json"
 
-    def artifacts(self) -> Path:
-        """The folders of the run's checks, one per step, each holding attempt-N/ (contracts/artifact.py)."""
-        return self.dir / "artifacts"
+    def attempts(self) -> Path:
+        """attempts/: one folder per run attempt (a process that took the run up; the factory.db attempt row's n)."""
+        return self.dir / "attempts"
+
+    def attempt(self, n: int) -> Path:
+        """attempts/<run>-attempt-<n>/: what run attempt n wrote."""
+        return self.attempts() / f"{self.dir.name}-attempt-{n}"
+
+    def artifacts(self, n: int) -> Path:
+        """The folders of the checks run in run attempt n, one per step, each holding attempt-S/ (S: the step's own try)."""
+        return self.attempt(n) / "artifacts"
+
+    def check_dirs(self) -> list[tuple[int, Path]]:
+        """(run attempt, <step> folder) of every step that kept anything, oldest run attempt first."""
+        found: list[tuple[int, Path]] = []
+        for a in sorted(self.attempts().glob("*-attempt-*/artifacts")):
+            n = a.parent.name.rpartition("-attempt-")[2]
+            found += [(int(n), d) for d in sorted(a.iterdir()) if d.is_dir()] if n.isdigit() else []
+        return sorted(found, key=lambda x: x[0])
 
     def handoff(self) -> Path:
         return self.dir / "handoff.json"

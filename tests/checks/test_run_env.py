@@ -1,5 +1,5 @@
 """RUNENV: every check, fix and gate command is told its run through the one child-env builder: TL_RUN_ID, TL_RUN_DIR, TL_ATTEMPT,
-TL_ARTIFACT_DIR (<run dir>/artifacts/<step>/attempt-N), TL_WORKTREE, TL_BRANCH. None of them is part of a result's identity."""
+TL_ARTIFACT_DIR (<run dir>/attempts/<run>-attempt-R/artifacts/<step>/attempt-N), TL_WORKTREE, TL_BRANCH. None is in a result's identity."""
 import sys
 from pathlib import Path
 
@@ -12,6 +12,7 @@ from support import procsim
 
 from taskloop.adapters import childenv
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.paths import RunFiles
 
 NAMES = (EnvVar.TL_RUN_ID, EnvVar.TL_RUN_DIR, EnvVar.TL_ATTEMPT, EnvVar.TL_ARTIFACT_DIR, EnvVar.TL_WORKTREE, EnvVar.TL_BRANCH)
 
@@ -33,7 +34,7 @@ class RunEnv(EngineTest):
 
     def test_a_check_process_sees_the_six_names_with_their_values(self):
         eng, got = self.seen()
-        art = eng.run_dir / "artifacts" / "c" / "attempt-1"
+        art = RunFiles(eng.run_dir).artifacts(1) / "c" / "attempt-1"
         assert got == {
             "TL_RUN_ID": eng.run_id, "TL_RUN_DIR": str(eng.run_dir), "TL_ATTEMPT": "1", "TL_ARTIFACT_DIR": str(art),
             "TL_WORKTREE": str(eng.wt), "TL_BRANCH": eng.git.branch(str(eng.wt))}

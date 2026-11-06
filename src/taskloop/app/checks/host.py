@@ -130,7 +130,7 @@ class CleanHost:
     def __init__(self, host: CheckHost, wt: Path, checkout: CheckoutView) -> None:
         self.original, self.wt, self.checkout = host, wt, checkout
         self.bead, self.run_id, self.run_dir = host.bead, host.run_id, host.run_dir
-        self.cfg, self.log, self.steps = host.cfg, host.log, host.steps
+        self.cfg, self.log, self.steps, self.home = host.cfg, host.log, host.steps, host.home
         self.checklog, self.stores = host.checklog, host.stores
         self.spawner, self.env, self.bead_env = host.spawner, host.env, host.bead_env
         self.git, self.waits = host.git, host.waits

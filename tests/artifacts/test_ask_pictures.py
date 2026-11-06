@@ -6,6 +6,7 @@ from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.artifacts import ask_pictures, store
 from taskloop.contracts.artifact import ArtifactSlot
+from taskloop.contracts.paths import RunFiles
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 32
 
@@ -19,7 +20,7 @@ class AskPictures(Case):
         self.slot = ArtifactSlot(repo="r-1", bead="t-1", run="RUN", stage="ask", attempt=1)
 
     def attempt(self, check: str, n: int, **files: bytes) -> Path:
-        d = self.run_dir / "artifacts" / check / f"attempt-{n}"
+        d = RunFiles(self.run_dir).artifacts(1) / check / f"attempt-{n}"
         d.mkdir(parents=True)
         for name, data in files.items():
             (d / name.replace("_", ".")).write_bytes(data)

@@ -17,6 +17,7 @@ from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.env import Env
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.locator import RunBundle
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Git, Spawner
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
@@ -65,6 +66,7 @@ class CliHost:
         self.log = log
         self.checklog = CheckLog(self.log)
         self.run_dir = bundle.dir
+        self.home = ConfigDir.holding(bundle.dir)
         self.bead_env: Mapping[str, str] = check_env()
         self.killed = self.wall_hit = False
         self.halt = threading.Event()

@@ -285,10 +285,10 @@ off, no call reaches the claude family but the planner and reflect (tests/review
 `"writer": true` (`false`: never) or its own `"writer_check_max_s"`; a `run: gate` check always is the engine's. `"tail_log"` names a log of the tree
 whose first 20 `error CS` lines join a red's output when it shows none (the analyzers default to `client/Logs/unity-project-files.log`).
 **Evidence.** After every attempt of a check its log, and the files of the tree its `"keep"` globs name (a Unity log, a result XML), are
-copied (never linked) into `<config>/runs/<run id>/artifacts/<check>/attempt-N/`, read-only, one directory per attempt, so a retry, the
+copied (never linked) into `<config>/runs/<run id>/attempts/<run id>-attempt-R/artifacts/<check>/attempt-N/`, read-only, one directory per attempt, so a retry, the
 next run in the slot or the slot's reset cannot overwrite them; each file is one `evidence` row (`artifact`, `artifact_hash` sha256, `bytes`).
 **Run environment.** Every worker, check, fix and gate command is told its run: `TL_RUN_ID`, `TL_RUN_DIR`, `TL_ATTEMPT` (N),
-`TL_ARTIFACT_DIR` (`<run dir>/artifacts/<step>/attempt-N`, made before the command starts: write logs and results there directly),
+`TL_ARTIFACT_DIR` (`<run dir>/attempts/<run id>-attempt-R/artifacts/<step>/attempt-N`, made before the command starts: write logs and results there directly),
 `TL_WORKTREE` and `TL_BRANCH`. They are no part of a check's cache key. The `keep` globs above are the fallback for files a tool cannot
 redirect; they land in the same directory. Files left in `TL_ARTIFACT_DIR` (except `check.log`) are shown on the bead's page like pictures.
 **Duplicates.** A plan check cannot be a copy of a repo check (a ref names it). Two identical adhoc commands in one block run once. 
