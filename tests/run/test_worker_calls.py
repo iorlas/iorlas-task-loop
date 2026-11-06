@@ -120,6 +120,21 @@ class Calls(te.EngineTest):
         assert answered
         assert {r["cost_source"] for r in answered} - {"harness", "free", "unknown"} == set()
 
+    def write_call_end(self, cost, source):
+        usage = {"tokens": {"in_fresh": 200, "cache_read": 800, "cache_write": 70, "out": 50}, "cost": cost or 0.0, "cost_usd": cost,
+                 "cost_source": source, "secs": 1, "turns": 1, "context_k": None, "answer_bytes": 0, "ref": "w1"}
+        write = te.full(te.WRITE, "w1", exit_code=0, cost=cost or 0.0, usage=usage)
+        self.go(fake_route.Script({"plan": [te.PLAN], "write": [write], "review": [te.CLEAN]}))
+        return next(r for r in records(self.eng, "call_end") if r.get("exit") is not None)
+
+    def test_call_end_keeps_cache_write_and_an_unknown_cost_is_null_not_zero(self):
+        end = self.write_call_end(None, "unknown")
+        assert (end["cost"], end["cost_source"], end["tokens"]["cache_write"]) == (None, "unknown", 70)
+
+    def test_call_end_keeps_a_cost_the_harness_gave(self):
+        end = self.write_call_end(0.5, "harness")
+        assert (end["cost"], end["cost_source"]) == (0.5, "harness")
+
     def test_every_worker_call_is_told_its_run_through_the_six_names(self):
         seen = []
         real = worker_call.dg.call

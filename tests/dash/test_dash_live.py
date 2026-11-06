@@ -40,7 +40,6 @@ def put(path, rows, mode="a"):
 
 def make_run(root):
     """An engine log with a command and a write step, and the live file of its write call."""
-    eng = os.path.join(root, "task-loop", "engine")
     b = manifest(os.path.join(root, "task-loop"), f"{BEAD}-{STAMP}", BEAD, T)
     log = str(b.log)
     put(log, [typed("run_start", T, run_id=f"{BEAD}-{STAMP}", bead=BEAD, worktree=""),
@@ -48,7 +47,7 @@ def make_run(root):
               typed("cmd_end", T + 3, id="m1", exit=0),
               typed("step_start", T + 4, id="n1", text="write: x", step="write"),
               typed("call_start", T + 5, id="c1", n=1, step="write", node="n1", role="worker")])
-    lf = os.path.join(eng, f"{BEAD}-{STAMP}.live", "01-write.jsonl")
+    lf = os.path.join(b.live, "01-write.jsonl")
     put(
         lf,
         [

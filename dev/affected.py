@@ -237,7 +237,8 @@ CONFIG_FILES = ("pyproject.toml", "uv.lock", "mise.toml", "mise.lock", ".importl
 def closure(repo, tests, tracked=None):
     """Every file the result of running `tests` can depend on, sorted: the tests (those of the always-run tests/rules folder left out: they
     read the whole tree and are a check of their own), the conftest.py above each, everything they import (forward, lazy imports too),
-    every non-Python file under tests/ and every one a reached file names by basename, and the root config files. Deliberately wide: a
+    the non-Python files under tests/ that a reached file can read (`data_in_scope`) and every one a reached file names by basename, and
+    the root config files. Deliberately wide: a
     file in the closure that did not matter costs a rerun, a file that mattered and is missing is a wrong pass."""
     tests = [t for t in tests if not t.startswith(ALWAYS + "/")]
     reached = set(tests)
@@ -254,9 +255,21 @@ def closure(repo, tests, tracked=None):
     if tracked is None:
         listed = git(repo.root, "ls-files")
         tracked = listed.split("\n") if listed is not None else [p.relative_to(repo.root).as_posix() for p in repo.root.rglob("*")]
+    folders = {p.split("/")[1] for p in reached if p.startswith("tests/") and p.count("/") > 1}
     data = {p for p in tracked if p and not p.endswith(".py") and not SKIP_PARTS & set(p.split("/"))
-            and (p.startswith("tests/") or Path(p).name in named or p in CONFIG_FILES)}
+            and (data_in_scope(p, folders, named) if p.startswith("tests/") else Path(p).name in named or p in CONFIG_FILES)}
     return sorted(p for p in reached | data if (repo.root / p).is_file())
+
+
+def data_in_scope(path, folders, named):
+    """A non-Python file under tests/ a reached file can read: a loose file of tests/, the data of a folder a reached test file sits in,
+    a fixture folder with the name of such a folder or one a reached file names, or any file a reached file names by basename."""
+    parts = path.split("/")
+    if len(parts) <= 2 or Path(path).name in named:
+        return True
+    if parts[1] == "fixtures":
+        return parts[2] in folders or parts[2] in named
+    return parts[1] in folders
 
 
 def test_keys(repo, tests, tracked=None):
