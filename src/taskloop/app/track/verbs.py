@@ -22,7 +22,9 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import Landed, landed_meta
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Git
+from taskloop.contracts.reponame import repo_name
 from taskloop.contracts.slots import SlotGitError, git_probe
+from taskloop.contracts.stores import ReposStore
 
 Guard = Callable[[BeadId, str], str]  # (bead, close reason) -> "" when the close goes on, else why it is refused (closeguard.py)
 
@@ -161,16 +163,20 @@ def passthrough(store: BdStore, rest: list[str], guard: Guard) -> int:
 
 
 def register(git: Git, directory: str, who: Identity) -> int:
-    """`tl register [DIR]`: add the repo of a working directory to the dashboard."""
+    """`tl register [DIR|NAME]`: add the repo of a working directory to the dashboard; a registered name stands for its folder."""
     try:
         path = repo_root(directory) if git.toplevel(directory) else None
     except (OSError, ValueError, SlotGitError):
         path = None
     if path is None:
-        print("tl: not a Git working directory: " + repr(directory), file=sys.stderr)
+        try:
+            path = ReposStore(who.config).path_of(directory)
+        except ValueError as e:
+            print(f"tl: not a Git working directory: {directory!r}; {e}", file=sys.stderr)
+            return 1
+    if not register_repo(path, who.config):
         return 1
-    register_repo(path, who.config)
-    print("REGISTERED " + path)
+    print(f"REGISTERED {repo_name(path)} {path}")
     return 0
 
 

@@ -52,7 +52,6 @@ class CheckEnvironmentTest(Case):
     def test_default_mode_keeps_absent_config_names_absent_and_honors_declared_home(self):
         out = check_env({"HOME": "/owner"}, {"HOME": "/declared"}, home=None)
         assert out["HOME"] == "/declared"
-        assert out["DOTNET_CLI_HOME"] == "/declared"
         assert not {"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "MISE_CONFIG_DIR"} & out.keys()
 
     def test_builder_overrides_home_and_config_after_declared_env(self):
@@ -75,20 +74,20 @@ class CheckEnvironmentTest(Case):
     def test_cache_defaults_point_to_the_original_toolchain_locations(self):
         out = check_env({"HOME": "/owner"}, {"HOME": "/ignored"}, home="/scratch")
         expected = {"XDG_CACHE_HOME": "/owner/.cache", "UV_CACHE_DIR": "/owner/.cache/uv",
-                    "UV_PYTHON_INSTALL_DIR": "/owner/.local/share/uv/python", "DOTNET_CLI_HOME": "/owner",
-                    "NUGET_PACKAGES": "/owner/.nuget/packages", "MISE_CACHE_DIR": "/owner/.cache/mise",
+                    "UV_PYTHON_INSTALL_DIR": "/owner/.local/share/uv/python",
+                    "MISE_CACHE_DIR": "/owner/.cache/mise",
                     "MISE_DATA_DIR": "/owner/.local/share/mise", "MISE_STATE_DIR": "/owner/.local/state/mise"}
         assert {k: out[k] for k in expected} == expected
 
     def test_explicit_cache_paths_survive_and_slot_overrides_win(self):
         caches = {"XDG_CACHE_HOME": "/cache", "UV_CACHE_DIR": "/uv", "UV_PYTHON_INSTALL_DIR": "/python",
-                  "DOTNET_CLI_HOME": "/dotnet", "NUGET_PACKAGES": "/nuget", "MISE_CACHE_DIR": "/mise-cache",
+                  "MISE_CACHE_DIR": "/mise-cache",
                   "MISE_DATA_DIR": "/mise-data", "MISE_STATE_DIR": "/mise-state"}
         for home in (None, "/scratch"):
             with self.subTest(home=home):
                 out = check_env({"HOME": "/owner", **caches, "MISE_SECRET_TOKEN": "secret"},
-                                {"DOTNET_CLI_HOME": "/slot/dotnet"}, home=home)
-                assert {k: out[k] for k in caches} == {**caches, "DOTNET_CLI_HOME": "/slot/dotnet"}
+                                {"UV_CACHE_DIR": "/slot/uv"}, home=home)
+                assert {k: out[k] for k in caches} == {**caches, "UV_CACHE_DIR": "/slot/uv"}
                 assert "MISE_SECRET_TOKEN" not in out
 
     def test_each_execution_has_a_private_home_and_cleans_up_on_error(self):
