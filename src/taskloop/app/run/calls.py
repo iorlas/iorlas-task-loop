@@ -90,8 +90,9 @@ class Calls:
         if node == "write":  # where the session's context stands now: what the next round weighs against write_fresh_above_k
             if not row["transcript"] and self.opencode(row["ref"]):  # OpenCode: the session id stands for the transcript
                 row["transcript"] = "opencode:" + self.opencode(row["ref"])
-            tok = self.context_tokens(row["transcript"])
-            row["context_k"] = round(tok / 1000) if tok else None
+            told = res.usage.context_k if res.usage else None  # delegate says it for Claude and Codex; OpenCode is still read here (B3b)
+            tok = None if told else self.context_tokens(row["transcript"])
+            row["context_k"] = round(told) if told else round(tok / 1000) if tok else None
         for k in KEYS:
             self.stats["tokens_" + k] += int((row["tokens"] or {}).get(k) or 0)
         self.sessions.append(row)
