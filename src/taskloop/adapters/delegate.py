@@ -20,7 +20,6 @@ from taskloop.contracts.delegate import REASON_TIMEOUT, DelegateResult, Permanen
 from taskloop.contracts.env import Env
 
 CONTRACT = delegate_wire.CONTRACT  # the contract number this engine speaks
-NODE_MARGIN_S = 180  # --timeout passed = the node's limit minus this
 BACKSTOP_S = 120  # the engine stops the child at the node's limit plus this
 LIBRARY = "delegate.api"  # what the engine logs as the route of a call
 

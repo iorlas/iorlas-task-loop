@@ -122,48 +122,10 @@ ROWS = table_of(RunRow, RefusalRow, CanaryRow, GapRow, ReleaseRow, ReapRow)
 
 
 @mutable
-class Streak:
-    ts: float
-    outcome: str
-    fp: str
-    task: str | None
-
-
-@mutable
 class Failure:
     ts: float
     outcome: str
     say: str
-
-
-@mutable
-class PairFact:
-    streak: list[Streak] = field(default_factory=list)
-    rung: int = 0
-    until: float = 0.0
-    kind: str | None = None
-    fp: str | None = None
-    evidence: str = ""
-    source: str | None = None
-    fails: list[Failure] = field(default_factory=list)
-    last_done: float = 0.0
-
-
-@mutable
-class LaneFact:
-    kind: str
-    until: float
-    source: str
-    evidence: str
-    ts: float
-
-
-@mutable
-class HealthState:
-    V = V
-    ts: float = 0.0
-    pairs: dict[str, PairFact] = field(default_factory=dict)  # "LANE|model"
-    lanes: dict[str, LaneFact] = field(default_factory=dict)
 
 
 @record
@@ -172,4 +134,4 @@ class HealthCheckpoint:
 
     V = V
     policy: BreakerPolicy
-    state: HealthState
+    state: dict[str, Json]  # any_breaker State.to_dict(); a checkpoint of an older shape is read as absent

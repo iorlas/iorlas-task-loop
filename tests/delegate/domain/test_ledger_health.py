@@ -2,18 +2,19 @@
 pre-D2 fold: every row's admit/refuse decision must be the same). Run: uv run pytest tests/delegate/domain/test_ledger_health.py"""
 
 import json
-import tempfile
 from dataclasses import replace
 from pathlib import Path
 
+from any_breaker import State
 from delegate.contracts import codec
-from delegate.contracts.history import HealthState, RefusalRow, ReleaseRow, RunRow
+from delegate.contracts.history import RefusalRow, ReleaseRow, RunRow
 from delegate.contracts.json_types import as_num, as_opt_str
 from delegate.contracts.routing import BreakerPolicy
 from delegate.contracts.stores import CheckpointStore, HistoryStore
 from delegate.domain.health.ledger import STATES, HealthLedger, combine, failure_fields, stale_usage
 from delegate.domain.health.matchers import fingerprint
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -40,6 +41,11 @@ def row(ts, lane="L", model="m", outcome=None, task=None, say="", until=None, **
         until=as_num(fields.get("until")),
         **kw,
     )
+
+
+def pair_keys(state):
+    """The (lane, model) pairs the fold counts: any_breaker keys of the form `lane|model` (a lane out is keyed by the lane alone)."""
+    return {k: v for k, v in state.keys.items() if "|" in k and not k.endswith("|")}
 
 
 def fold(rows, state=None, pol=POL):
@@ -73,7 +79,7 @@ class Replay:
 
     def replay(self, name):
         g = GOLDEN[name]
-        state, got = HealthState(), []
+        state, got = State(), []
         for r in g["rows"]:
             v = view(state, g["lane"], g["model"], r["ts"])
             got.append([r["ts"], v.usable, v.canary, v.state])
@@ -100,18 +106,18 @@ class Replay:
         state, g = self.replay("bad_request_22oct")
         assert len(g["rows"]) == 53
         assert all(d[1] for d in g["decisions"])  # every one of the 53 was admitted
-        assert not (state.pairs or state.lanes)
+        assert not (pair_keys(state) or state.outs)
 
     def test_22_oct_night_whole_history_never_benches(self):
         g = GOLDEN["night_22oct"]
-        state, got = HealthState(), []
+        state, got = State(), []
         for r in sorted(g["rows"], key=lambda r: r["ts"]):
             got.append([r["ts"], view(state, r["lane"], r["model"], r["ts"]).usable])
             LEDGER.step(state, golden_row(r))
         assert got == g["decisions"]
-        assert {k: p.rung for k, p in state.pairs.items()} == g["pairs"]
-        assert sorted(state.lanes) == g["lanes"]
-        assert not [k for k, p in state.pairs.items() if p.rung]
+        assert {k: p.rung for k, p in pair_keys(state).items()} == g["pairs"]
+        assert sorted(state.outs) == g["lanes"]
+        assert not [k for k, p in pair_keys(state).items() if p.rung]
 
 
 class Breaker(Case):
@@ -164,7 +170,7 @@ class Breaker(Case):
         assert view(s, "L", "m", 1040).usable
 
     def test_ladder_is_15_30_60_then_stays_at_60_and_a_passing_canary_resets_it(self):
-        s = HealthState()
+        s = State()
         for i in range(3):
             LEDGER.step(s, row(1000 + i, outcome="worker_failed", say="x", task=f"t{i}"))
         fail_at, minutes = 1002, []
@@ -207,7 +213,7 @@ class Breaker(Case):
         ]
         s = fold([row(1000 + i, outcome=never[i % len(never)], say="same", task=f"t{i}") for i in range(60)])
         assert view(s, "L", "m", 1100).usable
-        assert not (s.pairs or s.lanes)
+        assert not (pair_keys(s) or s.outs)
 
     def test_refusals_are_not_facts(self):
         s = fold([RefusalRow(ts=1000 + i, outcome="vendor_blip", role="worker", lane="L", model="m", say="x") for i in range(9)])
@@ -276,7 +282,7 @@ class LaneFacts:
         assert view(s2, "L", "m", 1600).canary
 
     def test_combine_picks_the_most_severe_state(self):
-        up = view(HealthState(), "L", "m", 1)
+        up = view(State(), "L", "m", 1)
         assert combine(up) == "up"
         assert combine(up, busy=True) == "busy"
         assert combine(up, held=True, busy=True) == "held"
@@ -304,7 +310,7 @@ class Fold:
         ]
 
     def dump(self, s):
-        return json.dumps(codec.to_json(s), sort_keys=True)
+        return json.dumps(s.to_dict(), sort_keys=True)
 
     def test_replay_is_deterministic_and_order_independent(self):
         rows = self.rows()
@@ -313,11 +319,11 @@ class Fold:
     def test_checkpoint_plus_tail_equals_full_fold(self):
         rows = self.rows()
         for cut in (5, 17, 33):
-            cp = codec.from_json(HealthState, json.loads(self.dump(fold(rows[:cut]))))  # a checkpoint went through a file
+            cp = State.from_dict(json.loads(self.dump(fold(rows[:cut]))))  # a checkpoint went through a file
             assert self.dump(fold(rows, cp)) == self.dump(fold(rows))  # rows at or before the checkpoint are skipped
 
     def test_history_skips_corrupt_and_stale_lines(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             p = Path(d) / "history.jsonl"
             h = HistoryStore(p)
             h.add(row(1000, outcome="worker_failed", say="x"))
@@ -331,13 +337,18 @@ class Fold:
             assert [r.ts for r in h.rows(since=1000)] == [1001]
 
     def test_checkpoint_file_is_only_a_cache(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             store = CheckpointStore(Path(d) / "cp.json")
             s = fold(self.rows())
             store.save(s, POL)
             assert store.load(POL) == s
             assert store.load(BreakerPolicy(n=9)) is None  # another policy: refold
             (Path(d) / "cp.json").write_text("{garbage", encoding="utf-8")
+            assert store.load(POL) is None
+            store.save(s, POL)
+            doc = json.loads((Path(d) / "cp.json").read_text(encoding="utf-8"))
+            doc["state"] = {"v": 1, "ts": 99999.0, "pairs": {}, "lanes": {}}  # the shape before any_breaker: absent, never a stale ts
+            (Path(d) / "cp.json").write_text(json.dumps(doc), encoding="utf-8")
             assert store.load(POL) is None
 
     def test_a_run_row_carries_v_fingerprint_say(self):

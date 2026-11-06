@@ -18,8 +18,6 @@ from stream_proc import proc_start
 from support import fake_route
 from taskloop.adapters import runner
 
-DONE_WHEN_EXISTS = "while [ ! -e '%s' ]; do sleep 0.02; done"
-
 
 class FakeApi:
     def __init__(self, workdir: Path, body: str, chat_until: float = 0.0, answer: dict[str, Any] | None = None) -> None:
