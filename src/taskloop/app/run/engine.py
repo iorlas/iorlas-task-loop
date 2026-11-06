@@ -13,6 +13,7 @@ from taskloop.app.run import ended
 from taskloop.app.run.blocked import Blocked, FixFailed
 from taskloop.app.run.console import say
 from taskloop.app.run.context import RunContext
+from taskloop.app.run.facts import open_facts
 from taskloop.app.run.host import RunHost
 from taskloop.app.run.layout import RunLayout, finish_of, live_run, loop_id_of, loop_of, repo_of
 from taskloop.app.run.stages import run_stages
@@ -81,7 +82,8 @@ class Engine(RunHost):
         # exec and an unfinished close retain their run id; a completed network pause retains only its counters
         dead_run = self.dead.ended.run if self.dead and self.dead.ended else None
         taken = (self.reexec.run if self.reexec else None) or (live_run(self.home, pause.run) if pause else None) or dead_run
-        layout = RunLayout.open(bead, wt, taken, self.home, repo_of(self.git, wt), self.clock.now(),
+        repo = repo_of(self.git, wt)
+        layout = RunLayout.open(bead, wt, taken, self.home, repo, self.clock.now(),
                                 loop=loop_of(self.env, self.git, wt), loop_id=loop_id_of(self.env),
                                 mode=mode, owner=who.actor, session=who.session)
         self.log_path, self.err_path, self.run_dir, self.live_dir = layout.log_path, layout.err_path, layout.run_dir, layout.live_dir
@@ -106,6 +108,7 @@ class Engine(RunHost):
             self.reload.restore_run(rundocs.pause(self.home, pause.run))
             self.reload.carry_done_memo(self.home.run_dir(pause.run))
             self.log.note(f"back from the network pause of {pause.run}: continuing as run {stem}")
+        self.facts, self.ports = open_facts(self, repo)  # the stages' read path (docs/design/facts.md): the engine's own handles, frozen
 
     @property
     def intake_per_day(self) -> int:
