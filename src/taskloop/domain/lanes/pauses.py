@@ -68,7 +68,8 @@ BACKOFF: Final[dict[str, Backoff | None]] = {
 OVERRIDES: Final[dict[str, tuple[Permanence, str] | None]] = {
     Reason.NO_LANE: ("needs_owner", "The owner must restore an available lane; a predicted time cannot repair it."),
     Reason.CRASH: ("needs_owner", "A delegate crash needs owner investigation after in-process retries are exhausted."),
-    Reason.ONLY_FAMILY_UNREADY: None, Reason.LOOP_EXCLUDED: None, Reason.SAME_FAMILY: None, Reason.BUSY: None, Reason.TIMEOUT: None, Reason.NETWORK: None,
+    Reason.ONLY_FAMILY_UNREADY: None, Reason.LOOP_EXCLUDED: None, Reason.SAME_FAMILY: None, Reason.BUSY: None, Reason.TIMEOUT: None,
+    Reason.NETWORK: None,
     Reason.ENGINE_CRASH: None, Reason.STAGE_REFUSED: None, Reason.TRANSIENT_INFRASTRUCTURE: None,
     Reason.RATE_LIMITED: None, Reason.HUNG: None, Reason.VENDOR_BLIP: None, Reason.WORKER_FAILED: None,
     Reason.SCHEMA_INVALID: None, Reason.HELD: None, Reason.DUPLICATE_TASK: None, Reason.LOCK: None, Reason.NO_ANSWER: None,
