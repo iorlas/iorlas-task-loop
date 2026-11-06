@@ -5,11 +5,11 @@ numbers (one that is nobody's, and this test process's own)."""
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -103,7 +103,7 @@ class Decision(Case):
         assert runlife.is_lost(self.m(pid_start="t0"), "h", late, same_start)
 
     def test_what_the_dashboard_shows_is_what_reconcile_writes(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             cfg = ConfigDir(Path(d))
             now = 1_800_000_000.0
             for run, pid in (("r-dead", NOBODY), ("r-live", os.getpid())):
@@ -138,7 +138,7 @@ class Crash(Case):
     run lost, and the dashboard's live view and the report both read that; a live pid, another host or an ended run is never marked."""
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.tmp = TemporaryDirectory(ignore_cleanup_errors=True)
         home = Path(self.tmp.name)
         self.cfg = home / "task-loop"
         self.t0 = 1_800_000_000.0
@@ -215,7 +215,7 @@ class Crash(Case):
 
 class Sweep(Case):
     def test_a_log_older_than_retain_goes_with_its_live_folder_and_a_recent_or_live_one_stays(self):
-        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
+        with TemporaryDirectory(ignore_cleanup_errors=True) as d:
             cfg = ConfigDir(Path(d) / "task-loop")
             now = 1_800_000_000.0
 
@@ -240,7 +240,7 @@ class Sweep(Case):
 
 class BeatsAreNoEvents(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.tmp = TemporaryDirectory(ignore_cleanup_errors=True)
         self.addCleanup(self.tmp.cleanup)
         self.cfg = Path(self.tmp.name) / "task-loop"
         self.t0 = 1_800_000_000.0

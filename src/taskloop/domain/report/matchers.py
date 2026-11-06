@@ -8,32 +8,18 @@ from a trace row years later.
 Pure; the regexes live here because nothing else in domain may import `re`.
 """
 
-import hashlib
 import os
 import re
 from datetime import datetime, timedelta
 from typing import Final
 
+import any_failure_fp as failure_fp
+
 # origin() writes one of these; an older row may have none at all.
 STARTED_BECAUSE: Final = ("first", "answer", "resume", "retry", "fresh")
 
-ANSI: Final = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
-URL: Final = re.compile(r"\bhttps?://\S+", re.I)
-UUID: Final = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
-SHA: Final = re.compile(r"\b[0-9a-f]{7,40}\b", re.I)
-# A token that may be a bead id: tl-19i, tl-d5f.46, tl-fsj, t-1-1. _bead_token decides.
-CANDIDATE: Final = re.compile(r"\b[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+\b", re.I)
-BEAD_PREFIXES: Final = ("tl", "task", "bead")
-SESSION: Final = re.compile(r"\b(?:ref|ses|session|run|thread)[-_][A-Za-z0-9._-]+\b", re.I)
-# Absolute POSIX/Windows paths, and relative paths with a separator and a file extension (Assets/Player.cs,
-# Assets\Player.cs). A bare word pair such as and/or is not a path.
-PATH: Final = re.compile(r"(?:[A-Za-z]:)?(?:[\\/][\w.@%+~-]+){2,}"
-                  r"|(?:[\w.@%+~-]+[\\/])+[\w.@%+~-]*\.[A-Za-z0-9]{1,8}\b")
-QUOTED: Final = re.compile(r"`[^`]*`|\"[^\"]*\"|'[^']*'")
-BRACES: Final = re.compile(r"\{[^{}]*\}")
-NUMBER: Final = re.compile(r"\b\d+(?:\.\d+)?\b")
-SPACE: Final = re.compile(r"\s+")
-EDGE: Final = " :;,.-|/"
+# A token that may be a bead id: tl-19i, tl-d5f.46, tl-fsj, t-1-1. A descriptive hyphenated word (read-only) is not one.
+BEAD: Final = re.compile(r"\b(?=[a-z0-9.-]*\d|(?:tl|task|bead)[.-])[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+\b")
 
 
 def normalize_started_because(value: object, prev_run: object = "") -> str:
@@ -44,45 +30,14 @@ def normalize_started_because(value: object, prev_run: object = "") -> str:
     return "retry" if str(prev_run or "").strip() else "first"
 
 
-def _bead_token(token: str) -> bool:
-    """True when token is an id, not a descriptive hyphenated word."""
-    if any(ch.isdigit() for ch in token):
-        return True
-    return re.split(r"[.-]", token)[0].lower() in BEAD_PREFIXES
-
-
 def fingerprint(why: object) -> str:
     """A stable, readable slug for a failure reason ("" when there is no text)."""
-    text = str(why or "")
-    if not text.strip():
-        return ""
-    text = ANSI.sub("", text).lower()
-    text = URL.sub(" <url> ", text)
-    # Whole paths before sessions and before embedded SHAs/UUIDs: Assets/Player2.cs is a path, not a bead, and
-    # /repo/thread-1234abc/Player.cs is one path, not a session plus a sha. Paths first also keeps a session-like
-    # segment inside a Windows or POSIX path from being split off.
-    text = PATH.sub(" <path> ", text)
-    text = SESSION.sub(" <session> ", text)
-    text = UUID.sub(" <id> ", text)
-    text = SHA.sub(" <sha> ", text)
-    text = CANDIDATE.sub(lambda m: " <bead> " if _bead_token(m.group(0)) else m.group(0), text)
-    text = QUOTED.sub(" <quoted> ", text)
-    text = BRACES.sub(" <json> ", text)
-    text = NUMBER.sub(" <n> ", text)
-    text = SPACE.sub(" ", text).strip(EDGE)
-    if not text:
-        return ""
-    if len(text) > 120:
-        text = text[:112].rstrip(EDGE) + "#" + hashlib.sha1(text.encode("utf-8")).hexdigest()[:8]
-    return text
-
-
-HASH_TAIL: Final = re.compile(r"#[0-9a-f]{8}$")
+    return failure_fp.fingerprint(why, ids={"bead": BEAD})
 
 
 def fingerprint_head(why: object) -> str:
     """`fingerprint` without the hash of a long tail: a storm is the same head."""
-    return HASH_TAIL.sub("", fingerprint(why))
+    return failure_fp.head(fingerprint(why))
 
 
 def run_fingerprint(outcome: object, why: object) -> str:

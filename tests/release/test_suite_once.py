@@ -1,5 +1,4 @@
 """Verification uses pre-bump content; the same tree under the same selection is verified once."""
-import tempfile
 from dataclasses import replace
 from pathlib import Path
 from unittest import mock
@@ -8,6 +7,7 @@ import pytest
 import support.paths  # noqa: F401
 from support.case import Case
 from support.shells import quiet_shell
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.release import flow
 from taskloop.app.release.shell import Abort
@@ -17,7 +17,7 @@ from taskloop.contracts.gitfacts import StatusRow
 
 class SuiteOnce(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
         self.env = Env({"XDG_CONFIG_HOME": str(self.root / "cfg"), "XDG_CACHE_HOME": str(self.root / "cache")})

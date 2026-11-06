@@ -1,11 +1,11 @@
 """A bead parked on an ask that was dropped at upgrade (a v1 or unreadable file) stays visible and is asked again."""
 import json
 import sys
-import tempfile
 from argparse import Namespace
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -27,7 +27,7 @@ T = 1000.0
 @domain
 class OrphanTest(Case):
     def setup_method(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(Path(self.tmp.name))
         unreadable_ask(self.cfg, "tl-7", json.dumps({"v": 1, "id": "tl-7-2", "bead": "tl-7", "status": "open", "kind": "verify"}))

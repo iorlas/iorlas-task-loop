@@ -5,11 +5,11 @@ field was wrong. `GOLDEN_WRITE=1 uv run pytest tests/dash/test_dash_golden.py` r
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -50,7 +50,7 @@ CLOSES = [
 
 class Golden(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         root = Path(self.tmp.name)
         repo = root / "lifesim"
         repo.mkdir()

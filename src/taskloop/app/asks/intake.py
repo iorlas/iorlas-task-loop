@@ -13,6 +13,7 @@ from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask, AskAction, AskAnswer, ThreadEntry
 from taskloop.contracts.bead import Comment
 from taskloop.contracts.dash import OwnerCause, Stick
+from taskloop.contracts.enums import AskKind
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
 from taskloop.contracts.stores import AskStore
@@ -105,7 +106,8 @@ class Intake:
             return done, why
         with contextlib.suppress(BdFailure):  # the loop's own reopen takes a blocked bead whose ask is answered
             self.store.update(bead, BeadPatch(status="open"))
-        self.note(bead, receipt("answer", given.text, ask=ask.id, action=action))
+        kind = {"kind": ask.kind.value} if ask.kind is AskKind.DECISION else {}  # the answer to a decision is a record: its comment says so
+        self.note(bead, receipt("answer", given.text, ask=ask.id, action=action, **kind))
         return done, ""
 
     def withdraw(self, bead: BeadId, why: str) -> tuple[Ask | None, str]:

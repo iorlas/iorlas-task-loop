@@ -2,6 +2,7 @@
 per repo) fetch, rebase, the repo's checks again after a lost push race, the gate only when main moved under the outside gate and the
 tries are used up, and the push. A red gate, a conflict or red checks are fixed outside the lock; a rejected push tries again (three
 times); a network error rests until the network is back. The pushed tree is always one the gate passed on the same base."""
+import time
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
@@ -195,18 +196,21 @@ class Lander:
         e.steps.begin("land", f"land (gate before the lock, try {st.attempts})", **{"try": st.attempts})
         e.newfiles.quarantine_strays()
         before, head = e.git.rev_parse(e.wt, e.cfg.base), e.git.rev_parse(e.wt, "HEAD")
+        m0 = time.monotonic()
         rc, tail = e.checkout.fetch()
+        m1 = time.monotonic()
         problem = self.rebasing.run(rc, tail)
+        m2 = time.monotonic()
         where = Placing.NO_GATE
         if problem is None:
             where = Placing.CACHED if self.gate.green() else Placing.OUTSIDE
             got = self.gate.run()
             problem = got if isinstance(got, Problem) else None
-        self.emit(st, before, head, problem, where)
+        self.emit(st, before, head, problem, where, (m1 - m0, m2 - m1, time.monotonic() - m2))
         st.phase = Phase.STEP_OPEN if problem is None else Phase.FRESH
         return problem
 
-    def emit(self, st: Land, before: str, head: str, problem: Problem | None, where: Placing) -> None:
+    def emit(self, st: Land, before: str, head: str, problem: Problem | None, where: Placing, secs: tuple[float, float, float]) -> None:
         e = self.e
         e.log.emit(
             rec.LandTry(
@@ -216,6 +220,9 @@ class Lander:
                 rebase_moved=e.git.rev_parse(e.wt, "HEAD") != head,
                 failing=problem.kind.value if problem else "",
                 gate=where.value,
+                fetch_s=round(secs[0], 3),
+                rebase_s=round(secs[1], 3),
+                gate_s=round(secs[2], 3),
             )
         )
 
@@ -243,13 +250,16 @@ class Lander:
                 st.phase = Phase.FRESH
             e.newfiles.quarantine_strays()
             before, head = e.git.rev_parse(e.wt, e.cfg.base), e.git.rev_parse(e.wt, "HEAD")
+            m0 = time.monotonic()
             rc, tail = e.checkout.fetch()
+            m1 = time.monotonic()
             if rc == 0 and (st.pushes or st.phase is Phase.NET_DOWN):
                 found = self.landed.already(fetch=False)  # an earlier push of this land may have gone through
                 if found:
                     return self.landed.found(found), None
                 st.phase = Phase.FRESH  # looked: not landed
             problem = self.rebasing.run(rc, tail)
+            m2 = time.monotonic()
             where = self.placing(st) if problem is None else Placing.NO_GATE
             if where is Placing.STALE:
                 problem = Problem(ProblemKind.STALE, "")
@@ -258,7 +268,8 @@ class Lander:
             gate_pass: GatePass | None = None
             if problem is None:
                 gate_pass, problem = self.pass_for(where)
-            self.emit(st, before, head, problem, Placing.NO_GATE if where is Placing.STALE else where)
+            self.emit(st, before, head, problem, Placing.NO_GATE if where is Placing.STALE else where,
+                      (m1 - m0, m2 - m1, time.monotonic() - m2))
             if gate_pass is None:
                 return "", problem
             got = self.pushing.push(st, gate_pass)
