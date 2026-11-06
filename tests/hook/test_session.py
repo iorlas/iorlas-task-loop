@@ -1,10 +1,10 @@
 """SessionStart introduces task-loop only in profile repos and survives hook failures."""
 import json
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.contracts.env import Env
 from taskloop.domain import selfdescribe
@@ -13,7 +13,7 @@ from taskloop.hook import session
 
 class SessionContext(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.repo = Path(tmp.name)
         self.env = Env()

@@ -2,7 +2,6 @@
 
 import json
 import sqlite3
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,6 +9,7 @@ import pytest
 import support.paths  # noqa: F401
 from support.case import Case
 from support.narrow import must
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.enums import Outcome, Result, Step, WhyCode
@@ -23,7 +23,7 @@ from taskloop.contracts.stores import JsonStore
 
 class RunRowsTest(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.cfg = ConfigDir(Path(tmp.name))
         self.rows = RunRows(self.cfg)

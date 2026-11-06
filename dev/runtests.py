@@ -143,8 +143,11 @@ def main():
     home = scratch.scratch_dir(os.environ, "tl-run-")
     try:
         env = isolated_env(home)
-        parallel = pytest(root, env, "not serial", tests, n)
-        serial = pytest(root, env, "serial", tests, 1)
+        parallel = pytest(root, env, "not serial and not quarantine", tests, n)
+        serial = pytest(root, env, "serial and not quarantine", tests, 1)
+        held = pytest(root, env, "quarantine", tests, 1)  # apart: a red one is said, never the run's verdict (tests/quarantine.txt)
+        if held not in (0, NO_TESTS):
+            print(f"runtests: quarantined tests are red (exit {held}); not blocking", flush=True)
         summary = testtimes_report.budget_warning(sorted(str(p) for p in home.glob("times-*.json")))
         if summary:
             print(summary, flush=True)

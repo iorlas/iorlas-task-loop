@@ -3,7 +3,6 @@ Every test here runs in milliseconds; the real git and the real files are in tes
 import contextlib
 import os
 import sys
-import tempfile
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,6 +10,7 @@ from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -48,7 +48,7 @@ class Beating(FakeBeads):
 
 class Rig(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.git, self.tickets = FakeSlotGit(), MemTickets()
         self.bd = Beating(actor=ME, prefix="sl")
@@ -310,7 +310,7 @@ class OneLease(Rig):
 
 class StaleDirs(Rig):
     def test_a_stray_slot_folder_does_not_change_the_slot_count(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.env.repo = tmp.name
         Path(self.env.dir_of("s5")).mkdir(parents=True)

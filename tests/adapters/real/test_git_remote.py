@@ -1,6 +1,5 @@
 """The port's remote calls against a bare origin: what moved on the remote, and what the caller is told when it did not."""
 
-import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -9,6 +8,7 @@ import support.paths  # noqa: F401
 from git_porcelain.real import Done, RealRepo
 from support.case import Case
 from support.checked import run_checked
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import git_ops
 from taskloop.adapters.git import RealGit
@@ -19,7 +19,7 @@ from taskloop.domain.land.matchers import Push
 
 class RealGitRemoteTest(Case):
     def setup_method(self):
-        temporary = tempfile.TemporaryDirectory()
+        temporary = TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
         self.repo, self.origin = self.root / "repo", self.root / "origin.git"

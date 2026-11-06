@@ -6,12 +6,12 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / "skills" / "task-loop"
@@ -45,7 +45,7 @@ FAKE = str(Path(__file__).resolve().parents[1] / "support" / "fake_route.py")
 
 class Fake(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.dir = Path(self.tmp.name)
         self.script = self.dir / "script.json"
         self.env = dict(os.environ, FAKE_ROUTE_SCRIPT=str(self.script), FAKE_ROUTE_DELEGATE=str(DELEGATE))

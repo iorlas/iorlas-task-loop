@@ -1,11 +1,11 @@
 """`tl wait` (exit code per outcome, timeout, an ask ending the wait) and `tl ask show`: temp config dir, fake clock and sleep."""
 import argparse
 import sys
-import tempfile
 from pathlib import Path
 from typing import ClassVar
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -43,7 +43,7 @@ class Clock:
 
 class WaitCase(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(self.tmp.name)
         self.asks = AskStore.at(self.cfg)

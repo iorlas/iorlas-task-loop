@@ -22,6 +22,10 @@ test-full:
 test-live *args:
     uv run pytest -m live -s tests/live {{args}}
 
+# Vendored shelf packages: `just vendor sync NAME [--tag TAG]` copies one from the shelf tag, `just vendor check` proves no drift (shelf_vendor, itself vendored).
+vendor *args:
+    PYTHONPATH=skills/task-loop/_vendor python3 -m shelf_vendor --vendor-dir skills/task-loop/_vendor --manifest dev/vendor.json {{args}}
+
 # The delegate tests (tests/delegate; real processes, several minutes). No other run collects them unless the change touches src/delegate, tests/delegate or the vendored packages (tests/support/scope.py).
 test-delegate *args:
     TL_DELEGATE_TESTS=1 uv run pytest -m "" tests/delegate {{args}}

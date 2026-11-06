@@ -5,7 +5,6 @@ import json
 import os
 import sqlite3
 import sys
-import tempfile
 import types
 from pathlib import Path
 from typing import cast
@@ -13,6 +12,7 @@ from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -89,7 +89,7 @@ def make_db(path):
 
 class OpenCode(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.db = os.path.join(self.tmp.name, "opencode.db")
         make_db(self.db)
         self.cfg = os.path.join(self.tmp.name, "cfg")

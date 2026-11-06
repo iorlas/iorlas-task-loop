@@ -3,10 +3,10 @@ orphaned; clean removes only an owned worktree that is merged and clean and says
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
@@ -27,7 +27,7 @@ def git(cwd, *args):
 
 class Rig(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name).resolve()
         self.git, self.cfg, self.out = port_git(), ConfigDir(root / "cfg"), []
