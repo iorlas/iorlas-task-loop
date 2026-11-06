@@ -10,7 +10,7 @@ from taskloop.app.launch import repos
 from taskloop.app.reconcile import lost as lostwork
 from taskloop.app.report import card as cards
 from taskloop.app.report import planner, reflect
-from taskloop.app.report.inputs import bead_status, prefix, repo_traces
+from taskloop.app.report.inputs import bead_status, landed_of, prefix, repo_traces
 from taskloop.app.report.window import digest_time, since_of, window
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
@@ -101,7 +101,7 @@ def cmd_lost(a: Any, env: Env, git: Git, who: Identity) -> int:
     since = since_of(a.since, time.time())
     traces = repo_traces(repo, git, who.config).runs
     rows = lostwork.lost_work(repo, repos.default_base(repo, git), lambda b: bead_status(b, repo, who), traces, git,
-        who.config, since=since)
+        lambda b: landed_of(b, repo, who), since=since)
     if a.json:
         print(json.dumps(rows, indent=1, ensure_ascii=False))
     else:
