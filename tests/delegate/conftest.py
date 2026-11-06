@@ -23,7 +23,6 @@ import hermetic  # noqa: E402
 # is what the loop and slots tests build repos under), and each delegate test gets its home from own_home below
 for _k, _v in _collector_env.items():
     os.environ.pop(_k, None) if _v is None else os.environ.__setitem__(_k, _v)
-tempfile.tempdir = None
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -47,7 +46,6 @@ def own_home():
     saved = {k: os.environ.get(k) for k in ENV}
     d = tempfile.mkdtemp(prefix="t-", dir=hermetic.ROOT)
     hermetic.home(d)
-    tempfile.tempdir = None  # gettempdir caches the first answer: a test's own TMPDIR, gone with it
     try:
         yield
     finally:
