@@ -22,8 +22,8 @@ def test_no_file_no_worker_and_no_events(workdir):
 
 def test_the_first_line_is_the_worker_and_the_start_event_says_where_it_ran(workdir):
     live = Path(workdir) / "live.jsonl"
-    lines(live, {"v": 1, "pid": 7, "pgid": 7, "run_id": "r1"}, {"k": "start", "t": 1.0, "harness": "h", "pid": 7, "lane": "L", "model": "m", "effort": "e"},
-          {"k": "nope", "t": 2.0})
+    started = {"k": "start", "t": 1.0, "harness": "h", "pid": 7, "lane": "L", "model": "m", "effort": "e"}
+    lines(live, {"v": 1, "pid": 7, "pgid": 7, "run_id": "r1"}, started, {"k": "nope", "t": 2.0})
     a = agent(live)
     worker = a.worker()
     assert worker is not None and worker.pid == 7
