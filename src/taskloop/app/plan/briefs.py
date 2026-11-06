@@ -9,6 +9,7 @@ from taskloop.app.asks import intake
 from taskloop.contracts.bdsafe import peek
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
+from taskloop.domain.asks import text as asktext
 from taskloop.domain.plan import brief as bf
 
 ENGINE_LABELS = ("needs-owner-check",)
@@ -39,7 +40,8 @@ class Briefs:
         hint = str(bead.metadata.get(intake.HINT) or "")
         linked = bf.linked(e.bead, bead, comments, e.cfg.owner_author,
                            lambda i: peek(e.store, BeadId(i)), e.store.comments, mentioned_ids)
-        said = e.planner.cap.answered_words()  # the owner's typed answer is no comment: the brief carries it for the workers
+        # the owner's typed answer is no comment: the brief carries it for the workers
+        said = asktext.words(e.answered.answer if e.answered else None)
         answer = f"\n## Owner answer (to ask {e.answered.id})\n{said}\n" if said and e.answered else ""
         brief = self.fit(bead, comments, hint, len(linked.encode()) + len(answer.encode())).plus("linked", linked).plus("answer", answer)
         e.snap = bf.snapshot(bead, comments, e.cfg.owner_author)
