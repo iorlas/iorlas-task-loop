@@ -216,13 +216,14 @@ class Run:
         no = lease.claim()
         if no:
             return self.refuse(no[0], no[1], env.now() + decide.busy_jitter(), **who)
-        lease.keep_alive()
-        hooks, launched = self._hooks(rid, lease, d)
-        fam = as_str(who["family"])
-        git_before, t0 = self.git_before, time.time()
-        t_from = file_size(harnesses.find_transcript(a.resume, fam)) if a.resume else 0
+        hooks: RunHooks | None = None
+        launched: dict[str, Json] = {}
+        fam, git_before, t0, t_from = as_str(who["family"]), self.git_before, time.time(), 0
         res: dict[str, Json]
-        try:
+        try:  # the lease is held from here: every step before the launch is inside the boundary that releases it
+            lease.keep_alive()
+            hooks, launched = self._hooks(rid, lease, d)
+            t_from = file_size(harnesses.find_transcript(a.resume, fam)) if a.resume else 0
             res = self._launch(d, brief, rid, t, hooks, canary_due)
         except Exception as e:  # a launcher bug is an error object, not a stack trace
             res = {"outcome": "crash", "say": f"{type(e).__name__}: {e}"}
@@ -233,7 +234,9 @@ class Run:
                 raise
             res = {"outcome": "killed", "say": f"route.py got signal {e.code - 128}; its worker was stopped first"}
         finally:
-            lease.finish(hooks.stops)
+            lease.finish(hooks.stops if hooks else [])
+        if hooks is None:  # the setup failed: nothing was launched, so there is no run to settle
+            return res
         return self._finish(res, d, lane, who, rid, lease, hooks, launched, cap, (t0, t_from, git_before))
 
     def _hooks(self, rid: str, lease: RunLease, d: dict[str, Json]) -> tuple[RunHooks, dict[str, Json]]:

@@ -14,7 +14,7 @@ import zlib
 from collections.abc import Callable
 from pathlib import Path
 
-from taskloop.contracts import log, wire
+from taskloop.contracts import factorydb, log, wire
 from taskloop.contracts.delegate import LiveEvent
 from taskloop.contracts.paths import ConfigDir
 from taskloop_dash import jsonl
@@ -92,6 +92,7 @@ class LiveRun:
 
     def __init__(self, cfg: ConfigDir, run: str) -> None:
         self.cfg, self.run = cfg, run
+        self.attempt = 0  # the run's newest attempt row (0: none yet); a cursor belongs to one attempt
         self.lock = threading.RLock()  # the server is threaded: one reader at a time advances the offsets and reads the items
         self.sources: dict[str, Source | EngineSource] = {ev.ENGINE: EngineSource(cfg, run)}
 
@@ -102,7 +103,12 @@ class LiveRun:
         with self.lock:
             self._refresh()
 
+    def _attempt(self) -> int:
+        found = factorydb.attempt_of(self.cfg.factory_db(), self.run)
+        return self.attempt if found is None else found
+
     def _refresh(self) -> None:
+        self.attempt = self._attempt()
         try:
             names: list[str] = sorted(n for n in os.listdir(self.live_dir()) if n.endswith(".jsonl"))
         except OSError:
@@ -122,6 +128,7 @@ class LiveRun:
         if isinstance(engine, EngineSource):
             out["_engine_bytes"] = (decode(engine.cursor) or {}).get("engine", 0)
         out["_run"] = zlib.crc32(self.run.encode())  # a cursor belongs to one run
+        out["_attempt"] = self.attempt  # and to one attempt of it
         return out
 
     def select(self, keep: Callable[[str, int], bool]) -> list[tuple[str, int, Json]]:
@@ -139,10 +146,13 @@ class LiveRun:
 
 
 def page(run: LiveRun, since: dict[str, int] | None = None, limit: int = PAGE) -> Json:
-    """{events, cursor, reset}: the first MAX_PAGE events after `since`, else the newest `limit` events. A burst past one page is not cut:
-    the cursor stops at the first event left over, so the next poll carries on from it. A cursor of another run is a `reset`: the newest
-    events answer it. A `gap`: the cursor had read a worker file that retention has since removed, so events between it and now are gone."""
-    reset = since is not None and since.get("_run", zlib.crc32(run.run.encode())) != zlib.crc32(run.run.encode())
+    """{events, cursor, reset}: the first MAX_PAGE events after `since`, else the newest `limit` events. A burst past one page is not
+    cut: the cursor stops at the first event left over, so the next poll carries on from it. A cursor of another run, or of an
+    earlier attempt of this one, is a `reset`: the newest events answer it. A `gap`: the cursor had read a worker file that
+    retention has since removed, so events between it and now are gone."""
+    reset = since is not None and (
+        since.get("_run", zlib.crc32(run.run.encode())) != zlib.crc32(run.run.encode())
+        or since.get("_attempt", run.attempt) != run.attempt)  # a cursor without the key is from before attempts: it continues
     if reset:
         since = None
     gap = since is not None and any(not t.startswith("_") and off > 0 and t not in run.sources for t, off in since.items())

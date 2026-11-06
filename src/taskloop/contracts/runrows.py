@@ -1,21 +1,13 @@
 """Authoritative run manifests and atomic changes in factory.db."""
 
 import json
-import os
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
-from pathlib import Path
 
 from taskloop.contracts import attemptrows, factorydb, wire
-from taskloop.contracts.askrows import has_legacy_asks, import_legacy_asks
-from taskloop.contracts.guard import guard
 from taskloop.contracts.ids import loop_key
-from taskloop.contracts.paths import ConfigDir, RunFiles
-from taskloop.contracts.receiptrows import import_legacy_receipts
-from taskloop.contracts.run import DoneMemo, RunManifest
-from taskloop.contracts.stores import JsonStore
-
-_IMPORTED: set[tuple[int, str]] = set()
+from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.run import RunManifest
 
 
 class StaleRevision(ValueError):
@@ -116,62 +108,3 @@ class RunRows:
         with self.transaction() as con:
             row = con.execute("SELECT manifest,rev FROM run WHERE run=?", (run,)).fetchone()
             return (row[0], row[1]) if row else None
-
-
-def import_legacy(cfg: ConfigDir) -> int:
-    """Import missing rows once; retained legacy files are rollback copies only."""
-    try:
-        entries = list(cfg.runs_dir().iterdir())
-    except FileNotFoundError:
-        return 0
-    store = RunRows(cfg)
-    count = 0
-    with store.transaction() as con:
-        known = {row[0] for row in con.execute("SELECT run FROM run")}
-        for entry in entries:
-            if not entry.is_dir():
-                continue
-            m = store.read(con, entry.name) if entry.name in known else JsonStore(cfg.run_manifest(entry.name), RunManifest).get()
-            if m is not None and m.run == entry.name:
-                if entry.name not in known:
-                    store.write(con, m)
-                    count += 1
-                else:
-                    attemptrows.ensure(con, m)
-                _import_steps(con, cfg, m)
-    return count
-
-
-def _import_steps(con: factorydb.sqlite3.Connection, cfg: ConfigDir, m: RunManifest) -> None:
-    files = RunFiles(cfg.run_dir(m.run))
-    for path in (files.done_memo(), files.legacy_done_memo()):
-        _import_step_file(con, path, m)
-
-
-def _import_step_file(con: factorydb.sqlite3.Connection, path: Path, m: RunManifest) -> None:
-    """A source marker prevents rereading even torn or empty legacy memos."""
-    if con.execute("SELECT 1 FROM source WHERE path=?", (str(path),)).fetchone():
-        return
-    if con.execute("SELECT 1 FROM step WHERE run=? LIMIT 1", (m.run,)).fetchone() is None:
-        memo = JsonStore(path, DoneMemo).get()
-        for key, entry in (memo.done.items() if memo else ()):
-            con.execute("INSERT INTO step (run,key,try,attempt,status,started,ended,input_digest,result,calls) "
-                        "VALUES (?,?,1,?,'done',?,?,?,?,0)",
-                        (m.run, key, m.attempts, m.started, m.started, entry.sha, json.dumps(wire.dump(entry))))
-    con.execute("INSERT INTO source (path,family,seen) VALUES (?,'step',?)", (str(path), m.started))
-
-
-def import_once(cfg: ConfigDir) -> None:
-    """One legacy import pass per config root per process, independent of locator count."""
-    key = (os.getpid(), str(cfg.root.resolve()))
-    if key in _IMPORTED:
-        return
-    if not (any(p.exists() for p in (cfg.runs_dir(), cfg.root / "results")) or has_legacy_asks(cfg)):
-        _IMPORTED.add(key)
-        return
-    with guard(cfg.lock_record("run-import", "legacy")):
-        if key not in _IMPORTED:
-            import_legacy_asks(cfg)
-            import_legacy_receipts(cfg)
-            import_legacy(cfg)
-            _IMPORTED.add(key)

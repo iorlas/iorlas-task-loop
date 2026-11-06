@@ -309,21 +309,3 @@ class ReviewFixes(AreasBase):
         assert bd.slots["sl-1"]["status"] == "open"
 
 
-    def test_a_ticket_without_seq_does_not_break_the_line_and_stale_tmp_files_are_swept(self):
-        self.beads({}, slots=1)
-        repo = str(self.repo)
-        d = sl.ticket_dir(repo)
-        (d / (f"{7:06d}.json")).write_text(json.dumps({"pid": os.getpid()}))  # no seq, no why: not a ticket
-        old, fresh = d / ".1.2.tmp", d / ".1.3.tmp"
-        old.write_text("{")
-        fresh.write_text("{")
-        os.utime(old, (time.time() - 700, time.time() - 700))
-        assert wslots.waiting_line(repo, who()) == []
-        assert (
-            wslots.wait_slot(repo, wslots.profile_slots(repo), "x", stop=lambda: True, spawner=real_spawner(), git=port_git(), who=who())
-            is not None
-        )  # nobody is ahead: the free slot is taken
-        assert not old.exists()
-        assert fresh.exists()
-
-

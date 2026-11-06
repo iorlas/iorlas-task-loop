@@ -44,6 +44,7 @@ class RunVendors(RunBase):
         assert "ANTHROPIC_FOO" not in env
         assert "DELEGATE_DEPTH=1" in env
         assert f"=url.{PUSH_REFUSED}.pushInsteadOf" in env  # a Codex write step cannot push
+        assert f"tool_output_token_limit={dec.TOOL_OUTPUT_TOKENS}" in self.args_seen()  # a tool result over the cap is cut by the CLI
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_limit_marks_the_lane_out_and_the_next_call_goes_to_the_subscription_via_claude_p(self):
@@ -62,6 +63,7 @@ class RunVendors(RunBase):
         assert "--max-budget-usd" not in seen  # a subscription has no dollar cap
         assert "ANTHROPIC_API_KEY" not in Path(os.environ["FAKE_ENV"]).read_text()
         assert f"=url.{PUSH_REFUSED}.pushInsteadOf" in Path(os.environ["FAKE_ENV"]).read_text()  # nor a Claude one
+        assert f"BASH_MAX_OUTPUT_LENGTH={env.TOOL_OUTPUT_CHARS}" in Path(os.environ["FAKE_ENV"]).read_text()
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_claude_worker_still_sees_a_custom_claude_config_dir(self):
