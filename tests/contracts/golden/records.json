@@ -1482,11 +1482,7 @@
   "inputs": [
    "**/*.csproj"
   ],
-  "triggers": [
-   "restore",
-   "project.assets.json",
-   "NU1"
-  ],
+  "triggers": [],
   "timeout_min": 20
  },
  "GatePlan": {
@@ -1612,11 +1608,7 @@
     "inputs": [
      "**/*.csproj"
     ],
-    "triggers": [
-     "restore",
-     "project.assets.json",
-     "NU1"
-    ],
+    "triggers": [],
     "timeout_min": 30
    },
    "slot_env": {},
@@ -1707,7 +1699,7 @@
    "keep_days": 14,
    "min_free_gb": 5,
    "min_ram_mb": 1024,
-   "build_dir": "~/Workspaces/wt"
+   "build_dir": ""
   }
  },
  "RunRequest": {

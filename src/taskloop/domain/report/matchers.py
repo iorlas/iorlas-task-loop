@@ -21,9 +21,9 @@ ANSI: Final = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 URL: Final = re.compile(r"\bhttps?://\S+", re.I)
 UUID: Final = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
 SHA: Final = re.compile(r"\b[0-9a-f]{7,40}\b", re.I)
-# A token that may be a bead id: tl-19i, lifesim-d5f.46, tl-fsj, t-1-1. _bead_token decides.
+# A token that may be a bead id: tl-19i, tl-d5f.46, tl-fsj, t-1-1. _bead_token decides.
 CANDIDATE: Final = re.compile(r"\b[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+\b", re.I)
-BEAD_PREFIXES: Final = ("tl", "lifesim", "task", "bead", "fld")
+BEAD_PREFIXES: Final = ("tl", "task", "bead")
 SESSION: Final = re.compile(r"\b(?:ref|ses|session|run|thread)[-_][A-Za-z0-9._-]+\b", re.I)
 # Absolute POSIX/Windows paths, and relative paths with a separator and a file extension (Assets/Player.cs,
 # Assets\Player.cs). A bare word pair such as and/or is not a path.

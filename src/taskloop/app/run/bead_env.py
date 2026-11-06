@@ -15,6 +15,6 @@ def bead_env(e: Any, *, create: bool = True) -> dict[str, str]:
     key = f"{repo}-{hashlib.sha1(origin.encode('utf-8', 'surrogateescape')).hexdigest()[:10]}"
     state = e.home.slot_state(key, slot)
     env = slot_env.slot_env(state, repo, slot, e.cfg.slot_env)
-    for folder in slot_env.folders(env) if create else []:
+    for folder in slot_env.folders(env, state) if create else []:
         Path(folder).mkdir(parents=True, exist_ok=True)
     return env
