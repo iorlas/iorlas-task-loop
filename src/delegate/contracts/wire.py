@@ -15,7 +15,7 @@ from delegate.contracts.codec import ABSENT, Absent, mutable, record
 from delegate.contracts.json_types import Json
 
 CONTRACT = 4
-CAPABILITIES = ("writer_exec_allow",)
+CAPABILITIES = ("writer_exec_allow", "attempts")
 END_OK, END_ERROR, END_TIMEOUT, END_SURVIVED = "ok", "error", "timeout", "worker_survived"
 Scope = Literal["bead", "caller", "machine", "lane", "model"]
 Permanence = Literal["transient", "needs_owner"]
@@ -146,6 +146,22 @@ class Tokens:
     out: int | None
 
 
+AttemptKind = Literal["first", "canary", "network_rerun", "schema_reask", "reroute"]
+
+
+@record
+class Attempt:
+    """One launch of a call's ladder (canary, the first launch, the network rerun, the schema re-ask, the reroute): how it ended and what
+    it cost, so the caller sees what in-call retries it paid for and need not retry on top of them."""
+
+    kind: AttemptKind
+    lane: str | None
+    model: str | None
+    outcome: str | None  # the contract.json reason this launch ended with; None = it answered
+    secs: float
+    tokens: Tokens | None
+
+
 @record
 class UsageTokens:
     """usage.tokens: Tokens plus the vendor-neutral split (cache_write is null where the vendor does not report it)."""
@@ -274,6 +290,9 @@ class RunResult:
         default=ABSENT, metadata={"doc": "the first error the harness or the process reported, cut to 240 characters"}
     )
     worker: WorkerEnd | Absent = field(default=ABSENT, metadata={"doc": "how the worker's life ended; absent when no worker was launched"})
+    attempts: list[Attempt] | Absent = field(
+        default=ABSENT, metadata={"doc": "every launch the call made, in order; absent when it made a single one (capability attempts)"}
+    )
 
     @property
     def reason(self) -> str | None:

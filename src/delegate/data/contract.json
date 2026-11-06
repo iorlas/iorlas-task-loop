@@ -893,6 +893,87 @@
      }
     },
     "description": "how the worker's life ended; absent when no worker was launched"
+   },
+   "attempts": {
+    "type": "array",
+    "items": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "kind",
+      "lane",
+      "model",
+      "outcome",
+      "secs",
+      "tokens"
+     ],
+     "properties": {
+      "kind": {
+       "type": "string",
+       "enum": [
+        "first",
+        "canary",
+        "network_rerun",
+        "schema_reask",
+        "reroute"
+       ]
+      },
+      "lane": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "model": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "outcome": {
+       "type": [
+        "string",
+        "null"
+       ]
+      },
+      "secs": {
+       "type": "number"
+      },
+      "tokens": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "additionalProperties": false,
+       "required": [
+        "in",
+        "cached",
+        "out"
+       ],
+       "properties": {
+        "in": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "cached": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "out": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        }
+       }
+      }
+     }
+    },
+    "description": "every launch the call made, in order; absent when it made a single one (capability attempts)"
    }
   }
  },
@@ -1764,7 +1845,8 @@
   }
  },
  "capabilities": [
-  "writer_exec_allow"
+  "writer_exec_allow",
+  "attempts"
  ],
  "request_schema": {
   "type": "object",
