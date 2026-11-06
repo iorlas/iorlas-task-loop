@@ -13,8 +13,8 @@ class LookHostConformance(EngineTest):
 
     def test_the_check_names_a_member_the_host_lacks(self):
         eng = make_engine(self.wt, store=self.store)
-        del eng.pictures
-        assert missing(eng, LookPorts) == ["pictures"]
+        del eng.steps
+        assert missing(eng, LookPorts) == ["steps"]
 
 
 class RenderHandOff(EngineTest):
