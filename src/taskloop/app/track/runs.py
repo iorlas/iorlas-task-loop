@@ -39,12 +39,17 @@ def records(path: Path) -> list[log.EngineLog]:
 def items(run: str, rows: list[log.EngineLog]) -> list[Item]:
     """The timed things of one run, in the order they ended."""
     names: dict[str, tuple[str, str]] = {}
+    began: dict[str, float] = {}  # a command's start: its record carries no seconds, the gap to its end is the span
     out: list[Item] = []
     bead = ""
     for r in rows:
         bead = bead or r.bead
         if isinstance(r, log.StepStart):
             names[r.id] = ("step", r.step)
+        elif isinstance(r, log.CmdStart):
+            names[r.id], began[r.id] = ("cmd", r.text), r.t
+        elif isinstance(r, log.CmdEnd) and r.id in began:
+            out.append(Item(run, r.bead or bead, "cmd", names[r.id][1], max(0.0, r.t - began.pop(r.id)), 0.0, r.t))
         elif isinstance(r, log.CallStart):
             names[r.id] = ("call", f"{r.node} {r.role}".strip())
         elif isinstance(r, log.CheckStart):
