@@ -2,6 +2,8 @@
 text."""
 
 import shlex
+from collections.abc import Mapping
+from types import MappingProxyType
 
 from delegate.contracts.wire import RECIPE_RUNNERS
 from delegate.domain.policy.matchers import name_of, pieces, sed_print_only, unwrap, writes_or_substitutes
@@ -83,7 +85,18 @@ GIT_LISTING = (
     "--format",
     "--sort",
 )
-GIT_CHANGING = ("commit", "push", "checkout", "switch", "merge", "rebase", "reset", "cherry-pick", "revert", "am", "pull")
+GIT_CHANGING = (
+    "commit", "push", "checkout", "switch", "merge", "rebase", "reset", "cherry-pick", "revert", "am", "pull",
+    "update-ref", "symbolic-ref", "reflog", "filter-branch", "replace", "gc", "prune",
+)  # fmt: skip
+# Tools a write step has no business with: the forge (`gh`), and the tracker's writes (`bd`, `dolt`: the coordinator's). Reads pass.
+FORGE = frozenset({"gh"})
+TRACKER_READS: Mapping[str, frozenset[str]] = MappingProxyType(
+    {
+        "bd": frozenset({"show", "list", "ready", "search", "stats", "blocked", "prime", "memories"}),
+        "dolt": frozenset({"status", "log", "diff", "show", "ls"}),
+    }
+)
 FIND_RUNS = frozenset({"-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprintf", "-fls"})
 
 
@@ -116,6 +129,16 @@ def git_args(t: list[str]) -> list[str]:
     return args
 
 
+def git_config_override(t: list[str]) -> bool:
+    """`git -c key=value ...` (or --config-env): a per-call config can name a program for git to run, so a write step may not set one."""
+    i = 1
+    while i < len(t) and t[i].startswith("-"):
+        if t[i].startswith(("-c", "--config-env")):
+            return True
+        i += 2 if t[i] in ("-C", "--git-dir", "--work-tree", "--namespace") else 1
+    return False
+
+
 def git_write(cmd: str) -> str | None:
     """The first git command in `cmd` that changes refs, the index's commits, worktrees or remotes (git is the coordinator's), else None.
     Listing forms pass: stash list/show, branch and tag listings, worktree list."""
@@ -125,7 +148,8 @@ def git_write(cmd: str) -> str | None:
         args = git_args(t)
         sub, rest = (args[0] if args else ""), args[1:]
         if (
-            sub in GIT_CHANGING
+            git_config_override(t)
+            or sub in GIT_CHANGING
             or (sub == "stash" and not (rest and rest[0] in ("list", "show")))
             or (sub == "worktree" and not (rest and rest[0] == "list"))
             or (
@@ -203,6 +227,10 @@ def writer_problem(cmd: str, engine_only: tuple[str, ...] = ()) -> str | None:
             continue
         name = name_of(t[0])
         args = [x for x in t[1:] if not x.startswith("-")]
+        if name in FORGE:
+            return f"`{name}` talks to the forge, which is the coordinator's"
+        if name in TRACKER_READS and not (args and args[0] in TRACKER_READS[name]):
+            return f"`{name} {args[0] if args else ''}` writes the tracker, which is the coordinator's"
         if name in KILLERS and not (name == "kill" and args and all(x.startswith(OWN_PIDS) for x in args)):
             return f"`{name}` stops processes this step did not start"
         if name in RUNNERS and any(x in engine_only for x in args):

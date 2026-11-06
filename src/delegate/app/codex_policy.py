@@ -90,6 +90,25 @@ def _line_count(path: object) -> int | None:
         return None
 
 
+def worktree_head() -> str:
+    """The commit the worktree is at, read from its git files (no git process); '' when unreadable: audit evidence, never a gate."""
+    try:
+        dot = Path(".git")
+        git = Path(dot.read_text(encoding="utf-8").split("gitdir:", 1)[1].strip()) if dot.is_file() else dot
+        head = (git / "HEAD").read_text(encoding="utf-8").strip()
+        if not head.startswith("ref: "):
+            return head
+        ref = head[5:]
+        common = git / (git / "commondir").read_text(encoding="utf-8").strip() if (git / "commondir").is_file() else git
+        for root in (git, common):
+            if (root / ref).is_file():
+                return (root / ref).read_text(encoding="utf-8").strip()
+        packed = (common / "packed-refs").read_text(encoding="utf-8").splitlines()
+        return next((line.split()[0] for line in packed if line.endswith(" " + ref)), "")
+    except OSError, IndexError:
+        return ""
+
+
 def guard(a: env.Args) -> int:
     """Persist one authorization decision before dispatch; storage errors never start an executable."""
     argv = getattr(a, "exec_allow", None)
@@ -124,6 +143,8 @@ def guard(a: env.Args) -> int:
         if row["allowed"] and resolved is not None:
             # the guard's stdio is the command's own; a negative code N = killed by signal N
             result = os.waitstatus_to_exitcode(os.waitpid(os.posix_spawnp(resolved[0], resolved, os.environ), 0)[1])
+            with JsonlLog.open(root / "guard.jsonl") as audit:  # best effort: the authorization row above is already durable
+                audit.append_json({"v": 1, "mode": "exit", "argv": argv, "cwd": row["cwd"], "exit": result, "head": worktree_head()})
     except (Exception, SystemExit) as error:
         print(f"delegate guard: config/audit failure: {type(error).__name__}: {error}", file=sys.stderr)
         return 2

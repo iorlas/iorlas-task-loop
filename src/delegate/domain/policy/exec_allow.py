@@ -6,7 +6,17 @@ import shlex
 from delegate.domain.policy.worker import judge
 
 BROAD = frozenset(
-    {("dotnet", "build"), ("dotnet", "test"), ("dotnet", "restore"), ("python", "-m", "unittest"), ("python", "-m", "pytest")}
+    {
+        ("dotnet", "build"),
+        ("dotnet", "test"),
+        ("dotnet", "restore"),
+        ("python", "-m", "unittest"),
+        ("python", "-m", "pytest"),
+        ("python", "-I", "-B", "-m", "unittest"),
+        ("python", "-I", "-B", "-m", "pytest"),
+        ("uv", "run", "--no-sync", "--project", ".", "python", "-m", "unittest"),
+        ("uv", "run", "--no-sync", "--project", ".", "python", "-m", "pytest"),
+    }
 )
 EXACT = frozenset({("dotnet", "--version")})
 
@@ -18,6 +28,7 @@ def words(value: object) -> list[str]:
 
 
 def valid_rule(rule: list[str]) -> bool:
+    """Only the decided forms (BROAD, EXACT) and one `just <recipe>`; no other uv, python or wrapper form, whatever host.json lists."""
     return tuple(rule) in BROAD | EXACT or (
         len(rule) == 2
         and rule[0] == "just"
@@ -34,7 +45,7 @@ def host_policy(doc: object) -> tuple[dict[str, str], list[list[str]]]:
     if not isinstance(rules, list):
         raise ValueError("writer_exec_allow must be an argv list")
     for name, path in binaries.items():
-        if name not in {"dotnet", "python", "just"} or not isinstance(path, str) or not path.startswith("/") or "\0" in path:
+        if name not in {"dotnet", "python", "just", "uv"} or not isinstance(path, str) or not path.startswith("/") or "\0" in path:
             raise ValueError("binaries must pin dotnet/python/just to absolute paths")
         if posixpath.normpath(path) != path:
             raise ValueError("binary paths must be normalized")

@@ -94,7 +94,7 @@ class Overlay(Case):
         assert [r["decision"] for r in matching] == ["allow"]
         result = subprocess.run(command, env=os.environ | {"PATH": ""}, capture_output=True, text=True, check=False)
         assert result.returncode == 0, result.stderr
-        row = json.loads((self.root / "guard.jsonl").read_text())
+        row = json.loads((self.root / "guard.jsonl").read_text().splitlines()[0])
         assert row["allowed"]
         assert row["resolved_argv"][0] == sys.executable
         assert "approval_policy=never" in spec.argv
