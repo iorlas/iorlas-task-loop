@@ -1,11 +1,11 @@
 """app/asks on fakes: raise and consume, the sweeps, and the owner's typed verbs."""
 import dataclasses
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -91,7 +91,7 @@ class RaiserTest(Case):
 class SweepTest(Case):
     def setup_method(self) -> None:
         self.asks = fake_stores().asks
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.repo = Path(self.tmp.name)
         (self.repo / ".beads").mkdir()

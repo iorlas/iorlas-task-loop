@@ -1,13 +1,13 @@
 """Jsonl: byte offsets that never move, a cursor that survives a growing file, a torn last line that waits; and the stores on it."""
 import json
 import sys
-import tempfile
 import threading
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import itertools
@@ -25,7 +25,7 @@ from taskloop.contracts.snapshots import Pin
 
 class JsonlTest(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.path = Path(self.tmp.name) / "sub" / "x.jsonl"
         self.j = Jsonl(self.path)
@@ -149,7 +149,7 @@ class JsonlTest(Case):
 
 class StoresTest(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = paths.ConfigDir(self.tmp.name)
 

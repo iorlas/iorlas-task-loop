@@ -4,12 +4,12 @@ does not invalidate a check that says `inputs_only` (tl-9un.34); two runners wri
 import hashlib
 import json
 import sys
-import tempfile
 import threading
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -284,7 +284,7 @@ class Store(Case):
 
 class Concurrent(Case):
     def test_runners_writing_at_once_lose_no_pass_and_no_base_answer(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             stores = real_stores(paths.ConfigDir(Path(d)))
             checks = [Check(id=CheckId(f"c{i % 4}"), cmd=f"cmd{i}") for i in range(12)]
             go = threading.Barrier(len(checks))

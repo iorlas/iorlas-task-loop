@@ -45,7 +45,7 @@ class RetiredKeys(Case):
     def test_a_profile_with_the_retired_keys_loads_warns_once_and_is_left_as_it_was(self):
         raw = json.dumps({"engine": {"check_idle_min": 3, "check_wall_min": 20,
                                      "checks": [{"id": "u", "argv": ["just", "u"], "idle_min": 2, "wall_min": 90}]}}, indent=1)
-        tmp = te.tempfile.TemporaryDirectory()
+        tmp = te.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         f = Path(tmp.name) / ".task-loop.json"
         f.write_text(raw)
