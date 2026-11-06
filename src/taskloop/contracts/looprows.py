@@ -9,9 +9,9 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from taskloop.contracts import factorydb, wire
+from taskloop.contracts.docstore import JsonStore
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import JsonStore
 
 KIND = "loop"
 DIED = "died-"

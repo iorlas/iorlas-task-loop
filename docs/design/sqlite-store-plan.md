@@ -91,12 +91,14 @@ it implies.
 | file store | table | note |
 |---|---|---|
 | 1 checkpoint, 8 follow-ups, 13 per-round checks, 20 run-dir state | `run` columns + `step`, `check_round`, new `checkpoint(bead PK, run, rev, body)` | the checkpoint is per bead across runs, so its own table, revisioned like `run` |
-| 2 loop state, 11 engine lock, 12 worktree records, 10 slot tickets | `lease` (kinds `loop`, `slot`, `run`) (slot tickets are `lease` rows `slot` named `<repo_key>/<seq>`, the counter a `kv` row: no `slot_ticket` table, no schema bump, so an older tl is not parked as behind) | `lease` already has host, pid, start_id (the pid-reuse fix of tl-br2.13), beat, until |
+| 2 loop state, 11 engine lock (a `lease` row `run` named `engine:<worktree key>`; the take stays under its kernel lock), 12 worktree records, 10 slot tickets | `lease` (kinds `loop`, `slot`, `run`) (slot tickets are `lease` rows `slot` named `<repo_key>/<seq>`, the counter a `kv` row: no `slot_ticket` table, no schema bump, so an older tl is not parked as behind) | `lease` already has host, pid, start_id (the pid-reuse fix of tl-br2.13), beat, until |
 | 3 loop command, 6 owner request | `signal` | taken once (`taken`), written by the owner, read by the loop or engine |
 | 4 parks, 5 pauses, reexec, 16 storm | `wait` (kind, wake_at, wake_on, facts, cleared) | the schema comment already says: park writes go through the loop-owned wait store |
 | 7 call state | `effect` (key = bead+call key, state intent/returned/consumed, receipt) | this is exactly the outbox the review asks for |
 | 9 landed | `effect` (`land:<bead>`), outbox only | class O (2a): git and receipts are the record; no `landed` table |
-| 14, 15, 17, 18, 21 | `kv` (key, value JSON, stamp) | cold singleton documents: no schema of their own |
+| 14, 15 (pin, bad versions, release result), 17, 18 (dash and reflect state) | `kv` (key, value JSON, stamp) | cold singleton documents: no schema of their own (`docrows.singleton`) |
+| 15 `repos.json` | file until its own slice | locked read-modify-write with a v1 converter and dashboard readers: its own PR |
+| 21 `host.json` | stays a file | a person writes it by hand (setup keeps an existing one): not machine state |
 | 19 ADRs | `kv` read cache of `docs/adr/NNNN-title.md` | class R (2a): the file in git is the record, the verbs write it |
 | decision asks, `ask_ledger` | `ask` (open asks only) | class R (2a): the answer is a bead comment `kind=decision` |
 

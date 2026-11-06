@@ -17,8 +17,10 @@ from taskloop.contracts.wire import Rec
 
 class RowDocs[T: Rec]:
     def __init__(self, cfg: ConfigDir, cls: type[T], legacy: Callable[[str], Path], *, table: str, key_col: str, body_col: str,
-                 prefix: str = "", revisioned: bool = False) -> None:
-        self.rows, self.cfg, self.cls, self.legacy = LoopRows(cfg, ""), cfg, cls, legacy
+                 prefix: str = "", revisioned: bool = False, quiet: bool = False) -> None:
+        """`quiet` (the dashboard's read): a database that cannot be opened reads as no row, and an older file is not adopted."""
+        self.quiet = quiet
+        self.rows, self.cfg, self.cls, self.legacy = LoopRows(cfg, "", quiet=quiet), cfg, cls, legacy
         self.table, self.key_col, self.body_col, self.prefix, self.revisioned = table, key_col, body_col, prefix, revisioned
 
     def of(self, key: str) -> RowDoc[T]:
@@ -71,9 +73,9 @@ class RowDoc[T: Rec]:
         text = self.raw()
         if text is None:
             old = self.legacy_store().read()
-            if isinstance(old, Present):
+            if isinstance(old, Present) and not self.docs.quiet:
                 self.write(old.rec)
-            if not isinstance(old, Absent):
+            if not isinstance(old, Absent) and not self.docs.quiet:
                 with contextlib.suppress(OSError):
                     if isinstance(old, Present):
                         self.docs.legacy(self.key).unlink()
@@ -131,6 +133,11 @@ class RowDoc[T: Rec]:
             con.execute(f"DELETE FROM {d.table} WHERE {d.key_col}=?", (self.k,))
         with contextlib.suppress(OSError):
             d.legacy(self.key).unlink()
+
+
+def singleton[T: Rec](cfg: ConfigDir, cls: type[T], name: str, legacy: Path, quiet: bool = False) -> RowDoc[T]:
+    """One cold document (a pin, a release result, a snapshot) as the `kv` row `name`; the older file `legacy` is adopted on first read."""
+    return RowDocs(cfg, cls, lambda _key: legacy, table="kv", key_col="k", body_col="v", prefix=name, quiet=quiet).of("")
 
 
 class StaleRevision(ValueError):
