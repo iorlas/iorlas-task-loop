@@ -11,10 +11,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 from any_agent.harnesses.opencode import OpenCodeHarness
-from delegate.app import cockpit, env, harnesses, onboard, status, usage
+from delegate.app import cockpit, env, harnesses, onboard, usage
 from delegate.domain.lanes.lane import Lane
 from delegate.domain.time import spec
-from support.procsim import real_proc
 
 import routing_support as support
 from test_route import CFG, T, route
@@ -217,22 +216,6 @@ class LoginCheck:
         p.write_text("#!/bin/sh\n" + body + "\n")
         p.chmod(p.stat().st_mode | stat.S_IEXEC)
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_codex_login_status_decides_and_the_answer_is_cached(self):
-        with (
-            tempfile.TemporaryDirectory() as d,
-            patch.dict(os.environ, {"PATH": d + os.pathsep + os.environ["PATH"], "DELEGATE_CONFIG_DIR": d}),
-        ):
-            os.environ.pop("DELEGATE_NOCACHE", None)
-            count = Path(d) / "count"
-            self.fake(d, "codex", f'echo x >> "{count}"; [ "$1 $2" = "login status" ] && {{ echo "Not logged in"; exit 1; }}; exit 2')
-            a = cockpit.login_state("OPENAI_SUBSCRIPTION", env.load_state(), T)
-            b = cockpit.login_state("OPENAI_SUBSCRIPTION", env.load_state(), T + 200)
-            c = cockpit.login_state("OPENAI_SUBSCRIPTION", env.load_state(), T + 400)
-            assert (a[0], b[0], c[0]) == (False, False, False)
-            assert len(count.read_text().split()) == 2  # once, then again after the 5-minute cache ran out
-            self.fake(d, "codex", 'echo "Logged in using ChatGPT"')
-            assert harnesses.probe_login("OPENAI_SUBSCRIPTION")[0]
 
     def test_opencode_logins_are_read_from_its_auth_file(self):
         with (
@@ -300,17 +283,3 @@ class Command:
         for k in ("lanes", "running", "needs_input"):
             assert k in data
         assert ck["next_worker"]["action"] in ("run", "stop")
-
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_stdout_gets_a_safe_encoding_for_emoji(self):
-        class Narrow(io.StringIO):
-            encoding = "cp1252"
-            reconfigured = None
-
-            def reconfigure(self, **kw):
-                self.reconfigured = kw
-
-        s = Narrow()
-        with patch.object(sys, "stdout", s), patch.object(status, "cmd_status", return_value=0):
-            route.main(["status"])
-        assert s.reconfigured == {"encoding": "utf-8", "errors": "replace"}

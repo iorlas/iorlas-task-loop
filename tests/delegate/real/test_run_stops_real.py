@@ -239,7 +239,7 @@ class RunStops(RunBase):
         led = health_ledger.HealthLedger(env.typed_routing(CFG).settings.breaker)
         st = led.fold(env.history_store().rows())
         assert led.view(st, "OPENAI_SUBSCRIPTION", r["model"], time.time()).usable
-        assert st.pairs == {}
+        assert {k: v for k, v in st.keys.items() if '|' in k} == {}
         _, r = self.run_it()
         assert r["stop"] is None
 
@@ -322,7 +322,7 @@ class RunStops(RunBase):
         assert [(type(r).__name__, r.lane, r.model, r.gap_s, r.finished) for r in got] == [
             ("GapRow", "OPENAI_SUBSCRIPTION", "gpt-6.1-sol", 2200.0, True)
         ]
-        assert health_ledger.HealthLedger(env.typed_routing(CFG).settings.breaker).fold(rows).pairs == {}
+        assert health_ledger.HealthLedger(env.typed_routing(CFG).settings.breaker).fold(rows).keys == {}
         gaps.flush(dog, obj(None), d["lane"], d["model"], True)  # never raises
 
     @real_proc("delegate: stderr chatter keeps a run alive on a real git work tree")

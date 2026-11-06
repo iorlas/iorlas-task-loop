@@ -6,7 +6,6 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 import threading
 from pathlib import Path
 
@@ -15,6 +14,7 @@ from delegate.contracts.stores import StateStore
 from stream_proc import stop_tree
 from support.case import Case
 from support.procsim import real_proc
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401
 
@@ -81,7 +81,7 @@ LIMIT_S = 60
 
 class Contention(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.base = Path(tmp.name)
         self.cfg = self.base / "cfg"
