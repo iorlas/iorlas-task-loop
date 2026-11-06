@@ -37,6 +37,7 @@ from taskloop.domain import outcome as oc  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import engine_case as T  # noqa: E402
+from support import netgate  # noqa: E402
 from support.briefs import brief_digest  # noqa: E402
 from support.builders import cfg_with  # noqa: E402
 from support.checks import res  # noqa: E402
@@ -72,7 +73,6 @@ from taskloop.domain.checks import (  # noqa: E402
     lint,  # noqa: F401
 )
 from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
-from taskloop.domain.lanes import netgate  # noqa: E402
 from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT  # noqa: E402
 
 

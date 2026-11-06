@@ -20,7 +20,7 @@ import hermetic  # noqa: F401  (a home of its own for every test)
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "delegate"))
 import shutil
 
-from delegate.adapters import agent_runs, codex_account
+from delegate.adapters import codex_account
 from delegate.adapters.harness import claude
 from delegate.adapters.harness.opencode import OpenCodeHarness
 from delegate.app import env, launch, watch
@@ -92,8 +92,6 @@ class Replay(Case):
         penv = dict(os.environ, DELEGATE_CONFIG_DIR=str(self.cfg), HOME=str(self.base), CODEX_HOME=str(self.base))
         for p in (
             mock.patch.dict(os.environ, penv),
-            mock.patch.object(agent_runs, "run"),
-            mock.patch.object(agent_runs, "lanes"),
             mock.patch.object(sys, "platform", "darwin"),
             mock.patch.object(OpenCodeHarness, "write_shell"),
             mock.patch.object(env, "child_env", side_effect=lambda extra=None: dict(os.environ, **(extra or {}))),
@@ -142,7 +140,7 @@ class Replay(Case):
         a = a or self.a
         d = self.d(kind)
         with mock.patch.object(shutil, "which", return_value=exe), mock.patch.object(OpenCodeHarness, "find_exe", return_value=exe):
-            return launch.launch_worker(d, "brief", a, "rid12345", T, env.load_routing(), {}, RunHooks())
+            return launch.launch_worker(d, "brief", a, "rid12345", T, env.load_routing(), RunHooks())
 
     CASES: ClassVar = {
         "codex": ([CODEX_STARTED, CODEX_CMD, CODEX_MSG, CODEX_DONE], "codex answer"),
