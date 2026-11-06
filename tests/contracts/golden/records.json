@@ -335,6 +335,11 @@
   "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "t": 1793050200.5
  },
+ "Defect": {
+  "item": "i",
+  "why": "w",
+  "where": "p.png"
+ },
  "StageProgress": {
   "write": null,
   "red": 1,
@@ -466,18 +471,9 @@
    "writer_family": null,
    "writer_fallback": false,
    "fallback_lane": "",
-   "writer_said": "",
-   "look_paths": [],
    "look_notes": [],
    "look_unjudged": {},
    "look_done": 0,
-   "look_prev": [
-    {
-     "item": "i",
-     "why": "w",
-     "where": ""
-    }
-   ],
    "rendered_names": [
     "r"
    ],
@@ -1284,9 +1280,10 @@
   "why": "1st of 2 chosen"
  },
  "ReposIndex": {
-  "v": 1,
+  "v": 2,
   "repos": {
-   "/r": {
+   "o/r": {
+    "path": "/r",
     "added": 1793050200.5
    }
   }
@@ -1390,6 +1387,7 @@
   "started": 1793050200.5,
   "ended": 1793050260.5,
   "loop": "L1",
+  "loop_id": null,
   "attempts": 2,
   "state": "done",
   "heartbeat": 1793050259.5,
@@ -1481,11 +1479,7 @@
   "inputs": [
    "**/*.csproj"
   ],
-  "triggers": [
-   "restore",
-   "project.assets.json",
-   "NU1"
-  ],
+  "triggers": [],
   "timeout_min": 20
  },
  "GatePlan": {
@@ -1611,11 +1605,7 @@
     "inputs": [
      "**/*.csproj"
     ],
-    "triggers": [
-     "restore",
-     "project.assets.json",
-     "NU1"
-    ],
+    "triggers": [],
     "timeout_min": 30
    },
    "slot_env": {},
@@ -1706,7 +1696,7 @@
    "keep_days": 14,
    "min_free_gb": 5,
    "min_ram_mb": 1024,
-   "build_dir": "~/Workspaces/wt"
+   "build_dir": ""
   }
  },
  "RunRequest": {

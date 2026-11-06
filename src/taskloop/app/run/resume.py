@@ -21,7 +21,6 @@ LATE = (
     "fixes",
     "denials",
     "stage_tree",
-    "writer_said",
     "accepted_new",
     "writer",
     "writer_family",

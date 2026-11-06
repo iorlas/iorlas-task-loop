@@ -128,15 +128,15 @@ def how_of(d: dict[str, Json]) -> How:
     )
 
 
-def lane_gone_check(lane: str, since: float) -> Callable[[], str | None]:
-    """-> a function: the words of a limit, credit or login mark another process set on `lane` after `since` (wall clock), else None. The
-    worker
+def lane_gone_check(lane: str, since: float) -> Callable[[], tuple[str, str] | None]:
+    """-> a function: (the mark's reason: limit | credit | logged_out, its words) of a mark another process set on `lane` after `since`
+    (wall clock), else None. The worker
     still running there is burning an exhausted lane."""
 
-    def gone() -> str | None:
+    def gone() -> tuple[str, str] | None:
         o = env.load_state().out.get(lane)
         if o and o.set >= since and o.until > env.now() and o.reason in ("limit", "credit", "logged_out"):
-            return o.why or "lane marked out"
+            return o.reason, o.why or "lane marked out"
         return None
 
     return gone
@@ -407,7 +407,7 @@ def finish_run(hx: Harness, h: How, a: env.Args, d: dict[str, Json], t: float, o
         o = None
         res["warnings"] = ["answer_done_process_alive"]
     if out.net and (o is None or o.reason == "killed"):  # we stopped it because the network is down
-        o = classify.Outcome("network", hx.evidence.transient, "event")
+        o = classify.network_stop(hx.evidence.transient)
     if o:  # the CLI's own error or stderr, never the model's answer
         settler().apply(
             res,

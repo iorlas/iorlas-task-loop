@@ -14,7 +14,7 @@ from taskloop.app.run.blocked import Blocked, FixFailed
 from taskloop.app.run.console import say
 from taskloop.app.run.context import RunContext
 from taskloop.app.run.host import RunHost
-from taskloop.app.run.layout import RunLayout, finish_of, live_run, loop_of, repo_of
+from taskloop.app.run.layout import RunLayout, finish_of, live_run, loop_id_of, loop_of, repo_of
 from taskloop.app.run.stages import run_stages
 from taskloop.app.run.state import carries_state
 from taskloop.contracts import fence
@@ -81,7 +81,7 @@ class Engine(RunHost):
         dead_run = self.dead.ended.run if self.dead and self.dead.ended else None
         taken = (self.reexec.run if self.reexec else None) or (live_run(self.home, pause.run) if pause else None) or dead_run
         layout = RunLayout.open(bead, wt, taken, self.home, repo_of(self.git, wt), self.clock.now(),
-                                loop=loop_of(self.env, self.git, wt),
+                                loop=loop_of(self.env, self.git, wt), loop_id=loop_id_of(self.env),
                                 mode=mode, owner=who.actor, session=who.session)
         self.log_path, self.err_path, self.run_dir, self.live_dir = layout.log_path, layout.err_path, layout.run_dir, layout.live_dir
         self.run_id = layout.run  # the run's id: TL_RUN_ID in its checks, run_id in its rows

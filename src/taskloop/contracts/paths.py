@@ -139,10 +139,6 @@ class ConfigDir:
     def check_logs(self, run: RunId | str) -> Path:
         return self.run_dir(run) / "checks"
 
-    def artifacts(self, bead: BeadId) -> Path:
-        """The plain files a bead's runs left (screenshots, PDFs): one flat directory per bead, outside every worktree."""
-        return self.root / "artifacts" / str(bead)
-
     def artifact_store(self) -> Path:
         """The artifact store's root: <root>/<repo>/<bead>/<run>/<stage>-<attempt>/<name> (contracts/artifact.py)."""
         return self.root / "artifacts"
@@ -294,10 +290,6 @@ class RepoDirs:
     def engine_take(self) -> Path:
         """Held (locks.hold_path) while a run checks the engine lock and writes its own: two runs starting at once cannot both win."""
         return self.task / "engine.take"
-
-    def artifacts(self, bead: str) -> Path:
-        """Where a run drops screenshots, PDFs: `StepArtifacts` copies the files from here when a step ends."""
-        return self.task / bead / "artifacts"
 
     def check_log(self, name: str) -> Path:
         return self.task / "checks" / name

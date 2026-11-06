@@ -35,7 +35,7 @@ from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId
+from taskloop.contracts.ids import BeadId, new_loop_id
 from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.ports import Beads, Git, Spawner
@@ -140,6 +140,8 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
           start_cwd: str = "", *, env: Env, spawner: Spawner, git: Git, who: Identity) -> LoopEnv:
     """The LoopEnv of `repo` on this install."""
     store = store or beadtools.bd_store(who.actor, repo)
+    loop_id = env.get(EnvVar.TASK_LOOP_LOOP_ID) or new_loop_id()  # an exec'd loop keeps the id of the lifetime it continues
+    env = env.with_(EnvVar.TASK_LOOP_LOOP_ID, loop_id)  # ... and hands it on through its own exec (exec_env)
     cfg = paths.ConfigDir(ident.config_dir(env))  # made here: the loop writes under it for as long as it runs
 
     def profile() -> RepoProfile:
@@ -161,7 +163,8 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         claim=lambda b, wt, slot: ops.claim(repo, store, b, wt, slot, git, who, now),
         loop_lock=ops.loop_lock,
         drop_engine_lock=lambda d: engine_lock.drop_engine_lock(d, os.getpid()),
-        spawn=lambda cmd, log, extra: ops.spawn(spawner, cmd, log, {**extra, **childenv.identity_env(who)}),
+        spawn=lambda cmd, log, extra: ops.spawn(
+            spawner, cmd, log, {**extra, EnvVar.TASK_LOOP_LOOP_ID.value: loop_id, **childenv.identity_env(who)}),
         stop_now=ops.stop_now,
         stop_tree=ops.stop_tree,
         run_task_argv=lambda bead, wt, slot, out, code: (
