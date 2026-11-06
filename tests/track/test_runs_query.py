@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.app.track import runs
+from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 
 
@@ -79,3 +80,18 @@ def test_slow_ranks_by_exec_then_by_wait(tmp_path):
 def test_slow_with_no_logs_says_so(tmp_path):
     rc, out = say(runs.slow, ConfigDir(tmp_path), 5, "exec", 10)
     assert rc == 0 and "no timed items" in out
+
+
+def test_show_lists_the_attempts_of_the_run_from_factory_db(tmp_path):
+    """A run that was taken up again (a retry inside one run id) shows each attempt: the DB rows, read-only."""
+    cfg = ConfigDir(tmp_path)
+    where = RunLocator(cfg)
+    run = where.take_up("R2", "/repo", "tl-x", 10).manifest.run
+    where.take_up("R2", "/repo", "tl-x", 20)
+    cfg.engine_log(run).parent.mkdir(parents=True, exist_ok=True)
+    cfg.engine_log(run).write_text(json.dumps(row("run_start", 1.0, worktree="/w", branch="b", run_id=run)) + "\n", encoding="utf-8")
+    rc, out = say(runs.show, run, cfg)
+    assert rc == 0
+    lines = [ln for ln in out.splitlines() if ln.strip().startswith("attempt")]
+    assert len(lines) == 2 and "yielded" in lines[0] and "taken up by another process" in lines[0]
+    assert "open" in lines[1]

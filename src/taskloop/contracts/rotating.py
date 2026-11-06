@@ -3,6 +3,7 @@
 the current file: a cursor past the end of a freshly rotated file reads from 0."""
 import json
 import sys
+import weakref
 from collections.abc import Callable
 from pathlib import Path
 from typing import override
@@ -16,6 +17,8 @@ class RotatingJsonl(Jsonl):
     def __init__(self, path: Path, rotate_bytes: int = ROTATE_BYTES, keep: int = KEEP, rotate_lock: Path | bool = False) -> None:
         super().__init__(path)
         self.log = JsonlLog(path, rotate_bytes=rotate_bytes, keep=keep, rotate_lock=rotate_lock)
+        # the log holds its append descriptor open until closed: a store dropped without a close would keep it for the life of the process
+        weakref.finalize(self, self.log.close)
 
     def rewrite(self, keep: Callable[[bytes], bool]) -> int:
         """Keep the lines `keep` accepts, under the rotate lock; -> how many lines went."""
