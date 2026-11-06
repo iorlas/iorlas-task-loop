@@ -21,6 +21,7 @@ from support.logs import records
 from support.narrow import must
 
 # isort: split
+from support.memstores import fake_stores
 from support.spawn import port_git
 
 from taskloop.app.checks.cache import KEEP, InputKeys, RunMemo, green_result, is_green, key_digest, plan_digest
@@ -28,7 +29,6 @@ from taskloop.contracts import paths, wire
 from taskloop.contracts.checks import Check, CheckResult, PassRecord
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.runkey import BaseSha, Digest, RunKey
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.real import real_stores
 
 ANSWERS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}

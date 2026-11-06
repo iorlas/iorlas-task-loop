@@ -9,11 +9,11 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fakegit import FakeGit
+from support.memstores import fake_stores
 
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.stackgate import StackGate
 from taskloop.contracts.gitfacts import TreeEntry
-from taskloop.stores.memory import fake_stores
 
 
 class StackPolicy(Case):

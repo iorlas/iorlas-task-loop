@@ -42,6 +42,25 @@ class FastReads(fixtures.ApiFixture):
             assert self.finds == 1
             assert profile.call_count == 1
 
+    def test_concurrent_cost_requests_share_one_build(self):
+        entered, release = threading.Event(), threading.Event()
+        original = self.dash.reads.worlds.world
+
+        def build():
+            entered.set()
+            release.wait(2)
+            return original()
+
+        with patch.object(self.dash.reads.worlds, "world", side_effect=build) as world, ThreadPoolExecutor(8) as pool:
+            futures = [pool.submit(self.dash.reads.cost, "24h", 0, "") for _ in range(8)]
+            try:
+                assert entered.wait(1)
+            finally:
+                release.set()
+            pages = [f.result(2) for f in futures]
+            assert world.call_count == 1
+            assert all(p is pages[0] for p in pages)
+
     def test_first_concurrent_requests_share_one_build(self):
         entered, release = threading.Event(), threading.Event()
         original = self.dash.reads.worlds.world
