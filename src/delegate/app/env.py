@@ -130,6 +130,10 @@ def history_path() -> Path:
     return config_dir() / "history.jsonl"
 
 
+def history_lost_path() -> Path:
+    return history_store().lost_path
+
+
 def history_store() -> HistoryStore:
     return HistoryStore(history_path())
 
