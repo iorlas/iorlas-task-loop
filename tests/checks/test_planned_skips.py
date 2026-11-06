@@ -4,7 +4,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support import engine_case as te
+from support.check_host import CheckHostCase
+from support.plans import FALSE
 
 from taskloop.app.checks.cache import is_green
 from taskloop.contracts import wire
@@ -14,7 +15,7 @@ from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.specs import gate_items
 
 
-class PlannedSkips(te.EngineTest):
+class PlannedSkips(CheckHostCase):
     def memo(self):
         host = self.eng.checker.host
         return self.eng.checker._memo(host.checkout.tree_hash(), host.git.rev_parse(str(host.wt), host.cfg.base))
@@ -41,7 +42,7 @@ class PlannedSkips(te.EngineTest):
     def test_a_planned_skip_before_a_red_is_not_recorded(self):
         self.eng = self.checks_engine(checks=[
             {"id": "coverage", "cmd": "true", "group": "static", "run": "gate", "when": ["ui/**"]},
-            {"id": "red", "cmd": te.FALSE, "group": "tests", "run": "gate"},
+            {"id": "red", "cmd": FALSE, "group": "tests", "run": "gate"},
         ])
         run = self.eng.checker.run_items(gate_items(self.eng.cfg))
         assert [(r.status, r.planned) for r in run] == [("skipped", True), ("failed", False)]
@@ -49,7 +50,7 @@ class PlannedSkips(te.EngineTest):
 
     def test_a_failed_first_skip_is_not_planned_or_recorded(self):
         self.eng = self.checks_engine(checks=[
-            {"id": "red", "cmd": te.FALSE, "group": "static", "run": "gate"},
+            {"id": "red", "cmd": FALSE, "group": "static", "run": "gate"},
             {"id": "coverage", "cmd": "true", "group": "tests", "run": "gate", "when": ["ui/**"]},
         ])
         run = self.eng.checker.run_items(gate_items(self.eng.cfg))
@@ -59,7 +60,7 @@ class PlannedSkips(te.EngineTest):
     def test_a_planned_skip_in_another_lane_is_not_recorded_when_a_lane_fails(self):
         self.eng = self.checks_engine(checks=[
             {"id": "coverage", "cmd": "true", "run": "gate", "when": ["ui/**"], "lane": "a"},
-            {"id": "red", "cmd": te.FALSE, "run": "gate", "lane": "b"},
+            {"id": "red", "cmd": FALSE, "run": "gate", "lane": "b"},
         ])
         self.eng.checker.run_items(gate_items(self.eng.cfg))
         assert not self.green("coverage")

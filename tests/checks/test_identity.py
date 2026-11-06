@@ -5,7 +5,7 @@ from unittest import mock
 
 from support import procsim
 from support.case import Case
-from support.engine_case import EngineTest
+from support.check_host import CheckHostCase
 from support.memstores import fake_stores
 from support.spawn import port_git
 from support.tmpdir import TemporaryDirectory
@@ -184,7 +184,7 @@ class DatabaseDeliveryIdentity(DeliveryIdentity):
         return real_stores(ConfigDir(Path(tmp.name)))
 
 
-class StepIdentity(EngineTest):
+class StepIdentity(CheckHostCase):
     def test_distinct_ids_receive_their_own_injected_step_identity(self):
         seen = []
         cmd = procsim.fake("record-step", lambda cwd, env: (seen.append(env["TL_ARTIFACT_STEP"]) or 0, ""))

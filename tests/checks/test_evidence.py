@@ -11,15 +11,14 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
-from support.engine_case import EngineTest
-from support.logs import records
+from support.check_host import CheckHostCase
 
 from taskloop.app.run import worker_call
 
 CMD = "unity-like-check"
 
 
-class Evidence(EngineTest):
+class Evidence(CheckHostCase):
     def setup_method(self):
         super().setup_method()
         self.runs = 0
@@ -45,7 +44,7 @@ class Evidence(EngineTest):
         )
         assert (d / "Logs/Editor.log").read_text() == "editor log of run 1\n"
         assert (d / "check.log").read_text() == (eng.run_dir / res.log).read_text()
-        rows = {r["artifact"]: r for r in records(eng, "evidence") if r["call_id"] == "u"}
+        rows = {r["artifact"]: r for r in eng.records("evidence") if r["call_id"] == "u"}
         assert len(rows) == 3
         for rel, r in rows.items():
             data = (eng.run_dir / rel).read_bytes()
@@ -102,10 +101,10 @@ class Evidence(EngineTest):
         d = eng.run_dir / "artifacts" / "x" / "attempt-1"
         copied = sorted(p.relative_to(d).as_posix() for p in d.rglob("*") if p.is_file() and p.name != "id_rsa")
         assert copied == ["Logs/Editor.log", "check.log"]
-        rows = {r["artifact"].rsplit("/", 1)[-1] for r in records(eng, "evidence") if r["call_id"] == "x"}
+        rows = {r["artifact"].rsplit("/", 1)[-1] for r in eng.records("evidence") if r["call_id"] == "x"}
         assert rows == {"Editor.log", "check.log"}
 
     def test_keeping_evidence_makes_no_model_call(self):
         with mock.patch.object(worker_call.dg, "call", side_effect=AssertionError("ingest called a model")):
             eng, _ = self.attempt()
-        assert len([r for r in records(eng, "evidence") if r["call_id"] == "u"]) == 3
+        assert len([r for r in eng.records("evidence") if r["call_id"] == "u"]) == 3
