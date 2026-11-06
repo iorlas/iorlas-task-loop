@@ -1,12 +1,12 @@
 """Interleavings of the real producers (the run manifest rows, the owner-request file) against the dashboard's own checks: no
 hand-made record stands in for what the engine writes."""
 
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
 from support.dashlogs import RunScript, T, bead
 from support.runs import manifest
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.run import requests
 from taskloop.contracts.paths import ConfigDir
@@ -68,7 +68,7 @@ def test_a_claim_with_no_manifest_for_90_seconds_is_starting_and_becomes_running
 
 
 def test_an_engine_log_removed_by_retention_between_polls_is_not_an_error():
-    with tempfile.TemporaryDirectory() as d:
+    with TemporaryDirectory() as d:
         cfg = ConfigDir(d)
         bundle = manifest(cfg, RUN, BEAD, NOW, repo=REPO, state=RunState.DONE)
         log = Path(bundle.log)

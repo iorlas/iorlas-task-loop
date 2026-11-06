@@ -1,11 +1,11 @@
 """The Floor reads resource holder hints through ConfigDir without taking or changing a lock."""
 import sys
-import tempfile
 import time
 from pathlib import Path
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -24,7 +24,7 @@ from taskloop_dash.env import Env, Ports
 
 class ResourceLeases(Case):
     def test_a_held_lease_is_read_only_and_joined_to_the_run(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             root = Path(tmp)
             cfg, repo = ConfigDir(root / "cfg"), root / "project"
             repo.mkdir()

@@ -8,6 +8,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from any_failure_fp import Event, trip
+
 from taskloop.contracts.kinds import Kind
 from taskloop.domain import outcome as oc
 
@@ -25,19 +27,16 @@ def storm_trip(history: Sequence[Mapping[str, Any]], bead: str, kind: Kind, fing
     is the close being made. Only FAULT_* count: an ask repeats legitimately, a lane or network pause is gated by its wake."""
     if not oc.POLICY[kind].storm:
         return None
-    cut = now - knobs["storm_window_s"]
-    beads = {bead}
-    for h in history:
-        if h.get("fingerprint") != fingerprint or float(h.get("t") or 0) < cut:
-            continue
-        try:
-            if oc.POLICY[Kind(h.get("kind"))].storm:
-                beads.add(str(h.get("bead")))
-        except ValueError:
-            continue
-    if len(beads) < knobs["storm_beads"]:
-        return None
-    return StormTrip(fingerprint, tuple(sorted(beads)), now)
+    events = [Event(str(h.get("bead")), str(h.get("fingerprint")), float(h.get("t") or 0), str(h.get("kind"))) for h in history]
+    found = trip(events, bead, fingerprint, now, window_s=knobs["storm_window_s"], min_keys=int(knobs["storm_beads"]), count=_storms)
+    return StormTrip(found.fp, found.keys, found.t) if found else None
+
+
+def _storms(e: Event) -> bool:
+    try:
+        return oc.POLICY[Kind(e.kind)].storm
+    except ValueError:
+        return False
 
 
 def banner(trip: StormTrip, record: str) -> str:

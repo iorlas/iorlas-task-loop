@@ -10,8 +10,8 @@ from pathlib import Path
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Git, SlotGit
 from taskloop.contracts.slots import SlotGitError
+from taskloop.contracts.worktreerows import WorktreeDocs
 from taskloop.contracts.worktrees import Owned
-from taskloop.stores.files import FileDocSet
 
 SHOWN = 8  # lines of a loss printed per worktree
 
@@ -21,8 +21,8 @@ def loop_path(repo: str, name: str) -> str:
     return str(Path(repo) / ".worktrees" / ("loop-" + name))
 
 
-def docs(cfg: ConfigDir, repo_key: str) -> FileDocSet[Owned]:
-    return FileDocSet(lambda key: cfg.worktree_record(repo_key, key), Owned)
+def docs(cfg: ConfigDir, repo_key: str) -> WorktreeDocs:
+    return WorktreeDocs(cfg, repo_key)
 
 
 def key_of(path: str) -> str:
