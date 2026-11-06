@@ -84,6 +84,13 @@ def completed(cmd: Sequence[str], code: int, out: str, err: str = "") -> Complet
     return subprocess.CompletedProcess(cmd, code, out, err)
 
 
+def survivors_of(stop: dict[str, Any], res: DelegateResult | None = None) -> list[int]:
+    """The pids the stop itself found alive, and the ones delegate names in the answer (`worker.end` worker_survived), without repeats."""
+    pids = [int(p) for p in stop.get("alive") or []]
+    pids += [s.pid for s in (res.worker.survivors if res and res.worker else []) if s.pid not in pids]
+    return pids
+
+
 class Seam:
     """What the engine reads off a process seam after a call (stop, obs, secs, worker, live_start): a fake lane's defaults."""
 
@@ -98,11 +105,8 @@ class Seam:
         return None
 
     def survivors(self, res: DelegateResult | None = None) -> list[int]:
-        """The pids that outlived the stop of this call: the ones the stop itself found alive, and the ones delegate names in the answer
-        (`worker.end` worker_survived). Empty: the tree is proven dead. The engine asks this and reads no pid itself."""
-        pids = [int(p) for p in self.stop.get("alive") or []]
-        pids += [s.pid for s in (res.worker.survivors if res and res.worker else []) if s.pid not in pids]
-        return pids
+        """The pids that outlived the stop of this call (empty: the tree is proven dead). The engine asks this and reads no pid itself."""
+        return survivors_of(self.stop, res)
 
 
 class ApiRunner(Seam):
