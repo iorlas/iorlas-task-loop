@@ -3,7 +3,6 @@ import json
 import os
 import socket
 import sys
-import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -11,6 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -44,7 +44,7 @@ class Live(Case):
     """The real server process, against an empty config: every endpoint answers."""
 
     def test_endpoints(self):
-        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {
+        with TemporaryDirectory() as d, mock.patch.dict(os.environ, {
                 "XDG_CONFIG_HOME": d, "APPDATA": d, "TASK_LOOP_DASH_BIND": "127.0.0.1", "HOME": d, "USERPROFILE": d}), serving() as base:
             v = json.loads(urllib.request.urlopen(base + "/api/version", timeout=10).read())
             assert v["version"]
@@ -58,7 +58,7 @@ class Asks(Case):
     typed record on the ask and the bead is opened; the page and the read API answer a plain GET."""
 
     def test_no_credentials_needed_to_read_or_answer(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             d = Path(tmp)
             asks = AskStore.at(ConfigDir(d / "task-loop"))
             asks.put(MOCKS["lifesim-22b3"].replace(bead="x-1", id="x-1-1", repo=str(d), t=time.time() - 3600,
