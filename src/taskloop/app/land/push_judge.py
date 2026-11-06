@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from enum import IntEnum
 
+from taskloop.adapters import profile_at
 from taskloop.adapters.clock import SystemClock
 from taskloop.app.checks import authorization
 from taskloop.app.land.profile_change import diff_sha
@@ -84,7 +85,7 @@ class PushJudge:
         return commit
 
     def policy_profile(self, tip: PushTip) -> EngineConfig | None:
-        path = ".task-loop.json"
+        path = profile_at.FILE
         tip_tree = self.git.rev_parse(self.repo, tip.sha + "^{tree}")
         if not tip_tree:
             raise ValueError(f"cannot name the tree of {tip.sha}")

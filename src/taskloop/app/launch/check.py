@@ -3,10 +3,10 @@ run by a person in the current worktree through the engine's own runner. No ID: 
 makes due; the IDs: just those checks, whatever their `run`, always. The engine's own `diff-check` (git diff --check from the
 merge-base) runs first in every case. It claims no bead and writes no bd; its manifest and evidence use the engine's run machinery."""
 import argparse
-import json
 from contextlib import ExitStack
 from pathlib import Path
 
+from taskloop.adapters import profile_at
 from taskloop.app.checks import authorization
 from taskloop.app.checks.runner import Checker
 from taskloop.app.launch.check_host import CliHost
@@ -56,11 +56,13 @@ def chosen(cfg: EngineConfig, ids: list[str]) -> list[CheckSpec]:
 
 def profile_of(repo: str) -> EngineConfig:
     """The engine block of the worktree's own .task-loop.json (what a person edited, committed or not)."""
-    path = Path(repo) / ".task-loop.json"
+    path = Path(repo) / profile_at.FILE
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = profile_at.raw_in(repo)
     except (OSError, ValueError) as e:
         raise SystemExit(f"tl check: cannot read {path}: {e}") from None
+    if data is None:
+        raise SystemExit(f"tl check: cannot read {path}: no such file")
     return wslots.load_profile(data).engine
 
 
