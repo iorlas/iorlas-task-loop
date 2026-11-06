@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from taskloop.adapters.ident import hostname
-from taskloop.app.prune import runs, slotstate
+from taskloop.app.prune import retention, runs, slotstate
 from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.release.shell import Shell
 from taskloop.app.run import running
@@ -50,6 +50,10 @@ def run(cfg: ConfigDir, loop: LoopConfig, repos: list[str], store_of: Callable[[
         held = sum(1 for d in folders if d.bead in exempt)
         say(f"prune: run data: {would}{len(gone)} item(s), {mb(sum(g.bytes for g in gone))}; kept every run folder newer than "
             f"{runs.kept_days(loop.keep_days):g} days and {held} of beads still open or parked")
+    logs = retention.prune(cfg, loop.keep_days, now, dry_run)
+    for g in logs:
+        say(f"prune: {would}{g.path} ({mb(g.bytes)})")
+    count += len(logs)
     orphans = slotstate.prune(cfg, repos, sh.port, now, dry_run)
     for g in orphans:
         say(f"prune: {would}{g.path} ({mb(g.bytes)}): its slot is gone")
