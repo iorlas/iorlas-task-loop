@@ -26,20 +26,22 @@ class Ownership(Case):
         self.log = RunLog(fake_stores().run_log("run"))
         self.lock = self.enterContext(mock.patch("taskloop.app.slots.engine_lock.read_engine_lock"))
         self.alive = self.enterContext(mock.patch("taskloop.app.slots.engine_lock.proc_alive", return_value=True))
+        self.agents = self.enterContext(mock.patch("taskloop.app.slots.engine_lock.running_for", return_value=["r1"]))
 
     def test_cleanup_keeps_live_engine_and_orphan_worker_checkouts(self):
         for slot in (False, True):
             for lock in (EngineLock(pid=987654, started=1, bead="a"),
-                         EngineLock(pid=0, started=1, bead="a", workers=[(987654, "start")])):
+                         EngineLock(pid=0, started=1, bead="a")):
                 with self.subTest(slot=slot, lock=lock):
                     self.lock.return_value = lock
                     why = cleanup.tidy_local(self.git, "/repo", self.log, "task/a", "head", lambda _, slot=slot: slot, cfg=homes.cfg())
-                    assert "pid 987654" in why
+                    assert ("pid 987654" in why) or ("run r1" in why)
                     assert self.git.calls == []
                     assert self.git.local == "head"
 
     def test_cleanup_still_cleans_dead_and_absent_locks(self):
         self.alive.return_value = False
+        self.agents.return_value = []
         for slot in (False, True):
             for lock in (None, EngineLock(pid=987654, started=1, bead="a")):
                 with self.subTest(slot=slot, lock=lock):

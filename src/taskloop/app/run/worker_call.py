@@ -219,7 +219,7 @@ class WorkerCall:
         req = c.prepared.request.replace(live_file=live, tools=[worker_request.artifact_tool(e, c)])  # per call: not in the call's identity
         c.limit_s = float(req.timeout_s)
         brief = worker_request.brief(c, req)
-        runner = e.router.runner(e.err_path, None, live, e.lock_worker)
+        runner = e.router.runner(e.err_path, None, live)
         runner.outer = e.halt  # a stop of the run ends the call
         cid = e.calls.start(c.step or c.node, c.node, c.role, bool(c.resume), e.live_n)
         c.state = callstate.begin(
@@ -242,7 +242,6 @@ class WorkerCall:
         e.calls.end(cid, c.node, c.role, c.tries, res, stopped, bool(c.resume), len(brief), runner.worker, runner.live_start())
         if stopped or survivors:  # the actual stop path, including a worker that outlived every signal
             self.log_kill(c, runner, survivors=survivors)
-        e.lock_workers(survivors, runner.worker)
         if survivors:  # a retry would write into the tree the old worker still writes in
             raise self.ops.blocked(
                 "failed: the {} worker (pid {}) is still alive after the stop ({}), SIGTERM and SIGKILL; "
