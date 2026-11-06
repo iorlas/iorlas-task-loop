@@ -42,7 +42,7 @@ def test_the_ledger_is_written_most_red_first_as_one_json_row_a_line(tmp_path):
     out = tmp_path / "flakes.jsonl"
     flakes.write(out, flakes.build(tmp_path))
     rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
-    assert [r["test"] for r in rows][0] == "tests/a/test_x.py::T::test_two"
+    assert next(r["test"] for r in rows) == "tests/a/test_x.py::T::test_two"
 
 
 def test_the_quarantine_list_skips_comments_and_blank_lines(tmp_path):

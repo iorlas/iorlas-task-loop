@@ -3,7 +3,8 @@
     python3 dev/flakes.py [runs-dir [out.jsonl]]      # default: <config>/runs -> <config>/flakes.jsonl
 
 A row per test: `test`, `fails` (red suite logs naming it), `runs` (their run ids). The list a person quarantines from is read off the top
-of it; a quarantined test (tests/quarantine.txt) runs apart in dev/runtests.py and cannot block. The list may only shrink (tests/rules/test_quarantine_ratchet.py).
+of it; a quarantined test (tests/quarantine.txt) runs apart in dev/runtests.py and cannot block.
+The list may only shrink (tests/rules/real/test_quarantine_ratchet.py).
 """
 import json
 import os
