@@ -551,7 +551,7 @@ class Loop(LoopBase):
         bd = self.beads({"x-1": [], "x-2": [rec("landed")]})
         self.hold["x-1"] = 3
         self.during.append(lambda: self.main(["stop", "--repo", str(self.repo), "--now"]))
-        with mock.patch.object(wloop, "landed_on_base", return_value=True):
+        with mock.patch.object(wloop.ops, "landed_on_base", return_value=True):
             self.run_loop()
         assert ("update", "x-1", "--status", "open", "--assignee", "") not in bd.calls
         assert "on the base" in self.lines()[0]["why"]
