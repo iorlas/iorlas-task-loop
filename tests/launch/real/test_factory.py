@@ -1,19 +1,19 @@
 """The real Spawner detaches a harmless stand-in from a launcher that exits."""
 import json
 import sys
-import tempfile
 import time
 from pathlib import Path
 
 import support.paths
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import procs
 
 
 class DetachedFactory(Case):
     def test_child_survives_launchers_process_group_with_null_stdin(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with TemporaryDirectory() as directory:
             root = Path(directory)
             proof, recorded = root / "proof.json", root / "loop.pid"
             standin = (

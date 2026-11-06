@@ -4,11 +4,11 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -51,7 +51,7 @@ raise SystemExit(cmd_judge_push(args, who=who, env=env, spawner=RealSpawner(env)
 
 class Base(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         t = Path(self.tmp.name)
         self.cfg, self.calls = t / "cfg", t / "calls"
