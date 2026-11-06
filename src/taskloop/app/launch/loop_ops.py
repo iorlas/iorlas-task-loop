@@ -12,6 +12,7 @@ from jsonl_log import close_held
 
 from taskloop.adapters import beadtools, childenv, ident, ram
 from taskloop.adapters.bd import BdStore
+from taskloop.app.doctor import disk
 from taskloop.app.loop.env import ReloadNote
 from taskloop.app.reconcile import leases
 from taskloop.app.release import reexec
@@ -68,6 +69,7 @@ def chores(repo: str, spawner: Spawner, env: Env, git: Git, who: Identity, store
         factorybackup.backup(who.config, trail.now())
     except Exception as e:
         console.say(f"loop: db backup: {e}")
+    disk.sample_volume(who.config, trail.now(), console.say)  # the hourly point of doctor --disk's forecast
     if store is not None:
         try:
             for line in bdbackup.nightly(who.config, wslots.repo_key(repo), lambda argv: _bd(store, argv), trail.now()):
