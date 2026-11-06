@@ -3,9 +3,9 @@ leaked into it. Read-only: nothing is removed. A compliant repo gets no line."""
 from pathlib import Path
 from types import SimpleNamespace
 
-from taskloop.domain.layout import matchers as layout
 from taskloop.app.wire import doctor
 from taskloop.contracts import config
+from taskloop.domain.layout import matchers as layout
 
 
 def profile(*checks: dict, slots: dict | None = None) -> config.RepoProfile:
