@@ -3,12 +3,20 @@ seconds of a try's fetch, rebase and gate."""
 import statistics
 from collections import Counter
 from collections.abc import Sequence
-from typing import Any
+from typing import TypedDict
 
 from taskloop.contracts.log import EngineLog, LandTry
 
 
-def land_stats(tries: Sequence[LandTry]) -> dict[str, Any]:
+class LandStats(TypedDict):
+    tries: int
+    retried: int
+    causes: dict[str, int]
+    median_s: dict[str, float]
+    biggest: str
+
+
+def land_stats(tries: Sequence[LandTry]) -> LandStats:
     """{tries, retried (a try with a `failing`), causes {failing: n}, median_s {phase: s}, biggest (the phase with the largest median)}."""
     causes = Counter(t.failing for t in tries if t.failing)
     median = ({"fetch": statistics.median(t.fetch_s for t in tries), "rebase": statistics.median(t.rebase_s for t in tries),
