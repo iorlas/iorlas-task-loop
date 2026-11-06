@@ -70,7 +70,7 @@ class Worlds:
         bd_ok_at, bd_error = self.beads.health(path)
         slot_source = self.slot_source(path)
         slots = slots_of(rows, slot_source.host.split(".")[0].lower())  # titled as ident.hostname() names this machine
-        states = LoopRows(env.config, loop_key(path)).rows("")
+        states = LoopRows(env.config, loop_key(path), quiet=True).rows("")
         _, items = self.looks.look_items(id, raw)
         looks = [LookItem(bead=i["bead"], title=i["title"], artifacts=tuple(
             self.looks.shot_url(id, s["path"]) for s in i["shots"] if s["role"] == "after"))
