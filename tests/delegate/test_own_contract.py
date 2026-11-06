@@ -142,7 +142,7 @@ class RealProcesses(Case):
     @real_proc("delegate: a worker, git or CLI process")
     def test_call_timeout_stops_a_worker_that_ignores_sigterm(self):
         time.time()
-        out, hooks = self.run_fake("spawner", timeout=2)
+        out, hooks = self.run_fake("spawner", timeout=1)
         assert out.timed_out
         end = procs.worker_end(hooks.stops, "timeout")
         assert (end.end, end.stopped, end.survivors) == (wire.END_TIMEOUT, True, [])

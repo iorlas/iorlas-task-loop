@@ -73,7 +73,7 @@ class RealTrees(Case):
         th = threading.Thread(target=watch)
         th.start()
         sup = Supervisor(CodexHarness(), RunHooks(started=lambda w: seen.update(shim=w.pid)), LiveSink("codex", ""))
-        out = sup.run(LaunchSpec(argv=[sys.executable, "-c", SHIM, self.pidfile], env=dict(os.environ), cwd=self.d.name, stdin=""), 3)
+        out = sup.run(LaunchSpec(argv=[sys.executable, "-c", SHIM, self.pidfile], env=dict(os.environ), cwd=self.d.name, stdin=""), 1.5)
         th.join()
         assert out.timed_out
         assert seen["child_start"] and seen["shim_start"]
@@ -108,7 +108,7 @@ class RealTrees(Case):
     @real_proc("delegate: a worker, git or CLI process")
     def test_run_tree_timeout_stops_the_tree(self):
         with pytest.raises(subprocess.TimeoutExpired):
-            procs.run_capture([sys.executable, "-c", SHIM, self.pidfile], 3)
+            procs.run_capture([sys.executable, "-c", SHIM, self.pidfile], 1.5)
         child = wait_for(self.pidfile)
         end = time.time() + 15
         while alive(child) and time.time() < end:

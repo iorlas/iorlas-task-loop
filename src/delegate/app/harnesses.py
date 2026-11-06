@@ -1,5 +1,7 @@
 """Which harness serves which lane: the OpenCode profiles per lane, the login probe per lane, the transcript finder per family."""
 
+import time
+from collections.abc import Callable
 from typing import Final
 
 from any_agent.harnesses import claude, codex, opencode
@@ -22,6 +24,16 @@ OC_PROFILES: Final = {
     "DEEPSEEK_FREE": Profile(providers=("opencode",), own_data=True, price="free"),
 }
 ZAI_MODELS = ("zai-coding-plan/glm-5.3", "zai-coding-plan/glm-5.3-flash")
+
+
+# The monotonic clock a run's watchdog and turn rules read. The one seam for time: a test swaps it for a fake that moves when the
+# supervisor looks, so a silence or a grace that takes minutes of a real worker takes a few polls.
+CLOCK: Callable[[], float] = time.monotonic
+
+
+def now() -> float:
+    """The run clock, read through the seam (a late binding: `launch` passes this, so swapping CLOCK takes effect)."""
+    return CLOCK()
 
 
 def sandbox() -> Sandbox:

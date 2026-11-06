@@ -1,7 +1,6 @@
 """Look items: every item of a repo's owner-look beads with its pictures (GET /api/look-shot serves one), and the owner's answer through
 the `look` port. "good" settles an item; "redo" with a note files a follow-up bead that carries the note and the pictures."""
 
-import mimetypes
 import os
 from pathlib import Path
 from typing import Any
@@ -72,7 +71,7 @@ class Looks:
                 data = None
         if not data or data.startswith(b"version https://git-lfs"):  # an LFS pointer is not a picture
             return None
-        return data, PICTURES.get(ext) or mimetypes.guess_type(rel)[0] or "application/octet-stream"
+        return data, PICTURES[ext]  # ext is in PICTURES (checked above)
 
     def answer(self, repo: str, item: str, verdict: str, note: str, look_bead: str = "") -> Result:
         """Answer one look item through the `look` port, then drop the repo's cached items."""
