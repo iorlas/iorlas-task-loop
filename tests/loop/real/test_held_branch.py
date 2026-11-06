@@ -22,6 +22,7 @@ from support import (  # noqa: E402
     looptest,
     tlbd,
 )
+from support.args import Args  # noqa: E402
 from support.checked import run_checked  # noqa: E402
 from support.engine_locks import put_lock  # noqa: E402
 from support.procsim import real_proc  # noqa: E402
@@ -35,9 +36,6 @@ import loop.test_loop as tlp  # noqa: E402
 from taskloop.adapters import pidcheck  # noqa: E402
 from taskloop.app.loop import verdict as vd  # noqa: E402
 from taskloop.app.loop.take import Taker  # noqa: E402
-from taskloop.app.run import (  # noqa: E402
-    entry,
-)
 from taskloop.contracts.env import snapshot  # noqa: E402
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
@@ -80,7 +78,7 @@ class HeldBranch(Case):
         self.addCleanup(os.chdir, before)
 
     def reset(self):
-        a = entry.Args(op="reset", name="s1", bead="x-1", n=None, force=False)
+        a = Args(op="reset", name="s1", bead="x-1", n=None, force=False)
         out = io.StringIO()
         with redirect_stdout(out), redirect_stderr(io.StringIO()):
             rc = tl.v_slot(a, tl.Ctx(tl.HERE, tl.trail.now, [], snapshot(), spawner=real_spawner(), git=port_git(), who=who()))
