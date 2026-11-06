@@ -8,6 +8,7 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fakegit import ScriptedGit
+from support.memstores import fake_stores
 from support.narrow_hosts import FakeGateHost
 
 from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
@@ -16,7 +17,6 @@ from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.specs import engine_digest
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 

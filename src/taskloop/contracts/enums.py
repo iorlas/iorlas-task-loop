@@ -116,7 +116,7 @@ class CheckStatus(StrEnum):
 class WaitWhat(StrEnum):
     LANE = "lane"
     NETWORK = "network"
-    UNITY_SLOT = "unity_slot"
+    CHECK_SLOT = "check_slot"  # a check queued for a scarce slot (read from its output)
     RESOURCE = "resource"
     EDITOR_LOCK = "editor_lock"
     DELEGATE_CRASH = "delegate_crash"

@@ -4,10 +4,10 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from support.argv_checks import ArgvChecks
 from support.case import Case
 from support.checked import run_checked
 
-from taskloop.adapters.checks_argv import ArgvChecks
 from taskloop.adapters.git import RealGit
 from taskloop.contracts.env import Env
 from taskloop.contracts.ports import CheckSpec

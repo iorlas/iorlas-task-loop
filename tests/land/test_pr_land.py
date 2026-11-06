@@ -1,8 +1,8 @@
 """The PR-mode land (`land_mode: pr`): the branch goes up, a PR is opened, the bead waits as a typed ask; merged -> the PR's merge commit is
 the landing; closed unmerged -> a typed ask. The engine never merges: the forge fake fails the test on `gh pr merge`."""
+import os
 import shutil
 import sys
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,6 +17,8 @@ from support.forgesim import ForgeSim
 from support.narrow import must
 
 # isort: split
+from support.memstores import fake_stores
+
 from taskloop.app.asks import pr_wake, raiser
 from taskloop.app.land import pr_land
 from taskloop.app.land.forge import peek
@@ -24,7 +26,7 @@ from taskloop.app.land.gate import Problem, ProblemKind, mint
 from taskloop.app.land.pr_land import PrLand
 from taskloop.app.land.state import Land
 from taskloop.app.run.blocked import Blocked, blocked_for
-from taskloop.contracts import fence
+from taskloop.contracts import fence, scratch
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import load
@@ -35,7 +37,6 @@ from taskloop.contracts.ids import BeadId, TreeSha
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.asks import specs
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 BEAD = BeadId("t-1")
@@ -99,7 +100,7 @@ class World(Case):
         self.git = Git(self.sim)
         self.store = FakeBeads()
         self.store.beads[BEAD] = Bead(id=BEAD, title="T", status="in_progress")
-        run_dir = tempfile.mkdtemp()
+        run_dir = scratch.scratch_dir(os.environ)
         self.addCleanup(shutil.rmtree, run_dir, True)
         self.host = SimpleNamespace(
             bead=BEAD, cfg=SimpleNamespace(base="origin/main", land=["git", "push", "origin", "HEAD:main"]), spawner=self.sim,

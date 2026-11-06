@@ -59,6 +59,7 @@ class FakeBeadStore:
         self.beads, self.notes, self.calls = {}, {}, []
         self.fail = []  # (returncode, stderr) for the next writes, in order
         self.fns = {}   # name -> a function that answers instead (see `stub`)
+        self.meta = {}  # bead -> the metadata its writes set: bd keeps it, so a `show` (canned or not) answers it on top
 
     def put(self, bead):
         b = as_bead(bead)
@@ -90,9 +91,8 @@ class FakeBeadStore:
         return self
 
     def show(self, bead: BeadId):
-        if "show" in self.fns:
-            return as_bead(self.fns["show"](bead), bead)
-        return self.beads.get(bead, self.default)
+        found = as_bead(self.fns["show"](bead), bead) if "show" in self.fns else self.beads.get(bead, self.default)
+        return found.replace(metadata={**found.metadata, **self.meta[bead]}) if found is not None and bead in self.meta else found
 
     def comments(self, bead: BeadId):
         if "comments" in self.fns:
@@ -137,6 +137,8 @@ class FakeBeadStore:
 
     def update(self, bead: BeadId, patch: BeadPatch) -> None:
         self.run(bd.update_argv(bead, patch))
+        if patch.set_metadata:
+            self.meta.setdefault(bead, {}).update(patch.set_metadata)
 
     def claim(self, bead: BeadId):
         return self.run(["update", bead, "--claim"], failing=True)[0] == 0

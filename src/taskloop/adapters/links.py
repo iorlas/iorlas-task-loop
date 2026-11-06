@@ -1,6 +1,6 @@
 """Cited links of a research task, opened from the engine's host (tl-bxk.7).
 
-lifesim-ggi: 7 of 19 links answered 403 from the host, and the writer said "verified" from a sandbox with no network. So the
+One consumer run: 7 of 19 links answered 403 from the host, and the writer said "verified" from a sandbox with no network. So the
 engine opens every link the task adds to a text file, outside any sandbox; one that does not open goes back to the writer
 (replace it, or write `unverified` on its line), and a link the writer marks unverified goes to the owner with the claim it carries.
 The check is injectable for tests.

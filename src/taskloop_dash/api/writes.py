@@ -3,9 +3,10 @@ never a process or a bd argv. A refused write is Result(ok=false) with status 20
 unknown verb 404. Every verb is routed to a Port (one with no backend answers a Result that says so). park, stop and note name the
 run the owner observed; the engine acts on them at its next step boundary (stop at once, through its stop flag)."""
 
+import threading
 from typing import Any, Final, assert_never
 
-from taskloop.contracts import wire
+from taskloop.contracts import factorydb, receipts, wire
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.dash import (
     WRITES,
@@ -59,6 +60,7 @@ class Writes:
     def __init__(self, env: Env, records: Records, beads: Beads, looks: Looks) -> None:
         self.env, self.records, self.beads, self.looks = env, records, beads, looks
         self.store = AskStore.at(env.config)
+        self.keys = threading.Lock()
 
     def post(self, verb: str, body: object) -> Reply:
         cls = WRITES.get(verb)
@@ -69,7 +71,39 @@ class Writes:
         except ValueError as err:
             return 400, {"error": str(err)}
         self.env.touch()
-        return 200, wire.dump(self.dispatch(req))
+        key = getattr(req, "key", "")
+        if key:
+            return 200, wire.dump(self.receipted(verb, key, req))
+        out = self.dispatch(req)
+        if out.ok:
+            self.forget()
+        return 200, wire.dump(out)
+
+    def receipted(self, verb: str, key: str, req: DashCommand) -> Result:
+        """A command with an idempotency key acts once: its first answer is kept in factory.db and a retry gets that answer back, whether
+        the reply was lost, the page reloaded or the dashboard restarted. A key reused for another command is refused."""
+        what = {"verb": verb, **{f: getattr(req, f) for f in ("project", "bead", "run")}}
+        with self.keys:
+            con = factorydb.shared_rw(self.env.config.factory_db())
+            if con is None:
+                return Result(ok=False, message="The dashboard cannot keep receipts: factory.db is unavailable. Nothing was changed.")
+            kept = receipts.get(con, key)
+            if kept is not None:
+                if kept["what"] != what:
+                    return Result(ok=False, message="That idempotency key was used for another command.", receipt="refused")
+                return Result(ok=bool(kept["ok"]), message=str(kept["message"]), receipt="accepted" if kept["ok"] else "refused")
+            out = self.dispatch(req)
+            if out.ok:
+                self.forget()
+            out = out.replace(receipt="accepted" if out.ok else "refused")
+            receipts.put(con, key, {"what": what, "ok": out.ok, "message": out.message, "receipt": out.receipt}, self.env.clock())
+            return out
+
+    def forget(self) -> None:
+        """An applied write drops what the page read of its effects (decisions, ledger, landings, looks), so the next poll sees it
+        instead of the copy kept for a few seconds."""
+        for key in [k for k in self.env.ttl.names() if k.startswith(("v2", "looks:"))]:
+            self.env.ttl.drop(key)
 
     def dispatch(self, req: DashCommand) -> Result:
         """The write a command asks for. The match is exhaustive: a new member of DashCommand with no case here is a type error."""

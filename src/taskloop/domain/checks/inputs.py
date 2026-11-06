@@ -7,15 +7,20 @@ tracked file switches the cache off for that round. Only a pass is stored, and a
 it can read what git cannot see."""
 import hashlib
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Final
 
 from taskloop.contracts.argv import argv_of
 from taskloop.contracts.checks import Check
 from taskloop.domain.checks.matchers import expand_braces, glob_re, literal_prefix
 
-ROOT_FILES: Final = ("justfile", "Justfile", ".justfile", "*.lock", "packages-lock.json", "package-lock.json", "Directory.Packages.props",
-              "Directory.Build.props", "Directory.Build.targets", "global.json", "nuget.config", ".task-loop.json")
+ROOT_FILES: Final = ("justfile", "Justfile", ".justfile", "*.lock", "package-lock.json", ".task-loop.json")
+
+
+def anywhere(names: Iterable[str], extra: Iterable[str] = ()) -> list[str]:
+    """The file names (the engine's, then the profile's `pin_files`) as globs for the root or any folder below it."""
+    every = [*names, *extra]
+    return ["*/" + g for g in every] + every
 
 
 def dead_globs(paths: Iterable[str], globs: Iterable[str]) -> list[str]:
@@ -57,10 +62,10 @@ def matching(paths: Iterable[str], globs: Iterable[str], exclude: Iterable[str] 
 
 WHOLE_TREE: Final = "-"  # reads_digest of a check without `inputs`: the key's `tree` says which files
 TOOLCHAIN_FILES: Final = ("mise.toml", ".mise.toml", ".tool-versions", ".python-version", ".node-version", ".nvmrc", "rust-toolchain",
-                          "rust-toolchain.toml", "global.json")
+                          "rust-toolchain.toml")
 
 
-def reads_digest(check: Check, files: Mapping[str, str], ignored: Mapping[str, str]) -> str:
+def reads_digest(check: Check, files: Mapping[str, str], ignored: Mapping[str, str], pins: Sequence[str] = ()) -> str:
     """What one check reads, as a digest: with `inputs` the hash of the tree files matching them, of the gitignored files matching
     them (`ignored`: path -> content digest; tree_hash never sees them), and unless `inputs_only` also of the justfile, lockfiles and
     .task-loop.json anywhere in the tree. WHOLE_TREE for a check without `inputs` (the key's `tree` says which). '' = it reads
@@ -77,7 +82,7 @@ def reads_digest(check: Check, files: Mapping[str, str], ignored: Mapping[str, s
         h.update((f"I\t{p}\t{ignored[p]}\0").encode("utf-8", "surrogateescape"))
     h.update(f"\0{ih}\0{chr(0).join(excl)}".encode("utf-8", "surrogateescape"))
     if not check.inputs_only:
-        h.update(inputs_hash(files, ["*/" + g for g in ROOT_FILES] + list(ROOT_FILES)).encode())
+        h.update(inputs_hash(files, anywhere(ROOT_FILES, pins)).encode())
     return h.hexdigest()
 
 
@@ -101,18 +106,17 @@ def selected_digest(check: Check) -> str:
     return hashlib.sha1(text.encode("utf-8", "surrogateescape")).hexdigest()
 
 
-def toolchain_digest(files: Mapping[str, str], host: str) -> str:
+def toolchain_digest(files: Mapping[str, str], host: str, pins: Sequence[str] = ()) -> str:
     """The toolchain a check ran under: the host (system and machine) and the pin files of the tree (mise, python, node, rust, dotnet),
     at any depth. A bumped pin reruns even a check whose `inputs_only` leaves the rest of the tree out."""
-    pins = ["*/" + g for g in TOOLCHAIN_FILES] + list(TOOLCHAIN_FILES)
-    return hashlib.sha1(f"{host}\0{inputs_hash(files, pins)}".encode("utf-8", "surrogateescape")).hexdigest()
+    return hashlib.sha1(f"{host}\0{inputs_hash(files, anywhere(TOOLCHAIN_FILES, pins))}".encode("utf-8", "surrogateescape")).hexdigest()
 
 
-def touched(check: Check, changed: Iterable[str]) -> bool:
+def touched(check: Check, changed: Iterable[str], pins: Sequence[str] = ()) -> bool:
     """True when the diff (`changed`: paths) changes what the check reads: any path for a check with no `inputs` (it reads the whole
     tree), else a path under its inputs, or (unless `inputs_only`) one of the root files its cache key also reads."""
     paths = [p for p in changed if p]
     if not check.inputs:
         return bool(paths)
     own = bool(matching(paths, check.inputs, check.exclude))
-    return own or (not check.inputs_only and bool(matching(paths, ["*/" + g for g in ROOT_FILES] + list(ROOT_FILES))))
+    return own or (not check.inputs_only and bool(matching(paths, anywhere(ROOT_FILES, pins))))

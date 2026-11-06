@@ -56,15 +56,13 @@ class ReleaseReceipt(Case):
         if cached:
             verify(repo, sh, checks)
         stores = real_stores(ConfigDir(root / "config/task-loop"))
-        run_check = mock.Mock(return_value=1)
         actual_push = port.push
         def judged_push(d, remote, refspec):
             tip, tree = git("rev-parse", "HEAD"), git("rev-parse", "HEAD^{tree}")
             assert tree != before_tree
             request = f"refs/heads/main {tip} refs/heads/main {base}\n"
-            decision = judge_push(d, request, stores, port, run_check, env=env)
+            decision = judge_push(d, request, stores, port, env=env)
             assert decision.status == PushStatus.ALLOWED, decision.reasons
-            run_check.assert_not_called()
             cfg = authorization.profile(port, d, TreeSha(base))
             memo = authorization.memo_for(stores, port, d, cfg, TreeSha(tree), BaseSha(base), env)
             check = next(c for c in gate_items(cfg) if c.id == CheckId("suite"))

@@ -25,6 +25,7 @@ BACKSTOP_S = 120  # the engine stops the child at the node's limit plus this
 LIBRARY = "delegate.api"  # what the engine logs as the route of a call
 
 Runner = Callable[..., Any]
+RunRecord = dict[str, Any]  # one finished run of `api.history`
 
 
 @dataclass(frozen=True)
@@ -64,7 +65,7 @@ def resolve() -> Resolved:
     return Resolved(Path(), LIBRARY, api.contract(), "library")
 
 
-def _last_json(text: str) -> Any:
+def _last_json(text: str) -> object:
     try:
         return json.loads(text.strip().splitlines()[-1]) if text.strip() else None
     except (ValueError, IndexError):
@@ -89,6 +90,11 @@ def role_status(env: Env | None = None) -> dict[str, Any]:
     """Status `roles`: {role: {"usable": True | False | None, "lane", "why", "until", ...}}; {} when unreadable."""
     roles = status_json().get("roles")
     return roles if isinstance(roles, dict) else {}
+
+
+def run_history(since: float = 0.0) -> list[RunRecord]:
+    """delegate's finished runs after `since` (`api.history`): the one read of them."""
+    return [dict(r) for r in api.history(since)]
 
 
 def accounts() -> list[api.Account]:
@@ -132,6 +138,7 @@ def api_request(req: RunRequest, env: Mapping[str, str]) -> api.RunRequest:
         parent=req.parent, task=req.task, title=req.title[:120], call_id=req.call_id or None, live_file=req.live_file or None,
         engine_only=list(req.engine_only), engine_only_advisory=req.engine_only_advisory, only_family=list(req.only_family),
         writer_exec_allow=[list(x) for x in req.writer_exec_allow],
+        read_roots=list(req.read_roots),
         worker_env=dict(env),
         tools=[api.ToolServer(name=t.name, command=list(t.command), bead=t.bead, run=t.run, stage=t.stage, attempt=t.attempt)
                for t in req.tools],

@@ -1,0 +1,82 @@
+"""The ratchets without a stored baseline: each judges the change, not the tree.
+
+Design. layer_ratchet, temp_ratchet and needs_ratchet used to compare today's counts with a JSON file every PR rewrote, so two PRs in
+different areas conflicted on it and one landing turned the others red. Now nothing is stored (as tests/rules/type_counts.py already
+works): a ratchet counts its offenders in the .py files the change touches, at the merge base with origin/main (`git show`) and in the
+working tree, per key (offender kind, or capability and reason), and fails when a key's count went up. A move is net zero; a cleanup
+needs no `--write`; two PRs that touch different files share no file. No origin/main (a bare checkout): skipped, said so.
+A deliberate rise is a line in a commit message of the change: `Ratchet-allow: <temp|layer|needs> +N <a reason in words>`.
+"""
+import ast
+import re
+import subprocess
+from collections.abc import Callable
+from pathlib import Path
+
+Counter = Callable[[str, ast.Module], dict[str, int]]
+ALLOW = re.compile(r"^Ratchet-allow:\s+(\w+)\s+\+(\d+)\s+(\S.*)$", re.MULTILINE)
+MIN_REASON_WORDS = 4
+
+
+def git(root: Path, *argv: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["git", "-C", str(root), *argv], capture_output=True, text=True, check=False)
+
+
+def merge_base(root: Path, ref: str = "origin/main") -> str | None:
+    ran = git(root, "merge-base", "HEAD", ref)
+    return ran.stdout.strip() if ran.returncode == 0 else None
+
+
+def changed_py(root: Path, base: str) -> list[str]:
+    """The .py files the change adds, modifies, deletes or renames against `base`, plus untracked ones."""
+    names = set(git(root, "diff", "--name-only", "--no-renames", base).stdout.split())
+    names |= set(git(root, "ls-files", "--others", "--exclude-standard").stdout.split())
+    return sorted(n for n in names if n.endswith(".py"))
+
+
+def tree_of(text: str | None) -> ast.Module | None:
+    try:
+        return ast.parse(text) if text is not None else None
+    except SyntaxError:
+        return None
+
+
+def counted(counter: Counter, rel: str, text: str | None) -> dict[str, int]:
+    tree = tree_of(text)
+    return counter(rel, tree) if tree is not None else {}
+
+
+def net(counter: Counter, root: Path, base: str, paths: list[str]) -> tuple[dict[str, int], dict[str, int]]:
+    """(before, after): the counter's totals per key over `paths` at `base` and in the working tree."""
+    before: dict[str, int] = {}
+    after: dict[str, int] = {}
+    for rel in paths:
+        old = git(root, "show", f"{base}:{rel}")
+        mine = root / rel
+        now = mine.read_text(encoding="utf-8") if mine.is_file() else None
+        for out, text in ((before, old.stdout if old.returncode == 0 else None), (after, now)):
+            for key, n in counted(counter, rel, text).items():
+                out[key] = out.get(key, 0) + n
+    return before, after
+
+
+def rises(before: dict[str, int], after: dict[str, int]) -> dict[str, int]:
+    return {k: n - before.get(k, 0) for k, n in sorted(after.items()) if n > before.get(k, 0)}
+
+
+def allowed(root: Path, base: str, ratchet: str) -> int:
+    """The total of `Ratchet-allow: <ratchet> +N reason` lines in the change's commit messages (a reason in words, else it counts 0)."""
+    log = git(root, "log", "--format=%B", f"{base}..HEAD").stdout
+    return sum(int(n) for name, n, reason in ALLOW.findall(log) if name == ratchet and len(reason.split()) >= MIN_REASON_WORDS)
+
+
+def problems(ratchet: str, counter: Counter, root: Path) -> list[str] | None:
+    """The keys that rose beyond what the change allows, or None when there is no origin/main to compare with."""
+    base = merge_base(root)
+    if base is None:
+        return None
+    before, after = net(counter, root, base, changed_py(root, base))
+    up = rises(before, after)
+    if sum(up.values()) <= allowed(root, base, ratchet):
+        return []
+    return [f"{key}: +{n}" for key, n in up.items()]
