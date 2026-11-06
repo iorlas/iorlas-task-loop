@@ -1,4 +1,4 @@
-"""Schema v3 and conservative SQLite opens for the shared factory journal.
+"""Schema v4 and conservative SQLite opens for the shared factory journal.
 
 Connections belong to their caller's thread. Writers use begin_immediate for
 short transactions; unavailable databases are reported as visible errors.
@@ -18,7 +18,7 @@ from sqlite_store import SqlValue
 from taskloop.contracts import factorymigrate, factoryprune, wire
 from taskloop.contracts.run import RunManifest
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 DDL = """
 CREATE TABLE source (path TEXT PRIMARY KEY, family TEXT NOT NULL,
   dev INTEGER, ino INTEGER, size INTEGER, mtime_ns INTEGER, head TEXT,
@@ -69,6 +69,7 @@ CREATE TABLE wait (
   id INTEGER PRIMARY KEY, repo TEXT NOT NULL, run TEXT, kind TEXT NOT NULL,
   wake_at REAL, wake_on TEXT, facts TEXT, since REAL NOT NULL, cleared REAL
 );
+CREATE TABLE checkpoint (bead TEXT PRIMARY KEY, t REAL NOT NULL, rev INTEGER NOT NULL DEFAULT 0, body TEXT NOT NULL);
 CREATE TABLE signal (
   id INTEGER PRIMARY KEY, run TEXT, kind TEXT NOT NULL,
   payload TEXT, at REAL NOT NULL, taken REAL
@@ -95,8 +96,9 @@ OWNERS: dict[str, str] = {
     "effect": "engine",
     "wait": "loop",
     "signal": "owner",
+    "checkpoint": "engine",  # one row per bead across runs; the engine writes it with the revision it read
 }
-REVISIONED_TABLES = frozenset({"run", "ask", "bead"})
+REVISIONED_TABLES = frozenset({"run", "ask", "bead", "checkpoint"})
 # V1 held derived data only; preserve it before creating authoritative v2.
 SCHEMA = sqlite_store.Schema(
     version=SCHEMA_VERSION,

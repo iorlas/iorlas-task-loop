@@ -20,7 +20,7 @@ from taskloop.contracts.paths import ConfigDir
 
 TABLES = {
     "source", "bead", "run", "attempt", "step", "lease", "check_pass",
-    "check_round", "ask", "ask_ledger", "kv", "effect", "wait", "signal",
+    "check_round", "ask", "ask_ledger", "kv", "effect", "wait", "signal", "checkpoint",
 }
 INDEXES = {
     "run_bead", "run_recent", "run_live", "bead_status", "check_tree", "ask_live",
@@ -55,7 +55,7 @@ class FactoryDbTest(Case):
 
     def test_fresh_open_creates_schema_and_pragmas(self):
         con = self.rw()
-        assert con.execute("PRAGMA user_version").fetchone() == (3,)
+        assert con.execute("PRAGMA user_version").fetchone() == (factorydb.SCHEMA_VERSION,)
         assert con.execute("PRAGMA journal_mode").fetchone() == ("wal",)
         assert con.execute("PRAGMA synchronous").fetchone() == (1,)
         assert con.execute("PRAGMA busy_timeout").fetchone() == (5000,)
@@ -84,9 +84,9 @@ class FactoryDbTest(Case):
     def test_wrong_version_is_rejected_without_replacing_it(self):
         con = self.rw()
         con.execute("PRAGMA user_version=99")
-        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v3.*update it"):
+        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v4.*update it"):
             factorydb.open_rw(self.path)
-        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v3.*update it"):
+        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v4.*update it"):
             factorydb.open_ro(self.path)
         assert con.execute("PRAGMA user_version").fetchone() == (99,)
 
@@ -105,7 +105,7 @@ class FactoryDbTest(Case):
     def test_reader_names_schema_errors_as_database_unavailable(self):
         con = self.rw()
         con.execute("PRAGMA user_version=99")
-        expected = "database unavailable: factory.db is schema v99, this code knows v3: update it"
+        expected = "database unavailable: factory.db is schema v99, this code knows v4: update it"
         assert factorydb.database_error(self.path, 1) == expected
         assert factorydb.run_rows(self.path, 1) == ([], expected)
 
@@ -155,7 +155,7 @@ class FactoryDbTest(Case):
         with pytest.raises(ValueError, match="transaction"):
             factorydb.cas_update(con, "ask", "bead", "b", 0, status="answered")
         with factorydb.begin_immediate(con):
-            for table in TABLES - {"run", "ask", "bead"}:
+            for table in TABLES - {"run", "ask", "bead", "checkpoint"}:
                 with self.subTest(table=table), pytest.raises(ValueError, match="unrevisioned"):
                     factorydb.cas_update(con, table, "id", "key", 0)
 
