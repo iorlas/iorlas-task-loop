@@ -67,7 +67,7 @@ def keep(
 
 
 def memo_in(
-    run_dir: Path, key: tuple[Any, ...], sha: str, answer_file: str, identity: CallIdentity | None = None,
+    run_dir: Path, key: tuple[object, ...], sha: str, answer_file: str, identity: CallIdentity | None = None,
 ) -> Callable[[sqlite3.Connection | None], None]:
     """`keep` as a step for a transaction that is already open (the connection), or its own when none is (None): what `settle` hands
     to the checkpoint's write, so the memo and the thread's updates land together."""
