@@ -11,6 +11,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from taskloop.app.look.state import LOOK_FIELDS
 from taskloop.app.run.review_glue import review_of
 from taskloop.contracts import fence, wire
 from taskloop.contracts.checkpoint import (
@@ -27,7 +28,6 @@ from taskloop.contracts.checkpoint import (
 from taskloop.contracts.followups import FollowupOutbox
 from taskloop.contracts.plancheck import PlanData
 from taskloop.contracts.review import Unfiled
-from taskloop.contracts.wire import Open
 from taskloop.domain.checks import trim
 from taskloop.domain.followups import FollowKey
 from taskloop.stores.api import AmendDoc
@@ -76,11 +76,6 @@ class StateAttrs:
     writer_family: str | None
     writer_fallback: bool
     fallback_lane: str
-    look_notes: list[str]
-    look_unjudged: dict[str, str]
-    look_done: int
-    rendered_names: list[str]
-    last_reqs: list[Open]
     render_stale: bool
     handoff: Handoff
     stage_tree: str
@@ -93,8 +88,13 @@ def state_names() -> tuple[str, ...]:
     return tuple(name for name in wire.names(RunState) if name not in NOT_ATTRS)
 
 
+def attr_names() -> tuple[str, ...]:
+    """The RunState fields that are engine attributes: all but the look stage's, which it holds as `engine.look`."""
+    return tuple(name for name in state_names() if name not in LOOK_FIELDS)
+
+
 def carries_state[T](cls: type[T]) -> type[T]:
-    for name in state_names():
+    for name in attr_names():
         setattr(cls, name, StateField(name))
     return cls
 
@@ -208,7 +208,7 @@ class Checkpoints:
         """What the owner-look bead needs goes into the record, so a crash after the land still files it."""
         e = self.e
         self.amend(lambda ck: ck.replace(state=ck.state.replace(
-            look_notes=list(e.look_notes), look_unjudged=dict(e.look_unjudged), review=review_of(e))))
+            look_notes=list(e.look.notes), look_unjudged=dict(e.look.unjudged), review=review_of(e))))
 
     def amend(self, fn: Callable[[Checkpoint], Checkpoint]) -> bool:
         """Rewrite the stored record with `fn` (a rebase moves its head, a cap grant adds an amend). False when there is none. The
