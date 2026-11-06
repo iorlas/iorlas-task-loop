@@ -13,6 +13,8 @@ from support.engine_case import real_git
 # isort: split
 from land import test_engine_land_1 as base
 
+LIMIT_S = 30  # each cell is a whole engine run on real git (clone, rebase, push); 18.6 s of CPU was measured on a loaded host (wall 62 s)
+
 CELLS = {
     "test_happy_path_lands_and_closes": "a land to a real origin: the pushed tree and the clone's origin/main are git's own",
     "test_wip_from_an_earlier_run_lands_as_one_titled_commit": "real commits and a real log: one titled commit reaches origin/main",
