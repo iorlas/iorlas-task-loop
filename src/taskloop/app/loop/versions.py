@@ -11,7 +11,7 @@ from pathlib import Path
 
 from taskloop.contracts import paths
 from taskloop.contracts.loop import BadVersion, BadVersions
-from taskloop.contracts.stores import JsonStore
+from taskloop.contracts.stores import BadVersionStore
 
 CORE = ("tl.py",)
 
@@ -47,7 +47,7 @@ class Installs:
                  now: Callable[[], float] = time.time) -> None:
         self.root, self.installed, self.pinned = root, installed, pinned  # root: the running install's dir
         self.now = now
-        self.bad = JsonStore(cfg.bad_versions(), BadVersions)
+        self.bad = BadVersionStore(cfg)
         self.dangling = ""  # the installed entry whose dir is gone, set by the last target() that fell through to the highest dir
 
     @property
