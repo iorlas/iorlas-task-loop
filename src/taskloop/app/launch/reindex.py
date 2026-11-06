@@ -14,7 +14,7 @@ def run(cfg: ConfigDir) -> int:
     if restored is not None:
         print(f"restored factory.db from {restored}")
     elif damage:
-        print("factory.db was damaged and no backup exists; rebuilding from retained files")
+        print("factory.db was damaged and no backup exists; rebuilding empty (the run files are no longer a source)")
     records = Records(Env(cfg.root, ports=Ports(store=store)))
     counts = reindex(cfg, repos=records.repos, store_of=store)
     print(f"reindexed: {counts['run']} runs, {counts['source']} sources in {counts['seconds']:.3f}s")
