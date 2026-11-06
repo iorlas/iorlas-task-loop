@@ -6,10 +6,10 @@ from pathlib import Path
 
 from taskloop.contracts.ago import ago
 from taskloop.contracts.ask import Ask
+from taskloop.contracts.askstore import HAD_PICK, ORPHAN, AskStore
 from taskloop.contracts.beadsport import BdFailure, BeadPatch, BeadQuery, Beads
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.ids import BeadId, is_bead_id
-from taskloop.contracts.stores import HAD_PICK, ORPHAN, AskStore
 
 UNUSED_ANSWER_S = 30 * 60
 EVERY_S = 600

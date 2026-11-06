@@ -5,12 +5,11 @@ anything."""
 import contextlib
 import functools
 import os
-import platform
 import shutil
 from collections.abc import Callable
 from pathlib import Path
 
-from taskloop.adapters import beadtools, childenv, ident, pidcheck, ram
+from taskloop.adapters import beadtools, childenv, ident, pidcheck
 from taskloop.adapters import delegate as dg
 from taskloop.adapters import storm as storm_file
 from taskloop.adapters.locks import hold_path
@@ -32,6 +31,7 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts import paths
 from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.config import HostResources, RepoProfile
+from taskloop.contracts.docstore import JsonStore
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
@@ -41,8 +41,8 @@ from taskloop.contracts.ids import BeadId, new_loop_id
 from taskloop.contracts.landed import landed_by
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.procport import Spawner
+from taskloop.contracts.rowstores import ReposStore
 from taskloop.contracts.slots import SlotGitError, git_probe
-from taskloop.contracts.stores import JsonStore, ReposStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.beads import rules as beadlint
 
@@ -67,16 +67,6 @@ def free_bytes(cfg: paths.ConfigDir) -> int:
     return shutil.disk_usage(cfg.root).free
 
 
-def available_mb(spawner: Spawner) -> int | None:
-    if platform.system() != "Darwin":
-        return None  # macOS only: vm_stat is the one reader
-    try:
-        result = spawner.run(["/usr/bin/vm_stat"], timeout_s=2)
-        return ram.available_mb(result.out) if result.exit == 0 else None
-    except OSError:
-        return None
-
-
 def files_of(repo: str, cfg: paths.ConfigDir, now: Callable[[], float] = trail.now) -> LoopFiles:
     return LoopFiles(cfg, wslots.repo_key(repo), pidcheck.pid_alive, now)
 
@@ -94,7 +84,7 @@ def roles(repo: str | Path, env: Env, git: Git) -> dict[str, bool | None] | None
     route = delegate_route(repo, env, git)
     if not route:
         return None
-    return {role: v.get("usable") if isinstance((v or {}).get("usable"), bool) else None for role, v in dg.role_status(env).items()}
+    return dg.roles_usable()
 
 
 def make_probe(repo: str | Path, env: Env, git: Git) -> dg.RouteProbe | None:
@@ -207,5 +197,5 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
             who=who,
         ),
         free_bytes=lambda: free_bytes(cfg),
-        available_mb=lambda: available_mb(spawner),
+        available_mb=lambda: ops.available_mb(spawner),
     )

@@ -23,8 +23,8 @@ from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import MARKETPLACE, BeadId, parse_bead_id
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.procport import Spawner
+from taskloop.contracts.rowstores import ReleaseResultStore
 from taskloop.contracts.snapshots import ReleaseResult
-from taskloop.contracts.stores import ReleaseResultStore
 
 
 @dataclass(frozen=True)

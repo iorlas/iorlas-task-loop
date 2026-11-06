@@ -13,9 +13,9 @@ import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from taskloop.adapters import check_files, profile_at
+from taskloop.adapters import check_files
 from taskloop.app.checks.execution import HOST_IDENTITY, LINUX_IDENTITY
-from taskloop.contracts import config, wire
+from taskloop.contracts import wire
 from taskloop.contracts.checks import BaseRedRecord, Check, CheckResult, PassRecord
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import CheckId, TreeSha
@@ -80,15 +80,6 @@ def key_digest(key: RunKey) -> str:
 def plan_digest(cmd: list[str] | None) -> Digest:
     """Exact argv identity; None preserves legacy `when` skips."""
     return Digest(hashlib.sha1(json.dumps(cmd).encode()).hexdigest() if cmd is not None else "")
-
-
-def repo_plan_digest(wt: str) -> Digest | None:
-    """Read the current producer from the repo profile; an unreadable profile cannot authorize skips."""
-    try:
-        data = profile_at.raw_in(wt)
-        return plan_digest(None) if data is None else plan_digest(config.load(data).engine.plan_cmd)
-    except (OSError, ValueError, config.ConfigError):
-        return None
 
 
 class RunMemo:

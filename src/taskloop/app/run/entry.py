@@ -27,6 +27,7 @@ from taskloop.app.slots import engine_lock
 from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import fence, wire
+from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.beadsport import BdFailure, BeadPatch, Beads
 from taskloop.contracts.config import EngineConfig
@@ -42,7 +43,6 @@ from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.procport import Spawner
 from taskloop.contracts.run import Reexec, RunReport
-from taskloop.contracts.stores import AskStore
 from taskloop.domain.plan.brief import owner_written
 
 say = console.say

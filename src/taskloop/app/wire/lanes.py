@@ -10,8 +10,9 @@ from taskloop.contracts import paths
 from taskloop.contracts.delegate_status import snapshot_of
 from taskloop.contracts.env import Env
 from taskloop.contracts.procport import Spawner
+from taskloop.contracts.rowstores import StatusStore, StatusTriedStore
 from taskloop.contracts.snapshots import StatusTried
-from taskloop.contracts.stores import StatusStore, StatusTriedStore, UsageHistory
+from taskloop.contracts.stores import UsageHistory
 
 EVERY_S = 20 * 60  # the loop files delegate's status again when the snapshot is this old
 

@@ -2,6 +2,7 @@
 of a quiet moment. Each is a function of ports; app/launch/loop.py closes them over a repo into the LoopEnv."""
 import contextlib
 import os
+import platform
 import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -9,7 +10,7 @@ from typing import Any
 
 from jsonl_log import close_held
 
-from taskloop.adapters import childenv, ident
+from taskloop.adapters import childenv, ident, ram
 from taskloop.app.loop.env import ReloadNote
 from taskloop.app.reconcile import leases
 from taskloop.app.release import reexec
@@ -108,3 +109,13 @@ def exec_into(repo: str, d: Path, argv: list[str], handover: str, env: Env, who:
 def loop_lock(cfg: paths.ConfigDir, wt: str, slot: str, slot_bead: str | None, bead: str) -> None:
     if os.path.isdir(wt):
         engine_lock.loop_lock(cfg, wt, slot, slot_bead or "", bead=bead)
+
+
+def available_mb(spawner: Spawner) -> int | None:
+    if platform.system() != "Darwin":
+        return None  # macOS only: vm_stat is the one reader
+    try:
+        result = spawner.run(["/usr/bin/vm_stat"], timeout_s=2)
+        return ram.available_mb(result.out) if result.exit == 0 else None
+    except OSError:
+        return None

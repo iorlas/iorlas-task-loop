@@ -25,8 +25,8 @@ from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.procport import Spawner
+from taskloop.contracts.rowstores import ReposStore
 from taskloop.contracts.slots import SlotGitError
-from taskloop.contracts.stores import ReposStore
 from taskloop.domain.beads import matchers as beadlint
 from taskloop.domain.checks.inputs import dead_globs
 from taskloop.domain.lanes import pin

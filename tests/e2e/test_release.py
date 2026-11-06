@@ -32,7 +32,7 @@ from taskloop.contracts import wire
 from taskloop.contracts.env import Env, snapshot
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import ReleaseResultStore
+from taskloop.contracts.rowstores import ReleaseResultStore
 
 ROOT = Path(__file__).resolve().parents[2]
 RELEASE = ROOT / "dev" / "release.py"

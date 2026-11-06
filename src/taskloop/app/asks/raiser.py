@@ -4,10 +4,10 @@ from dataclasses import dataclass
 
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask
+from taskloop.contracts.askstore import HAD_PICK, AskStore
 from taskloop.contracts.beadsport import BdFailure, BeadPatch, Beads
 from taskloop.contracts.enums import AskStatus, WhyCode
 from taskloop.contracts.ids import BeadId, parse_bead_id
-from taskloop.contracts.stores import HAD_PICK, AskStore
 from taskloop.domain.asks import similar
 from taskloop.domain.asks.lint import lint
 from taskloop.domain.asks.spec import AskSpec
