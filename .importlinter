@@ -266,6 +266,7 @@ forbidden_modules =
     taskloop.app.run.fields
     taskloop.app.run.host
     taskloop.app.run.layout
+    taskloop.app.run.facts
     taskloop.app.run.parts_land
     taskloop.app.run.parts_plan
     taskloop.app.run.parts_run
