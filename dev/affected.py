@@ -28,8 +28,8 @@ The rules, all in this file, none of them stored or switchable:
               the justfile select tests/rules.
   deleted     a deleted src/taskloop file has no node left to follow: it selects the tests/ folder that mirrors its slice.
   always      tests/rules (they read the whole tree and take seconds), so a change that selects nothing else still runs them.
-ledger      a test file is green when the key of everything it can depend on (its closure, narrowed to the data of its own slice, plus
-            the files its code names, the config and the python version) is in the ledger, a file of keys that `--mark-green` appends to
+ledger      a test file is green when the key of everything it can depend on (its whole closure: imports, conftests, every data file
+            under tests/, the files its code names, the config, and the python version) is in the ledger, a file of keys that `--mark-green` appends to
             after a green run. `--skip-green` leaves those out; tests/rules are never left out. A changed key (any file of the closure) is a
             test that runs again, so a base move reruns only the tests whose own files it touched.
 tests/live is explicit-only and is never selected. There is no flag for a wider run: the full run is `just test-full`.
@@ -234,21 +234,11 @@ CONFIG_FILES = ("pyproject.toml", "uv.lock", "mise.toml", "mise.lock", ".importl
                 ".task-loop.json")
 
 
-def in_scope(path, scope):
-    """A data file the closure keeps for its tests/ folder: all of tests/, or only `scope`'s own."""
-    if not path.startswith("tests/"):
-        return False
-    parts = path.split("/")
-    return scope is None or parts[1:2] == [scope] or parts[1:3] == ["fixtures", scope]
-
-
-def closure(repo, tests, tracked=None, scope=None):
+def closure(repo, tests, tracked=None):
     """Every file the result of running `tests` can depend on, sorted: the tests (those of the always-run tests/rules folder left out: they
     read the whole tree and are a check of their own), the conftest.py above each, everything they import (forward, lazy imports too),
     every non-Python file under tests/ and every one a reached file names by basename, and the root config files. Deliberately wide: a
-    file in the closure that did not matter costs a rerun, a file that mattered and is missing is a wrong pass.
-    `scope`: a slice folder name; the tests/ data kept is then that slice's (tests/<scope>/, tests/fixtures/<scope>/) and what a
-    reached file names."""
+    file in the closure that did not matter costs a rerun, a file that mattered and is missing is a wrong pass."""
     tests = [t for t in tests if not t.startswith(ALWAYS + "/")]
     reached = set(tests)
     for t in tests:
@@ -265,7 +255,7 @@ def closure(repo, tests, tracked=None, scope=None):
         listed = git(repo.root, "ls-files")
         tracked = listed.split("\n") if listed is not None else [p.relative_to(repo.root).as_posix() for p in repo.root.rglob("*")]
     data = {p for p in tracked if p and not p.endswith(".py") and not SKIP_PARTS & set(p.split("/"))
-            and (in_scope(p, scope) or Path(p).name in named or p in CONFIG_FILES)}
+            and (p.startswith("tests/") or Path(p).name in named or p in CONFIG_FILES)}
     return sorted(p for p in reached | data if (repo.root / p).is_file())
 
 
@@ -277,7 +267,7 @@ def test_keys(repo, tests, tracked=None):
     seen = {}
     keys = {}
     for test in tests:
-        files = closure(repo, [test], tracked, scope=test.split("/")[1])
+        files = closure(repo, [test], tracked)
         for f in files:
             if f not in seen:
                 seen[f] = hashlib.sha1((repo.root / f).read_bytes()).hexdigest()
@@ -291,16 +281,28 @@ def ledger_path(given, environ=None):
     return Path(given or Path(env.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "task-loop" / "green-tests.txt")
 
 
+def ledger_keys(path):
+    """The keys in the ledger, oldest first: a file that is missing, unreadable or torn gives the whole ones (a word that is no sha is dropped)."""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    return [word for word in text.split() if len(word) == 40 and all(c in "0123456789abcdef" for c in word)]
+
+
 def read_ledger(path):
-    return set(path.read_text(encoding="utf-8").split()) if path.is_file() else set()
+    return set(ledger_keys(path))
 
 
 def mark_green(repo, tests, path, tracked=None):
-    """Append the keys of `tests` as they are now; the file keeps its newest 50000 keys."""
+    """Add the keys of `tests` as they are now (call it only after a green run of exactly those files); the file is written whole and
+    swapped in, keeps its newest 50000 keys and loses any line that is no key."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    old = path.read_text(encoding="utf-8").split() if path.is_file() else []
+    old = ledger_keys(path)
     new = [k for k in test_keys(repo, tests, tracked).values() if k not in set(old)]
-    path.write_text("\n".join((old + new)[-50000:]) + "\n", encoding="utf-8")
+    tmp = path.with_name(path.name + f".{os.getpid()}")
+    tmp.write_text("\n".join((old + new)[-50000:]) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def not_green(repo, tests, path, tracked=None):
