@@ -66,6 +66,12 @@
     "tree_hash": "915889c7033b4c61f0e5657fc3f0edbe55911cd91980e2a65b06f6ac5d4f553b"
   },
   {
+    "name": "beads_client",
+    "shelf_tag": "f04f679aa9bafe51bb5e2205738d0cab641885f6",
+    "shelf_commit": "f04f679aa9bafe51bb5e2205738d0cab641885f6",
+    "tree_hash": "9a8ab27d8e493ba49c9d51e02b7ea931af91c94c408d8a97dd3184fa533d75d2"
+  },
+  {
     "name": "child_env",
     "shelf_tag": "0378d34a67b09557449f204c2c35d5e5a8890b08",
     "shelf_commit": "0378d34a67b09557449f204c2c35d5e5a8890b08",

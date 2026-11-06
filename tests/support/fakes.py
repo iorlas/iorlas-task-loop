@@ -5,8 +5,12 @@ reads what the engine did from `calls` (each write as the argv bd would get, in 
 import support.paths  # noqa: F401
 
 # isort: split
+import json
 from contextlib import contextmanager
 from pathlib import Path
+
+import beads_client as client
+from beads_client.client import create_argv as client_create_argv
 
 from support import fake_route
 from support.fake_clock import FakeClock  # noqa: F401  (re-exported: one place for a test to import its fakes from)
@@ -47,6 +51,28 @@ def as_comment(c):
         if isinstance(c, Comment)
         else Comment(author=c.get("author") or "", text=c.get("text") or "", created_at=c.get("created_at") or "")
     )
+
+
+def create_argv(new: NewBead) -> list[str]:
+    """The argv a `create` is: the client's own, for the record of calls."""
+    return client_create_argv(client.NewBead(new.title, new.issue_type, new.priority, new.description, new.acceptance_criteria,
+                                             tuple(new.labels), new.parent, tuple(new.deps), new.no_inherit_labels))
+
+
+def update_argv(bead: BeadId, patch: BeadPatch) -> list[str]:
+    """The argv an `update` is, for the record of calls (the order the client writes it in)."""
+    a = ["update", bead]
+    for flag, val in (("--status", patch.status or None), ("--if-assignee", patch.if_assignee or None), ("--assignee", patch.assignee),
+                      ("--description", patch.description), ("--notes", patch.notes)):
+        if val is not None:
+            a += [flag, val]
+    if patch.metadata is not None:
+        a += ["--metadata", json.dumps(patch.metadata)]
+    for k, v in patch.set_metadata.items():
+        a += ["--set-metadata", f"{k}={v}"]
+    for k in patch.unset_metadata:
+        a += ["--unset-metadata", k]
+    return a
 
 
 class FakeBeadStore:
@@ -131,12 +157,12 @@ class FakeBeadStore:
         return rc, out
 
     def create(self, new: NewBead) -> BeadId:
-        _rc, out = self.run(bd.create_argv(new))
-        made = bd._loads(out) if out else None
+        _rc, out = self.run(create_argv(new))
+        made = json.loads(out) if out else None
         return BeadId(str(made.get("id"))) if isinstance(made, dict) and made.get("id") else BeadId(self.made)
 
     def update(self, bead: BeadId, patch: BeadPatch) -> None:
-        self.run(bd.update_argv(bead, patch))
+        self.run(update_argv(bead, patch))
         if patch.set_metadata:
             self.meta.setdefault(bead, {}).update(patch.set_metadata)
 
