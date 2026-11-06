@@ -6,8 +6,9 @@ from support.tlmain import tl
 
 from taskloop.domain import selfdescribe
 
-# The git pre-push hook's and the artifact_add tool server's internal protocols are not session commands.
-EXCLUDED = {"judge-push", "artifact-server"}
+# The git pre-push hook's and the artifact_add tool server's internal protocols are not session commands, nor is the owner's one-time
+# `tl layout migrate`, which runs with every loop stopped.
+EXCLUDED = {"judge-push", "artifact-server", "layout"}
 
 
 class CommandCoverage(Case):

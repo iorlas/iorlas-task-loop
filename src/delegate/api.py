@@ -9,6 +9,8 @@ import json
 import os
 from collections.abc import Callable
 
+from stream_proc import proc_start
+
 from delegate.adapters import procs
 from delegate.app import answer, doctor, env, net
 from delegate.app import run as run_app
@@ -24,6 +26,7 @@ from delegate.contracts.wire import RunRequest, RunResult, ToolServer, WorkerEnd
 
 __all__ = [
     "Account",
+    "AgentRef",
     "Handle",
     "RunRequest",
     "RunResult",
@@ -31,6 +34,7 @@ __all__ = [
     "ToolServer",
     "WorkerEnd",
     "accounts",
+    "agents",
     "as_json",
     "cancel",
     "contract",
@@ -94,6 +98,28 @@ class Account:
     enabled: bool
     ready: bool
     fix: str
+
+
+@record
+class AgentRef:
+    """A worker run that still goes: the run, the task it serves (the caller's `task`), where, and in what role."""
+
+    run_id: str
+    task: str
+    lane: str
+    role: str
+
+
+def agents() -> list[AgentRef]:
+    """The runs whose worker or whose route process is still alive, by the leases delegate keeps: the answer for a caller that restarted
+    (an engine killed with its worker running). Reads only; the reap of an orphan stays at the next claim."""
+    found = []
+    for run_id, v in env.load_state().leases.items():
+        worker = v.worker_pid is not None and bool(v.worker_start) and proc_start(v.worker_pid) == v.worker_start
+        route = bool(v.pid_start) and proc_start(v.pid) == v.pid_start
+        if worker or route:
+            found.append(AgentRef(run_id=run_id, task=v.task, lane=v.lane, role=v.role or ""))
+    return found
 
 
 def history(since: float = 0.0) -> list[dict[str, Json]]:
