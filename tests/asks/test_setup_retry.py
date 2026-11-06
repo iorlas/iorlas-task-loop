@@ -16,12 +16,12 @@ from taskloop.app.asks import raiser, setup_retry
 from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.wire import asks as wire_asks
 from taskloop.contracts.ask import AskAnswer
+from taskloop.contracts.askstore import HAD_PICK
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import load
 from taskloop.contracts.enums import AskKind, AskStatus
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.stores import HAD_PICK
 from taskloop.domain.asks import specs
 
 BEAD = BeadId("t-1")

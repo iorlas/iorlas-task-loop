@@ -44,6 +44,7 @@ from loop import test_loop
 import tl
 from support import gitsim, tlbd
 from support import slots as sl
+from support.args import Args
 from support.cfgs import cfg_with
 from support.engine_locks import put_lock
 from support.fake_clock import FakeClock
@@ -86,7 +87,6 @@ except ImportError:  # Windows
 
 GUARD = 60  # hang guard only, seconds: no assertion reads a duration
 OTHER_ENGINE = 4242  # a pid the fake process table says is alive, and not ours
-Args = entry.Args
 
 
 class SafeBd(test_loop.FakeBd):

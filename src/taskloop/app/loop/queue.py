@@ -17,6 +17,7 @@ from taskloop.contracts.loop import Skip
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
 
 Key = tuple[int, int, list[tuple[int, int | str]], Bead]  # (priority, epic rank, natural id, bead)
+ORDERED = "ordered"  # the label of an epic whose children must name what they follow
 ANY_AREA = "*"  # busy_areas key for a running bead that could not be read: every area waits
 
 
@@ -68,6 +69,7 @@ class QueueRule:
         self.parked = parked  # a bead whose last run ended on a question and whose text is the same (tl-7y6.7.3)
         self.hosted = hosted  # a bead whose needs label names a resource this host lacks (tl-7k8.8)
         self.parents: dict[BeadId, BeadId | None] = {}
+        self.ordered: dict[str, bool] = {}  # epic -> carries the `ordered` label
         self.umbrellas: set[str] = set()
         self.chosen: list[BeadId] = []  # the pick set (contracts/pickset.py); [] = every ready bead
         self.only = False
@@ -149,7 +151,32 @@ class QueueRule:
         if who:
             until = float(b.metadata.get(intake.HOLD_UNTIL) or 0)
             return Skip(why=f"held by {who}", kind="hold", until=until or None)
-        return self.hosted(b) or self.parked(b)
+        return self.hosted(b) or self.parked(b) or self.unordered(b)
+
+    def unordered(self, b: Bead) -> Skip | None:
+        """A direct child of an epic labelled `ordered` that waits for nothing: the order is data, so the child names what it follows
+        (a `blocks` dep; the parent-child link is no order). An epic or child bd cannot show is not a reason to skip."""
+        parent = b.parent
+        if not is_bead_id(parent) or (parent not in self.ordered and not self.reads_ordered(BeadId(parent))):
+            return None
+        if not self.ordered[parent]:
+            return None
+        try:
+            held = self.store.show(b.id)
+        except BdFailure:
+            return None
+        if held is None or any(d.type != "parent-child" for d in held.dependencies):
+            return None
+        return Skip(why=f"ordered epic {parent}: add a dep (bd dep add) or drop the label", kind="unordered")
+
+    def reads_ordered(self, epic: BeadId) -> bool:
+        """Remember whether the epic carries the `ordered` label; False (and nothing remembered) when bd cannot show it."""
+        try:
+            found = self.store.show(epic)
+        except BdFailure:
+            return False
+        self.ordered[epic] = bool(found and ORDERED in found.labels)
+        return True
 
     def rank(self, ready: list[Bead], repo: str, open_beads: Sequence[Bead] | None = None) -> Queue:
         self.umbrellas = {b.parent for b in (ready if open_beads is None else open_beads) if b.parent and b.status != "closed"}

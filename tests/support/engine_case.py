@@ -78,12 +78,12 @@ from taskloop.app.wire import slots as wslots
 from taskloop.app.write.newfiles import NewFiles
 from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskAnswer
+from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.plancheck import adhoc
-from taskloop.contracts.stores import AskStore
 from taskloop.domain.checks import (
     lint,  # noqa: F401
 )

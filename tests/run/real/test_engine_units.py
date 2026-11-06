@@ -72,7 +72,7 @@ class DelegateLauncher(T.EngineTest):
 
     def lanes(self, **out):
         """`route.py status --json` lanes: name -> {out}."""
-        return mock.patch.object(lroute, "lane_status", return_value={k: {"out": v} for k, v in out.items()})
+        return mock.patch.object(lroute, "status_json", return_value={"lanes": {k: {"out": v} for k, v in out.items()}})
 
 
     # contract 4: an answer that picked a lane says whether it is a fallback (and from which first lane, when it can)

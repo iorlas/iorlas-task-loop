@@ -11,12 +11,12 @@ from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.contracts import factorydb, wire
+from taskloop.contracts.docstore import JsonStore
 from taskloop.contracts.enums import Outcome, Result, Step, WhyCode
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunFinish, RunManifest, RunState
 from taskloop.contracts.runrows import RunRows, StaleRevision
-from taskloop.contracts.stores import JsonStore
 
 
 class RunRowsTest(Case):

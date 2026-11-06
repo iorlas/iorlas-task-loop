@@ -52,8 +52,8 @@ from taskloop.app.run import reload as run_reload  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts.env import Env, snapshot  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
+from taskloop.contracts.rowstores import BadVersionStore  # noqa: E402
 from taskloop.contracts.run import Reexec, ReexecNote  # noqa: E402
-from taskloop.contracts.stores import BadVersionStore  # noqa: E402
 
 PLAN_DEF = "    def plan(self, again: bool = False) -> PlanData:\n"
 BREAK_PLAN = (PLAN_DEF, PLAN_DEF + "        raise RuntimeError('planted: cannot plan')\n", "src/taskloop/app/plan/planner.py")

@@ -273,7 +273,7 @@ class DelegateLauncher(T.EngineTest):
 
     def lanes(self, **out):
         """`route.py status --json` lanes: name -> {out}."""
-        return mock.patch.object(lroute, "lane_status", return_value={k: {"out": v} for k, v in out.items()})
+        return mock.patch.object(lroute, "status_json", return_value={"lanes": {k: {"out": v} for k, v in out.items()}})
 
     def test_a_fallback_writer_is_asked_fresh_once_its_lane_is_back_and_codex_takes_over(self):
         with self.lanes(OPENAI_SUBSCRIPTION=False, CLAUDE_SUBSCRIPTION=False):
@@ -304,7 +304,7 @@ class DelegateLauncher(T.EngineTest):
         assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write", None, "w2"]
 
     def test_the_first_choice_writer_still_resumes_and_no_status_is_read(self):
-        with mock.patch.object(lroute, "lane_status") as st:
+        with mock.patch.object(lroute, "status_json") as st:
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE, WRITE],
                                      "review": [review(unmet=["more"]), review(unmet=["more"]), CLEAN]})
         assert rc == 0, self.blocked
@@ -349,7 +349,7 @@ class DelegateLauncher(T.EngineTest):
     def test_the_answer_a_fallback_answer_with_no_lane_known_is_asked_fresh_next_round(self):
         anon = dict(self.SONNET_FB)
         anon.pop("first_lane")
-        with mock.patch.object(lroute, "lane_status") as st:
+        with mock.patch.object(lroute, "status_json") as st:
             rc, s = self.run_engine({"plan": [self.no_checks], "write": [anon, self.CODEX_FIRST],
                                      "review": [review(unmet=["more"]), CLEAN]})
         assert rc == 0, self.blocked
@@ -357,18 +357,22 @@ class DelegateLauncher(T.EngineTest):
         st.assert_not_called()
 
     def test_the_answer_a_first_choice_answer_is_resumed(self):
-        with mock.patch.object(lroute, "lane_status") as st:
+        with mock.patch.object(lroute, "status_json") as st:
             rc, s = self.run_engine({"plan": [self.no_checks], "write": [self.CODEX_FIRST, self.CODEX_FIRST],
                                      "review": [review(unmet=["more"]), CLEAN]})
         assert rc == 0, self.blocked
         assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "w3"]
         st.assert_not_called()
 
-    def test_lane_status_reads_the_status_lanes(self):
-        with mock.patch.object(lroute, "status_json", return_value={"v": 1, "lanes": {"OPENAI_SUBSCRIPTION": {"out": True}}}):
-            assert lroute.lane_status(snapshot()) == {"OPENAI_SUBSCRIPTION": {"out": True}}
+    def test_lanes_read_the_status_lanes(self):
+        raw = {"OPENAI_SUBSCRIPTION": {"out": True, "reason": "limit", "out_until": 90.0}, "X": {"out": False}, "Y": {}}
+        with mock.patch.object(lroute, "status_json", return_value={"v": 1, "lanes": raw}):
+            want = [lroute.Lane("OPENAI_SUBSCRIPTION", False, "limit", 90.0), lroute.Lane("X", True), lroute.Lane("Y", None)]
+            assert lroute.lanes() == want
+            assert lroute.lane("X") == lroute.Lane("X", True)
+            assert lroute.lane("NOPE") is None
         with mock.patch.object(lroute, "status_json", return_value={}):
-            assert lroute.lane_status(snapshot()) == {}
+            assert lroute.lanes() == []
 
     # lifesim-5ar.6 2026-10-21: the resumed writer's lane_out came with no retry_after, so next was owner, and the bead
     # blocked "needs a human" after 114 min of work
