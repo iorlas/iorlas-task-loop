@@ -27,9 +27,10 @@ class WriteRound:
         boundary = s.n == 1 and s.i > 0 and not s.state  # the first write of a later stage
         fresh = e.hand.drop_big(boundary)
         prompt, delta = self.prompts(s, boundary, fresh)
-        s.w, s.wfam = e.ai("write", f"{s.name} write {s.n}", prompt, delta=delta, resume_key="writer", write=s.n,
+        got = e.ai("write", f"{s.name} write {s.n}", prompt, delta=delta, resume_key="writer", write=s.n,
                            visual=e.pictures.stage_visual(s.st), round=s.rounds + 1,
                            at=(s.sk, s.rounds, s.n + (10000 if s.prepare_retried else 0)), **s.meta)
+        s.w, s.wfam = got.data, got.family
         self.record(s, fresh)
         if Prepare(e).retry(s, str(s.w.get("bad_checks", [])) + str(s.w.get("problem", ""))):
             return PREPARED
@@ -138,10 +139,11 @@ class WriteRound:
         s.shots_fixed = True
         tip = SHOTS_FIX % e.pictures.shot_table()
         e.steps.move("write", "shots_contract", "a visual write named no shots and gave no reason: asked once more")
-        w2, wfam = e.ai("write", f"{s.name} shots contract", prompt + tip, delta=tip, resume_key="writer", write=s.n, visual=True,
+        got = e.ai("write", f"{s.name} shots contract", prompt + tip, delta=tip, resume_key="writer", write=s.n, visual=True,
                         round=s.rounds + 1, at=(s.sk, s.rounds, s.n + 500), **s.meta)
+        w2 = got.data
         e.stats["writes"] += 1
-        s.wfam = e.writer_family = wfam
+        s.wfam = e.writer_family = got.family
         e.writer.last_stage = s.last
         e.last_summary = w2["summary"]
         if w2["question"].strip():

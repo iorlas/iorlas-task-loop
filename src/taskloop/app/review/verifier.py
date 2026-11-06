@@ -110,8 +110,8 @@ class Verifier:
                                       checks=e.settles.evidence_text(), where=e.briefing.where("verify"),
                                       items=items) + e.routing.ledger().text()
         try:
-            d, _ = e.ai("verify", f"{len(gaps)} unchecked item(s) before land", prompt, writer_family=e.writer_family,
-                        items=len(gaps), at=(e.at_stage, 0, 0))
+            d = e.ai("verify", f"{len(gaps)} unchecked item(s) before land", prompt, writer_family=e.writer_family,
+                        items=len(gaps), at=(e.at_stage, 0, 0)).data
         except e.Blocked as b:
             if b.kind.name in RAISE_KINDS:
                 raise  # tl-bxk.10.31: the request is malformed for every bead; the network and a kill resume this step, they do not skip it
