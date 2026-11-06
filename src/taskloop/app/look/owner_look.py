@@ -9,7 +9,9 @@ from urllib.parse import urlencode
 
 from taskloop.adapters import bdcreate, beadtools
 from taskloop.adapters.repourl import repo_url
+from taskloop.contracts import factorydb, gallery
 from taskloop.contracts.ids import BeadId, is_bead_id
+from taskloop.contracts.lookrows import LookRaced, LookRows
 from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, Git, NewBead
 from taskloop.domain.look.matchers import sections
 
@@ -119,21 +121,26 @@ class OwnerLook:
                 e.warn("owner-look bead filed, but its id was not in bd's answer: no looks metadata")
 
     def write_looks(self, bead_id: BeadId) -> None:
-        """tl-bxk.13.15: the gallery's data on the owner-look bead, as metadata `looks` (one entry per taste item: id, bead,
-        title, note, shots[{path, role before|after, label}], status). A re-land of this bead replaces its own entries and
-        keeps one the owner already answered (good or redo)."""
+        """tl-bxk.13.15: the gallery's data of the owner-look bead, as its kv row (contracts/lookrows.py; one entry per taste item: id,
+        bead, title, note, shots[{path, role before|after, label}], status). A re-land of this bead replaces its own entries and
+        keeps one the owner already answered (good or redo). The row is written by compare-and-set, so an answer the owner gives
+        meanwhile is not lost, and the bead's metadata (a hold) is not touched."""
         e = self.e
         shots = [{"path": ref, "role": "before" if m.role == "before" else "after", "label": Path(m.name).stem}
                  for ref, m in e.pictures.show_pictures()]
         mine = [{"id": f"{e.bead}#{k}", "bead": e.bead, "title": t, "note": " ".join(e.look_notes)[:600], "shots": shots, "status": "open"}
                 for k, t in enumerate(e.cases.cases_of("taste"), 1)]
         shown = beadtools.peek(e.store, bead_id)
-        meta = dict(shown.metadata) if shown else {}
-        old = meta.get("looks") if isinstance(meta.get("looks"), list) else []
-        answered = {x.get("id"): x for x in old if isinstance(x, dict) and x.get("bead") == e.bead and x.get("status") in ("good", "redo")}
-        meta["looks"] = [x for x in old if isinstance(x, dict) and x.get("bead") != e.bead] + [answered.get(x["id"], x) for x in mine]
-        if not beadtools.attempt(e.store.update, bead_id, BeadPatch(metadata=meta)):
-            e.warn(f"owner-look bead {bead_id}: looks metadata failed")
+
+        def refile(old: list[gallery.Item]) -> list[gallery.Item]:
+            answered = {x.get("id"): x for x in old if x.get("bead") == e.bead and x.get("status") in ("good", "redo")}
+            return [x for x in old if x.get("bead") != e.bead] + [answered.get(x["id"], x) for x in mine]
+
+        before = {"metadata": shown.metadata, "description": shown.description} if shown else {}  # a bead from before the row
+        try:
+            LookRows(e.home).modify(bead_id, lambda: gallery.stored(bead_id, before), refile)
+        except (LookRaced, factorydb.DatabaseError) as err:
+            e.warn(f"owner-look bead {bead_id}: looks row failed: {err}")
 
     def unverified_text(self) -> str:
         rows = []

@@ -2,18 +2,20 @@
 import sys
 import threading
 from pathlib import Path
+from unittest import mock
 
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.look_world import FakeBd, world
+from support.look_world import FakeBd, looks, world
 
 from taskloop.app.asks.intake import Intake
-from taskloop.contracts import gallery
+from taskloop.contracts import factorydb, gallery
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.lookrows import LookRows
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.stores import AskStore
 
@@ -21,7 +23,7 @@ NOW = 1_800_000_000.0
 
 
 def intake(fake, tmp):
-    return Intake(AskStore.at(tmp), fake, lambda: NOW, "dash")
+    return Intake(AskStore.at(tmp), fake, lambda: NOW, "dash", look_rows=LookRows(tmp))
 
 
 class Look(Case):
@@ -34,14 +36,15 @@ class Look(Case):
         return intake(fake, self.config).look(item, verdict, note, look_bead)
 
     def stored(self, fake):
-        return {e["id"]: e for e in fake.beads["tl-look"].metadata["looks"]}
+        return {e["id"]: e for e in LookRows(self.config).items("tl-look") or []}
 
-    def test_good_settles_the_item_and_keeps_the_other_metadata(self):
+    def test_good_settles_the_item_in_the_row_and_leaves_the_bead_metadata_alone(self):
         fake = world("open", "open")
         assert self.look(fake, "good") == ("good", "")
         e = self.stored(fake)["tl-1#1"]
         assert (e["status"], e["answered"]) == ("good", NOW)
-        assert fake.beads[BeadId("tl-look")].metadata["other"] == 1
+        assert fake.beads[BeadId("tl-look")].metadata == {"looks": looks("open", "open"), "other": 1}  # the bead is not written
+        assert not any(c[0] == "update-meta" for c in fake.calls)
         assert fake.beads[BeadId("tl-look")].status == "open"  # one item still waits
 
     def test_the_last_good_closes_the_look_bead(self):
@@ -100,6 +103,7 @@ class Look(Case):
     def test_the_item_is_found_by_its_id_or_by_a_source_bead_with_one_waiting_item(self):
         fake = world("open")
         assert self.look(fake, "good", item="tl-1")[0] == "good"  # the source bead, one item waiting
+        self.config = ConfigDir(self.tmp.name + "/second")  # a fresh row for the second bead
         fake = world("open", "open")
         assert self.look(fake, "good", item="tl-1")[0] == ""  # two items: ambiguous, refused
         assert self.look(fake, "good", item="tl-1#2")[0] == "good"
@@ -112,24 +116,24 @@ class Look(Case):
         fake.beads[BeadId("plain")] = Bead(id=BeadId("plain"), title="", status="open", labels=["auto"], metadata={"looks": []})
         assert "no longer exists" in self.look(fake, "good", look_bead="plain")[1]  # not an owner-look bead: never touched
 
-    def test_an_old_description_bead_is_turned_into_metadata_by_the_first_answer(self):
+    def test_an_old_description_bead_is_turned_into_a_row_by_the_first_answer(self):
         desc = "## tl-9: Settings\n- docs/e/tl-9/a.png\n"
         fake = FakeBd({"tl-look": {"id": "tl-look", "title": "", "status": "open", "labels": [gallery.LABEL], "description": desc}})
         assert self.look(fake, "good", item="tl-9#0") == ("good", "")
-        assert fake.beads[BeadId("tl-look")].metadata["looks"][0]["status"] == "good"
+        assert self.stored(fake)["tl-9#0"]["status"] == "good"
 
-    def test_bd_failing_reports_and_changes_nothing_else(self):
+    def test_a_row_that_cannot_be_saved_reports_and_changes_nothing_else(self):
         fake = world("open")
-        fake.refuse = {"update-meta"}
-        status, why = self.look(fake, "good")
+        with mock.patch.object(LookRows, "_swap", side_effect=factorydb.DatabaseError("disk full")):
+            status, why = self.look(fake, "good")
         assert status == ""
-        assert "bd refused the answer" in why
+        assert "not saved" in why
         assert fake.beads[BeadId("tl-look")].status == "open"
 
     def test_a_failed_save_closes_the_redo_bead_it_made(self):
         fake = world("open")
-        fake.refuse = {"update-meta"}
-        assert self.look(fake, "redo", note="n")[0] == ""
+        with mock.patch.object(LookRows, "_swap", side_effect=factorydb.DatabaseError("disk full")):
+            assert self.look(fake, "redo", note="n")[0] == ""
         assert fake.beads[BeadId("tl-r-2")].status == "closed"
 
     def test_two_clicks_at_once_file_one_follow_up(self):

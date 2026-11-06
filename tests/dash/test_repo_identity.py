@@ -15,6 +15,7 @@ from support.tmpdir import TemporaryDirectory
 from taskloop.app.launch.dash_ports import owner_intake, owner_writes
 from taskloop.app.run import requests
 from taskloop.contracts.ids import loop_key
+from taskloop.contracts.lookrows import LookRows
 from taskloop.contracts.run import RunState
 from taskloop.contracts.runrows import RunRows
 from taskloop.contracts.stores import AskStore
@@ -43,7 +44,7 @@ class RepoIdentity(Case):
             self.runs.append(script.name)
         write_repos(cfg / "repos.json", *self.repos)
         env = Env(cfg, home=root, clock=lambda: T + 200)
-        intake = owner_intake(AskStore.at(env.config), self.stores.__getitem__, env.clock)
+        intake = owner_intake(AskStore.at(env.config), self.stores.__getitem__, env.clock, look_rows=LookRows(env.config))
         env.ports = Ports(store=self.stores.__getitem__, **owner_writes(intake, env.config))
         ingest(env.config, env.clock())
         self.dash = Dash(env)
