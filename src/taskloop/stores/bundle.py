@@ -10,7 +10,6 @@ from taskloop.contracts.config import HostResources
 from taskloop.contracts.events import Event
 from taskloop.contracts.followups import FollowupOutbox
 from taskloop.contracts.log import EngineLog
-from taskloop.contracts.loop import LoopCommand, LoopState, Rest
 from taskloop.contracts.profile_changes import ProfileChange
 from taskloop.contracts.stores import AskStore
 from taskloop.contracts.trace import RunTrace
@@ -28,9 +27,6 @@ class Stores:
     adrs: Callable[[str], AdrStore]  # the decision store of a repo (its path)
     checkpoints: CheckpointBook
     followups: DocSet[FollowupOutbox]
-    loop_state: Callable[[str], Doc[LoopState]]
-    loop_command: Callable[[str], Doc[LoopCommand]]
-    loop_rest: Callable[[str], Doc[Rest]]
     results: Callable[[str, str], Passes]  # the passes of a check of a repo (repo key, check id), one per run key
     base_red: Callable[[str], DocSet[BaseRedRecord]]  # whether a check was red on its base, one per run key (repo key)
     durations: DocSet[Durations]  # one per repo

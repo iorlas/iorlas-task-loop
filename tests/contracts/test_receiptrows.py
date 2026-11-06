@@ -14,11 +14,10 @@ from support.tmpdir import TemporaryDirectory
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.checks import BaseRedRecord, CheckResult, PassRecord
 from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.receiptrows import DbDocSet, import_legacy_receipts
+from taskloop.contracts.receiptrows import DbDocSet
 from taskloop.contracts.runkey import BaseSha, Digest, RunKey
-from taskloop.contracts.stores import Absent, JsonStore, Present
+from taskloop.contracts.stores import Absent, Present
 from taskloop.stores.real import real_stores
 
 
@@ -140,63 +139,12 @@ class ReceiptRowsTest(Case):
                 future.result()
         assert self.docs.keys() == [f"{prefix}{i:02}" for prefix in ("a", "b") for i in range(20)]
 
-    def legacy_files(self):
-        rec = self.receipt()
-        for digest in ("one", "two"):
-            JsonStore(self.cfg.result("repo", "test", digest), PassRecord).write(rec)
-        red = BaseRedRecord(key=rec.key, red=True, run_id="red-run", ts=4.0)
-        JsonStore(self.cfg.base_red("repo", "red"), BaseRedRecord).write(red)
-        torn = self.cfg.result("repo", "test", "torn")
-        torn.write_bytes(b"{")
-        return {p: p.read_bytes() for p in (self.cfg.root / "results").glob("*/*/*.json")}
-
-    def test_import_three_valid_one_torn_is_insert_only_and_preserves_files(self):
-        files = self.legacy_files()
-        assert import_legacy_receipts(self.cfg) == 3
-        assert self.docs.keys() == ["one", "two"]
-        red = self.stores.base_red("repo").of("red").get()
-        assert red is not None
-        assert red.red
-        assert {p: p.read_bytes() for p in files} == files
-        current = self.receipt(20.0).replace(host="new")
-        self.docs.of("one").write(current)
-        self.docs.of("two").delete()
-        with patch.object(JsonStore, "get", side_effect=AssertionError("legacy reread")):
-            assert import_legacy_receipts(self.cfg) == 0
-        assert self.docs.of("one").get() == current
-        assert self.docs.of("two").get() is None
-        assert {p: p.read_bytes() for p in files} == files
-
-    def test_import_does_not_overwrite_an_existing_row_without_a_source_marker(self):
-        self.legacy_files()
-        current = self.receipt(20.0)
-        self.docs.of("one").write(current)
-        assert import_legacy_receipts(self.cfg) == 2
-        assert self.docs.of("one").get() == current
-
-    def test_live_store_never_reads_legacy_files_on_a_miss_or_database_error(self):
-        self.legacy_files()
-        with patch.object(JsonStore, "get", side_effect=AssertionError("file fallback")):
-            assert self.docs.of("one").get() is None
-            assert self.docs.keys() == []
-            assert not self.cfg.factory_db().exists()
-            self.cfg.factory_db().write_bytes(b"broken database")
-            with pytest.raises(factorydb.DatabaseError):
-                self.docs.of("one").get()
-
     def test_unreadable_database_is_not_an_absent_receipt(self):
         with patch.object(Path, "stat", side_effect=PermissionError("unreadable")):
             with pytest.raises(factorydb.DatabaseError):
                 self.docs.of("one").get()
             with pytest.raises(factorydb.DatabaseError):
                 self.docs.keys()
-
-    def test_locator_first_use_imports_receipts_even_without_legacy_runs(self):
-        self.legacy_files()
-        assert RunLocator(self.cfg).runs() == []
-        assert self.docs.keys() == ["one", "two"]
-        with patch.object(JsonStore, "get", side_effect=AssertionError("legacy reread")):
-            assert RunLocator(self.cfg).runs() == []
 
     def test_mismatched_check_is_rejected(self):
         docs = DbDocSet(self.cfg, "repo", "other", "pass", PassRecord)
