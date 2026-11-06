@@ -86,7 +86,7 @@ Architecture (layers, app slices, dashboard, `import re` placement): the `.impor
 ## Architecture Overview
 
 See README.md (Layout) and docs/design/dashboard/README.md. The skill (SKILL.md) is the method; `tl.py` is the only code the
-orchestrating session runs; the dashboard server only reads.
+orchestrating session runs; the dashboard server reads state and takes only the owner's typed writes (`POST /api/<verb>`, `contracts.dash.WRITES`), each an in-process Port call.
 
 ## Before changing the dashboard, tl.py, or the skill's Workers section
 
