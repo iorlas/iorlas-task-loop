@@ -17,8 +17,10 @@ from typing import Any, override
 
 from delegate import api
 from taskloop.adapters import deadline, procs
+from taskloop.adapters.agent import ApiAgent
 from taskloop.adapters.delegate import Stopped
 from taskloop.contracts import wire
+from taskloop.contracts.agent import Agent
 from taskloop.contracts.delegate import LiveEvent, LiveStart, WorkerStarted
 
 POLL_S = 0.5  # seconds between the looks at the live file while a call runs
@@ -132,22 +134,11 @@ class ApiRunner(Seam):
         self.obs.update(started_t=t0, ended_t=None, first_error_t=None, last_event_t=None, kill_t=None, why="", alive=[])
         self.stop.clear()
         self.worker = None
-        handles: list[api.Handle] = []
-        box: list[api.RunResult] = []
-        finished = threading.Event()
-
-        def work() -> None:
-            try:
-                box.append(api.run(request, started=handles.append))
-            finally:
-                finished.set()
-
-        thread = threading.Thread(target=work, daemon=True)
-        thread.start()
+        agent: Agent = ApiAgent(request, self.grace).start()
         limit = deadline.remaining(self.wall or timeout or 3600.0)
         why = ""
         try:
-            while not finished.wait(POLL_S):
+            while not agent.done(POLL_S):
                 if self.worker is None and live:
                     self.worker = worker_started(live)
                     if self.worker and self.on_worker:
@@ -157,11 +148,11 @@ class ApiRunner(Seam):
                 elif time.time() - t0 >= limit:
                     why = f"timeout {int((self.wall or timeout or 3600) // 60)} min"
                 if why:
-                    self._cancel(handles, thread, why)
+                    self._cancel(agent, why)
                     break
         except BaseException:  # the engine itself is stopped (a raising SIGTERM handler): end the worker's tree first
             self.obs.update(kill_t=self.obs["kill_t"] or time.time(), why=self.obs["why"] or "interrupted", ended_t=time.time())
-            self._cancel(handles, thread, self.obs["why"])
+            self._cancel(agent, self.obs["why"])
             self.stop.update(self.obs)
             raise
         self.secs, self.obs["ended_t"] = time.time() - t0, time.time()
@@ -171,12 +162,9 @@ class ApiRunner(Seam):
         if why:
             self.stop.update(self.obs, kind="wall" if why.startswith("timeout") else "stop")
             raise Stopped(why)
-        return subprocess.CompletedProcess(list(cmd), 0, json.dumps(api.as_json(box[0])), "")
+        return subprocess.CompletedProcess(list(cmd), 0, json.dumps(agent.result()), "")
 
-    def _cancel(self, handles: list[api.Handle], thread: threading.Thread, why: str) -> None:
+    def _cancel(self, agent: Agent, why: str) -> None:
         """End the worker (SIGTERM, then SIGKILL after the grace) and wait for the call's thread to hand back."""
         self.obs.update(kill_t=self.obs["kill_t"] or time.time(), why=self.obs["why"] or why)
-        if handles:
-            end = api.cancel(handles[0])
-            self.obs["alive"] = [x.pid for x in end.survivors]
-        thread.join(self.grace + 10)
+        self.obs["alive"] = agent.stop()

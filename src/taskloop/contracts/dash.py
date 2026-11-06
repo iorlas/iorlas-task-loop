@@ -434,7 +434,7 @@ class LivePage(Rec):
     state: Literal["live", "ended", "lost"]
     lines: list[TermLine] = msgspec.field(default_factory=list)
     tools: list[ToolCall] = msgspec.field(default_factory=list)
-    reset: bool = False  # the cursor was another run's or no longer fits: these lines replace what the page shows
+    reset: bool = False  # the cursor was another run's or an earlier attempt's, or no longer fits: these lines replace what the page shows
     gap: bool = False  # retention removed a file the cursor had read: lines between the cursor and these are gone
 
 
