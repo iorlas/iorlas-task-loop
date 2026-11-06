@@ -22,11 +22,11 @@ class CheckRound:
         stage = dict(s.st, checks=s.st["checks"] + (e.cases.case_checks() if s.last else []))
         run = e.stage_checks.stoppable(stage, s.name, acceptance_first=s.acc_first,
                                        conflict_fix=s.state.get("conflict_fix"), round=s.rounds + 1, **s.meta)
-        s.run, e.last_run = run, run
+        s.run = s.out.run = run
         e.stores.check_run(e.run_dir.name, None).write(run)
-        e.stats["tests_added"], e.stats["tests_removed"] = count_tests(e.checkout.task_diff(), e.cfg.test_pattern)
-        if e.stats["tests_removed"]:
-            e.warn(f"the task's diff removes {e.stats['tests_removed']} tests")
+        _added, removed = s.out.tests = count_tests(e.checkout.task_diff(), e.cfg.test_pattern)
+        if removed:
+            e.warn(f"the task's diff removes {removed} tests")
         failed = run.failed
         if failed and Prepare(e).retry(s, check_evidence.failure_brief(failed, e.run_dir)):
             return PREPARED
@@ -58,12 +58,12 @@ class CheckRound:
 
     def impossible(self, s: StageState, wrong: list[tuple[Any, str]]) -> str:
         e = self.e
-        e.stuck_why = "the writer says these stage checks are wrong: " + "; ".join(
+        stuck = s.out.stuck_why = "the writer says these stage checks are wrong: " + "; ".join(
             f"`{c.cmd}` (exit {c.exit}): {why}" for c, why in wrong)
-        e.warn(f"{s.name}: {e.stuck_why[:300]}")
+        e.warn(f"{s.name}: {stuck[:300]}")
         e.hand.note_round(s.name, s.rounds + 1, "bad_checks", s.w["summary"], [why for _, why in wrong])
         brief = check_evidence.failure_brief([c for c, _ in wrong], e.run_dir)
-        (e.run_dir / "replan.md").write_text(e.stuck_why + "\n\nTheir output:\n" + brief)
+        (e.run_dir / "replan.md").write_text(stuck + "\n\nTheir output:\n" + brief)
         n = len(wrong)
         e.steps.move("replan", "bad_checks",
                      f"the writer says {n} check{'' if n == 1 else 's'} cannot pass: " + "; ".join(why for _, why in wrong))
@@ -85,11 +85,11 @@ class CheckRound:
             e.steps.move("write", "checks_red", red_text)
             return AGAIN
         s.red, s.rounds = 0, s.rounds + 1
-        e.stats["rounds"] += 1
-        e.stuck_why = f"checks still red after {e.cfg.max_check_tries} tries: {check_evidence.compact(failed)}"
+        s.out.rounds += 1
+        stuck = s.out.stuck_why = f"checks still red after {e.cfg.max_check_tries} tries: {check_evidence.compact(failed)}"
         if s.rounds >= int(e.cfg.max_rounds):
             brief = check_evidence.failure_brief(failed, e.run_dir)
-            (e.run_dir / "replan.md").write_text(e.stuck_why + "\n\nTheir output:\n" + brief)
+            (e.run_dir / "replan.md").write_text(stuck + "\n\nTheir output:\n" + brief)
             e.steps.move("replan", "rounds_used", f"{red_text}; {s.rounds} rounds used")
             return REPLAN
         e.steps.move("write", "checks_red", f"{red_text}; round {s.rounds} used")
