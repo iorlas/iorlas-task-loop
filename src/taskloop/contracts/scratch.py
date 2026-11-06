@@ -45,13 +45,6 @@ def scratch(env: Mapping[str, str], prefix: str = "tl-") -> Generator[Path]:
         shutil.rmtree(folder, ignore_errors=True)
 
 
-def scratch_file(env: Mapping[str, str], prefix: str = "tl-", suffix: str = "") -> Path:
-    """A new empty file under the scratch root, closed; the caller removes it."""
-    fd, name = tempfile.mkstemp(prefix=prefix, suffix=suffix, dir=scratch_root(env))
-    os.close(fd)
-    return Path(name)
-
-
 def git_identity_env() -> dict[str, str]:
     """The author and committer a test commits as, plus no host git config (the null device on every OS): the test owns its identity."""
     return {**IDENTITY, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
