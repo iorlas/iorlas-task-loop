@@ -2,6 +2,7 @@
 soft ask the run goes on past, an agent's declared cause reaches the ask, and a repeat is matched when it is raised."""
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -11,6 +12,8 @@ from support.engine_case import CLEAN, PLAN, WRITE, EngineTest
 from support.narrow import must
 
 from taskloop.app.asks import intake
+from taskloop.app.plan import adrsync
+from taskloop.contracts import adrfiles
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import SimilarRef
 from taskloop.contracts.dash import OwnerCause
@@ -34,8 +37,18 @@ class EngineDecisions(EngineTest):
     def adrs(self) -> AdrStore:
         return AdrStore.at(homes.cfg(), self.repo())
 
-    def decide(self, text: str, key: str = "") -> Adr:
-        return self.adrs().add(Adr(id="", n=0, repo=self.repo(), text=text, question="q?", answer="a", ask="x-1", bead="x", key=key, t=1.0))
+    def decide(self, text: str, key: str = "", retired: bool = False, n: int = 0) -> Adr:
+        """An ADR file on the base commit (the record the plan stage reads); the cache fills when the planner syncs. The git read is
+        planted here: files_at on real git is covered in tests/plan/real."""
+        files = self.__dict__.setdefault("files", {})
+        n = n or len(files) + 1
+        adr = Adr(id=f"ADR-{n}", n=n, repo=self.repo(), text=text, question="q?", answer="a", ask="x-1", bead="x", key=key, t=1.0,
+                  retired_t=5.0 if retired else None, retired_by="denis" if retired else "")
+        files[f"{adrfiles.DIR}/{adrfiles.file_name(n, adrfiles.title_of(text))}"] = adrfiles.render(adr)
+        patcher = patch.object(adrsync, "files_at", lambda *_a: dict(files))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return adr
 
     def test_the_planner_reads_the_decisions_in_force_and_the_ones_it_cites_are_counted(self):
         first = self.decide("Saves stay in format v1.")
@@ -54,7 +67,7 @@ class EngineDecisions(EngineTest):
     def test_a_pruned_decision_is_no_longer_read_cited_or_matched(self):
         old = self.decide("Saves stay in format v1.")
         self.decide("Money moves weekly.")
-        assert self.adrs().retire(old.id, "denis", 5.0) == ""
+        self.decide("Saves stay in format v1.", retired=True, n=1)
         rc, s = self.run_engine({"plan": [dict(PLAN, cited=[old.id, "ADR-2"])], "write": [WRITE], "review": [CLEAN]})
         assert rc == 0, self.blocked
         assert "Saves stay in format v1." not in s.prompts[0]

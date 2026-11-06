@@ -5,10 +5,10 @@ import io
 import os
 import subprocess
 import sys
-import tempfile
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from support.narrow import must
@@ -33,7 +33,7 @@ FUNC = 'def area(self, w, h):\n    """Rectangle area."""\n    return self.scale 
 
 class CheckMove(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.d = self.tmp.name
         self.git("init", "-q")
 

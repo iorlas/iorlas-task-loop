@@ -61,7 +61,7 @@ class Records:
         return open_records(self.env.config, NET_PAUSE, NetPause, self.env.config.net_pause(BeadId("x")).parent)
 
     def repos(self) -> list[str]:
-        known = ReposStore(self.env.config).known()
+        known = ReposStore(self.env.config, quiet=True).known()
         return [p for p in known if os.path.isdir(p)]
 
     def traces(self) -> TraceBook:
