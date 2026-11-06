@@ -197,7 +197,7 @@ class NotTheLanesFault:
         ]
         st = led.fold(rows)
         v = led.view(st, "OPENAI_SUBSCRIPTION", "m", 1100.0)
-        assert (v.state, v.usable, st.pairs, st.lanes) == ("up", True, {}, {})
+        assert (v.state, v.usable, {k: v for k, v in st.keys.items() if '|' in k}, st.outs) == ("up", True, {}, {})
 
     def test_a_failure_that_names_no_cause_becomes_network_only_when_the_net_is_down(self):
         d: dict[str, Any] = {"lane": "OPENAI_SUBSCRIPTION"}
