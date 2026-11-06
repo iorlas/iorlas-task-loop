@@ -24,6 +24,17 @@ class Doc[T](Protocol):
     def delete(self) -> None: ...
 
 
+class AmendDoc[T](Doc[T], Protocol):
+    """A Doc that can be rewritten from what it holds without losing another writer's change in between."""
+
+    def modify(self, fn: Callable[[T], T]) -> bool: ...
+
+
+class AmendSet[T](Protocol):
+    def of(self, key: str) -> AmendDoc[T]: ...
+    def keys(self) -> list[str]: ...
+
+
 class DocSet[T](Protocol):
     """A keyed family of Docs (one per bead, one per ask)."""
 

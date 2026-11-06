@@ -67,6 +67,7 @@ def request(e: RequestHost, c: Call, live: str, timeout_s: int, idle_s: int) -> 
         only_family=only_family,
         writer_exec_allow=e.cfg.writer_exec_allow if c.role == pin.PINNED_ROLE else [],
         engine_only=recipes,
+        read_roots=list(e.cfg.writer_read_roots) if c.node == "write" else [],
         engine_only_advisory=bool(only_family and recipes),
     )
 

@@ -153,7 +153,7 @@ class ReviewRound:
         return dict(review, findings=out, unmet=routed.unmet)
 
     def settle(self, s: StageState, review: dict[str, Any]) -> None:
-        """What the review leaves behind: the unchecked items (lifesim-gfr.31.1: each review re-judges what is open, so its list replaces
+        """What the review leaves behind: the unchecked items (each review re-judges what is open, so its list replaces
         the old; a fix at land reviews only the fix: it adds), the look and link verdicts, the comment, the leftovers, the lows."""
         e = self.e
         checks = s.run.results
@@ -174,7 +174,7 @@ class ReviewRound:
 
     def verdict(self, s: StageState, review: dict[str, Any]) -> str:
         e = self.e
-        if review["question"].strip() and review["decided"].strip():  # lifesim-d5f.58: a fix round, not an ask
+        if review["question"].strip() and review["decided"].strip():  # a fix round, not an ask
             e.log.note(f"{s.name}: the review asked what an accepted requirement decides ({review['decided'][:200]}): sending it back")
             review["unmet"] = review["unmet"] + [
                 f"{review['decided']} (an accepted requirement decides it: meet it) {review['question']}"]

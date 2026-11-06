@@ -8,8 +8,6 @@ from pathlib import Path
 
 from rules import temp_ratchet
 from taskloop.contracts import scratch
-from taskloop.contracts.env import Env
-from taskloop.contracts.paths import default_root
 
 
 def test_no_new_temp_site():
@@ -23,9 +21,9 @@ def test_grown_names_only_increases():
     assert temp_ratchet.grown({"a": 2, "b": 1}, {"a": 2}) == ["b: 1 (baseline 0)"]
 
 
-def test_scratch_lives_under_the_config_root_and_never_in_the_system_temp(tmp_path):
-    env = {"XDG_CONFIG_HOME": str(tmp_path)}
-    assert scratch.scratch_root(env) == (default_root(Env(env)) / "tmp").resolve()
+def test_scratch_lives_under_the_cache_root_and_never_in_the_system_temp_or_the_config_dir(tmp_path):
+    env = {"XDG_CACHE_HOME": str(tmp_path), "XDG_CONFIG_HOME": str(tmp_path / "cfg")}
+    assert scratch.scratch_root(env) == (tmp_path / "task-loop" / "tmp").resolve()
     with scratch.scratch(env, "x-") as folder:
         assert folder.is_dir() and folder.parent == scratch.scratch_root(env)
     assert not folder.exists()

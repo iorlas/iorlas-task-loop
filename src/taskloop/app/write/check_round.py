@@ -77,7 +77,7 @@ class CheckRound:
         s.feedback = (f"\nThese checks fail (run by the engine, outside your sandbox). Fix exactly this:\n{brief}\n"
                       + e.briefing.base_red_text(run))
         again = [c.cmd for c in failed if c.cmd in prev_red and c.id == c.cmd]  # a plan's check, not a repo check
-        if again:  # tl-bxk.13.11: lifesim-fdyo tuned contrast to a threshold the plan made up, 3 rounds, 5.98M tokens in one turn
+        if again:  # tl-bxk.13.11: a consumer bead tuned contrast to a threshold the plan made up, 3 rounds, 5.98M tokens in one turn
             s.feedback += REPEAT_RED % "\n".join(f"- {c[:200]}" for c in again)
         red_text = f"{len(failed)} failed: {', '.join(c.id[:60] for c in failed)}"
         e.hand.note_round(s.name, s.rounds + 1, "checks_red", s.w["summary"], [c.id for c in failed])

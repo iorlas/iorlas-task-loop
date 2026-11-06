@@ -1,10 +1,10 @@
 """Every scratch folder, once: the one place that decides where temporary files live (stdlib only, no OS path literal).
 
-A scratch folder is a child of `<config root>/tmp` (default_root of contracts/paths.py: $XDG_CONFIG_HOME or ~/.config, then
-task-loop), never
-the system temp dir. The config root sits on the user's own disk, as the checkout does, so git discovery never crosses a mount (a tmpfs
-/tmp made "not a git repository" and "Stopping at filesystem boundary"), and the same code runs on Mac, Linux and Windows. `TL_SCRATCH` in
-`env` moves the root (a test run points it into its own home). Nothing else names /tmp, /var/tmp, `tempfile` or TMPDIR:
+A scratch folder is a child of `<cache root>/task-loop/tmp` ($XDG_CACHE_HOME or ~/.cache), never the system temp dir and never under
+~/.config (a test run may not open anything there: tests/delegate/hermetic.py). The cache root sits on the user's own disk, as the
+checkout does, so git discovery never crosses a mount (a tmpfs /tmp made "not a git repository" and "Stopping at filesystem boundary"),
+and the same code runs on Mac, Linux and Windows. `TL_SCRATCH` in `env` moves the root (a test run points it into its own home).
+Nothing else names /tmp, /var/tmp, `tempfile` or TMPDIR:
 tests/rules/test_temp_ratchet.py counts the sites and fails any new one.
 
 The git identity a test commits with is this module's too (`git_identity_env`, `write_git_config`): a test carries its own, never
@@ -23,9 +23,9 @@ IDENTITY = {"GIT_AUTHOR_NAME": "tl test", "GIT_AUTHOR_EMAIL": "test@tl.invalid",
 
 
 def scratch_root(env: Mapping[str, str]) -> Path:
-    """`$TL_SCRATCH`, else <config root>/tmp (the config root as default_root says). Created here, with its parents."""
+    """`$TL_SCRATCH`, else <cache root>/task-loop/tmp ($XDG_CACHE_HOME or ~/.cache). Created here, with its parents."""
     explicit = env.get(SCRATCH_VAR)
-    base = Path(explicit) if explicit else Path(env.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "task-loop" / "tmp"
+    base = Path(explicit) if explicit else Path(env.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "task-loop" / "tmp"
     base.mkdir(parents=True, exist_ok=True)
     return base.resolve()
 

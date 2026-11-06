@@ -161,7 +161,7 @@ def denied_items(hx: Harness, read_only: bool | None, engine_only: tuple[str, ..
         if hx.kind == "claude" and policy.is_policy_denial(x.tool, x.input, bool(read_only), engine_only):
             continue
         kind = x.kind if x.kind != "policy" else "secret" if hx.kind == "opencode" and x.tool == "Bash" and secret_hit(cmd) else "policy"
-        out.append(policy.denial_item(policy.denial(kind, x.tool, x.input)))
+        out.append(policy.denial_item(policy.denial(kind, x.tool, x.input, x.reason)))
     return out
 
 
@@ -280,6 +280,7 @@ def prepare_opencode(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: f
             session=rid,
             write=h.write,
             engine_only=tuple(getattr(a, "engine_only", None) or ()),
+            read_roots=tuple(getattr(a, "read_root", None) or ()),
         )
     )
     if lane == "DEEPSEEK_FREE" and not hx.free_model_ok(h.model, spec.env):  # fail closed if the exact free model or its zero price is gone

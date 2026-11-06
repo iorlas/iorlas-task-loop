@@ -51,7 +51,7 @@ def gate_only_checks(plan: Plan, cfg: EngineConfig) -> list[tuple[str, str]]:
 
 def own_timeout_problems(plan: Plan, cap_min: float) -> list[str]:
     """[why] for a plan check that sets a time limit above the engine's check limit: the engine kills it at the cap, every round
-    (lifesim-yxbb.3: a play test with timeout_ms 2400000 under a 30-minute cap timed out five rounds, 2.5 hours)."""
+    (a play test with timeout_ms 2400000 under a 30-minute cap timed out five rounds, 2.5 hours)."""
     out: list[str] = []
     for c in own_checks(plan):
         for minutes, text in sh.own_timeouts(c.text):
@@ -88,9 +88,9 @@ def evidence_problems(plan: Plan, evidence: str) -> list[str]:
 
 def command_problems(argv: Sequence[str], probe: TreeProbe, made: Sequence[str] = (),
                      earlier: Sequence[Adhoc] = ()) -> list[str]:
-    """[why a plan check cannot start]: a program that is no file of the tree and not on PATH (lifesim-fld.10 planned 'After building
+    """[why a plan check cannot start]: a program that is no file of the tree and not on PATH (a consumer bead planned 'After building
     the current player: python3 ...', a sentence run as the command `After`); a `just` recipe the tree's justfile does not have
-    (lifesim-ov3w). Only the program word is judged."""
+    (a typo'd recipe). Only the program word is judged."""
     out: list[str] = []
     for w in dict.fromkeys([argv[0], *sh.head(argv)[:1]]):
         if "/" in w:
