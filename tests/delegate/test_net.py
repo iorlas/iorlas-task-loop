@@ -64,7 +64,9 @@ class Probe:
         assert r["hosts"][host] == "ok"
 
     def test_down_when_nothing_connects(self):
-        r: Any = netprobe.probe([closed_port()], connect=lambda addr, timeout: (_ for _ in ()).throw(OSError("refused")))
+        r: Any = netprobe.probe(
+            [closed_port()], resolve=lambda name, port: name, connect=lambda addr, timeout: (_ for _ in ()).throw(OSError("refused"))
+        )
         assert (r["up"], r["why"]) == (False, "offline")
 
     def test_a_dns_outage_is_not_up_even_when_an_ip_literal_answers(self):
