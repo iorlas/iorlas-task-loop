@@ -43,10 +43,8 @@ Not covered by that prefix, and each needs its own line in the PR that implement
 ## Profile key
 
 `CheckSpec.network: bool = False` (`contracts/config.py`, next to `env`). Per the repo rule a new `.task-loop.json` key ships one release
-after the code that reads it: release N reads the key (default false = deny), release N+1 lets profiles set it. A consumer repo whose
-checks use the network (restore, a registry) breaks at release N until N+1; so N should ship the **refusal text** only on a failed check
-("exit 1 ... with network removed; set `network: true` in the check if it needs one") and an opt-out engine key `check_net: off` default
-**on**? That is the owner's call, below.
+after the code that reads it: release N reads the key (default false = deny), release N+1 lets profiles set it. A consumer repo whose checks use the network (restore, a registry) breaks at release N until N+1, hence decision 1 below (warn-only for
+one release).
 
 ## How it degrades
 
