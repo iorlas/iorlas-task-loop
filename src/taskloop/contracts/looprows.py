@@ -1,15 +1,12 @@
 """The loop's state, one `lease` row (kind `loop`) per loop process in factory.db: its LoopState in `body`, its pid and start in the
 columns. A loop that died keeps its row renamed `died-<name>` as evidence (the file store kept `died-<pid>.json`). Its repo's stop
 command and rests are `kv` rows."""
-import contextlib
 import json
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
-from pathlib import Path
 
 from taskloop.contracts import factorydb, wire
-from taskloop.contracts.docstore import JsonStore
 from taskloop.contracts.loop import LoopState
 from taskloop.contracts.paths import ConfigDir
 
@@ -87,22 +84,16 @@ class LoopRows:
 
 
 class KvDoc[T]:
-    """One record of the repo's loop (its stop command, its rests) as a `kv` row; the same get / write / delete the file store had. An older
-    loop's file at `legacy` is adopted on the first `get` (moved into the row, then removed: dual-read, never dual-write)."""
+    """One record of the repo's loop (its stop command, its rests) as a `kv` row; the same get / write / delete the file store had."""
 
-    def __init__(self, rows: LoopRows, key: str, tp: type[T], legacy: Path) -> None:
-        self.rows, self.k, self.tp, self.legacy = rows, key, tp, legacy
+    def __init__(self, rows: LoopRows, key: str, tp: type[T]) -> None:
+        self.rows, self.k, self.tp = rows, key, tp
 
     def get(self) -> T | None:
         found = self.rows.select("SELECT v FROM kv WHERE k=?", (self.k,))
         if found:
             return self.decode(found[0][0])
-        old = JsonStore(self.legacy, self.tp).get()
-        if old is not None:
-            self.write(old)
-        with contextlib.suppress(OSError):
-            self.legacy.unlink()
-        return old
+        return None
 
     def write(self, rec: T) -> None:
         with self.rows.transaction() as con:
@@ -112,8 +103,6 @@ class KvDoc[T]:
     def delete(self) -> None:
         with self.rows.transaction() as con:
             con.execute("DELETE FROM kv WHERE k=?", (self.k,))
-        with contextlib.suppress(OSError):
-            self.legacy.unlink()
 
     def decode(self, text: str) -> T | None:
         try:

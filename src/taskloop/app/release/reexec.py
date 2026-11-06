@@ -19,11 +19,11 @@ NET_PAUSE_ADOPT_S = lp.KNOBS["net_pause_max_s"]  # a run paused for the network 
 
 
 def reexec_store(home: ConfigDir, bead: BeadId) -> WaitDoc[ReexecNote]:
-    return WaitDoc(home, REEXEC, bead, ReexecNote, home.reexec_note(bead))
+    return WaitDoc(home, REEXEC, bead, ReexecNote)
 
 
 def net_pause_store(home: ConfigDir, bead: BeadId) -> WaitDoc[NetPause]:
-    return WaitDoc(home, NET_PAUSE, bead, NetPause, home.net_pause(bead))
+    return WaitDoc(home, NET_PAUSE, bead, NetPause)
 
 
 def read_reexec(home: ConfigDir, bead: BeadId) -> ReexecNote | None:
