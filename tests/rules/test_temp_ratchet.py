@@ -1,24 +1,10 @@
-"""Temp paths, ratchet mode: only src/taskloop/contracts/scratch.py names a temp location (/tmp, /var/tmp, `tempfile`, TMPDIR).
-Today's sites
-are the baseline (temp_baseline.json, per directory); a new one fails. Use `scratch` / `scratch_dir` (code) or the `workdir`
-fixture (tests)."""
-import json
+"""Temp paths: only src/taskloop/contracts/scratch.py names a temp location (/tmp, /var/tmp, `tempfile`, TMPDIR). A new site in a change
+fails (tests/rules/real/test_ratchets_change.py); use `scratch` / `scratch_dir` (code) or the `workdir` fixture (tests). The scratch
+helper's own behaviour is held here."""
 import os
 from pathlib import Path
 
-from rules import temp_ratchet
 from taskloop.contracts import scratch
-
-
-def test_no_new_temp_site():
-    base = json.loads(temp_ratchet.BASELINE.read_text(encoding="utf-8"))
-    bad = temp_ratchet.grown(temp_ratchet.count_tree(), base)
-    assert bad == [], ("a new /tmp, tempfile or TMPDIR site: ask contracts/scratch.py (scratch / scratch_dir; tests: the workdir fixture): "
-                       + "; ".join(bad))
-
-
-def test_grown_names_only_increases():
-    assert temp_ratchet.grown({"a": 2, "b": 1}, {"a": 2}) == ["b: 1 (baseline 0)"]
 
 
 def test_scratch_lives_under_the_cache_root_and_never_in_the_system_temp_or_the_config_dir(tmp_path):

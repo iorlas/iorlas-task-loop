@@ -1,17 +1,11 @@
-"""The test-layer ratchet's counter: what each tests/ directory holds that its layer does not allow (CLAUDE.md, Test layers).
+"""The test-layer ratchet's counter: what a test file holds that its layer does not allow (CLAUDE.md, Test layers).
 
-Two offenders, counted per directory outside `real/`, `e2e/` and `live/`: a `@real_proc` / `@real_git` mark (a real process or git
-inside a test that sits among the unit tests) and a `time.sleep(` call (a real wait; inject the clock). `layer_baseline.json` holds
-today's counts; `PYTHONPATH=tests uv run python -m rules.layer_ratchet --write` rewrites it after a cleanup lowers one."""
+Two offenders in a file outside `real/`, `e2e/` and `live/`: a `@real_proc` / `@real_git` mark (a real process or git inside a test that
+sits among the unit tests) and a `time.sleep(` call (a real wait; inject the clock). Judged on the change (ratchet_change.py): a rise
+in either, over the files the change touches, fails unless a commit says `Ratchet-allow: layer +N reason`."""
 import ast
-import json
-import sys
 from pathlib import Path
 
-from rules.gate_rules import parsed
-
-TESTS = Path(__file__).resolve().parents[1]
-BASELINE = Path(__file__).with_name("layer_baseline.json")
 MARKS = frozenset({"real_proc", "real_git"})
 OWN_KINDS = frozenset({"real", "e2e", "live", "fixtures"})
 
@@ -28,28 +22,9 @@ def offenders(tree: ast.Module) -> dict[str, int]:
     return found
 
 
-def count_tree(root: Path = TESTS) -> dict[str, dict[str, int]]:
-    """{directory: {offender: n}} for the directories that hold any; a test file outside real/, e2e/, live/ and support code."""
-    out: dict[str, dict[str, int]] = {}
-    for path in sorted(root.rglob("test_*.py")):
-        parts = path.relative_to(root).parts
-        if OWN_KINDS & set(parts[:-1]):
-            continue
-        _, tree = parsed(path)
-        for kind, n in offenders(tree).items():
-            if n:
-                row = out.setdefault("/".join(parts[:-1]) or ".", {})
-                row[kind] = row.get(kind, 0) + n
-    return out
-
-
-def grown(now: dict[str, dict[str, int]], base: dict[str, dict[str, int]]) -> list[str]:
-    """The directories whose count is above the baseline: the new violations."""
-    return [f"{d}: {kind} {n} (baseline {base.get(d, {}).get(kind, 0)})"
-            for d, row in sorted(now.items()) for kind, n in sorted(row.items()) if n > base.get(d, {}).get(kind, 0)]
-
-
-if __name__ == "__main__":
-    if "--write" in sys.argv:
-        BASELINE.write_text(json.dumps(count_tree(), indent=1, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps(count_tree(), indent=1, sort_keys=True))
+def file_counts(rel: str, tree: ast.Module) -> dict[str, int]:
+    """{offender: n} of one test file outside real/, e2e/, live/ and the support code; empty for any other file."""
+    parts = Path(rel).parts
+    if parts[0] != "tests" or not parts[-1].startswith("test_") or OWN_KINDS & set(parts[:-1]):
+        return {}
+    return {kind: n for kind, n in offenders(tree).items() if n}
