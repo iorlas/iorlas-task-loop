@@ -17,6 +17,8 @@ from support.forgesim import ForgeSim
 from support.narrow import must
 
 # isort: split
+from support.memstores import fake_stores
+
 from taskloop.app.asks import pr_wake, raiser
 from taskloop.app.land import pr_land
 from taskloop.app.land.forge import peek
@@ -35,7 +37,6 @@ from taskloop.contracts.ids import BeadId, TreeSha
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.asks import specs
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 BEAD = BeadId("t-1")

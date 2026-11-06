@@ -25,7 +25,7 @@ MAX_WORKERS = 4      # the box also runs the implementer workers; the tests must
 WORKER_MB = 2048     # RAM budget of one worker
 WALL_S = 3600.0      # a hang guard for one pytest run (a wide selection takes 15 min in 4 workers); its process tree is killed
 NO_TESTS = 5         # pytest's exit code for "no tests collected" (a selection without a serial test)
-DROP = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "PYTHONPATH", "VIRTUAL_ENV")
+DROP = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "PYTHONPATH")
 
 
 def count_tests(root, paths):
