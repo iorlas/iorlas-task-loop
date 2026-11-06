@@ -20,7 +20,7 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
-from taskloop.domain.report import matchers as lifecycle
+from taskloop.domain.lifecycle import matchers as lifecycle
 
 ROOT = te.ROOT
 from support.dashes import make_dash  # noqa: E402

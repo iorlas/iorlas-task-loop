@@ -5,8 +5,9 @@ an evidence file that proved it) each waited hours for an ask a supervisor settl
 from typing import Any
 
 from taskloop.contracts.answers import VERDICTS
+from taskloop.domain import followups
 from taskloop.domain.prompts.verify import VERIFY_PROMPT
-from taskloop.domain.review import followups, switch, visual
+from taskloop.domain.review import switch, visual
 from taskloop.domain.review.kinds import UNCHECKED_KINDS
 from taskloop.domain.review.skip import SkipKind
 
