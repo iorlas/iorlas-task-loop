@@ -1,8 +1,9 @@
 """Decisions in force: the repo's ADRs as the plan stage reads them, and the record of the plans that relied on one. The store is
-`taskloop.contracts.adrs.AdrStore` (under the task-loop state dir, written by `tl` and the dashboard's stick port)."""
+`taskloop.contracts.adrs.AdrStore`, a cache of the repo's `docs/adr` files at the base commit."""
 import time
 from typing import Any
 
+from taskloop.app.plan import adrsync
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.plancheck import PlanData
 
@@ -15,7 +16,11 @@ class Decisions:
         self.e = host
 
     def store(self) -> AdrStore:
-        return self.e.stores.adrs(self.e.ask_flow.repo())
+        """The repo's decisions, brought up to its `docs/adr` files at the base ref (cfg.base, what the run lands on) first."""
+        repo = self.e.ask_flow.repo()
+        store = self.e.stores.adrs(repo)
+        adrsync.refresh(self.e.git, self.e.wt, self.e.cfg.base, repo, store)
+        return store
 
     def text(self) -> str:
         """The prompt block: each ADR by id and text, and the instruction to name the ids relied on. '' when the repo has none."""

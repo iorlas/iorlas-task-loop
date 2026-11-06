@@ -2,11 +2,11 @@
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -31,7 +31,7 @@ class Res:
 
 class Base(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(self.root / "cfg"), "APPDATA": str(self.root / "cfg"),
                                                 "HOME": str(self.root)})
