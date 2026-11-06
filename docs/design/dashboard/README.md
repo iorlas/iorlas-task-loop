@@ -32,7 +32,7 @@ heartbeats and terminal states. Check evidence is retained under the run directo
 ## Server
 
 - Snapshot polls reuse a finished snapshot and its world for at least 3 seconds. A stale poll starts one background refresh and
-  returns the last build immediately; only the first build waits. Each bead drawer uses the same rule, taking the snapshot's
+  returns the last build immediately; only the first build waits. A refresh older than 60 s is abandoned for a new one and its late result is dropped. Each bead drawer uses the same rule, taking the snapshot's
   world plus that bead's full run history, comments and live events. Run state is read only from factory.db. A missing,
   incompatible, corrupt or stale (>5 s) DB suppresses run data and shows one database-unavailable line, including on cached reads.
   The indexer scans at most once per second, with about 200 ms per pass; pending work continues next pass. It identifies engine
