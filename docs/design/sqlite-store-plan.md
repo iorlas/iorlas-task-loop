@@ -113,7 +113,7 @@ Smallest and most contended first, each slice its own PR, each readable both way
 4. **Call state (7), landed (9)** onto `effect`; landed is the outbox only (2a), reconciled against git.
 5. **Slot tickets + engine lock + worktree records (10, 11, 12)** onto `lease`/`slot_ticket`. Builds on tl-sqd3.6 (PR #40).
 6. **Owner request (6), run-dir state (20), per-round checks (13)**.
-7. **Cold singletons (14-18, 21)** onto `kv`, one PR for the family. **ADRs (19)** follow the ADR verbs writing `docs/adr`, then the `kv` row is a cache. **Decision asks** move with their answer to a bead comment before the `ask_ledger` table is dropped.
+7. **Cold singletons (14-18, 21)** onto `kv`, one PR for the family. **ADRs (19)** follow the ADR verbs writing `docs/adr`, then the `kv` row is a cache. **Decision asks** move with their answer to a bead comment before the `ask_ledger` table is dropped (tl-sqd3.26.10).
 8. **Logs stay**: no slice; confirm the log reader and age rotation.
 9. **Delete** the legacy importers, `parks.py`, `files.py` pointers, `Stores.loop_state`, the `.holder` hints.
 
