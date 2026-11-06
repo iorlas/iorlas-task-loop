@@ -25,6 +25,7 @@ tl hint, tl hold, tl override, tl park, tl note: typed owner decisions.
 tl land: record landing; tl land-lock: serialize delivery; tl land-stack: deliver a stack.
 tl block: block a bead; tl trace: inspect runs; tl reflect: digest reflections.
 tl report: scorecard; tl lost: find unlanded work; tl green: inspect check evidence.
+tl runs: show one run or rank the slowest.
 tl usage: feed usage; tl lanes: refresh lane status; tl accounts: worker accounts, enable/decline; tl handoff: write or show a handoff.
 tl doctor, tl selftest, tl cutover: diagnostics.
 tl setup --plan|--apply: what this machine and repo still need; make it so.
