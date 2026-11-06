@@ -7,6 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from taskloop.adapters import layout_migrate
 from taskloop.adapters.bd import BdStore
 from taskloop.adapters.beadtools import attempt, peek
 from taskloop.adapters.gitrepo import repo_root
@@ -226,3 +227,8 @@ def trace(bead: BeadId, last: int, as_json: bool, env: Env) -> int:
 def runs(a: argparse.Namespace, cfg: ConfigDir) -> int:
     """`tl runs show RUN | slow [--top N] [--by exec|wait] [--runs N]`: read-only queries over the engine logs."""
     return runq.show(a.run, cfg) if a.op == "show" else runq.slow(cfg, a.top, a.by, a.runs)
+
+
+def layout(config: ConfigDir, now: float) -> int:
+    """`tl layout migrate`: the old config dir becomes the target tree (adapters/layout_migrate.py)."""
+    return layout_migrate.migrate(config, print, now)

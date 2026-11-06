@@ -202,8 +202,15 @@ def push_bar(env: dict[str, str]) -> dict[str, str]:
     }
 
 
+TOOL_OUTPUT_CHARS: Final = 12000  # about 200 lines: Claude Code cuts a Bash or MCP result over it, with its own pointer (tl-7y6.6.13)
+
+
+def output_cap() -> dict[str, str]:
+    return {"BASH_MAX_OUTPUT_LENGTH": str(TOOL_OUTPUT_CHARS), "MAX_MCP_OUTPUT_TOKENS": str(TOOL_OUTPUT_CHARS // 4)}
+
+
 def child_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     """The worker gets the caller's environment minus what a Claude session exports, delegate's and credential-looking variables, plus
     DELEGATE_DEPTH=1 and the push bar."""
-    out = scrub_current(keep=KEEP) | {"DELEGATE_DEPTH": "1"} | (extra or {})
+    out = output_cap() | scrub_current(keep=KEEP) | {"DELEGATE_DEPTH": "1"} | (extra or {})  # a cap the caller set wins
     return out | push_bar(out)

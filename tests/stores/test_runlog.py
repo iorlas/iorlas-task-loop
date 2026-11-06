@@ -30,7 +30,7 @@ class RunLog(te.EngineTest):
         recs = records(self.eng)
         assert pairs(recs) == ([], [])
         for r in recs:
-            assert (r["v"], r["run_id"], r["bead"]) == (3, self.eng.log_path.stem, self.eng.bead)
+            assert (r["v"], r["run_id"], r["bead"]) == (3, self.eng.log_path.parent.name, self.eng.bead)
             rec.decode(r)
         assert "run_start" in [r["kind"] for r in recs]
         after = ("said", "land_cleanup", "note")  # the close-out may follow the Close with comments and cleanup rows
@@ -61,4 +61,4 @@ class RunLog(te.EngineTest):
         assert rc == 0
         stores = real_stores(homes.cfg())
         got = stores.traces.read_from().items
-        assert [str(t.rec.run) for t in got] == [self.eng.log_path.stem]
+        assert [str(t.rec.run) for t in got] == [self.eng.log_path.parent.name]

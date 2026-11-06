@@ -496,6 +496,7 @@ only retries of failed operations (including vendor usage-limit unlocks) carry r
   engine's close step still runs, then the loop puts the bead back in the queue unclaimed and releases the slot).
   A stop during the push waits for it: a push that went through closes the bead landed, and the loop never reopens a
   bead whose land commit is on the base. Ctrl-C or SIGTERM to the loop itself is `--now`.
+- **Layout:** a run keeps everything in `runs/<run>/` (engine.jsonl, stderr.log, live/, plan.json); a repo's loop, slots, slot-state, decisions and durations are under `repos/<key>/`. A config dir from before that is not read: every `tl` verb but `layout` and `doctor` stops with exit 78 and names `tl layout migrate`. Stop the loops and runs, run it once (it renames each old place, checks hashes before and after, journals to `layout-migrate.jsonl`, refuses while a lock holder is alive or a target exists); a second run changes nothing.
 - **Disk:** the loop prunes at its start (`tl prune [--dry-run]`): run folders, check-round logs, engine logs and the event log older than
   `loop.keep_days` (14; beads not closed, parked ones included, keep theirs), worktrees under `loop.build_dir` (`~/Workspaces/wt`) whose HEAD
   is on origin/main, clean and idle that long, local `release/*` branches on origin/main, and local `task/*` branches of closed beads (`git branch -d` only: git's refusal keeps one); plain `git worktree remove`, never --force, and
@@ -579,7 +580,7 @@ duration back (`90m`, `12h`, `2d`); default the last 24 h. `--since HH:MM` is it
   anything else the owner, none is open.
 - **Crashes:** the loop saw run-task exit with no outcome; an engine log with no `close:` and no trace, quiet 30 min
   with no live `run-task <bead>`; or a trace closed `failed: engine error ...` (an exception the engine caught). A stop
-  (`failed: stopped (SIGTERM)`) is a failure, not a crash. A run's `.stderr` is the engine's and the worker's (worker test tracebacks
+  (`failed: stopped (SIGTERM)`) is a failure, not a crash. A run's `stderr.log` is the engine's and the worker's (worker test tracebacks
   land there) and is never read.
 - **Also:** minutes per bead (median, p90; all its runs in the window), fix rounds, replans, tokens by lane (codex,
   claude) and by role.

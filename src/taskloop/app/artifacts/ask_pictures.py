@@ -6,6 +6,7 @@ from typing import Final
 
 from taskloop.app.artifacts import rules, store
 from taskloop.contracts.artifact import ArtifactSlot
+from taskloop.contracts.paths import RunFiles
 from taskloop.contracts.wire import Refused
 
 MAX_PICTURES: Final = 4
@@ -22,7 +23,7 @@ def attach(root: Path, slot: ArtifactSlot, run_dir: Path, *, now: float, cap: in
     """The ids (`<repo>/<bead>/<run>/<stage>-<attempt>/<name>`) of the pictures registered for the slot's ask; [] when the run kept none."""
     ids: list[str] = []
     try:
-        checks = sorted(d for d in (run_dir / "artifacts").iterdir() if d.is_dir())
+        checks = sorted(d for d in RunFiles(run_dir).artifacts().iterdir() if d.is_dir())
     except OSError:
         return ids
     for check_dir in checks:
