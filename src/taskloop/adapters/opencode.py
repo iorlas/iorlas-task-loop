@@ -46,13 +46,6 @@ def opencode_has(env: Env, sid: str) -> bool:
     return bool(sid) and bool(opencode_rows(env, "SELECT 1 FROM session WHERE id = ?", (sid,)))
 
 
-def opencode_updated(env: Env, sid: str) -> float | None:
-    """Seconds since the epoch of the session's last change (OpenCode stores ms), or None."""
-    rows = opencode_rows(env, "SELECT MAX(t) FROM (SELECT MAX(time_updated) t FROM message WHERE session_id = ? "
-                         "UNION ALL SELECT MAX(time_updated) FROM part WHERE session_id = ?)", (sid, sid))
-    return rows[0][0] / 1000.0 if rows and rows[0][0] else None
-
-
 def opencode_context(env: Env, sid: str) -> int | None:
     """Input + cache read + cache write tokens of the session's last assistant message that reports any, or None."""
     for (data,) in opencode_rows(env, "SELECT data FROM message WHERE session_id = ? ORDER BY time_created DESC, id DESC LIMIT 20", (sid,)):
