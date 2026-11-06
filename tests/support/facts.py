@@ -3,10 +3,10 @@ use (FakeClock, fake_stores, the real RunLog/Steps/CheckLog over the in-memory l
 against this and a real Engine, so the two cannot drift."""
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any
 
 import support.paths  # noqa: F401
 from support.cfgs import cfg_with
+from support.fake_beads import FakeBeads
 from support.fake_clock import FakeClock
 from support.memstores import MemDoc, fake_stores
 from support.spawn import port_git, real_spawner
@@ -68,7 +68,7 @@ class FakeChecker:
         self.results, self.n = list(results), 0
 
     def run(self, stage_checks: Sequence[PlanCheck], name: str, markers: str = "", acceptance_first: bool = False,
-            groups: Sequence[str] | None = None, conflict_fix: Sequence[str] | None = None, **meta: Any) -> CheckRun:
+            groups: Sequence[str] | None = None, conflict_fix: Sequence[str] | None = None, **meta: object) -> CheckRun:
         return self.run_items([])
 
     def run_items(self, items: Sequence[Check], everything: bool = False, learn: bool = True, show_clean: bool = False,
@@ -89,10 +89,11 @@ class FakeRepoKey:
         return self.value
 
 
-def fake_facts(workdir: Path, bead: str = "t-1", cfg: EngineConfig | None = None, **facts: Any) -> tuple[RunFacts, RunPorts]:
-    """Facts and ports of a run that never ran: its folders are made under `workdir`, its log and stores are in memory."""
+def fake_facts(workdir: Path, bead: str = "t-1", cfg: EngineConfig | None = None, dry: bool = False,
+               fresh: bool = False) -> tuple[RunFacts, RunPorts]:
+    """Facts and ports of a run that never ran: its folders are made under `workdir`, its log and stores are in memory, its bd is a
+    FakeBeads. `dry` and `fresh` are the two flags a test sets."""
     run_id = "FAKERUN0000"
-    home = who().config
     run_dir = workdir / "runs" / run_id
     for sub in ("task", "evidence"):
         (run_dir / sub).mkdir(parents=True, exist_ok=True)
@@ -100,17 +101,12 @@ def fake_facts(workdir: Path, bead: str = "t-1", cfg: EngineConfig | None = None
     log = RunLog(stores.run_log(run_id), clock=clock.now, run_id=run_id, bead=bead, host="host")
     ports = RunPorts(
         clock=clock, env=snapshot(), git=port_git(), spawner=real_spawner(), steps=Steps(log, clock.now), log=log,
-        checklog=CheckLog(log), store=_NoBeads(), stores=stores, checkpoints=MemCheckpoints(bead, run_id, clock.now),
+        checklog=CheckLog(log), store=FakeBeads(), stores=stores, checkpoints=MemCheckpoints(bead, run_id, clock.now),
         checker=FakeChecker(), repo=FakeRepoKey("repo-key"),
     )
-    given = {"bead": BeadId(bead), "wt": str(workdir / "wt"), "cfg": cfg or cfg_with(EngineConfig()), "home": home, "run_id": run_id,
-             "run_dir": run_dir, "task_dir": run_dir / "task", "brief_file": run_dir / "task" / "brief.md",
-             "evidence_dir": run_dir / "evidence", "repo": "repo-id", "dry": False, "fresh": False, "claim": fence.offline(BeadId(bead))}
-    return RunFacts(**{**given, **facts}), ports
-
-
-class _NoBeads:
-    """A bd that is not there: a stage test that reaches for it must say what it needs."""
-
-    def __getattr__(self, name: str) -> Any:
-        raise AssertionError(f"this fake run has no bd (asked for {name}); build the facts with a store")
+    facts = RunFacts(
+        bead=BeadId(bead), wt=str(workdir / "wt"), cfg=cfg or cfg_with(EngineConfig()), home=who().config, run_id=run_id,
+        run_dir=run_dir, task_dir=run_dir / "task", brief_file=run_dir / "task" / "brief.md", evidence_dir=run_dir / "evidence",
+        repo="repo-id", dry=dry, fresh=fresh, claim=fence.offline(BeadId(bead)),
+    )
+    return facts, ports
