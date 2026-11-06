@@ -19,13 +19,8 @@ import support.paths  # noqa: E402, F401
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from support import engine_case as T  # noqa: E402
-from support.engine_case import (  # noqa: E402
-    PLAN,
-    WRITE,
-    full,
-    real_git,
-    stop,
-)
+from support.engine_case import full, real_git, stop  # noqa: E402
+from support.plans import PLAN, WRITE  # noqa: E402
 from support.spawn import (  # noqa: E402
     port_git,
     real_spawner,

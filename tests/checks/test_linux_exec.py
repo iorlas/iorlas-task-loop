@@ -12,7 +12,7 @@ import pytest
 from taskloop.app.checks.linux import EXECUTOR_DOWN_RC, LinuxRun, Remote
 from taskloop.contracts.config import CheckSpec, ExecutorConfig
 from taskloop.contracts.ids import CheckId
-from taskloop.contracts.ports import Ran, RanBytes, Streamed
+from taskloop.contracts.procport import Ran, RanBytes, Streamed
 from taskloop.contracts.slots import SlotGitError
 
 CFG = ExecutorConfig(host="pix", root="tl")

@@ -39,7 +39,7 @@ class WriterGrant(Case):
                 with self.subTest(node=node, grant=grant):
                     host = mock.Mock(session="s", bead="t-1")
                     host.cfg = config.EngineConfig(writer_family=["openai"], writer_exec_allow=grant)
-                    host.budget.labels = []
+                    host.budget.labels, host.plan_data = [], None
                     host.git.diff_entries.return_value = []
                     host.checker.split.return_value.engine_recipes.return_value = []
                     call = mock.Mock(node=node, role=role, cwd="/w", title="T", resume=None, writer=None)

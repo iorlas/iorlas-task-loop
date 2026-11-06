@@ -12,8 +12,8 @@ from support.argv_checks import ArgvChecks
 from taskloop.adapters.childenv import check_env
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.procs import Ran
+from taskloop.contracts.checksport import CheckSpec
 from taskloop.contracts.env import Env
-from taskloop.contracts.ports import CheckSpec
 
 
 class CheckEnvironment(Case):

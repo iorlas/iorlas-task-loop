@@ -9,8 +9,8 @@ from taskloop.adapters import beadtools
 from taskloop.contracts import bdsafe
 from taskloop.contracts.bd_errors import BdCommandFailure
 from taskloop.contracts.bead import BdError, Bead
+from taskloop.contracts.beadsport import BdFailure
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure
 
 
 class BeadTools(Case):

@@ -3,7 +3,7 @@
 from typing import Protocol
 
 from taskloop.app.land.rebase import Rebase
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 from taskloop.stores.runlog import RunLog
 
 

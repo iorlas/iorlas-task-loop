@@ -8,7 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from run.test_stages import StagesTest
 from support import engine_case as te
-from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, real_git, real_proc  # noqa: F401
+from support.engine_case import engine, real_git
+from support.plans import CLEAN, PLAN, WRITE
 from support.pushsim import pusher
 from support.spawn import port_git, real_spawner
 from support.who import who

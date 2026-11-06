@@ -63,6 +63,14 @@ def describe(pinned: Sequence[str]) -> str:
             "a bead label writer-family:<f> overrides)")
 
 
+def describe_second(second: str) -> str:
+    """engine.second_writer_family in a few words, for `tl doctor`."""
+    family = second.strip().lower()
+    if not family:
+        return "second_writer_family: off"
+    return f"second_writer_family: {family} (one light bead in {WARM_ONE_IN}, picked by bead id; that family alone, no fallback)"
+
+
 def exec_allow_problem(grant: Sequence[Sequence[str]], configured: Sequence[str], labels: Collection[str],
                        contract: int, capabilities: object) -> str:
     """A host execution grant requires an explicit Codex writer and delegate's advertised enforcement capability."""

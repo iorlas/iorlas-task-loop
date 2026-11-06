@@ -6,8 +6,9 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 from support import gitq, homes
-from support.engine_case import CLEAN, PLAN, WRITE, EngineTest, real_git
+from support.engine_case import EngineTest, real_git
 from support.logs import records
+from support.plans import CLEAN, PLAN, WRITE
 from support.spawn import port_git
 from support.who import who
 
