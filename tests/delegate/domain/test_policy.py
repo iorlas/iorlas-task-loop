@@ -1,10 +1,12 @@
 """domain/policy: the verdict on a worker's tool call, and the typed refusal record (D3)."""
 
 from any_agent import events as ev
+from delegate.app.codex_policy import hook_verdict
 from delegate.app.launch import secret_in
+from delegate.contracts.json_types import Json
 from delegate.domain.policy.matchers import heredoc_only_hit
 from delegate.domain.policy.shell import git_write, read_only_problem
-from delegate.domain.policy.worker import denial, denial_item, is_policy_denial, judge
+from delegate.domain.policy.worker import READ_CAP_LINES, denial, denial_item, is_policy_denial, judge, read_verdict
 
 
 class Policy:
@@ -54,3 +56,22 @@ class Policy:
         assert not is_policy_denial("Bash", {"command": "cat .env > x"}, True)  # a secret stays the owner's
         assert is_policy_denial("shell", {"command": "git push"})  # a shell by its command, not by its name
         assert not is_policy_denial("Read", {"file_path": "x"})
+
+
+def test_a_whole_file_read_over_the_cap_is_blocked_with_a_pointer_to_range_reads():
+    big: dict[str, Json] = {"file_path": "/x/big.py"}
+    v = read_verdict("Read", big, READ_CAP_LINES + 1)
+    assert v.blocked and "offset" in v.reason and "limit" in v.reason
+    assert not read_verdict("Read", big, READ_CAP_LINES).blocked
+    assert not read_verdict("Read", big | {"limit": 100}, 5000).blocked
+    assert not read_verdict("Read", big | {"offset": 10}, 5000).blocked
+    assert not read_verdict("Bash", {"command": "cat x"}, 5000).blocked
+    assert not read_verdict("Read", big, None).blocked
+
+
+def test_the_hook_blocks_a_whole_file_read_of_a_long_file_and_allows_a_range(tmp_path):
+    f = tmp_path / "long.txt"
+    f.write_text("x\n" * (READ_CAP_LINES + 5))
+    assert hook_verdict({"tool_name": "Read", "tool_input": {"file_path": str(f)}}, False, ()).blocked
+    assert not hook_verdict({"tool_name": "Read", "tool_input": {"file_path": str(f), "limit": 50}}, False, ()).blocked
+    assert not hook_verdict({"tool_name": "Read", "tool_input": {"file_path": str(tmp_path / "missing")}}, False, ()).blocked
