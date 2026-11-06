@@ -48,6 +48,6 @@ class ReexecHandoff(Case):
         assert (held.rec.pid, held.rec.start, held.rec.bead) == (202, "new", "b-1")
 
     def test_reexec_does_not_take_over_a_surviving_worker(self) -> None:
-        lock = self.lock.replace(workers=[(303, "worker")])
-        with mock.patch.object(engine_lock, "read_engine_lock", return_value=lock):
-            assert "worker pid 303" in engine_lock.engine_busy(homes.cfg(), "/wt", self.handoff())
+        with mock.patch.object(engine_lock, "read_engine_lock", return_value=self.lock), \
+                mock.patch.object(engine_lock, "running_for", return_value=["r303"]):
+            assert "worker run r303" in engine_lock.engine_busy(homes.cfg(), "/wt", self.handoff())
