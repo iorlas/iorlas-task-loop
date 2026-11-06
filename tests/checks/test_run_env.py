@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.engine_case import EngineTest
+from support.check_host import CheckHostCase
 
 # isort: split
 from support import procsim
@@ -24,7 +24,7 @@ def show(cwd, env):
 SHOW = procsim.default("show-run-env", show)
 
 
-class RunEnv(EngineTest):
+class RunEnv(CheckHostCase):
     def seen(self):
         eng = self.checks_engine(checks=[{"id": "c", "cmd": SHOW}])
         res = eng.run_checks({"checks": [], "files": []}, "s")[0]
