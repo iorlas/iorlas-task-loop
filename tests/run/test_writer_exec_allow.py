@@ -79,8 +79,8 @@ class Admission(te.EngineTest):
         assert "capability" in self.said()
 
     def test_empty_grant_does_not_require_capability(self):
-        with mock.patch.dict(fake_route.CONTRACT, {**fake_route.CONTRACT, "capabilities": []}, clear=True):
-            rc, script = self.run_engine({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
+        with mock.patch.dict(fake_route.CONTRACT, {**fake_route.CONTRACT, "capabilities": ["instructions_ref"]}, clear=True):
+            rc, script = self.run_engine({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})  # a reviewer needs instructions_ref
         assert rc == 0
         assert "write" in script.nodes
         assert all("--writer-exec-allow" not in argv for argv in script.argvs)
