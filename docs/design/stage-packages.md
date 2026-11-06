@@ -52,9 +52,9 @@ packages/
   cli/ dash/ delegate/   already their own pieces
 ```
 
-The skill still starts from `skills/task-loop/tl.py`; the workspace changes where code lives, not how a session runs it. Decision pending the
-owner: **plan, write, review, look as four packages or one `work` package**. I recommend four: they share `StageState` today, but that state
-is a value the loop passes (kernel), not a reason to share a folder. They stay four only if the hand-off work (ROUNDRESULT) lands first.
+The skill still starts from `skills/task-loop/tl.py`; the workspace changes where code lives, not how a session runs it. Decided by the
+owner (2026-11-07): **plan, write, review and look are four packages**. They share `StageState` today, but that state
+is a value the loop passes (kernel), not a reason to share a folder. The hand-off work (ROUNDRESULT) lands first.
 
 ## 3. Inheritance, so nothing is copied
 
@@ -126,7 +126,7 @@ be consumed as git sources. The stages stay in this repository until a second us
 | Host ban in three layers (types, imports, names) | decided here |
 | Prompts and data move into their stages | decided by the owner |
 | Selection by package graph; `dev/affected.py` retired when the last stage moves | decided here |
-| plan/write/review/look: four packages (recommended) or one | **open: owner** |
+| plan/write/review/look: four packages | decided by the owner |
 | `kernel` split (what is a contract, what is a port) | WORKSPACE spike, then one bead per move |
 
 Order (each PR small, reversible, hot code accepted): ROUNDRESULT (.60, in progress: returns replace field writes) -> WORKSPACE (.65: root
