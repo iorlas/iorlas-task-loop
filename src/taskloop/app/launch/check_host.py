@@ -32,13 +32,6 @@ class _Waits:
     def add(self, secs: float, what: WaitWhat, wid: str | None = None, lane: str = "", check: str = "") -> None: ...
 
 
-class _NewFiles:
-    """A person's check run stages nothing: no new file is one a stage meant."""
-
-    def new_file_kind(self, path: str) -> str:
-        return "unexplained"
-
-
 class CliHost:
     killed = ThreadFlag()
     wall_hit = ThreadFlag()
@@ -72,7 +65,8 @@ class CliHost:
         self.killed = self.wall_hit = False
         self.halt = threading.Event()
         self.tree_memo: tuple[treehash.State, TreeSha] | None = None
-        self.newfiles = _NewFiles()
+        self.accepted_new: list[str] = []  # a person's check run stages nothing: no new file is one a stage meant
+        self.plan_data: Mapping[str, object] | None = None
         self.steps: Any = None  # the step book is the engine's; a person's run has none
         self.shell, self.waits = Shell(self), _Waits()
         whole = Checkout(self)

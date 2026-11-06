@@ -1,6 +1,7 @@
 """The slot's checkout as git sees it: the base, a fetch, what is dirty, the tree git would commit now, what the task changed,
 what to stage."""
 
+from collections.abc import Mapping
 from typing import Protocol
 
 from taskloop.adapters import treehash
@@ -9,16 +10,15 @@ from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.matchers import NetText
+from taskloop.domain.write.newfiles import new_file_kind
 from taskloop.stores.runlog import RunLog
 
 
 class CheckoutConfig(Protocol):
     @property
     def base(self) -> str: ...
-
-
-class CheckoutNewFiles(Protocol):
-    def new_file_kind(self, path: str) -> str: ...
+    @property
+    def untracked_ignore(self) -> list[str]: ...
 
 
 class CheckoutHost(Protocol):
@@ -36,7 +36,9 @@ class CheckoutHost(Protocol):
     @property
     def log(self) -> RunLog: ...
     @property
-    def newfiles(self) -> CheckoutNewFiles: ...
+    def accepted_new(self) -> list[str]: ...
+    @property
+    def plan_data(self) -> Mapping[str, object] | None: ...
     def blocked_for(self, why: str, kind: str) -> Exception: ...
 
 
@@ -119,7 +121,7 @@ class Checkout:
             ignored = self.base_ignored(new)
             paths += [p for p in new if p not in ignored]
         else:
-            paths += [p for p in new if e.newfiles.new_file_kind(p) == "meant"]
+            paths += [p for p in new if new_file_kind(p, e.cfg.untracked_ignore or [], e.accepted_new, e.plan_data) == "meant"]
         if not why and paths:
             try:
                 e.git.stage_literal(e.wt, paths)
