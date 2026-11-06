@@ -31,13 +31,13 @@ class IdleHeartbeat:
 
     ident = 1
 
-    def __init__(self, target: Callable[[], None], daemon: bool) -> None:
+    def __init__(self, target: Callable[..., None], daemon: bool, args: tuple[object, ...] = ()) -> None:
         pass
 
     def start(self) -> None:
         pass
 
-    def join(self) -> None:
+    def join(self, timeout: float | None = None) -> None:
         pass
 
 

@@ -84,6 +84,9 @@ class ExecutorConfig(Rec):
 
     host: str = ""
     root: str = "tl"
+    # argv run in the slot's worktree on the executor when `setup_inputs` (committed paths, no globs) changed since the last setup there
+    setup: list[str] = msgspec.field(default_factory=list)
+    setup_inputs: list[str] = msgspec.field(default_factory=list)
     ssh: list[str] = msgspec.field(default_factory=lambda: [
         "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ControlMaster=auto", "-o", "ControlPath=~/.ssh/tl-%C",
         "-o", "ControlPersist=60"])  # one connection serves the steps of a run

@@ -1,10 +1,12 @@
 """The shared lifecycle of engine runs and standalone stage verbs."""
 import threading
 import time
+import traceback
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
+from taskloop.app.slots.lease import JOIN_WAIT
 from taskloop.contracts import log as rec
 from taskloop.contracts.finish import finish_run, previous_finish
 from taskloop.contracts.finish_projection import history
@@ -29,6 +31,15 @@ class StageRun:
     answer: RunFinish | None = None  # a one-stage run's own answer (staged, landed, done); else the state alone says it
 
 
+def beat_loop(stopped: threading.Event, locator: RunLocator, run: str, log: RunLog) -> None:
+    """The beat thread's body: a tick in the manifest every BEAT_EVERY until `stopped`; an error ends it, and the log says so."""
+    try:
+        while not stopped.wait(BEAT_EVERY):
+            locator.beat(run, time.time())
+    except Exception as err:  # the stage goes on without a beat: say so before the run is judged lost
+        log.warn("the heartbeat thread died, the run will look lost: " + "".join(traceback.format_exception(err)))
+
+
 @contextmanager
 def stage_run(who: Identity, repo: str, mode: str, *, bundle: RunBundle | None = None,
               events: bool = True, stores: Stores | None = None, log: RunLog | None = None) -> Generator[StageRun]:
@@ -48,11 +59,7 @@ def stage_run(who: Identity, repo: str, mode: str, *, bundle: RunBundle | None =
         stage = StageRun(bundle, log, stores)
         locator.beat(bundle.run, time.time())
 
-        def heartbeat() -> None:
-            while not stopped.wait(BEAT_EVERY):
-                locator.beat(bundle.run, time.time())
-
-        helper = threading.Thread(target=heartbeat, daemon=True)
+        helper = threading.Thread(target=beat_loop, args=(stopped, locator, bundle.run, log), daemon=True)
         helper.start()
         if events:
             log.emit(rec.RunStart(worktree=repo, mode=mode, owner=who.actor, session=who.session))
@@ -70,7 +77,7 @@ def stage_run(who: Identity, repo: str, mode: str, *, bundle: RunBundle | None =
     finally:
         stopped.set()
         if helper is not None and helper.ident is not None:
-            helper.join()
+            helper.join(JOIN_WAIT)
         if stage is None or not stage.continued:
             terminal = stage.terminal if stage is not None else None
             state = terminal or (RunState.DONE if rc == 0 else RunState.FAILED)

@@ -26,6 +26,7 @@ function Terminal({ card, keep = TERM_LINES, onTools }) {
       if (page.error) return;
       if (page.reset) el.replaceChildren();
       el.dataset.state = page.state;
+      if (page.gap) page.lines.unshift({ t: page.lines.length ? page.lines[0].t : Date.now() / 1000, tone: 'warn', text: 'lines before this were removed by retention' });
       for (const l of page.lines) {
         const row = document.createElement('button');
         row.className = `run-row new ${TONE[l.tone] || ''}`;
