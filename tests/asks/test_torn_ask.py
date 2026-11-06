@@ -1,10 +1,10 @@
 """A torn ask file fails closed: it is never read as no ask, so a new ask or an answer cannot overwrite it unseen."""
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -21,7 +21,7 @@ from taskloop.contracts.wire import Refused
 
 class TornAsk(Case):
     def setup_method(self) -> None:
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.cfg = ConfigDir(Path(tmp.name))
         self.asks = AskStore.at(self.cfg)

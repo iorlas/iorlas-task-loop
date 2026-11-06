@@ -1,10 +1,10 @@
 """CallState (the vendor call on disk) and the network gate (tl-7y6.2.13): checkpoints survive, finished output is never discarded."""
 import json
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 import support.paths  # noqa: E402, F401
@@ -21,7 +21,7 @@ KEY = ("write", 1, 0, 2)
 
 class Calls(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.dir = Path(self.tmp.name) / "checkpoints"
 
     def teardown_method(self):

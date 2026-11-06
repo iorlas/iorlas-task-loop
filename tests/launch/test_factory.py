@@ -2,7 +2,6 @@
 import argparse
 import io
 import json
-import tempfile
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -10,6 +9,7 @@ from unittest.mock import Mock, patch
 import pytest
 import support.paths  # noqa: F401
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import factory as adapter
 from taskloop.app.launch import factory
@@ -25,7 +25,7 @@ from taskloop.contracts.ports import Spawner
 
 class Factory(Case):
     def setup_method(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.files = LoopFiles(ConfigDir(Path(self.temp.name)), "repo-key", lambda pid: pid == 123, lambda: 42)
         self.state = LoopState(pid=123, started=40, t=41, repo="/repo", version="1", actor="loop", code_dir="/code", bead="tl-1")
@@ -204,7 +204,7 @@ class Factory(Case):
 
 class Lanes(Case):
     def setup_method(self):
-        temp = tempfile.TemporaryDirectory()
+        temp = TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.files = LoopFiles(ConfigDir(Path(temp.name)), "repo-key", lambda pid: True, lambda: 42)
         self.spawn = Mock(spec=Spawner)

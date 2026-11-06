@@ -4,13 +4,13 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 from support import procsim
 from support.case import Case
 from support.checked import run_checked
 from support.tlmain import tl_main
+from support.tmpdir import TemporaryDirectory
 
 CHECKS = [
     {"id": "fmt", "argv": [procsim.default("fmt-fine", procsim.exits(0, "fmt fine"))], "group": "static", "run": "gate"},
@@ -43,7 +43,7 @@ class TlCheck(Case):
         assert "skipped-by-plan: no relevant paths" in green.stdout
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.repo = Path(self.tmp.name, "repo")
         self.repo.mkdir()

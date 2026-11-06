@@ -74,7 +74,7 @@ class TestLinux:
     def test_the_committed_commit_is_pushed_to_the_run_ref_of_the_bare_repo(self, workdir):
         git, sp = FakeGit(), FakeSpawner()
         run_linux(workdir, git, sp)
-        assert git.pushed == [(str(workdir), "pix:/home/x/tl/repo-1.git", "abc123:refs/tl/r9")]
+        assert git.pushed == [(str(workdir), "pix:/home/x/tl/repo-1.git", "abc123:refs/tl/r9-lint")]
 
     def test_the_argv_runs_on_the_executor_in_the_slots_worktree_and_its_exit_and_output_come_back(self, workdir):
         sp = FakeSpawner(rc=3)
@@ -90,6 +90,20 @@ class TestLinux:
     def test_the_executors_artifacts_land_in_the_local_artifact_dir(self, workdir):
         run_linux(workdir, FakeGit(), FakeSpawner(files={"out/report.txt": "ok"}))
         assert (workdir / "art" / "out" / "report.txt").read_text() == "ok"
+
+    def test_the_attempts_ref_and_remote_artifacts_go_once_they_are_fetched(self, workdir):
+        sp = FakeSpawner()
+        run_linux(workdir, FakeGit(), sp)
+        words = [shlex.split(c[-1]) for c in sp.calls]
+        fetch = next(i for i, w in enumerate(words) if w[0] == "tar")
+        assert words[fetch + 1:] == [["git", "-C", "tl/repo-1.git", "update-ref", "-d", "refs/tl/r9-lint"],
+                                     ["rm", "-rf", "tl/repo-1/.artifacts/r9-lint"]]
+
+    def test_artifacts_a_crashed_run_left_are_swept_when_a_week_old(self, workdir):
+        sp = FakeSpawner()
+        run_linux(workdir, FakeGit(), sp)
+        sweep = next(w for w in (shlex.split(c[-1]) for c in sp.calls) if w[0] == "find")
+        assert sweep[1] == "/home/x/tl/repo-1/.artifacts" and sweep[sweep.index("-mtime") + 1] == "+7"
 
     def test_the_run_has_a_pty_so_a_killed_ssh_hangs_the_remote_check_up(self, workdir):
         sp = FakeSpawner()

@@ -1,11 +1,11 @@
 """app/asks on fakes: raise and consume, the sweeps, and the owner's typed verbs."""
 import dataclasses
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -17,7 +17,7 @@ from support.tiers import domain
 from taskloop.adapters.bd import BdRun, BdStore
 from taskloop.app.asks import intake, raiser, sweeps
 from taskloop.contracts.bead import Bead
-from taskloop.contracts.enums import AskStatus
+from taskloop.contracts.enums import AskKind, AskStatus
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import NewBead
 from taskloop.domain.asks import specs
@@ -91,7 +91,7 @@ class RaiserTest(Case):
 class SweepTest(Case):
     def setup_method(self) -> None:
         self.asks = fake_stores().asks
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.repo = Path(self.tmp.name)
         (self.repo / ".beads").mkdir()
@@ -173,6 +173,19 @@ class IntakeTest(Case):
         assert self.verbs.answer(BeadId("fk-1"), "rerun")[1] == "answered"
         assert must(must(self.verbs.answer(BeadId("fk-1"), "rerun", "better", amend=True)[0]).answer).text == "better"
         assert self.verbs.answer(BeadId("nope"), "rerun")[1] == "gone"
+
+    def test_the_answer_to_a_decision_ask_is_a_comment_that_says_kind_decision_and_another_kind_does_not(self) -> None:
+        kinds = {}
+        for bead, spec in (("fk-1", specs.missing_criteria()), ("fk-2", specs.open_question("Which way?", None))):
+            if bead == "fk-2":
+                self.store.create(NewBead(title="y"))
+                raiser.raise_ask(self.asks, spec, asking(bead))
+            kinds[bead] = must(self.asks.get(BeadId(bead))).kind
+            self.verbs.answer(BeadId(bead), "text", "go")
+        assert len(set(kinds.values())) == 2 and AskKind.DECISION in kinds.values()
+        for bead, kind in kinds.items():
+            text = self.store.comments(BeadId(bead))[-1].text
+            assert ("kind=decision" in text) == (kind is AskKind.DECISION), (bead, kind, text)
 
     def test_an_answer_naming_a_replaced_ask_is_refused_and_files_nothing(self) -> None:
         old = must(self.asks.get(BeadId("fk-1"))).id

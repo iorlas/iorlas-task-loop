@@ -206,7 +206,7 @@ class Worlds:
         return World(now=now, host=env.host, version=env.version, projects=projects, runs=runs,
                      asks={(loop_key(a.repo), a.bead): a for a in asks if a.status in LIVE},
                      run_headers=self.run_headers(now, rows), leases=self.leases(now, rows), database_error=database_error,
-                     status=StatusStore(env.config).get(), ledger=ledger, landings=self.landings(),
+                     status=StatusStore(env.config, quiet=True).get(), ledger=ledger, landings=self.landings(),
                      parks=self.records.parks(), net_pauses=self.records.net_pauses(), skipped_traces=self.records.traces().skipped)
 
     def comments(self, path: str, bead: BeadId) -> list[Comment]:

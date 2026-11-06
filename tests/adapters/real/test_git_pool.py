@@ -1,11 +1,11 @@
 """The migrated pool write uses real git with the engine's checkout and index pinning intact."""
 
 import subprocess
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401
+from support.tmpdir import TemporaryDirectory
 
 # isort: split
 import pytest
@@ -22,7 +22,7 @@ from taskloop.contracts.slots import SlotGitError
 
 class RealGitPoolTest(Case):
     def setup_method(self):
-        temporary = tempfile.TemporaryDirectory()
+        temporary = TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.home = Path(temporary.name).resolve()
         self.repo = self.home / "repo"
