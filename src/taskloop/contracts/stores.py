@@ -12,12 +12,12 @@ from taskloop.contracts.ask import Ask, AskAnswer, ThreadEntry
 from taskloop.contracts.askrows import AskRows, DbDocs, DbLedger
 from taskloop.contracts.dash import OwnerCause, Stick
 from taskloop.contracts.docrows import RowDoc, singleton
-from taskloop.contracts.docstore import ForeignVersion, Item, JsonStore, Ledger, Page, Present, Torn, refusal
+from taskloop.contracts.docstore import ForeignVersion, Item, JsonStore, Ledger, Page, Present, Torn, refusal  # noqa: F401
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.guard import guard
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import LedgerEntry, LedgerEvent
-from taskloop.contracts.loop import BadVersions, LoopCommand, LoopState, Rest
+from taskloop.contracts.loop import BadVersions
 from taskloop.contracts.reponame import repo_name
 from taskloop.contracts.rotating import RotatingJsonl
 from taskloop.contracts.run import LoopLogLine
@@ -400,21 +400,6 @@ class AskStore:
             done = a.replace(thread=[*a.thread, entry])
             self.put(done)
             return done, ""
-
-
-class LoopStateStore(JsonStore[LoopState]):
-    def __init__(self, cfg: paths.ConfigDir, repo_key: str) -> None:
-        super().__init__(cfg.loop_state(repo_key), LoopState)
-
-
-class LoopCommandStore(JsonStore[LoopCommand]):
-    def __init__(self, cfg: paths.ConfigDir, repo_key: str) -> None:
-        super().__init__(cfg.loop_command(repo_key), LoopCommand)
-
-
-class RestStore(JsonStore[Rest]):
-    def __init__(self, cfg: paths.ConfigDir, repo_key: str) -> None:
-        super().__init__(cfg.loop_rest(repo_key), Rest)
 
 
 class StatusStore(RowDoc[StatusSnapshot]):

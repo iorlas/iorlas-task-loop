@@ -16,9 +16,7 @@ from taskloop.contracts import factorybackup, factorydb
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import RunManifest
 from taskloop.contracts.runrows import RunRows
-from taskloop.contracts.stores import JsonStore
 
 
 class Reindex(Case):
@@ -28,10 +26,8 @@ class Reindex(Case):
             script = RunScript("b-1").step("write", 10, 3).close("done").write(cfg.root)
             rows = RunRows(cfg)
             original = must(rows.get(script.name))
-            JsonStore(cfg.run_manifest(script.name), RunManifest).write(original)
             with rows.transaction() as con:
-                for table in ("attempt", "step", "run"):
-                    con.execute(f"DELETE FROM {table} WHERE run=?", (script.name,))
+                con.execute("UPDATE run SET facts=NULL WHERE run=?", (script.name,))
             args = tl.build_parser().parse_args(["doctor", "--reindex"])
             ctx = tl.Ctx(tl.HERE, lambda: 0.0, [], Env({}), spawner=real_spawner(), git=port_git(),
                          who=Identity(actor="test", home=str(cfg.root)))
@@ -53,13 +49,9 @@ def test_reindex_recovers_truncated_database(tmp_path, with_backup):
     script = RunScript("b-saved").step("write", 10, 3).close("done").write(cfg.root)
     rows = RunRows(cfg)
     original = must(rows.get(script.name))
-    JsonStore(cfg.run_manifest(script.name), RunManifest).write(original)
     factorydb.close_shared()
     snapshot = factorybackup.backup(cfg, 1_800_000_000.0) if with_backup else None
-    # This retained manifest postdates the snapshot and must be reimported.
     later = RunScript("b-later").step("plan", 2).close("done").write(cfg.root)
-    retained = must(rows.get(later.name))
-    JsonStore(cfg.run_manifest(later.name), RunManifest).write(retained)
     factorydb.close_shared()
     cfg.factory_db().write_bytes(b"")
     try:
@@ -69,10 +61,10 @@ def test_reindex_recovers_truncated_database(tmp_path, with_backup):
         if with_backup:
             assert f"restored factory.db from {snapshot}" in output
         else:
-            assert "factory.db was damaged and no backup exists; rebuilding from retained files" in output
-        assert "reindexed: 2 runs, 2 sources in" in output
-        assert rows.get(script.name) == original
-        assert rows.get(later.name) == retained
+            assert "factory.db was damaged and no backup exists; rebuilding empty (the run files are no longer a source)" in output
+        assert f"reindexed: {1 if with_backup else 0} runs, {1 if with_backup else 0} sources in" in output
+        assert rows.get(script.name) == (original if with_backup else None)
+        assert rows.get(later.name) is None  # the run files are no longer a source of runs: what the snapshot lacks is gone
         assert factorybackup.damaged(cfg) == ""
         assert next(cfg.root.glob("factory.db.bad-*")).read_bytes() == b""
     finally:

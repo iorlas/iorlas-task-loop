@@ -18,6 +18,7 @@ class Score(Rec):
     lost: int
     crashes: int
     m2_pass: bool
+    main_red: bool = False  # a revert landed on main since the window began (app/report/mainstate.py)
 
 
 @final

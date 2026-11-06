@@ -23,7 +23,6 @@ from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.followups import FollowupOutbox
 from taskloop.contracts.ledger import Adr, AdrUse, LedgerEntry
 from taskloop.contracts.locks import LockRecord, LockTimeout, Ticket, pid_alive
-from taskloop.contracts.loop import LoopCommand, LoopState, Rest
 from taskloop.contracts.profile_changes import ProfileChange
 from taskloop.contracts.rotating import RotatingJsonl
 from taskloop.contracts.stores import Absent, AskStore, ForeignVersion, JsonlStore, Present, Read, Torn, refusal
@@ -216,9 +215,6 @@ class MemTickets:
 def fake_stores(pid: int | None = None) -> Stores:
     """A whole fake process environment: nothing touches the disk."""
     runs: dict[str, MemLog[log.EngineLog]] = {}
-    state: dict[str, MemDoc[LoopState]] = {}
-    cmds: dict[str, MemDoc[LoopCommand]] = {}
-    rests: dict[str, MemDoc[Rest]] = {}
     check_runs: dict[tuple[str, int | None], MemDoc[CheckRun]] = {}
     adrs: dict[str, AdrStore] = {}
     passes: dict[tuple[str, str], MemDocSet[PassRecord]] = {}
@@ -231,9 +227,6 @@ def fake_stores(pid: int | None = None) -> Stores:
         adrs=lambda repo: adrs.setdefault(repo, AdrStore(MemDocSet(Adr), MemLog(_decode(AdrUse)))),
         checkpoints=CheckpointBook(MemDocSet(Checkpoint)),
         followups=MemDocSet(FollowupOutbox),
-        loop_state=lambda key: state.setdefault(key, MemDoc(LoopState)),
-        loop_command=lambda key: cmds.setdefault(key, MemDoc(LoopCommand)),
-        loop_rest=lambda key: rests.setdefault(key, MemDoc(Rest)),
         results=lambda repo, check: passes.setdefault((repo, check), MemDocSet(PassRecord)),
         base_red=lambda repo: reds.setdefault(repo, MemDocSet(BaseRedRecord)),
         durations=MemDocSet(Durations),
