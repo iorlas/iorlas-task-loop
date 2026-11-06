@@ -1,0 +1,139 @@
+"""What the review stage reads and writes of the engine that runs it: one Protocol, so the stage has no hidden reach into the Engine
+(docs/design/b-review.md, slice 3; the same shape as look/host.py). The stage's own parts that read each other (`settles`, `routing`,
+`judge`-style views) are typed by the verbs the reader calls."""
+import threading
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Protocol
+
+from taskloop.app.review.state import ReviewLive
+from taskloop.contracts.asked import Asked
+from taskloop.contracts.checks import Check, CheckRun
+from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.ids import BeadId, TreeSha
+from taskloop.contracts.plancheck import PlanCheck, PlanData
+from taskloop.contracts.stop import Stop
+from taskloop.contracts.wire import Open
+from taskloop.domain.review.ledger import Ledger
+
+
+class ReviewSteps(Protocol):
+    def begin(self, step: str, text: str, **meta: object) -> int: ...
+    def outcome(self, outcome: str, detail: str = ...) -> None: ...
+    def move(self, to: str, cause: str, detail: str = ...) -> None: ...
+
+
+class ReviewBudget(Protocol):
+    @property
+    def labels(self) -> list[str]: ...
+
+
+class ReviewLog(Protocol):
+    def note(self, text: str) -> int: ...
+
+
+class ReviewStores(Protocol):
+    def check_run(self, run: str, rnd: int | None = ...) -> SavedRun: ...
+
+
+class SavedRun(Protocol):
+    def get(self) -> CheckRun | None: ...
+
+
+class TreeView(Protocol):
+    """The checkout as review reads it."""
+
+    def tree_hash(self) -> TreeSha: ...
+    def task_diff(self) -> str: ...
+    def changed_paths(self) -> list[str]: ...
+    def base_sha(self) -> str: ...
+
+
+class CaseBook(Protocol):
+    def case_checks(self) -> list[PlanCheck]: ...
+
+
+class BriefView(Protocol):
+    def text(self) -> str: ...
+
+
+class Briefing(Protocol):
+    def where(self, node: str, checks: Sequence[Check] = ..., failed: object = ..., listed: Sequence[str] = ...) -> str: ...
+
+
+class LookView(Protocol):
+    """The look stage's verdict on an item, as the verifier asks it."""
+
+    def is_look(self, u: Open) -> bool: ...
+    def look_verify(self, gaps: Sequence[Open]) -> str: ...
+    def look_verdict(self, u: Open, v: str, a: Open, why: str) -> tuple[str, Open, str]: ...
+
+
+class FixRound(Protocol):
+    def fix(self, kind: str, tail: str, resume: bool = ...) -> str: ...
+
+
+class PendingKeeper(Protocol):
+    def keep_pending(self, origin: str = ...) -> None: ...
+
+
+class SettlesView(Protocol):
+    """The stage's own settles, as the verifier and the routing call it."""
+
+    def settle(self, gaps: list[Open]) -> tuple[list[Open], list[Open]]: ...
+    def work_summary(self) -> str: ...
+    def unused_tool(self, what: str) -> str: ...
+    def evidence_text(self, checks: list[object] | None = ..., current: bool | None = ...) -> str: ...
+
+
+class RoutingView(Protocol):
+    """The stage's own routing, as the verifier and the settles call it."""
+
+    def ledger(self) -> Ledger: ...
+    def engine_steps(self, gaps: list[Open]) -> list[Open]: ...
+    def route_open(self, u: Open, a: Open, why: str) -> tuple[str, Open, str, str]: ...
+    def route_left(self, left: list[Open]) -> list[Open]: ...
+    def resolve_kind(self, u: Open, a: Open) -> tuple[str, str]: ...
+    def proof_stuck(self, items: list[Open]) -> Stop: ...
+    def add_leftover(self, lo: Open) -> bool: ...
+    def add_unverified(self, u: Open, why: str) -> None: ...
+
+
+class ReviewHost(Protocol):
+    bead: BeadId
+    wt: str
+    cfg: EngineConfig
+    run_dir: Path
+    evidence_dir: Path
+    scope: str
+    plan_data: PlanData | None
+    last_run: CheckRun | None
+    fixes: int
+    leftovers: list[Open]
+    at_stage: int
+    last_flag: str
+    writer_family: str
+    review: ReviewLive
+    steps: ReviewSteps
+    budget: ReviewBudget
+    log: ReviewLog
+    stores: ReviewStores
+    checkout: TreeView
+    cases: CaseBook
+    briefs: BriefView
+    briefing: Briefing
+    judge: LookView
+    fixer: FixRound
+    checkpoints: PendingKeeper
+    settles: SettlesView
+    routing: RoutingView
+    Blocked: type[Stop]
+
+    def ai(self, node: str, title: str, prompt: str, *a: object, **kw: object) -> Asked: ...
+    def comment(self, text: str) -> None: ...
+    def warn(self, text: str) -> None: ...
+    def diff_text(self) -> str: ...
+    def on_path(self, name: str) -> str | None: ...
+    def blocked_for(self, why: str, kind: str, stop: object = None, spec: object = None, fix: bool = False) -> Stop: ...
+    def sh(self, cmd: Sequence[str], timeout: float = ..., check: bool = ..., save: Path | None = ..., env: Mapping[str, str] | None = ...,
+           pin: bool = ..., what: str = ..., cwd: Path | None = ..., stop: threading.Event | None = ...) -> tuple[int, str]: ...

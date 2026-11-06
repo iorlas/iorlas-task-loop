@@ -4,6 +4,7 @@ whether the engine ran a check is settled by the engine's own results; one that 
 import shlex
 from typing import Any, Final, NewType
 
+from taskloop.app.review.host import ReviewHost
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.checks import planref
@@ -26,7 +27,7 @@ def lint_argv(tool: str) -> LintArgv | None:
 
 
 class Settles:
-    def __init__(self, host: Any, git: Git) -> None:
+    def __init__(self, host: ReviewHost, git: Git) -> None:
         self.e = host
         self.git = git
 

@@ -7,7 +7,7 @@ from typing import Any
 from taskloop.app.write.check_round import CheckRound
 from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.review_round import ReviewRound
-from taskloop.app.write.state import AGAIN, CheckOut, StageState
+from taskloop.app.write.state import AGAIN, RoundOut, StageState
 from taskloop.app.write.write_round import WriteRound
 from taskloop.contracts.plancheck import PlanData, RoundState
 
@@ -50,22 +50,32 @@ class StageLoop:
             e.warn(f"{s.name}: write {s.n} (round {s.rounds + 1})")
         s.prepare_retried = False
         while True:
-            flow = self.writing.run(s)
-            if not flow:
-                try:
-                    flow = self.checking.run(s)
-                finally:  # a stuck check parks the bead by raising: the closer still reads the run and why
-                    self.hand_on(s)
+            flow = self.write(s) or self.check(s)
             if flow != PREPARED:
                 return flow or self.reviewing.run(s)
 
+    def write(self, s: StageState, *, look: bool = True) -> str:
+        try:
+            return self.writing.run(s, look=look)
+        finally:  # a question parks the bead by raising: the closer still reads what the round left
+            self.hand_on(s)
+
+    def check(self, s: StageState) -> str:
+        try:
+            return self.checking.run(s)
+        finally:  # a stuck check parks the bead by raising: the closer still reads the run and why
+            self.hand_on(s)
+
     def hand_on(self, s: StageState) -> None:
-        """Apply what the check round left in `s.out` to the engine, then clear it."""
-        e, out, s.out = self.e, s.out, CheckOut()
+        """Apply what the rounds left in `s.out` to the engine, then clear it."""
+        e, out, s.out = self.e, s.out, RoundOut()
         if out.run is not None:
             e.last_run = out.run
         if out.tests is not None:
             e.stats["tests_added"], e.stats["tests_removed"] = out.tests
         if out.stuck_why is not None:
             e.stuck_why = out.stuck_why
+        if out.summary is not None:
+            e.last_summary = out.summary
         e.stats["rounds"] += out.rounds
+        e.stats["writes"] += out.writes

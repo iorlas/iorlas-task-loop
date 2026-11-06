@@ -88,7 +88,7 @@ class WriteRound:
                                "turns": wr.get("turns"), "prompt_chars": wr.get("prompt_chars"), "context_k": wr.get("context_k"),
                                "fresh": fresh})
         e.shared.add_flakes(w.get("flakes") or [])
-        e.last_summary = w["summary"]
+        s.out.summary = w["summary"]
 
     def question(self, s: StageState) -> str:
         """A question an accepted requirement decides is a fix round, not an ask; any other is the owner's."""
@@ -100,12 +100,12 @@ class WriteRound:
             spec = askspecs.open_question(w["question"], w.get("options"), w.get("owner_cause"))
             raise e.blocked_for("owner decision needed", "ASK_DECISION", spec=spec)
         s.rounds += 1
-        e.stats["rounds"] += 1
-        e.stuck_why = f"the writer asked what an accepted requirement decides: {w['decided']}"
-        e.warn(f"{s.name}: {e.stuck_why[:300]}")
+        s.out.rounds += 1
+        stuck = s.out.stuck_why = f"the writer asked what an accepted requirement decides: {w['decided']}"
+        e.warn(f"{s.name}: {stuck[:300]}")
         if s.rounds >= int(e.cfg.max_rounds):
-            (e.run_dir / "replan.md").write_text(e.stuck_why + "\n\nThe question: " + w["question"])
-            e.steps.move("replan", "rounds_used", f"{s.rounds} rounds used: {e.stuck_why}")
+            (e.run_dir / "replan.md").write_text(stuck + "\n\nThe question: " + w["question"])
+            e.steps.move("replan", "rounds_used", f"{s.rounds} rounds used: {stuck}")
             return REPLAN
         e.steps.move("write", "writer_decided", f"an accepted requirement decides it: {w['decided']}")
         s.feedback = DECIDED_TEXT % (w["question"], w["decided"])
@@ -142,10 +142,10 @@ class WriteRound:
         got = e.ai("write", f"{s.name} shots contract", prompt + tip, delta=tip, resume_key="writer", write=s.n, visual=True,
                         round=s.rounds + 1, at=(s.sk, s.rounds, s.n + 500), **s.meta)
         w2 = got.data
-        e.stats["writes"] += 1
+        s.out.writes += 1
         s.wfam = e.writer_family = got.family
         e.writer.last_stage = s.last
-        e.last_summary = w2["summary"]
+        s.out.summary = w2["summary"]
         if w2["question"].strip():
             e.steps.outcome("asks", w2["question"][:200])
             spec = askspecs.open_question(w2["question"], w2.get("options"), w2.get("owner_cause"))
