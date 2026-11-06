@@ -1537,6 +1537,7 @@
    "reflect": true,
    "intake_per_day": 0,
    "writer_family": [],
+   "second_writer_family": "",
    "writer_exec_allow": [],
    "writer_read_roots": [],
    "planner_notes": "",

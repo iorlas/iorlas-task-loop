@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 from typing import Final
 
 from taskloop.contracts.ago import ago
+from taskloop.domain import versions
 
 STATUS_LINES: Final = 40
 STATUS_BYTES: Final = 8 * 1024
@@ -62,6 +63,7 @@ class Brief:
     version: str = ""
     installed: str = ""
     pinned: str = ""
+    shim_sha256: str = ""
 
 
 def clock(t: float) -> str:
@@ -80,7 +82,11 @@ def body(b: Brief) -> list[str]:
     for lp in b.loops:
         now = f"{lp.bead} in {lp.slot or 'its worktree'}" if lp.bead else "between beads"
         out.append(f"  pid {lp.pid} since {clock(lp.since)}: {now}; task-loop {lp.version}")
-    out.append(f"versions: running {b.version or '?'}, newest installed {b.installed or '?'}, pin {b.pinned or 'none'}")
+    out.append(f"versions: running {b.version or '?'}, newest installed {b.installed or '?'}, pin {b.pinned or 'none'}"
+               + (f", shim {b.shim_sha256[:8]}" if b.shim_sha256 else ""))
+    odd = versions.skew([lp.version for lp in b.loops], b.installed)
+    if odd:
+        out.append(f"SKEW: loop engine(s) on {', '.join(odd)}, newest installed {b.installed}")
     out.append(f"asks: {len(b.asks)} open")
     out += [f"  {a.bead} [{a.kind}] {a.decision[:90]} ({ago(b.now, a.since)})" for a in b.asks]
     if b.slots:
@@ -119,7 +125,10 @@ def status_lines(b: Brief) -> list[str]:
 
 
 def status_json(b: Brief) -> dict[str, object]:
-    return {"running": bool(b.loops), "summary": first_line(b), **asdict(b)}
+    loops = [lp.version for lp in b.loops]
+    census = {"running": b.version, "installed": b.installed, "pinned": b.pinned, "loops": loops, "shim_sha256": b.shim_sha256,
+              "skew": versions.skew(loops, b.installed)}
+    return {"running": bool(b.loops), "summary": first_line(b), **asdict(b), "versions": census}
 
 
 def handoff_text(b: Brief) -> str:
