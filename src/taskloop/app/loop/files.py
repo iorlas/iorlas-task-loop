@@ -15,7 +15,7 @@ from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.loop import LoopCommand, LoopState, LoopTarget, Rest, StopRequest
 from taskloop.contracts.looprows import DIED, KvDoc, LoopRows
 from taskloop.contracts.run import LoopLogLine
-from taskloop.contracts.stores import JsonStore, LoopLog, Page
+from taskloop.contracts.stores import LoopLog, Page
 
 StopMode = Literal["now", "after", ""]
 EXIT_REASONS = (
@@ -34,7 +34,7 @@ class LoopFiles:
     def __init__(self, cfg: paths.ConfigDir, key: str, pid_alive: Callable[[int], bool], now: Callable[[], float] = time.time) -> None:
         self.cfg, self.key, self.pid_alive, self.now = cfg, key, pid_alive, now
 
-    # ---- one state per loop process: a `lease` row in factory.db (an old <key>.<pid>.json is adopted once) -------------------
+    # ---- one state per loop process: a `lease` row in factory.db -------------------
     def rows(self) -> LoopRows:
         return LoopRows(self.cfg, self.key)
 
@@ -54,20 +54,8 @@ class LoopFiles:
         d.mkdir(parents=True, exist_ok=True)
         return d
 
-    def adopt_files(self) -> None:
-        """Dual-read, never dual-write: a state file an older loop left is moved into the database and removed."""
-        for f in sorted(self.cfg.loop_state(self.key).parent.glob(self.key + ".*.json")):
-            if f.name.endswith((".command.json", "-rest.json")):
-                continue
-            st = JsonStore(f, LoopState).get()
-            if st is not None:
-                self.rows().put(st)
-            with contextlib.suppress(OSError):
-                f.unlink()
-
     def live(self, but: int | None = None) -> list[LoopState]:
         """The repo's live loops (`but`: leave this pid out), oldest first. A dead loop's row is kept as evidence (renamed `died-`)."""
-        self.adopt_files()
         out: list[LoopState] = []
         for st in self.rows().rows(""):
             if not self.pid_alive(st.pid):
@@ -86,19 +74,17 @@ class LoopFiles:
                                      "reason": reason, "detail": detail})
 
     def died(self) -> list[LoopState]:
-        found = [*self.rows().rows(DIED)]
-        found += [st for f in self.runs().glob("died-*.json") if (st := JsonStore(f, LoopState).get()) is not None]  # an older loop's
-        return found
+        return [*self.rows().rows(DIED)]
 
     # ---- the stop command ------------------------------------------------------------------------------------------
     def lock(self) -> contextlib.AbstractContextManager[object]:
         return hold_path(self.cfg.lock_record(LockWhat.LOOP.value, self.key), "loop", what=LockWhat.LOOP)
 
     def command(self) -> KvDoc[LoopCommand]:
-        return KvDoc(self.rows(), f"loop-command:{self.key}", LoopCommand, self.cfg.loop_command(self.key))
+        return KvDoc(self.rows(), f"loop-command:{self.key}", LoopCommand)
 
     def rest_doc(self) -> KvDoc[Rest]:
-        return KvDoc(self.rows(), f"loop-rest:{self.key}", Rest, self.cfg.loop_rest(self.key))
+        return KvDoc(self.rows(), f"loop-rest:{self.key}", Rest)
 
     def stop_for(self, pid: int, started: float) -> StopMode:
         """What the repo's command says to the loop (`pid`, `started`): a loop the command does not name (one started later, even on
