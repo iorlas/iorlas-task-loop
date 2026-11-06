@@ -11,7 +11,8 @@ from unittest import mock
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes
 from support.askjson import unreadable_ask
-from support.engine_case import BEAD, CAT_ENV, CLEAN, PLAN, WRITE, EngineTest, ask_rec, review, stop, verdict
+from support.engine_case import EngineTest, ask_rec, stop
+from support.plans import BEAD, CAT_ENV, CLEAN, PLAN, WRITE, review, verdict
 from support.runs import manifest
 
 from taskloop.adapters import (

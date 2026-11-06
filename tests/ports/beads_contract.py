@@ -5,8 +5,8 @@ import pytest
 from support.case import Case
 from support.tags import contract  # noqa: F401  (re-exported for the subclasses)
 
+from taskloop.contracts.beadsport import BdFailure, BeadPatch, BeadQuery, Beads, NewBead
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, Beads, NewBead
 
 # A mixin: only a subclass that is also collected runs; the checker sees addCleanup and subTest through this base.
 _Base = Case

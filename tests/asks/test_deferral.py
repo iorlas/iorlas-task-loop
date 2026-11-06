@@ -9,7 +9,7 @@ import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 
 from taskloop.app.asks import deferral as intake
-from taskloop.contracts.ports import BeadQuery, NewBead
+from taskloop.contracts.beadsport import BeadQuery, NewBead
 
 
 def filed(store, n, priority=None):

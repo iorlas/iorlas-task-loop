@@ -25,12 +25,12 @@ from taskloop.adapters.ident import hostname
 from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskOption
 from taskloop.contracts.askstore import AskStore
+from taskloop.contracts.beadsport import BeadQuery
 from taskloop.contracts.dash import BeadDetail, Snapshot
 from taskloop.contracts.dashcost import CostPage
 from taskloop.contracts.enums import AskClass, AskKind, AskStatus
 from taskloop.contracts.ids import BeadId, loop_key
 from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.ports import BeadQuery
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
 from taskloop_dash.http import make_handler

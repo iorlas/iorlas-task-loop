@@ -2,8 +2,8 @@
 repo, plan with the same `strays` rule, give back what is dead. No branch, tree or git is looked at."""
 from taskloop.app.reconcile.apply import act_lease
 from taskloop.app.reconcile.observe import lease_of, slot_facts
+from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
 from taskloop.domain.reconcile.diff import lease_actions
 from taskloop.domain.reconcile.facts import FreeSlot, ReleaseClaim, RepoView
 

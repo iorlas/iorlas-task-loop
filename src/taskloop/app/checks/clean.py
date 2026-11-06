@@ -6,8 +6,8 @@ from pathlib import Path
 from taskloop.adapters.base_tree import clean_tree
 from taskloop.app.checks.host import CheckFault, CheckHost, CleanHost
 from taskloop.contracts.checks import CheckFaultKind
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.ports import Git
 from taskloop.domain.checks import inputs
 
 

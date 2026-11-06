@@ -12,7 +12,7 @@ from support.case import Case
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support.builders import cfg_with  # noqa: E402
+from support.cfgs import cfg_with  # noqa: E402
 
 from taskloop.app.run import engine  # noqa: E402
 from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
