@@ -53,7 +53,7 @@ class StopRequestsLogic(LoopBase):
         looptest.write_state(self.repo_s, pid=self.old_pid, started=self.clock.t + 50)  # that loop's state replaces the old one
         with self.files.lock():
             self.files.clean_command()
-        assert not looptest.command(self.repo_s).exists()  # and it does not keep the old loop's command alive
+        assert not looptest.command_kept(self.repo_s)  # and it does not keep the old loop's command alive
 
     def test_a_stop_applies_to_the_loops_it_names_only(self):
         self.old_loop()
@@ -67,10 +67,10 @@ class StopRequestsLogic(LoopBase):
         self.stop()
         with self.files.lock():
             self.files.clean_command()
-            assert looptest.command(self.repo_s).exists()
+            assert looptest.command_kept(self.repo_s)
             self.files.remove(self.old_pid)
             self.files.clean_command()
-        assert not looptest.command(self.repo_s).exists()
+        assert not looptest.command_kept(self.repo_s)
 
     def test_a_stop_waits_for_a_registration_in_progress_and_names_the_new_loop(self):
         self.old_loop()

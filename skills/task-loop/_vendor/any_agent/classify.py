@@ -1,61 +1,36 @@
-"""The one outcome ladder : what a vendor CLI said -> one reason from contract.json.
+"""The one outcome ladder: what a vendor CLI said -> one reason string.
 
-Pure: no state, no I/O except reading contract.json once. The three launchers (codex, opencode, claude) collect evidence, call
-`classify`, then apply the effects of the reason in one place (Settler.apply). Vendor text enters through `vendor_err` (the vendor's own
+Pure: no state, no I/O. The caller collects the harness's evidence, calls `classify`, then applies the effects of the reason in one place.
+The generic words (limit, credit, login, network) are here; each harness module owns the patterns only its CLI speaks and the ladder merges
+them. Vendor text enters through `vendor_err` (the vendor's own
 error event, or the CLI's own error result) and `stderr`; the model's answer text is never an argument, so a worker that says
 "rate limit" cannot take its lane out.
 """
 
 import re
 from collections.abc import Callable, Mapping
+from functools import cache
 from typing import NamedTuple
 
-from delegate.contracts.json_types import Json
+from any_agent import drops, vendors
+from any_agent._json import Json
 
-# ---- PATTERNS: every regex that turns vendor text into a reason lives here -----------------------------------------------------
-LIMIT_RE = re.compile(r"usage limit|rate.?limit|quota|too many requests|\b429\b|try again (later|in)|credit balance", re.I)
-CREDIT_RE = re.compile(
-    r"spend(ing)?[- ]?(limit|control)|out of credits|credit balance|insufficient (funds|credit)|credits? (exhausted|too low)"
-    r"|personal-team-blocked",
-    re.I,
-)
-SPEND_RE = re.compile(CREDIT_RE.pattern + r"|top[- ]?up|billing|cycle cap|cap reached", re.I)  # cockpit: any prose that means money
-LOGIN_RE = re.compile(
-    r"not logged in|please (run|use) [`'\"]?\S*\s*login|oauth session expired|failed to authenticate|invalid api key|401 unauthorized", re.I
-)
-NETWORK_RE = re.compile(
-    r"ENOTFOUND|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|getaddrinfo|could not resolve host|network is unreachable"
-    r"|cannot connect to api|unable to connect",
-    re.I,
-)
-CODEX_STATUS_RE = re.compile(
-    r'"status":\s*4(?!29)\d\d'
-)  # codex puts the HTTP status inside its error JSON; 429 is a limit, not a bad request
-BAD_REQUEST_RE = re.compile(
-    CODEX_STATUS_RE.pattern
-    + r"|invalid_request_error|invalid_json_schema|Invalid schema for response_format|unrecognized arguments:|error: unknown argument"
-    r"|no rollout found for thread|No conversation found with session ID",
-    re.I,
-)  # the vendor refused the request itself: schema, a flag its CLI no longer takes, or a --resume thread it does not know
-# What a vendor or the OS says when the connection itself broke. `max_output_tokens` after "stream disconnected" is the model's cap, not
-# the network.
-DROP_RE = re.compile(
-    r"ENOTFOUND|ECONNRESET|ECONNREFUSED|ECONNABORTED|ETIMEDOUT|EAI_AGAIN|EPIPE|getaddrinfo|could not resolve host|network is unreachable"
-    r"|cannot connect to api|unable to connect|error sending request|connection (reset|closed|refused|timed out|failed)|socket hang up"
-    r"|dns error|network error|waiting for network|(?:TLS|SSL) handshake|stream disconnected(?!.{0,200}max_output_tokens)",
-    re.I | re.S,
-)
+
+# ---- PATTERNS: what vendors say lives in any_agent.vendors, what only a CLI says in its harness module ---------------------------
+def _cli_bad_request() -> tuple[str, ...]:
+    from any_agent.harnesses import claude, codex  # noqa: PLC0415 - harness modules do not import the ladder, but keep the edge lazy
+
+    return (*codex.BAD_REQUEST_PATTERNS, *claude.BAD_REQUEST_PATTERNS)  # a --resume thread the CLI does not know, a 4xx body it forwards
+
+
+@cache
+def _ladder_words(vendor_names: tuple[str, ...]) -> vendors.Words:
+    w = vendors.words(vendor_names)
+    bad = re.compile(w.bad_request.pattern + "|" + "|".join(_cli_bad_request()), re.IGNORECASE)
+    return vendors.Words(limit=w.limit, credit=w.credit, spend=w.spend, login=w.login, network=w.network, bad_request=bad)
+
+
 NET_AMBIGUOUS = ("worker_failed", "vendor_blip", "hung")  # failures that name no cause of their own: the network may be it
-PATTERNS = {
-    "dropped": DROP_RE,
-    "limit": LIMIT_RE,
-    "credit": CREDIT_RE,
-    "spend": SPEND_RE,
-    "login": LOGIN_RE,
-    "network": NETWORK_RE,
-    "codex_status": CODEX_STATUS_RE,
-    "bad_request": BAD_REQUEST_RE,
-}
 
 
 class Outcome(NamedTuple):
@@ -64,14 +39,14 @@ class Outcome(NamedTuple):
     source: str  # ours | event | stderr | exit
 
 
-def _ours(s: Mapping[str, Json], timed_out: bool) -> Outcome | None:
+def _ours(s: Mapping[str, Json], timed_out: bool, w: vendors.Words) -> Outcome | None:
     """The reasons only facts we measured ourselves give: a secret, the watchdog, our own timeout."""
     if s.get("secret"):
         return Outcome("secrets", str(s["secret"]), "ours")
     if s.get("watchdog") == "limit":
         msg = str(s.get("msg") or "")
-        return Outcome("credit_exhausted" if CREDIT_RE.search(msg) else "rate_limited", msg, "ours")
-    if s.get("watchdog") == "credit":  # another process marked the lane out for credit / login: its own words, not a guess from text
+        return Outcome("credit_exhausted" if w.credit.search(msg) else "rate_limited", msg, "ours")
+    if s.get("watchdog") == "credit":  # another process marked the lane out: its own words, not a guess from text
         return Outcome("credit_exhausted", str(s.get("msg") or ""), "ours")
     if s.get("watchdog") == "logged_out":
         return Outcome("logged_out", str(s.get("msg") or ""), "ours")
@@ -91,17 +66,17 @@ def _by_status(http: Json, text: str, src: str) -> Outcome | None:
     return Outcome("bad_request", text, src)
 
 
-def _by_text(text: str, src: str, work_seen: bool) -> Outcome | None:
+def _by_text(text: str, src: str, work_seen: bool, w: vendors.Words) -> Outcome | None:
     """The reason the vendor's words give, first match wins."""
-    if CREDIT_RE.search(text):
+    if w.credit.search(text):
         return Outcome("credit_exhausted", text, src)
-    if LIMIT_RE.search(text):
+    if w.limit.search(text):
         return Outcome("rate_limited", text, src)
-    if LOGIN_RE.search(text):
+    if w.login.search(text):
         return Outcome("logged_out", text, src)
-    if BAD_REQUEST_RE.search(text):
+    if w.bad_request.search(text):
         return Outcome("bad_request", text, src)
-    if NETWORK_RE.search(text) and not work_seen:
+    if w.network.search(text) and not work_seen:
         return Outcome("network", text, src)
     return None
 
@@ -125,32 +100,33 @@ def classify(
     timed_out: bool = False,
     work_seen: bool = False,
     structured: Mapping[str, Json] | None = None,
+    only: tuple[str, ...] = (),
 ) -> Outcome | None:
     """-> Outcome, or None when the run is done. First match wins.
 
     rc: exit code (negative = a signal); vendor_err: the vendor's error text from its event stream; stderr: the CLI's stderr; timed_out: our
     --timeout fired; work_seen: the worker did something before it failed; structured: facts we measured ourselves:
-    {"secret": cmd, "watchdog": "limit"|"credit"|"logged_out"|"hung", "msg": log line, "http_status": int, "net_up": False}."""
+    {"secret": cmd, "watchdog": "limit"|"credit"|"logged_out"|"hung", "msg": log line, "http_status": int, "net_up": False};
+    only: vendor names whose words count
+    beside `common` and the CLIs' own (none = every registered vendor)."""
     s = structured or {}
     vendor_event, code = (vendor_err or "").strip(), rc or 0
-    ours = _ours(s, timed_out)
+    w = _ladder_words(tuple(sorted(only)))
+    ours = _ours(s, timed_out, w)
     if ours:
         return ours
     text = vendor_event + ("\n" + (stderr or "") if code != 0 else "")
     src = "event" if vendor_event else "stderr"
-    return _by_status(s.get("http_status"), text, src) or _by_text(text, src, work_seen) or _by_exit(code, vendor_event, stderr, work_seen)
-
-
-def looks_dropped(text: str | None) -> bool:
-    """True when `text` (a vendor error event or stderr, never the model's answer) says the connection broke."""
-    return bool(DROP_RE.search(text or ""))
+    return (
+        _by_status(s.get("http_status"), text, src) or _by_text(text, src, work_seen, w) or _by_exit(code, vendor_event, stderr, work_seen)
+    )
 
 
 def with_network(o: Outcome, net_up: Callable[[], bool]) -> Outcome:
     """`o`, or the network outcome when it was the network. `classify` trusts network words only before the worker did anything, and a
     silent hang is only a network drop if the net is down: a failure with no cause of its own is checked against the words of a dropped
     connection, then against one probe (`net_up`). Limits, logins, bad requests, secrets and timeouts are never second-guessed."""
-    if o.reason in NET_AMBIGUOUS and (looks_dropped(o.detail) or not net_up()):
+    if o.reason in NET_AMBIGUOUS and (drops.looks_dropped(o.detail) or not net_up()):
         return Outcome("network", o.detail, o.source)
     return o
 
@@ -160,19 +136,19 @@ def network_stop(evidence: str) -> Outcome:
     return Outcome("network", evidence, "event")
 
 
-def says_login(text: str):
-    return bool(LOGIN_RE.search(text))
+def says_login(text: str, only: tuple[str, ...] = ()) -> bool:
+    return bool(_ladder_words(tuple(sorted(only))).login.search(text))
 
 
-def says_spend(text: str):
-    return bool(SPEND_RE.search(text))
+def says_spend(text: str, only: tuple[str, ...] = ()) -> bool:
+    return bool(_ladder_words(tuple(sorted(only))).spend.search(text))
 
 
-def limit_words(text: str, top: str | None):
+def limit_words(text: str, top: str | None) -> str:
     """The window a limit message names ("weekly limit hit"), else `top` (the fullest window's name) or the plain words."""
-    if re.search(r"free usage", text, re.I):
+    if re.search(r"free usage", text, re.IGNORECASE):
         return "free usage limit reached"
     for pat, word in ((r"week|7.?day", "weekly"), (r"5.?hour|five.?hour", "5-hour"), (r"daily|per day|\bday\b", "daily")):
-        if re.search(pat, text, re.I):
+        if re.search(pat, text, re.IGNORECASE):
             return f"{word} limit hit"
     return f"{top} limit hit" if top else "usage limit hit"
