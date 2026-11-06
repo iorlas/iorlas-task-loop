@@ -1390,6 +1390,7 @@
   "started": 1793050200.5,
   "ended": 1793050260.5,
   "loop": "L1",
+  "loop_id": null,
   "attempts": 2,
   "state": "done",
   "heartbeat": 1793050259.5,

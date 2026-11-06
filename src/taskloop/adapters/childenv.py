@@ -125,7 +125,7 @@ PER_RUN = frozenset({EnvVar.TL_ARTIFACT_DIR, EnvVar.TL_ARTIFACT_STEP, EnvVar.TL_
                      EnvVar.TL_WORKTREE, EnvVar.TL_BRANCH,
                      EnvVar.TL_REEXEC, EnvVar.TL_LOOP_STATE,
                      EnvVar.TL_RELEASE_REEXEC, EnvVar.TASK_LOOP_SLOT_BEAD, EnvVar.TASK_LOOP_ACTOR, EnvVar.TASK_LOOP_SESSION,
-                     EnvVar.TASK_LOOP_LOOP_PID, EnvVar.TASK_LOOP_WORKER})
+                     EnvVar.TASK_LOOP_LOOP_PID, EnvVar.TASK_LOOP_LOOP_ID, EnvVar.TASK_LOOP_WORKER})
 
 
 def reaching(env: Mapping[str, str]) -> dict[str, str]:
