@@ -1,11 +1,11 @@
 """adapters/locks.hold_path: an error from ProcessLock.acquire other than LockHeldError gives the in-process mutex back."""
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -18,7 +18,7 @@ from taskloop.adapters.locks import ProcessLock, hold_path
 @domain
 class MutexReleased(Case):
     def test_an_oserror_from_acquire_does_not_leave_the_path_locked_for_the_next_holder(self) -> None:
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             path = Path(d) / "x.lock"
             real, calls = ProcessLock.acquire, []
 

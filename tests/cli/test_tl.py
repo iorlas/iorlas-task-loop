@@ -24,6 +24,7 @@ from support.spawn import port_git  # noqa: E402
 from taskloop.app.release import pins  # noqa: E402
 from taskloop.app.wire import usage as usage_cmd  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
+from taskloop.contracts.stores import PinStore, ReposStore  # noqa: E402
 
 # isort: split
 import contextlib  # noqa: E402
@@ -105,7 +106,7 @@ class Records(Base):
         lines = (homes.config_dir() / "events.jsonl").read_text().splitlines()
         assert [json.loads(ln)["kind"] for ln in lines] == ["claim", "close"]
         assert json.loads(lines[0])["session"] == "abcdef12-3456"
-        assert [e["path"] for e in json.loads((homes.config_dir() / "repos.json").read_text())["repos"].values()] == [str(self.home)]
+        assert ReposStore(homes.cfg()).known() == [str(self.home)]
 
     @pytest.mark.skipif(os.name == "nt", reason="the registry lock is fcntl")
     def test_writers_registering_at_once_neither_crash_nor_lose_a_repo(self):
@@ -125,7 +126,7 @@ class Records(Base):
         for p in ps:
             p.join(60)
         assert errs == []
-        repos = json.loads((homes.config_dir() / "repos.json").read_text())["repos"]
+        repos = wire.dump(ReposStore(homes.cfg()).index())["repos"]
         assert len(repos) == 50
 
     def test_prune_keeps_recent(self):
@@ -239,7 +240,7 @@ class PinAndRollback(Base):
         return rc, out.getvalue(), err.getvalue()
 
     def pinned(self):
-        return json.loads((homes.config_dir() / "pinned.json").read_text())
+        return wire.dump(must(PinStore(homes.cfg()).get()))
 
     def test_pin_writes_both_versions_and_clear_removes_the_file(self):
         rc, out, _ = self.pin("0.2.0", "--delegate", "0.5.0")
@@ -249,7 +250,7 @@ class PinAndRollback(Base):
         assert self.pin("--delegate", "0.6.0")[0] == 0  # one side only: the other stays
         assert (self.pinned()["task-loop"], self.pinned()["delegate"]) == ("0.2.0", "0.6.0")
         assert self.pin("--clear")[0] == 0
-        assert not (homes.config_dir() / "pinned.json").exists()
+        assert PinStore(homes.cfg()).get() is None
         assert self.pin("--clear")[0] == 0  # clearing nothing is fine
 
     def test_a_pin_to_a_missing_cache_dir_is_refused_and_writes_nothing(self):
@@ -258,7 +259,7 @@ class PinAndRollback(Base):
         assert "0.3.0 is not installed" in err
         assert "0.1.0, 0.2.0, 0.10.0" in err
         assert self.pin("0.2.0", "--delegate", "9.9.9")[0] == 2
-        assert not (homes.config_dir() / "pinned.json").exists()  # not even the valid half
+        assert PinStore(homes.cfg()).get() is None  # not even the valid half
         shutil.rmtree(self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.1.0/skills")  # half-copied
         assert self.pin("0.1.0")[0] == 2
 

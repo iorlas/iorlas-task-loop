@@ -1,10 +1,10 @@
 """R16: Kind/POLICY exhaustiveness, apply and the storm detector (tl-7y6.2.1/2/3)."""
 import json
 import sys
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import mkdtemp
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -124,7 +124,7 @@ class Storm(Case):
             assert lh.storm_trip([row("a", k, fp, 10.0)], "b", k, fp, 20.0) is None, k
 
     def test_the_record_is_written_once_and_expires(self):
-        p = storm_file.storm_path(tempfile.mkdtemp(), "repo")
+        p = storm_file.storm_path(mkdtemp(), "repo")
         win = oc.KNOBS["storm_window_s"]
         assert storm_file.write_storm(p, "fp", ("a", "b"), 100.0, 100.0, win)
         assert not storm_file.write_storm(p, "fp", ("a", "b"), 100.0, 150.0, win)
@@ -144,7 +144,7 @@ def replay(name, stop_on_trip=True, squeeze=None):
     """Feed a corpus fixture through the close path (fingerprint, apply, storm) one row = one engine call. Returns
     (calls made, banners printed, dispositions). squeeze: spacing in seconds that replaces the real times."""
     clk, history, banners, disps, calls = FakeClock(), [], [], [], 0
-    path = storm_file.storm_path(tempfile.mkdtemp(), "repo")
+    path = storm_file.storm_path(mkdtemp(), "repo")
     for n, r in enumerate(rows(name)):
         clk.t = r["t"] if squeeze is None else 1_000_000.0 + n * squeeze
         calls += 1

@@ -1,10 +1,10 @@
 """The page and its modules served read-only from the static dir (assets.py via http.route)."""
 
 import sys
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tests"))
@@ -15,7 +15,7 @@ from taskloop_dash.http import route  # noqa: E402
 
 class Static(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         base = Path(tmp.name)
         self.out = base / "outside.js"

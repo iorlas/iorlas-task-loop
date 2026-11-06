@@ -1,12 +1,12 @@
 """A suite child can push to its own origin while tl's refusing global hook is installed."""
 import os
 import subprocess
-import tempfile
 from pathlib import Path
 
 from support.argv_checks import ArgvChecks
 from support.case import Case
 from support.checked import run_checked
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters.git import RealGit
 from taskloop.contracts.env import Env
@@ -15,7 +15,7 @@ from taskloop.contracts.ports import CheckSpec
 
 class CheckHooks(Case):
     def test_suite_push_uses_git_defaults_instead_of_the_pinned_judge(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             root = Path(tmp)
             repo, origin = root / "repo", root / "origin.git"
             repo.mkdir()

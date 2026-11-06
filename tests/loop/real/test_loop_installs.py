@@ -33,6 +33,8 @@ from taskloop.app.run import (
 from taskloop.contracts import wire
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.loop import Carry, LoopState
+from taskloop.contracts.snapshots import Pin
+from taskloop.contracts.stores import BadVersionStore, PinStore
 
 
 class Moving(LoopBase):
@@ -93,10 +95,10 @@ class Entry(Moving):
         inst = wstart.installs(homes.cfg(), snapshot(), here=must(self.here))
         assert inst.target() == ("0.3.0", self.cache / "0.3.0")
         assert inst.dangling == "0.2.0"
-        (homes.config_dir() / "pinned.json").write_text(json.dumps({"v": 1, "task-loop": "0.3.0"}))
+        PinStore(homes.cfg()).write(Pin(task_loop="0.3.0"))
         inst.target()
         assert inst.dangling == ""  # a pin is strict: nothing fell through
-        os.unlink(homes.config_dir() / "pinned.json")
+        PinStore(homes.cfg()).delete()
         self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
         with pytest.raises(more.Moved):
             self.run_loop()
@@ -135,8 +137,8 @@ class Fallback(Moving):
         events = [e for e in eventlog.read() if e["kind"] == "reload_fallback"]
         assert (len(events), events[0]["old"], events[0]["new"]) == (1, "0.2.0", "0.1.0")
         assert "logic broken" in events[0]["why"]
-        bad = json.loads((homes.config_dir() / "bad-versions.json").read_text())["entries"]
-        assert [e["version"] for e in bad] == ["0.2.0"]
+        bad = must(BadVersionStore(homes.cfg()).get()).entries
+        assert [e.version for e in bad] == ["0.2.0"]
 
     def test_a_loop_that_already_went_back_is_not_sent_again(self):
         st = json.loads(os.environ["TL_LOOP_STATE"])

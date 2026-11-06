@@ -9,6 +9,7 @@ from unittest import mock
 import pytest
 import support.paths  # noqa: F401
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import procs
 from taskloop.adapters.spawner import RealSpawner
@@ -20,7 +21,7 @@ class CapturedProcesses(Case):
         child = ("import os, signal, sys, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
                  "print(os.getpid(), flush=True); os.write(2, b'partial\\xff'); time.sleep(60)")
         for detached in (False, True):
-            with self.subTest(detached=detached), tempfile.TemporaryDirectory() as tmp:
+            with self.subTest(detached=detached), TemporaryDirectory() as tmp:
                 pidfile = Path(tmp) / "pid"
                 parent = ("import subprocess, sys, time; from pathlib import Path; "
                           f"p = subprocess.Popen([sys.executable, '-c', {child!r}], start_new_session={detached}); "
