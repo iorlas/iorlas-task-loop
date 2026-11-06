@@ -189,7 +189,7 @@ def install_problems(plugin_root: Path, env: Env) -> list[str]:
 def disk_run(config: ConfigDir) -> int:
     """`tl doctor --disk`: the config folder's bytes by area and the free space of its volume. 1 when the volume runs low."""
     root = config.root
-    lines = disk.report(root, shutil.disk_usage(root if root.is_dir() else root.parent).free)
+    lines = disk.report(root, shutil.disk_usage(root if root.is_dir() else root.parent).free, disk.read_samples(config))
     print("\n".join(lines))
     return 1 if any(ln.startswith("WARN") for ln in lines) else 0
 

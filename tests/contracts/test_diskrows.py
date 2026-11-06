@@ -1,0 +1,34 @@
+"""Free-space samples of the config volume in factory.db's kv table: one a hour, kept a fortnight (tl-7i9k.24.1)."""
+import sqlite3
+
+import pytest
+
+from taskloop.contracts import diskrows
+
+DAY = 86400.0
+GB = 1 << 30
+
+
+@pytest.fixture
+def con():
+    c = sqlite3.connect(":memory:")
+    c.execute("CREATE TABLE kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL, stamp TEXT)")
+    yield c
+    c.close()
+
+
+def test_a_second_sample_in_the_same_hour_is_not_kept(con):
+    diskrows.sample(con, 10 * GB, 3600.0 * 5 + 10)
+    diskrows.sample(con, 9 * GB, 3600.0 * 5 + 3000)
+    assert diskrows.samples(con) == [(3600.0 * 5 + 10, 10 * GB)]
+
+
+def test_samples_come_back_oldest_first_and_a_new_sample_drops_those_past_fourteen_days(con):
+    for day in (0, 8, 20):
+        diskrows.sample(con, (30 - day) * GB, day * DAY)
+    assert diskrows.samples(con) == [(8 * DAY, 22 * GB), (20 * DAY, 10 * GB)]
+
+
+def test_a_foreign_kv_row_is_not_a_sample(con):
+    con.execute("INSERT INTO kv(k,v,t) VALUES ('beads.x','{}',1)")
+    assert diskrows.samples(con) == []
