@@ -1,10 +1,10 @@
 """One code path: an answer from the dashboard and `tl answer` leave the same ask record and the same bead comments."""
 import sys
-import tempfile
 from argparse import Namespace
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -33,7 +33,7 @@ def world(root: str):
 
 class SameIntake(Case):
     def test_the_dash_and_tl_answer_file_the_same_record_and_comments(self):
-        with tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+        with TemporaryDirectory() as a, TemporaryDirectory() as b:
             tl_store, tl_asks = world(a)
             dash_store, dash_asks = world(b)
             args = Namespace(op="answer", bead="b-1", text=["go", "with", "A"], amend=False, option=None, rerun=False, confirm=False,

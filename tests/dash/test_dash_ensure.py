@@ -3,11 +3,11 @@ import gc
 import os
 import socket
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -44,7 +44,7 @@ def live(script, version="v1", binds=("127.0.0.1",), pid=4242, protocol=READ_PRO
 
 class StaleReason(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.script = Path(self.tmp.name) / "server.py"
         self.script.write_text("")
 
@@ -85,7 +85,7 @@ class StaleReason(Case):
 
 class EnsureFlow(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.script = Path(self.tmp.name) / "server.py"
         self.script.write_text("")
         env = {"XDG_CONFIG_HOME": self.tmp.name, "APPDATA": self.tmp.name, "TASK_LOOP_DASH_PORT": "7878"}
@@ -181,21 +181,21 @@ class EnsureFlow(Case):
 
 class DevCheckout(Case):
     def test_git_worktree_is_dev(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             (Path(d) / ".git").write_text("gitdir: /x")
             sub = Path(d) / "skills" / "task-loop" / "dash"
             sub.mkdir(parents=True)
             assert bind.is_dev_checkout(sub)
 
     def test_plugin_cache_is_not_dev_even_inside_git(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             (Path(d) / ".git").mkdir()
             sub = Path(d) / "plugins" / "cache" / "mk" / "tl" / "0.17.0" / "skills" / "task-loop" / "dash"
             sub.mkdir(parents=True)
             assert not bind.is_dev_checkout(sub)
 
     def test_plain_directory_is_not_dev(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             assert not bind.is_dev_checkout(Path(d))
 
     def test_dev_defaults_to_loopback_random_port(self):

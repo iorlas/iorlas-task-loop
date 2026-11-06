@@ -42,33 +42,34 @@ class Stick_(Case):
     def last(self):
         return self.asks.history(self.ask.id)[-1]
 
-    def test_adr_files_a_decision_the_plan_stage_reads_and_marks_the_ask(self) -> None:
+    def adr_beads(self):
+        return [b for b in self.beads.beads.values() if "adr" in b.labels]
+
+    def test_adr_files_a_bead_that_lands_the_decision_and_marks_the_ask(self) -> None:
         assert self.verbs.stick(self.ask.id, Stick.ADR, "Saves stay v1 until a bead says otherwise.") == ""
-        [adr] = self.stores.adrs(REPO).all()
-        assert (
-            (adr.id, adr.text, adr.question, adr.answer, adr.ask, adr.bead, adr.by, adr.key)
-            == ("ADR-1", "Saves stay v1 until a bead says otherwise.", self.ask.decision, "keep v1", self.ask.id, "t-1", "denis",
-                          self.ask.key)
-        )
-        assert (self.last().event, self.last().outcome, self.last().outcome_ref) == ("stick", Stick.ADR, "ADR-1")
+        [made] = self.adr_beads()
+        assert made.title == "ADR: Saves stay v1 until a bead says otherwise."
+        for want in (f"- Ask: {self.ask.id}\n", "- Bead: t-1\n", f"- Key: {self.ask.key}\n", "- By: denis\n", "docs/adr/NNNN-",
+                     self.ask.decision, "keep v1", "Saves stay v1 until a bead says otherwise."):
+            assert want in made.description, want
+        assert (self.last().event, self.last().outcome, self.last().outcome_ref) == ("stick", Stick.ADR, made.id)
         got = must(self.asks.get(BeadId("t-1")))
-        assert (got.outcome, got.outcome_ref) == (Stick.ADR, "ADR-1")
+        assert (got.outcome, got.outcome_ref) == (Stick.ADR, made.id)
         assert any(c.text.startswith("Owner (tl) stick") for c in self.beads.comments(BeadId("t-1")))
+        assert self.stores.adrs(REPO).all() == []  # the cache fills when the file is on the base commit, not before
 
     def test_adr_without_words_drafts_one_from_the_question_and_the_answer_and_is_filed_once(self) -> None:
         self.verbs.stick(self.ask.id, Stick.ADR)
         self.verbs.stick(self.ask.id, Stick.ADR)
-        [adr] = self.stores.adrs(REPO).all()
-        assert adr.text == f"{self.ask.decision} Decided: keep v1"
+        [made] = self.adr_beads()
+        assert f"{self.ask.decision} Decided: keep v1" in made.description
         assert len([r for r in self.asks.history(self.ask.id) if r.event == "stick"]) == 1
 
-    def test_an_adr_of_a_later_ask_is_numbered_on(self) -> None:
-        self.verbs.stick(self.ask.id, Stick.ADR, "one")
-        again = must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), raiser.Asking(
-            bead=BeadId("t-1"), run="r", brief_hash="h", repo=REPO, title="Saves", now=T + 20))[0])
-        self.verbs.answer(BeadId("t-1"), "text", "migrate")
-        self.verbs.stick(again.id, Stick.ADR, "two")
-        assert [(a.id, a.text) for a in self.stores.adrs(REPO).all()] == [("ADR-1", "one"), ("ADR-2", "two")]
+    def test_an_ask_whose_decision_has_landed_is_linked_to_it_and_no_second_bead_is_filed(self) -> None:
+        landed = self.stores.adrs(REPO).add(Adr(id="", n=0, repo=REPO, text="v1", question=Q, answer="v1", ask=self.ask.id, bead="t-1",
+                                                key="k", t=T))
+        assert self.verbs.stick(self.ask.id, Stick.ADR, "again") == ""
+        assert (self.adr_beads(), self.last().outcome_ref) == ([], landed.id)
 
     def test_factory_files_a_bead_in_the_task_loop_repo_and_the_current_bead_does_not_wait(self) -> None:
         assert self.verbs.stick(self.ask.id, Stick.FACTORY, "bead template: say which save format") == ""
@@ -98,7 +99,7 @@ class Stick_(Case):
         assert "ADR-n" in self.verbs.stick(self.ask.id, Stick.REF)  # nothing matched, nothing named
         assert "ADR-9 is not a decision" in self.verbs.stick(self.ask.id, Stick.REF, "ADR-9")
         assert self.verbs.stick(self.ask.id, Stick.REF, made.id) == ""
-        assert (must(adrs.get(made.id)).refs, self.last().outcome_ref) == ([self.ask.id], made.id)
+        assert self.last().outcome_ref == made.id
 
     def test_ref_defaults_to_the_decision_the_ask_matched(self) -> None:
         adrs = self.stores.adrs(REPO)
@@ -110,7 +111,7 @@ class Stick_(Case):
         self.beads.beads[BeadId("t-2")] = Bead(id=BeadId("t-2"), title="x", status="blocked")
         self.verbs.answer(BeadId("t-2"), "text", "v1")
         assert self.verbs.stick(second.id, Stick.REF) == ""
-        assert must(adrs.get(made.id)).refs == [second.id]
+        assert self.asks.history(second.id)[-1].outcome_ref == made.id
 
     def test_demote_and_once_record_the_outcome_only(self) -> None:
         for outcome, event in ((Stick.DEMOTE, "demote"), (Stick.ONCE, "stick")):
@@ -131,4 +132,5 @@ class Stick_(Case):
             bead=BeadId("t-1"), run="r2", brief_hash="h2", repo=REPO, title="Saves", now=T + 40))[0])
         assert self.verbs.stick(self.ask.id, Stick.ADR, "still v1") == ""
         assert must(self.asks.get(BeadId("t-1"))).outcome is None  # the newer ask is untouched
-        assert self.stores.adrs(REPO).all()[0].ask == self.ask.id
+        [made] = self.adr_beads()
+        assert f"- Ask: {self.ask.id}\n" in made.description

@@ -1,11 +1,11 @@
 """The brief renderer: the text stays byte-identical to the golden set, and the section boundaries cover it exactly."""
 import sys
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -121,7 +121,7 @@ class FitsTheLimit(Case):
     def test_export_warns_naming_the_bead_text_size_when_the_text_alone_is_over_the_limit(self):
         bead = Bead(id=BeadId("t-1"), title="T", status="open", description="d" * 7000)
         warns, notes = [], []
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             store = SimpleNamespace(comments=lambda i: [Comment(author="a", text="one"), Comment(author="a", text="two")],
                                     show=lambda i: bead)
             host = SimpleNamespace(

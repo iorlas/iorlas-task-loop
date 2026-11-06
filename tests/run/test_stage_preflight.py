@@ -1,12 +1,12 @@
 """Hand stage runs must disclose WIP and preview without opening an engine."""
 import io
 import sys
-import tempfile
 from argparse import Namespace
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -34,7 +34,7 @@ from taskloop.contracts.runrows import RunRows
 @stdout_in("output")
 class StagePreflight(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
         self.wt = self.root / "worktree"
