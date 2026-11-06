@@ -15,6 +15,7 @@ import resource
 import shutil
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -181,7 +182,21 @@ WORK_S = pytest.StashKey[float]()
 
 
 @pytest.fixture(autouse=True)
-def case_helpers(request, procs):
+def no_leaked_threads(filesystem_cache, procs):
+    """A thread a test started and left running (a Lease heartbeat nobody stopped and joined) goes on using the stores the test's teardown
+    closes, and crashes the worker in sqlite3 later, in another test: the test that leaked it fails instead. It requests the fixtures that
+    close those stores so that it is checked before they are undone."""
+    before = set(threading.enumerate())
+    yield
+    left = [t for t in threading.enumerate() if t not in before]
+    for t in left:
+        t.join(0.5)
+    left = [t.name for t in left if t.is_alive()]
+    assert not left, f"the test left threads running: {left}; stop and join them before it ends"
+
+
+@pytest.fixture(autouse=True)
+def case_helpers(request, procs, no_leaked_threads):
     """The unittest names the plain test classes still use: self.addCleanup (runs last-in-first-out after the test and its teardown_method),
     self.enterContext, self.subTest (pytest's `subtests`), self._testMethodName and self.id(). It depends on `procs` so that the cleanups,
     which undo patches made in setup_method on top of the process sim, run before the sim is uninstalled."""
