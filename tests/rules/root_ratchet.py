@@ -53,9 +53,10 @@ def file_counts(rel: str, tree: ast.Module) -> dict[str, int]:
 def offenders(root: Path = ROOT) -> list[str]:
     """Every root file, worst first: 'rel: branches, long functions, sloc' (the list the ratchet is judged against)."""
     rows = []
-    for path in sorted((root / "src").rglob("*.py")) + [root / "skills/task-loop/tl.py"]:
+    for path in [*sorted((root / "src").rglob("*.py")), root / "skills/task-loop/tl.py"]:
         rel = path.relative_to(root).as_posix()
         c = file_counts(rel, ast.parse(path.read_text(encoding="utf-8")))
         if c:
-            rows.append((c["branch"] + 5 * c["long_function"], f"{rel}: {c['branch']} branches, {c['long_function']} long functions, {c['sloc']} sloc"))
+            said = f"{rel}: {c['branch']} branches, {c['long_function']} long functions, {c['sloc']} sloc"
+            rows.append((c["branch"] + 5 * c["long_function"], said))
     return [r for _, r in sorted(rows, reverse=True)]
