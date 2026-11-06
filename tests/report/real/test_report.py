@@ -44,7 +44,7 @@ from taskloop.app.report import card, inputs  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop.contracts.ids import BeadId, RunId  # noqa: E402
-from taskloop.contracts.landed import Landed, LandedStore  # noqa: E402
+from taskloop.contracts.landed import Landed  # noqa: E402
 from taskloop.contracts.run import RunState  # noqa: E402
 from taskloop.contracts.trace import RunTrace  # noqa: E402
 
@@ -69,6 +69,7 @@ def commit(repo, name, text, msg, t):
 
 class Base(Case):
     def setup_method(self):
+        self.landings: dict[str, Landed] = {}
         self.tmp = tempfile.TemporaryDirectory()
         self.home = Path(self.tmp.name)
         env = {"XDG_CONFIG_HOME": str(self.home / "cfg"), "APPDATA": str(self.home / "cfg"),
@@ -103,7 +104,9 @@ class LostWork(Base):
         return shas
 
     def lost(self, status, traces=(), since=None):
-        return lost.lost_work(str(self.repo), "main", status.get, list(traces), RealGit(snapshot()), homes.cfg(), since=since)
+        return lost.lost_work(str(self.repo), "main", status.get, list(traces), RealGit(snapshot()),
+                              self.landings.get, since=since)
+
 
     def by_class(self, rows):
         out = {}
@@ -150,13 +153,13 @@ class LostWork(Base):
     def test_the_landed_record_covers_the_branch_whatever_the_land_title_says(self):
         self.branch("task/t-1", [("f.txt", "one\n", "wip (t-1): blocked")], T0)
         land = self.squash_land("a title the bead lost")
-        LandedStore(homes.config_dir()).put(Landed(bead=BeadId("t-1"), sha=land, base="main", t=T0 + 31 * MIN))
+        self.landings["t-1"] = Landed(bead=BeadId("t-1"), sha=land, base="main", t=T0 + 31 * MIN)
         assert set(self.by_class(self.lost({"t-1": "closed"}))) == {"landed"}
 
     def test_a_record_whose_sha_is_not_on_the_base_is_no_land(self):
         self.branch("task/t-1", [("f.txt", "one\n", "wip (t-1): blocked")], T0)
         off = self.branch("task/other", [("g.txt", "x\n", "other")], T0)[0]
-        LandedStore(homes.config_dir()).put(Landed(bead=BeadId("t-1"), sha=off, base="main", t=T0 + 31 * MIN))
+        self.landings["t-1"] = Landed(bead=BeadId("t-1"), sha=off, base="main", t=T0 + 31 * MIN)
         assert "lost" in self.by_class(self.lost({"t-1": "closed"}))
 
     def test_a_revert_that_names_the_bead_is_no_land(self):
