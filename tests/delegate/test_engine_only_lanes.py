@@ -216,7 +216,7 @@ class RoutingTest(Case):
 
 class OpenCodeReadRootsTest:
     def outside(self, write: bool, roots: tuple[str, ...] = ()):
-        return box.permissions(write, (), roots)["external_directory"]
+        return box.permissions(box.Sandbox(), write, (), roots)["external_directory"]
 
     def test_a_write_step_reads_nothing_outside_its_cwd_without_a_root(self):
         assert self.outside(True) == "deny"
