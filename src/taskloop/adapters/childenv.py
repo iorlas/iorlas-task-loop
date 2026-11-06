@@ -127,7 +127,7 @@ def check_environment(base: Mapping[str, str], extra: Mapping[str, str] | None =
 # Registered names that differ run to run without changing what a check does (paths of this run, ids of this process): not part of a
 # result's identity. Every other registered name that reaches the child is.
 PER_RUN = frozenset({EnvVar.TL_ARTIFACT_DIR, EnvVar.TL_ARTIFACT_STEP, EnvVar.TL_RUN_ID, EnvVar.TL_RUN_DIR, EnvVar.TL_ATTEMPT,
-                     EnvVar.TL_WORKTREE, EnvVar.TL_BRANCH,
+                     EnvVar.TL_WORKTREE, EnvVar.TL_BRANCH, EnvVar.TL_JUDGE_TL,
                      EnvVar.TL_REEXEC, EnvVar.TL_LOOP_STATE,
                      EnvVar.TL_RELEASE_REEXEC, EnvVar.TASK_LOOP_SLOT_BEAD, EnvVar.TASK_LOOP_ACTOR, EnvVar.TASK_LOOP_SESSION,
                      EnvVar.TASK_LOOP_LOOP_PID, EnvVar.TASK_LOOP_LOOP_ID, EnvVar.TASK_LOOP_WORKER})
