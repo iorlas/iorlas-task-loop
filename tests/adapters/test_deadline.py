@@ -1,6 +1,5 @@
 """Nested wall limits cannot cancel or extend the run's enclosing deadline."""
 import subprocess
-import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -11,6 +10,7 @@ import stream_proc
 import support.paths  # noqa: F401
 from support.case import Case
 from support.fake_deadline import FakeDeadline
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import procs, runner
 from taskloop.adapters.deadline import DeadlineExpired, deadline, remaining
@@ -74,7 +74,7 @@ class Deadlines(Case):
             return mock.Mock(survivors=[])
 
         request = runner.api.RunRequest(role="worker", brief_file="b.md", cwd=".")
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(runner.api, "run", hung), \
+        with TemporaryDirectory() as tmp, mock.patch.object(runner.api, "run", hung), \
                 mock.patch.object(runner.api, "cancel", cancel), mock.patch.object(runner, "POLL_S", 0.01), \
                 pytest.raises(DeadlineExpired) as expired, deadline(0.02, "land judge"):
             runner.ApiRunner(Path(tmp) / "stderr", wall=60)(["judge"], request=request)

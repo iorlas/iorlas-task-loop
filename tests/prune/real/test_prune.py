@@ -3,13 +3,13 @@ trees and release branches go, nothing is forced, --dry-run only says, and a sec
 import os
 import subprocess
 import sys
-import tempfile
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
@@ -80,7 +80,7 @@ class Store:
 
 class Trees(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         self.origin, self.repo, self.build = self.root / "origin.git", self.root / "repo", self.root / "wt"

@@ -1,7 +1,6 @@
 """Attempt rows share the manifest's atomic ownership and terminal writes."""
 
 import os
-import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier
@@ -11,6 +10,7 @@ import pytest
 import support.paths  # noqa: F401
 from support.case import Case
 from support.narrow import must
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.contracts import attemptrows, factorydb
 from taskloop.contracts.enums import Outcome, Result
@@ -22,7 +22,7 @@ from taskloop.contracts.run import RunFinish, RunState
 
 class AttemptRows(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.cfg = ConfigDir(Path(tmp.name))
         self.where = RunLocator(self.cfg)

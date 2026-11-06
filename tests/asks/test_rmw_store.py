@@ -3,13 +3,13 @@ refused unless it says so, and a line appended while a log is pruned survives (u
 import json
 import os
 import sys
-import tempfile
 import threading
 import time
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -56,7 +56,7 @@ class SlowDocs:
 
 class Asks(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.cfg = ConfigDir(tmp.name)
         AskStore.at(self.cfg).file(S.ASK.replace(status=AskStatus.OPEN, answer=None, answered=None, consumed=None))
@@ -124,7 +124,7 @@ def during(real, fn):
 
 class Logs(Case):
     def test_a_usage_row_appended_during_prune_survives(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         cfg = ConfigDir(tmp.name)
         h = UsageHistory(cfg)
@@ -138,7 +138,7 @@ class Logs(Case):
         assert [r.at for r in h.rows()] == [T, T + 7]
 
     def test_an_event_appended_during_prune_survives(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp.name, "CLAUDE_CODE_SESSION_ID": "abcdef12-3456"}):
             f = ConfigDir(Path(tmp.name) / "task-loop").events()

@@ -1,6 +1,5 @@
 """RunRows uses shared factory writers for atomic domain updates."""
 
-import tempfile
 import time
 from pathlib import Path
 
@@ -8,6 +7,7 @@ import pytest
 import support.paths  # noqa: F401
 from support.case import Case
 from support.narrow import must
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.contracts import factorydb
 from taskloop.contracts.paths import ConfigDir
@@ -18,7 +18,7 @@ from taskloop.contracts.runrows import RunRows
 class SharedWriterTest(Case):
     def setup_method(self):
         factorydb.close_shared()
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.addCleanup(factorydb.close_shared)
         self.cfg = ConfigDir(Path(tmp.name))

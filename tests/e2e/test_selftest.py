@@ -5,11 +5,11 @@ import io
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "skills" / "task-loop"
@@ -23,7 +23,7 @@ import tl  # noqa: E402
 
 class SelfTest(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.home = Path(os.path.realpath(self.tmp.name))
         p = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(self.home / "cfg"), "HOME": str(self.home)})

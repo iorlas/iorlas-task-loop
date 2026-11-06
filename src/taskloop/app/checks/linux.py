@@ -24,6 +24,7 @@ from taskloop.domain.checks.matchers import safe_name
 EXECUTOR_DOWN_RC = 255  # ssh's own code for "could not connect": the check did not run
 TAIL_LINES = 40
 WALL_RC = 124
+STALE_DAYS = 7
 SETUP_S = 1800  # the executor's setup (uv sync, mise install) may take this long
 SETUP_FAILED_RC = 1
 STEP_S = 120  # a prepare step (probe, init, checkout) that takes longer means the executor is not answering
@@ -73,10 +74,11 @@ class LinuxRun:
         attempt = f"{run_id}-{safe_name(step)}"
         remote_art = ""
         try:
-            home = self._prepare(wt, repo, slot, sha, run_id)
+            home = self._prepare(wt, repo, slot, sha, attempt)
             remote_art = f"{home}/{self.cfg.root}/{repo}/.artifacts/{attempt}"
             self._must(["mkdir", "-p", remote_art])
         except SetupFailed as err:
+            self._release(repo, attempt)
             log.write_text(f"{err}\n", encoding="utf-8")
             return Remote(SETUP_FAILED_RC, str(err))
         except ExecutorDown as err:
@@ -96,10 +98,18 @@ class LinuxRun:
                                                   *[f"{k}={v}" for k, v in env.items()], *argv], tty=True),
                                        on_output=on_output, timeout_s=timeout_s, stop=stop)
         rc = WALL_RC if done.timed_out == "wall" else done.returncode if done.returncode is not None else -(done.signal or 1)
-        return Remote(rc, "\n".join(tail) + self._fetch(remote_art, artifact_dir), stopped=done.timed_out == "stopped",
-                      wall_hit=done.timed_out == "wall")
+        text = "\n".join(tail) + self._fetch(remote_art, artifact_dir)
+        self._release(repo, attempt)  # the artifacts are here now: the run's refs and files go with the run
+        return Remote(rc, text, stopped=done.timed_out == "stopped", wall_hit=done.timed_out == "wall")
 
-    def _prepare(self, wt: str, repo: str, slot: str, sha: str, run_id: str) -> str:
+    def _release(self, repo: str, attempt: str) -> None:
+        """Best effort, never a verdict: this attempt's ref in the bare repo and its artifact directory on the executor. The commit stays
+        reachable from the slot's worktree for as long as that worktree has it checked out."""
+        base = f"{self.cfg.root}/{repo}"
+        self._ssh_run(["git", "-C", f"{base}.git", "update-ref", "-d", f"refs/tl/{attempt}"])
+        self._ssh_run(["rm", "-rf", f"{base}/.artifacts/{attempt}"])
+
+    def _prepare(self, wt: str, repo: str, slot: str, sha: str, attempt: str) -> str:
         """The commit is on the executor and checked out in the slot's worktree; the executor's home directory."""
         cfg = self.cfg
         if not cfg.host:
@@ -107,8 +117,11 @@ class LinuxRun:
         home = self._must(["pwd"]).strip()  # also the probe: an executor that does not answer ends here
         bare, work = f"{home}/{cfg.root}/{repo}.git", f"{home}/{cfg.root}/{repo}/{slot}"
         self._must(["git", "init", "--bare", "-q", bare])
+        # what a crashed engine left (a run releases its own): artifact directories nobody has touched for STALE_DAYS
+        self._ssh_run(["find", f"{home}/{cfg.root}/{repo}/.artifacts", "-mindepth", "1", "-maxdepth", "1", "-mtime", f"+{STALE_DAYS}",
+                       "-exec", "rm", "-rf", "{}", "+"])
         try:
-            self.git.push(wt, f"{cfg.host}:{bare}", f"{sha}:refs/tl/{run_id}")
+            self.git.push(wt, f"{cfg.host}:{bare}", f"{sha}:refs/tl/{attempt}")
         except SlotGitError as err:
             raise ExecutorDown(str(err)) from err
         if self._ssh_run(["test", "-d", work]).exit == 0:  # the slot's worktree stays between runs: its caches are the speed

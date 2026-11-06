@@ -7,7 +7,6 @@ import shutil
 import stat
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import unittest
@@ -16,6 +15,7 @@ from pathlib import Path
 
 import support.paths  # noqa: F401
 from support import homes
+from support.tmpdir import TemporaryDirectory
 
 # isort: split
 import contextlib
@@ -43,7 +43,7 @@ PYTEST_RED = ("FAILED tests/test_red.py::R::test_red_one - AssertionError: boom\
 @pytest.mark.skipif(os.name == "nt", reason="the lock is fcntl")
 class Release(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.rmtree)
         h = self.home = Path(self.tmp.name)
         self.origin, self.seed, self.repo = h / "o.git", h / "seed", h / "repo"

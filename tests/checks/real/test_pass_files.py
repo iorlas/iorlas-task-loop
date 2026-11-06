@@ -4,19 +4,19 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 from support.case import Case
 from support.checked import run_checked
 from support.tlmain import tl_main
+from support.tmpdir import TemporaryDirectory
 
 SEES = "import sys; open(sys.argv[1], 'a').write(' '.join(f'{p}={open(p).read().strip()}' for p in sys.argv[2:]) + '\\n')"
 
 
 class PassFiles(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.repo = Path(self.tmp.name, "repo")
         self.repo.mkdir()
