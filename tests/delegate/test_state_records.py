@@ -12,7 +12,6 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-import stream_proc
 from any_agent import reset_parse
 from any_agent.classify import Outcome
 from any_agent.harnesses.codex import CodexHarness
@@ -25,7 +24,10 @@ from delegate.contracts import codec, stores
 from delegate.contracts import history as hist
 from delegate.domain.health import ledger as health_ledger
 from delegate.domain.lanes.lane import Lane
+from support import fake_worker
 from support.case import Case
+from support.fake_clock import SteppingClock
+from support.fake_worker import Err, Exit, Jump
 from support.procsim import real_proc
 
 import hermetic  # noqa: F401  (a home of its own for every test)
@@ -298,8 +300,8 @@ class ConfigLocation(Case):
 
 
 class WatchdogProc(Case):
-    """delegate-go0 on a real child process (python, so it runs on Windows too): a dead stream is stopped through stop_tree,
-    a chatty one is not."""
+    """delegate-go0 on a worker that is a script (tests/support/fake_worker.py) with the fake clock: a dead stream is stopped through the
+    tree stop, a chatty one is not."""
 
     def setup_method(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -308,28 +310,30 @@ class WatchdogProc(Case):
         p.start()
         self.addCleanup(p.stop)
 
-    def run_child(self, code, **limits):
+    def run_worker(self, *script, **limits):
+        clock = SteppingClock(0.25)
         with short_limits("codex", **limits):
-            sup = Supervisor(CodexHarness(), RunHooks(), LiveSink("codex", ""), limits=harnesses.LIMITS["codex"])
-        with mock.patch.object(stream_proc, "stop_tree", wraps=stream_proc.stop_tree) as st:
-            t0 = time.time()
-            out = sup.run(LaunchSpec(argv=[sys.executable, "-c", code], env=dict(os.environ), cwd=self.tmp.name, stdin=""), 0)
-        return out.rc, {"why": out.watch.why, "kind": out.watch.kind}, st, time.time() - t0
+            sup = Supervisor(CodexHarness(), RunHooks(), LiveSink("codex", ""), limits=harnesses.LIMITS["codex"], clock=clock)
+        with fake_worker.install(list(script), clock=clock) as started:
+            out = sup.run(LaunchSpec(argv=["codex"], env=dict(os.environ), cwd=self.tmp.name, stdin=""), 0)
+        return out.rc, {"why": out.watch.why, "kind": out.watch.kind}, started[0]
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_dead_stream_is_stopped_through_stop_tree(self):
-        rc, state, st, _secs = self.run_child("import time;print('started',flush=True);time.sleep(60)", first_event_s=5, silence_s=1)
+    def test_dead_stream_is_stopped_through_the_tree_stop(self):
+        rc, state, worker = self.run_worker("started", first_event_s=5, silence_s=1)
         assert (state["why"], state["kind"]) == ("hung", "silence")
-        assert st.called
+        assert worker.stopped
         assert rc != 0
 
-    @real_proc("delegate: a worker, git or CLI process")
-    def test_a_child_that_prints_nothing_is_hung_on_the_first_event_deadline(self):
-        _rc, state, _st, _secs = self.run_child("import time;time.sleep(60)", first_event_s=1, silence_s=60)
+    def test_a_worker_that_prints_nothing_is_hung_on_the_first_event_deadline(self):
+        _rc, state, _worker = self.run_worker(first_event_s=1, silence_s=60)
         assert (state["why"], state["kind"]) == ("hung", "first_event")
 
-    @real_proc("delegate: a worker, git or CLI process")
     def test_stderr_deltas_keep_a_quiet_stdout_alive(self):
-        code = "import sys,time\nfor i in range(8):\n sys.stderr.write('thinking\\n');sys.stderr.flush();time.sleep(0.4)"
-        rc, state, st, _secs = self.run_child(code, first_event_s=5, silence_s=1)
-        assert (rc, state["why"], st.called) == (0, None, False)
+        beat = [step for _ in range(8) for step in (Jump(0.4), Err("thinking"))]
+        rc, state, worker = self.run_worker(*beat, Exit(0), first_event_s=5, silence_s=1)
+        assert (rc, state["why"], worker.stopped) == (0, None, False)
+        quiet = [step for _ in range(8) for step in (Jump(0.4),)]  # the same gaps with nothing printed: the silence limit is real
+        _rc, state, worker = self.run_worker("started", *quiet, first_event_s=5, silence_s=1)
+        assert (state["why"], worker.stopped) == ("hung", True)
+
+
