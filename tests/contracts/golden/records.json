@@ -1563,6 +1563,7 @@
      "lane": "",
      "needs": [],
      "pass_files": false,
+     "closure_cmd": [],
      "fix": []
     },
     {
@@ -1593,6 +1594,7 @@
       "unity"
      ],
      "pass_files": false,
+     "closure_cmd": [],
      "fix": []
     }
    ],
@@ -1612,6 +1614,10 @@
    },
    "slot_env": {},
    "host": false,
+   "queued_match": "",
+   "lock_fail": "",
+   "slow_cmd": "",
+   "project_log": "",
    "worker_rules": "",
    "test_pattern": "^\\s*(def test_|async def test_|\\[(Test|UnityTest|Fact|Theory|TestMethod|TestCase)\\b|#\\[test\\]|(it|test)\\(|func Test)",
    "area_label_prefix": "",

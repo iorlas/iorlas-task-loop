@@ -10,6 +10,7 @@ import shutil
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import procs
@@ -30,6 +31,24 @@ class BdRun:
 
 
 Runner = Callable[[list[str], str | None], BdRun]
+VERSION = re.compile(r"(\d+)\.(\d+)\.(\d+)")
+
+
+def db_version(cwd: str | None) -> str:
+    """The bd version that last wrote the database (.beads/.local_version), found from `cwd` up and, for a linked git worktree,
+    in the main checkout; '' when there is none or no directory is named."""
+    if not cwd:
+        return ""
+    here = Path(cwd).resolve()
+    for d in (here, *here.parents):
+        if (d / ".beads" / ".local_version").is_file():
+            return (d / ".beads" / ".local_version").read_text(encoding="utf-8").strip()
+        link = d / ".git"
+        if link.is_file() and link.read_text(encoding="utf-8").startswith("gitdir:"):
+            main = Path(link.read_text(encoding="utf-8").split(":", 1)[1].strip()).parents[2]  # <main>/.git/worktrees/<name>
+            seen = main / ".beads" / ".local_version"
+            return seen.read_text(encoding="utf-8").strip() if seen.is_file() else ""
+    return ""
 
 
 def subprocess_runner(argv: list[str], cwd: str | None, timeout: float | None = None) -> BdRun:
@@ -184,7 +203,21 @@ class BdStore:
         return BdStore(self.actor, cwd, self.exe, self._run, self.timeout)
 
     def _call(self, *args: str) -> BdRun:
-        return self._run([self.exe, "--actor", self.actor, *args, "--json"], self.cwd)
+        r = self._run([self.exe, "--actor", self.actor, *args, "--json"], self.cwd)
+        if r.code == 0:
+            return r
+        older = self._older_than_db()
+        return BdRun(r.code, r.out, f"{older}\n{r.err}") if older else r
+
+    def _older_than_db(self) -> str:
+        """After a failed call: 'bd X at PATH is older than the db's Y; fix PATH' when this bd is older than the one that wrote the db."""
+        wrote = VERSION.search(db_version(self.cwd))
+        if not wrote:
+            return ""
+        have = VERSION.search(self._run([self.exe, "--version"], self.cwd).out)
+        if have and tuple(map(int, have.groups())) < tuple(map(int, wrote.groups())):
+            return f"bd {'.'.join(have.groups())} at {self.exe} is older than the db's {'.'.join(wrote.groups())}; fix PATH"
+        return ""
 
     def _must(self, *args: str) -> BdRun:
         r = self._call(*args)

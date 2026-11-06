@@ -1,6 +1,7 @@
 """Which tests a change can break: the files a diff changed, followed up the import graph to the test files that reach them.
 
     python3 dev/affected.py [--base REV [--head REV]] [--root DIR] [--changed PATH ...]    prints the test files, one per line
+    python3 dev/affected.py ... --closure                                                    prints the files those tests depend on instead
 
 The changed files are the diff against BASE (default: the merge base of HEAD and origin/main; no origin/main: HEAD), the working tree
 and the untracked files included, or exactly the PATHs given with --changed. The graph is read from the syntax trees under `--root`
@@ -221,15 +222,47 @@ def select(repo, changed):
     return sorted(chosen)
 
 
+CONFIG_FILES = ("pyproject.toml", "uv.lock", "mise.toml", "mise.lock", ".importlinter", "ruff.toml", "pyrefly.toml", "justfile",
+                ".task-loop.json")
+
+
+def closure(repo, tests, tracked=None):
+    """Every file the result of running `tests` can depend on, sorted: the tests (those of the always-run tests/rules folder left out: they
+    read the whole tree and are a check of their own), the conftest.py above each, everything they import (forward, lazy imports too),
+    every non-Python file under tests/ and every one a reached file names by basename, and the root config files. Deliberately wide: a
+    file in the closure that did not matter costs a rerun, a file that mattered and is missing is a wrong pass."""
+    tests = [t for t in tests if not t.startswith(ALWAYS + "/")]
+    reached = set(tests)
+    for t in tests:
+        parts = t.split("/")
+        reached |= {c for c in ("/".join([*parts[:i], "conftest.py"]) for i in range(1, len(parts))) if c in repo.trees}
+    todo = list(reached)
+    while todo:
+        for target in repo.edges.get(todo.pop(), ()):
+            if target not in reached:
+                reached.add(target)
+                todo.append(target)
+    named = set().union(*(repo.mentions.get(p, set()) for p in reached)) if reached else set()
+    if tracked is None:
+        listed = git(repo.root, "ls-files")
+        tracked = listed.split("\n") if listed is not None else [p.relative_to(repo.root).as_posix() for p in repo.root.rglob("*")]
+    data = {p for p in tracked if p and not p.endswith(".py") and not SKIP_PARTS & set(p.split("/"))
+            and (p.startswith("tests/") or Path(p).name in named or p in CONFIG_FILES)}
+    return sorted(p for p in reached | data if (repo.root / p).is_file())
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="affected.py", description=(__doc__ or "").split("\n\n")[0])
     ap.add_argument("--root", default=str(Path(__file__).resolve().parent.parent), help="the checkout to read (default: this one)")
     ap.add_argument("--base", help="the revision to diff against (default: merge base of HEAD and origin/main)")
     ap.add_argument("--head", help="diff BASE..HEAD instead of BASE and the working tree")
     ap.add_argument("--changed", nargs="*", help="exactly these paths, no git")
+    ap.add_argument("--closure", action="store_true", help="print the files the selected tests can depend on, not the tests")
     args = ap.parse_args(argv)
     changed = set(args.changed) if args.changed is not None else changed_files(args.root, base_of(args.root, args.base), args.head)
-    print("\n".join(select(Repo(args.root), changed)))
+    repo = Repo(args.root)
+    chosen = select(repo, changed)
+    print("\n".join(closure(repo, chosen) if args.closure else chosen))
     return 0
 
 
