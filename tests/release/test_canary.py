@@ -1,5 +1,4 @@
 """Origin-backed canary acknowledgements and emergency rollback."""
-import tempfile
 from dataclasses import replace
 from pathlib import Path
 from unittest import mock
@@ -8,6 +7,7 @@ import pytest
 import support.paths  # noqa: F401
 from support.case import Case
 from support.shells import quiet_shell
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.release import canary, pins
 from taskloop.app.release.shell import Abort
@@ -19,7 +19,7 @@ from taskloop.contracts.snapshots import Pin
 
 class Canary(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.config = Path(tmp.name) / "task-loop"
         self.git = mock.Mock()
@@ -57,7 +57,7 @@ class Canary(Case):
 
     def test_mac_pin_is_refused_until_canary_acknowledgement(self):
         env = Env({"XDG_CONFIG_HOME": str(self.config.parent), "CLAUDE_CONFIG_DIR": str(self.config.parent / "claude")})
-        with mock.patch.object(pins.sys, "platform", "darwin"), \
+        with mock.patch.object(pins, "on_mac", return_value=True), \
                 mock.patch.object(pins, "installed_version", return_value="1.2.2"), \
                 mock.patch.object(pins, "cache_dirs", return_value={"1.2.3": Path("/installed")}):
             _, why = pins.set_pin(env, "1.2.3", git=self.git)
@@ -77,7 +77,7 @@ class Canary(Case):
 
     def test_installing_a_version_does_not_authorize_the_first_standing_pin(self):
         env = Env({"XDG_CONFIG_HOME": str(self.config.parent), "CLAUDE_CONFIG_DIR": str(self.config.parent / "claude")})
-        with mock.patch.object(pins.sys, "platform", "darwin"), \
+        with mock.patch.object(pins, "on_mac", return_value=True), \
                 mock.patch.object(pins, "installed_version", return_value="1.2.3"), \
                 mock.patch.object(pins, "cache_dirs", return_value={"1.2.3": Path("/installed")}):
             _, why = pins.set_pin(env, "1.2.3", git=self.git)
@@ -88,7 +88,7 @@ class Canary(Case):
     def test_mac_rollback_and_night_repin_need_no_network_or_new_acknowledgement(self):
         env = Env({"XDG_CONFIG_HOME": str(self.config.parent), "CLAUDE_CONFIG_DIR": str(self.config.parent / "claude")})
         pins.pin_store(env).write(Pin(task_loop="1.2.4"))
-        with mock.patch.object(pins.sys, "platform", "darwin"), \
+        with mock.patch.object(pins, "on_mac", return_value=True), \
                 mock.patch.object(pins, "previous_version", return_value="1.2.3"), \
                 mock.patch.object(pins, "cache_dirs", return_value={"1.2.3": Path("/old"), "1.2.4": Path("/new")}):
             assert pins.run_rollback(env, self.git) == 0

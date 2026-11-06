@@ -2,10 +2,10 @@
 import contextlib
 import json
 import sys
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -28,7 +28,7 @@ class ProfilesOnTheSim(Case):
         sim = gitsim.Sim(self)
         sim.install(stack)
         self.addCleanup(sim.check)
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.home = Path(tmp.name).resolve()
         gitsim.new_world(self.home)

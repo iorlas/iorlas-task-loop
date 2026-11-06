@@ -139,6 +139,9 @@ class LandTry(LogRec, tag="land_try"):
     rebase_moved: bool = False
     failing: str = ""  # "gate", "conflict" or "verify": a fix round; "stale": main moved under the outside gate; "": on to the push
     gate: str = ""  # where the gate ran: "outside" the lock, "inside" it, "cached" (passed on this tree and base before); "" none
+    fetch_s: float = 0.0  # seconds of the try's fetch, of its rebase (with the already-landed look between), and of its gate
+    rebase_s: float = 0.0
+    gate_s: float = 0.0
 
 
 @final
