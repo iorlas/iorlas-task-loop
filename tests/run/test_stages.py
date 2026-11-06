@@ -29,6 +29,7 @@ from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.wire import slots as wslots
 from taskloop.app.write.handoff import HANDOFF_CAP
+from taskloop.contracts import rundocs
 from taskloop.contracts.answers import IRREVERSIBLE
 from taskloop.contracts.argv import argv_of
 from taskloop.contracts.config import EngineConfig
@@ -236,8 +237,8 @@ class Handoff(StagesTest):
         assert "<rounds>" in amend
         assert "tried the rename" in amend
         assert "bad_checks" in amend
-        handoff = json.loads((self.eng.run_dir / "handoff.json").read_text())
-        assert handoff["rounds"][0]["kind"] == "bad_checks"
+        handoff = must(rundocs.handoff(self.eng.home, self.eng.run_id).get())
+        assert handoff.rounds[0].kind == "bad_checks"
 
     def test_a_low_finding_is_not_listed_again_by_the_next_review(self):
         first = dict(CLEAN, findings=[te.finding("high"), dict(te.finding("low"), fix="rename the helper")])

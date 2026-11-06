@@ -6,11 +6,10 @@ import hashlib
 from collections.abc import Sequence
 from typing import Any
 
+from taskloop.contracts import rundocs
 from taskloop.contracts.config import FRESH_ABOVE_K
-from taskloop.contracts.paths import RunFiles
 from taskloop.contracts.ports import Git
 from taskloop.contracts.run import HandoffMirror, Round
-from taskloop.contracts.stores import JsonStore
 from taskloop.domain.prompts.write import DONE_SO_FAR, STAGES_DONE, WRITE_RESUME_PROMPT
 from taskloop.domain.review.findings import blocks
 
@@ -117,6 +116,6 @@ class Handoff:
     def save(self) -> None:
         with contextlib.suppress(OSError):
             h = self.e.handoff
-            JsonStore(RunFiles(self.e.run_dir).handoff(), HandoffMirror).write(HandoffMirror(
+            rundocs.handoff(self.e.home, self.e.run_id).write(HandoffMirror(
                 rounds=list(h.rounds), seen_lows=list(h.seen_lows),
                 deferred=[{"what": t, "why": w} for t, w in self.e.routing.ledger().deferred()], filed=list(self.e.filed)))

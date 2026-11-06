@@ -20,7 +20,7 @@ from taskloop.contracts.paths import ConfigDir
 
 TABLES = {
     "source", "bead", "run", "attempt", "step", "lease", "check_pass",
-    "check_round", "ask", "ask_ledger", "kv", "effect", "wait", "signal", "checkpoint",
+    "check_round", "ask", "ask_ledger", "kv", "effect", "wait", "signal", "checkpoint", "timed",
 }
 INDEXES = {
     "run_bead", "run_recent", "run_live", "bead_status", "check_tree", "ask_live",
@@ -84,9 +84,9 @@ class FactoryDbTest(Case):
     def test_wrong_version_is_rejected_without_replacing_it(self):
         con = self.rw()
         con.execute("PRAGMA user_version=99")
-        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v4.*update it"):
+        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v5.*update it"):
             factorydb.open_rw(self.path)
-        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v4.*update it"):
+        with pytest.raises(factorydb.DatabaseError, match=r"factory\.db is schema v99.*knows v5.*update it"):
             factorydb.open_ro(self.path)
         assert con.execute("PRAGMA user_version").fetchone() == (99,)
 
@@ -105,7 +105,7 @@ class FactoryDbTest(Case):
     def test_reader_names_schema_errors_as_database_unavailable(self):
         con = self.rw()
         con.execute("PRAGMA user_version=99")
-        expected = "database unavailable: factory.db is schema v99, this code knows v4: update it"
+        expected = "database unavailable: factory.db is schema v99, this code knows v5: update it"
         assert factorydb.database_error(self.path, 1) == expected
         assert factorydb.run_rows(self.path, 1) == ([], expected)
 
@@ -211,6 +211,7 @@ class FactoryDbTest(Case):
         con.execute("INSERT INTO step(run,key,try,attempt,status,started,ended) VALUES (?,'s',1,1,'ok',1,2)", (run,))
         con.execute("INSERT INTO effect(key,run,name,state,intent_at,done_at) VALUES (?,?,'e','done',1,2)", (run, run))
         con.execute("INSERT INTO check_round(run,round,ts,body) VALUES (?,1,2,'{}')", (run,))
+        con.execute("INSERT INTO timed(run,bead,kind,name,exec_s,wait_s,t) VALUES (?,?,'step','s',1,0,2)", (run, run))
 
     def test_prune_deletes_old_finished_history_and_returns_counts(self):
         con = self.rw()
@@ -219,7 +220,7 @@ class FactoryDbTest(Case):
         con.execute("INSERT INTO ask_ledger(t,event,ask,bead,body,origin) VALUES (2,'answer','a','old','{}','o')")
         con.execute("INSERT INTO ask_ledger(t,event,body,origin) VALUES (10,'answer','{}','recent')")
         counts = factorydb.prune_older_than(con, 10)
-        assert counts == dict.fromkeys(("ask_ledger", "check_round", "step", "attempt", "effect", "run"), 1)
+        assert counts == dict.fromkeys(("ask_ledger", "check_round", "step", "attempt", "effect", "timed", "run"), 1)
         assert con.execute("SELECT origin FROM ask_ledger").fetchall() == [("recent",)]
         assert con.execute("SELECT status FROM ask").fetchall() == [("answered",)]
         assert not con.in_transaction
@@ -274,14 +275,14 @@ class FactoryDbTest(Case):
         assert factorydb.prune_older_than(con, 10, ("run",)) == {"run": 0}
         assert factorydb.prune_older_than(con, 10, ("step", "run")) == {"step": 1, "run": 0}
         assert (
-            factorydb.prune_older_than(con, 10, ("attempt", "effect", "check_round", "run"))
-            == {"check_round": 1, "attempt": 1, "effect": 1, "run": 1}
+            factorydb.prune_older_than(con, 10, ("attempt", "effect", "check_round", "timed", "run"))
+            == {"check_round": 1, "attempt": 1, "effect": 1, "timed": 1, "run": 1}
         )
 
     def test_prune_rejects_state_tables_before_deleting_anything(self):
         con = self.rw()
         self.seed_history(con)
-        for table in TABLES - {"ask_ledger", "check_round", "step", "attempt", "effect", "run"}:
+        for table in TABLES - {"ask_ledger", "check_round", "step", "attempt", "effect", "timed", "run"}:
             with self.subTest(table=table), pytest.raises(ValueError, match="history"):
                 factorydb.prune_older_than(con, 10, ("step", table))
         assert con.execute("SELECT count(*) FROM step").fetchone() == (1,)

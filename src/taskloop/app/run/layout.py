@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from taskloop.adapters import locks
-from taskloop.contracts import factorydb
+from taskloop.contracts import factorydb, rundocs
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import loop_key
@@ -88,6 +88,7 @@ def drop_run_log(cfg: ConfigDir, b: RunBundle) -> None:
     cfg.run_request(b.run).unlink(missing_ok=True)
     with contextlib.suppress(factorydb.DatabaseError):
         SignalRows(cfg, b.run).drop_all()
+        rundocs.forget(cfg, b.run)
     cfg.run_request_lock(b.run).unlink(missing_ok=True)
     locks.holder_file(cfg.run_request_lock(b.run)).unlink(missing_ok=True)
     b.log.unlink()

@@ -10,6 +10,7 @@ from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.env import Env
 from taskloop.contracts.ids import TreeSha
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Git, Spawner
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
@@ -74,6 +75,8 @@ class CheckHost(Protocol):
     def run_id(self) -> str: ...  # the run's id: TL_RUN_ID in every check, `run_id` in every row
     @property
     def run_dir(self) -> Path: ...
+    @property
+    def home(self) -> ConfigDir: ...  # the config dir the run's rows live in
     @property
     def cfg(self) -> EngineConfig: ...
     @property

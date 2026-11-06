@@ -14,12 +14,13 @@ from taskloop.app.release import catalog, pins, reexec
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import trail
 from taskloop.contracts import log as rec
+from taskloop.contracts import rundocs
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.paths import ConfigDir, RunFiles
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import NetPause, Reexec, ReexecNote, RunCounters
 from taskloop.contracts.runrows import RunRows
-from taskloop.contracts.stores import JsonStore
+from taskloop.stores.api import Doc
 
 
 class Exec(BaseException):
@@ -42,11 +43,11 @@ class Reload:
         return RunCounters(elapsed=time.time() - e.t0, waited=e.waited, cost=e.cost, stats=dict(e.stats), sessions=list(e.sessions),
                            write_rounds=list(e.write_rounds), node_n=e.steps.n)
 
-    def restore_run(self, file: Path) -> None:
+    def restore_run(self, doc: Doc[RunCounters]) -> None:
         """The counters of the run that exec'd (RunFiles.reexec) or paused for the network (RunFiles.pause), so the run's cost,
         time and trace go on across the move; the time between is neither spent nor waited."""
         e = self.e
-        c = JsonStore(file, RunCounters).get()
+        c = doc.get()
         if c is None:
             return
         e.budget.restore(c.elapsed, c.waited)
@@ -69,7 +70,7 @@ class Reload:
         the new run keeps the cost and time budget (the pause itself is neither spent nor waited)."""
         e = self.e
         try:
-            JsonStore(RunFiles(e.run_dir).pause(), RunCounters).write(self.counters())
+            rundocs.pause(e.home, e.run_id).write(self.counters())
             reexec.net_pause_store(e.home, e.bead).write(NetPause(run=e.run_id, bead=e.bead, t=time.time()))
         except OSError as err:
             e.warn(f"could not keep the network pause for the next run: {err}")
@@ -100,7 +101,7 @@ class Reload:
         """The note the next process reads; "" when it was written, else why not."""
         e = self.e
         try:
-            JsonStore(RunFiles(e.run_dir).reexec(), RunCounters).write(self.counters())
+            rundocs.reexec(e.home, e.run_id).write(self.counters())
             reexec.reexec_store(e.home, e.bead).write(ReexecNote(
                 run=e.run_id, bead=e.bead, frm=here, to=ver, step=step, from_dir=str(ident.PLUGIN_ROOT / "skills" / "task-loop"),
                 t=time.time()))
