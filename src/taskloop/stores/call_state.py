@@ -1,7 +1,8 @@
 """One vendor call in flight, on disk: the checkpoint that lets a killed loop, a sleeping laptop or a dropped network resume
 the step instead of the run (tl-7y6.2.13; 60-design-A1 sec 2.3, `CallState` was `StepState`).
 
-File: <dir>/<bead>.call.json, written by tmp + os.replace, one writer (the engine that owns the bead). Phases:
+Row: `effect` `call:<bead>` in <dir>/../factory.db (contracts/effectrows.py), one writer (the engine that owns the bead); an older tl's
+<dir>/<bead>.call.json is read until the next save moves it into the row. Phases:
 calling (written BEFORE the call) -> returned (the raw answer is on disk BEFORE it is validated) -> consumed (the node file
 exists). `reattach` says what a restart does with it: use the finished answer (never discard output), resume the vendor
 thread with a short note (never restart a thread that has a ref), or start the call.
@@ -15,6 +16,9 @@ from collections.abc import Sequence
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
+
+from taskloop.contracts import effectrows
+from taskloop.contracts.paths import ConfigDir
 
 V = 1
 NETWORK_RESUME_DELTA = "The connection dropped. Continue from where you stopped; your last output was cut. Do not restart."
@@ -43,14 +47,12 @@ class CallState:
         return path_for(self.dir, self.bead)
 
     def save(self) -> CallState:
-        p = self.path
-        p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_name(f"{p.name}.{os.getpid()}.tmp")
         d = asdict(self)
         d.pop("dir")
         d["key"] = list(self.key)
-        tmp.write_text(json.dumps(d), encoding="utf-8")
-        os.replace(tmp, p)
+        effectrows.put(cfg_of(self.dir), self.bead, self.run, json.dumps(list(self.key)), self.phase, self.t_call, json.dumps(d))
+        with contextlib.suppress(OSError):
+            self.path.unlink()  # the older file, if any: one writer per fact
         return self
 
     def note_ref(self, ref: str, now: float = 0.0) -> CallState:
@@ -77,8 +79,14 @@ class CallState:
         return self.save()
 
     def drop(self) -> None:
+        effectrows.delete(cfg_of(self.dir), self.bead)
         with contextlib.suppress(OSError):
             self.path.unlink()
+
+
+def cfg_of(dir_: str | Path) -> ConfigDir:
+    """The config dir whose factory.db holds the calls: the folder the checkpoints folder sits in."""
+    return ConfigDir(Path(dir_).parent)
 
 
 def path_for(dir_: str | Path, bead: str) -> Path:
@@ -104,9 +112,12 @@ def begin(
 
 
 def load_for(dir_: str | Path, bead: str, key: Sequence[object]) -> CallState | None:
-    """The bead's CallState when it is for this key, else None: no file, damaged, a newer version, another key."""
+    """The bead's CallState when it is for this key, else None: no row or file, damaged, a newer version, another key."""
     try:
-        d = json.loads(path_for(dir_, bead).read_text(encoding="utf-8"))
+        text = effectrows.receipt(cfg_of(dir_), bead)
+        if text is None:
+            text = path_for(dir_, bead).read_text(encoding="utf-8")
+        d = json.loads(text)
         if int(d.get("v", 0)) > V or tuple(d.get("key") or ()) != tuple(key):
             return None
         known = {f.name for f in fields(CallState)} - {"dir"}
