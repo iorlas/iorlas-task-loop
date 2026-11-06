@@ -155,7 +155,7 @@ class RunRowsTest(Case):
         with self.rows.transaction() as con:
             assert con.execute("SELECT key,input_digest FROM step").fetchall() == [("[2]", "current")]
 
-    def test_v1_is_quarantined_and_recreated_as_v3(self):
+    def test_v1_is_quarantined_and_recreated_at_the_current_schema(self):
         path = self.cfg.factory_db()
         with sqlite3.connect(path) as con:
             con.execute("CREATE TABLE derived (value TEXT)")
@@ -165,7 +165,7 @@ class RunRowsTest(Case):
         con = factorydb.open_rw(path)
         assert con is not None
         try:
-            assert con.execute("PRAGMA user_version").fetchone() == (3,)
+            assert con.execute("PRAGMA user_version").fetchone() == (factorydb.SCHEMA_VERSION,)
             assert con.execute("SELECT count(*) FROM run").fetchone() == (0,)
         finally:
             con.close()
@@ -192,3 +192,28 @@ class RunRowsTest(Case):
                 self.rows.get("r")
             with pytest.raises(factorydb.DatabaseError):
                 self.rows.all()
+
+
+class ForwardReadable(RunRowsTest):
+    """A manifest row a newer tl wrote (an extra key) reads in this one; a row that does not validate says so, not 'sqlite' (tl-x3m0)."""
+
+    def put_raw(self, edit):
+        m = RunManifest(run="r", repo="/repo", bead="b", started=10.0, loop="loop", state=RunState.RUNNING)
+        self.rows.put(m)
+        with self.rows.transaction() as con:
+            body = json.loads(con.execute("SELECT manifest FROM run WHERE run='r'").fetchone()[0])
+            edit(body)
+            con.execute("UPDATE run SET manifest=? WHERE run='r'", (json.dumps(body),))
+        return m
+
+    def test_an_extra_key_from_a_newer_writer_is_read_past(self):
+        m = self.put_raw(lambda body: body.update(pid_start_from_the_future=1.5))
+        assert self.rows.get("r") == m
+        assert self.rows.all() == [m]
+        assert import_legacy(self.cfg) == 0  # re-reads every row on every run: must not raise
+
+    def test_a_row_that_does_not_validate_names_validation_the_run_and_the_field(self):
+        self.put_raw(lambda body: body.update(started="not a number"))
+        for read in (lambda: self.rows.get("r"), self.rows.all):
+            with pytest.raises(factorydb.DatabaseError, match=r"run manifest r does not validate.*started"):
+                read()

@@ -134,7 +134,7 @@ class Waits:
     def note_slot_waits(self, text: str, wall: float) -> None:
         """A check's output says how long it queued for a Unity slot ("unity-slot: x got slot 0 after 686s"). The output
         is not trusted: all the waits in one run together are at most that run's wall time."""
-        self.add(min(slot_wait_secs(text), wall), WaitWhat.UNITY_SLOT)
+        self.add(min(slot_wait_secs(text), wall), WaitWhat.CHECK_SLOT)
 
     def token_cap_check(self) -> None:
         """engine.bead_token_cap: the bead's tokens (in + out) over its earlier runs (traces.jsonl, read once) and this one so far."""

@@ -26,11 +26,12 @@ def chk(name: str, cmd: str = "true", **kw) -> Check:
 
 class Tags(Case):
     def test_tags_come_from_the_id_and_command_once_at_the_edge(self):
-        assert tags_of("unity-edit", "just unity") == ["unity"]
+        assert tags_of("unity-edit", "just unity", "(?i)unity") == ["queued"]
+        assert tags_of("unity-edit", "just unity") == []  # no profile pattern: no group
         assert tags_of("compile", "just build") == ["build"]
         assert tags_of("lint", "ruff") == []
         k = CheckSpec(id=CheckId("play-unity"), argv=["x"])
-        assert repo_check(k, EngineConfig()).tags == ["unity"]
+        assert repo_check(k, EngineConfig(queued_match="unity")).tags == ["queued"]
 
     def test_an_unknown_tag_fails_to_parse(self):
         with pytest.raises(ValueError):
@@ -40,9 +41,9 @@ class Tags(Case):
         assert diff_check("b", "t").tags == ["diff"]
         assert CheckResult.skipped(diff_check("b", "t"), "why").tags == ["diff"]
 
-    def test_the_plan_puts_a_unity_tagged_check_in_the_unity_group_whatever_its_text(self):
-        plan = CheckPlan.build([chk("render", tags=["unity"]), chk("unity-lint")], Durations())
-        assert {s.check.id: s.unity for s in plan.steps} == {"render": True, "unity-lint": False}
+    def test_the_plan_puts_a_queued_tagged_check_in_the_queued_group_whatever_its_text(self):
+        plan = CheckPlan.build([chk("render", tags=["queued"]), chk("unity-lint")], Durations())
+        assert {s.check.id: s.queued for s in plan.steps} == {"render": True, "unity-lint": False}
 
     def test_a_conflict_fix_keeps_the_diff_and_build_tagged_checks_only(self):
         items = [diff_check("b", "t"), chk("compile", tags=["build"]), chk("build-docs"), chk("tests")]

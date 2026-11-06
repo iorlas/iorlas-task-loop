@@ -1,5 +1,5 @@
 """The task as workers read it: the bead's own text and the people's comments, never the engine's own records (plans, reviews, reflects
-pile up on every rerun: 40 of lifesim-vbo's 45 KB brief). Inline, never a path: a worker's file tools reach only its worktree, and the
+pile up on every rerun: 40 of one consumer run's 45 KB brief). Inline, never a path: a worker's file tools reach only its worktree, and the
 engine's files live outside it so the worker cannot change them."""
 import hashlib
 from typing import Any

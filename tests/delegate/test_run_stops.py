@@ -11,23 +11,28 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from delegate.adapters.harness import reset_parse
-from delegate.app import answer, env, launch, net, usage, watch
+from any_agent import reset_parse, watch
+from any_agent.classify import classify
+from any_agent.supervisor import LaneGoneWatcher
+from delegate.app import answer, env, gaps, launch, net, usage
 from delegate.app import decide as dec
-from delegate.app.supervisor import LaneGoneWatcher
 from delegate.contracts import history as hist
 from delegate.contracts import stops
 from delegate.contracts.routing import Settings
 from delegate.contracts.state import StateDoc
 from delegate.domain.health import ledger as health_ledger
 from delegate.domain.lanes.lane import Lane
+from support.fake_worker import Err, Exit, Jump
 from support.procsim import real_proc
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
-from run_support import RunBase
+from run_support import RunBase, short_limits
 from test_route import CFG, at, need, no_reader, obj, route, why
 
+THREAD = '{"type":"thread.started","thread_id":"thread-123"}'
+ANSWER = '{"type":"item.completed","item":{"id":"i9","type":"agent_message","text":"{\\"findings\\": []}"}}'
+TURN_DONE = '{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":7}}'
 LIMIT_S = 60  # each test makes several full runs, every run spawns a fake CLI and git
 
 
@@ -50,9 +55,10 @@ class RunStops(RunBase):
         for i in range(4):
             self.lease(f"o{i}", "OPENAI_SUBSCRIPTION")
             self.lease(f"c{i}", "CLAUDE_SUBSCRIPTION")
+        before = time.time()
         _, r = self.run_it()
         assert why(r) == "busy"
-        assert 55 <= at(r) - time.time() <= 125, at(r)
+        assert before + 55 <= at(r) <= time.time() + 125, at(r)
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_the_lease_is_released_and_a_history_line_is_written(self):
@@ -64,25 +70,23 @@ class RunStops(RunBase):
         assert "brief" not in json.dumps(line)
         assert line["overlap"] == []
 
-    @real_proc("delegate: a worker, git or CLI process")
+    @real_proc("delegate: the answer-done stop is judged on a run over a real git work tree")
     def test_answer_done_process_alive_is_done_after_the_grace(self):
         """delegate-itn: turn.completed after the final agent message, then the process never exits: done after the grace,
         whole tree stopped."""
-        self.enterContext(mock.patch.object(watch, "ANSWER_GRACE_S", 1))
-        t0 = time.time()
-        _, r = self.run_it(mode="answer_alive", timeout=0)
-        assert time.time() - t0 < 40
+        self.enterContext(short_limits("codex", grace_s=1))
+        started = self.play(THREAD, ANSWER, TURN_DONE)
+        _, r = self.run_it(timeout=0)
         assert (r["stop"], r["text"], r["lane"]) == (None, '{"findings": []}', "OPENAI_SUBSCRIPTION")
         assert r["warnings"] == ["answer_done_process_alive"]
         assert r["stop"] is None
         assert json.loads(env.history_path().read_text().splitlines()[-1])["warnings"] == ["answer_done_process_alive"]
         assert "OPENAI_SUBSCRIPTION" not in env.load_state().out
-        time.sleep(0.3)
-        with pytest.raises(OSError):
-            os.kill(int(Path(os.environ["FAKE_PIDFILE"]).read_text()), 0)
+        assert [p.stopped for p in started] == [True]  # the whole tree was stopped
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_later_event_resets_the_answer_grace(self):
+        self.real_clock()
         self.fast_clock(grace=1, stall=900)
         _, r = self.run_it(mode="progress_then_work", timeout=4)
         assert why(r) == "timeout"
@@ -311,20 +315,21 @@ class RunStops(RunBase):
             t[0] = tick
             dog.touch()
         assert not dog.poll()
-        dog.flush(env.history_add, d["lane"], d["model"], True)
+        gaps.flush(dog, env.history_add, d["lane"], d["model"], True)
         rows = env.history_store().rows()
-        gaps = [r for r in rows if isinstance(r, hist.GapRow)]
-        assert len(gaps) == len(rows)
-        assert [(type(r).__name__, r.lane, r.model, r.gap_s, r.finished) for r in gaps] == [
+        got = [r for r in rows if isinstance(r, hist.GapRow)]
+        assert len(got) == len(rows)
+        assert [(type(r).__name__, r.lane, r.model, r.gap_s, r.finished) for r in got] == [
             ("GapRow", "OPENAI_SUBSCRIPTION", "gpt-6.1-sol", 2200.0, True)
         ]
         assert health_ledger.HealthLedger(env.typed_routing(CFG).settings.breaker).fold(rows).pairs == {}
-        dog.flush(obj(None), d["lane"], d["model"], True)  # never raises
+        gaps.flush(dog, obj(None), d["lane"], d["model"], True)  # never raises
 
-    @real_proc("delegate: a worker, git or CLI process")
+    @real_proc("delegate: stderr chatter keeps a run alive on a real git work tree")
     def test_any_stream_line_counts_as_activity_even_on_stderr(self):
-        with mock.patch.dict(watch.LIMITS["codex"], silence_s=1):  # the fake prints to stderr every 0.4 s for 3 s
-            _, r = self.run_it(mode="chatter", timeout=0)
+        self.play(THREAD, *[s for _ in range(8) for s in (Jump(0.4), Err("thinking"))], Exit(0))  # stderr every 0.4 s for 3 s
+        with short_limits("codex", silence_s=1):
+            _, r = self.run_it(timeout=0)
         assert r["stop"] is None
 
     @real_proc("delegate: a worker, git or CLI process")
@@ -375,6 +380,14 @@ class RunStops(RunBase):
         launch.settler().mark_out("OPENAI_SUBSCRIPTION", env.now() + 3600, "limit refusal: usage limit", env.now())
         stop = need(w.poll())
         assert stop.why == "limit"
+        for reason, want in (
+            ("logged_out", "logged_out"),
+            ("credit", "credit_exhausted"),
+        ):  # the mark's reason is kept, not collapsed to a limit
+            launch.settler().mark_out("OPENAI_SUBSCRIPTION", env.now() + 3600, "other words", env.now(), reason)
+            stop = need(w.poll())
+            assert stop.why == reason
+            assert need(classify(None, structured={"watchdog": stop.why, "msg": stop.msg})).reason == want
         late = LaneGoneWatcher(
             launch.lane_gone_check("OPENAI_SUBSCRIPTION", time.time() + 5), every=0
         )  # a worker that started after the mark is not affected

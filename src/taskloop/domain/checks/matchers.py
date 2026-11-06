@@ -1,5 +1,6 @@
 """Every regular expression the checks need over text: globs, command text, a check's output. The one place in domain/checks
 that imports `re` (rule: import re only in domain/**/matchers.py)."""
+import functools
 import re
 from typing import Final
 
@@ -45,29 +46,34 @@ def literal_prefix(g: str) -> str:
 
 
 # -- command text -------------------------------------------------------------------------------------------------------
-UNITY: Final = re.compile(r"(?i)unity")  # the Unity group: repo checks that name Unity in their id or command (slot queue, minutes each)
 CONFLICT_BUILD: Final = re.compile(r"(?i)(?<![a-z])(build|compile)(?![a-z])")  # a repo check a conflict fix still runs
-SLOW_CMD: Final = re.compile(r"(?i)(?<![a-z])(unity|play|test[-_]all|check|build|dotnet)")
 
 
-def is_unity(text: str) -> bool:
-    return bool(UNITY.search(text))
+@functools.cache
+def _profile_re(pattern: str) -> re.Pattern[str] | None:
+    return re.compile(pattern) if pattern else None
+
+
+def is_queued(text: str, pattern: str) -> bool:
+    """Whether a check's id and command match engine.queued_match (the repo's slow, slot-queued group); no pattern: none do."""
+    rx = _profile_re(pattern)
+    return bool(rx and rx.search(text))
 
 
 def is_build(text: str) -> bool:
     return bool(CONFLICT_BUILD.search(text))
 
 
-def looks_slow(cmd: str) -> bool:
-    """A command nobody has timed that is named like a Unity, play, full test, check or build run."""
-    return bool(SLOW_CMD.search(cmd))
+def looks_slow(cmd: str, pattern: str) -> bool:
+    """A command nobody has timed that matches engine.slow_cmd; no pattern: none does."""
+    rx = _profile_re(pattern)
+    return bool(rx and rx.search(cmd))
 
 
 # -- a check's output ---------------------------------------------------------------------------------------------------
 STALE_TREE: Final = re.compile(r"does not contain recipe|This checkout has no |no recipe (?:named|called)|Justfile does not contain", re.I)
 COMPILE_FAIL: Final = re.compile(r"error CS(?!0006\b|2001\b)\d+|SyntaxError")
 IMPORT_RACE: Final = re.compile(r"Library/|Temp/|asset import|importing asset|refresh", re.I)
-LOCK_FAIL: Final = re.compile(r"another Unity instance|Multiple Unity instances|It looks like another Unity instance is running", re.I)
 SLOT_WAIT: Final = re.compile(r"\bgot slot \S+ after (\d+) ?s\b")
 CS_ERROR: Final = re.compile(r"error CS\d+")
 ELLIPSIS: Final = re.compile(r"\.\.\.|\u2026")
@@ -75,11 +81,13 @@ SAFE_NAME: Final = re.compile(r"[^\w.-]+")
 TIMING: Final = re.compile(r"\[\d+ ?m?s\]|\b\d+(?:\.\d+)?\s?(?:ms|s|sec|secs|seconds|min|mins)\b", re.I)
 
 
-def failure_kind(text: str) -> str:
-    """'lock' (an editor or project lock: wait, then rerun), 'deterministic' (a CS compile error or SyntaxError: a rerun
-    fails the same way), 'import' (the same, but the log mentions Library/, Temp/ or an asset import: retry once anyway),
+def failure_kind(text: str, lock_fail: str = "") -> str:
+    """'lock' (matches engine.lock_fail: an editor or project lock, wait then rerun),
+    'deterministic' (a CS compile error or SyntaxError: a rerun fails the same way), 'import' (the same, but the log mentions
+    Library/, Temp/ or an asset import: retry once anyway),
     else 'flaky' (today's retry)."""
-    if LOCK_FAIL.search(text):
+    lock = _profile_re(lock_fail)
+    if lock and lock.search(text):
         return "lock"
     if COMPILE_FAIL.search(text):
         return "import" if IMPORT_RACE.search(text) else "deterministic"

@@ -99,7 +99,8 @@ class Hardening(Case):
 
 class ShotUrl(Case):
     def test_a_picture_kept_as_an_artifact_is_served_by_the_artifact_url(self):
-        assert LOOKS.shot_url("demo", "artifact:tl-1/a b.png") == "/api/artifact?bead=tl-1&name=a%20b.png"
+        assert LOOKS.shot_url("demo", "artifact:r-1/tl-1/RUN/write-2/a b.png") == (
+            "/api/artifact?repo=r-1&bead=tl-1&run=RUN&stage=write&attempt=2&name=a+b.png")
         assert LOOKS.shot_url("demo", "docs/a.png") == "/api/look-shot?repo=demo&path=docs/a.png"
 
 
@@ -124,7 +125,7 @@ class Api(Case):
                 assert dash.looks.look_shot(loop_key(repo), "docs/evidence/tl-1/m1.png") == (PNG, "image/png")
                 assert dash.looks.look_shot(loop_key(repo), "docs/evidence/tl-1/nope.png") is None
                 good = {"project": loop_key(repo), "bead": "tl-1#1", "verdict": "good", "note": ""}
-                assert dash.writes.post("look", good) == (200, {"ok": True, "message": ""})
+                assert dash.writes.post("look", good) == (200, {"ok": True, "message": "", "receipt": ""})
                 assert [i["status"] for i in dash.looks.look_items(loop_key(repo))[1]] == ["good"]
                 assert not dash.writes.post("look", dict(good, project="nowhere"))[1]["ok"]
                 assert not dash.writes.post("look", dict(good, verdict="redo"))[1]["ok"]  # redo needs a note

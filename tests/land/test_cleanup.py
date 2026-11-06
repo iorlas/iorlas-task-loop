@@ -11,6 +11,8 @@ import support.paths  # noqa: F401
 from support.fakegit import ScriptedGit
 
 # isort: split
+from support.memstores import fake_stores
+
 from taskloop.app.land import cleanup
 from taskloop.app.run.closer_branch import ReleaseSlot
 from taskloop.contracts import fence
@@ -18,7 +20,6 @@ from taskloop.contracts import log as rec
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.slots import Checkout, GitReadFailure, SlotGitError
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 

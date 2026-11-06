@@ -38,7 +38,7 @@ class RealGit(LandGit):
     @override
     def _pool(self, d: str) -> RealRepo:
         repo = RealRepo if self.pinned else UnpinnedRepo
-        return repo(Path(d).resolve(), env=self.git_env(d), memoize=False, sleep=self.sleep)
+        return repo(Path(d).resolve(), env=self.git_env(d), ambient=self.env.vars, memoize=False, sleep=self.sleep)
 
     def branch(self, d: str) -> str:
         return self._ask(d, "symbolic-ref", "--short", "-q", "HEAD", missing=True)
@@ -117,9 +117,11 @@ class RealGit(LandGit):
         self._must(os.path.dirname(dst) or ".", "clone", "-q", src, dst)
 
     def push(self, d: str, remote: str, refspec: str) -> None:
-        with pool_errors(partial(remote_error, push=True)):
-            done = self._pool(d).worktree(Path(d).resolve()).push_request(
-                remote, [refspec], options=["-q"], force=True, allow_delete=True)
+        try:
+            with pool_errors(partial(remote_error, push=True)):
+                done = self._pool(d).worktree(Path(d).resolve()).push_request(remote, [refspec], options=["-q"])
+        except ValueError as err:  # the porcelain refuses `+refspec`, `:ref` and --force unless the caller opts in; this port never does
+            raise SlotGitError(f"push refused: {err} ({refspec})") from err
         if not done.ok:
             err = classify(done.output, push=True)
             err.output = done.output

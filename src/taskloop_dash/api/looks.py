@@ -1,11 +1,10 @@
 """Look items: every item of a repo's owner-look beads with its pictures (GET /api/look-shot serves one), and the owner's answer through
 the `look` port. "good" settles an item; "redo" with a note files a follow-up bead that carries the note and the pictures."""
 
-import mimetypes
 import os
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from taskloop.contracts import gallery
 from taskloop.contracts.dash import Result
@@ -13,6 +12,7 @@ from taskloop.contracts.gallery import LABEL, PICTURES
 from taskloop_dash.env import Bead, Env
 from taskloop_dash.readers.beads import Beads
 from taskloop_dash.readers.records import Records
+from taskloop_dash.views.artifact_files import split_stage
 
 
 class Looks:
@@ -40,10 +40,13 @@ class Looks:
 
     @staticmethod
     def shot_url(repo: str, path: str) -> str:
-        """A picture kept as an artifact ("artifact:<bead>/<name>") is served by /api/artifact, an old repo one by /api/look-shot."""
-        if path.startswith("artifact:") and "/" in path:
-            bead, name = path[9:].split("/", 1)
-            return f"/api/artifact?bead={quote(bead)}&name={quote(name)}"
+        """A picture kept as an artifact ("artifact:<repo>/<bead>/<run>/<stage>-<attempt>/<name>") is served by /api/artifact, a picture
+        of the repo's tree by /api/look-shot."""
+        parts = path[len("artifact:"):].split("/", 4) if path.startswith("artifact:") else []
+        if len(parts) == 5 and split_stage(parts[3]):
+            stage, attempt = split_stage(parts[3]) or ("", 0)
+            return "/api/artifact?" + urlencode({"repo": parts[0], "bead": parts[1], "run": parts[2], "stage": stage,
+                                                 "attempt": attempt, "name": parts[4]})
         return f"/api/look-shot?repo={quote(repo)}&path={quote(path)}"
 
     def look_shot(self, repo: str, rel: str) -> tuple[bytes, str] | None:
@@ -68,7 +71,7 @@ class Looks:
                 data = None
         if not data or data.startswith(b"version https://git-lfs"):  # an LFS pointer is not a picture
             return None
-        return data, PICTURES.get(ext) or mimetypes.guess_type(rel)[0] or "application/octet-stream"
+        return data, PICTURES[ext]  # ext is in PICTURES (checked above)
 
     def answer(self, repo: str, item: str, verdict: str, note: str, look_bead: str = "") -> Result:
         """Answer one look item through the `look` port, then drop the repo's cached items."""

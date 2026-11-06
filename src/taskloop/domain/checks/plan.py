@@ -14,7 +14,7 @@ class Step:
     check: Check
     env: tuple[int, ...]  # the checks whose $TL_CHECK_LOG_/RC_ it reads (Check.reads): the graph's edges into it
     absent: tuple[CheckId, ...]  # what it reads that is not in this round (a group left out, a conflict fix)
-    unity: bool = False  # in the Unity group: after every cheaper check, skipped by any red
+    queued: bool = False  # in the queued group (engine.queued_match): after every cheaper check, skipped by any red
 
 
 @dataclass(frozen=True)
@@ -44,10 +44,10 @@ class CheckPlan:
         where = {c.id: i for i, c in enumerate(chosen)}
         env = {i: [where[r] for r in c.reads if r in where] for i, c in enumerate(chosen)}
         repo = [i for i, c in enumerate(chosen) if c.group != "acceptance"]
-        unity = frozenset(i for i in repo if "unity" in chosen[i].tags)
-        order = CheckOrder(history, acceptance_first).sort(chosen, env, unity)
+        queued = frozenset(i for i in repo if "queued" in chosen[i].tags)
+        order = CheckOrder(history, acceptance_first).sort(chosen, env, queued)
         pos = {o: n for n, o in enumerate(order)}
-        steps = tuple(Step(chosen[o], tuple(pos[e] for e in env[o]), tuple(r for r in chosen[o].reads if r not in where), o in unity)
+        steps = tuple(Step(chosen[o], tuple(pos[e] for e in env[o]), tuple(r for r in chosen[o].reads if r not in where), o in queued)
                       for o in order)
         return cls(steps, tuple(skipped))
 

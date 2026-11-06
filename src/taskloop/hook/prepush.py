@@ -107,11 +107,8 @@ def githook(name: str, argv: list[str], stdin_text: str, environ: Mapping[str, s
             ["git", "lfs", "pre-push", *args] if name == "pre-push" and uses_lfs() else [])
         if not cmd:
             return 0
-        # the repo's pre-push hook never runs the gate: a `tl judge-push` it calls only reads the receipt (TL_JUDGE_READ_ONLY)
-        child = without_hooks_path(environ)
-        if name == "pre-push":
-            child["TL_JUDGE_READ_ONLY"] = "1"
-        return subprocess.run(cmd, input=stdin_text if name in STDIN_HOOKS else None, text=True, check=False, env=child).returncode
+        return subprocess.run(cmd, input=stdin_text if name in STDIN_HOOKS else None, text=True, check=False,
+                              env=without_hooks_path(environ)).returncode
     except Exception as err:
         if name == "pre-push":
             print(f"tl pre-push: refused: chained hook unavailable: {err}", file=sys.stderr)

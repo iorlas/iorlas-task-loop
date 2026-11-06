@@ -5,10 +5,10 @@ from unittest import mock
 
 import support.paths  # noqa: F401
 from support.case import Case
+from support.memstores import fake_stores
 
 from taskloop.app.run.shell import Shell
 from taskloop.contracts.log import CmdEnd
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 
