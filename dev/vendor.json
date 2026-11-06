@@ -18,6 +18,12 @@
     "tree_hash": "5a8d73fd64cb794bbf5fe93b681bd0e543877c489f9c18149fb1e53bb9aa4328"
   },
   {
+    "name": "any_contract",
+    "shelf_tag": "0235df7ea88457944b36bf30c1b63ecde7677a85",
+    "shelf_commit": "0235df7ea88457944b36bf30c1b63ecde7677a85",
+    "tree_hash": "ed296dfe1f504dab0143350b57bd310710241ddb724d20cc32ba517841025d66"
+  },
+  {
     "name": "any_failure_fp",
     "shelf_tag": "bf97aba8c13426f488ccb5ddd74c8432d5840781",
     "shelf_commit": "bf97aba8c13426f488ccb5ddd74c8432d5840781",
