@@ -137,6 +137,10 @@ def _open(
         address = f"{resolved.as_uri()}?mode=ro" if readonly else os.fspath(path)
         con = sqlite3.connect(address, uri=readonly, isolation_level=None, timeout=5.0, check_same_thread=not shared)
         version = int(con.execute("PRAGMA user_version").fetchone()[0])
+        if readonly and version == 0 and con.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone() is None:
+            # A file a writer has created but not yet initialised is not there yet, the same as a missing file.
+            con.close()
+            return None
         _validate_version(version, schema, readonly=readonly)
         if not readonly and version < schema.version and version in schema.quarantine_versions:
             con.close()
