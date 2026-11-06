@@ -104,6 +104,7 @@ class RealRepo:
         *,
         identity: Identity | None = None,
         env: Mapping[str, str] | None = None,
+        ambient: Mapping[str, str] | None = None,
         memoize: bool = True,
         remote_timeout: float = 600.0,
         sleep: Callable[[float], None] = time.sleep,
@@ -112,6 +113,10 @@ class RealRepo:
         self.path = path
         self.who = identity
         self.extra_env = dict(env or {})
+        # A snapshot of the ambient environment, taken once: every call then skips the os.environ scan and the PATH
+        # search. Without one, each call reads os.environ and PATH as they are at that moment.
+        self._ambient = None if ambient is None else real_env.base(source=ambient)
+        self._git: str | bool | None = False if ambient is None else shutil.which("git", path=ambient.get("PATH"))
         self.memoize = memoize
         self.remote_timeout = remote_timeout
         self.sleep = sleep
@@ -133,11 +138,12 @@ class RealRepo:
         timeout: float | None = None,
     ) -> Done:
         """``git -C cwd args``. A failure raises :class:`GitUnavailable` when ``check``; otherwise the caller reads ``rc``."""
-        if shutil.which("git") is None:
+        if (shutil.which("git") if self._git is False else self._git) is None:
             msg = "git not found on PATH"
             raise GitUnavailable(msg, hint="install git")
         pin_env = real_env.pinned(cwd) if pin else {}
-        child = real_env.base({**self.extra_env, **pin_env, **(env or {})})
+        extra = {**self.extra_env, **pin_env, **(env or {})}
+        child = real_env.base(extra) if self._ambient is None else {**self._ambient, **extra}
         if self.observer is not None:
             self.observer(args)
         try:

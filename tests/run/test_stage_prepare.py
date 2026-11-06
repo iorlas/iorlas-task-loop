@@ -13,7 +13,7 @@ from taskloop.contracts.ports import Ran
 
 class StagePrepare(EngineTest):
     def test_write_step_prepares_and_retries_at_the_same_attempt(self):
-        eng = self.checks_engine(prepare={"cmd": ["restore"]})
+        eng = self.checks_engine(prepare={"cmd": ["restore"], "triggers": ["restore"]})
         state = StageState(plan_of(PLAN), 0, None)
 
         def write(s, *, look):
@@ -26,7 +26,7 @@ class StagePrepare(EngineTest):
         assert (state.n, eng.stats["writes"], eng.replans) == (1, 1, 0)
 
     def test_check_step_repairs_and_repeats_write_without_incrementing_attempt(self):
-        eng = self.checks_engine(prepare={"cmd": ["restore"]})
+        eng = self.checks_engine(prepare={"cmd": ["restore"], "triggers": ["project.assets.json"]})
         state = StageState(plan_of(PLAN), 0, None)
         state.n = 1
 

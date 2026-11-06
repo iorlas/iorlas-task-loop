@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from taskloop.adapters.ident import PLUGIN_ROOT, config_dir
+from taskloop.contracts.dash import READ_PROTOCOL
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ports import Spawner
@@ -105,6 +106,8 @@ def stale_reason(v: dict[str, Any], version: str, want: list[str]) -> str | None
         return "its script is gone: " + script
     if v.get("version") != version:
         return f"version {v.get('version')} differs from installed {version}"
+    if v.get("protocol") != READ_PROTOCOL:
+        return f"it speaks read protocol {v.get('protocol')}, installed is {READ_PROTOCOL}"
     missing = [a for a in want if a not in (v.get("binds") or [])]
     if missing:
         return "it does not serve " + ", ".join(missing)

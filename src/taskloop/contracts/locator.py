@@ -98,7 +98,7 @@ class RunLocator:
         self._change(run, lambda m: m.replace(worktree=path))
 
     def create(self, repo: str, bead: str, now: float, loop: str | None = None, *, mode: str = "", owner: str = "",
-               session: str = "") -> RunBundle:
+               session: str = "", loop_id: str | None = None) -> RunBundle:
         """A new run: a fresh opaque id, its folder and its manifest (state created, owned by this process). `mode`, `owner` and
         `session` say what kind of run it is and whose."""
         while True:
@@ -108,7 +108,7 @@ class RunLocator:
             except FileExistsError:
                 continue
             break
-        m = RunManifest(run=run, repo=repo, bead=bead, started=now, loop=loop, heartbeat=now, pid=os.getpid(),
+        m = RunManifest(run=run, repo=repo, bead=bead, started=now, loop=loop, loop_id=loop_id, heartbeat=now, pid=os.getpid(),
                         pid_start=proc_start(os.getpid()) or "", host=host_name(), mode=mode, owner=owner, session=session)
         self._ready()
         with self.rows.transaction() as con:

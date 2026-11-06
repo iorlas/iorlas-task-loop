@@ -78,8 +78,7 @@ def check_caches(base: Mapping[str, str]) -> dict[str, str]:
     cache = base.get("XDG_CACHE_HOME") or str(home / ".cache")
     data = base.get("XDG_DATA_HOME") or str(home / ".local/share")
     defaults = {"XDG_CACHE_HOME": cache, "UV_CACHE_DIR": str(Path(cache) / "uv"),
-                "UV_PYTHON_INSTALL_DIR": str(Path(data) / "uv/python"), "DOTNET_CLI_HOME": str(home),
-                "NUGET_PACKAGES": str(home / ".nuget/packages"), "MISE_CACHE_DIR": str(Path(cache) / "mise"),
+                "UV_PYTHON_INSTALL_DIR": str(Path(data) / "uv/python"), "MISE_CACHE_DIR": str(Path(cache) / "mise"),
                 "MISE_DATA_DIR": str(Path(data) / "mise"), "MISE_STATE_DIR": str(home / ".local/state/mise")}
     return {k: base.get(k) or v for k, v in defaults.items()}
 
@@ -126,7 +125,7 @@ PER_RUN = frozenset({EnvVar.TL_ARTIFACT_DIR, EnvVar.TL_ARTIFACT_STEP, EnvVar.TL_
                      EnvVar.TL_WORKTREE, EnvVar.TL_BRANCH,
                      EnvVar.TL_REEXEC, EnvVar.TL_LOOP_STATE,
                      EnvVar.TL_RELEASE_REEXEC, EnvVar.TASK_LOOP_SLOT_BEAD, EnvVar.TASK_LOOP_ACTOR, EnvVar.TASK_LOOP_SESSION,
-                     EnvVar.TASK_LOOP_LOOP_PID, EnvVar.TASK_LOOP_WORKER})
+                     EnvVar.TASK_LOOP_LOOP_PID, EnvVar.TASK_LOOP_LOOP_ID, EnvVar.TASK_LOOP_WORKER})
 
 
 def reaching(env: Mapping[str, str]) -> dict[str, str]:
