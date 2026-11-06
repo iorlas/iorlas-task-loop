@@ -88,9 +88,12 @@ class Intake:
         with contextlib.suppress(BdFailure):  # the receipt is for people: the typed record is already written
             self.store.add_comment(bead, text)
 
-    def answer(self, bead: BeadId, action: AskAction, text: str = "", amend: bool = False) -> tuple[Ask | None, str]:
-        """File the answer on the bead's ask, open the bead for the loop. -> (the ask, "" or why it cannot be answered)."""
+    def answer(self, bead: BeadId, action: AskAction, text: str = "", amend: bool = False, expect: str = "") -> tuple[Ask | None, str]:
+        """File the answer on the bead's ask, open the bead for the loop. -> (the ask, "" or why it cannot be answered).
+        `expect` is the id of the ask the owner saw: a newer ask of the bead refuses the answer ("superseded") instead of taking it."""
         ask = self.asks.get(bead)
+        if ask is not None and expect and ask.id != expect:
+            return None, "superseded"
         if ask is None:
             # a bead parked on an ask that was dropped at upgrade: "rerun" is how the owner has it asked again
             if action == "rerun" and bead in self.asks.orphans() and sweeps.reopen(self.asks, self.store, bead):

@@ -40,10 +40,6 @@ def log(repo):
     return homes.cfg().loop_log(wslots.repo_key(repo))
 
 
-def state_path(repo, pid):
-    return homes.cfg().loop_state(f"{wslots.repo_key(repo)}.{pid}")
-
-
 def write_state(repo, pid=None, **fields):
     """A loop's state file as a LoopState (a live loop of a test: the test's own pid, or a child's)."""
     pid = pid or os.getpid()
@@ -62,6 +58,11 @@ def live(repo):
 
 def command(repo):
     return homes.cfg().loop_command(wslots.repo_key(repo))
+
+
+def command_kept(repo):
+    """Whether the repo has a stop command (a `kv` row; `command(repo)` is where an older loop kept it as a file)."""
+    return files(repo).command().get() is not None
 
 
 def rests(repo):

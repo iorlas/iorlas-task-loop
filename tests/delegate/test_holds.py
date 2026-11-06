@@ -1,8 +1,10 @@
 """Owner holds: record, back_at, stale asks."""
 
+import contextlib
 import copy
 import io
 import json
+import os
 import sys
 import tempfile
 import time
@@ -11,9 +13,9 @@ from typing import Any
 from unittest import mock
 
 import pytest
+from any_agent.supervisor import RunHooks
 from delegate.app import answer, env, fleet, launch, status
 from delegate.app import decide as dec
-from delegate.app.supervisor import RunHooks
 from delegate.cli import verbs
 from delegate.contracts import stops
 from delegate.contracts.state import RefRecord
@@ -216,3 +218,33 @@ class StaleHolds(Case):
         payload = status.status_payload(CFG, self.lanes(50), ck, env.load_state(), env.now())
         assert payload["asks"] == []
         assert "health" in payload
+
+
+class CheapStatusAsks(Case):
+    """`status --cheap` keeps the asks of live holds and drops those of a hold that ended: it is not a frozen copy of the snapshot."""
+
+    def setup_method(self):
+        self.d = tempfile.TemporaryDirectory()
+        self.addCleanup(self.d.cleanup)
+        p = mock.patch.dict(os.environ, {"DELEGATE_CONFIG_DIR": self.d.name})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def cheap(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            assert route.main(["status", "--json", "--cheap"]) == 0
+        return json.loads(out.getvalue())
+
+    def test_an_ask_follows_its_hold_not_the_snapshot(self):
+        h = support.add_hold("OPENAI_SUBSCRIPTION", "+2d", "weekly spent")
+        env.states().update(lambda s: setattr(s.holds[h.id], "stale_at", env.now()))
+        env.snapshot_path().write_text(
+            json.dumps({"v": 1, "ts": env.now(), "lanes": {"OPENAI_SUBSCRIPTION": {"week": 0, "five": 3}}, "asks": [{"kind": "frozen"}]})
+        )
+        got = self.cheap()
+        assert [(a["kind"], a["id"]) for a in got["asks"]] == [("hold_stale", h.id)]
+        assert [x["id"] for x in got["holds"]] == [h.id]
+        env.states().update(lambda s: s.holds.pop(h.id))  # released
+        got = self.cheap()
+        assert (got["asks"], got["holds"]) == ([], [])

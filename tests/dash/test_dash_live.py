@@ -78,6 +78,36 @@ class Feed(Case):
                     break
             assert seen == [f"m{i}" for i in range(n)]
 
+    def test_a_replaced_worker_file_of_the_same_size_or_larger_starts_over_and_a_deleted_one_leaves_the_feed(self):
+        with tempfile.TemporaryDirectory() as d:
+            _log, lf, run = self.run_of(d)
+            self.refresh(run)
+            before = [e.get("text") for e in run.events()]
+            assert "between the start and the command" in before
+            replacement = lf + ".new"
+            put(replacement, [{"t": T + 6.5, "k": "msg", "text": "x" * 400}, {"t": T + 7, "k": "msg", "text": "after replacement"}], "w")
+            os.replace(replacement, lf)
+            self.refresh(run)
+            texts = [e.get("text") for e in run.events()]
+            assert "after replacement" in texts
+            assert "between the start and the command" not in texts
+            os.unlink(lf)
+            self.refresh(run)
+            assert "after replacement" not in [e.get("text") for e in run.events()]
+
+    def test_a_cursor_of_another_run_is_a_reset_not_a_silent_skip(self):
+        with tempfile.TemporaryDirectory() as d:
+            _log, _lf, run = self.run_of(d)
+            self.refresh(run)
+            mine = live.page(run)
+            assert mine["reset"] is False
+            assert live.page(run, live.decode(mine["cursor"]))["reset"] is False
+            foreign = must(live.decode(mine["cursor"]))
+            foreign["_run"] += 1
+            got = live.page(run, foreign)
+            assert got["reset"] is True
+            assert got["events"]
+
     def run_of(self, d):
         b, lf = make_run(d)
         return str(b.log), lf, live.LiveRun(ConfigDir(Path(d) / 'task-loop'), b.run)

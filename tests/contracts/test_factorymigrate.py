@@ -74,7 +74,7 @@ def test_real_v2_database_upgrades_in_place_preserving_rows(tmp_path):
         factorydb.open_ro(path)
     writer = must(factorydb.open_rw(path))
     try:
-        assert writer.execute("PRAGMA user_version").fetchone() == (3,)
+        assert writer.execute("PRAGMA user_version").fetchone() == (factorydb.SCHEMA_VERSION,)
         assert writer.execute("SELECT * FROM bead").fetchone() == (*before, "{}")
         assert writer.execute("SELECT * FROM run").fetchone() == run
     finally:
@@ -127,12 +127,13 @@ def test_older_reader_refuses_then_writer_upgrades_in_place(database):
     path, con = database
     identity = path.stat().st_ino
     original = authoritative_rows(con)
-    schema = replace(factorydb.SCHEMA, version=4, steps={3: add_summary})
+    here = factorydb.SCHEMA_VERSION
+    schema = replace(factorydb.SCHEMA, version=here + 1, steps={**factorydb.SCHEMA.steps, here: add_summary})
     with patch.object(factorydb, "_STORE", Store(schema)):
-        message = r"factory\.db is schema v3.*knows v4.*the writer has not upgraded it yet"
+        message = rf"factory\.db is schema v{here}.*knows v{here + 1}.*the writer has not upgraded it yet"
         with pytest.raises(factorydb.SchemaError, match=message):
             factorydb.open_ro(path)
-        assert con.execute("PRAGMA user_version").fetchone() == (3,)
+        assert con.execute("PRAGMA user_version").fetchone() == (here,)
         writer = must(factorydb.open_rw(path))
         writer.close()
         reader = must(factorydb.open_ro(path))
@@ -150,10 +151,11 @@ def test_older_reader_refuses_then_writer_upgrades_in_place(database):
 def test_writer_reports_upgrade_failure_without_quarantine(database):
     path, con = database
     original = authoritative_rows(con)
-    schema = replace(factorydb.SCHEMA, version=4, steps={})
+    here = factorydb.SCHEMA_VERSION
+    schema = replace(factorydb.SCHEMA, version=here + 1, steps=dict(factorydb.SCHEMA.steps))
     with patch.object(factorydb, "_STORE", Store(schema)), \
-            pytest.raises(factorydb.SchemaError, match=r"factory\.db missing upgrade step v3 -> v4"):
+            pytest.raises(factorydb.SchemaError, match=rf"factory\.db missing upgrade step v{here} -> v{here + 1}"):
         factorydb.open_rw(path)
-    assert con.execute("PRAGMA user_version").fetchone() == (3,)
+    assert con.execute("PRAGMA user_version").fetchone() == (here,)
     assert authoritative_rows(con) == original
     assert list(path.parent.glob("factory.db.bad-*")) == []

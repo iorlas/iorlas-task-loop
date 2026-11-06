@@ -3,9 +3,9 @@
 import tempfile
 from pathlib import Path
 
-from delegate.adapters.harness import classify
-from delegate.adapters.harness.opencode import OpenCodeHarness
-from delegate.app.supervisor import LogWatcher
+from any_agent import vendors
+from any_agent.harnesses.opencode import OpenCodeHarness
+from any_agent.supervisor import LogWatcher
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 
@@ -20,7 +20,7 @@ class LogWatch:
     def run_poll(self, lines):
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "a.log").write_text("old\n")
-            w = LogWatcher(Path(d), classify.LIMIT_RE.search, OpenCodeHarness().echoes_input)
+            w = LogWatcher(Path(d), vendors.words().limit.search, OpenCodeHarness().echoes_input)
             with open(Path(d) / "a.log", "a") as f:
                 f.write("\n".join(lines) + "\n")
             return w.poll()
@@ -37,4 +37,4 @@ class LogWatch:
     def test_lines_from_before_the_launch_are_not_seen(self):
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "a.log").write_text(REAL + "\n")
-            assert LogWatcher(Path(d), classify.LIMIT_RE.search, OpenCodeHarness().echoes_input).poll() is None
+            assert LogWatcher(Path(d), vendors.words().limit.search, OpenCodeHarness().echoes_input).poll() is None

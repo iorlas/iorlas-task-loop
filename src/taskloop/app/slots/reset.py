@@ -102,7 +102,7 @@ def check_out(slot: SlotView, bead: str) -> None:
     what = f"slot {slot.name}"
     if bead and retrying(env, what, lambda: env.git.has_branch(d, "task/" + bead)):
         # the bead's branch holds its earlier runs' work: check it out as it is, never reset it to base (a forced reset
-        # here wiped lifesim-r32's reviewed work on 2026-10-19; the engine rebases at land)
+        # here wiped a bead's reviewed work on 2026-10-19; the engine rebases at land)
         held = retrying(env, what, lambda: free_branch(slot, "task/" + bead))
         if held:  # a live run has it: this bead is not for this slot now (never a failure)
             raise SlotFail("bead_pinned", held)
@@ -115,7 +115,7 @@ def check_out(slot: SlotView, bead: str) -> None:
 
 def free_branch(slot: SlotView, branch: str) -> str:
     """Make `branch` free to check out in the slot. Another worktree holding it (a pre-slot worktree, a dead run's) is
-    removed when clean, else detached where it stands: its files and commits stay (tl-bxk.10.26, lifesim 2026-10-22).
+    removed when clean, else detached where it stands: its files and commits stay (tl-bxk.10.26, 2026-10-22).
     "" when free, else why a live run keeps it (the repo's own checkout counts as live)."""
     env, d = slot.env, slot.dir
     held = [c for c in env.git.checkouts(d) if c.branch == branch and os.path.realpath(c.path) != os.path.realpath(d)]

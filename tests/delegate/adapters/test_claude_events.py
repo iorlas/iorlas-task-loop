@@ -8,9 +8,9 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
-from delegate.adapters.harness.base import LaunchInputs
-from delegate.adapters.harness.claude import ClaudeHarness, stream_usage, tokens_of
-from delegate.contracts import events as ev
+from any_agent import events as ev
+from any_agent.harnesses.claude import ClaudeHarness, stream_usage, tokens_of
+from any_agent.protocol import LaunchInputs
 from delegate.contracts.json_types import obj
 from support.procsim import real_proc
 
@@ -44,7 +44,7 @@ class Stream:
         end, tend, pend = pl[3]
         assert (end.id, end.exit, end.out, tend.out, pend.exit) == ("tu1", None, "a b", "ok", 1)
         assert pl[4][1].final
-        assert pl[5][1] == ev.Denied(tool="Bash", input={"command": "git push"})
+        assert pl[5][1] == ev.Denied(tool="Bash", input={"command": "git push"}, reason="the CLI's permission check refused the call")
 
     def test_evidence_holds_what_the_stream_established(self):
         h, _ = stream("session")

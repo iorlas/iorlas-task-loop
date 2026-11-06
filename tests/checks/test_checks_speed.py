@@ -103,7 +103,7 @@ class InputCache(SpeedTest):
         (self.wt / "justfile").write_text("x:\n")  # outside the globs, but it defines the recipe
         eng.run_checks(self.ST, "s")
         assert n.read_text() == "11"
-        (self.wt / "packages-lock.json").write_text("{}")
+        (self.wt / "package-lock.json").write_text("{}")
         eng.run_checks(self.ST, "s")
         assert n.read_text() == "111"
         te.sh("git", "commit", "--allow-empty", "-qm", "x", cwd=self.wt)
@@ -113,6 +113,21 @@ class InputCache(SpeedTest):
         eng2 = self.checks_engine(checks=[dict(chk, env={"A": "1"})])
         eng2.run_checks(self.ST, "s")
         assert n.read_text() == "11111"
+
+    def test_a_pin_file_the_profile_names_is_an_input_and_an_unnamed_one_is_not(self):
+        cmd, n = self.bump()
+        chk = {"id": "u", "cmd": cmd, "group": "tests", "inputs": ["app/**"]}
+        eng = self.checks_engine(checks=[chk], pin_files=["Directory.Build.props"])
+        (self.wt / "app").mkdir()
+        (self.wt / "app" / "a.src").write_text("1\n")
+        eng.run_checks(self.ST, "s")
+        (self.wt / "other.cfg").write_text("x\n")  # a file nobody names: not an input
+        eng.run_checks(self.ST, "s")
+        assert n.read_text() == "1"
+        (self.wt / "app" / "Directory.Build.props").write_text("<a/>")  # inside the globs it is an input anyway
+        (self.wt / "Directory.Build.props").write_text("<a/>")  # outside them, only the profile's name makes it one
+        eng.run_checks(self.ST, "s")
+        assert n.read_text() == "11"
 
     def test_a_gitignored_file_under_the_globs_counts_by_its_content(self):
         cmd, n = self.bump()

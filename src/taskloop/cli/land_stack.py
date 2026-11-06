@@ -74,7 +74,7 @@ def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs
                   StackGate(cmds, git, stores, repo, f"origin/{a.base}", tl, env), store, a.wait_min,
                   lambda bead: locator.add_bead(run, bead),
                   lambda path: bool(slot_of(slot_repo, path, who, store, strict=True)), profile_slots(slot_repo).base,
-                  cfg=who.config, profile_change=profile_change)
+                  cfg=who.config, profile_change=profile_change, jobs=a.jobs)
     rc = 1
     try:
         rc = stack.run(items)
@@ -98,4 +98,6 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     p.add_argument("--bead", action="append", default=[], metavar="ITEM=BEAD", help="the bead to record the land on (task/<bead> names it)")
     p.add_argument("--supersede", action="append", default=[], metavar="ITEM=PR", help="an older PR to close once this item has merged")
     p.add_argument("--wait-min", type=float, default=None, help="give up (exit 75) after this long waiting for the land lock")
+    p.add_argument("--jobs", type=int, default=4, metavar="N",
+                   help="gate up to N of the items at once before the one-by-one merges (default 4; 1 gates each in its turn)")
     p.add_argument("--profile-change", metavar="TEXT", help="owner's quoted approval and timestamp for this call's profile changes")

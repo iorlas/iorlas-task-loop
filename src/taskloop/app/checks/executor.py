@@ -23,7 +23,6 @@ from taskloop.domain.checks.names import log_var, rc_var
 from taskloop.domain.checks.plan import CheckPlan, Step
 from taskloop.domain.checks.specs import due
 
-PROJECT_LOG = "client/Logs/unity-project-files.log"  # where Unity says why the project files could not be regenerated
 PROJECT_LOG_LINES = 20
 FAILED_FIRST = " failed first"
 
@@ -139,7 +138,7 @@ class CheckExecutor:
         is the diff's: if nothing it reads changed, a host that has the resource has nothing new to verify."""
         lack = self.resources.lacking(c)
         st.changed = self.host.checkout.changed_paths() if st.changed is None else st.changed
-        changed = touched(c, st.changed)
+        changed = touched(c, st.changed, self.host.cfg.pin_files)
         said = "its inputs changed: it waits for a host that has it" if changed else "its inputs are unchanged: the land may go on"
         why = f"deferred: needs {', '.join(lack)}, which this host does not have; {said}"
         self.host.log.note(f"`{c.id}` {why}")
@@ -167,7 +166,7 @@ class CheckExecutor:
         gone = self._producer_gone(step, st)
         if gone:
             return CheckResult.skipped(c, f"producer {gone} did not run", producer=gone)
-        if st.red and (c.group != st.red or expected_secs(c.cmd, self.history) >= CHEAP_S or step.unity
+        if st.red and (c.group != st.red or expected_secs(c.cmd, self.history) >= CHEAP_S or step.queued
                        or any(d in st.red_skipped for d in step.env)):
             # a red group skips the groups after it, and any red skips every expensive check (the cheap ones of its own group run to
             # the end, so the writer sees all the cheap failures at once; the Unity group never runs after a red)
@@ -278,7 +277,7 @@ class CheckExecutor:
     def _project_log(self, c: Check, seen: str, log: Path) -> str:
         """A red analyzer whose output shows no compile error because the project files could not be regenerated: the first
         PROJECT_LOG_LINES error lines of the log Unity wrote for that, in the output the writer sees (and in the saved log)."""
-        path = c.tail_log or (PROJECT_LOG if "analy" in (c.id + " " + c.cmd).lower() else "")
+        path = c.tail_log or self.host.cfg.project_log
         if not path or cs_error_lines(seen, 1):
             return ""
         lines = cs_error_lines("\n".join(check_files.read_lines(Path(self.host.wt) / path)), PROJECT_LOG_LINES)
