@@ -1,6 +1,8 @@
 """What one worker answer says about the run's threads, as a value: the call computes it, the caller applies and persists it."""
 from dataclasses import dataclass
 
+from taskloop.contracts.wire import Open
+
 
 @dataclass(frozen=True)
 class Fallback:
@@ -21,3 +23,12 @@ class Updates:
     fallback: Fallback | None = None  # only when delegate said it on this answer
     planner_ref: str = ""  # the plan node's session, "" = unchanged
     flag: str = ""  # same_family | degraded | "": what the call reports about its lane
+
+
+@dataclass(frozen=True)
+class Asked:
+    """A worker call's result: the answer's data and family, and what it says about the run's threads (the caller applies those)."""
+
+    data: Open
+    family: str
+    updates: Updates
