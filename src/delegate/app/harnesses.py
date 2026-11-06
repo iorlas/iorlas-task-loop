@@ -2,18 +2,32 @@
 
 from typing import Final
 
-from delegate.adapters.harness.claude import ClaudeHarness
-from delegate.adapters.harness.codex import CodexHarness
-from delegate.adapters.harness.opencode import OpenCodeHarness, Profile
+from any_agent.harnesses import claude, codex, opencode
+from any_agent.harnesses.claude import ClaudeHarness
+from any_agent.harnesses.codex import CodexHarness
+from any_agent.harnesses.opencode import OpenCodeHarness, Profile
+from any_agent.harnesses.opencode_sandbox import Sandbox
+from any_agent.watch import Limits
+from app_dirs import config_dir
+
 from delegate.app import env
 
 AUTH_TIMEOUT = 10
+CLI_OF_KIND: Final = {"claude_p": "claude", "codex": "codex", "opencode": "opencode"}  # a runner kind (route.how) -> its CLI
+# The deadlines a run is held to per CLI: each harness's own measured Limits. A test swaps one entry to shorten them.
+LIMITS: Final[dict[str, Limits]] = {"claude": claude.LIMITS, "codex": codex.LIMITS, "opencode": opencode.LIMITS}
 OC_PROFILES: Final = {
     "GROK_SUBSCRIPTION": Profile(auth_key="xai"),
     "ZAI_CODING_SUBSCRIPTION": Profile(providers=("zai-coding-plan",), price="unknown", auth_key="zai-coding-plan", need_key=True),
     "DEEPSEEK_FREE": Profile(providers=("opencode",), own_data=True, price="free"),
 }
 ZAI_MODELS = ("zai-coding-plan/glm-5.3", "zai-coding-plan/glm-5.3-flash")
+
+
+def sandbox() -> Sandbox:
+    """What delegate adds to the OpenCode sandbox: the task-loop runs folder (the engine points reviewers at its files) and the engine's
+    git-ignored scratch folder (a reviewer's test run writes its temp files there)."""
+    return Sandbox(readable=(str(config_dir("task-loop") / "runs"),), scratch=".task")
 
 
 def probe_login(name: str):

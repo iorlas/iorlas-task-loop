@@ -10,6 +10,7 @@ import json
 import os
 import threading
 import time
+import zlib
 from collections.abc import Callable
 from pathlib import Path
 
@@ -47,11 +48,21 @@ class Source:
         self.tag, self.path = tag, path
         self.offset = 0
         self.items: list[tuple[int, Json]] = []
+        self.ident: tuple[int, int] | None = None
 
     def refresh(self) -> None:
-        if jsonl.size_of(self.path) < self.offset:  # the file was replaced
+        """Start over when the file is another file (device and inode) or shrank; read nothing of a file that vanished."""
+        try:
+            st = os.stat(self.path)
+        except OSError:
+            self.offset, self.ident = 0, None
+            self.items = []
+            return
+        ident = (st.st_dev, st.st_ino)
+        if (self.ident is not None and ident != self.ident) or st.st_size < self.offset:
             self.offset = 0
             self.items = []
+        self.ident = ident
         rows, self.offset = jsonl.read_from(self.path, self.offset, ev.decode_worker)
         self.items += [(off, ev.worker_event(r, self.tag, off)) for off, r in rows]
 
@@ -96,6 +107,9 @@ class LiveRun:
             names: list[str] = sorted(n for n in os.listdir(self.live_dir()) if n.endswith(".jsonl"))
         except OSError:
             names = []
+        kept = {n[: -len(".jsonl")] for n in names}
+        for tag in [t for t, s in self.sources.items() if isinstance(s, Source) and t not in kept]:
+            del self.sources[tag]  # retention removed the file: its events are no longer a stream anyone can reread
         for name in names:
             tag = name[: -len(".jsonl")]
             self.sources.setdefault(tag, Source(tag, str(self.live_dir() / name)))
@@ -107,6 +121,7 @@ class LiveRun:
         engine = self.sources[ev.ENGINE]
         if isinstance(engine, EngineSource):
             out["_engine_bytes"] = (decode(engine.cursor) or {}).get("engine", 0)
+        out["_run"] = zlib.crc32(self.run.encode())  # a cursor belongs to one run
         return out
 
     def select(self, keep: Callable[[str, int], bool]) -> list[tuple[str, int, Json]]:
@@ -124,8 +139,12 @@ class LiveRun:
 
 
 def page(run: LiveRun, since: dict[str, int] | None = None, limit: int = PAGE) -> Json:
-    """{events, cursor}: the first MAX_PAGE events after `since`, else the newest `limit` events. A burst past one page is not cut:
-    the cursor stops at the first event left over, so the next poll carries on from it."""
+    """{events, cursor, reset}: the first MAX_PAGE events after `since`, else the newest `limit` events. A burst past one page is not cut:
+    the cursor stops at the first event left over, so the next poll carries on from it. A cursor of another run is a `reset`: the newest
+    events answer it."""
+    reset = since is not None and since.get("_run", zlib.crc32(run.run.encode())) != zlib.crc32(run.run.encode())
+    if reset:
+        since = None
     got = run.select(lambda t, off: since is None or off >= since.get(t, 0))
     cursor = run.offsets()
     if since is None:
@@ -134,7 +153,7 @@ def page(run: LiveRun, since: dict[str, int] | None = None, limit: int = PAGE) -
         for tag, off, _ in reversed(got[MAX_PAGE:]):
             cursor[tag] = off
         got = got[:MAX_PAGE]
-    return {"events": [e for _, _, e in got], "cursor": encode(cursor)}
+    return {"events": [e for _, _, e in got], "cursor": encode(cursor), "reset": reset}
 
 
 def poll(

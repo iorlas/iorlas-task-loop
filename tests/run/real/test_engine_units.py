@@ -47,7 +47,7 @@ class Outcome(T.EngineTest):
 
 
     def main(self, outcome_file, **kw):
-        a = mock.Mock(id="t-1", worktree=str(Path(self.tmp.name, "slot")), slot=None, dry_run=False, fresh=False,
+        a = mock.Mock(id="t-1", branch=None, pr=None, worktree=str(Path(self.tmp.name, "slot")), slot=None, dry_run=False, fresh=False,
                       quiet=True, outcome_file=str(outcome_file))
         Path(a.worktree).mkdir(exist_ok=True)
         out = io.StringIO()

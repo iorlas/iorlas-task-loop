@@ -10,12 +10,14 @@ from collections.abc import Sequence
 from pathlib import Path
 from unittest import mock
 
-from delegate.adapters import procs
-from delegate.adapters.harness import opencode_sandbox as box
-from delegate.adapters.harness.base import LaunchInputs
-from delegate.adapters.harness.opencode import OpenCodeHarness, Profile
+from any_agent import events as ev
+from any_agent import procs
+from any_agent.harnesses import opencode_sandbox
+from any_agent.harnesses import opencode_sandbox as box
+from any_agent.harnesses.opencode import OpenCodeHarness, Profile
+from any_agent.protocol import LaunchInputs
+from delegate.app import harnesses
 from delegate.app.publish import LiveSink
-from delegate.contracts import events as ev
 from delegate.contracts.json_types import obj
 from support.case import Case
 
@@ -173,7 +175,7 @@ class World(Case):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         h = OpenCodeHarness(profile, Path(tmp.name))
-        with mock.patch.object(OpenCodeHarness, "write_shell") as shell:
+        with mock.patch.object(opencode_sandbox, "write_shell") as shell:
             s = h.launch_spec(
                 LaunchInputs(
                     exe="/bin/oc",
@@ -287,5 +289,5 @@ class World(Case):
     def test_the_sandbox_shell_is_offline_and_a_refused_network_is_not_a_denial(self):
         assert box.network_refusal("error: tcp connect error\n  Operation not permitted (os error 1)")
         assert not box.network_refusal("cat: /Users/x/.ssh/id_rsa: Operation not permitted")
-        assert box.permissions(True)["external_directory"] == "deny"
-        assert obj(box.permissions(False)["read"])[str(Path.home() / ".ssh")] == "deny"
+        assert box.permissions(harnesses.sandbox(), True)["external_directory"] == "deny"
+        assert obj(box.permissions(harnesses.sandbox(), False)["read"])[str(Path.home() / ".ssh")] == "deny"

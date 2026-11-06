@@ -14,12 +14,12 @@ from typing import Any
 from unittest import mock
 
 import pytest
+from any_agent.harnesses.codex import CodexHarness
+from any_agent.protocol import LaunchSpec
+from any_agent.supervisor import RunHooks, Supervisor
 from delegate.adapters import codex_account, procs
-from delegate.adapters.harness.base import LaunchSpec
-from delegate.adapters.harness.codex import CodexHarness
 from delegate.app import lease, usage
 from delegate.app.publish import LiveSink
-from delegate.app.supervisor import RunHooks, Supervisor
 from delegate.contracts.state import Lease
 from stream_proc import alive, proc_start
 from support.case import Case
@@ -72,7 +72,7 @@ class RealTrees(Case):
 
         th = threading.Thread(target=watch)
         th.start()
-        sup = Supervisor(CodexHarness(), "codex", RunHooks(started=lambda w: seen.update(shim=w.pid)), LiveSink("codex", ""))
+        sup = Supervisor(CodexHarness(), RunHooks(started=lambda w: seen.update(shim=w.pid)), LiveSink("codex", ""))
         out = sup.run(LaunchSpec(argv=[sys.executable, "-c", SHIM, self.pidfile], env=dict(os.environ), cwd=self.d.name, stdin=""), 3)
         th.join()
         assert out.timed_out
@@ -88,7 +88,7 @@ class RealTrees(Case):
             seen.update(pid=w.pid, start=proc_start(w.pid))
             raise OSError("state is locked")
 
-        sup = Supervisor(CodexHarness(), "codex", RunHooks(started=refuse), LiveSink("codex", ""))
+        sup = Supervisor(CodexHarness(), RunHooks(started=refuse), LiveSink("codex", ""))
         with pytest.raises(OSError, match="state is locked"):
             sup.run(LaunchSpec(argv=[sys.executable, "-c", SHIM, self.pidfile], env=dict(os.environ), cwd=self.d.name, stdin=""), 30)
         assert gone(seen["pid"], seen["start"]), "an unregistered worker was left running"
@@ -167,9 +167,7 @@ class KillPaths(Case):
         assert (res, err) == ({"ok": 1}, None)
 
     def test_no_pattern_kills_and_no_bare_kill_in_router(self):
-        src = "".join(
-            (ROOT / "src" / "delegate" / f).read_text(encoding="utf-8") for f in ("entry.py", "adapters/procs.py", "app/supervisor.py")
-        )
+        src = "".join((ROOT / "src" / "delegate" / f).read_text(encoding="utf-8") for f in ("entry.py", "adapters/procs.py"))
         assert re.search(r"pkill|killall|pgrep", src) is None
         assert re.search(r"\.kill\(\)|os\.kill", src) is None  # every stop goes through stream_proc
         assert len(re.findall(r"\.terminate\(\)", src)) == 0

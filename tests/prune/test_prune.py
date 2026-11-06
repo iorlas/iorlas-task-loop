@@ -25,12 +25,15 @@ from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.run import layout
 from taskloop.app.run.layout import RunLayout
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.checkpoint import Checkpoint
+from taskloop.contracts.checkpoint import RunState as CheckpointState
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdError, BdFailure, Beads
 from taskloop.contracts.run import RunState
+from taskloop.stores.real import real_stores
 
 DAY = 86400
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"}
@@ -160,6 +163,17 @@ class RunData(Case):
         assert (logs / "00-c.r1.log").exists()
         assert self.cfg.engine_log("x-7-20260101-000000").exists()
         assert not self.cfg.engine_log("x-1-20260101-000000").exists()  # a closed one's, 45 days old, went with prune
+
+    def test_a_resumable_checkpoint_survives_every_sweep_with_its_origin_run_branch_and_head(self):
+        """tl-9un.46: checkpoints cross runs, so no run-folder sweep touches them, whatever the age of the run that left one."""
+        mine = real_stores(self.cfg).checkpoints
+        for bead in ("x-1", "x-9"):  # a closed bead's old run folders go; an open one's checkpoint stays
+            mine.of(bead).write(Checkpoint(bead=bead, run="origin-run", t=0.0, branch=f"task/{bead}", head="abc123", step="write",
+                                           state=CheckpointState()))
+        self.prune(Store(("x-9", "open")), days=1)
+        for bead in ("x-1", "x-9"):
+            got = mine.of(bead).get()
+            assert got is not None and (got.run, got.branch, got.head, got.closed) == ("origin-run", f"task/{bead}", "abc123", False)
 
     def test_the_evidence_of_a_closed_bead_goes_with_its_run_folder_after_30_days_not_before(self):
         for bead, age in (("x-5", 29), ("x-6", 31)):

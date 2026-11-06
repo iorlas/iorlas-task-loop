@@ -10,7 +10,7 @@ from unittest import mock
 
 import pytest
 import stream_proc
-from delegate.app import answer, env, launch, net, watch
+from delegate.app import answer, env, launch, net
 from delegate.app import decide as dec
 from delegate.contracts import stops
 from delegate.contracts.state import RefRecord
@@ -21,7 +21,7 @@ from support.procsim import real_proc
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
-from run_support import RunBase
+from run_support import RunBase, short_limits
 from test_route import _call, at, route, why
 
 LIMIT_S = 60  # each test makes several full runs, every run spawns a fake CLI and git
@@ -351,7 +351,7 @@ class RunVendors(RunBase):
             return {"up": False, "ip_up": False, "why": "offline", "ms": 1, "hosts": {}, "at": time.time()}
 
         time.time()
-        with mock.patch.object(net, "net_probe", down), mock.patch("delegate.app.supervisor.NET_GRACE_S", 1):
+        with mock.patch.object(net, "net_probe", down), mock.patch("any_agent.supervisor.NET_GRACE_S", 1):
             _, r = self.run_it(mode="wait_stuck", timeout=60)
         assert (why(r), r["ref"]) == ("network", "thread-123")
         assert r["stop"]["resumable"]
@@ -433,7 +433,7 @@ class RunVendors(RunBase):
     @real_proc("delegate: a worker, git or CLI process")
     def test_codex_that_goes_quiet_is_stopped_through_the_tree_kill_and_the_lane_is_not_marked_out(self):
         with (
-            mock.patch.dict(watch.LIMITS["codex"], silence_s=1),
+            short_limits("codex", silence_s=1),
             mock.patch.object(stream_proc, "stop_tree", wraps=stream_proc.stop_tree) as st,
         ):
             time.time()
