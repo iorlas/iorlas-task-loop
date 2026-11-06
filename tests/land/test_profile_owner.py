@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fake_clock import FakeClock
 from support.fakegit import FakeGit
+from support.memstores import fake_stores
 from support.narrow_hosts import FakePushHost, Stopped
 
 from taskloop.app.land.cmds import Cmds, Stop
@@ -35,7 +36,6 @@ from taskloop.contracts.gitfacts import TreeEntry
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.profile_changes import ProfileChange
 from taskloop.contracts.runkey import BaseSha
-from taskloop.stores.memory import fake_stores
 
 TEXT = 'Denis: "I approve this profile" 2026-11-02T12:00Z'
 PATCH = 'diff --git a/.task-loop.json b/.task-loop.json\n-old\n+new\n'
@@ -82,7 +82,7 @@ class OwnerText(Case):
 
 class OwnerGate(Case):
     def setup_method(self):
-        self.git = FakeGit(**{"rev_parse__origin/main": "base", "rev_parse__tip^{tree}": "tree"})
+        self.git = FakeGit(**{"rev_parse__origin/main": "base", "rev_parse__tip^{tree}": "tree", "rev_parse__HEAD": "tip"})
         self.cmds = mock.Mock(spec=Cmds)
         self.cmds.port.side_effect = lambda text, fn: fn()
         self.stores = fake_stores()
@@ -117,7 +117,8 @@ class OwnerGate(Case):
         assert [check.id for check in red.call_args.args[0].gate_checks] == ["base-check"]
         with (mock.patch.object(self.git, "show", return_value=self.policy),
               mock.patch.object(self.gate, "red", return_value=["base-check"]),
-              mock.patch.object(self.gate, "worktree", return_value=""), pytest.raises(Stop)):
+              mock.patch.object(self.gate, "worktree", return_value=""),
+              mock.patch.object(self.gate, "fresh", return_value="/fresh"), pytest.raises(Stop)):
             self.gate.require("topic", "tip", profile_change=TEXT)
         assert self.stores.profile_changes.read_from().items == []
 
@@ -181,7 +182,6 @@ class OwnerJudge(Case):
                            **{"rev_parse__base^{tree}": "base-tree", "rev_parse__tip^{tree}": "tree",
                               "rev_parse__HEAD^{tree}": "tree", "rev_parse__origin/main": "base", "rev_parse__HEAD": "tip"})
         self.stores = fake_stores()
-        self.check = mock.Mock(return_value=0)
         self.profile = json.dumps({"engine": {"checks": [{"id": "base-check", "argv": ["true"], "run": "gate"}]}})
         for patch in (mock.patch.object(self.git, "ls_tree", side_effect=lambda repo, rev, path: entry(rev)),
                       mock.patch.object(self.git, "show", side_effect=lambda repo, rev, path: self.profile),
@@ -196,7 +196,7 @@ class OwnerJudge(Case):
 
     def judge(self):
         return judge_push("/repo", f"refs/heads/topic tip refs/heads/main {'0' * 40}\n", self.stores, self.git,
-                          self.check, env=Env(), clock=self.clock)
+                          env=Env(), clock=self.clock)
 
     def test_fresh_matching_row_allows_but_only_with_base_evidence(self):
         self.audit()
@@ -218,7 +218,6 @@ class OwnerJudge(Case):
                 result = self.judge()
                 assert result.status == PushStatus.REFUSED
                 assert "profile_changed:" in result.reasons[0]
-        self.check.assert_not_called()
 
     def test_fake_clock_expiry_at_six_hundred_seconds(self):
         self.profile = "{}"
@@ -227,17 +226,6 @@ class OwnerJudge(Case):
         assert self.judge().status == PushStatus.ALLOWED
         self.clock.advance(0.01)
         assert self.judge().status == PushStatus.REFUSED
-
-    def test_check_retry_receives_the_base_registry_even_when_tip_removes_it(self):
-        self.audit()
-        self.git.replies[("dirty",)] = False
-        base_cfg = load(json.loads(self.profile)).engine
-        with (mock.patch.object(self.git, "show", side_effect=lambda repo, rev, path: self.profile if rev == "base-tree" else "{}"),
-              mock.patch.object(Path, "read_bytes", return_value=b"{}"),
-              mock.patch("taskloop.app.checks.authorization.results",
-                         side_effect=[{"base-check": None}, {"base-check": mock.Mock()}])):
-            assert self.judge().status == PushStatus.ALLOWED
-        self.check.assert_called_once_with(base_cfg)
 
     def test_constructed_engine_push_path_cannot_authorize_a_profile_change(self):
         def push(argv, **kwargs):

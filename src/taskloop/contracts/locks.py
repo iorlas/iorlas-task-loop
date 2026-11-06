@@ -8,9 +8,10 @@ from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.wire import Rec
 
 
-def pid_alive(pid: int) -> bool:
-    """True when a process with this pid exists and is no zombie (stream-proc). A pid reused by another process is not detected here."""
-    return pid > 0 and stream_proc.alive(pid)
+def pid_alive(pid: int, start: str = "") -> bool:
+    """True when a process with this pid exists and is no zombie (stream-proc). With `start` (its proc_start token), a pid another
+    process took over reads as gone; without, a reused pid is not detected."""
+    return pid > 0 and stream_proc.alive(pid, start or None)
 
 
 class LockTimeout(TimeoutError):

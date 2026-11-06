@@ -46,10 +46,10 @@ def liveness(m: RunManifest) -> Liveness:
     return Liveness.LIVE if m.state.live else Liveness.LOST if m.state is RunState.LOST else Liveness.ENDED
 
 
-def is_lost(m: RunManifest, host: str, now: float, alive: Callable[[int], bool]) -> bool:
+def is_lost(m: RunManifest, host: str, now: float, alive: Callable[[int, str], bool]) -> bool:
     """The one decision: a run in a live state, of THIS host, whose heartbeat is older than STALE_AFTER and whose pid is gone, is lost.
     Pure: the writer (`reconcile`) and the dashboard's display both ask it, so what is shown is what would be written."""
-    return m.state.live and m.host == host and now - m.heartbeat >= STALE_AFTER and not (m.pid > 0 and alive(m.pid))
+    return m.state.live and m.host == host and now - m.heartbeat >= STALE_AFTER and not (m.pid > 0 and alive(m.pid, m.pid_start))
 
 
 def lost_reason(m: RunManifest, now: float) -> str:

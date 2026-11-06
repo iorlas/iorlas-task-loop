@@ -10,13 +10,13 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import homes
+from support.memstores import fake_stores
 
 from land.test_cleanup import CleanupGit
 from taskloop.app.land import cleanup
 from taskloop.app.land.tree import Tree
 from taskloop.app.slots.reset import leave_slot
 from taskloop.contracts.locks import EngineLock
-from taskloop.stores.memory import fake_stores
 from taskloop.stores.runlog import RunLog
 
 

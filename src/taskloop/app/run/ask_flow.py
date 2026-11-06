@@ -3,9 +3,12 @@ import time
 from typing import Any
 
 from taskloop.adapters import ident
+from taskloop.adapters.check_files import repo_key
+from taskloop.app.artifacts import ask_pictures
 from taskloop.app.asks import raiser, setup_retry
 from taskloop.app.run.blocked import Blocked
 from taskloop.app.run.layout import repo_of
+from taskloop.contracts.artifact import ArtifactSlot
 from taskloop.contracts.kinds import Kind
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks import text as asktext
@@ -34,12 +37,21 @@ class AskFlow:
         """The repo's path as asks and decisions name it: the parent of the git common dir (the worktree when git cannot say)."""
         return repo_of(self.e.git, self.e.wt)
 
+    def pictures(self) -> list[str]:
+        """The pictures the failing check left in this run, registered for the ask (none in a dry run)."""
+        e = self.e
+        if e.dry:
+            return []
+        e.artifact_repo = e.artifact_repo or repo_key(e.git, e.wt)
+        slot = ArtifactSlot(repo=e.artifact_repo, bead=e.bead, run=e.run_id, stage="ask", attempt=1)
+        return ask_pictures.attach(e.home.artifact_store(), slot, e.run_dir, now=time.time(), cap=int(e.cfg.evidence_cap_mb) << 20)
+
     def raise_ask(self, spec: Any, why: str, kind: Any) -> Any:
         """File the ask the stop carries. Lint decides whether it is one an owner can answer: if not, nothing is filed and the stop is
         the engine's own fault, never a prose question. -> the Ask, or None."""
         e = self.e
         at = raiser.Asking(bead=e.bead, run=e.run_id, brief_hash=e.brief_hash, now=time.time(), why=why, repo=self.repo(),
-                           title=e.bead_title)
+                           title=e.bead_title, artifacts=tuple(self.pictures()))
         a, problems = raiser.raise_ask(e.stores.asks, spec, at, e.stores.adrs(at.repo))
         if a is None:
             e.warn("the ask is not one an owner can answer ({}): {}".format("; ".join(problems), spec.decision[:200]))
