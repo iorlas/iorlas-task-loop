@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "f3905a4ed7354d81",
+ "version": "2c04e6940afc8097",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Autosave every 5 minutes. Part of Save system.",
@@ -72,6 +72,7 @@
    "phase": null
   }
  ],
+ "decisions": [],
  "passes": [
   {
    "n": 1,

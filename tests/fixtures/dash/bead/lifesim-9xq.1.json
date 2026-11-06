@@ -58,7 +58,7 @@
   "retry_at": 0.0,
   "shots": 0
  },
- "version": "314df50b9dfba78f",
+ "version": "14ed2e228698cde1",
  "bd_ok_at": null,
  "bd_error": "",
  "description": "Fridge spoils food after 3 days. Part of Economy.",
@@ -72,6 +72,7 @@
    "phase": null
   }
  ],
+ "decisions": [],
  "passes": [
   {
    "n": 1,
