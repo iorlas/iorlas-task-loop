@@ -9,7 +9,7 @@ from taskloop.contracts.bead import Bead, Comment
 from taskloop.contracts.dash import Artifact, AskCard, BeadDetail, CheckCount, LiveBox, Marker, Msg, Phase
 from taskloop.contracts.delegate import LiveCmdEnd, LiveCmdStart, LiveEvent, LiveTokens
 from taskloop.contracts.log import Overrun, RetryDecision, VendorError
-from taskloop.contracts.runlife import Liveness
+from taskloop.contracts.runlife import GONE, Liveness
 from taskloop_dash.tails import parse_ts
 from taskloop_dash.views import ledger, passes, phases, stage_logs
 from taskloop_dash.views.artifact_files import Item, url_of
@@ -73,7 +73,7 @@ def live_box(run: Run, ps: Sequence[passes.PassView], events: Sequence[LiveEvent
     if run.life is Liveness.ENDED or not mine or cur is None or cur.phase is None:
         return None
     n = mine[-1].n
-    if run.life is Liveness.LOST:
+    if run.life in GONE:
         return LiveBox(kind="exited", phase=cur.phase, pass_n=n, t=run.last_t, why=EXITED_WHY, exit_code=run.exit_code)
     if run.stuck is not None:
         st = run.stuck

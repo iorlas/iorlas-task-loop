@@ -5,15 +5,20 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from taskloop.adapters import check_files
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.host import CheckHost
 from taskloop.app.checks.keep import keep
+from taskloop.app.checks.linux import LinuxRun
 from taskloop.app.checks.step_env import step_env
 from taskloop.contracts.argv import argv_of
 from taskloop.contracts.checks import UNVERIFIED_EXIT, Check
 from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.envvars import EnvVar
 from taskloop.domain.checks import matchers, retry
+
+# the run's names that mean the same on the executor
+REMOTE_ENV = frozenset({EnvVar.TL_RUN_ID.value, EnvVar.TL_ATTEMPT.value, EnvVar.TL_ARTIFACT_STEP.value})
 
 
 @dataclass
@@ -71,7 +76,10 @@ class Attempts:
         env = {**c.env, **env, **ids}
         argv = [*argv_of(c.cmd), *c.files]
         try:
-            rc, tail = self.host.sh(argv, timeout=c.wall_min * 60, save=log, what="check", env=env, stop=stop)
+            if c.where == "linux":
+                rc, tail = self._linux(c, argv, env, ids, log, stop)
+            else:
+                rc, tail = self.host.sh(argv, timeout=c.wall_min * 60, save=log, what="check", env=env, stop=stop)
         except OSError as error:
             rc = 127 if isinstance(error, FileNotFoundError) else 126
             tail = f"check `{c.id}` could not start `{argv[0]}`: {error}"
@@ -79,6 +87,18 @@ class Attempts:
         # before a retry, the next check or the slot's reset overwrites what this attempt left
         keep(self.host, c, log, Path(ids[EnvVar.TL_ARTIFACT_DIR.value]))
         return rc, tail
+
+    def _linux(self, c: Check, argv: list[str], env: Mapping[str, str], ids: Mapping[str, str], log: Path,
+               stop: threading.Event | None) -> tuple[int, str]:
+        """The committed HEAD of the checkout this check runs in, on the executor: only what the check was told by its profile and
+        the run's names go over (the local paths mean nothing there)."""
+        wt, git = str(self.host.wt), self.host.git
+        slot = Path(wt).name if c.run_in == "slot" else "clean"
+        told = {k: v for k, v in env.items() if k in c.env or k in REMOTE_ENV}
+        return LinuxRun(self.host.cfg.executor, git, self.host.spawner).run(
+            wt=wt, repo=check_files.repo_key(git, wt), slot=slot, sha=git.rev_parse(wt, "HEAD"), run_id=self.host.run_id,
+            step=c.id, argv=argv, env=told, log=log, artifact_dir=Path(ids[EnvVar.TL_ARTIFACT_DIR.value]),
+            timeout_s=c.wall_min * 60, stop=stop)
 
     @staticmethod
     def _read(log: Path, fallback: str) -> str:

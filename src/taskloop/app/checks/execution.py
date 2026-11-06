@@ -6,6 +6,8 @@ from taskloop.contracts.runkey import Digest
 
 HOST_IDENTITY = Digest("host-v1")  # every check runs on this machine: the execution field of its run key
 
+LINUX_IDENTITY = Digest("linux-v1")  # a check with `in: linux` runs on the executor, in its slot's persistent worktree
+
 
 def check_env() -> dict[str, str]:
     """The admitted environment shared by standalone checks and delivery queries."""
