@@ -1,10 +1,10 @@
 """A committed malicious profile cannot make the push judge execute a host command."""
 import json
 import sys
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
@@ -20,7 +20,7 @@ from taskloop.contracts.env import snapshot
 class PushPolicy(Case):
     @real_git("the judge must reject a real committed malicious profile without creating a canary outside its worktree")
     def test_tip_profile_cannot_execute_on_the_host(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             root = Path(tmp)
             repo = root / "worktree"
             repo.mkdir()

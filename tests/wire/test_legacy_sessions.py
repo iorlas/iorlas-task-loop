@@ -1,8 +1,8 @@
 """The retired session index folder: doctor names it as removable legacy, never deletes it, and no source reads it."""
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.wire import doctor
 from taskloop.contracts.env import Env
@@ -12,7 +12,7 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 
 class LegacySessions(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.home = Path(tmp.name)
         self.env = Env({"HOME": tmp.name, "XDG_CONFIG_HOME": str(self.home / ".config")})

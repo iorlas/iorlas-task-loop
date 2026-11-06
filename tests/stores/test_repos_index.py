@@ -2,12 +2,12 @@
 map before STATEFILES) is an error naming the fix, for readers and writers alike, and is never read as empty or overwritten."""
 import json
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import mkdtemp
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -19,7 +19,7 @@ from taskloop.contracts.stores import ReposStore
 
 class ReposIndexFile(Case):
     def setup_method(self) -> None:
-        self.dir = Path(tempfile.mkdtemp())
+        self.dir = Path(mkdtemp())
         self.store = ReposStore(ConfigDir(self.dir))
 
     def test_a_missing_file_is_no_repos_and_an_add_creates_it(self) -> None:
