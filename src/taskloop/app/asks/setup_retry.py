@@ -4,10 +4,10 @@ import json
 from taskloop.app.asks import release
 from taskloop.contracts.ask import AskAnswer
 from taskloop.contracts.askstore import AskStore
+from taskloop.contracts.beadsport import BeadPatch, Beads
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BeadPatch, Beads
 
 RETRIED = "setup_retry_versions"
 

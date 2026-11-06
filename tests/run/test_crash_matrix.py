@@ -1,13 +1,15 @@
-"""The crash matrix, slice 1: a run that dies at each point of each transition resumes at a step the records allow.
+"""The crash matrix: a run that dies at each point of each transition resumes at a step the records allow.
 
-The records a run leaves are the manifest's `next_step` (advanced before a step's work and again when it returns) and the checkpoint's
-`step` (saved when the work returns, before the second advance). A kill between any two of those writes leaves one of four states,
-and the reconciler marks the dead run LOST. `select_step` reads them back; for every edge of the step graph and every kill point it
-must answer the step the table says: the same step again (at-least-once, so every step must be repeatable) or its successor, never a
-step before it or past its successor, and never an error for a lost run. Pure: no clock, no process."""
+The edges of the step graph are read off the code (tests/support/stepgraph.py). The records a run leaves are the manifest's `next_step`
+(advanced before a step's work and again when it returns) and the checkpoint's `step` (saved when the work returns, before the second
+advance). A kill between any two of those writes leaves one of three states, and the reconciler marks the dead run LOST. `select_step`
+reads them back; for every edge and every kill point it must answer the same step again (at-least-once, so every step must be
+repeatable) or its successor, never a step before it or past its successor, and never an error for a lost run. Pure: no clock, no
+process."""
 from pathlib import Path
 
 import pytest
+from support import stepgraph
 
 from taskloop.app.run.stages import select_step
 from taskloop.contracts.checkpoint import Checkpoint, EndRec
@@ -16,14 +18,8 @@ from taskloop.contracts.locator import RunBundle
 from taskloop.contracts.run import RunManifest, RunState
 
 S = Step
-# (step, the steps its work can hand on to): stages.dispatch and stage_rounds.round_step. Slice 2 derives this from the code.
-EDGES = [
-    (S.RESET, S.PLAN), (S.PLAN, S.WRITE), (S.REPLAN, S.WRITE),
-    (S.WRITE, S.WRITE), (S.WRITE, S.CHECKS), (S.WRITE, S.VERIFY), (S.WRITE, S.REPLAN),
-    (S.CHECKS, S.REVIEW), (S.CHECKS, S.WRITE), (S.CHECKS, S.VERIFY),
-    (S.REVIEW, S.WRITE), (S.REVIEW, S.LOOK), (S.REVIEW, S.VERIFY), (S.REVIEW, S.REPLAN),
-    (S.LOOK, S.VERIFY), (S.LOOK, S.WRITE), (S.VERIFY, S.GATE), (S.GATE, S.LAND), (S.LAND, S.CLOSE), (S.CLOSE, S.REFLECT),
-]
+GRAPH = stepgraph.graph()  # read off the code (tests/support/stepgraph.py), not typed here
+EDGES = sorted(((a, b) for a, nexts in GRAPH.items() for b in nexts if b is not None), key=lambda e: (e[0].value, e[1].value))
 STARTED, CK_AT = 1000.0, 1500.0
 POINTS = ["work-begun", "work-done-checkpoint-saved", "advanced"]
 
@@ -93,3 +89,9 @@ def test_a_finished_run_has_no_next_step_unless_one_is_named():
 
 def test_no_record_at_all_starts_at_reset():
     assert select_step(None, None, fresh=False, requested=None) == S.RESET
+
+
+def test_the_graph_read_from_the_code_covers_every_step_and_ends_at_reflect():
+    assert set(GRAPH) == set(Step)
+    assert [s for s, nexts in GRAPH.items() if None in nexts] == [S.REFLECT]
+    assert all(nexts for nexts in GRAPH.values())

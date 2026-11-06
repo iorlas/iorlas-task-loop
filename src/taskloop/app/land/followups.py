@@ -5,8 +5,8 @@ from typing import Protocol
 
 from taskloop.adapters import bdcreate
 from taskloop.app.asks import deferral as intake
+from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads, NewBead
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, NewBead
 from taskloop.domain import followups as fu
 from taskloop.stores.runlog import RunLog
 

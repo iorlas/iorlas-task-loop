@@ -3,7 +3,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Final
 
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 
 REQUIRED_CAPABILITIES: Final = ("instructions_ref",)  # a reviewer request carries the base commit (--instructions-ref)
 

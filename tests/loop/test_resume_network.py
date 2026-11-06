@@ -24,7 +24,8 @@ from support import (
     procsim,
     tlbd,
 )
-from support.engine_case import CLEAN, PLAN, WRITE, stop, verdict
+from support.engine_case import stop
+from support.plans import CLEAN, PLAN, WRITE, verdict
 
 from taskloop.app.loop.gate import GateRole
 from taskloop.app.release import reexec

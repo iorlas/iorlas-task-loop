@@ -5,7 +5,7 @@ from typing import Any
 
 from taskloop.adapters import gitmemo, gitrepo
 from taskloop.contracts.env import Env
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 
 _MEMO: dict[tuple[Any, ...], tuple[str, str] | None] = {}  # (slot, what the config files and environment are now) -> tree_problem's answer
 

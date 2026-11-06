@@ -6,8 +6,8 @@ from pathlib import Path
 
 from support import engine_case as te
 from support import homes, procsim
-from support.engine_case import CLEAN, PLAN, WRITE
 from support.logs import pairs, records
+from support.plans import CLEAN, PLAN, WRITE
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))

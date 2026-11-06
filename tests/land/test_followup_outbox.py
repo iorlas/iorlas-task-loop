@@ -21,10 +21,10 @@ from taskloop.app.run.closer_notes import FileNotes
 from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state
 from taskloop.contracts import fence
 from taskloop.contracts.bead import BdError
+from taskloop.contracts.beadsport import BdFailure
 from taskloop.contracts.checkpoint import RunState
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure
 from taskloop.domain.followups import FollowKey
 from taskloop.stores.runlog import RunLog
 
