@@ -16,6 +16,7 @@ REAL_HOME = os.path.realpath(os.path.expanduser("~"))
 FORBIDDEN = tuple(
     os.path.join(REAL_HOME, d) + os.sep for d in (".config", ".codex", ".claude", ".opencode", os.path.join(".local", "share"))
 )
+STDLIB = tuple(os.path.realpath(d) + os.sep for d in {sys.base_prefix, sys.prefix})  # a uv-managed Python lives under ~/.local/share
 FORBIDDEN_EXACT = tuple(os.path.join(REAL_HOME, d) for d in (".config", ".codex", ".claude", ".opencode"))
 ROOT = tempfile.mkdtemp(prefix="delegate-test-")
 _ENV = ("HOME", "USERPROFILE", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "CODEX_HOME", "DELEGATE_CONFIG_DIR", "TMPDIR")
@@ -24,7 +25,7 @@ _ENV = ("HOME", "USERPROFILE", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "CODEX_HOME",
 def _audit(event, args):
     if event == "open" and args and isinstance(args[0], (str, bytes, os.PathLike)):
         p = os.fsdecode(args[0])
-        if p.startswith(("/", REAL_HOME)) and (p.startswith(FORBIDDEN) or p in FORBIDDEN_EXACT):
+        if p.startswith(("/", REAL_HOME)) and (p.startswith(FORBIDDEN) or p in FORBIDDEN_EXACT) and not p.startswith(STDLIB):
             raise PermissionError(f"hermetic: a test opened the real {p}")
 
 
