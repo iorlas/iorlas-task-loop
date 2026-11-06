@@ -27,9 +27,10 @@ and permits only those two files to differ from the tested tree. Three lost push
 Then it tags v<version>, closes the bead, bumps the plugin's entry in the
 marketplace checkout (clean, on main), pushes it, tags it `iorlas-task-loop-v<version>`, runs `claude plugin marketplace update` and
 `claude plugin update`. The installed cache dir for the new version must exist afterwards: if not, the install runs once more, then the
-release exits non-zero naming the failing command. Every release writes <config>/releases/last.json; a failed one also comments on --bead
-and ends with a one-line "release FAILED" summary. After a successful push and install, --from-branch B's worktrees (plain `git worktree
-remove`, never --force) and B itself are removed; any failure keeps both. A plugin cache dir a live engine runs from stays.
+release exits non-zero naming the failing command. Every release writes its result (the `release:last` row in <config>/factory.db); a
+failed one also comments on --bead and ends with a one-line "release FAILED" summary. After a successful push and install, --from-branch
+B's worktrees (plain `git worktree remove`, never --force) and B itself are removed; any failure keeps both. A plugin cache dir a live
+engine runs from stays.
 """
 
 import sys

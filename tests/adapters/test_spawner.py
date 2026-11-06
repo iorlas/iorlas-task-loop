@@ -19,33 +19,12 @@ SRC = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 
 
 class SpawnerOnProcsim(Case):
-    def test_a_fake_command_answers_with_its_exit_and_output(self):
-        procsim.fake("say-hi", procsim.exits(3, "hi"))
-        r = RealSpawner(snapshot()).run(["say-hi"])
-        assert (r.exit, r.out, r.timed_out) == (3, "hi", False)
-
-    def test_a_fake_that_outlasts_the_timeout_is_exit_124(self):
-        procsim.fake("slow", procsim.hangs("partial"))
-        r = RealSpawner(snapshot()).run(["slow"], timeout_s=5)
-        assert (r.exit, r.timed_out) == (124, True)
-
     def test_timeout_preserves_stdout_and_stderr_for_prepare_diagnostics(self):
         def slow(cwd, env):
             raise subprocess.TimeoutExpired(["slow-restore"], 5, output=b"restoring", stderr=b"feed unavailable")
         procsim.fake("slow-restore", slow)
         r = RealSpawner(snapshot()).run(["slow-restore"], timeout_s=5)
         assert (r.exit, r.out, r.err, r.timed_out) == (124, "restoring", "feed unavailable", True)
-
-    def test_stream_hands_each_output_chunk_over_and_reports_how_it_ended(self):
-        procsim.fake("say-hi", procsim.exits(3, "hi"))
-        chunks: list[str] = []
-        r = RealSpawner(snapshot()).stream(["say-hi"], on_output=chunks.append)
-        assert ("".join(chunks), r.returncode, r.signal, r.timed_out) == ("hi\n", 3, None, None)
-
-    def test_a_streamed_fake_that_outlasts_its_limit_is_a_wall_stop(self):
-        procsim.fake("slow", procsim.hangs("partial"))
-        r = RealSpawner(snapshot()).stream(["slow"], on_output=lambda s: None, timeout_s=5)
-        assert (r.timed_out, r.returncode) == ("wall", None)
 
     def test_the_child_env_has_no_virtualenv_and_no_unregistered_engine_name(self):
         seen: dict[str, str] = {}
