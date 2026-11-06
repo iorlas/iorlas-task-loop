@@ -5,6 +5,7 @@ runner seam, and returns a `DelegateResult`. It never raises (but an interruptio
 `no_answer`, an answer that breaks the shape a `contract_violation`, a call the engine had to stop a `timeout`. Facts of a synthesized
 stop come from delegate's contract.json (`api.contract()`). Nothing here reads prose."""
 
+import contextlib
 import json
 import os
 import subprocess
@@ -188,9 +189,11 @@ def call(
             Path(bf).write_text(brief, encoding="utf-8")
             Path(sf).write_text(json.dumps(schema), encoding="utf-8")
             req = req.replace(brief_path=bf, schema_path=sf)
-            argv = req.to_argv("python", resolved.route)  # for the trace only: the runner takes `request`
+            wire_req = api_request(req, env)
+            with contextlib.suppress(ValueError):  # for the trace only (the runner takes `request`); a refused request has none
+                argv = wire_req.to_argv(resolved.route, contract=dict(c))
             wall = (req.timeout_s + BACKSTOP_S) if req.timeout_s else None
-            p = runner(argv, cwd=req.cwd or None, env=dict(env, **req.env()), timeout=wall, request=api_request(req, env))
+            p = runner(argv, cwd=req.cwd or None, env=dict(env, **req.env()), timeout=wall, request=wire_req)
     except (Stopped, subprocess.TimeoutExpired) as e:
         why = e.why if isinstance(e, Stopped) else "its wall limit ran out"
         return Answer(

@@ -9,7 +9,7 @@ from any_shell_policy import has_write_syntax
 from any_shell_policy.command import name_of
 
 from delegate.contracts.wire import RECIPE_RUNNERS
-from delegate.domain.policy.matchers import pieces, sed_print_only
+from delegate.domain.policy.matchers import GIT_ENV, pieces, sed_print_only
 
 # A read-only Claude step (reviewer, planner, light) gets Bash for reading only: every piece of the command line must start with one of
 # these, with no output redirection or command substitution. Codex read steps get the same from their read-only sandbox, enforced by the OS;
@@ -90,8 +90,10 @@ GIT_LISTING = (
 )
 GIT_CHANGING = (
     "commit", "push", "checkout", "switch", "merge", "rebase", "reset", "cherry-pick", "revert", "am", "pull",
-    "update-ref", "symbolic-ref", "reflog", "filter-branch", "replace", "gc", "prune",
+    "update-ref", "symbolic-ref", "reflog", "filter-branch", "filter-repo", "fast-import", "replace", "gc", "prune",
 )  # fmt: skip
+CONFIG_READS = frozenset({"--get", "--get-all", "--get-regexp", "--get-urlmatch", "-l", "--list", "--show-origin", "--show-scope"})
+REMOTE_READS = frozenset({"-v", "--verbose", "show", "get-url"})
 # Tools a write step has no business with: the forge (`gh`), and the tracker's writes (`bd`, `dolt`: the coordinator's). Reads pass.
 FORGE = frozenset({"gh"})
 TRACKER_READS: Mapping[str, frozenset[str]] = MappingProxyType(
@@ -142,9 +144,19 @@ def git_config_override(t: list[str]) -> bool:
     return False
 
 
+def config_writes(rest: list[str]) -> bool:
+    """`git config ...` that sets, adds, unsets or edits: anything but a read flag or a lone key (`git config user.email`)."""
+    if CONFIG_READS & set(rest):
+        return False
+    words = [x for x in rest if not x.startswith("-")]
+    return len(words) != 1 or any(x.startswith("-") for x in rest)
+
+
 def git_write(cmd: str) -> str | None:
     """The first git command in `cmd` that changes refs, the index's commits, worktrees or remotes (git is the coordinator's), else None.
     Listing forms pass: stash list/show, branch and tag listings, worktree list."""
+    if GIT_ENV.search(cmd):
+        return "a GIT_* setting in the environment"
     for t in pieces(cmd) or []:
         if name_of(t[0]) != "git":
             continue
@@ -153,6 +165,9 @@ def git_write(cmd: str) -> str | None:
         if (
             git_config_override(t)
             or sub in GIT_CHANGING
+            or (sub == "config" and config_writes(rest))
+            or (sub == "remote" and rest and rest[0] not in REMOTE_READS)
+            or (sub == "fetch" and any(":" in x for x in rest if not x.startswith("-")))
             or (sub == "stash" and not (rest and rest[0] in ("list", "show")))
             or (sub == "worktree" and not (rest and rest[0] == "list"))
             or (

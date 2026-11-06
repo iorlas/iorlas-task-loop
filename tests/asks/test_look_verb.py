@@ -146,3 +146,17 @@ class Look(Case):
         fake.beads[BeadId("tl-look")].metadata["looks"][0].update(status="redo", redo_bead="--force")
         self.look(fake, "undo")
         assert not any(c == ("close", "--force") for c in fake.calls)
+
+    def test_a_hold_the_owner_sets_while_a_redo_is_filed_is_kept(self):
+        fake = world("open")
+        create = fake.create
+
+        def create_then_hold(new):
+            made = create(new)
+            fake.beads[BeadId("tl-look")].metadata["owner_hold"] = "denis"  # the owner holds the look bead meanwhile
+            return made
+
+        fake.create = create_then_hold
+        assert self.look(fake, "redo", note="n")[0] == "redo"
+        meta = fake.beads[BeadId("tl-look")].metadata
+        assert meta["owner_hold"] == "denis" and meta["other"] == 1
