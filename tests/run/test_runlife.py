@@ -73,7 +73,7 @@ class Decision(Case):
         return base.replace(**kw)
 
     def test_only_a_stale_live_run_of_this_host_with_a_dead_pid_is_lost(self):
-        dead, alive = (lambda p: False), (lambda p: True)
+        dead, alive = (lambda p, start="": False), (lambda p, start="": True)
         late = 1000.0 + N
         assert runlife.is_lost(self.m(), "h", late, dead)
         assert not runlife.is_lost(self.m(), "h", late - 1, dead)  # fresh heartbeat
@@ -81,6 +81,13 @@ class Decision(Case):
         assert not runlife.is_lost(self.m(), "other", late, dead)  # another machine's pid says nothing
         assert not runlife.is_lost(self.m(state=RunState.DONE), "h", late, dead)  # terminal stays
         assert runlife.is_lost(self.m(pid=0), "h", late, alive)  # no pid recorded
+
+    def test_a_pid_another_process_took_over_is_not_the_run(self):
+        """After a reboot the run's pid may belong to an unrelated process: only the recorded start token says it is still the run."""
+        same_start = lambda p, start="": start == "t1"  # noqa: E731
+        late = 1000.0 + N
+        assert not runlife.is_lost(self.m(pid_start="t1"), "h", late, same_start)
+        assert runlife.is_lost(self.m(pid_start="t0"), "h", late, same_start)
 
     def test_what_the_dashboard_shows_is_what_reconcile_writes(self):
         with tempfile.TemporaryDirectory() as d:

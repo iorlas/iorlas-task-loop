@@ -10,22 +10,26 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import ModuleType
 
+from taskloop import contracts
 from taskloop.contracts import env as penv
 from taskloop.contracts.paths import default_root
 from taskloop_dash import serve
 from taskloop_dash.env import Env, Ports
 
 PACKAGE = Path(__file__).resolve().parents[1]
+CONTRACTS = Path(contracts.__file__).resolve().parent  # the records it reads and the commands it sends
 SKIP_DIRS = frozenset({"__pycache__"})
 
 
-def code_version(package: Path = PACKAGE) -> str:
-    """A short hash of every file of the package: a running dash from older code is replaced."""
+def code_version(*packages: Path) -> str:
+    """A short hash of every file of the dash package and of the contracts it imports: a running dash from older code, or from
+    older contracts than the engine now writes, is replaced."""
     h = hashlib.sha256()
-    for p in sorted(package.rglob("*")):
-        if p.is_file() and not SKIP_DIRS.intersection(p.parts):
-            h.update(p.relative_to(package).as_posix().encode())
-            h.update(p.read_bytes())
+    for package in packages or (PACKAGE, CONTRACTS):
+        for p in sorted(package.rglob("*")):
+            if p.is_file() and not SKIP_DIRS.intersection(p.parts):
+                h.update(p.relative_to(package).as_posix().encode())
+                h.update(p.read_bytes())
     return h.hexdigest()[:12]
 
 

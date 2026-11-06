@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.askjson import unreadable_ask
 from support.fake_beads import FakeBeads
+from support.memstores import fake_stores
 from support.narrow import must
 from support.tiers import domain
 
@@ -25,7 +26,6 @@ from taskloop.contracts.ledger import Adr
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.stores import AskStore
 from taskloop.domain.asks import similar, specs
-from taskloop.stores.memory import fake_stores
 
 T = 1000.0
 Q = "Which save format should the engine keep for old files?"
