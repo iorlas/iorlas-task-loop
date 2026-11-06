@@ -37,14 +37,11 @@ class TornLock(Case):
             engine_lock.read_engine_lock(homes.cfg(), self.wt)
 
 
-class OutOfTheTree(Case):
-    def test_a_taken_lock_lives_in_the_config_dir_and_the_worktree_gets_no_engine_file(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            wt = Path(tmp)
-            lock = engine_lock.EngineLock(homes.cfg(), wt, "tl-1")
-            assert lock.take() == ""
-            path = homes.cfg().engine_lock(wt)
-            assert path.is_file() and path.is_relative_to(homes.config_dir() / "locks")
-            assert not list(wt.rglob("engine.*"))
-            engine_lock.drop_engine_lock(homes.cfg(), wt)
-            assert not path.exists()
+def test_a_taken_lock_lives_in_the_config_dir_and_the_worktree_gets_no_engine_file(workdir) -> None:
+    lock = engine_lock.EngineLock(homes.cfg(), workdir, "tl-1")
+    assert lock.take() == ""
+    path = homes.cfg().engine_lock(workdir)
+    assert path.is_file() and path.is_relative_to(homes.config_dir() / "locks")
+    assert not list(workdir.rglob("engine.*"))
+    engine_lock.drop_engine_lock(homes.cfg(), workdir)
+    assert not path.exists()
