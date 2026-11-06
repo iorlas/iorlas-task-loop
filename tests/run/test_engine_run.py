@@ -35,7 +35,6 @@ import hashlib
 import json
 import os
 import subprocess
-import tempfile
 import time
 from pathlib import Path
 from unittest import mock
@@ -47,6 +46,7 @@ from support.checkpoints import drop_ck, stored_ck
 from support.fakes import as_bead, as_comment, must_bead
 from support.logs import records
 from support.spawn import port_git, real_spawner
+from support.tmpdir import mkdtemp
 from support.who import who
 
 from taskloop.adapters import (
@@ -445,7 +445,7 @@ class EngineRunTest(EngineTest):
         assert [(o["label"], o["recommended"]) for o in self.ask()["options"]] == [("Answer in words", True), ("Split the bead", False)]
 
     def test_run_breakdown_lists_where_the_minutes_went(self):
-        log = Path(tempfile.mkdtemp()) / "run.jsonl"
+        log = Path(mkdtemp()) / "run.jsonl"
         log.write_text(
             "\n".join(
                 json.dumps({"v": 3, "kind": "step_end", "t": 1.0, "id": "n1", "step": st, "outcome": "done", "exec_seconds": sec}) + "\n"

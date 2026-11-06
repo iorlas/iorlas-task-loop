@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -63,7 +64,7 @@ class AskV3(Case):
         assert (a.owner_cause, a.cause_by, a.blocking, a.default) == (OwnerCause.UNKNOWN, "agent", True, "")
 
     def test_an_ask_file_of_version_2_is_absent_and_listed_as_dropped(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             cfg = ConfigDir(tmp)
             asks = AskStore.at(cfg)
             old = wire.dump(must(raiser.raise_ask(fake_stores().asks, question(), asking())[0])) | {"v": 2}
@@ -115,7 +116,7 @@ class Ledger(Case):
         assert len(self.asks.rows()) == 2
 
     def test_the_ledger_file_is_not_an_ask_and_no_sweep_removes_it(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             cfg = ConfigDir(tmp)
             asks = AskStore.at(cfg)
             raiser.raise_ask(asks, question(), asking())

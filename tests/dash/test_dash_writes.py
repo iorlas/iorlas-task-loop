@@ -1,10 +1,10 @@
 """POST /api/<verb>: answer, look, cause and ack through the real Intake over a bd in memory; the Result shape; the refused cases."""
 import json
 import sys
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -33,7 +33,7 @@ RUN = "tl-5-20261026-100000"
 
 class Writes(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.fake = world("open")
         self.fake.beads[BeadId("b-1")] = Bead(id=BeadId("b-1"), title="", status="blocked")
