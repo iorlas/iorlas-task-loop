@@ -232,7 +232,7 @@ Per machine: one dashboard (port 7878, `dash ensure` is idempotent and replaces 
 - The reason for the container is the endpoint scanner's per-file cost on the Mac (about 20 ms a file, bead memory 2026-10-29). Cheaper than any of the above if allowed: a Defender folder exclusion for the factory's worktree and slot folders. Untested and policy-dependent (see D6).
 - Needs a server? No for one-way jobs over ssh (the engine starts the job, streams the log, collects the result). A server is only needed when the remote machine must start work on its own, which the git-remote bus already covers.
 
-**D6 (answered 2026-11-05: no, this Mac cannot exclude folders from Defender; so the ssh Linux executor is the replacement and the container backend is frozen until it exists).** Can this Mac exclude the factory's worktree folders (`~/Workspaces/wt`, the slots dirs) from Defender?** If yes, the container checks and their images can be deleted and review/land/gate run natively; if the policy forbids it, the ssh Linux executor is the replacement and the container backend stays until it exists.
+**D6 (answered 2026-11-05: no, this Mac cannot exclude folders from Defender; so the ssh Linux executor is the replacement and the container backend is frozen until it exists; built 0.23.403: `in: linux` checks run on it and the container backend is deleted).** Can this Mac exclude the factory's worktree folders (`~/Workspaces/wt`, the slots dirs) from Defender?** If yes, the container checks and their images can be deleted and review/land/gate run natively; if the policy forbids it, the ssh Linux executor is the replacement and the container backend stays until it exists.
 
 ## What another machine needs that is not in the bead or git yet (read; sources named)
 
