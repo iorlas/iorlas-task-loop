@@ -16,6 +16,8 @@ import support.paths  # noqa: E402, F401
 from support.narrow import must  # noqa: E402
 
 from taskloop.contracts.env import Env as ProcessEnv  # noqa: E402
+from taskloop.contracts.paths import ConfigDir  # noqa: E402
+from taskloop.contracts.stores import ReposStore  # noqa: E402
 from taskloop_dash import bind  # noqa: E402
 from taskloop_dash.cli import dash as dash_cli  # noqa: E402
 
@@ -37,7 +39,7 @@ class Env(Case):
         self.tmp.cleanup()
 
     def with_repos(self):
-        (self.state / "repos.json").write_text("{}")
+        ReposStore(ConfigDir(self.state)).add(str(self.state), 1.0)
 
     def run_server(self, where, *args, public=False):
         """`python3 -m taskloop_dash ARGS` for the code in `where`, in this process: a refusal or a failed bind exits, which is all these
@@ -111,7 +113,7 @@ class InstalledCopy(Env):
 
 class EmptyState(Env):
     def test_guard_refuses_installed_copy_too(self):
-        assert "repos.json" in must(self.guard(["127.0.0.1"], 7878, where=self.cache))
+        assert "no repos registered" in must(self.guard(["127.0.0.1"], 7878, where=self.cache))
 
     def test_other_port_needs_no_repos_json(self):
         assert self.guard(["127.0.0.1"], 0, where=self.cache) is None

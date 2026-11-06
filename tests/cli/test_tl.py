@@ -24,7 +24,7 @@ from support.spawn import port_git  # noqa: E402
 from taskloop.app.release import pins  # noqa: E402
 from taskloop.app.wire import usage as usage_cmd  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
-from taskloop.contracts.stores import PinStore  # noqa: E402
+from taskloop.contracts.stores import PinStore, ReposStore  # noqa: E402
 
 # isort: split
 import contextlib  # noqa: E402
@@ -106,7 +106,7 @@ class Records(Base):
         lines = (homes.config_dir() / "events.jsonl").read_text().splitlines()
         assert [json.loads(ln)["kind"] for ln in lines] == ["claim", "close"]
         assert json.loads(lines[0])["session"] == "abcdef12-3456"
-        assert [e["path"] for e in json.loads((homes.config_dir() / "repos.json").read_text())["repos"].values()] == [str(self.home)]
+        assert ReposStore(homes.cfg()).known() == [str(self.home)]
 
     @pytest.mark.skipif(os.name == "nt", reason="the registry lock is fcntl")
     def test_writers_registering_at_once_neither_crash_nor_lose_a_repo(self):
@@ -126,7 +126,7 @@ class Records(Base):
         for p in ps:
             p.join(60)
         assert errs == []
-        repos = json.loads((homes.config_dir() / "repos.json").read_text())["repos"]
+        repos = wire.dump(ReposStore(homes.cfg()).index())["repos"]
         assert len(repos) == 50
 
     def test_prune_keeps_recent(self):
