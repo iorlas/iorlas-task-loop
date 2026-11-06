@@ -49,6 +49,31 @@ class Policy:
         for c in ("git status", "git -C sub log", "git stash list", "git branch --list", "git worktree list", "git log -1"):
             assert git_write(c) is None, c
 
+    def test_git_config_and_environment_overrides_cannot_reopen_what_git_writes_close(self):
+        for c in (
+            "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/x git log",
+            "GIT_CONFIG_PARAMETERS=\"'core.hooksPath=/x'\" git status",
+            "export GIT_DIR=/elsewhere; git status",
+            "GIT_EXEC_PATH=/x git log",
+            "GIT_SSH_COMMAND=x git status",
+            "git config core.hooksPath /x",
+            "git config --global alias.x '!sh'",
+            "git config --unset core.hooksPath",
+            "git config --add remote.origin.pushurl x",
+            "git remote add x y",
+            "git remote set-url origin y",
+            "git remote remove origin",
+            "git filter-repo --path x",
+            "git fast-import",
+            "git fetch origin +refs/heads/x:refs/heads/main",
+        ):
+            assert git_write(c), c
+            assert judge("Bash", {"command": c}, False).blocked, c
+        for c in ("git config --get user.name", "git config user.email", "git config -l",
+                  "git config --list --show-origin", "git remote -v",
+                  "git remote show origin", "git remote get-url origin", "git remote", "git fetch origin", "git fetch origin main"):
+            assert git_write(c) is None, c
+
     def test_a_write_step_may_not_use_the_forge_or_write_the_tracker(self):
         for c in (
             "gh pr merge 1",
