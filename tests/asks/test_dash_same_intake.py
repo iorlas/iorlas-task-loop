@@ -14,6 +14,7 @@ from support.narrow import must
 
 from asks.dash_ports import answering
 from asks.samples import MOCKS
+from taskloop.app.asks import ledgercomments
 from taskloop.cli import asks as cli_asks
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
@@ -42,8 +43,12 @@ class SameIntake(Case):
             dash = make_dash(answering(lambda repo: dash_store, b), config=b)
             req = {"project": "b", "ask": "b-1-1", "kind": "answer", "text": "go with A"}
             assert dash.writes.post("answer", req) == (200, {"ok": True, "message": "", "receipt": ""})
-            assert [c.text for c in dash_store.comments(BeadId("b-1"))] == [c.text for c in tl_store.comments(BeadId("b-1"))]
-            assert "Owner (tl) answer" in dash_store.comments(BeadId("b-1"))[0].text
+            def said(store):  # the ledger comment carries the clock of its path: compared apart from its t
+                texts = [c.text for c in store.comments(BeadId("b-1"))]
+                return [t for t in texts if not t.startswith(ledgercomments.PREFIX)], [
+                    must(ledgercomments.parse(t)).replace(t=0.0) for t in texts if t.startswith(ledgercomments.PREFIX)]
+            assert said(dash_store) == said(tl_store)
+            assert "Owner (tl) answer" in said(dash_store)[0][0]
             assert dash_store.beads[BeadId("b-1")].status == tl_store.beads[BeadId("b-1")].status
             mine, theirs = dash_asks.get(BeadId("b-1")), tl_asks.get(BeadId("b-1"))
             assert must(must(mine).answer).replace(t=0) == must(must(theirs).answer).replace(t=0)

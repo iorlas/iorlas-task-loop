@@ -169,6 +169,7 @@ class AskStore:
         self.docs = docs
         self.ledger = ledger
         self.held = held
+        self.before: Callable[[LedgerEntry], None] | None = None  # the record that comes first: a bead comment (app/asks/ledgercomments.py)
 
     @classmethod
     def at(cls, cfg: paths.ConfigDir) -> AskStore:
@@ -182,10 +183,17 @@ class AskStore:
         """One ledger row of this transition, carrying the ask's answer, cause and outcome as they are now."""
         if self.ledger is not None:
             answer = (a.answer.text or a.answer.action) if a.answer else ""
-            self.ledger.append(LedgerEntry(
+            self.append(LedgerEntry(
                 t=t, event=event, ask=a.id, bead=a.bead, repo=a.repo, question=a.decision, key=a.key, blocking=a.blocking,
                 cause=a.owner_cause, cause_by=a.cause_by, answer=answer, outcome=a.outcome, outcome_ref=a.outcome_ref,
                 similar=list(a.similar) if event == "raise" else [], why=why))
+
+    def append(self, entry: LedgerEntry) -> None:
+        """The comment first (`before`, when set: a refusal leaves no row), then the row: the comment is the record, the row its cache."""
+        if self.before is not None:
+            self.before(entry)
+        if self.ledger is not None:
+            self.ledger.append(entry)
 
     def rows(self) -> list[LedgerEntry]:
         """Every ledger row, oldest first ([] for a store with no ledger)."""
@@ -339,7 +347,7 @@ class AskStore:
         rows = [row for row in self.history(ask_id) if row.event != "answer_refused"]
         if not rows or self.ledger is None:
             return False
-        self.ledger.append(rows[-1].replace(**{"t": now, "event": event, "similar": [], "why": "", **changes}))
+        self.append(rows[-1].replace(**{"t": now, "event": event, "similar": [], "why": "", **changes}))
         return True
 
     def correct_cause(self, bead: BeadId, ask_id: str, cause: OwnerCause, now: float) -> bool:
