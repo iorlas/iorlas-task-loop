@@ -8,7 +8,7 @@ from taskloop.contracts.finish_projection import history
 from taskloop.contracts.guard import guard
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunFinish, RunManifest, RunState
-from taskloop.contracts.runrows import RunRows, import_once
+from taskloop.contracts.runrows import RunRows
 
 
 @dataclass(frozen=True)
@@ -39,7 +39,6 @@ def finish_run(cfg: ConfigDir, run: str, candidate: RunFinish,
     """
     if candidate.state.live:
         raise ValueError(f"{candidate.state} is not a terminal state")
-    import_once(cfg)
     doc = RunRows(cfg)
     with doc.transaction() as con:
         old = doc.read(con, run)

@@ -164,7 +164,7 @@ LOG = {
         model="m",
         effort="high",
         secs=229.0,
-        tokens=TOK,
+        tokens=log.CallTokens(in_=412000, cached=380000, out=5100, cache_write=1200),
         cost=0.0,
         cost_source="free",
         family="openai",
