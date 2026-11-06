@@ -1,11 +1,13 @@
 """The scorecard's land section: how many tries retried and why, and the median seconds of the phases of a try."""
+import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.app.report.landphases import land_stats
+from taskloop.app.report.card import typed_log
+from taskloop.app.report.landphases import land_stats, tries_of
 from taskloop.contracts import log as rec
 
 
@@ -22,11 +24,6 @@ def test_no_tries_say_nothing() -> None:
 
 
 def test_the_tries_are_read_from_a_runs_engine_log(tmp_path: Path) -> None:
-    import json
-
-    from taskloop.app.report.card import typed_log
-    from taskloop.app.report.landphases import tries_of
-
     path = tmp_path / "run.jsonl"
     row = {"v": 3, "kind": "land_try", "t": 1.0, "run_id": "R", "n": 1, "failing": "gate", "fetch_s": 1.5, "rebase_s": 0.5, "gate_s": 9.0}
     path.write_text(json.dumps(row) + "\ntorn{\n", encoding="utf-8")

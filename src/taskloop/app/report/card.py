@@ -10,8 +10,8 @@ from typing import Any, Final, TypedDict
 from taskloop.adapters import beadtools, gitrepo
 from taskloop.app.asks import intake
 from taskloop.app.reconcile.lost import lost_work
-from taskloop.app.report.landphases import land_stats, tries_of
 from taskloop.app.report.inputs import bead_status, landed_of, read_jsonl, repo_traces
+from taskloop.app.report.landphases import land_stats, tries_of
 from taskloop.app.report.planner import input_tokens
 from taskloop.contracts import paths, runlife, wire
 from taskloop.contracts.bead import Comment
