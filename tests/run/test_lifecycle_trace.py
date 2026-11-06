@@ -31,13 +31,14 @@ DASH = make_dash()
 
 
 class Fingerprint(Case):
-    def test_volatile_ids_paths_numbers_and_quotes_do_not_change_a_fingerprint(self):
+    def test_volatile_ids_paths_and_numbers_do_not_change_a_fingerprint(self):
         a = lifecycle.fingerprint("failed: bead tl-19i on /Users/me/repo/src/file.py exit 1 after 2.8 h: `boom`")
-        b = lifecycle.fingerprint("FAILED: bead lifesim-d5f.46 on /home/other/tree/a/b.py exit 127 after 14 h: `bang`")
+        b = lifecycle.fingerprint("FAILED: bead lifesim-d5f.46 on /home/other/tree/a/b.py exit 127 after 14 h: `boom`")
         assert a == b
         assert "<bead>" in a
         assert "<path>" in a
-        assert "<quoted>" in a
+        assert "quoted" in a
+        assert a != lifecycle.fingerprint("failed: bead tl-19i on /Users/me/repo/src/file.py exit 1 after 2.8 h: `bang`")  # another quote
 
     def test_a_session_ref_a_sha_and_a_uuid_are_volatile_too(self):
         one = lifecycle.fingerprint("thread ref-write failed at 1234abc after ses_123 on 123e4567-e89b-12d3-a456-426614174000")
