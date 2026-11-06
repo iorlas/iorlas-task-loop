@@ -12,7 +12,6 @@ from support import homes
 from support.case import Case
 from support.engine_case import CLEAN, PLAN, WRITE, EngineTest
 from support.tmpdir import TemporaryDirectory
-from taskloop.contracts.logstores import EventLog, LoopLog, RunLog, TraceStore
 
 from taskloop.app.run.finish import answer, outcome
 from taskloop.contracts import log, runlife, wire
@@ -25,6 +24,7 @@ from taskloop.contracts.locator import RunLocator, host_name
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunState
 from taskloop.contracts.runrows import RunRows
+from taskloop.contracts.stores import EventLog, LoopLog, RunLog, TraceStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs
 

@@ -17,7 +17,6 @@ from contracts import samples as S
 from support import homes
 from support.narrow import must
 from support.who import who
-from taskloop.contracts.logstores import UsageHistory
 
 from taskloop.app.track import trail
 from taskloop.contracts.ask import AskAnswer
@@ -26,6 +25,7 @@ from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.snapshots import LaneStatus, StatusSnapshot, WindowStatus
+from taskloop.contracts.stores import UsageHistory
 from taskloop.contracts.usage import USAGE_KEEP_S
 
 T = S.T
