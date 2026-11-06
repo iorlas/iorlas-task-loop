@@ -1,7 +1,6 @@
 """Names and times the task view prints: lanes by family, models, clock times. No regex: the engine's own text is
 split with str methods."""
 
-import mimetypes
 import time
 from typing import Final
 
@@ -9,11 +8,23 @@ FAMILY: Final = {"openai": "Codex", "claude": "Claude", "xai": "Grok"}
 
 
 IMAGES: Final = ("image/png", "image/jpeg", "image/gif", "image/webp")
+# The one table of what is served by its name; the host's mime database (/etc/mime.types) answers differently per machine.
+TYPES: Final = {
+    "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif", "webp": "image/webp",
+    "mp4": "video/mp4", "webm": "video/webm", "ogv": "video/ogg",
+    "mp3": "audio/mpeg", "wav": "audio/vnd.wave", "ogg": "audio/ogg", "m4a": "audio/mp4", "aac": "audio/aac", "flac": "audio/flac",
+    "pdf": "application/pdf",
+}
+
+
+def content_type(name: str) -> str:
+    """The type a file name is served as, from TYPES by its extension; '' for any other (it downloads)."""
+    return TYPES.get(name.rpartition(".")[2].lower(), "") if "." in name else ""
 
 
 def kind_of(name: str) -> str:
     """'image' (shown inline), 'pdf' (opens in a tab) or 'file' (download only: HTML is never run as a page)."""
-    ctype = mimetypes.guess_type(name)[0] or ""
+    ctype = content_type(name)
     return "image" if ctype in IMAGES else "pdf" if ctype == "application/pdf" else "file"
 
 

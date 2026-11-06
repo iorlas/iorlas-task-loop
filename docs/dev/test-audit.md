@@ -56,4 +56,4 @@ Of the 93 tests that sleep over 0.5 s (147 s of `time.sleep`, idle pix), about 8
 the wait IS the subject, with a real child process, so a fake clock needs a clock seam in `src/delegate`), and only run when a change touches
 delegate. Outside delegate the rest are thread race windows of 10-300 ms (asks/rmw_store, checks/resources, slots, write_idle) and real-process
 waits in `real/` (slots, loop hold e2e, adapters). The one avoidable wait outside them, `tests/adapters/test_links.py` (3.0 s, a sleep standing
-in for a hung link check), now waits on an Event (0.5 s). A clock seam for delegate's watchdog is a design change in the library, not a test edit.
+in for a hung link check), now waits on an Event (0.5 s). The clock seam for delegate's watchdog landed after this census (tl-wnup.6, #69).

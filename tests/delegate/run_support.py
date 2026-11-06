@@ -18,6 +18,7 @@ from delegate.app import env, harnesses, usage
 from delegate.contracts import history as hist
 from delegate.domain.health import ledger as health_ledger
 from support.case import Case
+from support.fake_clock import SteppingClock
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -33,6 +34,7 @@ class RunBase(Case):
     FAKE_CLAUDE = (FIX / "fake_claude.sh").read_text(encoding="utf-8")
 
     def setup_method(self):
+        self.enterContext(mock.patch.object(harnesses, "CLOCK", SteppingClock(0.25)))  # a silence or a grace passes in polls, not seconds
         self.tmp = tempfile.TemporaryDirectory()
         base = Path(self.tmp.name)
         self.base = base
@@ -128,6 +130,10 @@ class RunBase(Case):
         support.put_lease(
             rid, lane=lane, role="worker", start=env.now(), task=task, expires=expires if expires is not None else env.now() + 600
         )
+
+    def real_clock(self):
+        """A test whose assertion is the real time between two events of the worker runs the watchdog on the real clock."""
+        self.enterContext(mock.patch.object(harnesses, "CLOCK", time.monotonic))
 
     def fast_clock(self, grace=1, stall=1):
         stall_patch = mock.patch.object(watch, "STALL_S", stall)
