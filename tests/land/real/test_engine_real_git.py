@@ -1,6 +1,6 @@
 """The engine's land on a real git repo: the integration set. Every other engine test runs on the gitsim (tests/support/gitsim); these
 cells re-run a handful of land tests against real git (origin + clone), where git's own behaviour is what the test is about, so the sim
-is checked against it. The stop-during-the-push test of test_engine_land_1 is marked `real_git` in place (its land command is a child
+is checked against it. The stop-during-the-push test lives in test_engine_signals (its land command is a child
 process that runs git push itself)."""
 import functools
 import sys

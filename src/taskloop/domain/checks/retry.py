@@ -18,10 +18,10 @@ def lock_waits() -> list[int]:
     return out
 
 
-def retry_allowed(retry: int, tries: int, output: str) -> bool:
+def retry_allowed(retry: int, tries: int, output: str, lock_fail: str = "") -> bool:
     """Whether a check that failed `tries` times may run again: by its `retry` count; a compile error only once, and only if the log
     shows an asset import in flight; a lock is waited out elsewhere."""
-    kind = failure_kind(output)
+    kind = failure_kind(output, lock_fail)
     if kind == "deterministic":
         return False
     return tries <= (max(retry, 1) if kind == "import" else retry)
