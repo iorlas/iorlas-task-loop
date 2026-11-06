@@ -4,7 +4,7 @@ import support.paths  # noqa: F401
 from support import looptest
 
 from loop.test_loop import LoopBase
-from taskloop.contracts.loop import LoopState
+from taskloop.contracts.loop import LoopCommand, LoopState, LoopTarget, Rest
 from taskloop.contracts.stores import JsonStore
 
 
@@ -34,3 +34,13 @@ class LoopRowsTest(LoopBase):
         files.pid_alive = lambda _: False
         assert files.live() == [] and [st.pid for st in files.died()] == [7]
         assert files.live() == []
+
+    def test_the_stop_command_and_the_rests_are_rows_and_an_older_loops_files_are_adopted(self):
+        files = looptest.files(str(self.repo))
+        old = LoopCommand(action="stop_now", by="t", t=1.0, targets=[LoopTarget(pid=5, started=2.0)])
+        JsonStore(files.cfg.loop_command(files.key), LoopCommand).write(old)
+        JsonStore(files.cfg.loop_rest(files.key), Rest).write(Rest(beads={"b-1": 1e12}))
+        assert files.command().get() == old and not files.cfg.loop_command(files.key).exists()
+        assert files.rests() == {"b-1": 1e12} and not files.cfg.loop_rest(files.key).exists()
+        files.command().delete()
+        assert files.command().get() is None

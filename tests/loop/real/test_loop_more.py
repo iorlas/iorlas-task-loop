@@ -267,7 +267,7 @@ class StopRequests(LoopBase):
                 self.files.command().write(LoopCommand(action="stop_after_current", by="t", t=self.clock.t - 10,
                                                   targets=[LoopTarget(pid=12345, started=1.0)]))
                 def no_command():
-                    assert not looptest.command(self.repo_s).exists()
+                    assert not looptest.command_kept(self.repo_s)
                 self.during.append(no_command)
                 assert self.run_loop() == 0
 

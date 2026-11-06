@@ -13,7 +13,7 @@ from taskloop.app.loop import exits
 from taskloop.contracts import paths
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.loop import LoopCommand, LoopState, LoopTarget, Rest, StopRequest
-from taskloop.contracts.looprows import DIED, LoopRows
+from taskloop.contracts.looprows import DIED, KvDoc, LoopRows
 from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.stores import JsonStore, LoopLog, Page
 
@@ -94,8 +94,11 @@ class LoopFiles:
     def lock(self) -> contextlib.AbstractContextManager[object]:
         return hold_path(self.cfg.lock_record(LockWhat.LOOP.value, self.key), "loop", what=LockWhat.LOOP)
 
-    def command(self) -> JsonStore[LoopCommand]:
-        return JsonStore(self.cfg.loop_command(self.key), LoopCommand)
+    def command(self) -> KvDoc[LoopCommand]:
+        return KvDoc(self.rows(), f"loop-command:{self.key}", LoopCommand, self.cfg.loop_command(self.key))
+
+    def rest_doc(self) -> KvDoc[Rest]:
+        return KvDoc(self.rows(), f"loop-rest:{self.key}", Rest, self.cfg.loop_rest(self.key))
 
     def stop_for(self, pid: int, started: float) -> StopMode:
         """What the repo's command says to the loop (`pid`, `started`): a loop the command does not name (one started later, even on
@@ -127,14 +130,14 @@ class LoopFiles:
     # ---- rests, the pass log, exits ------------------------------------------------------------------------------
     def rests(self) -> dict[str, float]:
         """{bead: when it may run again}, shared by every loop on the repo."""
-        doc = JsonStore(self.cfg.loop_rest(self.key), Rest).get()
+        doc = self.rest_doc().get()
         return {b: t for b, t in (doc.beads if doc else {}).items() if t > self.now()}
 
     def rest_bead(self, bead: str, until: float) -> None:
         with self.lock():
             rests = self.rests()
             rests[bead] = until
-            JsonStore(self.cfg.loop_rest(self.key), Rest).write(Rest(beads=rests))
+            self.rest_doc().write(Rest(beads=rests))
 
     def log(self) -> LoopLog:
         return LoopLog(self.cfg, self.key)
