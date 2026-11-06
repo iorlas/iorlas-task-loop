@@ -188,7 +188,7 @@ JSON documents go through `JsonStore` (atomic replace, no lock: `tl/contracts/st
 | `reexec/<bead>.json` | `ReloadNote` | engine before exec (`release/reexec.py:21`) | loop crash fallback (`loop/run.py:76-86`) | no |
 | `landed/<bead>.json` | `Landed` | engine (`engine.py:360`), `tl land` (`cli/land.py:31`) | reconcile, loop, close guard | **yes** |
 | `followups/<bead>.json` | `FollowupOutbox` | engine close and review (`run/closer_notes.py`, `write/review_round.py`) | engine | no |
-| `artifacts/<bead>/` | plain files | engine (`StepArtifacts`) | dashboard `/api/artifact` | no |
+| `artifacts/<repo>/<bead>/<run>/<stage>-<attempt>/<name>` (+ `<name>.json`) | `ArtifactMeta` | the `artifact_add` tool server and the engine's renders (`app/artifacts/store.py`) | dashboard `/api/artifact`, the owner-look bead | no |
 | `results/<repo_key>/<sha1(check)>/<digest>.json`, `results/<repo_key>/base-red/`, `check-durations/<repo_key>.json` | `PassRecord`, `BaseRedRecord`, `Durations` | every check runner: stage round, land gate, `tl check`, push judge (`checks/cache.py:1`, `runner.py:43`, `:139`) | land gate, push judge, `tl green`, dashboard | **yes** (one file per key, so conflicts are per key) |
 | `loop/<key>.<pid>.json` | `LoopState` v2 (`contracts/loop.py:56-78`) | the loop each pass (`loop/core.py:96`); factory writes a placeholder for the child and later patches `log` (`launch/factory.py:67-70`, `:83-88`) | dashboard (own glob, `readers/world.py:68-69`), `tl status`, `tl factory status`, other loops | **yes** (launcher and child) |
 | `loop/<key>.command.json` | `LoopCommand` v1 | `tl stop`, `tl factory stop` (`loop/files.py:85-92`, under loop lock) | loop (`files.py:77-83`) | yes, locked |

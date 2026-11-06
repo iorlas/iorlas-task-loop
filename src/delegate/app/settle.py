@@ -1,4 +1,4 @@
-"""Settler: the one place a classified outcome (adapters/harness/classify.py) is applied to the answer and, for a lane-scoped reason, to
+"""Settler: the one place a classified outcome (the shelf any_agent.classify) is applied to the answer and, for a lane-scoped reason, to
 the lane's state. All three launchers end here. `apply` is the only entry; one method per reason, found by name.
 
 `reset` is the default end of a limit when the message names no time; `login` the hint stored
@@ -9,7 +9,9 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from delegate.adapters.harness import classify, reset_parse
+from any_agent import reset_parse
+from any_agent.classify import Outcome, with_network
+
 from delegate.app import answer
 from delegate.app.env import Args
 from delegate.contracts.json_types import Json, as_str
@@ -31,7 +33,7 @@ class Case:
     """One outcome being applied: the answer under construction and everything a reason's method may need."""
 
     res: dict[str, Json]
-    o: classify.Outcome
+    o: Outcome
     d: dict[str, Json]
     t: float
     who: str
@@ -87,14 +89,14 @@ class Settler:
             )
         )
 
-    def net_pass(self, o: classify.Outcome, d: dict[str, Json]) -> classify.Outcome:
+    def net_pass(self, o: Outcome, d: dict[str, Json]) -> Outcome:
         """The decision is `classify.with_network`; this only supplies the lane's one probe."""
-        return classify.with_network(o, lambda: self.net_up(as_str(d["lane"])))
+        return with_network(o, lambda: self.net_up(as_str(d["lane"])))
 
     def apply(
         self,
         res: dict[str, Json],
-        o: classify.Outcome,
+        o: Outcome,
         d: dict[str, Json],
         t: float,
         who: str,

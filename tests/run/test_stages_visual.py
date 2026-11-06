@@ -28,6 +28,7 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from run.test_stages import StagesTest
+from taskloop.app.artifacts import store
 from taskloop.app.land.rebase import MAX_REBASE_RESETS
 from taskloop.app.run import (
     entry,
@@ -36,7 +37,7 @@ from taskloop.app.run import (
 from taskloop.app.run import running as wrunning
 from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.checkpoint import Defect
+from taskloop.contracts.artifact import ArtifactSlot
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.run import Round
@@ -305,7 +306,6 @@ class VisualWork(StagesTest):
             store=self.store,
             attrs={
                 "look_done": 1,
-                "look_prev": [Defect(item="i", why="x")],
                 "rendered_names": ["a.png"],
                 "last_reqs": self.SHOTS,
                 "render_stale": True,
@@ -336,9 +336,15 @@ class VisualWork(StagesTest):
     def test_the_gallery_data_lands_in_the_owner_look_beads_metadata(self):
         e = make_engine(self.wt, store=self.store, attrs={
             "plan_data": dict(PLAN, cases=[{"criterion": "it reads well", "check": "", "class": "taste"}]),
-            "look_paths": ["main.png"],
             "look_notes": ["the main screen shows"],
             })
+        png = self.wt / "pic.png"
+        png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 32)
+        e.artifact_repo = "repo"
+        for t, (name, role, stage) in enumerate((("main-before.png", "before", "write"), ("main.png", "result", "look"),
+                                                 ("half.png", "progress", "write")), 1):
+            store.add(e.home.artifact_store(), ArtifactSlot(repo="repo", bead="t-1", run=e.run_id, stage=stage, attempt=1), png,
+                      name=name, caption="c", role=role, now=float(t))
         sent = []
         old = {"metadata": {"looks": [
             {"id": "t-0#1", "bead": "t-0", "title": "other", "shots": [], "status": "open"},
@@ -361,7 +367,9 @@ class VisualWork(StagesTest):
         entry = json.loads(sent[0][3])["looks"][-1]
         assert (entry["id"], entry["bead"], entry["title"], entry["status"]) == ("t-1#1", "t-1", "it reads well", "open")
         assert entry["note"] == "the main screen shows"
-        assert entry["shots"] == [{"path": "artifact:t-1/main.png", "role": "after", "label": "main"}]
+        assert entry["shots"] == [
+            {"path": f"artifact:repo/t-1/{e.run_id}/write-1/main-before.png", "role": "before", "label": "main-before"},
+            {"path": f"artifact:repo/t-1/{e.run_id}/look-1/main.png", "role": "after", "label": "main"}]  # no progress picture
 
 
 class ResumeCount(StagesTest):
@@ -563,7 +571,6 @@ class ResumeCount(StagesTest):
             attrs={
                 "branch": "task/t-1",
                 "unverified": [{"what": "x"}],
-                "look_paths": ["p.png"],
                 "fixes": 2,
                 "replans": 2,
                 "rendered_names": ["a.png"],
@@ -573,7 +580,7 @@ class ResumeCount(StagesTest):
         gitq.git("checkout", "-q", "task/t-1", cwd=e.wt)
         e.handoff.rounds = [Round(stage="s", round=1, kind="k")]
         assert e.restart.again("x")
-        assert (e.unverified, e.look_paths, e.handoff.rounds, e.fixes, e.replans, e.rendered_names) == ([], [], [], 0, 0, [])
+        assert (e.unverified, e.handoff.rounds, e.fixes, e.replans, e.rendered_names) == ([], [], 0, 0, [])
         assert e.verify_answer == "Use the old format"  # the owner's word still goes to the planner
 
 

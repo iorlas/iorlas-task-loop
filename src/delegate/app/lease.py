@@ -8,13 +8,13 @@ import threading
 from collections.abc import Callable
 from dataclasses import replace
 
+from any_agent.procs import StopReport
 from stream_proc import alive, proc_start
 
 from delegate.adapters import procs
 from delegate.app import env
 from delegate.contracts import history as hist
 from delegate.contracts.state import Lease, StateDoc
-from delegate.contracts.wire import WorkerEnd
 from delegate.domain.lanes.leases import LEASE_RENEW, LEASE_TTL, LeaseBook, suspect
 
 
@@ -136,7 +136,7 @@ class RunLease:
         with contextlib.suppress(Exception):
             env.update_state(release)
 
-    def finish(self, stops: list[WorkerEnd]):
+    def finish(self, stops: list[StopReport]):
         """The run ended. A worker tree that outlived its stops keeps its lease (heartbeat off): the lane's slot is not free while it edits
         the tree, and the next claim's reaper ends it. Otherwise `release`."""
         if any(s.survivors for s in stops):

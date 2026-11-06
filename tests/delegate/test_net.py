@@ -15,9 +15,11 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from delegate.adapters import netprobe, procs
-from delegate.adapters.harness import classify
-from delegate.app import env, harnesses, launch, net, watch
+from any_agent import procs
+from any_agent.classify import Outcome
+from any_agent.drops import looks_dropped
+from delegate.adapters import netprobe
+from delegate.app import env, harnesses, launch, net
 from delegate.app import roles as role_view
 from delegate.app.settle import Settler
 from delegate.contracts import stops
@@ -124,7 +126,7 @@ class Words:
             "socket hang up",
             "dns error: failed to lookup address",
         ):
-            assert classify.looks_dropped(text), text
+            assert looks_dropped(text), text
 
     def test_what_is_not_a_drop(self):
         for text in (
@@ -134,7 +136,7 @@ class Words:
             "the test suite failed: 3 errors",
             "",
         ):
-            assert not classify.looks_dropped(text), text
+            assert not looks_dropped(text), text
 
 
 class RouteNet(Case):
@@ -201,12 +203,12 @@ class NotTheLanesFault:
         d: dict[str, Any] = {"lane": "OPENAI_SUBSCRIPTION"}
         down = {"up": False, "ip_up": False, "why": "offline", "ms": 1, "hosts": {}, "at": 1.0}
         for reason in ("hung", "worker_failed", "vendor_blip"):
-            o = classify.Outcome(reason, "", "ours")
+            o = Outcome(reason, "", "ours")
             with mock.patch.object(net, "net_probe", lambda hosts=None: down):
                 assert launch.settler().net_pass(o, d).reason == "network", reason
             assert launch.settler().net_pass(o, d).reason == reason  # test_route's probe says up
         for reason in ("rate_limited", "bad_request", "logged_out", "secrets", "timeout", "credit_exhausted"):
-            o = classify.Outcome(reason, "", "ours")
+            o = Outcome(reason, "", "ours")
             with mock.patch.object(net, "net_probe", lambda hosts=None: down):
                 assert launch.settler().net_pass(o, d).reason == reason, reason  # never second-guessed, never probed
 
@@ -214,7 +216,7 @@ class NotTheLanesFault:
         probe = mock.Mock(side_effect=AssertionError("probed"))
         with mock.patch.object(net, "net_probe", probe):
             o = launch.settler().net_pass(
-                classify.Outcome("worker_failed", "stream disconnected before completion: websocket closed", "event"), {"lane": "X"}
+                Outcome("worker_failed", "stream disconnected before completion: websocket closed", "event"), {"lane": "X"}
             )
         assert o.reason == "network"
 
@@ -224,7 +226,7 @@ class NotTheLanesFault:
         down = {"up": False, "ip_up": False, "why": "offline", "ms": 1, "hosts": {}, "at": 1.0}
         res: dict[str, Any] = {"hung_words": "printed nothing within 120s", "hung_kind": "first_event", "ref": None}
         with mock.patch.object(net, "net_probe", lambda hosts=None: down), mock.patch.object(Settler, "mark_out") as mark:
-            launch.settler().apply(res, classify.Outcome("hung", "", "ours"), d, T, "codex", a)
+            launch.settler().apply(res, Outcome("hung", "", "ours"), d, T, "codex", a)
         mark.assert_not_called()
         assert (res["outcome"], res["resumable"]) == ("network", False)
         assert "hung_words" not in res
@@ -328,7 +330,7 @@ class Adapters:
     def test_the_three_runners_are_data_and_every_cli_has_watchdog_limits(self):
         assert set(profiles.REGISTRY) == {"codex", "opencode", "claude_p"}
         for a in profiles.REGISTRY.values():
-            assert a.cli in watch.LIMITS
+            assert a.cli in harnesses.LIMITS
         assert profiles.REGISTRY["opencode"].resume == "untested"
         assert set(launch.PREPARE) == set(
             profiles.REGISTRY

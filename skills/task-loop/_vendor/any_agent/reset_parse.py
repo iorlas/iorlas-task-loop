@@ -7,24 +7,24 @@ import re
 import time
 from collections.abc import Callable, Mapping
 
-from delegate.contracts.json_types import Json
+from any_agent._json import Json
 
 RESET_LADDER_MIN = (15, 30, 60)  # a limit whose end nobody states: refusal time + this, one rung further for each consecutive guess
 RESET_AT_RE = re.compile(
     r"(?:reset(?:s)?|resume(?:s)?|available|renews?|until|try again|retry)\s*(?:at|on|after|:)?\s*"
     r"(\d{4}-\d\d-\d\d)[T ](\d\d:\d\d(?::\d\d)?)(?:\.\d+)?\s*(Z\b|UTC\b|GMT\b|[+-]\d\d:?\d\d\b)?",
-    re.I,
+    re.IGNORECASE,
 )
 RETRY_AFTER_RE = re.compile(
     r"retry[- ]after\W{0,3}\s*(\d+(?:\.\d+)?)\b(?!\s*[-:/]\d)"
     r"|retry[- ]after\W{0,3}\s*([A-Z][a-z]{2}, \d\d [A-Z][a-z]{2} \d{4} [\d:]{8} GMT)",
-    re.I,
+    re.IGNORECASE,
 )
 IN_RE = re.compile(
     r"\bin\s+(?:about\s+|around\s+)?(\d+(?:\.\d+)?)\s*(days?|d|hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\b(?:\s*(?:and\s*)?(\d+)\s*(minutes?|mins?|m)\b)?",
-    re.I,
+    re.IGNORECASE,
 )
-TRY_AT_RE = re.compile(r"try again at (\d{1,2}):(\d{2})\s*([AP]M)?", re.I)
+TRY_AT_RE = re.compile(r"try again at (\d{1,2}):(\d{2})\s*([AP]M)?", re.IGNORECASE)
 UNIT_S = {"d": 86400, "h": 3600, "m": 60, "s": 1}
 
 
@@ -66,10 +66,11 @@ def parse_reset(msg: str | None, t: float) -> tuple[float | None, str | None]:
     if m:
         h, mi = int(m.group(1)) % 12 if m.group(3) else int(m.group(1)), int(m.group(2))
         h += 12 if (m.group(3) or "").upper() == "PM" else 0
-        at = dt.datetime.fromtimestamp(t).replace(hour=h % 24, minute=mi, second=0, microsecond=0)
-        if at.timestamp() <= t:
-            at += dt.timedelta(days=1)
-        return at.timestamp(), "local " + (time.tzname[time.localtime(at.timestamp()).tm_isdst > 0] or "")
+        wall = dt.datetime.fromtimestamp(t).astimezone().replace(tzinfo=None, hour=h % 24, minute=mi, second=0, microsecond=0)
+        if wall.astimezone().timestamp() <= t:
+            wall += dt.timedelta(days=1)
+        at = wall.astimezone().timestamp()  # after the replace, so a day the clocks change keeps the offset of the time named
+        return at, "local " + (time.tzname[time.localtime(at).tm_isdst > 0] or "")
     m = IN_RE.search(msg)
     if m:
         secs = float(m.group(1)) * UNIT_S[m.group(2)[0].lower()] + (int(m.group(3)) * 60 if m.group(3) else 0)

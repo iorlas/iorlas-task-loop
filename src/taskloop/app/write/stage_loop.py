@@ -34,7 +34,7 @@ class StageLoop:
         if not s.state or s.fix:  # a resumed stage keeps the checkpoint's start; the first stage starts at the task's base
             e.stage_tree = e.checkout.tree_hash() if (i or s.fix or e.amended) else ""
         if not s.state:  # a resumed stage keeps its render rounds (the checkpoint's)
-            e.look_done, e.look_prev = 0, list[Any]()
+            e.look_done = 0
         return s
 
     def round(self, s: StageState) -> str:
