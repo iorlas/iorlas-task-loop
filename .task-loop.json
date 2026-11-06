@@ -17,7 +17,12 @@
           "gate"
         ],
         "group": "tests",
-        "run": "gate"
+        "run": "gate",
+        "closure_cmd": [
+          "python3",
+          "dev/affected.py",
+          "--closure"
+        ]
       }
     ]
   }
