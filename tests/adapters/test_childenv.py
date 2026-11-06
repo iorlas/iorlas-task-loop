@@ -23,7 +23,7 @@ class Venv(Case):
 
     def test_only_registered_engine_names_pass(self):
         out = childenv.tool_env(BASE)
-        assert sorted(k for k in out if k.startswith(("TL_", "TASK_LOOP_"))) == ["TL_CHECK_LOG_A", "TL_SLOT"]
+        assert sorted(k for k in out if k.startswith(("TL_", "TASK_LOOP_"))) == ["TL_CHECK_LOG_A", "TL_JUDGE_TL", "TL_SLOT"]
 
     def test_worker_env_drops_it_too(self):
         out = childenv.child_env_of(BASE)
@@ -43,11 +43,11 @@ class Allowlist(Case):
                 "SSH_AUTH_SOCK": "/s", "EDITOR": "vi", "PYTHONPATH": "/p"}
         out = childenv.tool_env(base, {"DECLARED": "1"})
         assert sorted(out) == ["DECLARED", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "HOME",
-                                       "LANG", "LC_ALL", "LC_TIME", "PATH", "SHELL", "SSH_AUTH_SOCK", "TERM", "TL_SLOT",
+                                       "LANG", "LC_ALL", "LC_TIME", "PATH", "SHELL", "SSH_AUTH_SOCK", "TERM", "TL_JUDGE_TL", "TL_SLOT",
                                        "TMPDIR", "USER"]
 
     def test_an_empty_environment_gets_only_the_hooks_path(self):
-        assert sorted(childenv.tool_env({})) == ["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"]
+        assert sorted(childenv.tool_env({})) == ["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "TL_JUDGE_TL"]
 
 
 class HooksPath(Case):
@@ -69,6 +69,10 @@ class HooksPath(Case):
             (out["GIT_CONFIG_COUNT"], out["GIT_CONFIG_KEY_0"], out["GIT_CONFIG_KEY_1"], out["GIT_CONFIG_VALUE_1"])
             == ("2", "a.b", "core.hooksPath", "/xdg/task-loop/githooks")
         )
+
+    def test_a_child_names_the_tl_of_its_own_install_for_the_pre_push_judge(self):
+        assert childenv.tool_env(self.CFG)["TL_JUDGE_TL"] == str(childenv.OWN_TL)
+        assert childenv.OWN_TL.name == "tl.py" and childenv.OWN_TL.parent.name == "task-loop"
 
     def test_the_retired_push_marker_reaches_neither_children_nor_result_keys(self):
         assert "TL_LAND" not in childenv.tool_env({**self.CFG, "TL_LAND": "1"})
