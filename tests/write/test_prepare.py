@@ -8,12 +8,13 @@ from support import procsim
 from support.builders import plan_of
 from support.engine_case import CLEAN, PLAN, RED_ONCE, WRITE, EngineTest
 from support.logs import records
+from support.narrow import must
 
 from taskloop.app.run.blocked import Blocked
 from taskloop.app.write.prepare import Prepare
 from taskloop.app.write.state import StageState
+from taskloop.contracts import rundocs
 from taskloop.contracts.kinds import Kind
-from taskloop.contracts.paths import RunFiles
 from taskloop.contracts.ports import Ran
 
 
@@ -90,7 +91,7 @@ class PrepareTests(EngineTest):
         assert "exit 7" in stopped.value.why
         assert "package details" in stopped.value.why
         assert "network unavailable" in stopped.value.why
-        assert not RunFiles(eng.run_dir).prepare_stamp().exists()
+        assert rundocs.prepare_stamp(eng.home, eng.run_id).get() is None
         assert any("network unavailable" in r["text"] for r in records(eng, "note"))
         run.assert_called_once_with(["restore"], cwd=str(eng.wt), extra=eng.bead_env, timeout_s=720)
 
@@ -112,7 +113,7 @@ class PrepareTests(EngineTest):
             Prepare(eng).run()
         assert "timed out" in stopped.value.why
         assert "restoring" in stopped.value.why
-        assert not RunFiles(eng.run_dir).prepare_stamp().exists()
+        assert rundocs.prepare_stamp(eng.home, eng.run_id).get() is None
 
     def test_custom_triggers_replace_defaults_and_repair_is_bounded(self):
         eng = self.checks_engine(prepare={"cmd": ["restore"], "triggers": ["fetch-deps"]})
@@ -132,7 +133,7 @@ class PrepareTests(EngineTest):
         with mock.patch.object(eng.spawner, "run", return_value=Ran(exit=0)) as run:
             assert prepare.run()
             assert not prepare.run()
-            stamp_time = RunFiles(eng.run_dir).prepare_stamp().stat().st_mtime_ns
+            stamp_time = must(rundocs.prepare_stamp(eng.home, eng.run_id).get()).ns
             os.utime(path, ns=(stamp_time + 1, stamp_time + 1))
             assert prepare.run()
             old_time = path.stat().st_mtime_ns

@@ -6,7 +6,7 @@ from typing import Protocol
 
 from taskloop.app.checks.host import CheckHost
 from taskloop.app.write.state import StageState
-from taskloop.contracts.paths import RunFiles
+from taskloop.contracts import rundocs
 from taskloop.domain.checks.inputs import matching
 from taskloop.domain.checks.matchers import expand_braces
 
@@ -45,12 +45,13 @@ class Prepare:
         e, cfg = self.e, self.e.cfg.prepare
         if cfg is None:
             return False
-        stamp = RunFiles(e.run_dir).prepare_stamp()
+        stamp = rundocs.prepare_stamp(e.home, e.run_id)
         try:
             fingerprint, newest = self.inputs()
-            if not force and stamp.exists() and stamp.read_text() == fingerprint and newest <= stamp.stat().st_mtime_ns:
+            have = stamp.get()
+            if not force and have is not None and have.fingerprint == fingerprint and newest <= have.ns:
                 return False
-            stamp.unlink(missing_ok=True)
+            stamp.delete()
             ran = e.spawner.run(cfg.cmd, cwd=str(e.wt), extra=e.bead_env, timeout_s=cfg.timeout_min * 60)
             tail = "stdout:\n" + ran.out[-4000:] + "\nstderr:\n" + ran.err[-4000:]
             status = "timed out" if ran.timed_out else f"exit {ran.exit}"
@@ -58,7 +59,7 @@ class Prepare:
             if ran.exit or ran.timed_out:
                 raise e.blocked_for(f"failed: engine.prepare {status}\n{tail}", "FAULT_INFRA")
             fingerprint, _ = self.inputs()
-            stamp.write_text(fingerprint)
+            stamp.write(rundocs.stamped(fingerprint))
             return True
         except OSError as err:
             raise e.blocked_for(f"failed: engine.prepare: {err}", "FAULT_INFRA") from err
