@@ -132,6 +132,7 @@ def api_request(req: RunRequest, env: Mapping[str, str]) -> api.RunRequest:
         parent=req.parent, task=req.task, title=req.title[:120], call_id=req.call_id or None, live_file=req.live_file or None,
         engine_only=list(req.engine_only), engine_only_advisory=req.engine_only_advisory, only_family=list(req.only_family),
         writer_exec_allow=[list(x) for x in req.writer_exec_allow],
+        read_roots=list(req.read_roots),
         worker_env=dict(env),
         tools=[api.ToolServer(name=t.name, command=list(t.command), bead=t.bead, run=t.run, stage=t.stage, attempt=t.attempt)
                for t in req.tools],

@@ -18,7 +18,7 @@ The model supplies only what the script cannot read itself; the script decides.
                      [--claude-usage JSON|@file|-] [--cwd DIR] [--verbose]
   route.py run ROLE [--cwd DIR] [--brief FILE] [--schema FILE] [--resume REF] [--cap USD] [--timeout SEC] [--unattended]\
  [--authored-by W] [--premium] [--allow-degraded] [--only-family F]...
-                    [--engine-only RECIPE]... [--engine-only-advisory] [--claude-usage JSON] [--parent SESSION] [--task ID]\
+                    [--engine-only RECIPE]... [--read-root DIR]... [--engine-only-advisory] [--claude-usage JSON] [--parent SESSION] [--task ID]\
  [--title T]    brief on stdin; one JSON object on stdout, exit 0 (see docs/dev/integrations.md)
   route.py net [--lane L] [--host H ...]    is the machine online? stdlib sockets, no quota, answers in under 3 s: {up, why, hosts}
   route.py report --lane LANE --event out|ok [--until EPOCH|ISO]
@@ -122,6 +122,7 @@ def _add_run(sub: argparse._SubParsersAction[CallParser]) -> None:
     ru.add_argument(
         "--engine-only", action="append", default=[], help="a recipe only the engine runs; a write step's guard blocks it; repeatable"
     )
+    ru.add_argument("--read-root", action="append", default=[], help="a folder outside cwd an OpenCode write step may read; repeatable")
     ru.add_argument(
         "--engine-only-advisory",
         action="store_true",

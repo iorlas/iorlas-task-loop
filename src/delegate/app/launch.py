@@ -277,6 +277,7 @@ def prepare_opencode(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: f
             session=rid,
             write=h.write,
             engine_only=tuple(getattr(a, "engine_only", None) or ()),
+            read_roots=tuple(getattr(a, "read_root", None) or ()),
         )
     )
     if lane == "DEEPSEEK_FREE" and not hx.free_model_ok(h.model, spec.env):  # fail closed if the exact free model or its zero price is gone

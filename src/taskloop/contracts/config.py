@@ -182,6 +182,7 @@ class EngineConfig(Rec):
     reflect: bool = True
     writer_family: list[str] = msgspec.field(default_factory=list)  # e.g. ["openai"]: --only-family on every worker call
     writer_exec_allow: list[list[str]] = msgspec.field(default_factory=list)
+    writer_read_roots: list[str] = msgspec.field(default_factory=list)  # absolute folders an OpenCode write step may read outside its cwd
     planner_notes: str = ""
     shot_table: str = ""
     write_fresh_stage_k: float = 100
@@ -366,6 +367,8 @@ def grant_problem(eng: EngineConfig) -> str:
     """Why engine.writer_exec_allow is malformed ('' when it is not); delegate checks the binaries against its own host.json."""
     if any(not argv or any(not arg for arg in argv) for argv in eng.writer_exec_allow):
         return "engine.writer_exec_allow entries must be nonempty lists of nonempty strings"
+    if any(not root.startswith("/") for root in eng.writer_read_roots):
+        return "engine.writer_read_roots entries must be absolute paths"
     return ""
 
 

@@ -123,7 +123,7 @@ class OpenCodeHarness(Quiet):
         for r in (*roots, *caches):  # created here, before any sandboxed command: a command cannot create them
             r.mkdir(parents=True, exist_ok=True)
         self.write_shell(i.cwd, i.write, self.shell, roots, caches)
-        config: dict[str, Json] = {"permission": box.permissions(i.write, i.engine_only)}
+        config: dict[str, Json] = {"permission": box.permissions(i.write, i.engine_only, i.read_roots)}
         if self.profile.providers:
             for key in SESSION_VARS:
                 env.pop(key, None)

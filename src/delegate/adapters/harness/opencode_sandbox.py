@@ -62,7 +62,7 @@ def engine_only_rules(engine_only: Sequence[str]) -> dict[str, str]:
     }
 
 
-def permissions(write: bool, engine_only: Sequence[str] = ()) -> dict[str, Json]:
+def permissions(write: bool, engine_only: Sequence[str] = (), read_roots: Sequence[str] = ()) -> dict[str, Json]:
     reads: dict[str, Json] = {
         "*": "allow",
         ".env": "deny",
@@ -74,7 +74,12 @@ def permissions(write: bool, engine_only: Sequence[str] = ()) -> dict[str, Json]
     }
     for x in SECRETS:
         reads[str(Path.home() / x)] = reads[str(Path.home() / x) + "/*"] = "deny"
-    outside: Json = "deny" if write else {"*": "deny", **{x + "/**": "allow" for x in readable_outside()}}
+    # a write step reads outside its cwd only in the caller's listed roots; a read-only step ignores the list
+    outside: Json = (
+        ({"*": "deny", **{x.rstrip("/") + "/**": "allow" for x in read_roots}} if read_roots else "deny")
+        if write
+        else {"*": "deny", **{x + "/**": "allow" for x in readable_outside()}}
+    )
     # a read-only step ignores the list
     bash: dict[str, Json] | None = {"*": "allow", **engine_only_rules(engine_only)} if write and engine_only else None
     return {

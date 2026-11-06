@@ -35,6 +35,7 @@ class LaunchInputs:
     system: str = ""  # claude: the appended system prompt
     settings: str = ""  # claude: --settings JSON (the PreToolUse guard)
     write: bool = False  # claude, opencode: may the worker edit
+    read_roots: tuple[str, ...] = ()  # opencode: folders outside cwd a write step may read
     engine_only: tuple[str, ...] = ()  # opencode: recipes only the engine runs, denied in the bash permission rules of a write step
 
 
