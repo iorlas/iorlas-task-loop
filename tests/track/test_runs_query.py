@@ -1,0 +1,70 @@
+"""RUNSQ: `tl runs show` and `tl runs slow` read an engine log and print the timed items; they write nothing."""
+import io
+import json
+import sys
+from contextlib import redirect_stdout
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import support.paths  # noqa: F401
+
+from taskloop.app.track import runs
+from taskloop.contracts.paths import ConfigDir
+
+
+def row(kind: str, t: float, **kw):
+    return {"v": 3, "kind": kind, "t": t, "run_id": "R1", "bead": "tl-x", **kw}
+
+
+FIXTURE = [
+    row("run_start", 1.0, worktree="/w", branch="task/x"),
+    row("step_start", 2.0, id="n1", step="write"),
+    row("step_end", 130.0, id="n1", step="write", outcome="ok", exec_seconds=128.0),
+    row("check_start", 131.0, id="c1", check="unit", group="g", cmd="just test", round=1),
+    row("check_end", 191.0, id="c1", exit=0, status="pass", exec_seconds=60.0, wait_seconds=12.0),
+    row("wait_start", 192.0, id="w1", what="lane"),
+    row("wait_end", 300.0, id="w1", wait_seconds=108.0),
+    row("close", 301.0, outcome="landed", why="done"),
+]
+
+
+def say(fn, *args):
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = fn(*args)
+    return rc, buf.getvalue()
+
+
+def home(tmp_path):
+    cfg = ConfigDir(tmp_path)
+    cfg.engine_dir().mkdir()
+    cfg.engine_log("R1").write_text("\n".join(json.dumps(r) for r in FIXTURE) + "\ntorn{\n", encoding="utf-8")
+    return cfg
+
+
+def test_show_prints_the_run_end_to_end(tmp_path):
+    rc, out = say(runs.show, "R1", home(tmp_path))
+    assert rc == 0
+    assert "bead tl-x" in out
+    assert "step   write" in out and "2.1m" in out
+    assert "check  unit" in out and "wait 12s" in out
+    assert "wait   lane" in out
+    assert "total exec 3.1m  wait 2.0m  -> landed: done" in out
+
+
+def test_show_of_an_unknown_run_exits_1(tmp_path):
+    rc, out = say(runs.show, "nope", ConfigDir(tmp_path))
+    assert rc == 1 and "no engine log" in out
+
+
+def test_slow_ranks_by_exec_then_by_wait(tmp_path):
+    cfg = home(tmp_path)
+    rc, out = say(runs.slow, cfg, 2, "exec", 10)
+    assert rc == 0 and [ln.split()[2] for ln in out.splitlines()] == ["step", "check"]
+    rc, out = say(runs.slow, cfg, 1, "wait", 10)
+    assert rc == 0 and out.split()[2] == "wait"
+
+
+def test_slow_with_no_logs_says_so(tmp_path):
+    rc, out = say(runs.slow, ConfigDir(tmp_path), 5, "exec", 10)
+    assert rc == 0 and "no timed items" in out
