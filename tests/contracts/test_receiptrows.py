@@ -1,7 +1,6 @@
 """Receipt rows are the sole authority, including retention and legacy retirement."""
 
 import json
-import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
@@ -10,6 +9,7 @@ import pytest
 import support.paths  # noqa: F401
 from support.case import Case
 from support.memstores import MemDocSet
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.checks import BaseRedRecord, CheckResult, PassRecord
@@ -24,7 +24,7 @@ from taskloop.stores.real import real_stores
 
 class ReceiptRowsTest(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.addCleanup(factorydb.close_shared)
         self.cfg = ConfigDir(Path(tmp.name))

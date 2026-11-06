@@ -1,9 +1,9 @@
 """Every JsonlStore rotates: past its cap the files shift, at most `keep` exist, and no store has a way to append without it."""
 import sys
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -19,7 +19,7 @@ def decode(data):
 
 class RotationTest(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.path = Path(self.tmp.name) / "x.jsonl"
 

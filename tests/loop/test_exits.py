@@ -1,7 +1,6 @@
 """Every recoverable lane termination leaves evidence even when disk writes fail."""
 import errno
 import io
-import tempfile
 from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -9,6 +8,7 @@ from unittest.mock import Mock, patch
 import pytest
 import support.paths  # noqa: F401
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.loop import exits
 from taskloop.app.loop.files import EXIT_REASONS, LoopFiles
@@ -20,7 +20,7 @@ from taskloop.contracts.paths import ConfigDir
 
 class LaneExits(Case):
     def setup_method(self):
-        temp = tempfile.TemporaryDirectory()
+        temp = TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.files = LoopFiles(ConfigDir(Path(temp.name)), "repo", lambda _: True, lambda: 42)
         self.directory = self.files.runs()

@@ -1,10 +1,10 @@
 """One RunOutcome and one sealed Fault union: an unknown outcome is an error, each Fault variant has one action, an ask needs a spec."""
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -88,7 +88,7 @@ class RoundVerdictUnion(Case):
 
 class OutcomeFile(Case):
     def test_a_file_of_the_old_shape_or_an_unknown_outcome_is_a_failure_that_names_the_file(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             for name, text in (("old.json", '{"v": 1, "outcome": "landed", "bead": "t-1"}'),
                                ("odd.json", '{"v": 2, "outcome": "wat", "bead": "t-1"}'), ("torn.json", "{")):
                 f = Path(d, name)

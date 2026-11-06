@@ -1,10 +1,10 @@
 """The owner audit has one shared path and preserves the exact JSONL row across readers."""
 import json
 import sys
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -17,7 +17,7 @@ from taskloop.stores.real import real_stores
 
 class ProfileAudit(Case):
     def test_missing_audit_is_empty_and_one_append_is_one_shared_json_row(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             cfg = ConfigDir(tmp)
             writer, reader = real_stores(cfg), real_stores(cfg)
             assert reader.profile_changes.read_from().items == []

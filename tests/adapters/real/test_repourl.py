@@ -1,19 +1,19 @@
 """repo_url names a repo the same from its main checkout and from a slot, with or without an origin remote (tl-6bv: the loop read the
 storm record by the main checkout's path, the engine wrote it by its slot's path)."""
 import subprocess
-import tempfile
 from pathlib import Path
 
 from support.case import Case
 from support.checked import run_checked
 from support.spawn import port_git
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters.repourl import repo_url
 
 
 class RepoUrl(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.repo = str(Path(self.tmp.name, "repo").resolve())
         self.slot = str(Path(self.tmp.name, "slot").resolve())
