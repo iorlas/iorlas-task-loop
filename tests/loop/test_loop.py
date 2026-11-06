@@ -7,7 +7,6 @@ import shutil
 import stat
 import subprocess
 import sys
-import tempfile
 from collections.abc import Callable
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -15,6 +14,7 @@ from typing import Any, ClassVar
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
@@ -134,7 +134,7 @@ class FakeBd:
 
 class Base(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.home = Path(self.tmp.name)
         self.repo = self.home / "repo"
         self.repo.mkdir()

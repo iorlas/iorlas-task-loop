@@ -2,7 +2,6 @@
 
 import sqlite3
 import sys
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,6 +9,7 @@ import pytest
 import sqlite_store
 from sqlite_store import filesystem
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -31,7 +31,7 @@ class FactoryDbTest(Case):
     def setup_method(self):
         factorydb.clear_filesystem_cache()
         self.addCleanup(factorydb.clear_filesystem_cache)
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.path = Path(tmp.name) / "factory.db"
 

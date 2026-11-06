@@ -13,6 +13,7 @@ from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask, AskAction, AskAnswer, ThreadEntry
 from taskloop.contracts.bead import Comment
 from taskloop.contracts.dash import OwnerCause, Stick
+from taskloop.contracts.enums import AskKind
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
 from taskloop.contracts.stores import AskStore
@@ -105,7 +106,8 @@ class Intake:
             return done, why
         with contextlib.suppress(BdFailure):  # the loop's own reopen takes a blocked bead whose ask is answered
             self.store.update(bead, BeadPatch(status="open"))
-        self.note(bead, receipt("answer", given.text, ask=ask.id, action=action))
+        kind = {"kind": ask.kind.value} if ask.kind is AskKind.DECISION else {}  # the answer to a decision is a record: its comment says so
+        self.note(bead, receipt("answer", given.text, ask=ask.id, action=action, **kind))
         return done, ""
 
     def withdraw(self, bead: BeadId, why: str) -> tuple[Ask | None, str]:
@@ -183,10 +185,16 @@ class Intake:
         return ""
 
     def prune(self, repo: str, adr: str) -> str:
-        """Retire a decision in force of `repo` (kept in the store, marked with who and when). -> "" or why not."""
+        """Retire a decision in force of `repo`: files the bead that marks its file retired (the file is the record). -> "" or why not."""
         if self.adrs is None:
             return "there is no decision store here"
-        return self.adrs(repo).retire(adr, self.by, self.now())
+        found = self.adrs(repo).get(adr)
+        if found is None:
+            return f"{adr} is not a decision of this repo"
+        if found.retired_t is not None:
+            return f"{adr} is already retired"
+        stick.retire(self.store, adr)
+        return ""
 
     def ask_back(self, bead: BeadId, ask_id: str, text: str) -> str:
         """The owner asks back instead of answering: the entry joins the ask's thread and the ask stays open. -> "" or why not."""

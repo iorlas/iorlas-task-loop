@@ -1,6 +1,5 @@
 """Repository collisions must never mix dashboard reads or owner writes."""
 
-import tempfile
 from pathlib import Path
 
 import support.paths  # noqa: F401
@@ -11,6 +10,7 @@ from support.fakes import FakeBeadStore
 from support.narrow import must
 from support.repos import write_repos
 from support.runs import manifest
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.launch.dash_ports import owner_intake, owner_writes
 from taskloop.contracts.ids import loop_key
@@ -23,7 +23,7 @@ from taskloop_dash.env import Env, Ports
 
 class RepoIdentity(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
         self.repos = [root / side / "demo" for side in ("a", "b")]
