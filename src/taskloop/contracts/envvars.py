@@ -14,7 +14,6 @@ class EnvVar(StrEnum):
     TL_ATTEMPT = "TL_ATTEMPT"                    # N of this attempt (the N of TL_ARTIFACT_DIR)
     TL_WORKTREE = "TL_WORKTREE"                  # the worktree the run works in
     TL_BRANCH = "TL_BRANCH"                      # the branch checked out in it
-    TL_JUDGE_READ_ONLY = "TL_JUDGE_READ_ONLY"    # the repo hook's `tl judge-push` only reads the receipt
     TL_WORKER_MB = "TL_WORKER_MB"                # address-space cap of each xdist worker (dev/runtests.py)
     TL_SCRATCH = "TL_SCRATCH"                    # moves the scratch root (contracts/scratch.py; dev/runtests.py reads it too)
     # handovers between two processes of the engine (one typed record each, see contracts/env.py)
