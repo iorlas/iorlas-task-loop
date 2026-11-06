@@ -8,6 +8,8 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from any_agent import procs as shelf_procs
+from any_agent import supervisor
 
 HERE = str(Path(__file__).resolve().parent)
 if HERE not in sys.path:
@@ -35,3 +37,11 @@ def own_home():
         for k, v in saved.items():
             os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
         shutil.rmtree(d, ignore_errors=True)
+
+
+@pytest.fixture(autouse=True)
+def quick_waits(monkeypatch):
+    """The supervisor looks at its worker every POLL_S and a stop waits GRACE_S between SIGTERM and SIGKILL: both are the library's
+    defaults for a real worker (0.5 s, 5 s), not what a test asserts, so a test waits a tenth of that."""
+    monkeypatch.setattr(supervisor, "POLL_S", 0.05)
+    monkeypatch.setattr(shelf_procs, "GRACE_S", 0.5)

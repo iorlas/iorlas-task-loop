@@ -377,6 +377,7 @@ def run_prepared(
         dataclasses.replace(hooks, ref=on_ref),
         live,
         limits=harnesses.LIMITS[harnesses.CLI_OF_KIND[h.kind]],
+        clock=harnesses.now,
         gone=lane_gone_check(lane, time.time()),
         log=log,
         policy=secret_in if hx.secret_event else None,

@@ -84,6 +84,7 @@ class RunStops(RunBase):
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_later_event_resets_the_answer_grace(self):
+        self.real_clock()
         self.fast_clock(grace=1, stall=900)
         _, r = self.run_it(mode="progress_then_work", timeout=4)
         assert why(r) == "timeout"
@@ -324,6 +325,7 @@ class RunStops(RunBase):
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_any_stream_line_counts_as_activity_even_on_stderr(self):
+        self.real_clock()
         with short_limits("codex", silence_s=1):  # the fake prints to stderr every 0.4 s for 3 s
             _, r = self.run_it(mode="chatter", timeout=0)
         assert r["stop"] is None
