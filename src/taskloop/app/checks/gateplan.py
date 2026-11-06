@@ -8,10 +8,9 @@ from pathlib import Path
 from taskloop.adapters.childenv import check_environment
 from taskloop.app.checks.cache import NO_DIGEST, plan_digest
 from taskloop.app.checks.host import CheckHost
-from taskloop.contracts import wire
+from taskloop.contracts import rundocs, wire
 from taskloop.contracts.config import ConfigError
 from taskloop.contracts.gateplan import GatePlan
-from taskloop.contracts.paths import RunFiles
 from taskloop.contracts.runkey import Digest
 from taskloop.contracts.slots import SlotGitError
 
@@ -44,13 +43,7 @@ def parse(text: str) -> GatePlan:
 
 def once(host: CheckHost, reason: str) -> bool:
     """Persist the diagnostic key in the run directory, including across engine reloads."""
-    path = RunFiles(host.run_dir).plan_note(reason)
-    try:
-        with path.open("x"):
-            pass
-    except FileExistsError:
-        return False
-    return True
+    return rundocs.once(host.home, host.run_id, hashlib.sha256(reason.encode()).hexdigest())
 
 
 def command(host: CheckHost, cmd: list[str]) -> list[str]:
