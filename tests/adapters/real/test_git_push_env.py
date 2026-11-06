@@ -2,11 +2,11 @@
 
 import os
 import subprocess
-import tempfile
 from pathlib import Path
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters.git import RealGit
 from taskloop.contracts.env import Env, snapshot
@@ -20,7 +20,7 @@ def sh(*a, cwd, check=True):
 
 class PortPushHasNoGateAuthority(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.tmp = TemporaryDirectory(ignore_cleanup_errors=True)
         self.addCleanup(self.tmp.cleanup)
         root = Path(os.path.realpath(self.tmp.name))
         self.remote, self.repo, hooks = root / "o.git", root / "r", root / "hooks"

@@ -2,11 +2,11 @@
 and the Snapshot's lanes decoding strictly."""
 import json
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -40,7 +40,7 @@ def snap(at, state="ready", five=None, week=None, used=10.0, reset=T + 5 * H, ou
 
 class History(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.cfg = ConfigDir(tmp.name)
         self.h = UsageHistory(self.cfg)

@@ -4,10 +4,10 @@ session's: the sidecar here follows the agreed schema, built by hand."""
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -48,7 +48,7 @@ def bump(path: Path, n: int = 5) -> None:
 
 class Store(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.dash = make_dash(config=self.tmp.name)
         self.art = self.dash.artifacts
 
@@ -102,7 +102,7 @@ class Cache(Case):
     """A bead with 100 artifacts: each sidecar is read once per folder change, and a poll that changed nothing reads none."""
 
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.dash = make_dash(config=self.tmp.name)
         self.art = self.dash.artifacts
         self.reads: list[str] = []
@@ -155,7 +155,7 @@ class Cache(Case):
 
 class Serve(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.dash = make_dash(config=self.tmp.name)
         put(self.tmp.name, "write-1", "a.png", b"png")
         put(self.tmp.name, "write-1", "page.html", b"<script>alert(1)</script>")
@@ -197,7 +197,7 @@ class Detail(Case):
         run = script.move("n2", "bad_checks").step("write", 10, 1).run(1_800_000_000.0)
         ps = passes.passes_of([run])
         assert [p.n for p in ps] == [1, 2]
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         art = make_dash(config=tmp.name).artifacts
         put(tmp.name, "write-1", "a.png", role="before", created=1, run=run.name)
         put(tmp.name, "write-2", "b.png", role="after", created=2, run=run.name, caption="fixed")
@@ -213,7 +213,7 @@ class Detail(Case):
 
 class WithTheWriter(Case):
     def test_what_the_store_writer_leaves_is_what_the_reader_lists_and_serves(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             src = Path(tmp, "shot.png")
             src.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 16)
             dash = make_dash(config=tmp)

@@ -5,8 +5,11 @@ import shlex
 from collections.abc import Mapping
 from types import MappingProxyType
 
+from any_shell_policy import has_write_syntax
+from any_shell_policy.command import name_of
+
 from delegate.contracts.wire import RECIPE_RUNNERS
-from delegate.domain.policy.matchers import name_of, pieces, sed_print_only, unwrap, writes_or_substitutes
+from delegate.domain.policy.matchers import pieces, sed_print_only
 
 # A read-only Claude step (reviewer, planner, light) gets Bash for reading only: every piece of the command line must start with one of
 # these, with no output redirection or command substitution. Codex read steps get the same from their read-only sandbox, enforced by the OS;
@@ -190,10 +193,9 @@ def piece_problem(t: list[str]) -> str | None:
 
 def read_only_problem(cmd: str) -> str | None:
     """None when every piece of `cmd` only reads, else what is not allowed."""
-    cmd = unwrap(cmd)
-    if writes_or_substitutes(cmd):
+    if has_write_syntax(cmd):
         return "output redirection or command substitution"
-    ps = pieces(cmd)
+    ps = pieces(cmd, bare=True)
     if ps is None:
         return "unparsable command"
     for t in ps:
@@ -212,19 +214,10 @@ WRITER_RULE = (
 )
 
 
-def after_assignments(t: list[str]) -> list[str]:
-    """The words of a command line after its leading `NAME=value` assignments (`FOO=1 just recipe`)."""
-    n = next((i for i, x in enumerate(t) if not (x.partition("=")[1] and x.partition("=")[0].isidentifier())), len(t))
-    return t[n:]
-
-
 def writer_problem(cmd: str, engine_only: tuple[str, ...] = ()) -> str | None:
     """Why a write step may not run `cmd`, else None: the kill family (on anything but the step's own `$!` or `%job`), or a recipe the
     brief says only the engine runs (`just <recipe>`, `make <recipe>` and kin)."""
-    for words in pieces(cmd) or []:
-        t = after_assignments(words)
-        if not t:
-            continue
+    for t in pieces(cmd) or []:
         name = name_of(t[0])
         args = [x for x in t[1:] if not x.startswith("-")]
         if name in FORGE:
