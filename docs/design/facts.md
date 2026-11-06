@@ -89,6 +89,10 @@ Frozen means the references and the data cannot be rebound; the ports are live o
 3. **Are the 11 ports concrete handles, or Protocols per stage?** Recommend Protocols named for the capability and defined by the consumer (`Narrate`, `StepBook`, ...); `RunPorts` holds the handles, a stage declares the Protocol it takes. This matches stage-isolation 1.1 (b) and keeps contracts free of app classes.
 4. **Slice 3 (the checks pilot on the facts) in this bead or after?** Recommend in: it is the only proof that the shape is complete before four stage beads depend on it.
 
-## Not verified
+## Verified before slice 1
 
-The `Claim` type's mutability (`fence.Claim`, not found at the path ATTR-MAP implies) and whether `fresh` changes after open were not read; slice 1 starts by reading both. The step-order table is from reading `engine.py` and `fields.py`, not from running the engine.
+`Claim` is `contracts/fence.py`'s `@final` class with `__slots__` and no setter: its five attributes (`actor`, `bead`, `gen`, `slot_bead`, `slot_gen`) are assigned only in its constructor, which only `take`, `hand` and `offline` may call; nothing in `src` rebinds `claim` or any of them after `RunFields.__init__` (grep). `fresh` is assigned once there (`fields.py:90`) and read only. Both go into the frozen `RunFacts` as they are. The step-order table is from reading `engine.py` and `fields.py`, not from running the engine.
+
+## Decisions taken (internal shape; the lead's call, 2026-11-06)
+
+All four recommendations above: `BeadInfo` from `begin`; `RepoKey` as a lazy port; Protocols named for the capability with `RunPorts` holding the handles; the checks pilot (slice 3) in this bead but after B-CHECKS from the architect.
