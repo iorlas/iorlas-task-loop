@@ -141,10 +141,11 @@ class LiveRun:
 def page(run: LiveRun, since: dict[str, int] | None = None, limit: int = PAGE) -> Json:
     """{events, cursor, reset}: the first MAX_PAGE events after `since`, else the newest `limit` events. A burst past one page is not cut:
     the cursor stops at the first event left over, so the next poll carries on from it. A cursor of another run is a `reset`: the newest
-    events answer it."""
+    events answer it. A `gap`: the cursor had read a worker file that retention has since removed, so events between it and now are gone."""
     reset = since is not None and since.get("_run", zlib.crc32(run.run.encode())) != zlib.crc32(run.run.encode())
     if reset:
         since = None
+    gap = since is not None and any(not t.startswith("_") and off > 0 and t not in run.sources for t, off in since.items())
     got = run.select(lambda t, off: since is None or off >= since.get(t, 0))
     cursor = run.offsets()
     if since is None:
@@ -153,7 +154,7 @@ def page(run: LiveRun, since: dict[str, int] | None = None, limit: int = PAGE) -
         for tag, off, _ in reversed(got[MAX_PAGE:]):
             cursor[tag] = off
         got = got[:MAX_PAGE]
-    return {"events": [e for _, _, e in got], "cursor": encode(cursor), "reset": reset}
+    return {"events": [e for _, _, e in got], "cursor": encode(cursor), "reset": reset, "gap": gap}
 
 
 def poll(
