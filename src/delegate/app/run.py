@@ -345,11 +345,7 @@ class Run:
             env.history_add(hist.CanaryRow(ts=env.now(), run_id=str(uuid.uuid4()), lane=as_str(d["lane"]), model=as_str(d["model"])))
             return None
         if res["outcome"] == "timeout":  # a probe that did not answer in time is hung: `timeout` is never counted, `hung` is
-            res.update(
-                outcome="hung",
-                retry_after=env.now() + 60,
-                say=f"canary: {d['lane']}/{d['model']} did not answer within {CANARY_TIMEOUT_S}s",
-            )
+            res.update(settle.probe_hung(as_str(d["lane"]), as_str(d["model"]), CANARY_TIMEOUT_S, env.now()))
         else:
             res["say"] = "canary failed: " + as_str(res.get("say"))
         return res
