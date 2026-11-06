@@ -9,6 +9,7 @@ from urllib.parse import quote, urlencode
 from taskloop.contracts import gallery
 from taskloop.contracts.dash import Result
 from taskloop.contracts.gallery import LABEL, PICTURES
+from taskloop.contracts.lookrows import LookRows
 from taskloop_dash.env import Bead, Env
 from taskloop_dash.readers.beads import Beads
 from taskloop_dash.readers.records import Records
@@ -18,6 +19,7 @@ from taskloop_dash.views.artifact_files import split_stage
 class Looks:
     def __init__(self, env: Env, records: Records, beads: Beads) -> None:
         self.env, self.records, self.beads = env, records, beads
+        self.rows = LookRows(env.config, quiet=True)
 
     def collect(self, repo: str, beads: list[dict[str, Any]]) -> list[gallery.Item]:
         """Every item of every owner-look bead of the repo (open or closed: an answered item stays so it can be taken back)."""
@@ -27,7 +29,8 @@ class Looks:
                 continue
             shown = self.beads.show(repo, b["id"]) or {}
             filed = gallery.epoch(b.get("created_at") or shown.get("created_at"))
-            out += [dict(i, filed=filed) for i in gallery.items_of(b["id"], dict(shown, title=shown.get("title") or b.get("title")))]
+            held = self.rows.items(b["id"])
+            out += [dict(i, filed=filed) for i in gallery.items_of(b["id"], dict(shown, title=shown.get("title") or b.get("title")), held)]
         return out
 
     def look_items(self, repo: str, rows: list[Bead] | None = None) -> tuple[str, list[gallery.Item]]:

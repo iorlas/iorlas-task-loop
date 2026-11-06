@@ -320,8 +320,8 @@ class LoopSelfUpdate(LoopBase):
         assert [ln["outcome"] for ln in self.lines()] == ["landed"]
         exe, argv, state, _, _ = self.execs[0]
         assert exe == argv[0]
-        assert argv[:5] == childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py", snapshot())
-        assert argv[5:] == ["loop", "--repo", str(self.repo), "--max-beads", "5"]
+        assert argv[:6] == childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py", snapshot())
+        assert argv[6:] == ["loop", "--repo", str(self.repo), "--max-beads", "5"]
         assert json.loads(state)["carry"]["ran"] == 1
 
     def test_the_old_pid_leaves_the_live_loops_before_the_exec(self):
@@ -346,7 +346,7 @@ class LoopSelfUpdate(LoopBase):
         with pytest.raises(Moved), redirect_stdout(io.StringIO()) as out:
             self.main(["loop", "--repo", str(self.repo)])
         assert "loop: moving to 0.10.0 (was 0.1.0)" in out.getvalue()
-        assert "0.10.0" in self.execs[0][1][4]
+        assert "0.10.0" in self.execs[0][1][5]
         assert self.started == []  # the first look is before any bead
 
     def pin(self, **v):
@@ -359,7 +359,7 @@ class LoopSelfUpdate(LoopBase):
         self.pin(**{"task-loop": "0.2.0"})
         with pytest.raises(Moved):
             self.run_loop()
-        assert self.execs[0][1][:5] == childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py", snapshot())
+        assert self.execs[0][1][:6] == childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py", snapshot())
 
     def test_a_pin_to_an_older_install_moves_the_loop_back(self):
         self.beads({"x-1": [rec("landed")]})
@@ -368,7 +368,7 @@ class LoopSelfUpdate(LoopBase):
         self.pin(**{"task-loop": "0.0.5"})
         with pytest.raises(Moved):
             self.run_loop()
-        assert "0.0.5" in self.execs[0][1][4]
+        assert "0.0.5" in self.execs[0][1][5]
 
     def test_a_pin_to_the_running_version_stays_though_a_newer_one_is_installed(self):
         self.beads({"x-1": [rec("landed")], "x-2": [rec("landed")]})
@@ -501,7 +501,7 @@ class LandedOnBase(Base):
         bd = beadtools.bd_store(who().actor, str(self.repo))
 
         def landed(bead_id):
-            return wloop.landed_on_base(str(self.repo), homes.cfg(), bd, str(wt), BeadId(bead_id), port_git())
+            return wloop.ops.landed_on_base(str(self.repo), homes.cfg(), bd, str(wt), BeadId(bead_id), port_git())
         assert landed("x-1")
         # not on main
         assert not landed("x-2")

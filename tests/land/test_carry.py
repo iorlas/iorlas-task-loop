@@ -19,8 +19,9 @@ from taskloop.contracts.checks import CheckResult
 from taskloop.contracts.config import load
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitfacts import TreeEntry
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.ports import Git, Ran
+from taskloop.contracts.procport import Ran
 from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.specs import repo_check
 from taskloop.stores.runlog import RunLog

@@ -8,7 +8,7 @@ from taskloop.app.land.push_evidence import failure
 from taskloop.contracts import log as rec
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Ran
+from taskloop.contracts.procport import Ran
 from taskloop.contracts.slots import SlotGitError
 from taskloop.stores.runlog import RunLog
 

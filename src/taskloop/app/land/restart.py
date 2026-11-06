@@ -5,8 +5,8 @@ from typing import Protocol
 from taskloop.app.land.gitcall import must
 from taskloop.app.land.parts import MoveSteps
 from taskloop.contracts.checkpoint import RunState
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.plancheck import PlanData
-from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import SlotGitError
 from taskloop.stores.runlog import RunLog
 

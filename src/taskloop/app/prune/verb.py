@@ -10,11 +10,12 @@ from taskloop.app.prune import retention, runs, slotstate
 from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.release.shell import Shell
 from taskloop.app.run import running
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Beads
 from taskloop.contracts.rowstores import ReposStore
+from taskloop.contracts.scratch import scratch_root
 
 
 def mb(n: int) -> str:
@@ -54,6 +55,10 @@ def run(cfg: ConfigDir, loop: LoopConfig, repos: list[str], store_of: Callable[[
     for g in logs:
         say(f"prune: {would}{g.path} ({mb(g.bytes)})")
     count += len(logs)
+    leftovers = retention.prune_scratch(scratch_root(sh.env.vars), now, dry_run)
+    for g in leftovers:
+        say(f"prune: {would}{g.path} ({mb(g.bytes)}): a land or check that died left it")
+    count += len(leftovers)
     orphans = slotstate.prune(cfg, repos, sh.port, now, dry_run)
     for g in orphans:
         say(f"prune: {would}{g.path} ({mb(g.bytes)}): its slot is gone")

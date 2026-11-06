@@ -4,8 +4,8 @@ sorted and unique, metadata values are strings, a write to an unknown bead is re
 from typing import Any
 
 from taskloop.contracts.bead import BdError, Bead, Comment, Dep
+from taskloop.contracts.beadsport import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
 from taskloop.contracts.ids import BeadId, parse_bead_id
-from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
 
 
 class MemoryBeads:

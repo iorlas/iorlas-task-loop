@@ -79,7 +79,7 @@ class Entry(Moving):
         self.beads({"x-1": [rec("landed")]})
         with pytest.raises(more.Moved):
             self.run_loop()
-        assert self.execs[0][1][:5] == childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py", snapshot())
+        assert self.execs[0][1][:6] == childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py", snapshot())
 
     def test_a_directory_that_is_not_installed_is_ignored_when_the_loop_runs_what_is_installed(self):
         self.install("0.99.0")
@@ -131,7 +131,7 @@ class Fallback(Moving):
     def test_a_loop_that_breaks_soon_after_a_move_goes_back_once_and_says_red(self):
         with pytest.raises(more.Moved):
             self.run_loop()
-        assert self.execs[0][1][:5] == childenv.script_argv(self.back / "skills" / "task-loop" / "tl.py", snapshot())
+        assert self.execs[0][1][:6] == childenv.script_argv(self.back / "skills" / "task-loop" / "tl.py", snapshot())
         assert json.loads(self.execs[0][2])["carry"]["fallback"]
         assert [x for x in self.said if "RED: task-loop 0.2.0 broke" in x and "back to 0.1.0" in x], self.said
         events = [e for e in eventlog.read() if e["kind"] == "reload_fallback"]

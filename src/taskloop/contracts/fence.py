@@ -6,8 +6,8 @@ from typing import final
 
 from taskloop.contracts.bdsafe import peek
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BdFailure, BeadPatch, Beads
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
 
 BEAD_GEN = "fence_gen"
 SLOT_GEN = "held_gen"  # never cleared with the slot's holder marks: a retake after a release must still be a higher number

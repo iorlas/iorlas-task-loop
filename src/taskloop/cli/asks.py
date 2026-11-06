@@ -13,9 +13,10 @@ from taskloop.app.run import requests
 from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.askstore import AskStore
+from taskloop.contracts.beadsport import BdFailure, Beads
 from taskloop.contracts.ids import BeadId, parse_bead_id
+from taskloop.contracts.lookrows import LookRows
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, Beads
 
 Out = Callable[[str], None]
 FLAG_ACTIONS: Final[tuple[AskAction, ...]] = ("rerun", "confirm", "split")  # `tl answer --rerun|--confirm|--split`
@@ -113,7 +114,7 @@ def run(a: Namespace, asks: AskStore, store_at: Callable[[str], Beads], now: Cal
         out(f"tl: {op} needs a bead id")
         return 2
     ask = asks.get(bead)
-    verbs = intake.Intake(asks, store_at(ask.repo if ask else ""), now, by)
+    verbs = intake.Intake(asks, store_at(ask.repo if ask else ""), now, by, look_rows=LookRows(cfg))
     try:
         return verb(a, op, bead, ask, verbs, out, cfg, now)
     except (BdFailure, ValueError) as e:

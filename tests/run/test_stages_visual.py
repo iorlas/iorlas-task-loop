@@ -16,14 +16,16 @@ from support import (
     homes,
     procsim,
 )
-from support.builders import cfg_with, make_engine, plan_of
+from support.builders import make_engine
+from support.cfgs import cfg_with, plan_of
 from support.checkpoints import read_ck
-from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint  # noqa: F401
+from support.engine_case import engine
 from support.fakes import (
     FakeBeadStore,
     must_bead,
 )
 from support.imagetools import without_image_tools
+from support.plans import BEAD, CLEAN, FALSE, PLAN, WRITE
 from support.spawn import port_git, real_spawner
 from support.who import who
 
@@ -40,6 +42,7 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts.artifact import ArtifactSlot
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.lookrows import LookRows
 from taskloop.contracts.run import Round
 from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.prompts.plan import REPLAN_CAP
@@ -333,7 +336,7 @@ class VisualWork(StagesTest):
         _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         assert "look-objective:" not in s.prompts[0]
 
-    def test_the_gallery_data_lands_in_the_owner_look_beads_metadata(self):
+    def test_the_gallery_data_lands_in_the_owner_look_beads_row(self):
         e = make_engine(self.wt, store=self.store, attrs={
             "plan_data": dict(PLAN, cases=[{"criterion": "it reads well", "check": "", "class": "taste"}]),
             "look_notes": ["the main screen shows"],
@@ -345,26 +348,21 @@ class VisualWork(StagesTest):
                                                  ("half.png", "progress", "write")), 1):
             store.add(e.home.artifact_store(), ArtifactSlot(repo="repo", bead="t-1", run=e.run_id, stage=stage, attempt=1), png,
                       name=name, caption="c", role=role, now=float(t))
+        rows = LookRows(e.home)
+        old = [{"id": "t-0#1", "bead": "t-0", "title": "other", "shots": [], "status": "open"},
+               {"id": "t-1#1", "bead": "t-1", "title": "it reads well", "shots": [], "status": "good"}]
+        rows.modify("lk-1", lambda: old, lambda items: items)  # the row as an earlier filing and the owner left it
         sent = []
-        old = {"metadata": {"looks": [
-            {"id": "t-0#1", "bead": "t-0", "title": "other", "shots": [], "status": "open"},
-            {"id": "t-1#1", "bead": "t-1", "title": "it reads well", "shots": [], "status": "good"}], "keep": "me"}}
-        with self.store.stub(show=old), \
-                self.store.stub(bd_fn=lambda *a, **k: sent.append(a) or mock.Mock(returncode=0, stdout="", stderr="")):
+        with self.store.stub(bd_fn=lambda *a, **k: sent.append(a) or mock.Mock(returncode=0, stdout="", stderr="")):
             e.owner_look.write_looks(BeadId("lk-1"))
-        (call,) = sent
-        assert call[:3] == ("update", "lk-1", "--metadata")
-        meta = json.loads(call[3])
-        assert meta["keep"] == "me"
-        assert [x["id"] for x in meta["looks"]] == ["t-0#1", "t-1#1"]
-        assert meta["looks"][1]["status"] == "good"  # the owner's answer stays
+        assert sent == []  # the bead's metadata is not written
+        got = rows.items("lk-1") or []
+        assert [x["id"] for x in got] == ["t-0#1", "t-1#1"]
+        assert got[1]["status"] == "good"  # the owner's answer stays
         e.leftovers = []
-        old["metadata"]["looks"].pop()
-        sent.clear()
-        with self.store.stub(show=old), \
-                self.store.stub(bd_fn=lambda *a, **k: sent.append(a) or mock.Mock(returncode=0, stdout="", stderr="")):
-            e.owner_look.write_looks(BeadId("lk-1"))
-        entry = json.loads(sent[0][3])["looks"][-1]
+        rows.modify("lk-1", list, lambda items: items[:1])
+        e.owner_look.write_looks(BeadId("lk-1"))
+        entry = (rows.items("lk-1") or [])[-1]
         assert (entry["id"], entry["bead"], entry["title"], entry["status"]) == ("t-1#1", "t-1", "it reads well", "open")
         assert entry["note"] == "the main screen shows"
         assert entry["shots"] == [

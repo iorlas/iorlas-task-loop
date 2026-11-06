@@ -7,9 +7,9 @@ import pytest
 from support.fakes import FakeBeadStore
 
 from taskloop.contracts.bead import BdError, Bead
+from taskloop.contracts.beadsport import BdFailure, BeadQuery
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadQuery
 from taskloop_dash.env import Env, Ports
 from taskloop_dash.index import Indexer, reindex
 from taskloop_dash.readers.beads import Beads

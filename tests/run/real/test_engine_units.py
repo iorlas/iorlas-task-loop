@@ -19,18 +19,14 @@ import support.paths  # noqa: E402, F401
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from support import engine_case as T  # noqa: E402
-from support.engine_case import (  # noqa: E402
-    PLAN,
-    WRITE,
-    full,
-    real_git,
-    stop,
-)
+from support.engine_case import full, real_git, stop  # noqa: E402
+from support.plans import PLAN, WRITE  # noqa: E402
 from support.spawn import (  # noqa: E402
     port_git,
     real_spawner,
 )
 from support.who import who  # noqa: E402
+from support.world import _template  # noqa: E402
 
 from taskloop.adapters import delegate as lroute  # noqa: E402
 from taskloop.app.run import (  # noqa: E402
@@ -108,7 +104,7 @@ class DelegateLauncher(T.EngineTest):
 class NoBackgroundGit(T.EngineTest):
     @real_git("asserts the git config of the real template and clone repos")
     def test_template_and_clone_repos_never_auto_gc_or_maintain(self):
-        for repo in (T._template() / "o.git", T._template() / "wt", self.tmp_repo("o.git"), self.tmp_repo("wt")):
+        for repo in (_template() / "o.git", _template() / "wt", self.tmp_repo("o.git"), self.tmp_repo("wt")):
             for key, want in (("maintenance.auto", "false"), ("gc.auto", "0")):
                 got = subprocess.run(
                     ["git", "-C", str(repo), "config", "--local", "--get", key], capture_output=True, text=True, check=False

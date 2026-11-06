@@ -6,9 +6,9 @@ from pathlib import Path
 
 from taskloop.app.checks import authorization
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha
 from taskloop.contracts.slots import SlotGitError
 from taskloop.stores.real import real_stores

@@ -17,7 +17,8 @@ from support import homes
 from run import test_stages_visual
 from support import engine_case as te
 from support import gitq
-from support.engine_case import CLEAN, PLAN, WRITE, real_git, stop
+from support.engine_case import real_git, stop
+from support.plans import CLEAN, PLAN, WRITE
 from support.pushsim import CUT, pusher
 
 from taskloop.app.loop.gate import GateRole

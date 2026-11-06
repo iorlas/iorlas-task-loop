@@ -117,7 +117,7 @@ class Api(Case):
             env = {"HOME": home, "XDG_CONFIG_HOME": str(cfg.parent), "APPDATA": str(cfg.parent)}
             with mock.patch.dict(os.environ, env):
                 dash = make_dash(home=home)
-            dash.env.ports = answering(lambda repo: fake, home)
+            dash.env.ports = answering(lambda repo: fake, dash.env.config.root)
             seed_beads(dash.env.config, repo, fake.beads.values(), NOW)
             with mock.patch.object(dash.env.ports, "store", lambda repo: fake):
                 path, items = dash.looks.look_items(loop_key(repo))

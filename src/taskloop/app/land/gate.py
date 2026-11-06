@@ -17,8 +17,8 @@ from taskloop.app.land import verified
 from taskloop.contracts import log as rec
 from taskloop.contracts.checks import Check, CheckFaultKind, CheckRun
 from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha, Digest
 from taskloop.domain.checks.specs import engine_digest, gate_items
 from taskloop.stores.runlog import RunLog

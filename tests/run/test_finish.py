@@ -10,7 +10,8 @@ import pytest
 import support.paths  # noqa: F401
 from support import homes
 from support.case import Case
-from support.engine_case import CLEAN, PLAN, WRITE, EngineTest
+from support.engine_case import EngineTest
+from support.plans import CLEAN, PLAN, WRITE
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.run.finish import answer, outcome
