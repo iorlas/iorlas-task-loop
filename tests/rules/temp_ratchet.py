@@ -1,20 +1,16 @@
 """The temp-path ratchet's counter: where code names a temp location itself instead of asking src/taskloop/contracts/scratch.py.
 
-A site is a `tempfile` attribute or import, or a string constant holding /tmp, /var/tmp or TMPDIR, anywhere in src/, dev/,
-skills/ and tests/
-but scratch.py itself. `temp_baseline.json` holds today's count per directory; `PYTHONPATH=tests uv run python -m
-rules.temp_ratchet --write`
-rewrites it after a cleanup lowers one."""
+A site is a `tempfile` attribute or import, or a string constant holding /tmp, /var/tmp or TMPDIR, anywhere in src/, dev/, skills/ and
+tests/ but scratch.py itself. Judged on the change (ratchet_change.py): a rise over the files the change touches fails unless a commit
+says `Ratchet-allow: temp +N reason`."""
 import ast
-import json
-import sys
 from pathlib import Path
 
-from rules.gate_rules import ROOT, SKIP_DIRS, parsed
+from rules.gate_rules import SKIP_DIRS
 
-BASELINE = Path(__file__).with_name("temp_baseline.json")
 HOME_FILE = "src/taskloop/contracts/scratch.py"
 SCAN = ("src", "dev", "skills", "tests")
+RATCHET_FILES = ("temp_ratchet.py", "test_temp_ratchet.py", "test_ratchets.py", "test_ratchets_change.py")  # they quote sites
 NEEDLES = ("/tmp", "/var/tmp", "TMPDIR")
 
 
@@ -31,27 +27,12 @@ def sites(tree: ast.Module) -> int:
     return sum(named(node) for node in ast.walk(tree))
 
 
-def count_tree(root: Path = ROOT) -> dict[str, int]:
-    out: dict[str, int] = {}
-    for top in SCAN:
-        for path in sorted((root / top).rglob("*.py")):
-            rel = path.relative_to(root)
-            if SKIP_DIRS & set(rel.parts) - {"fixtures"} or "_vendor" in rel.parts or rel.as_posix() == HOME_FILE:
-                continue
-            if "rules" in rel.parts and rel.name in ("temp_ratchet.py", "test_temp_ratchet.py"):
-                continue
-            n = sites(parsed(path)[1])
-            if n:
-                key = "/".join(rel.parts[:-1])
-                out[key] = out.get(key, 0) + n
-    return out
-
-
-def grown(now: dict[str, int], base: dict[str, int]) -> list[str]:
-    return [f"{d}: {n} (baseline {base.get(d, 0)})" for d, n in sorted(now.items()) if n > base.get(d, 0)]
-
-
-if __name__ == "__main__":
-    if "--write" in sys.argv:
-        BASELINE.write_text(json.dumps(count_tree(), indent=1, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps(count_tree(), indent=1, sort_keys=True))
+def file_counts(rel: str, tree: ast.Module) -> dict[str, int]:
+    """{"site": n} of one file under src/, dev/, skills/ or tests/ that may name a temp location; empty for any other file."""
+    path = Path(rel)
+    if path.parts[0] not in SCAN or SKIP_DIRS & set(path.parts) - {"fixtures"} or "_vendor" in path.parts or rel == HOME_FILE:
+        return {}
+    if "rules" in path.parts and path.name in RATCHET_FILES:
+        return {}
+    n = sites(tree)
+    return {"site": n} if n else {}
