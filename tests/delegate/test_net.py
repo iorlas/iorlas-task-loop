@@ -15,7 +15,6 @@ from typing import Any
 from unittest import mock
 
 import pytest
-
 from any_agent import procs
 from any_agent.classify import Outcome
 from any_agent.drops import looks_dropped
