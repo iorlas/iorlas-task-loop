@@ -20,7 +20,9 @@ from support import tlbd  # noqa: E402
 from support.dashes import serving  # noqa: E402
 
 from taskloop.app.launch import dash_ports  # noqa: E402
+from taskloop.contracts.dash import READ_PROTOCOL  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
+from taskloop.contracts.factorydb import SCHEMA_VERSION  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
 from taskloop.contracts.stores import AskStore  # noqa: E402
@@ -46,6 +48,7 @@ class Live(Case):
                 "XDG_CONFIG_HOME": d, "APPDATA": d, "TASK_LOOP_DASH_BIND": "127.0.0.1", "HOME": d, "USERPROFILE": d}), serving() as base:
             v = json.loads(urllib.request.urlopen(base + "/api/version", timeout=10).read())
             assert v["version"]
+            assert (v["protocol"], v["schema"]) == (READ_PROTOCOL, SCHEMA_VERSION)
             assert v["database_error"].startswith("database unavailable:")
             assert b"task-loop" in urllib.request.urlopen(base + "/").read()
 
@@ -75,7 +78,7 @@ class Asks(Case):
                             return r.status, json.loads(r.read())
                     except urllib.error.HTTPError as e:
                         return e.code, None
-                assert post("new") == (200, {"ok": True, "message": ""})
+                assert post("new") == (200, {"ok": True, "message": "", "receipt": ""})
                 got = asks.get(BeadId("x-1"))
                 assert got is not None and got.answer is not None
                 assert (got.status.value, got.answer.text, got.answer.by) == ("answered", "new", "dash")

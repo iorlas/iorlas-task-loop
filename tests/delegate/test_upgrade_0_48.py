@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 from delegate.app import doctor, env
-from delegate.contracts.stores import StateStore
+from delegate.contracts.stores import StateStore, StateUnreadable
 from support.procsim import real_proc
 
 import hermetic  # noqa: F401  (a home of its own for every test)
@@ -60,16 +60,15 @@ class Upgrade(T.RunBase):
         assert (list(doc.holds), list(doc.leases), list(doc.refs)) == (["h1"], ["r-live"], [])
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_state_unknown_key_that_is_not_retired_still_resets(self):
+    def test_state_unknown_key_that_is_not_retired_is_refused_and_left_untouched(self):
         path = Path(self.tmp.name, "state.json")
         d = json.loads((FIX / "state_pre_0_48.json").read_text())
         d["mystery"] = 1
         path.write_text(json.dumps(d))
-        err = io.StringIO()
-        with contextlib.redirect_stderr(err):
-            doc = StateStore(path).load()
-        assert (doc.out, doc.holds) == ({}, {})
-        assert "empty state" in err.getvalue()
+        before = path.read_bytes()
+        with pytest.raises(StateUnreadable, match=r"state\.json\.old"):
+            StateStore(path).load()
+        assert path.read_bytes() == before
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_config_with_retired_keys_warns_naming_file_safe_to_delete_and_is_untouched(self):
