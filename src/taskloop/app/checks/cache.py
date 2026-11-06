@@ -14,7 +14,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from taskloop.adapters import check_files
-from taskloop.app.checks.execution import HOST_IDENTITY
+from taskloop.app.checks.execution import HOST_IDENTITY, LINUX_IDENTITY
 from taskloop.contracts import config, wire
 from taskloop.contracts.checks import BaseRedRecord, Check, CheckResult, PassRecord
 from taskloop.contracts.ids import CheckId, TreeSha
@@ -152,9 +152,10 @@ class RunMemo:
         return Digest(hashlib.sha256(json.dumps(records, sort_keys=True).encode()).hexdigest()) if records else NO_DIGEST
 
     def execution(self, c: Check) -> Digest:
+        where = LINUX_IDENTITY if c.where == "linux" else HOST_IDENTITY  # a pass on the executor says nothing of this machine
         if c.run_in == "slot":
-            return Digest("slot-v1:" + HOST_IDENTITY)
-        return Digest("clean-v1:" + HOST_IDENTITY) if self.keys.clean else HOST_IDENTITY
+            return Digest("slot-v1:" + where)
+        return Digest("clean-v1:" + where) if self.keys.clean else Digest(where)
 
     def command_key(self, c: Check) -> RunKey:
         """Only the same registry requirement and resolved execution may share a result."""

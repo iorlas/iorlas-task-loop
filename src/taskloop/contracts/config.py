@@ -77,12 +77,27 @@ class HostResources(Rec):
 
 
 @final
+class ExecutorConfig(Rec):
+    """engine.executor: the Linux machine a check with `in: linux` runs on, reached over ssh. `host` is the ssh destination ("" : none,
+    such a check fails loudly); `root` holds <repo>.git (the bare repo the commit is pushed to) and <repo>/<slot> (one persistent
+    worktree per slot), relative to the executor's home; `ssh` is the client argv."""
+
+    host: str = ""
+    root: str = "tl"
+    ssh: list[str] = msgspec.field(default_factory=lambda: [
+        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ControlMaster=auto", "-o", "ControlPath=~/.ssh/tl-%C",
+        "-o", "ControlPersist=60"])  # one connection serves the steps of a run
+
+
+@final
 class CheckSpec(Rec):
     id: CheckId
     argv: list[str]
     group: Literal["static", "tests", "acceptance"] = "tests"
     run: Literal["stage", "gate", "both"] = "stage"  # stage: the round after each write; gate: land's gate steps (and `tl check`); both
     run_in: Literal["clean", "slot"] = "clean"  # gate: fresh committed checkout by default; slot: committed slot with setup inputs
+    # host: this machine; linux: the committed tree is pushed to engine.executor and run there (a down executor fails the check)
+    where: Literal["host", "linux"] = msgspec.field(default="host", name="in")
     when: list[str] = msgspec.field(default_factory=list)
     retry: int = 0
     wall_min: float | None = None  # this check's wall-time limit; absent: engine.check_wall_min
@@ -239,6 +254,7 @@ class EngineConfig(Rec):
     look_max_px: int = 1280
     brief_kb: float = 5
     resources: dict[str, ResourceSpec] = msgspec.field(default_factory=dict)  # scarce tools: name -> limit per machine
+    executor: ExecutorConfig = msgspec.field(default_factory=ExecutorConfig)  # where `in: linux` checks run
     evidence_cap_mb: float = 200  # the new bytes of evidence one run keeps (twins are links); the rest is dropped and counted in the log
 
     @property
