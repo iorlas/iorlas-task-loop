@@ -7,7 +7,7 @@ from typing import final
 from taskloop.contracts.bdsafe import peek
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BeadPatch, Beads
+from taskloop.contracts.ports import BdFailure, BeadPatch, Beads
 
 BEAD_GEN = "fence_gen"
 SLOT_GEN = "held_gen"  # never cleared with the slot's holder marks: a retake after a release must still be a higher number
@@ -66,6 +66,8 @@ def take(store: Beads, bead: BeadId, actor: str, slot_bead: BeadId | None = None
     run noted when it took the slot (None: read now)."""
     gen = gen_of(peek(store, bead)) + 1
     store.update(bead, BeadPatch(set_metadata={BEAD_GEN: str(gen)}))
+    if gen_of(peek(store, bead)) != gen:  # bd has no compare-and-set: read it back, so a second run that bumped at once is refused here
+        raise Fenced(f"{bead} was taken by another run while this one took it (wanted generation {gen})")
     if slot_gen is None:
         slot_gen = gen_of(peek(store, slot_bead), SLOT_GEN) if slot_bead else 0
     return Claim(_KEY, bead, actor, gen, slot_bead, slot_gen)
@@ -78,14 +80,21 @@ def hand(store: Beads, bead: BeadId, actor: str) -> Claim:
 
 
 def stale(store: Beads, c: Claim) -> str:
-    """Why this claim is no longer the current one, "" while it is (or when bd cannot be asked: a bd outage fences nothing)."""
+    """Why this claim is no longer the current one, "" while it is. Fails closed: when bd cannot be asked, the ownership is unreadable and
+    the claim is refused (a bead that is not there is not refused: there is nothing to have been taken)."""
     if not c.fenced:
         return ""
-    b = peek(store, c.bead)
+    try:
+        b = store.show(c.bead)
+    except BdFailure as err:
+        return f"{c.bead}: ownership unreadable ({err}); refused until bd answers"
     if b is not None and gen_of(b) != c.gen:
         return f"{c.bead} was taken again by another run (generation {gen_of(b)}, this run holds {c.gen})"
     if c.slot_bead:
-        sb = peek(store, c.slot_bead)
+        try:
+            sb = store.show(c.slot_bead)
+        except BdFailure as err:
+            return f"slot bead {c.slot_bead}: ownership unreadable ({err}); refused until bd answers"
         if sb is not None and gen_of(sb, SLOT_GEN) != c.slot_gen:
             return f"slot bead {c.slot_bead} was taken again (generation {gen_of(sb, SLOT_GEN)}, this run holds {c.slot_gen})"
     return ""

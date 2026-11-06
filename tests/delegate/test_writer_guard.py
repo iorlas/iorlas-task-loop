@@ -101,3 +101,9 @@ class WriterGuardTest:
     def test_judge_leaves_read_only_steps_to_their_own_rule(self):
         assert judge("Bash", {"command": "pkill x"}, False).blocked
         assert "not a reading command" in judge("Bash", {"command": "pkill x"}, True).reason
+
+    def test_a_shell_is_judged_by_its_command_not_by_its_tool_name(self):
+        for tool in ("Bash", "shell", "exec_command", "bash", "run_terminal_cmd"):
+            assert "not a reading command" in judge(tool, {"command": "rm x"}, True).reason, tool
+            assert not judge(tool, {"command": "cat f"}, True).blocked, tool
+            assert judge(tool, {"command": "git push"}, False).blocked, tool

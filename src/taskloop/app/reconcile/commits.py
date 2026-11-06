@@ -4,7 +4,7 @@ from collections.abc import Callable, Sequence
 
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId, is_bead_id
-from taskloop.contracts.landed import LandedStore
+from taskloop.contracts.landed import Landed
 from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import MissingRevision, SlotGitError
 from taskloop.contracts.trace import RunTrace
@@ -53,10 +53,10 @@ def legacy_lands(git: Git, repo: str, bases: list[str], traces: Sequence[RunTrac
     return lands
 
 
-def lands_of(git: Git, repo: str, bases: list[str], store: LandedStore, legacy: dict[str, list[int]]) -> LANDS:
+def lands_of(git: Git, repo: str, bases: list[str], landed_of: Callable[[BeadId], Landed | None], legacy: dict[str, list[int]]) -> LANDS:
     """bead -> times its land reached the base: the landed record when it has one and its sha is on a base; else the legacy table."""
     def of(bead: str) -> list[float]:
-        rec = store.get(bead) if is_bead_id(bead) else None
+        rec = landed_of(BeadId(bead)) if is_bead_id(bead) else None
         if rec is None:
             return list(legacy.get(bead, []))
         return [rec.t] if on_a_base(git, repo, rec.sha, bases) else []
@@ -64,9 +64,9 @@ def lands_of(git: Git, repo: str, bases: list[str], store: LandedStore, legacy: 
 
 
 def observe_commits(git: Git, repo: str, base: str, since: float | None, status_of: Callable[[BeadId], str | None],
-                    traces: Sequence[RunTrace], store: LandedStore) -> tuple[BranchCommit, ...]:
+                    traces: Sequence[RunTrace], landed_of: Callable[[BeadId], Landed | None]) -> tuple[BranchCommit, ...]:
     bases = bases_of(git, repo, base) or [base]
-    lands = lands_of(git, repo, bases, store, legacy_lands(git, repo, bases, traces))
+    lands = lands_of(git, repo, bases, landed_of, legacy_lands(git, repo, bases, traces))
     statuses: dict[str, str | None] = {}
     found: list[BranchCommit] = []
     for ref in (r.name.removeprefix("refs/heads/") for r in git.for_each_ref(repo, "refs/heads/task/", "refs/heads/wip/")):

@@ -228,7 +228,7 @@ class WorkerCall:
         t0, trees = time.time(), strays.worktrees(e)  # the worktrees the repo holds before the worker runs
         try:
             wenv = {**e.bead_env, **step_env(e, c.step or c.node)}
-            ans = dg.call(e.resolved, req, brief, c.schema, runner, env=childenv.current_env(e.env, wenv))
+            ans = dg.call(e.resolved, req, brief, c.schema, runner, env=childenv.delegate_call_env(e.env, wenv))
         except BaseException as exc:  # an interruption stopped the delegate inside the process seam: record that stop here
             if runner.obs.get("kill_t") or runner.stop.get("alive"):
                 self.log_kill(c, runner, exc)
@@ -399,8 +399,9 @@ class WorkerCall:
     def end_call(self, c: Call, ans: dg.Answer) -> None:
         e, res = self.e, ans.res
         if c.state is not None and c.prepared is not None:
-            c.state.consumed()
+            # the memo first: a crash between the two re-recovers, never loses
             done_memo.keep(e.run_dir, c.key, c.sha, c.state.answer_file, c.prepared.snapshot)
+            c.state.consumed()
         if c.node == "plan" and res.ref:
             e.planner_ref = res.ref
         e.last_flag = res.flag  # same_family | degraded | ...: delegate could not give the usual lane

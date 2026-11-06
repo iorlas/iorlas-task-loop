@@ -69,6 +69,14 @@ def read_json(path: Path) -> Json:
 _STATE_WARNED: set[tuple[Path, str]] = set()
 
 
+class StateUnreadable(Exception):
+    """state.json exists and is not this version (an older or newer route.py wrote it, or it is damaged). Nothing was changed; the owner
+    moves the file aside to start empty."""
+
+    def __init__(self, why: str) -> None:
+        super().__init__(f"{why}; the file is untouched. To start from empty state, move it aside (mv state.json state.json.old)")
+
+
 class StateStore:
     """`state.json` as a `StateDoc`. All writes go through `transaction()` / `update()`: one lock, read-modify-write."""
 
@@ -76,7 +84,18 @@ class StateStore:
         self.path = path
 
     def load(self) -> StateDoc:
-        data = read_json(self.path)
+        """A missing file is an empty state. A file that exists and cannot be read as this version raises `StateUnreadable` and is never
+        rewritten: its holds, leases and refs are the owner's, and a default written back over them would lose them."""
+        try:
+            text = self.path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return StateDoc()
+        except OSError as e:
+            raise StateUnreadable(f"{self.path} cannot be read ({e})") from e
+        try:
+            data = json.loads(text)
+        except ValueError as e:
+            raise StateUnreadable(f"{self.path} is not JSON ({e})") from e
         if isinstance(data, dict):
             data, gone = split_retired_state(data)
             for k in gone:
@@ -89,10 +108,7 @@ class StateStore:
         try:
             return codec.from_json(StateDoc, data)
         except codec.CodecError as e:
-            if data is not None and (self.path, "") not in _STATE_WARNED:  # a file from before the typed state: dropped, never migrated
-                _STATE_WARNED.add((self.path, ""))
-                print(f"delegate: {self.path} is not a v{StateDoc.V} state file ({e}); starting from empty state", file=sys.stderr)
-            return StateDoc()
+            raise StateUnreadable(f"{self.path} is not a v{StateDoc.V} state file ({e})") from e
 
     @contextlib.contextmanager
     def transaction(self) -> Generator[StateDoc]:

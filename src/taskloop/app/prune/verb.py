@@ -14,16 +14,29 @@ from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Beads
+from taskloop.contracts.stores import ReposStore
 
 
 def mb(n: int) -> str:
     return f"{n / (1 << 20):.1f} MB"
 
 
+def _forget_missing(cfg: ConfigDir, dry_run: bool, say: Callable[[str], None]) -> None:
+    """repos.json: an entry whose folder is gone is dropped (named only, with `dry_run`)."""
+    store = ReposStore(cfg)
+    if dry_run:
+        gone = [n for n, e in store.index().repos.items() if not Path(e.path).is_dir()]
+    else:
+        gone = store.drop_missing(lambda p: Path(p).is_dir())
+    for name in gone:
+        say(f"prune: {'would drop' if dry_run else 'dropped'} repo {name}: its folder is gone")
+
+
 def run(cfg: ConfigDir, loop: LoopConfig, repos: list[str], store_of: Callable[[str], Beads], now: float, dry_run: bool,
         sh: Shell, say: Callable[[str], None] = print, *, who: Identity) -> int:
     """Prune once. -> how many things went (would, with `dry_run`)."""
     would = "would remove " if dry_run else "removed "
+    _forget_missing(cfg, dry_run, say)
     exempt, why = runs.open_beads(repos, store_of)
     count = 0
     if why:

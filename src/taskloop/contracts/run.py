@@ -220,6 +220,7 @@ class RunManifest(Rec):
     started: float
     ended: float | None = None
     loop: str | None = None
+    loop_id: str | None = None  # the supervisor lifetime that started it (kept across the loop's exec); None for a hand run
     attempts: int = 1
     state: RunState = RunState.CREATED
     heartbeat: float = 0.0

@@ -20,11 +20,12 @@ from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId, loop_key
 from taskloop.contracts.ledger import LedgerEntry
 from taskloop.contracts.loop import LoopState
+from taskloop.contracts.looprows import LoopRows
 from taskloop.contracts.run import RunState
 from taskloop.contracts.runlife import RETAIN, Liveness, shown
 from taskloop.contracts.slots import slots_of
 from taskloop.contracts.slottable import SlotSource
-from taskloop.contracts.stores import LIVE, JsonStore, StatusStore
+from taskloop.contracts.stores import LIVE, StatusStore
 from taskloop_dash.api.looks import Looks
 from taskloop_dash.env import Env
 from taskloop_dash.readers import dbruns
@@ -69,8 +70,7 @@ class Worlds:
         bd_ok_at, bd_error = self.beads.health(path)
         slot_source = self.slot_source(path)
         slots = slots_of(rows, slot_source.host.split(".")[0].lower())  # titled as ident.hostname() names this machine
-        states = [s for s in (JsonStore(f, LoopState).get() for f in sorted(env.config.loop_state(loop_key(path)).parent.glob(
-            loop_key(path) + ".*.json"))) if s is not None]
+        states = LoopRows(env.config, loop_key(path), quiet=True).rows("")
         _, items = self.looks.look_items(id, raw)
         looks = [LookItem(bead=i["bead"], title=i["title"], artifacts=tuple(
             self.looks.shot_url(id, s["path"]) for s in i["shots"] if s["role"] == "after"))

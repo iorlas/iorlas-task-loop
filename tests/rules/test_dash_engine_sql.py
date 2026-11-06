@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from rules.gate_rules import parsed
 from taskloop.contracts.factorydb import OWNERS
 
 ENGINE_TABLES = tuple(table for table, role in OWNERS.items() if role != "index")
@@ -26,8 +27,7 @@ def test_dashboard_has_no_engine_table_sql() -> None:
     root = Path(__file__).resolve().parents[2] / "src" / "taskloop_dash"
     bad = []
     for path in sorted(root.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        bad.extend(f"{path.relative_to(root)}:{line}" for line in engine_sql(tree))
+        bad.extend(f"{path.relative_to(root)}:{line}" for line in engine_sql(parsed(path)[1]))
     assert bad == []
 
 

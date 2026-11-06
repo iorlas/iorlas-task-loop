@@ -7,7 +7,7 @@ from support import engine_case as te
 from support import procsim
 from support.case import Case
 
-from taskloop.adapters.childenv import CHECK_SECRETS, check_env, check_environment, tool_env
+from taskloop.adapters.childenv import CHECK_SECRETS, check_env, check_environment, current_env, delegate_call_env, tool_env
 from taskloop.adapters.git import RealGit
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.env import Env
@@ -29,6 +29,13 @@ class CheckEnvironmentTest(Case):
                                           "GIT_CONFIG_NOSYSTEM": "1"}
         assert "core.hooksPath" in pinned.values()
         assert "core.hooksPath" in tool_env(base).values()
+
+    def test_a_call_to_delegate_carries_no_depth_mark_but_any_other_child_does(self):
+        env = Env({"PATH": "/bin"})
+        assert current_env(env)["DELEGATE_DEPTH"] == "1"
+        out = delegate_call_env(env, {"X": "1"})
+        assert "DELEGATE_DEPTH" not in out
+        assert (out["TASK_LOOP_WORKER"], out["X"]) == ("1", "1")
 
     def test_profile_defaults_to_the_callers_home(self):
         assert not EngineConfig().check_scratch_home

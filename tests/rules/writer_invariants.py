@@ -14,7 +14,6 @@ WRITERS: Final = {
     'ReleaseResultStore': {'taskloop.app.release.flow'},
     'ReflectStateStore': {'taskloop.app.report.reflect'},
     'ParkStore': {'taskloop.app.asks.parks', 'taskloop.app.loop.take', 'taskloop.app.run.stages', 'taskloop.contracts.parks'},
-    'LandedStore': {'taskloop.app.run.parts_land', 'taskloop.cli.land', 'taskloop.contracts.landed'},
     'TraceStore': {'taskloop.app.run.records', 'taskloop.contracts.finish_projection'},
     'LoopStateStore': {'taskloop.app.loop.files'},
     'LoopCommandStore': {'taskloop.app.loop.files'},
@@ -30,7 +29,7 @@ WRITERS: Final = {
 PATH_STORES: Final = {
     'pin': 'PinStore', 'status': 'StatusStore', 'status_tried': 'StatusTriedStore', 'repos': 'ReposStore',
     'release_result': 'ReleaseResultStore', 'reflect_state': 'ReflectStateStore',
-    'park': 'ParkStore', 'landed': 'LandedStore', 'traces': 'TraceStore',
+    'park': 'ParkStore', 'traces': 'TraceStore',
     'loop_state': 'LoopStateStore', 'loop_command': 'LoopCommandStore', 'loop_rest': 'RestStore',
     'bad_versions': 'BadVersionStore',
     'handoff': 'HandoffMirrorStore', 'reexec_note': 'ReexecNoteStore',

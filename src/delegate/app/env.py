@@ -188,7 +188,22 @@ def session_host() -> str:
 KEEP = ("CLAUDE_CONFIG_DIR",)
 
 
+PUSH_REFUSED = "delegate-push-refused://"  # no such remote helper: git aborts the push and says so
+
+
+def push_bar(env: dict[str, str]) -> dict[str, str]:
+    """git's own env config (GIT_CONFIG_COUNT/KEY_n/VALUE_n) added to the existing entries: every push URL is rewritten (the empty
+    prefix matches all) to a scheme git cannot run, whatever the lane and however the command is spelled. Fetch is untouched."""
+    n = max(int(env.get("GIT_CONFIG_COUNT") or 0), 0)
+    return {
+        "GIT_CONFIG_COUNT": str(n + 1),
+        f"GIT_CONFIG_KEY_{n}": f"url.{PUSH_REFUSED}.pushInsteadOf",
+        f"GIT_CONFIG_VALUE_{n}": "",
+    }
+
+
 def child_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     """The worker gets the caller's environment minus what a Claude session exports, delegate's and credential-looking variables, plus
-    DELEGATE_DEPTH=1."""
-    return scrub_current(keep=KEEP) | {"DELEGATE_DEPTH": "1"} | (extra or {})
+    DELEGATE_DEPTH=1 and the push bar."""
+    out = scrub_current(keep=KEEP) | {"DELEGATE_DEPTH": "1"} | (extra or {})
+    return out | push_bar(out)
