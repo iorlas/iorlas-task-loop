@@ -50,7 +50,7 @@ BACKOFF: Final[dict[str, Backoff | None]] = {
     Reason.LOCK: Backoff(30, 1800),
     Reason.KILLED: Backoff(),
     Reason.WORKER_SURVIVED: None,
-    Reason.NO_LANE: None, Reason.SAME_FAMILY: None, Reason.ENGINE_CRASH: None, Reason.STAGE_REFUSED: None,
+    Reason.NO_LANE: None, Reason.LOOP_EXCLUDED: None, Reason.SAME_FAMILY: None, Reason.ENGINE_CRASH: None, Reason.STAGE_REFUSED: None,
     Reason.TRANSIENT_INFRASTRUCTURE: None, Reason.CRASH: None, Reason.NO_ANSWER: None, Reason.ENGINE_ONLY_UNENFORCED: None,
     Reason.OVERRUN: None, Reason.SECRETS: None, Reason.CREDIT_EXHAUSTED: None, Reason.LOGGED_OUT: None,
     Reason.BAD_REQUEST: None, Reason.CALLER: None, Reason.SETUP: None, Reason.SETUP_OWN_TREE: None,
@@ -68,7 +68,7 @@ BACKOFF: Final[dict[str, Backoff | None]] = {
 OVERRIDES: Final[dict[str, tuple[Permanence, str] | None]] = {
     Reason.NO_LANE: ("needs_owner", "The owner must restore an available lane; a predicted time cannot repair it."),
     Reason.CRASH: ("needs_owner", "A delegate crash needs owner investigation after in-process retries are exhausted."),
-    Reason.ONLY_FAMILY_UNREADY: None, Reason.SAME_FAMILY: None, Reason.BUSY: None, Reason.TIMEOUT: None, Reason.NETWORK: None,
+    Reason.ONLY_FAMILY_UNREADY: None, Reason.LOOP_EXCLUDED: None, Reason.SAME_FAMILY: None, Reason.BUSY: None, Reason.TIMEOUT: None, Reason.NETWORK: None,
     Reason.ENGINE_CRASH: None, Reason.STAGE_REFUSED: None, Reason.TRANSIENT_INFRASTRUCTURE: None,
     Reason.RATE_LIMITED: None, Reason.HUNG: None, Reason.VENDOR_BLIP: None, Reason.WORKER_FAILED: None,
     Reason.SCHEMA_INVALID: None, Reason.HELD: None, Reason.DUPLICATE_TASK: None, Reason.LOCK: None, Reason.NO_ANSWER: None,
