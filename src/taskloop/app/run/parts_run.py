@@ -1,13 +1,12 @@
 """The machinery of a run: waits, the delegation seam, owner asks and requests, shell and check runs, the reload, the records, the
 tree check every node is wrapped in, and the live file and engine lock a worker call leaves."""
-import os
 import threading
 from functools import cached_property
 from typing import Any
 
 from taskloop.adapters import childenv, slotcheck
+from taskloop.adapters.agent import new_live
 from taskloop.adapters.check_probe import PathProbe
-from taskloop.adapters.runner import live_path
 from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.run.bead_env import bead_env
 from taskloop.app.run.delegation import Delegation
@@ -70,10 +69,8 @@ class RunParts(Plumbing):
     def live(self, step: str) -> str:
         """The live file for the next delegate call (delegate appends worker events there; the dashboard's Live view reads them)."""
         self.live_n += 1
-        path = live_path(self.live_dir, self.live_n, step)
-        try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-        except OSError:
+        path = new_live(self.live_dir, self.live_n, step)
+        if not path:
             return ""
         self.live_now = path
         return path
