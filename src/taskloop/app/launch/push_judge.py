@@ -4,8 +4,9 @@ import sys
 
 from taskloop.app.land.push_judge import judge_push
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.ports import Git, Spawner
+from taskloop.contracts.procport import Spawner
 from taskloop.stores.real import real_stores
 
 

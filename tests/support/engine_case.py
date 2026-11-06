@@ -37,13 +37,29 @@ from support import (
     netgate,  # noqa: F401
     procsim,
 )
-from support.builders import argv_cfg, cfg_with, make_engine
+from support.builders import make_engine
+from support.cfgs import argv_cfg, cfg_with
 from support.checked import run_checked
 from support.checkpoints import flat_ck, stored_ck
 from support.checks import res
 from support.fakes import FakeBeadStore
 from support.logs import records
 from support.narrow import must
+from support.plans import (  # noqa: F401  (the tests' old import point)
+    BEAD,
+    CAT_ENV,
+    CLEAN,
+    FALSE,
+    HAS_F,
+    PLAN,
+    RED_ONCE,
+    ROUTE,
+    STILL_OPEN,
+    WRITE,
+    finding,
+    review,
+    verdict,
+)
 from support.procsim import real_proc  # noqa: F401
 from support.push_race import PushRace
 from support.spawn import port_git, real_spawner
@@ -74,8 +90,6 @@ from taskloop.domain.checks import (
 from taskloop.domain.lanes import policy as lp  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[2]
-
-
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -136,78 +150,6 @@ def pyc(code, *args):
     return shlex.join([sys.executable, "-c", code, *args])
 
 
-HAS_F = "has-f"  # a procsim fake: exit 0 iff f.txt exists in the check's directory
-
-
-FALSE = "false"  # a procsim fake: exit 1
-
-
-RED_ONCE = "green-on-d3"  # a procsim fake (registered in setup_method): exit 0 iff f.txt reads d3, red until the writer wrote it
-
-
-PLAN: dict[str, Any] = {
-    "summary": "do it",
-    "stages": [
-        {
-            "goal": "add f",
-            "files": ["f.txt"],
-            "checks": [adhoc(HAS_F)],
-            "hard": False,
-            "anchors": [{"path": "f.txt", "lines": "1", "symbol": "", "why": "the file"}],
-        }
-    ],
-    "risks": [],
-    "question": "",
-    "options": [],
-    "decided": "",
-    "cases": [{"criterion": "f.txt is shown", "check": None, "class": "show", "shows": []}],  # a visual bead: verify runs
-    "leftovers": [],
-}
-
-
-WRITE = {
-    "summary": "wrote f",
-    "checks_run": [{"cmd": "test -f f.txt", "exit": 0}],
-    "question": "",
-    "options": [],
-    "decided": "",
-    "bad_checks": [],
-    "new_cases": [],
-    "unchecked": [],
-    "logic_only": "",
-}
-
-
-ROUTE = "/h/.claude/plugins/cache/iorlas-marketplace/iorlas-delegate/%s/skills/delegate/route.py"
-
-
-CLEAN = {
-    "findings": [],
-    "unmet": [],
-    "criteria": [],
-    "question": "",
-    "options": [],
-    "decided": "",
-    "leftovers": [],
-    "unchecked": [],
-    "look": "",
-}
-
-
-BEAD = {"id": "t-1", "title": "Add f", "metadata": {}, "acceptance_criteria": "f.txt exists", "labels": ["visual"]}  # visual: verify runs
-
-
-def review(unmet=(), findings=(), question="", decided=""):
-    return dict(CLEAN, unmet=list(unmet), findings=list(findings), question=question, decided=decided)
-
-
-def verdict(n, v, evidence="", why="", kind="other", source=""):
-    return {"n": n, "verdict": v, "evidence": evidence, "why": why, "kind": kind, "source": source}
-
-
-STILL_OPEN = {"items": [verdict(1, "open", why="only the owner can open it")]}
-
-
 def stop(reason, ref="", **kw):
     """A stopped answer, contract 4: the row of `reason` in delegate's contract.json (kw: at, fix, partial, say, family, lane ...)."""
     return fake_route.stop_answer(reason, ref, **kw)
@@ -219,14 +161,6 @@ def full(data, ref="w2", **kw):
                   "tokens": {"in": 1000, "cached": 800, "out": 50}, "context": {"instructions": [], "env_keys": []}}
     fields.update(kw)
     return fake_route.answer(fake_route.contract(), None, ref, False, data, **fields)
-
-
-CAT_ENV = {"kind": "policy", "tool": "shell", "path": ".env", "input": {"command": "cat .env"}}
-
-
-def finding(severity):
-    return {"file": "f.txt", "line": 1, "severity": severity, "fix": f"a {severity} fix", "axis": "standards", "category": "logic",
-            "scenario": "input x gives y" if severity == "high" else ""}
 
 
 def no_sleep_here():
@@ -660,8 +594,6 @@ class StrayWriteScript(fake_route.Script):
             (d / "InitTestScene123.unity").write_text("scene\n")
             (d / "InitTestScene123.unity.meta").write_text("meta\n")
         return super().reply(role, prompt, schema, cwd, resume, *a, **kw)
-
-
 
 
 BRIEFS = ROOT / "tests" / "fixtures" / "briefs"

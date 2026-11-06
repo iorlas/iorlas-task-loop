@@ -9,9 +9,9 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from taskloop.app.reconcile.commits import observe_commits
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import Landed
-from taskloop.contracts.ports import Git
 from taskloop.contracts.trace import RunTrace
 from taskloop.domain.reconcile.diff import findings
 from taskloop.domain.reconcile.facts import Observed
