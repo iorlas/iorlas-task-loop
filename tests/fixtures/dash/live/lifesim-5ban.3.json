@@ -41,5 +41,6 @@
    "arg": "dotnet test --filter path_avoids_walls"
   }
  ],
- "reset": false
+ "reset": false,
+ "gap": false
 }

@@ -19,6 +19,7 @@ from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import CheckId
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.run import RunState
+from taskloop.stores.runlog import RunLog
 
 
 class StageRuns(Case):
@@ -111,9 +112,21 @@ class StageRuns(Case):
              mock.patch("taskloop.app.run.stage_run.time.time", side_effect=lambda: float(next(ticks))), \
              stage_run(self.who, str(self.repo), "stage:check") as stage:
             before = self.locator.runs()[-1].manifest.heartbeat
-            make_thread.call_args.kwargs["target"]()
+            make_thread.call_args.kwargs["target"](*make_thread.call_args.kwargs["args"])
             assert self.locator.runs()[-1].manifest.heartbeat > before
             stage.rc = 0
         stopped.set.assert_called_once()
         thread.join.assert_called_once()
         self.assert_ended(RunState.DONE)
+
+    def test_a_heartbeat_that_cannot_be_written_is_logged_when_it_ends_the_beat_thread(self):
+        stopped, thread = mock.Mock(), mock.Mock()
+        stopped.wait.side_effect = [False, True]
+        with mock.patch("taskloop.app.run.stage_run.threading.Event", return_value=stopped), \
+             mock.patch("taskloop.app.run.stage_run.threading.Thread", return_value=thread) as make_thread, \
+             mock.patch.object(RunLog, "warn") as warn, \
+             stage_run(self.who, str(self.repo), "stage:check") as stage:
+            with mock.patch.object(RunLocator, "beat", side_effect=RuntimeError("database is locked")):
+                make_thread.call_args.kwargs["target"](*make_thread.call_args.kwargs["args"])
+            stage.rc = 0
+        assert any("the heartbeat thread died" in str(c.args[0]) and "database is locked" in str(c.args[0]) for c in warn.call_args_list)
