@@ -41,8 +41,8 @@ from taskloop.contracts.config import LoopConfig  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop.contracts.loop import LoopCommand, LoopState, LoopTarget  # noqa: E402
+from taskloop.contracts.rowstores import PinStore  # noqa: E402
 from taskloop.contracts.snapshots import Pin  # noqa: E402
-from taskloop.contracts.stores import PinStore  # noqa: E402
 
 
 class UpAt:

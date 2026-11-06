@@ -2,10 +2,10 @@
 the StuckWatch (domain/stuck.py) says whether a new stuck episode began; each one is written as one Stuck record."""
 
 import contextlib
-import os
 import threading
 from typing import Any
 
+from taskloop.adapters.agent import last_event_t
 from taskloop.domain.stuck import StuckWatch
 
 
@@ -19,12 +19,7 @@ class StuckTick:
     def worker_t(self) -> float:
         """When the worker of the open call last wrote its live file (0 when there is none)."""
         path = self.e.live_now
-        if not path:
-            return 0.0
-        try:
-            return os.stat(path).st_mtime
-        except OSError:
-            return 0.0
+        return last_event_t(path) if path else 0.0
 
     def tick(self) -> None:
         e = self.e

@@ -13,9 +13,9 @@ from contracts import samples as S
 from support.askjson import unreadable_ask
 
 from taskloop.contracts.askrows import AskRows
+from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import AskStore
 from taskloop.contracts.wire import Refused
 
 
