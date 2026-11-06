@@ -33,6 +33,7 @@ class Facts:
     phase: Phase | None = None  # the phase of that run's current (else last) step
     close: Close | None = None  # that run's Close
     blocked: bool = False  # an open `blocks` dependency
+    abandoned: str = ""  # the reconcile sweep's Stray.why for an expired claim: nothing runs under it and its lease ended
     stuck: bool = False  # that run is live and a stuck episode of it is open
     # shown, never decided on:
     stuck_line: str = ""
@@ -68,7 +69,8 @@ def marker(f: Facts) -> Marker:
     parked = f.close is not None and f.close.outcome in PARKING
     rules = ((f.ask, Marker.ASK), (f.look, Marker.LOOK), (f.closed, Marker.DONE), (f.life is Liveness.LIVE and f.stuck, Marker.STUCK),
              (f.soft_ask, Marker.SOFT_ASK), (f.life is Liveness.LIVE, Marker.RUN), (f.life is Liveness.LOST, Marker.EXITED),
-             (f.claimed, Marker.RUN), (parked, Marker.PARKED), (f.blocked, Marker.BLOCKED))
+             (f.claimed and bool(f.abandoned), Marker.EXITED), (f.claimed, Marker.RUN), (parked, Marker.PARKED),
+             (f.blocked, Marker.BLOCKED))
     return next((m for ok, m in rules if ok), Marker.READY)
 
 
@@ -93,6 +95,7 @@ def status_line(f: Facts) -> str:
              (f.closed, first_line(f.closed_reason) or "closed"), (f.life is Liveness.LIVE and f.stuck, f.stuck_line or "stuck"),
              (f.soft_ask, first_line(f.ask_line) or "a question waits, the run went on"), (f.life is Liveness.LIVE, running),
              (f.life is Liveness.LOST, "the run is lost: its process is gone and it recorded no end"),
+             (f.claimed and bool(f.abandoned), f.abandoned),
              (f.claimed, f"claimed by {f.assignee}" if f.assignee else "claimed"), (parked, why),
              (f.blocked and bool(f.blocker), f"waits for {f.blocker}"))
     return next((text for ok, text in rules if ok), "ready")

@@ -7,12 +7,12 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from support.argv_checks import ArgvChecks
 from support.case import Case
 from support.checked import run_checked
 from support.tlmain import tl_main
 
 from taskloop.adapters import childenv
-from taskloop.adapters.checks_argv import ArgvChecks
 from taskloop.adapters.childenv import CHECK_SECRETS
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.run.shell import Shell
