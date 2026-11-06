@@ -131,16 +131,43 @@ class Waits(Rig):
         loop = self.make_loop()
         bead = self.block_same_bead(loop)
         self.slot().take("loop")
+        self.t[0] += 31 * 60  # the first probe is due 30 minutes after the set-aside
         now = self.t[0]
         with patch.object(Slot, "ready_for", side_effect=SlotFail("slot_broken", "setup failed")):
             assert loop.settle.candidates("s1", [bead]) == []
         assert loop.c.slot_blocked == {"s1": "x-1"}
         assert self.slot().slot_bead().metadata["aside_probe"] == "pending"
+        self.t[0] += 61 * 60  # and the next one 60 minutes after that failed
         with patch.object(Slot, "ready_for"), patch.object(aside, "setup") as setup:
             assert loop.settle.candidates("s1", [bead]) == [bead]
         setup.assert_called_once()
         assert loop.c.slot_blocked == {}
-        assert self.t[0] == now
+        assert self.t[0] == now + 61 * 60
+        assert not {"aside_level", "aside_probe", "aside_until"} & set(self.slot().slot_bead().metadata)
+
+    def test_a_set_aside_slot_is_probed_after_30_then_60_then_120_minutes_and_120_repeats(self):
+        loop = self.make_loop()
+        bead = self.block_same_bead(loop)
+        self.slot().take("loop")
+        waits = []
+        with patch.object(Slot, "ready_for", side_effect=SlotFail("slot_broken", "setup failed")):
+            for failed in range(5):
+                start = self.t[0]
+                while self.slot().slot_bead().metadata.get("aside_level") != str(failed + 1):
+                    self.t[0] += 60  # a minute at a time: the probe runs on the first pass that finds it due
+                    assert loop.settle.candidates("s1", [bead]) == []
+                waits.append((self.t[0] - start) // 60)
+        assert waits == [30, 60, 120, 120, 120]
+
+    def test_no_probe_runs_before_it_is_due(self):
+        loop = self.make_loop()
+        bead = self.block_same_bead(loop)
+        self.slot().take("loop")
+        self.t[0] += 29 * 60
+        with patch.object(aside, "setup") as setup:
+            assert loop.settle.candidates("s1", [bead]) == []
+        setup.assert_not_called()
+        assert "aside_probe" not in self.slot().slot_bead().metadata
 
     def test_different_eligible_bead_releases_same_bead_condition_without_probe(self):
         loop = self.make_loop()
