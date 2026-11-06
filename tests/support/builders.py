@@ -25,5 +25,3 @@ def make_engine(wt, bead="t-1", cfg=None, script=None, attrs=None, **seams):
     for k, v in (attrs or {}).items():
         setattr(e, k, v)
     return e
-
-
