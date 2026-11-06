@@ -15,13 +15,15 @@ def feed(windows: str, spawner: Spawner, env: Env) -> int:
     except ValueError as e:
         print(f"the usage windows are no JSON: {e}")
         return 1
-    status = dg.status_json(reading)
-    lanes.file_answer(json.dumps(status), ConfigDir(config_dir(env)))  # the dashboard's lane cards read this
     try:
-        lane = status["lanes"]["CLAUDE_SUBSCRIPTION"]
-        print("fed {}: Claude subscription 5h {}%, week {}%{}".format(dg.LIBRARY, lane.get("five"), lane.get("week"),
-                                                                     ", OUT" if lane.get("out") else ""))
-    except (KeyError, TypeError):
+        snap = dg.status_snapshot(reading)
+    except ValueError:
         print("delegate did not take the reading")
         return 1
+    lanes.file_snapshot(snap, ConfigDir(config_dir(env)))  # the dashboard's lane cards read this
+    lane = next((x for x in snap.lanes if x.id == "CLAUDE_SUBSCRIPTION"), None)
+    if lane is None:
+        print("delegate did not take the reading")
+        return 1
+    print("fed {}: Claude subscription 5h {}%, week {}%{}".format(dg.LIBRARY, lane.five, lane.week, ", OUT" if lane.out else ""))
     return 0

@@ -15,6 +15,7 @@ from support.narrow import must
 from taskloop.app.wire import lanes
 from taskloop.contracts import wire
 from taskloop.contracts.dash import Snapshot
+from taskloop.contracts.delegate_status import snapshot_of
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.snapshots import LaneStatus, StatusSnapshot, WindowStatus
 from taskloop.contracts.stores import UsageHistory
@@ -72,7 +73,7 @@ class History(Case):
         UsageHistory(self.cfg).record(snap(T - USAGE_KEEP_S - 5))
         window = {"name": "x", "used_pct": 3, "resets_at": T + H}
         answer = json.dumps({"ts": T, "lanes": {}, "cockpit": {"lanes": [{"id": "A", "state": "ready", "windows": [window]}]}})
-        assert lanes.file_answer(answer, self.cfg) is None
+        assert lanes.file_snapshot(snapshot_of(json.loads(answer)), self.cfg) is None
         assert [(r.at, r.used_pct) for r in self.h.rows()] == [(T, 3.0)]
 
 
