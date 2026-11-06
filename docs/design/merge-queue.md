@@ -16,7 +16,7 @@ merging main in (plain pushes, no force); landing stays squash, one commit per b
 | 1 | Queue commits | keep `gh pr merge --squash`; fast-forward the tested commit if the tree assertion fires twice | 2, 15 |
 | 2 | `land_mode` push in the queue | no; one mode per repo; push mode is an out-of-queue pusher | 8, 10 |
 | 3 | Path claims | display and queue rule only; delay dispatch within one epic after a month of overlap data | 11 |
-| 4 | Lock main | branch protection to queue-only pushes after clean shadow, owner hotfix bypass; plus automatic guard rails (`tl doctor` fails on drift) | 8.1 |
+| 4 | Lock main | lightweight: ruleset (no force-push, no deletion) plus a pre-push judge that refuses unmarked pushes to main; `tl doctor` fails on drift; full queue-only lock stays an owner option | 8.1 |
 | 5 | Lookahead cap | floor 1, cap 4, cap 3 if wasted ratio >0.5 in shadow; "window" retired | 6 |
 | 6 | Executor slot | freed at enqueued-green; back-pressure at queue length 2 x lookahead | 10 |
 | 7 | Tree mismatch | no blind revert; freeze, evidence, repair agent dispatched automatically; human only after two failed repairs | 2.1 |
@@ -313,15 +313,26 @@ Goal: the settings that make the invariant true on GitHub are checked by the mac
   protected", `branches/main` reports `protected: false`, `rulesets` is `[]`. So today **nothing** stops a direct push to main and no
   check is required. This is what the "raced" class (section 2) rests on. Not checked: other branches, org-level rulesets, GitHub
   merge-queue settings.
+- **Applied 2026-11-07 (by the owner's lead, not by code):** ruleset id 26735683 "main: no force-push, no deletion": rules `deletion` and
+  `non_fast_forward`, no bypass actors. Denis prefers lightweight over GitHub rules. Deliberately **no** required PR and **no** required
+  status checks on main: `land_mode: push` (`app/land/push.py`) and release (`app/release/publish.py`, `push.py`: `git push origin
+  HEAD:main`) push to main directly and a PR rule would break both. Rollback: `gh api -X DELETE repos/iorlas/iorlas-task-loop/rulesets/26735683`.
+  The repo is public and the owner is admin. The earlier "queue-only pushes" lock (decision 4) is therefore met by the hook layer below,
+  not by GitHub; the full lock stays an owner option once push mode and release go through the queue.
+- **Lightweight layer: the pre-push judge.** `app/land/push_judge.py` is extended to refuse any push to main that does not carry tl's land
+  or release marker. Agent worktrees push to `claude/<slug>` branches only, so they never meet the rule. Limit: a git hook is bypassable
+  with `--no-verify` (forbidden by our rules) and covers only machines with tl installed. That is why the ruleset stays: it is the
+  floor for everything the hook cannot see.
 - **What doctor checks, each a FAIL (non-zero exit) on drift, never a warning:**
-  1. main has a protection rule or ruleset (a missing one fails once the queue is `on`; in `shadow` it is reported as the pending step);
-  2. required status checks on main equal the profile's check set (names and `check_set_hash`, section 4);
-  3. pushes to main are limited to the queue actor plus the owner bypass; no other actor, no force-push, no deletion;
-  4. strict "branch must be up to date" is **off** (the queue handles it; leaving it on makes GitHub reject queue merges);
-  5. the owner hotfix bypass exists and is the only bypass.
-  Mode gating: `land.queue = off` checks 2 only when required checks exist; `shadow` checks 1-5 and reports; `on` fails on 1-5.
-- **The bead produces, it does not apply.** Changing GitHub settings stays Denis's act. The bead outputs the exact `gh api` calls and
-  settings (a printed script and a doc section) and the doctor check; running them is the owner's step, done once shadow mode runs clean.
+  1. the ruleset exists: `deletion` and `non_fast_forward` on main, no bypass actors (an absent or loosened ruleset fails);
+  2. the pre-push hook is installed in **every registered worktree** and is the current judge (a missing hook fails);
+  3. no required-PR or required-status-check rule is present unless the profile's check set equals it (names and `check_set_hash`,
+     section 4; decision 9, the profile is authoritative);
+  4. strict "branch must be up to date" is off (the queue handles it; on, GitHub rejects queue merges).
+  Mode gating: all four fail in every mode once the ruleset exists; the optional full lock (queue-only pushes, hotfix bypass) is a
+  later owner step and adds its own rows then.
+- **The bead produces, it does not apply.** Changing GitHub settings stays the owner's act. The bead outputs the exact `gh api` calls and
+  settings (a printed script) for the ruleset and for the optional full lock, plus the doctor checks.
 - Reads `gh api` only; needs admin scope to see protection, and doctor says "cannot read protection (token scope)" as a FAIL, not a pass.
 - Same rule for `tl doctor`'s other queue checks: the reconcile loop (section 9) and these guard rails are the two things doctor owns.
 
@@ -470,8 +481,9 @@ watchdog and `slot_sim` are the template.
    is the "raced" class by definition.
 3. **Path claims: display and queue rule in v1.** They may delay dispatch only within one epic, after a month of overlap data. Why:
    stages.md found 5 of 73 pairs overlapped; a scheduler on that is a cost with no measured gain.
-4. **Lock main to queue-only pushes** by branch protection once shadow runs clean, with an owner hotfix bypass; plus automatic guard
-   rails so drift cannot happen: `tl doctor` fails on it (section 8.1). Finding: no protection on this repo today.
+4. **Lock main, lightweight** (revised same day: Denis prefers lightweight over GitHub rules): a ruleset against force-push and deletion
+   (applied), a pre-push judge that refuses unmarked pushes to main, and `tl doctor` failing on drift (section 8.1). No required PR or
+   checks: push mode and release push to main directly. A full queue-only lock with owner bypass remains an option for later.
 5. **Lookahead: floor 1, cap 4.** Cap 3 if the wasted-gate ratio exceeds 0.5 in shadow. Why 4: the current `--jobs` default; at p = 0.3
    deeper builds mostly die. "Window" is retired for this (terms in section 6, docs/glossary.md).
 6. **Free the executor slot at enqueued-green**, with back-pressure at queue length 2 x lookahead. Why: idle slots are the problem
@@ -503,7 +515,7 @@ m needs i, e, k, h; n (guard rails) needs k; o (repair) needs d, g, l; p (glossa
 | tl-7s2f.11 (j) | bead-dep gate, cycle check, overlap check, path claims | c |
 | tl-7s2f.12 (k) | hotfix, freeze, check-set hash, timeouts | d, g |
 | tl-7s2f.13 (m) | staged rollout, kill switch proof, slot back-pressure | i, e, k, h |
-| tl-7s2f.14 (n) | automatic guard rails: `tl doctor` fails on branch-protection drift, prints the settings (section 8.1) | k |
+| tl-7s2f.14 (n) | guard rails: pre-push judge refuses unmarked pushes to main, `tl doctor` fails on ruleset or hook drift (section 8.1) | k |
 | tl-7s2f.15 (o) | recovery flow: repair agent on a tree mismatch (section 2.1) | d, g, l |
 | tl-7s2f.16 (p) | glossary alignment: lookahead replaces window in code, config, views | e |
 | tl-7s2f.17 (q) | flake escalation: auto fix bead at more than 3 rows a week | f |
