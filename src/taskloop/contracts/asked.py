@@ -1,5 +1,6 @@
 """What one worker answer says about the run's threads, as a value: the call computes it, the caller applies and persists it."""
 from dataclasses import dataclass
+from typing import Protocol
 
 from taskloop.contracts.wire import Open
 
@@ -32,3 +33,10 @@ class Asked:
     data: Open
     family: str
     updates: Updates
+
+
+class AskAi(Protocol):
+    """The one verb a stage uses to ask a worker: the node it is (`plan`, `write`, `review`, `verify`, `look`), a title for the step book
+    and the prompt; the host applies `updates` to the run before it returns."""
+
+    def ai(self, node: str, title: str, prompt: str, *a: object, **kw: object) -> Asked: ...
