@@ -51,6 +51,30 @@ class CheckpointRows(Case):
             self.doc.write(ck(step="b"), expect_rev=0)
         assert self.doc.get() == ck(step="a")
 
+    def test_modify_reruns_on_the_newer_record_when_another_writer_got_in_between(self):
+        self.doc.write(ck())
+        seen: list[str] = []
+
+        def fn(rec: Checkpoint) -> Checkpoint:
+            seen.append(rec.step)
+            if len(seen) == 1:  # a second writer lands between the read and the write
+                self.doc.write(ck(step="theirs"))
+            return rec.replace(applied=[*rec.applied, f"after-{rec.step or 'none'}"])
+        assert self.doc.modify(fn)
+        assert seen == ["", "theirs"]
+        got = self.doc.get()
+        assert got is not None and got.step == "theirs" and got.applied == ["after-theirs"]
+
+    def test_modify_of_no_record_is_false_and_a_writer_that_always_loses_is_refused(self):
+        assert not self.doc.modify(lambda rec: rec)
+        self.doc.write(ck())
+
+        def always_raced(rec: Checkpoint) -> Checkpoint:
+            self.doc.write(ck(step="again"))
+            return rec
+        with pytest.raises(StaleRevision):
+            self.doc.modify(always_raced)
+
     def test_the_book_lists_open_beads_from_rows(self):
         self.stores.checkpoints.of("t-1").write(ck())
         self.stores.checkpoints.of("t-2").write(ck(bead="t-2", closed=True))

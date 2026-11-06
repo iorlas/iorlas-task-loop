@@ -30,7 +30,7 @@ from taskloop.contracts.review import Unfiled
 from taskloop.contracts.wire import Open
 from taskloop.domain.checks import trim
 from taskloop.domain.review.followups import FollowKey
-from taskloop.stores.api import Doc
+from taskloop.stores.api import AmendDoc
 from taskloop.stores.bundle import Stores
 
 NOT_ATTRS = ("review",)  # the one field of another lane's type: reached as `engine.state.review` only
@@ -107,10 +107,10 @@ class Checkpoints:
         self.e = host
 
     @property
-    def doc(self) -> Any:
+    def doc(self) -> AmendDoc[Checkpoint]:
         return self.e.stores.checkpoints.of(self.e.bead)
 
-    def writer(self) -> Doc[Checkpoint]:
+    def writer(self) -> AmendDoc[Checkpoint]:
         """The record's document for a write: only a run that still holds its bead and slot may write it (Fenced otherwise)."""
         fence.check(self.e.store, self.e.claim)
         return self.doc
@@ -148,16 +148,13 @@ class Checkpoints:
     def close(self, why: str = "") -> None:
         """The close step committed everything: the record's head is now what the next run should find. A red gate at land is no
         stop: the next run re-plans with the gate's output, or it would rerun the same red gate."""
-        ck = self.read()
-        if ck is None:
-            return
-        red = why.startswith("gate red") and not ck.state.pending_land_validation
-        review = ck.state.review.replace(filed=list(self.e.filed))
-        state = ck.state.replace(review=review)
-        done = ck.replace(head=self.e.git.rev_parse(self.e.wt, "HEAD"), closed=True, state=state)
-        if red:
-            done = done.replace(step="gate-red", gate_tail=trim.trim_log(why, log=str(self.e.gate_log or "")))
-        self.writer().write(done)
+        head = self.e.git.rev_parse(self.e.wt, "HEAD")
+
+        def closed(ck: Checkpoint) -> Checkpoint:
+            red = why.startswith("gate red") and not ck.state.pending_land_validation
+            done = ck.replace(head=head, closed=True, state=ck.state.replace(review=ck.state.review.replace(filed=list(self.e.filed))))
+            return done.replace(step="gate-red", gate_tail=trim.trim_log(why, log=str(self.e.gate_log or ""))) if red else done
+        self.amend(closed)
 
     def applied(self) -> frozenset[str]:
         ck = self.read()
@@ -165,9 +162,7 @@ class Checkpoints:
 
     def mark_applied(self, key: str) -> None:
         """A close effect ran: its key goes into the record, so a kill after it resumes at the next effect. No record, no key kept."""
-        ck = self.read()
-        if ck is not None and key not in ck.applied:
-            self.writer().write(ck.replace(applied=[*ck.applied, key]))
+        self.amend(lambda ck: ck if key in ck.applied else ck.replace(applied=[*ck.applied, key]))
 
     def keep_end(self, end: EndRec) -> None:
         """The close's outcome goes into the record before its first effect: a restart finishes the close from it. No record, none kept."""
@@ -187,10 +182,7 @@ class Checkpoints:
         """The follow-ups filed so far and the ones bd refused (`lost`: kept, none lost): written at once, a kill loses no title."""
         self.e.unfiled += [Unfiled(title=lo["title"], why=lo["why"]) for lo in lost or []]
         self.e.leftovers += [dict(lo) for lo in lost or []]
-        ck = self.read()
-        if ck is not None:
-            kept = ck.state.replace(review=review_of(self.e), followup_ids=dict(self.e.followup_ids))
-            self.writer().write(ck.replace(state=kept))
+        self.amend(lambda ck: ck.replace(state=ck.state.replace(review=review_of(self.e), followup_ids=dict(self.e.followup_ids))))
         self.keep_pending()
 
     def keep_pending(self, origin: str = "close") -> None:
@@ -214,21 +206,14 @@ class Checkpoints:
 
     def keep_look(self) -> None:
         """What the owner-look bead needs goes into the record, so a crash after the land still files it."""
-        ck, e = self.read(), self.e
-        if ck is not None:
-            kept = ck.state.replace(
-                look_notes=list(e.look_notes),
-                look_unjudged=dict(e.look_unjudged),
-                review=review_of(e))
-            self.writer().write(ck.replace(state=kept))
+        e = self.e
+        self.amend(lambda ck: ck.replace(state=ck.state.replace(
+            look_notes=list(e.look_notes), look_unjudged=dict(e.look_unjudged), review=review_of(e))))
 
     def amend(self, fn: Callable[[Checkpoint], Checkpoint]) -> bool:
-        """Rewrite the stored record with `fn` (a rebase moves its head, a cap grant adds an amend). False when there is none."""
-        ck = self.read()
-        if ck is None:
-            return False
-        self.writer().write(fn(ck))
-        return True
+        """Rewrite the stored record with `fn` (a rebase moves its head, a cap grant adds an amend). False when there is none. The
+        write is checked against the revision `fn` saw: another writer's change in between makes `fn` run again on the newer record."""
+        return self.writer().modify(fn)
 
     def drop(self) -> None:
         self.writer().delete()
