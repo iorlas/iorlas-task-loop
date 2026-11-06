@@ -145,7 +145,7 @@ class PreEngineFailure(tlp.LoopBase):
         lines = self.lines()
         assert "did not give a clean tree: fatal: 'task/x-1'" in lines[0]["why"]
         assert "slot reset s1 for x-1" in lines[0]["why"]
-        assert not looptest.rest_file(str(self.repo)).exists()
+        assert looptest.rests(str(self.repo)) == {}
 
     def test_a_second_loop_leaves_the_bead_the_first_one_rested(self):
         self.beads({"x-1": [tlp.rec("landed")], "x-2": [tlp.rec("landed")]})
