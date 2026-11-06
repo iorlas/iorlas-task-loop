@@ -63,8 +63,8 @@ class KeyedEnv(EngineTest):
         standalone = Checker(self.cli(eng))._memo(tree, base)
         memos = []
 
-        def capture(*args):
-            memo = RunMemo(*args)
+        def capture(*args, **kw):
+            memo = RunMemo(*args, **kw)
             memos.append(memo)
             return memo
 
