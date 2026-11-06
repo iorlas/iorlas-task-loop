@@ -106,11 +106,13 @@ class Board:
         cur = newest.current() if newest else None
         ask_open, soft_ask, ask_line = ask_facts(self.w.asks.get((p.id, b.id)))
         blocking = blockers(b, self.by_id[p.id])
+        abandoned = {x.ref: x.why for x in p.strays if x.kind == "bead" and x.expired}
         f = columns.Facts(
             closed=b.status == "closed", claimed=b.status == "in_progress", ask=ask_open, soft_ask=soft_ask,
             look=any(i.bead == b.id for i in p.looks),
             life=newest.life if newest else None, phase=cur.phase if cur else None, close=newest.close if newest else None,
-            blocked=bool(blocking), ask_line=ask_line, step_text=cur.text if cur else "", wait=newest.wait if newest else None,
+            blocked=bool(blocking),
+            abandoned=abandoned.get(b.id, ""), ask_line=ask_line, step_text=cur.text if cur else "", wait=newest.wait if newest else None,
             blocker=blocking[0] if blocking else "", closed_reason=b.close_reason, assignee=b.assignee,
             stuck=bool(newest and newest.stuck), stuck_line=passes.stuck_text(newest.stuck) if newest and newest.stuck else "")
         col, mark = columns.column(f), columns.marker(f)
