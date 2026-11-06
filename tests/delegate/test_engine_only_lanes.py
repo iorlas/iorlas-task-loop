@@ -4,7 +4,6 @@ Claude: the PreToolUse hook. OpenCode: the bash deny rules of its permission con
 import copy
 import json
 import re
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +15,7 @@ from delegate.contracts.routing import CallArgs
 from delegate.contracts.state import RefRecord
 from delegate.contracts.wire import RECIPE_RUNNERS
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -84,7 +84,7 @@ class OpenCodeRulesTest:
         assert self.bash(engine_only=()) == {}
 
     def test_the_launch_carries_the_rules_in_the_config_the_harness_reads(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with TemporaryDirectory() as tmp:
             hx = OpenCodeHarness(root=Path(tmp))
             spec = hx.launch_spec(
                 LaunchInputs(

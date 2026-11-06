@@ -6,7 +6,6 @@ import json
 import os
 import stat
 import sys
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -14,6 +13,7 @@ from any_agent.harnesses.opencode import OpenCodeHarness
 from delegate.app import cockpit, env, harnesses, onboard, usage
 from delegate.domain.lanes.lane import Lane
 from delegate.domain.time import spec
+from support.tmpdir import TemporaryDirectory
 
 import routing_support as support
 from test_route import CFG, T, route
@@ -187,7 +187,7 @@ class Fmt:
 
 class Readers:
     def test_the_claude_reader_marks_its_source(self):
-        with tempfile.TemporaryDirectory() as d, patch.dict(os.environ, {"DELEGATE_CONFIG_DIR": d}):
+        with TemporaryDirectory() as d, patch.dict(os.environ, {"DELEGATE_CONFIG_DIR": d}):
             c = lane("CLAUDE_SUBSCRIPTION", shared=True)
             with patch.object(usage, "claude_logged_out", return_value=False), patch.object(env, "update_state"):
                 usage.read_claude_subscription(
@@ -219,7 +219,7 @@ class LoginCheck:
 
     def test_opencode_logins_are_read_from_its_auth_file(self):
         with (
-            tempfile.TemporaryDirectory() as d,
+            TemporaryDirectory() as d,
             patch.dict(os.environ, {"XDG_DATA_HOME": d}),
             patch.object(OpenCodeHarness, "find_exe", return_value="opencode"),
         ):
@@ -236,7 +236,7 @@ class LoginCheck:
 class Command:
     def run_status(self, *argv, state=None, ready=None):
         cfg = cfg_all()
-        with tempfile.TemporaryDirectory() as d, patch.dict(os.environ, {"DELEGATE_CONFIG_DIR": d, "CLAUDE_CODE_ENTRYPOINT": "cli"}):
+        with TemporaryDirectory() as d, patch.dict(os.environ, {"DELEGATE_CONFIG_DIR": d, "CLAUDE_CODE_ENTRYPOINT": "cli"}):
             (Path(d) / "state.json").write_text(json.dumps({"v": 1, **(state or {})}))
             (Path(d) / "config.json").write_text(json.dumps({"profile": {"lanes": {"DEEPSEEK_FREE": "enabled"}}}))
             ready = ready or dict.fromkeys(cfg["lanes"], True)

@@ -2,12 +2,12 @@
 
 import copy
 import os
-import tempfile
 from typing import Any
 
 from delegate.app import cockpit, env, usage
 from delegate.contracts.state import UsageCache
 from delegate.domain.lanes.lane import Lane
+from support.tmpdir import TemporaryDirectory
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
@@ -60,7 +60,7 @@ def with_res(res, S=None, st=None, t=NOW):
 class Fresh:
     def setup_method(self):
         self.saved = os.environ.get("DELEGATE_CONFIG_DIR")
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         os.environ["DELEGATE_CONFIG_DIR"] = self.tmp.name
 
     def teardown_method(self):
