@@ -5,8 +5,9 @@ import os
 import sys
 from pathlib import Path
 
-from support import engine_case as te
+from support.check_host import CheckHostCase
 from support.narrow import must
+from support.shellkit import sh
 
 from taskloop.app.checks.cache import is_green, plan_digest
 from taskloop.contracts.ids import CheckId
@@ -14,7 +15,7 @@ from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.specs import gate_items
 
 
-class RealGatePlan(te.EngineTest):
+class RealGatePlan(CheckHostCase):
     def test_script_receives_argv_cwd_and_nul_paths_and_its_skip_is_stored(self):
         script = Path(self.tmp.name, "producer.py")
         self.eng = self.checks_engine(plan_cmd=[sys.executable, str(script), "steps", "--json"], checks=[
@@ -23,8 +24,8 @@ class RealGatePlan(te.EngineTest):
         name = "new file.txt"
         (Path(self.eng.wt) / name).write_text("changed\n")
         (Path(self.eng.wt) / ".gitignore").write_text("ignored.log\n")
-        te.sh("git", "add", name, ".gitignore", cwd=str(self.eng.wt))
-        te.sh("git", "commit", "-qm", "changed path", cwd=str(self.eng.wt))
+        sh("git", "add", name, ".gitignore", cwd=str(self.eng.wt))
+        sh("git", "commit", "-qm", "changed path", cwd=str(self.eng.wt))
         (Path(self.eng.wt) / "ignored.log").write_text("ignored files do not block the plan\n")
         body = {"version": 1, "base": base, "empty": False, "full": False, "full_reasons": [], "steps": [
             {"name": "coverage", "lane": "tests", "run": False, "argv": ["false"], "pre": [],
