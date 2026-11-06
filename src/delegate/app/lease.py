@@ -50,9 +50,12 @@ class RunLease:
         self.peers: list[str] = []
         self.ended_peers: list[str] = []
         self.beat = threading.Event()
+        self.reaped: dict[str, bool] = {}  # run id -> its orphaned worker is gone, for the orphans stopped before the claim
 
     def claim(self):
-        """-> None when the lease is held, else (reason, say): duplicate_task | busy."""
+        """-> None when the lease is held, else (reason, say): duplicate_task | busy. Orphans are stopped first, with the state lock free
+        (a stop takes seconds); the claim then runs under the lock and only reads what that stop found."""
+        self._reap_orphans()
         taken: dict[str, tuple[str, str]] = {}
         me_start = proc_start(os.getpid())
 
@@ -84,19 +87,23 @@ class RunLease:
         env.update_state(claim)
         return taken.get("no")
 
-    @staticmethod
-    def _live_after_reaping(st: StateDoc):
-        live = LeaseBook(st.leases).live(env.now())
-        for k, v in list(st.leases.items()):
+    def _reap_orphans(self) -> None:
+        """Stop the worker tree of every lease whose route.py is gone, outside the state lock; each stop is a ReapRow in history."""
+        for k, v in list(env.load_state().leases.items()):
             if orphan(v):
                 gone = reap(v)
+                self.reaped[k] = gone
                 env.history_add(
                     hist.ReapRow(ts=env.now(), run_id=k, role=v.role, task=v.task, lane=v.lane, reaped=gone, worker_pid=v.worker_pid)
                 )
-                if gone:
-                    live.pop(k, None)
-                else:  # still running: its lease stays, so the same task or a full lane waits
-                    live[k] = replace(v, expires=env.now() + LEASE_TTL)
+
+    def _live_after_reaping(self, st: StateDoc):
+        live = LeaseBook(st.leases).live(env.now())
+        for k, v in list(st.leases.items()):
+            if self.reaped.get(k):
+                live.pop(k, None)
+            elif k in self.reaped or orphan(v):  # still running (or orphaned since the stops): its lease stays, so the same task waits
+                live[k] = replace(v, expires=env.now() + LEASE_TTL)
             elif k not in live and v.pid_start and proc_start(v.pid) == v.pid_start:
                 live[k] = v  # expired only because route.py could not renew it (the laptop slept): it is still running
         return live
