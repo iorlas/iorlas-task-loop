@@ -1,4 +1,5 @@
 """RunState and its one writer: every field survives a park, adding one is one edit, and nothing else writes the record."""
+import json
 import sys
 import typing
 from pathlib import Path
@@ -226,3 +227,22 @@ class OneWriter(Case):
 
 OK = {"src/taskloop/app/run/state.py", "src/taskloop/stores/books.py", "src/taskloop/stores/real.py",
       "src/taskloop/app/run/shared.py"}  # shared.py: the sibling's plan is read (siblings()), never written
+
+
+class OldCheckpoint(Case):
+    """A checkpoint written before the look stage's fields became `engine.look` (tests/fixtures/checkpoint_v3_look.json, dumped by that
+    code): the record on disk is unchanged, so it loads, the look stage sees its fields, and saving writes them back as they were."""
+
+    def test_an_old_checkpoint_gives_the_look_stage_its_fields_and_saves_them_back(self):
+        old = json.loads((ROOT / "tests" / "fixtures" / "checkpoint_v3_look.json").read_text(encoding="utf-8"))
+        ck = wire.load(Checkpoint, old)
+        h = Host()
+        Resume(h).restore(ck, late=True)
+        assert (h.look.notes, h.look.unjudged, h.look.done) == (
+            ["the main screen shows the list"], {"look judge, round 2": "no lane: busy"}, 2)
+        reqs = [{"method": "Shots", "names": ["home.png"]}]
+        assert (h.look.rendered, h.look.last_reqs, h.render_stale) == (["home.png", "list.png"], reqs, True)
+        h.checkpoints.save(step="write", stage=1)
+        saved = wire.dump(stored(h))["state"]
+        names = (*LOOK_FIELDS, "render_stale")
+        assert {k: saved[k] for k in names} == {k: old["state"][k] for k in names}
