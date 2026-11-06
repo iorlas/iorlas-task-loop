@@ -93,7 +93,7 @@ def roles(repo: str | Path, env: Env, git: Git) -> dict[str, bool | None] | None
     route = delegate_route(repo, env, git)
     if not route:
         return None
-    return {role: v.get("usable") if isinstance((v or {}).get("usable"), bool) else None for role, v in dg.role_status(env).items()}
+    return dg.roles_usable()
 
 
 def make_probe(repo: str | Path, env: Env, git: Git) -> dg.RouteProbe | None:
