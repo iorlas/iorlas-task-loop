@@ -36,6 +36,12 @@
     "tree_hash": "72468f96edd8dafe6ce172f75e2079104b379dcd44742dc7dbf8d1fc5265a2a8"
   },
   {
+    "name": "any_shell_policy",
+    "shelf_tag": "bf97aba8c13426f488ccb5ddd74c8432d5840781",
+    "shelf_commit": "bf97aba8c13426f488ccb5ddd74c8432d5840781",
+    "tree_hash": "283ac76ea0fb10d1e48f38be5439cd6f5bfe25da500f5dbf8f14e0740d86e884"
+  },
+  {
     "name": "app_dirs",
     "shelf_tag": "app-dirs-v0.1.0",
     "shelf_commit": "57720d92b344d4ab9d937412bdb13ee79fbf3d5d",
