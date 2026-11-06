@@ -8,8 +8,8 @@ from support import homes
 from support.narrow import must
 
 from taskloop.contracts import wire
+from taskloop.contracts.rowstores import PinStore, SharedNotesStore
 from taskloop.contracts.snapshots import Pin
-from taskloop.contracts.stores import PinStore, SharedNotesStore
 
 
 def test_a_pin_is_a_kv_row_written_read_and_cleared():

@@ -4,7 +4,7 @@ from typing import Any
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from taskloop.contracts.delegate_status import snapshot_of
-from taskloop.contracts.stores import StatusStore
+from taskloop.contracts.rowstores import StatusStore
 
 
 def lane(**kw: Any) -> dict[str, Any]:

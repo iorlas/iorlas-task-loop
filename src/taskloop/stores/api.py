@@ -8,9 +8,9 @@ from contextlib import AbstractContextManager
 from typing import Protocol
 
 from taskloop.contracts.checks import PassRecord
+from taskloop.contracts.docstore import Page, Read
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.locks import LockRecord, Ticket
-from taskloop.contracts.stores import Page, Read
 
 
 class Doc[T](Protocol):

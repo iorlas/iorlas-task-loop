@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import ReposStore
+from taskloop.contracts.rowstores import ReposStore
 
 
 class ReposIndexFile(Case):
