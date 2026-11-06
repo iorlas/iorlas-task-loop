@@ -63,7 +63,10 @@ AmendWith = Callable[[Callable[[Checkpoint], Checkpoint], Callable[[sqlite3.Conn
 
 class Amender:
     def __init__(self, amend_with: AmendWith) -> None:
-        self.amend_with = amend_with
+        self.write = amend_with
+
+    def amend_with(self, fn: Callable[[Checkpoint], Checkpoint], also: Callable[[sqlite3.Connection | None], None]) -> bool:
+        return self.write(fn, also)
 
 
 class Engine:

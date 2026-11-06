@@ -30,7 +30,9 @@ class Amends(Protocol):
 class Settling(Threads, Protocol):
     run_dir: Path
     state: RunState
-    checkpoints: Amends
+
+    @property
+    def checkpoints(self) -> Amends: ...
 
 
 def thread_updates(c: Call, res: DelegateResult, fallback_lane: str, ctx: float | None, seen: list[str]) -> Updates:
