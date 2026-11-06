@@ -4,6 +4,7 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
+from taskloop.adapters import profile_at
 from taskloop.adapters.gitmemo import ref_files
 from taskloop.adapters.gitrepo import Sig, git_dirs, is_dir_sig, sig
 from taskloop.contracts import config
@@ -11,13 +12,13 @@ from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import NotARepo, SlotGitError
 from taskloop.contracts.stores import ReposStore
 
-FILE = ".task-loop.json"
+FILE = profile_at.FILE
 
 
 def _base_name(repo: str | Path) -> str:
     """The base ref the working tree's profile names (engine.base), the default when it names none or does not parse."""
     try:
-        engine = json.loads((Path(repo) / FILE).read_text(encoding="utf-8")).get("engine")
+        engine = (profile_at.raw_in(repo) or {}).get("engine")
         name = engine.get("base") if isinstance(engine, dict) else None
     except (OSError, ValueError, AttributeError):
         name = None
