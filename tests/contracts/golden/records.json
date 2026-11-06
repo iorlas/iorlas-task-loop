@@ -1536,6 +1536,7 @@
    "epic_only": false,
    "reflect": true,
    "writer_family": [],
+   "second_writer_family": "",
    "writer_exec_allow": [],
    "writer_read_roots": [],
    "planner_notes": "",
