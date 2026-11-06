@@ -24,7 +24,7 @@ class LockTimeout(TimeoutError):
 
 @final
 class EngineLock(Rec):
-    """<worktree>/.task/engine.lock: the run-task (or the loop, `by`) that owns the worktree, with the processes it started. A process
+    """<config>/locks/engine-<key>.lock: the run-task (or the loop, `by`) that owns the worktree, with the processes it started. A process
     is named by pid and start token (pidcheck.proc_start): a reused pid is not the same process. pid 0: a worker outlived its engine."""
 
     V: ClassVar[int] = 3

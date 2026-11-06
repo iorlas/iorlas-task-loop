@@ -163,7 +163,7 @@ class Areas(AreasBase):
         bd = self.lanes({"x-1": [rec("landed")]}, {"x-1": "live"})
         seen: dict[str, Any] = {}
         self.during.append(lambda: seen.update(meta=dict(bd.slots["sl-1"].get("metadata") or {}),
-                                               lock=engine_lock.read_engine_lock(self.slot("s1"))))
+                                               lock=engine_lock.read_engine_lock(homes.cfg(), self.slot("s1"))))
         self.run_loop()
         assert seen["meta"].get("held_bead") == "x-1"
         assert seen["lock"].bead == "x-1"
@@ -224,7 +224,7 @@ class Areas(AreasBase):
         assert "area live busy: x-1 in s1" in r["why"]
         self.made.assert_not_called()
         assert (bd.slots["sl-2"]["status"], bd.slots["sl-2"]["assignee"]) == ("open", "")
-        assert not engine_lock.engine_lock_path(self.slot("s2")).exists()
+        assert not homes.cfg().engine_lock(self.slot("s2")).exists()
 
     def test_a_hand_run_in_a_free_area_or_with_no_area_says_nothing(self):
         bd = self.lanes({"x-1": [], "x-2": [], "x-3": []}, {"x-1": "live", "x-2": "shell"})

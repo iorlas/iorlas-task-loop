@@ -617,7 +617,7 @@ local to one machine, hence the host in the title.
   (two hand runs from one session share its actor, and bd lets an actor re-claim its own bead): `TAKEN: slot S held by <holder> since <t>
   (<why>)`, nothing runs. Only a run the loop started (`TASK_LOOP_SLOT_BEAD` names that slot's bead) uses the loop's
   take and does not take or release again.
-- **Engine lock:** every run-task writes `<worktree>/.task/engine.lock` (pid and start time, bead and the
+- **Engine lock:** every run-task writes `<config>/locks/engine-<worktree key>.lock` (pid and start time, bead and the
   worker) and removes it at the end; the loop writes its own from the slot take through the slot reset until its
   run-task takes it over. The loop's slot choice, `tl slot reset` (exit 4, `BUSY`, with the lock's path and pid),
   `tl slot release` and another run-task keep off a worktree whose lock names a live process, even when the slot bead
