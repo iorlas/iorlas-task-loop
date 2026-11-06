@@ -147,6 +147,7 @@ class RunFields(StateAttrs):
         self.fp, self.storm = "", ""  # its fingerprint, a storm banner
         self.crash_fingerprint, self.crash_site = "", ""
         self.disp: oc.Disposition | None = None
+        self.last_flag = ""  # same_family | degraded | ...: what the last worker call reported (worker_call sets it)
         self.retry_after = 0.0  # a pause for a lane: when delegate says it is back (epoch; 0 = unknown)
         self.landed_sha = ""  # set the moment the push goes through: whatever stops the run after it, the bead landed
         self.land_remote_oid = ""  # task ref checked before land; remote cleanup uses this exact lease

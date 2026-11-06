@@ -1,10 +1,13 @@
 """`tl doctor` ops checks: release clones that lag their origin, and capabilities the engine's requests rely on."""
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Final
 
 from taskloop.contracts.gitport import Git
+from taskloop.contracts.trace import RunTrace
 
+SHARE_OF_BEADS: Final = 20  # the doctor looks at this many of the latest beads for the second family's routed share
+WORKER_ROLE: Final = "worker"
 REQUIRED_CAPABILITIES: Final = ("instructions_ref",)  # a reviewer request carries the base commit (--instructions-ref)
 
 
@@ -33,3 +36,20 @@ def capability_gap(contract: Mapping[str, object]) -> str:
     have = contract.get("capabilities")
     missing = [c for c in REQUIRED_CAPABILITIES if not isinstance(have, list) or c not in have]
     return f"delegate lacks capabilities the engine relies on: {', '.join(missing)}" if missing else ""
+
+
+def second_share(runs: Sequence[RunTrace], second: str, last: int = SHARE_OF_BEADS) -> tuple[int, int]:
+    """(beads whose worker ran on `second`, beads counted): the latest `last` beads by their latest run, a bead once however many runs
+    and calls it had."""
+    latest: dict[str, float] = {}
+    on_second: set[str] = set()
+    for r in runs:
+        latest[r.bead] = max(latest.get(r.bead, r.ended), r.ended)
+        if any(c.role == WORKER_ROLE and c.family.lower() == second.lower() for c in r.sessions):
+            on_second.add(r.bead)
+    beads = sorted(latest, key=lambda b: latest[b])[-last:]
+    return sum(1 for b in beads if b in on_second), len(beads)
+
+
+def second_share_line(second: str, routed: int, of: int) -> str:
+    return f"second_writer_family {second} routed: " + (f"{routed} of the last {of} beads" if of else "no runs yet")

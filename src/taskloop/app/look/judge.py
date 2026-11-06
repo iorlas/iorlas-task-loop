@@ -5,7 +5,9 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import looks
+from taskloop.app.look.host import LookHost
 from taskloop.contracts.checkpoint import Defect
+from taskloop.contracts.plancheck import StageData
 from taskloop.domain.prompts.write import LOOK_FEEDBACK, LOOK_WRITE_TABLE
 from taskloop.domain.review import switch
 from taskloop.domain.review.matchers import Wording
@@ -19,7 +21,7 @@ def plural(n: int, word: str) -> str:
 
 
 class Judge:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: LookHost) -> None:
         self.e = host
 
     def judge_shots(self, names: list[str], rnd: int, summary: str, last: bool = True) -> tuple[list[Defect], str]:
@@ -60,17 +62,17 @@ class Judge:
         e.look_unjudged[f"look judge, round {rnd}"] = "no lane: " + b.why[:160]
         return [], "(not judged: no lane for the look judge)"
 
-    def look_step(self, st: Any, w: Any, name: str, last: bool = True, *, checks: bool = True) -> str:
+    def look_step(self, st: StageData, w: Any, name: str, last: bool = True, *, checks: bool = True) -> str:
         """After a visual write: the cheap checks, the shots the writer asked for, the look judge. -> the feedback that sends the
         writer back with the defects (text and picture paths), or "" to go on to the full checks. At most engine.look_rounds
         render rounds per stage; a defect that comes back is a leftover with the pictures, not another write."""
         e = self.e
-        if not e.pictures.look_ready(st) or e.look_done >= int(e.cfg.look_rounds) or e.dry:
+        if not e.pictures.look_ready(st) or e.look_done >= e.cfg.look_rounds or e.dry:
             return ""
         reqs = [r for r in w.get("shots") or [] if isinstance(r, dict)]
         if not reqs:
             return ""
-        if checks and e.stage_checks.stoppable(dict(st, checks=[]), name, groups=("static",)).failed:
+        if checks and e.stage_checks.stoppable(StageData(files=st["files"], checks=[]), name, groups=("static",)).failed:
             return ""  # the full checks show it to the writer; no render over a red static check
         e.look_done += 1
         rnd = e.look_done
@@ -84,7 +86,7 @@ class Judge:
             e.look_notes = [summary.strip()]
         e.pictures.persist_look()
         fresh = defects
-        out_of_rounds = e.look_done >= int(e.cfg.look_rounds)
+        out_of_rounds = e.look_done >= e.cfg.look_rounds
         if out_of_rounds:  # the rounds are capped: what is left is a follow-up, not another write
             for d in defects:
                 self.look_leftover(d, names)
@@ -104,7 +106,7 @@ class Judge:
             e.checkpoints.keep_pending("look")
             e.log.note(f"look defect filed as a follow-up: {d.why[:200]}")
 
-    def look_write(self, st: Any) -> str:
+    def look_write(self, st: StageData) -> str:
         e = self.e
         if not e.pictures.stage_visual(st):
             return ""
@@ -115,7 +117,7 @@ class Judge:
                 "change is clearly logic-only and nothing on screen differs, put a one-line reason in logic_only; "
                 "otherwise leave logic_only empty.")
 
-    def look_review(self, st: Any, w: Any, fix: bool = False) -> str:
+    def look_review(self, st: StageData, w: Any, fix: bool = False) -> str:
         e = self.e
         if fix or not e.pictures.stage_visual(st):
             return ""
@@ -138,7 +140,7 @@ class Judge:
                      "can differ; if not, give a medium finding.")
         return text + NOT_VISUAL
 
-    def look_judged(self, review: Any, st: Any, w: Any, fix: bool) -> None:
+    def look_judged(self, review: Any, st: StageData, w: Any, fix: bool) -> None:
         """No screenshot and no logic-only reason on a visual stage is a warning; the reviewer's look is kept."""
         e = self.e
         if fix or not e.pictures.stage_visual(st):
