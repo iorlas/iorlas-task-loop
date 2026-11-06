@@ -170,6 +170,30 @@
     "permanence": "transient",
     "retry_kind": "predicted"
    }
+  },
+  {
+   "id": "only_family_unready",
+   "expected_reason": "only_family_unready",
+   "synthetic": true,
+   "source": "tests/delegate/test_only_family.py",
+   "expected_stop": {
+    "reason": "only_family_unready",
+    "scope": "lane",
+    "permanence": "transient",
+    "retry_kind": "poll"
+   }
+  },
+  {
+   "id": "loop_excluded",
+   "expected_reason": "loop_excluded",
+   "synthetic": true,
+   "source": "tests/delegate/test_review_order.py",
+   "expected_stop": {
+    "reason": "loop_excluded",
+    "scope": "machine",
+    "permanence": "needs_owner",
+    "retry_kind": "none"
+   }
   }
  ]
 }
