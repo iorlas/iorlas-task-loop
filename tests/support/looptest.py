@@ -40,10 +40,6 @@ def log(repo):
     return homes.cfg().loop_log(wslots.repo_key(repo))
 
 
-def state_path(repo, pid):
-    return homes.cfg().loop_state(f"{wslots.repo_key(repo)}.{pid}")
-
-
 def write_state(repo, pid=None, **fields):
     """A loop's state file as a LoopState (a live loop of a test: the test's own pid, or a child's)."""
     pid = pid or os.getpid()

@@ -176,7 +176,7 @@ class LoopHealth(LoopBase):
         self.beads({"x-1": [rec("landed")]})
         looptest.write_state(str(self.repo), pid=os.getpid(), started=self.clock.t)  # this process is alive
         assert "RED:" not in self.status()
-        looptest.state_path(str(self.repo), os.getpid()).unlink()
+        looptest.files(str(self.repo)).remove(os.getpid())
         self.run_loop()  # drains: a fresh exit line is a fresh beat
         assert "RED:" not in self.status()
         self.beads({"x-1": [rec("landed")]})  # the bead is ready again

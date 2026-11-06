@@ -2,6 +2,7 @@
 and exit lines. A torn or foreign-version file reads as absent; the stores do that."""
 import contextlib
 import json
+import sqlite3
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -12,6 +13,7 @@ from taskloop.app.loop import exits
 from taskloop.contracts import paths
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.loop import LoopCommand, LoopState, LoopTarget, Rest, StopRequest
+from taskloop.contracts.looprows import DIED, LoopRows
 from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.stores import JsonStore, LoopLog, Page
 
@@ -32,38 +34,45 @@ class LoopFiles:
     def __init__(self, cfg: paths.ConfigDir, key: str, pid_alive: Callable[[int], bool], now: Callable[[], float] = time.time) -> None:
         self.cfg, self.key, self.pid_alive, self.now = cfg, key, pid_alive, now
 
-    # ---- one state per loop process -------------------------------------------------------------------------------
-    def state_file(self, pid: int) -> JsonStore[LoopState]:
-        return JsonStore(self.cfg.loop_state(f"{self.key}.{pid}"), LoopState)
+    # ---- one state per loop process: a `lease` row in factory.db (an old <key>.<pid>.json is adopted once) -------------------
+    def rows(self) -> LoopRows:
+        return LoopRows(self.cfg, self.key)
 
     def write(self, st: LoopState) -> None:
-        self.state_file(st.pid).write(st)
+        self.rows().put(st)
 
     def read(self, pid: int) -> LoopState | None:
-        return self.state_file(pid).get()
+        return self.rows().get(pid)
 
     def remove(self, pid: int) -> None:
-        self.state_file(pid).delete()
+        """A row that cannot be deleted (no disk, a locked database) stays: the next `live()` finds its pid dead and records it."""
+        with contextlib.suppress(OSError, sqlite3.Error):
+            self.rows().delete(pid)
 
     def runs(self) -> Path:
         d = self.cfg.loop_runs(self.key)
         d.mkdir(parents=True, exist_ok=True)
         return d
 
-    def live(self, but: int | None = None) -> list[LoopState]:
-        """The repo's live loops (`but`: leave this pid out), oldest first. A dead loop's file is kept as evidence."""
-        d = self.cfg.loop_state(self.key).parent
-        out: list[LoopState] = []
-        for f in sorted(d.glob(self.key + ".*.json")):
-            if f.name.endswith(".command.json"):
+    def adopt_files(self) -> None:
+        """Dual-read, never dual-write: a state file an older loop left is moved into the database and removed."""
+        for f in sorted(self.cfg.loop_state(self.key).parent.glob(self.key + ".*.json")):
+            if f.name.endswith((".command.json", "-rest.json")):
                 continue
             st = JsonStore(f, LoopState).get()
-            if st is None:
-                continue
+            if st is not None:
+                self.rows().put(st)
+            with contextlib.suppress(OSError):
+                f.unlink()
+
+    def live(self, but: int | None = None) -> list[LoopState]:
+        """The repo's live loops (`but`: leave this pid out), oldest first. A dead loop's row is kept as evidence (renamed `died-`)."""
+        self.adopt_files()
+        out: list[LoopState] = []
+        for st in self.rows().rows(""):
             if not self.pid_alive(st.pid):
                 self.record_dead(st)
-                with contextlib.suppress(OSError):
-                    f.replace(self.runs() / f"died-{st.pid}.json")
+                self.rows().mark_died(st.pid)
             elif st.pid != but:
                 out.append(st)
         return sorted(out, key=lambda st: st.started)
@@ -77,8 +86,9 @@ class LoopFiles:
                                      "reason": reason, "detail": detail})
 
     def died(self) -> list[LoopState]:
-        found = (JsonStore(f, LoopState).get() for f in self.runs().glob("died-*.json"))
-        return [st for st in found if st is not None]
+        found = [*self.rows().rows(DIED)]
+        found += [st for f in self.runs().glob("died-*.json") if (st := JsonStore(f, LoopState).get()) is not None]  # an older loop's
+        return found
 
     # ---- the stop command ------------------------------------------------------------------------------------------
     def lock(self) -> contextlib.AbstractContextManager[object]:
