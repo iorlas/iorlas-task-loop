@@ -1,0 +1,66 @@
+# ASKAI: a worker call returns a typed result; the caller persists it with the done-memo (tl-e5t0.59)
+
+Part of ARCHVERT (`stage-isolation.md` section 7, finding 6). Docs only; the slices below are code.
+
+## Problem
+
+`WorkerCall` (`app/run/worker_call.py`) writes engine fields from inside a call:
+
+| write | where | what it is |
+|---|---|---|
+| `e.writer_fallback`, `e.fallback_lane` | `take_answer` | the writer's thread ran on a fallback lane (only when the call resumes the writer) |
+| `e.writer.delegate`, `.ctx`, `.seen` | `take_answer` | the writer's session ref, its context size, what it has seen |
+| `e.planner_ref` | `end_call` | the planner's session ref |
+| `e.last_flag` | `end_call` | `same_family` / `degraded` of the last call, read by look, verify and review |
+| `e.lane_notes`, warn, comment | `end_call` | the same-family note |
+
+`end_call` first calls `done_memo.keep` (a row in `factory.db`, table `step`), then `c.state.consumed()`. The fields above live in
+`RunState`, which reaches disk only at the next `Checkpoints.save` (a row in the same `factory.db`, table `checkpoint`). A crash
+between the memo and the next save leaves a consumed step whose session ref, fallback and planner ref are gone: the resumed run
+reuses the answer and starts the next call with a stale thread.
+
+## Decision
+
+1. **`AskAi.ask(req) -> Asked`** (kernel port, `stage-isolation.md` (b)). `Asked` is a frozen value:
+   `data`, `family`, and `updates: Updates`. The call never touches the engine.
+2. **`Updates`** (frozen, one per call; contracts layer, no delegate import):
+   - `session: SessionUpdate | None`: `ref`, `ctx`, `seen` for the caller's thread (writer or planner: the request names which, `Thread.WRITER | Thread.PLANNER`);
+   - `fallback: Fallback | None`: `on: bool`, `lane: str`, set only when delegate said it on this answer (as `take_answer` does now);
+   - `flag: str`: `same_family` / `degraded` / `""`, with the read-only same-family override folded in by `ask` (it has the writer family in the request);
+   - `note: str`: the lane note, or `""`.
+   - `pause: Pause | None`: the stop value when the call ended on one; it goes into the close intent, not into an engine field.
+3. **`settle(asked)`** is the caller's one function (kernel, next to `done_memo`): it applies `updates` to a `RunState` copy and writes
+   the done-memo row and the checkpoint row **in one `factory.db` transaction**. `done_memo.keep` gets a variant that takes the open
+   connection (`RunRows.transaction`, same `shared_rw` handle the checkpoint rows use). Then `c.state.consumed()`. Order is kept:
+   memo and updates together, then consumed. A crash before the transaction re-asks nothing new (the call state still says
+   `calling`); after it, recall finds both.
+4. **Notes** (`warn`, `comment`, `lane_notes`) are effects, not state: `settle` returns them and the caller emits them after the
+   transaction (an effect that is repeated after a crash is only a duplicate line; the dedupe on `lane_notes` stays).
+5. **`last_flag`** stays in `RunState` for now (look, verify and review read it); it becomes a field of the checkpoint written by `settle`, and
+   its readers take it from `RunFacts` later (C-WORKERS). Not decided here.
+
+## What does not change
+
+Request building, retries, stop handling (`LaneActs`) and what each stage sends. `host.ai` keeps its shape for the six call sites
+(`plan`, `sendback`, `write`, `review`, `verify`, `look`) until slice 3.
+
+## Slices (each behaviour-preserving, one PR)
+
+1. **Value and transaction.** `Updates`/`Asked` in `contracts`, `done_memo.keep` on an open connection, `settle`. `take_answer` and `end_call` compute `Updates` and call `settle`; fields are still assigned from `Updates` by the host, so no caller changes. Crash test (below).
+2. **Move the writes out.** `worker_call` returns `Asked`; the host's `ai` applies it. `grep -n "e\.\(writer\|planner_ref\|last_flag\|fallback_lane\|writer_fallback\)" worker_call.py` is empty.
+3. **Callers take `Asked`.** Six call sites; `AskAi` as a port in the stages that use it. Waits for the stage hosts (ARCHVERT-HOSTS).
+
+Not touched: `paths.py`, ids, run layout, `policy.TABLE`/`retry.PLAN` (B2b, held for Denis).
+
+## Acceptance criteria
+
+- No engine field is written by `worker_call` (a test greps the module for `self.e.<state field> =` and `e.<state field> =`).
+- `Asked.updates` carries session, fallback, flag, note and pause; each has a unit test from a `DelegateResult` (fallback only when delegate said it; read-only same-family override).
+- A crash test: inject a failure after `settle`'s transaction and before `consumed()`; reopen the run; the done-memo is found **and** the checkpoint holds the same session ref, fallback and planner ref. A second test fails the transaction midway (after the memo row, before the checkpoint row): neither is visible.
+- The `Pause` value of a stopped call reaches the close intent (a test of the close with a stop).
+- Ratchets: no new `Any`, `cast`, ignore; files under 400 SLOC; unit-layer tests only (`workdir` fixture for the sqlite file).
+
+## Open
+
+- Verified: `LoopRows` (checkpoint) and `RunRows` both open `factorydb.shared_rw(cfg.factory_db())`, so they share one per-thread connection and file. `begin_immediate` is not reentrant (a nested `BEGIN IMMEDIATE` errors), so `settle` opens one transaction and writes the checkpoint row on that connection: slice 1 adds `RowDoc.write_in(con, rec, expect_rev)`, the body of `write` without its own transaction, and `write` calls it.
+- `Updates.pause` takes whatever type the close intent takes today (`domain/lanes/pauses.py`); B2b may replace it with `NeedsOwner`, and changes both together.
