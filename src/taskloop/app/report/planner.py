@@ -1,15 +1,12 @@
 """What the planner costs per bead: delegate's history rows split by the engine logs' plan nodes. Reads only."""
-import os
 import statistics
-from collections.abc import Collection
-from pathlib import Path
+from collections.abc import Collection, Iterable
 from typing import Any
 
+from taskloop.adapters.delegate import RunRecord, run_history
 from taskloop.app.report.inputs import prefix, read_jsonl
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
-
-HISTORY = "~/.config/task-loop/delegate/history.jsonl"
 
 
 def plan_class(rec: dict[str, Any]) -> str:
@@ -28,14 +25,13 @@ def input_tokens(tk: dict[str, Any] | None) -> int:
 
 
 def planner_stats(cfg: ConfigDir, since: float, until: float, prefixes: Collection[str] = (),
-                  history: str | Path | None = None) -> dict[str, Any]:
-    """Planner calls per bead from delegate's history (input: `in`, plus cached on rows from before delegate 0.22), split by the engine
-    logs' plan nodes:
+                  rows: Iterable[RunRecord] | None = None) -> dict[str, Any]:
+    """Planner calls per bead from delegate's run rows (`rows`, default `run_history`; input: `in`, plus cached on rows from
+    before delegate 0.22), split by the engine logs' plan nodes:
     first plan, full plans again (a new thread from scratch), amends, check send-backs. Reads only."""
-    history = Path(history or os.path.expanduser(HISTORY))
     locator = RunLocator(cfg)
     calls = {}
-    for r in read_jsonl(history):
+    for r in run_history(since) if rows is None else rows:
         t = r.get("ts") or 0
         task = r.get("task") or ""
         if r.get("role") != "planner" or not (since <= t <= until) or not task:
