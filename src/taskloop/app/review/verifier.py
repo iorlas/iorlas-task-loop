@@ -4,6 +4,7 @@ owner. The 2026-10-21 night: three beads (a hand-written .meta against its sibli
 an evidence file that proved it) each waited hours for an ask a supervisor settled in a minute by reading."""
 from typing import Any
 
+from taskloop.app.review.host import ReviewHost
 from taskloop.contracts.answers import VERDICTS
 from taskloop.domain import followups
 from taskloop.domain.prompts.verify import VERIFY_PROMPT
@@ -20,7 +21,7 @@ def plural(n: int) -> str:
 
 
 class Verifier:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: ReviewHost) -> None:
         self.e = host
 
     def run(self, gaps: list[Item]) -> list[Item]:
@@ -166,7 +167,7 @@ class Verifier:
     def settle_wrong(self, still: list[Item], wrong: list[Item]) -> list[Item]:
         """Items found wrong go to a fix round; what the fix leaves unproven is routed again, until no fix round is left."""
         e = self.e
-        if e.fixes >= int(e.cfg.max_fix_rounds):
+        if e.fixes >= e.cfg.max_fix_rounds:
             e.steps.move("ask", "verify_wrong", f"{len(wrong)} found wrong, no fix round left")
             return still + [dict(u, why="found wrong: {}; no fix round left".format(u["why"])) for u in wrong]
         e.steps.move("fix", "verify_wrong", f"{len(wrong)} found wrong: " + "; ".join(u["why"] for u in wrong))
@@ -176,7 +177,7 @@ class Verifier:
             pending = [u for u in left if u.get("proof_round")]
             if not pending:
                 return left
-            if e.fixes >= int(e.cfg.max_fix_rounds):  # a bead with an unproven checkable item never lands
+            if e.fixes >= e.cfg.max_fix_rounds:  # a bead with an unproven checkable item never lands
                 raise e.routing.proof_stuck(pending)
             still = [u for u in left if not u.get("proof_round")]
             e.steps.move("fix", "verify_unproven", f"{len(pending)} still unproven after the fix round")
