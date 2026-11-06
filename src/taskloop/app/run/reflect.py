@@ -50,7 +50,7 @@ class Reflector:
                              title=f"{e.bead} · reflect", timeout_s=45)
             cid = e.calls.start("reflect", "reflect", "reviewer", False, e.live_n)
             runner = e.router.runner(e.err_path, None, e.live("reflect"))
-            res = dg.call(e.resolved, req, prompt, answers.sent_schema("reflect"), runner, childenv.current_env(e.env)).res
+            res = dg.call(e.resolved, req, prompt, answers.sent_schema("reflect"), runner, childenv.delegate_call_env(e.env)).res
             saved = {k: v for k, v in e.stats.items() if k.startswith("tokens_")}
             e.calls.end(cid, "reflect", "reviewer", 1, res)
             e.stats.update(saved)  # the run's counts are the run's, as the Reflect comment says them
