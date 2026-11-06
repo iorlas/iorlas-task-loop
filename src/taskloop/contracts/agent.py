@@ -3,6 +3,8 @@
 The engine holds an `Agent` and nothing of the harness or the process under it: no Handle, no pid. `stop` is the only way to end it."""
 from typing import Protocol
 
+from taskloop.contracts.delegate import LiveEvent, LiveStart, WorkerStarted
+
 
 class Agent(Protocol):
     def done(self, timeout: float) -> bool:
@@ -15,4 +17,16 @@ class Agent(Protocol):
 
     def stop(self) -> list[int]:
         """End the call and its tree, then wait for the call to hand back. -> the pids that outlived it (empty: proven dead)."""
+        ...
+
+    def worker(self) -> WorkerStarted | None:
+        """The worker once it exists, else None."""
+        ...
+
+    def start_event(self) -> LiveStart | None:
+        """Where the call ran: harness, lane, model, effort; None until the worker says."""
+        ...
+
+    def events(self) -> list[LiveEvent]:
+        """What the worker did so far, in order."""
         ...

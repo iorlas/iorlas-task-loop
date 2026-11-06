@@ -181,6 +181,20 @@
    "retry": "none",
    "health": "none",
    "wording": "route.py itself failed"
+  },
+  "only_family_unready": {
+   "scope": "lane",
+   "permanence": "transient",
+   "retry": "poll",
+   "health": "none",
+   "wording": "no step of the --only-family families is ready now; no other family is used"
+  },
+  "loop_excluded": {
+   "scope": "machine",
+   "permanence": "needs_owner",
+   "retry": "none",
+   "health": "none",
+   "wording": "every step for the role is barred by the loop's exclusions; nothing is left to route"
   }
  },
  "run_args": [
