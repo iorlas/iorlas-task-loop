@@ -20,7 +20,8 @@ from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, Beads
 from taskloop.contracts.rotating import NO_ROTATION
-from taskloop.contracts.stores import EventLog, ReposStore
+from taskloop.contracts.rowstores import ReposStore
+from taskloop.contracts.stores import EventLog
 
 SOURCE: Final = "task-loop"
 RETAIN_DAYS: Final = 7

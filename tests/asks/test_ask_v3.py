@@ -18,13 +18,13 @@ from support.tiers import domain
 from taskloop.app.asks import intake, raiser, sweeps
 from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskAnswer, SimilarRef, ThreadEntry
+from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.dash import OwnerCause, Stick
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ledger import Adr
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import AskStore
 from taskloop.domain.asks import similar, specs
 
 T = 1000.0
