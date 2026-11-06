@@ -2,11 +2,13 @@
 linked, into <run folder>/artifacts/<check>/attempt-N/, the directory the check already wrote to (TL_ARTIFACT_DIR). The next attempt,
 the next run in the slot and the slot's reset all overwrite the originals; the directory is one per attempt, read-only after, with one
 Evidence row per file (sha256 and bytes).
+A name that looks like a credential (.env*, *.pem, *.key, id_*, *token*, *secret*) is not copied and gets no row.
 Nothing here raises into the engine: evidence is never worth a run."""
 import hashlib
 from pathlib import Path
 
 from taskloop.app.checks.host import CheckHost
+from taskloop.contracts.artifact import secret_name
 from taskloop.contracts.checks import Check
 from taskloop.contracts.log import Evidence
 
@@ -33,7 +35,8 @@ def files_of(c: Check, wt: Path, log: Path) -> list[tuple[Path, str]]:
     top = wt.resolve()
     for pat in c.keep:
         for p in sorted(wt.glob(pat)):
-            if p.is_file() and not p.is_symlink() and p.resolve().is_relative_to(top) and p.stat().st_size <= MAX_BYTES:
+            if (p.is_file() and not p.is_symlink() and p.resolve().is_relative_to(top) and p.stat().st_size <= MAX_BYTES
+                    and not secret_name(p.name)):
                 found.append((p, p.relative_to(wt).as_posix()))
     return found
 
@@ -58,7 +61,7 @@ def keep(host: CheckHost, c: Check, log: Path, d: Path) -> None:
         n = int(d.name.removeprefix("attempt-"))
         for src, name in files_of(c, Path(host.wt), log):
             copy_once(src, d / name)
-        for f in sorted(p for p in d.rglob("*") if p.is_file() and not p.is_symlink()):
+        for f in sorted(p for p in d.rglob("*") if p.is_file() and not p.is_symlink() and not secret_name(p.name)):
             f.chmod(0o444)
             digest = hashlib.sha256(f.read_bytes()).hexdigest()
             host.log.emit(Evidence(call_id=c.id, attempt=n, bytes=f.stat().st_size, artifact=f.relative_to(host.run_dir).as_posix(),

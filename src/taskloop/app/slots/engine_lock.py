@@ -1,6 +1,6 @@
 """The engine lock: a running engine in a worktree. run-task writes the worktree's lock row in factory.db, never a file in the worktree
 a worker can write (contracts/locks.py EngineLock: pid, start,
-bead, slot, slot_bead, by, route, workers); the loop writes one (by "loop") from its slot take until its run-task replaces it. The loop,
+bead, slot, slot_bead, by); the loop writes one (by "loop") from its slot take until its run-task replaces it. The loop,
 `tl slot reset|release` and another run-task keep off a worktree whose lock names a live process, whatever the slot bead says. A process is
 the one in the lock only while its start time matches (pid reuse) and it is no zombie. The record is a `lease` row (contracts/lockrows.py;
 an older tl's file is read until the next write); the check and the write of a take happen under `hold_path` on
@@ -10,6 +10,7 @@ import os
 import time
 from pathlib import Path
 
+from taskloop.adapters.agent import running_for
 from taskloop.adapters.locks import hold_path
 from taskloop.adapters.pidcheck import proc_alive, proc_start
 from taskloop.app.slots.env import stamp
@@ -93,9 +94,9 @@ def engine_busy(cfg: ConfigDir, wt: str | Path, handoff: Env | None = None) -> s
     if lock.pid and lock.pid not in mine and proc_alive(lock.pid, lock.start):
         who = "loop" if lock.by == "loop" else "engine"
         return f"{who} pid {lock.pid} runs {lock.bead or 'a slot reset'} since {stamp(lock.started)}{where}"
-    left = [str(p) for p, st in [*([lock.route] if lock.route else []), *lock.workers] if p and p not in mine and proc_alive(p, st)]
+    left = running_for(lock.bead)
     if left:
-        return f"worker pid {','.join(left)} of {lock.bead or '?'} outlived its engine{where}"
+        return f"worker run {','.join(left)} of {lock.bead or '?'} outlived its engine{where}"
     return ""
 
 
@@ -126,10 +127,10 @@ class EngineLock:
         self.write()
 
     def release(self) -> None:
-        left = [(p, st) for p, st in self.rec.workers if proc_alive(p, st)]
+        left = running_for(self.rec.bead)
         with contextlib.suppress(OSError):
             if left:
-                self.note(pid=0, route=None, workers=left)
+                self.note(pid=0)
             else:
                 drop_engine_lock(self.cfg, self.wt)
 

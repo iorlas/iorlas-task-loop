@@ -16,13 +16,13 @@ from support.builders import cfg_with  # noqa: E402
 
 from taskloop.app.run import engine  # noqa: E402
 from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
+from taskloop.domain.land.fix_text import FIX_GOAL as _FIX_GOALS  # noqa: E402
 from taskloop.domain.prompts import common as cp  # noqa: E402
 from taskloop.domain.prompts import plan as pp  # noqa: E402
 from taskloop.domain.prompts import reflect as fp  # noqa: E402
 from taskloop.domain.prompts import review as rp  # noqa: E402
 from taskloop.domain.prompts import verify as vp  # noqa: E402
 from taskloop.domain.prompts import write as wp  # noqa: E402
-from taskloop.domain.prompts.land import FIX_GOAL as _FIX_GOALS  # noqa: E402
 from taskloop.domain.prompts.review import acceptance_text  # noqa: E402
 
 TEMPLATES = {"PLAN_PROMPT": pp, "WRITE_PROMPT": wp, "WRITE_RESUME_PROMPT": wp, "REVIEW_PROMPT": rp, "VERIFY_PROMPT": vp,

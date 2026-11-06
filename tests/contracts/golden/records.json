@@ -1038,28 +1038,14 @@
   ]
  },
  "EngineLock": {
-  "v": 3,
+  "v": 4,
   "pid": 1789,
   "started": 1793050200.5,
   "start": "99",
   "bead": "tl-1",
   "slot": "s1",
   "slot_bead": "slot-1",
-  "by": "tl-abc",
-  "route": [
-   10,
-   "5"
-  ],
-  "workers": [
-   [
-    11,
-    "6"
-   ],
-   [
-    12,
-    "7"
-   ]
-  ]
+  "by": "tl-abc"
  },
  "Ticket": {
   "v": 1,

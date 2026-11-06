@@ -1,10 +1,14 @@
 """delegate.api: run, status and cancel as a library call; a delegate fault is a failed typed result."""
 
 
+import os
+
 import pytest
 from delegate import api
 from delegate.app import env
 from delegate.contracts import history as hist
+from delegate.contracts.state import Lease
+from stream_proc import proc_start
 
 LIMIT_S = 60  # each test runs a fake CLI and git
 
@@ -39,3 +43,11 @@ def test_history_lists_the_finished_runs_after_a_time_as_wire_objects():
     env.history_add(hist.RunRow(ts=200.0, run_id="b", role="worker", lane="L", model="m", effort="e", done=True))
     assert [(r["run_id"], r["role"], r["task"]) for r in api.history()] == [("a", "planner", "tl-1"), ("b", "worker", "")]
     assert [r["run_id"] for r in api.history(150.0)] == ["b"]
+
+
+def test_agents_lists_the_runs_whose_process_still_lives():
+    me = os.getpid()
+    live = Lease(lane="L", pid=me, pid_start=proc_start(me), start=1.0, expires=2.0, task="tl-1", role="worker")
+    dead = Lease(lane="L", pid=2**22 + 1, pid_start="gone", start=1.0, expires=2.0, task="tl-2", role="worker")
+    env.update_state(lambda st: st.leases.update({"r1": live, "r2": dead}))
+    assert [(a.run_id, a.task, a.role) for a in api.agents()] == [("r1", "tl-1", "worker")]
