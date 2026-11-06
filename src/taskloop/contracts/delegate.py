@@ -63,6 +63,7 @@ class RunRequest(Rec):
     only_family: list[str] = msgspec.field(default_factory=list)
     writer_exec_allow: list[list[str]] = msgspec.field(default_factory=list)
     read_roots: list[str] = msgspec.field(default_factory=list)  # --read-root once each: folders an OpenCode write step may read
+    instructions_ref: str = ""  # --instructions-ref: a commit whose instruction files the worker reads instead of the work tree's
     tools: list[ToolBinding] = msgspec.field(default_factory=list)  # not part of the route.py argv: delegate.api takes them typed
 
     def env(self) -> dict[str, str]:
