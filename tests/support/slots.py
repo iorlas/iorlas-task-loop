@@ -41,12 +41,12 @@ def drop_ticket(repo, t):
 
 
 def ticket_names(repo):
-    """Every ticket of the repo as it sits: rows of the line and an older loop's files, dead waiters' too."""
+    """Every ticket of the repo as it sits: rows of the line, dead waiters' too."""
     key = wslots.repo_key(str(repo))
     cfg = homes.cfg()
     sql = "SELECT name FROM lease WHERE kind=? AND name >= ? AND name < ?"
     rows = LoopRows(cfg, "").select(sql, (ticketrows.KIND, *ticketrows.span(key)))
-    return [r[0] for r in rows] + [p.name for p in ticket_dir(repo).glob("*.json")]
+    return [r[0] for r in rows]
 
 
 def put_ticket(repo, **fields):
@@ -58,12 +58,6 @@ def put_ticket_key(key, **fields):
     with LoopRows(homes.cfg(), "").transaction() as con:
         con.execute("INSERT INTO lease (kind, name, holder, pid, since, body) VALUES (?, ?, ?, ?, ?, ?)",
                     (ticketrows.KIND, ticketrows.name_of(key, fields["seq"]), "t", fields.get("pid"), 1, json.dumps(fields)))
-
-
-def ticket_dir(repo):
-    d = tickets().cfg.ticket(wslots.repo_key(str(repo)), 0).parent
-    d.mkdir(parents=True, exist_ok=True)
-    return d
 
 
 def dead_pid():

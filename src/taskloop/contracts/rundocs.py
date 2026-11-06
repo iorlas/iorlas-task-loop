@@ -8,7 +8,7 @@ from typing import ClassVar, final
 from taskloop.contracts.checks import Durations
 from taskloop.contracts.docrows import RowDoc, RowDocs, singleton
 from taskloop.contracts.looprows import LoopRows
-from taskloop.contracts.paths import ConfigDir, RunFiles
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import HandoffMirror, RunCounters
 from taskloop.contracts.wire import Rec
 
@@ -25,19 +25,19 @@ class PrepareStamp(Rec):
 
 
 def pause(cfg: ConfigDir, run: str) -> RowDoc[RunCounters]:
-    return singleton(cfg, RunCounters, f"{RUN}{run}:pause", RunFiles(cfg.run_dir(run)).pause())
+    return singleton(cfg, RunCounters, f"{RUN}{run}:pause")
 
 
 def reexec(cfg: ConfigDir, run: str) -> RowDoc[RunCounters]:
-    return singleton(cfg, RunCounters, f"{RUN}{run}:reexec", RunFiles(cfg.run_dir(run)).reexec())
+    return singleton(cfg, RunCounters, f"{RUN}{run}:reexec")
 
 
 def handoff(cfg: ConfigDir, run: str) -> RowDoc[HandoffMirror]:
-    return singleton(cfg, HandoffMirror, f"{RUN}{run}:handoff", RunFiles(cfg.run_dir(run)).handoff())
+    return singleton(cfg, HandoffMirror, f"{RUN}{run}:handoff")
 
 
 def prepare_stamp(cfg: ConfigDir, run: str) -> RowDoc[PrepareStamp]:
-    return singleton(cfg, PrepareStamp, f"{RUN}{run}:prepare", RunFiles(cfg.run_dir(run)).prepare_stamp())
+    return singleton(cfg, PrepareStamp, f"{RUN}{run}:prepare")
 
 
 def stamped(fingerprint: str) -> PrepareStamp:
@@ -60,4 +60,4 @@ def forget(cfg: ConfigDir, run: str) -> None:
 
 
 def durations(cfg: ConfigDir, *, quiet: bool = False) -> RowDocs[Durations]:
-    return RowDocs(cfg, Durations, cfg.check_durations, table="kv", key_col="k", body_col="v", prefix="durations:", quiet=quiet)
+    return RowDocs(cfg, Durations, table="kv", key_col="k", body_col="v", prefix="durations:", quiet=quiet)

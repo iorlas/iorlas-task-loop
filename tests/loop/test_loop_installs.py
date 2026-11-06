@@ -15,6 +15,8 @@ from support import homes
 
 from loop.test_loop import LoopBase
 from taskloop.contracts.env import snapshot
+from taskloop.contracts.snapshots import Pin
+from taskloop.contracts.stores import PinStore
 
 # isort: split
 from support import (
@@ -70,5 +72,5 @@ class Entry(Moving):
         self.install("0.2.0")
         self.install("0.3.0")
         self.installed("0.3.0")
-        (homes.config_dir() / "pinned.json").write_text(json.dumps({"v": 1, "task-loop": "0.2.0"}))
+        PinStore(homes.cfg()).write(Pin(task_loop="0.2.0"))
         assert self.target() == ("0.2.0", self.cache / "0.2.0")

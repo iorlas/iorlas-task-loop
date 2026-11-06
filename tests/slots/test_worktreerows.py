@@ -26,20 +26,8 @@ def test_a_record_is_written_read_listed_and_deleted(repo):
     docs = WorktreeDocs(homes.cfg(), repo)
     docs.of("a-1").write(owned())
     assert must(docs.of("a-1").get()).bead == "b-1" and docs.keys() == ["a-1"]
-    assert not homes.cfg().worktree_record(repo, "a-1").exists()
     docs.of("a-1").delete()
     assert docs.of("a-1").get() is None and docs.keys() == []
-
-
-def test_an_older_tls_file_is_listed_read_and_adopted_into_a_row(repo):
-    cfg = homes.cfg()
-    path = cfg.worktree_record(repo, "old-1")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(wire.dump(owned("old"))))
-    docs = WorktreeDocs(cfg, repo)
-    assert docs.keys() == ["old-1"]
-    assert must(docs.of("old-1").get()).bead == "old"
-    assert not path.exists() and docs.keys() == ["old-1"]  # now a row
 
 
 def test_a_newer_writers_extra_keys_are_read_past_and_repos_do_not_mix(repo):
