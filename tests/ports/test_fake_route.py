@@ -20,7 +20,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 
 # isort: split
-from support import dlcall, fake_route  # noqa: E402
+from support import (  # noqa: E402
+    dlcall,
+    fake_route,
+    netgate,
+)
 from support.fake_clock import FakeClock  # noqa: E402
 from support.narrow import must  # noqa: E402
 
@@ -30,7 +34,6 @@ from taskloop.app.loop.net import NetState  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop.contracts.kinds import Kind  # noqa: E402
 from taskloop.domain import outcome as oc  # noqa: E402
-from taskloop.domain.lanes import netgate  # noqa: E402
 from taskloop.domain.lanes import policy as lp  # noqa: E402
 from taskloop.stores import call_state as cs  # noqa: E402
 
