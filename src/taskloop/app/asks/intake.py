@@ -183,10 +183,16 @@ class Intake:
         return ""
 
     def prune(self, repo: str, adr: str) -> str:
-        """Retire a decision in force of `repo` (kept in the store, marked with who and when). -> "" or why not."""
+        """Retire a decision in force of `repo`: files the bead that marks its file retired (the file is the record). -> "" or why not."""
         if self.adrs is None:
             return "there is no decision store here"
-        return self.adrs(repo).retire(adr, self.by, self.now())
+        found = self.adrs(repo).get(adr)
+        if found is None:
+            return f"{adr} is not a decision of this repo"
+        if found.retired_t is not None:
+            return f"{adr} is already retired"
+        stick.retire(self.store, adr)
+        return ""
 
     def ask_back(self, bead: BeadId, ask_id: str, text: str) -> str:
         """The owner asks back instead of answering: the entry joins the ask's thread and the ask stays open. -> "" or why not."""

@@ -1,16 +1,18 @@
 """Make it stick: what the owner turns an answered ask into (dash-spec 5.3). Each outcome has an effect through a typed port and one
-ledger row. The ADR is written under the task-loop state dir (the engine and `tl` never write into a checkout); a factory bead is filed
-in the task-loop repo; a fix amends the bead's own text; demote and once record the outcome only.
+ledger row. The ADR is landed through a bead (`docs/adr/NNNN-title.md`, contracts/adrfiles.py): the engine and `tl` never write into a
+checkout, so the outcome files the bead and a lane lands the file; a factory bead is filed in the task-loop repo; a fix amends the
+bead's own text; demote and once record the outcome only.
 
 `Stick.REF` links the ask to a decision already in force (the one its repeat key matched, or the id named in `text`)."""
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import assert_never
 
+from taskloop.contracts import adrfiles
 from taskloop.contracts.adrs import AdrStore, is_adr_id
 from taskloop.contracts.dash import Stick
-from taskloop.contracts.ledger import Adr, LedgerEntry
-from taskloop.contracts.ports import BeadPatch, Beads, NewBead
+from taskloop.contracts.ledger import LedgerEntry
+from taskloop.contracts.ports import BeadPatch, BeadQuery, Beads, NewBead
 
 FACTORY_LABEL = "factory"
 TITLE_CAP = 200
@@ -49,18 +51,30 @@ def decide(fx: Effects, raised: LedgerEntry, answered: LedgerEntry, outcome: Sti
 
 
 def adr(fx: Effects, raised: LedgerEntry, answered: LedgerEntry, text: str, by: str, now: float) -> tuple[str, str]:
-    if fx.adrs is None:
-        return "", "there is no decision store here"
-    store = fx.adrs(raised.repo)
-    have = next((a for a in store.all() if a.ask == raised.ask and a.retired_t is None), None)
-    if have is not None:
-        return have.id, ""  # asked twice: one decision per ask
-    made = store.add(Adr(id="", n=0, repo=raised.repo, text=text[:TEXT_CAP] or draft(raised, answered.answer), question=raised.question,
-                         answer=answered.answer, ask=raised.ask, bead=raised.bead, key=raised.key, t=now, by=by))
-    return made.id, ""
+    """File the bead that lands the ADR. -> its id (the ADR's number is the file's, taken when it lands)."""
+    if fx.adrs is not None:
+        have = next((a for a in fx.adrs(raised.repo).all() if a.ask == raised.ask and a.retired_t is None), None)
+        if have is not None:
+            return have.id, ""  # landed already: one decision per ask
+    marker = f"- Ask: {raised.ask}\n"
+    pending = next((b for b in fx.store.find(BeadQuery(label=adrfiles.LABEL)) if marker in b.description), None)
+    if pending is not None:
+        return pending.id, ""  # asked twice: the bead that lands it is already open
+    decision = text[:TEXT_CAP] or draft(raised, answered.answer)
+    body = adrfiles.template(raised.ask, raised.bead, raised.key, raised.question, answered.answer, decision, by, now)
+    title = f"ADR: {adrfiles.title_of(decision)}"[:TITLE_CAP]
+    return fx.store.create(NewBead(title=title, description=body, labels=[adrfiles.LABEL], no_inherit_labels=True)), ""
+
+
+def retire(store: Beads, adr: str) -> str:
+    """File the bead that retires a decision in force (its file's Status line). -> its id."""
+    body = (f"Retire {adr}: in its `{adrfiles.DIR}` file set `- Status: retired` and add the lines `- Retired-by: <who>` and "
+            f"`- Retired-at: <epoch seconds>`. Leave the sections as they are.")
+    return store.create(NewBead(title=f"Retire {adr}", description=body, labels=[adrfiles.LABEL], no_inherit_labels=True))
 
 
 def ref(fx: Effects, raised: LedgerEntry, text: str) -> tuple[str, str]:
+    """Link the ask to a decision in force: the link is the ledger row's `outcome_ref`, the ADR file is not edited."""
     if fx.adrs is None:
         return "", "there is no decision store here"
     store = fx.adrs(raised.repo)
@@ -69,8 +83,6 @@ def ref(fx: Effects, raised: LedgerEntry, text: str) -> tuple[str, str]:
     found = store.get(named) if is_adr_id(named) else None
     if found is None or found.retired_t is not None:
         return "", "name a decision in force (ADR-n) to link this ask to" if not named else f"{named} is not a decision of this repo"
-    if raised.ask not in found.refs:
-        store.put(found.replace(refs=[*found.refs, raised.ask]))
     return found.id, ""
 
 
