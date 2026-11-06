@@ -374,12 +374,11 @@ class Invariants(test_loop.Base):
         for w in waiters.values():
             w.join(GUARD)
         assert served == ["W3", "W1", "W2"]
-        assert list(sl.ticket_dir(self.repo_s).glob("*.json")) == []
+        assert sl.ticket_names(self.repo_s) == []
         # a waiter whose process is gone is dropped by whoever reads the line, and blocks nobody
-        d = sl.ticket_dir(self.repo_s)
-        (d / "000099.json").write_text(json.dumps({"v": 1, "seq": 99, "prio": 0, "pid": sl.dead_pid(), "why": "dead", "since": 1}))
+        sl.put_ticket(self.repo_s, v=1, seq=99, prio=0, pid=sl.dead_pid(), why="dead", since=1)
         assert wslots.waiting_line(self.repo_s, support_who.who()) == []
-        assert not (d / "000099.json").exists()
+        assert sl.ticket_names(self.repo_s) == []
         assert must(wslots.wait_slot(self.repo_s, self.cfg, "late", stop=lambda: True, spawner=real_spawner(),
             git=port_git(), who=support_who.who()))[0] == "s1"
         # tickets taken at once are all different and numbered in arrival order
@@ -577,7 +576,7 @@ class Invariants(test_loop.Base):
         for b in self.bd.slots.values():
             assert (b["status"], b.get("assignee") or "") == ("open", ""), b
             assert not set(b.get("metadata") or {}) & set(marks.HELD_KEYS), b
-        assert list(sl.ticket_dir(self.repo_s).glob("*.json")) == []
+        assert sl.ticket_names(self.repo_s) == []
         for n in slots:
             assert not homes.cfg().engine_lock(wslots.slot_dir(self.repo_s, n, self.cfg)).exists(), n
         for lock in (homes.config_dir() / "locks").glob("*.lock"):
@@ -624,9 +623,7 @@ class Invariants(test_loop.Base):
         self.clock.advance(61)  # the hold has run out
         d2 = wslots.slot_dir(repo, "s2", cfg)
         put_lock(d2, {"pid": 5252, "start": "T5252", "bead": "w-3", "started": 1})  # not in the process table
-        (sl.ticket_dir(repo) / "000077.json").write_text(
-            json.dumps({"v": 1, "seq": 77, "prio": 0, "pid": sl.dead_pid(), "why": "dead", "since": 1})
-        )
+        sl.put_ticket(repo, v=1, seq=77, prio=0, pid=sl.dead_pid(), why="dead", since=1)
         self.actors["MainThread"] = "tl-main"
         for name in ("s1", "s2"):
             sb = wslots.take_named_slot(repo, name, cfg, "next", spawner=real_spawner(), git=port_git(), who=support_who.who())[0]

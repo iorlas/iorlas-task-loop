@@ -11,7 +11,7 @@ from typing import Final
 from taskloop.contracts.dash import Column, DotState, Marker, Phase, PhaseDot, Tone
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.log import Close, WaitStart
-from taskloop.contracts.runlife import Liveness
+from taskloop.contracts.runlife import GONE, Liveness
 from taskloop_dash.views import names, phases
 
 PARKING = (Outcome.PARKED, Outcome.BLOCKED, Outcome.NOOP)
@@ -68,7 +68,7 @@ def marker(f: Facts) -> Marker:
         return Marker.NOOP
     parked = f.close is not None and f.close.outcome in PARKING
     rules = ((f.ask, Marker.ASK), (f.look, Marker.LOOK), (f.closed, Marker.DONE), (f.life is Liveness.LIVE and f.stuck, Marker.STUCK),
-             (f.soft_ask, Marker.SOFT_ASK), (f.life is Liveness.LIVE, Marker.RUN), (f.life is Liveness.LOST, Marker.EXITED),
+             (f.soft_ask, Marker.SOFT_ASK), (f.life is Liveness.LIVE, Marker.RUN), (f.life in GONE, Marker.EXITED),
              (f.claimed and bool(f.abandoned), Marker.EXITED), (f.claimed, Marker.RUN), (parked, Marker.PARKED),
              (f.blocked, Marker.BLOCKED))
     return next((m for ok, m in rules if ok), Marker.READY)
@@ -94,7 +94,7 @@ def status_line(f: Facts) -> str:
     rules = ((f.ask, first_line(f.ask_line) or "waiting for your answer"), (f.look, "waiting for your look"),
              (f.closed, first_line(f.closed_reason) or "closed"), (f.life is Liveness.LIVE and f.stuck, f.stuck_line or "stuck"),
              (f.soft_ask, first_line(f.ask_line) or "a question waits, the run went on"), (f.life is Liveness.LIVE, running),
-             (f.life is Liveness.LOST, "the run is lost: its process is gone and it recorded no end"),
+             (f.life in GONE, "the run is lost: its process is gone and it recorded no end"),
              (f.claimed and bool(f.abandoned), f.abandoned),
              (f.claimed, f"claimed by {f.assignee}" if f.assignee else "claimed"), (parked, why),
              (f.blocked and bool(f.blocker), f"waits for {f.blocker}"))
