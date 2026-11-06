@@ -1,4 +1,4 @@
-"""A factory.db of a foreign schema version shows its error with the last valid observation, not as absence; a corrupt one still drops it."""
+"""A factory.db of a foreign schema version shows its error over the last valid observation, not as absence; a corrupt one drops it."""
 
 import sqlite3
 from pathlib import Path
