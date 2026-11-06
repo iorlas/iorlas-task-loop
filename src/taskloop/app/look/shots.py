@@ -64,13 +64,13 @@ class Pictures:
             if not (f.is_file() and f.suffix.lower() in IMAGE_EXT):
                 continue
             rel = str(f.relative_to(e.evidence_dir))
-            if self.shot_methods() and rel not in e.rendered_names:
+            if self.shot_methods() and rel not in e.look.rendered:
                 continue  # with a shot table the pictures are the engine's own, of this run: never a writer's or an older run's
             why = f"over {MAX_SHOT_BYTES >> 20} MB" if f.stat().st_size > MAX_SHOT_BYTES else (
                 f"more than {MAX_SHOTS} screenshots" if len(out) >= MAX_SHOTS else "")
             if why:
-                if rel not in e.shots_skipped:
-                    e.shots_skipped.add(rel)
+                if rel not in e.look.skipped:
+                    e.look.skipped.add(rel)
                     e.log.note(f"screenshot {rel} skipped: {why}")
                 continue
             out.append(rel)
@@ -85,8 +85,8 @@ class Pictures:
         """{method: entry} from engine.shot_table, read from the base branch (a worker can edit the working copy, not that);
         {} when unset or unreadable (then a visual stage works the old way)."""
         e = self.e
-        if e.shot_cache is None:
-            e.shot_cache = dict[str, Any]()
+        if e.look.shot_cache is None:
+            e.look.shot_cache = dict[str, Any]()
             rel = (e.cfg.shot_table or "").strip()
             if rel:
                 try:
@@ -96,8 +96,8 @@ class Pictures:
                 methods, err = looks.parse_table(text) if text else ({}, f"{rel} is not on {e.cfg.base}")
                 if err:
                     e.warn(f"engine.shot_table: {err}; visual stages work the old way")
-                e.shot_cache = methods
-        return e.shot_cache
+                e.look.shot_cache = methods
+        return e.look.shot_cache
 
     def shot_table(self):
         """The shot methods the repo can render, as the planner and the writer are told them."""
@@ -132,7 +132,7 @@ class Pictures:
         names: list[str] = []
         errs: list[str] = []
         asked = list(reqs[:looks.MAX_REQUESTS])
-        e.last_reqs = list(asked)
+        e.look.last_reqs = list(asked)
         e.steps.begin("render", f"render shots, round {rnd}", round=rnd)
         for k, req in enumerate(asked):
             files, m, err = self.render_one(req, rnd, k, base)
@@ -142,7 +142,7 @@ class Pictures:
                 names.append(self.keep_picture(f, names, base, rnd))
             if m and files:
                 self.warn_if_untracked(m, files)
-        e.rendered_names = sorted({*e.rendered_names, *names})
+        e.look.rendered = sorted({*e.look.rendered, *names})
         if names:
             e.render_stale = False
         plural = "" if len(names) == 1 else "s"

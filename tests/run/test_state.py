@@ -1,4 +1,5 @@
 """RunState and its one writer: every field survives a park, adding one is one edit, and nothing else writes the record."""
+import json
 import sys
 import typing
 from pathlib import Path
@@ -13,8 +14,9 @@ from support.fake_beads import FakeBeads
 from support.fakegit import ScriptedGit
 from support.memstores import fake_stores
 
+from taskloop.app.look.state import LOOK_FIELDS, LookState
 from taskloop.app.run.resume import KEEP_FOR_ACTIVE, LATE, Resume
-from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state, state_names
+from taskloop.app.run.state import Checkpoints, StateAttrs, attr_names, carries_state, state_names
 from taskloop.contracts import fence, wire
 from taskloop.contracts.checkpoint import BriefSnap, Checkpoint, Handoff, PlanStep, RunState, WriterSession
 from taskloop.contracts.ids import BeadId
@@ -79,7 +81,7 @@ class Host(StateAttrs):
         self.run_id = "t-1-20260101-000000"
         self.unchecked = [{"what": "u", "kind": "", "source": "", "why": "", "proof_round": False}]
         self.unverified, self.filed, self.unfiled = [{"what": "v", "kind": "", "why": "", "source": ""}], [], []
-        self.look_notes, self.look_unjudged = [], {}
+        self.look = LookState(lambda: self.state)
         self.task_branch, self.gate_log, self.head = "task/t-1", None, "h0"
 
     @property
@@ -103,14 +105,23 @@ class Fields(Case):
 
     def test_the_engine_declares_every_field_with_the_type_the_state_holds(self):
         declared, held = typing.get_type_hints(StateAttrs), typing.get_type_hints(RunState)
-        assert {k: declared[k] for k in state_names()} == {k: held[k] for k in state_names()}
+        assert {k: declared[k] for k in attr_names()} == {k: held[k] for k in attr_names()}
+        assert not set(LOOK_FIELDS) & set(declared)  # the look stage's fields are `engine.look`, not engine attributes
         assert not hasattr(StateAttrs, "__getattr__")  # an attribute the state lacks is an error, not an Any
 
     def test_the_engine_reads_and_writes_every_field_through_the_state(self):
         h = Host()
-        for name in state_names():
+        for name in attr_names():
             setattr(h, name, SAMPLE[name])
             assert getattr(h.state, name) is SAMPLE[name], name
+
+    def test_the_look_stage_reads_and_writes_its_fields_through_the_same_state(self):
+        h = Host()
+        for name, attr in zip(LOOK_FIELDS, ("notes", "unjudged", "done", "rendered", "last_reqs"), strict=True):
+            setattr(h.look, attr, SAMPLE[name])
+            assert getattr(h.state, name) is SAMPLE[name], name
+        h.state = RunState()  # a task that starts again replaces the state: the look view follows it
+        assert h.look.done == 0
 
     def test_the_dump_holds_every_field_and_nothing_else(self):
         dump = RunState().dump()
@@ -128,7 +139,7 @@ class Park(Case):
     def parked(self) -> tuple[Host, Host]:
         a = Host()
         for name in state_names():
-            setattr(a, name, SAMPLE[name])
+            setattr(a.state, name, SAMPLE[name])
         a.filed, a.unfiled = ["x"], [Unfiled(title="t", why="w")]
         a.checkpoints.save(step="write", stage=1, rounds=2, n=3, feedback="fb")
         b = Host()
@@ -146,7 +157,7 @@ class Park(Case):
             if name in kept:
                 continue
             want = a.state.pending_land_validation if name == "pending_land_validation" else getattr(a.state, name)
-            assert getattr(b, name) == want, name
+            assert getattr(b.state, name) == want, name
         assert (b.snap, b.brief_hash) == (snap, "now")  # the bead as it is now, not as it was planned
         assert (b.unverified, b.filed, b.unfiled) == (a.unverified, a.filed, a.unfiled)  # the ReviewState folds them in
 
@@ -216,3 +227,22 @@ class OneWriter(Case):
 
 OK = {"src/taskloop/app/run/state.py", "src/taskloop/stores/books.py", "src/taskloop/stores/real.py",
       "src/taskloop/app/run/shared.py"}  # shared.py: the sibling's plan is read (siblings()), never written
+
+
+class OldCheckpoint(Case):
+    """A checkpoint written before the look stage's fields became `engine.look` (tests/fixtures/checkpoint_v3_look.json, dumped by that
+    code): the record on disk is unchanged, so it loads, the look stage sees its fields, and saving writes them back as they were."""
+
+    def test_an_old_checkpoint_gives_the_look_stage_its_fields_and_saves_them_back(self):
+        old = json.loads((ROOT / "tests" / "fixtures" / "checkpoint_v3_look.json").read_text(encoding="utf-8"))
+        ck = wire.load(Checkpoint, old)
+        h = Host()
+        Resume(h).restore(ck, late=True)
+        assert (h.look.notes, h.look.unjudged, h.look.done) == (
+            ["the main screen shows the list"], {"look judge, round 2": "no lane: busy"}, 2)
+        reqs = [{"method": "Shots", "names": ["home.png"]}]
+        assert (h.look.rendered, h.look.last_reqs, h.render_stale) == (["home.png", "list.png"], reqs, True)
+        h.checkpoints.save(step="write", stage=1)
+        saved = wire.dump(stored(h))["state"]
+        names = (*LOOK_FIELDS, "render_stale")
+        assert {k: saved[k] for k in names} == {k: old["state"][k] for k in names}
