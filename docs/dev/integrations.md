@@ -1,6 +1,6 @@
 # What task-loop relies on (read before changing the dashboard, tl.py, or the skill's Workers section)
 
-A plugin install ships only `skills/` and `hooks/`, so nothing here is loaded when someone just runs the loop.
+A plugin install ships `skills/`, `hooks/` and `src/` (`MANIFEST.sha256` lists them), but not `docs/`: this document is not loaded when someone just runs the loop.
 
 task-loop reads formats it does not own. Each has one reader in a module of `src/taskloop_dash/` (or `tl.py`); when a
 format changes, only that reader changes, and a broken reader must cost one panel, never the page (the handler
