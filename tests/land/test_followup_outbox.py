@@ -25,7 +25,7 @@ from taskloop.contracts.checkpoint import RunState
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ports import BdFailure
-from taskloop.domain.review.followups import FollowKey
+from taskloop.domain.followups import FollowKey
 from taskloop.stores.runlog import RunLog
 
 

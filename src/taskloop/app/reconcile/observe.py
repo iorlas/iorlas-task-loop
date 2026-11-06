@@ -14,6 +14,7 @@ from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git
 from taskloop.contracts.reconcile import Lease, SlotFact, epoch
 from taskloop.contracts.slots import SlotGitError
+from taskloop.domain.lifecycle.matchers import land_bead
 from taskloop.domain.reconcile.facts import (
     BeadFact,
     Checkout,
@@ -23,7 +24,6 @@ from taskloop.domain.reconcile.facts import (
     RepoView,
     Worktree,
 )
-from taskloop.domain.report.matchers import land_bead
 
 TASK = "task/"
 RELEASE = "release/"

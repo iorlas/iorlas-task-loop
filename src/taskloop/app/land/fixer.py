@@ -15,9 +15,9 @@ from taskloop.contracts.ports import Git, Sh
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks import planref, trim
-from taskloop.domain.prompts.land import FIX_GOAL as GOAL
-from taskloop.domain.prompts.land import FIX_TEXT as TEXT
-from taskloop.domain.prompts.land import FIX_WHAT as WHAT
+from taskloop.domain.land.fix_text import FIX_GOAL as GOAL
+from taskloop.domain.land.fix_text import FIX_TEXT as TEXT
+from taskloop.domain.land.fix_text import FIX_WHAT as WHAT
 
 
 class FixerCheckpoints(Protocol):
