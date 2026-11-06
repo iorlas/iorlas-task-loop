@@ -8,7 +8,7 @@ from taskloop.app.slots.line import order, wait_slot, waiting_line
 from taskloop.app.slots.marks import held_by, mark_held, next_gen
 from taskloop.app.slots.pool import Slot, SlotPool
 from taskloop.app.slots.reset import setup
-from taskloop.contracts.ports import NewBead
+from taskloop.contracts.beadsport import NewBead
 from taskloop.contracts.slots import SlotFail, SlotGitError
 
 CODES: Final = {"busy": 4, "bead_pinned": 5, "slot_broken": 3, "transient": 3}

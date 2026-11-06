@@ -4,8 +4,9 @@ from pathlib import Path
 
 from taskloop.app.reconcile.apply import apply
 from taskloop.app.reconcile.observe import Live, observe
+from taskloop.contracts.beadsport import Beads
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Beads, Git
 from taskloop.domain.reconcile.diff import diff
 
 

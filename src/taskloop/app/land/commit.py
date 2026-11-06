@@ -4,8 +4,8 @@ from typing import Protocol
 from taskloop.app.land.gitcall import must
 from taskloop.app.land.parts import StageCheckout, Strays
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import Git
 
 
 class CommitHost(Protocol):

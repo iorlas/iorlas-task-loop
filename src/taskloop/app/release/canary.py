@@ -4,7 +4,7 @@ from pathlib import Path
 from taskloop.app.release import clone, publish
 from taskloop.app.release.catalog import version_tuple
 from taskloop.app.release.shell import Abort, Shell
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import SlotGitError
 
 

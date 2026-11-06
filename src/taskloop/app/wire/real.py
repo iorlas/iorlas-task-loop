@@ -2,7 +2,8 @@
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.contracts.env import Env
-from taskloop.contracts.ports import Git, Spawner
+from taskloop.contracts.gitport import Git
+from taskloop.contracts.procport import Spawner
 
 
 def spawner(env: Env) -> Spawner:

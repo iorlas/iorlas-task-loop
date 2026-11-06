@@ -4,7 +4,7 @@ from argparse import Namespace
 from typing import Protocol
 
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import Ran
+from taskloop.contracts.procport import Ran
 
 TASK = "task/"
 

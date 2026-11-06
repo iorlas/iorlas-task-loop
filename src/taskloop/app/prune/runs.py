@@ -11,9 +11,9 @@ from taskloop.app.run import layout
 from taskloop.app.track import trail
 from taskloop.contracts import factorydb
 from taskloop.contracts.bd_errors import BdCommandFailure
+from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
 from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads
 from taskloop.contracts.runlife import KEEP_DAYS
 
 

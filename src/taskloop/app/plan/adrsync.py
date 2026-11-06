@@ -2,7 +2,7 @@
 folder has no decisions, and a read git cannot make leaves the cache as it was."""
 from taskloop.contracts import adrfiles
 from taskloop.contracts.adrs import AdrStore
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import SlotGitError
 
 

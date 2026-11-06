@@ -16,11 +16,13 @@ from taskloop.app.release import canary, clone, gate, manifest, publish, selfupd
 from taskloop.app.release.push import push_main, release_lock_path
 from taskloop.app.release.shell import Abort, Shell, say
 from taskloop.contracts.bd_errors import BdCommandFailure
+from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import MARKETPLACE, BeadId, parse_bead_id
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git, Spawner
+from taskloop.contracts.procport import Spawner
 from taskloop.contracts.rowstores import ReleaseResultStore
 from taskloop.contracts.snapshots import ReleaseResult
 

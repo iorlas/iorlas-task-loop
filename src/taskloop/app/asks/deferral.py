@@ -4,8 +4,8 @@ import time
 from collections.abc import Callable
 from typing import Final
 
+from taskloop.contracts.beadsport import BdFailure, BeadPatch, BeadQuery, Beads
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BdFailure, BeadPatch, BeadQuery, Beads
 
 FROM_REVIEW: Final = "from-review"
 PROMOTED: Final = "promoted:"  # + the day (YYYY-MM-DD): the label that counts a day's promotions, closed beads included
