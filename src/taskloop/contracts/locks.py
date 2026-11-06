@@ -1,7 +1,6 @@
 """Lock records: who holds the engine, a slot ticket, a named lock. Liveness is a pid probe, nothing more."""
 from typing import ClassVar, final
 
-import msgspec
 import stream_proc
 
 from taskloop.contracts.enums import LockWhat
@@ -24,10 +23,11 @@ class LockTimeout(TimeoutError):
 
 @final
 class EngineLock(Rec):
-    """<config>/locks/engine-<key>.lock: the run-task (or the loop, `by`) that owns the worktree, with the processes it started. A process
-    is named by pid and start token (pidcheck.proc_start): a reused pid is not the same process. pid 0: a worker outlived its engine."""
+    """<config>/locks/engine-<key>.lock: the run-task (or the loop, `by`) that owns the worktree, . A process is named by pid
+    and start token (pidcheck.proc_start): a reused pid is not the same process. pid 0: a worker outlived its engine (delegate says so:
+    `adapters.agent.running_for`); the lock names no worker."""
 
-    V: ClassVar[int] = 3
+    V: ClassVar[int] = 4
     pid: int
     started: float
     start: str = ""
@@ -35,8 +35,6 @@ class EngineLock(Rec):
     slot: str = ""
     slot_bead: str = ""
     by: str = "run-task"
-    route: tuple[int, str] | None = None
-    workers: list[tuple[int, str]] = msgspec.field(default_factory=list)
 
 
 @final

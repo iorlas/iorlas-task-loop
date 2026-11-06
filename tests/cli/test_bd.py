@@ -6,6 +6,7 @@ import pytest
 import support.paths  # noqa: F401
 from support.case import Case
 from support.tlmain import tl, tl_main
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import beadtools
 from taskloop.cli import bd
@@ -55,6 +56,7 @@ class BdExit(Case):
 
     def test_task_show_reaches_the_guarded_adapter_passthrough(self):
         context = mock.Mock()
+        context.who.config.root = Path(self.enterContext(TemporaryDirectory()))  # a config dir in the current layout
         context.who.actor = "tl-session"
         store = mock.Mock()
         store.passthrough.return_value = mock.Mock(out="shown\n", err="", code=0)
@@ -69,6 +71,7 @@ class BdExit(Case):
 
     def test_task_close_refusal_stops_before_adapter_execution(self):
         context, store = mock.Mock(), mock.Mock()
+        context.who.config.root = Path(self.enterContext(TemporaryDirectory()))
         refusal = mock.Mock(return_value="no land on record; use tl task close X --reason duplicate")
         with (mock.patch.object(tl, "Ctx", return_value=context),
               mock.patch.object(beadtools, "bd_store", return_value=store),

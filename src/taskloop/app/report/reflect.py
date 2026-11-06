@@ -24,7 +24,7 @@ from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.procport import Spawner
 from taskloop.contracts.snapshots import ReflectState
 from taskloop.contracts.stores import ReflectStateStore, ReposStore
-from taskloop.domain.report import matchers
+from taskloop.domain.lifecycle import matchers
 from taskloop.domain.report.reflect import (
     OWNERS,
     TITLE_SIMILAR,

@@ -6,7 +6,7 @@ from typing import Protocol
 from taskloop.adapters import bdcreate
 from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads, NewBead
 from taskloop.contracts.ids import BeadId
-from taskloop.domain.review import followups as fu
+from taskloop.domain import followups as fu
 from taskloop.stores.runlog import RunLog
 
 

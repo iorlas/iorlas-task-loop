@@ -13,7 +13,7 @@ from taskloop.app.slots.surface import SlotView
 from taskloop.contracts.gitport import SlotGit
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.slots import BranchPinned, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
-from taskloop.domain.land.matchers import NetText
+from taskloop.domain.matchers import NetText
 
 T = TypeVar("T")
 TRIES = 3  # a git lock (index.lock, a ref) held by another process is waited for this many times before the slot is broken

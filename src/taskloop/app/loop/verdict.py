@@ -9,7 +9,7 @@ from taskloop.contracts.config import ProfileReadError
 from taskloop.contracts.enums import Result
 from taskloop.contracts.run import RunReport
 from taskloop.contracts.slots import SlotFailCode
-from taskloop.domain.land.matchers import NetText
+from taskloop.domain.matchers import NetText
 
 NETWORK = "pause_network"
 FAULT_SLOT = "fault_slot"

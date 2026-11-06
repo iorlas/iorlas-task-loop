@@ -5,7 +5,7 @@ from typing import Protocol
 
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import SlotGitError
-from taskloop.domain.land.matchers import NetText
+from taskloop.domain.matchers import NetText
 
 
 class BlockedFor(Protocol):

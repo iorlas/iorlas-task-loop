@@ -8,8 +8,8 @@ from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.landed import Landed
 from taskloop.contracts.slots import MissingRevision, SlotGitError
 from taskloop.contracts.trace import RunTrace
+from taskloop.domain.lifecycle import matchers
 from taskloop.domain.reconcile.lost import BranchCommit
-from taskloop.domain.report import matchers
 
 LANDS = Callable[[str], list[float]]
 
