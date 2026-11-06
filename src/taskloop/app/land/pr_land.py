@@ -8,7 +8,7 @@ from typing import Protocol
 from taskloop.app.land.cmds import Cmds, Runs, Stop
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.gate import GatePass, Problem
-from taskloop.app.land.outbound import target
+from taskloop.app.land.outbound import last_fetched, target
 from taskloop.app.land.parts import FetchCheckout, OutcomeSteps
 from taskloop.app.land.push import stale
 from taskloop.app.land.push_evidence import failure
@@ -125,7 +125,8 @@ class PrLand:
             return problem
         fence.check(e.store, e.claim)
         sha, remote, branch = e.git.rev_parse(e.wt, "HEAD"), self.remote(), e.task_branch
-        done = e.git.push_lease(e.wt, remote, f"{sha}:refs/heads/{branch}")
+        ref = f"refs/heads/{branch}"
+        done = e.git.push_lease(e.wt, remote, f"{sha}:{ref}", last_fetched(e.git, e.wt, remote, ref))
         if not done.ok:
             kind = "PAUSE_NETWORK" if Push.transient(done.output) else "FAULT_LAND"
             raise e.blocked_for(f"{'paused' if kind == 'PAUSE_NETWORK' else 'failed'}: pushing {branch} to {remote} for the PR failed; "

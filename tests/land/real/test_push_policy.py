@@ -3,7 +3,6 @@ import json
 import sys
 import tempfile
 from pathlib import Path
-from unittest import mock
 
 from support.case import Case
 
@@ -12,11 +11,9 @@ import support.paths  # noqa: F401
 from support import gitq
 from support.engine_case import real_git
 
-from taskloop.adapters.checks_argv import ArgvChecks
 from taskloop.adapters.git import RealGit
 from taskloop.app.land.push_judge import PushStatus, judge_push
 from taskloop.contracts.env import snapshot
-from taskloop.contracts.ports import CheckSpec
 from taskloop.stores.memory import fake_stores
 
 
@@ -47,15 +44,8 @@ class PushPolicy(Case):
             assert tip != base
             env = snapshot()
 
-            def check(policy):
-                for step in json.loads(profile.read_text())["engine"]["checks"]:
-                    ArgvChecks(env, scratch_home=policy.check_scratch_home).run(CheckSpec(argv=step["argv"], cwd=str(repo)))
-                return 0
-
-            checked = mock.Mock(side_effect=check)
             decision = judge_push(str(repo), f"refs/heads/topic {tip} refs/heads/topic {'0' * 40}\n",
-                                  fake_stores(), RealGit(env), checked, env=env)
+                                  fake_stores(), RealGit(env), env=env)
             assert decision.status == PushStatus.REFUSED
             assert decision.reasons[0].startswith("profile_changed: refs/heads/topic")
-            checked.assert_not_called()
             assert not canary.exists()
