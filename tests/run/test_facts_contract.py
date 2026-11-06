@@ -5,9 +5,11 @@ import dataclasses
 from pathlib import Path
 
 import pytest
+from support.check_host import FakeCheckHost
 from support.engine_case import EngineTest
 from support.facts import FakeRepoKey, fake_facts
 from support.host_conformance import missing
+from support.who import who
 
 from taskloop.contracts import stagefacts as sf
 from taskloop.stores.runports import RunPorts
@@ -87,9 +89,6 @@ class FactsContract(EngineTest):
 
 class CheckHostOnFacts(EngineTest):
     def test_the_fake_check_host_is_a_view_of_its_facts_and_ports(self):
-        from support.check_host import FakeCheckHost
-        from support.who import who
-
         host = FakeCheckHost(self.wt, self.checks_engine().cfg, who().config)
         f, p = host.facts, host.ports
         assert (host.bead, host.wt, host.cfg, host.home, host.run_id, host.run_dir) == (f.bead, f.wt, f.cfg, f.home, f.run_id, f.run_dir)
