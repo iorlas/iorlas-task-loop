@@ -8,6 +8,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "dev"))
 import flakes  # noqa: E402
+
 from rules import ratchet_change as rc  # noqa: E402
 
 REL = "tests/quarantine.txt"
