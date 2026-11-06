@@ -38,6 +38,12 @@ def test_an_ignored_source_file_outside_the_allowlist_is_refused_by_name(path):
     assert path in fault.value.text and ".venv" not in fault.value.text
 
 
+@pytest.mark.parametrize("path", [".import_linter_cache/delegate.meta.json", ".mypy_cache/3.13/x.data.json", ".ruff_cache/0.1/y.json",
+                                  "pkg/.pytest_cache/v/cache/nodeids.json"])
+def test_the_tool_caches_of_the_default_allowlist_are_not_source(path):
+    guard_slot(host([path]))
+
+
 def test_the_repo_declares_its_own_allowlist():
     cfg = cfg_with(gate_ignored_allow=["generated/**"])
     guard_slot(host(["generated/Table.cs"], cfg))
