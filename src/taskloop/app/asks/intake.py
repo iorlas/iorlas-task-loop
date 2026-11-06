@@ -17,6 +17,7 @@ from taskloop.contracts.beadsport import BdFailure, BeadPatch, Beads
 from taskloop.contracts.dash import OwnerCause, Stick
 from taskloop.contracts.enums import AskKind
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.lookrows import LookRows
 from taskloop.domain import timespec
 
 HINT: Final = "owner_hint"
@@ -80,10 +81,11 @@ class Intake:
     """The owner's verbs for one repo's tracker. `by` is who says it."""
 
     def __init__(self, asks: AskStore, store: Beads, now: Callable[[], float], by: str, adrs: Callable[[str], AdrStore] | None = None,
-                 factory: Callable[[], Beads | None] | None = None) -> None:
-        """`adrs(repo)` is the decision store of a repo, `factory()` the tracker of the task-loop repo (None: none registered)."""
+                 factory: Callable[[], Beads | None] | None = None, look_rows: LookRows | None = None) -> None:
+        """`adrs(repo)` is the decision store of a repo, `factory()` the tracker of the task-loop repo (None: none registered),
+        `look_rows` the look items (None: the look verb refuses)."""
         self.asks, self.store, self.now, self.by = asks, store, now, by
-        self.adrs, self.factory = adrs, factory
+        self.adrs, self.factory, self.look_rows = adrs, factory, look_rows
         asks.before = ledgercomments.record(store)  # every row an owner verb causes is a comment on the bead first
 
     def note(self, bead: BeadId, text: str) -> None:
@@ -152,7 +154,9 @@ class Intake:
 
     def look(self, item: str, verdict: str, note: str = "", look_bead: str = "") -> tuple[str, str]:
         """Answer one look item (good, redo with a note, or undo). -> (the item's status after, "" or why nothing changed)."""
-        return looks.answer(self.store, item, verdict, note, self.now(), look_bead)
+        if self.look_rows is None:
+            return "", "The look items are not wired to a database here."
+        return looks.answer(self.store, self.look_rows, item, verdict, note, self.now(), look_bead)
 
     def cause(self, bead: BeadId, scope: str, cause: str) -> str:
         """Record why a run stopped or an ask was asked, for `scope` (a run id or an ask id). -> "" or why it was refused."""

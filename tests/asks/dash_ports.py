@@ -9,6 +9,7 @@ from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.lookrows import LookRows
 from taskloop.contracts.paths import ConfigDir
 from taskloop_dash.env import Ports
 
@@ -21,7 +22,7 @@ def answering(store: Callable[[str], Beads], config: Path | str, by: str = "dash
     def adrs(repo: str) -> AdrStore:
         return AdrStore.at(ConfigDir(config), repo)
 
-    intake = owner_intake(AskStore.at(ConfigDir(config)), store_now, clock, by, adrs, factory)
+    intake = owner_intake(AskStore.at(ConfigDir(config)), store_now, clock, by, adrs, factory, LookRows(ConfigDir(config)))
 
     def answer(repo: str, bead: str, action: AskAction, text: str, amend: bool) -> tuple[Ask | None, str]:
         return intake(repo).answer(BeadId(bead), action, text, amend)
