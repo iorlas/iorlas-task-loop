@@ -7,8 +7,7 @@ import msgspec
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.enums import Outcome, WaitWhat, WhyCode
 from taskloop.contracts.row import Row
-from taskloop.contracts.trace import Tokens
-from taskloop.contracts.wire import load
+from taskloop.contracts.wire import Rec, load
 
 
 class LogRec(Row):
@@ -59,6 +58,16 @@ class CallStart(LogRec, tag="call_start"):
 
 
 @final
+class CallTokens(Rec):
+    """One call's tokens as the run log keeps them: Tokens plus cache_write, null where the vendor does not report it (codex, grok, zai)."""
+
+    in_: int = msgspec.field(default=0, name="in")
+    cached: int = 0
+    out: int = 0
+    cache_write: int | None = None
+
+
+@final
 class CallEnd(LogRec, tag="call_end"):
     id: str
     status: str
@@ -68,8 +77,8 @@ class CallEnd(LogRec, tag="call_end"):
     model: str = ""
     effort: str = ""
     secs: float = 0.0
-    tokens: Tokens = msgspec.field(default_factory=Tokens)
-    cost: float = 0.0
+    tokens: CallTokens = msgspec.field(default_factory=CallTokens)
+    cost: float | None = None  # null when cost_source is unknown: a cost the vendor did not give is not 0
     cost_source: str = ""  # delegate's usage.cost_source (harness, free, unknown); "" in a log written before it: cost 0 then is not known
     family: str = ""
     flag: str | None = None
