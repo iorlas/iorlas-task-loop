@@ -201,6 +201,8 @@ class EngineConfig(Rec):
     owner_author: str = ""  # exact bd comment author; unset means no comment is an owner instruction
     # A check runs with a private empty HOME when true; default to the real HOME because toolchains keep licences under it.
     check_scratch_home: bool = False
+    # true: a check runs with no network (sandbox-exec on macOS, unshare -rn on Linux; loopback stays). A host that cannot only warns once.
+    check_net_isolate: bool = False
     pick_label: str = ""
     needs_info_label: str = "needs-info"
     skip_labels: list[str] = msgspec.field(default_factory=list)

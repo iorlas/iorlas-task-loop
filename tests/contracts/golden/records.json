@@ -1529,6 +1529,7 @@
    "check_links": true,
    "owner_author": "",
    "check_scratch_home": true,
+   "check_net_isolate": false,
    "pick_label": "auto",
    "needs_info_label": "needs-info",
    "skip_labels": [],
