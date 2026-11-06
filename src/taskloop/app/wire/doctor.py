@@ -196,6 +196,8 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
         print(link_line)  # a foreign `tl` is a WARN below
     warns = git_warnings(repo, source, git) + layout_warnings(repo, source, git) + bead_lint_warnings(repo, who) + slot_warns
     warns += [link_line] if foreign else []
+    warns += [] if source[0].engine.writer_exec_allow else [
+        "plan check argv unrestricted: the profile lists no engine.writer_exec_allow, so a planner's own check may run any command"]
     warns += [f"run {r} is lost: its process is gone and it recorded no end" for r in runlife.reconcile(who.config, time.time())]
     print(f"contracts: {Path(contracts.__file__).resolve().parent}")
     print(f"engine: {pin.describe(pin.families(source[0].engine.writer_family, []))}")
