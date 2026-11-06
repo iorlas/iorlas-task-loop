@@ -4,6 +4,7 @@
 open Stuck episode. Left at its default: the live box's `subtasks` (no source)."""
 
 from collections.abc import Sequence
+from typing import Final
 
 from taskloop.contracts.bead import Bead, Comment
 from taskloop.contracts.dash import Artifact, AskCard, BeadDetail, CheckCount, LiveBox, Marker, Msg, Phase
@@ -27,8 +28,9 @@ def comment_msg(c: Comment) -> Msg:
     return Msg(t=parse_ts(c.created_at) or 0.0, icon=COMMENT_ICON, who=c.author, md=c.text)
 
 
-LAND_WHY = {"gate": "gate red, fix round", "conflict": "rebase conflict, fix round", "verify": "checks red, fix round",
-            "stale": "main moved under the gate, gate again"}
+LAND_WHY: Final[dict[str, str]] = {
+    "gate": "gate red, fix round", "conflict": "rebase conflict, fix round", "verify": "checks red, fix round",
+    "stale": "main moved under the gate, gate again"}
 
 
 def land_try_text(x: LandTry) -> str:
