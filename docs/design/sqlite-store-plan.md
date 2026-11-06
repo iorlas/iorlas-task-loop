@@ -96,7 +96,9 @@ it implies.
 | 4 parks, 5 pauses, reexec, 16 storm | `wait` (kind, wake_at, wake_on, facts, cleared) | the schema comment already says: park writes go through the loop-owned wait store |
 | 7 call state | `effect` (key = bead+call key, state intent/returned/consumed, receipt) | this is exactly the outbox the review asks for |
 | 9 landed | `effect` (`land:<bead>`), outbox only | class O (2a): git and receipts are the record; no `landed` table |
-| 14, 15, 17, 18, 21 | `kv` (key, value JSON, stamp) | cold singleton documents: no schema of their own |
+| 14, 15 (pin, bad versions, release result), 17, 18 (dash and reflect state) | `kv` (key, value JSON, stamp) | cold singleton documents: no schema of their own (`docrows.singleton`) |
+| 15 `repos.json` | file until its own slice | locked read-modify-write with a v1 converter and dashboard readers: its own PR |
+| 21 `host.json` | stays a file | a person writes it by hand (setup keeps an existing one): not machine state |
 | 19 ADRs | `kv` read cache of `docs/adr/NNNN-title.md` | class R (2a): the file in git is the record, the verbs write it |
 | decision asks, `ask_ledger` | `ask` (open asks only) | class R (2a): the answer is a bead comment `kind=decision` |
 
