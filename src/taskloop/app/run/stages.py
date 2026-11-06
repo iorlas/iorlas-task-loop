@@ -273,9 +273,9 @@ def finish_step(e: RunHost, step: Step, bead: Bead) -> Step | None:
         return None
     else:  # verify
         e.steps.begin(step, "verify")
-        if e.verifier.run(e.unchecked):
+        if e.verifier.run(e.review.unchecked):
             raise ValueError("verify refused: unchecked items still need the owner")
-        e.unchecked = []
+        e.review.unchecked = []
         following = Step.GATE
     return following
 

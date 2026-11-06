@@ -77,9 +77,9 @@ class FileNotes:
             old = e.stores.asks.get(e.bead)
             if old:
                 e.stores.asks.close(e.bead, old.id, "the run landed", time.time())
-            if e.unverified:
+            if e.review.unverified:
                 e.comment("Land (engine): " + e.owner_look.unverified_text())
-            look = [u for u in e.unchecked if u["kind"] == "other" and not e.judge.is_look(u)]
+            look = [u for u in e.review.unchecked if u["kind"] == "other" and not e.judge.is_look(u)]
             if look:
                 beadtools.attempt(e.store.add_label, e.bead, "needs-owner-check")
                 e.comment("Look (engine): landed, but nobody checked: " + "; ".join(u["what"] for u in look))
@@ -121,8 +121,8 @@ class Reflect:
         e = self.e
         notes = e.checkpoints.notes() or noted or Notes(filed=0, unfiled=0)  # the checkpoint's: a restart has no memory of FileNotes
         verified = ""
-        if e.verified:
-            verified = "; self-verified=" + ", ".join("{} {}".format(sum(x["verdict"] == k for x in e.verified), k) for k in VERDICTS)
+        if e.review.verified:
+            verified = "; self-verified=" + ", ".join("{} {}".format(sum(x["verdict"] == k for x in e.review.verified), k) for k in VERDICTS)
         unfiled = f" unfiled={notes.unfiled};" if notes.unfiled else ""
         text = outcomes.reflection_text(e.reflection)
         e.comment(f"Reflect (engine): outcome={outcome};{text} filed={notes.filed};{unfiled} {stats}"

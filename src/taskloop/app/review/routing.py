@@ -48,11 +48,11 @@ class Routing:
                                   lambda: self.names_code(u["what"])), source
 
     def settle_engine_step(self, u: Item) -> None:
-        self.e.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "why": AT_LAND, "evidence": AT_LAND})
+        self.e.review.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "why": AT_LAND, "evidence": AT_LAND})
 
     def add_unverified(self, u: Item, why: str) -> None:
-        if u["what"] not in {x["what"] for x in self.e.unverified}:
-            self.e.unverified.append({"what": u["what"], "kind": u["kind"], "why": why, "source": u.get("source") or ""})
+        if u["what"] not in {x["what"] for x in self.e.review.unverified}:
+            self.e.review.unverified.append({"what": u["what"], "kind": u["kind"], "why": why, "source": u.get("source") or ""})
 
     def backed_by_leftover(self, what: str) -> bool:
         """True when an owner-review follow-up bead for this item is already in the leftovers (tl-bxk.13.1): the owner sees it there, so

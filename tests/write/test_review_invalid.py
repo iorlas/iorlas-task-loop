@@ -88,4 +88,4 @@ class ReviewInvalid(EngineTest):
         s.wrote_unchecked = [earlier, written]
         with mock.patch.object(e.checkpoints, "keep_pending"):
             e.stage_loop.reviewing.unavailable(s)
-        assert e.unchecked == [earlier, written]
+        assert e.review.unchecked == [earlier, written]

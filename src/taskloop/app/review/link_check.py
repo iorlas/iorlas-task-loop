@@ -26,12 +26,12 @@ class LinkCheck:
         except Exception as err:  # no diff to read is no check, never a failed run
             e.warn(f"link check skipped: {err}")
             return
-        todo = [u for _, _, u in found if u not in e.link_ok]
+        todo = [u for _, _, u in found if u not in e.review.link_ok]
         if not todo:
             return
-        todo = [u for u in todo if e.link_tries.get(u, 0) < 2][:LINK_CAP]  # each link is opened twice at most, 200 per review
+        todo = [u for u in todo if e.review.link_tries.get(u, 0) < 2][:LINK_CAP]  # each link is opened twice at most, 200 per review
         try:
-            got = links.check_all(todo, fn=e.link_fn or links.check)
+            got = links.check_all(todo, fn=e.review.link_fn or links.check)
         except Exception as err:  # opening links must never stop a run
             e.warn(f"link check skipped: {err}")
             return
@@ -45,19 +45,19 @@ class LinkCheck:
     def remember(self, got: dict[str, tuple[bool, str]]) -> None:
         e = self.e
         for url, (ok, why) in got.items():
-            e.link_tries[url] = e.link_tries.get(url, 0) + 1
+            e.review.link_tries[url] = e.review.link_tries.get(url, 0) + 1
             if ok:
-                e.link_ok.add(url)
-                e.link_bad.pop(url, None)
+                e.review.link_ok.add(url)
+                e.review.link_bad.pop(url, None)
             elif why != links.UNKNOWN:  # out of time is no verdict
-                e.link_bad[url] = why
+                e.review.link_bad[url] = why
 
     def report(self, found: list[tuple[str, str, str]], review: Any) -> None:
         e = self.e
         seen: set[tuple[str, str]] = set()
         for path, line, url in found:
-            why = e.link_bad.get(url)
-            if url in e.link_ok or not why or (path, url) in seen:
+            why = e.review.link_bad.get(url)
+            if url in e.review.link_ok or not why or (path, url) in seen:
                 continue
             seen.add((path, url))
             if Wording.marked_unverified(line):

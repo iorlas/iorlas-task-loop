@@ -13,7 +13,7 @@ def known[T: Rec](cls: type[T], items: list[dict[str, Any]]) -> list[T]:
 
 
 def review_of(e: Any) -> ReviewState:
-    return ReviewState(unchecked=known(Unchecked, e.unchecked), unverified=known(Unverified, e.unverified), filed=list(e.filed),
+    return ReviewState(unchecked=known(Unchecked, e.review.unchecked), unverified=known(Unverified, e.review.unverified), filed=list(e.filed),
                        unfiled=list(e.unfiled))
 
 
@@ -22,6 +22,6 @@ def apply_review(e: Any, review: ReviewState, *, unchecked: bool, late: bool = F
     follow-ups filed or refused only from a checkpoint this engine left (`late`)."""
     if late:
         e.filed, e.unfiled = list(review.filed), list(review.unfiled)
-    e.unverified = [u.to_dict() for u in review.unverified]
+    e.review.unverified = [u.to_dict() for u in review.unverified]
     if unchecked:
-        e.unchecked = [u.to_dict() for u in review.unchecked]
+        e.review.unchecked = [u.to_dict() for u in review.unchecked]

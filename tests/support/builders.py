@@ -24,5 +24,5 @@ def make_engine(wt, bead="t-1", cfg=None, script=None, attrs=None, **seams):
     seams.setdefault("clock", FakeClock())
     e = engine.Engine(BeadId(bead), str(wt), c, **seams, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
     for k, v in (attrs or {}).items():
-        setattr(e.state if k in LOOK_FIELDS else e, k, v)  # the look stage's checkpointed fields are the run state's
+        setattr(e.state if k in LOOK_FIELDS else e.review if k in vars(e.review) else e, k, v)  # the look stage's checkpointed fields are the run state's; the review stage's are its own
     return e

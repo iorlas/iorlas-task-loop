@@ -142,7 +142,7 @@ class Settles:
         return left, failed
 
     def settled(self, u: Item, evidence: str, why: str, verdict: str = "settled") -> None:
-        self.e.verified.append({"what": u["what"], "kind": u["kind"], "verdict": verdict, "why": why, "evidence": evidence})
+        self.e.review.verified.append({"what": u["what"], "kind": u["kind"], "verdict": verdict, "why": why, "evidence": evidence})
 
     def by_name(self, u: Item, names: list[str], results: list[Any]) -> bool:
         what = " ".join(u["what"].split()).lower()

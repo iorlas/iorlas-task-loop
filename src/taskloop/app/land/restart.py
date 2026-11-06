@@ -91,5 +91,5 @@ class Restart:
         e.old_plan, e.amend_why, e.amend_text, e.replan_first = None, "", "", False
         e.plan_summary, e.last_summary, e.amended = "", "", False
         e.state = e.state.start_again()
-        e.unverified = list[dict[str, str]]()
-        e.unchecked = list[dict[str, str]]()
+        e.review.unverified = list[dict[str, str]]()
+        e.review.unchecked = list[dict[str, str]]()

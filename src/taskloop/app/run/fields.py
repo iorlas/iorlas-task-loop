@@ -10,6 +10,7 @@ from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.runner import Checker
 from taskloop.app.look.state import LookState
+from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.budget import Budget
 from taskloop.app.run.calls import Calls
 from taskloop.app.run.context import RunContext
@@ -90,18 +91,13 @@ class RunFields(StateAttrs):
                                       "tests_removed": 0, "tokens_in": 0, "tokens_cached": 0, "tokens_out": 0}
         self.session, self.fresh = who.session, fresh
         self.bead_parent = ""  # tl-bxk.10.23
+        self.review = ReviewLive()  # the review stage's state: the unchecked and unverified lists, the verifier's answers, the links tried
         self.filed: list[str] = []
         self.unfiled: list[Unfiled] = []  # follow-ups bd refused (the ReviewState keeps both)
-        self.unverified: list[Open] = []  # tl-bxk.10.28: items that land for the owner
-        self.link_ok: set[str] = set()  # tl-bxk.7: links opened from this host
-        self.link_bad: dict[str, str] = {}
-        self.link_fn: Any = None  # a test's check
-        self.link_tries: dict[str, int] = {}
         self.amended = False  # a plan was amended or replanned: its first stage does not start at the task's base
         self.strays: list[str] = []  # unaccepted untracked files moved to evidence/strays before the land gate (tl-bxk.10.24)
         self.cap_granted = False
         self.old_plan, self.amend_text, self.amend_why = None, "", ""  # set where a checkpoint's plan is kept to be amended
-        self.unchecked: list[Open] = []  # what the last review of this run says nobody checked (each review re-judges it)
         self.answered: Any = None  # the owner ask this run starts from, once answered
         self.verify_answer = ""  # the owner's answer to a verify ask, when it asks for more than a yes
         self.stuck_why = ""
@@ -123,7 +119,6 @@ class RunFields(StateAttrs):
         self.land_fields()
 
     def land_fields(self) -> None:
-        self.verified: list[Open] = []  # the verifier's answer per unchecked item at land: in the trace and on the bead
         self.write_rounds: list[Open] = []  # per write round: resumed, input tokens, turns, prompt chars, context k, why fresh
         self.last_summary = ""  # the last write's summary: a fresh writer is told it
         self.state, self.checkpoints = RunState(), Checkpoints(self)  # what survives a park (contracts/checkpoint.py), and its one writer

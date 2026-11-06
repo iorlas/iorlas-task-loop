@@ -67,7 +67,7 @@ class WriteRound:
         dtail = ""  # what a resumed writer still needs that its first prompt did not say for this stage
         if s.last and not e.writer.last_stage:  # the acceptance cases run now: it has not been told
             dtail += CASES_NOW
-        if e.unchecked:
+        if e.review.unchecked:
             dtail += UNCHECKED_TEXT
         delta = None if fresh else e.hand.delta(s.i + 1, st["goal"], ", ".join(st["files"]), anchors_text(st), stage_checks,
                                                 where_text, s.feedback, dtail + e.judge.look_write(st))

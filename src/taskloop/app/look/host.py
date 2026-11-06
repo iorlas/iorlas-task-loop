@@ -18,6 +18,11 @@ from taskloop.contracts.wire import Open
 from taskloop.stores.runlog import RunLog
 
 
+class OwnerItems(Protocol):
+    """What the review stage left for the owner (the engine's `review`): the look stage files them in the owner-look bead."""
+    unverified: list[Open]
+
+
 class LookSteps(Protocol):
     def begin(self, step: str, text: str, **meta: object) -> int: ...
     def outcome(self, outcome: str, detail: str = ...) -> None: ...
@@ -97,7 +102,7 @@ class LookHost(Protocol):
     pause_role: str
     pause_lane: str
     leftovers: list[dict[str, str]]
-    unverified: list[Open]
+    review: OwnerItems
     artifact_repo: str
     render_stale: bool
     look: LookState
