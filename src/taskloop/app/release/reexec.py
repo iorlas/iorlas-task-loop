@@ -6,15 +6,15 @@ from collections.abc import Sequence
 
 from jsonl_log import close_held
 
+from taskloop.contracts import rundocs
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir, RunFiles
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import NetPause, Reexec, ReexecNote
 from taskloop.contracts.waitrows import NET_PAUSE, REEXEC, WaitDoc
 from taskloop.domain.lanes import policy as lp
 
-RELOAD_FALLBACK_S = 120  # a run-task that dies this soon after an exec is put back on the version it came from (by the loop)
 NET_PAUSE_ADOPT_S = lp.KNOBS["net_pause_max_s"]  # a run paused for the network is taken up again by the next run-task within this long
 
 
@@ -43,7 +43,7 @@ def take_net_pause(home: ConfigDir, bead: BeadId) -> NetPause | None:
     store.delete()
     if note is None or time.time() - note.t > NET_PAUSE_ADOPT_S:
         return None
-    return note if RunFiles(home.run_dir(note.run)).pause().is_file() else None
+    return note if rundocs.pause(home, note.run).get() is not None else None
 
 
 def take_reexec(env: Env) -> Reexec | None:

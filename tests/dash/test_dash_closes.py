@@ -14,23 +14,12 @@ import support.paths  # noqa: F401
 from support.dashlogs import T
 from support.narrow import must
 
-from taskloop.app.run.trace import why_code
 from taskloop.contracts import wire
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import RunId
-from taskloop.contracts.kinds import ASKS, Kind
-from taskloop.contracts.log import Close
 from taskloop.contracts.trace import RunTrace, Stats
-from taskloop.domain import outcome as oc
-from taskloop.domain.asks.spec import AskSpec
 from taskloop_dash.env import Env
 from taskloop_dash.readers.records import Records
-
-
-def close_of(kind: Kind) -> Close:
-    spec = AskSpec.__new__(AskSpec) if kind in ASKS else None  # the word needs no spec's content
-    word = oc.make(kind, "x", spec=spec).word
-    return Close(t=T, outcome=word, why_code=why_code(kind.value, word), why="x")
 
 
 def trace(run: str, outcome: Outcome, ended: float, replans: int = 0) -> RunTrace:

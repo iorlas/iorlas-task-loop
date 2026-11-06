@@ -8,7 +8,7 @@ from typing import Any, Final, Protocol, override
 
 from jsonl_log import KEEP, ROTATE_BYTES, Entry
 
-from taskloop.contracts import docstore, events, log, paths, wire
+from taskloop.contracts import docstore, events, factorydb, log, paths, timedrows, wire
 from taskloop.contracts.ask import Ask, AskAnswer, ThreadEntry
 from taskloop.contracts.askrows import AskRows, DbDocs, DbLedger
 from taskloop.contracts.dash import OwnerCause, Stick
@@ -23,7 +23,6 @@ from taskloop.contracts.reponame import repo_name
 from taskloop.contracts.rotating import RotatingJsonl
 from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.snapshots import (
-    DashState,
     Pin,
     ReflectState,
     ReleaseResult,
@@ -83,8 +82,34 @@ def _one(cls: type) -> Any:
 
 
 class RunLog(JsonlStore[log.EngineLog]):
+    """The engine log of one run. Each end record that completes a timed thing also adds its `timed` row (contracts/timedrows.py); the
+    row is best effort, the log is the record."""
+
     def __init__(self, cfg: paths.ConfigDir, run: str) -> None:
         super().__init__(cfg.engine_log(run), log.decode)
+        self.cfg, self.run = cfg, run
+        self.tracker: timedrows.Tracker | None = None
+
+    def warm(self) -> timedrows.Tracker:
+        """The pairing state of this run: a run that exec'd or took up again has the starts of its earlier process in the file."""
+        if self.tracker is None:
+            self.tracker = timedrows.Tracker(self.run)
+            for earlier in self.read_from(0).items:
+                self.tracker.feed(earlier.rec)
+        return self.tracker
+
+    @override
+    def append(self, rec: log.EngineLog) -> int:
+        tracker = None
+        with contextlib.suppress(OSError, factorydb.DatabaseError):
+            tracker = self.warm()  # read before the append: the file does not hold `rec` yet
+        at = super().append(rec)
+        if tracker is not None:
+            item = tracker.feed(rec)
+            if item is not None:
+                with contextlib.suppress(OSError, factorydb.DatabaseError, factorydb.sqlite3.Error):
+                    timedrows.add(self.cfg, item)
+        return at
 
 
 class EventLog(JsonlStore[events.Event]):
@@ -169,6 +194,7 @@ class AskStore:
         self.docs = docs
         self.ledger = ledger
         self.held = held
+        self.before: Callable[[LedgerEntry], None] | None = None  # the record that comes first: a bead comment (app/asks/ledgercomments.py)
 
     @classmethod
     def at(cls, cfg: paths.ConfigDir) -> AskStore:
@@ -182,10 +208,17 @@ class AskStore:
         """One ledger row of this transition, carrying the ask's answer, cause and outcome as they are now."""
         if self.ledger is not None:
             answer = (a.answer.text or a.answer.action) if a.answer else ""
-            self.ledger.append(LedgerEntry(
+            self.append(LedgerEntry(
                 t=t, event=event, ask=a.id, bead=a.bead, repo=a.repo, question=a.decision, key=a.key, blocking=a.blocking,
                 cause=a.owner_cause, cause_by=a.cause_by, answer=answer, outcome=a.outcome, outcome_ref=a.outcome_ref,
                 similar=list(a.similar) if event == "raise" else [], why=why))
+
+    def append(self, entry: LedgerEntry) -> None:
+        """The comment first (`before`, when set: a refusal leaves no row), then the row: the comment is the record, the row its cache."""
+        if self.before is not None:
+            self.before(entry)
+        if self.ledger is not None:
+            self.ledger.append(entry)
 
     def rows(self) -> list[LedgerEntry]:
         """Every ledger row, oldest first ([] for a store with no ledger)."""
@@ -339,7 +372,7 @@ class AskStore:
         rows = [row for row in self.history(ask_id) if row.event != "answer_refused"]
         if not rows or self.ledger is None:
             return False
-        self.ledger.append(rows[-1].replace(**{"t": now, "event": event, "similar": [], "why": "", **changes}))
+        self.append(rows[-1].replace(**{"t": now, "event": event, "similar": [], "why": "", **changes}))
         return True
 
     def correct_cause(self, bead: BeadId, ask_id: str, cause: OwnerCause, now: float) -> bool:
@@ -500,11 +533,6 @@ class PinStore(RowDoc[Pin]):
 class ReleaseResultStore(RowDoc[ReleaseResult]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
         super().__init__(singleton(cfg, ReleaseResult, "release:last", cfg.release_result()).docs, "")
-
-
-class DashStateStore(RowDoc[DashState]):
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(singleton(cfg, DashState, "dash:state", cfg.dash_state()).docs, "")
 
 
 class BadVersionStore(RowDoc[BadVersions]):

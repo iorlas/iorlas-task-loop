@@ -64,7 +64,9 @@ class Probe:
         assert r["hosts"][host] == "ok"
 
     def test_down_when_nothing_connects(self):
-        r: Any = netprobe.probe([closed_port()], connect=lambda addr, timeout: (_ for _ in ()).throw(OSError("refused")))
+        r: Any = netprobe.probe(
+            [closed_port()], resolve=lambda name, port: name, connect=lambda addr, timeout: (_ for _ in ()).throw(OSError("refused"))
+        )
         assert (r["up"], r["why"]) == (False, "offline")
 
     def test_a_dns_outage_is_not_up_even_when_an_ip_literal_answers(self):
@@ -196,7 +198,7 @@ class NotTheLanesFault:
         ]
         st = led.fold(rows)
         v = led.view(st, "OPENAI_SUBSCRIPTION", "m", 1100.0)
-        assert (v.state, v.usable, st.pairs, st.lanes) == ("up", True, {}, {})
+        assert (v.state, v.usable, {k: v for k, v in st.keys.items() if '|' in k}, st.outs) == ("up", True, {}, {})
 
     def test_a_failure_that_names_no_cause_becomes_network_only_when_the_net_is_down(self):
         d: dict[str, Any] = {"lane": "OPENAI_SUBSCRIPTION"}

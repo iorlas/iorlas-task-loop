@@ -115,9 +115,6 @@ def without_shims(fn):
 EXIT_127 = pytest.mark.skipif(os.name == "nt", reason="the engine reads a missing tool as bash's exit 127; cmd.exe reports it as exit 1")
 
 
-SH_FAKE = pytest.mark.skipif(os.name == "nt", reason="the bd fake is a #!/bin/sh script, which Windows cannot execute")
-
-
 NO_FCNTL = pytest.mark.skipif(os.name == "nt", reason="the lock is fcntl; tl has none on Windows (documented no-op)")
 
 

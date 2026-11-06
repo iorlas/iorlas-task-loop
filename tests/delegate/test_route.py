@@ -16,7 +16,6 @@ from delegate.app import net, usage
 from delegate.contracts.routing import Settings
 from delegate.contracts.state import StateDoc
 from delegate.contracts.stores import locked
-from delegate.domain.health import ledger as health_ledger
 from delegate.domain.lanes.lane import Lane
 from delegate.domain.time import spec
 from support.tmpdir import TemporaryDirectory, mkdtemp
@@ -90,10 +89,6 @@ def decide(role, ls, st=None, **args):
     a = {"authored_by": None, "failed": [], "premium": None, "allow_degraded": False}
     a.update(args)
     return support.decide(role, copy.deepcopy(CFG), ls, st or {}, T, a)
-
-
-def health_mod():
-    return health_ledger
 
 
 def argparse_ns(role, **kw):
