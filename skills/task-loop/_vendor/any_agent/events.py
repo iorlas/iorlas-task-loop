@@ -1,10 +1,8 @@
 """HarnessEvent: what a harness's parser says happened, one record per fact. In memory only (never written to disk): each harness's
 `parse_line` turns one line of its output into zero or more of these, once, and the supervisor, the live sink and the classifier all read
-the
-same records."""
+the same records."""
 
-from delegate.contracts.codec import record
-from delegate.contracts.json_types import Json
+from any_agent._json import Json, record
 
 
 @record

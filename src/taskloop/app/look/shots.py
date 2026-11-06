@@ -8,10 +8,8 @@ from typing import Any
 from taskloop.adapters import looks
 from taskloop.adapters.check_files import repo_key
 from taskloop.app.artifacts import store
-from taskloop.app.artifacts.keep import Keeper, place
+from taskloop.app.artifacts.keep import Keeper
 from taskloop.contracts.artifact import ArtifactMeta, ArtifactSlot
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.log import Artifacts
 from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import SlotGitError
 from taskloop.contracts.wire import Refused
@@ -106,9 +104,14 @@ class Pictures:
     def look_ready(self, st: Any):
         return bool(self.shot_methods()) and self.stage_visual(st)
 
-    def artifacts_dir(self, bead: BeadId | None = None) -> Path:
-        """Where this bead's pictures are kept (the dashboard serves them): outside the repo and every worktree."""
-        return self.e.home.artifacts(bead or self.e.bead)
+    def show_pictures(self) -> list[tuple[str, ArtifactMeta]]:
+        """The run's pictures the owner may want to see (role before, after or result), oldest first, each with its address
+        `artifact:<repo>/<bead>/<run>/<stage>-<attempt>/<name>`: the store is the one record, so a crash after the land loses none."""
+        e = self.e
+        e.artifact_repo = e.artifact_repo or repo_key(self.git, e.wt)
+        slot = ArtifactSlot(repo=e.artifact_repo, bead=e.bead, run=e.run_id, stage="", attempt=0)
+        return [(f"artifact:{e.artifact_repo}/{e.bead}/{e.run_id}/{f.parent.name}/{m.name}", m)
+                for f, m in store.run_listing(e.home.artifact_store(), slot) if m.kind in IMAGE_KINDS and m.role != "progress"]
 
     def before_pictures(self) -> list[tuple[Path, ArtifactMeta]]:
         """The pictures the worker registered with role `before` in this run: the worker says what is a before, nothing is matched."""
@@ -192,29 +195,6 @@ class Pictures:
                       role="result", now=e.now(), cap=int(e.cfg.evidence_cap_mb) << 20)
         except (Refused, OSError) as err:
             e.warn(f"render {name} not registered as an artifact: {err}")
-
-    def copy_looks(self):
-        """The screenshots of a visual change are kept like artifacts (config dir, the dashboard's bead page), never in the repo;
-        one Artifacts record names them."""
-        e = self.e
-        vp, shots = self.visual_cfg(), self.shots()
-        if not (vp and shots and visual_hit(vp, e.checkout.changed_paths())):
-            self.persist_look()
-            return
-        dest, names = self.artifacts_dir(), list[str]()
-        for s in shots:
-            name = s.replace("/", "-")
-            try:
-                place(e.evidence_dir / s, dest / name, None)
-            except OSError as err:
-                e.warn(f"screenshot {s} not kept: {err}")
-                continue
-            names.append(name)
-        if names:
-            cur = e.steps.cur
-            e.log.emit(Artifacts(id=cur.id if cur else "land", step=cur.step if cur else "land", bead=e.bead, names=names))
-        e.look_paths = names
-        self.persist_look()
 
     def persist_look(self):
         """What the owner-look bead needs goes into the checkpoint, so a crash after the land still files it."""

@@ -1,4 +1,4 @@
-"""Supervisor: run one worker to its end (D3). It spawns the harness's launch in a session of its own, pumps each output line into the
+"""Supervisor: run one worker to its end. It spawns the harness's launch in a session of its own, pumps each output line into the
 harness parser ONCE, routes the parsed events (the turn rules, the live file, the vendor ref, the secret policy), ticks the watchers about
 every half second and stops the worker's tree when one fires, on the call's timeout, or when the caller dies. What the caller wants to
 hear comes in a `RunHooks` for this run (no process-wide callback lists); what happened comes back as a `RunOutcome`.
@@ -17,19 +17,58 @@ import time
 from collections.abc import Callable
 from dataclasses import field
 from pathlib import Path
-from typing import IO
+from typing import IO, Literal, Protocol
 
-from delegate.adapters import procs
-from delegate.adapters.harness.base import Harness, LaunchSpec, Summary
-from delegate.app import watch
-from delegate.app.publish import LiveSink, end_status
-from delegate.contracts import events as ev
-from delegate.contracts import wire
-from delegate.contracts.codec import mutable
+from any_agent import events as ev
+from any_agent import procs, watch
+from any_agent._json import mutable
+from any_agent.protocol import Harness, LaunchSpec, Summary
+from any_agent.watch import Limits
 
 LANE_GONE_EVERY = 10  # seconds between looks at whether the lane was marked out by someone else
 NET_GRACE_S = 15  # how long a worker may say "waiting for network" before one probe decides whether to stop it
 POLL_S = 0.5
+
+
+type EndStatus = Literal["done", "error", "killed", "timeout"]
+
+
+class LiveSink(Protocol):
+    """Where a run reports what the worker is doing right now (a live file, a dashboard). Every call is from the supervisor's threads
+    and may not raise."""
+
+    def started(self, pid: int) -> None: ...
+
+    def feed(self, e: ev.HarnessEvent) -> None: ...
+
+    def poll(self, idle_s: float) -> None: ...
+
+    def end(self, status: EndStatus, cost_usd: float | None = None) -> None: ...
+
+
+class NullSink:
+    """The sink of a caller that watches nothing."""
+
+    def started(self, pid: int) -> None:
+        pass
+
+    def feed(self, e: ev.HarnessEvent) -> None:
+        pass
+
+    def poll(self, idle_s: float) -> None:
+        pass
+
+    def end(self, status: EndStatus, cost_usd: float | None = None) -> None:
+        pass
+
+
+def end_status(timed_out: bool, hung: str | None, stop: str | None, rc: int | None) -> EndStatus:
+    """A run's outcome as its end status."""
+    if timed_out:
+        return "timeout"
+    if hung or stop == "stall":
+        return "killed"
+    return "done" if stop == "answer" or rc == 0 else "error"
 
 
 @mutable
@@ -39,15 +78,15 @@ class RunHooks:
     started: Callable[[procs.Worker], None] | None = None  # the process exists: its pid, group and start token
     ref: Callable[[str], None] | None = None  # the vendor named its session
     beat: Callable[[float], None] | None = None  # the worker printed something (wall time, at most every 30 s)
-    idle_s: float | None = None  # run --idle: seconds of silence before the worker is hung (None = the CLI's limit)
+    idle_s: float | None = None  # seconds of silence before the worker is hung (None = the harness's limit)
     unattended: bool = False  # the caller is an engine: stop when it dies
-    stops: list[wire.WorkerEnd] = field(default_factory=list)  # one report per tree stop made for this run
+    stops: list[procs.StopReport] = field(default_factory=list)  # one report per tree stop made for this run
 
 
 @mutable
 class Stop:
-    """Why a watcher stopped the worker: "limit" (the lane is out) or "hung" (a deadline), the deadline's kind and words, the vendor's
-    line."""
+    """Why a watcher stopped the worker: "limit" | "credit" | "logged_out" (the lane is out) or "hung" (a deadline), the deadline's kind and
+    words, the vendor's line."""
 
     why: str | None = None
     msg: str = ""
@@ -73,7 +112,7 @@ class RunOutcome:
 class LaneGoneWatcher:
     """Stops a worker whose lane another process marked out for a limit, credit or login reason: it is burning an exhausted lane."""
 
-    def __init__(self, gone: Callable[[], str | None], every: float = LANE_GONE_EVERY) -> None:
+    def __init__(self, gone: Callable[[], tuple[str, str] | None], every: float = LANE_GONE_EVERY) -> None:
         self.gone, self.every = gone, every
         self.last: float | None = None
 
@@ -81,8 +120,8 @@ class LaneGoneWatcher:
         if self.last is not None and time.monotonic() - self.last < self.every:
             return None
         self.last = time.monotonic()
-        msg = self.gone()
-        return Stop(why="limit", msg=msg) if msg is not None else None
+        mark = self.gone()
+        return Stop(why=mark[0], msg=mark[1]) if mark is not None else None  # the mark's own reason
 
 
 class LogWatcher:
@@ -101,7 +140,7 @@ class LogWatcher:
             for f in self.dir.glob("*.log"):
                 size, off = f.stat().st_size, self.offs.get(f, 0)
                 if size > off:
-                    with open(f, "rb") as fh:
+                    with f.open("rb") as fh:
                         fh.seek(off)
                         new = fh.read(size - off).decode("utf-8", "replace")
                     self.offs[f] = size
@@ -115,20 +154,20 @@ class Supervisor:
     def __init__(
         self,
         harness: Harness,
-        cli: str,
-        hooks: RunHooks,
-        live: LiveSink,
+        hooks: RunHooks | None = None,
+        live: LiveSink | None = None,
         *,
-        gone: Callable[[], str | None] | None = None,
+        limits: Limits | None = None,
+        gone: Callable[[], tuple[str, str] | None] | None = None,
         log: LogWatcher | None = None,
         policy: Callable[[ev.HarnessEvent], str | None] | None = None,
         net_up: Callable[[], bool] | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        lim = watch.limits(cli)
-        self.hx, self.hooks, self.live, self.policy, self.net_up, self.clock = harness, hooks, live, policy, net_up, clock
-        self.dog = watch.Watchdog(lim["first_event_s"], hooks.idle_s or lim["silence_s"], clock=clock, beat=hooks.beat)
-        self.turn = watch.Turn(cli, clock=clock)
+        lim, hooks = limits or harness.limits, hooks or RunHooks()
+        self.hx, self.hooks, self.live, self.policy, self.net_up, self.clock = harness, hooks, live or NullSink(), policy, net_up, clock
+        self.dog = watch.Watchdog(lim.first_event_s, hooks.idle_s or lim.silence_s, clock=clock, beat=hooks.beat)
+        self.turn = watch.Turn(lim.grace_s, clock=clock)
         self.gone = LaneGoneWatcher(gone) if gone else None
         self.log, self.lock, self.out = log, threading.RLock(), RunOutcome()
         self.now = Stop()
@@ -215,15 +254,19 @@ class Supervisor:
         self.out.worker = worker
         self.live.started(worker.pid)
         if self.hooks.started:
-            with contextlib.suppress(Exception):
+            try:
                 self.hooks.started(worker)
+            except Exception:  # an unregistered worker could never be reaped: stop its tree now and let the caller see the failure
+                self.hooks.stops.append(procs.kill_tree(p))
+                raise
         out: list[str] = []
         err: list[str] = []
         killed: list[int] = []
 
         def feed_stdin() -> None:
             with contextlib.suppress(OSError):
-                assert p.stdin is not None
+                if p.stdin is None:
+                    return
                 p.stdin.write(spec.stdin.encode("utf-8"))
                 p.stdin.close()
 
@@ -245,7 +288,7 @@ class Supervisor:
     def _wait(self, p: subprocess.Popen[bytes], killed: list[int], timeout: float) -> None:
         ppid, end = os.getppid(), time.time() + timeout if timeout else None
 
-        def bye(signum: int, frame: object) -> None:
+        def bye(signum: int, frame: object) -> None:  # noqa: ARG001 - the signal handler signature
             raise SystemExit(128 + signum)
 
         mine = threading.current_thread() is threading.main_thread()  # a library caller runs on any thread; only the main one takes signals
@@ -293,3 +336,25 @@ class Supervisor:
             o.stream_tail = watch.tail(out)
         self.live.end(end_status(o.timed_out, self.now.why if self.now.why == "hung" else None, self.turn.stop, rc), o.summary.cost or None)
         return o
+
+
+def run(
+    harness: Harness,
+    spec: LaunchSpec,
+    timeout: float,
+    hooks: RunHooks | None = None,
+    *,
+    live: LiveSink | None = None,
+    limits: Limits | None = None,
+    gone: Callable[[], tuple[str, str] | None] | None = None,
+    log: LogWatcher | None = None,
+    policy: Callable[[ev.HarnessEvent], str | None] | None = None,
+    net_up: Callable[[], bool] | None = None,
+    clock: Callable[[], float] = time.monotonic,
+) -> RunOutcome:
+    """Run `spec` under `harness` to its end -> RunOutcome. `timeout` of 0 = none. What the caller wants to hear comes in `hooks`, `live`,
+    `gone` (the lane marked out: its reason and message), `log` (the harness's own log),
+    `policy` (a secret path a command names: its words) and
+    `net_up` (one probe once the worker has waited for the network past the grace)."""
+    sup = Supervisor(harness, hooks, live, limits=limits, gone=gone, log=log, policy=policy, net_up=net_up, clock=clock)
+    return sup.run(spec, timeout)

@@ -105,7 +105,7 @@ class Records(Base):
         lines = (homes.config_dir() / "events.jsonl").read_text().splitlines()
         assert [json.loads(ln)["kind"] for ln in lines] == ["claim", "close"]
         assert json.loads(lines[0])["session"] == "abcdef12-3456"
-        assert str(self.home) in json.loads((homes.config_dir() / "repos.json").read_text())["repos"]
+        assert [e["path"] for e in json.loads((homes.config_dir() / "repos.json").read_text())["repos"].values()] == [str(self.home)]
 
     @pytest.mark.skipif(os.name == "nt", reason="the registry lock is fcntl")
     def test_writers_registering_at_once_neither_crash_nor_lose_a_repo(self):

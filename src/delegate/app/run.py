@@ -6,21 +6,24 @@ JSON answer. Every outcome, including a crash, is an answer; exit 0 whenever it 
 import argparse
 import contextlib
 import json
+import os
 import sys
 import time
 import uuid
 from collections.abc import Callable
 from pathlib import Path
 
+from any_agent.supervisor import RunHooks
+
 from delegate.adapters import git, procs
-from delegate.app import answer, cockpit, codex_policy, decide, env, harnesses, launch, net, usage, watch
+from delegate.app import answer, cockpit, codex_policy, decide, env, harnesses, launch, net, usage
 from delegate.app.launch import how_of
 from delegate.app.lease import RunLease
 from delegate.app.run_end import file_size, history_row, transcript_info, worker_ended
-from delegate.app.supervisor import RunHooks
 from delegate.contracts import history as hist
 from delegate.contracts.json_types import Json, arr, as_num, as_opt_bool, as_opt_int, as_opt_obj, as_opt_str, as_str, obj
 from delegate.contracts.state import RefRecord, StateDoc
+from delegate.contracts.stores import StateUnreadable
 from delegate.domain.cost import accounting
 from delegate.domain.health import ledger as health_ledger
 from delegate.domain.holds.book import HoldBook
@@ -90,6 +93,8 @@ class Run:
     # -- the call --------------------------------------------------------------------------------------------------------------------------
     def go(self) -> int:
         try:
+            if os.environ.get("DELEGATE_DEPTH"):
+                return self.refuse("caller", "DELEGATE_DEPTH is set: a delegated worker never delegates further", None)
             try:
                 codex_policy.admit_request(getattr(self.a, "writer_exec_allow", []), tuple(getattr(self.a, "engine_only", None) or ()))
             except (ValueError, OSError) as error:
@@ -97,11 +102,13 @@ class Run:
             return self._go()
         except codex_policy.ExecAllowError as error:
             return self.refuse("bad_request", str(error), None)
+        except StateUnreadable as e:  # a state file from another version: needs the owner, and nothing was launched
+            return self.refuse("crash", str(e), None)
         except TimeoutError as e:  # state lock held too long: transient, so stop with a retry time (error means permanent)
             return self.refuse("lock", str(e), env.now() + decide.busy_jitter())
 
     def _go(self) -> int:
-        d, lanes, warnings, t = decide.decision(self.a, self.cfg, self.unattended)
+        d, lanes, warnings, t = decide.decision(self.a, self.cfg, self.unattended, apply=True)
         if warnings:
             self.extra["warnings"] = warnings
         for key in ("notice", "warning"):
@@ -150,7 +157,7 @@ class Run:
     def _reroute(self, res: dict[str, Json], brief: str) -> dict[str, Json] | int:
         """One fresh attempt after the re-ask failed; each attempt has already kept its own history and usage."""
         pair = (as_str(res["lane"]), as_str(res["model"]))
-        d, lanes, warnings, t = decide.decision(self.a, self.cfg, self.unattended, frozenset((pair,)))
+        d, lanes, warnings, t = decide.decision(self.a, self.cfg, self.unattended, frozenset((pair,)), apply=True)
         if (
             d["action"] != "run"
             or (d["lane"], d["model"]) == pair
@@ -204,7 +211,7 @@ class Run:
         )  # a guess: the soonest reset (too early costs one refused call, too late days)
         cap = lane.slots(env.settings_of(self.cfg))
         canary_due = bool(lane.canary.get(as_str(d["model"]))) and h.kind in profiles.REGISTRY
-        silence_s = self.idle_s or watch.LIMITS[watch.CLI_OF_KIND[h.kind]]["silence_s"]
+        silence_s = self.idle_s or harnesses.LIMITS[harnesses.CLI_OF_KIND[h.kind]].silence_s
         lease = RunLease(rid, a.role, a.task, as_str(d["lane"]), as_str(d["model"]), cap, canary_due, silence_s)
         no = lease.claim()
         if no:
@@ -226,7 +233,7 @@ class Run:
                 raise
             res = {"outcome": "killed", "say": f"route.py got signal {e.code - 128}; its worker was stopped first"}
         finally:
-            lease.release()
+            lease.finish(hooks.stops)
         return self._finish(res, d, lane, who, rid, lease, hooks, launched, cap, (t0, t_from, git_before))
 
     def _hooks(self, rid: str, lease: RunLease, d: dict[str, Json]) -> tuple[RunHooks, dict[str, Json]]:

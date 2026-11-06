@@ -7,6 +7,7 @@ from typing import Final
 from delegate.app import doctor, env, net, status
 from delegate.cli import parser, verbs
 from delegate.contracts.json_types import Json
+from delegate.contracts.stores import StateUnreadable
 
 TABLE: Final = {
     "status": status.cmd_status,
@@ -48,4 +49,8 @@ def main(argv: list[str] | None = None):
         a.exec_allow = exec_argv
     if a.cmd in NO_CONFIG:
         return NO_CONFIG[a.cmd](a)
-    return TABLE[a.cmd](a, env.load_routing())
+    try:
+        return TABLE[a.cmd](a, env.load_routing())
+    except StateUnreadable as e:
+        print(f"route.py: {e}", file=sys.stderr)
+        return 1

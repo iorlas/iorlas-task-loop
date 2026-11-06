@@ -12,8 +12,8 @@ import hermetic  # noqa: F401  (a home of its own for every test)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "delegate"))
-from delegate.adapters.harness.codex import CodexHarness
-from delegate.app.publish import LiveSink, end_status
+from any_agent.harnesses.codex import CodexHarness
+from delegate.app.publish import LiveSink
 from support.case import Case
 from support.procsim import real_proc
 
@@ -196,13 +196,3 @@ class LiveFile(Case):
             lv.end("done")
         ev = self.events(f)
         assert (ev[-1]["k"], lv.capped, 0 < len(ev) < 10) == ("end", True, True)
-
-    def test_end_status(self):
-        assert [
-            end_status(True, None, None, 0),
-            end_status(False, "hung", None, 0),
-            end_status(False, None, "stall", 0),
-            end_status(False, None, "answer", -9),
-            end_status(False, None, None, 0),
-            end_status(False, None, None, 1),
-        ] == ["timeout", "killed", "killed", "done", "done", "error"]

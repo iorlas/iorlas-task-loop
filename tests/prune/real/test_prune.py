@@ -27,7 +27,6 @@ from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import Landed as LandedRec
-from taskloop.contracts.landed import LandedStore
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import BdError, BdFailure, Beads, Git
 
@@ -336,11 +335,11 @@ class Landed(Case):
         assert "bd did not answer" in kept[0]
 
     def test_the_landed_record_decides_a_title_does_not(self):
-        cfg = ConfigDir(self.root / "cfg")
         self.land_commit("a-1")  # titled (a-1) but a revert-like title is not what counts
         git(self.repo, "commit", "-q", "--amend", "-m", 'Revert "work (a-1)"')
-        assert not observe.landed(self.repo, BeadId("a-1"), GIT, cfg)  # no record, a revert subject: not landed
-        LandedStore(cfg).put(LandedRec(bead=BeadId("a-1"), sha=git(self.repo, "rev-parse", "HEAD"), base="origin/main", t=1.0))
-        assert observe.landed(self.repo, BeadId("a-1"), GIT, cfg)  # the record's sha is on HEAD
-        LandedStore(cfg).put(LandedRec(bead=BeadId("a-1"), sha=git(self.repo, "rev-parse", "task/a-3"), base="origin/main", t=1.0))
-        assert not observe.landed(self.repo, BeadId("a-1"), GIT, cfg)  # a sha that never reached HEAD
+        assert not observe.landed(self.repo, BeadId("a-1"), GIT, lambda b: None)  # no record, a revert subject: not landed
+
+        def record(sha: str):
+            return lambda b: LandedRec(bead=b, sha=sha, base="origin/main", t=1.0)
+        assert observe.landed(self.repo, BeadId("a-1"), GIT, record(git(self.repo, "rev-parse", "HEAD")))  # the record's sha is on HEAD
+        assert not observe.landed(self.repo, BeadId("a-1"), GIT, record(git(self.repo, "rev-parse", "task/a-3")))  # never reached HEAD

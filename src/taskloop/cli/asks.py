@@ -134,7 +134,7 @@ def verb(a: Namespace, op: str, bead: BeadId, ask: Ask | None, verbs: intake.Int
     words = " ".join(getattr(a, "text", None) or [])
     if op == "answer":
         action, said = action_of(a, ask)
-        _done, why = verbs.answer(bead, action, said, amend=bool(getattr(a, "amend", False)))
+        _done, why = verbs.answer(bead, action, said, amend=bool(getattr(a, "amend", False)), expect=getattr(a, "expect", None) or "")
         out(NEXT % bead if not why else "tl: " + SAYS.get(why, why))
         return 0 if not why else 1
     if op == "withdraw":
@@ -191,6 +191,7 @@ def add_parsers(sp: Any) -> None:
 
 def answer_flags(p: Any) -> None:
     p.add_argument("--amend", action="store_true", help="replace an answer no run has used yet")
+    p.add_argument("--expect", metavar="ASK_ID", help="answer only this ask; refused when the engine has asked again since")
     p.add_argument("--option", type=int, help="pick option N of the ask")
     p.add_argument("--rerun", action="store_true", help="run again, nothing else")
     p.add_argument("--confirm", action="store_true", help="yes, go on as it is")

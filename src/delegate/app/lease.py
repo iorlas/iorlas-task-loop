@@ -8,6 +8,7 @@ import threading
 from collections.abc import Callable
 from dataclasses import replace
 
+from any_agent.procs import StopReport
 from stream_proc import alive, proc_start
 
 from delegate.adapters import procs
@@ -134,6 +135,14 @@ class RunLease:
 
         with contextlib.suppress(Exception):
             env.update_state(release)
+
+    def finish(self, stops: list[StopReport]):
+        """The run ended. A worker tree that outlived its stops keeps its lease (heartbeat off): the lane's slot is not free while it edits
+        the tree, and the next claim's reaper ends it. Otherwise `release`."""
+        if any(s.survivors for s in stops):
+            self.beat.set()
+        else:
+            self.release()
 
     @property
     def overlap(self):

@@ -39,9 +39,12 @@ def read_from(path: str, offset: int, decode: Callable[[object], Any] = log.deco
         offset = 0
     if size == offset:
         return [], offset
-    with open(path, "rb") as f:
-        f.seek(offset)
-        data = f.read(CHUNK)
+    try:
+        with open(path, "rb") as f:
+            f.seek(offset)
+            data = f.read(CHUNK)
+    except OSError:  # retention removed the file between the stat and the open
+        return [], offset
     end = data.rfind(b"\n")
     if end < 0:
         return [], offset
