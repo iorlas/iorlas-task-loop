@@ -95,9 +95,11 @@ class RunMemo:
     """The result store of one repo, asked and written for one tree and base. `run_id` and `host` are who writes (the provenance of a
     pass). What this block has run is kept in memory by its complete resolved requirement."""
 
-    def __init__(self, stores: Stores, repo: str, keys: InputKeys, base: BaseSha, engine_env: Mapping[str, str], run_id: str = "") -> None:
+    def __init__(self, stores: Stores, repo: str, keys: InputKeys, base: BaseSha, engine_env: Mapping[str, str], run_id: str = "",
+                 executor: str = "") -> None:
         self.stores, self.repo, self.keys, self.base, self.engine_env = stores, repo, keys, base, engine_env
         self.run_id, self.host = run_id, platform.node()
+        self.executor = executor  # engine.executor.host: where an `in: linux` check ran, part of its key
         self.system = f"{platform.system()}-{platform.machine()}"
         self.ran: dict[RunKey, tuple[CheckResult, float]] = {}  # this block's runs by command -> result, wall limit
         self.slot_keys: InputKeys | None = None
@@ -147,7 +149,8 @@ class RunMemo:
         return Digest(hashlib.sha256(json.dumps(records, sort_keys=True).encode()).hexdigest()) if records else NO_DIGEST
 
     def execution(self, c: Check) -> Digest:
-        where = LINUX_IDENTITY if c.where == "linux" else HOST_IDENTITY  # a pass on the executor says nothing of this machine
+        # a pass on one executor says nothing of another, or of this machine
+        where = Digest(f"{LINUX_IDENTITY}:{self.executor}") if c.where == "linux" else HOST_IDENTITY
         if c.run_in == "slot":
             return Digest("slot-v1:" + where)
         return Digest("clean-v1:" + where) if self.keys.clean else Digest(where)

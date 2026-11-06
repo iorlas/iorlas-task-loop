@@ -9,7 +9,7 @@ from pathlib import Path
 import msgspec
 import pytest
 
-from taskloop.app.checks.linux import EXECUTOR_DOWN_RC, LinuxRun
+from taskloop.app.checks.linux import EXECUTOR_DOWN_RC, LinuxRun, Remote
 from taskloop.contracts.config import CheckSpec, ExecutorConfig
 from taskloop.contracts.ids import CheckId
 from taskloop.contracts.ports import Ran, RanBytes, Streamed
@@ -35,9 +35,9 @@ class FakeGit:
 class FakeSpawner:
     """Records every argv; the executor answers `rc` and the tar of `files` for the artifact fetch."""
 
-    def __init__(self, rc: int = 0, files: dict[str, str] | None = None) -> None:
+    def __init__(self, rc: int = 0, files: dict[str, str] | None = None, timed_out: str | None = None) -> None:
         self.calls: list[list[str]] = []
-        self.rc, self.files = rc, files or {}
+        self.rc, self.files, self.timed_out = rc, files or {}, timed_out
 
     def run(self, argv: list[str], *, timeout_s: float | None = None) -> Ran:
         self.calls.append(argv)
@@ -58,10 +58,11 @@ class FakeSpawner:
                stop: threading.Event | None = None) -> Streamed:
         self.calls.append(argv)
         on_output("remote says hi\n")
-        return Streamed(returncode=self.rc, signal=None, timed_out=None, secs=0.1)
+        return Streamed(returncode=None if self.timed_out else self.rc, signal=15 if self.timed_out else None, timed_out=self.timed_out,
+                        secs=0.1)
 
 
-def run_linux(tmp: Path, git: FakeGit, sp: FakeSpawner) -> tuple[int, str]:
+def run_linux(tmp: Path, git: FakeGit, sp: FakeSpawner) -> Remote:
     art = tmp / "art"
     art.mkdir()
     return LinuxRun(CFG, git, sp).run(
@@ -73,11 +74,11 @@ class TestLinux:
     def test_the_committed_commit_is_pushed_to_the_run_ref_of_the_bare_repo(self, workdir):
         git, sp = FakeGit(), FakeSpawner()
         run_linux(workdir, git, sp)
-        assert git.pushed == [(str(workdir), "pix:/home/x/tl/repo-1.git", "abc123:refs/tl/r9")]
+        assert git.pushed == [(str(workdir), "pix:/home/x/tl/repo-1.git", "abc123:refs/tl/r9-lint")]
 
     def test_the_argv_runs_on_the_executor_in_the_slots_worktree_and_its_exit_and_output_come_back(self, workdir):
         sp = FakeSpawner(rc=3)
-        rc, tail = run_linux(workdir, FakeGit(), sp)
+        rc, tail, *_ = run_linux(workdir, FakeGit(), sp)
         assert rc == 3
         assert "remote says hi" in tail
         assert "remote says hi" in (workdir / "log").read_text()
@@ -90,9 +91,34 @@ class TestLinux:
         run_linux(workdir, FakeGit(), FakeSpawner(files={"out/report.txt": "ok"}))
         assert (workdir / "art" / "out" / "report.txt").read_text() == "ok"
 
+    def test_the_attempts_ref_and_remote_artifacts_go_once_they_are_fetched(self, workdir):
+        sp = FakeSpawner()
+        run_linux(workdir, FakeGit(), sp)
+        words = [shlex.split(c[-1]) for c in sp.calls]
+        fetch = next(i for i, w in enumerate(words) if w[0] == "tar")
+        assert words[fetch + 1:] == [["git", "-C", "tl/repo-1.git", "update-ref", "-d", "refs/tl/r9-lint"],
+                                     ["rm", "-rf", "tl/repo-1/.artifacts/r9-lint"]]
+
+    def test_artifacts_a_crashed_run_left_are_swept_when_a_week_old(self, workdir):
+        sp = FakeSpawner()
+        run_linux(workdir, FakeGit(), sp)
+        sweep = next(w for w in (shlex.split(c[-1]) for c in sp.calls) if w[0] == "find")
+        assert sweep[1] == "/home/x/tl/repo-1/.artifacts" and sweep[sweep.index("-mtime") + 1] == "+7"
+
+    def test_the_run_has_a_pty_so_a_killed_ssh_hangs_the_remote_check_up(self, workdir):
+        sp = FakeSpawner()
+        run_linux(workdir, FakeGit(), sp)
+        assert "-tt" in next(c for c in sp.calls if "just" in c[-1])
+        assert not any("-tt" in c for c in sp.calls if "just" not in c[-1])
+
+    @pytest.mark.parametrize(("how", "stopped", "wall"), [("stopped", True, False), ("wall", False, True), (None, False, False)])
+    def test_a_run_says_whether_the_engine_stopped_it_or_its_wall_limit_did(self, workdir, how, stopped, wall):
+        done = run_linux(workdir, FakeGit(), FakeSpawner(timed_out=how))
+        assert (done.stopped, done.wall_hit) == (stopped, wall)
+
     def test_a_down_executor_fails_loudly_and_nothing_runs_locally(self, workdir):
         sp = FakeSpawner()
-        rc, tail = run_linux(workdir, FakeGit(down=True), sp)
+        rc, tail, *_ = run_linux(workdir, FakeGit(down=True), sp)
         assert rc == EXECUTOR_DOWN_RC
         assert "executor pix is down" in tail and "Connection refused" in tail
         assert not any("just" in " ".join(c) for c in sp.calls)
@@ -136,7 +162,7 @@ def setup_calls(sp: FakeSpawner) -> list[list[str]]:
     return [shlex.split(c[-1]) for c in sp.calls if "uv" in c[-1] and shlex.split(c[-1])[0] == "env" and "just" not in c[-1]]
 
 
-def run_with_setup(tmp: Path, sp: FakeSpawner, lock: str = "L1") -> tuple[int, str]:
+def run_with_setup(tmp: Path, sp: FakeSpawner, lock: str = "L1") -> Remote:
     art = tmp / "art"
     art.mkdir(exist_ok=True)
     return LinuxRun(SETUP, RevGit(lock), sp).run(
@@ -169,6 +195,6 @@ class TestSetup:
 
     def test_a_failed_setup_is_a_red_check_that_never_runs_the_argv(self, workdir):
         sp = SetupSpawner(marked=False, setup_rc=2)
-        rc, tail = run_with_setup(workdir, sp)
+        rc, tail, *_ = run_with_setup(workdir, sp)
         assert rc == 1 and "exited 2" in tail and "resolved 3 packages" in tail
         assert not any("just" in c[-1] for c in sp.calls)

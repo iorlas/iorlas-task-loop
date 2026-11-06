@@ -53,6 +53,7 @@ from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts.env import Env, snapshot  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop.contracts.run import Reexec  # noqa: E402
+from taskloop.contracts.stores import BadVersionStore  # noqa: E402
 
 PLAN_DEF = "    def plan(self, again: bool = False) -> PlanData:\n"
 BREAK_PLAN = (PLAN_DEF, PLAN_DEF + "        raise RuntimeError('planted: cannot plan')\n", "src/taskloop/app/plan/planner.py")
@@ -277,7 +278,7 @@ class Reload(te.EngineTest):
         assert pids == [str(os.getpid())] * 2  # run-task's parent is uv: the loop names itself for the lock handoff
         fb = [e for e in self.events() if e["kind"] == "reload_fallback"]
         assert [(e["old"], e["new"]) for e in fb] == [("0.2.0", "0.1.0")]
-        assert "0.2.0" in [e["version"] for e in json.loads((homes.config_dir() / "bad-versions.json").read_text())["entries"]]
+        assert "0.2.0" in [e.version for e in must(BadVersionStore(homes.cfg()).get()).entries]
         assert any("RED" in c for c in said)
         assert not homes.cfg().reexec_note(BeadId("t-1")).exists()
 

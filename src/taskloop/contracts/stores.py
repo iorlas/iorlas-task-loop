@@ -12,6 +12,7 @@ from taskloop.contracts import docstore, events, log, paths, wire
 from taskloop.contracts.ask import Ask, AskAnswer, ThreadEntry
 from taskloop.contracts.askrows import AskRows, DbDocs, DbLedger
 from taskloop.contracts.dash import OwnerCause, Stick
+from taskloop.contracts.docrows import RowDoc, singleton
 from taskloop.contracts.docstore import ForeignVersion, Item, JsonStore, Ledger, Page, Present, Torn, refusal
 from taskloop.contracts.enums import AskStatus
 from taskloop.contracts.guard import guard
@@ -382,14 +383,19 @@ class RestStore(JsonStore[Rest]):
         super().__init__(cfg.loop_rest(repo_key), Rest)
 
 
-class StatusStore(JsonStore[StatusSnapshot]):
-    def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.snapshot("delegate", "status"), StatusSnapshot)
+class StatusStore(RowDoc[StatusSnapshot]):
+    def __init__(self, cfg: paths.ConfigDir, quiet: bool = False) -> None:
+        super().__init__(singleton(cfg, StatusSnapshot, "snapshot:delegate.status", cfg.snapshot("delegate", "status"), quiet).docs, "")
 
 
-class StatusTriedStore(JsonStore[StatusTried]):
+class StatusTriedStore(RowDoc[StatusTried]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.snapshot("delegate", "tried"), StatusTried)
+        super().__init__(singleton(cfg, StatusTried, "snapshot:delegate.tried", cfg.snapshot("delegate", "tried")).docs, "")
+
+
+class SharedNotesStore(RowDoc[SharedNotes]):
+    def __init__(self, cfg: paths.ConfigDir, repo_key: str) -> None:
+        super().__init__(singleton(cfg, SharedNotes, "shared:" + repo_key, cfg.shared(repo_key)).docs, "")
 
 
 class ReposStore(JsonStore[ReposIndex]):
@@ -477,21 +483,21 @@ class ReposStore(JsonStore[ReposIndex]):
             return gone
 
 
-class PinStore(JsonStore[Pin]):
+class PinStore(RowDoc[Pin]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.pin(), Pin)
+        super().__init__(singleton(cfg, Pin, "pin", cfg.pin()).docs, "")
 
 
-class ReleaseResultStore(JsonStore[ReleaseResult]):
+class ReleaseResultStore(RowDoc[ReleaseResult]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.release_result(), ReleaseResult)
+        super().__init__(singleton(cfg, ReleaseResult, "release:last", cfg.release_result()).docs, "")
 
 
-class BadVersionStore(JsonStore[BadVersions]):
+class BadVersionStore(RowDoc[BadVersions]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.bad_versions(), BadVersions)
+        super().__init__(singleton(cfg, BadVersions, "bad-versions", cfg.bad_versions()).docs, "")
 
 
-class ReflectStateStore(JsonStore[ReflectState]):
+class ReflectStateStore(RowDoc[ReflectState]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(cfg.reflect_state(), ReflectState)
+        super().__init__(singleton(cfg, ReflectState, "reflect:digest", cfg.reflect_state()).docs, "")
