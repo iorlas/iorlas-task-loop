@@ -32,6 +32,9 @@ class RepoGit(ScriptedGit):
 
     profile = json.dumps({"engine": {"checks": [{"id": "unit", "argv": ["x"], "run": "gate"}]}})
 
+    def common_dir(self, d):
+        return f"{d}/.git"
+
     def show(self, d, rev, path):
         return self.profile
 
