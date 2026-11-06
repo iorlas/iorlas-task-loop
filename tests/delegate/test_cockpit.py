@@ -283,4 +283,3 @@ class Command:
         for k in ("lanes", "running", "needs_input"):
             assert k in data
         assert ck["next_worker"]["action"] in ("run", "stop")
-

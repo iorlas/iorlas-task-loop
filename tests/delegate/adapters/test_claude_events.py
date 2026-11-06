@@ -166,4 +166,3 @@ class World:
         (day / "sess-1.jsonl").write_text("{}\n")
         h = ClaudeHarness()
         assert (h.transcript("sess-1"), h.transcript("zzz"), h.transcript(None)) == (str(day / "sess-1.jsonl"), None, None)
-

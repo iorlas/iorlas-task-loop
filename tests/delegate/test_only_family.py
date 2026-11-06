@@ -37,4 +37,3 @@ class OnlyFamilyTest:
     def test_a_family_with_no_step_in_the_role_is_a_stop_too(self):
         d = self.decide("openai", "xai", "claude", only_family=["nonesuch"])
         assert (d["action"], d["reason"]) == ("stop", "only_family_unready")
-
