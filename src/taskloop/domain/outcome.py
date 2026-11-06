@@ -26,7 +26,7 @@ from taskloop.contracts.kinds import (
 )
 from taskloop.contracts.reconcile import LOOP_ABSENT_S
 from taskloop.domain.asks.spec import AskSpec
-from taskloop.domain.report import matchers as lifecycle
+from taskloop.domain.lifecycle import matchers as lifecycle
 
 # The tunables, in one place. Cells are values: a predicate goes to code.
 KNOBS: Final = {
