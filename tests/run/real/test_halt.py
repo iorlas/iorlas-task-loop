@@ -3,13 +3,13 @@ point. Real processes; the signal is raised by signal.raise_signal, never os.kil
 import json
 import signal
 import sys
-import tempfile
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
 import pytest
+from support.tmpdir import mkdtemp
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -51,7 +51,7 @@ class Halt(te.EngineTest):
         assert "wip (t-1)" in gitq.git("log", "-1", "--format=%s", "task/t-1", cwd=str(self.wt))
         assert halting.RUN_HALT["ev"] is None
     def test_a_worker_call_is_stopped_by_the_run_flag_and_its_process_is_gone(self):
-        d = Path(tempfile.mkdtemp())
+        d = Path(mkdtemp())
         self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
         pidfile = d / "w.pid"
         fake = FakeApi(d, "sleep 30")

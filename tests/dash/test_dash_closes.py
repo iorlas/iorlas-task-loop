@@ -4,10 +4,10 @@ are skipped and counted."""
 
 import json
 import sys
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -40,7 +40,7 @@ def trace(run: str, outcome: Outcome, ended: float, replans: int = 0) -> RunTrac
 
 class Traces(Case):
     def test_traces_of_another_version_are_skipped_and_counted(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             cfg = Path(d)
             rows = [wire.dump(trace("01KBN6Z0M4R5E8YQ2T7C9W3XA1", Outcome.LANDED, T + 100, replans=2)),
                     wire.dump(trace("01KBN6Z0M4R5E8YQ2T7C9W3XA2", Outcome.FAILED, T + 200)),

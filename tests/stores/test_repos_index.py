@@ -2,16 +2,17 @@
 map before STATEFILES) is an error naming the fix, for readers and writers alike, and is never read as empty or overwritten."""
 import json
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from support.case import Case
+from support.tmpdir import mkdtemp
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
+from taskloop.contracts import wire
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.snapshots import ReposIndex
 from taskloop.contracts.stores import ReposStore
@@ -19,7 +20,7 @@ from taskloop.contracts.stores import ReposStore
 
 class ReposIndexFile(Case):
     def setup_method(self) -> None:
-        self.dir = Path(tempfile.mkdtemp())
+        self.dir = Path(mkdtemp())
         self.store = ReposStore(ConfigDir(self.dir))
 
     def test_a_missing_file_is_no_repos_and_an_add_creates_it(self) -> None:
@@ -34,7 +35,8 @@ class ReposIndexFile(Case):
         self.store.path.parent.mkdir(parents=True, exist_ok=True)
         self.store.path.write_text(json.dumps({"v": 1, "repos": {a: {"added": 1.0}, b: {"added": 2.0}}}), encoding="utf-8")
         assert self.store.known() == [a]
-        assert json.loads(self.store.path.read_text(encoding="utf-8")) == {"v": 2, "repos": {"one": {"path": a, "added": 1.0}}}
+        assert wire.dump(self.store.index()) == {"v": 2, "repos": {"one": {"path": a, "added": 1.0}}}
+        assert not self.store.path.exists() and ReposStore(ConfigDir(self.dir)).known() == [a]  # adopted into the row
 
     def test_the_name_is_the_origin_owner_and_name_or_the_folder_name(self) -> None:
         r = self.repo("work/tl", origin="git@github.com:iorlas/task-loop.git")

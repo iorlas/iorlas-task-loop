@@ -1,6 +1,5 @@
 """The run locator: the three queries answered from manifests alone, an opaque unique time-ordered id per run."""
 import os
-import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier
@@ -8,6 +7,7 @@ from threading import Barrier
 import pytest
 import support.paths  # noqa: F401
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.contracts.ids import RunId
 from taskloop.contracts.locator import RunLocator, host_name
@@ -19,7 +19,7 @@ T0 = 1793050200.0
 
 class Locator(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.cfg = ConfigDir(Path(tmp.name))
         self.where = RunLocator(self.cfg)

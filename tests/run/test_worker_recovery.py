@@ -1,6 +1,5 @@
 """C07: recovery proves execution identity, including completed writer effects."""
 
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -9,6 +8,7 @@ import pytest
 import support.paths  # noqa: F401
 from support.case import Case
 from support.narrow import must
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.run import call, done_memo, worker_call
 from taskloop.contracts import factorydb, wire
@@ -22,7 +22,7 @@ from taskloop.stores import call_state
 
 class Recovery(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(Path(self.tmp.name))
         self.root = self.cfg.run_dir("run-1")

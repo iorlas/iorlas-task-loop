@@ -4,12 +4,12 @@ import json
 import os
 import shutil
 import sys
-import tempfile
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
 import pytest
+from support.tmpdir import mkdtemp
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -41,6 +41,8 @@ from taskloop.contracts.config import LoopConfig  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop.contracts.loop import LoopCommand, LoopState, LoopTarget  # noqa: E402
+from taskloop.contracts.snapshots import Pin  # noqa: E402
+from taskloop.contracts.stores import PinStore  # noqa: E402
 
 
 class UpAt:
@@ -292,7 +294,7 @@ class LoopSelfUpdate(LoopBase):
 
     def setup_method(self):
         super().setup_method()
-        self.cache = Path(tempfile.mkdtemp())
+        self.cache = Path(mkdtemp())
         self.addCleanup(shutil.rmtree, self.cache, True)
         self.execs = []
 
@@ -348,7 +350,7 @@ class LoopSelfUpdate(LoopBase):
         assert self.started == []  # the first look is before any bead
 
     def pin(self, **v):
-        (homes.config_dir() / "pinned.json").write_text(json.dumps({"v": 1, **v}))
+        PinStore(homes.cfg()).write(Pin(**{k.replace("-", "_"): x for k, x in v.items()}))
 
     def test_a_pin_beats_the_newest_install(self):
         self.beads({"x-1": [rec("landed")]})
@@ -388,12 +390,12 @@ class LoopSelfUpdate(LoopBase):
         self.install("0.2.0")
         with pytest.raises(Moved):
             self.run_loop()
-        assert not (homes.config_dir() / "pinned.json").exists()
+        assert PinStore(homes.cfg()).get() is None
         self.pin(**{"task-loop": "0.1.0"})
-        before = (homes.config_dir() / "pinned.json").read_bytes()
+        before = PinStore(homes.cfg()).get()
         self.beads({"x-3": [rec("landed")]})
         self.run_loop()
-        assert (homes.config_dir() / "pinned.json").read_bytes() == before
+        assert PinStore(homes.cfg()).get() == before
         for f in (ROOT / "src" / "taskloop" / "app" / "loop").glob("*.py"):
             src = f.read_text(encoding="utf-8")
             assert "write_pin" not in src

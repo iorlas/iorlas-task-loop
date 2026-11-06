@@ -2,11 +2,11 @@
 import json
 import socket
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -25,7 +25,7 @@ def line(**kw):
 class Tails(Case):
     def setup_method(self):
         self.dash = make_dash()
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.p = Path(self.tmp.name) / "s.jsonl"
 
     def teardown_method(self):

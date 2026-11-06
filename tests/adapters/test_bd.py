@@ -5,11 +5,11 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
 from support.case import Case
+from support.tmpdir import mkdtemp
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -51,7 +51,7 @@ class RealBdContract(BeadsContract, Case):
         if not exe:
             cls.why_not = "bd is not installed"
             return
-        cls.root = tempfile.mkdtemp(prefix="ports-bd-")
+        cls.root = mkdtemp(prefix="ports-bd-")
         subprocess.run(["git", "init", "-q"], cwd=cls.root, check=True)
         r = subprocess.run([exe, "init", "--quiet", "--prefix", "pt"], cwd=cls.root, capture_output=True, text=True,
                            env=dict(os.environ, HOME=cls.root), check=False)

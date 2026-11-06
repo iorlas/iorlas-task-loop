@@ -6,11 +6,11 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
@@ -35,7 +35,7 @@ GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid", "GIT
 
 class BadProfile(Case):
     def setup_method(self) -> None:
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name).resolve()
         patch = mock.patch.dict(os.environ, dict(GIT_ENV, XDG_CONFIG_HOME=str(root / "cfg"), CLAUDE_CONFIG_DIR=str(root / "claude")))
@@ -102,7 +102,7 @@ class SourceIsTheBaseCommit(Case):
     """The loop reads the profile off the base commit; doctor must read the same one, not a stale checkout."""
 
     def setup_method(self) -> None:
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         patch = mock.patch.dict(os.environ, GIT_ENV)
         patch.start()

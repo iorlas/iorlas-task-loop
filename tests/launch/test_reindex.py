@@ -1,6 +1,5 @@
 """The doctor's reindex verb launches the same state indexer and reports its work."""
 
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,6 +9,7 @@ from support.dashlogs import RunScript
 from support.narrow import must
 from support.spawn import port_git, real_spawner
 from support.tlmain import tl
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.launch import reindex
 from taskloop.contracts import factorybackup, factorydb
@@ -23,7 +23,7 @@ from taskloop.contracts.stores import JsonStore
 
 class Reindex(Case):
     def test_doctor_flag_rebuilds_and_reports_counts_without_running_diagnostics(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with TemporaryDirectory() as folder:
             cfg = ConfigDir(Path(folder))
             script = RunScript("b-1").step("write", 10, 3).close("done").write(cfg.root)
             rows = RunRows(cfg)
