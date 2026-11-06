@@ -7,7 +7,7 @@ import pytest
 from support.facts import fake_facts
 from support.host_conformance import missing
 
-from taskloop.contracts import runfacts as rf
+from taskloop.contracts import stagefacts as rf
 from taskloop.stores.runports import RunPorts
 
 PORT_PROTOCOLS = {

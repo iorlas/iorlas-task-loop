@@ -11,7 +11,6 @@ from support.fake_clock import FakeClock
 from support.memstores import MemDoc, fake_stores
 from support.spawn import port_git, real_spawner
 from support.who import who
-
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.run.steps import Steps
 from taskloop.contracts import fence
@@ -21,7 +20,7 @@ from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.plancheck import PlanCheck
-from taskloop.contracts.runfacts import RunFacts
+from taskloop.contracts.stagefacts import RunFacts
 from taskloop.stores.runlog import RunLog
 from taskloop.stores.runports import RunPorts
 
@@ -115,5 +114,3 @@ class _NoBeads:
 
     def __getattr__(self, name: str) -> Any:
         raise AssertionError(f"this fake run has no bd (asked for {name}); build the facts with a store")
-
-
