@@ -25,7 +25,7 @@ from support import (
     tlbd,
 )
 from support import slots as sl
-from support.builders import cfg_with
+from support.cfgs import cfg_with
 from support.fakes import (
     FakeBeadStore,
     as_bead,

@@ -15,11 +15,11 @@ import support.paths  # noqa: F401
 from support import engine_case as te
 from support import homes
 from support.case import Case
-from support.engine_case import PLAN, WRITE
 from support.fake_beads import FakeBeads
 from support.logs import typed
 from support.memstores import fake_stores
 from support.narrow import must
+from support.plans import PLAN, WRITE
 from support.runs import manifest
 from support.tmpdir import TemporaryDirectory
 

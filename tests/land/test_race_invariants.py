@@ -45,7 +45,7 @@ import tl
 from support import gitsim, tlbd
 from support import slots as sl
 from support.args import Args
-from support.builders import cfg_with
+from support.cfgs import cfg_with
 from support.engine_locks import put_lock
 from support.fake_clock import FakeClock
 from support.narrow import must
