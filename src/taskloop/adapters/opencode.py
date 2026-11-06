@@ -1,5 +1,4 @@
 """OpenCode's session store, read only (session, message and part tables; never the credential ones), and where a transcript is."""
-import json
 import os
 import re
 import sqlite3
@@ -51,23 +50,6 @@ def opencode_updated(env: Env, sid: str) -> float | None:
     rows = opencode_rows(env, "SELECT MAX(t) FROM (SELECT MAX(time_updated) t FROM message WHERE session_id = ? "
                          "UNION ALL SELECT MAX(time_updated) FROM part WHERE session_id = ?)", (sid, sid))
     return rows[0][0] / 1000.0 if rows and rows[0][0] else None
-
-
-def opencode_context(env: Env, sid: str) -> int | None:
-    """Input + cache read + cache write tokens of the session's last assistant message that reports any, or None."""
-    for (data,) in opencode_rows(env, "SELECT data FROM message WHERE session_id = ? ORDER BY time_created DESC, id DESC LIMIT 20", (sid,)):
-        try:
-            d = json.loads(data)
-            if d.get("role") != "assistant":
-                continue
-            t = d["tokens"]
-            n = int(t.get("input") or 0) + int((t.get("cache") or {}).get("read") or 0) + int((t.get("cache") or {}).get("write") or 0)
-        except (ValueError, KeyError, TypeError, AttributeError):
-            continue
-        if n:
-            return n
-    return None
-
 
 def transcript_of(env: Env, family: str, ref: str) -> str:
     """Where a worker session's transcript lives on this machine: Codex rollouts and Claude projects, by session id; for

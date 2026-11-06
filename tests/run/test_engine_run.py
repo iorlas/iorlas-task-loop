@@ -49,9 +49,6 @@ from support.spawn import port_git, real_spawner
 from support.tmpdir import mkdtemp
 from support.who import who
 
-from taskloop.adapters import (
-    context_size,
-)
 from taskloop.adapters import delegate as dl
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.plan.planner import Planner
@@ -369,9 +366,6 @@ class EngineRunTest(EngineTest):
             assert s.calls[2][1] == "ref-write", path
             assert self.MARK not in s.prompts[2]
             assert self.eng.write_rounds[0]["context_k"] is None
-        empty = Path(self.tmp.name, "empty.jsonl")
-        empty.write_text("")
-        assert context_size.context_tokens(str(empty), snapshot()) is None
 
     def test_round_three_after_a_fresh_start_resumes_the_fresh_session(self):
         big, small = Path(self.tmp.name, "big.jsonl"), Path(self.tmp.name, "small.jsonl")
