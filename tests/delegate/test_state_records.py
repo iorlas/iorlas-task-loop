@@ -335,5 +335,3 @@ class WatchdogProc(Case):
         quiet = [step for _ in range(8) for step in (Jump(0.4),)]  # the same gaps with nothing printed: the silence limit is real
         _rc, state, worker = self.run_worker("started", *quiet, first_event_s=5, silence_s=1)
         assert (state["why"], worker.stopped) == ("hung", True)
-
-
