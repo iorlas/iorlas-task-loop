@@ -56,12 +56,15 @@ class StatusSnapshot(Rec):
 
 @final
 class RepoEntry(Rec):
+    path: str
     added: float
 
 
 @final
 class ReposIndex(Rec):
-    V: ClassVar[int] = 1
+    """repos.json: repo name (`owner/name` of the origin, else the folder name) to its folder."""
+
+    V: ClassVar[int] = 2
     repos: dict[str, RepoEntry] = msgspec.field(default_factory=dict)
 
 

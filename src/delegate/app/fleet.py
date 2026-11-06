@@ -29,6 +29,7 @@ WARN_EVERY_S = 86400
 class Fleet:
     lanes: dict[str, Lane]
     offers: list[str] = field(default_factory=list)  # lanes seen for the first time and not usable: reported once, then remembered
+    enables: list[str] = field(default_factory=list)  # undecided lanes this machine has ready: only `run` turns them on in the profile
 
 
 class FleetBuilder:
@@ -68,8 +69,8 @@ class FleetBuilder:
         return fleet
 
     def _mode(self, name: str, spec: LaneSpec, ready: bool, fleet: Fleet) -> str:
-        """-> "on" | "off" | "drift". Shared lanes are always on. Otherwise the profile decides; a lane never decided is turned on once if
-        the machine has it ready, else left out silently."""
+        """-> "on" | "off" | "drift". Shared lanes are always on. Otherwise the profile decides; a lane never decided is on for this call if
+        the machine has it ready (listed in `Fleet.enables`: the caller decides whether to write it), else left out silently."""
         if spec.shared_with_orchestrator:
             return "on"
         prof = self.config.profile()
@@ -79,7 +80,8 @@ class FleetBuilder:
         if v == "enabled":
             return "on" if ready else "drift"
         if ready:
-            self.config.set_lane(name, "enabled")
+            if name not in fleet.enables:
+                fleet.enables.append(name)
             return "on"
         if name not in prof.offered and name not in fleet.offers:
             fleet.offers.append(name)

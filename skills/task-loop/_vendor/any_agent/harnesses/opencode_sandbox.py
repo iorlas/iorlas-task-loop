@@ -9,10 +9,7 @@ import subprocess
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-from app_dirs import config_dir
-
-from delegate.contracts.json_types import Json
-from delegate.contracts.wire import RECIPE_RUNNERS
+from any_agent._json import Json, record
 
 SECRETS = (
     ".ssh",
@@ -38,10 +35,19 @@ RULE = (
 NETWORK_REFUSALS = ("tcp connect error", "Network is unreachable", "Failed to connect", "error sending request")
 
 
-def readable_outside() -> list[str]:
-    """Folders outside the work folder a read-only worker may read: the caller's runs folder (the engine points reviewers at its files)
-    and temp dirs."""
-    return [str(config_dir("task-loop") / "runs"), "/private/tmp", "/private/var/folders", "/tmp", "/var/folders"]
+TEMP_DIRS = ("/private/tmp", "/private/var/folders", "/tmp", "/var/folders")  # noqa: S108 - the sandbox profile names them
+RECIPE_RUNNERS = ("just", "make", "mise", "npm", "yarn", "pnpm", "uv")  # the commands that take a recipe by name
+
+
+@record
+class Sandbox:
+    """What the caller adds to the sandbox: `readable` = folders outside the work folder a read-only worker may read (besides temp dirs),
+    `scratch` = the git-ignored folder of the work folder a read-only worker may write (its test runs' temp files), `runners` = the commands
+    that take an engine-only recipe by name."""
+
+    readable: tuple[str, ...] = ()
+    scratch: str = ".scratch"
+    runners: tuple[str, ...] = RECIPE_RUNNERS
 
 
 # OpenCode matches a bash permission pattern against the command text with `*` for any characters, the last matching rule wins, and it
@@ -51,18 +57,18 @@ LEAD = ("{runner} {recipe}", "{runner} * {recipe}")
 TRAIL = ("", " *", '"*', "'*", ";*", "&*", "|*", ")*")
 
 
-def engine_only_rules(engine_only: Sequence[str]) -> dict[str, str]:
+def engine_only_rules(sandbox: Sandbox, engine_only: Sequence[str]) -> dict[str, str]:
     """The bash deny rules for the recipes only the engine runs (`--engine-only`), after the `*` allow so that they win."""
     return {
         "*" + lead.format(runner=runner, recipe=recipe) + trail: "deny"
         for recipe in engine_only
-        for runner in RECIPE_RUNNERS
+        for runner in sandbox.runners
         for lead in LEAD
         for trail in TRAIL
     }
 
 
-def permissions(write: bool, engine_only: Sequence[str] = (), read_roots: Sequence[str] = ()) -> dict[str, Json]:
+def permissions(sandbox: Sandbox, write: bool, engine_only: Sequence[str] = (), read_roots: Sequence[str] = ()) -> dict[str, Json]:
     reads: dict[str, Json] = {
         "*": "allow",
         ".env": "deny",
@@ -78,10 +84,9 @@ def permissions(write: bool, engine_only: Sequence[str] = (), read_roots: Sequen
     outside: Json = (
         ({"*": "deny", **{x.rstrip("/") + "/**": "allow" for x in read_roots}} if read_roots else "deny")
         if write
-        else {"*": "deny", **{x + "/**": "allow" for x in readable_outside()}}
+        else {"*": "deny", **{x + "/**": "allow" for x in (*sandbox.readable, *TEMP_DIRS)}}
     )
-    # a read-only step ignores the list
-    bash: dict[str, Json] | None = {"*": "allow", **engine_only_rules(engine_only)} if write and engine_only else None
+    bash: dict[str, Json] | None = {"*": "allow", **engine_only_rules(sandbox, engine_only)} if write and engine_only else None
     return {
         "*": "allow",
         **({"bash": bash} if bash else {}),
@@ -115,13 +120,13 @@ def _quote(x: object) -> str:
     return json.dumps(os.path.realpath(str(x)))
 
 
-def write_shell(cwd: str, write: bool, path: Path, roots: Sequence[Path] = (), caches: Sequence[Path] = ()) -> None:
+def write_shell(sandbox: Sandbox, cwd: str, write: bool, path: Path, roots: Sequence[Path] = (), caches: Sequence[Path] = ()) -> None:
     """The $SHELL OpenCode runs commands with: each one under sandbox-exec. `roots` are the XDG dirs the launcher points commands at
     (their tools cache and keep state there), writable like temp. `caches` are the tool cache dirs (they may sit under a SECRETS folder
     such as ~/.claude/plugins/data): read and write is allowed there after the secrets rule, and nowhere wider."""
     home = Path.home()
     secrets = " ".join(f"(subpath {_quote(home / x)})" for x in SECRETS)
-    scratch = Path(cwd) / ".task"  # the task-loop engine's git-ignored scratch folder: a reviewer's test run writes its temp files there
+    scratch = Path(cwd) / sandbox.scratch
     writable: list[str | Path] = [
         cwd if write else scratch,
         "/private/tmp",
@@ -156,7 +161,7 @@ _probed: list[str | None] = []
 
 def preflight(run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run) -> str | None:
     """None when this process can start a sandboxed command, else why not (once per process). macOS cannot nest a sandbox in a sandbox:
-    when delegate itself runs inside one (a sandboxed agent session), sandbox-exec exits 71 and every command of the worker would fail."""
+    when the caller itself runs inside one (a sandboxed agent session), sandbox-exec exits 71 and every command of the worker would fail."""
     if not _probed:
         try:
             r = run(PROBE, capture_output=True, text=True, timeout=20, check=False)

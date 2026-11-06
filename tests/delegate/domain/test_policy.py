@@ -1,7 +1,7 @@
 """domain/policy: the verdict on a worker's tool call, and the typed refusal record (D3)."""
 
+from any_agent import events as ev
 from delegate.app.launch import secret_in
-from delegate.contracts import events as ev
 from delegate.domain.policy.matchers import heredoc_only_hit
 from delegate.domain.policy.shell import git_write, read_only_problem
 from delegate.domain.policy.worker import denial, denial_item, is_policy_denial, judge
@@ -52,4 +52,5 @@ class Policy:
         assert is_policy_denial("Bash", {"command": "git push"})
         assert is_policy_denial("Bash", {"command": "touch x"}, True)
         assert not is_policy_denial("Bash", {"command": "cat .env > x"}, True)  # a secret stays the owner's
-        assert not is_policy_denial("Read", {"command": "git push"})
+        assert is_policy_denial("shell", {"command": "git push"})  # a shell by its command, not by its name
+        assert not is_policy_denial("Read", {"file_path": "x"})

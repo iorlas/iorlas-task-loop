@@ -1,36 +1,47 @@
 """CodexHarness: `codex exec --json`. Its argv, its event parser (each line parsed once, into HarnessEvents and Evidence), its transcript
 file and its login status."""
 
+from __future__ import annotations
+
 import contextlib
 import json
+import os
 import re
 import shutil
 import subprocess
 import time
-from collections.abc import Callable
 from pathlib import Path
-from typing import override
+from typing import TYPE_CHECKING, override
 
-from delegate.adapters import codex_account, procs
-from delegate.adapters.harness.base import Evidence, LaunchInputs, LaunchSpec, Quiet, Summary
-from delegate.adapters.harness.codex_overlay import CodexOverlay
-from delegate.contracts import events as ev
-from delegate.contracts.json_types import Json
-from delegate.domain.jsonval import obj, objs, opt_int, opt_str
+from any_agent import events as ev
+from any_agent import procs
+from any_agent._json import Json, obj, objs, opt_int, opt_str, text
+from any_agent.protocol import Evidence, LaunchInputs, LaunchSpec, Quiet, Summary
+from any_agent.watch import Limits
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from any_agent.harnesses.codex_overlay import CodexOverlay
 
 RECONNECT_RE = re.compile(r"^\s*Reconnecting\.\.\.\s*(\d+)/(\d+)")  # codex retrying its stream: progress until n == of
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 LOGIN_URL_RE = re.compile(r"https://\S+")
 LOGIN_CODE_RE = re.compile(r"\b[A-Z0-9]{4,}-[A-Z0-9]{4,}\b")
-WAITING_RE = re.compile(r"^\s*Reconnecting\.\.\.\s*waiting for network", re.I)  # codex waits for the network by itself
+WAITING_RE = re.compile(r"^\s*Reconnecting\.\.\.\s*waiting for network", re.IGNORECASE)  # codex waits for the network by itself
 STATUS_RE = re.compile(r"(?:last status|status|HTTP)\W{0,3}(\d{3})\b")
+STATUS_4XX_RE = re.compile(
+    r'"status":\s*4(?!29)\d\d'
+)  # codex puts the HTTP status inside its error JSON; 429 is a limit, not a bad request
+BAD_REQUEST_PATTERNS = (STATUS_4XX_RE.pattern, r"no rollout found for thread")  # a 4xx body, a --resume thread codex does not know
+LIMITS = Limits(first_event_s=120, silence_s=3600)  # `codex exec --json` is silent during pure reasoning (rollout gaps up to 2,298 s)
 SHELL_ITEM = "command_execution"
 TOOL_ITEMS = ("mcp_tool_call", "file_change", "web_search", "collab_tool_call")
 WORK_ITEMS = (SHELL_ITEM, "file_change", "agent_message", "mcp_tool_call")  # a finished one of these: the worker did something
 
 
-def _s(x: object) -> str:
-    return x if isinstance(x, str) else "" if x is None else str(x)
+def sessions_root() -> Path:
+    return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "sessions"
 
 
 def http_status(text: str) -> int | None:
@@ -48,16 +59,17 @@ def http_status(text: str) -> int | None:
 
 def tool_parts(item: dict[str, Json]) -> tuple[str, str]:
     """(name, arg) of a non-shell item: an MCP call is `server.tool`, an edit lists its paths, a search keeps its query."""
-    kind = _s(item.get("type"))
+    kind = text(item.get("type"))
     if kind == "mcp_tool_call":
-        return _s(item.get("server")) + "." + _s(item.get("tool")), ""
+        return text(item.get("server")) + "." + text(item.get("tool")), ""
     if kind == "file_change":
-        return "edit", ", ".join(_s(c.get("path")) for c in objs(item.get("changes")))
-    return kind.split("_")[0], _s(item.get("query"))
+        return "edit", ", ".join(text(c.get("path")) for c in objs(item.get("changes")))
+    return kind.split("_")[0], text(item.get("query"))
 
 
 class CodexHarness(Quiet):
     kind = "codex"
+    limits = LIMITS
     secret_event = ev.Cmd  # no hook under `codex exec`: stop the worker before it can use what it read
     EXE = "codex"
 
@@ -98,7 +110,7 @@ class CodexHarness(Quiet):
         return events
 
     def _events(self, raw: dict[str, Json]) -> list[ev.HarnessEvent]:
-        kind, item = _s(raw.get("type")), obj(raw.get("item"))
+        kind, item = text(raw.get("type")), obj(raw.get("item"))
         if kind in ("item.started", "item.completed", "item.updated") and item.get("type"):
             return self._item(kind, item)
         u = raw.get("usage")
@@ -118,11 +130,11 @@ class CodexHarness(Quiet):
         if kind == "turn.started":
             return []
         if kind in ("turn.failed", "error"):
-            return [self._failure(_s(obj(raw.get("error")).get("message")) if kind == "turn.failed" else _s(raw.get("message")))]
+            return [self._failure(text(obj(raw.get("error")).get("message")) if kind == "turn.failed" else text(raw.get("message")))]
         return [ev.Unknown(type=kind[:60])]
 
     def _shell(self, kind: str, item: dict[str, Json], ident: str | None) -> list[ev.HarnessEvent]:
-        cmd = _s(item.get("command"))
+        cmd = text(item.get("command"))
         if kind == "item.updated":
             return []
         if kind != "item.completed":
@@ -145,9 +157,9 @@ class CodexHarness(Quiet):
                 return []
             return [ev.ToolEnd(id=ident, name=name, arg=arg) if done else ev.Tool(id=ident, name=name, arg=arg)]
         if ity == "agent_message":
-            return [ev.Msg(text=_s(item.get("text")))] if done else []
+            return [ev.Msg(text=text(item.get("text")))] if done else []
         if ity == "reasoning":
-            return [ev.Think(text=_s(item.get("text")))] if done else []
+            return [ev.Think(text=text(item.get("text")))] if done else []
         return [ev.Unknown(type=kind)]
 
     def _failure(self, text: str) -> ev.HarnessEvent:
@@ -161,7 +173,7 @@ class CodexHarness(Quiet):
 
     def _note(self, raw: dict[str, Json], events: list[ev.HarnessEvent]) -> None:
         """What this line established, for the classifier and the supervisor."""
-        e, kind, item = self.evidence, _s(raw.get("type")), obj(raw.get("item"))
+        e, kind, item = self.evidence, text(raw.get("type")), obj(raw.get("item"))
         if kind.startswith(("item.", "turn.")) and kind != "turn.failed":
             e.net_at = None  # the stream moves again: the wait for the network is over
         if kind == "item.completed" and item.get("type") in WORK_ITEMS:
@@ -221,7 +233,7 @@ class CodexHarness(Quiet):
         """The rollout file of thread `ref`, or None."""
         if not ref:
             return None
-        hits = sorted(codex_account.sessions_root().rglob(f"*{ref}.jsonl"))
+        hits = sorted(sessions_root().rglob(f"*{ref}.jsonl"))
         return str(hits[0]) if hits else None
 
     def login_probe(self, timeout: float) -> tuple[bool | None, str]:

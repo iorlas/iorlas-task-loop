@@ -1,4 +1,4 @@
-"""The outcome ladder (adapters/harness/classify.py) and contract.json, replayed on fixtures taken from real runs (contract/)."""
+"""The outcome ladder (the shelf any_agent.classify) and contract.json, replayed on fixtures taken from real runs (contract/)."""
 
 import argparse
 import io
@@ -14,12 +14,13 @@ from typing import ClassVar
 from unittest.mock import patch
 
 import pytest
+from any_agent.classify import Outcome, classify
+from any_agent.harnesses import opencode_sandbox
+from any_agent.harnesses.opencode import OpenCodeHarness
+from any_agent.supervisor import RunHooks
 from delegate.adapters import codex_account
-from delegate.adapters.harness import classify
-from delegate.adapters.harness.opencode import OpenCodeHarness
 from delegate.app import answer, env, launch
 from delegate.app import decide as dec
-from delegate.app.supervisor import RunHooks
 from delegate.cli import verbs
 from delegate.contracts import stops
 from delegate.contracts.json_types import Json, as_opt_str, obj
@@ -53,7 +54,7 @@ def load(path):
 
 def replay(row, f):
     ev = row["evidence"]
-    return classify.classify(ev["rc"], ev["vendor_err"], ev["stderr"], ev["timed_out"], ev["work_seen"], ev["structured"])
+    return classify(ev["rc"], ev["vendor_err"], ev["stderr"], ev["timed_out"], ev["work_seen"], ev["structured"])
 
 
 def reason_of(
@@ -65,7 +66,7 @@ def reason_of(
     structured: Mapping[str, Json] | None = None,
 ) -> str | None:
     """The reason the ladder gives for a run, None when the run is done."""
-    o = classify.classify(rc, vendor_err, stderr, timed_out, work_seen, structured)
+    o = classify(rc, vendor_err, stderr, timed_out, work_seen, structured)
     return o.reason if o else None
 
 
@@ -214,9 +215,9 @@ class Stop(Case):
         assert (out.reason, r["stop"]["scope"], r["stop"]["retry"]) == ("credit", "lane", {"kind": "none", "at": None})
 
     def test_answers_that_wait_for_a_time_say_when(self):
-        r = self.answer(classify.Outcome("rate_limited", "Usage limit reached for 5 hour", "event"), "ZAI_CODING_SUBSCRIPTION")
+        r = self.answer(Outcome("rate_limited", "Usage limit reached for 5 hour", "event"), "ZAI_CODING_SUBSCRIPTION")
         assert (r["stop"]["permanence"], r["stop"]["retry"]) == ("transient", {"kind": "predicted", "at": T + 3600})
-        r = self.answer(classify.Outcome("logged_out", "Not logged in", "stderr"), "OPENAI_SUBSCRIPTION")
+        r = self.answer(Outcome("logged_out", "Not logged in", "stderr"), "OPENAI_SUBSCRIPTION")
         assert (r["stop"]["permanence"], r["stop"]["retry"]["kind"]) == ("needs_owner", "none")
         assert "codex login" in r["stop"]["fix"]
 
@@ -225,7 +226,7 @@ class Stop(Case):
             res: dict[str, Json] = {"ref": "thread-1", "started": True, "partial": True}
             launch.settler().apply(
                 res,
-                classify.Outcome(reason, "signal 15" if reason == "killed" else "ENOTFOUND", "exit"),
+                Outcome(reason, "signal 15" if reason == "killed" else "ENOTFOUND", "exit"),
                 {"lane": "OPENAI_SUBSCRIPTION"},
                 T,
                 "cli",
@@ -325,49 +326,6 @@ class Docs:
         assert set(re.findall(r'ru\.add_argument\(\s*"(--[a-z-]+)"', self.SRC)) == set(CONTRACT["run_args"])
 
 
-class Ladder:
-    def test_order_first_match_wins(self):
-        c = reason_of
-        assert c(1, "x", "", True, False, {"secret": "cat .env"}) == "secrets"
-        assert c(1, "", "", True, False, {"watchdog": "limit", "msg": "Usage limit"}) == "rate_limited"
-        assert c(1, "", "", False, False, {"watchdog": "limit", "msg": "personal-team-blocked:spending-limit"}) == "credit_exhausted"
-        assert c(-15, "", "", False, False, {"watchdog": "hung"}) == "hung"
-        assert c(-15, "", "", False, False, {"watchdog": "hung", "net_up": False}) == "network"
-        assert c(-15, "", "", True, False) == "timeout"
-        assert c(1, "credit balance is too low", "", False, True) == "credit_exhausted"  # before the limit pattern that also matches it
-        assert c(1, "", "401 Unauthorized", False, False) == "logged_out"
-        assert c(1, 'HTTP {"status":404}', "", False, False) == "bad_request"
-        assert c(1, 'HTTP {"status":429}', "", False, False) == "rate_limited"
-        for text in (
-            "Invalid schema for response_format 'x'",
-            "error: unknown argument '--foo'",
-            "codex: error: unrecognized arguments: --bar",
-        ):  # the engine's INFRA_TEXT, now the vendor's own bad_request
-            assert c(2, "", text, False, False) == "bad_request", text
-        assert c(1, "getaddrinfo ENOTFOUND x", "", False, False) == "network"
-        assert c(1, "getaddrinfo ENOTFOUND x", "", False, True) == "worker_failed"  # it had started: not a network start-up failure
-        assert c(-9, "", "", False, True) == "killed"
-        assert c(1, "boom", "", False, False) == "vendor_blip"
-        assert c(1, "boom", "", False, True) == "worker_failed"
-        assert c(2, "", "noise", False, False) == "worker_failed"
-        assert c(0, "", "login noise: not logged in", False, True) is None  # stderr of a good run is not read
-
-    def test_http_status_from_the_cli_is_read_before_any_text(self):
-        c = reason_of
-        assert c(1, "", "", False, False, {"http_status": 429}) == "rate_limited"
-        assert c(1, "x", "", False, False, {"http_status": 401}) == "logged_out"
-        assert c(1, "x", "", False, False, {"http_status": 400}) == "bad_request"
-
-    def test_one_patterns_block_one_copy_of_each_regex(self):
-        here = ROOT / "src" / "delegate" / "adapters" / "harness" / "classify.py"
-        others = [p for p in (ROOT / "src" / "delegate").rglob("*.py") if p != here]
-        for name in ("LIMIT_RE", "LOGIN_RE", "NETWORK_RE", "SPEND_RE"):
-            assert f"\n{name} = re.compile" in here.read_text(encoding="utf-8")
-            for p in others:
-                assert f"\n{name} = re.compile" not in p.read_text(encoding="utf-8"), p.name
-        assert set(classify.PATTERNS) == {"limit", "credit", "spend", "login", "network", "codex_status", "bad_request"}
-
-
 class Launchers(Case):
     """The three harnesses end in the same ladder; the supervisor replays the events of a fixture row (delegate_fakes/fake_run.py)."""
 
@@ -378,7 +336,7 @@ class Launchers(Case):
             patch.object(shutil, "which", return_value="cli"),
             patch.object(OpenCodeHarness, "find_exe", return_value="opencode"),
             patch.object(sys, "platform", "darwin"),
-            patch.object(OpenCodeHarness, "write_shell"),
+            patch.object(opencode_sandbox, "write_shell"),
             patch.object(env, "child_env", return_value={}),
             patch.object(codex_account, "thread_total", return_value=None),
             patch.object(codex_account, "child_tokens", return_value=({"in": 0, "cached": 0, "out": 0}, 0)),
