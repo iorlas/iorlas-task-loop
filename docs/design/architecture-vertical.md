@@ -251,3 +251,36 @@ Three independent opus reviews, code only. What changed:
 - **Contracts (reviewer 2):** `config.py` cannot be split by fields, only into views; 7 "dead" contracts are live internals; owners of `enums`, `runlife`, `checkpoint` corrected; kernel 626 sloc; "single cause" became "main cause, 75%" (§0, §2).
 - **Mechanics (reviewer 3):** no existing path hook; the checklist of ~35 hard-coded places; caps silently skipped under `packages/`; test count 330 → 256 (44%); P1 is M with no promised gain; overlap rule widened to every file the four PRs touch; S1 split in three (§1, §4, §6).
 Disagreements I keep: shelf is not the lever (§3); packages stay in this repo with import names, not workspace installs (the review found no argument against). Not re-measured after the review: the 119-commit baseline (origin/main moved).
+
+## 9. Measured after the first hub splits (2026-11-06): why the dash/delegate path move is deferred
+
+Method: `dev/reach.py` and the same `Repo` graph. "Stages" = distinct stage packages (`reach.stage_of`, kernel left out) in the forward import closure of a test file.
+
+**The move gives no selection drop.** Candidates with the fewest inbound imports:
+
+| stage | src files | inbound src files | tests importing it | selection of one edit now |
+|---|---|---|---|---|
+| dash (`taskloop_dash`) | 57 | 3 | 59 | median 92 (46 `tests/rules`, always, + 49 dash tests): already independent |
+| delegate | 66 | 3 | 71 | 413 per delegate-only commit; wide only because 14 app files import `adapters.delegate`/`runner` (the Agent-port work of ISOLATION, #191), not because of its directory |
+| hook | 6 | 0 | 6 | tiny |
+
+A `packages/` move of dash costs S1a (~35 files of mechanics) + ~116 moved files across four live lanes and changes no edge. Dash still imports 44 contract files, 40 of them shared with other stages: its coupling is contract churn, which the contract splits (C2, C3a) address. Verdict: ❌ move now; ✅ after the contracts and test hubs are owned.
+
+**Tests that are still wide** (before T0b; `tests/rules` left out; "within ≤ 3 stages" = own stage + 2):
+
+| folder | tests | median stages reached | within ≤ 3 |
+|---|---|---|---|
+| delegate | 77 | 1 | 77 |
+| adapters | 46 | 0 | 42 |
+| contracts | 33 | 0 | 32 |
+| dash | 51 | 1 | 40 |
+| domain | 20 | 2 | 17 |
+| asks | 18 | 3 | 12 |
+| checks | 43 | 12 | 15 |
+| land | 42 | 10 | 9 |
+| run | 53 | 12 | 6 |
+| loop | 32 | 14 | 0 |
+| write, review, look | 18 | 12 | 3 |
+| all folders | 553 | | 313 (57%) |
+
+Cause of the wide ones: `tests/support/engine_case.py` (596 sloc, imported by 108 tests: run 32, checks 26, land 16, review 7, write 6, plan 6), `builders.make_engine` (457 src files forward through `app/run/engine.py`), `looptest`, `slots`. T0a moved `cfg_with`, `plan_of` and `argv_cfg` to `support/cfgs.py` (reaches 8 src files); of the 32 importers of `builders`, 26 only needed those. T0b is the engine harness: the 26 checks tests and 16 land tests that subclass `EngineTest` to exercise one stage through the whole engine.
