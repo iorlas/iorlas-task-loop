@@ -18,6 +18,7 @@ from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import AnswerAsk, Beads
 from taskloop.contracts.slottable import SlotSource
 from taskloop_dash.cache import FileCache, TtlCache
+from taskloop_dash.readers import dbruns
 from taskloop_dash.tails import Tails
 
 Bead = dict[str, Any]
@@ -123,6 +124,7 @@ class Env:
         self.tails = tails or Tails()
         self.ttl = TtlCache(clock)
         self.files = FileCache()
+        self.kept_runs: dbruns.Kept = {}
         self.started = clock()
         self.last_seen = clock()
         self.projects = self.home / ".claude" / "projects"
