@@ -1,62 +1,36 @@
-"""The owner's requests to a live run (contracts/requests.py): `post` merges one into the run's request file, `take` hands the whole
-file to the run once. Both hold the file's lock (the kernel drops it with the process), so a request written while the run
-takes the file is never lost or taken twice. The run acts on them (OwnerRequests): stop at its Beat or next step boundary through its
-stop flag, park and the notes at its next step boundary."""
+"""The owner's requests to a live run (contracts/requests.py): `post` adds one as a `signal` row, `take` hands the run's untaken rows
+to it once, merged (contracts/signalrows.py), so a request written while the run takes is never lost or taken twice. The run acts on
+them (OwnerRequests): stop at its Beat or next step boundary through its stop flag, park and the notes at its next step boundary."""
 
 import contextlib
-import json
-from collections.abc import Generator
-from pathlib import Path
+import time
 from typing import Any
 
-from atomic_io import atomic_write_json
-
-from taskloop.adapters import locks
 from taskloop.app.asks.intake import Intake, receipt
+from taskloop.contracts import factorydb, runlife
 from taskloop.contracts import log as rec
-from taskloop.contracts import runlife, wire
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.requests import OwnerNote, OwnerRequest
 from taskloop.contracts.runlife import Liveness, liveness
+from taskloop.contracts.signalrows import SignalRows
 
 PARKED_WHY = "parked: by the owner (the branch and the checkpoint are kept; release the hold to go on)"
 STOPPED_WHY = "failed: stopped by the owner"
 NOTE_HEAD = "\n\n## The owner's note for this stage\n"
 
 
-@contextlib.contextmanager
-def locked(cfg: ConfigDir, run: str) -> Generator[Path]:
-    """The run's request file, under its lock (the one lock primitive, adapters/locks.py)."""
-    lock = cfg.run_request_lock(run)
-    lock.parent.mkdir(parents=True, exist_ok=True)
-    with locks.hold_path(lock, "owner-request", timeout=30):
-        yield cfg.run_request(run)
-
-
-def read(path: Path) -> OwnerRequest | None:
-    try:
-        return wire.load(OwnerRequest, json.loads(path.read_text(encoding="utf-8")))
-    except (OSError, ValueError):  # none, torn, or a foreign version: no request
-        return None
-
-
 def post(cfg: ConfigDir, run: str, by: str, now: float, *, repo: str, bead: str,
          park: bool = False, stop: bool = False, note: str = "") -> str:
-    """Merge into the observed repo/bead's live run. Identity refusal precedes every write, including the request lock."""
+    """Add to the observed repo/bead's live run. Identity refusal precedes every write; a request that lands
+    after the run ended is dropped at its close."""
     why = runlife.command_scope(cfg, repo, bead, run, now)
     if why:
         return why
-    with locked(cfg, run) as path:
-        why = runlife.command_scope(cfg, repo, bead, run, now)
-        if why:
-            return why
-        old = read(path) or OwnerRequest()
-        notes = old.notes + ([OwnerNote(text=note.strip(), t=now, by=by)] if note.strip() else [])
-        atomic_write_json(path, wire.dump(OwnerRequest(park=old.park or park, stop=old.stop or stop, notes=notes, by=by, t=now)),
-                          indent=1, fsync=False)
+    notes = [OwnerNote(text=note.strip(), t=now, by=by)] if note.strip() else []
+    SignalRows(cfg, run).post(OwnerRequest(park=park, stop=stop, notes=notes, by=by, t=now), now)
     return ""
 
 
@@ -67,18 +41,13 @@ def live(cfg: ConfigDir, run: str, now: float) -> bool:
     return b is not None and liveness(b.manifest) is Liveness.LIVE
 
 
-def take(cfg: ConfigDir, run: str) -> OwnerRequest | None:
-    """The run's pending request, removed: each is acted on once."""
-    if not cfg.run_request(run).exists():
-        return None
-    with locked(cfg, run) as path:
-        got = read(path)
-        path.unlink(missing_ok=True)
-    return got
+def take(cfg: ConfigDir, run: str, now: float = 0.0) -> OwnerRequest | None:
+    """The run's pending request, taken: each is acted on once."""
+    return SignalRows(cfg, run).take(now or time.time())
 
 
 def peek(cfg: ConfigDir, run: str) -> OwnerRequest | None:
-    return read(cfg.run_request(run))
+    return SignalRows(cfg, run).peek()
 
 
 class OwnerRequests:
@@ -132,7 +101,7 @@ class OwnerRequests:
     def drop(self) -> None:
         """At the close: a request the run did not take is for a run that has ended; it is dropped, never acted on later."""
         self.closing = True
-        with contextlib.suppress(OSError):
+        with contextlib.suppress(OSError, factorydb.DatabaseError):
             take(self.cfg, self.run)
 
 
