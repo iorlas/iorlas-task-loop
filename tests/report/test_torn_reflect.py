@@ -13,6 +13,7 @@ import support.paths  # noqa: F401
 from support import homes
 
 from taskloop.app.report import reflect as rd
+from taskloop.contracts.looprows import LoopRows
 from taskloop.contracts.wire import Refused
 
 
@@ -24,14 +25,16 @@ class TornReflect(Case):
         env = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": str(root / "cfg"), "APPDATA": str(root / "cfg"), "HOME": str(root)})
         env.start()
         self.addCleanup(env.stop)
-        self.path = homes.cfg().reflect_state()
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text('{"v": 1, "filed"')
+        self.key = "reflect:digest"
+        with LoopRows(homes.cfg(), "").transaction() as con:
+            con.execute("INSERT INTO kv (k, v, t) VALUES (?, ?, 0) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (self.key, self.torn))
 
-    def test_read_and_write_back_refuse_with_the_path(self) -> None:
+    torn = '{"v": 1, "filed"'
+
+    def test_read_and_write_back_refuse_with_the_row(self) -> None:
         with pytest.raises(Refused) as ctx:
             rd.read_state(homes.cfg())
-        assert str(self.path) in str(ctx.value)
+        assert self.key in str(ctx.value)
         with pytest.raises(Refused):
             rd.due(homes.cfg())
-        assert self.path.read_text() == '{"v": 1, "filed"'
+        assert LoopRows(homes.cfg(), "").select("SELECT v FROM kv WHERE k=?", (self.key,)) == [(self.torn,)]
