@@ -4,7 +4,6 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-
 from support.dashlogs import RunScript, T
 
 from taskloop.contracts import factorydb
