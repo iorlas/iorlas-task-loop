@@ -12,7 +12,7 @@ from taskloop.contracts.answers import VERDICTS
 from taskloop.contracts.checkpoint import Notes
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId
-from taskloop.domain.review import followups as fu
+from taskloop.domain import followups as fu
 from taskloop.stores.bundle import Stores
 
 
