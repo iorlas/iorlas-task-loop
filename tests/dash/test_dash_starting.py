@@ -85,3 +85,21 @@ class Abandoned(Case):
 
     def test_a_claim_inside_its_lease_is_still_starting(self):
         assert self.snap(False).marker.value == "run"
+
+
+class Stalled(Case):
+    """Past the startup lease a claim with no run is not RUN: the card says the start stalled (the F03 board half)."""
+
+    def card(self, age):
+        p = project()
+        p = ProjectIn(id=p.id, name=p.name, beads=p.beads, slots=[slot(held_bead="p-1")])
+        return build(World(now=T + age, host="host", version="test", projects=[p], runs={}, asks={})).beads[0]
+
+    def test_inside_the_lease_the_claim_reads_as_running(self):
+        c = self.card(120)
+        assert c.marker.value == "run" and c.column == Column.WORKING
+
+    def test_past_the_lease_it_reads_exited_with_the_stalled_reason(self):
+        c = self.card(700)
+        assert c.marker.value == "exited" and c.column == Column.WORKING
+        assert c.status.startswith("start stalled: no run 11 min")
