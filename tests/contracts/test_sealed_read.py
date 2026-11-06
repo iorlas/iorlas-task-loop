@@ -1,10 +1,10 @@
 """JsonStore.read says which of four it found, and a caller that must not read a damaged file as empty refuses it by name."""
 import sys
-import tempfile
 from pathlib import Path
 
 import pytest
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -16,7 +16,7 @@ from taskloop.contracts.wire import Refused
 
 class SealedRead(Case):
     def setup_method(self) -> None:
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.path = Path(tmp.name) / "n.json"
         self.store = JsonStore(self.path, NetPause)

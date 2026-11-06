@@ -2,11 +2,11 @@
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 from support.case import Case
 from support.imagetools import without_image_tools
+from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -79,7 +79,7 @@ class Table(Case):
             assert why in err
 
     def test_collect_takes_new_or_changed_pictures_not_old_ones_nor_symlinks(self):
-        with tempfile.TemporaryDirectory() as d:
+        with TemporaryDirectory() as d:
             wt, out = Path(d, "wt"), Path(d, "out")
             (wt / "client/Logs/shots").mkdir(parents=True)
             out.mkdir()
@@ -127,7 +127,7 @@ class Judge(Case):
             assert part in text
 
     def test_downscale_falls_back_to_a_copy_and_says_so(self):  # no image tool, so no real process either
-        with tempfile.TemporaryDirectory() as d, without_image_tools():
+        with TemporaryDirectory() as d, without_image_tools():
             src = Path(d, "a.png")
             src.write_bytes(b"not an image")
             why = looks.downscale(src, Path(d, "sub", "b.png"), 100)

@@ -6,10 +6,11 @@ import json
 import os
 import signal
 import sys
-import tempfile
 import time
 from pathlib import Path
 from typing import Any
+
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -63,7 +64,7 @@ def dead_pid() -> int:
 
 class RealRig:
     def __init__(self) -> None:
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.cfg = paths.ConfigDir(Path(self.tmp.name) / "task-loop")
         self.stores: Stores = real_stores(self.cfg)
         self.procs: list[Holder] = []

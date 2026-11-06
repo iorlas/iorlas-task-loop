@@ -4,7 +4,6 @@ file, a fake bd), its handler on a loopback port. The snapshot's version is its 
 import json
 import socket
 import sys
-import tempfile
 import threading
 import urllib.error
 import urllib.request
@@ -12,6 +11,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -40,7 +40,7 @@ NOW = T + 3600
 
 class ApiFixture(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         root = Path(self.tmp.name)
         self.repo = root / "lifesim"
         self.repo.mkdir()

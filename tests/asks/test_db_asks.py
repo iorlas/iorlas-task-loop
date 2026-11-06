@@ -1,10 +1,10 @@
 """Run the existing ask and ledger behavior contracts against AskStore.at's database adapter."""
 
-import tempfile
 from pathlib import Path
 
 import support.paths  # noqa: F401
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from asks import test_ask_v3
 from taskloop.app.asks.intake import Intake
@@ -15,7 +15,7 @@ from taskloop.contracts.stores import AskStore
 
 class DatabaseAsks(Case):
     def database(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.addCleanup(factorydb.close_shared)
         return AskStore.at(ConfigDir(Path(tmp.name)))

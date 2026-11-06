@@ -4,7 +4,6 @@ import builtins
 import json
 import os
 import random
-import tempfile
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
@@ -14,6 +13,7 @@ from support.case import Case
 from support.dashlogs import RunScript, T
 from support.narrow import must
 from support.runs import manifest
+from support.tmpdir import TemporaryDirectory
 
 from dash import test_dash_api as fixtures
 from taskloop.contracts import factorydb
@@ -30,7 +30,7 @@ NOW = T + 3600
 
 class FactoryIndex(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.cfg = ConfigDir(Path(tmp.name))
         self.paths = []

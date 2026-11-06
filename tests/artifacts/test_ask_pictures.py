@@ -1,8 +1,8 @@
 """A stuck or decision ask carries the pictures the failing check left (tl-3qz): registered in the store, named on the ask."""
-import tempfile
 from pathlib import Path
 
 from support.case import Case
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.artifacts import ask_pictures, store
 from taskloop.contracts.artifact import ArtifactSlot
@@ -12,7 +12,7 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 32
 
 class AskPictures(Case):
     def setup_method(self):
-        tmp = tempfile.TemporaryDirectory()
+        tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.run_dir = Path(tmp.name) / "run"
         self.root = Path(tmp.name) / "store"

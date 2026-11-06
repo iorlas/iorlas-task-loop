@@ -1,7 +1,6 @@
 """Real check children retain the caller's HOME by default and isolate it when the profile opts in."""
 import json
 import sys
-import tempfile
 import threading
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,6 +10,7 @@ from support.argv_checks import ArgvChecks
 from support.case import Case
 from support.checked import run_checked
 from support.tlmain import tl_main
+from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import childenv
 from taskloop.adapters.childenv import CHECK_SECRETS
@@ -23,7 +23,7 @@ from taskloop.contracts.ports import CheckSpec
 
 class CheckHomeCanaryTest(Case):
     def setup_method(self):
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         self.owner = self.root / "owner"
