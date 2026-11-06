@@ -10,13 +10,13 @@ The shot table is a JSON file in the repo (engine.shot_table, read from the base
 engine runs):
 
     {"v": 1, "methods": [
-      {"method": "CreatorShots",
-       "summary": "named creator categories",                     # one line for the writer's prompt
-       "argv": ["Unity", "-batchmode", "-projectPath", "client", "-executeMethod", "Lifesim.Editor.CreatorShots.Run", "{args}",
-                "-logFile", "client/Logs/creator-shots.log"],           # a program and its arguments: no shell
-       "args": [{"name": "shots", "flag": "-shots", "pattern": "[\\\\w=,:-]+", "required": false,
+      {"method": "ProfileShots",
+       "summary": "named profile categories",                     # one line for the writer's prompt
+       "argv": ["render-tool", "--headless", "--project", "app", "--entry", "Shots.Run", "{args}",
+                "--log", "app/logs/shots.log"],                         # a program and its arguments: no shell
+       "args": [{"name": "shots", "flag": "--shots", "pattern": "[\\\\w=,:-]+", "required": false,
                  "about": "body=body,face=face"}],      # flag "" = a positional argument
-       "out": "client/Logs/shots",                                # where the pictures land; {out} in argv = a folder the engine gives
+       "out": "app/logs/shots",                                # where the pictures land; {out} in argv = a folder the engine gives
        "files": "*.png",                                          # which of them (fnmatch), default *.png
        "timeout_min": 15}]}
 

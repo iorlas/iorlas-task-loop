@@ -91,7 +91,7 @@ class WriteRound:
         e.last_summary = w["summary"]
 
     def question(self, s: StageState) -> str:
-        """A question an accepted requirement decides is a fix round, not an ask (lifesim-d5f.58); any other is the owner's."""
+        """A question an accepted requirement decides is a fix round, not an ask; any other is the owner's."""
         e, w = self.e, s.w
         if not w["question"].strip():
             return ""
@@ -132,7 +132,7 @@ class WriteRound:
 
     def shots_contract(self, s: StageState, prompt: str) -> None:
         """tl-tno: a visual write that named no shots and gave no reason is asked once more, with the table, before any check or review
-        runs (the review's 'asked for no shots' finding burned lifesim-d5f.39's re-plan cap)."""
+        runs (the review's 'asked for no shots' finding burned a bead's re-plan cap)."""
         e, w = self.e, s.w
         if not (e.pictures.look_ready(s.st) and not s.fix and not s.shots_fixed and not (w.get("shots") or [])
                 and not (w.get("logic_only") or "").strip()):

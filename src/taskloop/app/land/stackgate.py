@@ -5,6 +5,7 @@ and asked again; with no such worktree the gate makes one (detached at the oid, 
 command by hand. Still not green: it stops with the check's exit code. Each refused step says the first key field that differs
 from its newest receipt on the tree and base. A commit with no gate step passes. Its plan_cmd identifies the producer of planned skips."""
 import json
+import threading
 
 from taskloop.app.checks import authorization
 from taskloop.app.land.carry import Carry
@@ -106,6 +107,27 @@ class StackGate:
             raise Stop(ran.exit if ran and ran.exit else 1, f"{branch} ({oid[:12]}) is still not green for {self.named(red)} after "
                                                       f"`{text_of(argv)}` (exit {ran.exit if ran else 'not run'})")
         return base
+
+    def needs_run(self, oid: str) -> bool:
+        """True when a gate step of the base's profile has no evidence for this oid yet: a `tl check` would be run for it (a read only;
+        a profile change or a missing base is `require`'s to refuse)."""
+        base = self.cmds.port(f"git rev-parse --verify {self.base_ref}", lambda: self.git.rev_parse(self.repo, self.base_ref))
+        engine = self.profile(base) if base else None
+        if engine is None or not engine.gate_checks:
+            return False
+        tree = self.cmds.port(f"git rev-parse --verify {oid[:12]}^{{tree}}", lambda: self.git.rev_parse(self.repo, f"{oid}^{{tree}}"))
+        return bool(tree) and bool(self.red(engine, tree, base))
+
+    def warm(self, oid: str, git_lock: threading.Lock) -> int:
+        """Run `tl check` for the oid in a fresh worktree, the one `require` would make, so its receipts exist when `require` asks. Runs in
+        a worker thread: only the spawner runs outside `git_lock` and nothing here writes a log row; -> the check's exit code."""
+        with git_lock:
+            path = self.fresh(oid)
+        try:
+            return self.cmds.spawner.run([*self.tl, "check", "--repo", path], cwd=path).exit
+        finally:
+            with git_lock:
+                self.cmds.row(f"git worktree remove {path}", lambda: self.git.remove_worktree_force(self.repo, path))
 
     def moved_during(self, branch: str, oid: str, wt: str, base: str) -> str:
         """After a red run: the worktree's HEAD or the base moved while `tl check` ran (a merge of main into the worktree, another
