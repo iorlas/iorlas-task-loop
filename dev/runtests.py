@@ -41,6 +41,7 @@ def load_scratch():
 scratch = load_scratch()
 
 CHUNK = 150          # tests per worker: a worker costs ~2 s to start and a few hundred MB, so a smaller share is not worth one
+MIN_LANE_WORKERS = 2  # a lane's selection past CHUNK tests keeps this many however busy the host is
 MAX_WORKERS = 4      # the box also runs the implementer workers; the tests must not starve them
 WORKER_MB = 2048     # RAM budget of one worker
 WALL_S = 3600.0      # a hang guard for one pytest run (a wide selection takes 15 min in 4 workers); its process tree is killed
@@ -94,11 +95,23 @@ def lower_priority(environ):
         os.nice(NICE - now)
 
 
-def workers(n_tests, cpus=None, mem_mb=None):
-    """How many pytest workers this selection earns on this host (1: no xdist)."""
+def busy_cpus():
+    """The cores other work keeps busy: the 1-minute load average, rounded (0 where the host does not say)."""
+    try:
+        return round(os.getloadavg()[0])
+    except OSError:
+        return 0
+
+
+def workers(n_tests, cpus=None, mem_mb=None, busy=None, full=False):
+    """How many pytest workers this selection earns on this host right now (1: no xdist). A lane run leaves the cores the other lanes
+    keep busy (MIN_LANE_WORKERS past CHUNK tests: one worker made wide runs slow); the landing gate takes them all."""
     cpu = cpus if cpus is not None else (os.cpu_count() or 1)
     ram = mem_mb if mem_mb is not None else total_mb()
-    return max(1, min(cpu, cpu if ram is None else ram // WORKER_MB, math.ceil(n_tests / CHUNK), MAX_WORKERS))
+    free = cpu if full else cpu - (busy if busy is not None else busy_cpus())
+    if not full and n_tests > CHUNK:
+        free = max(free, MIN_LANE_WORKERS)
+    return max(1, min(free, cpu if ram is None else ram // WORKER_MB, math.ceil(n_tests / CHUNK), MAX_WORKERS))
 
 
 def isolated_env(home):
@@ -159,7 +172,7 @@ def main():
     if len(tests) < len(selected):
         print(f"runtests: {len(selected) - len(tests)} of {len(selected)} selected test files already green (ledger)", flush=True)
     n_tests = count_tests(root, tests)
-    n = workers(n_tests)
+    n = workers(n_tests, full=bool(os.environ.get(FULL)))
     print(f"runtests: {len(tests)} test files, {n_tests} tests, {n} worker{'s' if n > 1 else ''} (change against {base[:12]})", flush=True)
     note = wide_note(root, n_tests)
     if note:
