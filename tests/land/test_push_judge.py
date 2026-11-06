@@ -211,6 +211,7 @@ class PushJudge(Case):
     def test_git_failures_are_unavailable(self):
         with mock.patch.object(self.git, "rev_parse", side_effect=GitReadFailure("unknown")):
             assert self.judge().status == PushStatus.UNAVAILABLE
+
     def test_a_green_tip_that_adds_a_credential_is_refused_naming_the_kind(self):
         self.stamp()
         self.git.replies[("diff",)] = "+++ b/f\n+" + "-----BEGIN " + "RSA PRIVATE KEY-----\n"
@@ -222,8 +223,21 @@ class PushJudge(Case):
         self.git.replies[("diff",)] = "+AKIA" + "ABCDEFGHIJKLMNOP\n"
         assert self.judge(self.request("head", remote="refs/heads/task/x")).status == PushStatus.ALLOWED
 
-    def test_a_deleted_ref_needs_no_gate_evidence(self):
-        assert self.judge(self.request("0" * 40)).status == PushStatus.ALLOWED
+    def delete(self, remote):
+        return f"(delete) {'0' * 40} refs/heads/{remote} {'a' * 40}\n"
+
+    def test_deleting_a_task_branch_needs_no_gate_evidence(self):
+        for remote in ("task/x", "wip/x", "topic"):
+            assert self.judge(self.delete(remote)).status == PushStatus.ALLOWED, remote
+
+    def test_deleting_the_base_branch_is_refused(self):
+        decision = self.judge(self.delete("main"))
+        assert decision.status == PushStatus.REFUSED
+        assert "refs/heads/main" in decision.reasons[0]
+
+    def test_a_deletion_cannot_hide_in_a_push_with_other_tips(self):
+        decision = self.judge(self.request("head", remote="refs/heads/task/x") + self.delete("main"))
+        assert decision.status == PushStatus.REFUSED
 
     def test_working_tree_profile_is_not_read_for_delivery(self):
         self.stamp()
