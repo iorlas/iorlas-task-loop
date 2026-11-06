@@ -510,6 +510,33 @@ class Gated(GateCase):
         assert self.sim.ran("git push") == []
         assert "tl check --repo /wt/a" in self.kinds("warn")[0]["text"]
 
+    def test_independent_items_are_gated_at_once_before_the_first_merge(self):
+        real_run = self.sim.run
+        seen: list[str] = []
+
+        def run(argv, **kw):
+            if argv[:2] == ["tl", "check"]:
+                seen.append(argv[-1])
+                self.green.update("tree-" + oid[:6] for oid in OID.values())
+            return real_run(argv, **kw)
+
+        self.sim.run = run
+        assert self.deliver(StackItem(branch="task/a"), StackItem(branch="task/b"), jobs=2) == 0
+        checks, merges = self.sim.ran("tl check"), self.sim.ran("gh pr merge")
+        assert len(checks) == 2 and len(set(seen)) == 2  # one fresh worktree each, none run again by the serial loop
+        assert max(self.sim.calls.index(c) for c in checks) < self.sim.calls.index(merges[0])
+        assert len(merges) == 2
+
+    def test_one_item_to_gate_is_left_to_the_serial_loop(self):
+        self.green_on_check()
+        assert self.deliver(StackItem(branch="task/a"), jobs=4) == 0
+        assert len(self.sim.ran("tl check")) == 1
+
+    def test_a_red_prewarm_is_not_reported_the_serial_gate_says_it_and_nothing_merges(self):
+        self.sim.fail["tl check"] = 6
+        assert self.deliver(StackItem(branch="task/a"), StackItem(branch="task/b"), jobs=2) == 6
+        assert self.sim.ran("gh pr merge") == []
+
     def test_a_dirty_worktree_is_not_gated_a_fresh_one_is(self):
         self.git.worktrees["task/a"] = "/wt/a"
         self.git.heads["/wt/a"] = OID["task/a"]
@@ -615,7 +642,7 @@ class Verb(StackCase):
         store = self.own_worktree()
         who = Identity(actor="tl-me", home=self.tmp.name, session="sess-1")
         self.sim.pr(5, "old", "o" * 40)
-        args = Namespace(items=["task/a", "task/b"], repo=str(self.repo), base="main", method="squash", bead=[],
+        args = Namespace(jobs=1, items=["task/a", "task/b"], repo=str(self.repo), base="main", method="squash", bead=[],
                          supersede=["task/a=5"], wait_min=None, profile_change=None)
         with contextlib.redirect_stdout(io.StringIO()):
             rc = cmd_land_stack(args, who, self.git, self.sim, store, ["tl"])
@@ -655,7 +682,7 @@ class Verb(StackCase):
         patch = 'diff --git a/.task-loop.json b/.task-loop.json\n-old\n+new\n'
         self.git.profiles["origin/main"] = "{}"
         self.git.profiles[OID["task/a"]] = '{"engine": {"checks": []}}'
-        args = Namespace(items=["task/a"], repo=str(self.repo), base="main", method="squash", bead=[], supersede=[],
+        args = Namespace(jobs=1, items=["task/a"], repo=str(self.repo), base="main", method="squash", bead=[], supersede=[],
                          wait_min=None, profile_change=text)
         who = Identity(actor="tl-me", home=self.tmp.name, session="sess-1")
         with (contextlib.redirect_stdout(io.StringIO()), mock.patch.object(self.git, "profile_diff", return_value=patch)):
@@ -682,7 +709,8 @@ class Verb(StackCase):
             assert "missing-bead" in close["why"]
 
     def test_the_verb_makes_a_run_the_board_finds_through_its_manifest(self):
-        a = Namespace(items=["task/a", "task/b"], repo=str(self.repo), base="main", method="squash", bead=["task/b=tl-b"], supersede=[],
+        a = Namespace(jobs=1, items=["task/a", "task/b"], repo=str(self.repo), base="main", method="squash",
+                      bead=["task/b=tl-b"], supersede=[],
                       wait_min=None, profile_change=None)
         store = self.bd("a", "tl-b")
         who = Identity(actor="tl-me", home=self.tmp.name, session="sess-1")
@@ -708,7 +736,7 @@ class Verb(StackCase):
         return store
 
     def verb(self, items, bead, who, store=None):
-        a = Namespace(items=items, repo=str(self.repo), base="main", method="squash", bead=bead, supersede=[], wait_min=None,
+        a = Namespace(jobs=1, items=items, repo=str(self.repo), base="main", method="squash", bead=bead, supersede=[], wait_min=None,
                       profile_change=None)
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
