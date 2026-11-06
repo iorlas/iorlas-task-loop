@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.adapters import childenv
+from taskloop.contracts.env import Env
 
 BASE = {"PATH": "/venv/bin:/usr/bin", "VIRTUAL_ENV": "/venv", "VIRTUAL_ENV_PROMPT": "x", "PYTHONHOME": "/h", "HOME": "/home/u",
         "TL_SLOT": "s1", "TL_BOGUS": "1", "TASK_LOOP_NOPE": "1", "TL_CHECK_LOG_A": "/log"}
@@ -81,5 +82,5 @@ class HooksPath(Case):
 
 def test_a_script_runs_without_the_uv_config_of_the_directory_it_starts_in():
     """A worktree's own uv.toml (an index-url) must not decide where tl.py's dependencies come from (tl-7i9k.53, M-055)."""
-    argv = childenv.script_argv("/x/tl.py", {"UV": "/bin/uv"})
+    argv = childenv.script_argv("/x/tl.py", Env({"UV": "/bin/uv"}))
     assert argv == ["/bin/uv", "run", "--quiet", "--no-config", "--script", "/x/tl.py"]
