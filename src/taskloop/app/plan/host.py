@@ -18,10 +18,9 @@ from taskloop.contracts.enums import AskClass
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId, TreeSha
 from taskloop.contracts.plancheck import PlanData
+from taskloop.contracts.stop import Stop
 from taskloop.contracts.wire import Open
 from taskloop.domain.review.ledger import Ledger
-
-Stop = Exception  # the engine's Blocked; contracts/stop.py (B-REVIEW 3) will type it
 
 
 class Answered(Protocol):
