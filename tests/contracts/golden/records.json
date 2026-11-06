@@ -1674,6 +1674,8 @@
    "executor": {
     "host": "",
     "root": "tl",
+    "setup": [],
+    "setup_inputs": [],
     "ssh": [
      "ssh",
      "-o",

@@ -1,9 +1,10 @@
-"""The engine lock: a running engine in a worktree. run-task writes <config>/locks/engine-<worktree key>.lock, never a file in the worktree
+"""The engine lock: a running engine in a worktree. run-task writes the worktree's lock row in factory.db, never a file in the worktree
 a worker can write (contracts/locks.py EngineLock: pid, start,
 bead, slot, slot_bead, by, route, workers); the loop writes one (by "loop") from its slot take until its run-task replaces it. The loop,
 `tl slot reset|release` and another run-task keep off a worktree whose lock names a live process, whatever the slot bead says. A process is
-the one in the lock only while its start time matches (pid reuse) and it is no zombie. The file is a record on a JsonStore; the check and
-the write of a take happen under `hold_path` on ConfigDir.engine_take, so two runs starting at once cannot both win."""
+the one in the lock only while its start time matches (pid reuse) and it is no zombie. The record is a `lease` row (contracts/lockrows.py;
+an older tl's file is read until the next write); the check and the write of a take happen under `hold_path` on
+ConfigDir.engine_take, so two runs starting at once cannot both win."""
 import contextlib
 import os
 import time
@@ -15,15 +16,16 @@ from taskloop.app.slots.env import stamp
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.ids import loop_key
+from taskloop.contracts.lockrows import EngineLockRows
 from taskloop.contracts.locks import EngineLock as Lock
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import Reexec
-from taskloop.contracts.stores import JsonStore
 from taskloop.contracts.wire import Refused
 
 
-def _store(cfg: ConfigDir, wt: str | Path) -> JsonStore[Lock]:
-    return JsonStore(cfg.engine_lock(wt), Lock)
+def _store(cfg: ConfigDir, wt: str | Path) -> EngineLockRows:
+    return EngineLockRows(cfg, wt)
 
 
 def read_engine_lock(cfg: ConfigDir, wt: str | Path) -> Lock | None:
@@ -47,8 +49,7 @@ def drop_engine_lock(cfg: ConfigDir, wt: str | Path, pid: int | None = None) -> 
         held = peek_engine_lock(cfg, wt)
         if held is None or held.pid != pid:
             return
-    with contextlib.suppress(OSError):
-        cfg.engine_lock(wt).unlink()
+    _store(cfg, wt).delete()
 
 
 def lock_pid(cfg: ConfigDir, wt: str | Path) -> int | None:
@@ -88,7 +89,7 @@ def engine_busy(cfg: ConfigDir, wt: str | Path, handoff: Env | None = None) -> s
         handed = Reexec.parse(handoff.get(EnvVar.TL_REEXEC))
         if handed is not None and handed.pid == lock.pid and handed.bead == lock.bead:
             mine.add(handed.pid)  # exec leaves uv at this pid; its new Python child takes the lock next
-    where = f"; lock {cfg.engine_lock(wt)}"
+    where = f"; lock engine:{loop_key(wt)} in {cfg.factory_db()}"
     if lock.pid and lock.pid not in mine and proc_alive(lock.pid, lock.start):
         who = "loop" if lock.by == "loop" else "engine"
         return f"{who} pid {lock.pid} runs {lock.bead or 'a slot reset'} since {stamp(lock.started)}{where}"
@@ -105,7 +106,6 @@ class EngineLock:
     def __init__(self, cfg: ConfigDir, wt: str | Path, bead: str, slot: str = "", env: Env | None = None) -> None:
         self.env = env or Env()
         self.cfg, self.wt = cfg, wt
-        self.path = cfg.engine_lock(wt)
         self.rec = Lock(pid=os.getpid(), start=proc_start(os.getpid()), bead=bead, slot=slot or "",
                         slot_bead=self.env.get(EnvVar.TASK_LOOP_SLOT_BEAD), by="run-task", started=time.time())
 
@@ -123,8 +123,7 @@ class EngineLock:
 
     def note(self, **kw: object) -> None:
         self.rec = self.rec.replace(**kw)
-        with contextlib.suppress(OSError):
-            self.write()
+        self.write()
 
     def release(self) -> None:
         left = [(p, st) for p, st in self.rec.workers if proc_alive(p, st)]
@@ -132,7 +131,7 @@ class EngineLock:
             if left:
                 self.note(pid=0, route=None, workers=left)
             else:
-                self.path.unlink()
+                drop_engine_lock(self.cfg, self.wt)
 
 
 LOCK: EngineLock | None = None  # this process's EngineLock while run-task runs
