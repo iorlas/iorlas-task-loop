@@ -104,6 +104,27 @@ class RowDoc[T: Rec]:
                         f"ON CONFLICT({d.key_col}) DO UPDATE SET {d.body_col}=excluded.{d.body_col}, t=excluded.t{bump}",
                         (self.k, body, time.time()))
 
+    def modify(self, fn: Callable[[T], T], tries: int = 8) -> bool:
+        """Read-modify-write one record: `fn` sees the stored record and its result replaces it only if no other writer got in between
+        (the revision is checked in the write's transaction; a lost race re-reads and runs `fn` again). False when there is no record."""
+        for _ in range(tries):
+            self.get()  # adopts an older loop's file first, so the row and its revision exist
+            d = self.docs
+            found = d.rows.select(f"SELECT {d.body_col}, rev FROM {d.table} WHERE {d.key_col}=?", (self.k,)) if d.revisioned else []
+            if not found:
+                return False
+            read = self.legacy_store().decode(self.forward(found[0][0]))
+            if isinstance(read, (Torn, ForeignVersion)):
+                raise wire.Refused(refusal(read))
+            if not isinstance(read, Present):
+                return False
+            try:
+                self.write(fn(read.rec), expect_rev=int(found[0][1]))
+                return True
+            except StaleRevision:
+                continue
+        raise StaleRevision(self.k)
+
     def delete(self) -> None:
         d = self.docs
         with d.rows.transaction() as con:
