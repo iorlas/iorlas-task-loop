@@ -75,11 +75,20 @@ def lower_priority(environ):
         os.nice(NICE - now)
 
 
-def workers(n_tests, cpus=None, mem_mb=None):
-    """How many pytest workers this selection earns on this host (1: no xdist)."""
+def busy_cpus():
+    """The cores other work keeps busy: the 1-minute load average, rounded (0 where the host does not say)."""
+    try:
+        return round(os.getloadavg()[0])
+    except OSError:
+        return 0
+
+
+def workers(n_tests, cpus=None, mem_mb=None, busy=None):
+    """How many pytest workers this selection earns on this host right now (1: no xdist): the cores the other lanes leave free."""
     cpu = cpus if cpus is not None else (os.cpu_count() or 1)
     ram = mem_mb if mem_mb is not None else total_mb()
-    return max(1, min(cpu, cpu if ram is None else ram // WORKER_MB, math.ceil(n_tests / CHUNK), MAX_WORKERS))
+    free = cpu - (busy if busy is not None else busy_cpus())
+    return max(1, min(free, cpu if ram is None else ram // WORKER_MB, math.ceil(n_tests / CHUNK), MAX_WORKERS))
 
 
 def isolated_env(home):
