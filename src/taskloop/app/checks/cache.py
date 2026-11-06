@@ -13,7 +13,7 @@ import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from taskloop.adapters import check_files
+from taskloop.adapters import check_files, profile_at
 from taskloop.app.checks.execution import HOST_IDENTITY
 from taskloop.contracts import config, wire
 from taskloop.contracts.checks import BaseRedRecord, Check, CheckResult, PassRecord
@@ -85,14 +85,9 @@ def plan_digest(cmd: list[str] | None) -> Digest:
 def repo_plan_digest(wt: str) -> Digest | None:
     """Read the current producer from the repo profile; an unreadable profile cannot authorize skips."""
     try:
-        text = (Path(wt) / ".task-loop.json").read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return plan_digest(None)
-    except (OSError, ValueError):
-        return None
-    try:
-        return plan_digest(config.load(json.loads(text)).engine.plan_cmd)
-    except (ValueError, config.ConfigError):
+        data = profile_at.raw_in(wt)
+        return plan_digest(None) if data is None else plan_digest(config.load(data).engine.plan_cmd)
+    except (OSError, ValueError, config.ConfigError):
         return None
 
 
