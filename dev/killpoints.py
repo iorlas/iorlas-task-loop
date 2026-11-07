@@ -40,7 +40,7 @@ def child(config: str, kill: str, seed: bool) -> int:
     from tlkernel.kinds import Kind  # noqa: PLC0415
     from tlkernel.paths import ConfigDir  # noqa: PLC0415
 
-    declare_parts(STAGE_PARTS)
+    declare_parts(STAGE_PARTS, complete=True)
     signal.signal(signal.SIGTERM, signal.SIG_IGN)  # only SIGKILL ends it: no handler, no cleanup, no finally
     at, _, phase = kill.partition(":")
     doc = real_stores(ConfigDir(config)).checkpoints.of(BEAD)
