@@ -9,7 +9,11 @@ from taskloop.app.workers import call_state, done_memo, worker_identity
 from taskloop.app.workers.worker_identity import ExecutionContext, NodeInput, PreparedCall, context
 
 # Bump when answer interpretation changes incompatibly, even if the JSON schema does not.
-PRODUCER = "worker-run:4;answers:1"
+PRODUCER = "worker-run:4;answers:2"
+RESUME_AFTER_STOP = (
+    "\nYour last attempt at this step stopped before it gave an answer. Continue from where you stopped and "
+    "answer in the required format; do not start over."
+)
 
 
 def prepare_call(input: NodeInput, context: ExecutionContext) -> PreparedCall:
@@ -60,7 +64,7 @@ def _recover_state(call: PreparedCall, st: call_state.CallState) -> Fresh | Resu
     if what and what[0] == "answer":
         return Returned(what[1], st)
     if what:
-        return Resuming(what[1], what[2])
+        return Resuming(what[1], RESUME_AFTER_STOP)
     return Fresh()
 
 

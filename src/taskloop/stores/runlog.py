@@ -51,3 +51,7 @@ class RunLog:
         return "{} {}".format(
             rec.kind, " ".join("{}={}".format(*kv) for kv in wire.dump(rec).items() if kv[0] not in ("v", "kind", "t"))
         )
+
+
+def real_log(rows: Log[EngineLog], run_id: str, machine: str) -> RunLog:
+    return RunLog(rows, run_id=run_id, host=machine)

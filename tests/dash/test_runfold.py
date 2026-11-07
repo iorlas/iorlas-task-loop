@@ -47,7 +47,7 @@ def fixture_records(path):
                 items.append(item)
             raw["run"] = {"round": raw["round"], "results": items}
         fields = {f.encode_name for f in msgspec.structs.fields(tp)}
-        rows.append(wire.load(rec.EngineLog, {"v": 3, "kind": raw["kind"], **{k: v for k, v in raw.items() if k in fields}}))
+        rows.append(wire.load(rec.EngineLog, {"v": 4, "kind": raw["kind"], **{k: v for k, v in raw.items() if k in fields}}))
     return rows
 
 

@@ -16,13 +16,13 @@ from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
 from tlkernel.run import NetPause, Reexec, ReexecNote, RunCounters
+from tlkernel.run_slot import RUN_SLOT
 from tlkernel.runrows import RunRows
-from tlkernel.storeapi import Doc
 from tlkernel.wire import Open
 
-from taskloop.adapters import childenv, ident
-from taskloop.adapters.halt import RUN_SLOT
+from taskloop.app.pipeline.adapter_ports import ChildEnv, Install
 from taskloop.app.pipeline.ports import Reexecs, Trail
+from taskloop.app.pipeline.store_ports import ReadDoc
 
 
 class Exec(BaseException):
@@ -84,8 +84,9 @@ class ReloadHost(Protocol):
 
 class Reload:
     def __init__(self, host: ReloadHost, reexecs: Reexecs, trail: Trail,
-                 newer: Callable[[], tuple[str, Path] | None], slot: Callable[[], str]) -> None:
+                 newer: Callable[[], tuple[str, Path] | None], slot: Callable[[], str], child_env: ChildEnv, install: Install) -> None:
         self.host = host
+        self.child_env, self.install = child_env, install
         self.reexecs, self.trail, self.newer, self.slot = reexecs, trail, newer, slot
 
     def counters(self) -> RunCounters:
@@ -94,7 +95,7 @@ class Reload:
                            sessions=list(host.sessions),
                            write_rounds=list(host.write.write_rounds), node_n=host.steps.n)
 
-    def restore_run(self, doc: Doc[RunCounters]) -> None:
+    def restore_run(self, doc: ReadDoc[RunCounters]) -> None:
         """The counters of the run that exec'd (RunFiles.reexec) or paused for the network (RunFiles.pause), so the run's cost,
         time and trace go on across the move; the time between is neither spent nor waited."""
         host = self.host
@@ -145,7 +146,7 @@ class Reload:
         if not found:
             return
         ver, d = found
-        here = ident.plugin_version() or ident.PLUGIN_ROOT.name
+        here = self.install.plugin_version() or self.install.PLUGIN_ROOT.name
         self.switch(step, ver, d, here, argv)
 
     def hand_over(self, step: str, ver: str, here: str) -> str:
@@ -154,7 +155,8 @@ class Reload:
         try:
             rundocs.reexec(host.home, host.run_id).write(self.counters())
             self.reexecs.note(ReexecNote(
-                run=host.run_id, bead=host.bead, frm=here, to=ver, step=step, from_dir=str(ident.PLUGIN_ROOT / "skills" / "task-loop"),
+                run=host.run_id, bead=host.bead, frm=here, to=ver, step=step,
+                from_dir=str(self.install.PLUGIN_ROOT / "skills" / "task-loop"),
                 t=time.time()))
         except OSError as err:
             return str(err)
@@ -171,7 +173,7 @@ class Reload:
         self.trail.event(host.who, "reload", host.bead, who="engine", old=here, new=ver, step=step, run_id=run, code_dir=str(d))
         host.log.note(f"moving to task-loop {ver} (was {here}) at {step}; run {run} goes on from its checkpoint")
         host.log.emit(rec.Reload(old=here, new=ver, step=step))
-        handed = childenv.exec_env(host.env, {EnvVar.TL_REEXEC: Reexec(
+        handed = self.child_env.exec_env(host.env, {EnvVar.TL_REEXEC: Reexec(
             run=run, bead=host.bead, pid=os.getpid(), frm=here, owned=RUN_SLOT["owned"]).text()})
         for f in (sys.stdout, sys.stderr):
             try:
@@ -179,7 +181,8 @@ class Reload:
             except Exception as err:
                 host.warn(f"could not flush output before reload: {err}\n" + traceback.format_exc())
         try:
-            (host.exec_fn or self.reexecs.exec)([*childenv.script_argv(d / "skills" / "task-loop" / "tl.py", host.env), *argv], handed)
+            (host.exec_fn or self.reexecs.exec)(
+                [*self.child_env.script_argv(d / "skills" / "task-loop" / "tl.py", host.env), *argv], handed)
             host.moved = True
             raise Exec()  # reached only when the exec function is a test's
         except OSError as exc:  # exec itself failed: this version goes on where it is

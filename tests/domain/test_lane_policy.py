@@ -41,7 +41,7 @@ class Exhaustive(Case):
         assert set(lp.TABLE) == set(lp.LEGAL)
         actions = (lp.NewThread, lp.Reroute, lp.Yield, lp.Fail)
         for scope, perm, retry in lp.LEGAL:
-            for c in (ctx(), ctx(resumed=True, attempt=2, denied_retried=True)):
+            for c in (ctx(), ctx(attempt=2, denied_retried=True)):
                 a = lp.decide(stop(scope, perm, retry, retry_at=NOW + 60), c)
                 assert isinstance(a, actions), (scope, perm, retry)
 
@@ -82,7 +82,7 @@ class Exhaustive(Case):
 
 
 def test_network_stop_pauses_immediately():
-    action = lp.decide(stop("machine", "transient", "poll"), ctx(resumed=True))
+    action = lp.decide(stop("machine", "transient", "poll"), ctx())
     assert isinstance(action, lp.Yield)
     assert (action.kind, action.retry_after) == ("PAUSE_NETWORK", 0)
 
@@ -110,13 +110,6 @@ class Incidents(Case):
         assert (type(a), kind_of(a), out(a).rule.makes_ask) == (lp.Fail, Kind.FAULT_BAD_REQUEST, False)
         assert out(a).fingerprint.startswith("FAULT_BAD_REQUEST")
 
-    def test_a_refused_resume_is_one_new_thread_and_a_second_refusal_is_the_fault(self):
-        for reason in ("bad_request", "caller"):
-            s = stop("caller", "needs_owner", "none", reason=reason)
-            assert lp.decide(s, ctx(resumed=True)) == lp.NewThread("", "resume_refused", "resume_refused")
-            assert kind_of(lp.decide(s, ctx(resumed=True, resume_refused=1))) == Kind.FAULT_BAD_REQUEST
-            assert kind_of(lp.decide(s, ctx())) == Kind.FAULT_BAD_REQUEST  # a call that resumed nothing has nothing to drop
-
     def test_hung_reroutes_away_from_the_model_then_pauses(self):
         s = stop("model", "transient", "none", model="grok-4", lane="GROK")
         assert lp.decide(s, ctx()) == lp.Reroute("grok-4")
@@ -138,31 +131,31 @@ class Incidents(Case):
 def test_lane_poll_moves_on_and_bead_poll_pauses():
     s = stop("lane", "transient", "poll", lane="OPENAI")
     assert lp.decide(s, ctx()) == lp.Reroute("OPENAI")
-    assert lp.decide(s, ctx(resumed=True)) == lp.NewThread("lane_out")
+    assert lp.decide(s, ctx()) == lp.Reroute("OPENAI")
     assert kind_of(lp.decide(stop("bead", "transient", "poll"), ctx())) == Kind.PAUSE_LANE
 
 
-def test_predicted_lane_always_parks_or_starts_fresh():
+def test_predicted_lane_always_parks():
     for gap in (120, 5000):
         s = stop("lane", "transient", "predicted", retry_at=NOW + gap)
         a = only(lp.Yield, lp.decide(s, ctx()))
         assert (a.kind, a.retry_after) == ("PAUSE_LANE", NOW + gap)
-        assert lp.decide(s, ctx(resumed=True)) == lp.NewThread("lane_out")
+        assert lp.decide(s, ctx()) == lp.Yield("PAUSE_LANE", NOW + gap)
 
 
-def test_failed_worker_only_gets_a_fresh_engine_prompt_when_resumed():
+def test_failed_worker_faults_after_delegate_recovery():
     s = stop("bead")
     assert kind_of(lp.decide(s, ctx())) == Kind.FAULT_INFRA
-    assert lp.decide(s, ctx(resumed=True)) == lp.NewThread("", "attempt", "worker_failed")
-    assert kind_of(lp.decide(s, ctx(resumed=True, attempt=1))) == Kind.FAULT_INFRA
+    assert lp.decide(s, ctx()) == lp.Fail("FAULT_INFRA", "worker_failed")
+    assert kind_of(lp.decide(s, ctx(attempt=1))) == Kind.FAULT_INFRA
 
 
 def test_delegate_crash_fails_immediately():
     assert lp.decide(stop("machine"), ctx()) == lp.Fail("FAULT_CRASHED")
 
 
-def test_hurt_write_only_reroutes_resumed_calls():
+def test_hurt_write_asks_after_delegate_recovery():
     s = stop("bead", exit_code=-15, lane="lane", model="model")
-    assert lp.decide(s, ctx(resumed=True, node="write")) == lp.Reroute("model", "attempt", "worker_failed")
+    assert lp.decide(s, ctx(node="write")) == lp.Fail("ASK_STUCK", "worker_failed")
     assert kind_of(lp.decide(s, ctx(node="write"))) == Kind.ASK_STUCK
-    assert kind_of(lp.decide(s, ctx(resumed=True, node="write", attempt=1))) == Kind.ASK_STUCK
+    assert kind_of(lp.decide(s, ctx(node="write", attempt=1))) == Kind.ASK_STUCK

@@ -26,7 +26,6 @@ from taskloop.app.workers.calls import timing
 from taskloop.app.workers.lane_acts import LaneActs
 from taskloop.domain.lanes import policy as lp
 from taskloop.domain.lanes.denials import command_of, secret_false_positive
-from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT
 from taskloop.domain.lanes.retry import PLAN
 from taskloop.domain.lanes.roles import READ_ONLY_NODES, ROLES
 
@@ -60,7 +59,7 @@ class WorkerCall:
         resume_key: Any = None,
         writer_family: str | None = None,
         step: str | None = None,
-        resume_ref: str | None = None,
+        thread: str = "",
         visual: bool = False,
         delta: str | None = None,
         cwd: Any = None,
@@ -72,8 +71,8 @@ class WorkerCall:
         e.halt_point()
         e.waits.budget_check()
         e.stats["nodes"] += 1
-        c = self.start_call(node, title, prompt, resume_key, writer_family, step, resume_ref, visual, delta, cwd, at)
-        e.steps.begin(step or node, f"{node}: {title}", node=node, backend="delegate", role=c.role, resume=bool(c.resume), **meta)
+        c = self.start_call(node, title, prompt, resume_key, writer_family, step, thread, visual, delta, cwd, at)
+        e.steps.begin(step or node, f"{node}: {title}", node=node, backend="delegate", role=c.role, resume=bool(c.delta), **meta)
         while True:
             ans = c.finished or self.call_once(c)
             c.finished = None
@@ -114,7 +113,7 @@ class WorkerCall:
         resume_key: Any,
         writer_family: str | None,
         step: str | None,
-        resume_ref: str | None,
+        thread: str,
         visual: bool,
         delta: str | None,
         cwd: Any,
@@ -122,12 +121,13 @@ class WorkerCall:
     ) -> Call:
         e = self.e
         writer = writer_family if node in READ_ONLY_NODES else None
-        resume = resume_ref or (e.writer.delegate if resume_key else None)
+        has_thread = bool(resume_key and e.writer.delegate)
         reset = False
-        if resume and resume_key and e.writer_fallback:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
+        if has_thread and e.writer_fallback:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
             lane = e.router.lane(e.fallback_lane) if e.fallback_lane else None
             if e.fallback_lane and lane is None:  # that lane is not configured here: no fallback
                 reset = True
+                has_thread = False
             elif lane is None or lane.usable is True:  # back again, or no lane known to wait for
                 e.steps.move(
                     step or node,
@@ -137,27 +137,30 @@ class WorkerCall:
                         e.writer_family or "?",
                     ),
                 )
-                resume, prompt = None, prompt + FRESH_WRITER_TEXT
+                has_thread = False
         e.publish_plan()  # an unsandboxed worker can write here: every step reads the engine's plan
-        text = delta if (delta and resume and resume_key) else prompt
+        delta = delta if (bool(e.planner_ref) if node == "plan" else has_thread or thread) else None
+        key = (step or node, *tuple(at))
         c = Call(
             node,
             ROLES[node],
             answers.sent_schema(node, visual),
             cwd or e.wt,
             prompt,
-            text,
+            prompt,
             writer,
-            resume,
-            (step or node, *tuple(at)),
-            bool(resume_key),
+            delta,
+            key,
+            "writer" if resume_key else "planner" if node == "plan" else "/".join(map(str, key)),
             writer_family,
             step,
             title,
         )
         c.visual = visual
-        c.thread = Updates(fallback=Fallback(False, "")) if reset else Updates()  # a fallback to a lane not configured here is dropped
+        c.updates = Updates(fallback=Fallback(False, "")) if reset else Updates()  # a fallback to a lane not configured here is dropped
         self.attach(c)
+        if node == "plan":
+            c.delta = delta
         return c
 
     # -- the checkpoint of a call in flight
@@ -175,8 +178,7 @@ class WorkerCall:
             c.state = decision.state
         elif isinstance(decision, worker_recovery.Resuming):
             e.log.note(f"{c.node}: compatible interrupted thread {decision.ref}: resuming")
-            c.resume, c.text = decision.ref, decision.text
-            c.was_resumed = True
+            c.delta = decision.text
         elif decision.reason:
             e.log.note(f"{c.node}: {decision.reason}")
 
@@ -221,16 +223,20 @@ class WorkerCall:
         req = c.prepared.request.replace(live_file=live, tools=[worker_request.artifact_tool(e, c)])  # per call: not in the call's identity
         c.limit_s = float(req.timeout_s)
         brief = worker_request.brief(e, c, req)
+        delta = c.delta
+        if delta is not None:
+            delta += brief[len(c.text):]
+            worker_request.refuse_over_cap(e, c.node, c.role, delta)
         runner = e.router.runner(e.err_path, None, live)
         runner.outer = e.halt  # a stop of the run ends the call
-        cid = e.calls.start(c.step or c.node, c.node, c.role, bool(c.resume), e.live_n)
+        cid = e.calls.start(c.step or c.node, c.node, c.role, bool(c.delta), e.live_n)
         c.state = callstate.begin(
-            e.call_dir(), e.run_id, e.bead, c.key, c.role, resume_of=c.resume or "", execution_id=c.sha, now=e.clock.now()
+            e.call_dir(), e.run_id, e.bead, c.key, c.role, execution_id=c.sha, now=e.clock.now()
         )
         t0, trees = time.time(), strays.worktrees(e)  # the worktrees the repo holds before the worker runs
         try:
             wenv = {**e.bead_env, **step_env(e, c.step or c.node)}
-            ans = e.router.call(e.resolved, req, brief, c.schema, runner, env=childenv.delegate_call_env(e.env, wenv))
+            ans = e.router.call(e.resolved, req, brief, c.schema, runner, env=childenv.delegate_call_env(e.env, wenv), delta=delta)
         except BaseException as exc:  # an interruption stopped the delegate inside the process seam: record that stop here
             if runner.obs.get("kill_t") or runner.survivors():
                 self.log_kill(c, runner, exc)
@@ -241,7 +247,8 @@ class WorkerCall:
         e.cost += res.cost
         stopped = runner.stop.get("why") or ""
         survivors = runner.survivors(res)
-        e.calls.end(cid, c.node, c.role, c.tries, res, stopped, bool(c.resume), len(brief), runner.worker, runner.live_start())
+        sent = len(delta if delta is not None else brief)
+        e.calls.end(cid, c.node, c.role, c.tries, res, stopped, bool(c.delta), sent, runner.worker, runner.live_start())
         if stopped or survivors:  # the actual stop path, including a worker that outlived every signal
             self.log_kill(c, runner, survivors=survivors)
         if survivors:  # a retry would write into the tree the old worker still writes in
@@ -326,10 +333,8 @@ class WorkerCall:
         if res.git_violation:
             e.warn("{} changed git: {}".format(c.node, "; ".join(res.git_violation)))
         ctx = (e.sessions[-1] if e.sessions else {}).get("context_k")  # k tokens, None = unknown
-        seen = e.hand.seen_now() if c.resume_key and res.ref else []
-        c.thread = asked.then(c.thread, asked.thread_updates(c, res, e.fallback_lane, ctx, seen))
-        if c.resume_key and res.ref:
-            c.resume = res.ref
+        seen = e.hand.seen_now() if c.thread == "writer" and res.ref else []
+        c.updates = asked.then(c.updates, asked.thread_updates(c, res, e.fallback_lane, ctx, seen))
         return answers.sent_errors(c.node, c.visual, res.data, res.say or res.text)
 
     def refused(self, c: Call, res: DelegateResult, denied: list[Any], errs: Any = True) -> bool:
@@ -373,8 +378,8 @@ class WorkerCall:
 
     def again(self, c: Call, note: str = "") -> None:
         """The next call starts a new thread with the whole prompt."""
-        c.text = c.full + (FRESH_WRITER_TEXT if c.resume else "") + note
-        c.resume = None
+        c.delta = None
+        c.text = c.full + note
 
     def charge(self, c: Call, name: str) -> None:
         if name == "denied_retried":
@@ -385,7 +390,7 @@ class WorkerCall:
     def end_call(self, c: Call, ans: Answer) -> Updates:
         """The call's updates to the run's threads, kept with the memo; the caller applies them to the engine."""
         e, res = self.e, ans.res
-        done = asked.done_updates(c, res, c.thread)
+        done = asked.done_updates(c, res, c.updates)
         if c.state is not None and c.prepared is not None:
             # the memo first, with the thread's fields in one transaction: a crash between this and consumed re-recovers, never loses
             asked.settle(e, c, done, c.state.answer_file, c.prepared.snapshot)

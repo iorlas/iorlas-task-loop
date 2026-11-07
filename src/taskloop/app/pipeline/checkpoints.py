@@ -14,12 +14,11 @@ from tlkernel.followups import FollowupOutbox
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.review import Unfiled
-from tlkernel.storeapi import AmendDoc
 
 from taskloop.app.pipeline.review_glue import ReviewLists, review_of
+from taskloop.app.pipeline.store_ports import CheckpointDoc, CheckpointStores
 from taskloop.domain.checks import trim
 from taskloop.domain.followups import FollowKey
-from taskloop.stores.bundle import Stores
 
 
 class CheckpointLook(Protocol):
@@ -45,7 +44,7 @@ class CheckpointHost(Protocol):
     @property
     def state(self) -> RunState: ...
     @property
-    def stores(self) -> Stores: ...
+    def stores(self) -> CheckpointStores: ...
     @property
     def store(self) -> Beads: ...
     @property
@@ -74,7 +73,7 @@ class CheckpointHost(Protocol):
     def dry(self) -> bool: ...
 
 
-def read_checkpoint(stores: Stores, bead: str) -> Checkpoint | None:
+def read_checkpoint(stores: CheckpointStores, bead: str) -> Checkpoint | None:
     """Read the stage cursor before an engine exists, without exposing a checkpoint writer."""
     return stores.checkpoints.of(bead).get()
 
@@ -88,10 +87,10 @@ class Checkpoints:
         self.hooks = hooks
 
     @property
-    def doc(self) -> AmendDoc[Checkpoint]:
+    def doc(self) -> CheckpointDoc:
         return self.host.stores.checkpoints.of(self.host.bead)
 
-    def writer(self) -> AmendDoc[Checkpoint]:
+    def writer(self) -> CheckpointDoc:
         """The record's document for a write: only a run that still holds its bead and slot may write it (Fenced otherwise)."""
         fence.check(self.host.store, self.host.claim)
         return self.doc

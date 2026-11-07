@@ -29,7 +29,8 @@ class DraftCheckpoint(EngineTest):
         rc, script = self.run_engine({"plan": [bad]})
         assert rc == 2
         assert [c[0] for c in script.calls] == ["planner"]
-        assert script.calls[0][1] == "ref-plan"
+        assert script.requests[0].thread == "planner"
+        assert script.requests[0].delta_file
         assert "issue tracker" in script.prompts[0]
         assert self.eng.result().kind == "fault_plan"
         assert self.eng.planned == 1

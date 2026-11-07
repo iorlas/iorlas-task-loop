@@ -10,17 +10,17 @@ from tlkernel.config import EngineConfig
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.ports import Clock
+from tlkernel.stagefacts import RunLogPort
 from tlkernel.waitenums import WaitWhat
 
-from taskloop.adapters import deadline
 from taskloop.app.pipeline import outcomes
+from taskloop.app.pipeline.adapter_ports import Deadline
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.steps import Open
+from taskloop.app.pipeline.store_ports import WaitStores
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.checks.matchers import slot_wait_secs
 from taskloop.domain.lanes.liveness import LIVENESS
-from taskloop.stores.bundle import Stores
-from taskloop.stores.runlog import RunLog
 
 
 class WaitsBudget(Protocol):
@@ -47,7 +47,7 @@ class WaitsHost(Protocol):
     @property
     def cfg(self) -> EngineConfig: ...
     @property
-    def log(self) -> RunLog: ...
+    def log(self) -> RunLogPort: ...
     @property
     def clock(self) -> Clock: ...
     @property
@@ -57,7 +57,7 @@ class WaitsHost(Protocol):
     @property
     def stats(self) -> dict[str, int]: ...
     @property
-    def stores(self) -> Stores: ...
+    def stores(self) -> WaitStores: ...
     @property
     def log_path(self) -> Path: ...
 
@@ -67,8 +67,9 @@ class WaitsHost(Protocol):
 
 
 class Waits:
-    def __init__(self, host: WaitsHost) -> None:
+    def __init__(self, host: WaitsHost, deadline: Deadline) -> None:
         self.host = host
+        self.deadline = deadline
         self.earlier: tuple[int, int] | None = None  # (tokens, runs) of the bead's earlier runs
 
     def start(self, what: WaitWhat, holder: str = "", until: float | None = None, lane: str = "", check: str = "") -> str:
@@ -116,7 +117,7 @@ class Waits:
         try:
             with self.host.os_lock(
                 path, holder or self.host.bead, waiting,
-                timeout=deadline.remaining(LIVENESS.lock_wait_s), check=self.host.halt_point,
+                timeout=self.deadline.remaining(LIVENESS.lock_wait_s), check=self.host.halt_point,
             ):
                 acquired = True
                 waited()
@@ -129,7 +130,7 @@ class Waits:
         except TimeoutError as err:
             if acquired:
                 raise
-            deadline.check()
+            self.deadline.check()
             raise Blocked(f"paused: {what} wait deadline exceeded (held by {err}); retry later", kind=Kind.PAUSE_LANE) from None
         finally:
             waited()

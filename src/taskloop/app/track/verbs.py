@@ -195,7 +195,7 @@ def trace_line(r: dict[str, Any]) -> str:
 
 
 def trace(bead: BeadId, last: int, as_json: bool, env: Env) -> int:
-    """`tl trace [ID] [--last N] [--json]`: engine runs and every worker session of each, with where its transcript lives."""
+    """`tl trace [ID] [--last N] [--json]`: engine runs and every worker session of each, with node, role, family, status and ref."""
     path = ConfigDir(config_dir(env)).traces()
     runs: list[dict[str, Any]] = []
     if path.exists():
@@ -217,8 +217,8 @@ def trace(bead: BeadId, last: int, as_json: bool, env: Env) -> int:
     for r in runs:
         print(trace_line(r))
         for s in r.get("sessions", []):
-            print("  {:<7} {:<8} {:<6} {:<9} {}  {}".format(s.get("node"), s.get("role"), s.get("family") or "?", s.get("status"),
-                                                           s.get("ref") or "-", s.get("transcript") or ""))
+            print("  {:<7} {:<8} {:<6} {:<9} {}".format(s.get("node"), s.get("role"), s.get("family") or "?", s.get("status"),
+                                                           s.get("ref") or "-"))
     return 0
 
 
