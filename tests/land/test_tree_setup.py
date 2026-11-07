@@ -41,5 +41,5 @@ def test_a_deviating_worktree_fails_the_bead(tmp_path: Path) -> None:
 
 def test_the_writer_prompt_says_worktree_and_branch_exist() -> None:
     checker = SimpleNamespace(split=lambda: SimpleNamespace(divide=lambda pool: ([], [])))
-    text = Briefing(SimpleNamespace(wt="/w/s1", branch="task/t-1", checker=checker)).where("write")
+    text = Briefing(SimpleNamespace(wt="/w/s1", branch="task/t-1", checker=checker, cfg=SimpleNamespace(checks=[]))).where("write")
     assert "/w/s1" in text and "task/t-1" in text and "exist" in text
