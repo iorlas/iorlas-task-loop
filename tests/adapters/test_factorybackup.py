@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from tlkernel import factorybackup, factorydb
+from taskloop.adapters import factorybackup
+from tlkernel import factorydb
 from tlkernel.paths import ConfigDir
 from tltestkit.narrow import must
 
