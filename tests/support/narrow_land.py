@@ -433,4 +433,3 @@ class NoWip:
 def table_kit(table: FakeGit, **kw: Any) -> LandKit:
     """A LandKit whose git and shell answer from a FakeGit table."""
     return LandKit(table, table.sh, **kw)
-
