@@ -8,11 +8,11 @@ import json
 from pathlib import Path
 
 from atomic_io import atomic_write_bytes
+
+from tlartifacts import rules
+from tlartifacts.keep import CAP_BYTES, Keeper
 from tlkernel.artifact import SIDECAR_SUFFIX, ArtifactMeta, ArtifactSlot
 from tlkernel.wire import Refused, dump, load
-
-from taskloop.app.artifacts import rules
-from taskloop.app.artifacts.keep import CAP_BYTES, Keeper
 
 
 def run_folder(root: Path, slot: ArtifactSlot) -> Path:

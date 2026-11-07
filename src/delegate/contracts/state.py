@@ -75,6 +75,13 @@ class RefRecord:
 
 
 @mutable
+class ThreadRecord:
+    ref: str
+    lane: str | None
+    model: str | None
+
+
+@mutable
 class Dwell:
     lane: str
     since: float
@@ -99,6 +106,7 @@ class StateDoc:
     out: dict[str, OutState] = field(default_factory=dict)
     leases: dict[str, Lease] = field(default_factory=dict)
     refs: dict[str, RefRecord] = field(default_factory=dict)
+    threads: dict[str, ThreadRecord] = field(default_factory=dict)
     holds: dict[str, Hold] = field(default_factory=dict)
     prev: dict[str, Dwell] = field(default_factory=dict)
     auth: dict[str, AuthEntry] = field(default_factory=dict)
@@ -121,7 +129,7 @@ def split_retired_state(data: dict[str, Json]) -> tuple[dict[str, Json], list[st
     for k, v in data.items():
         if k in RETIRED_STATE:
             gone.append(k)
-        elif isinstance(v, dict) and k in ("out", "holds", "leases", "refs", "prev", "auth", "warned_at"):
+        elif isinstance(v, dict) and k in ("out", "holds", "leases", "refs", "threads", "prev", "auth", "warned_at"):
             keep: dict[str, Json] = {}
             for name, e in v.items():
                 if name in RETIRED_LANES or (isinstance(e, dict) and e.get("lane") in RETIRED_LANES):

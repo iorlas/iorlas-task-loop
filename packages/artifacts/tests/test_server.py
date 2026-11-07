@@ -3,7 +3,7 @@ import io
 import json
 from pathlib import Path
 
-from taskloop.app.artifacts import server, store
+from tlartifacts import server, store
 from tlkernel.artifact import ArtifactSlot
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"x" * 64

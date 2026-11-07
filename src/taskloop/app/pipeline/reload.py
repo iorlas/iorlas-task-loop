@@ -22,7 +22,7 @@ from tlkernel.wire import Open
 from taskloop.adapters import childenv, ident
 from taskloop.adapters.halt import RUN_SLOT
 from taskloop.app.pipeline.ports import Reexecs, Trail
-from taskloop.stores.api import Doc
+from taskloop.app.pipeline.store_ports import ReadDoc
 
 
 class Exec(BaseException):
@@ -94,7 +94,7 @@ class Reload:
                            sessions=list(host.sessions),
                            write_rounds=list(host.write.write_rounds), node_n=host.steps.n)
 
-    def restore_run(self, doc: Doc[RunCounters]) -> None:
+    def restore_run(self, doc: ReadDoc[RunCounters]) -> None:
         """The counters of the run that exec'd (RunFiles.reexec) or paused for the network (RunFiles.pause), so the run's cost,
         time and trace go on across the move; the time between is neither spent nor waited."""
         host = self.host
