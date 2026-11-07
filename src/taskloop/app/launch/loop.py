@@ -161,7 +161,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
             False,
             shell.of(spawner, git, env),
             say,
-            who=who,
+            live=lambda r: running(r, git, who, store if r == repo else bd_of(who, r)),
         ),
         free_bytes=lambda: free_bytes(cfg),
         available_mb=lambda: ops.available_mb(spawner),

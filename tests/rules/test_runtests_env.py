@@ -5,6 +5,7 @@ import os
 import sys
 from unittest import mock
 
+import pytest
 import runtests
 import support.paths  # noqa: F401
 
@@ -16,6 +17,21 @@ def test_isolated_env_drops_the_git_config_variables(tmp_path):
     assert not [k for k in env if k.startswith("GIT_CONFIG_") or k == "GIT_DIR"]
     assert env["KEEP"] == "1"
     assert env["HOME"] == str(tmp_path)
+
+
+@pytest.mark.parametrize("configured, exists", [("/custom/uv", True), ("/custom/uv", False), (None, True), (None, False), ("", True)])
+def test_isolated_env_preserves_the_callers_uv_cache(tmp_path, monkeypatch, configured, exists):
+    real_home = tmp_path / "caller"
+    cache = real_home / ".cache" / "uv"
+    if exists:
+        cache.mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(real_home))
+    monkeypatch.delenv("UV_CACHE_DIR", raising=False)
+    if configured is not None:
+        monkeypatch.setenv("UV_CACHE_DIR", configured)
+    env = runtests.isolated_env(tmp_path / "isolated")
+    assert env.get("UV_CACHE_DIR") == (configured or (str(cache) if exists else None))
+    assert env["HOME"] == str(tmp_path / "isolated")
 
 
 def _res(timed_out):

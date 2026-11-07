@@ -1,12 +1,12 @@
 """The small documents of one run that were files in its folder (pause, reexec, handoff, the prepare stamp, the once-per-run notes)
-as `kv` rows `run:<run>:<name>` in factory.db, and the check durations of a repo as `kv` rows `durations:<repo key>`.
+as `run_doc` rows `run:<run>:<name>` in factory.db, and the check durations of a repo as `duration_doc` rows `durations:<repo key>`.
 What stays in the run folder is evidence that people and tools read as files:
 the engine log, `plan.json`, `engine-checks*.json`, the live folder, the push logs."""
 import time
 from typing import ClassVar, final
 
 from tlkernel.checks import Durations
-from tlkernel.docrows import RowDoc, RowDocs, singleton
+from tlkernel.docrows import DURATION_DOCS, RUN_DOCS, RowDoc, RowDocs, singleton
 from tlkernel.looprows import LoopRows
 from tlkernel.paths import ConfigDir
 from tlkernel.run import HandoffMirror, RunCounters
@@ -25,19 +25,19 @@ class PrepareStamp(Rec):
 
 
 def pause(cfg: ConfigDir, run: str) -> RowDoc[RunCounters]:
-    return singleton(cfg, RunCounters, f"{RUN}{run}:pause")
+    return singleton(cfg, RunCounters, f"{RUN}{run}:pause", table=RUN_DOCS)
 
 
 def reexec(cfg: ConfigDir, run: str) -> RowDoc[RunCounters]:
-    return singleton(cfg, RunCounters, f"{RUN}{run}:reexec")
+    return singleton(cfg, RunCounters, f"{RUN}{run}:reexec", table=RUN_DOCS)
 
 
 def handoff(cfg: ConfigDir, run: str) -> RowDoc[HandoffMirror]:
-    return singleton(cfg, HandoffMirror, f"{RUN}{run}:handoff")
+    return singleton(cfg, HandoffMirror, f"{RUN}{run}:handoff", table=RUN_DOCS)
 
 
 def prepare_stamp(cfg: ConfigDir, run: str) -> RowDoc[PrepareStamp]:
-    return singleton(cfg, PrepareStamp, f"{RUN}{run}:prepare")
+    return singleton(cfg, PrepareStamp, f"{RUN}{run}:prepare", table=RUN_DOCS)
 
 
 def stamped(fingerprint: str) -> PrepareStamp:
@@ -47,7 +47,7 @@ def stamped(fingerprint: str) -> PrepareStamp:
 def once(cfg: ConfigDir, run: str, key: str) -> bool:
     """True the first time `key` is asked for in this run (also across engine reloads), False after: one row, inserted if absent."""
     with LoopRows(cfg, "").transaction() as con:
-        return bool(con.execute("INSERT INTO kv (k, v, t) VALUES (?, '1', ?) ON CONFLICT(k) DO NOTHING",
+        return bool(con.execute(f"INSERT INTO {RUN_DOCS} (k, v, t) VALUES (?, '1', ?) ON CONFLICT(k) DO NOTHING",
                                 (f"{RUN}{run}:once:{key}", time.time())).rowcount)
 
 
@@ -56,8 +56,8 @@ def forget(cfg: ConfigDir, run: str) -> None:
     if not cfg.factory_db().exists():
         return
     with LoopRows(cfg, "").transaction() as con:
-        con.execute("DELETE FROM kv WHERE k LIKE ? ESCAPE '\\'", (f"{RUN}{run.replace('%', '\\%').replace('_', '\\_')}:%",))
+        con.execute(f"DELETE FROM {RUN_DOCS} WHERE k LIKE ? ESCAPE '\\'", (f"{RUN}{run.replace('%', '\\%').replace('_', '\\_')}:%",))
 
 
 def durations(cfg: ConfigDir, *, quiet: bool = False) -> RowDocs[Durations]:
-    return RowDocs(cfg, Durations, table="kv", key_col="k", body_col="v", prefix="durations:", quiet=quiet)
+    return RowDocs(cfg, Durations, table=DURATION_DOCS, key_col="k", body_col="v", prefix="durations:", quiet=quiet)

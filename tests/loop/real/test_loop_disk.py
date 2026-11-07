@@ -66,6 +66,7 @@ class DiskPreflight(LoopBase):
             self.run_loop()
         assert run.call_count == 1
         assert not run.call_args.args[5]  # not a dry run
+        assert callable(run.call_args.kwargs["live"])
 
     def test_a_prune_that_breaks_never_stops_the_loop(self):
         self.beads({"x-1": [rec("landed")]})

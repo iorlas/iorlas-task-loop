@@ -9,6 +9,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from taskloop.adapters.layout_paths import retired_dir
+from tlkernel.docrows import DURATION_DOCS
 from tlkernel.gitport import Git
 from tlkernel.ids import loop_key
 from tlkernel.paths import ConfigDir
@@ -88,13 +89,13 @@ def moves(cfg: ConfigDir, keys: dict[str, str]) -> list[Pair]:
 
 
 def rekey_rows(keys: dict[str, str], run: Callable[[str, tuple[str, ...]], int]) -> int:
-    """Rewrite the old keys in factory.db: the durations (kv `durations:<key>`) and the check receipts (check_pass.repo_key). `run`
-    executes one statement and returns the rows it changed. A row the new key already holds wins; the old one (a cache) is dropped."""
+    """Rewrite the old keys in factory.db: the durations (duration_doc `durations:<key>`) and the check receipts (check_pass.repo_key).
+    `run` executes one statement and returns the rows it changed. A row the new key already holds wins; the old one (a cache) is dropped."""
     n = 0
     for old, new in keys.items():
         for sql, args in (
-            ("UPDATE OR IGNORE kv SET k=? WHERE k=?", (f"durations:{new}", f"durations:{old}")),
-            ("DELETE FROM kv WHERE k=?", (f"durations:{old}",)),
+            (f"UPDATE OR IGNORE {DURATION_DOCS} SET k=? WHERE k=?", (f"durations:{new}", f"durations:{old}")),
+            (f"DELETE FROM {DURATION_DOCS} WHERE k=?", (f"durations:{old}",)),
             ("UPDATE OR IGNORE check_pass SET repo_key=? WHERE repo_key=?", (new, old)),
             ("DELETE FROM check_pass WHERE repo_key=?", (old,)),
         ):
