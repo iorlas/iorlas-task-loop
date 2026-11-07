@@ -111,7 +111,7 @@ New tables beyond v3: `checkpoint` (schema v4, one `user_version` step, DDL and 
 Smallest and most contended first, each slice its own PR, each readable both ways until it lands:
 
 1. **Loop state + command (2, 3)** onto `lease`/`signal`. Hot, small, one writer plus the dashboard poll; kills the phantom-loop and rename dance (`LoopFiles.live()`).
-2. **Parks, pauses, reexec (4, 5)** onto `wait`. Unlocked RMW today; the `wait` store is loop-owned, the engine submits through it.
+2. **Parks, pauses, reexec (4, 5)** onto asks-owned `park` rows (4) and pipeline `wait` rows (5). ParkStore serializes park updates.
 3. **Checkpoint (1) + follow-ups (8)** onto `checkpoint`. The most contended RMW; revision makes the lost-update impossible. Largest slice: split into read path, then write path.
 4. **Call state (7), landed (9)** onto `effect`; landed is the outbox only (2a), reconciled against git.
 5. **Slot tickets + engine lock + worktree records (10, 11, 12)** onto `lease`/`slot_ticket`. Builds on tl-sqd3.6 (PR #40).
