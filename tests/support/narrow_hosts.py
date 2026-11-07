@@ -31,12 +31,12 @@ from taskloop.app.land.sync import Sync
 from taskloop.app.pipeline.budget import Budget
 from taskloop.app.pipeline.closing import CloseParts, Closer
 from taskloop.app.pipeline.steps import Steps
-from taskloop.domain import outcome as oc
-from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes.pause_reasons import Producer
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 from tlkernel import fence
+from tlkernel import runoutcome as oc
+from tlkernel.askspec import AskSpec
 from tlkernel.bead import Bead
 from tlkernel.beadsport import Beads, DoltPush
 from tlkernel.checkpoint import Checkpoint, CloseIntent, Notes

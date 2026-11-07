@@ -5,8 +5,8 @@ from support.pipeline_ports import FakeBeadClosing, FakeParkBook
 
 from taskloop.adapters import beadtools
 from taskloop.app.pipeline.closing_settle import Settle
-from taskloop.domain import outcome as oc
-from taskloop.domain.asks import specs
+from tlkernel import askspecs as specs
+from tlkernel import runoutcome as oc
 from tlkernel.bead import Bead
 from tlkernel.kinds import Kind
 

@@ -37,10 +37,10 @@ from taskloop.app.track import runs
 from taskloop.app.track.verbs import trace
 from taskloop.app.wire import closeguard
 from taskloop.cli.land_stack import cmd_land_stack
-from taskloop.domain import outcome as oc
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 from tlkernel import check_files, log
+from tlkernel import runoutcome as oc
 from tlkernel.bead import Bead
 from tlkernel.beadsport import DoltPush
 from tlkernel.checks import Check, CheckResult

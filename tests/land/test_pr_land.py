@@ -28,8 +28,8 @@ from taskloop.app.land.gate import Problem, ProblemKind, mint
 from taskloop.app.land.pr_land import PrLand
 from taskloop.app.land.state import Land
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
-from taskloop.domain.asks import specs
 from taskloop.stores.runlog import RunLog
+from tlkernel import askspecs as specs
 from tlkernel import fence, scratch
 from tlkernel.ask import Ask
 from tlkernel.askenums import AskClass, AskStatus
