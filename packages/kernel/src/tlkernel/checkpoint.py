@@ -1,4 +1,4 @@
-"""Checkpoint: where a run stopped, so the next run on the same bead resumes there (checkpoints/<bead>.json, v4).
+"""Checkpoint: where a run stopped, so the next run on the same bead resumes there (cursor and section rows, v5).
 
 Two parts. `RunState` is everything the run carries across a park, one typed value; adding a field is one edit here (the
 engine reads and writes it through `engine.state`, `dump()` is the payload). `Checkpoint` is that state plus where the run
@@ -180,7 +180,7 @@ class StageProgress(Rec):
 
 @final
 class Checkpoint(Rec):
-    V: ClassVar[int] = 4
+    V: ClassVar[int] = 5
     bead: str
     run: str
     t: float
@@ -198,3 +198,129 @@ class Checkpoint(Rec):
     notes: Notes | None = None  # the FileNotes result
     state: RunState = msgspec.field(default_factory=RunState)
     progress: StageProgress | None = None
+
+
+@final
+class PlanSection(Rec):
+    """Persisted plan progress."""
+
+    V: ClassVar[int] = 1
+    plan_data: PlanData | None = None
+    brief_hash: str = ""
+    snap: BriefSnap | None = None
+    planner_ref: str = ""
+    planned: int = 0
+    replans: int = 0
+    extra: int = 0
+    rebase_resets: int = 0
+    plan_log: list[PlanStep] = msgspec.field(default_factory=list)
+
+
+@final
+class WriteSection(Rec):
+    """Persisted write progress."""
+
+    V: ClassVar[int] = 1
+    writer: WriterSession = msgspec.field(default_factory=WriterSession)
+    writer_family: str | None = None
+    writer_fallback: bool = False
+    fallback_lane: str = ""
+    handoff: Handoff = msgspec.field(default_factory=Handoff)
+    stage_tree: str = ""
+    denials: list[str] = msgspec.field(default_factory=list)
+
+
+@final
+class LandSection(Rec):
+    """Persisted land progress."""
+
+    V: ClassVar[int] = 1
+    pending_land_validation: str = ""
+    leftovers: list[dict[str, str]] = msgspec.field(default_factory=list)
+    followup_ids: dict[str, str] = msgspec.field(default_factory=dict)
+    fixes: int = 0
+
+
+@final
+class LookSection(Rec):
+    """Persisted look progress."""
+
+    V: ClassVar[int] = 1
+    look_notes: list[str] = msgspec.field(default_factory=list)
+    look_unjudged: dict[str, str] = msgspec.field(default_factory=dict)
+    look_done: int = 0
+    rendered_names: list[str] = msgspec.field(default_factory=list)
+    last_reqs: list[Open] = msgspec.field(default_factory=list)
+    render_stale: bool = False
+
+
+@final
+class Shared(Rec):
+    """Progress shared by the stages, kept with the cursor."""
+
+    done: list[str] = msgspec.field(default_factory=list)
+    accepted: list[int] = msgspec.field(default_factory=list)
+    accepted_new: list[str] = msgspec.field(default_factory=list)
+
+
+@final
+class CursorBody(Rec):
+    """Checkpoint envelope without stage-owned state."""
+
+    V: ClassVar[int] = 5
+    bead: str
+    run: str
+    t: float
+    branch: str = ""
+    head: str = ""
+    closed: bool = False
+    step: str = ""
+    stage: int = 0
+    rounds: int = 0
+    n: int = 0
+    feedback: str = ""
+    gate_tail: str = ""
+    applied: list[str] = msgspec.field(default_factory=list)  # keys of the close effects already applied (domain/effects.key_of)
+    ended: CloseIntent | None = None  # the close's outcome, stored before its first effect: a restart finishes the close from it
+    notes: Notes | None = None  # the FileNotes result
+    shared: Shared = msgspec.field(default_factory=Shared)
+    progress: StageProgress | None = None
+
+
+SECTION_TYPES: dict[str, type[Rec]] = {
+    "plan": PlanSection, "write": WriteSection, "land": LandSection, "look": LookSection, "review": ReviewState,
+}
+
+
+def split(ck: Checkpoint) -> tuple[CursorBody, dict[str, Rec]]:
+    """Separate the cursor and every stage's owned fields without changing the checkpoint."""
+    state = wire.builtins(ck.state)
+    sections = {
+        name: ck.state.review if name == "review" else wire.load(cls, {
+            "v": cls.V, **{field: state[field] for field in wire.names(cls)},
+        })
+        for name, cls in SECTION_TYPES.items()
+    }
+    body = wire.dump(ck)
+    del body["state"]
+    body["shared"] = {field: state[field] for field in wire.names(Shared)}
+    return wire.load(CursorBody, body), sections
+
+
+def join(cursor: CursorBody, sections: dict[str, Rec]) -> Checkpoint:
+    """Assemble one complete checkpoint; every section must have its declared type."""
+    if sections.keys() != SECTION_TYPES.keys():
+        raise wire.Refused("checkpoint: missing or unknown sections")
+    state = wire.builtins(cursor.shared)
+    for name, cls in SECTION_TYPES.items():
+        section = sections[name]
+        if type(section) is not cls:
+            raise wire.Refused(f"checkpoint: foreign {name} section")
+        if name == "review":
+            state["review"] = wire.builtins(section)
+        else:
+            state.update(wire.builtins(section))
+    body = wire.dump(cursor)
+    del body["shared"]
+    body["state"] = state
+    return wire.load(Checkpoint, body)
