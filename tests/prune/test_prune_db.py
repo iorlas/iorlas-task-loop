@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 from support.shells import quiet_shell
-from support.who import who
 
 from taskloop.app.prune import runs, verb
 from taskloop.app.prune.traces import prune_traces
@@ -73,7 +72,7 @@ def invoke(cfg: ConfigDir, now: float, dry_run: bool, monkeypatch: pytest.Monkey
     monkeypatch.setattr(runs, "open_beads", lambda repos, store: ({"kept"}, ""))
     monkeypatch.setattr(verb, "sweep", lambda *args: ([], []))
     output: list[str] = []
-    verb.run(cfg, LoopConfig(keep_days=7), [], no_store, now, dry_run, quiet_shell(), output.append, who=who())
+    verb.run(cfg, LoopConfig(keep_days=7), [], no_store, now, dry_run, quiet_shell(), output.append, live=lambda repo: {})
     return output
 
 
