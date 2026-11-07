@@ -1588,6 +1588,7 @@
    ],
    "land_mode": "push",
    "land_queue": "off",
+   "land_queue_max_in_flight": 4,
    "base": "origin/main",
    "check_links": true,
    "owner_author": "",

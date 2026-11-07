@@ -2,7 +2,7 @@
 import pytest
 
 from taskloop.domain.land.queue_model import Build, Built, Drop, Ejected, Entry, Gate, Gated, Landed, Merge, Phase, apply, plan
-from tlkernel.config import load
+from tlkernel.config import ConfigError, load
 
 MAIN = "main0"
 
@@ -79,3 +79,10 @@ def test_a_run_to_the_end_merges_in_queue_order_whatever_order_the_gates_finish(
 def test_the_config_key_defaults_to_off_and_reads_shadow_and_on():
     assert load({}).engine.land_queue == "off"
     assert load({"engine": {"land_queue": "on"}}).engine.land_queue == "on"
+
+
+def test_the_cap_key_defaults_to_four_and_refuses_less_than_one():
+    assert load({}).engine.land_queue_max_in_flight == 4
+    assert load({"engine": {"land_queue_max_in_flight": 2}}).engine.land_queue_max_in_flight == 2
+    with pytest.raises(ConfigError, match="at least 1"):
+        load({"engine": {"land_queue_max_in_flight": 0}})

@@ -5,9 +5,8 @@ from pathlib import Path
 
 from tlkernel.gitport import Git
 
-from taskloop.app.workers import done_memo, worker_identity
+from taskloop.app.workers import call_state, done_memo, worker_identity
 from taskloop.app.workers.worker_identity import ExecutionContext, NodeInput, PreparedCall, context
-from taskloop.stores import call_state
 
 # Bump when answer interpretation changes incompatibly, even if the JSON schema does not.
 PRODUCER = "worker-run:4;answers:1"
