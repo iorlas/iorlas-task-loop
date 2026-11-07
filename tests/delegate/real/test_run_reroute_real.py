@@ -5,7 +5,6 @@ from unittest import mock
 
 import routing_support as support
 from run_support import RunBase
-from support.procsim import real_proc
 from test_route import CFG, lanes, why
 
 from delegate.adapters import git
@@ -14,6 +13,7 @@ from delegate.contracts import history as hist
 from delegate.contracts.routing import CallArgs, Step
 from delegate.domain.holds.book import HoldBook
 from delegate.domain.routing.router import Router
+from tltestkit.procsim import real_proc
 
 
 class RunReroute(RunBase):

@@ -17,13 +17,16 @@ import subprocess
 import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 from unittest import mock
 
 import pytest
 import stream_proc
 
-from taskloop.adapters import procs
+# Modules exposing run_bytes(argv, *, capture, ...) that the sim must also answer for.
+# The root conftest registers the shell's adapter.
+SHELL_PROCESS_ADAPTERS: list[ModuleType] = []
 
 Fake = Callable[[Path, Mapping[str, str]], tuple[Any, ...]]  # (exit, output) or (exit, output, seconds it would take)
 
@@ -244,7 +247,8 @@ class Procs:
 
     def install(self, stack: contextlib.ExitStack) -> None:
         stack.enter_context(mock.patch.object(subprocess, "run", self.sp_run(subprocess.run)))
-        stack.enter_context(mock.patch.object(procs, "run_bytes", self.sp_run(procs.run_bytes, captured=True)))
+        for mod in SHELL_PROCESS_ADAPTERS:
+            stack.enter_context(mock.patch.object(mod, "run_bytes", self.sp_run(mod.run_bytes, captured=True)))
         stack.enter_context(mock.patch.object(stream_proc, "run", self.sp_stream(stream_proc.run)))
         # capture() calls the module-level capture_bytes of stream_proc.capture (the function shadows its module)
         stack.enter_context(mock.patch.object(stream_proc, "capture_bytes", self.sp_bytes(stream_proc.capture_bytes)))

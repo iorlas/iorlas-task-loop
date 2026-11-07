@@ -146,7 +146,7 @@ Counts from grep over `tests/` (3,123 lines match any of: tmp paths, signal, for
 | # | What | Evidence | Windows impact | Size |
 |---|---|---|---|---|
 | T1 | Files using `symlink_to`, `os.kill`, `killpg`, `fcntl`, `start_new_session`, `/bin/sh`, `sh -c`, `#!/bin` | 76 files in `tests/` | Each needs `skipif(sys.platform == "win32")` or a rewrite. Skips hide the gap; a rewrite per primitive (kill tree, lock, symlink) is the real work. | L |
-| T2 | `procsim` guard (`tests/support/procsim.py`): "a logic test that spawns, forks or runs real git fails" | CLAUDE.md "Build & Test" | The guard itself is Python-level; should port. Real tests (`tests/*/real/`, `@real_proc`, `@real_git`, `tests/delegate`) spawn real shells and processes. | M |
+| T2 | `procsim` guard (`packages/testkit/src/tltestkit/procsim.py`): "a logic test that spawns, forks or runs real git fails" | CLAUDE.md "Build & Test" | The guard itself is Python-level; should port. Real tests (`tests/*/real/`, `@real_proc`, `@real_git`, `tests/delegate`) spawn real shells and processes. | M |
 | T3 | `tests/rules` (gate rules, 400-SLOC caps, `import re` placement) | Pure source scans | Portable; they read files with `\n` assumptions: set `.gitattributes` (F14). | S |
 | T4 | `dev/runtests.py:42,58,73` (RAM from `sysconf`, `~/.gitconfig` copy, SIGTERM trap) and `dev/affected.py` (diff against `origin/main` and import graph) | Runner for `just test` | `affected.py` is pure Python + git; runtests needs P5 and F17. | S |
 | T5 | `dev/race.py:95,120-125,156,200,255` | Writes `#!/bin/sh` fake `bd`/`claude`, `chmod 755`, `core.hooksPath` | A real-process race harness; needs fake executables as `.cmd`/python scripts. Low priority (a dev tool). | M |

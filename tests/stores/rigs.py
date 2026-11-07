@@ -14,7 +14,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support import procsim
 from support.memstores import fake_stores
 
 from taskloop.stores.bundle import Stores
@@ -23,6 +22,7 @@ from tlkernel import paths, wire
 from tlkernel.docstore import JsonStore
 from tlkernel.lockenums import LockWhat
 from tlkernel.locks import LockRecord
+from tltestkit import procsim
 from tltestkit.memdoc import MemDoc, MemLockTable, MemLog
 
 

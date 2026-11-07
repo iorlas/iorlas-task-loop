@@ -8,11 +8,10 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.check_host import CheckHostCase
 
 # isort: split
-from support import procsim
-
 from tlkernel import childenv
 from tlkernel.envvars import EnvVar
 from tlkernel.paths import RunFiles
+from tltestkit import procsim
 
 NAMES = (EnvVar.TL_RUN_ID, EnvVar.TL_RUN_DIR, EnvVar.TL_ATTEMPT, EnvVar.TL_ARTIFACT_DIR, EnvVar.TL_WORKTREE, EnvVar.TL_BRANCH)
 

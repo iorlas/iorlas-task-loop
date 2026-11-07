@@ -14,7 +14,6 @@ import routing_support as support
 import stream_proc
 from run_support import RunBase, short_limits
 from stream_proc import proc_start
-from support.procsim import real_proc
 from test_route import _call, at, route, why
 
 from delegate.app import answer, env, launch, net
@@ -24,6 +23,7 @@ from delegate.contracts import stops
 from delegate.contracts.state import RefRecord
 from delegate.domain.policy import worker
 from delegate.domain.policy.worker import is_policy_denial
+from tltestkit.procsim import real_proc
 
 DECLINED = "the reviewer declined the escalation"
 REFUSED = "the CLI's permission check refused the call"

@@ -23,12 +23,12 @@ from any_agent.harnesses.codex import CodexHarness
 from any_agent.protocol import LaunchSpec
 from any_agent.supervisor import RunHooks, Supervisor
 from stream_proc import alive, proc_start
-from support.procsim import real_proc
 
 from delegate.adapters import procs
 from delegate.app import harnesses
 from delegate.app.publish import LiveSink
 from delegate.contracts import codec, wire
+from tltestkit.procsim import real_proc
 
 FAKE = str(Path(__file__).resolve().parent.parent / "delegate_fakes" / "fake_agent.py")
 
