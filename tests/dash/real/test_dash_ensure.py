@@ -17,6 +17,7 @@ import support.paths  # noqa: E402, F401
 
 # isort: split
 
+from taskloop.contracts import factorydb  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop_dash import bind, serve  # noqa: E402
 from taskloop_dash.cli import dash as dash_cli  # noqa: E402
@@ -61,7 +62,7 @@ class LoudBind(Case):
         cfg = mkdtemp()
         err = io.StringIO()
         with mock.patch.dict(os.environ, {"TASK_LOOP_DASH_DEV_PUBLIC": "1", "XDG_CONFIG_HOME": cfg, "APPDATA": cfg}), \
-                contextlib.redirect_stderr(err), pytest.raises(SystemExit) as stop:
+                contextlib.redirect_stderr(err), mock.patch.object(factorydb._STORE, "parts", None), pytest.raises(SystemExit) as stop:
             dash_cli.main(["--port", str(port), "--bind", "127.0.0.1,100.64.0.199"])  # a Tailscale address this host does not have
         assert stop.value.code != 0
         assert f"100.64.0.199:{port}" in err.getvalue()
