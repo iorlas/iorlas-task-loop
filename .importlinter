@@ -212,10 +212,10 @@ source_modules =
     taskloop.app.pipeline.blocked
     taskloop.app.pipeline.budget
     taskloop.app.pipeline.waits
-    taskloop.app.run.closer
-    taskloop.app.run.closer_branch
+    taskloop.app.pipeline.closing
+    taskloop.app.pipeline.closing_branch
     taskloop.app.pipeline.closing_decide
-    taskloop.app.run.closer_host
+    taskloop.app.pipeline.closing_host
     taskloop.app.run.closer_ports
     taskloop.app.pipeline.closing_notes
     taskloop.app.pipeline.closing_record
@@ -278,7 +278,7 @@ ignore_imports =
     taskloop.app.run.records -> taskloop.app.run.layout
     taskloop.app.run.stages -> taskloop.app.run.layout
     taskloop.app.run.stages -> taskloop.app.run.run_once
-    taskloop.app.run.closer_branch -> taskloop.app.wire.slots
+    taskloop.app.run.closer_ports -> taskloop.app.wire.slots
     taskloop.app.run.closer_ports -> taskloop.app.wire.closeguard
     taskloop.app.run.preflight -> taskloop.app.wire.closeguard
     taskloop.app.run.running -> taskloop.app.wire.slots

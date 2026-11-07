@@ -16,6 +16,7 @@ from support.fake_beads import FakeBeads
 from support.fake_clock import FakeClock
 from support.fakegit import FakeGit, ScriptedGit
 from support.memstores import fake_stores
+from support.pipeline_ports import FakeAskRules, FakeParkBook
 from support.who import who
 from taskloop.app.land.commit import Commit
 from taskloop.app.land.fix_outside import FixOutside
@@ -28,8 +29,8 @@ from taskloop.app.land.recheck import Recheck
 from taskloop.app.land.state import LandState
 from taskloop.app.land.sync import Sync
 from taskloop.app.pipeline.budget import Budget
+from taskloop.app.pipeline.closing import CloseParts, Closer
 from taskloop.app.pipeline.steps import Steps
-from taskloop.app.run.closer import CloseParts, Closer
 from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.beadsport import Beads, DoltPush
@@ -620,7 +621,7 @@ def table_kit(table: FakeGit, **kw: Any) -> LandKit:
     return LandKit(table, table.sh, **kw)
 
 
-# ---- the close: one small fake per step (app/run/closer_*.py) ----
+# ---- the close: one small fake per step (app/pipeline/closing_*.py) ----
 
 
 class Said:
@@ -810,5 +811,5 @@ class CloseKit:
                 notes=SpyNotes(),
                 reflect=SpyReflect(),
                 settle=SpySettle(),
-            ),
+            ), FakeAskRules(), FakeParkBook(),
         )

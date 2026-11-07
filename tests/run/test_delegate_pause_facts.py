@@ -12,8 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.app.asks import parks
+from taskloop.app.asks.closing import ClosingAsks
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
-from taskloop.app.run.closer import Closer
+from taskloop.app.pipeline.closing import Closer
 from taskloop.app.workers.lane_acts import LaneActs
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.delegate import DelegateResult, Retry, StopFacts
@@ -47,8 +48,8 @@ class DelegatePauseFacts(Case):
                     LaneActs(host, worker).end(call, result, stop, action)
                 assert host.pause_permanence == permanence
                 store.return_value.get.return_value = None
-                with mock.patch("taskloop.app.run.closer.beadtools.peek", return_value=bead):
-                    Closer(host, mock.Mock()).pause(oc.make(Kind.PAUSE_LANE, "paused"))
+                with mock.patch("taskloop.app.pipeline.closing.beadtools.peek", return_value=bead):
+                    Closer(host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home)).pause(oc.make(Kind.PAUSE_LANE, "paused"))
                 saved = store.return_value.put.call_args.args[0]
                 assert saved.permanence == permanence
                 assert saved.retry_at == (900 if permanence == "transient" else 0)
