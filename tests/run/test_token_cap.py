@@ -12,7 +12,7 @@ import support.paths  # noqa: F401
 from support.narrow_hosts import FakeWaitsHost
 
 # isort: split
-from taskloop.app.run import trace as runtrace
+from taskloop.app.pipeline import trace as runtrace
 from taskloop.app.run.blocked import Blocked
 from taskloop.app.run.waits import Waits
 from taskloop.contracts.enums import WaitWhat

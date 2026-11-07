@@ -6,7 +6,7 @@ from typing import Protocol
 
 from taskloop.adapters import beadtools
 from taskloop.app.land.followups import FollowUpCheckpoints, FollowUpHost, file_follow_ups
-from taskloop.app.run import outcomes
+from taskloop.app.pipeline import outcomes
 from taskloop.app.run.closer_branch import DONE
 from taskloop.contracts.answers import VERDICTS
 from taskloop.contracts.checkpoint import Notes
