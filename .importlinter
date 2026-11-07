@@ -283,6 +283,7 @@ source_modules =
     taskloop.app.pipeline.resume
     taskloop.app.run.field_ports
     taskloop.app.pipeline.steps
+    taskloop.app.pipeline.store_ports
     taskloop.app.pipeline.stuck
     taskloop.app.pipeline.summaries
     taskloop.app.pipeline.trace
