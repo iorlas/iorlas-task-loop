@@ -12,7 +12,7 @@ import support.paths  # noqa: E402, F401
 
 sys.path.insert(0, str(ROOT / "tests"))
 from taskloop.app.checks import evidence  # noqa: E402
-from taskloop.domain.checks import trim  # noqa: E402
+from tlkernel import checktrim as trim  # noqa: E402
 from tltestkit.checks import res  # noqa: E402
 
 FIX = Path(__file__).parents[1] / "fixtures" / "checklogs"

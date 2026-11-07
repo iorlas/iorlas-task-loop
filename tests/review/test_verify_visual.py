@@ -8,9 +8,9 @@ import support.paths  # noqa: F401
 from support import engine_case as T
 from support.plans import BEAD, CLEAN, PLAN, WRITE, verdict
 
-from taskloop.domain.followups import key_label, unchecked
 from tlkernel.beadsport import BeadQuery
 from tlkernel.config import ReviewSkipConfig
+from tlkernel.followkeys import key_label, unchecked
 
 PLAIN = dict(BEAD, labels=[])  # f.txt, "f.txt exists": nothing visual about it
 NOT_VISUAL = dict(PLAN, cases=[])  # no look-objective, taste or show case: the planner says nothing is to be seen
