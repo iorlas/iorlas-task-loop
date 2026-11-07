@@ -76,7 +76,14 @@ class CloseKill(te.EngineTest):
 
     @te.real_git("a child process is killed and a new one restarts on the same checkout and config dir")
     def test_the_restart_reuses_the_dead_runs_id(self):
-        _, second = self.killed_before("Reflect")
+        first, second = self.killed_before("Reflect")
+        before = next(r for r in first if "effect" in r)
+        resumed = next(r for r in second if "effect" in r)
+        assert resumed["stats"] == before["stats"]
+        assert "cost=$7.25" in resumed["stats"]
+        assert resumed["pause_reason"] == "dead pause"
+        assert resumed["retry_after"] == 1234.0
+        assert resumed["crash_fingerprint"] == "dead-fp"
         run = next(r for r in second if "run" in r)["run"]
         runs = RunLocator(ConfigDir(Path(os.environ["XDG_CONFIG_HOME"], "task-loop"))).of_bead("t-1")
         assert [b.run for b in runs] == [run]  # one run, taken up by the second process: two attempts

@@ -9,7 +9,7 @@ from typing import Protocol
 from tlkernel import log as rec
 from tlkernel import plancheck, wire
 from tlkernel.ask import Ask
-from tlkernel.checkpoint import EndRec
+from tlkernel.checkpoint import CloseIntent, EndRec
 from tlkernel.config import EngineConfig
 from tlkernel.delegate import DelegateResult
 from tlkernel.env import Env
@@ -51,7 +51,7 @@ class JournalBudget(Protocol):
 
 
 class JournalCheckpoints(Protocol):
-    def keep_end(self, end: EndRec) -> None: ...
+    def keep_end(self, intent: CloseIntent) -> None: ...
 
 
 class JournalReview(Protocol):
@@ -78,7 +78,7 @@ class JournalTraces(Protocol):
     def traces(self) -> Log[RunTrace]: ...
 
 
-class JournalHost(RecordHost, Protocol):
+class JournalHost(RecordHost, ended.HostFacts, Protocol):
     run_logged: bool
     kind: Kind
     why: str
@@ -118,8 +118,6 @@ class JournalHost(RecordHost, Protocol):
     def t0(self) -> float: ...
     @property
     def stats(self) -> Mapping[str, int]: ...
-    @property
-    def asked(self) -> bool: ...
     @property
     def log_path(self) -> Path: ...
     @property
@@ -236,7 +234,7 @@ class Journal:
         e = self.host
         self.use(record)
         if not e.dry and record.end:
-            e.checkpoints.keep_end(wire.load(EndRec, record.end))
+            e.checkpoints.keep_end(ended.intent_of(wire.load(EndRec, record.end), e, stats))
         (emit or RecordRun(e).run)(record, stats)
         indexes(e.home, manifest, record, LoopLogLine(
             slot=e.env.get(EnvVar.TASK_LOOP_SLOT) or self.slot() or "", outcome=record.result,

@@ -41,9 +41,14 @@ CREATE TABLE bead (id TEXT PRIMARY KEY, repo_key TEXT NOT NULL, title TEXT NOT N
 CREATE INDEX bead_status ON bead(repo_key, status);
 """)
 
+def close_intent(con: sqlite3.Connection) -> None:
+    """pipeline v1 -> v2: checkpoint v4 keeps CloseIntent; old bodies stay foreign and are refused by their reader."""
+
+
 PIPELINE = Part(
-    name="pipeline", version=1, tables=("run", "attempt", "step", "effect", "wait", "checkpoint", "timed", "signal"),
+    name="pipeline", version=2, tables=("run", "attempt", "step", "effect", "wait", "checkpoint", "timed", "signal"),
     records=(RunManifest, Checkpoint, OwnerRequest),
+    steps={1: close_intent},
     ddl="""
 CREATE TABLE run (run TEXT PRIMARY KEY, repo TEXT NOT NULL, repo_key TEXT NOT NULL, bead TEXT NOT NULL DEFAULT '',
   mode TEXT NOT NULL DEFAULT '', owner TEXT, session TEXT, loop TEXT, worktree TEXT, branch TEXT, sha TEXT,
