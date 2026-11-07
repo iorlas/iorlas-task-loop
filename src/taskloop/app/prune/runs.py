@@ -13,6 +13,7 @@ from tlkernel.locator import RunBundle, RunLocator
 from tlkernel.paths import ConfigDir
 from tlkernel.runlife import KEEP_DAYS
 
+from taskloop.app.prune.paths import suite_logs
 from taskloop.app.prune.traces import prune_traces
 from taskloop.app.run import layout
 from taskloop.app.track import trail
@@ -100,7 +101,7 @@ def _prune_files(cfg: ConfigDir, days: float, exempt: set[str], now: float, dry_
     rounds = [f for f in layout.prune_check_rounds(cfg, days, exempt, True)
               if not any(d in f.parents for d in dirs)] if bundles else []
     logs = layout.prune_run_logs(cfg, now, days * 86400, exempt, True) if bundles else []
-    suites = [f for f in cfg.suite_logs() if f.stat().st_mtime < now - days * 86400]
+    suites = [f for f in suite_logs(cfg) if f.stat().st_mtime < now - days * 86400]
     found = [Gone(p, size_of(p)) for p in [*dirs, *rounds, *logs, *suites] if p.exists()]
     if not dry_run:
         for d in dirs:

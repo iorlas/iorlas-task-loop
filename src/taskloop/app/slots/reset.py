@@ -13,6 +13,7 @@ from tlkernel.slots import BranchPinned, DirtyTree, IndexLocked, RefRace, SlotFa
 from taskloop.app.slots import owned
 from taskloop.app.slots.engine_lock import engine_busy
 from taskloop.app.slots.env import SlotEnv, stamp
+from taskloop.app.slots.paths import slot_setup_mark
 from taskloop.app.slots.surface import SlotView
 from taskloop.domain.matchers import NetText
 
@@ -167,7 +168,7 @@ def setup(slot: SlotView, force: bool = False) -> None:
         env.say("READY " + d)
         return
     digest = inputs_hash(d, cfg.setup_inputs)
-    mark = env.cfgdir.slot_setup_mark(hashlib.sha1(d.encode()).hexdigest()[:12])
+    mark = slot_setup_mark(env.cfgdir, hashlib.sha1(d.encode()).hexdigest()[:12])
     mark.parent.mkdir(parents=True, exist_ok=True)
     if not force and cfg.setup_inputs and mark.exists() and mark.read_text() == digest:
         env.say("READY " + d + " (setup unchanged)")
