@@ -19,10 +19,10 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import gitq
 from support.fake_api import FakeApi
-from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.adapters import delegate, runner
 from taskloop.adapters import halt as halting
+from tltestkit.plans import CLEAN, PLAN, WRITE
 
 WAIT = 120  # the longest a helper waits for a started process on a loaded runner (it ends the moment the process is there)
 

@@ -12,7 +12,6 @@ from support import engine_case as T
 from support import gitq
 from support.engine_case import engine
 from support.fakes import must_bead
-from support.plans import BEAD, CLEAN, PLAN, WRITE, verdict
 from support.spawn import port_git, real_spawner
 from support.who import who
 
@@ -25,6 +24,7 @@ from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlpipeline.closing import Closer
 from tltestkit import fake_route
+from tltestkit.plans import BEAD, CLEAN, PLAN, WRITE, verdict
 
 VISUAL = {"include": ["*.txt"], "exclude": ["docs/**"]}
 LOOK_ASK = "Whether smiles-front.png matches the rung B ladder image. Only the owner can judge the look."

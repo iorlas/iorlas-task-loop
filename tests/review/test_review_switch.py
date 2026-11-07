@@ -10,7 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import engine_case as T
 from support.engine_case import adhoc
-from support.plans import BEAD, CLEAN, HAS_F, PLAN, WRITE, review
+
+from tltestkit.plans import BEAD, CLEAN, HAS_F, PLAN, WRITE, review
 
 CASE = {"criterion": "the file f.txt exists", "check": adhoc(HAS_F), "class": "test"}
 COVERED = dict(PLAN, cases=[CASE])
