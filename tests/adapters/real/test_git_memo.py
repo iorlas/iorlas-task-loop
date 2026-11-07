@@ -8,19 +8,20 @@ from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401
-from support.tmpdir import TemporaryDirectory
+
+from tltestkit.tmpdir import TemporaryDirectory
 
 # isort: split
 import pytest
 from git_porcelain.errors import GitUnavailable
 from git_porcelain.real import RealWorktree
-from support.case import Case
 from support.checked import run_checked
 
 from taskloop.adapters import slotcheck, treehash
 from taskloop.adapters.git import RealGit
 from taskloop.app.run import engine
 from tlkernel.env import snapshot
+from tltestkit.case import Case
 
 
 def sh(*a, cwd):

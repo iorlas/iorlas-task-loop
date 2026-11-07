@@ -4,14 +4,13 @@ import base64
 import json
 from pathlib import Path
 
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
-
 from taskloop.app.slots import config as slots_config
 from taskloop.app.wire import setup, setup_apply
 from taskloop.cli import setup as cli_setup
 from tlkernel.env import Env
 from tlkernel.procport import Ran
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 

@@ -4,13 +4,13 @@ from unittest import mock
 
 import pytest
 from support import procsim
-from support.case import Case
 from support.check_host import CheckHostCase
 
 from taskloop.adapters.childenv import CHECK_SECRETS, check_env, check_environment, current_env, delegate_call_env, tool_env
 from taskloop.adapters.git import RealGit
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env
+from tltestkit.case import Case
 
 
 class CheckEnvironmentTest(Case):

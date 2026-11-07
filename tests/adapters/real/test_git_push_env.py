@@ -5,12 +5,12 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters.git import RealGit
 from tlkernel.env import Env, snapshot
 from tlkernel.slots import SlotGitError
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 def sh(*a, cwd, check=True):

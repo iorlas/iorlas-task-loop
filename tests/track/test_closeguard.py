@@ -10,7 +10,6 @@ from support import homes
 from support.who import who
 
 # isort: split
-from support.case import Case
 from support.fake_beads import FakeBeads
 from support.fakegit import ScriptedGit
 
@@ -22,6 +21,7 @@ from tlkernel.gitfacts import Ref
 from tlkernel.ids import BeadId
 from tlkernel.locator import RunLocator
 from tlkernel.stores import TraceStore
+from tltestkit.case import Case
 
 SHA = "a" * 40
 

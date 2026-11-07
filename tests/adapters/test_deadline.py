@@ -8,13 +8,13 @@ from unittest import mock
 import pytest
 import stream_proc
 import support.paths  # noqa: F401
-from support.case import Case
 from support.fake_deadline import FakeDeadline
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import procs, runner
 from taskloop.adapters.deadline import DeadlineExpired, deadline, remaining
 from taskloop.adapters.spawner import Started
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class Deadlines(Case):

@@ -5,9 +5,7 @@ from unittest import mock
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
 from support.shells import quiet_shell
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.release import canary, pins
 from taskloop.app.release.shell import Abort
@@ -15,6 +13,8 @@ from tlkernel.env import Env
 from tlkernel.gitfacts import Ref
 from tlkernel.slots import SlotGitError
 from tlkernel.snapshots import Pin
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class Canary(Case):

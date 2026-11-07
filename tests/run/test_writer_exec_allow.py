@@ -7,13 +7,13 @@ import support.paths  # noqa: F401
 from support import engine_case as te
 from support import fake_route
 from support.argv_of import argv_of
-from support.case import Case
 
 from taskloop.adapters import delegate_wire
 from taskloop.app.workers import worker_identity, worker_request
 from taskloop.domain.lanes import pin
 from tlkernel import config
 from tlkernel.delegate import RunRequest
+from tltestkit.case import Case
 
 GRANT = [["just", "unity-shot"], ["tool", "an argument"]]
 

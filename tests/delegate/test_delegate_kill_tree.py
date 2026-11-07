@@ -10,9 +10,10 @@ from unittest import mock
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 from stream_proc import proc_start
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
 from test_route import ROOT
+
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 # A fake of the Codex CLI: a node-shim analogue that starts a native child in a session of its own; the child ignores SIGTERM.
 CHILD = "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(300)"
