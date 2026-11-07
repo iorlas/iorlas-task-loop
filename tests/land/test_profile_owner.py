@@ -20,12 +20,12 @@ from support.narrow_hosts import FakePushHost, Stopped
 
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.gate import mint
+from taskloop.app.land.host import Land
 from taskloop.app.land.profile_change import owner_refusal
 from taskloop.app.land.push import Pusher
 from taskloop.app.land.push_judge import PushStatus, judge_push
 from taskloop.app.land.stack import Stack
 from taskloop.app.land.stackgate import StackGate
-from taskloop.app.land.state import Land
 from taskloop.app.launch.check import run_check
 from taskloop.cli.land_stack import add_parser, cmd_land_stack
 from tlkernel.config import load
