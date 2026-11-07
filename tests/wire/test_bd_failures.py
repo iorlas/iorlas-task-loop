@@ -27,9 +27,9 @@ class BdFallbacks(Case):
         with mock.patch.object(slots, "slot_table", side_effect=BdCommandFailure("tl: bd is not on PATH")):
             assert brief.slot_lines("/repo", who, 0, mock.Mock()) == ()
 
-    def test_sweep_remains_optional_when_bd_is_missing(self):
+    def test_sweep_remains_optional_when_bd_is_missing(self, workdir):
         who = Identity(actor="owner", home=".")
-        home = mock.Mock(spec=ConfigDir)
+        home = ConfigDir(workdir)
         with mock.patch.object(asks, "store"), \
                 mock.patch.object(asks.sweeps, "close_stale", side_effect=BdCommandFailure("tl: bd is not on PATH")):
             assert asks.sweep("close", who, home) == []

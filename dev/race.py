@@ -60,7 +60,6 @@ from taskloop.adapters import ident  # noqa: E402
 from taskloop.app.slots import (  # noqa: E402
     marks,
 )
-from taskloop.app.slots import paths as slot_paths  # noqa: E402
 from taskloop.app.wire import real  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
@@ -398,7 +397,8 @@ class Race:
             sb = beads[f"sl-{i}"]
             assert (sb["status"], sb.get("assignee") or "") == ("open", ""), sb
             assert not (set(sb.get("metadata") or {}) & set(marks.HELD_KEYS)), sb
-            assert not (slot_paths.engine_lock(ConfigDir(self.h / "cfg" / "task-loop"), str(self.repo / ".slots" / s)).exists()), s
+            engine = ConfigDir(self.h / "cfg" / "task-loop").lock_record("engine", wslots.repo_key(str(self.repo / ".slots" / s)))
+            assert not engine.exists(), s
         cfg = self.h / "cfg" / "task-loop"
         for lock in (cfg / "locks").glob("*.lock"):
             try:
