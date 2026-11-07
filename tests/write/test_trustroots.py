@@ -6,6 +6,7 @@ from support.case import Case
 
 from taskloop.app.run.blocked import Blocked, blocked_for
 from taskloop.app.write.review_round import ReviewRound
+from taskloop.app.write.state import RoundStop
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.gitfacts import DiffEntry
 from taskloop.contracts.ids import BeadId
@@ -19,8 +20,10 @@ class ReviewTrustRoots(Case):
         host.store.show.return_value = Bead(id=host.bead, title="t", status="open")
         review = ReviewRound(host)
         review.switched_off = Mock(return_value=True)
-        with pytest.raises(Blocked) as caught:
+        with pytest.raises(RoundStop) as caught:
             review.run(Mock())
-        assert caught.value.kind == Kind.ASK_DECISION
-        assert caught.value.spec is not None
+        blocked = caught.value.cause
+        assert isinstance(blocked, Blocked)
+        assert blocked.kind == Kind.ASK_DECISION
+        assert blocked.spec is not None
         review.switched_off.assert_not_called()

@@ -26,6 +26,7 @@ from loop.test_loop import LoopBase, rec
 from support.args import Args
 from support.engine_locks import put_lock
 from support.spawn import port_git, real_spawner
+from support.taker import real_taker
 from support.who import who
 
 from taskloop.adapters import pidcheck
@@ -233,7 +234,7 @@ class LiveEngineBackstop(Slots):
         env = dataclasses.replace(wloop.build(str(self.repo), env=snapshot(), spawner=real_spawner(),
             git=port_git(), who=who()), slot_env=lambda: senv)
         with redirect_stdout(io.StringIO()):
-            assert REAL_PREPARE(Taker(env, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), {}), "s1", "x-1") is not None
+            assert REAL_PREPARE(real_taker(env, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), {}), "s1", "x-1") is not None
     def test_slot_list_shows_the_live_engine(self):
         self.beads({})
         k = self.live_lock("s1", bead="x-7")

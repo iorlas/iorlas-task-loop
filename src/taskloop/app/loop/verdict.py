@@ -2,7 +2,6 @@
 from dataclasses import dataclass, replace
 from os import EX_CONFIG
 from pathlib import Path
-from typing import Any
 
 from taskloop.contracts import wire
 from taskloop.contracts.config import ProfileReadError
@@ -60,7 +59,7 @@ class Verdict:
                 and ((self.pre_engine and self.recovery_failed)
                      or (not self.pre_engine and self.minutes is not None and self.minutes < quick_min)))
 
-    def with_(self, **fields: Any) -> Verdict:
+    def with_(self, **fields: object) -> Verdict:
         return replace(self, **fields)
 
 
