@@ -23,7 +23,7 @@ from support.plans import PLAN, WRITE
 from support.runs import manifest
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.app.asks import intake, owner_verbs
+from taskloop.app.asks import ask_verbs, intake, owner_verbs
 from taskloop.app.pipeline import requests
 from taskloop.app.run.layout import prune_run_logs
 from taskloop.cli import asks as cli
@@ -131,7 +131,8 @@ class Cli(Case):
         ap = argparse.ArgumentParser()
         cli.add_parsers(ap.add_subparsers(dest="cmd"))
         when = now or time.time()
-        return cli.run(ap.parse_args(argv), fake_stores().asks, lambda _r: self.store, lambda: when, "denis", self.cfg, self.out.append)
+        return ask_verbs.run(cli.arguments(ap.parse_args(argv)), fake_stores().asks, lambda _r: self.store, lambda: when,
+                             "denis", self.cfg, self.out.append)
 
     def test_park_and_note_reach_the_live_run(self):
         run = "fk-1-20261026-100000"
