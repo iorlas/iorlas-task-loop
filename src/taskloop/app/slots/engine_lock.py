@@ -137,4 +137,18 @@ class EngineLock:
                 drop_engine_lock(self.cfg, self.wt)
 
 
-LOCK: EngineLock | None = None  # this process's EngineLock while run-task runs
+class HeldLock:
+    """The engine lock held by one run, shared with its slot readers."""
+
+    def __init__(self) -> None:
+        self._lock: EngineLock | None = None
+
+    def set(self, lock: EngineLock) -> None:
+        self._lock = lock
+
+    def clear(self) -> None:
+        self._lock = None
+
+    @property
+    def slot(self) -> str:
+        return self._lock.rec.slot if self._lock else ""
