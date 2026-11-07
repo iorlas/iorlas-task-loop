@@ -16,7 +16,7 @@ from support.fakegit import FakeGit, ScriptedGit
 from support.memstores import fake_stores
 from support.who import who
 from taskloop.adapters import beadtools
-from taskloop.app.land.fix_outside import FixOutside
+from taskloop.app.land.fix import FixOutside
 from taskloop.app.land.gate import Gate, GateChecker, GateCheckout
 from taskloop.app.land.host import LandState
 from taskloop.app.land.lander import GateStep, Lander, LandParts

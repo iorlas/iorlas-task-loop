@@ -12,7 +12,7 @@ from unittest import mock
 from support.memstores import fake_stores
 from support.push_race import seam
 from taskloop.adapters import halt, landlock
-from taskloop.app.land.fixer import Fixer
+from taskloop.app.land.fix import Fixer
 from taskloop.app.land.push import pin_head
 from taskloop.app.run import engine
 from taskloop.app.write.stage_loop import StageLoop

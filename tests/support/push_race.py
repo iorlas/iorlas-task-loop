@@ -9,7 +9,7 @@ from unittest import mock
 
 from taskloop.adapters.git import RealGit
 from taskloop.app.land.checkout import Checkout
-from taskloop.app.land.fixer import Fixer
+from taskloop.app.land.fix import Fixer
 from taskloop.app.land.lander import Lander
 from taskloop.app.land.push import pin_head
 from taskloop.app.run import engine
