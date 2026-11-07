@@ -1,6 +1,5 @@
 """A take's generation is one past the slot bead as it is once the claim is won, never past a read made before it (tl-br2.5)."""
 from slots.test_slot_pool import Rig
-
 from tlkernel.beadsport import BeadPatch
 from tlkernel.fence import SLOT_GEN, gen_of
 from tlkernel.ids import BeadId
