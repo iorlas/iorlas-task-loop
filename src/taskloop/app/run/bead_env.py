@@ -4,9 +4,8 @@ from typing import Any
 
 from tlkernel.check_files import repo_key
 from tlkernel.slots import git_probe
-
-from taskloop.app.slots.paths import slot_state
-from taskloop.domain import slot_env
+from tlslots import slot_env
+from tlslots.paths import slot_state
 
 
 def bead_env(e: Any, *, create: bool = True) -> dict[str, str]:

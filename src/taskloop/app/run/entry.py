@@ -27,6 +27,8 @@ from tlkernel.run import Reexec, RunReport
 from tlkernel.run_slot import RUN_SLOT
 from tlpipeline.api import admission as pipeline_admission
 from tlpipeline.api import target
+from tlslots import config as wslots_config
+from tlslots import engine_lock
 
 from taskloop.adapters import beadtools, gitrepo, ident
 from taskloop.adapters import halt as halting
@@ -35,10 +37,9 @@ from taskloop.app.loop.queue import has_areas
 from taskloop.app.reconcile import leases
 from taskloop.app.run import preflight, running
 from taskloop.app.run.engine import Blocked, Engine
-from taskloop.app.slots import config as wslots_config
-from taskloop.app.slots import engine_lock
 from taskloop.app.track import console, verbs
 from taskloop.app.track.outcome_line import append_output, pause_line, report
+from taskloop.app.wire import slotfx
 from taskloop.app.wire import slots as wslots
 from taskloop.stores.real import real_stores
 
@@ -220,7 +221,7 @@ def run_in(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, spawner:
         if took:
             a.slot_gen = fence.gen_of(beadtools.peek(store or beadtools.bd_store(who.actor, repo), took), SLOT_GEN)
         env = env.with_(EnvVar.TASK_LOOP_SLOT_BEAD, took) if took else env  # the engine's heartbeat keeps it
-        lock = engine_lock.EngineLock(who.config, wt, a.id, slot, env)
+        lock = engine_lock.EngineLock(who.config, wt, a.id, slot, env, fx=slotfx.FX)
         busy = take_area(a, repo, cfg, lock, git, who, took or sb if slot else "", store)
         if busy:
             why = busy if busy.startswith("area ") else f"worktree {wt}: {busy}"

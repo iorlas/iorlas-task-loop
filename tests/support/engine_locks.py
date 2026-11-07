@@ -3,8 +3,8 @@ from pathlib import Path
 from typing import Any
 
 from support import homes
-from taskloop.app.slots import engine_lock
 from tlkernel.locks import EngineLock
+from tlslots import engine_lock
 
 
 def put_lock(wt: str | Path, f: dict[str, Any]) -> None:

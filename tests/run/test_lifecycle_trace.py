@@ -14,11 +14,11 @@ from support.engine_case import stop
 from taskloop.adapters import delegate as dl
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
-from taskloop.app.slots import config as wslots_config
 from tlkernel import lifecyclematchers as lifecycle
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
+from tlslots import config as wslots_config
 from tltestkit import fake_route, procsim
 from tltestkit.case import Case
 from tltestkit.plans import CLEAN, PLAN, WRITE

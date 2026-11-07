@@ -5,14 +5,14 @@ from typing import Protocol
 
 from tlkernel.identity import Identity
 from tlpipeline import api
+from tlslots.config import profile_slots
 
 from taskloop.adapters import beadtools, closes
 from taskloop.app.asks.closing import ClosingAsks
 from taskloop.app.land.closing import LandCleanups, LandFollowUps
 from taskloop.app.land.record import FollowUpCheckpoints, FollowUpHost, file_follow_ups
-from taskloop.app.slots.config import profile_slots
 from taskloop.app.track.closing import ClosingBeads
-from taskloop.app.wire import closeguard
+from taskloop.app.wire import closeguard, slotfx
 from taskloop.app.wire.slots import slot_of
 from taskloop.stores.runlog import RunLog
 
@@ -51,7 +51,7 @@ def closing_ports(e: BindingHost) -> ClosingPorts:
     asks = ClosingAsks(e.home)
     cleanup = LandCleanups(e.git, e.log, e.home,
                            slot_check=lambda repo: (lambda path: bool(slot_of(repo, path, e.who, e.store, strict=True))),
-                           base_of=lambda repo: profile_slots(repo).base)
+                           base_of=lambda repo: profile_slots(repo).base, fx=slotfx.FX)
     return ClosingPorts(asks, asks, cleanup, ClosingBeads(e.who, e.store, closeguard.ENGINE),
                         LandFollowUps(lambda: file_follow_ups(e)))
 

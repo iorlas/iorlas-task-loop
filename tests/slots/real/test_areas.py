@@ -40,13 +40,6 @@ from taskloop.app.loop.queue import QueueRule
 from taskloop.app.run import (
     entry,
 )
-from taskloop.app.slots import config as wslots_config
-from taskloop.app.slots import (
-    engine_lock,
-    marks,
-)
-from taskloop.app.slots import line as slots_line
-from taskloop.app.slots.paths import engine_lock as engine_lock_path
 from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
 from taskloop.stores.ticketrows import TicketRows
@@ -55,6 +48,13 @@ from tlkernel.enums import Result
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId, loop_key
 from tlkernel.run import RunReport
+from tlslots import config as wslots_config
+from tlslots import (
+    engine_lock,
+    marks,
+)
+from tlslots import line as slots_line
+from tlslots.paths import engine_lock as engine_lock_path
 from tltestkit.narrow import must
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"

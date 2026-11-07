@@ -8,9 +8,9 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 from taskloop.app.run import engine
 from taskloop.app.run.state import state_names
-from taskloop.app.slots import config as wslots_config
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
+from tlslots import config as wslots_config
 from tltestkit.cfgs import cfg_with
 
 

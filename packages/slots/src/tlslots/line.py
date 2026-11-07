@@ -7,9 +7,9 @@ from collections.abc import Callable
 from tlkernel.ids import BeadId
 from tlkernel.locks import Ticket
 
-from taskloop.app.slots import watchdog
-from taskloop.app.slots.env import DEFAULT_PRIO, TICKET_POLL, SlotEnv
-from taskloop.app.slots.pool import SlotPool
+from tlslots import watchdog
+from tlslots.env import DEFAULT_PRIO, TICKET_POLL, SlotEnv
+from tlslots.pool import SlotPool
 
 
 def order(t: Ticket) -> tuple[int, int]:

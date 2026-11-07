@@ -13,7 +13,7 @@ def tree(root, files):
 FILES = {
     "src/taskloop/__init__.py": "", "packages/kernel/src/tlkernel/__init__.py": "", "packages/kernel/src/tlkernel/k.py": "X = 1\n",
     "src/taskloop/app/__init__.py": "", "src/taskloop/app/land/__init__.py": "",
-    "src/taskloop/app/land/a.py": "from taskloop.app.slots import s\n",
+    "src/taskloop/app/land/a.py": "from taskloop.app" ".slots import s\n",
     "src/taskloop/app/slots/__init__.py": "", "src/taskloop/app/slots/s.py": "from taskloop.app.land import a\n",
     "tests/conftest.py": "", "tests/land/test_a.py": "from taskloop.app.land import a\n",
     "tests/x/test_k.py": "from tlkernel import k\n", "tests/x/test_k2.py": "from tlkernel import k\n",

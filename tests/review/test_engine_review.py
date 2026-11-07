@@ -20,7 +20,7 @@ from support.spawn import port_git
 
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.run import engine
-from taskloop.app.slots import config as wslots_config
+from tlslots import config as wslots_config
 from tltestkit.cfgs import cfg_with
 from tltestkit.narrow import must
 

@@ -7,12 +7,12 @@ from tlkernel.bead import Bead
 from tlkernel.delegateport import Resolved
 from tlkernel.env import Env
 from tlkernel.ids import parse_bead_id
+from tlslots import config as wslots_config
 
 from taskloop.adapters import ident
 from taskloop.app.doctor import selftest
 from taskloop.app.doctor.memory_beads import MemoryBeads
 from taskloop.app.run.engine import Engine
-from taskloop.app.slots import config as wslots_config
 from taskloop.app.wire import real
 from taskloop.stores.delegate import fixed_route, real_route
 

@@ -8,9 +8,11 @@ from support.memstores import fake_stores
 
 from taskloop.app.land import cleanup
 from taskloop.app.land.closing import LandCleanups, LandFollowUps
+from taskloop.app.wire.slotfx import FX
 from taskloop.stores.runlog import RunLog
 from tlkernel.gitport import Git
 from tlkernel.paths import ConfigDir
+from tlslots.effects import Effects
 
 
 def test_followups_returns_filers_list():
@@ -43,10 +45,11 @@ def test_cleanup_uses_repo_slot_predicate_and_base(workdir: Path, monkeypatch: p
         lookups.append(("base", repo))
         return "origin/topic"
 
-    def record(git: Git, log: RunLog, predicate: Callable[[str], bool], base: str, *, cfg: ConfigDir) -> None:
+    def record(git: Git, log: RunLog, predicate: Callable[[str], bool], base: str, *, cfg: ConfigDir, fx: Effects) -> None:
+        assert fx is FX
         calls.append((git, log, predicate, base, cfg))
 
     monkeypatch.setattr(cleanup, "retry_logged", record)
-    LandCleanups(ports.git, log, cfg, slot_check, base_of).retry("repo-1")
+    LandCleanups(ports.git, log, cfg, slot_check, base_of, fx=FX).retry("repo-1")
     assert lookups == [("slots", "repo-1"), ("base", "repo-1")]
     assert calls == [(ports.git, log, is_slot, "origin/topic", cfg)]

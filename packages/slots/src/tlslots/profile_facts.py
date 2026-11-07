@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from taskloop.app.slots import config as slots_config
+from tlslots import config as slots_config
 
 
 @dataclass(frozen=True)

@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 from contextlib import redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -37,15 +38,17 @@ from taskloop.app.run import (
     engine,
     entry,
 )
-from taskloop.app.slots import (
-    engine_lock,
-)
+from taskloop.app.wire import slotfx
+from taskloop.app.wire.slotfx import FX
 from tlkernel.enums import Result
 from tlkernel.env import snapshot
 from tlkernel.ids import loop_key
 from tlkernel.kinds import Kind
 from tlkernel.lockrows import EngineLockRows
 from tlkernel.run import RunReport
+from tlslots import (
+    engine_lock,
+)
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 
@@ -220,8 +223,9 @@ class LiveEngineBackstop(Slots):
         k = sleeper()
         self.kids.append(k)
         put_lock(self.slot("s1"), {"pid": 0, "bead": "x-0"})
-        with mock.patch.object(engine_lock, "running_for", return_value=["r1"]):  # delegate names the run whose worker k stands for
-            assert "run r1" in engine_lock.engine_busy(homes.cfg(), self.slot("s1"))
+        # delegate names the run whose worker k stands for
+        with mock.patch.object(slotfx, "FX", replace(FX, running_for=mock.Mock(return_value=["r1"]))):
+            assert "run r1" in engine_lock.engine_busy(homes.cfg(), self.slot("s1"), fx=slotfx.FX)
             self.run_loop("--max-beads", "1")
         assert self.started == [("x-1", "s2")]
     def test_slot_reset_never_touches_a_slot_with_a_live_engine(self):
@@ -294,11 +298,11 @@ class StaleLocks(Slots):
         k = sleeper()
         self.kids.append(k)
         put_lock(self.slot("s1"), {"pid": k.pid, "start": "Mon Jan  1 00:00:00 2001", "bead": "x-0"})
-        assert engine_lock.engine_busy(homes.cfg(), self.slot("s1")) == ""
+        assert engine_lock.engine_busy(homes.cfg(), self.slot("s1"), fx=slotfx.FX) == ""
         put_lock(self.slot("s1"), {"pid": k.pid, "start": pidcheck.proc_start(k.pid), "bead": "x-0"})
-        assert f"pid {k.pid}" in engine_lock.engine_busy(homes.cfg(), self.slot("s1"))
+        assert f"pid {k.pid}" in engine_lock.engine_busy(homes.cfg(), self.slot("s1"), fx=slotfx.FX)
         put_lock(self.slot("s1"), {"pid": 0, "workers": [(k.pid, "Mon Jan  1 00:00:00 2001")]})
-        assert engine_lock.engine_busy(homes.cfg(), self.slot("s1")) == ""
+        assert engine_lock.engine_busy(homes.cfg(), self.slot("s1"), fx=slotfx.FX) == ""
     def test_a_zombie_is_dead(self):
         z = subprocess.Popen(["true"])
         try:
@@ -308,7 +312,7 @@ class StaleLocks(Slots):
                 time.sleep(0.05)
             assert not pidcheck.pid_alive(z.pid)  # exited and not yet reaped: stream-proc reads it as gone
             put_lock(self.slot("s1"), {"pid": z.pid, "bead": "x-0"})
-            assert engine_lock.engine_busy(homes.cfg(), self.slot("s1")) == ""
+            assert engine_lock.engine_busy(homes.cfg(), self.slot("s1"), fx=slotfx.FX) == ""
         finally:
             z.wait()
     def test_busy_names_the_lock_and_force_drops_it_on_reset_and_release(self):

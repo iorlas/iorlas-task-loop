@@ -25,6 +25,7 @@ from taskloop.app.land.push_judge import PushStatus, judge_push
 from taskloop.app.land.stack import Stack
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.launch.check import run_check
+from taskloop.app.wire.slotfx import FX
 from taskloop.cli.land_stack import add_parser, cmd_land_stack
 from tlkernel.config import load
 from tlkernel.env import Env
@@ -133,7 +134,7 @@ class OwnerGate(Case):
         log, forge = mock.Mock(), mock.Mock()
         log.stamp = {}
         stack = Stack(forge, self.cmds, log, self.git, "/repo", Path("/lock"), mock.Mock(), mock.Mock(),
-                      "owner", "session", self.gate, mock.Mock(), cfg=mock.Mock(), profile_change=TEXT)
+                      "owner", "session", self.gate, mock.Mock(), cfg=mock.Mock(), profile_change=TEXT, fx=FX)
         pr = mock.Mock(state="OPEN", head_oid="tip")
 
         def prepared(*args):
@@ -161,7 +162,7 @@ class OwnerGate(Case):
     def test_a_failed_audit_stops_before_push_or_merge(self):
         log = mock.Mock(stamp={})
         stack = Stack(mock.Mock(), self.cmds, log, self.git, "/repo", Path("/lock"), mock.Mock(), mock.Mock(),
-                      "owner", "session", self.gate, mock.Mock(), cfg=mock.Mock(), profile_change=TEXT)
+                      "owner", "session", self.gate, mock.Mock(), cfg=mock.Mock(), profile_change=TEXT, fx=FX)
         with (mock.patch.object(stack, "resolve", return_value=("topic", "tip", None)),
               mock.patch.object(self.git, "show", return_value="{}"),
               mock.patch.object(self.git, "profile_diff", return_value=PATCH),

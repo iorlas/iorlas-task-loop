@@ -1,4 +1,4 @@
-"""Paths owned by taskloop.app.slots."""
+"""Paths owned by tlslots."""
 from pathlib import Path
 
 from tlkernel.ids import loop_key

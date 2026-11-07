@@ -3,6 +3,7 @@ from collections.abc import Callable
 
 from tlkernel.gitport import Git
 from tlkernel.paths import ConfigDir
+from tlslots.effects import Effects
 
 from taskloop.app.land import cleanup
 from taskloop.app.land.rebase import oneline
@@ -19,12 +20,13 @@ class LandFollowUps:
 
 class LandCleanups:
     def __init__(self, git: Git, log: RunLog, cfg: ConfigDir,
-                 slot_check: Callable[[str], Callable[[str], bool]], base_of: Callable[[str], str]) -> None:
+                 slot_check: Callable[[str], Callable[[str], bool]], base_of: Callable[[str], str], *, fx: Effects) -> None:
+        self.fx = fx
         self.git, self.log, self.cfg = git, log, cfg
         self.slot_check, self.base_of = slot_check, base_of
 
     def retry(self, repo: str) -> None:
-        cleanup.retry_logged(self.git, self.log, self.slot_check(repo), self.base_of(repo), cfg=self.cfg)
+        cleanup.retry_logged(self.git, self.log, self.slot_check(repo), self.base_of(repo), cfg=self.cfg, fx=self.fx)
 
 
 class LandHistory:

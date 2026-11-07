@@ -11,7 +11,7 @@ from tlkernel.checks import CheckRun
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 
-from taskloop.app.land.fix_outside import FixOutsideHost
+from taskloop.app.land.fix import FixOutsideHost
 from taskloop.app.land.gate import GateCheckout, GateHost, GateSteps
 from taskloop.app.land.host import BeginSteps, FetchCheckout, LandLocks, MoveSteps, NetWorker, OutcomeSteps, StageCheckout, Strays
 from taskloop.app.land.pr_land import PrHost

@@ -13,8 +13,8 @@ from tltestkit.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from checks.test_checks_speed import SpeedTest
-from taskloop.app.slots import config as wslots_config
 from tlkernel import config
+from tlslots import config as wslots_config
 from tltestkit import procsim
 from tltestkit.tmpdir import TemporaryDirectory
 

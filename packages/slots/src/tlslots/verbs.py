@@ -5,12 +5,12 @@ from typing import Any, Final
 from tlkernel.beadsport import NewBead
 from tlkernel.slots import SlotFail, SlotGitError
 
-from taskloop.app.slots import owned
-from taskloop.app.slots.env import SlotEnv, stamp
-from taskloop.app.slots.line import order, wait_slot, waiting_line
-from taskloop.app.slots.marks import fresh_gen, held_by, mark_held
-from taskloop.app.slots.pool import Slot, SlotPool
-from taskloop.app.slots.reset import setup
+from tlslots import owned
+from tlslots.env import SlotEnv, stamp
+from tlslots.line import order, wait_slot, waiting_line
+from tlslots.marks import fresh_gen, held_by, mark_held
+from tlslots.pool import Slot, SlotPool
+from tlslots.reset import setup
 
 CODES: Final = {"busy": 4, "bead_pinned": 5, "slot_broken": 3, "transient": 3}
 

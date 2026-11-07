@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from taskloop.app.land.tree import Tree
+from taskloop.app.wire.slotfx import FX
 from taskloop.app.write.briefing import Briefing
 
 
@@ -21,7 +22,7 @@ class FakeGit:
 
 def _tree(tmp_path: Path, branch: str, top: Path) -> Tree:
     blocked = lambda why, kind: RuntimeError(f"{kind}: {why}")  # noqa: E731
-    return Tree(SimpleNamespace(wt=str(tmp_path), git=FakeGit(branch, str(top)), blocked_for=blocked))
+    return Tree(SimpleNamespace(wt=str(tmp_path), git=FakeGit(branch, str(top)), blocked_for=blocked), fx=FX)
 
 
 def test_matching_branch_and_worktree_pass(tmp_path: Path) -> None:

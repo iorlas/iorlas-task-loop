@@ -33,6 +33,7 @@ from taskloop.app.land.stackgate import StackGate
 from taskloop.app.track import runs
 from taskloop.app.track.verbs import trace
 from taskloop.app.wire import closeguard
+from taskloop.app.wire.slotfx import FX
 from taskloop.cli.land_stack import cmd_land_stack
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
@@ -182,7 +183,7 @@ class StackCase(Case):
         forge = Forge(cmds, self.git, str(self.repo), "main")
         gate = StackGate(cmds, self.git, real_stores(self.cfg), str(self.repo), "origin/main", ["tl"])
         stack = Stack(forge, cmds, log, self.git, str(self.repo), lock, self.record, lambda: self.synced, "tl-me", "sess-1", gate,
-                      FakeBeads(actor="tl-me"), named=self.beads.append, cfg=self.cfg, **kw)
+                      FakeBeads(actor="tl-me"), named=self.beads.append, cfg=self.cfg, **kw, fx=FX)
         self.rc = stack.run(list(items))
         done = oc.make(Kind.LANDED if self.rc == 0 else Kind.FAULT_LAND,
                        f"{len(items)} delivered" if self.rc == 0 else stack.failure_reason, sha=stack.last)

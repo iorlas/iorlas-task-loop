@@ -18,7 +18,6 @@ from support.dashes import make_dash  # noqa: E402
 from support.factory_index import ingest  # noqa: E402
 
 from taskloop.app.report import card  # noqa: E402
-from taskloop.app.slots.lease import Lease  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402
 from taskloop_dash.api import live as live_api  # noqa: E402
 from tlkernel import runlayout as layout  # noqa: E402
@@ -30,6 +29,7 @@ from tlkernel.paths import ConfigDir  # noqa: E402
 from tlkernel.run import RunManifest, RunState  # noqa: E402
 from tlkernel.runlife import BEAT_EVERY, KEEP_DAYS, STALE_AFTER, Liveness, liveness  # noqa: E402
 from tlkernel.trace import RunTrace  # noqa: E402
+from tlslots.lease import Lease  # noqa: E402
 from tltestkit.logs import typed  # noqa: E402
 from tltestkit.narrow import must  # noqa: E402
 from tltestkit.runs import manifest  # noqa: E402

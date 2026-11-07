@@ -8,6 +8,7 @@ from tlkernel import childenv
 from tlkernel.kinds import Kind
 from tlkernel.runlayout import repo_of
 from tlpipeline import api
+from tlslots.engine_lock import HeldLock
 
 from taskloop.adapters import deadline, ident, slotcheck
 from taskloop.adapters.agent import last_event_t, new_live
@@ -23,7 +24,6 @@ from taskloop.app.run.reload_ports import installed_newer, locked_slot
 from taskloop.app.run.shared import Shared
 from taskloop.app.run.shell import Shell
 from taskloop.app.run.state import state_names
-from taskloop.app.slots.engine_lock import HeldLock
 from taskloop.app.track.closing import TrailEvents
 from taskloop.app.workers.delegation import Delegation
 

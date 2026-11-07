@@ -9,6 +9,7 @@ root_packages =
     tlkernel
     tlartifacts
     tlgate
+    tlslots
     tlpipeline
     msgspec
     re
@@ -173,7 +174,6 @@ layers =
     release
     checks
     track | doctor
-    slots
     asks
 
 # Direct slice imports are checked by tests/rules/arch_invariants.py's allow-table.
@@ -246,6 +246,17 @@ forbidden_modules =
     delegate
 allow_indirect_imports = True
 
+[importlinter:contract:package-slots-imports-only-the-kernel]
+name = tlslots imports the kernel and third parties only
+type = forbidden
+source_modules =
+    tlslots
+forbidden_modules =
+    taskloop
+    taskloop_dash
+    delegate
+allow_indirect_imports = True
+
 [importlinter:contract:package-pipeline-imports-only-the-kernel]
 name = The pipeline package (tlpipeline) imports the kernel and third parties, never the tree or another package
 type = forbidden
@@ -274,7 +285,7 @@ source_modules =
     taskloop.app.review
     taskloop.app.report
     taskloop.app.review
-    taskloop.app.slots
+    tlslots
     taskloop.app.track
     taskloop.app.workers
     taskloop.app.write

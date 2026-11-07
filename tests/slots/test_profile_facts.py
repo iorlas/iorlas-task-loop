@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from taskloop.app.slots import profile_facts
+from tlslots import profile_facts
 
 
 def test_profile_problems_and_configured_slot_folders(tmp_path: Path):

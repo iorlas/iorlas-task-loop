@@ -1,7 +1,7 @@
-"""One fix round at land: the writer fixes what the land found wrong (a red gate on the rebased tree, a merge conflict, what the verifier
-found), under the stage loop's checks and review, without undoing what the accepted stages built."""
+"""Fix land failures under the stage loop checks and review, outside the land lock before retrying."""
 from collections.abc import Sequence
-from typing import ClassVar, Protocol
+from types import MappingProxyType
+from typing import ClassVar, Final, Protocol
 
 from tlgate import evidence as check_evidence
 from tlgate.domain import planref
@@ -14,7 +14,8 @@ from tlkernel.gitport import Git
 from tlkernel.plancheck import PlanCheck, PlanData, RoundState, StageData
 from tlkernel.ports import Sh
 
-from taskloop.app.land.host import CaseChecks, LandState, StageCheckout
+from taskloop.app.land.gate import Problem, ProblemKind
+from taskloop.app.land.host import CaseChecks, LandState, MoveSteps, StageCheckout
 from taskloop.app.land.rebase import must
 from taskloop.domain.land.fix_text import FIX_GOAL as GOAL
 from taskloop.domain.land.fix_text import FIX_TEXT as TEXT
@@ -133,3 +134,76 @@ class Fixer:
         if done != "accept":
             e.warn("land: the fix round did not pass its checks and review; landing tries the gate again")
         return done
+
+
+class FixRounds(Protocol):
+    def fix(self, kind: str, tail: str, resume: bool = ...) -> str: ...
+
+
+class FixConfig(Protocol):
+    @property
+    def max_fix_rounds(self) -> int: ...
+
+
+class FixCheckpoints(Protocol):
+    def save(self, *, step: str = ..., stage: int = ..., rounds: int = ..., n: int = ..., feedback: str = ...) -> None: ...
+
+
+class FixOutsideHost(Protocol):
+    """What fixing outside the lock reads of the engine: the fix rounds used and allowed, the fixer, the plan's stage count, the barrier
+    and its checkpoint, git, the staging and the amend."""
+
+    pending_land_validation: str  # set while the land's retry checks still need accepted checks and review
+    fixes: int
+    stuck_why: str
+
+    @property
+    def cfg(self) -> FixConfig: ...
+    @property
+    def steps(self) -> MoveSteps: ...
+    @property
+    def fixer(self) -> FixRounds: ...
+    @property
+    def plan_data(self) -> PlanData | None: ...
+    @property
+    def checkpoints(self) -> FixCheckpoints: ...
+    @property
+    def checkout(self) -> StageCheckout: ...
+    @property
+    def git(self) -> Git: ...
+    @property
+    def wt(self) -> str: ...
+    def blocked_for(self, why: str, kind: str) -> Exception: ...
+
+
+# A stale gate is retried without a fix round.
+CAUSE: Final = MappingProxyType({
+    ProblemKind.GATE: "gate_red", ProblemKind.VERIFY: "checks_red", ProblemKind.CONFLICT: "conflict", ProblemKind.STALE: None,
+})
+
+
+class FixOutside:
+    def __init__(self, host: FixOutsideHost) -> None:
+        self.e = host
+
+    def run(self, problem: Problem) -> None:
+        e = self.e
+        cause = CAUSE[problem.kind]
+        if cause is None:
+            return
+        if e.fixes < e.cfg.max_fix_rounds:
+            first = problem.text.strip().splitlines() or [""]
+            red = f"gate red on the rebased tree: {problem.named or first[-1]}"
+            e.steps.move("fix", cause, red if problem.kind is ProblemKind.GATE else problem.text.splitlines()[0])
+        fixed = e.fixer.fix(problem.kind, problem.text)
+        stages = len(plancheck.stages_of(e.plan_data))
+        if problem.kind is ProblemKind.VERIFY and fixed != "accept":
+            e.pending_land_validation += "\n" + e.stuck_why
+            e.checkpoints.save(stage=stages, step="land-verify-red")
+            raise e.blocked_for("land retry validation fix did not pass its checks and review; branch kept", "FAULT_LAND")
+        if problem.kind is ProblemKind.VERIFY:
+            e.pending_land_validation = ""
+            e.checkpoints.save(stage=stages, step="land")
+            if e.git.dirty(e.wt):  # unlike verification before finish(), a retry check's fix follows the task commit
+                e.checkout.stage_all(check=True)
+                must(e, "commit --amend", lambda: e.git.amend(e.wt))

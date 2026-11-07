@@ -95,3 +95,5 @@ Unresolved policy conflict: the specified gate Ruff config extends kernel, whose
 threading ban rejects existing imports in attempts, base, host, lanes, linux,
 resources and round. Resolving this requires a lint-layer decision; the pure move
 keeps both the imports and requested config.
+
+S1 slots code carve: `packages/slots` (`tlslots`) owns slot orchestration, liveness and slot environment rules. Tests remain in `tests/slots`; machine effects are supplied through `Effects`, bound by `app/wire/slotfx.py`.

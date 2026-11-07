@@ -12,8 +12,8 @@ from tlkernel.paths import TASK_EXCLUDE
 from tlkernel.slots import NotARepo, SlotGitError
 from tlkernel.slottable import WORKTREE, SlotSource
 
-from taskloop.adapters.ident import hostname
-from taskloop.app.slots.env import DEFAULT_PRIO
+from tlslots.effects import Effects
+from tlslots.env import DEFAULT_PRIO
 
 
 def profile(repo: str, base: str | None, git: Git) -> dict[str, Any]:
@@ -87,13 +87,13 @@ def profile_slots(repo: str, git: Git | None = None) -> SlotsConfig:
 
 
 
-def slot_source(repo: str, git: Git) -> SlotSource:
+def slot_source(repo: str, git: Git, *, fx: Effects) -> SlotSource:
     """The slot count the loops use (the profile on the base ref, as `cfg_source` reads it), this machine's host and the slot folders on
     disk. A bad profile exits (cfg_source says so); a caller that must not exit answers for it."""
     profile_, base, commit = cfg_source(repo, git)
     cfg = profile_.slots
     root = str(Path(slot_dir(repo, "x", cfg)).parent)
-    return SlotSource(host=hostname(), count=cfg.count, source=base if commit else WORKTREE, sha=commit, dirs=slot_dirs(root), root=root)
+    return SlotSource(host=fx.hostname(), count=cfg.count, source=base if commit else WORKTREE, sha=commit, dirs=slot_dirs(root), root=root)
 
 
 

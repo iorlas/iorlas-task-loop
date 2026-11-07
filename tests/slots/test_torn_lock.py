@@ -10,9 +10,10 @@ from tltestkit.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import homes
 
-from taskloop.app.slots import engine_lock
+from taskloop.app.wire.slotfx import FX
 from tlkernel.lockrows import EngineLockRows
 from tlkernel.wire import Refused
+from tlslots import engine_lock
 from tltestkit.narrow import must
 
 TORN = '{"v": 1, "pid": 12'
@@ -29,10 +30,10 @@ class TornLock(Case):
                         "ON CONFLICT(kind, name) DO UPDATE SET body=excluded.body", (self.rows.name, TORN))
 
     def test_the_worktree_is_busy_and_the_message_names_the_lock(self) -> None:
-        assert self.rows.name in engine_lock.engine_busy(homes.cfg(), self.wt)
+        assert self.rows.name in engine_lock.engine_busy(homes.cfg(), self.wt, fx=FX)
 
     def test_take_refuses_and_leaves_the_row(self) -> None:
-        why = engine_lock.EngineLock(homes.cfg(), self.wt, "tl-1").take()
+        why = engine_lock.EngineLock(homes.cfg(), self.wt, "tl-1", fx=FX).take()
         assert self.rows.name in why
         assert self.rows.body() == TORN
 
@@ -42,7 +43,7 @@ class TornLock(Case):
 
 
 def test_a_taken_lock_is_a_row_and_the_worktree_gets_no_engine_file(workdir) -> None:
-    lock = engine_lock.EngineLock(homes.cfg(), workdir, "tl-1")
+    lock = engine_lock.EngineLock(homes.cfg(), workdir, "tl-1", fx=FX)
     assert lock.take() == ""
     assert must(EngineLockRows(homes.cfg(), workdir).need()).bead == "tl-1"
     assert not list(workdir.rglob("engine.*"))
@@ -56,4 +57,4 @@ def test_a_row_that_does_not_decode_is_refused_not_read_as_no_lock(workdir) -> N
         con.execute("INSERT INTO lease (kind, name, holder, since, body) VALUES ('run', ?, 'x', 1, ?)", (rows.name, '{"v": 1, "pid": 12'))
     with pytest.raises(Refused):
         engine_lock.read_engine_lock(homes.cfg(), workdir)
-    assert rows.get() is None and "engine:" in engine_lock.engine_busy(homes.cfg(), workdir)
+    assert rows.get() is None and "engine:" in engine_lock.engine_busy(homes.cfg(), workdir, fx=FX)

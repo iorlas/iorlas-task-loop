@@ -20,6 +20,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.ports import AnswerAsk
 from tlkernel.rowstores import ReposStore
 from tlkernel.slottable import SlotSource
+from tlslots import config as wslots_config
 
 from taskloop.adapters.bd import BdStore
 from taskloop.adapters.ident import config_dir, hostname
@@ -29,10 +30,9 @@ from taskloop.app.asks.owner_verbs import OwnerVerbs
 from taskloop.app.doctor import profiles
 from taskloop.app.report import card as cards
 from taskloop.app.report.card import score_of
-from taskloop.app.slots import config as wslots_config
 from taskloop.app.track.trail import now
 from taskloop.app.wire import asks as wire_asks
-from taskloop.app.wire import real
+from taskloop.app.wire import real, slotfx
 from taskloop_dash.env import Ports
 
 DASH_ACTOR = "tl-dash"  # the dashboard's bd actor
@@ -148,7 +148,7 @@ def ports(env: Env) -> Ports:
     def slot_source(repo: str) -> SlotSource:
         """What the loops count (origin/main's profile); a profile that does not load shows no lanes, its red row says why."""
         try:
-            return wslots_config.slot_source(repo, git)
+            return wslots_config.slot_source(repo, git, fx=slotfx.FX)
         except (Exception, SystemExit):
             return SlotSource(host=hostname(), source="unreadable")
 

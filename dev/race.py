@@ -57,15 +57,15 @@ import support.paths  # noqa: E402, F401
 from process_lock import LockHeldError, ProcessLock  # noqa: E402
 
 from taskloop.adapters import ident  # noqa: E402
-from taskloop.app.slots import config as wslots_config  # noqa: E402
-from taskloop.app.slots import (  # noqa: E402
-    marks,
-)
 from taskloop.app.wire import real  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlkernel.locator import RunLocator  # noqa: E402
 from tlkernel.paths import ConfigDir  # noqa: E402
+from tlslots import config as wslots_config  # noqa: E402
+from tlslots import (  # noqa: E402
+    marks,
+)
 
 PY = sys.executable
 BEADS = [f"w-{i}" for i in range(1, 7)]

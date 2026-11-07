@@ -1,0 +1,15 @@
+# The root config plus the process and delegate import bans of the former app layer.
+extend = "../../ruff.toml"
+src = ["src"]
+
+[lint.flake8-tidy-imports.banned-api]
+"delegate.app".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.cli".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.adapters".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.domain".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.contracts".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.entry".msg = "task-loop imports delegate.api and nothing else of delegate"
+"subprocess".msg = "a stage starts a process through the Spawner handed down from the edge (tlkernel.procport), never subprocess"
+
+[lint.per-file-ignores]
+"tests/**" = ["TID251"]  # a real/ test of the process itself may start one; the Spawner rule is for the stage's code

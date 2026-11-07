@@ -18,13 +18,13 @@ from support.fakes import FakeBeadStore
 from support.spawn import port_git, real_spawner
 from support.who import who
 from taskloop.app.run import engine
-from taskloop.app.slots import config as wslots_config
 from taskloop.cli.ctx import declare_stage_parts
 from tlkernel import runoutcome as oc
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlpipeline.api import Closer
+from tlslots import config as wslots_config
 
 
 class Journal(list):

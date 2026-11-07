@@ -14,6 +14,7 @@ from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.procport import Spawner
 from tlkernel.rowstores import ReposStore
+from tlslots import engine_lock
 
 from taskloop.adapters import ident
 from taskloop.app.doctor import profiles
@@ -26,8 +27,8 @@ from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.loop import parse_handover
 from taskloop.app.loop.versions import Installs
 from taskloop.app.release import catalog, pins
-from taskloop.app.slots import engine_lock
 from taskloop.app.track import trail
+from taskloop.app.wire import slotfx
 from taskloop.app.wire import slots as wslots
 
 
@@ -67,7 +68,7 @@ def live_work(git: Git, who: Identity) -> list[tuple[str, str]]:
         for st in live_loops(r, who.config):
             out.append(("loop", "loop pid {} on {}{}".format(st.pid, r, (" running " + st.bead) if st.bead else "")))
         for wt in [r, *wslots.worktrees(r, git, who, slots=None if shutil.which("bd") else [])]:  # slot dirs need bd
-            busy = engine_lock.engine_busy(who.config, wt)
+            busy = engine_lock.engine_busy(who.config, wt, fx=slotfx.FX)
             if busy:
                 out.append(("run", f"run in {wt}: {busy}"))
     return out
