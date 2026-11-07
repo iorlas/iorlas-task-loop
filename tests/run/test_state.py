@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -20,7 +21,7 @@ from taskloop.app.look.state import LOOK_FIELDS, LookState
 from taskloop.app.pipeline.resume import KEEP_FOR_ACTIVE, LATE, Resume
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.review_glue import ReviewGlue
-from taskloop.app.run.state import Checkpoints, StateAttrs, attr_names, carries_state, state_names
+from taskloop.app.run.state import Checkpoints, StateAttrs, attr_names, carries_state, checkpoint_hooks, restarted, state_names
 from taskloop.app.write.state import WriteState
 from tlkernel import fence, wire
 from tlkernel.checkpoint import BriefSnap, Checkpoint, Handoff, PlanStep, RunState, WriterSession
@@ -82,7 +83,7 @@ class Host(StateAttrs, SimpleNamespace):
         self.dry = False
         self.bead, self.stores = "t-1", fake_stores()
         self.store, self.claim = FakeBeads(), fence.offline(BeadId("t-1"))
-        self.checkpoints = Checkpoints(self)
+        self.checkpoints = Checkpoints(self, checkpoint_hooks(lambda: self.state))
         self.run_id = "t-1-20260101-000000"
         self.review = ReviewLive()
         self.review.unchecked = [{"what": "u", "kind": "", "source": "", "why": "", "proof_round": False}]
@@ -218,7 +219,7 @@ class Park(Case):
         Resume(b, FakeHeadHistory(), ReviewGlue(b), state_names()).restore(ck, late=False)
         assert b.leftovers == a.leftovers
         assert b.leftovers[0]["origin"] == "review"
-        assert b.state.start_again().leftovers == a.leftovers
+        assert restarted(b.state).leftovers == a.leftovers
 
 
 class OneWriter(Case):
@@ -255,3 +256,24 @@ class OldCheckpoint(Case):
         saved = wire.dump(stored(h))["state"]
         names = (*LOOK_FIELDS, "render_stale")
         assert {k: saved[k] for k in names} == {k: old["state"][k] for k in names}
+
+
+def test_restart_keeps_exactly_the_eight_section_fields():
+    state = RunState(**SAMPLE)
+    state.review = ReviewState(filed=["old-attempt"])
+    kept = {"extra", "rebase_resets", "brief_hash", "snap", "planner_ref",
+            "pending_land_validation", "leftovers", "followup_ids"}
+    fresh = restarted(state)
+    for name in wire.names(RunState):
+        assert getattr(fresh, name) == getattr(state if name in kept else RunState(), name), name
+
+
+@pytest.mark.parametrize("step", ["write", "plan", "land"])
+def test_save_hook_follows_replaced_state_and_pins_pending_validation(step: str):
+    host = Host()
+    host.state = RunState(pending_land_validation="validate the new base")
+    host.checkpoints.save(step=step, feedback="old feedback")
+    assert (stored(host).step, stored(host).feedback) == ("land-verify-red", "validate the new base")
+    host.state.pending_land_validation = ""
+    host.checkpoints.save(step=step, feedback="old feedback")
+    assert (stored(host).step, stored(host).feedback) == (step, "old feedback")
