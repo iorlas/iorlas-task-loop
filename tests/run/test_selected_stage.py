@@ -20,9 +20,9 @@ from taskloop.app.pipeline.closing_record import RecordRun
 from taskloop.app.pipeline.cursor import parse_step
 from taskloop.app.pipeline.finish import answer
 from taskloop.app.pipeline.steps import Steps
+from taskloop.app.plan.keep import PlanKeeper
 from taskloop.app.plan.planned import Planned
 from taskloop.app.run.blocked import Blocked
-from taskloop.app.run.parts_plan import PlanParts
 from taskloop.app.run.stages import round_step, run_stages
 from taskloop.app.write.state import ACCEPT, StageState
 from taskloop.contracts import log as rec
@@ -68,7 +68,7 @@ class SelectedStage(Case):
         e.plan_data = None
         data = typed(PLAN)
         e.planner.plan.return_value = Planned(plan_data=data, summary=data["summary"], planned=1)
-        e.take_planned.side_effect = lambda p: PlanParts.take_planned(e, p)
+        e.planner.take.side_effect = lambda p: PlanKeeper(e).take(p)
         e.checkpoints.read.return_value = None
         e.store.show.return_value = Bead(id=e.bead, title="stage task", status="open")
         e.lander.gate.green.return_value = False
@@ -118,7 +118,7 @@ class SelectedStage(Case):
         rc, manifest = self.invoke("plan")
         assert rc == 0
         assert manifest.next_step is Step.WRITE
-        self.e.take_planned.assert_called_once_with(p)
+        self.e.planner.take.assert_called_once_with(p)
         assert self.e.plan_data is p.plan_data
         assert (self.e.plan_summary, self.e.planned) == (p.summary, p.planned)
 

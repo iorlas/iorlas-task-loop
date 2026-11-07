@@ -171,7 +171,7 @@ class RunOnce:
             e.stage_tree = ""  # the stage's diff starts at the base now: the rebase moved what it was measured from
         if plan is None:  # a move here loses nothing: the new image reads the same checkpoint (or none) and plans
             e.reload.safe_point("plan")
-            plan, i, state = e.take_planned(e.planner.plan(again=e.replan_first)), 0, None
+            plan, i, state = e.planner.take(e.planner.plan(again=e.replan_first)), 0, None
         return plan, i, state
 
     def its_work(self) -> str:
@@ -226,7 +226,7 @@ class RunOnce:
         if replans > int(e.cfg.max_replans) + e.extra:
             raise e.planner.cap.blocked(f"stage {i + 1} stuck after {e.cfg.max_rounds} rounds. What failed: {e.stuck_why[:600]}")
         e.accepted = list[int]()
-        return e.take_planned(e.planner.plan(again=True))
+        return e.planner.take(e.planner.plan(again=True))
 
     def close_out(self, hb: Lease, end: Ended) -> None:
         """The close, then the run's one terminal state, whatever the close did (a close that raises still leaves a state)."""

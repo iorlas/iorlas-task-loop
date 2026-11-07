@@ -13,7 +13,6 @@ from support.plans import PLAN
 
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run.blocked import Blocked, blocked_for
-from taskloop.app.run.parts_plan import PlanParts
 from taskloop.contracts.kinds import Kind
 
 
@@ -22,8 +21,6 @@ class EmptyPlan(Case):
         host = mock.Mock(done=done, landed_sha=landed, leftovers=[])
         host.checkout.task_diff.return_value = diff
         host.blocked_for = blocked_for
-        host.add_leftovers.side_effect = lambda items: PlanParts.add_leftovers(host, items)
-        host.set_summary.side_effect = lambda text: PlanParts.set_summary(host, text)
         return host
 
     def test_noop_with_or_without_followups_and_on_replan(self):

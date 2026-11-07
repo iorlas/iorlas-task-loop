@@ -112,16 +112,7 @@ class PlanShared(Protocol):
     def shared_text(self) -> str: ...
 
 
-class PlanKeep(Protocol):
-    """Keep planner effects visible to collaborators at the point they occur."""
-
-    def keep_draft(self, data: PlanData) -> None: ...
-    def set_summary(self, text: str) -> None: ...
-    def count_plan(self) -> None: ...
-    def add_leftovers(self, items: list[Open]) -> None: ...
-
-
-class PlanHost(PlanKeep, Protocol):
+class PlanHost(Protocol):
     bead: BeadId
     wt: str
     cfg: EngineConfig
@@ -140,6 +131,7 @@ class PlanHost(PlanKeep, Protocol):
     planner_ref: str
     kind: object
     plan_data: PlanData | None
+    plan_summary: str
     plan_log: list[PlanStep]
     planned: int
     extra: int

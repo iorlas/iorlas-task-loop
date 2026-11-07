@@ -97,10 +97,10 @@ def test_take_planned_is_idempotent_and_keeps_identity(world):
     e = world.checks_engine()
     data = typed(PLAN)
     p = Planned(plan_data=data, summary=data["summary"], planned=3)
-    assert e.take_planned(p) is data
-    assert e.take_planned(p) is data
+    assert e.planner.take(p) is data
+    assert e.planner.take(p) is data
     assert (e.plan_data, e.plan_summary, e.planned) == (data, p.summary, 3)
     leftovers = e.leftovers
-    e.add_leftovers([{"title": "later", "why": "outside this plan"}])
+    e.planner.keep.leftovers([{"title": "later", "why": "outside this plan"}])
     assert e.leftovers is leftovers
     assert leftovers[-1]["title"] == "later"
