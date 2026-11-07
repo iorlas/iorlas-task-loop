@@ -3,7 +3,7 @@ name = "tlasks"
 version = "0"
 description = "Ask admission, owner questions and park rules. Imports only the kernel."
 requires-python = ">=3.15"
-dependencies = ["tlkernel", "tltestkit"]
+dependencies = ["tlkernel"]
 
 [tool.uv.sources]
 tlkernel = { workspace = true }
@@ -25,4 +25,4 @@ python_files = ["test_*.py"]
 python_classes = ["*"]
 addopts = "-p no:cacheprovider"
 # atomic_io is a vendored shelf directory with no manifest, so it cannot be declared: the vendor dir is the one undeclared path (docs/design/workspace.md section 4)
-pythonpath = ["src", "../../skills/task-loop/_vendor"]
+pythonpath = ["../../skills/task-loop/_vendor"]

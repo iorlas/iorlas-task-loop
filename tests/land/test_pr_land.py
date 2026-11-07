@@ -27,6 +27,7 @@ from taskloop.app.land.host import Land
 from taskloop.app.land.pr_land import PrLand
 from taskloop.stores.runlog import RunLog
 from tlasks import raiser, sweeps
+from tlasks.contracts.records import Asking
 from tlkernel import askspecs as specs
 from tlkernel import fence, scratch
 from tlkernel.ask import Ask
@@ -210,7 +211,7 @@ def asking(sim_state: str):
     """A PR_OPEN ask on t-1 whose PR (7) is `sim_state`, a bd with the bead blocked, and the asks."""
     asks, store = fake_stores().asks, FakeBeads()
     store.beads[BEAD] = Bead(id=BEAD, title="T", status="blocked", metadata={PR_NUMBER: "7"})
-    at = raiser.Asking(bead=BEAD, run="r", brief_hash="b", repo="/repo", title="T", now=1)
+    at = Asking(bead=BEAD, run="r", brief_hash="b", repo="/repo", title="T", now=1)
     ask = must(raiser.raise_ask(asks, specs.pr_open(BEAD, 7, "https://x/o/r/pull/7"), at)[0])
     sim = NeverMerges()
     sim.pr(7, BRANCH, HEAD, state=sim_state)

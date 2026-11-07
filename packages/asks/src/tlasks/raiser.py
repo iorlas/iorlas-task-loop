@@ -1,6 +1,5 @@
 """Raising an ask and starting from an answered one: the engine's two moments with the owner. Pure of bd and git except for the
 queue label, which goes through the Beads port."""
-from dataclasses import dataclass
 
 from tlkernel.adrs import AdrStore
 from tlkernel.ask import Ask
@@ -9,28 +8,13 @@ from tlkernel.asklint import lint
 from tlkernel.askspec import AskSpec
 from tlkernel.askstore import HAD_PICK, AskStore
 from tlkernel.beadsport import BdFailure, BeadPatch, Beads
-from tlkernel.enums import WhyCode
 from tlkernel.ids import BeadId, parse_bead_id
 
 from tlasks import similar
+from tlasks.contracts.records import Asking
 
 PARK_AFTER_S = 3 * 86400
 WHY_CAP = 4000
-
-
-@dataclass(frozen=True)
-class Asking:
-    """Where and when an ask is raised."""
-
-    bead: BeadId
-    run: str
-    brief_hash: str
-    repo: str
-    title: str
-    now: float
-    why: str = ""
-    why_code: WhyCode | None = None
-    artifacts: tuple[str, ...] = ()  # store ids of the pictures that show the owner what the stop is about
 
 
 def build(spec: AskSpec, n: int, at: Asking) -> Ask:

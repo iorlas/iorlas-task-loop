@@ -1,7 +1,7 @@
 """TESTISO checks the real workspace and rejects an undeclared sibling even in lazy or type-only imports."""
 import pytest
 
-from rules.package_tests import problems
+from rules.package_tests import ASKS_DB_RUN_INTEGRATION, ROOT, imports, problems
 
 
 def member(root, folder, name, import_root, dependencies=(), dev=()):
@@ -54,7 +54,9 @@ def test_standard_library_own_pytest_and_normalized_third_party_imports_pass(tmp
     "def lazy():\n    import gate\n",
     "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    import kernel\n",
 ])
-@pytest.mark.parametrize("folder,package,integration", [("gate", "tlgate", "checks"), ("slots", "tlslots", "slots")])
+@pytest.mark.parametrize("folder,package,integration", [
+    ("gate", "tlgate", "checks"), ("asks", "tlasks", "asks"), ("slots", "tlslots", "slots"),
+])
 def test_package_pure_integration_tests_must_move_to_the_member(tmp_path, source, folder, package, integration):
     member(tmp_path, "kernel", "tlkernel", "kernel")
     member(tmp_path, folder, package, "gate", ["tlkernel"], ["msgspec"])
@@ -68,4 +70,20 @@ def test_package_pure_integration_tests_must_move_to_the_member(tmp_path, source
         f"tests/{integration}/test_pure.py: imports only the {folder} package; move it to packages/{folder}/tests",
     ]
     path.write_text(source + "\nimport taskloop\n", encoding="utf-8")
+    assert problems(tmp_path) == []
+
+
+def test_retained_asks_files_have_explicit_db_run_or_shell_classification():
+    tests = ROOT / "tests/asks"
+    assert all((tests / name).is_file() and reason for name, reason in ASKS_DB_RUN_INTEGRATION.items())
+    for path in tests.glob("test_*.py"):
+        assert path.name in ASKS_DB_RUN_INTEGRATION or any(name == "taskloop" for _, name in imports(path)), path.name
+
+
+def test_classified_db_integration_is_retained_without_dummy_shell_imports(tmp_path):
+    member(tmp_path, "asks", "tlasks", "tlasks")
+    tests = tmp_path / "tests/asks"
+    tests.mkdir(parents=True)
+    for name in ASKS_DB_RUN_INTEGRATION:
+        (tests / name).write_text("import tlasks\n", encoding="utf-8")
     assert problems(tmp_path) == []

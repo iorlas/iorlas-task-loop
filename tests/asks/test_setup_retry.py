@@ -8,6 +8,7 @@ from support.memstores import fake_stores
 from taskloop.app.run.parts_run import ask_flow_over
 from taskloop.app.wire import asks as wire_asks
 from tlasks import raiser, sweeps
+from tlasks.contracts.records import Asking
 from tlkernel import askspecs as specs
 from tlkernel.ask import AskAnswer
 from tlkernel.askenums import AskKind, AskStatus
@@ -35,7 +36,7 @@ class SetupRetry(Case):
         self.file()
 
     def file(self, why=WHY, stuck=False):
-        at = raiser.Asking(bead=BEAD, run="r", brief_hash="brief", repo="/repo", title="T", now=1, why=why)
+        at = Asking(bead=BEAD, run="r", brief_hash="brief", repo="/repo", title="T", now=1, why=why)
         spec = specs.no_progress("checks", 2, why) if stuck else specs.missing_criteria()
         return must(raiser.raise_ask(self.asks, spec, at)[0])
 
