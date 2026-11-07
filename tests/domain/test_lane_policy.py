@@ -12,6 +12,7 @@ from support.narrow import must, only  # noqa: E402
 
 from taskloop.domain import outcome as oc  # noqa: E402
 from taskloop.domain.lanes import policy as lp  # noqa: E402
+from taskloop.domain.lanes.says import stop_why  # noqa: E402
 from tlkernel.kinds import PAUSES, Kind  # noqa: E402
 
 NOW = 1_000_000.0
@@ -22,11 +23,11 @@ def stop(scope, permanence="transient", retry="none", **kw):
 
 
 def ctx(**kw):
-    return lp.Ctx(now=NOW, **kw)
+    return lp.Ctx(**kw)
 
 
 def out(action):
-    return oc.make(Kind[action.kind], action.say)
+    return oc.make(Kind[action.kind])
 
 
 def kind_of(action):
@@ -41,7 +42,7 @@ class Exhaustive(Case):
         actions = (lp.NewThread, lp.Reroute, lp.Yield, lp.Fail)
         for scope, perm, retry in lp.LEGAL:
             for c in (ctx(), ctx(resumed=True, attempt=2, denied_retried=True)):
-                a = lp.decide(stop(scope, perm, retry, ref="r1", resumable=True, retry_at=NOW + 60), c)
+                a = lp.decide(stop(scope, perm, retry, retry_at=NOW + 60), c)
                 assert isinstance(a, actions), (scope, perm, retry)
 
     def test_the_unknown_tuple_row_pauses_the_lane_and_never_fails_or_asks(self):
@@ -70,7 +71,7 @@ class Exhaustive(Case):
         tree = ast.parse(src)
         reads = {f.name for f in ast.walk(tree) if isinstance(f, ast.FunctionDef)
                  for n in ast.walk(f) if isinstance(n, ast.Attribute) and n.attr == "reason"}
-        assert reads == {"_say", "stop_of"}, "only _say (wording) and stop_of (the facts) read a reason"
+        assert reads == {"stop_of"}, "only stop_of reads a reason to extract stop facts"
 
     def test_the_module_is_pure(self):
         tree = ast.parse((ROOT / "src" / "taskloop" / "domain" / "lanes" / "policy.py").read_text(encoding="utf-8"))
@@ -81,17 +82,19 @@ class Exhaustive(Case):
 
 
 def test_network_stop_pauses_immediately():
-    action = lp.decide(stop("machine", "transient", "poll", ref="sess-1", partial=True), ctx(resumed=True))
+    action = lp.decide(stop("machine", "transient", "poll"), ctx(resumed=True))
     assert isinstance(action, lp.Yield)
-    assert (action.kind, action.retry_after, action.banner, action.charges) == ("PAUSE_NETWORK", 0, False, "")
+    assert (action.kind, action.retry_after) == ("PAUSE_NETWORK", 0)
     assert not oc.POLICY[Kind.PAUSE_NETWORK].storm
 
 
 class Incidents(Case):
     def test_logged_out_twice_pauses_the_lane_with_the_login_fix_and_no_ask(self):
         for _ in range(2):
-            a = lp.decide(stop("lane", "needs_owner", "none", reason="logged_out", fix="claude /login", lane="CLAUDE"), ctx())
-            assert (kind_of(a), only(lp.Yield, a).fix, out(a).rule.makes_ask) == (Kind.PAUSE_LANE, "claude /login", False)
+            s = stop("lane", "needs_owner", "none", reason="logged_out", fix="claude /login", lane="CLAUDE")
+            a = only(lp.Yield, lp.decide(s, ctx()))
+            assert (kind_of(a), out(a).rule.makes_ask) == (Kind.PAUSE_LANE, False)
+            assert "claude /login" in stop_why("write", a.kind, s, "", now=NOW)
 
     def test_exit_15_is_a_kill_pause_never_a_fail_or_an_ask(self):
         for facts in (("machine", "transient", "none"), ("machine", "needs_owner", "none"), ("machine", "transient", "poll")):
@@ -149,14 +152,14 @@ def test_predicted_lane_always_parks_or_starts_fresh():
 
 
 def test_failed_worker_only_gets_a_fresh_engine_prompt_when_resumed():
-    s = stop("bead", resumable=True, ref="r")
+    s = stop("bead")
     assert kind_of(lp.decide(s, ctx())) == Kind.FAULT_INFRA
     assert lp.decide(s, ctx(resumed=True)) == lp.NewThread("", "attempt", "worker_failed")
     assert kind_of(lp.decide(s, ctx(resumed=True, attempt=1))) == Kind.FAULT_INFRA
 
 
 def test_delegate_crash_fails_immediately():
-    assert lp.decide(stop("machine"), ctx()) == lp.Fail("FAULT_CRASHED", "machine/transient/none")
+    assert lp.decide(stop("machine"), ctx()) == lp.Fail("FAULT_CRASHED")
 
 
 def test_hurt_write_only_reroutes_resumed_calls():

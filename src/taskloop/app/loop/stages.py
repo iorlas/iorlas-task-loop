@@ -1,15 +1,26 @@
-"""The adapters of the loop's ports (ports.py) over the real stages: slots and asks. This is where the loop meets them; the composition root
-(launch/loop.py) builds these into the LoopEnv."""
-from collections.abc import Callable
+"""The loop's stage adapters and world-facing rules: slots, asks, claims, handover and quiet-moment chores.
+The composition roots bind real stage calls; these rules consume ports and callbacks."""
+import contextlib
+import os
+import sys
+from collections.abc import Callable, Iterable, Mapping
+from pathlib import Path
+from typing import Any
 
+from jsonl_log import close_held
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, Beads
+from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
+from tlkernel.landed import Landed
 from tlkernel.loop import Skip
 from tlkernel.paths import ConfigDir
+from tlkernel.procport import Child, Spawner
+from tlkernel.run import ReexecNote
 from tlkernel.slots import SlotFail, SlotGitError
 
 from taskloop.app.asks import deferral, parks
+from taskloop.app.loop.env import ReloadNote, Storm
 from taskloop.app.loop.ports import LeaseHandle
 from taskloop.app.slots import aside, owned, watchdog
 from taskloop.app.slots import line as slots_line
@@ -87,3 +98,121 @@ class EngineAsks:
 
     def promote_if_due(self, store: Beads, per_day: int, now: float, last: float, say: Callable[[str], object]) -> float:
         return deferral.promote_if_due(store, per_day, now, last, say)
+
+
+STOP_GRACE_S = 300.0  # let a stopped run-task finish its close before ending the stream
+
+
+def reload_note(read: Callable[[], ReexecNote | None], drop: Callable[[], None]) -> ReloadNote | None:
+    rec = read()
+    drop()
+    if not rec:
+        return None
+    return ReloadNote(run=rec.run, to=rec.to, frm=rec.frm, from_dir=rec.from_dir, t=rec.t)
+
+
+def fetch(repo: str, git: Git) -> None:
+    with contextlib.suppress(SlotGitError):
+        git.fetch(repo)
+
+
+def chores[Config, Store](lanes: Callable[[], object], config: Callable[[], Config], sweep: Callable[[Config], object],
+                          wake: Callable[[Config], object], reflect: Callable[[], object], backup: Callable[[], object],
+                          disk: Callable[[], object], store: Store | None, nightly: Callable[[Store], Iterable[str]],
+                          say: Callable[[str], object]) -> None:
+    lanes()
+    cfg = config()
+    sweep(cfg)
+    wake(cfg)
+    try:
+        reflect()
+    except Exception as e:
+        say(f"loop: reflect digest: {e}")
+    try:
+        backup()
+    except Exception as e:
+        say(f"loop: db backup: {e}")
+    disk()
+    if store is not None:
+        try:
+            for line in nightly(store):
+                say(line)
+        except Exception as e:
+            say(f"loop: bd backup: {e}")
+
+
+def claim(admit: Callable[[], tuple[bool, str]], take: Callable[[], int]) -> tuple[bool, str]:
+    # a paused run's claim was released by the step's sweep; a live claim stops here
+    ok, why = admit()
+    if not ok:
+        return False, why
+    return take() == 0, "claimed by another session"
+
+
+def stop_now(child: Child) -> None:
+    child.stop_async(STOP_GRACE_S)
+
+
+def stop_tree(child: Child) -> None:
+    child.stop(STOP_GRACE_S)
+
+
+def exec_into(repo: str, start_cwd: str, argv: Callable[[], list[str]], environ: Callable[[], Mapping[str, str]]) -> None:
+    if start_cwd:
+        os.chdir(start_cwd)  # a relative --repo in argv means the start directory
+    sys.stdout.flush()
+    sys.stderr.flush()
+    close_held()
+    try:
+        cmd = argv()
+        os.execve(cmd[0], cmd, environ())
+    except OSError:
+        with contextlib.suppress(OSError):
+            os.chdir(repo)
+        raise
+
+
+def loop_lock(wt: str, slot: str, slot_bead: str | None, bead: str, lock: Callable[[str, str, str, str], object]) -> None:
+    if os.path.isdir(wt):
+        lock(wt, slot, slot_bead or "", bead)
+
+
+def available_mb(system: Callable[[], str], spawner: Spawner, parse: Callable[[str], int | None]) -> int | None:
+    if system() != "Darwin":
+        return None  # macOS only: vm_stat is the one reader
+    try:
+        result = spawner.run(["/usr/bin/vm_stat"], timeout_s=2)
+        return parse(result.out) if result.exit == 0 else None
+    except OSError:
+        return None
+
+
+def landed_on_base(repo: str, wt: str, bead_id: BeadId, git: Git, base_of: Callable[[], str],
+                   record: Callable[[], Landed | None], peek: Callable[[], Bead | None]) -> bool:
+    """Only positive evidence lets the loop treat a bead as landed; an unknown probe stays not ready."""
+    if not os.path.isdir(wt):
+        return False
+    base = base_of()
+    rec = record()
+    if rec is not None:
+        return git.is_ancestor(wt, rec.sha, base)
+    branch = getattr(peek(), "metadata", {}).get("branch") or "task/" + bead_id
+    with contextlib.suppress(SlotGitError):
+        git.fetch(wt)
+    tip = git.rev_parse(wt, "refs/heads/" + branch)
+    last = git.log(wt, [tip], limit=1) if tip else []
+    if not last or not last[0].subject.endswith(f"({bead_id})"):
+        return False
+    return git.is_ancestor(wt, tip, base)
+
+
+def storm(path_of: Callable[[], Path], read: Callable[[Path], Mapping[str, Any] | None], window_s: float) -> Storm | None:
+    path = path_of()
+    rec = read(path)
+    if not rec:
+        return None
+    banner = (
+        "WAIT: storm {} on {}; the beads stay open (look at their logs). Record {} expires {:d} min after it was written; "
+        "clear it to wake sooner"
+    ).format(rec.get("fingerprint"), ",".join(rec.get("beads") or []), path, (window_s // 60))
+    return Storm(rec.get("fingerprint") or "", banner, float(rec["t"]) + window_s)

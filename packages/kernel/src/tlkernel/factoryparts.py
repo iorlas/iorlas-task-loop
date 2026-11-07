@@ -10,11 +10,12 @@ from typing import Final
 from tlkernel import factoryretired
 from tlkernel.ask import Ask
 from tlkernel.bead import Bead
-from tlkernel.checkpoint import Checkpoint
+from tlkernel.checkpoint import Checkpoint, CursorBody, LandSection, LookSection, PlanSection, WriteSection
 from tlkernel.checks import Durations
 from tlkernel.dbparts import Part, Prune, doc_table
 from tlkernel.docrows import (
     BEADCACHE_DOCS,
+    CHECKPOINT_SECTIONS,
     DISK_DOCS,
     DURATION_DOCS,
     FLAKE_DOCS,
@@ -39,6 +40,7 @@ from tlkernel.parks import Park
 from tlkernel.queue_doc import QueueDoc
 from tlkernel.queue_state import QueueState
 from tlkernel.requests import OwnerRequest
+from tlkernel.review import ReviewState
 from tlkernel.run import HandoffMirror, RunCounters, RunManifest
 from tlkernel.rundocs import PrepareStamp
 from tlkernel.snapshots import Pin, ReflectState, ReleaseResult, ReposIndex, SharedNotes, StatusSnapshot, StatusTried
@@ -75,11 +77,21 @@ def close_intent(con: sqlite3.Connection) -> None:
     """pipeline v1 -> v2: checkpoint v4 keeps CloseIntent; old bodies stay foreign and are refused by their reader."""
 
 
+SECTION_DDL = (f"CREATE TABLE {CHECKPOINT_SECTIONS} (bead TEXT NOT NULL, section TEXT NOT NULL, "
+               "body TEXT NOT NULL, PRIMARY KEY (bead, section))")
+
+
+def checkpoint_sections(con: sqlite3.Connection) -> None:
+    """pipeline v2 -> v3: add section storage; old checkpoint bodies remain foreign."""
+    con.execute(SECTION_DDL)
+
+
 PIPELINE = Part(
-    name="pipeline", version=2, tables=("run", "attempt", "step", "effect", "wait", "checkpoint", "timed", "signal"),
-    records=(RunManifest, Checkpoint, OwnerRequest),
-    steps={1: close_intent},
-    ddl="""
+    name="pipeline", version=3,
+    tables=("run", "attempt", "step", "effect", "wait", "checkpoint", CHECKPOINT_SECTIONS, "timed", "signal"),
+    records=(RunManifest, Checkpoint, CursorBody, PlanSection, WriteSection, LandSection, LookSection, ReviewState, OwnerRequest),
+    steps={1: close_intent, 2: checkpoint_sections},
+    ddl=f"""
 CREATE TABLE run (run TEXT PRIMARY KEY, repo TEXT NOT NULL, repo_key TEXT NOT NULL, bead TEXT NOT NULL DEFAULT '',
   mode TEXT NOT NULL DEFAULT '', owner TEXT, session TEXT, loop TEXT, worktree TEXT, branch TEXT, sha TEXT,
   state TEXT NOT NULL, reason TEXT, started REAL NOT NULL, ended REAL, next_step TEXT,
@@ -106,6 +118,7 @@ CREATE TABLE wait (
   id INTEGER PRIMARY KEY, repo TEXT NOT NULL, run TEXT, kind TEXT NOT NULL,
   wake_at REAL, wake_on TEXT, facts TEXT, since REAL NOT NULL, cleared REAL
 );
+{SECTION_DDL};
 CREATE TABLE checkpoint (bead TEXT PRIMARY KEY, t REAL NOT NULL, rev INTEGER NOT NULL DEFAULT 0, body TEXT NOT NULL);
 CREATE TABLE timed (id INTEGER PRIMARY KEY, run TEXT NOT NULL, bead TEXT, kind TEXT NOT NULL, name TEXT NOT NULL,
   exec_s REAL NOT NULL, wait_s REAL NOT NULL, t REAL NOT NULL);

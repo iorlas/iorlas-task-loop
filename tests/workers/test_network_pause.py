@@ -27,7 +27,7 @@ def test_network_stop_pauses_immediately(monkeypatch):
     )
     monkeypatch.setattr(lane_acts.writer_pin, "pinned", lambda *args: None)
     acts = lane_acts.LaneActs(host, worker)
-    stop = lp.Stop("machine", "transient", "poll", reason="network", ref="session", partial=True)
+    stop = lp.Stop("machine", "transient", "poll", reason="network")
     result = DelegateResult()
     with pytest.raises(RuntimeError, match="PAUSE_NETWORK"):
         acts.act(call, result, stop, lp.decide(stop, acts.ctx_of(call)))

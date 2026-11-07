@@ -42,7 +42,7 @@ class Pin(Case):
         reason = delegate.REASON_ENGINE_ONLY_UNENFORCED
         assert reason in pin.STOP_REASONS
         stop = lp.Stop("machine", "needs_owner", reason=reason, fix="use advisory or another harness")
-        action = lp.decide(stop, lp.Ctx(now=1, node="write"))
+        action = lp.decide(stop, lp.Ctx(node="write"))
         assert isinstance(action, lp.Yield)
         assert isinstance(action, lp.Yield)
         for why in (pin.stop_why("write", ["openai"], reason, "CODEX: just check", stop.fix),
