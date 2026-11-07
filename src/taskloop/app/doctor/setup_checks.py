@@ -145,12 +145,14 @@ OWNERSHIP = "## Ownership"
 
 def slot_warnings[SlotContext](
     table: Callable[[], SlotTable], env: Callable[[], SlotContext] | None, look: Callable[[SlotContext], list[str]],
+    configured: tuple[int, str] | None = None,
 ) -> tuple[str, list[str]]:
     """(the slot table's one-line summary, its WARN lines): the slots as `tl status` and the dash list them, against config and folders."""
+    summary = f"slots: {configured[0]} ({configured[1]}); " if configured else ""
     try:
         slots = table()
     except (SystemExit, OSError, ValueError, BdFailure) as err:
-        return f"slots: not read ({err})", []
+        return summary + f"slots: not read ({err})", []
     states = ", ".join(f"{v.id} {v.state}" for v in slots.slots) or "none"
     where = f"{slots.source} {slots.source_sha[:7]}".strip()
     warns = [f"slot {v.id} is {v.state}: {v.idle_why}" for v in slots.slots if v.state == "dead"]
@@ -159,7 +161,8 @@ def slot_warnings[SlotContext](
     if env is not None:  # tl-bxk.10.33.12: the liveness invariants, read only (the loop and the waiters heal)
         with contextlib.suppress(SystemExit, OSError, ValueError, BdFailure):
             warns += look(env())
-    return f"slots: {slots.configured} configured from {where}; {states}", warns
+    summary = f"slots: {configured[0]} ({configured[1]})" if configured else f"slots: {slots.configured}"
+    return f"{summary} configured from {where}; {states}", warns
 
 
 def install_problems(plugin_root: Path, config: Path, verify_installed: Callable[[], list[str]]) -> list[str]:

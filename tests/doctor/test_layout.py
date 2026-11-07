@@ -9,7 +9,7 @@ from tlkernel import config
 
 
 def profile(*checks: dict, slots: dict | None = None) -> config.RepoProfile:
-    return config.load({"engine": {"checks": list(checks)}, "slots": slots or {}})
+    return config.load({"engine": {"checks": list(checks)}, "slots": slots if slots is not None else {"count": 0}})
 
 
 GOOD = {"id": "unit", "argv": ["run-tests", "--out", "$TL_ARTIFACT_DIR/unit.xml"], "inputs": ["src/**"]}

@@ -183,7 +183,7 @@ class Base(Case):
             self.tmp.cleanup()
 
     def config(self, **engine_cfg):
-        (self.repo / ".task-loop.json").write_text(json.dumps({"engine": engine_cfg}))
+        (self.repo / ".task-loop.json").write_text(json.dumps({"engine": engine_cfg, "slots": {"count": 0}}))
 
     def fake(self, *beads, **kw):
         f = FakeBd(beads, **kw)
@@ -325,12 +325,12 @@ class QueueRuleFromBase(Base):
     def test_engine_load_cfg_reads_the_base_branch_with_the_base_the_working_tree_names(self):
         self.push_rule({"engine": {"brief_kb": 7}})
         self.sh("git", "fetch", "-q", "origin", cwd=self.repo)
-        (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {"brief_kb": 99}}))
+        (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": 0}, "engine": {"brief_kb": 99}}))
         assert wloop.wslots_config.load_cfg(str(self.repo), port_git()).brief_kb == 7
 
     def test_no_remote_falls_back_to_the_working_tree(self):
         self.sh("git", "remote", "remove", "origin", cwd=self.repo)
-        (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {"skip_labels": ["later"]}}))
+        (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": 0}, "engine": {"skip_labels": ["later"]}}))
         self.fake(bead("x-1", labels=["later"]), bead("x-2"))
         ranked, skipped = looptest.queue(str(self.repo))
         assert [b.id for b, _ in ranked] == ["x-2"]
@@ -702,7 +702,7 @@ class Loop(LoopBase):
         assert "no free slot" in self.out
 
     def test_without_slots_the_loop_uses_its_worktree(self):
-        (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {}}))
+        (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {}, "slots": {"count": 0}}))
         self.beads({"x-1": [rec("landed")]}, slots=0)
         with mock.patch.object(wslots, "start_worktree", return_value=str(self.home / "wt")):
             assert self.run_loop() == 0
@@ -773,7 +773,7 @@ class Loop(LoopBase):
         assert all(a.startswith(session_actor + "-") for a in seen), seen  # still names its session
 
     def test_without_slots_each_loop_start_reuses_its_sessions_worktree(self):
-        (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {}}))
+        (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {}, "slots": {"count": 0}}))
         names = []
         with mock.patch.object(wslots, "start_worktree", side_effect=lambda repo, git, who, name=None: names.append(name) or
                                str(self.home / "wt")):
@@ -784,7 +784,7 @@ class Loop(LoopBase):
         assert names == ["abcdef12"] * 2  # tl-abcdef12: the session's actor, not the per-loop one
     def test_without_slots_a_second_loop_of_the_session_takes_its_own_worktree(self):
         # two loops in one worktree would reset it under each other's engine
-        (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {}}))
+        (self.repo / ".task-loop.json").write_text(json.dumps({"engine": {}, "slots": {"count": 0}}))
         self.beads({"x-1": [rec("landed")]}, slots=0)
         k = self.other_loop()
         looptest.write_state(str(self.repo), pid=k.pid, started=self.clock.t, worktree=str(self.repo / ".worktrees" / "loop-abcdef12"))

@@ -13,6 +13,7 @@ from tlkernel.ids import loop_key
 from tlkernel.paths import ConfigDir
 from tlkernel.rowstores import ReposStore
 from tlkernel.slots import SlotView
+from tlslots.config import selected_profile
 
 from taskloop.adapters import pidcheck
 from taskloop.adapters.ident import claude_dir, config_dir
@@ -47,11 +48,14 @@ def slot_lines(repo: str, who: Identity, now: float, git: Git) -> tuple[str, ...
     or a readable profile has none."""
     try:
         table = wslots.slot_table(repo, who, git, now)
+        selected = selected_profile(repo, git)
     except (BdCommandFailure, SystemExit, OSError, ValueError, BdFailure):
         return ()
-    return tuple(line_of(v) for v in table.slots if v.state != "retiring") + (
-        (f"(slots.count {table.configured} from {table.source}{' ' + table.source_sha[:7] if table.source_sha else ''})",)
-        if table.slots else ())
+    return (
+        *(line_of(v) for v in table.slots if v.state != "retiring"),
+        f"slots: {selected.cfg.slots.count} ({selected.slots_source})",
+        f"(slots.count {table.configured} from {table.source}{' ' + table.source_sha[:7] if table.source_sha else ''})",
+    )
 
 
 def line_of(v: SlotView) -> str:

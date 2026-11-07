@@ -2,7 +2,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from tlkernel import config, profile_at
 from tlkernel.bead import Bead
@@ -39,15 +39,31 @@ def load_profile(data: Any) -> RepoProfile:
 
 
 
+class SelectedProfile(NamedTuple):
+    cfg: RepoProfile
+    base: str
+    commit: str
+    slots_source: str
+
+
 def cfg_source(repo: str, git: Git) -> tuple[RepoProfile, str, str]:
-    """(the RepoProfile, the base hint, the pinned commit: empty for a local fallback). A bad .task-loop.json exits loudly."""
+    """The selected profile, base hint and pinned commit (empty for a local fallback)."""
+    selected = selected_profile(repo, git)
+    return selected.cfg, selected.base, selected.commit
+
+
+def selected_profile(repo: str, git: Git) -> SelectedProfile:
+    """The selected typed profile, revision and origin of its effective slot count. Bad profiles exit loudly."""
     try:
         local = profile(repo, None, git)
         engine = local.get("engine") if isinstance(local, dict) else None
         hint = engine.get("base") if isinstance(engine, dict) else None
         base = hint if isinstance(hint, str) else EngineConfig().base
         data, commit = profile_source(repo, base, git)
-        return load_profile(data), base, commit
+        cfg = load_profile(data)
+        slots = data.get("slots") if isinstance(data, dict) else None
+        source = "profile" if isinstance(slots, dict) and "count" in slots else "default"
+        return SelectedProfile(cfg, base, commit, source)
     except config.ConfigError as err:
         print(f"task-loop: {err}", file=sys.stderr)
         raise SystemExit(os.EX_CONFIG) from err
@@ -69,7 +85,8 @@ def profile_slots(repo: str, git: Git | None = None) -> SlotsConfig:
     try:
         return local_profile(repo).slots
     except (OSError, ValueError):
-        return SlotsConfig()
+        # Keep slots off when the profile cannot be read safely.
+        return SlotsConfig(count=0)
 
 
 

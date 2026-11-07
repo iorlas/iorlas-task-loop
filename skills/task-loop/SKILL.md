@@ -337,7 +337,7 @@ some, even one with `inputs_only`; a check with neither already reads the whole 
 A repo's `just check` is then one line, `tl check` (`~/.config/task-loop/bin/tl` is the shim), and each step's own recipe
 (`just native-check`) stays available alone.
 
-No `slots` (or `count` 0): slots are off. No profile: say so in one line, use
+Omitted `slots.count` defaults to 4 slots; explicit `count` 0 turns slots off. No profile: say so in one line, use
 `bd ready --exclude-type epic --exclude-label slot`, the gate the repo's AGENTS.md names, and land on main by push.
 
 ## 0. Start (once)
