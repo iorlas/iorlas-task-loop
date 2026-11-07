@@ -11,12 +11,14 @@ from typing import Protocol, assert_never
 from taskloop.adapters import beadtools
 from taskloop.app.asks import parks, raiser
 from taskloop.app.pipeline import ended as stored_end
+from taskloop.app.pipeline.closing_decide import Decide
+from taskloop.app.pipeline.closing_notes import FileNotes, Reflect
 from taskloop.app.pipeline.closing_record import RecordRun
-from taskloop.app.run.closer_branch import DONE, ReleaseSlot, SaveBranch
-from taskloop.app.run.closer_decide import Decide
+from taskloop.app.pipeline.closing_settle import Settle
+from taskloop.app.pipeline.outcomes import DONE
+from taskloop.app.run.closer_branch import ReleaseSlot, SaveBranch
 from taskloop.app.run.closer_host import CloseHost, CloserHost
-from taskloop.app.run.closer_notes import FileNotes, Reflect
-from taskloop.app.run.closer_settle import Settle
+from taskloop.app.run.closer_ports import closing_ports
 from taskloop.contracts.checkpoint import Checkpoint, Notes
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.kinds import ASKS, Kind
@@ -213,5 +215,7 @@ class Closer:
 
 def closer_over(host: CloserHost, after_save: Callable[[], None] | None = None) -> Closer:
     """The Closer over the engine: each step gets the host typed as that step's own Protocol."""
-    return Closer(host, CloseParts(decide=Decide(host), branch=SaveBranch(host, after_save), slot=ReleaseSlot(host), record=RecordRun(host),
-                                   notes=FileNotes(host), reflect=Reflect(host), settle=Settle(host)))
+    ports = closing_ports(host)
+    return Closer(host, CloseParts(
+        decide=Decide(host, ports.say), branch=SaveBranch(host, after_save), slot=ReleaseSlot(host), record=RecordRun(host),
+        notes=FileNotes(host, ports.follow_ups), reflect=Reflect(host), settle=Settle(host, ports.beads, ports.asks)))
