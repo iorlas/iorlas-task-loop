@@ -2,10 +2,9 @@
 
 import re
 
-from support.case import Case
-
 from taskloop.domain.checks import diagnostics as dg
 from taskloop.domain.checks.diagnostics import Diagnostic
+from tltestkit.case import Case
 
 
 def only(text):

@@ -3,12 +3,12 @@ import os
 from pathlib import Path
 from unittest import mock
 
-from support.case import Case
 from support.spawn import port_git
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.look import shots
 from tlartifacts import store
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 PNG = b"\x89PNG\r\n\x1a\n"
 

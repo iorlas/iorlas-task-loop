@@ -3,7 +3,7 @@ name = "tltestkit"
 version = "0"
 description = "The test kit every package inherits: the layer of a test by its path and the limits of each layer (stage-packages.md section 3)."
 requires-python = ">=3.15"
-dependencies = []
+dependencies = ["tlkernel"]
 
 [build-system]
 requires = ["hatchling"]
@@ -21,3 +21,6 @@ addopts = "-p no:cacheprovider"
 
 [project.entry-points.pytest11]
 tltestkit = "tltestkit.plugin"
+
+[tool.uv.sources]
+tlkernel = { workspace = true }

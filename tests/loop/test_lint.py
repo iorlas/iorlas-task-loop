@@ -4,7 +4,7 @@ import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from support.case import Case
+from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)

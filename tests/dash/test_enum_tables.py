@@ -1,10 +1,9 @@
 """Enum display tables explicitly preserve the formerly implicit empty cases."""
 
-from support.case import Case
-
 from taskloop_dash.views import columns, phases
 from tlkernel.dashenums import Marker, Phase
 from tlkernel.enums import Cause, Step, WhyCode
+from tltestkit.case import Case
 
 
 class DisplayTables(Case):

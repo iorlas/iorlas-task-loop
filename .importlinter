@@ -280,7 +280,6 @@ source_modules =
     taskloop.app.pipeline.requests
     taskloop.app.pipeline.resume
     taskloop.app.run.field_ports
-    taskloop.app.run.running
     taskloop.app.pipeline.steps
     taskloop.app.pipeline.stuck
     taskloop.app.pipeline.summaries
@@ -308,6 +307,7 @@ forbidden_modules =
     taskloop.app.run.preflight
     taskloop.app.run.reload_ports
     taskloop.app.run.run_once
+    taskloop.app.run.running
     taskloop.app.run.sections
     taskloop.app.run.shared
     taskloop.app.run.shell
@@ -319,7 +319,6 @@ allow_indirect_imports = True
 ignore_imports =
     # The baseline (tl-e5t0.30): edges that exist today. The contract fails on a new one; each removal shrinks this list, never grows it.
     taskloop.app.prune.runs -> taskloop.app.run.layout
-    taskloop.app.run.running -> taskloop.app.wire.slots
 
 [importlinter:contract:converted-stages-take-no-host]
 name = A converted stage imports no host (not the Engine, run, wire or launch)

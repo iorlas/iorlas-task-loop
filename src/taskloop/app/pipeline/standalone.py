@@ -8,6 +8,7 @@ from tlkernel import fence, wire
 from tlkernel.bead import Bead
 from tlkernel.beadsport import Beads
 from tlkernel.checkpoint import Checkpoint
+from tlkernel.checkpoint import RunState as CheckpointState
 from tlkernel.checks import CheckRun
 from tlkernel.enums import Step
 from tlkernel.gitport import Git
@@ -134,8 +135,9 @@ class StandaloneHost[T](RecordHost, CrashHost, Protocol):
     scope: str
     asked: bool
     landed_sha: str
-    plan_data: PlanData | None
     last_run: CheckRun | None
+    @property
+    def state(self) -> CheckpointState: ...
     @property
     def sessions(self) -> Sessions: ...
     @property
@@ -307,11 +309,11 @@ class Standalone[T]:
         host = self.host
         if ck is None:
             return step, ck
-        host.plan_data = ck.state.plan_data
+        host.state.plan_data = ck.state.plan_data
         host.last_run = host.stores.check_run(ck.run, None).get()
         if host.last_run is not None:
             host.stores.check_run(host.run_id, None).write(host.last_run)
-        if not host.plan_data or step in (Step.RESET, Step.GATE, Step.CLOSE, Step.REFLECT):
+        if not host.state.plan_data or step in (Step.RESET, Step.GATE, Step.CLOSE, Step.REFLECT):
             host.resume.restore(ck, late=True)
             return step, ck
         plan, index, _ = host.resume.point()

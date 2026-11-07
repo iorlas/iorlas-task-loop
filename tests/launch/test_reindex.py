@@ -4,12 +4,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from support.case import Case
 from support.dashlogs import RunScript
 from support.narrow import must
 from support.spawn import port_git, real_spawner
 from support.tlmain import tl
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.launch import reindex
 from taskloop.app.wire import doctor
@@ -19,6 +17,8 @@ from tlkernel.env import Env
 from tlkernel.identity import Identity
 from tlkernel.paths import ConfigDir
 from tlkernel.runrows import RunRows
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class Reindex(Case):

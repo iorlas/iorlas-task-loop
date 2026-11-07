@@ -5,12 +5,12 @@ from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401
-from support.case import Case
 
 from taskloop.app.release import flow, publish
 from taskloop.app.release.shell import Abort
 from tlkernel.env import Env
 from tlkernel.slots import SlotGitError
+from tltestkit.case import Case
 
 
 class FailureSummary(Case):

@@ -14,10 +14,11 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from support.case import Case
 from support.checked import run_checked
 from support.tlmain import tl_main
-from support.tmpdir import TemporaryDirectory
+
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 LIFESIM = Path.home() / "Workspaces" / "lifesim"

@@ -3,7 +3,6 @@ from unittest import mock
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
 
 from taskloop.adapters import beadtools
 from tlkernel import bdsafe
@@ -11,6 +10,7 @@ from tlkernel.bd_errors import BdCommandFailure
 from tlkernel.bead import BdError, Bead
 from tlkernel.beadsport import BdFailure
 from tlkernel.ids import BeadId
+from tltestkit.case import Case
 
 
 class BeadTools(Case):

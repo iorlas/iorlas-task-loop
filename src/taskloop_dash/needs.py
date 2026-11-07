@@ -1,10 +1,10 @@
-"""Parts read by dashboard projections and their contract row readers. The `lease` table (slots part) is read too, but the dashboard
-cannot import a stage package to declare that part; it joins here when the slots part is importable from the kernel or a public view."""
+"""Parts read by dashboard projections and their contract row readers, including the slots lease table."""
 from types import MappingProxyType
 from typing import Final
 
 NEEDS: Final = MappingProxyType({
     "dash": 1,  # source, bead
+    "slots": 1,  # lease
     "pipeline": 1,  # run, wait
     "asks": 1,  # ask, ask_ledger
     "receipt": 1,

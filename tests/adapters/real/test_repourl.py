@@ -3,12 +3,12 @@ repository identity by the main checkout's path, the engine wrote it by its slot
 import subprocess
 from pathlib import Path
 
-from support.case import Case
 from support.checked import run_checked
 from support.spawn import port_git
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters.repourl import repo_url
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class RepoUrl(Case):

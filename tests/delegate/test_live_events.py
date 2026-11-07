@@ -14,9 +14,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "delegate"))
 import test_stream_supervisor as tss
 from any_agent.harnesses.codex import CodexHarness
-from support.case import Case
 
 from delegate.app.publish import LiveSink
+from tltestkit.case import Case
 
 j = tss.j
 LONG = "x" * 3000

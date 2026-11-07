@@ -576,7 +576,7 @@ class ResumeCount(StagesTest):
         gitq.git("checkout", "-q", "task/t-1", cwd=e.wt)
         e.handoff.rounds = [Round(stage="s", round=1, kind="k")]
         assert e.restart.again("x")
-        assert (e.review.unverified, e.handoff.rounds, e.fixes, e.replans, e.look.rendered) == ([], [], 0, 0, [])
+        assert (e.review.unverified, e.handoff.rounds, e.fixes, e.state.replans, e.look.rendered) == ([], [], 0, 0, [])
         assert e.verify_answer == "Use the old format"  # the owner's word still goes to the planner
 
 

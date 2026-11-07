@@ -1,6 +1,5 @@
 """A slot remains visible between its claim and the engine's first manifest."""
 
-from support.case import Case
 from support.dashlogs import RunScript, T, bead
 
 from taskloop_dash.views.floor import slot_of
@@ -10,6 +9,7 @@ from tlkernel.dash import Column
 from tlkernel.events import Claim, SlotSetup, SlotTake, Stage
 from tlkernel.ids import BeadId
 from tlkernel.reconcile import Stray
+from tltestkit.case import Case
 
 NOW = T + 120
 CLAIMED = "2027-01-15T08:00:00Z"  # T

@@ -1,7 +1,6 @@
 """Shared review switch policy."""
-from support.case import Case
-
 from taskloop.domain.work import switch
+from tltestkit.case import Case
 
 
 class Switch(Case):

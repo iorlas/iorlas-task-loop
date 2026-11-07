@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from support.case import Case
+from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -20,6 +20,7 @@ from tlkernel.ask import AskAnswer
 from tlkernel.askenums import AskKind, AskStatus
 from tlkernel.askstore import HAD_PICK
 from tlkernel.bead import Bead
+from tlkernel.checkpoint import RunState
 from tlkernel.config import load
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
@@ -72,7 +73,7 @@ class SetupRetry(Case):
 
     def test_engine_ask_flow_answers_and_consumes_the_setup_ask(self):
         host = SimpleNamespace(stores=SimpleNamespace(asks=self.asks), store=self.store, bead=BEAD, cfg=self.cfg,
-                               dry=False, brief_hash="brief", fresh=False, briefs=mock.Mock(), log=mock.Mock())
+                               dry=False, state=RunState(brief_hash="brief"), fresh=False, briefs=mock.Mock(), log=mock.Mock())
         with mock.patch("taskloop.app.run.ask_flow.ident.plugin_version", return_value="1.0"):
             AskFlow(host).check()
         assert host.answered.answer.text == "retry"

@@ -25,7 +25,7 @@ class AskFlow:
         e = self.e
         if not e.dry:
             setup_retry.retry_setup(e.stores.asks, e.store, e.bead, ident.plugin_version(), time.time(), e.cfg, starting=True)
-        state, a = raiser.check(e.stores.asks, e.bead, e.brief_hash, e.fresh, time.time())
+        state, a = raiser.check(e.stores.asks, e.bead, e.state.brief_hash, e.fresh, time.time())
         if state == "wait" and a:
             raise Blocked(raiser.waiting_line(a), kind=Kind.WAIT_ASK)
         if state == "answer" and a:
@@ -51,7 +51,7 @@ class AskFlow:
         """File the ask the stop carries. Lint decides whether it is one an owner can answer: if not, nothing is filed and the stop is
         the engine's own fault, never a prose question. -> the Ask, or None."""
         e = self.e
-        at = raiser.Asking(bead=e.bead, run=e.run_id, brief_hash=e.brief_hash, now=time.time(), why=why, repo=self.repo(),
+        at = raiser.Asking(bead=e.bead, run=e.run_id, brief_hash=e.state.brief_hash, now=time.time(), why=why, repo=self.repo(),
                            title=e.bead_title, artifacts=tuple(self.pictures()))
         a, problems = raiser.raise_ask(e.stores.asks, spec, at, e.stores.adrs(at.repo))
         if a is None:

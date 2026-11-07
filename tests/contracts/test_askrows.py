@@ -8,8 +8,6 @@ from threading import Barrier
 import pytest
 import support.paths  # noqa: F401
 from support.askjson import unreadable_ask
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
 
 from contracts import samples as S
 from tlkernel import factorydb, wire
@@ -22,6 +20,8 @@ from tlkernel.docstore import Absent, ForeignVersion, JsonStore, Present, Torn
 from tlkernel.ledger import LedgerEntry
 from tlkernel.paths import ConfigDir
 from tlkernel.wire import Refused
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 def unexpected_access(*_args, **_kwargs):

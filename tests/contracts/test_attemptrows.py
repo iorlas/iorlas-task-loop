@@ -8,9 +8,7 @@ from unittest.mock import patch
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
 from support.narrow import must
-from support.tmpdir import TemporaryDirectory
 
 from tlkernel import attemptrows, factorydb
 from tlkernel.enums import Outcome, Result
@@ -18,6 +16,8 @@ from tlkernel.finish import finish_run
 from tlkernel.locator import RunLocator, host_name
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunFinish, RunState
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class AttemptRows(Case):

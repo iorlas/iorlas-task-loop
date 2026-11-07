@@ -5,8 +5,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("record_exchange", ROOT / "dev" / "record_exchange.py")
