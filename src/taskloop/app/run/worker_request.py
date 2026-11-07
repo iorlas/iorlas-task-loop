@@ -7,9 +7,9 @@ from taskloop.adapters import childenv, ident
 from taskloop.adapters.check_files import repo_key
 from taskloop.app.asks import trustroots
 from taskloop.app.checks.runner import Checker
+from taskloop.app.pipeline.budget import Budget
 from taskloop.app.run import writer_pin
 from taskloop.app.run.blocked import Blocked, refuse_over_cap
-from taskloop.app.run.budget import Budget
 from taskloop.app.run.call import Call
 from taskloop.app.write.prompts import ENGINE_ONLY_ADVISORY
 from taskloop.contracts import log as rec

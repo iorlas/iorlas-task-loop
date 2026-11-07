@@ -37,12 +37,9 @@ from support.who import who
 
 from taskloop.adapters import delegate as dl
 from taskloop.app.land.checkout import Checkout
+from taskloop.app.pipeline import outcomes
 from taskloop.app.plan.planner import Planner
-from taskloop.app.run import (
-    engine,
-    entry,
-    outcomes,
-)
+from taskloop.app.run import engine, entry
 from taskloop.app.slots.lease import Lease
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.config import EngineConfig

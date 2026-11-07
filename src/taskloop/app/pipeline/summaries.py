@@ -1,16 +1,17 @@
 """What a node's answer says in a few lines: the facts behind the step (verbose mode) and the one line the trace keeps."""
+from collections.abc import Mapping
 from typing import Any
 
 from taskloop.contracts import plancheck
 from taskloop.contracts.answers import VERDICTS
 
 
-def asked(d: Any) -> list[str]:
+def asked(d: Mapping[str, Any]) -> list[str]:
     q = [f"question: {d['question']}"] if d["question"].strip() else []
     return q + ([f"decided by: {d['decided']}"] if d["decided"].strip() else [])
 
 
-def details(node: str, d: Any) -> list[str]:
+def details(node: str, d: Mapping[str, Any]) -> list[str]:
     if node == "plan":
         stages = [f"{n + 1}. {s['goal']}{' (hard)' if s['hard'] else ''} → checks: {'; '.join(map(plancheck.text_of, s['checks']))}"
                   for n, s in enumerate(d["stages"])]
@@ -27,7 +28,7 @@ def details(node: str, d: Any) -> list[str]:
     return []
 
 
-def summarize(node: str, d: Any) -> str:
+def summarize(node: str, d: Mapping[str, Any]) -> str:
     if node == "plan":
         return f"{len(d['stages'])} stages, {len(d['risks'])} risks: {d['summary'][:200]}"
     if node == "write":
