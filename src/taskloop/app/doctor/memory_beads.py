@@ -1,8 +1,6 @@
 """`MemoryBeads`: the bd `tl selftest` runs on (none installed, none touched), in memory, with the behaviour the code relies on
 (claim only an open bead, closed beads leave `find`, labels
 sorted and unique, metadata values are strings, a write to an unknown bead is refused)."""
-from typing import Any
-
 from tlkernel.bead import BdError, Bead, Comment, Dep
 from tlkernel.beadsport import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
 from tlkernel.ids import BeadId, parse_bead_id
@@ -20,7 +18,7 @@ class MemoryBeads:
             raise BdFailure(BdError(kind="not_found", text=f"Issue {bead} not found"))
         return self.beads[bead]
 
-    def _put(self, b: Bead, **changes: Any) -> None:
+    def _put(self, b: Bead, **changes: object) -> None:
         self.beads[b.id] = b.replace(**changes)
 
     def show(self, bead: BeadId) -> Bead | None:

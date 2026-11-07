@@ -67,7 +67,7 @@ C-THIN (a), tl-e5t0.40.1: `run/ask_flow`, `bead_env`, `closer_ports`, `preflight
 Keeping them thin, mechanically:
 
 1. import-linter: nodes never import roots; roots are leaves of the graph (a `forbidden` contract per root package).
-2. A root-lint test (AST): in root modules, no `if/for/while/try/match` outside a small allow-list of construction helpers, no function over ~25 sloc, and a **ratcheted total** (today 4,060 wiring sloc; goal under ~1,500). A branch on domain data in a root fails with "this is a rule: move it to a node".
+2. A change ratchet per root file (AST): branches (`if/for/while/try/match`), functions over 25 sloc, and sloc are compared with the merge base for each changed root file; new root files count from zero, so they are frozen too. A deliberate rise requires `Ratchet-allow: root +N reason`. No baseline or total is stored. Measured 2026-11-07: **78 root files, 4,298 sloc, 374 branches, 13 long functions, and 151 Engine attributes** (distinct annotated fields, self assignments and properties across Engine and its bases). The goal is under ~1,500 root sloc: 2,799 sloc must go to reach strictly under 1,500. Run `uv run python dev/root_report.py` for the current totals and 10 worst files; move rules into nodes to bring the roots down.
 3. Root files may hold no class with behaviour: dataclasses and factories only.
 
 ## 3. Persistence: stages own data, the db package routes and checks
