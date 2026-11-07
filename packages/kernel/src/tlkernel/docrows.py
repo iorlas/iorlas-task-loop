@@ -19,6 +19,8 @@ REPOS_DOCS = "repos_doc"  # the registered repositories index
 TICKET_DOCS = "ticket_doc"  # persistent slot ticket sequence counters
 INDEX_DOCS = "index_doc"  # dashboard index pass freshness
 
+WORKTREE_DOCS = "worktree_doc"  # ownership records of worktrees tl made
+DISK_DOCS = "disk_doc"  # the loop's hourly free-space samples
 LOOP_DOCS = "loop_doc"  # the loop stage's repo stop commands and rests
 LOOK_DOCS = "look_doc"  # the look stage's owner-look galleries
 LANES_DOCS = "lanes_doc"  # the lanes part's status snapshot and last attempt

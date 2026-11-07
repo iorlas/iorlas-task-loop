@@ -40,6 +40,8 @@ TABLES = {
     "release_doc",
     "report_doc",
     "work_doc",
+    "worktree_doc",
+    "disk_doc",
     "loop_doc",
     "look_doc",
     "lanes_doc",

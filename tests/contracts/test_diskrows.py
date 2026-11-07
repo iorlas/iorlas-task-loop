@@ -1,9 +1,10 @@
-"""Free-space samples of the config volume in factory.db's kv table: one a hour, kept a fortnight (tl-7i9k.24.1)."""
+"""Free-space samples of the config volume in factory.db's disk_doc table: one a hour, kept a fortnight (tl-7i9k.24.1)."""
 import sqlite3
 
 import pytest
 
 from tlkernel import diskrows
+from tlkernel.factoryparts import DISK
 
 DAY = 86400.0
 GB = 1 << 30
@@ -13,6 +14,7 @@ GB = 1 << 30
 def con():
     c = sqlite3.connect(":memory:")
     c.execute("CREATE TABLE kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL, stamp TEXT)")
+    c.executescript(DISK.ddl)
     yield c
     c.close()
 
@@ -32,3 +34,10 @@ def test_samples_come_back_oldest_first_and_a_new_sample_drops_those_past_fourte
 def test_a_foreign_kv_row_is_not_a_sample(con):
     con.execute("INSERT INTO kv(k,v,t) VALUES ('unrelated.x','{}',1)")
     assert diskrows.samples(con) == []
+
+
+def test_samples_live_in_disk_doc_only(con):
+    diskrows.sample(con, 10 * GB, 3600.0)
+    assert con.execute("SELECT k FROM disk_doc").fetchall() == [("disk.free.1",)]
+    assert con.execute("SELECT k FROM kv WHERE k LIKE 'disk.free.%'").fetchall() == []
+    assert diskrows.samples(con) == [(3600.0, 10 * GB)]
