@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.app.land.gitcall import oneline
-from taskloop.app.run.decide import CONFIRMED, OUTSIDE, Decision, World, resume_decision, stage_count
+from taskloop.app.pipeline.decide import CONFIRMED, OUTSIDE, Decision, World, resume_decision, stage_count
 from taskloop.app.run.review_glue import apply_review
 from taskloop.app.run.state import state_names
 from taskloop.contracts import plancheck, wire

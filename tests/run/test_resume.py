@@ -8,8 +8,8 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
+from taskloop.app.pipeline.decide import Decision
 from taskloop.app.review.state import ReviewLive
-from taskloop.app.run.decide import Decision
 from taskloop.app.run.resume import Resume
 from taskloop.contracts import wire
 from taskloop.contracts.answers import WriteAnswerLook

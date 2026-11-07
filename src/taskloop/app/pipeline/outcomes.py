@@ -2,7 +2,7 @@
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from taskloop.contracts import log as rec
 from taskloop.contracts.ask import BudgetLine
@@ -42,7 +42,12 @@ def close_move(kind: Kind) -> tuple[str, str]:
     return ("ask", ASK_NAME[kind]) if kind in ASKS else ("close", "failed")
 
 
-def run_breakdown(log_path: str | Path, open_node: Any = None, top: int = 4) -> list[BudgetLine]:
+class OpenStep(Protocol):
+    step: str
+    t: float
+
+
+def run_breakdown(log_path: str | Path, open_node: OpenStep | None = None, top: int = 4) -> list[BudgetLine]:
     """Where a run's minutes went, from its engine log, longest first: BudgetLine(step, minutes, rounds). Steps under a minute are
     left out; the open step counts up to now."""
     tot: dict[str, list[float]] = {}

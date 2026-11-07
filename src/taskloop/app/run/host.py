@@ -6,7 +6,8 @@ from typing import Any
 from taskloop.app.look.judge import Judge
 from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.look.shots import Pictures
-from taskloop.app.run import asked, summaries
+from taskloop.app.pipeline import summaries
+from taskloop.app.run import asked
 from taskloop.app.run.closer import Closer, closer_over
 from taskloop.app.run.parts_land import LandParts
 from taskloop.app.run.parts_plan import PlanParts

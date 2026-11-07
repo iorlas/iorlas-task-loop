@@ -32,11 +32,9 @@ from support.who import who
 from run.test_stages import StagesTest
 from taskloop.app.artifacts import store
 from taskloop.app.land.rebase import MAX_REBASE_RESETS
+from taskloop.app.pipeline import outcomes
 from taskloop.app.plan.prompts import REPLAN_CAP
-from taskloop.app.run import (
-    entry,
-    outcomes,
-)
+from taskloop.app.run import entry
 from taskloop.app.run import running as wrunning
 from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots

@@ -1,12 +1,13 @@
 """Steps: the cursor over a run's steps. One step is open at a time; opening the next closes it. Every move writes its record."""
 
 from collections.abc import Callable
-from typing import Any
 
 from taskloop.contracts.log import StepEnd, StepStart, Transition
 from taskloop.stores.runlog import RunLog
 
-META = ("stage", "stages", "round", "write", "fix")  # the counters a StepStart carries
+
+def _count(v: object) -> int | None:
+    return v if isinstance(v, int) else None
 
 
 class Open:
@@ -42,7 +43,7 @@ class Steps:
         """The id of the open step ('' when none is open)."""
         return self.cur.id if self.cur else ""
 
-    def begin(self, step: str, text: str, **meta: Any) -> int:
+    def begin(self, step: str, text: str, **meta: object) -> int:
         """A step begins (the open one ends first), after `guard` has looked at the tree."""
         if self.only is not None and step != self.only:
             raise ValueError(f"{self.only} stopped before {step}: run --stage {step} separately")
@@ -51,7 +52,8 @@ class Steps:
         self.end()
         self.n += 1
         self.cur = self.last = Open(self.n, step, self.clock())
-        self.log.emit(StepStart(id=self.cur.id, step=step, text=text, **{k: meta[k] for k in META if meta.get(k) is not None}))
+        self.log.emit(StepStart(id=self.cur.id, step=step, text=text, stage=_count(meta.get("stage")), stages=_count(meta.get("stages")),
+                                  round=_count(meta.get("round")), write=_count(meta.get("write")), fix=_count(meta.get("fix"))))
         if self.on_begin:
             self.on_begin(text)
         return self.n
