@@ -12,7 +12,7 @@ from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.asks.closing import ClosingTrust
 from taskloop.app.checks.step import StageChecks
 from taskloop.app.land.closing import LandHistory
-from taskloop.app.pipeline.journal import Journal, JournalHost
+from taskloop.app.pipeline.journal import Journal
 from taskloop.app.pipeline.reflect import Reflector
 from taskloop.app.pipeline.reload import Reload, ReloadHost
 from taskloop.app.pipeline.requests import OwnerRequests
@@ -51,8 +51,8 @@ class RunParts(Plumbing):
         return Reload(self, ReexecBook(self.home), TrailEvents(), lambda: installed_newer(self.env), locked_slot, childenv, ident)
 
     @cached_property
-    def records(self: JournalHost) -> Journal:
-        return Journal(self, locked_slot, repo_of)
+    def records(self) -> Journal:
+        return Journal(self, self, self, self, self, self, locked_slot, repo_of)
     shared = cached_property(Shared)
     @cached_property
     def stuck(self: StuckHost) -> StuckTick: return StuckTick(self, last_event_t)

@@ -7,6 +7,7 @@ import pytest
 from support.pipeline_ports import FakeBeadClosing, FakeRoundSteps
 
 from taskloop.adapters import beadtools
+from taskloop.app.pipeline import journal as journal_module
 from taskloop.app.pipeline import standalone as standalone_module
 from taskloop.app.pipeline import standalone_roles
 from taskloop.app.pipeline.standalone import Standalone
@@ -94,15 +95,15 @@ def test_round_dispatch_uses_injected_composition():
     parts.cursor.checkpoints.save.assert_not_called()
 
 
-def test_standalone_protocols_have_at_most_sixteen_own_members():
+def test_standalone_and_journal_protocols_have_at_most_sixteen_own_members():
     def members(protocol):
         return set(protocol.__annotations__) | {
             name for name, value in vars(protocol).items()
             if isinstance(value, property) or (callable(value) and not name.startswith("_"))}
 
-    protocols = {name: value for module in (standalone_module, standalone_roles) for name, value in vars(module).items()
+    protocols = {name: value for module in (standalone_module, standalone_roles, journal_module) for name, value in vars(module).items()
                  if isinstance(value, type) and getattr(value, "_is_protocol", False)
-                 and value.__module__ in (standalone_module.__name__, standalone_roles.__name__)}
+                 and value.__module__ in (standalone_module.__name__, standalone_roles.__name__, journal_module.__name__)}
     assert protocols
     assert {name: len(members(value)) for name, value in protocols.items() if len(members(value)) > 16} == {}
 

@@ -43,7 +43,7 @@ class FailureLogging(Case):
                 host = mock.Mock(run_id="r1")
                 with mock.patch("taskloop.app.pipeline.journal.RunLocator"), \
                         mock.patch("taskloop.app.pipeline.journal.finish_run", side_effect=error):
-                    Journal(host, lambda: "", lambda _git, _wt: "repo").settle(RunState.PARKED, "paused")
+                    Journal(host, host, host, host, host, host, lambda: "", lambda _git, _wt: "repo").settle(RunState.PARKED, "paused")
                 self.assert_traceback(host.warn.call_args.args[0], "could not settle run r1")
 
     def test_reflection_catch_all_logs_traceback(self):
