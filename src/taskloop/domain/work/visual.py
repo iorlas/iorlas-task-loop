@@ -1,12 +1,15 @@
 """Is a bead visual: the planner's typed field decides, never a word list. A bead is visual iff some plan case is look-objective,
 taste or show; only a visual bead runs the verify stage, any other lands with its unchecked items in one follow-up bead.
 `visual_paths` is only a check on that judgement: a visual path touched with no such case sends the plan back to the planner once.
-`unmet_shows` is the mechanical half of the `show` class: the named artifacts exist in the store for the current stage attempt."""
+`unmet_shows` is the mechanical half of the `show` class: the named artifacts exist in the store for the current stage attempt.
+
+Used by: plan, review, write.
+"""
 from collections.abc import Collection, Iterable, Sequence
 from typing import Final
 
 from taskloop.domain.checks.matchers import glob_re
-from taskloop.domain.plan.matchers import word_set
+from taskloop.domain.work.matchers import word_set
 from tlkernel.plancheck import Open
 
 VISUAL_CLASSES: Final = frozenset({"look-objective", "taste", "show"})

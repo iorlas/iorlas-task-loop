@@ -13,7 +13,7 @@ from tlkernel.stop import Stop
 from tlkernel.wire import Open
 
 from taskloop.domain.asks.spec import AskSpec
-from taskloop.domain.review.ledger import Ledger
+from taskloop.domain.work.ledger import Ledger
 
 
 class ReviewSteps(Protocol):

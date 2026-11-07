@@ -13,7 +13,7 @@ from support.memstores import MemLog
 from support.narrow import must
 from support.plans import FALSE, PLAN, WRITE
 
-from taskloop.app.run.stuck import StuckTick
+from taskloop.app.pipeline.stuck import StuckTick
 from taskloop.domain.stuck import StuckWatch
 from taskloop.stores.runlog import RunLog
 from taskloop_dash.views import columns, passes

@@ -120,32 +120,6 @@ class BdDemand:
         return "os" if cls.is_other_os(text) else ""
 
 
-class Wording:
-    """Words that say what an item is about: filing and recording (the ledger's own subject), the owner's call, a look."""
-
-    FILING = re.compile(r"\b(?:beads?|follow-?ups?|filed?|filing|issues?|tickets?|records?|recorded|leftovers?|deferred?)\b", re.I)
-    OWNERISH = re.compile(r"\b(?:owner|sign-?off|approv\w*|review|confirm\w*|decid\w*|decision)\b", re.I)
-    LOOK = re.compile(r"owner\b[^.]{0,40}\b(?:judge|check|decide|assess|review|verify)\b[^.]*\b"
-                      r"(?:looks?|visual\w*|appearance|screenshots?)\b", re.I)  # 'Only the owner can judge the look.'
-    UNVERIFIED = re.compile(r"\bunverified\b", re.I)
-
-    @classmethod
-    def about_filing(cls, what: str) -> bool:
-        return cls.FILING.search(what) is not None
-
-    @classmethod
-    def ownerish(cls, text: str) -> bool:
-        return cls.OWNERISH.search(text) is not None
-
-    @classmethod
-    def is_look(cls, what: str) -> bool:
-        return cls.LOOK.search(what) is not None
-
-    @classmethod
-    def marked_unverified(cls, line: str) -> bool:
-        return cls.UNVERIFIED.search(line) is not None
-
-
 class GateProof:
     """An item settles from the engine's own results only in a narrow form (tl-bxk.10.19, .25): its sole doubt is that the verifier cannot
     prove the engine ran or passed a check, and it names that check. An item about coverage, skips, fakes or a check that never ran is

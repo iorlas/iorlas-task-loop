@@ -1,4 +1,4 @@
-"""Is a bead visual: the planner's case classes decide (domain/review/visual.py); visual_paths is only a check; `show` items are
+"""Is a bead visual: the planner's case classes decide (domain/work/visual.py); visual_paths is only a check; `show` items are
 checked against the artifacts the stage attempt registered."""
 import sys
 from pathlib import Path
@@ -8,7 +8,7 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.domain.review import visual as v
+from taskloop.domain.work import visual as v
 
 
 def case(cls: str, **kw: object) -> dict[str, object]:

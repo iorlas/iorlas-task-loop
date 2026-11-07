@@ -1,5 +1,8 @@
 """Review switches control intermediate stages. Every mode reviews the final stage against the bead's acceptance; plan case wording
-and green checks cannot stand in for that review."""
+and green checks cannot stand in for that review.
+
+Used by: look, review, write, pipeline.
+"""
 from collections.abc import Collection
 from typing import Final
 

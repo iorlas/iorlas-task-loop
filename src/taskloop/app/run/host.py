@@ -1,9 +1,10 @@
 """The run as its steps see it: the land, plan and machinery parts, and the two that need them all, the worker call and the close.
 The Engine (engine.py) opens a run into this; the steps (stages.py, crash.py) are typed against it and never import the Engine."""
+from collections.abc import Callable
 from functools import cached_property
-from typing import Any
 
 from tlkernel import plancheck
+from tlkernel.asked import Asked
 from tlkernel.stagefacts import RunFacts
 
 from taskloop.app.look.judge import Judge
@@ -102,17 +103,21 @@ class RunHost(LandParts, PlanParts, RunParts):
     def closer(self) -> Closer:
         return closer_over(self, self.worker.saved)
 
-    def ai(self, node: str, title: str, prompt: str, *a: Any, **kw: Any):
+    def ai(self, node: str, title: str, prompt: str, *a: object, **kw: object) -> Asked:
         """One AI node, then the tree check: a worker that wrote core.worktree is caught before review or land. Before it, the
         owner's requests are taken (a safe point), and the notes taken since the last call end its prompt (and its delta)."""
-        self.requests.at_step(kw.get("step") or node)
+        step = kw.get("step")
+        step = step if isinstance(step, str) and step else node
+        self.requests.at_step(step)
         notes = self.requests.prompt_tail()
         if notes:
             prompt += notes
-            if kw.get("delta") is not None:
-                kw["delta"] += notes
-        got = self.worker.run(node, title, prompt, *a, **kw)
+            delta = kw.get("delta")
+            if isinstance(delta, str):
+                kw["delta"] = delta + notes
+        run: Callable[..., Asked] = self.worker.run
+        got = run(node, title, prompt, *a, **kw)
         asked.apply(self, got.updates)
-        self.assert_tree(kw.get("step") or node, "after")
+        self.assert_tree(step, "after")
         plancheck.parse(got.data)
         return got

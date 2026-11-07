@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.domain.review import findings as fnd
-from taskloop.domain.review.ledger import Ledger
+from taskloop.domain.work.ledger import Ledger
 
 SENDBACKS = json.loads((Path(__file__).resolve().parents[1] / "fixtures" / "sendbacks.json").read_text(encoding="utf-8"))
 

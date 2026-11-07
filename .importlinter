@@ -258,7 +258,7 @@ source_modules =
     taskloop.app.run.stages
     taskloop.app.run.state
     taskloop.app.pipeline.steps
-    taskloop.app.run.stuck
+    taskloop.app.pipeline.stuck
     taskloop.app.pipeline.summaries
     taskloop.app.run.target
     taskloop.app.pipeline.trace
@@ -349,4 +349,18 @@ forbidden_modules =
     taskloop.app.slots
     taskloop.app.track
     taskloop.app.write
+allow_indirect_imports = True
+
+[importlinter:contract:work-imports-no-stage]
+name = domain/work reaches no stage
+type = forbidden
+source_modules = taskloop.domain.work
+forbidden_modules =
+    taskloop.app
+    taskloop.domain.plan
+    taskloop.domain.review
+    taskloop.domain.write
+    taskloop.domain.look
+    taskloop.domain.asks
+    taskloop.domain.land
 allow_indirect_imports = True

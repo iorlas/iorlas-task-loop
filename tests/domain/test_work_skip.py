@@ -1,4 +1,4 @@
-"""domain/review/skip.py: a stage's review is skipped only when every changed path is mechanical; one other path means review."""
+"""domain/work/skip.py: a stage's review is skipped only when every changed path is mechanical; one other path means review."""
 import sys
 from pathlib import Path
 
@@ -8,7 +8,7 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.domain.review.skip import SkipKind, decide
+from taskloop.domain.work.skip import SkipKind, decide
 from tlkernel import config
 from tlkernel.config import ReviewSkipConfig
 from tlkernel.gitfacts import DiffEntry
