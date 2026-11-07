@@ -9,6 +9,21 @@ Decided before this doc, not reopened: bead deps are a scheduling gate only (no 
 PRs always branch off main; no stacked PRs; no epic or integration branches by default (trunk, dark flags, queue); branches are updated by
 merging main in (plain pushes, no force); landing stays squash, one commit per bead.
 
+## As decided (Denis, 2026-11-07; section 15 has the reasoning)
+
+| # | Question | Decision | Section |
+|---|---|---|---|
+| 1 | Queue commits | keep `gh pr merge --squash`; fast-forward the tested commit if the tree assertion fires twice | 2, 15 |
+| 2 | `land_mode` push in the queue | no; one mode per repo; push mode is an out-of-queue pusher | 8, 10 |
+| 3 | Path claims | display and queue rule only; delay dispatch within one epic after a month of overlap data | 11 |
+| 4 | Lock main | lightweight: ruleset (no force-push, no deletion) plus a pre-push judge that refuses unmarked pushes to main; `tl doctor` fails on drift; full queue-only lock stays an owner option | 8.1 |
+| 5 | Gates in flight: floor and cap | floor 1, cap 4, cap 3 if wasted ratio >0.5 in shadow; "window" and "lookahead" retired | 6 |
+| 6 | Executor slot | freed at enqueued-green; back-pressure at queue length 2 x gates in flight | 10 |
+| 7 | Tree mismatch | no blind revert; freeze, evidence, repair agent dispatched automatically; human only after two failed repairs | 2.1 |
+| 8 | Quarantine | none in v1 or v2; retry, main check, flake score, auto fix bead; v2 owner-approved skip, 7 days, no silent renewal | 7 |
+| 9 | Required-check set | profile is authoritative; `tl doctor` fails on drift | 8.1 |
+| 10 | Stuck-head timeout | 2 x p90 gate seconds, measured in shadow; no number before data | 8 |
+
 ## 1. Problem and goals
 
 Today (landing-code-map, `app/land/stack.py`): `land-stack` gates open PRs in parallel (prewarm, `--jobs` default 4), then merges serially
@@ -34,7 +49,7 @@ Non-goals: batching in v1, probabilistic speculation, multiple queues per repo, 
 ## 2. Core invariant: tested tree == landed tree
 
 **Invariant.** For every PR the lander merges, `tree(main after merge) == tree(the commit that was gated)`, and the parent of the new main
-commit is the main the gate assumed. Everything else (depth, AIMD, ejection) is allowed to be wrong in cost; this one is not allowed to be
+commit is the main the gate assumed. Everything else (gates in flight, AIMD, ejection) is allowed to be wrong in cost; this one is not allowed to be
 wrong at all, because a silent mismatch ships untested code.
 
 Why it is the first-ranked risk:
@@ -60,19 +75,37 @@ when `tree(main) == tree(Q(N-1))` and the merge bases agree (experiment, section
 **Action on mismatch** (layer 3 only; layers 1-2 just refuse):
 - Parent differs from `main_before`: someone pushed to main between prediction and merge ("raced"). Run the gate on new main head as a
   backstop, record an incident row, reset the queue. No freeze.
-- Parent as expected, tree differs ("corrupt"): freeze the queue (no merge, no new gate starts), incident row, one ask to Denis with
-  both tree ids and the PR. No automatic revert in v1: a revert is a second write to main on the same broken path, and the cause may be
-  an out-of-queue push, not the squash.
+- Parent as expected, tree differs ("corrupt"): freeze the queue (no merge, no new gate starts), incident row with evidence, then the
+  recovery flow of section 2.1. No blind revert: a revert is a second write to main on the same broken path, and the cause may be an
+  out-of-queue push, not the squash. Until the repair bead (section 16) lands, the interim is freeze plus one ask, as in tl-7s2f.3.
 - ❌ Rejected: trusting `--match-head-commit` plus the gate. Head match says nothing about the base; this is the GitHub failure shape.
 - ❌ Rejected: fast-forwarding main to the queue commits (bors style) in v1. Queue commits are already one per PR, so it would meet "one
   commit per bead" and the invariant by construction. But it bypasses `gh pr merge`: the PR would not show merged (queue commits are not
-  the PR's commits), branch protection and merge record change. Revisit when the assertion fires more than once (section 12).
+  the PR's commits), branch protection and merge record change. Revisit when the assertion fires twice (section 12): then queue commits are fast-forwarded (decision 1).
+
+### 2.1 Recovery flow (decision 7: AI sorts it out, a human is the last resort)
+States and moves, in words:
+1. **Frozen.** A "corrupt" mismatch freezes the queue. Evidence is written first: both tree ids, the PR, `main_before`, `merge_sha`, the
+   diff between the two trees, the events since the last clean assertion, and whether `origin/main` has any commit not made by the queue.
+2. **Repair dispatched.** The engine starts a repair agent with that evidence, no ask. Default repair: a **revert PR** of the bad commit.
+   Alternatives the agent may choose when the evidence says a revert is wrong: **fix-forward** (a PR that makes main equal the tested
+   tree), or **re-merge main into the owner's branch** and re-gate. Whatever it picks is a normal PR: it enters the queue, gets the same
+   gates and the same assertion. The queue is unfrozen for that one item only; everything else waits.
+3. **Landed clean.** The repair PR passes the assertion: unfreeze, rebuild the rest from new main (section 4 invalidation), close the
+   incident row.
+4. **Textual merge conflict** (a different path, not a mismatch): the item is ejected with `conflict` and goes back to its **writer
+   agent** to update from main (merge main in, plain push). The queue then rebuilds behind it and gates again. No human.
+5. **Repair failed.** The repair PR is ejected or its assertion fires again: one more repair attempt with the first one's evidence added.
+   Failing a second time is the only case that asks a human (Decisions tab and one ask to Denis). The queue stays frozen until the ask is
+   answered.
+The invariant is not weakened: the repair goes through layers 1-3 like any PR. What changes from the first draft is who acts, not what
+is checked. Bead: repair dispatch (section 16).
 
 ## 3. Queue model
 
 ### 3.1 Semantics
-Serial in meaning: PRs land in queue order, each on exactly the main it was tested on. Parallel in execution: up to W gates run at once
-(W = window, section 6). Candidate N is gated on `main + PR1..PR(N-1) + PR(N)`, assuming 1..N-1 pass. If one fails the assumption is
+Serial in meaning: PRs land in queue order, each on exactly the main it was tested on. Parallel in execution: up to G gates run at once
+(G = gates in flight, section 6). Candidate N is gated on `main + PR1..PR(N-1) + PR(N)`, assuming 1..N-1 pass. If one fails the assumption is
 repaired (section 5), never papered over.
 
 ```
@@ -157,7 +190,7 @@ Reuse    = by tree: a Result for tree T and the same check_set_hash serves any q
 | head of any PR in the list changed (push, force-push by an agent) | that PR's builds and all builds behind it are dead; PR re-enters at its position |
 | PR ahead ejected | builds containing it are dead; builds ahead of it live |
 | check set changed (profile at base) | all dead |
-| profile change PR itself (owner path) | barrier: window 1 around it, everything behind rebuilt |
+| profile change PR itself (owner path) | barrier: one gate in flight around it, everything behind rebuilt |
 
 - **Relation to RunKey and Carry:** RunKey stays the receipt identity per check. QueueKey is the identity of a build, one level up. Carry
   `queue_parent` (3.3) is the single place where a receipt crosses from `base = Q(N-1)` to `base = main`. Receipts are never
@@ -199,27 +232,32 @@ Mechanics:
 - Concurrency of reset: all mutations (eject, rebuild, reorder) are one reconcile step over durable state (section 9), never edits from
   several threads.
 
-## 6. Depth and window
+## 6. Gates in flight
 
-- **Start at W = 1** per repo: the queue then equals today's serial behaviour with the new invariant and bookkeeping. This isolates
+- **Terms** (docs/glossary.md, worked example there): *gates in flight* G = how many PRs are being tested at the same time, each on main
+  plus the PRs ahead of it; G = 1 is today's serial behaviour. *Floor* = fewest in flight, 1. *Cap* = most in flight, default 4.
+  *Queue depth* = PRs waiting, a different number. G starts at 1, grows by 1 after each success, halves after a failure, and stays
+  between floor and cap. The draft words "window" and "lookahead" are retired (window also names an account's usage window; lookahead
+  told nobody anything). Suggested config key: `land.queue.max_in_flight` (the cap).
+- **Start at G = 1** per repo: the queue then equals today's serial behaviour with the new invariant and bookkeeping. This isolates
   correctness bugs from cost-tuning bugs.
 - **AIMD, Zuul style** [V for the shape; defaults unverified]: Zuul grows linear on merge (+1) and halves on failure, window 20, floor 3
   by default [unverified]. Ours: floor 1, +1 per merged PR, halve (round down, min 1) per *own gate failure or conflict eject*, not per
   flake or infra stop. Cap configurable, default 4 (the current `--jobs` default, cli/land_stack.py:102). Per repo; one queue per repo in
-  v1, so a flaky repo does not shrink another's window (Zuul isolates per change queue [V]).
-- **Why depth is bounded.** If a gate fails with probability p, the chance a depth-d speculative build survives is about (1-p)^d [I,
+  v1, so a flaky repo does not shrink another's gates in flight (Zuul isolates per change queue [V]).
+- **Why gates in flight are bounded.** If a gate fails with probability p, the chance a speculative build d gates deep build survives is about (1-p)^d [I,
   not from a source]. land-speed.md shows 25 of 84 attempts gate-red, about 30%. Much of that is owners running `just test` not
   `just check` (code map), which the queue does not change for pre-queue red but which should fall once the owner gate is the same check
   set. At p = 0.3 and d = 4 only 24% of the deepest builds survive [I]: a cap of 4 is already generous, and AIMD is what will find the
   real number. Uber still builds ~2x per change after tuning [V]; expect waste.
-- **Wasted-gate accounting** (on every ejection and every window change): `wasted_gate_s` = seconds of gates that were cancelled or
-  invalidated; `useful_gate_s` = seconds of gates whose result was used. Ratio over the last 20 merges above 0.5 holds W (no increase)
-  [threshold is a guess, tunable]. Each wasted build records its cause (culprit ahead, base moved, head changed, config change).
-- **Batching only when depth regularly exceeds 3** (median queue length over a week). Then: group the front K PRs as one build,
+- **Wasted-gate accounting** (on every ejection and every change of G): `wasted_gate_s` = seconds of gates that were cancelled or
+  invalidated; `useful_gate_s` = seconds of gates whose result was used. Ratio over the last 20 merges above 0.5 holds G (no increase)
+  [threshold is a guess, tunable]; above 0.5 in shadow, the cap drops to 3. Each wasted build records its cause (culprit ahead, base moved, head changed, config change).
+- **Batching only when queue depth regularly exceeds 3** (median queue length over a week). Then: group the front K PRs as one build,
   on red bisect by halving, never retest the last (if all earlier parts pass, the last is the culprit; Mergify trick [V]). Batch only
   PRs of equal priority and no overlap (section 11). Costs: loses per-commit greenness, lengthens attribution [V Graphite caveat].
   Not v1: single owner, volume is a handful of PRs a day [I].
-- ❌ Rejected: starting at a deep window. One bug in section 2 or 4 would turn into mass wasted CI and mass ejections at once.
+- ❌ Rejected: starting at many gates in flight at once. One bug in section 2 or 4 would turn into mass wasted CI and mass ejections at once.
 
 ## 7. Flakes
 
@@ -239,10 +277,16 @@ known flakes (rule 1c, design only): rule 4 is the writer-side statement of step
 score crosses a threshold or main is red" (asking per flake would generate the noise rule 4 tried to stop). The known-flakes list is
 the human-readable projection of the flake score log. Neither has a registry in code today (code map).
 
-- **No automatic quarantine in v1.** Reasons: (1) a quarantined test is a hole in the gate nobody sees, and nothing in the fetched sources
-  documents quarantine inside a queue [unverified]; (2) no registry with owner, expiry and un-quarantine exists (M, ~150 lines per
-  code map); (3) retry plus main-check already removes the harm that matters (innocent ejection) without removing coverage. Revisit
-  when one test appears in more than 3 flake rows a week (section 12).
+- **No automatic quarantine, in v1 or v2** (decision 8; Denis's rule is fail early, fail often). In plain words: a quarantined test is a
+  test that stops being able to fail the gate. The gate then says green about code it no longer checks, and nobody sees the hole. So a
+  flaky test keeps failing loudly, and we make that cheap and then make it get fixed:
+  1. A red shard is retried once; still red, the failing test runs on clean main (steps 1-2 above). A test that fails on main or passes on
+     retry is *not blamed on the PR*; it is not hidden either: every such event is a row in the flake score.
+  2. When one test has more than 3 flake rows in a week, the engine files a **fix bead** for it automatically (owner: the next free
+     slot, normal priority). The test stays in the gate.
+  3. v2 only: the owner may approve a **skip** for one test, with a hard expiry of 7 days. It shows on Board and Floor as a hole. It
+     cannot be renewed silently: at expiry the test is back in the gate, and a new skip is a new owner approval with the fix bead still open.
+  Cost accepted: a flaky test can still delay the queue (retry plus main check, minutes). Gain: no unseen coverage loss.
 - ❌ Rejected: unlimited retry (hides real failures; OpenStack's recheck-spamming, fixed by a "clean check" policy [S]). Retry cap is 1.
 - ❌ Rejected: Aviator-style "a later green covers the earlier red" [V] and Mergify `skip_intermediate_results` [V]: they give up
   per-state validation, which is the invariant.
@@ -260,19 +304,49 @@ the human-readable projection of the flake score log. Neither has a registry in 
   reconcile. Also the automatic reaction to a "corrupt" mismatch (section 2).
 - **Required-check set declared once.** The set is the gate steps of the profile at `base_sha`; its hash is `check_set_hash` in the
   QueueKey (section 4) and the value that GitHub branch protection must list. Any drift between the two is a silent hole (Aviator needs
-  explicit required-check config on drafts [V]). A doctor check compares the profile's set with the repo's protection rules via `gh api`
-  and warns on difference. Whether this repo has required checks on GitHub at all is unverified; if none, the hash still keys the queue.
-- **Timeouts.** Per gate (default 2x the 90th percentile of recent gate seconds for that repo, floor from config) and stuck-head (the
-  item at queue head with a green gate that cannot merge for N min): per-gate expiry gives `stuck`, retry once; head stuck gives an
+  explicit required-check config on drafts [V]). The profile is authoritative (decision 9): `tl doctor`
+  compares its set with the repo's protection rules via `gh api` and **fails** on any difference, no warn-only phase (section 8.1).
+- - **Timeouts.** Per gate (default 2 x the 90th percentile of recent gate seconds for that repo, floor from config) and stuck-head (the
+  item at queue head with a green gate that cannot merge for N min; N = 2 x p90 gate seconds, measured in shadow mode first, no number
+  committed before data: decision 10): per-gate expiry gives `stuck`, retry once; head stuck gives an
   incident row, ejection of the head with reason `stuck`, rebuild behind. Without these a hung gate blocks everyone (GitHub, bors, Aviator,
   GitLab all have one [V]). Shopify's lesson: do not eject for a *pending* check, wait for it [V]; our timeout is on running time, not
   on pending.
+
+### 8.1 Automatic guard rails (decision 4: boundaries so drift cannot happen)
+Goal: the settings that make the invariant true on GitHub are checked by the machine on every `tl doctor` run, not remembered by a person.
+- **Finding, 2026-11-07 (read-only `gh api`, as admin of iorlas/iorlas-task-loop):** `branches/main/protection` returns 404 "Branch not
+  protected", `branches/main` reports `protected: false`, `rulesets` is `[]`. So today **nothing** stops a direct push to main and no
+  check is required. This is what the "raced" class (section 2) rests on. Not checked: other branches, org-level rulesets, GitHub
+  merge-queue settings.
+- **Applied 2026-11-07 (by the owner's lead, not by code):** ruleset id 26735683 "main: no force-push, no deletion": rules `deletion` and
+  `non_fast_forward`, no bypass actors. Denis prefers lightweight over GitHub rules. Deliberately **no** required PR and **no** required
+  status checks on main: `land_mode: push` (`app/land/push.py`) and release (`app/release/publish.py`, `push.py`: `git push origin
+  HEAD:main`) push to main directly and a PR rule would break both. Rollback: `gh api -X DELETE repos/iorlas/iorlas-task-loop/rulesets/26735683`.
+  The repo is public and the owner is admin. The earlier "queue-only pushes" lock (decision 4) is therefore met by the hook layer below,
+  not by GitHub; the full lock stays an owner option once push mode and release go through the queue.
+- **Lightweight layer: the pre-push judge.** `app/land/push_judge.py` is extended to refuse any push to main that does not carry tl's land
+  or release marker. Agent worktrees push to `claude/<slug>` branches only, so they never meet the rule. Limit: a git hook is bypassable
+  with `--no-verify` (forbidden by our rules) and covers only machines with tl installed. That is why the ruleset stays: it is the
+  floor for everything the hook cannot see.
+- **What doctor checks, each a FAIL (non-zero exit) on drift, never a warning:**
+  1. the ruleset exists: `deletion` and `non_fast_forward` on main, no bypass actors (an absent or loosened ruleset fails);
+  2. the pre-push hook is installed in **every registered worktree** and is the current judge (a missing hook fails);
+  3. no required-PR or required-status-check rule is present unless the profile's check set equals it (names and `check_set_hash`,
+     section 4; decision 9, the profile is authoritative);
+  4. strict "branch must be up to date" is off (the queue handles it; on, GitHub rejects queue merges).
+  Mode gating: all four fail in every mode once the ruleset exists; the optional full lock (queue-only pushes, hotfix bypass) is a
+  later owner step and adds its own rows then.
+- **The bead produces, it does not apply.** Changing GitHub settings stays the owner's act. The bead outputs the exact `gh api` calls and
+  settings (a printed script) for the ruleset and for the optional full lock, plus the doctor checks.
+- Reads `gh api` only; needs admin scope to see protection, and doctor says "cannot read protection (token scope)" as a FAIL, not a pass.
+- Same rule for `tl doctor`'s other queue checks: the reconcile loop (section 9) and these guard rails are the two things doctor owns.
 
 ## 9. Durability, reconcile loop, visibility
 
 **State that must survive a crash:** queue list (PR, bead, head SHA, state, position, entered_ts), builds (QueueKey, `Q` sha, tree,
 state, worktree path, owner pid + start_id + lease expiry, started, finished), event log (ejections, resets, flake rows), flags (freeze,
-window, last base_sha).
+gates in flight, last base_sha).
 
 **Where.** Direction: factory.db, SQLite, one transaction per state change. slot-grant.md names it for the slot family and
 sqlite-store-plan.md describes the stores; the exact family and schema are for bead (g) [I; the plan was not re-read for this doc]. Files
@@ -288,13 +362,13 @@ twice does nothing the second time. It fixes:
 - merged but not recorded (crash between `gh pr merge` and `tl land` record, stack.py `merged`): PR is MERGED on the forge and `merge_sha`
   exists -> run the post-land assertion, then record; never merge again;
 - ejected items whose bead was not notified;
-- window state not matching the last events (recompute).
+- gates-in-flight state not matching the last events (recompute).
 Zuul's 2024 orphaned-changes report [S] and Tide's partial-merge TODO [V] are the failure shapes. Pattern is the slot watchdog
 (slot-grant.md (b)): a pure function plus a heal, one incident row per episode.
 
 **Visibility** (extends dash-spec.md section 4 Floor; names are suggestions):
 - Floor: a **land lock** segment on the bead line while the item holds the lock (gate runs outside it, so the segment is short and
-  honest); a new row group "Queue" with one track per build window slot (gate running, waiting on culprit, green waiting for merge).
+  honest); a new row group "Queue" with one row per gate in flight (gate running, waiting on culprit, green waiting for merge).
   Colours follow the colour contract: red tint for a failed gate, grey hatch for waiting behind an item, teal live.
 - Landing strip: one strip under the Floor, queue order left to right, each PR as a chip: gate state, wait so far, a marker for ejected.
 - Board: card badge `queued #n`, `ejected: reason`; Decisions tab lists asks from section 7 and 8.
@@ -307,13 +381,13 @@ Dash slices stay owned by the dashboard bead owners; bead (h) supplies the data 
 Today `land_mode` has `pr` (the loop opens a PR; `pr_land.py` never merges) and `push` (the lander merges under the land lock, up to
 `land_optimistic_tries = 2`, config.py:191).
 
-- Queue applies to `pr` mode and `land-stack` only in v1. Push mode keeps its optimistic path; it is an out-of-queue pusher (section 8),
-  so pairing it with a live queue costs resets. A repo picks one mode.
+- Queue applies to `pr` mode and `land-stack` only (decision 2). Push mode keeps its optimistic path; it is an out-of-queue pusher
+  (section 8), so pairing it with a live queue costs resets. One mode per repo.
 - **Free the slot at "enqueued with its own gate green"**, not at merge. The agent has nothing left to do: its work is judged, and if the
   queue ejects it for its own failure the bead returns as a new dispatch (slot-grant's atomic grant, a resumed worker). Holding the slot
   to merge parks slots on a wait the queue is designed to hide (goal 1, 2).
 - Risk: freeing early starts more beads, which means more PRs, deeper queue, more drift. Counter: back-pressure. When
-  `queue_len >= 2 * W` (default) the dispatcher does not start new beads for that repo. [Threshold is a guess; bead (m) tunes it.]
+  `queue_len >= 2 * G` (default) the dispatcher does not start new beads for that repo. [Threshold is a guess; bead (m) tunes it.]
 - ❌ Rejected: free at merge. Idle-slot hours are the problem statement.
 - ❌ Rejected: free at PR open (before the own gate). The own gate is the agent's feedback loop (stages.md); leaving earlier moves
   failures from a loop the agent owns to a queue it does not.
@@ -367,7 +441,7 @@ deps-topology research]. Tracker edges are intent, not code fact. Beads' own dep
 - **Uber build-target-hash conflict analysis, probabilistic speculation.** Uber's analyzer needs a build graph and an ML speculation
   engine trained on 100k+ changes; production since 2018 across 6 monorepos, tens of thousands of changes a month [V 2025 paper], builds
   per change still 1.85 to 2.57 [V]. We have a handful of PRs a day [I] and no target graph; touched-path overlap (section 11 edge 4) is
-  the cheap shadow of it. Revisit if: depth is regularly >6 and the p50 wasted ratio stays above 0.5 with AIMD at floor; then
+  the cheap shadow of it. Revisit if: queue depth is regularly >6 and the p50 wasted ratio stays above 0.5 with AIMD at floor; then
   commutativity (Uber BLRD [V]) is the first thing to try, not the predictor.
 - **Aviator "merge everything up to the completed draft"** and **GitLab "merge without restarting"**: untested merges by design [V].
   Violates section 2.
@@ -398,31 +472,39 @@ watchdog and `slot_sim` are the template.
   risk), and its wait vs actual. Shadow gates cost CI; run them niced and only for PRs enqueued by `land-stack`.
 - **Simulation harness.** land-speed.md records only aggregates for the 84 attempts (46 landed, 25 gate-red, 7 conflict, 6 head-moved),
   not the per-attempt timeline. The raw rows (arrival, gate seconds, outcome) are the `LandTry` rows [unverified that they survive].
-  Harness: replay arrivals and outcomes through the pure queue model with a fake clock, output the metrics above for W = 1, 2, 4 and AIMD,
-  and compare with the recorded serial result. Policy changes to W, cap, retry or timeouts must show their replay delta (Uber's simulator
+  Harness: replay arrivals and outcomes through the pure queue model with a fake clock, output the metrics above for G = 1, 2, 4 and AIMD,
+  and compare with the recorded serial result. Policy changes to G, cap, retry or timeouts must show their replay delta (Uber's simulator
   [V]).
-- **Staged rollout.** shadow -> W = 2 -> AIMD (cap 4) -> batching only if depth regularly >3 -> done. Gate to advance: replay and live
+- **Staged rollout.** shadow -> G = 2 -> AIMD (cap 4) -> batching only if queue depth regularly >3 -> done. Gate to advance: replay and live
   metrics within bounds, zero invariant incidents for a week of landed PRs [week is a guess].
 
-## 15. Open questions for Denis (each with a recommendation)
+## 15. Decisions (were open questions; Denis, 2026-11-07)
 
-1. **Fast-forward queue commits instead of `gh pr merge --squash`?** Recommend no for v1 (section 2); yes if the assertion fires twice.
-2. **Include land_mode push in the queue?** Recommend no; one mode per repo; push mode is an out-of-queue pusher.
-3. **Do path claims ever delay dispatch?** Recommend: only for beads in the same epic, after a month of overlap data; v1 display and
-   queue rule only.
-4. **Lock main to queue-only pushes (branch protection)?** Recommend yes once shadow shows clean, with a hotfix bypass for the owner.
-   Removes the "raced" class; costs the direct-push escape. Unverified: whether branch protection is enabled on this repo.
-5. **Window cap default 4?** Recommend 4 with floor 1; AIMD finds the truth. Lower to 3 if wasted ratio >0.5 in shadow.
-6. **Free slot at enqueued-green (section 10)?** Recommend yes with the `2 * W` back-pressure.
-7. **Auto-revert on a "corrupt" mismatch?** Recommend no in v1: freeze and ask.
-8. **Quarantine in v2?** Recommend yes behind an owner-approved registry with expiry, when one test exceeds 3 flake rows a week.
-9. **Where is the required-check set authoritative: profile or GitHub?** Recommend profile, with a doctor warning on drift.
-10. **Stuck-head timeout value.** Recommend 2x p90 gate seconds, measured in shadow; no number committed before data.
+1. **Queue commits: keep `gh pr merge --squash`.** Fast-forward the tested commit only if the tree assertion fires twice. Why: squash
+   keeps one commit per bead and the PR shows merged; fast-forward bypasses the merge record and branch protection. The assertion is
+   the evidence that decides, so no guess now.
+2. **`land_mode` push is not in the queue.** One mode per repo; push mode counts as an out-of-queue pusher. Why: two writers to main
+   is the "raced" class by definition.
+3. **Path claims: display and queue rule in v1.** They may delay dispatch only within one epic, after a month of overlap data. Why:
+   stages.md found 5 of 73 pairs overlapped; a scheduler on that is a cost with no measured gain.
+4. **Lock main, lightweight** (revised same day: Denis prefers lightweight over GitHub rules): a ruleset against force-push and deletion
+   (applied), a pre-push judge that refuses unmarked pushes to main, and `tl doctor` failing on drift (section 8.1). No required PR or
+   checks: push mode and release push to main directly. A full queue-only lock with owner bypass remains an option for later.
+5. **Gates in flight: floor 1, cap 4.** Cap 3 if the wasted-gate ratio exceeds 0.5 in shadow. Why 4: the current `--jobs` default; at p = 0.3
+   deeper builds mostly die. "Window" is retired for this (terms in section 6, docs/glossary.md).
+6. **Free the executor slot at enqueued-green**, with back-pressure at queue length 2 x gates in flight. Why: idle slots are the problem
+   statement; back-pressure stops the faster slots from growing drift.
+7. **Tree mismatch: no blind auto-revert; an agent repairs it, a human only after two failed repairs** (section 2.1). Why: the queue
+   still verifies the repair; a person is slower and is not the dear resource to spend on a recoverable event.
+8. **Quarantine: none in v1 or v2** (section 7). Flake policy instead: retry once, check on clean main, flake score, auto fix bead at
+   more than 3 rows a week, v2 owner-approved skip with a 7-day expiry. Why: quarantine hides failures; fail early, fail often.
+9. **Required-check set: the profile is authoritative**; `tl doctor` fails on drift against GitHub, no warn-only phase (section 8.1).
+10. **Stuck-head timeout: 2 x p90 gate seconds**, measured in shadow mode first; no number is committed before data.
 
 ## 16. Slices (beads under the epic "MQUEUE: speculative merge queue")
 
 Epic tl-7s2f. Order: a, then b and l; c needs b and l; d, f, g need c; e needs d; h needs g; i needs c, g, l; j needs c; k needs d, g;
-m needs i, e, k, h. The config key `land.queue = off|shadow|on` (kill switch) lands in c; m proves it.
+m needs i, e, k, h; n (guard rails) needs k; o (repair) needs d, g, l; p (glossary) needs e; q (flake fix beads) needs f; r (skip registry, v2) needs q, m. tl-7s2f.3 keeps its interim freeze-plus-ask until o lands. The config key `land.queue = off|shadow|on` (kill switch) lands in c; m proves it.
 
 | Bead | Slice | Deps |
 |---|---|---|
@@ -431,7 +513,7 @@ m needs i, e, k, h. The config key `land.queue = off|shadow|on` (kill switch) la
 | tl-7s2f.3 (l) | tested-tree == landed-tree assertion in today's land-stack | a |
 | tl-7s2f.4 (c) | queue ref builder, gate on main + ahead, `land.queue` key | b, l |
 | tl-7s2f.5 (d) | eject, rebuild only behind, cancellable gates | c |
-| tl-7s2f.6 (e) | AIMD window, wasted-gate accounting | d |
+| tl-7s2f.6 (e) | AIMD gates in flight, wasted-gate accounting | d |
 | tl-7s2f.7 (f) | flake policy and score log | c |
 | tl-7s2f.8 (g) | durable state + reconcile loop | c |
 | tl-7s2f.9 (h) | metrics, Floor land-lock, Landing strip, Board | g |
@@ -439,13 +521,17 @@ m needs i, e, k, h. The config key `land.queue = off|shadow|on` (kill switch) la
 | tl-7s2f.11 (j) | bead-dep gate, cycle check, overlap check, path claims | c |
 | tl-7s2f.12 (k) | hotfix, freeze, check-set hash, timeouts | d, g |
 | tl-7s2f.13 (m) | staged rollout, kill switch proof, slot back-pressure | i, e, k, h |
-
+| tl-7s2f.14 (n) | guard rails: pre-push judge refuses unmarked pushes to main, `tl doctor` fails on ruleset or hook drift (section 8.1) | k |
+| tl-7s2f.15 (o) | recovery flow: repair agent on a tree mismatch (section 2.1) | d, g, l |
+| tl-7s2f.16 (p) | glossary alignment: gates in flight replaces window in code, config, views | e |
+| tl-7s2f.17 (q) | flake escalation: auto fix bead at more than 3 rows a week | f |
+| tl-7s2f.18 (r) | v2: owner-approved test skip, 7-day hard expiry | q, m |
 The `## Touches` paths in the beads are best guesses from the code map; each bead's first step confirms them.
 
 ## Unverified (collected)
 
 - GitHub's own account of the 2026-04-23 incident; the figures (4 h, 658 repos, 2,092 PRs) are from secondary reports.
-- Mergify's TLA+ invariants; Zuul, GitLab, Mergify, Tide numeric limits and defaults (window 20, floor 3, 20 parallel pipelines, 128 checks).
+- Mergify's TLA+ invariants; Zuul, GitLab, Mergify, Tide numeric limits and defaults (Zuul window 20, floor 3, 20 parallel pipelines, 128 checks).
 - GitHub's server-side squash equals local `git merge --squash` on the experiment's cases (not tested against GitHub).
 - Criss-cross merge bases and renames in the equality of queue tree and landed tree.
 - Spawner cancel API; `authorization.results` base handling for a queue worktree; whether checks set `retry`; whether `LandTry` rows are

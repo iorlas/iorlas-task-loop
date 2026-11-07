@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.app.plan.decisions import Decisions
+from taskloop.app.plan.host import PlanHost
 from taskloop.app.plan.probe import AcProbe
 from taskloop.contracts import plancheck
 from taskloop.contracts.gitport import Git
@@ -16,7 +17,7 @@ REPLAN_CALLS = 6  # the calls a replan may spend looking (study 63: the median r
 
 
 class PlanPrompt:
-    def __init__(self, host: Any, git: Git) -> None:
+    def __init__(self, host: PlanHost, git: Git) -> None:
         self.e = host
         self.git = git
         self.decisions = Decisions(host)
@@ -81,9 +82,10 @@ class PlanPrompt:
         shared = e.shared.shared_text()
         if shared:
             rules.append(shared.strip())
-        if e.pictures.visual_cfg() and e.pictures.shot_methods():  # the classes mean "the engine renders": only with a shot table
+        visual_cfg = e.pictures.visual_cfg()
+        if visual_cfg and e.pictures.shot_methods():  # the classes mean "the engine renders": only with a shot table
             rules.append(VISUAL_PLAN)
-            rules.append(VISUAL_STAGES % (", ".join(e.pictures.visual_cfg().include)[:300], e.pictures.shot_table()))
+            rules.append(VISUAL_STAGES % (", ".join(visual_cfg.include)[:300], e.pictures.shot_table()))
         rules.append(SHOW_PLAN)
         rules.append("Proof files that a check reads or a reviewer looks at (screenshots, logs, probe output) go under "
                      f"{e.evidence_dir}: it is kept across runs, and nothing else under {e.task_dir} is.")
