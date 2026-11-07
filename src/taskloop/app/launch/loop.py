@@ -31,7 +31,6 @@ from taskloop.app.wire import slots as wslots
 from taskloop.contracts import paths
 from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.config import RepoProfile
-from taskloop.contracts.delegateport import Probe, Resolved
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
@@ -43,7 +42,8 @@ from taskloop.contracts.procport import Spawner
 from taskloop.contracts.rowstores import ReposStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.beads import rules as beadlint
-from taskloop.stores.delegate import real_route
+from taskloop.stores.delegate import make_probe as make_net_probe
+from taskloop.stores.delegate import real_route, route_name
 from taskloop.stores.real import real_stores
 
 HERE = ident.PLUGIN_ROOT / "skills" / "task-loop"  # the install this code runs from; tl.main takes it as a parameter for a test
@@ -77,8 +77,7 @@ def live_loops(repo: str, cfg: paths.ConfigDir) -> list[LoopState]:
 
 def delegate_route(repo: str | Path, env: Env, git: Git) -> str | None:
     """What the engine's calls go through: the delegate library."""
-    found = real_route().resolve()
-    return found.route if isinstance(found, Resolved) else None
+    return route_name()
 
 
 def roles(repo: str | Path, env: Env, git: Git) -> dict[str, bool | None] | None:
@@ -88,9 +87,8 @@ def roles(repo: str | Path, env: Env, git: Git) -> dict[str, bool | None] | None
     return real_route().roles_usable()
 
 
-def make_probe(repo: str | Path, env: Env, git: Git) -> Probe | None:
-    route = delegate_route(repo, env, git)
-    return real_route().probe(("github.com",)) if route else None
+def make_probe(repo: str | Path, env: Env, git: Git):
+    return make_net_probe(("github.com",)) if delegate_route(repo, env, git) else None
 
 
 def storm(repo: str, cfg: paths.ConfigDir, now: Callable[[], float] = trail.now, *, git: Git) -> Storm | None:

@@ -3,7 +3,7 @@ root of a run: it opens the run's identity, layout and context from the edge, an
 import shutil
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 from taskloop.adapters import landlock
 from taskloop.adapters.clock import SystemClock
@@ -112,6 +112,7 @@ class Engine(RunHost):
         self.facts, self.ports = open_facts(self, repo)  # the stages' read path (docs/design/facts.md): the engine's own handles, frozen
 
     @property
+    @override
     def intake_per_day(self) -> int:
         return self.cfg.intake_per_day
 

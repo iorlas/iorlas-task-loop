@@ -19,7 +19,10 @@ class RunHost(LandParts, PlanParts, RunParts):
     accepted: list[int]
     stage_tree: str
     replan_first: bool
-    intake_per_day: int  # the Engine's: CloserHost reads it
+
+    @property
+    def intake_per_day(self) -> int:  # the Engine's: CloserHost reads it
+        raise NotImplementedError
 
     @cached_property
     def worker(self) -> WorkerCall:
