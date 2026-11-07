@@ -10,7 +10,6 @@ from dataclasses import dataclass, field
 from os import EX_CONFIG
 from pathlib import Path
 
-from taskloop.app.asks import deferral as intake
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop import waits
 from taskloop.app.loop.core import Core, prio_of
@@ -21,12 +20,7 @@ from taskloop.app.loop.refuse import Refuser
 from taskloop.app.loop.run import BeadRun, Where
 from taskloop.app.loop.settle import Settle
 from taskloop.app.loop.take import Taker
-from taskloop.app.loop.takeports import EngineSlots, ParkGate
 from taskloop.app.loop.versions import Installs
-from taskloop.app.slots import line as slots_line
-from taskloop.app.slots import owned, watchdog
-from taskloop.app.slots.lease import Lease
-from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts import runlife, wire
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.beadsport import BdFailure
@@ -81,9 +75,8 @@ class Loop(Core):
         self.until = self.until if inherited else end_time(args.until, env.now())
         self.settle = Settle(env, files, self.tune, self.say, self.c, self.gate, self.net, self.left)
         self.runner = BeadRun(env, files, installs, self.tune, self.stop_mode, self.running, self.beat, self.say)
-        self.taker = Taker(env, self.runner, self.tune, self.say, self.record, self.c.later, EngineSlots(env), ParkGate(env))
+        self.taker = Taker(env, self.runner, self.tune, self.say, self.record, self.c.later)
         self.refuser = Refuser(env.store, self.say)  # lint refusals: one label and comment per bead, one line per loop
-        self.watch = watchdog.Watch()  # the slot liveness look (tl-bxk.10.33.12)
         self.area_wait = [0.0, 0.0]  # when every ready bead began waiting for an area, and when that was last said
         if inherited:
             self.st = LoopState(pid=env.pid, started=self.started, t=env.now(), repo=env.repo, version=env.version, code_dir=env.code_dir,
@@ -242,7 +235,7 @@ class Loop(Core):
         cands = self.candidates(q)
         if self.prof.slots.count > 0:  # tl-bxk.10.33.12: the slot liveness invariants, once per EVERY s
             since = min((self.first_seen.get(b.id, self.env.now()) for b in cands), default=None)
-            watchdog.tick(self.env.slot_env(), self.watch, ready_since=since, idle_lanes=1)
+            self.env.slots.tick(ready_since=since, idle_lanes=1)
         if cands:
             self.area_wait[0] = 0.0
             return self.work(cands, rule)
@@ -250,7 +243,8 @@ class Loop(Core):
 
     def promote_intake(self) -> None:
         """The deferred follow-ups the day's budget allows become open (engine.intake_per_day; off at 0)."""
-        self.intake_at = intake.promote_if_due(self.env.store, self.prof.engine.intake_per_day, self.env.now(), self.intake_at, self.say)
+        env = self.env
+        self.intake_at = env.asks.promote_if_due(env.store, self.prof.engine.intake_per_day, env.now(), self.intake_at, self.say)
 
     def start_worktree(self) -> None:
         """Slots off: the loop works in its session's worktree. The pick and the state that names it, under a lock: two loops
@@ -267,7 +261,7 @@ class Loop(Core):
         env = self.env
         name = env.session_actor[3:]
         taken = {st.worktree for st in self.files.live(but=env.pid)}
-        return env.actor()[3:] if owned.loop_path(env.repo, name) in taken else name
+        return env.actor()[3:] if env.slots.worktree_path(env.repo, name) in taken else name
 
     def queue(self) -> tuple[Queue, QueueRule]:
         q, rule = rank_ready(self.env, self.prof.engine, self.say, self.args.only)
@@ -349,21 +343,20 @@ class Loop(Core):
                 where = f" for this loop: {ahead} ahead in line" if ahead else ""
                 self.say(f"no free slot{where}{'' if not told[0] else f' for {(env.now() - since) // 60:.0f} min'}; waiting")
                 told[0] = env.now()
-        return slots_line.wait_slot(env.slot_env(), "tl loop",
-                                    stop=lambda: bool(self.stop_mode() or (self.until and env.now() >= self.until)),
+        return env.slots.wait_slot("tl loop",
+                                   stop=lambda: bool(self.stop_mode() or (self.until and env.now() >= self.until)),
                                     sleep=lambda secs: self.nap(secs, self.until), poll=(5, min(30, max(5, wait * 60))),
                                     on_wait=waiting, prio=prio)
 
     def work(self, cands: list[Bead], rule: QueueRule) -> int | None:
         env, slots = self.env, self.prof.slots.count > 0
-        pool = SlotPool(env.slot_env()) if slots else None
-        if pool:
-            self.reclaim(pool)
+        if slots:
+            self.reclaim()
         got = self.acquire(min(prio_of(b) for b in cands)) if slots else ("", self.wt, None)
         if got is None:
             return None
         name, d, slot_bead = got
-        lease = Lease(env.store, slot_bead, every=self.tune().heartbeat).start()
+        lease = env.slots.lease(env.store, slot_bead, self.tune().heartbeat).start()
         try:
             env.loop_lock(d, name, slot_bead, "")  # from the take through reset: no hand run gets in
             if slots:
@@ -373,26 +366,26 @@ class Loop(Core):
             lease.stop()
             env.drop_engine_lock(d)
             if slots:
-                self.release(name, pool)
+                self.release(name)
             self.running(None)
         if taken.verdict is None:  # every candidate is held by another session: the next pass sleeps until one is due
             return None
         return self.settle.apply(taken.verdict, taken.bead, name, slots)
 
-    def release(self, name: str, pool: SlotPool | None = None) -> None:
+    def release(self, name: str) -> None:
         try:
-            (pool or SlotPool(self.env.slot_env())).slot(name).release(mine=True)
+            self.env.slots.release(name)
         except SlotFail:
             pass
         except BdFailure as e:  # the slot bead stays claimed: the next pass gives it back (reclaim)
             self.say(f"tl: slot {name} was not released ({e}); the next pass gives it back")
 
-    def reclaim(self, pool: SlotPool) -> None:
+    def reclaim(self) -> None:
         """One loop holds one slot (tl-bxk.10.33.14): a slot this loop still holds before it takes another is a leak."""
         try:
-            for slot in pool.leaked():
-                self.say(f"tl: slot {slot.name} was still held by this loop with no run in it: released")
-                slot.release(mine=False)
+            for name in self.env.slots.leaked():
+                self.say(f"tl: slot {name} was still held by this loop with no run in it: released")
+                self.env.slots.release_leaked(name)
         except (SlotFail, BdFailure) as e:
             self.say(f"tl: slot leak check failed: {e}")
 

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
-from taskloop.app.slots.env import SlotEnv
+from taskloop.app.loop.ports import LoopAsks, LoopSlots
 from taskloop.contracts import paths
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.beadsport import Beads
@@ -49,7 +49,8 @@ class LoopEnv:
     repo_key: str
     cfgdir: paths.ConfigDir
     store: Beads
-    slot_env: Callable[[], SlotEnv]
+    slots: LoopSlots
+    asks: LoopAsks
     profile: Callable[[], RepoProfile]  # read from the base branch's commit (working tree when it does not resolve), every call
     fetch: Callable[[], None]
     lint: Callable[[Bead], str]  # why a bead is not self-contained, "" when it is

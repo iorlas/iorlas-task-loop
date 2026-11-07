@@ -12,7 +12,7 @@ from taskloop.app.land.landed import LandedConfig
 from taskloop.app.land.outbound import pin_head, target
 from taskloop.app.land.parts import NetWorker, OutcomeMoveSteps
 from taskloop.app.land.push_evidence import failure
-from taskloop.app.land.state import PUSH_TRIES, PUSH_UP_FAILS, Land, Next, Phase
+from taskloop.app.land.state import PUSH_TRIES, PUSH_UP_FAILS, Land, LandState, Next, Phase
 from taskloop.contracts import fence
 from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.gitport import Git
@@ -37,7 +37,7 @@ class PushHost(Protocol):
     the steps and warnings; the landed sha it sets; the network probe."""
 
     landed_sha: str  # set the moment the push goes through
-    land_remote_oid: str  # the task ref checked before the push; cleanup retains this lease
+    land_state: LandState
     task_branch: str
 
     @property
@@ -87,7 +87,7 @@ class Pusher:
             return problem
         fence.check(e.store, e.claim)  # a run whose bead or slot was taken again pushes nothing (Fenced; RunOnce closes nothing)
         want = target(e.cfg.land)
-        e.land_remote_oid = cleanup.remote_oid(e.git, e.wt, want[0], e.task_branch) if want and e.task_branch else ""
+        e.land_state.remote_oid = cleanup.remote_oid(e.git, e.wt, want[0], e.task_branch) if want and e.task_branch else ""
         with e.stop_deferred() as stop:  # a push half done is no state to stop in: finish it, then stop
             t0 = self.clock()
             lrc, ltail = self.out.lfs_push()  # the pushed ref's LFS objects first: the push must not point at objects origin lacks

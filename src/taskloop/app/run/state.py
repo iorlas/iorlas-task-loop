@@ -156,7 +156,7 @@ class Checkpoints:
         def closed(ck: Checkpoint) -> Checkpoint:
             red = why.startswith("gate red") and not ck.state.pending_land_validation
             done = ck.replace(head=head, closed=True, state=ck.state.replace(review=ck.state.review.replace(filed=list(self.e.filed))))
-            return done.replace(step="gate-red", gate_tail=trim.trim_log(why, log=str(self.e.gate_log or ""))) if red else done
+            return done.replace(step="gate-red", gate_tail=trim.trim_log(why, log=str(self.e.land_state.gate_log or ""))) if red else done
         self.amend(closed)
 
     def applied(self) -> frozenset[str]:
