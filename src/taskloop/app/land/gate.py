@@ -22,7 +22,7 @@ from tlkernel.stagefacts import RunLogPort
 from taskloop.app.checks import evidence
 from taskloop.app.checks.host import CheckFault
 from taskloop.app.land import verified
-from taskloop.app.land.state import LandState
+from taskloop.app.land.host import LandState
 from taskloop.domain.checks.specs import engine_digest, gate_items
 
 FAULTS = MappingProxyType({CheckFaultKind.STALE_BASE: "FAULT_STALE_BASE", CheckFaultKind.KILLED: "PAUSE_KILLED",

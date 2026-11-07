@@ -14,8 +14,8 @@ from support.narrow_hosts import LandKit, Stopped, table_kit
 
 # isort: split
 from taskloop.app.land.gate import Problem, ProblemKind, mint
+from taskloop.app.land.host import Land, Phase
 from taskloop.app.land.lander import Lander
-from taskloop.app.land.state import Land, Phase
 from tlkernel import log as rec
 from tlkernel.ids import TreeSha
 from tlkernel.runkey import BaseSha

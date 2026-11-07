@@ -16,7 +16,7 @@ from support.fake_beads import FakeBeads
 from support.fakegit import ScriptedGit
 from support.memstores import fake_stores
 
-from taskloop.app.land.state import LandState
+from taskloop.app.land.host import LandState
 from taskloop.app.look.state import LOOK_FIELDS, LookState
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.sections import checkpoint_hooks, restarted

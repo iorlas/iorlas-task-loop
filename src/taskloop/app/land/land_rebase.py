@@ -4,8 +4,8 @@ from typing import Protocol
 from tlkernel.gitport import Git
 
 from taskloop.app.land.gate import Problem, ProblemKind
+from taskloop.app.land.host import OutcomeSteps
 from taskloop.app.land.landed import LandedConfig
-from taskloop.app.land.parts import OutcomeSteps
 
 
 class LandRebaseHost(Protocol):

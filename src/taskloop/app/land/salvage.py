@@ -4,8 +4,8 @@ from typing import Protocol
 
 from tlkernel.gitport import Git
 
+from taskloop.app.land.host import LandState
 from taskloop.app.land.rebase import Rebase
-from taskloop.app.land.state import LandState
 from taskloop.stores.runlog import RunLog
 
 
