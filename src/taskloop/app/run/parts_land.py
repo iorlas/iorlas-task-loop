@@ -1,6 +1,7 @@
 """The land side of a run: the tree, the rebase and its salvage, the fixer, the lander, and the receipt a land leaves."""
 from functools import cached_property
 from pathlib import Path
+from typing import override
 
 from taskloop.adapters import landlock
 from taskloop.adapters.repourl import repo_url
@@ -23,8 +24,12 @@ class LandParts(Plumbing):
     rebase = cached_property(Rebase)
     restart = cached_property(Restart)
     fixer = cached_property(Fixer)
-    checkout = cached_property(Checkout)
     lander = cached_property(lander_over)
+
+    @cached_property
+    @override
+    def checkout(self) -> Checkout:
+        return Checkout(self)
 
     @cached_property
     def salvage(self) -> Salvage:

@@ -14,6 +14,7 @@ from taskloop_dash.views import runfacts as facts
 from tlkernel import log as rec
 from tlkernel import wire
 from tlkernel.runlife import Liveness
+from tlkernel.stuck import open_episode
 from tltestkit.case import Case
 
 
@@ -63,7 +64,7 @@ def whole(name, records):
         next((r.lane for r in reversed(body) if isinstance(r, rec.CallEnd) and r.lane), ""),
         next((r.exit for r in reversed(body) if isinstance(r, rec.CallEnd) and r.exit is not None), None),
         said=tuple(r for r in body if isinstance(r, rec.Said)),
-        assumed=sum(isinstance(r, rec.Assumed) for r in body), stuck=facts.stuck_of(body), waits=facts.waits_of(body))
+        assumed=sum(isinstance(r, rec.Assumed) for r in body), stuck=open_episode(body), waits=facts.waits_of(body))
 
 
 class RunFold(Case):

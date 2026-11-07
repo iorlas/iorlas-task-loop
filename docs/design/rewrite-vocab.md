@@ -33,7 +33,7 @@ Design note only; no code moves with it. The bead's acceptance: `grep '"(FAULT|P
 ## Risks and what to check
 
 - **Persisted values.** Stored rows hold lowercase values; the strings being removed are uppercase names that never reach disk. A `StrEnum` with the same values changes no row. A test that round-trips every member through `kind_named` guards it.
-- **Typing that hides a wrong kind.** Today a typo in `"FAULT_SLOTT"` fails at runtime in `Kind[...]`; after step 2 it fails in pyrefly. That is the point, but it means step 2 needs `just types-all` on the whole tree, not only the changed files.
+- **Typing that hides a wrong kind.** Today a typo in `"FAULT_SLOTT"` fails at runtime in `Kind[...]`; after step 2 it fails in pyrefly. That is the point, but it means step 2 needs `just types` on the whole tree, not only the changed files.
 - **Domain returning names.** `domain/lanes` is imported by `app`; changing its return type is a contract change within the layers, which `.importlinter` allows (domain does not import app), but every test double of those functions changes in step 4.
 - **Overlap.** LANEPURGE renames `lane` words in `domain/lanes`, `lane_acts.py` and `Cause.LANE_OUT`; run step 4 before LANEPURGE's domain cut or after it, not at the same time, and keep the two PRs on disjoint files.
 

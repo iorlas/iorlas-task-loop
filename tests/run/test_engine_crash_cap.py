@@ -94,7 +94,7 @@ class CrashCap(EngineTest):
         self.crash({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         e = self.eng
         before = must(ParkStore(e.home).get(e.bead))
-        runner = Standalone(e, rounds=FakeRoundSteps(), once=mock.Mock(), lease=mock.Mock(),
+        runner = Standalone(e, e, e, e, e, rounds=FakeRoundSteps(), once=mock.Mock(), lease=mock.Mock(),
                             closing=FakeBeadClosing(), has_land=lambda: True,
                             repo_of=lambda git, wt: wt, stage_run=mock.Mock())
         with mock.patch.object(runner, "next_step", side_effect=Fenced("lease lost")), \
