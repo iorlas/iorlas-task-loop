@@ -190,5 +190,5 @@ def test_apply_assigns_the_thread_fields_and_the_flag():
 
 
 def test_worker_call_assigns_no_engine_field():
-    source = Path("src/taskloop/app/run/worker_call.py").read_text(encoding="utf-8")
+    source = (Path(__file__).resolve().parents[2] / "src/taskloop/app/run/worker_call.py").read_text(encoding="utf-8")
     assert re.findall(r"\be\.(?:writer\b[.\w]*|writer_fallback|fallback_lane|planner_ref|last_flag)\s*=[^=]", source) == []

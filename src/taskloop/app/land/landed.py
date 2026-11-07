@@ -4,6 +4,7 @@ from typing import Protocol
 from taskloop.app.land import cleanup
 from taskloop.app.land.outbound import target
 from taskloop.app.land.parts import FetchCheckout, OutcomeSteps
+from taskloop.app.land.state import LandState
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId
 
@@ -19,7 +20,7 @@ class LandedHost(Protocol):
     """What the look for an earlier push reads of the engine: the bead, the base, git, the fetch, and the landed sha it sets."""
 
     landed_sha: str  # set the moment the push goes through
-    land_remote_oid: str
+    land_state: LandState
 
     @property
     def bead(self) -> BeadId: ...
@@ -54,7 +55,7 @@ class Landed:
         tip = last[0].oid
         want = target(e.cfg.land)
         branch = e.git.branch(e.wt) if want else ""
-        e.land_remote_oid = cleanup.remote_oid(e.git, e.wt, want[0], branch) if want and branch else ""
+        e.land_state.remote_oid = cleanup.remote_oid(e.git, e.wt, want[0], branch) if want and branch else ""
         return tip if e.git.is_ancestor(e.wt, tip, e.cfg.base) else ""
 
     def found(self, sha: str) -> str:

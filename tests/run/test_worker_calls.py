@@ -23,6 +23,7 @@ from taskloop.app.run import engine, worker_call
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.paths import RunFiles
 from taskloop.domain.lanes import retry
 
 
@@ -155,7 +156,7 @@ class Calls(te.EngineTest):
             assert env["TL_ATTEMPT"] == "1"
             assert env["TL_BRANCH"]
             art = Path(env["TL_ARTIFACT_DIR"])
-            assert art.parent.parent == e.run_dir / "artifacts"
+            assert art.parent.parent == RunFiles(e.run_dir).artifacts(1)
             assert art.name == "attempt-1"
             assert art.is_dir()
 

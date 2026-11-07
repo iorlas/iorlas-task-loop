@@ -3,6 +3,7 @@
 from typing import Protocol
 
 from taskloop.app.land.rebase import Rebase
+from taskloop.app.land.state import LandState
 from taskloop.contracts.gitport import Git
 from taskloop.stores.runlog import RunLog
 
@@ -15,9 +16,7 @@ class SalvageHost(Protocol):
     """What the salvage reads of the engine: git, the conflict's words and the head before the rebase, the one fix round it
     may ask for (the land's own two stay as they were)."""
 
-    rebase_orig: str
-    salvage_tail: str
-    salvaged: bool
+    land_state: LandState
     fixes: int
 
     @property
@@ -45,7 +44,7 @@ class Salvage:
         e = self.e
         fixes, ok = e.fixes, False
         try:
-            d = e.fixer.fix("conflict", e.salvage_tail, resume=True)
+            d = e.fixer.fix("conflict", e.land_state.salvage_tail, resume=True)
             ok = not e.git.unmerged(e.wt)  # (a fix the review sent back still continued the rebase)
             if d != "accept":
                 e.warn("resume: the conflict fix did not pass its checks and review; the stage goes on from it")
@@ -56,9 +55,9 @@ class Salvage:
         if e.git.rebasing(e.wt):
             e.git.rebase_abort(e.wt)
         if not ok:
-            e.git.reset(e.wt, e.rebase_orig, "hard")  # the work as it was, for start_again
+            e.git.reset(e.wt, e.land_state.rebase_orig, "hard")  # the work as it was, for start_again
             return "conflict"
-        e.salvaged = True
+        e.land_state.salvaged = True
         self.rebase.follow_checkpoint()
         e.log.note("resume conflict fixed in place instead of starting again (salvaged)")
         return self.rebase.plan_count()
