@@ -21,7 +21,7 @@ class ArchitectureInvariants(Case):
         bad = [problem for module, tree in production_trees().items() if module.startswith(
             ('taskloop.domain.', 'tlgate.domain.', 'tlslots.liveness', 'tlslots.slot_env',
              'tlasks.hold', 'tlasks.similar', 'tlasks.matchers', 'tlasks.timespec',
-             'tlwork.plan.matchers', 'tlwork.plan.stored',
+             'tlwork.look.matchers', 'tlwork.plan.matchers', 'tlwork.plan.stored',
              'tlwork.work.', 'tlwork.prompts.', 'tlwork.review.availability', 'tlwork.review.findings'))
                for problem in domain_world_problems(module, tree)]
         assert bad == []

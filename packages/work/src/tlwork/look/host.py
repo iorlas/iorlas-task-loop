@@ -1,6 +1,6 @@
 """What the look stage reads and writes of the engine that runs it: one Protocol, so the stage has no hidden reach into the Engine."""
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol
@@ -101,6 +101,9 @@ class LookPorts(Protocol):
     def log(self) -> Narrate: ...
     @property
     def ports(self) -> RepoHolder: ...
+
+    @property
+    def downscale(self) -> Callable[[str | Path, str | Path, float], str]: ...
 
     def ai(self, node: str, title: str, prompt: str, *a: object, **kw: object) -> Asked: ...
     def comment(self, text: str) -> None: ...

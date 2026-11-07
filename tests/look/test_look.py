@@ -14,8 +14,6 @@ from support.fakes import must_bead
 from support.spawn import port_git, real_spawner
 from support.who import who
 
-from taskloop.app.look import shots
-from taskloop.app.look.owner_look import OwnerLook
 from tlkernel import answers, wire
 from tlkernel.artifact import ArtifactMeta
 from tlkernel.config import RepoProfile, VisualConfig
@@ -24,6 +22,8 @@ from tlkernel.ids import BeadId
 from tlpipeline.api import Closer
 from tltestkit import fake_route
 from tltestkit.plans import BEAD, CLEAN, PLAN, WRITE, verdict
+from tlwork.look import shots
+from tlwork.look.owner_look import OwnerLook
 
 VISUAL = {"include": ["*.txt"], "exclude": ["docs/**"]}
 LOOK_ASK = "Whether smiles-front.png matches the rung B ladder image. Only the owner can judge the look."

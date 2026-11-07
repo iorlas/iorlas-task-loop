@@ -7,6 +7,8 @@ from pathlib import Path
 
 # Source, destination for the work package slices.
 SLICES = (
+    ('taskloop.app.look', 'tlwork.look'),
+    ('taskloop.domain.look', 'tlwork.look'),
     ('taskloop.app.plan', 'tlwork.plan'),
     ('taskloop.domain.plan', 'tlwork.plan'),
     ('taskloop.app.review', 'tlwork.review'),
@@ -77,7 +79,7 @@ def plan(root: Path) -> tuple[dict[Path, Path], list[tuple[Path, str]], list[str
                 errors.append(f'unexpected source file: {path}')
                 continue
             dest = target / path.relative_to(source)
-            if old == 'taskloop.domain.plan' and path.name == '__init__.py' and not path.read_text().strip():
+            if old in {'taskloop.domain.plan', 'taskloop.domain.look'} and path.name == '__init__.py' and not path.read_text().strip():
                 continue  # the application package supplies the shared empty initializer
             if old == 'taskloop.domain.review' and path.name == '__init__.py':
                 dest = root / 'packages/work/src/tlwork/__init__.py'
@@ -111,7 +113,7 @@ def main() -> None:
         source.rename(dest)
     for path, text in edits:
         moves.get(path, path).write_text(text)
-    for redundant in ('src/taskloop/domain/plan/__init__.py', 'src/taskloop/app/plan/ruff.toml'):
+    for redundant in ('src/taskloop/domain/look/__init__.py', 'src/taskloop/domain/plan/__init__.py', 'src/taskloop/app/plan/ruff.toml'):
         (root / redundant).unlink(missing_ok=True)
     config = root / 'packages/work/ruff.toml'
     if config.exists():

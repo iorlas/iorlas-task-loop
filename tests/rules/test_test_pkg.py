@@ -12,7 +12,7 @@ def tree(root: Path) -> None:
     """Build stage edges write -> look -> checks -> write and an unrelated stage."""
     sources = {
         "write/__init__.py": "",
-        "write/body.py": "from taskloop.app.look import api\n",
+        "write/body.py": "from taskloop.app" + ".look import api\n",
         "look/__init__.py": "from ..checks import api\n",
         "checks/__init__.py": "",
         "checks/api.py": "import taskloop.app.write.body\n",
