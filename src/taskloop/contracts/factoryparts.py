@@ -4,17 +4,18 @@ The tables stay here until their stage's own store module defines them (the D-* 
 `kv` is the prefix grab-bag the D-KV bead takes apart. The frozen `user_version` (factorydb.SCHEMA_VERSION) stays what the vendored
 sqlite_store checks; a change to a part is a version bump of the part and a step (dbparts), not of that number.
 """
+import sqlite3
+
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.dbparts import Part, Prune, doc_table
-from taskloop.contracts.ledger import LedgerEntry
+from taskloop.contracts.docrows import RELEASE_DOCS, REPORT_DOCS, WORK_DOCS
+from taskloop.contracts.ledger import Adr, LedgerEntry
+from taskloop.contracts.parks import Park
 from taskloop.contracts.requests import OwnerRequest
 from taskloop.contracts.run import RunManifest
 from taskloop.contracts.snapshots import Pin, ReflectState, ReleaseResult
-
-REPORT_DOCS = "report_doc"  # the report stage's document: the reflect digest state
-RELEASE_DOCS = "release_doc"  # the release stage's documents: the pin and the last release result
 
 # The runs that may age out (the pipeline's rule; the history of other parts is pruned by it too). `?` is the cutoff; the temp table
 # prune_keep_bead holds the beads the caller exempts.
@@ -93,13 +94,24 @@ CREATE TABLE signal (
               after=("step", "attempt", "effect", "timed", "check_round")),
     ))
 
+PARK_DDL = "CREATE TABLE park (bead TEXT PRIMARY KEY, t REAL NOT NULL, body TEXT NOT NULL)"
+
+
+
+def add_park(con: sqlite3.Connection) -> None:
+    """asks v1 -> v2: parks leave the pipeline's `wait` table (no rows carried over)."""
+    con.execute(PARK_DDL)
+
+
 ASKS = Part(
-    name="asks", version=1, tables=("ask", "ask_ledger"),
-    records=(Ask, LedgerEntry),
-    ddl="""
+    name="asks", version=2, tables=("ask", "ask_ledger", "park"),
+    records=(Ask, LedgerEntry, Park),
+    steps={1: add_park},
+    ddl=f"""
 CREATE TABLE ask (bead TEXT PRIMARY KEY, id TEXT NOT NULL, repo TEXT, status TEXT NOT NULL, t REAL NOT NULL, consumed REAL,
   body TEXT NOT NULL, rev INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX ask_live ON ask(status, t);
+{PARK_DDL};
 CREATE TABLE ask_ledger (id INTEGER PRIMARY KEY, t REAL NOT NULL, event TEXT NOT NULL, ask TEXT, bead TEXT, repo TEXT,
   body TEXT NOT NULL, origin TEXT NOT NULL UNIQUE);
 """,
@@ -122,3 +134,5 @@ CREATE TABLE kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL, stamp TEX
 RELEASE = Part(name="release", version=1, tables=(RELEASE_DOCS,), records=(Pin, ReleaseResult), ddl=doc_table(RELEASE_DOCS))
 
 REPORT = Part(name="report", version=1, tables=(REPORT_DOCS,), records=(ReflectState,), ddl=doc_table(REPORT_DOCS))
+
+WORK = Part(name="work", version=1, tables=(WORK_DOCS,), records=(Adr,), ddl=doc_table(WORK_DOCS))

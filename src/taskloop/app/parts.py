@@ -6,6 +6,6 @@ from taskloop.app.checks.store import GATE
 from taskloop.app.land.store import LAND
 from taskloop.app.slots.store import SLOTS
 from taskloop.contracts.dbparts import Part
-from taskloop.contracts.factoryparts import ASKS, DASH, KV, PIPELINE, RELEASE, REPORT
+from taskloop.contracts.factoryparts import ASKS, DASH, KV, PIPELINE, RELEASE, REPORT, WORK
 
-STAGE_PARTS: tuple[Part, ...] = (DASH, PIPELINE, SLOTS, GATE, ASKS, KV, RELEASE, REPORT, LAND)
+STAGE_PARTS: tuple[Part, ...] = (DASH, PIPELINE, SLOTS, GATE, ASKS, KV, RELEASE, REPORT, LAND, WORK)
