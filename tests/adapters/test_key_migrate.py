@@ -73,7 +73,7 @@ def test_every_old_key_moves_to_the_one_key_in_files_and_rows_and_a_second_run_c
     con = factorydb.open_rw(cfg.factory_db())
     assert con is not None
     assert [r[0] for r in con.execute("SELECT repo_key FROM check_pass")] == [one]
-    assert [r[0] for r in con.execute("SELECT k FROM kv WHERE k LIKE 'durations:%'")] == [f"durations:{one}"]
+    assert [r[0] for r in con.execute("SELECT k FROM duration_doc WHERE k LIKE 'durations:%'")] == [f"durations:{one}"]
     con.close()
     journal = (cfg.root / "layout-migrate.jsonl").read_text()
     assert json.loads(journal.splitlines()[-1])["rows"] == 2
