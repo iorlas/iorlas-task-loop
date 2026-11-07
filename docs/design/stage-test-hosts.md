@@ -39,7 +39,7 @@ An edit under `app/run`, `app/launch`, `app/loop`, `app/wire` (the shell, ~half 
 
 ## Pilot (first PR when approved)
 
-`tests/support/hosts/checks.py` + a `CheckHost` contract test (Engine vs fake) + convert `tests/checks/test_check_quiet.py`, `test_check_trim.py`, `test_check_timeout_park.py`, `test_check_spawn.py` (the real-process ones, 4 files) and report `dev/reach.py` before/after. If the pilot cuts those four to ~112 src files and stays green, convert the other 21 checks files one PR each.
+`tests/support/hosts/checks.py` + a `CheckHost` contract test (Engine vs fake) + convert `tests/checks/test_check_quiet.py`, `packages/gate/tests/test_check_trim.py`, `packages/gate/tests/test_check_timeout_park.py`, `test_check_spawn.py` (the real-process ones, 4 files) and report `dev/reach.py` before/after. If the pilot cuts those four to ~112 src files and stays green, convert the other 21 checks files one PR each.
 
 ## Risks
 

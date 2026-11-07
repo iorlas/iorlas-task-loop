@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 from tlkernel import checktrim as trim  # noqa: E402
 from tltestkit import procsim  # noqa: E402
 
-FIX = Path(__file__).parents[1] / "fixtures" / "checklogs"
+FIX = Path(__file__).parents[2] / "packages" / "gate" / "tests" / "fixtures" / "checklogs"
 
 # fixture -> lines that must survive: every failing test name, and its first assertion / compile error line
 MUST = {

@@ -1,18 +1,12 @@
 """engine.input_sets and engine.hatch: globs written once, named by @name; a hatch file change forces every glob-keyed check."""
-import sys
-from pathlib import Path
 
 import pytest
-
+from tlkernel import inputsets
+from tlkernel.config import ConfigError, load
 from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 from tlgate.domain.inputs import reads_digest, touched
 from tlgate.domain.specs import due, repo_check
-from tlkernel import inputsets
-from tlkernel.config import ConfigError, load
 
 SRC = ["src/**", "lib/**"]
 

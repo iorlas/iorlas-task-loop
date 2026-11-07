@@ -5,15 +5,16 @@ changing a view or the HTTP API. Rotation and age pruning belong to tl-zej9.18.
 """
 
 import base64
+import contextlib
 import heapq
 import json
-import os
 import threading
 import time
 import zlib
 from collections.abc import Callable
 from pathlib import Path
 
+from delegate import api
 from taskloop_dash import jsonl
 from taskloop_dash.jsonrec import Json
 from taskloop_dash.views import live_events as ev
@@ -44,27 +45,19 @@ def decode(text: str | None) -> dict[str, int] | None:
 class Source:
     """One file: its events so far, and the offset after the last complete line read."""
 
-    def __init__(self, tag: str, path: str) -> None:
-        self.tag, self.path = tag, path
+    def __init__(self, tag: str, live_dir: str) -> None:
+        self.tag, self.live_dir = tag, live_dir
         self.offset = 0
         self.items: list[tuple[int, Json]] = []
-        self.ident: tuple[int, int] | None = None
+        self.ident = 0
 
     def refresh(self) -> None:
-        """Start over when the file is another file (device and inode) or shrank; read nothing of a file that vanished."""
-        try:
-            st = os.stat(self.path)
-        except OSError:
-            self.offset, self.ident = 0, None
+        """Refresh through delegate's reader, clearing events when the stream resets."""
+        result = api.live_read(self.live_dir, self.tag, self.offset, self.ident)
+        if result.reset:
             self.items = []
-            return
-        ident = (st.st_dev, st.st_ino)
-        if (self.ident is not None and ident != self.ident) or st.st_size < self.offset:
-            self.offset = 0
-            self.items = []
-        self.ident = ident
-        rows, self.offset = jsonl.read_from(self.path, self.offset, ev.decode_worker)
-        self.items += [(off, ev.worker_event(r, self.tag, off)) for off, r in rows]
+        self.offset, self.ident = result.cursor, result.ident
+        self.items += [(line.offset, ev.worker_event(line.event, self.tag, line.offset)) for line in result.lines]
 
 
 class EngineSource:
@@ -109,16 +102,12 @@ class LiveRun:
 
     def _refresh(self) -> None:
         self.attempt = self._attempt()
-        try:
-            names: list[str] = sorted(n for n in os.listdir(self.live_dir()) if n.endswith(".jsonl"))
-        except OSError:
-            names = []
-        kept = {n[: -len(".jsonl")] for n in names}
+        files = api.live_files(str(self.live_dir()))
+        kept = {file.name for file in files}
         for tag in [t for t, s in self.sources.items() if isinstance(s, Source) and t not in kept]:
-            del self.sources[tag]  # retention removed the file: its events are no longer a stream anyone can reread
-        for name in names:
-            tag = name[: -len(".jsonl")]
-            self.sources.setdefault(tag, Source(tag, str(self.live_dir() / name)))
+            del self.sources[tag]  # retention removed the stream
+        for file in files:
+            self.sources.setdefault(file.name, Source(file.name, str(self.live_dir())))
         for s in self.sources.values():
             s.refresh()
 
@@ -211,15 +200,26 @@ class Logs:
 
     def calls(self, run: str) -> dict[int, tuple[LiveEvent, ...]]:
         out: dict[int, tuple[LiveEvent, ...]] = {}
-        for path in sorted(self.cfg.live_dir(run).glob("*.jsonl")):
-            number = path.stem.partition("-")[0]
+        for file in api.live_files(str(self.cfg.live_dir(run))):
+            number = file.name.partition("-")[0]
             if number.isdigit():
-                out[int(number)] = tuple(jsonl.records(str(path), decode=live_event))
+                out[int(number)] = tuple(self._live_records(run, file.name))
         return out
 
     def console(self, run: str) -> list[LiveEvent]:
-        try:
-            files = sorted(self.cfg.live_dir(run).glob("*.jsonl"), key=lambda f: f.stat().st_mtime)
-        except OSError:
-            return []
-        return jsonl.records(str(files[-1]), decode=live_event) if files else []
+        files = sorted(api.live_files(str(self.cfg.live_dir(run))), key=lambda f: f.mtime)
+        return self._live_records(run, files[-1].name) if files else []
+
+    def _live_records(self, run: str, name: str) -> list[LiveEvent]:
+        cursor, ident = 0, 0
+        out: list[LiveEvent] = []
+        while True:
+            result = api.live_read(str(self.cfg.live_dir(run)), name, cursor, ident)
+            if result.reset:
+                out = []
+            for line in result.lines:
+                with contextlib.suppress(ValueError):
+                    out.append(live_event(line.event))
+            if result.cursor == cursor:
+                return out
+            cursor, ident = result.cursor, result.ident
