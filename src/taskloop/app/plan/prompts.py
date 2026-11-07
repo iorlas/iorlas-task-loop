@@ -1,7 +1,7 @@
 """The planner's prompt, its visual-stage rules, and the texts a plan is sent back with."""
 from typing import Final
 
-from taskloop.domain.prompts.common import COMMON, DECIDED_RULE, OPTIONS_RULE
+from tlwork.prompts.common import COMMON, DECIDED_RULE, OPTIONS_RULE
 
 PLAN_BRIEF_KB: Final = 12            # the planner's whole brief should stay under this
 

@@ -9,6 +9,7 @@ root_packages =
     tlkernel
     tlartifacts
     tlgate
+    tlwork
     tlslots
     tlpipeline
     msgspec
@@ -168,7 +169,7 @@ layers =
     wire
     loop
     land
-    write | review | plan | look
+    write | plan | look
     report
     reconcile
     release
@@ -246,6 +247,17 @@ forbidden_modules =
     delegate
 allow_indirect_imports = True
 
+[importlinter:contract:package-work-imports-only-the-kernel]
+name = The work package (tlwork) imports the kernel, the gate package and third parties, never the tree
+type = forbidden
+source_modules =
+    tlwork
+forbidden_modules =
+    taskloop
+    taskloop_dash
+    delegate
+allow_indirect_imports = True
+
 [importlinter:contract:package-slots-imports-only-the-kernel]
 name = tlslots imports the kernel and third parties only
 type = forbidden
@@ -282,9 +294,8 @@ source_modules =
     taskloop.app.prune
     taskloop.app.reconcile
     taskloop.app.release
-    taskloop.app.review
+    tlwork.review
     taskloop.app.report
-    taskloop.app.review
     tlslots
     taskloop.app.track
     taskloop.app.workers
@@ -327,6 +338,7 @@ type = forbidden
 source_modules =
     tlartifacts
     tlgate
+    tlwork
     tlpipeline
     taskloop.app.checks
     taskloop.app.doctor
@@ -334,7 +346,6 @@ source_modules =
     taskloop.app.plan
     taskloop.app.reconcile
     taskloop.app.release
-    taskloop.app.review
 forbidden_modules =
     taskloop.app.run
     taskloop.app.wire
@@ -358,11 +369,11 @@ allow_indirect_imports = True
 [importlinter:contract:work-imports-no-stage]
 name = domain/work reaches no stage
 type = forbidden
-source_modules = taskloop.domain.work
+source_modules = tlwork.work
 forbidden_modules =
     taskloop.app
     taskloop.domain.plan
-    taskloop.domain.review
+    tlwork.review
     taskloop.domain.write
     taskloop.domain.look
     taskloop.domain.asks

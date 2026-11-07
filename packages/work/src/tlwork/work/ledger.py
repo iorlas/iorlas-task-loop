@@ -6,7 +6,7 @@ Used by: plan, review, write.
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from taskloop.domain.work.matchers import Wording, word_set
+from tlwork.work.matchers import Wording, word_set
 
 Entry = dict[str, str]
 

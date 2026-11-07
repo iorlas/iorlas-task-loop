@@ -1,7 +1,6 @@
 """What a resume hands the stage loop once the decision is made: where it goes on, and what it puts back in the engine."""
 from types import SimpleNamespace
 
-from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.state import state_names
 from tlkernel import wire
 from tlkernel.answers import WriteAnswerLook
@@ -11,6 +10,7 @@ from tlkernel.plancheck import PlanData
 from tlpipeline.api import Decision, Resume, ReviewGlue
 from tlpipeline.testing import FakeHeadHistory
 from tltestkit.case import Case
+from tlwork.review.state import ReviewLive
 
 PLAN: PlanData = {"summary": "two stages", "stages": [{"goal": "a", "files": [], "checks": []}, {"goal": "b", "files": [], "checks": []}]}
 

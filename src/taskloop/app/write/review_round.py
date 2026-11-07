@@ -9,16 +9,16 @@ from tlkernel import askspecs
 from tlkernel import lanecaps as caps
 from tlkernel import workswitch as switch
 from tlkernel.reviewmatchers import AcceptanceItems
+from tlwork.prompts.common import LATER_CASES, UNCHECKED_TEXT
+from tlwork.review import findings as fnd
+from tlwork.review.availability import ReviewUnavailable
+from tlwork.work.skip import SkipKind
 
 from taskloop.app.asks import trustroots
 from taskloop.app.write import review_skip
 from taskloop.app.write.host import WriteHost
 from taskloop.app.write.review_prompt import acceptance_text, review_prompt
 from taskloop.app.write.state import ACCEPT, AGAIN, REPLAN, RoundResult, StageState, carrying
-from taskloop.domain.prompts.common import LATER_CASES, UNCHECKED_TEXT
-from taskloop.domain.review import findings as fnd
-from taskloop.domain.review.availability import ReviewUnavailable
-from taskloop.domain.work.skip import SkipKind
 
 CASES_RAN = ("The engine ran every case above with the checks, so a case is never an unchecked item; a case whose "
              "check does not prove its criterion is a finding.\n")

@@ -13,7 +13,7 @@ from tlkernel.stagefacts import LeftoverSink
 from tlkernel.stop import Stop
 from tlkernel.wire import Open
 
-from taskloop.domain.work.ledger import Ledger
+from tlwork.work.ledger import Ledger
 
 
 class ReviewSteps(Protocol):

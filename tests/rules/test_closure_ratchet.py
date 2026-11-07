@@ -66,3 +66,14 @@ def test_slots_member_keeps_the_slots_stage_identity_and_kernel_closure():
         "packages/kernel/src/tlkernel/locks.py": "import dataclasses",
     })
     assert counts == {"slots": 4, "slots (external modules)": 1}
+
+
+def test_work_review_keeps_its_identity_and_reaches_moved_domain():
+    counts = closures({
+        "packages/work/src/tlwork/__init__.py": "",
+        "packages/work/src/tlwork/review/__init__.py": "",
+        "packages/work/src/tlwork/review/routing.py": "from tlwork.work.ledger import Ledger",
+        "packages/work/src/tlwork/work/__init__.py": "",
+        "packages/work/src/tlwork/work/ledger.py": "import dataclasses",
+    })
+    assert counts == {"review": 3, "review (external modules)": 1}
