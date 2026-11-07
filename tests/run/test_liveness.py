@@ -1,4 +1,5 @@
 """Wall deadlines and bounded lock waits survive slow or hung work."""
+
 import contextlib
 from collections.abc import Callable, Generator
 from pathlib import Path
@@ -11,6 +12,7 @@ from support.fake_deadline import FakeDeadline
 from support.lifecycle import lifecycle
 from support.narrow_hosts import FakeWaitsHost
 
+from taskloop.adapters import deadline
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.waits import Waits
 from taskloop.domain.lanes.liveness import LIVENESS
@@ -51,7 +53,7 @@ class RunDeadline(Case):
 class LockWait(Case):
     def test_lock_wait_has_finite_timeout_and_a_transient_stop(self):
         host = FakeWaitsHost()
-        waits = Waits(host)
+        waits = Waits(host, deadline)
 
         @contextlib.contextmanager
         def busy(path: Path | str, holder: str, waiting: Callable[[str], None] | None = None,
