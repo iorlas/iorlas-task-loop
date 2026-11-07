@@ -12,7 +12,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from support import engine_case as te
-from support.waits import until
+from support.waits import until_marker
 
 from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
@@ -37,7 +37,7 @@ class CloseKill(te.EngineTest):
         marker = Path(self.tmp.name, "pid")
         dying = self.child("die", effect, str(marker), journal=first)
         try:
-            until(marker.exists, WAIT)
+            until_marker(marker, dying, WAIT)
             pid = int(marker.read_text())
             assert pid == dying.pid
             os.kill(pid, signal.SIGKILL)  # the pid of the child this test started
