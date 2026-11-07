@@ -19,6 +19,7 @@ from taskloop.app.look.state import LOOK_FIELDS, LookState
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.resume import KEEP_FOR_ACTIVE, LATE, Resume
 from taskloop.app.run.state import Checkpoints, StateAttrs, attr_names, carries_state, state_names
+from taskloop.app.write.state import WriteState
 from taskloop.contracts import fence, wire
 from taskloop.contracts.checkpoint import BriefSnap, Checkpoint, Handoff, PlanStep, RunState, WriterSession
 from taskloop.contracts.ids import BeadId
@@ -86,6 +87,7 @@ class Host(StateAttrs):
         self.review.unverified = [{"what": "v", "kind": "", "why": "", "source": ""}]
         self.filed, self.unfiled = [], []
         self.look = LookState(lambda: self.state)
+        self.write = WriteState()
         self.task_branch, self.land_state, self.head = "task/t-1", LandState(), "h0"
 
     @property

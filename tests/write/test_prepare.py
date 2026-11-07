@@ -65,7 +65,7 @@ class PrepareTests(EngineTest):
         assert script.nodes.count("write") == 2
         assert self.eng.replans == 0
         assert self.eng.stats["writes"] == 1
-        assert [r["write"] for r in self.eng.write_rounds] == [1, 1]
+        assert [r["write"] for r in self.eng.write.write_rounds] == [1, 1]
 
     def test_check_assets_failure_prepares_and_retries_without_consuming_counters(self):
         events = []
