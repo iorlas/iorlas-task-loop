@@ -14,8 +14,8 @@ from support.plans import CLEAN, PLAN, WRITE
 # isort: split
 
 from taskloop.app.checks import resources
+from taskloop.app.pipeline.waits import Waits
 from taskloop.app.plan.planner import Planner
-from taskloop.app.run.waits import Waits
 from taskloop.contracts.config import HostResources
 
 ANSWERS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
