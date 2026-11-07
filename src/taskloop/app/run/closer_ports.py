@@ -20,6 +20,7 @@ from taskloop.app.slots.config import profile_slots
 from taskloop.app.track.closing import ClosingBeads
 from taskloop.app.wire import closeguard
 from taskloop.app.wire.slots import slot_of
+from taskloop.stores.runlog import RunLog
 
 
 class BindingCheckpoints(CloseAllCheckpoints, FollowUpCheckpoints, Protocol):
@@ -27,6 +28,8 @@ class BindingCheckpoints(CloseAllCheckpoints, FollowUpCheckpoints, Protocol):
 
 
 class BindingHost(CloserHost, FollowUpHost, Protocol):
+    @property
+    def log(self) -> RunLog: ...
     @property
     def who(self) -> Identity: ...
     @property
