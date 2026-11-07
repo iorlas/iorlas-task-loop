@@ -17,7 +17,7 @@ import support.paths  # noqa: F401
 
 import tlkernel as pkg
 from contracts import samples as S
-from tlkernel import delegate, enums, events, ids, log, trace, wire
+from tlkernel import askenums, checkenums, delegate, enums, events, ids, lockenums, log, trace, waitenums, wire
 from tlkernel.ask import Ask
 from tlkernel.loop import LoopCommand
 from tlkernel.parks import Park
@@ -138,7 +138,7 @@ class Refusals(Case):
     def test_a_foreign_version_is_stale(self):
         with pytest.raises(StaleRecord) as cm:
             wire.load(type(S.OUTCOME), self.wire(v=1))
-        assert (cm.value.found, cm.value.want) == (1, 2)
+        assert (cm.value.found, cm.value.want) == (1, S.OUTCOME.V)
         with pytest.raises(StaleRecord):
             wire.load(type(S.OUTCOME), {k: v for k, v in self.wire().items() if k != "v"})
 
@@ -238,7 +238,7 @@ class Ids(Case):
                 v(bad)
 
     def test_enum_members_are_their_wire_strings(self):
-        for e in vars(enums).values():
+        for e in (e for module in (enums, askenums, checkenums, lockenums, waitenums) for e in vars(module).values()):
             if isinstance(e, type) and issubclass(e, enum.StrEnum) and e is not enum.StrEnum:
                 assert all(str(m) == m.value for m in e), e
 

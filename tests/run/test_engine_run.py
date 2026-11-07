@@ -50,11 +50,12 @@ from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.plan.matchers import AcceptanceText
 from taskloop.domain.write.matchers import count_tests
 from tlkernel.config import EngineConfig
-from tlkernel.enums import Result, WaitWhat
+from tlkernel.enums import Result
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.run import RunReport
+from tlkernel.waitenums import WaitWhat
 
 
 class EngineRunTest(EngineTest):

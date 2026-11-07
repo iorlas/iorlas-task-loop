@@ -21,9 +21,9 @@ from taskloop_dash.views.runfacts import run_of
 from tlkernel import log as rec
 from tlkernel.checks import CheckResult, CheckRun
 from tlkernel.dash import Marker
-from tlkernel.enums import WaitWhat
 from tlkernel.ids import CheckId
 from tlkernel.runlife import SAME_RED, silent_limit
+from tlkernel.waitenums import WaitWhat
 
 T = 1_800_000_000.0
 WRITE_LIMIT = silent_limit("write")

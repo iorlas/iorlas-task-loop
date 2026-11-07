@@ -26,10 +26,10 @@ from tlkernel.checkpoint import Checkpoint
 from tlkernel.checks import BaseRedRecord, CheckRun, Durations, PassRecord
 from tlkernel.config import HostResources
 from tlkernel.docstore import Absent, ForeignVersion, Present, Read, Torn, refusal
-from tlkernel.enums import LockWhat
 from tlkernel.flakes import FlakeLog
 from tlkernel.followups import FollowupOutbox
 from tlkernel.ledger import Adr, AdrUse, LedgerEntry
+from tlkernel.lockenums import LockWhat
 from tlkernel.locks import LockRecord, LockTimeout, Ticket, pid_alive
 from tlkernel.profile_changes import ProfileChange
 from tlkernel.queue_doc import QueueDoc

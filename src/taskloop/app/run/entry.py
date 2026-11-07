@@ -299,7 +299,7 @@ def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: En
     rc = eng.run(stage=getattr(a, "stage", None), continuous=bool(getattr(a, "loop", False)))
     with defer_stop(None):  # the outcome line is what the loop reads: a stop waits for it
         rec = eng.result()
-        if pause_line(rec):
-            say(pause_line(rec))
+        if pause_line(rec, eng.retry_after):
+            say(pause_line(rec, eng.retry_after))
         report(a, rec)
     return rc

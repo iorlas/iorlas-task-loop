@@ -49,7 +49,7 @@ class Retry(te.EngineTest):
         assert paused is not None
         assert (paused.reason, paused.permanence) == ("rate_limited", "transient")
         assert paused.retry_at > paused.t
-        assert self.eng.result().retry_after == paused.retry_at
+        assert self.eng.retry_after == paused.retry_at
         closes = [row.rec for row in self.eng.stores.run_log(self.eng.run_id).read_from(0).items if isinstance(row.rec, Close)]
         assert [row.retry_at for row in closes] == [paused.retry_at]
         with mock.patch.object(parks, "time", mock.Mock(time=lambda: paused.retry_at)):
@@ -78,7 +78,7 @@ class Retry(te.EngineTest):
                 rec = ParkStore(self.eng.home).get(self.eng.bead)
                 assert rec is not None
                 assert (rec.reason, rec.permanence, rec.retry_at) == (reason, "needs_owner", 0)
-                assert self.eng.result().retry_after == 0
+                assert self.eng.retry_after == 0
                 assert self.eng.asked == (reason == "crash")
                 assert (self.ask() is not None) == (reason == "crash")
 

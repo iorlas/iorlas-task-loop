@@ -3,7 +3,7 @@ the cache that
 `status` shows. `net_up` is the one question the outcome ladder asks when a failure names no cause."""
 
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from delegate.adapters import netprobe
 from delegate.app import env
@@ -48,3 +48,19 @@ def cmd_net(a: env.Args):
         )
     )
     return 0
+
+
+NET_BACKOFF = (5, 10, 20, 40, 60, 120)
+
+
+def wait_up(
+    lane: str, cap_s: float, now: Callable[[], float], sleep: Callable[[float], object]
+) -> tuple[float, bool]:
+    """Probe after each backoff, clipping the last sleep to this call's remaining budget."""
+    start, index = now(), 0
+    while (waited := now() - start) < cap_s:
+        sleep(min(NET_BACKOFF[min(index, len(NET_BACKOFF) - 1)], cap_s - waited))
+        index += 1
+        if net_up(lane):
+            return min(now() - start, cap_s), True
+    return cap_s, False

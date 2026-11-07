@@ -1,10 +1,11 @@
 """The line for a slot as `lease` rows (kind `slot`, name `<repo_key>/<seq>`, the Ticket in `body`) in factory.db. A new ticket's number is
-taken in one write transaction, past every live row and the repo's `kv` counter, so two waiters never share one and a number never
+taken in one write transaction, past every live row and the repo's `ticket_doc` counter, so two waiters never share one and a number never
 repeats across an empty line."""
 import json
 import time
 
 from tlkernel import wire
+from tlkernel.docrows import TICKET_DOCS
 from tlkernel.locks import Ticket
 from tlkernel.looprows import LoopRows
 from tlkernel.paths import ConfigDir
@@ -28,14 +29,14 @@ class TicketRows:
     def take(self, repo_key: str, why: str, prio: int, *, pid: int, now: float, pid_start: float | None = None, bead: str = "") -> Ticket:
         counter = f"slot-seq:{repo_key}"
         with self.rows.transaction() as con:
-            last = con.execute("SELECT v FROM kv WHERE k=?", (counter,)).fetchone()
+            last = con.execute(f"SELECT v FROM {TICKET_DOCS} WHERE k=?", (counter,)).fetchone()
             live = con.execute("SELECT name FROM lease WHERE kind=? AND name >= ? AND name < ?", (KIND, *span(repo_key))).fetchall()
             seq = max([int(last[0]) if last else 0, *(int(n[0].rsplit("/", 1)[1]) for n in live)]) + 1
             ticket = Ticket(pid=pid, why=why, since=now, prio=prio, seq=seq, pid_start=pid_start, bead=bead)
             con.execute("INSERT INTO lease (kind, name, holder, pid, start_id, since, body) VALUES (?, ?, ?, ?, ?, ?, ?)",
                         (KIND, name_of(repo_key, seq), why, pid, None if pid_start is None else str(pid_start), now,
                          json.dumps(wire.dump(ticket))))
-            con.execute("INSERT INTO kv (k, v, t) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, t=excluded.t",
+            con.execute(f"INSERT INTO {TICKET_DOCS} (k, v, t) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, t=excluded.t",
                         (counter, str(seq), time.time()))
         return ticket
 

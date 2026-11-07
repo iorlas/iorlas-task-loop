@@ -5,7 +5,7 @@ from support.case import Case
 from taskloop.domain.asks.lint import INFRA, KIND_OF
 from taskloop.domain.lanes import pauses
 from taskloop.domain.lanes.pause_reasons import Reason
-from tlkernel.enums import AskClass
+from tlkernel.askenums import AskClass
 
 
 class PolicyTables(Case):

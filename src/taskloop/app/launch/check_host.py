@@ -5,13 +5,13 @@ from pathlib import Path
 from typing import Any
 
 from tlkernel.config import EngineConfig
-from tlkernel.enums import WaitWhat
 from tlkernel.env import Env
 from tlkernel.gitport import Git
 from tlkernel.ids import TreeSha
 from tlkernel.locator import RunBundle
 from tlkernel.paths import ConfigDir
 from tlkernel.procport import Spawner
+from tlkernel.waitenums import WaitWhat
 
 from taskloop.adapters import check_files, ident, treehash
 from taskloop.adapters.threadflag import ThreadFlag

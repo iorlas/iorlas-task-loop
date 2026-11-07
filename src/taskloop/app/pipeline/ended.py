@@ -5,10 +5,10 @@ from typing import Protocol
 
 from tlkernel import wire
 from tlkernel.ask import AskDetail, AskOption
+from tlkernel.askenums import AskClass
 from tlkernel.checkpoint import Checkpoint, CloseIntent, EndRec, PauseFacts, Producer
 from tlkernel.dash import OwnerCause
 from tlkernel.delegate import Permanence
-from tlkernel.enums import AskClass
 from tlkernel.kinds import Kind
 
 from taskloop.domain import effects

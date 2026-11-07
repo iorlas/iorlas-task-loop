@@ -9,9 +9,9 @@ from taskloop_dash.views import columns, floor, names, passes, phases
 from taskloop_dash.views.runfacts import Run
 from taskloop_dash.views.world import ProjectIn, World
 from tlkernel.ask import Ask
+from tlkernel.askenums import AskStatus
 from tlkernel.bead import Bead
 from tlkernel.dash import BeadCard, Column, Marker, Phase, Totals
-from tlkernel.enums import AskStatus
 from tlkernel.ids import BeadId, is_bead_id
 
 SLOT, LOOK = "slot", "owner-look"  # the labels of the loop's own beads: never cards

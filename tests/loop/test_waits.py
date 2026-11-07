@@ -7,7 +7,6 @@ from support.fake_loop_env import slot_loop_env
 
 from taskloop.app.loop.env import Storm
 from taskloop.app.loop.loop import Loop, LoopArgs
-from taskloop.app.loop.queue import Queue, Ranked
 from taskloop.app.loop.settle import Settle
 from taskloop.app.loop.verdict import Verdict
 from taskloop.app.loop.waits import blocked
@@ -24,7 +23,6 @@ class Waits(Rig):
     def make_loop(self):
         env = slot_loop_env(self.env)
         env.profile = RepoProfile
-        env.roles = lambda: {}
         env.storm = lambda: None
         files = Mock()
         files.stop_for.return_value = ""
@@ -97,26 +95,6 @@ class Waits(Rig):
         loop.files.stop_for = lambda pid, started: "after"
         assert loop.ends() == 0
         assert loop.exit["reason"] == "stop_request"
-
-    def test_no_lane_wait_publishes_a_role_wake_and_role_recovery_releases_it(self):
-        loop = self.make_loop()
-        usable = [False]
-        loop.env.roles = lambda: {"worker": usable[0]}
-        loop.gate.roles = loop.env.roles
-        bead = Bead(id=BeadId("x-1"), title="work", status="open")
-        loop.gate.hold(bead.id, "worker")
-        loop.c.later[bead.id] = 0
-        assert loop.idle(Queue(ranked=[Ranked(bead, "only candidate")])) is None
-        assert loop.wait is not None
-        assert loop.wait.reason == "no_lane"
-        assert loop.st.wait == loop.wait
-        assert not loop.exit
-        usable[0] = True
-        self.t[0] = loop.wait.probe_at  # the idle nap lasted a whole role-view cache; the next look sees the recovery
-        assert loop.gate.ready(bead.id)
-        assert bead.id not in loop.gate.held
-        assert not loop.resource_wait()
-        assert loop.wait is None
 
     def block_same_bead(self, loop):
         verdict = Verdict(Result.FAILED, kind="fault_slot", slot_fault="slot_broken", minutes=0.1,

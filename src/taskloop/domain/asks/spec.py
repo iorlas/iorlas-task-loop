@@ -3,8 +3,8 @@ from dataclasses import dataclass, field
 
 from taskloop.domain.asks.lint import KIND_OF
 from tlkernel.ask import AskDetail, AskOption
+from tlkernel.askenums import AskClass, AskKind
 from tlkernel.dash import OwnerCause
-from tlkernel.enums import AskClass, AskKind
 
 
 @dataclass(frozen=True)

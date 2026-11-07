@@ -18,8 +18,8 @@ from taskloop.domain.asks import similar, specs
 from tlkernel import adrfiles
 from tlkernel.adrs import AdrStore
 from tlkernel.ask import SimilarRef
+from tlkernel.askenums import AskStatus
 from tlkernel.dash import OwnerCause
-from tlkernel.enums import AskStatus
 from tlkernel.ids import BeadId
 from tlkernel.ledger import Adr
 

@@ -27,9 +27,9 @@ from taskloop.app.wire.brief import held_resources
 from taskloop.domain.checks.inputs import touched
 from tlkernel.checks import UNVERIFIED_EXIT, Check, CheckResult, CheckRun
 from tlkernel.config import ConfigError, EngineConfig, HostResources, ResourceSpec, load
-from tlkernel.enums import WaitWhat
 from tlkernel.ids import CheckId
 from tlkernel.paths import ConfigDir
+from tlkernel.waitenums import WaitWhat
 
 ANSWERS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 UNITY = {"unity": {"limit": 1}}

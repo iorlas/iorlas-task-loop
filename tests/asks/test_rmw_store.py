@@ -20,8 +20,8 @@ from support.who import who
 
 from taskloop.app.track import trail
 from tlkernel.ask import AskAnswer
+from tlkernel.askenums import AskStatus
 from tlkernel.askstore import AskStore
-from tlkernel.enums import AskStatus
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
 from tlkernel.snapshots import LaneStatus, StatusSnapshot, WindowStatus

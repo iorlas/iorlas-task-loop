@@ -2,10 +2,10 @@
 import json
 
 from tlkernel.ask import AskAnswer
+from tlkernel.askenums import AskStatus
 from tlkernel.askstore import AskStore
 from tlkernel.beadsport import BeadPatch, Beads
 from tlkernel.config import EngineConfig
-from tlkernel.enums import AskStatus
 from tlkernel.ids import BeadId
 
 from taskloop.app.asks import release

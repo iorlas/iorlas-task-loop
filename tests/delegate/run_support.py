@@ -2,6 +2,7 @@
 a config dir of its own. Not a test module."""
 
 import dataclasses
+import functools
 import io
 import json
 import os
@@ -17,11 +18,11 @@ import routing_support as support
 from any_agent import watch
 from support import fake_worker
 from support.case import Case
-from support.fake_clock import SteppingClock
+from support.fake_clock import FakeClock, SteppingClock
 from support.tmpdir import TemporaryDirectory
 from test_route import no_reader, route
 
-from delegate.app import env, harnesses, usage
+from delegate.app import env, harnesses, run, usage
 from delegate.contracts import history as hist
 from delegate.domain.health import ledger as health_ledger
 
@@ -35,6 +36,8 @@ class RunBase(Case):
     FAKE_CLAUDE = (FIX / "fake_claude.sh").read_text(encoding="utf-8")
 
     def setup_method(self):
+        network_clock = FakeClock()
+        self.enterContext(mock.patch.object(run, "Run", functools.partial(run.Run, now=network_clock.now, sleep=network_clock.advance)))
         self.clock = SteppingClock(0.25)  # a silence or a grace passes in polls, not seconds
         self.enterContext(mock.patch.object(harnesses, "CLOCK", self.clock))
         self.tmp = TemporaryDirectory()

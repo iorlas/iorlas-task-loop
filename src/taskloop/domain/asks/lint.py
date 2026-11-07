@@ -6,7 +6,7 @@ a denied command, a stale base, a missing tool) is a class lint refuses: it neve
 from typing import Final
 
 from tlkernel.ask import Ask
-from tlkernel.enums import AskClass, AskKind
+from tlkernel.askenums import AskClass, AskKind
 
 INFRA: Final = frozenset({AskClass.LANE_FAILURE, AskClass.BAD_REQUEST, AskClass.SANDBOX_DENIAL, AskClass.STALE_BASE, AskClass.MISSING_TOOL})
 KIND_OF: Final = {

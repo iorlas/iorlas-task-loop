@@ -263,7 +263,7 @@ class FactoryIndex(Case):
                     path.write_bytes(b"broken database")
                 else:
                     con = must(factorydb.open_rw(path))
-                    con.execute("PRAGMA user_version=99" if kind == "wrong" else "UPDATE kv SET t=0 WHERE k='index.run.pass'")
+                    con.execute("PRAGMA user_version=99" if kind == "wrong" else "UPDATE index_doc SET t=0 WHERE k='index.run.pass'")
                     con.close()
                 dash = Dash(Env(cfg.root, clock=lambda: NOW))
                 with patch("tlkernel.locator.RunLocator.runs", side_effect=AssertionError("unexpected run-file read")):

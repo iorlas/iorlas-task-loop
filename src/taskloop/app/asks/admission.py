@@ -2,9 +2,9 @@
 import time
 from collections.abc import Callable
 
+from tlkernel.askenums import AskStatus
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, BeadPatch, Beads
-from tlkernel.enums import AskStatus
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId

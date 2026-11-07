@@ -13,9 +13,10 @@ from support.narrow import must
 
 from tlkernel import wire
 from tlkernel.ask import Ask, AskAnswer
+from tlkernel.askenums import AskStatus
 from tlkernel.checkpoint import Checkpoint
-from tlkernel.enums import AskStatus, LockWhat
 from tlkernel.followups import FollowupOutbox
+from tlkernel.lockenums import LockWhat
 from tlkernel.locks import LockTimeout
 
 CK = cast(Checkpoint, S.OTHERS["Checkpoint"])

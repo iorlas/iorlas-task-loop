@@ -7,9 +7,9 @@ from typing import Protocol
 
 from tlkernel import plancheck, wire
 from tlkernel.ask import Ask
+from tlkernel.askenums import AskClass
 from tlkernel.checkpoint import BriefSnap, Checkpoint
 from tlkernel.checks import CheckRun
-from tlkernel.enums import AskClass
 from tlkernel.gitport import Git
 from tlkernel.plancheck import PlanData, RoundState
 from tlkernel.wire import Open
