@@ -397,7 +397,7 @@ class Detail(Case):
         w = dataclasses.replace(w, runs={**w.runs, ("lifesim", "b-look"): [s.run(NOW)]})
         p = w.projects[0]
         d = bead_detail.build(Board(w), p, next(x for x in p.beads if x.id == "b-look"), [], [])
-        assert d.artifacts == []  # the store listing (tests/dash/test_dash_artifacts.py) is the one source
+        assert d.artifacts == []  # the store listing (tests/dashwire/test_dash_artifacts.py) is the one source
         assert self.card(snapshot.build(w), "b-look").shots == 1  # the card counts the run's records, touching no file
 
 

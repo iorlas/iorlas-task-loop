@@ -5,9 +5,9 @@ from typing import Final, assert_never
 
 from taskloop.domain.checks.cmd import matchers as sh
 from taskloop.domain.checks.names import log_var, rc_var
-from taskloop.domain.matchers import clip
 from tlkernel.config import CheckSpec, EngineConfig
 from tlkernel.ids import CheckId
+from tlkernel.matchers import clip
 from tlkernel.plancheck import Adhoc, PlanCheck, PlanData, Ref
 
 JUST_PLAIN_FLAGS: Final = frozenset({"--unstable", "-q", "--quiet", "-v", "--verbose", "--dry-run", "-n", "--no-deps", "--highlight",

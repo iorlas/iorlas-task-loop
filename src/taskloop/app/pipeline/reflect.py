@@ -12,6 +12,7 @@ from tlkernel.delegateport import Answer, Resolved, Seam
 from tlkernel.env import Env
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
+from tlkernel.matchers import clip
 from tlkernel.schema import unstrict
 from tlkernel.stores import JsonlStore
 from tlkernel.wire import Open
@@ -20,7 +21,6 @@ from taskloop.app.pipeline.adapter_ports import DelegateEnv
 from taskloop.app.pipeline.ports import TrustRefusal
 from taskloop.app.pipeline.reflect_prompt import REFLECT_PROMPT
 from taskloop.domain.lanes import caps
-from taskloop.domain.matchers import clip
 
 
 class ReflectConfig(Protocol):

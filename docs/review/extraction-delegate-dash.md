@@ -346,7 +346,7 @@ Contracts to own:
 
 **Reuse first / target:** extend jsonl-log with a multi-source reader. event-bus is in-process notification; http-cache/http-fetch do not preserve file offsets. Merge projected records by a supplied ordering key and wait for new content without changing the transport.
 
-**Runtime donors:** src/taskloop_dash/api/live.py:26-38 (13),44-53 (10),59 (1),74-98 (25),102-124 (23): **72**. **Tests:** tests/dash/test_dash_live.py:64-89 (26),118-140 (23): **49**, transplanted against synthetic source/projector inputs. Keep the original app integration assertions too if they verify engine event mapping.
+**Runtime donors:** src/taskloop_dash/api/live.py:26-38 (13),44-53 (10),59 (1),74-98 (25),102-124 (23): **72**. **Tests:** tests/dashwire/test_dash_live.py:64-89 (26),118-140 (23): **49**, transplanted against synthetic source/projector inputs. Keep the original app integration assertions too if they verify engine event mapping.
 
     feed = MergedFeed(sources, discover, decode, project, order, clock)
     feed.refresh(); feed.offsets() -> dict[str, int]

@@ -31,7 +31,7 @@ class ArtifactTool(te.EngineTest):
         assert len({opts(r.tools[0].command)["--run"] for r in script.requests}) == 1
 
     def test_the_server_takes_no_binding_from_the_model(self):
-        from taskloop.app.artifacts import server  # noqa: PLC0415
+        from tlartifacts import server  # noqa: PLC0415
 
         schema = server.TOOL["inputSchema"]
         assert isinstance(schema, dict) and schema["additionalProperties"] is False

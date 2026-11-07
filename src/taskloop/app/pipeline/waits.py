@@ -10,17 +10,17 @@ from tlkernel.config import EngineConfig
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.ports import Clock
+from tlkernel.stagefacts import RunLogPort
 from tlkernel.waitenums import WaitWhat
 
 from taskloop.app.pipeline import outcomes
 from taskloop.app.pipeline.adapter_ports import Deadline
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.steps import Open
+from taskloop.app.pipeline.store_ports import WaitStores
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.checks.matchers import slot_wait_secs
 from taskloop.domain.lanes.liveness import LIVENESS
-from taskloop.stores.bundle import Stores
-from taskloop.stores.runlog import RunLog
 
 
 class WaitsBudget(Protocol):
@@ -47,7 +47,7 @@ class WaitsHost(Protocol):
     @property
     def cfg(self) -> EngineConfig: ...
     @property
-    def log(self) -> RunLog: ...
+    def log(self) -> RunLogPort: ...
     @property
     def clock(self) -> Clock: ...
     @property
@@ -57,7 +57,7 @@ class WaitsHost(Protocol):
     @property
     def stats(self) -> dict[str, int]: ...
     @property
-    def stores(self) -> Stores: ...
+    def stores(self) -> WaitStores: ...
     @property
     def log_path(self) -> Path: ...
 

@@ -6,10 +6,9 @@ from pathlib import Path
 from tlkernel import wire
 from tlkernel.config import ProfileReadError
 from tlkernel.enums import Result
+from tlkernel.matchers import NetText
 from tlkernel.run import RunReport
 from tlkernel.slots import SlotFailCode
-
-from taskloop.domain.matchers import NetText
 
 NETWORK = "pause_network"
 FAULT_SLOT = "fault_slot"
