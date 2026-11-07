@@ -7,6 +7,7 @@ from pathlib import Path
 from tlkernel import fence
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, BeadQuery, Beads
+from tlkernel.branches import TASK
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId, is_bead_id
 from tlkernel.landed import Landed, landed_in
@@ -27,7 +28,6 @@ from taskloop.domain.reconcile.facts import (
     Worktree,
 )
 
-TASK = "task/"
 RELEASE = "release/"
 
 

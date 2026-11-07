@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Protocol
 
 from tlkernel.beadsport import DoltPush
+from tlkernel.branches import task_branch
 from tlkernel.config import EngineConfig
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
@@ -142,7 +143,7 @@ class Outbound:
         e.checkout.stage_all()
         if e.git.staged(e.wt):  # staged work: a wip commit of what the stages meant
             e.tree.wip(f"stage {stage} accepted", everything=False)
-        ref = f"refs/heads/task/{e.bead}"
+        ref = f"refs/heads/{task_branch(e.bead)}"
         rc, tail = self.lfs_push()  # git-lfs's hook is not on the hooks path: else the branch lacks its LFS files
         if not rc:
             t0 = e.clock.monotonic()

@@ -7,7 +7,7 @@ from tlkernel.paths import ConfigDir
 from taskloop.adapters import ident
 from taskloop.app.loop.versions import Installs
 from taskloop.app.release import catalog, pins
-from taskloop.app.slots import engine_lock
+from taskloop.app.slots.engine_lock import HeldLock
 from taskloop.app.track import trail
 
 
@@ -18,5 +18,5 @@ def installed_newer(env: Env, root: Path = ident.PLUGIN_ROOT) -> tuple[str, Path
     return (found.version, found.dir) if found else None
 
 
-def locked_slot() -> str:
-    return engine_lock.LOCK.rec.slot if engine_lock.LOCK else ""
+def locked_slot(held: HeldLock) -> str:
+    return held.slot
