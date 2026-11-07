@@ -1,0 +1,282 @@
+"""Resume: gather the world, ask `resume_decision`, and apply the answer to the engine (its state, its notes, replan.md)."""
+
+import copy
+from collections.abc import Callable
+from pathlib import Path
+from typing import Protocol
+
+from tlkernel import planbrief as brief
+from tlkernel import plancheck, wire
+from tlkernel.ask import Ask
+from tlkernel.askenums import AskClass
+from tlkernel.checkpoint import Checkpoint, RunState
+from tlkernel.checks import CheckRun
+from tlkernel.gitport import Git
+from tlkernel.plancheck import PlanData, RoundState
+from tlkernel.wire import Open
+from tlpipeline.decide import CONFIRMED, OUTSIDE, Decision, World, resume_decision, stage_count
+from tlpipeline.ports import HeadHistory, ReviewRestore
+
+KEEP_FOR_ACTIVE = ("plan_data", "accepted", "extra", "planner_ref", "brief_hash", "snap", "review")  # restored one by one, not copied over
+LATE = (
+    "done",
+    "replans",
+    "fixes",
+    "denials",
+    "stage_tree",
+    "accepted_new",
+    "writer",
+    "writer_family",
+)  # only a checkpoint this engine left (HEAD is where it was) hands these on
+GATE_NOTE = (
+    "Every stage was accepted, then the gate failed on the tree rebased onto the latest base (often another task landed "
+    "first). Plan the fix.\n\n"
+)
+VERIFY_NOTE = "A push retry's validation fix did not pass checks and review. Plan the fix before landing.\n\n"
+
+
+class ResumeCheckpoints(Protocol):
+    def read(self) -> Checkpoint | None: ...
+    def drop(self) -> None: ...
+    def keep_pending(self) -> None: ...
+
+
+class ResumeLog(Protocol):
+    def note(self, text: str) -> int: ...
+
+
+class ResumeCap(Protocol):
+    def answered_words(self) -> str: ...
+
+
+class ResumePlanner[T](Protocol):
+    @property
+    def cap(self) -> ResumeCap: ...
+    def take(self, p: T) -> PlanData: ...
+    def resume_draft(self, data: PlanData) -> T: ...
+
+
+class ResumeCases(Protocol):
+    def promised_missing(self, plan: PlanData, upto: int) -> int | None: ...
+
+
+class ResumeReview(Protocol):
+    unchecked: list[Open]
+
+
+class ResumeAmend(Protocol):
+    def resume_into(self, old_plan: PlanData | None, why: str, text: str | None = None) -> None: ...
+
+
+class ResumeCheckRun(Protocol):
+    def get(self) -> CheckRun | None: ...
+    def write(self, rec: CheckRun) -> None: ...
+
+
+class ResumeStores(Protocol):
+    @property
+    def check_run(self) -> Callable[[str, int | None], ResumeCheckRun]: ...
+
+
+class ResumeProgress(Protocol):
+    replan_first: bool
+    fresh: bool
+    ck_run: str
+    resumed: bool
+    @property
+    def checkpoints(self) -> ResumeCheckpoints: ...
+    @property
+    def state(self) -> RunState: ...
+
+
+class ResumePlanning[T](Protocol):
+    answered: Ask | None
+    @property
+    def planner(self) -> ResumePlanner[T]: ...
+    @property
+    def cases(self) -> ResumeCases: ...
+    @property
+    def amend(self) -> ResumeAmend: ...
+    plan_summary: str
+    verify_answer: str
+    def publish_plan(self) -> None: ...
+
+
+class ResumeRecords(Protocol):
+    wt: str
+    left_dirty: bool
+    @property
+    def git(self) -> Git: ...
+    @property
+    def log(self) -> ResumeLog: ...
+    last_run: CheckRun | None
+    run_id: str
+    run_dir: Path
+    @property
+    def stores(self) -> ResumeStores: ...
+    @property
+    def review(self) -> ResumeReview: ...
+
+
+class Resume[T]:
+    def __init__(self, progress: ResumeProgress, planning: ResumePlanning[T], records: ResumeRecords,
+                 history: HeadHistory, review: ReviewRestore, state_names: tuple[str, ...]) -> None:
+        self.history, self.review, self.state_names = history, review, state_names
+        self.progress, self.planning, self.records = progress, planning, records
+
+    def point(self) -> tuple[PlanData | None, int, RoundState | None]:
+        """(plan, stage index, stage state) from the last run's checkpoint, or (None, 0, None) to plan afresh. A tree changed since
+        (someone edited the branch) amends the plan; a changed bead keeps the accepted stages and amends the rest; otherwise the
+        run goes on at the same stage and round, with the same writer thread, or straight to land when every stage was accepted."""
+        self.progress.replan_first = False
+        ck = self.progress.checkpoints.read()
+        w = self.world(ck)
+        d = resume_decision(ck, w)
+        self.progress.ck_run = "" if ck is None or self.progress.fresh else ck.run
+        if d.drop:
+            self.progress.checkpoints.drop()
+        if ck is None or d.kind == "fresh":
+            self.progress.checkpoints.keep_pending()
+            return None, 0, None
+        self.restore(ck, late=d.why != OUTSIDE)
+        self.progress.resumed = d.why != OUTSIDE
+        if d.kind in ("resume", "land"):
+            self.note_kept(ck, w)
+        return self.apply(ck, d)
+
+    def note_kept(self, ck: Checkpoint, w: World) -> None:
+        """The bead or the owner's answer moved but nothing the plan reads changed: say the plan is kept and the planner not called."""
+        if w.answer_given and not w.answer_words and ck.state.brief_hash == w.brief_hash and w.brief_diff is not None:
+            self.records.log.note(f"the owner's answer ({w.answer_action}) only asks for a rerun: keeping the plan, no planner run")
+        elif ck.state.brief_hash != w.brief_hash:
+            self.records.log.note(
+                f"the bead changed since the checkpoint of {ck.run}, but nothing the plan reads: keeping the plan, no planner run"
+            )
+
+    def world(self, ck: Checkpoint | None) -> World:
+        a = self.planning.answered
+        given = a is not None and a.answer is not None
+        words = self.planning.planner.cap.answered_words() if a is not None or ck is not None else ""
+        snap_diff = quiet = req = None
+        if ck is not None and ck.state.snap is not None and self.progress.state.snap is not None:
+            snap_diff = brief.diff(ck.state.snap, self.progress.state.snap, words)
+            quiet = brief.diff(ck.state.snap, self.progress.state.snap, words, comments=False)
+            req = brief.diff(ck.state.snap, self.progress.state.snap, "", comments=False)
+        return World(
+            fresh=self.progress.fresh,
+            branch=self.records.git.branch(self.records.wt),
+            head=self.records.git.rev_parse(self.records.wt, "HEAD"),
+            parent=self.records.git.rev_parse(self.records.wt, "HEAD~1") if self.records.left_dirty else "",
+            left_dirty=self.records.left_dirty,
+            brief_hash=self.progress.state.brief_hash,
+            answered=a is not None,
+            answer_given=given,
+            answer_external_fact=a is not None and a.ask_class == AskClass.EXTERNAL_FACT,
+            answer_confirms=given and a is not None and a.answer is not None and a.answer.action == "confirm",
+            answer_words=words,
+            answer_id=a.id if a is not None else "",
+            answer_action=a.answer.action if given and a is not None and a.answer is not None else "",
+            brief_diff=snap_diff,
+            brief_diff_quiet=quiet,
+            brief_diff_req=req,
+            missing_stage=self.missing(ck) if ck is not None else None,
+        )
+
+    def missing(self, ck: Checkpoint) -> int | None:
+        n = stage_count(ck)
+        plan = ck.state.plan_data or {}
+        plancheck.parse_stored(plan)  # a saved plan comes back with its risks and cases as dicts: their checks are parsed again
+        return self.planning.cases.promised_missing(plan, n if (ck.step == "land" or ck.stage >= n) else ck.stage) if plan else None
+
+    def restore(self, ck: Checkpoint, late: bool) -> None:
+        """The checkpoint's state into the engine: what every resume keeps, and (HEAD is the engine's) what only a resume keeps."""
+        saved = copy.deepcopy(ck.state)
+        for name in self.state_names:
+            if name not in KEEP_FOR_ACTIVE and (late or name not in LATE):
+                setattr(self.progress.state, name, getattr(saved, name))
+        self.review.apply(saved.review, unchecked=False, late=late)
+        self.progress.state.extra = self.progress.state.extra + saved.extra
+        self.progress.state.planner_ref = saved.planner_ref or self.progress.state.planner_ref
+        self.progress.state.pending_land_validation = saved.pending_land_validation or (ck.feedback if ck.step == "land-verify-red" else "")
+        self.progress.checkpoints.keep_pending()
+
+    def apply(self, ck: Checkpoint, d: Decision) -> tuple[PlanData | None, int, RoundState | None]:
+        plan = ck.state.plan_data
+        if plan:
+            plancheck.parse_stored(plan)  # a saved plan comes back with its risks and cases as dicts: their checks are parsed again
+        if d.kind in ("amend", "replan"):
+            return self.amend(ck, d)
+        if ck.step == "plan" and plan is not None:
+            self.records.log.note(f"resuming {ck.run}: validating the saved draft plan before any write")
+            return self.planning.planner.take(self.planning.planner.resume_draft(plan)), 0, None
+        self.progress.state.plan_data, self.planning.plan_summary, self.progress.state.accepted = (
+            plan, (plan or {})["summary"], list(ck.state.accepted))
+        self.planning.publish_plan()
+        if d.redo_from is not None:
+            return self.redo(ck, d)
+        if d.kind == "land":
+            if d.why != CONFIRMED:
+                self.review.apply(ck.state.review, unchecked=True)  # still unproven: verified again before land
+            self.records.log.note(f"resuming {ck.run}: every stage was accepted, going straight to land")
+            return plan, d.stage, None
+        self.records.log.note(f"resuming {ck.run} at stage {ck.stage + 1}/{stage_count(ck)}, round {ck.rounds + 1} (write {ck.n + 1})")
+        state: RoundState = {"rounds": ck.rounds, "n": ck.n, "feedback": ck.feedback}
+        if ck.step == "review" and ck.progress is not None and ck.progress.write is not None:  # tl-q3ma
+            self.records.last_run = self.records.stores.check_run(ck.run, None).get()
+            if self.records.last_run is not None:
+                self.records.stores.check_run(self.records.run_id, None).write(self.records.last_run)
+                state["review_from"] = wire.dump(ck.progress)
+        return plan, ck.stage, state
+
+    def redo(self, ck: Checkpoint, d: Decision) -> tuple[PlanData | None, int, RoundState | None]:
+        """A file a stage promised is gone (the resume is in another slot): that stage runs again."""
+        again = d.stage
+        self.records.log.note(f"resuming {ck.run}: a file stage {again + 1} promised is missing, so that stage runs again")
+        self.progress.state.accepted = [k for k in self.progress.state.accepted if k < again]
+        redo = {st["goal"] for st in (ck.state.plan_data or {})["stages"][again:]}
+        self.progress.state.done = [g for g in self.progress.state.done if g not in redo]
+        self.records.review.unchecked = []
+        return ck.state.plan_data, again, None
+
+    def amend(self, ck: Checkpoint, d: Decision) -> tuple[PlanData | None, int, RoundState | None]:
+        """The plan is made again: the old one is kept for the planner to amend, with why and what changed."""
+        if d.verify_answer:
+            self.progress.state.plan_data, self.planning.plan_summary = ck.state.plan_data, (ck.state.plan_data or {})["summary"]
+            self.planning.verify_answer = d.verify_answer
+            asked = self.planning.answered.id if self.planning.answered else ""
+            self.records.log.note(f"the owner answered verify ask {asked} with more than a yes: planning what it asks, "
+                                  f"keeping {len(self.progress.state.done)} stage(s)")
+            return None, 0, None
+        self.planning.amend.resume_into(ck.state.plan_data, d.amend_why)
+        if d.kind == "replan":
+            self.replan_note(ck)
+            return None, 0, None
+        if d.why == OUTSIDE:
+            self.records.log.note(f"the branch changed since the checkpoint of {ck.run}: amending its plan")
+            self.planning.amend.resume_into(ck.state.plan_data, d.amend_why, self.outside_text(ck))
+            return None, 0, None
+        self.records.log.note(
+            f"the bead changed since the checkpoint of {ck.run}: amending its plan, "
+            f"keeping {len(self.progress.state.done)} accepted stage(s)"
+        )
+        text = d.amend_text + "\nAccepted stages (their work is in the tree): " + ("; ".join(self.progress.state.done) or "none")
+        self.planning.amend.resume_into(ck.state.plan_data, d.amend_why, text)
+        return None, 0, None
+
+    def replan_note(self, ck: Checkpoint) -> None:
+        gate = ck.step == "gate-red"
+        self.records.log.note(
+            f"the gate was red at land in {ck.run}: re-planning with its output, keeping {len(self.progress.state.done)} accepted stage(s)"
+            if gate
+            else f"retry validation failed in {ck.run}: re-planning the unaccepted fix"
+        )
+        Path(self.records.run_dir / "replan.md").write_text((GATE_NOTE + ck.gate_tail) if gate else (VERIFY_NOTE + ck.feedback))
+        self.progress.replan_first = True
+
+    def outside_text(self, ck: Checkpoint) -> str:
+        return (
+            "The branch changed outside the engine since the old plan (commits after {}):\n{}\nNo stage of the old plan is known to "
+            "be in the tree; read `git status` and the diff from the base.".format(
+                ck.head[:12], (self.history.since(self.records.wt, ck.head, 15) or "(none)")[:800]
+            )
+        )

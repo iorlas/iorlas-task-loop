@@ -6,9 +6,9 @@ import inspect
 import textwrap
 from collections.abc import Callable
 
-from taskloop.app.pipeline.standalone import Standalone
 from taskloop.app.write import rounds as stage_rounds
 from tlkernel.enums import Step
+from tlpipeline.standalone import Standalone
 
 Graph = dict[Step, set[Step | None]]
 

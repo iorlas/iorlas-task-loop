@@ -1,8 +1,6 @@
 """Stage faults retry under the same slot lease until per-bead escalation parks the bead."""
 from unittest.mock import Mock
 
-from support.fake_clock import FakeClock
-
 from taskloop.app.asks import parks
 from taskloop.app.loop.loop import Loop
 from taskloop.app.loop.net import NetState
@@ -16,6 +14,7 @@ from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.parks import ParkStore
 from tlkernel.paths import ConfigDir
+from tltestkit.fake_clock import FakeClock
 
 
 def test_stage_fault_keeps_slot_and_retries_until_parked(workdir):

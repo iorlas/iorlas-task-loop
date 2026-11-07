@@ -2,7 +2,7 @@
 from unittest import mock
 
 from taskloop.adapters import deadline
-from taskloop.app.pipeline.lifecycle import Lifecycle, LifecycleHost
+from tlpipeline.lifecycle import Lifecycle, LifecycleHost
 
 
 def lifecycle(host: LifecycleHost) -> Lifecycle:

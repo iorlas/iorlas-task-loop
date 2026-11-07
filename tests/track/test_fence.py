@@ -22,14 +22,14 @@ from support.fake_beads import FakeBeads
 from support.lifecycle import lifecycle
 from support.memstores import fake_stores
 
-from taskloop.app.pipeline.checkpoints import Checkpoints
-from taskloop.app.pipeline.lifecycle import Ended
 from taskloop.app.track import verbs
 from taskloop.app.wire import closeguard
 from tlkernel import fence
 from tlkernel.bead import BdError, Bead
 from tlkernel.beadsport import BdFailure, BeadPatch
 from tlkernel.ids import BeadId
+from tlpipeline.checkpoints import Checkpoints
+from tlpipeline.lifecycle import Ended
 
 ME = "tl-run00001"
 LOCKED = BdFailure(BdError(kind="other", text="locked"))

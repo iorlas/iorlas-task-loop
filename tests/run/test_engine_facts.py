@@ -8,12 +8,9 @@ import types
 import support.paths  # noqa: F401
 from support import engine_case as te
 from support.dashlogs import RunScript
-from support.memstores import MemLog
 from support.plans import FALSE, PLAN, WRITE
 
 from taskloop.adapters.agent import last_event_t
-from taskloop.app.pipeline.stuck import StuckTick
-from taskloop.app.pipeline.stuck_rule import StuckWatch
 from taskloop.stores.runlog import RunLog
 from taskloop_dash.views import columns, passes
 from taskloop_dash.views.runfacts import run_of
@@ -23,7 +20,10 @@ from tlkernel.dash import Marker
 from tlkernel.ids import CheckId
 from tlkernel.runlife import SAME_RED, silent_limit
 from tlkernel.waitenums import WaitWhat
+from tlpipeline.stuck import StuckTick
+from tlpipeline.stuck_rule import StuckWatch
 from tltestkit.case import Case
+from tltestkit.memdoc import MemLog
 from tltestkit.narrow import must
 
 T = 1_800_000_000.0

@@ -8,6 +8,7 @@ root_packages =
     taskloop_dash
     tlkernel
     tlartifacts
+    tlpipeline
     msgspec
     re
     urllib
@@ -233,6 +234,17 @@ forbidden_modules =
     delegate
 allow_indirect_imports = True
 
+[importlinter:contract:package-pipeline-imports-only-the-kernel]
+name = The pipeline package (tlpipeline) imports the kernel and third parties, never the tree or another package
+type = forbidden
+source_modules =
+    tlpipeline
+forbidden_modules =
+    taskloop
+    taskloop_dash
+    delegate
+allow_indirect_imports = True
+
 [importlinter:contract:nobody-imports-a-root]
 name = Nobody imports a root: nodes, run's logic modules and the layers below never import launch, wire or run's composition files
 type = forbidden
@@ -243,7 +255,6 @@ source_modules =
     taskloop.app.land
     taskloop.app.look
     taskloop.app.loop
-    taskloop.app.pipeline
     taskloop.app.plan
     taskloop.app.prune
     taskloop.app.reconcile
@@ -255,40 +266,7 @@ source_modules =
     taskloop.app.track
     taskloop.app.workers
     taskloop.app.write
-    taskloop.app.pipeline.adapter_ports
-    taskloop.app.pipeline.blocked
-    taskloop.app.pipeline.budget
-    taskloop.app.pipeline.waits
-    taskloop.app.pipeline.closing
-    taskloop.app.pipeline.closing_branch
-    taskloop.app.pipeline.closing_decide
-    taskloop.app.pipeline.closing_host
-    taskloop.app.pipeline.closing_notes
-    taskloop.app.pipeline.closing_record
-    taskloop.app.pipeline.closing_settle
-    taskloop.app.pipeline.crash
-    taskloop.app.pipeline.lifecycle
-    taskloop.app.pipeline.run
-    taskloop.app.pipeline.run_roles
-    taskloop.app.pipeline.standalone_roles
-    taskloop.app.pipeline.standalone
-    taskloop.app.pipeline.decide
-    taskloop.app.pipeline.ended
-    taskloop.app.pipeline.finish
-    taskloop.app.pipeline.outcomes
-    taskloop.app.pipeline.journal
-    taskloop.app.pipeline.reflect
-    taskloop.app.pipeline.reflect_prompt
-    taskloop.app.pipeline.reload
-    taskloop.app.pipeline.requests
-    taskloop.app.pipeline.resume
     taskloop.app.run.field_ports
-    taskloop.app.pipeline.steps
-    taskloop.app.pipeline.store_ports
-    taskloop.app.pipeline.stuck
-    taskloop.app.pipeline.stuck_rule
-    taskloop.app.pipeline.summaries
-    taskloop.app.pipeline.trace
     taskloop.stores
     taskloop.domain
     taskloop.adapters
@@ -329,10 +307,10 @@ name = A converted stage imports no host (not the Engine, run, wire or launch)
 type = forbidden
 source_modules =
     tlartifacts
+    tlpipeline
     taskloop.app.checks
     taskloop.app.doctor
     taskloop.app.loop
-    taskloop.app.pipeline
     taskloop.app.plan
     taskloop.app.reconcile
     taskloop.app.release
@@ -355,26 +333,6 @@ source_modules =
 forbidden_modules =
     taskloop.adapters.delegate
     taskloop.adapters.runner
-allow_indirect_imports = True
-
-[importlinter:contract:pipeline-imports-no-stage]
-name = The pipeline node reaches a stage only through its ports (docs/design/pipeline-node.md)
-type = forbidden
-source_modules =
-    taskloop.app.pipeline
-forbidden_modules =
-    taskloop.app.asks
-    taskloop.app.checks
-    taskloop.app.land
-    taskloop.app.look
-    taskloop.app.plan
-    taskloop.app.prune
-    taskloop.app.release
-    taskloop.app.report
-    taskloop.app.review
-    taskloop.app.slots
-    taskloop.app.track
-    taskloop.app.write
 allow_indirect_imports = True
 
 [importlinter:contract:work-imports-no-stage]

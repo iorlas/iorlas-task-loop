@@ -21,11 +21,11 @@ from tltestkit.logs import records
 from taskloop.app.land import outbound
 from taskloop.app.land.lander import Lander
 from taskloop.app.land.sync import Sync as AfterLand
-from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from tlkernel import lanepauses as pauses
 from tlkernel import runoutcome as oc
 from tlkernel.enums import Result
 from tlkernel.kinds import Kind
+from tlpipeline.blocked import Blocked, blocked_for
 
 ATTR = "*.bin filter=lfs diff=lfs merge=lfs -text\n"
 RUN = ({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})

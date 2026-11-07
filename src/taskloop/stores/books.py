@@ -1,10 +1,10 @@
-"""Logic over a DocSet that real and fake share, so the two cannot differ: checkpoints (read here; app/pipeline/checkpoints.py writes)."""
+"""Logic over a DocSet that real and fake share, so the two cannot differ: checkpoints (read here; tlpipeline/checkpoints.py writes)."""
 from tlkernel.checkpoint import Checkpoint
 from tlkernel.storeapi import AmendDoc, AmendSet
 
 
 class CheckpointBook:
-    """checkpoints/<bead>: `Checkpoints` (app/pipeline/checkpoints.py) is the one writer; the dashboard and resume read."""
+    """checkpoints/<bead>: `Checkpoints` (tlpipeline/checkpoints.py) is the one writer; the dashboard and resume read."""
 
     def __init__(self, docs: AmendSet[Checkpoint]) -> None:
         self.docs = docs

@@ -7,13 +7,11 @@ from pathlib import Path
 import support.paths  # noqa: F401
 from support.cfgs import cfg_with
 from support.fake_beads import FakeBeads
-from support.fake_clock import FakeClock
 from support.memcheckpoints import MemCheckpointDoc
 from support.memstores import fake_stores
 from support.spawn import port_git, real_spawner
 from support.who import who
 from taskloop.app.checks.checklog import CheckLog
-from taskloop.app.pipeline.steps import Steps
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 from taskloop.stores.runports import RunPorts
@@ -27,6 +25,8 @@ from tlkernel.paths import ConfigDir
 from tlkernel.plancheck import PlanCheck
 from tlkernel.ports import Clock
 from tlkernel.stagefacts import RunFacts
+from tlpipeline.steps import Steps
+from tltestkit.fake_clock import FakeClock
 
 
 class MemCheckpoints:

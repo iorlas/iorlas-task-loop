@@ -32,7 +32,6 @@ from taskloop.app.land.cmds import Cmds
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import MODE, Stack
 from taskloop.app.land.stackgate import StackGate
-from taskloop.app.pipeline.finish import answer
 from taskloop.app.track import runs
 from taskloop.app.track.verbs import trace
 from taskloop.app.wire import closeguard
@@ -57,6 +56,7 @@ from tlkernel.locks import LockTimeout
 from tlkernel.paths import ConfigDir
 from tlkernel.runkey import BaseSha
 from tlkernel.slots import Checkout, NotARepo, SlotGitError
+from tlpipeline.finish import answer
 
 OID: dict[str, str] = {"task/a": "a" * 40, "task/b": "b" * 40}
 

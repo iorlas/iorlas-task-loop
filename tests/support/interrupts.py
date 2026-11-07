@@ -9,21 +9,21 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from support.fake_clock import FakeClock
 from support.memstores import fake_stores
 from support.push_race import seam
 from taskloop.adapters import halt, landlock
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.land.fixer import Fixer
 from taskloop.app.land.outbound import pin_head
-from taskloop.app.pipeline.checkpoints import Checkpoints
-from taskloop.app.pipeline.steps import Steps
 from taskloop.app.run import engine
 from taskloop.app.write.stage_loop import StageLoop
 from taskloop.stores.bundle import Stores
 from tlkernel.kinds import Kind
 from tlkernel.paths import ConfigDir
+from tlpipeline.checkpoints import Checkpoints
+from tlpipeline.steps import Steps
 from tltestkit import fake_route
+from tltestkit.fake_clock import FakeClock
 
 
 class IdleHeartbeat:
@@ -70,7 +70,7 @@ class RecoveryRig:
         stack.enter_context(mock.patch.object(halt, "nap", self.nap))
         stack.enter_context(mock.patch.object(landlock, "os_lock", self.locked))
         stack.enter_context(mock.patch("taskloop.app.run.run_once.Lease"))
-        stack.enter_context(mock.patch("taskloop.app.pipeline.stage_run.threading",
+        stack.enter_context(mock.patch("tlpipeline.stage_run.threading",
                                        SimpleNamespace(Event=threading.Event, Thread=IdleHeartbeat)))
         return stack
 

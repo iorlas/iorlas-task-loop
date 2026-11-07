@@ -9,14 +9,11 @@ from tltestkit.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.narrow_hosts import CloseKit, FakeReleaseSlotHost, FakeSettleHost
-from support.pipeline_ports import FakeParkBook
+
+from tlpipeline.testing import FakeParkBook
 
 # isort: split
-from support.pipeline_ports import FakeLandCleanup
-
 from taskloop.app.asks import raiser
-from taskloop.app.pipeline.closing_branch import ReleaseSlot
-from taskloop.app.pipeline.closing_settle import Settle
 from taskloop.app.track.closing import ClosingBeads
 from taskloop.app.wire import closeguard
 from tlkernel import askspecs
@@ -27,6 +24,9 @@ from tlkernel.enums import Outcome
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.log import Note
+from tlpipeline.closing_branch import ReleaseSlot
+from tlpipeline.closing_settle import Settle
+from tlpipeline.testing import FakeLandCleanup
 
 
 class Effects(Case):

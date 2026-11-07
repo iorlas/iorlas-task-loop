@@ -3,7 +3,6 @@ from unittest.mock import Mock
 
 import pytest
 from support.narrow_hosts import CloseKit
-from support.pipeline_ports import FakeAskRules, FakeParkBook
 
 from tlkernel import askspecs as specs
 from tlkernel import runoutcome as oc
@@ -13,6 +12,7 @@ from tlkernel.checkpoint import Checkpoint, CloseIntent, EndRec, PauseFacts
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.parks import Park
+from tlpipeline.testing import FakeAskRules, FakeParkBook
 
 
 def test_ask_lint_converts_invalid_ask_to_engine_fault(monkeypatch):

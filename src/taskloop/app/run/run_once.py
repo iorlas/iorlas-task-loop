@@ -3,11 +3,11 @@ from collections.abc import Callable
 from typing import Any
 
 from tlkernel.envvars import EnvVar
+from tlpipeline.lifecycle import Lifecycle
+from tlpipeline.run import RunBody
 
 from taskloop.adapters import beadtools, deadline, ident
 from taskloop.app.land.closing import LandHistory
-from taskloop.app.pipeline.lifecycle import Lifecycle
-from taskloop.app.pipeline.run import RunBody
 from taskloop.app.release.closing import ReexecBook
 from taskloop.app.slots.lease import Lease
 
