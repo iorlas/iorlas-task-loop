@@ -26,13 +26,15 @@ class Phase(StrEnum):
 
 @final
 class Entry(Rec):
-    """branch, head: the PR's branch and the head that is judged. q, tree: its queue commit and that commit's tree ('' until built)."""
+    """branch, head: the PR's branch and the head that is judged. q, tree, ref: its queue commit, its tree and the ref keeping it
+    ('' until built)."""
 
     branch: str
     head: str
     phase: Phase = Phase.WAITING
     q: str = ""
     tree: str = ""
+    ref: str = ""
     reason: str = ""
 
 
@@ -64,10 +66,10 @@ class Merge:
 @final
 @dataclass(frozen=True)
 class Drop:
-    """Remove the queue ref and the worktree of an entry that left the queue."""
+    """Remove the queue ref of an entry that left the queue."""
 
     branch: str
-    q: str
+    ref: str
 
 
 type Action = Build | Gate | Merge | Drop
@@ -79,6 +81,7 @@ class Built:
     branch: str
     q: str
     tree: str
+    ref: str = ""
 
 
 @final
@@ -101,7 +104,19 @@ class Landed:
     branch: str
 
 
-type Event = Built | Ejected | Gated | Landed
+@final
+@dataclass(frozen=True)
+class Started:
+    branch: str
+
+
+@final
+@dataclass(frozen=True)
+class Dropped:
+    branch: str
+
+
+type Event = Built | Ejected | Started | Gated | Landed | Dropped
 
 
 def live(entries: Sequence[Entry]) -> list[Entry]:
@@ -112,7 +127,7 @@ def live(entries: Sequence[Entry]) -> list[Entry]:
 def plan(entries: Sequence[Entry], main: str, in_flight: int) -> list[Action]:
     """What to do now: drop the refs of entries that left, merge the head when green, gate built entries up to `in_flight` at once, and
     build the next entries on their predecessor's Q (one chain, in order, no further than `in_flight` entries past the head)."""
-    acts: list[Action] = [Drop(e.branch, e.q) for e in entries if e.phase in (Phase.EJECTED, Phase.MERGED) and e.q]
+    acts: list[Action] = [Drop(e.branch, e.ref) for e in entries if e.phase in (Phase.EJECTED, Phase.MERGED) and e.ref]
     queue = live(entries)
     if queue and queue[0].phase is Phase.GREEN:
         acts.append(Merge(queue[0].branch, queue[0].q, queue[0].tree))
@@ -139,11 +154,17 @@ def apply(entries: Sequence[Entry], event: Event) -> list[Entry]:
         if e.branch != event.branch:
             out.append(e)
         elif isinstance(event, Built):
-            out.append(e.replace(phase=Phase.BUILT, q=event.q, tree=event.tree))
+            out.append(e.replace(phase=Phase.BUILT, q=event.q, tree=event.tree, ref=event.ref))
         elif isinstance(event, Ejected):
             out.append(e.replace(phase=Phase.EJECTED, reason=event.reason))
+        elif isinstance(event, Started):
+            out.append(e.replace(phase=Phase.GATING))
+        elif isinstance(event, Dropped):
+            out.append(e.replace(q="", ref=""))
         elif isinstance(event, Gated):
             out.append(e.replace(phase=Phase.GREEN if event.green else Phase.EJECTED, reason="" if event.green else "gate"))
-        else:
+        elif isinstance(event, Landed):
             out.append(e.replace(phase=Phase.MERGED))
+        else:
+            out.append(e)
     return out
