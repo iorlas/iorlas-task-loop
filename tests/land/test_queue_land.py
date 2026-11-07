@@ -81,8 +81,8 @@ def test_a_red_gate_ejects_its_entry_merges_those_ahead_and_names_it():
     w = World(red={"q2"})
     with pytest.raises(Stop) as stop:
         w.run()
-    assert [d[0] for d in w.delivered] == ["a"]
-    assert "queue: b ejected" in stop.value.why and "1 merged" in stop.value.why
+    assert [d[0] for d in w.delivered] == ["a", "c"]
+    assert "queue: b ejected" in stop.value.why and "2 merged" in stop.value.why
     assert FakeRefs.kept == set()
 
 

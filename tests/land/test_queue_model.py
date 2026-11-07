@@ -18,7 +18,7 @@ def test_the_first_waiting_entry_is_built_on_main_and_the_next_waits_for_its_q()
 
 
 def test_the_next_entry_is_built_on_the_q_of_the_one_ahead():
-    assert plan(entries(Phase.BUILT, Phase.WAITING), MAIN, 2) == [Gate("b0", "q0"), Build("b1", "h1", "q0")]
+    assert plan(entries(Phase.BUILT, Phase.WAITING), MAIN, 2) == [Gate("b0", "q0"), Build("b1", "h1", "q0", "b0")]
 
 
 def test_gates_in_flight_bound_the_gates_started():
@@ -53,7 +53,7 @@ def test_events_move_an_entry_through_its_phases():
     es = apply(es, Built("b0", "q", "t"))
     assert (es[0].phase, es[0].q, es[0].tree) == (Phase.BUILT, "q", "t")
     assert apply(es, Gated("b0", True))[0].phase is Phase.GREEN
-    assert apply(es, Gated("b0", False))[0].phase is Phase.EJECTED
+    assert apply(es, Gated("b0", False))[0].phase is Phase.RED
     assert apply(es, Landed("b0"))[0].phase is Phase.MERGED
 
 

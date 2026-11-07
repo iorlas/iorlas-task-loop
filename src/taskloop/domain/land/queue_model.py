@@ -3,8 +3,8 @@ them, and `plan`, which says what to do next. Nothing here touches git, a proces
 the stack) does the effects and feeds the results back through `apply`.
 
 An entry is WAITING (no queue commit yet), BUILT (its queue commit Q(N) exists: Q(N-1) plus the head, as merge-tree made it), GATING (its
-gate runs on Q(N)), GREEN (the gate passed), EJECTED (it could not join the queue: `reason`) or MERGED. Only the head of the queue merges,
-and only when green, so the merge order is the queue order whatever order the gates finish in."""
+gate runs on Q(N)), GREEN (the gate passed), RED (the gate failed, blame pending), EJECTED (it could not join the queue: `reason`) or
+MERGED. Only the head of the queue merges, and only when green, so the merge order is the queue order whatever order the gates finish in."""
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -20,6 +20,7 @@ class Phase(StrEnum):
     BUILT = "built"
     GATING = "gating"
     GREEN = "green"
+    RED = "red"
     EJECTED = "ejected"
     MERGED = "merged"
 
@@ -36,6 +37,7 @@ class Entry(Rec):
     tree: str = ""
     ref: str = ""
     reason: str = ""
+    after: str = ""
 
 
 @final
@@ -46,6 +48,7 @@ class Build:
     branch: str
     head: str
     parent: str
+    after: str = ""
 
 
 @final
@@ -72,7 +75,21 @@ class Drop:
     ref: str
 
 
-type Action = Build | Gate | Merge | Drop
+@final
+@dataclass(frozen=True)
+class Eject:
+    branch: str
+    reason: str
+
+
+@final
+@dataclass(frozen=True)
+class Reset:
+    branch: str
+    ref: str = ""
+
+
+type Action = Build | Gate | Merge | Drop | Eject | Reset
 
 
 @final
@@ -82,6 +99,7 @@ class Built:
     q: str
     tree: str
     ref: str = ""
+    after: str = ""
 
 
 @final
@@ -116,7 +134,7 @@ class Dropped:
     branch: str
 
 
-type Event = Built | Ejected | Started | Gated | Landed | Dropped
+type Event = Built | Ejected | Started | Gated | Landed | Dropped | Reset
 
 
 def live(entries: Sequence[Entry]) -> list[Entry]:
@@ -124,11 +142,37 @@ def live(entries: Sequence[Entry]) -> list[Entry]:
     return [e for e in entries if e.phase not in (Phase.EJECTED, Phase.MERGED)]
 
 
+def stale(entries: Sequence[Entry]) -> list[Reset]:
+    """The entries built on one that left or was reset (and so, in order, everything built on those): only they are rebuilt."""
+    invalid = {e.branch for e in entries if e.phase in (Phase.EJECTED, Phase.WAITING)}
+    out = []
+    for e in entries:
+        if e.phase in (Phase.BUILT, Phase.GATING, Phase.GREEN, Phase.RED) and e.after in invalid:
+            out.append(Reset(e.branch, e.ref))
+            invalid.add(e.branch)
+    return out
+
+
+def culprit(queue: Sequence[Entry]) -> Eject | None:
+    """The first red entry when every entry before it is green; a red behind an unresolved entry waits, it is not blamed."""
+    for e in queue:
+        if e.phase is Phase.RED:
+            return Eject(e.branch, "gate")
+        if e.phase is not Phase.GREEN:
+            return None
+    return None
+
+
 def plan(entries: Sequence[Entry], main: str, in_flight: int) -> list[Action]:
-    """What to do now: drop the refs of entries that left, merge the head when green, gate built entries up to `in_flight` at once, and
-    build the next entries on their predecessor's Q (one chain, in order, no further than `in_flight` entries past the head)."""
+    """What to do now: drop the refs of entries that left; reset the entries built on one that left; eject the culprit; merge the head
+    when green, gate built entries up to `in_flight` at once, and build the next entries on their predecessor's Q (one chain, in order,
+    no further than `in_flight` entries past the head)."""
     acts: list[Action] = [Drop(e.branch, e.ref) for e in entries if e.phase in (Phase.EJECTED, Phase.MERGED) and e.ref]
+    if resets := stale(entries):
+        return [*acts, *resets]
     queue = live(entries)
+    if (out := culprit(queue)) is not None:
+        return [*acts, out]
     if queue and queue[0].phase is Phase.GREEN:
         acts.append(Merge(queue[0].branch, queue[0].q, queue[0].tree))
     gating = sum(e.phase is Phase.GATING for e in queue)
@@ -136,12 +180,12 @@ def plan(entries: Sequence[Entry], main: str, in_flight: int) -> list[Action]:
         if e.phase is Phase.BUILT and gating < in_flight:
             acts.append(Gate(e.branch, e.q))
             gating += 1
-    parent = main
+    parent, after = main, ""
     for i, e in enumerate(queue[: max(1, in_flight)]):
         if e.phase is Phase.WAITING:
-            acts.append(Build(e.branch, e.head, parent))
+            acts.append(Build(e.branch, e.head, parent, after))
             break  # the next one needs this one's Q
-        parent = e.q
+        parent, after = e.q, e.branch
         if i + 1 >= in_flight:
             break
     return acts
@@ -154,7 +198,9 @@ def apply(entries: Sequence[Entry], event: Event) -> list[Entry]:
         if e.branch != event.branch:
             out.append(e)
         elif isinstance(event, Built):
-            out.append(e.replace(phase=Phase.BUILT, q=event.q, tree=event.tree, ref=event.ref))
+            out.append(e.replace(phase=Phase.BUILT, q=event.q, tree=event.tree, ref=event.ref, after=event.after))
+        elif isinstance(event, Reset):
+            out.append(e.replace(phase=Phase.WAITING, q="", tree="", ref="", after=""))
         elif isinstance(event, Ejected):
             out.append(e.replace(phase=Phase.EJECTED, reason=event.reason))
         elif isinstance(event, Started):
@@ -162,7 +208,7 @@ def apply(entries: Sequence[Entry], event: Event) -> list[Entry]:
         elif isinstance(event, Dropped):
             out.append(e.replace(q="", ref=""))
         elif isinstance(event, Gated):
-            out.append(e.replace(phase=Phase.GREEN if event.green else Phase.EJECTED, reason="" if event.green else "gate"))
+            out.append(e.replace(phase=Phase.GREEN if event.green else Phase.RED, reason=""))
         elif isinstance(event, Landed):
             out.append(e.replace(phase=Phase.MERGED))
         else:
