@@ -1,8 +1,8 @@
-"""Resources: the scarce tools a check may need (`needs: ["unity"]`, declared in engine.resources with a machine-wide `limit`).
+"""Resources: the scarce tools a check may need (`needs: ["editor"]`, declared in engine.resources with a machine-wide `limit`).
 
 A check holds one lease per resource it needs while it runs. A lease is one of `limit` units of the machine's lease table
 (~/.config/task-loop/leases, any_lease), so the limit holds across slots, loops and manual runs (`python3 -m any_lease run
---root <table> unity N label -- cmd`), and a dead holder frees its unit by itself (a flock). The holder record is the label
+--root <table> editor N label -- cmd`), and a dead holder frees its unit by itself (a flock). The holder record is the label
 `bead:check` plus its lane; `tl status` and the dashboard read it. The wait is recorded: in the wait log (WaitWhat.RESOURCE, with
 the check, its lane and the holders; outside the run's budget) and per check (`CheckResult.waited`, `CheckEnd.waited`).
 The check's command gets ANY_LEASE_HELD and ANY_LEASE_ROOT, so a manual-run wrapper inside it does not take a second unit.

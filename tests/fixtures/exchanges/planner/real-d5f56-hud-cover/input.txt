@@ -29,7 +29,7 @@ each stage has its files and its checks. Budget: about 12 tool calls. Then plan.
 - An adhoc argv never starts with a repo check's command: use a ref. To assert on a repo check's output, list its id
   in `reads`: your check runs after it (skipped if it failed) with its log in `TL_CHECK_LOG_<ID>` (id upper-cased, other
   characters `_`; exit `TL_CHECK_RC_<ID>`). A script reads it; pass the name:
-  {"kind": "adhoc", "argv": ["python3", "tools/assert_log.py", "TL_CHECK_LOG_UNITY_TESTS", "Passed: 12"], "reads": ["unity-tests"]}.
+  {"kind": "adhoc", "argv": ["python3", "tools/assert_log.py", "TL_CHECK_LOG_SMOKE_TESTS", "Passed: 12"], "reads": ["smoke-tests"]}.
 - The engine sets every time limit and runs checks one at a time; never write timeouts, "run alone" or similar notes
   into a check.
 - cases: the acceptance cases. At least one per acceptance criterion of the task, each with the criterion it proves

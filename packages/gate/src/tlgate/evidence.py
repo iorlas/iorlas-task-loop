@@ -61,7 +61,7 @@ def round_outcome(run: CheckRun) -> str:
 
 
 def compact(checks: Sequence[CheckResult]) -> str:
-    """Check results for a prompt: command, exit code, and the lines that say what ran (a passing gate that skipped its Unity steps
+    """Check results for a prompt: command, exit code, and the lines that say what ran (a passing gate that skipped its editor steps
     must not look like one that ran them), or the tail of a failure."""
     out = []
     for c in checks:

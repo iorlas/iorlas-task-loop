@@ -1,5 +1,5 @@
 """Budget: what a run may spend (dollars, and minutes of its own time) and what it has. Time spent waiting for a shared resource
-(a Unity slot, a lane, an editor lock) is booked as waited and is not the run's minutes."""
+(an editor slot, a lane, an editor lock) is booked as waited and is not the run's minutes."""
 
 import dataclasses
 from collections.abc import Callable
