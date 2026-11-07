@@ -7,7 +7,6 @@ NEEDS: Final = MappingProxyType({
     "dash": 1,  # source, bead
     "pipeline": 1,  # run, wait
     "asks": 1,  # ask, ask_ledger
-    "kv": 1,  # remaining shared documents
     "receipt": 1,
     "beadcache": 1,
     "repos": 1,

@@ -11,7 +11,6 @@ from tlkernel.factoryparts import (
     DURATION,
     FLAKE,
     INDEX,
-    KV,
     LANES,
     LOOK,
     LOOP,
@@ -32,6 +31,6 @@ from taskloop.app.land.store import LAND
 from taskloop.app.slots.store import SLOTS
 
 STAGE_PARTS: tuple[Part, ...] = (
-    DASH, PIPELINE, SLOTS, GATE, ASKS, KV, RELEASE, REPORT, LAND, WORK, LANES, LOOP, LOOK, RECEIPT, BEADCACHE, REPOS,
+    DASH, PIPELINE, SLOTS, GATE, ASKS, RELEASE, REPORT, LAND, WORK, LANES, LOOP, LOOK, RECEIPT, BEADCACHE, REPOS,
     TICKET, INDEX, WORKTREE, DISK, RUNDOC, DURATION, QUEUE, FLAKE,
 )

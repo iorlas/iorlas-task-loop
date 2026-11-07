@@ -1,11 +1,13 @@
 """factory.db as the parts that own its tables (stage-isolation 3.1): today's schema declared at version 1, each part by its future owner.
 
 The tables stay here until their stage's own store module defines them (the D-* beads of ARCHVERT); every table is in exactly one part.
-`kv` is the prefix grab-bag the D-KV bead takes apart. The frozen `user_version` (factorydb.SCHEMA_VERSION) stays what the vendored
-sqlite_store checks; a change to a part is a version bump of the part and a step (dbparts), not of that number.
+The frozen `user_version` (factorydb.SCHEMA_VERSION) stays what the vendored sqlite_store checks; a change to a part is a version bump
+of the part and a step (dbparts), not of that number.
 """
 import sqlite3
+from typing import Final
 
+from tlkernel import factoryretired
 from tlkernel.ask import Ask
 from tlkernel.bead import Bead
 from tlkernel.checkpoint import Checkpoint
@@ -32,15 +34,18 @@ from tlkernel.docrows import (
 )
 from tlkernel.flakes import FlakeLog
 from tlkernel.ledger import Adr, LedgerEntry
-from tlkernel.loop import LoopCommand, Rest
+from tlkernel.loop import BadVersions, LoopCommand, Rest
 from tlkernel.parks import Park
 from tlkernel.queue_doc import QueueDoc
 from tlkernel.queue_state import QueueState
 from tlkernel.requests import OwnerRequest
 from tlkernel.run import HandoffMirror, RunCounters, RunManifest
 from tlkernel.rundocs import PrepareStamp
-from tlkernel.snapshots import Pin, ReflectState, ReleaseResult, ReposIndex, StatusSnapshot, StatusTried
+from tlkernel.snapshots import Pin, ReflectState, ReleaseResult, ReposIndex, SharedNotes, StatusSnapshot, StatusTried
 from tlkernel.worktrees import Owned
+
+# Parts that existed once; a rw launch deletes their schema_part row and drops their tables; D-KV.
+DROPPED_PARTS: Final = factoryretired.DROPPED_PARTS
 
 # The runs that may age out (the pipeline's rule; the history of other parts is pruned by it too). `?` is the cutoff; the temp table
 # prune_keep_bead holds the beads the caller exempts.
@@ -154,13 +159,6 @@ CREATE TABLE ask_ledger (id INTEGER PRIMARY KEY, t REAL NOT NULL, event TEXT NOT
         AND NOT EXISTS (SELECT 1 FROM run AS r
             WHERE r.bead=ask_ledger.bead AND r.state IN ('created','running'))"""),))
 
-KV = Part(
-    name="kv", version=1, tables=("kv",),
-    records=(),
-    ddl="""
-CREATE TABLE kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL, stamp TEXT);
-""")
-
 
 def discard_old_pin(con: sqlite3.Connection) -> None:
     """release v1 -> v2: discard the retired two-plugin pin."""
@@ -174,9 +172,9 @@ REPORT = Part(name="report", version=1, tables=(REPORT_DOCS,), records=(ReflectS
 
 WORK = Part(name="work", version=1, tables=(WORK_DOCS,), records=(Adr,), ddl=doc_table(WORK_DOCS))
 
-LOOP = Part(name="loop", version=1, tables=(LOOP_DOCS,), records=(LoopCommand, Rest), ddl=doc_table(LOOP_DOCS))
+LOOP = Part(name="loop", version=1, tables=(LOOP_DOCS,), records=(LoopCommand, Rest, BadVersions), ddl=doc_table(LOOP_DOCS))
 LOOK = Part(name="look", version=1, tables=(LOOK_DOCS,), records=(), ddl=doc_table(LOOK_DOCS))
-LANES = Part(name="lanes", version=1, tables=(LANES_DOCS,), records=(StatusSnapshot, StatusTried), ddl=doc_table(LANES_DOCS))
+LANES = Part(name="lanes", version=1, tables=(LANES_DOCS,), records=(StatusSnapshot, StatusTried, SharedNotes), ddl=doc_table(LANES_DOCS))
 
 RECEIPT = Part(name="receipt", version=1, tables=(RECEIPT_DOCS,), records=(), ddl=doc_table(RECEIPT_DOCS))
 BEADCACHE = Part(name="beadcache", version=1, tables=(BEADCACHE_DOCS,), records=(), ddl=doc_table(BEADCACHE_DOCS))
