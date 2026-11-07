@@ -3,7 +3,7 @@ from collections.abc import Callable, Sequence
 
 from support.fakegit import ScriptedGit
 from support.memstores import fake_stores
-from support.narrow_hosts import FakeGateHost
+from support.narrow_land import FakeGateHost
 
 from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
 from taskloop.stores.runlog import RunLog
