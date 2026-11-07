@@ -2,6 +2,7 @@
 Reads only, through the Git port, the landed records, bd (status_of) and the engine's traces."""
 from collections.abc import Callable, Sequence
 
+from tlkernel import lifecyclematchers as matchers
 from tlkernel.branches import TASK
 from tlkernel.enums import Outcome
 from tlkernel.gitport import Git
@@ -10,7 +11,6 @@ from tlkernel.landed import Landed
 from tlkernel.slots import MissingRevision, SlotGitError
 from tlkernel.trace import RunTrace
 
-from taskloop.domain.lifecycle import matchers
 from taskloop.domain.reconcile.lost import BranchCommit
 
 LANDS = Callable[[str], list[float]]

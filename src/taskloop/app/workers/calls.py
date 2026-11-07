@@ -84,7 +84,7 @@ class Calls:
             "flag": res.flag,
             "prompt_chars": prompt_chars,
         }
-        if node == "write":  # where the session's context stands now: what the next round weighs against write_fresh_above_k
+        if node == "write":  # session context telemetry for the trace
             told = res.usage.context_k if res.usage else None  # delegate says it, whatever the harness
             row["context_k"] = round(told) if told else None
         for k in KEYS:

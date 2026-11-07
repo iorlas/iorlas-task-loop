@@ -11,13 +11,13 @@ from tlkernel.branches import TASK
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId, is_bead_id
 from tlkernel.landed import Landed, landed_in
+from tlkernel.lifecyclematchers import land_bead
 from tlkernel.lockrows import EngineLockRows
 from tlkernel.paths import ConfigDir
 from tlkernel.reconcile import Lease, SlotFact, epoch
 from tlkernel.slots import SlotGitError
 
 from taskloop.app.release import tidy
-from taskloop.domain.lifecycle.matchers import land_bead
 from taskloop.domain.reconcile.facts import (
     BeadFact,
     Checkout,

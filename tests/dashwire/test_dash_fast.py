@@ -8,7 +8,7 @@ from support.dashlogs import bead
 from support.factory_index import seed_beads
 from support.hostname import hostname
 
-from dash import test_dash_api as fixtures
+from dashwire import test_dash_api as fixtures
 from tlkernel.ids import loop_key
 from tltestkit.narrow import must
 

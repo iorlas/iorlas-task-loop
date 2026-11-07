@@ -148,7 +148,7 @@ delegate says a subscription lane is out.
 An ask is one record, `~/.config/task-loop/asks/<bead>.json` (`tlkernel.ask.Ask`, `v` 2; an older or unknown `v` reads as
 no ask), written only through `AskStore`. It has a class, one decision sentence (at most 120 characters, ends in `?`), at most 3
 `tried` bullets and 2-5 options, recommended first, each with its consequence and a typed action; the card text is rendered from those
-fields (`domain/asks/text.py`), never copied from a worker. The engine lints every ask before it files one; a failed lint files nothing
+fields (`tlkernel/asktext.py`), never copied from a worker. The engine lints every ask before it files one; a failed lint files nothing
 and the stop is an engine fault. Owner classes: open_question, external_fact, unproven, no_progress, cap_reached, over_budget,
 missing_criteria, too_big. Infra trouble (lane failure, schema or bad request, sandbox denial, stale base, missing tool or recipe, a
 wrong tree) is never an ask: the bead stays open with an engine fault.
@@ -441,7 +441,7 @@ It keeps polling an empty queue; repeating start prints `already running`. Start
 print PID, version, repo, log path and dashboard addresses; status includes current beads when known and exits 1 when not running.
 `tl factory stop [--repo DIR] [--now]` uses the same graceful stop as `tl stop`, targeting each live loop's recorded PID and start time.
 `tl factory logs [--repo DIR] [-n N] [-f]` prints the last 50 lines by default and optionally follows the console log.
-The first lane's PID is `loop.pid` under `<config>/loop/<repo-key>/`; each `factory-lane-K.log` links to its `factory-<pid>.log`.
+The first loop's PID is `loop.pid` under `<config>/loop/<repo-key>/`; each `factory-loop-K.log` links to its `factory-<pid>.log`.
 On macOS an available `caffeinate -i -w <pid>` prevents idle sleep while the first newly launched loop lives. No OS service
 is installed; manually run `tl factory start` again after a reboot. Start/stop also work from a phone's SSH terminal on the host.
 Stopping a repo's factory leaves the shared dashboard available.

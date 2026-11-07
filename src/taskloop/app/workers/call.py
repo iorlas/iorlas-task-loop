@@ -28,6 +28,7 @@ class Call:
         self.node, self.role, self.schema, self.cwd, self.full, self.text = node, role, schema, cwd, full, text
         self.writer, self.delta, self.key, self.thread, self.writer_family = writer, delta, key, thread, writer_family
         self.step, self.title, self.visual = step, title, False
+        self.boundary = False
         self.tries = 1  # calls that came back with no valid answer, from 1: two at most (RetryPlan invalid_output)
         self.counts: dict[str, float] = {"attempt": 0}  # Ctx's counters
         self.denied_retried = False
