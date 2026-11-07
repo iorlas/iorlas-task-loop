@@ -1,12 +1,12 @@
 """Broken slots recover on successful probes, without clock holds."""
 from unittest.mock import patch
 
-from slots.test_slot_pool import Rig
 from tlkernel.beadsport import BeadPatch
 from tlkernel.slots import SlotFail
 from tlslots import aside
 from tlslots.marks import mark_held
 from tlslots.pool import Slot
+from tlslots.testing import Rig
 
 
 class Aside(Rig):

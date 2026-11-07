@@ -4,9 +4,9 @@ from unittest import mock
 
 import msgspec
 
-from slots.test_slot_pool import ME, Rig
 from tlkernel.ids import BeadId
 from tlslots import verbs
+from tlslots.testing import ME, Rig
 
 
 class Leak(Rig):

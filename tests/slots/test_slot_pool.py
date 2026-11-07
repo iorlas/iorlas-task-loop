@@ -1,7 +1,5 @@
 """The slot code (src/taskloop/app/slots) on fakes: bd in memory, git in memory with injected faults, the ticket line in a dict.
 Every test here runs in milliseconds; the real git and the real files are in test_tl (SlotReset) and test_slots."""
-import contextlib
-import os
 import sys
 import time
 from pathlib import Path
@@ -14,67 +12,15 @@ from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from support.fake_beads import FakeBeads
-from support.fake_slot_git import FakeSlotGit
-
 from taskloop.adapters.git import classify
 from taskloop.cli import slots as cli
-from tlkernel import paths
 from tlkernel.bead import Bead
-from tlkernel.config import SlotsConfig
 from tlkernel.ids import BeadId
 from tlkernel.slots import BranchPinned, Checkout, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
-from tlslots.env import SlotEnv
 from tlslots.lease import Lease
 from tlslots.line import wait_slot, waiting_line
-from tlslots.pool import SlotPool
-from tltestkit.memdoc import MemTickets
-
-ME = "tl-me"
-LIVE_PID = os.getpid()  # a pid the ticket line reads as alive: pid 1 is launchd on macOS, which libproc will not show to a user process
-
-
-class Beating(FakeBeads):
-    """FakeBeads that remembers its heartbeats."""
-
-    def __init__(self, **kw):
-        super().__init__(**kw)
-        self.beats = []
-
-    def heartbeat(self, bead):
-        self.beats.append(bead)
-        super().heartbeat(bead)
-
-
-class Rig(Case):
-    def setup_method(self):
-        tmp = TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.git, self.tickets = FakeSlotGit(), MemTickets()
-        self.bd = Beating(actor=ME, prefix="sl")
-        self.out, self.err, self.events, self.sleeps, self.busy_at, self.t = [], [], [], [], {}, [1000.0]
-        self.env = SlotEnv(
-            repo=str(Path(tmp.name) / "repo"), repo_key="r-1", cfg=SlotsConfig(count=2, keep=["ignored"]),
-            store=self.bd, git=self.git, tickets=self.tickets,
-            cfgdir=paths.ConfigDir(Path(tmp.name)), actor=ME, host="h", take_lock=contextlib.nullcontext,
-            busy=lambda d: self.busy_at.get(d, ""), drop_engine_lock=lambda d, pid=None: self.busy_at.pop(d, None),
-            event=lambda kind, bead="", **kw: self.events.append((kind, kw.get("slot"))), run_setup=lambda cmd, d: 0,
-            exclude_local=lambda r: None, say=self.out.append, warn=self.err.append, pid=LIVE_PID, now=lambda: self.t[0],
-            sleep=self.sleeps.append)
-        self.pool = SlotPool(self.env)
-        for n in ("s1", "s2"):
-            self.bd.beads[BeadId("sl-" + n)] = Bead(id=BeadId("sl-" + n), title="slot h " + n, status="open", labels=["slot"])
-        self.d1 = self.env.dir_of("s1")
-        for name in ("s1", "s2"):
-            Path(self.env.dir_of(name)).mkdir(parents=True)
-
-    def slot(self, name="s1"):
-        return self.pool.slot(name)
-
-    def code(self, call):
-        with pytest.raises(SlotFail) as cm:
-            call()
-        return cm.value.code
+from tlslots.testing import LIVE_PID, ME, Rig
+from tltestkit.membeads import MemBeads as FakeBeads
 
 
 class BeadlessNamedSlot(Rig):
