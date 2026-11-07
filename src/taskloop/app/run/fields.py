@@ -127,7 +127,7 @@ class RunFields(StateAttrs, FieldParts):
         self.reflection: Mapping[str, object] | None = None
         self.left_dirty, self.branch, self.task_branch = False, "", ""
         self.land_state = LandState()  # the land's and the resume rebase's unsaved state
-        self.artifact_repo = ""  # the repo's store key (adapters.check_files.repo_key), taken at the first registered render
+        self.artifact_repo = ""  # the repo's store key (tlkernel.check_files.repo_key), taken at the first registered render
         self.taste: list[Open] = []  # [{id, title}] taste items for the owner-look bead
         self.scope = ""  # the bead's acceptance text: an unchecked item outside it is a follow-up, not a gap (tl-bxk.13.5)
         self.sessions: list[Open] = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)

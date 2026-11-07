@@ -1,5 +1,5 @@
 """The HTTP face: the page and its modules from the static dir, the reads under /api/ (snapshot, bead, cost, live, artifact, look-shot,
-version), and POST /api/<verb>, the only writes. A broken transcript or log answers 500 with a fixed body
+version), and POST /api/<verb>, the only writes. A broken log answers 500 with a fixed body
 (the traceback goes to stderr), never takes the page down."""
 
 import json
@@ -123,7 +123,7 @@ def make_handler(
                             "database_error": dash.reads.worlds.database_error()}
                     return self.send(200, json.dumps(body).encode(), "application/json")
                 got = route(dash, static, u.path, q, self.headers.get("If-None-Match"))
-            except Exception as e:  # a broken transcript must not take the page down
+            except Exception as e:  # a broken log must not take the page down
                 return self.send(*internal_error("GET " + u.path, e))
             self.send(*(got or (404, b"not found", "text/plain", [])))
 

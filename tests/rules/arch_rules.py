@@ -9,11 +9,13 @@ from importgraph import targets_of
 from rules.gate_rules import ROOT, parsed, py_files
 
 MAX_FANOUT = 40
+TEST_SUPPORT = "testkit"  # the workspace member that is test support, not production: the production rules do not cover it
 
 
 def production_trees(root=ROOT):
     trees = {}
-    for path in py_files(root, ("src", *(p.relative_to(root).as_posix() for p in sorted(root.glob("packages/*/src"))), "skills", "dev")):
+    members = (p.relative_to(root).as_posix() for p in sorted(root.glob("packages/*/src")) if p.parent.name != TEST_SUPPORT)
+    for path in py_files(root, ("src", *members, "skills", "dev")):
         parts = path.relative_to(root).with_suffix("").parts
         if parts[0] == "src":
             parts = parts[1:]

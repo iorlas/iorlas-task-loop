@@ -1,11 +1,11 @@
 """`tl doctor` says how many of the last beads had their worker on the warm second family: read from the run traces, unit-pure."""
 import pytest
-from support.narrow import must
 
 from taskloop.app.doctor import ops
 from tlkernel.enums import Outcome
 from tlkernel.ids import RunId
 from tlkernel.trace import AiCall, RunTrace
+from tltestkit.narrow import must
 
 
 def run(n: int, bead: str, *families: str, role: str = "worker") -> RunTrace:

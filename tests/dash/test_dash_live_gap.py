@@ -6,10 +6,10 @@ from pathlib import Path
 
 from support.dashlive import make_run
 from support.factory_index import ingest
-from support.narrow import must
 
 from taskloop_dash.api import live
 from tlkernel.paths import ConfigDir
+from tltestkit.narrow import must
 
 
 def test_a_removed_worker_file_is_a_gap_for_a_cursor_that_had_read_it(tmp_path: Path) -> None:

@@ -6,7 +6,6 @@ from unittest import mock
 
 import pytest
 import support.paths  # noqa: F401
-from support.narrow import must
 from support.narrow_hosts import FakeOutboundHost
 
 from taskloop.adapters.agent import last_event_t
@@ -21,6 +20,7 @@ from tlkernel.gitfacts import GitOutcome
 from tlkernel.runlife import silent_limit
 from tlkernel.stores import JsonlStore
 from tltestkit.case import Case
+from tltestkit.narrow import must
 from tltestkit.tmpdir import TemporaryDirectory
 
 
