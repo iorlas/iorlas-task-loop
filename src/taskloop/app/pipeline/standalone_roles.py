@@ -3,6 +3,7 @@ from collections.abc import Iterable
 from contextlib import AbstractContextManager
 from typing import Protocol, runtime_checkable
 
+from tlkernel import closeeffects as effects
 from tlkernel import fence
 from tlkernel import runoutcome as oc
 from tlkernel.askspec import AskSpec
@@ -23,7 +24,6 @@ from tlkernel.wire import Open
 from taskloop.app.pipeline.closing_record import RecordHost, RecordSteps
 from taskloop.app.pipeline.crash import CrashHost
 from taskloop.app.pipeline.store_ports import StandaloneStores
-from taskloop.domain import effects
 
 
 @runtime_checkable

@@ -31,7 +31,6 @@ from taskloop.app.land.sync import Sync
 from taskloop.app.pipeline.budget import Budget
 from taskloop.app.pipeline.closing import CloseParts, Closer
 from taskloop.app.pipeline.steps import Steps
-from taskloop.domain.lanes.pause_reasons import Producer
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 from tlkernel import fence
@@ -47,6 +46,7 @@ from tlkernel.enums import Outcome
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId, TreeSha
 from tlkernel.kinds import Kind
+from tlkernel.pausereasons import Producer
 from tlkernel.plancheck import PlanCheck, PlanData, StageData
 from tlkernel.ports import Clock
 from tlkernel.run import RunFinish

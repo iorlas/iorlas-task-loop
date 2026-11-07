@@ -10,7 +10,8 @@ from tltestkit.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 
-from taskloop.domain.lanes import pauses, policy, roles
+from taskloop.domain.lanes import policy, roles
+from tlkernel import lanepauses as pauses
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
 
