@@ -8,17 +8,13 @@ from tlkernel.config import EngineConfig
 from tlkernel.env import Env
 from tlkernel.gitport import Git
 from tlkernel.ids import CheckId, TreeSha
-from tlkernel.locks import LockTimeout
 from tlkernel.matchers import secrets_added
-from tlkernel.paths import ConfigDir
 from tlkernel.ports import Clock
 from tlkernel.profile_changes import ProfileChange
 from tlkernel.runkey import BaseSha
-from tlkernel.slots import MissingRemote
 from tlkernel.storeapi import Log
 from tlkernel.systemclock import SystemClock
 
-from taskloop.adapters import landlock, locks
 from taskloop.app.land.gate import diff_sha
 
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -220,19 +216,6 @@ class PushJudge:
             for tip, _cfg in deliveries if tip.sha not in stamped
             and not any(self.git.is_ancestor(self.repo, tip.sha, top) for top in stamped))
         return PushDecision(PushStatus.REFUSED if refused else PushStatus.ALLOWED, refused)
-
-
-def land_lock_held(home: ConfigDir, git: Git, repo: str) -> bool:
-    """Whether someone holds the repo's land lock now: a land push and a release take it around their push to the base branch."""
-    try:
-        url = git.remote_url(repo, "origin")
-    except MissingRemote:
-        url = ""
-    try:
-        with locks.hold_path(landlock.land_lock_path(home, url or repo), "judge-probe", timeout=0):
-            return False
-    except LockTimeout:
-        return True
 
 
 def judge_push(repo: str, stdin: str, stores: ReceiptStores, git: Git, *, profile_changes: Log[ProfileChange], env: Env,
