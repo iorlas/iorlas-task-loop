@@ -1,9 +1,11 @@
 """Park as a state transition (tl-7y6.7.3), on the config dir: the loop's pick and run-task's entry ask `gate`; a run's close tells `ended`.
-The rule itself is domain/beads/park.py."""
+The rule itself is tlkernel/beadpark.py."""
 import time
 from collections.abc import Callable
 from random import random
 
+from tlkernel import beadpark as park
+from tlkernel import lanepauses as pauses
 from tlkernel.ask import Ask
 from tlkernel.bead import Bead
 from tlkernel.delegate import Permanence
@@ -12,11 +14,9 @@ from tlkernel.kinds import ASKS, FINISH, PAUSES, Kind
 from tlkernel.loop import Skip
 from tlkernel.parks import Park, ParkStore
 from tlkernel.paths import ConfigDir
+from tlkernel.pausereasons import Producer
 
 from taskloop.domain.asks import hold
-from taskloop.domain.beads import park
-from taskloop.domain.lanes import pauses
-from taskloop.domain.lanes.pause_reasons import Producer
 from taskloop.stores.real import real_stores
 
 

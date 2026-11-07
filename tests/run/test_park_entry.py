@@ -17,7 +17,7 @@ from support.who import who
 
 from taskloop.app.asks import admission, parks
 from taskloop.app.run import running as wrunning
-from taskloop.domain.beads import park
+from tlkernel import beadpark as park
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.parks import ParkStore

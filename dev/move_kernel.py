@@ -132,12 +132,12 @@ EDITS = (  # (file, old, new)
         'dev/killpoints.py',
         (
             '    from tlkernel.kinds import Kind  # noqa: PLC0415\n'
-            '    from taskloop.domain import effects as fx'
+            '    from tlkernel import closeeffects as fx'
         ),
         (
             '    import tlpaths  # noqa: F401, PLC0415\n'
             '    from tlkernel.kinds import Kind  # noqa: PLC0415\n'
-            '    from taskloop.domain import effects as fx'
+            '    from tlkernel import closeeffects as fx'
         ),
     ),
     (

@@ -188,7 +188,7 @@ class Checkpoint(Rec):
     n: int = 0
     feedback: str = ""
     gate_tail: str = ""
-    applied: list[str] = msgspec.field(default_factory=list)  # keys of the close effects already applied (domain/effects.key_of)
+    applied: list[str] = msgspec.field(default_factory=list)  # keys of the close effects already applied (tlkernel.closeeffects.key_of)
     ended: CloseIntent | None = None  # the close's outcome, stored before its first effect: a restart finishes the close from it
     notes: Notes | None = None  # the FileNotes result
     state: RunState = msgspec.field(default_factory=RunState)
@@ -273,7 +273,7 @@ class CursorBody(Rec):
     n: int = 0
     feedback: str = ""
     gate_tail: str = ""
-    applied: list[str] = msgspec.field(default_factory=list)  # keys of the close effects already applied (domain/effects.key_of)
+    applied: list[str] = msgspec.field(default_factory=list)  # keys of the close effects already applied (tlkernel.closeeffects.key_of)
     ended: CloseIntent | None = None  # the close's outcome, stored before its first effect: a restart finishes the close from it
     notes: Notes | None = None  # the FileNotes result
     shared: Shared = msgspec.field(default_factory=Shared)

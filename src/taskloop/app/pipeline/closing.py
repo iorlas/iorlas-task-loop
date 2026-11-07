@@ -8,8 +8,11 @@ from dataclasses import dataclass, replace
 from typing import Protocol, assert_never
 
 from tlkernel import askspecs
+from tlkernel import closeeffects as effects
+from tlkernel import lanepauses as pauses
 from tlkernel import runoutcome as oc
 from tlkernel.checkpoint import Checkpoint, Notes
+from tlkernel.effectinterpret import CheckpointLedger, interpret
 from tlkernel.enums import Outcome
 from tlkernel.kinds import ASKS, PAUSES, Kind
 from tlkernel.parks import Park
@@ -20,9 +23,6 @@ from taskloop.app.pipeline.adapter_ports import PeekBead
 from taskloop.app.pipeline.closing_host import CloseHost
 from taskloop.app.pipeline.outcomes import DONE
 from taskloop.app.pipeline.ports import AskRules, ParkBook
-from taskloop.domain import effects
-from taskloop.domain.interpret import CheckpointLedger, interpret
-from taskloop.domain.lanes import pauses
 
 
 class DecideStep(Protocol):

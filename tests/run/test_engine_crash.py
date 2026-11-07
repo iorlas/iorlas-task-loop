@@ -11,8 +11,8 @@ from support.checkpoints import read_ck
 from support.engine_case import EngineTest
 from support.plans import CLEAN, PLAN, WRITE
 
-from taskloop.domain import effects
-from taskloop.domain.lanes import pauses
+from tlkernel import closeeffects as effects
+from tlkernel import lanepauses as pauses
 from tlkernel import runoutcome as oc
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
