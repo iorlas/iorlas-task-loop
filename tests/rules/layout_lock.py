@@ -12,7 +12,7 @@ from pathlib import Path, PurePosixPath
 
 from rules.ratchet_change import MIN_REASON_WORDS, git, merge_base
 
-ENABLED = False
+ENABLED = True
 MOVE_SIMILARITY = "60%"
 """A move detected by git at >=60% similarity; a move disguised as a rewrite below
 it counts as delete plus add of unrelated files and stays free."""
