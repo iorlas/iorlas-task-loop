@@ -108,3 +108,12 @@ PR A asks code carve: `packages/asks` (`tlasks`) owns asks, admission, holds, ma
 E1 slice 3: `tlwork.look` owns look application and domain code and the shot specification helpers. `tlkernel.bdcreate` owns checked bead creation. Look receives the image downscaler through `LookPorts`, bound by run/host.py; the subprocess adapter stays in the shell. Tests remain in their original directories.
 
 E1 slice 4: `tlwork.write` owns write application and domain code; shared trust-root checks live in `tlkernel.trustroots`. Tests remain in their original directories. E1 is complete: review, plan, look and write live in `tlwork`.
+
+
+PR-2 moves asks' `test_deferral`, `test_lint`, `test_show`, `test_specs`, `test_stick` and `test_trustroots` into
+`packages/asks/tests`. `tlasks.testing` supplies memory stores, MemoryBeads, FakeClock, explicit identity and the quoted fixtures
+(`BAD` and `MOCKS` directly); `tlasks.contracts.records` owns AsksHost and Arguments/Asking records. Flow protocols stay in `tlasks.flow` and SweepHost stays in
+`tlasks.sweeps`, keeping storage dependencies out of the loop; AskReader stays in `tlkernel.askport`. The retained DB/run integration files are `test_ask_v3`, `test_closing`, `test_db_asks`, `test_ledgercomments`,
+`test_dash_same_intake`, `test_engine_decisions`, `test_look_row`, `test_look_verb`, `test_orphans`, `test_park_writes`, `test_rmw_store`, `test_torn_ask` and `test_wait`: they exercise
+persistent rows, SQL corruption/recovery, storage races or persisted run manifests. TESTISO names these explicitly; other retained
+asks tests import shell wiring and remain integration tests.

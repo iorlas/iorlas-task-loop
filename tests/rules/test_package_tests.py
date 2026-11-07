@@ -1,7 +1,7 @@
 """TESTISO checks the real workspace and rejects an undeclared sibling even in lazy or type-only imports."""
 import pytest
 
-from rules.package_tests import problems
+from rules.package_tests import ASKS_DB_RUN_INTEGRATION, ROOT, imports, problems
 
 
 def member(root, folder, name, import_root, dependencies=(), dev=()):
@@ -54,17 +54,34 @@ def test_standard_library_own_pytest_and_normalized_third_party_imports_pass(tmp
     "def lazy():\n    import gate\n",
     "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    import kernel\n",
 ])
-def test_package_pure_integration_tests_must_move_to_the_member(tmp_path, source):
+@pytest.mark.parametrize("folder,integration", [("gate", "checks"), ("asks", "asks")])
+def test_package_pure_integration_tests_must_move_to_the_member(tmp_path, source, folder, integration):
     member(tmp_path, "kernel", "tlkernel", "kernel")
-    member(tmp_path, "gate", "tlgate", "gate", ["tlkernel"], ["msgspec"])
-    tests = tmp_path / "tests" / "checks"
+    member(tmp_path, folder, "tl" + folder, "gate", ["tlkernel"], ["msgspec"])
+    tests = tmp_path / "tests" / integration
     tests.mkdir(parents=True)
     path = tests / "test_pure.py"
     path.write_text(source, encoding="utf-8")
     (tests / "conftest.py").write_text("import gate\n", encoding="utf-8")
     (tests / "__init__.py").write_text("", encoding="utf-8")
     assert problems(tmp_path) == [
-        "tests/checks/test_pure.py: imports only the gate package; move it to packages/gate/tests",
+        f"tests/{integration}/test_pure.py: imports only the {folder} package; move it to packages/{folder}/tests",
     ]
     path.write_text(source + "\nimport taskloop\n", encoding="utf-8")
+    assert problems(tmp_path) == []
+
+
+def test_retained_asks_files_have_explicit_db_run_or_shell_classification():
+    tests = ROOT / "tests/asks"
+    assert all((tests / name).is_file() and reason for name, reason in ASKS_DB_RUN_INTEGRATION.items())
+    for path in tests.glob("test_*.py"):
+        assert path.name in ASKS_DB_RUN_INTEGRATION or any(name == "taskloop" for _, name in imports(path)), path.name
+
+
+def test_classified_db_integration_is_retained_without_dummy_shell_imports(tmp_path):
+    member(tmp_path, "asks", "tlasks", "tlasks")
+    tests = tmp_path / "tests/asks"
+    tests.mkdir(parents=True)
+    for name in ASKS_DB_RUN_INTEGRATION:
+        (tests / name).write_text("import tlasks\n", encoding="utf-8")
     assert problems(tmp_path) == []

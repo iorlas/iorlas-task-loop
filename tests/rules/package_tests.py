@@ -6,7 +6,24 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-INTEGRATION = {"gate": "tests/checks"}
+INTEGRATION = {"gate": "tests/checks", "asks": "tests/asks"}
+# Import purity cannot identify persistent storage and run-state integration.
+ASKS_DB_RUN_INTEGRATION = {
+    "test_dash_same_intake.py": "dashboard and owner intake against persistent AskStore rows",
+    "test_engine_decisions.py": "engine run state and persistent ADR/ask ledger integration",
+    "test_ask_v3.py": "incompatible DB bodies and persistent ledger across sweeps",
+    "test_closing.py": "ClosingAsks against persistent ParkStore rows",
+    "test_db_asks.py": "AskStore.at and factorydb storage contracts",
+    "test_ledgercomments.py": "direct SQL deletion and rebuild of ask_ledger",
+    "test_look_row.py": "LookRows compare-and-set races and SQL assertions",
+    "test_look_verb.py": "persistent LookRows, DB failures and answer transactions",
+    "test_orphans.py": "incompatible stored DB bodies and reopening",
+    "test_park_writes.py": "persistent ParkStore write/read/drop rows",
+    "test_rmw_store.py": "persistent store races and run trail state",
+    "test_torn_ask.py": "raw AskRows corruption and SQL inspection",
+    "test_wait.py": "persisted run manifests and liveness interpretation",
+}
+
 
 
 def normalized(name: str) -> str:
@@ -56,6 +73,8 @@ def problems(root: Path = ROOT) -> list[str]:
         if integration := INTEGRATION.get(manifest.parent.name):
             for path in sorted((root / integration).rglob("*.py")):
                 if path.name in {"__init__.py", "conftest.py"}:
+                    continue
+                if manifest.parent.name == "asks" and path.name in ASKS_DB_RUN_INTEGRATION:
                     continue
                 if all(name in allowed or normalized(name) in third_party for _, name in imports(path)):
                     folder = manifest.parent.name

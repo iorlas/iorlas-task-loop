@@ -2,11 +2,6 @@
 from unittest import mock
 
 import pytest
-from support.fake_beads import FakeBeads
-from support.memstores import fake_stores
-from support.tiers import domain
-
-from tlasks import intake, raiser, similar
 from tlkernel import askspecs as specs
 from tlkernel.ask import SimilarRef
 from tlkernel.bead import Bead
@@ -16,6 +11,10 @@ from tlkernel.ledger import Adr
 from tltestkit.case import Case
 from tltestkit.narrow import must
 
+from tlasks import intake, raiser, similar
+from tlasks.contracts.records import Asking
+from tlasks.testing import FakeBeads, fake_stores
+
 T = 1000.0
 Q = "Which save format should the engine keep for old files?"
 OPTS = [{"label": "Keep v1", "cost": "none", "answer": "keep v1", "recommended": True},
@@ -23,7 +22,6 @@ OPTS = [{"label": "Keep v1", "cost": "none", "answer": "keep v1", "recommended":
 REPO = "/r/demo"
 
 
-@domain
 class Stick_(Case):
     def setup_method(self) -> None:
         self.stores = fake_stores()
@@ -32,7 +30,7 @@ class Stick_(Case):
         self.beads.beads[BeadId("t-1")] = Bead(id=BeadId("t-1"), title="Saves", status="blocked", description="Keep saves working.")
         self.factory = FakeBeads(prefix="tl")
         self.verbs = intake.Intake(self.asks, self.beads, lambda: T + 5, "denis", self.stores.adrs, lambda: self.factory)
-        self.ask = must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), raiser.Asking(
+        self.ask = must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), Asking(
             bead=BeadId("t-1"), run="r", brief_hash="h", repo=REPO, title="Saves", now=T))[0])
         self.verbs.answer(BeadId("t-1"), "text", "keep v1")
 
@@ -102,7 +100,7 @@ class Stick_(Case):
         adrs = self.stores.adrs(REPO)
         key = similar.key_of(self.ask.ask_class, self.ask.decision)
         made = adrs.add(Adr(id="", n=0, repo=REPO, text="v1", question=Q, answer="v1", ask="x-1", bead="x", key=key, t=T))
-        second = must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), raiser.Asking(
+        second = must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), Asking(
             bead=BeadId("t-2"), run="r", brief_hash="h", repo=REPO, title="x", now=T + 30), adrs)[0])
         assert second.similar == [SimilarRef(kind="adr", id=made.id), SimilarRef(kind="ask", id=self.ask.id)]  # the decision first
         self.beads.beads[BeadId("t-2")] = Bead(id=BeadId("t-2"), title="x", status="blocked")
@@ -117,7 +115,7 @@ class Stick_(Case):
         assert (self.stores.adrs(REPO).all(), list(self.factory.beads)) == ([], [])
 
     def test_an_unanswered_or_unknown_ask_is_refused(self) -> None:
-        other = must(raiser.raise_ask(self.asks, specs.missing_criteria(), raiser.Asking(
+        other = must(raiser.raise_ask(self.asks, specs.missing_criteria(), Asking(
             bead=BeadId("t-2"), run="r", brief_hash="h", repo=REPO, title="x", now=T))[0])
         assert self.verbs.stick(other.id, Stick.ADR) == "answer the ask first"
         assert self.verbs.stick("nope-1", Stick.ADR) == "this ask is not in the ledger"
@@ -125,7 +123,7 @@ class Stick_(Case):
 
     def test_it_holds_for_an_ask_a_newer_ask_replaced(self) -> None:
         self.asks.consume(BeadId("t-1"), T + 6)
-        must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), raiser.Asking(
+        must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), Asking(
             bead=BeadId("t-1"), run="r2", brief_hash="h2", repo=REPO, title="Saves", now=T + 40))[0])
         assert self.verbs.stick(self.ask.id, Stick.ADR, "still v1") == ""
         assert must(self.asks.get(BeadId("t-1"))).outcome is None  # the newer ask is untouched
