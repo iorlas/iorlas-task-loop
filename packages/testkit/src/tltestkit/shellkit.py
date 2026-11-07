@@ -1,5 +1,4 @@
-"""Shell helpers for tests: one-line commands, quoting, platform skips. No Engine, no host (engine_case re-exports them for the old import
-point)."""
+"""Shell helpers for tests: one-line commands, quoting, platform skips. No Engine, no host."""
 import functools
 import os
 import shlex
@@ -10,7 +9,7 @@ from unittest import mock
 
 import pytest
 
-from support.checked import run_checked
+from tltestkit.checked import run_checked
 
 
 def sh(*a, cwd):

@@ -15,7 +15,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
-from support.checked import run_checked  # noqa: E402
 from support.spawn import port_git  # noqa: E402
 from support.tlmain import tl_main  # noqa: E402
 from support.who import who  # noqa: E402
@@ -28,6 +27,7 @@ from taskloop.app.doctor import (  # noqa: E402
 from taskloop.app.slots import config as wslots_config  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
+from tltestkit.checked import run_checked  # noqa: E402
 
 
 def shown(p):

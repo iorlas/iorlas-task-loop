@@ -11,8 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.check_host import CheckHostCase
 from support.procsim import real_proc
-from support.shellkit import POSIX_CHECK, PY, shq
 from support.waits import until
+
+from tltestkit.shellkit import POSIX_CHECK, PY, shq
 
 # isort: split
 from taskloop.domain.checks.specs import gate_items

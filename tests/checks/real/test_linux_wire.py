@@ -3,12 +3,12 @@ local shell, so the push, the slot's persistent worktree, the exit code and the 
 import os
 import stat
 
-from support.checked import run_checked
 from support.spawn import port_git, real_spawner
 
 from taskloop.app.checks.linux import LinuxRun
 from tlkernel.config import ExecutorConfig
 from tlkernel.ids import CheckId
+from tltestkit.checked import run_checked
 
 # `ssh [-o opt]... <host> <command>`: git's own ssh call has the same shape
 SHIM = '#!/bin/sh\nwhile case "$1" in -o) shift 2;; -*) shift;; *) false;; esac; do :; done\nshift\ncd "$HOME" && exec sh -c "$1"\n'

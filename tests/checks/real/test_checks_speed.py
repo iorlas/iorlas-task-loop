@@ -11,8 +11,9 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
 from support.check_host import CheckHostCase
 from support.procsim import real_proc
-from support.shellkit import POSIX_CHECK, PY, shq
 from support.waits import until
+
+from tltestkit.shellkit import POSIX_CHECK, PY, shq
 
 
 class SpeedTest(CheckHostCase):

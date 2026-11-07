@@ -10,8 +10,9 @@ from support import gitq, procsim
 from support.aging import age
 from support.engine_case import EngineTest
 from support.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE
-from support.shellkit import sh
 from support.world import no_repo
+
+from tltestkit.shellkit import sh
 
 # isort: split
 import contextlib
