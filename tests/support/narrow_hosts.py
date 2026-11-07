@@ -12,7 +12,6 @@ from typing import Any
 import support.paths  # noqa: F401
 from support import homes
 from support.fake_beads import FakeBeads
-from support.fake_clock import FakeClock
 from support.fakegit import FakeGit, ScriptedGit
 from support.memstores import fake_stores
 from support.pipeline_ports import FakeAskRules, FakeParkBook
@@ -50,6 +49,7 @@ from tlkernel.kinds import Kind
 from tlkernel.plancheck import PlanCheck, PlanData, StageData
 from tlkernel.ports import Clock
 from tlkernel.run import RunFinish
+from tltestkit.fake_clock import FakeClock
 
 
 class FakeWaitsHost:

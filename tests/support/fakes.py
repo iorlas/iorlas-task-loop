@@ -12,7 +12,6 @@ from pathlib import Path
 import beads_client as client
 from beads_client.client import create_argv as client_create_argv
 
-from support.fake_clock import FakeClock  # noqa: F401  (re-exported: one place for a test to import its fakes from)
 from taskloop.adapters import bd
 from taskloop.adapters import delegate as dl
 from taskloop.adapters.delegate import FixedRoute
@@ -20,6 +19,7 @@ from tlkernel.bead import Bead, Comment
 from tlkernel.beadsport import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
 from tlkernel.ids import BeadId
 from tltestkit import fake_route
+from tltestkit.fake_clock import FakeClock  # noqa: F401  (re-exported: one place for a test to import its fakes from)
 from tltestkit.narrow import must
 
 _NO = object()

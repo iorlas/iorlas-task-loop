@@ -3,8 +3,8 @@ from contextlib import ExitStack
 from types import SimpleNamespace
 from unittest import mock
 
-from support.fake_clock import FakeClock
 from taskloop.adapters import deadline
+from tltestkit.fake_clock import FakeClock
 
 
 class FakeEvent:

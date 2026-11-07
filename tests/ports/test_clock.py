@@ -1,9 +1,9 @@
 """The Clock port (contracts/ports.py): one contract on SystemClock and on FakeClock."""
-from support.fake_clock import FakeClock
 from support.tags import contract
 
 from taskloop.adapters.clock import SystemClock
 from tlkernel.ports import Clock
+from tltestkit.fake_clock import FakeClock
 
 
 class ClockContract:
