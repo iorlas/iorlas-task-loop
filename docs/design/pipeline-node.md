@@ -106,3 +106,31 @@ P1 to P3 can run now beside the B-* lanes (they touch files only the pipeline ow
 | outcome carrier | one `RunEnd` value instead of five Engine fields |
 | P1 to P3 now, P4 on after the B-* beads | as section 7 |
 | `records` | moves with the pipeline (P7), pending the owner |
+
+## 9. P4: the close family's ports, from today's call sites (added 2026-11-07, after P3a)
+
+P3a showed the close family (`closer.py`, `closer_notes.py`, `closer_branch.py`, `closer_settle.py`, `closer_decide.py`, with `closer_host.py` composing their hosts) cannot move to `app/pipeline` as it is: each reaches a stage through a module function. Every such call is below, with the exact signature read from the code on main (07a7e21b+), so the ports are what the close needs today, not a guess.
+
+| port (in `app/pipeline/ports.py`) | method, taken from the call site | today's call | implemented by | bound in the root by |
+|---|---|---|---|---|
+| `AskRules` | `problems(spec: AskSpec) -> list[str]` | `raiser.problems(ended.spec)` (closer.py:112) | asks (`app/asks/closing.py`, a thin class over `raiser`) | `run/closer_ports.py` |
+| `ParkBook` | `paused(bead: Bead, kind: Kind, run: str, now: float, *, reason, not_before, fingerprint, producer, permanence) -> Park or None` ; `ended(bead: Bead, kind: Kind, run: str, now: float) -> None` | `parks.paused(e.home, ...)` (closer.py:156), `parks.ended(e.home, ...)` (closer_settle.py:71) | asks (`ParkBook(cfg)` over `app/asks/parks.py`; `cfg` is bound at construction, so the port has no `home`) | same |
+| `FollowUps` | `file() -> list[dict[str, str]]` (the leftovers bd refused) | `file_follow_ups(e)` (closer_notes.py:98); it reads the run's leftovers, filed set, stats, store and checkpoint | land (`app/land/followups.py` keeps `file_follow_ups`; the binder closes it over the run) | same |
+| `LandCleanup` | `retry(repo: str) -> None` (the cleanup rows a landed run left) | `cleanup.retry_logged(e.git, e.log, is_slot, profile_slots(repo).base, cfg=e.home)` (closer_branch.py:98); `is_slot` is `wire.slots.slot_of` | land (`cleanup`) with the slot predicate from `wire.slots` | the root: it is the only place allowed to name `wire` |
+| `BeadClosing` | `close(claim: Claim, reason: str) -> int` ; `block(claim: Claim, why: str, say: Callable[[str], None]) -> int` | `track.close_as(e.who, e.claim, reason, e.store, closeguard.ENGINE)`, `track.block_as(...)` (closer_settle.py:59-67) | track (`app/track/closing.py`, over `verbs`), with `closeguard.ENGINE` (a pure `lambda`) bound by the root, so the pipeline names no guard | same |
+| `Narrate` | `say(text: str) -> None` | `say(e.storm)` (closer_decide.py:78), from `run/console.py` | already `contracts.stagefacts.Narrate` (FACTS); the root passes the console | same |
+| `Slotting` | `leave_slot(outcome: Outcome, branch: str) -> None` | `e.tree.leave_slot(outcome, branch)` (closer_branch.py, a local `LeaveTree` Protocol today) | slots/land (`Tree`) | same; `fence.stale(store, claim)` is `contracts`, no port |
+
+What is already free of a stage: `closer_record` (moved in P3a), `closer_decide` apart from `Narrate`, the branch save in `closer_branch` (git and checkpoint Protocols that are local), and `Closer` itself once its five collaborators are typed by these ports.
+
+Rules for the slices: a port class lives in the stage that implements it (`app/<stage>/closing.py`), never in `app/pipeline`; the pipeline holds only the Protocols; the root file `run/closer_ports.py` is the one place that builds them, small enough to stay under the root ratchet (about 40 sloc, no branches).
+
+### P4 slices (each lands green, behaviour unchanged)
+
+| slice | content | files it touches |
+|---|---|---|
+| **P4a** | `pipeline/ports.py` with the seven Protocols above; stage-side classes (`asks/closing.py`, `track/closing.py`, `land` `FollowUps` and `LandCleanup` adapters) with their own small tests; fakes in `tests/support/pipeline_ports.py` | new files, plus one line each in asks, track and land; no change to `closer*.py` |
+| **P4b** | `closer_settle`, `closer_decide`, `closer_notes` take the ports; they move to `app/pipeline/` (`closing_settle.py`, `closing_decide.py`, `closing_notes.py`) with tests on the fakes | those three files, `closer_host.py`, `closer.py` imports |
+| **P4c** | `closer_branch` (`LandCleanup`, `Slotting`) and `closer.py` (`AskRules`, `ParkBook`) move; `closer_host.py` shrinks to the binder `run/closer_ports.py`; the pipeline joins no new exception | `closer_branch.py`, `closer.py`, `closer_host.py`, `run/host.py` |
+
+P4a is safe beside the B-* lanes (new files and one-line additions). P4b and P4c edit files only the close family owns, plus `run/host.py`'s `closer` property. The B-LAND bead owns `app/land/followups.py`; P4a adds the adapter beside it, not inside it, to avoid a conflict.
