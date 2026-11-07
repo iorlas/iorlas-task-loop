@@ -46,7 +46,7 @@ def import_line(text: str, node: ast.ImportFrom, module: str, names: list[str]) 
     lines = text.splitlines(keepends=True)
     indent = lines[node.lineno - 1][:node.col_offset]
     comments = [token.string for token in tokenize.generate_tokens(io.StringIO(text).readline)
-                if token.type == tokenize.COMMENT and node.lineno <= token.start[0] <= node.end_lineno
+                if token.type == tokenize.COMMENT and node.lineno <= token.start[0] <= (node.end_lineno or node.lineno)
                 and token.string.startswith("# noqa")]
     suffix = "  " + "  ".join(dict.fromkeys(comments)) if comments else ""
     return f"{indent}from {module} import {', '.join(sorted(set(names)))}{suffix}\n"
@@ -63,7 +63,7 @@ def rewrite_imports(text: str) -> str:
             name = alias.name + (f" as {alias.asname}" if alias.asname else "")
             groups.setdefault(OWNERS.get(alias.name, "enums"), []).append(name)
         replacement = "".join(import_line(text, node, "tlkernel." + mod, groups[mod]) for mod in MODULES if mod in groups)
-        edits.append((node.lineno, node.end_lineno, replacement))
+        edits.append((node.lineno, node.end_lineno or node.lineno, replacement))
     return replace_lines(text, edits)
 
 
@@ -74,12 +74,12 @@ def rewrite_wire(text: str) -> str:
         if isinstance(node, ast.ImportFrom) and node.module == "tlkernel" and any(a.name == "enums" for a in node.names):
             names = [a.name + (f" as {a.asname}" if a.asname else "") for a in node.names]
             names.extend(m for m in MODULES if m != "enums")
-            edits.append((node.lineno, node.end_lineno, import_line(text, node, "tlkernel", names)))
+            edits.append((node.lineno, node.end_lineno or node.lineno, import_line(text, node, "tlkernel", names)))
         if isinstance(node, ast.For) and ast.get_source_segment(text, node.iter) == "vars(enums).values()":
             lines = text.splitlines(keepends=True)
             old = "".join(lines[node.iter.lineno - 1:node.iter.end_lineno])
             new = "(e for module in (enums, askenums, checkenums, lockenums, waitenums) for e in vars(module).values())"
-            edits.append((node.iter.lineno, node.iter.end_lineno, old.replace("vars(enums).values()", new)))
+            edits.append((node.iter.lineno, node.iter.end_lineno or node.iter.lineno, old.replace("vars(enums).values()", new)))
     return replace_lines(text, edits)
 
 
