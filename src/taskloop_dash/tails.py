@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-TAIL_BYTES = 6_000_000  # never read more than this from the end of a transcript
+TAIL_BYTES = 6_000_000  # never read more than this from the end of a log
 
 
 def parse_ts(s: object) -> float | None:

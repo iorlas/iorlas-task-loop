@@ -21,8 +21,8 @@ def test_network_stop_pauses_immediately(monkeypatch):
         delegation=Mock(), halt_point=Mock(), waits=Mock(),
     )
     call = SimpleNamespace(
-        counts={"attempt": 0, "crashes": 0, "resume_refused": 0},
-        resume="session", denied_retried=False, secret_fp=False, node="write", step="write",
+        counts={"attempt": 0},
+        thread="writer", denied_retried=False, secret_fp=False, node="write", step="write",
         limit_s=100, role="worker",
     )
     monkeypatch.setattr(lane_acts.writer_pin, "pinned", lambda *args: None)

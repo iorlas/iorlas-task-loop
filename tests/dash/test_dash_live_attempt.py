@@ -4,10 +4,10 @@ import time
 from pathlib import Path
 
 import pytest
+from support.dashlive import make_run
 from support.factory_index import ingest
 from support.narrow import must
 
-from dash.test_dash_live import make_run
 from taskloop_dash.api import live
 from tlkernel import factorydb
 from tlkernel.paths import ConfigDir

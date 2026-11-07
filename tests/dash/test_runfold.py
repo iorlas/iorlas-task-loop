@@ -14,6 +14,7 @@ from taskloop_dash.views import runfacts as facts
 from tlkernel import log as rec
 from tlkernel import wire
 from tlkernel.runlife import Liveness
+from tlkernel.stuck import open_episode
 from tltestkit.case import Case
 
 
@@ -46,7 +47,7 @@ def fixture_records(path):
                 items.append(item)
             raw["run"] = {"round": raw["round"], "results": items}
         fields = {f.encode_name for f in msgspec.structs.fields(tp)}
-        rows.append(wire.load(rec.EngineLog, {"v": 3, "kind": raw["kind"], **{k: v for k, v in raw.items() if k in fields}}))
+        rows.append(wire.load(rec.EngineLog, {"v": 4, "kind": raw["kind"], **{k: v for k, v in raw.items() if k in fields}}))
     return rows
 
 
@@ -63,7 +64,7 @@ def whole(name, records):
         next((r.lane for r in reversed(body) if isinstance(r, rec.CallEnd) and r.lane), ""),
         next((r.exit for r in reversed(body) if isinstance(r, rec.CallEnd) and r.exit is not None), None),
         said=tuple(r for r in body if isinstance(r, rec.Said)),
-        assumed=sum(isinstance(r, rec.Assumed) for r in body), stuck=facts.stuck_of(body), waits=facts.waits_of(body))
+        assumed=sum(isinstance(r, rec.Assumed) for r in body), stuck=open_episode(body), waits=facts.waits_of(body))
 
 
 class RunFold(Case):

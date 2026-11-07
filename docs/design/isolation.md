@@ -125,4 +125,4 @@ B2b-1 done (2026-11-07): delegate owns worker network waits and resumes; engine 
 
 B2b-2 done (2026-11-07): lane polls and short lane-out waits are delegate's
 
-B2b-3a done (2026-11-07): worker_failed retry and the write reroute are delegate's; a delegate crash fails at once (fail fast). Rows left in policy.TABLE until B3 (resume/context behind the Agent): resume_refused, denied_secret, NewThread/Reroute for RESUMED calls, lane stops of resumed calls.
+B2b-3a done (2026-11-07): worker_failed retry and the write reroute are delegate's; a delegate crash fails at once (fail fast). B3-1b removes resume_refused and every resumed-call policy branch. Only denied_secret can start a new engine thread; lane/model polls and untimed lane stops retain the ordinary reroute policy. Hurt writes still ask after delegate recovery.

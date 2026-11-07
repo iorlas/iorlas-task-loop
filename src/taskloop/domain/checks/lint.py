@@ -8,10 +8,10 @@ from taskloop.domain.checks import produced
 from taskloop.domain.checks.cmd import matchers as sh
 from taskloop.domain.checks.names import norm
 from taskloop.domain.checks.planref import JUST_PLAIN_FLAGS, Plan, adhocs, plan_checks
-from taskloop.domain.matchers import clip
 from tlkernel.argv import FORM, argv_problems
 from tlkernel.checksport import TreeProbe
 from tlkernel.config import EngineConfig
+from tlkernel.matchers import clip
 from tlkernel.plancheck import Adhoc, Ref
 
 GATE_ONLY_TEXT: Final = ("\n\nYour plan was sent back: these checks run a command that runs only in the gate at land (the engine "

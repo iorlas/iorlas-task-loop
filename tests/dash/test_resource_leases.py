@@ -15,11 +15,12 @@ from support.factory_index import ingest
 from support.fakes import FakeBeadStore
 from support.repos import write_repos
 
-from taskloop.adapters.locks import resource_holders
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
 from tlkernel.ids import loop_key
 from tlkernel.locator import RunLocator
+from tlkernel.lockenums import LockWhat
+from tlkernel.locks import LockRecord
 from tlkernel.paths import ConfigDir
 
 
@@ -38,7 +39,8 @@ class ResourceLeases(Case):
             ingest(cfg, 1000)
             assert table.holders("unity")[0].holder.created == pytest.approx(time.time(), abs=5)  # type: ignore[union-attr]
             before = {p: p.read_bytes() for p in cfg.leases().iterdir()}
-            ports = Ports(store=lambda repo: FakeBeadStore(), resource_holders=resource_holders)
+            holder = LockRecord(what=LockWhat.RESOURCE, holder="owner:unity-check", pid=run.manifest.pid, t=1000)
+            ports = Ports(store=lambda repo: FakeBeadStore(), resource_holders=lambda cfg: [("unity", holder)])
             snap = Dash(Env(config=cfg.root, home=root, ports=ports, clock=lambda: 1000)).reads.snapshot()
             got = [(r.name, r.holder, r.run, r.project) for r in snap.leases]
             assert got == [("unity", "owner:unity-check", run.run, loop_key(repo))]

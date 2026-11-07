@@ -1,9 +1,12 @@
 """Crash recurrence needs an owner; lease loss must never become a crash park."""
+
 import sys
 from pathlib import Path
 from unittest import mock
 
 import pytest
+
+from taskloop.adapters import beadtools
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -96,7 +99,7 @@ class CrashCap(EngineTest):
         before = must(ParkStore(e.home).get(e.bead))
         runner = Standalone(e, e, e, e, e, rounds=FakeRoundSteps(), once=mock.Mock(), lease=mock.Mock(),
                             closing=FakeBeadClosing(), has_land=lambda: True,
-                            repo_of=lambda git, wt: wt, stage_run=mock.Mock())
+                            repo_of=lambda git, wt: wt, stage_run=mock.Mock(), peek_bead=beadtools.peek)
         with mock.patch.object(runner, "next_step", side_effect=Fenced("lease lost")), \
                 mock.patch.object(runner, "record_stage") as record, pytest.raises(Fenced):
             runner.one_stage("land", mock.Mock())

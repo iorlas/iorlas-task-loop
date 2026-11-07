@@ -109,7 +109,8 @@ class DashCommandUnion(Case):
         assert len(set(D.WRITES.values())) == len(D.WRITES), "two verbs share a record: the server could not tell them apart"
 
     def test_every_verb_is_handled_by_the_server_match(self) -> None:
-        # a member the match does not handle reaches assert_never; the 404/400/200 paths of each verb are in tests/dash/test_dash_writes.py
+        # A member the match does not handle reaches assert_never.
+        # The 404/400/200 paths of each verb are in tests/dashwire/test_dash_writes.py
         src = inspect.getsource(Writes.dispatch)
         for cls in D.WRITES.values():
             assert f"case {cls.__name__}():" in src

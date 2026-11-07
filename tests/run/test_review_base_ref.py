@@ -16,7 +16,7 @@ def build(role: str, node: str, resolved: str = "basesha"):
     host.git.rev_parse.return_value = resolved
     host.git.diff_entries.return_value = []
     host.checker.split.return_value.engine_recipes.return_value = []
-    call = mock.Mock(node=node, role=role, cwd="/w", title="T", resume=None, writer=None)
+    call = mock.Mock(node=node, role=role, cwd="/w", title="T", thread="worker/1", writer=None)
     with mock.patch.object(worker_request.planref, "stage_commands", return_value=[]), \
             mock.patch.object(worker_request.trustroots, "refusal", return_value=""):
         return worker_request.request(host, call, "live", 60, 30), host

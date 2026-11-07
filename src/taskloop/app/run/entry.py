@@ -24,6 +24,7 @@ from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.procport import Spawner
 from tlkernel.run import Reexec, RunReport
+from tlkernel.run_slot import RUN_SLOT
 
 from taskloop.adapters import beadtools, childenv, gitrepo, ident
 from taskloop.adapters import halt as halting
@@ -109,7 +110,7 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, sp
         return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
     a.slot, a.worktree, sb = got
     a.slot_gen = fence.gen_of(beadtools.peek(store or beadtools.bd_store(who.actor, repo), sb), SLOT_GEN)  # the lease this run took
-    halting.RUN_SLOT["owned"] = a.slot  # a re-exec hands the slot on (TL_REEXEC) and its next run-task gives it back
+    RUN_SLOT["owned"] = a.slot  # a re-exec hands the slot on (TL_REEXEC) and its next run-task gives it back
     try:  # run_in sees the slot as taken (its Env names the slot's bead); the engine heartbeats it
         return run_in(a, repo, cfg, store, env=env.with_(EnvVar.TASK_LOOP_SLOT_BEAD, sb), spawner=spawner, git=git, who=who)
     finally:
@@ -171,7 +172,7 @@ def _slot_taken(a: Any, repo: Any, wt: str, slot: str, sb: BeadId | None, store:
     """(slot bead taken here, taken outcome): a hand run takes its slot's bead as the loop does; one the loop started has it already."""
     named = sb is not None and env.bead(EnvVar.TASK_LOOP_SLOT_BEAD) == sb
     if slot and sb and named and _handed_slot(slot, env):
-        halting.RUN_SLOT["owned"] = slot
+        RUN_SLOT["owned"] = slot
         return sb, None  # exec'd by the run-task that took this slot: it is still ours, and this process gives it back
     if slot and not (sb and named):
         took, why = wslots.take_named_slot(repo, slot, wslots_config.profile_slots(repo), "run-task " + a.id, store=store, spawner=spawner,
@@ -179,7 +180,7 @@ def _slot_taken(a: Any, repo: Any, wt: str, slot: str, sb: BeadId | None, store:
         if not took:
             print(f"TAKEN: {why}")
             return None, RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
-        halting.RUN_SLOT["owned"] = slot
+        RUN_SLOT["owned"] = slot
         return took, None
     return None, None
 
