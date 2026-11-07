@@ -15,7 +15,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.procport import Spawner
 from tlkernel.rowstores import ReposStore
 from tlslots import watchdog
-from tlslots.config import cfg_source
+from tlslots.config import cfg_source, configured_slots
 
 from taskloop.adapters import layout_migrate
 from taskloop.adapters.beadtools import bd_store
@@ -48,7 +48,7 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
     slot_line, slot_warns = slot_warnings(
         lambda: wslots.slot_table(repo, who, git, now),
         None if spawner is None else lambda: wslots.slot_env(repo, spawner=spawner, git=git, who=who),
-        lambda env: watchdog.lines(watchdog.look(env)))
+        lambda env: watchdog.lines(watchdog.look(env)), configured_slots(repo, git))
     print(slot_line)
     link_line, foreign = path_link_line(env, config_dir(env))
     if not foreign:

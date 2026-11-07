@@ -173,7 +173,7 @@ class Base(Case):
             self.tmp.cleanup()
 
     def config(self, **engine_cfg):
-        (self.repo / ".task-loop.json").write_text(json.dumps({"engine": engine_cfg}))
+        (self.repo / ".task-loop.json").write_text(json.dumps({"engine": engine_cfg, "slots": {"count": 0}}))
 
     def fake(self, *beads, **kw):
         f = FakeBd(beads, **kw)

@@ -131,9 +131,12 @@ class CheckSpec(Rec):
         return text_of(self.argv)
 
 
+DEFAULT_SLOTS = 4
+
+
 @final
 class SlotsConfig(Rec):
-    count: int = 0
+    count: int = DEFAULT_SLOTS
     dir: str = ".slots"
     base: str = "origin/main"
     setup: list[str] = msgspec.field(default_factory=list)  # argv

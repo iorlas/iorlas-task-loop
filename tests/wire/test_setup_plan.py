@@ -85,8 +85,8 @@ class SetupPlan(Case):
         assert self.checks(done)["slots"].ok
         assert done.fixes == []
 
-    def test_a_profile_with_no_slots_asks_nothing_about_them(self):
-        (self.repo / ".task-loop.json").write_text(json.dumps({}))
+    def test_a_profile_with_slots_disabled_asks_nothing_about_them(self):
+        (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": 0}}))
         assert "slots" not in self.checks(setup.repo_part(self.repo, profile_facts))
 
     def test_the_command_prints_the_plan_as_json_or_text_and_exits_1_while_something_is_missing(self):

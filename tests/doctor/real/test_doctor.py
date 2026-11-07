@@ -69,7 +69,7 @@ class DoctorSource(Case):
 
     @staticmethod
     def config(name, inputs="missing/**", **extra):
-        return {"engine": dict(checks=[{"id": name, "argv": ["unused", "$TL_ARTIFACT_DIR"], "inputs": [inputs]}],
+        return {"slots": {"count": 0}, "engine": dict(checks=[{"id": name, "argv": ["unused", "$TL_ARTIFACT_DIR"], "inputs": [inputs]}],
                                **extra)}
 
     @staticmethod

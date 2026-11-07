@@ -27,7 +27,7 @@ def test_file_validation_keeps_falsey_json_defaults_and_captures_config_exit(tmp
     profile = tmp_path / '.task-loop.json'
     profile.write_text('[]')
     assert profile_facts.profile_problem(profile) == ''
-    assert profile_facts.slot_folders(tmp_path) is None
+    assert profile_facts.slot_folders(tmp_path) == profile_facts.SlotFolders(4, tmp_path / '.slots', ('s1', 's2', 's3', 's4'))
     profile.write_text('{"slots": {"cuont": 2}}')
     err = io.StringIO()
     with contextlib.redirect_stderr(err):
