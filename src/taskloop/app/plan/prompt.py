@@ -42,7 +42,7 @@ class PlanPrompt:
                     "follows; keep accepted stages and their checks unless the change touches them; do not re-explore code "
                     "the old plan already names. Same output schema as a plan.\n<old_plan>\n"
                     f"{json.dumps(plancheck.to_wire(old), indent=1)}\n</old_plan>\n"
-                    f"What changed:\n<change>\n{(e.amend_text or why).strip()}\n</change>")
+                    f"What changed:\n<change>\n{(e.amend.text or why).strip()}\n</change>")
         if again:
             return f"\n\nThe previous plan did not work. What failed:\n<failed>\n{why}\n</failed>\nPlan again."
         return ""
@@ -124,7 +124,7 @@ class PlanPrompt:
     def build(self, old: PlanData | None, again: bool, why: str) -> str:
         e = self.host
         extra = self.change(old, again, why)
-        e.old_plan, e.amend_text, e.amend_why = None, "", ""
+        e.amend.old_plan, e.amend.text, e.amend.why = None, "", ""
         extra += self.history(old, again)
         if not old and not again:
             extra += self.probe.text()  # tl-9un.1: what the acceptance names that cannot work, before the first plan
