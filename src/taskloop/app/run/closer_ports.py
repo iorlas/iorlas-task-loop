@@ -5,13 +5,13 @@ from typing import Protocol
 
 from tlkernel.identity import Identity
 from tlpipeline.closing import CloseParts, Closer
-from tlpipeline.closing_branch import ReleaseSlot, SaveBranch
-from tlpipeline.closing_decide import Decide
-from tlpipeline.closing_host import CloseAllCheckpoints, CloserHost
-from tlpipeline.closing_notes import FileNotes, Reflect
-from tlpipeline.closing_record import RecordRun
-from tlpipeline.closing_settle import Settle
-from tlpipeline.ports import AskRules, BeadClosing, FollowUps, LandCleanup, ParkBook
+from tlpipeline.closing_branch import BranchCheckpoints, BranchTree, ReleaseSlot, ReleaseSlotHost, SaveBranch, SaveBranchHost
+from tlpipeline.closing_decide import Decide, DecideHost
+from tlpipeline.closing_notes import FileNotes, FileNotesHost, NotesCheckpoints, Reflect, ReflectCheckpoints, ReflectHost
+from tlpipeline.closing_record import RecordHost, RecordRun
+from tlpipeline.closing_roles import CloseCheckpoints, CloseRuntime, CloseState, CloseStats
+from tlpipeline.closing_settle import Settle, SettleHost
+from tlpipeline.ports import AskRules, BeadClosing, FollowUps, LandCleanup, ParkBook, Slotting
 
 from taskloop.adapters import beadtools, closes
 from taskloop.app.asks.closing import ClosingAsks
@@ -24,11 +24,18 @@ from taskloop.app.wire.slots import slot_of
 from taskloop.stores.runlog import RunLog
 
 
-class BindingCheckpoints(CloseAllCheckpoints, FollowUpCheckpoints, Protocol):
+class BindingCheckpoints(CloseCheckpoints, BranchCheckpoints, NotesCheckpoints, ReflectCheckpoints, FollowUpCheckpoints, Protocol):
     pass
 
 
-class BindingHost(CloserHost, FollowUpHost, Protocol):
+class BindingTree(BranchTree, Slotting, Protocol):
+    pass
+
+
+class BindingHost(CloseState, CloseRuntime, CloseStats, DecideHost, SaveBranchHost, ReleaseSlotHost,
+                  RecordHost, FileNotesHost, ReflectHost, SettleHost, FollowUpHost, Protocol):
+    @property
+    def tree(self) -> BindingTree: ...
     @property
     def log(self) -> RunLog: ...
     @property
@@ -57,7 +64,7 @@ def closing_ports(e: BindingHost) -> ClosingPorts:
 def closer_over(host: BindingHost, after_save: Callable[[], None] | None = None) -> Closer:
     """The Closer over the engine: each step gets the host typed as that step's own Protocol."""
     ports = closing_ports(host)
-    return Closer(host, CloseParts(
+    return Closer(host, host, host, CloseParts(
         decide=Decide(host, closes.recent_closes), branch=SaveBranch(host, after_save),
         slot=ReleaseSlot(host, host.tree, ports.cleanup), record=RecordRun(host),
         notes=FileNotes(host, ports.follow_ups, beadtools.attempt), reflect=Reflect(host),

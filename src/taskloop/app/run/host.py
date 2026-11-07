@@ -41,7 +41,7 @@ class RunHost(LandParts, PlanParts, RunParts):
     replan_first: bool
 
     @property
-    def intake_per_day(self) -> int:  # the Engine's: CloserHost reads it
+    def intake_per_day(self) -> int:  # the Engine's: DecideHost reads it
         raise NotImplementedError
 
     def on_path(self, name: str) -> str | None:
