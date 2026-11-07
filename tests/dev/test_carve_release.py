@@ -2,7 +2,6 @@
 
 import pytest
 from carve_release import plan, rewrite
-
 from rules.arch_rules import graph_of, production_trees
 
 OLD = "taskloop" + ".app.release"
