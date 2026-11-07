@@ -51,7 +51,7 @@ class Env(Case):
         if public:
             env["TASK_LOOP_DASH_DEV_PUBLIC"] = "1"
         err = io.StringIO()
-        with mock.patch.object(factorydb._STORE, "parts", None), mock.patch.object(factorydb._STORE, "needs", None), \
+        with mock.patch.object(factorydb._STORE, "parts", None), mock.patch.object(factorydb._STORE, "complete", True), mock.patch.object(factorydb._STORE, "needs", None), \
                 mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stderr(err), pytest.raises(SystemExit) as stop:
             dash_cli.main(list(args), here=where)
         return stop.value.code, err.getvalue()
