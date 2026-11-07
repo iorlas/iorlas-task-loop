@@ -1,6 +1,5 @@
 """One vendor call in flight as an `effect` row in factory.db: key `call:<bead>`, `name` its coordinates, `state` its
-phase (calling, returned, consumed) and `receipt` the record. One row per bead, replaced by the bead's next call. An older tl's
-`<bead>.call.json` file is read until the call's next save moves it here (dual-read, never dual-write)."""
+phase (calling, returned, consumed) and `receipt` the record. One row per bead, replaced by the bead's next call."""
 import time
 
 from taskloop.contracts.looprows import LoopRows

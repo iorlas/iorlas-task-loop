@@ -21,6 +21,7 @@ from support.who import who  # noqa: E402
 
 from taskloop.adapters.git import RealGit  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402
+from taskloop.app.wire import hook as hook_wire  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
 
@@ -44,7 +45,8 @@ class DoctorSource(Case):
         script = '#!/bin/sh\ncase "$1" in --version) echo "bd version 1.3.1";; *) echo "[]";; esac\n'
         (stubs / "bd").write_text(script)
         (stubs / "bd").chmod(0o755)
-        others = [d for d in os.environ["PATH"].split(os.pathsep) if "tl-nobd-" not in d]  # the suite's failing bd would be a second build
+        # any bd of the host (the suite's failing one, a mise shim) would be a second build next to the stub
+        others = [d for d in os.environ["PATH"].split(os.pathsep) if d and "tl-nobd-" not in d and not (Path(d) / "bd").exists()]
         self.env = dict(os.environ, PATH=os.pathsep.join([str(stubs), *others]),
                         GIT_AUTHOR_NAME="test", GIT_AUTHOR_EMAIL="test@example.invalid",
                         GIT_COMMITTER_NAME="test", GIT_COMMITTER_EMAIL="test@example.invalid",
@@ -151,6 +153,7 @@ class DoctorSource(Case):
 
     def test_reports_exact_commit_when_ok(self):
         commit = self.advance_base(self.config("good", "old.txt"))
+        hook_wire.write_hooks(ROOT, snapshot())  # the pre-push judge is installed: the doctor fails without it
         out = self.doctor(cli=True)  # the one run through tl.main
         assert "base origin/main at commit " + commit in out
         assert "ok: no setup problems found in " + shown(self.wt) in out

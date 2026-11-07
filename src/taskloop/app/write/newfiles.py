@@ -4,8 +4,8 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from taskloop.app.write.review_prompt import NEW_FILES_TEXT
 from taskloop.contracts.gitport import Git
-from taskloop.domain.prompts.review import NEW_FILES_TEXT
 from taskloop.domain.write.newfiles import new_file_kind
 
 

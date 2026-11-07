@@ -49,7 +49,7 @@ class LandParts(Plumbing):
         if branch:
             prior = cleanup.previous(self.home, self.bead, repo, branch, sha)
             cleanup.record(self.log, repo, branch, self.git.rev_parse(self.wt, "HEAD") if pr else sha, sha,
-                           want[0] if want else "", self.land_remote_oid, prior)
+                           want[0] if want else "", self.land_state.remote_oid, prior)
 
     def land_lock_path(self) -> Path:
         return landlock.land_lock_path(self.home, repo_url(self.git, self.wt))
