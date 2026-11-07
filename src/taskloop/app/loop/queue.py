@@ -6,7 +6,6 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
-from taskloop.app.asks import intake, parks
 from taskloop.app.loop import hosts
 from taskloop.app.loop.env import LoopEnv
 from taskloop.contracts import pickset
@@ -15,6 +14,7 @@ from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop.contracts.loop import Skip
+from taskloop.domain.asks import hold
 
 Key = tuple[int, int, list[tuple[int, int | str]], Bead]  # (priority, epic rank, natural id, bead)
 ORDERED = "ordered"  # the label of an epic whose children must name what they follow
@@ -147,9 +147,9 @@ class QueueRule:
             return Skip(why="a slot", kind="slot")
         if hit:
             return Skip(why="label " + hit, kind="label")
-        who = intake.held(b.metadata, self.now())
+        who = hold.held(b.metadata, self.now())
         if who:
-            until = float(b.metadata.get(intake.HOLD_UNTIL) or 0)
+            until = float(b.metadata.get(hold.HOLD_UNTIL) or 0)
             return Skip(why=f"held by {who}", kind="hold", until=until or None)
         return self.hosted(b) or self.parked(b) or self.unordered(b)
 
@@ -260,7 +260,7 @@ def rank_ready(env: LoopEnv, cfg: EngineConfig, say: Callable[[str], None] = pri
         chosen = pickset.members(open_beads, only)
     except BdFailure:  # a queue that cannot be read must not become "take anything"
         ready = []
-    rule = QueueRule(env.store, cfg, env.running(), env.lint, say, env.now, lambda b: parks.skip_of(env.cfgdir, b, now=env.now()),
+    rule = QueueRule(env.store, cfg, env.running(), env.lint, say, env.now, env.asks.skip_of,
                     lambda b: hosts.skip_of(cfg, env.host(), b))
     rule.chosen, rule.only = chosen, bool(only)
     return rule.rank(ready, env.repo, open_beads), rule

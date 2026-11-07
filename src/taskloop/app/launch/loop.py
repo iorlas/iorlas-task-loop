@@ -20,6 +20,7 @@ from taskloop.app.launch import loop_ops as ops
 from taskloop.app.loop import lintrun
 from taskloop.app.loop.env import LoopEnv, Storm
 from taskloop.app.loop.files import LoopFiles
+from taskloop.app.loop.stages import EngineAsks, EngineSlots
 from taskloop.app.prune import verb as prune_verb
 from taskloop.app.release import catalog, shell
 from taskloop.app.run import console
@@ -118,7 +119,8 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         repo_key=wslots.repo_key(repo),
         cfgdir=cfg,
         store=store,
-        slot_env=lambda: wslots.slot_env(repo, store, profile().slots, now, spawner=spawner, git=git, who=who),
+        slots=EngineSlots(lambda: wslots.slot_env(repo, store, profile().slots, now, spawner=spawner, git=git, who=who)),
+        asks=EngineAsks(cfg, now),
         profile=profile,
         fetch=lambda: ops.fetch(repo, git),
         lint=lambda b: beadlint.why(b, repo, lambda: lintrun.has_children(store, b.id)),

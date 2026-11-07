@@ -43,6 +43,7 @@ from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.procport import Spawner
 from taskloop.contracts.run import Reexec, RunReport
+from taskloop.domain.asks import hold
 from taskloop.domain.plan.brief import owner_written
 
 say = console.say
@@ -102,7 +103,7 @@ def admit(bead_id: Any, repo: Any, git: Git, who: Identity, store: Any = None, a
     store = store or beadtools.bd_store(who.actor, repo)
     b = beadtools.peek(store, bead_id) or Bead(id=bead_id, title="", status="")
     holder, me = b.assignee, who.actor
-    if intake.held(b.metadata, at or time.time()):
+    if hold.held(b.metadata, at or time.time()):
         return False, f"held by the owner ({b.metadata[intake.HOLD]}): `tl hold {bead_id} --release` lets it go"
     if holder and holder != me:
         why = _foreign_claim(b, repo, git, who, store, fresh)
