@@ -180,18 +180,18 @@ class CallSite(Case):
         assert p == "/e/r1.live/03-write.jsonl"
         assert live_agent.live_path("/e/x.live", 12, "re view/2").endswith(".live/12-re-view-2.jsonl")
 
-    def test_the_call_sets_the_env(self):
+    def test_the_call_passes_the_live_file_in_the_request(self):
 
         seen = []
 
         def runner(cmd, **kw):
-            seen.append(kw.get("env"))
+            seen.append(kw["request"].live_file)
             return subprocess.CompletedProcess(cmd, 0, "", "")
         res = dl.Resolved(Path("/fake"), "/fake/route.py", fake_route.CONTRACT, "explicit")
         dlcall.call(res, "worker", "p", {}, ".", runner, live_file="/x/y.live/01-write.jsonl")
-        assert must(seen[0])["DELEGATE_LIVE_FILE"] == "/x/y.live/01-write.jsonl"
+        assert seen[0] == "/x/y.live/01-write.jsonl"
         dlcall.call(res, "worker", "p", {}, ".", runner, env={})
-        assert "DELEGATE_LIVE_FILE" not in must(seen[1])
+        assert not seen[1]
 
     def test_engine_numbers_its_calls(self):
         with TemporaryDirectory() as d:
