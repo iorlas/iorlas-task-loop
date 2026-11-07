@@ -4,11 +4,15 @@ import base64
 import json
 from pathlib import Path
 
+from taskloop.adapters.ident import config_dir
 from taskloop.app.doctor import setup, setup_apply
 from taskloop.app.slots import config as slots_config
 from taskloop.app.slots import profile_facts
 from taskloop.cli import setup as cli_setup
+from taskloop.stores.delegate import real_route
+from taskloop.stores.real import real_stores
 from tlkernel.env import Env
+from tlkernel.paths import ConfigDir
 from tlkernel.procport import Ran
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
@@ -40,6 +44,7 @@ class SetupApply(Case):
         self.addCleanup(tmp.cleanup)
         self.home = Path(tmp.name)
         self.env = Env({"HOME": str(self.home), "XDG_CONFIG_HOME": str(self.home / ".config")})
+        self.host = real_stores(ConfigDir(config_dir(self.env))).host
         (self.home / "cache").mkdir()
         self.plugin = self.home / "cache" / "0.9.9"  # an install by its version number, as the plugin cache has it: the shim resolves
         self.plugin.symlink_to(ROOT)
@@ -48,12 +53,13 @@ class SetupApply(Case):
         (self.repo / "justfile").write_text("check:\n    true\n")
 
     def test_the_machine_fixes_are_made_and_a_second_run_has_nothing_left(self):
-        code, lines = setup_apply.apply(self.plugin, self.env, None, {}, Recorder(), profile_facts)
+        code, lines = setup_apply.apply(self.plugin, self.env, None, {}, Recorder(), profile_facts, real_route(), self.host)
         assert code == 0
         assert {"shim", "githooks"} <= {line.removeprefix("fixed ") for line in lines}
-        machine = setup.machine(self.plugin, self.env).checks
+        machine = setup.machine(self.plugin, self.env, real_route()).checks
         assert all(c.ok for c in machine if c.id not in ("path-link", "accounts"))  # accounts: this machine's logins
-        assert setup_apply.apply(self.plugin, self.env, None, {}, Recorder(), profile_facts)[1] == ["machine: nothing to fix"]
+        _, lines = setup_apply.apply(self.plugin, self.env, None, {}, Recorder(), profile_facts, real_route(), self.host)
+        assert lines == ["machine: nothing to fix"]
 
     def test_the_answers_make_a_profile_the_loader_accepts(self):
         for answers in ({"gate": "no"}, {"unity-lease": "yes", "gate": "yes"}, {"gate": "yes"}):
@@ -62,7 +68,7 @@ class SetupApply(Case):
 
     def test_a_profile_goes_in_as_a_pr_over_gh_alone(self):
         sh = Recorder()
-        code, lines = setup_apply.apply(self.plugin, self.env, self.repo, {"gate": "yes"}, sh, profile_facts)
+        code, lines = setup_apply.apply(self.plugin, self.env, self.repo, {"gate": "yes"}, sh, profile_facts, real_route(), self.host)
         assert code == 0
         assert lines[-1] == "profile: PR https://example.test/pr/1"
         assert sh.committed() == {"engine": {"checks": [{"id": "gate", "argv": ["just", "check"]}]}}
@@ -75,21 +81,22 @@ class SetupApply(Case):
         (self.repo / "ProjectSettings").mkdir()
         (self.repo / "ProjectSettings" / "ProjectVersion.txt").write_text("m_EditorVersion: 6000.0\n")
         answers = {"unity-lease": "yes", "gate": "yes"}
-        setup_apply.apply(self.plugin, self.env, self.repo, answers, Recorder(), profile_facts)
+        setup_apply.apply(self.plugin, self.env, self.repo, answers, Recorder(), profile_facts, real_route(), self.host)
         host = self.home / ".config" / "task-loop" / "host.json"
         assert json.loads(host.read_text())["resources"] == ["unity"]
         host.write_text(json.dumps({"resources": []}))
-        _, lines = setup_apply.apply(self.plugin, self.env, self.repo, answers, Recorder(), profile_facts)
+        _, lines = setup_apply.apply(self.plugin, self.env, self.repo, answers, Recorder(), profile_facts, real_route(), self.host)
         assert json.loads(host.read_text())["resources"] == []
         assert not any("host.json" in line for line in lines)
 
     def test_a_missing_answer_opens_nothing_and_a_failed_step_is_named(self):
         sh = Recorder()
-        code, lines = setup_apply.apply(self.plugin, self.env, self.repo, {}, sh, profile_facts)
+        code, lines = setup_apply.apply(self.plugin, self.env, self.repo, {}, sh, profile_facts, real_route(), self.host)
         assert code == 1
         assert "no answer for gate" in lines[-1]
         assert sh.calls == []
-        code, lines = setup_apply.apply(self.plugin, self.env, self.repo, {"gate": "no"}, Recorder(fail_on="PUT"), profile_facts)
+        code, lines = setup_apply.apply(
+            self.plugin, self.env, self.repo, {"gate": "no"}, Recorder(fail_on="PUT"), profile_facts, real_route(), self.host)
         assert code == 1
         assert "gh api contents failed: refused" in lines[-1]
 

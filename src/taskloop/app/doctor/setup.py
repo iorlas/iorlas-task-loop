@@ -5,11 +5,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel.delegateport import Route
 from tlkernel.env import Env
 from tlkernel.paths import ConfigDir, default_root
 
 from taskloop.app.doctor import install, setup_checks
-from taskloop.stores.delegate import real_route
 
 
 class SlotFolderFacts(Protocol):
@@ -58,7 +58,7 @@ class Plan:
     questions: list[Question] = field(default_factory=list)
 
 
-def machine(plugin_root: Path, env: Env) -> Plan:
+def machine(plugin_root: Path, env: Env, route: Route) -> Plan:
     """The per-user part: the config folder, the shim, the `tl` on PATH and the git hooks. Every fix here is idempotent and safe."""
     root = default_root(env)
     checks = [Check("config", root.is_dir(), str(root))]
@@ -80,14 +80,14 @@ def machine(plugin_root: Path, env: Env) -> Plan:
                         + "".join(f"; {p}" for p in problems)))
     if names or problems:
         fixes.append(Fix("githooks", "write the git hooks (pre-push asks the delivery judge) into " + str(ConfigDir(root).hooks_dir())))
-    checks.append(accounts_check())
+    checks.append(accounts_check(route))
     return Plan(checks, fixes)
 
 
-def accounts_check() -> Check:
+def accounts_check(route: Route) -> Check:
     """Worker accounts: at least one enabled lane that is ready. The login itself is the owner's (`tl accounts` names each fix)."""
     try:
-        rows = real_route().accounts()
+        rows = route.accounts()
     except (ValueError, SystemExit, OSError) as e:
         return Check("accounts", False, f"delegate has no account state yet: {e}")
     ready = [r.lane for r in rows if r.enabled and r.ready]
@@ -134,8 +134,8 @@ def repo_part(repo: Path, facts: ProfileFacts) -> Plan:
     return Plan(checks, [], asks)
 
 
-def plan(plugin_root: Path, env: Env, repo: Path | None, facts: ProfileFacts) -> Plan:
-    parts = [machine(plugin_root, env)] + ([repo_part(repo, facts)] if repo else [])
+def plan(plugin_root: Path, env: Env, repo: Path | None, facts: ProfileFacts, route: Route) -> Plan:
+    parts = [machine(plugin_root, env, route)] + ([repo_part(repo, facts)] if repo else [])
     return Plan([c for p in parts for c in p.checks], [f for p in parts for f in p.fixes], [q for p in parts for q in p.questions])
 
 

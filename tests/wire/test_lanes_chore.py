@@ -9,11 +9,10 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.spawn import real_spawner
 
 from taskloop.app.doctor import lanes
+from taskloop.stores.delegate import real_route
 from tlkernel.delegate_status import snapshot_of
-from tlkernel.env import Env
 from tlkernel.paths import ConfigDir
 from tlkernel.rowstores import StatusStore
 
@@ -29,7 +28,7 @@ class Chore(Case):
 
     def chore(self, now, why=None):
         with mock.patch.object(lanes, "file_status", return_value=why) as ask:
-            return lanes.chore(self.said.append, real_spawner(), Env({"XDG_CONFIG_HOME": self.tmp.name}), now), ask.call_count
+            return lanes.chore(self.said.append, real_route(), self.cfg, now), ask.call_count
 
     def test_nothing_filed_asks_once_then_waits_20_minutes_even_when_it_failed(self):
         assert self.chore(5000.0, "delegate status exited 1: x") == (True, 1)

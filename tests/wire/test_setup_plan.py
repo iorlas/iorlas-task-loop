@@ -6,6 +6,7 @@ from pathlib import Path
 from taskloop.app.doctor import setup
 from taskloop.app.slots import profile_facts
 from taskloop.cli import setup as cli_setup
+from taskloop.stores.delegate import real_route
 from tlkernel.env import Env
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
@@ -30,7 +31,7 @@ class SetupPlan(Case):
 
     def test_a_bare_machine_is_planned_and_nothing_is_created(self):
         before = tree(self.home)
-        plan = setup.plan(self.plugin, self.env, self.repo, profile_facts)
+        plan = setup.plan(self.plugin, self.env, self.repo, profile_facts, real_route())
         assert tree(self.home) == before
         checks = self.checks(plan)
         assert not checks["config"].ok
@@ -40,16 +41,16 @@ class SetupPlan(Case):
 
     def test_a_local_folder_adds_the_path_link_fix_and_a_made_link_clears_it(self):
         (self.home / ".local").mkdir()
-        assert "path-link" in {f.id for f in setup.plan(self.plugin, self.env, None, profile_facts).fixes}
+        assert "path-link" in {f.id for f in setup.plan(self.plugin, self.env, None, profile_facts, real_route()).fixes}
         (self.home / ".local" / "bin").mkdir()
         (self.home / ".local" / "bin" / "tl").symlink_to(self.home / ".config" / "task-loop" / "bin" / "tl")
-        assert "path-link" not in {f.id for f in setup.plan(self.plugin, self.env, None, profile_facts).fixes}
+        assert "path-link" not in {f.id for f in setup.plan(self.plugin, self.env, None, profile_facts, real_route()).fixes}
 
     def test_a_repo_without_a_profile_gets_the_questions_tailored_to_its_stack(self):
         (self.repo / "ProjectSettings").mkdir()
         (self.repo / "ProjectSettings" / "ProjectVersion.txt").write_text("m_EditorVersion: 6000.0\n")
         (self.repo / "justfile").write_text("check:\n    true\n")
-        plan = setup.plan(self.plugin, self.env, self.repo, profile_facts)
+        plan = setup.plan(self.plugin, self.env, self.repo, profile_facts, real_route())
         assert [q.id for q in plan.questions] == ["unity-lease", "gate"]
         assert plan.questions[0].default == "yes"
         assert "unity" in self.checks(plan)["stack"].detail
