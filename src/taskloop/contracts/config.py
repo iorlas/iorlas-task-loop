@@ -196,6 +196,7 @@ class EngineConfig(Rec):
     gate_ignored_allow: list[str] = msgspec.field(default_factory=lambda: [
         ".venv/**", "node_modules/**", "**/__pycache__/**", "Library/**", "Temp/**", "obj/**", "bin/**", "**/.*cache*/**"])
     land_mode: Literal["push", "pr"] = "push"  # pr: the land opens a PR and waits for the owner to merge it; the engine never merges
+    land_queue: Literal["off", "shadow", "on"] = "off"  # the speculative merge queue (merge-queue.md); off: as before
     base: str = "origin/main"
     check_links: bool = True
     owner_author: str = ""  # exact bd comment author; unset means no comment is an owner instruction
