@@ -18,7 +18,6 @@ from support.tlmain import tl
 from taskloop.app.asks import admission
 from taskloop.app.run import entry
 from taskloop.app.run.engine import Engine
-from taskloop.app.run.layout import RunLayout
 from tlkernel.config import EngineConfig, SlotsConfig
 from tlkernel.enums import Result, Step
 from tlkernel.env import Env
@@ -28,6 +27,7 @@ from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.locator import RunLocator
 from tlkernel.run import RunReport, RunState
+from tlkernel.runlayout import RunLayout
 from tlkernel.runrows import RunRows
 from tltestkit.cfgs import cfg_with
 

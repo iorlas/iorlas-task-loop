@@ -8,9 +8,9 @@ from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.locator import RunLocator
+from tlkernel.runlayout import repo_of
 from tlpipeline.api import admission, read_checkpoint
 
-from taskloop.app.run.layout import repo_of
 from taskloop.app.track import console
 from taskloop.app.wire.closeguard import has_land
 from taskloop.stores.real import real_stores

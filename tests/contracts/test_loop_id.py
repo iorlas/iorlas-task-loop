@@ -1,13 +1,13 @@
 """LOOPID (tl-9un.45): each supervisor lifetime has an opaque loop id, kept across its exec; a run records it (None for a hand run)."""
 from pathlib import Path
 
-from taskloop.app.run.layout import loop_id_of
 from tlkernel import childenv
 from tlkernel.env import Env
 from tlkernel.envvars import EnvVar
 from tlkernel.ids import new_loop_id
 from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
+from tlkernel.runlayout import loop_id_of
 
 
 def test_a_new_loop_id_is_opaque_and_unique() -> None:
