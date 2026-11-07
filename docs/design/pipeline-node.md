@@ -230,3 +230,22 @@ Each PR is one bead (child of tl-e5t0.39, label `auto`), lands green, behaviour 
 | the 16-member ceiling | a ratchet in `tests/rules` (R5), list only shrinks |
 
 Beads (children of tl-e5t0.39): R1 tl-e5t0.39.1, R2 .2, R3 .3, R4a .4, R4b .5, R4c .6, R4d .7, R4e .8, R4f .9, R5 .10, R6 .11.
+
+## 13. R6 is not a pure move: what the package imports today (added 2026-11-07, after docs/design/workspace.md)
+
+`workspace.md` section 2 sets the rule: a stage package may import only `tlkernel` (and third parties); a stage that imports `taskloop.adapters`, `stores` or `domain` is not a leaf and its outward imports are settled first. Measured on main (AST of `src/taskloop/app/pipeline`, 41 modules): the pipeline imports **no other `app` stage** (the `pipeline-imports-no-stage` contract holds) but reaches the three layers below it:
+
+| layer | modules and who imports them (pipeline files) | settle by |
+|---|---|---|
+| `taskloop.stores` (11 files) | `stores.runlog.RunLog` (7: closing_branch, closing_host, closing_record, stage_run, standalone_roles, steps, waits), `stores.bundle.Stores` (5), `stores.api` `Log` / `Doc` / `AmendDoc` (3), `stores.real.real_stores` (stage_run) | **R6a**: the pipeline owns the Protocols it needs (`RunLog`, `Stores` slices) in `pipeline/ports.py` or the kernel record modules; `stores` implements them; `stage_run` receives `real_stores` from the binder |
+| `taskloop.adapters` (13 files) | `beadtools` (5), `ident` (3), `childenv` (2), `repourl.repo_url` (2), `closes`, `deadline` (2), `halt.RUN_SLOT`, `agent.last_event_t`, `looks.Methods` (run_roles) | **R6b**: pure helpers (`repourl`, `deadline`, `ident` reads) move to the kernel or become constructor values; the rest are ports bound by the root (`BeadTools`, `Clock/Deadline`, `ChildEnv`, `StuckClock`) |
+| `taskloop.domain` (24 files) | `domain.outcome` (14 files: the run's outcome vocabulary), `domain.asks.spec/specs` (6), `domain.effects` (4), `domain.lanes` (`caps`, `pauses`, `pin`, `liveness`, `pause_reasons.Producer`), `domain.plan.*` (`brief`, `matchers`), `domain.followups`, `domain.checks`, `domain.interpret`, `domain.stuck`, `domain.work`, `domain.review.kinds`, `domain.land.matchers`, `domain.lifecycle`, `domain.matchers.clip` | **R6c**: the run-end vocabulary (`outcome`, `effects`, `asks.spec`, `pause_reasons`) is shared with stages and the dashboard, so it goes to the kernel by the precedent of WORKKERNEL (tl-e5t0.70, `domain/work`); pipeline-only rules (`stuck`, `interpret`, `lifecycle`) move into the package; the plan/review/land matchers become values passed in |
+
+Order and collisions:
+
+1. **R6a (stores) and R6b (adapters)** touch import lines and constructor arguments in pipeline files plus the binders in `run/`; they run now, apart from `closing*.py` lines that B3-5 edits (the lead sequences B3 first for those four files; the rest of each PR does not collide).
+2. **R6c (domain)** moves files other stages and the dashboard import; it waits for B3-5 (`domain.lanes.pauses`, `pause_reasons`, policy rows are B3's) and for the kernel-rename lane (`tlkernel`, ENUMS, tl-e5t0.71 landed).
+3. **R5** needs R4d to R4f (the 16-member ceiling is real only when no module holds a wide host); only the `.importlinter` cleanup part (the `run.field_ports` source entry) can go earlier.
+4. **R6** is then the pure `git mv` it was planned to be, now with `tlpipeline -> tlkernel` as its only edge, plus the four edits per carve of `workspace.md` bug 6 (host_ban converted list, `arch_invariants.SLICE_IMPORTS`, the layers contract, `test_dash_state_paths`), the test move rule (a pipeline test that imports a sibling stage belongs to the sibling or `tests/e2e`; today 77 test files outside `tests/pipeline` mention the pipeline), and the vendored-shelf `pythonpath` decision (the pipeline imports `atomic_io` through `adapters`, check in R6b).
+
+Beads: R6a `tl-e5t0.39.12`, R6b `.13`, R6c `.14`; R6 (`.11`) depends on all three.
