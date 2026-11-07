@@ -86,6 +86,20 @@ class Writes(Case):
         assert (res.ok, must(must(self.asks.get(BeadId("b-1"))).answer).text) == (False, "better")
         assert "already used" in res.message
 
+    def test_an_ask_replaced_after_the_page_looked_is_refused_not_answered_on_the_new_ask(self):
+        found = self.dash.writes.find
+
+        def find_then_the_engine_asks_again(ask_id):
+            got = found(ask_id)
+            self.asks.put(ASK.replace(id="b-1-2"))  # between the dashboard's look at the ask and its answer
+            return got
+
+        with mock.patch.object(self.dash.writes, "find", find_then_the_engine_asks_again):
+            res = self.post("answer", {"project": loop_key(self.repo), "ask": "b-1-1", "kind": "answer", "text": "go with A"})
+        assert not res.ok
+        assert "asked again" in res.message
+        assert must(self.asks.get(BeadId("b-1"))).answer is None  # the new ask is still the owner's to answer
+
     def test_refused_answers_change_nothing(self):
         before = self.asks.get(BeadId("b-1"))
         for body, why in (({"ask": "b-1-1", "option": 9}, "not one of this ask"), ({"ask": "b-1-1", "option": -1}, "not one of this ask"),

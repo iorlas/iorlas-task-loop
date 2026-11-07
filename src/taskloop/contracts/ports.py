@@ -27,9 +27,10 @@ class Sh(Protocol):
 
 class AnswerAsk(Protocol):
     """The owner's answer to an ask: the one intake `tl answer` uses (typed record, bead opened, receipt comment). The dashboard calls
-    it with the ask's repo and bead; -> (the ask, "" or why: answered, withdrawn, closed, consumed, superseded, gone)."""
+    it with the ask's repo and bead, and `expect`, the id of the ask the owner saw (a newer ask refuses it: superseded);
+    -> (the ask, "" or why: answered, withdrawn, closed, consumed, superseded, gone)."""
 
-    def __call__(self, repo: str, bead: BeadId, action: AskAction, text: str, amend: bool) -> tuple[Ask | None, str]: ...
+    def __call__(self, repo: str, bead: BeadId, action: AskAction, text: str, amend: bool, expect: str = "") -> tuple[Ask | None, str]: ...
 
 
 class Delegate(Protocol):

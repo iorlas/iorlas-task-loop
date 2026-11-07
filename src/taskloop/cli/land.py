@@ -2,7 +2,7 @@
 import time
 
 from taskloop.app.land import cleanup
-from taskloop.app.run.finish import land_answer
+from taskloop.app.pipeline.finish import land_answer
 from taskloop.app.wire import closeguard
 from taskloop.app.wire.slots import load_cfg, profile_slots, slot_of
 from taskloop.contracts.beadsport import Beads
