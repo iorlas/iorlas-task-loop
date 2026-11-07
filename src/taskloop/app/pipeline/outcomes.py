@@ -12,6 +12,8 @@ from taskloop.contracts.stores import JsonlStore
 from taskloop.domain.matchers import clip
 
 
+DONE = (Outcome.LANDED, Outcome.DONE)
+
 def node_outcome(outcome: Outcome, kind: Kind) -> str:
     """What a node still open at the close came to: the run's own end."""
     if outcome in (Outcome.LANDED, Outcome.DONE):

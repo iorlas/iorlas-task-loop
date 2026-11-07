@@ -6,11 +6,12 @@ import threading
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
+from taskloop.app.land.followups import FollowUpCheckpoints, FollowUpHost
+from taskloop.app.pipeline.closing_decide import DecideHost
+from taskloop.app.pipeline.closing_notes import FileNotesHost, NotesCheckpoints, ReflectCheckpoints, ReflectHost
+from taskloop.app.pipeline.closing_settle import SettleHost
 from taskloop.app.run.closer_branch import BranchCheckpoints, BranchTree, LeaveTree, ReleaseSlotHost, SaveBranchHost
-from taskloop.app.run.closer_decide import DecideHost
-from taskloop.app.run.closer_notes import FileNotesHost, NotesCheckpoints, ReflectCheckpoints, ReflectHost
 from taskloop.app.run.closer_record import RecordHost, RecordRecords
-from taskloop.app.run.closer_settle import SettleHost
 from taskloop.contracts import fence
 from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.checkpoint import Checkpoint, EndRec
@@ -99,7 +100,7 @@ class CloseHost(Protocol):
     def warn(self, text: str) -> None: ...
 
 
-class CloseAllCheckpoints(CloseCheckpoints, BranchCheckpoints, NotesCheckpoints, ReflectCheckpoints, Protocol):
+class CloseAllCheckpoints(CloseCheckpoints, BranchCheckpoints, NotesCheckpoints, ReflectCheckpoints, FollowUpCheckpoints, Protocol):
     pass
 
 
@@ -107,7 +108,8 @@ class CloseTree(BranchTree, LeaveTree, Protocol):
     pass
 
 
-class CloserHost(CloseHost, DecideHost, SaveBranchHost, ReleaseSlotHost, RecordHost, FileNotesHost, ReflectHost, SettleHost, Protocol):
+class CloserHost(FollowUpHost, CloseHost, DecideHost, SaveBranchHost, ReleaseSlotHost, RecordHost,
+                 FileNotesHost, ReflectHost, SettleHost, Protocol):
     """The engine, as the close reads it: the sum of the parts above (no member of its own but the one that joins them)."""
 
     @property
