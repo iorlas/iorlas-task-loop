@@ -11,7 +11,7 @@ STAGE_MODULES = {
     "dash": "taskloop_dash.paths",
     "layout": "taskloop.adapters.layout_paths",
     "retired": "taskloop.adapters.layout_paths",
-    "check_dirs": "taskloop.app.artifacts.paths",
+    "check_dirs": "tlartifacts.paths",
     "engine_take": "taskloop.app.slots.paths",
     "engine_lock": "taskloop.app.slots.paths",
 }

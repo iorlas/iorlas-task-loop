@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from taskloop.app.artifacts import rules, store
+from tlartifacts import rules, store
 from tlkernel.artifact import ArtifactSlot
 from tlkernel.wire import Refused
 

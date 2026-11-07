@@ -7,10 +7,9 @@ from tlkernel import wire
 from tlkernel.config import ProfileReadError
 from tlkernel.enums import Result
 from tlkernel.kinds import Kind
+from tlkernel.matchers import NetText
 from tlkernel.run import RunReport
 from tlkernel.slots import SlotFailCode
-
-from taskloop.domain.matchers import NetText
 
 NETWORK = Kind.PAUSE_NETWORK.value
 FAULT_SLOT = Kind.FAULT_SLOT.value

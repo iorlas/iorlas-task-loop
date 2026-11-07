@@ -11,8 +11,8 @@ from support.factory_index import ingest
 from support.fakes import FakeBeadStore
 from support.narrow import must
 from support.repos import write_repos
+from support.runs import manifest
 
-from taskloop.app.run.layout import RunLayout
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
 from tlkernel.ids import loop_key
@@ -89,8 +89,8 @@ class RunHeaders(Case):
         assert headers[0].run == created[1].run
 
     def test_engine_layout_manifest_supplies_run_header_identity(self):
-        layout = RunLayout.open("t-1", self.repo, None, self.cfg, str(self.repo), self.now,
-                                mode="stage:gate", owner="mac-owner", session="mac-session")
+        layout = manifest(self.cfg, "t-1-run", "t-1", self.now, repo=str(self.repo),
+                          mode="stage:gate", owner="mac-owner", session="mac-session")
         head, = self.snapshot().runs
         assert (head.run, head.mode, head.owner, head.session) == (layout.run, "stage:gate", "mac-owner", "mac-session")
 

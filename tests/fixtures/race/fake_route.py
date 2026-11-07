@@ -86,7 +86,7 @@ def main(a):
     tokens = {"in": 1, "cached": 0, "out": 1}
     print(json.dumps({"contract": 4, "data": data, "text": "ok", "say": "", "ref": ref, "lane": "L", "model": "m", "effort": "e",
                       "family": family, "flag": None, "fallback": False, "first_lane": "L", "rung": 0, "tokens": tokens, "cost": 0.0,
-                      "secs": 1, "run_id": "race", "call_id": "race", "transcript": None, "transcript_info": None, "denied": [],
+                      "secs": 1, "run_id": "race", "call_id": "race", "denied": [],
                       "git_violation": [], "warnings": [], "usage": {"tokens": tokens, "cost": 0.0, "secs": 1, "turns": 1,
                                                                       "context_k": None, "answer_bytes": 0, "ref": ref},
                       "stop": None, "resumed": False}))

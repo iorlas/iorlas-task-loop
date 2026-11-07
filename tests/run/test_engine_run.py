@@ -351,22 +351,9 @@ class EngineRunTest(EngineTest):
         _rc, s = self.two_writes(ctx_k=500, write_fresh_above_k=0)  # 0: never
         assert s.calls[2][1] == "ref-write"
 
-    def test_a_missing_or_empty_transcript_resumes_as_before(self):
-        for path in ("", "/nonexistent/s.jsonl"):
-            extra = {"transcript": path}
-            with self.store.stub(show=dict(BEAD, description=self.MARK)):
-                _rc, s = self.run_engine({"plan": [self.plan_with(self.RED_ONCE)], "write": [WRITE, WRITE], "review": [CLEAN]},
-                                        j_extra={"write": [extra, extra]})
-            assert s.calls[2][1] == "ref-write", path
-            assert self.MARK not in s.prompts[2]
-            assert self.eng.write.write_rounds[0]["context_k"] is None
-
     def test_round_three_after_a_fresh_start_resumes_the_fresh_session(self):
-        big, small = Path(self.tmp.name, "big.jsonl"), Path(self.tmp.name, "small.jsonl")
-        for f, k in ((big, 160), (small, 40)):
-            f.write_text(json.dumps({"type": "assistant", "message": {"usage": {"input_tokens": k * 1000}}}) + "\n")
         red = procsim.fake("green-on-d4", lambda cwd, env: (0 if procsim.f_txt(cwd) == "d4" else 1, ""))
-        ex = [{"family": "claude", "transcript": str(f)} for f in (big, small, small)]
+        ex = [{"family": "claude", "usage": {"context_k": k}} for k in (160, 40, 40)]
         with self.store.stub(show=dict(BEAD, description=self.MARK)):
             rc, s = self.run_engine({"plan": [self.plan_with(red)], "write": [WRITE] * 3, "review": [CLEAN]}, j_extra={"write": ex})
         assert rc == 0, self.blocked
@@ -436,7 +423,7 @@ class EngineRunTest(EngineTest):
         log = Path(mkdtemp()) / "run.jsonl"
         log.write_text(
             "\n".join(
-                json.dumps({"v": 3, "kind": "step_end", "t": 1.0, "id": "n1", "step": st, "outcome": "done", "exec_seconds": sec}) + "\n"
+                json.dumps({"v": 4, "kind": "step_end", "t": 1.0, "id": "n1", "step": st, "outcome": "done", "exec_seconds": sec}) + "\n"
                 for st, sec in (("checks", 6000), ("checks", 3800), ("write", 900), ("plan", 20))
             )
         )
@@ -652,14 +639,12 @@ class EngineRunTest(EngineTest):
         assert "cat .env" in self.said()
         assert self.ask() is None  # tl-7y6.2.2: the tripwire is a machine fault, not an owner ask
 
-    def test_fail_on_a_resumed_write_retries_once_as_a_new_thread(self):
-        refused = stop("worker_failed", "ref-write", say="the resumed thread failed")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, refused, WRITE], "review": [review(unmet=["more"]), CLEAN]})
-        assert rc == 0, self.blocked
-        workers = [c for c in s.calls if c[0] == "worker"]
-        assert len(workers) == 3
-        assert workers[1][1] is not None  # the second write resumed the writer's thread
-        assert workers[2][1] is None     # the fail made it start a new one
+    def test_fail_on_a_resumed_write_is_delegates_to_retry_so_an_exhausted_one_faults(self):
+        failed = stop("worker_failed", "ref-write", say="the resumed thread failed")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, failed], "review": [review(unmet=["more"])]})
+        assert rc == 2
+        assert self.eng.kind.value == "fault_infra"
+        assert len([c for c in s.calls if c[0] == "worker"]) == 2  # the engine starts no thread of its own
 
     def test_no_answer_object_counts_as_fail(self):
         real = fake_route.Script.__call__

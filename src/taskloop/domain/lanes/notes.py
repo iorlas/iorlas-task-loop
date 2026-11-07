@@ -4,19 +4,9 @@ from typing import Final
 
 NET_WAIT_CAP_S: Final = 600  # maximum wait for the lander's git push network retry
 NET_BACKOFF: Final = (5, 10, 20, 40, 60, 120)  # seconds between the lander's git push network probes
-FRESH_WRITER_TEXT: Final = (
-    "\nYou take over from an earlier writer of this task, on another model. Its work is in this "
-    "tree, committed on this branch or not: read `git status` and the diff from main first, then go on "
-    "from there; do not start over."
-)
-RESUME_AFTER_STOP: Final = (
-    "\nYour last attempt at this step stopped before it gave an answer. Continue from where you stopped and "
-    "answer in the required format; do not start over."
-)
 NOTES: Final = {
     "apply_patch": (
         "\nAn earlier attempt at this step ran a command on a secret path and was stopped. Do not read or write "
         "secret files (.env, keys, credentials); change files with your editing tool, never through a shell redirect."
     ),
-    "lane_out": "",
 }

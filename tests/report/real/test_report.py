@@ -229,7 +229,7 @@ def trace(bead, outcome, start_min, end_min, why="", sha="", rounds=0, replans=0
           stderr="", kind=""):
     started, ended = T0 + start_min * MIN, T0 + end_min * MIN
     stem = run or str(RunId.new(started, hashlib.sha1(f"{bead}{started}".encode()).digest()[:10]))
-    return {"v": 2, "run": stem, "bead": bead, "repo_url": "https://example.invalid/r.git", "worktree": worktree or "", "branch": "",
+    return {"v": 3, "run": stem, "bead": bead, "repo_url": "https://example.invalid/r.git", "worktree": worktree or "", "branch": "",
             "coordinator_session": "", "started": started, "ended": ended, "outcome": outcome, "why": why, "sha": sha,
             "stats": {"rounds": rounds, "replans": replans}, "log": str(homes.config_dir() / "runs" / stem / "engine.jsonl"),
             "sessions": list(sessions), "stderr": stderr, "kind": kind or outcome if outcome in ("landed", "done") else kind}
