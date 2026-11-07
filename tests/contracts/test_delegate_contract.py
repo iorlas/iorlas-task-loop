@@ -143,3 +143,9 @@ class DelegateContract(Case):
             "status.ignored[].fields": (("state",), ()),
             "status.ignored[].state.enum": (("new",), ()),
         }
+
+
+def test_product_request_fields_match_delegate_schema():
+    properties = CONTRACT["request_schema"]["properties"]
+    for name in ("prefer", "writer_exec", "reviewer_other_family"):
+        assert properties[name] == schema.of(delegate.RunRequest)["properties"][name]

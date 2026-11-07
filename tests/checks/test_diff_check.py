@@ -11,7 +11,7 @@ from tltestkit.narrow import must
 
 # isort: split
 from taskloop.app.checks import evidence
-from taskloop.domain.checks import matchers
+from tlkernel import checkmatchers as matchers
 
 ST = {"checks": [], "files": []}
 TESTS = {"id": "unit", "cmd": procsim.default("unit-tests", procsim.exits(0, "unit ran")), "group": "tests"}

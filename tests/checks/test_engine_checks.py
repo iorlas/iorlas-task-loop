@@ -25,11 +25,11 @@ from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.domain.checks import lint
 from taskloop.domain.checks.writer_split import WriterSplit
-from taskloop.domain.review.matchers import Tools
 from taskloop.domain.write.matchers import count_tests
 from tlkernel import answers, childenv, plancheck
 from tlkernel.config import EngineConfig
 from tlkernel.env import snapshot
+from tlkernel.reviewmatchers import Tools
 from tltestkit.checks import ck, res, typed
 
 

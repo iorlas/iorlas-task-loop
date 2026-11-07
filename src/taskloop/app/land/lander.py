@@ -11,6 +11,7 @@ from typing import Protocol
 from tlkernel import askspecs
 from tlkernel import log as rec
 from tlkernel.bead import Bead
+from tlkernel.lanesliveness import LIVENESS
 
 from taskloop.adapters.deadline import DeadlineExpired, deadline
 from taskloop.app.asks import trustroots
@@ -27,7 +28,6 @@ from taskloop.app.land.push import Pusher
 from taskloop.app.land.recheck import Recheck
 from taskloop.app.land.state import Land, Next, Phase, Placing
 from taskloop.app.land.sync import Sync
-from taskloop.domain.lanes.liveness import LIVENESS
 from taskloop.domain.lanes.notes import NET_WAIT_CAP_S
 
 

@@ -39,7 +39,7 @@ class DelegatePauseFacts(Case):
                 action = policy.decide(stop, policy.Ctx())
                 assert isinstance(action, policy.Yield)
                 host = mock.Mock(dry=False, home=mock.Mock(), bead=bead.id, run_id="r1", asked=False)
-                host.cfg.writer_family, host.cfg.second_writer_family, host.plan_data, host.budget.labels = [], "", None, []
+                host.plan_data, host.budget.labels = None, []
                 host.clock.now.return_value = 100
                 host.ask_flow.raise_ask.return_value = True
                 worker = mock.Mock()

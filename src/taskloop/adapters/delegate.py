@@ -116,11 +116,10 @@ def api_request(req: RunRequest, env: Mapping[str, str]) -> api.RunRequest:
     return api.RunRequest(
         role=req.role, brief_file=req.brief_path, cwd=req.cwd, schema_file=req.schema_path,
         thread=req.thread, delta_file=req.delta_path or None, boundary=req.boundary,
-        authored_by=req.authored_by or None, timeout_s=req.timeout_s or None, idle_s=req.idle_s or None, unattended=req.unattended,
+        timeout_s=req.timeout_s or None, idle_s=req.idle_s or None, unattended=req.unattended,
         parent=req.parent, task=req.task, title=req.title[:120], call_id=req.call_id or None, live_file=req.live_file or None,
-        engine_only=list(req.engine_only), engine_only_advisory=req.engine_only_advisory, only_family=list(req.only_family),
-        writer_exec_allow=[list(x) for x in req.writer_exec_allow],
-        read_roots=list(req.read_roots),
+        engine_only=list(req.engine_only), engine_only_advisory=req.engine_only_advisory,
+        prefer=req.prefer, writer_exec=req.writer_exec, reviewer_other_family=req.reviewer_other_family,
         instructions_ref=req.instructions_ref,
         worker_env=dict(env),
         tools=[api.ToolServer(name=t.name, command=list(t.command), bead=t.bead, run=t.run, stage=t.stage, attempt=t.attempt)

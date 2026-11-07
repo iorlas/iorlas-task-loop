@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel import followkeys as fu
 from tlkernel.answers import VERDICTS
 from tlkernel.beadsport import Beads
 from tlkernel.checkpoint import Notes
@@ -15,7 +16,6 @@ from taskloop.app.pipeline import outcomes
 from taskloop.app.pipeline.outcomes import DONE
 from taskloop.app.pipeline.ports import FollowUps
 from taskloop.app.pipeline.store_ports import NotesStores
-from taskloop.domain import followups as fu
 
 
 class NotesCheckpoints(Protocol):

@@ -21,14 +21,15 @@ from support.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE
 from support.spawn import port_git, real_spawner
 from support.who import who
 
+import tltestkit.shellkit
 from taskloop.adapters import pidcheck
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.write.handoff import HANDOFF_CAP
 from taskloop.domain.checks import planref
-from taskloop.domain.plan.matchers import AcceptanceText
 from tlkernel import childenv, rundocs
+from tlkernel.acceptancetext import AcceptanceText
 from tlkernel.answers import IRREVERSIBLE
 from tlkernel.argv import argv_of
 from tlkernel.env import snapshot
@@ -69,11 +70,11 @@ class EmptyPlan(StagesTest):
         assert "noop: the plan found nothing to implement" in te.EngineTest.said(self)
 
     def test_an_empty_plan_over_work_no_review_accepted_is_not_done(self):
-        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
         (self.wt / "g.txt").write_text("half done\n")
-        te.sh("git", "add", "-A", cwd=self.wt)
-        te.sh("git", "commit", "-qm", "wip", cwd=self.wt)
-        te.sh("git", "checkout", "-q", "-", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "add", "-A", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "commit", "-qm", "wip", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-q", "-", cwd=self.wt)
         plan = dict(PLAN, stages=[], leftovers=[{"title": "File the table bead", "why": "x"}])
         rc, _s = self.run_engine({"plan": [plan]})
         assert rc != 0
@@ -333,14 +334,14 @@ class SharedNotes(StagesTest):
         assert "SoakTests.HeapGrowth" in s.prompts[2]  # the reviewer
 
     def test_what_landed_since_the_branch_left_the_base_is_listed(self):
-        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
         self.commit_base_cfg({"gate": ""})
-        te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "fetch", "-q", "origin", cwd=self.wt)
         assert self.eng_().shared.landed_since() == ["engine config"]
 
     def test_a_task_running_in_another_worktree_is_listed_with_its_files(self):
         other = Path(self.tmp.name, "wt2")
-        te.sh("git", "worktree", "add", "-q", "--detach", str(other), cwd=self.wt)
+        tltestkit.shellkit.sh("git", "worktree", "add", "-q", "--detach", str(other), cwd=self.wt)
         put_lock(str(other), {"pid": os.getpid(), "start": pidcheck.proc_start(os.getpid()), "bead": "t-2"})
         put_ck(self.eng_(), "t-2", plan_data={"summary": "tune the soak", "stages": [
             {"goal": "g", "files": ["SoakTests.cs", "justfile"], "checks": [], "hard": False}]})
@@ -351,11 +352,11 @@ class SharedNotes(StagesTest):
         assert self.eng_().shared.siblings() == []
 
     def test_a_branch_behind_the_base_is_rebased_before_it_is_planned(self):
-        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
         (self.wt / "g.txt").write_text("g\n")
-        te.sh("git", "add", "-A", cwd=self.wt)
-        te.sh("git", "commit", "-qm", "earlier work", cwd=self.wt)
-        te.sh("git", "checkout", "-q", "-", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "add", "-A", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "commit", "-qm", "earlier work", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-q", "-", cwd=self.wt)
         self.commit_base_cfg({"gate": ""})  # main moves on
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         assert rc == 0, self.blocked
@@ -365,15 +366,15 @@ class SharedNotes(StagesTest):
         assert "Add f (t-1)" in out
 
     def test_the_rebase_moves_the_checkpoints_head_with_it(self):
-        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
         (self.wt / "g.txt").write_text("g\n")
-        te.sh("git", "add", "-A", cwd=self.wt)
-        te.sh("git", "commit", "-qm", "earlier work", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "add", "-A", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "commit", "-qm", "earlier work", cwd=self.wt)
         e = self.eng_()
         old = gitq.git("rev-parse", "HEAD", cwd=e.wt)
         put_ck(e, head=old)
         self.commit_base_cfg({"gate": ""})
-        te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "fetch", "-q", "origin", cwd=self.wt)
         e.rebase.onto_base()
         new = gitq.git("rev-parse", "HEAD", cwd=e.wt)
         assert old != new
@@ -397,9 +398,9 @@ class Fdyo(StagesTest):
     def test_python_isolated_mode_with_a_repo_module_is_sent_back(self):
         (self.wt / "tools" / "tests").mkdir(parents=True)
         (self.wt / "tools" / "tests" / "test_x.py").write_text("x = 1\n")
-        te.sh("git", "add", "-A", cwd=self.wt)
-        te.sh("git", "commit", "-qm", "tools", cwd=self.wt)
-        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "add", "-A", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "commit", "-qm", "tools", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)
         bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["python3 -I -m unittest tools.tests.test_x"])])
         assert len(lint.dry_check(typed(bad), self.probe())) == 1
         assert "python -I removes the working directory" in lint.dry_check(typed(bad), self.probe())[0]
@@ -477,7 +478,9 @@ class Executable(StagesTest):
         return lint.command_problems(argv_of(cmd), probe or self.probe(), **kw)
 
     def test_real_commands_pass_the_word_check(self):
-        for ok in ("grep -q x a.txt", "env FOO=1 git status", "git status --short", "python3 -c 'a;b'", te.PY + " -c 'pass'"):
+        for ok in (
+            "grep -q x a.txt", "env FOO=1 git status", "git status --short", "python3 -c 'a;b'", tltestkit.shellkit.PY + " -c 'pass'",
+        ):
             assert self.problems(ok) == [], ok
 
 
@@ -783,9 +786,9 @@ class Inputs(StagesTest):
         assert "Facts about this factory and project" in s.prompts[0]
         assert "No Windows PC. Godot left main" in s.prompts[0]
         (self.wt / "notes.md").write_text("The factory is a Mac only.\n")
-        te.sh("git", "add", "-A", cwd=self.wt)
-        te.sh("git", "commit", "-qm", "notes", cwd=self.wt)
-        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "add", "-A", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "commit", "-qm", "notes", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "push", "-q", "origin", "HEAD:main", cwd=self.wt)
         _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, planner_notes="@notes.md")
         assert "The factory is a Mac only." in s.prompts[0]
         _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})

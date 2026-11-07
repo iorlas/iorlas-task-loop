@@ -15,13 +15,13 @@ from tltestkit.tmpdir import TemporaryDirectory
 import pytest
 from git_porcelain.errors import GitUnavailable
 from git_porcelain.real import RealWorktree
-from support.checked import run_checked
 
 from taskloop.adapters import slotcheck, treehash
 from taskloop.adapters.git import RealGit
 from taskloop.app.run import engine
 from tlkernel.env import snapshot
 from tltestkit.case import Case
+from tltestkit.checked import run_checked
 
 
 def sh(*a, cwd):

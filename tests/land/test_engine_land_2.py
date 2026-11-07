@@ -13,7 +13,7 @@ from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes
-from support.engine_case import POSIX_CHECK, EngineTest
+from support.engine_case import EngineTest
 from support.plans import CLEAN, HAS_F, PLAN, STILL_OPEN, WRITE, verdict
 from support.waits import until
 
@@ -24,6 +24,7 @@ from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
 from tltestkit import procsim
 from tltestkit.logs import records
+from tltestkit.shellkit import POSIX_CHECK
 
 
 class EngineLand2Test(EngineTest):
@@ -185,7 +186,8 @@ class EngineLand2Test(EngineTest):
         rc, s = self.verified(settled)
         assert rc == 0, self.blocked
         assert self.ask() is None
-        assert s.calls[3] == ("reviewer", None, "openai")  # read-only, another family than the writer
+        assert s.requests[3].reviewer_other_family
+        assert s.results[3]["family"] != s.results[1]["family"]
         brief = s.prompts[3]
         for item in self.GAPS:
             assert item["what"] in brief

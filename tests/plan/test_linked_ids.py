@@ -3,9 +3,9 @@ from unittest import mock
 
 import support.paths  # noqa: F401
 
-from taskloop.domain.plan.brief import linked
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
+from tlkernel.planbrief import linked
 from tltestkit.case import Case
 
 

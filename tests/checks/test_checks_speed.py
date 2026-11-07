@@ -11,7 +11,6 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.cfgs import cfg_with
 from support.check_host import CheckHostCase
 from support.plans import FALSE, PLAN
-from support.shellkit import sh
 from support.spawn import port_git
 
 from taskloop.adapters import procs
@@ -28,6 +27,7 @@ from tlkernel.ids import CheckId
 from tlkernel.plancheck import adhoc
 from tltestkit import procsim
 from tltestkit.checks import ck, typed
+from tltestkit.shellkit import sh
 
 
 def ignored_paths(wt, globs, exclude=()):
