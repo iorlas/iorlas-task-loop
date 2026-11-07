@@ -71,9 +71,22 @@ def py_files(root, scan=SCAN):
                     yield path
 
 
+def child_statements(node):
+    yield from getattr(node, "body", ())
+    for handler in getattr(node, "handlers", ()):
+        yield from handler.body
+    yield from getattr(node, "orelse", ())
+    yield from getattr(node, "finalbody", ())
+    for case in getattr(node, "cases", ()):
+        yield from case.body
+
+
 def docstring_nodes(tree):
     found = []
-    for node in ast.walk(tree):
+    pending = [tree]
+    while pending:
+        node = pending.pop()
+        pending.extend(child_statements(node))
         if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.body:
             first = node.body[0]
             if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
@@ -94,7 +107,7 @@ def sloc_lines(text, tree):
 
 
 def walk_defs(node, prefix=""):
-    for child in ast.iter_child_nodes(node):
+    for child in child_statements(node):
         if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
             yield prefix + child.name, child
             yield from walk_defs(child, prefix + child.name + ".")

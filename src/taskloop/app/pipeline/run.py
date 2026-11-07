@@ -6,6 +6,7 @@ from tlkernel import fence
 from tlkernel.askenums import AskClass
 from tlkernel.bead import Bead
 from tlkernel.beadsport import Beads
+from tlkernel.checkpoint import RunState
 from tlkernel.config import EngineConfig
 from tlkernel.delegateport import Refusal
 from tlkernel.enums import Step
@@ -156,13 +157,9 @@ class RunHost[T](CrashHost, Protocol):
     bead_title: str
     bead_parent: str
     scope: str
-    plan_data: PlanData | None
-    stage_tree: str
-    accepted: list[int]
-    done: list[str]
-    pending_land_validation: str
-    replans: int
     stats: dict[str, int]
+    @property
+    def state(self) -> RunState: ...
     @property
     def store(self) -> Beads: ...
     @property
@@ -233,8 +230,6 @@ class RunHost[T](CrashHost, Protocol):
     def checkout(self) -> Checkout: ...
     @property
     def stuck_why(self) -> str: ...
-    @property
-    def extra(self) -> int: ...
     @property
     def log(self) -> Log: ...
 
@@ -310,12 +305,12 @@ class RunBody[T]:
         at_land = plan is not None and (i >= len(plan["stages"]) or (state or {}).get("fix"))  # a conflict there is the writer's fix round
         moved = "" if at_land else host.rebase.onto_base(salvage=plan is not None)  # (no plan: nothing accepted to salvage)
         if moved == "conflict-fixable":
-            host.plan_data = host.plan_data or plan
+            host.state.plan_data = host.state.plan_data or plan
             moved = host.salvage.salvage()
         if moved == "conflict" and host.restart.again(self.its_work()):
             plan, i, state = None, 0, None
         elif moved == "rebased" and plan is not None:
-            host.stage_tree = ""  # the stage's diff starts at the base now: the rebase moved what it was measured from
+            host.state.stage_tree = ""  # the stage's diff starts at the base now: the rebase moved what it was measured from
         if plan is None:  # a move here loses nothing: the new image reads the same checkpoint (or none) and plans
             host.reload.safe_point("plan")
             plan, i, state = host.planner.take(host.planner.plan(again=host.replan_first)), 0, None
@@ -335,12 +330,12 @@ class RunBody[T]:
                 plan = self.replan(i)
                 i = 0
                 continue
-            host.accepted.append(i)
-            host.done.append(plan["stages"][i]["goal"])
+            host.state.accepted.append(i)
+            host.state.done.append(plan["stages"][i]["goal"])
             i += 1
             host.lander.out.wip_push(i)  # before the checkpoint: its head is the pushed commit
             if i == len(plan["stages"]):
-                host.pending_land_validation = ""  # every recovery stage passed checks and review
+                host.state.pending_land_validation = ""  # every recovery stage passed checks and review
             host.checkpoints.save(stage=i, rounds=0, n=0, feedback="", step="write" if i < len(plan["stages"]) else "land")
             if i == len(plan["stages"]):
                 host.reload.safe_point("land")  # the checkpoint says land: the close and the land run on the newest code
@@ -361,16 +356,16 @@ class RunBody[T]:
             raise blocked_for(f"failed: the task branch no longer fits {host.cfg.base} (it moved during the run); the branch is kept at "
                                 "its last accepted stage, fix the conflict by hand, then rerun", "FAULT_LAND")
         if moved:
-            host.stage_tree = ""  # the next stage's diff is measured from the new base
+            host.state.stage_tree = ""  # the next stage's diff is measured from the new base
 
     def replan(self, i: int) -> PlanData:
         host = self.host
-        if host.pending_land_validation:
-            host.pending_land_validation += "\n" + host.stuck_why
+        if host.state.pending_land_validation:
+            host.state.pending_land_validation += "\n" + host.stuck_why
             host.checkpoints.save(stage=i, rounds=0, n=0, feedback="", step="write")
-        host.replans += 1
-        host.stats["replans"] = replans = host.replans
-        if replans > host.cfg.max_replans + host.extra:
+        host.state.replans += 1
+        host.stats["replans"] = replans = host.state.replans
+        if replans > host.cfg.max_replans + host.state.extra:
             raise host.planner.cap.blocked(f"stage {i + 1} stuck after {host.cfg.max_rounds} rounds. What failed: {host.stuck_why[:600]}")
-        host.accepted = list[int]()
+        host.state.accepted = list[int]()
         return host.planner.take(host.planner.plan(again=True))

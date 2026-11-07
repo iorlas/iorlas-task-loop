@@ -27,14 +27,13 @@ ANSWER = WriteAnswerLook(summary="s", checks_run=[], question="", options=[], de
 
 
 class Host(SimpleNamespace):
-    plan_data: PlanData | None
     last_run: CheckRun | None
-    accepted: list[int]
     def __init__(self) -> None:
         self.notes: list[str] = []
         self.log = SimpleNamespace(note=self.notes.append)
         self.review = ReviewLive()
-        self.plan_data, self.plan_summary, self.accepted, self.published = None, "", [], 0
+        self.state = RunState()
+        self.plan_summary, self.published = "", 0
         self.run_id, self.last_run, self.stores = "r2", None, SimpleNamespace()
 
     def publish_plan(self) -> None:
@@ -51,7 +50,7 @@ class Apply(Case):
         h = Host()
         plan, stage, state = Resume(h, FakeHeadHistory(), ReviewGlue(h), state_names()).apply(ck(), Decision(kind="resume", stage=1))
         assert (plan, stage, state) == (PLAN, 1, {"rounds": 2, "n": 3, "feedback": "fb"})
-        assert (h.plan_data, h.plan_summary, h.accepted, h.published) == (PLAN, "two stages", [0], 1)
+        assert (h.state.plan_data, h.plan_summary, h.state.accepted, h.published) == (PLAN, "two stages", [0], 1)
 
     def test_a_review_checkpoint_hands_the_stage_its_progress_and_the_check_run(self):  # tl-q3ma
         h = Host()
