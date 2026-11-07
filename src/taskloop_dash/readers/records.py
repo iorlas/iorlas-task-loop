@@ -8,12 +8,12 @@ from typing import Any
 
 from taskloop.contracts import events, wire
 from taskloop.contracts.events import Event
-from taskloop.contracts.parks import Park
+from taskloop.contracts.parks import Park, ParkStore
 from taskloop.contracts.rowstores import ReposStore
 from taskloop.contracts.run import NetPause
 from taskloop.contracts.runlife import RETAIN
 from taskloop.contracts.trace import RunTrace
-from taskloop.contracts.waitrows import NET_PAUSE, PARK, open_records
+from taskloop.contracts.waitrows import NET_PAUSE, open_records
 from taskloop_dash.env import Env
 
 Span = dict[str, Any]
@@ -53,7 +53,7 @@ class Records:
 
     def parks(self) -> dict[str, Park]:
         """bead -> its Park record (left by runs that ended on a question; the loop skips the bead while its text is the same)."""
-        return open_records(self.env.config, PARK, Park)
+        return ParkStore.open_parks(self.env.config)
 
     def net_pauses(self) -> dict[str, NetPause]:
         """bead -> the NetPause a run left when it paused for the network and no run has taken up yet."""
