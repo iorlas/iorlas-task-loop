@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from taskloop.app.plan.host import PlanHost
 from taskloop.contracts import plancheck
 from taskloop.contracts.plancheck import PlanCheck, PlanData
 from taskloop.domain.checks import planref
@@ -13,12 +14,13 @@ from taskloop.domain.prompts.common import RULES_MAX
 
 
 class Cases:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: PlanHost) -> None:
         self.e = host
 
     def add_cases(self, new: Any):
         """A writer may add the cases it discovers; it can never remove one (the plan is the engine's)."""
         e = self.e
+        assert e.plan_data is not None, "cases are added to a plan that exists"
         cases = e.plan_data.setdefault("cases", [])
         have = {c["check"] for c in cases if c.get("check")}
         for c in new:
