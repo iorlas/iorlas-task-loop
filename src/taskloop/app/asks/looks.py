@@ -1,5 +1,5 @@
 """The owner's answer to a look item (`Intake.look`): good settles the item, redo files a follow-up bead that carries the note and the
-pictures, undo takes either back. The items live in the look bead's kv row (contracts/lookrows.py), written by compare-and-set, never
+pictures, undo takes either back. The items live in the look bead's look_doc row (tlkernel/lookrows.py), written by compare-and-set, never
 in the bead's metadata; the look bead closes when no item waits. Items
 are keyed by their id ("<source bead>#<n>", contracts/gallery.py). Every failure is a reason the owner can read; nothing is half done."""
 import contextlib

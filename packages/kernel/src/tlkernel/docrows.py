@@ -13,6 +13,8 @@ from tlkernel.looprows import LoopRows
 from tlkernel.paths import ConfigDir
 from tlkernel.wire import Rec
 
+LOOP_DOCS = "loop_doc"  # the loop stage's repo stop commands and rests
+LOOK_DOCS = "look_doc"  # the look stage's owner-look galleries
 REPORT_DOCS = "report_doc"  # the report stage's document: the reflect digest state
 WORK_DOCS = "work_doc"  # the work stage's documents: the cache of a repo's decision records
 RELEASE_DOCS = "release_doc"  # the release stage's documents: the pin and the last release result

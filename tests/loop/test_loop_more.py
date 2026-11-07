@@ -58,10 +58,26 @@ class StopRequests(LoopBase):
             assert self.main(["stop", "--repo", self.repo_s] + (["--now"] if now else [])) == 0
         return self.files.command().get()
 
+    def test_repo_documents_live_in_loop_doc_only(self):
+        self.old_loop()
+        self.files.pid_alive = lambda pid: True
+        assert self.files.request_stop(False, "owner")
+        command = self.files.command().get()
+        assert command is not None
+        self.files.rest_bead("b", self.clock.t + 60)
+        rows = self.files.rows()
+        assert {k for (k,) in rows.select("SELECT k FROM loop_doc")} == {
+            f"loop-command:{self.files.key}", f"loop-rest:{self.files.key}"}
+        assert rows.select("SELECT k FROM kv WHERE k LIKE 'loop-command:%' OR k LIKE 'loop-rest:%'") == []
+        assert self.files.command().get() == command
+        assert self.files.rests() == {"b": self.clock.t + 60}
+        self.files.command().delete()
+        assert rows.select("SELECT k FROM loop_doc WHERE k LIKE 'loop-command:%'") == []
+
     def test_a_command_that_is_not_a_command_is_ignored(self):
         for text in ("", "after", json.dumps({"mode": "after", "time": 1}), json.dumps({"v": 2, "action": "stop_now"})):
             with self.files.rows().transaction() as con:
-                con.execute("INSERT INTO kv (k, v, t) VALUES (?, ?, 0) ON CONFLICT(k) DO UPDATE SET v=excluded.v",
+                con.execute("INSERT INTO loop_doc (k, v, t) VALUES (?, ?, 0) ON CONFLICT(k) DO UPDATE SET v=excluded.v",
                             (f"loop-command:{self.files.key}", text))
             assert self.files.stop_for(self.old_pid, self.clock.t) == "", text
 
