@@ -3,7 +3,7 @@
 import argparse
 from collections.abc import Callable
 
-from delegate.app import env, net
+from delegate.app import answer, env, net
 from delegate.contracts.json_types import Json, arr, as_num, as_opt_obj, as_opt_str
 from delegate.domain.cost import accounting
 
@@ -45,3 +45,48 @@ def network(
         "network_rerun",
     )
     return merge(res, again)
+
+
+def lane_wait(
+    res: dict[str, Json],
+    launch_one: Callable[[str, env.Args, str], dict[str, Json]],
+    brief: str,
+    args: env.Args,
+    now: Callable[[], float],
+    sleep: Callable[[float], object],
+    wall: Callable[[], float],
+) -> dict[str, Json]:
+    """Poll a transient lane three times; spend at most 180 seconds on predicted recovery."""
+    polls, waited, immediate_retried = 0, 0.0, False
+    while res.get("outcome"):
+        facts = answer.result(as_opt_str(res.get("outcome")), **{k: v for k, v in res.items() if k != "outcome"})
+        stop = as_opt_obj(facts.get("stop")) or {}
+        retry = as_opt_obj(stop.get("retry")) or {}
+        if stop.get("permanence") != "transient":
+            break
+        scope, kind, at = stop.get("scope"), retry.get("kind"), as_num(retry.get("at")) or 0
+        if scope in ("lane", "model", "bead") and kind == "poll":
+            if polls >= 3:
+                break
+            gap = at if 0 < at <= 180 else 20
+            polls += 1
+            attempt = "lane_poll"
+        elif scope in ("lane", "model") and kind == "predicted":
+            gap = max(0.0, at - wall())
+            if gap > 180 - waited or (gap == 0 and immediate_retried):
+                break
+            immediate_retried = gap == 0
+            attempt = "lane_wait"
+        else:
+            break
+        started = now()
+        sleep(gap)
+        waited += max(gap, now() - started)
+        ref = as_opt_str(res.get("ref")) if res.get("resumable") else None
+        again = launch_one(
+            CONTINUE_NOTE if ref else brief,
+            argparse.Namespace(**dict(vars(args), resume=ref or args.resume)),
+            attempt,
+        )
+        res = merge(res, again)
+    return res

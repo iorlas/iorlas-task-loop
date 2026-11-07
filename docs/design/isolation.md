@@ -122,3 +122,5 @@ under 180 s now pauses the bead instead of waiting in the same run. **Decision f
 lane name in the engine? Recommended: yes. Accepted by Denis on 2026-11-07: "Protocol then protocol. Accept as written".
 
 B2b-1 done (2026-11-07): delegate owns worker network waits and resumes; engine network stops pause immediately.
+
+B2b-2 done (2026-11-07): lane polls and short lane-out waits are delegate's
