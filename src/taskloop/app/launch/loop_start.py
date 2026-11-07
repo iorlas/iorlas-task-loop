@@ -14,7 +14,8 @@ from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.procport import Spawner
 from tlkernel.rowstores import ReposStore
-from tlrelease import catalog, pins
+from tlrelease.catalog import installs as release_installs
+from tlrelease.versions import Installs
 from tlslots import engine_lock
 
 from taskloop.adapters import ident
@@ -26,7 +27,6 @@ from taskloop.app.loop import render
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.loop import parse_handover
-from taskloop.app.loop.versions import Installs
 from taskloop.app.track import trail
 from taskloop.app.wire import slotfx
 from taskloop.app.wire import slots as wslots
@@ -34,9 +34,7 @@ from taskloop.app.wire import slots as wslots
 
 def installs(cfg: paths.ConfigDir, env: Env, here: Path = HERE, now: Callable[[], float] = trail.now) -> Installs:
     """The installs of task-loop on this machine."""
-    return Installs(
-        cfg, here.parents[1], lambda: catalog.installed_version(ident.claude_dir(env)), lambda: pins.read_pin(cfg).task_loop or "", now=now
-    )
+    return release_installs(cfg, here.parents[1], lambda: ident.claude_dir(env), now)
 
 
 def other_red_rows(git: Git, repo: str, cfg: paths.ConfigDir) -> list[str]:
