@@ -12,6 +12,7 @@ from taskloop.app.land.state import LandState
 from taskloop.app.look.state import LookState
 from taskloop.app.pipeline.budget import Budget
 from taskloop.app.pipeline.steps import Steps
+from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.state import PlanState
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.context import RunContext
@@ -97,8 +98,6 @@ class RunFields(StateAttrs):
         self.review = ReviewLive()  # the review stage's state: the unchecked and unverified lists, the verifier's answers, the links tried
         self.filed: list[str] = []
         self.unfiled: list[Unfiled] = []  # follow-ups bd refused (the ReviewState keeps both)
-        self.amended = False  # a plan was amended or replanned: its first stage does not start at the task's base
-        self.old_plan, self.amend_text, self.amend_why = None, "", ""  # set where a checkpoint's plan is kept to be amended
         self.answered: Any = None  # the owner ask this run starts from, once answered
         self.verify_answer = ""  # the owner's answer to a verify ask, when it asks for more than a yes
         self.stuck_why = ""
@@ -114,6 +113,7 @@ class RunFields(StateAttrs):
         self.pause_producer: Producer = "engine"
         self.pause_permanence: Permanence | None = None
         self.budget_warned: set[float] = set()
+        self.amend = AmendState()  # the plan stage's amendment context (old plan, what changed, why)
         self.plan_state = PlanState()  # the plan stage's flags: the send-backs used, the cap raised
         self.land_fields()
 

@@ -82,7 +82,7 @@ class Planner:
     def count(self, old: PlanData | None, again: bool, why: str) -> None:
         """The planner is about to run: against the cap, unless the owner's answer or edit of the bead caused it (tl-19i)."""
         e = self.host
-        why_amend = e.amend_why or ""
+        why_amend = e.amend.why or ""
         owner = (bool(old) and not again and why_amend.startswith("bead changed: the owner answered")
                  and not (e.answered and e.answered.ask_class == AskClass.CAP_REACHED))  # a cap ask answered 'split' stays blocked
         owner = owner or (bool(old) and not again and why_amend.startswith(f"bead changed ({COMMENTS_ONLY})"))  # tl-9un.12
@@ -91,14 +91,14 @@ class Planner:
         if not owner:
             e.planned += 1
         e.plan_log.append(PlanStep(mode="amend" if old else "plan", counted=not owner,
-                                   why=clip(e.amend_why or ("a re-plan: " + clip(why, 160) if again else "first plan"), 240)))
-        if old and not again and not e.amend_text:
-            e.amend_text = "The bead is the same as when the old plan was made."
+                                   why=clip(e.amend.why or ("a re-plan: " + clip(why, 160) if again else "first plan"), 240)))
+        if old and not again and not e.amend.text:
+            e.amend.text = "The bead is the same as when the old plan was made."
 
     def plan(self, again: bool = False) -> PlanData:
         e = self.host
-        old = e.old_plan or (e.plan_data if again and e.plan_data else None)
-        e.amended = e.amended or bool(old)  # tl-bxk.10.24: work exists before this plan's first stage
+        old = e.amend.old_plan or (e.plan_data if again and e.plan_data else None)
+        e.amend.amended = e.amend.amended or bool(old)  # tl-bxk.10.24: work exists before this plan's first stage
         why = ""
         if again:
             with contextlib.suppress(OSError):
