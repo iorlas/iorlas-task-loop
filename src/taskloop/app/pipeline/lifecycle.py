@@ -9,6 +9,7 @@ from tlkernel import fence
 from tlkernel.beadsport import Beads
 from tlkernel.checkpoint import Checkpoint
 from tlkernel.checkpoint import RunState as CheckpointState
+from tlkernel.deadline import DeadlineExpired
 from tlkernel.enums import Step
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
@@ -17,9 +18,9 @@ from tlkernel.log import Beat
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
 
-from taskloop.adapters.deadline import DeadlineExpired, deadline
 from taskloop.app.pipeline import ended as stored_end
 from taskloop.app.pipeline import requests
+from taskloop.app.pipeline.adapter_ports import DeadlineScope
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.crash import CrashHost, parked_crash
 from taskloop.app.pipeline.finish import outcome as finished_outcome
@@ -139,9 +140,11 @@ class Ended:
 
 
 class Lifecycle:
-    def __init__(self, host: LifecycleHost, *, body: Callable[[LeaseLike, Ended], None],
-                 lease: Callable[[Callable[[], None], Callable[[BaseException], None]], LeaseLike], reexecs: Reexecs) -> None:
-        self.host = host
+    def __init__(self, context: LifecycleHost, *, body: Callable[[LeaseLike, Ended], None],
+                 lease: Callable[[Callable[[], None], Callable[[BaseException], None]], LeaseLike],
+                 reexecs: Reexecs, deadline: DeadlineScope) -> None:
+        self.host = context
+        self.deadline = deadline
         self.body = body
         self.lease = lease
         self.reexecs = reexecs
@@ -156,7 +159,7 @@ class Lifecycle:
             if host.dead is not None:  # the last run died inside its close: this process only finishes it
                 self.finish_dead(end)
             else:
-                with deadline(host.cfg.run_deadline_min * 60, "run"):
+                with self.deadline(host.cfg.run_deadline_min * 60, "run"):
                     self.body(hb, end)
         except DeadlineExpired as err:
             end.outcome = oc.make(Kind.OWNER_PARK, f"{err}; branch and checkpoint kept")

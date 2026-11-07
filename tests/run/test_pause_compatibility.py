@@ -1,5 +1,4 @@
 """Transient retry scheduling must not change existing owner, ask or infrastructure closes."""
-
 import sys
 from pathlib import Path
 from unittest import mock
@@ -7,6 +6,7 @@ from unittest import mock
 import pytest
 from support.parkmock import through_change
 
+from taskloop.adapters import beadtools
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -50,8 +50,9 @@ class PauseCompatibility(Case):
                 host.clock.now.return_value = 100
                 for n in range(4):
                     host.run_id = f"r{n}"
-                    with mock.patch("taskloop.app.pipeline.closing.beadtools.peek", return_value=self.bead):
-                        Closer(host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home)).pause(oc.make(Kind.PAUSE_LANE, "paused"))
+                    with mock.patch("taskloop.adapters.beadtools.peek", return_value=self.bead):
+                        Closer(host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home),
+                            beadtools.peek).pause(oc.make(Kind.PAUSE_LANE, "paused"))
                     assert (host.retry_after, host.asked, host.pause_reason) == (0, False, reason)
                     host.ask_flow.raise_ask.assert_not_called()
                     rec = store.return_value.put.call_args.args[0]
@@ -70,8 +71,9 @@ class PauseCompatibility(Case):
                 host.clock.now.return_value = 100
                 host.ask_flow.raise_ask.return_value = True
                 assert pauses.rule(reason, producer).max_attempts == 0
-                with mock.patch("taskloop.app.pipeline.closing.beadtools.peek", return_value=self.bead):
-                    Closer(host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home)).pause(oc.make(Kind.PAUSE_LANE, "paused"))
+                with mock.patch("taskloop.adapters.beadtools.peek", return_value=self.bead):
+                    Closer(host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home),
+                        beadtools.peek).pause(oc.make(Kind.PAUSE_LANE, "paused"))
                 assert (host.retry_after, host.asked) == (0, True)
                 host.ask_flow.raise_ask.assert_called_once()
                 rec = store.return_value.put.call_args.args[0]
@@ -95,8 +97,9 @@ class PauseCompatibility(Case):
                         pause_producer=producer, pause_permanence=policy.permanence, retry_after=0.0, asked=False
                     )
                     host.clock.now.return_value = 100
-                    with mock.patch("taskloop.app.pipeline.closing.beadtools.peek", return_value=self.bead):
-                        Closer(host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home)).pause(oc.make(Kind.PAUSE_LANE, "paused"))
+                    with mock.patch("taskloop.adapters.beadtools.peek", return_value=self.bead):
+                        Closer(host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home),
+                            beadtools.peek).pause(oc.make(Kind.PAUSE_LANE, "paused"))
                     rec = store.return_value.put.call_args.args[0]
                     assert rec.attempts == {pauses.attempt_key(reason, producer): n + 1}
                     assert rec.permanence == ("transient" if n < policy.max_attempts else "needs_owner")
