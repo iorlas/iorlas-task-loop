@@ -27,6 +27,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.profile_changes import ProfileChange
 from tlkernel.queue_doc import QueueDoc
 from tlkernel.slots import MissingRemote
+from tlkernel.storeapi import Doc
 
 from taskloop.adapters import landlock
 from taskloop.app.land import cleanup
@@ -38,7 +39,6 @@ from taskloop.app.land.queue_land import Queued, QueueLand
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.land.treecheck import Tested, TreeGuard
 from taskloop.domain.land.matchers import no_dolt_remote
-from taskloop.stores.api import Doc
 from taskloop.stores.bundle import Stores
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
