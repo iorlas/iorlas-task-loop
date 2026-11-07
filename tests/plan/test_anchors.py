@@ -1,10 +1,10 @@
 """Plan v2: a stage's anchors, how the writer reads them, and what the planner is sent back for."""
 from typing import Any, ClassVar
 
-from taskloop.domain.plan.stored import role_view, stored
 from tlkernel import answers
 from tlkernel.plancheck import PlanData, adhoc
 from tltestkit.case import Case
+from tlwork.plan.stored import role_view, stored
 from tlwork.prompts.anchors import anchors_text, unanchored
 
 ANCHOR = {"path": "src/a.py", "lines": "10-40", "symbol": "Thing.run", "why": "the loop to change"}

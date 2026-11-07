@@ -27,13 +27,18 @@ SLICE_IMPORTS: Final = {
 COMPOSITION_ROOTS: Final = frozenset({"launch", "run", "wire"})
 
 
+def app_module(module):
+    for stage, domain in (("review", {"findings", "availability"}), ("plan", {"matchers", "stored"}), ("look", {"matchers", "shotspec"})):
+        if module.startswith(f"tlwork.{stage}.") and module.rsplit(".", 1)[-1] not in domain:
+            return module.replace(f"tlwork.{stage}", "taskloop.app." + stage, 1)
+    return module
+
+
 def slice_problems(graph):
     out = []
     known = SLICE_IMPORTS.keys() | COMPOSITION_ROOTS
     for original, targets in graph.items():
-        module = original
-        if module.startswith("tlwork.review.") and module.rsplit(".", 1)[-1] not in {"findings", "availability"}:
-            module = module.replace("tlwork.review", "taskloop.app" + ".review", 1)
+        module = app_module(original)
         parts = module.split(".")
         if parts[:2] != ["taskloop", "app"] or len(parts) < 3:
             continue
@@ -43,10 +48,9 @@ def slice_problems(graph):
             continue
         for original_target in targets:
             target = original_target
-            if target in {"tlwork", "tlwork.review", "tlwork.work", "tlwork.prompts"}:
+            if target in {"tlwork", "tlwork.review", "tlwork.work", "tlwork.prompts", "tlwork.plan", "tlwork.look"}:
                 continue
-            if target.startswith("tlwork.review.") and target.rsplit(".", 1)[-1] not in {"findings", "availability"}:
-                target = target.replace("tlwork.review", "taskloop.app" + ".review", 1)
+            target = app_module(target)
             bits = target.split(".")
             if target == "tlgate":
                 continue  # package parent of both application and domain imports

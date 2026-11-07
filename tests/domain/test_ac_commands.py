@@ -1,6 +1,6 @@
 """AC parsing (tl-9un.1): which commands an acceptance names, and which of them a repo profile registers. Pure functions."""
 
-from taskloop.domain.beads import matchers as acnames
+from tlkernel import beadmatchers as acnames
 from tltestkit.case import Case
 
 REG = [("unit", ["pytest", "-q"]), ("lint", ["ruff", "check"])]

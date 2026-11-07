@@ -10,6 +10,7 @@ from tlkernel.askspec import AskSpec
 from tlkernel.beadsport import Beads
 from tlkernel.checkpoint import BriefSnap, Checkpoint, PlanStep, StageProgress
 from tlkernel.checks import Check, CheckRun
+from tlkernel.checksport import TreeProbe
 from tlkernel.config import HostResources, VisualConfig
 from tlkernel.gitport import Git
 from tlkernel.ids import TreeSha
@@ -18,9 +19,8 @@ from tlkernel.plancheck import PlanData
 from tlkernel.stagefacts import LeftoverSink
 from tlkernel.stop import Stop
 from tlkernel.wire import Open
-from tlwork.work.ledger import Ledger
 
-from taskloop.adapters.check_probe import PathProbe
+from tlwork.work.ledger import Ledger
 
 
 class Answered(Protocol):
@@ -174,6 +174,6 @@ class PlanPorts(Protocol):
     def now(self) -> float: ...
     def assumed(self, text: str) -> None: ...
     def publish_plan(self) -> None: ...
-    def shell_probe(self) -> PathProbe: ...
+    def shell_probe(self) -> TreeProbe: ...
     def blocked_for(self, why: str, kind: str, stop: object = None, spec: AskSpec | None = None, fix: bool = False) -> Stop: ...
     def move_host(self, needs: list[str], why: str) -> Stop: ...

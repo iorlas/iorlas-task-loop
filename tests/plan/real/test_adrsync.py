@@ -5,10 +5,10 @@ from pathlib import Path
 from support import homes
 from support.spawn import port_git
 
-from taskloop.app.plan import adrsync
 from tlkernel import adrfiles
 from tlkernel.adrs import AdrStore
 from tlkernel.ledger import Adr
+from tlwork.plan import adrsync
 
 REPO = "/r/adrsync-real"
 

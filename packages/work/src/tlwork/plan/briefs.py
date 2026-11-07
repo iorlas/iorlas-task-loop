@@ -5,16 +5,16 @@ import hashlib
 
 from tlkernel import asktext
 from tlkernel import planbrief as bf
+from tlkernel.bdids import mentioned_ids
 from tlkernel.bdsafe import peek
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
+from tlkernel.ownerkeys import HINT
 from tlkernel.stagefacts import RunFacts
 
-from taskloop.adapters.bdids import mentioned_ids
-from taskloop.app.asks import intake
-from taskloop.app.plan.amend import AmendState
-from taskloop.app.plan.host import PlanHand, PlanPorts
-from taskloop.app.plan.state import PlanState
+from tlwork.plan.amend import AmendState
+from tlwork.plan.host import PlanHand, PlanPorts
+from tlwork.plan.state import PlanState
 
 ENGINE_LABELS = ("needs-owner-check",)
 
@@ -40,7 +40,7 @@ class Briefs:
         something, and the snapshot a later amend diffs against."""
         bead = peek(self.ports.store, self.facts.bead) or Bead(id=self.facts.bead, title="", status="")
         comments = self.ports.store.comments(self.facts.bead)
-        hint = str(bead.metadata.get(intake.HINT) or "")
+        hint = str(bead.metadata.get(HINT) or "")
         linked = bf.linked(self.facts.bead, bead, comments, self.facts.cfg.owner_author,
                            lambda i: peek(self.ports.store, BeadId(i)), lambda i: self.ports.store.comments(BeadId(i)), mentioned_ids)
         # the owner's typed answer is no comment: the brief carries it for the workers

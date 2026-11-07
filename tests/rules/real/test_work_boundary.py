@@ -31,7 +31,7 @@ def test_work_reaches_no_stage(workdir, stage_import):
             if package == workdir:
                 break
             (package / "__init__.py").touch()
-    (workdir / "sample/work/policy.py").write_text("import sample.domain.plan\n" if stage_import else "VALUE = 1\n")
+    (workdir / "sample/work/policy.py").write_text("import sample.plan\n" if stage_import else "VALUE = 1\n")
     config_path = workdir / "imports.ini"
     with config_path.open("w") as stream:
         synthetic.write(stream)

@@ -46,7 +46,7 @@ Counts are greps of `src/taskloop`. Nothing was run for this note. Whether `shot
 
 ## Result (slices 1 to 3 and the fakes, measured 2026-11-07)
 
-Method: `dev/attrmap.py --root DIR` (engine attributes) and the forward import closure of `src/taskloop/app/look/*.py` over `dev/affected.Repo` edges (files under `src/`, stage by `dev/reach.stage_of`), on the commit before B-LOOK 1 (#312) and on this branch.
+Method: `dev/attrmap.py --root DIR` (engine attributes) and the forward import closure of `packages/work/src/tlwork/look/*.py` over `dev/affected.Repo` edges (files under `src/`, stage by `dev/reach.stage_of`), on the commit before B-LOOK 1 (#312) and on this branch.
 
 | | before B-LOOK | after slice 3 |
 |---|---|---|

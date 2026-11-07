@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from tlkernel.bdids import prefix_of
 from tlkernel.beadsport import BdFailure, Beads
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
@@ -15,7 +16,6 @@ from tlkernel.slots import git_probe
 from tlkernel.trace import RunTrace
 
 from taskloop.adapters import beadtools
-from taskloop.adapters.bdids import prefix_of
 from taskloop.stores.real import real_stores
 
 

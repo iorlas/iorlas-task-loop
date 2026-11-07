@@ -24,7 +24,6 @@ ROOT = Path(__file__).resolve().parents[2]
 from support import gitq  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
-from taskloop.app.plan.planner import Planner  # noqa: E402
 from taskloop.app.track import outcome_line  # noqa: E402
 from tlkernel import answers  # noqa: E402
 from tlkernel import runoutcome as oc  # noqa: E402
@@ -35,6 +34,7 @@ from tlkernel.kinds import Kind  # noqa: E402
 from tlkernel.run import RunReport  # noqa: E402
 from tlkernel.schema import unstrict  # noqa: E402
 from tlslots import config as wslots_config  # noqa: E402
+from tlwork.plan.planner import Planner  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import engine_case as T  # noqa: E402

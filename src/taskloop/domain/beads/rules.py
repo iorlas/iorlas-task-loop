@@ -5,7 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final
 
-from taskloop.domain.beads import matchers
+from tlkernel import beadmatchers as matchers
 from tlkernel.bead import Bead
 
 MAX_TOUCHES: Final = 8

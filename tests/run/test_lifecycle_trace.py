@@ -12,7 +12,6 @@ from support import homes
 from support.engine_case import stop
 
 from taskloop.adapters import delegate as dl
-from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
 from tlkernel import lifecyclematchers as lifecycle
 from tlkernel.env import snapshot
@@ -22,6 +21,7 @@ from tlslots import config as wslots_config
 from tltestkit import fake_route, procsim
 from tltestkit.case import Case
 from tltestkit.plans import CLEAN, PLAN, WRITE
+from tlwork.plan.planner import Planner
 
 ROOT = te.ROOT
 from support.dashes import make_dash  # noqa: E402

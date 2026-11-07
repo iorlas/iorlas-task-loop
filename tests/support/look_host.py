@@ -10,14 +10,15 @@ from typing import Any
 
 import support.paths  # noqa: F401
 from support.facts import fake_facts
-from taskloop.app.look.judge import Judge
-from taskloop.app.look.owner_look import OwnerLook
-from taskloop.app.look.shots import Pictures
-from taskloop.app.look.state import LookState
+from taskloop.adapters import looks
 from tlkernel.asked import Asked, Updates
 from tlkernel.checkpoint import RunState
 from tlkernel.config import EngineConfig
 from tlpipeline.api import Blocked, LeftoverQueue
+from tlwork.look.judge import Judge
+from tlwork.look.owner_look import OwnerLook
+from tlwork.look.shots import Pictures
+from tlwork.look.state import LookState
 
 
 class FakeLookPorts:
@@ -41,6 +42,8 @@ class FakeLookPorts:
         self.answers: list[Asked] = []  # ai() returns these in order
         self.asked: list[tuple[str, str]] = []
         self.pictures: Pictures
+
+    downscale = staticmethod(looks.downscale)
 
     def ai(self, node: str, title: str, prompt: str, *a: object, **kw: object) -> Asked:
         self.asked.append((node, title))

@@ -12,7 +12,6 @@ from tltestkit.case import Case
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from taskloop.app.plan import prompts as pp  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
 from taskloop.app.write import prompts as wp  # noqa: E402
 from taskloop.app.write import review_prompt as rp  # noqa: E402
@@ -21,6 +20,7 @@ from taskloop.domain.land.fix_text import FIX_GOAL as _FIX_GOALS  # noqa: E402
 from tlgate.domain.writer_split import WriterSplit  # noqa: E402
 from tlpipeline.api import reflect_prompt as fp  # noqa: E402
 from tltestkit.cfgs import cfg_with  # noqa: E402
+from tlwork.plan import prompts as pp  # noqa: E402
 from tlwork.prompts import common as cp  # noqa: E402
 from tlwork.review import verify_prompt as vp  # noqa: E402
 

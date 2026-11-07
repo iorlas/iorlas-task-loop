@@ -7,6 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from tlgate.domain.inputs import dead_globs
+from tlkernel import beadmatchers as beadlint
 from tlkernel import inputsets
 from tlkernel.bd_errors import BdCommandFailure
 from tlkernel.beadsport import BdFailure, BeadQuery, Beads
@@ -18,7 +19,6 @@ from tlkernel.slots import SlotGitError
 from tlkernel.slottable import SlotTable
 
 from taskloop.app.doctor import disk, install
-from taskloop.domain.beads import matchers as beadlint
 from taskloop.domain.layout import matchers as layout
 
 Source = tuple[RepoProfile, str, str]

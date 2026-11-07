@@ -1,3 +1,4 @@
+
 """The brief renderer: the text stays byte-identical to the golden set, and the section boundaries cover it exactly."""
 import sys
 from pathlib import Path
@@ -5,27 +6,27 @@ from unittest import mock
 
 from support.plan_host import FakePlan
 
+from tlkernel.ownerkeys import HINT
 from tltestkit.case import Case
 from tltestkit.cfgs import cfg_with
 from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import taskloop.app.plan.briefs as mod
+import tlwork.plan.briefs as mod
 from plan.brief_cases import CASES, beads
-from taskloop.app.asks import intake
-from taskloop.app.plan.briefs import ENGINE_LABELS
-from taskloop.app.plan.prompts import PLAN_BRIEF_KB, PLAN_PROMPT
 from tlkernel import planbrief as bf
 from tlkernel.bead import Bead, Comment
 from tlkernel.ids import BeadId
+from tlwork.plan.briefs import ENGINE_LABELS
+from tlwork.plan.prompts import PLAN_BRIEF_KB, PLAN_PROMPT
 
 GOLDEN = Path(__file__).resolve().parents[1] / "fixtures" / "brief_golden"
 
 
 def render(name: str) -> bf.Brief:
     bead, comments, owner_only = beads(name)
-    hint = str(bead.metadata.get(intake.HINT) or "")
+    hint = str(bead.metadata.get(HINT) or "")
     return bf.render(bead, comments, "denis", hint, owner_only, (*ENGINE_LABELS, "tl-pick"))
 
 

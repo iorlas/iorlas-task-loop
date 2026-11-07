@@ -2,7 +2,7 @@
 
 
 from taskloop.adapters import bd
-from taskloop.adapters.bdcreate import with_sections
+from tlkernel.bdcreate import with_sections
 from tltestkit.case import Case
 
 LIST = """Error: missing required sections for task:

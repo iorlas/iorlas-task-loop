@@ -2,10 +2,15 @@
 import argparse
 import ast
 import re
+import tomllib
 from pathlib import Path
 
-# Source, destination: slice 2 can add plan here.
+# Source, destination for the work package slices.
 SLICES = (
+    ('taskloop.app.look', 'tlwork.look'),
+    ('taskloop.domain.look', 'tlwork.look'),
+    ('taskloop.app.plan', 'tlwork.plan'),
+    ('taskloop.domain.plan', 'tlwork.plan'),
     ('taskloop.app.review', 'tlwork.review'),
     ('taskloop.domain.review', 'tlwork.review'),
     ('taskloop.domain.work', 'tlwork.work'),
@@ -55,6 +60,13 @@ def source_files(root: Path):
                 yield path
 
 
+def plan_ruff_errors(path):
+    config = tomllib.loads(path.read_text())
+    if config != {'extend': '../ruff.toml', 'lint': {'extend-select': ['ANN401']}}:
+        return [f'unsupported plan Ruff configuration: {path}']
+    return []
+
+
 def plan(root: Path) -> tuple[dict[Path, Path], list[tuple[Path, str]], list[str]]:
     moves, edits, errors = {}, [], []
     for old, new in SLICES:
@@ -67,8 +79,13 @@ def plan(root: Path) -> tuple[dict[Path, Path], list[tuple[Path, str]], list[str
                 errors.append(f'unexpected source file: {path}')
                 continue
             dest = target / path.relative_to(source)
+            if old in {'taskloop.domain.plan', 'taskloop.domain.look'} and path.name == '__init__.py' and not path.read_text().strip():
+                continue  # the application package supplies the shared empty initializer
             if old == 'taskloop.domain.review' and path.name == '__init__.py':
                 dest = root / 'packages/work/src/tlwork/__init__.py'
+            if path.name == 'ruff.toml' and old == 'taskloop.app.plan':
+                errors.extend(plan_ruff_errors(path))
+                continue  # equivalent ANN401 rule is inherited from packages/work/ruff.toml
             if path.name == 'ruff.toml':
                 dest = root / 'packages/work/ruff.toml'
             if dest.exists() or dest in moves.values():
@@ -96,6 +113,8 @@ def main() -> None:
         source.rename(dest)
     for path, text in edits:
         moves.get(path, path).write_text(text)
+    for redundant in ('src/taskloop/domain/look/__init__.py', 'src/taskloop/domain/plan/__init__.py', 'src/taskloop/app/plan/ruff.toml'):
+        (root / redundant).unlink(missing_ok=True)
     config = root / 'packages/work/ruff.toml'
     if config.exists():
         config.write_text(config.read_text().replace('extend = "../ruff.toml"', 'extend = "../../ruff.toml"'))

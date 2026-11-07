@@ -4,7 +4,7 @@ from support.engine_case import EngineTest
 from support.host_conformance import missing
 from support.look_host import FakeLook
 
-from taskloop.app.look.host import LookHost, LookPorts
+from tlwork.look.host import LookHost, LookPorts
 
 
 class LookHostConformance(EngineTest):
