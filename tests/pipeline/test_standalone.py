@@ -7,8 +7,8 @@ import pytest
 from support.pipeline_ports import FakeBeadClosing, FakeRoundSteps
 
 from taskloop.adapters import beadtools
+from taskloop.app.pipeline import closing_roles, standalone_roles
 from taskloop.app.pipeline import standalone as standalone_module
-from taskloop.app.pipeline import standalone_roles
 from taskloop.app.pipeline.standalone import Standalone
 from tlkernel import fence
 from tlkernel.bead import Bead
@@ -100,9 +100,9 @@ def test_standalone_protocols_have_at_most_sixteen_own_members():
             name for name, value in vars(protocol).items()
             if isinstance(value, property) or (callable(value) and not name.startswith("_"))}
 
-    protocols = {name: value for module in (standalone_module, standalone_roles) for name, value in vars(module).items()
+    protocols = {name: value for module in (standalone_module, standalone_roles, closing_roles) for name, value in vars(module).items()
                  if isinstance(value, type) and getattr(value, "_is_protocol", False)
-                 and value.__module__ in (standalone_module.__name__, standalone_roles.__name__)}
+                 and value.__module__ in (standalone_module.__name__, standalone_roles.__name__, closing_roles.__name__)}
     assert protocols
     assert {name: len(members(value)) for name, value in protocols.items() if len(members(value)) > 16} == {}
 
