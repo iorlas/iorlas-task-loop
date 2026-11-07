@@ -4,7 +4,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import IO
 
-from tlkernel import bdbackup, childenv, factorybackup, paths
+from tlkernel import childenv, paths
 from tlkernel.beadsport import Beads
 from tlkernel.env import Env
 from tlkernel.envvars import EnvVar
@@ -15,7 +15,7 @@ from tlkernel.landed import landed_by
 from tlkernel.procport import Child, Hold, Spawner
 from tlkernel.slots import git_probe
 
-from taskloop.adapters import beadtools, ident, ram
+from taskloop.adapters import bdbackup, beadtools, factorybackup, ident, ram
 from taskloop.adapters.bd import BdStore
 from taskloop.app.asks import admission
 from taskloop.app.doctor import disk

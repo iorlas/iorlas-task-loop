@@ -8,7 +8,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from tlkernel.factorybackup import backup_dir
+from taskloop.adapters.factorybackup import backup_dir
 from tlkernel.paths import ConfigDir
 
 Bd = Callable[[list[str]], tuple[int, str, str]]
