@@ -83,7 +83,7 @@ class Canary(Case):
             _, why = pins.set_pin(env, "1.2.3", git=self.git)
             assert "devbox-ok" in why
             self.acknowledge()
-            assert pins.run_pin(env, "1.2.3", None, False, self.git) == 0
+            assert pins.run_pin(env, "1.2.3", False, self.git) == 0
 
     def test_mac_rollback_and_night_repin_need_no_network_or_new_acknowledgement(self):
         env = Env({"XDG_CONFIG_HOME": str(self.config.parent), "CLAUDE_CONFIG_DIR": str(self.config.parent / "claude")})
@@ -92,7 +92,7 @@ class Canary(Case):
                 mock.patch.object(pins, "previous_version", return_value="1.2.3"), \
                 mock.patch.object(pins, "cache_dirs", return_value={"1.2.3": Path("/old"), "1.2.4": Path("/new")}):
             assert pins.run_rollback(env, self.git) == 0
-            assert pins.run_pin(env, "1.2.3", None, False, self.git) == 0
+            assert pins.run_pin(env, "1.2.3", False, self.git) == 0
             assert pins.read_pin(env).task_loop == "1.2.3"
             pins.clear_pin(env)
             assert pins.run_rollback(env, self.git) == 0
