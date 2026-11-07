@@ -42,3 +42,23 @@ def test_a_row_that_is_written_leaves_no_loss_record():
         env.history_add(row("fine"))
         assert not env.history_lost_path().exists()
         assert [n for n in doctor.history_loss_notes() if n["id"] == "history_lost"] == []
+
+
+def test_doctor_shows_the_count_of_lock_answers():
+    with TemporaryDirectory() as d, mock.patch.object(env, "config_dir", return_value=Path(d)):
+        for outcome in ("lock", "lock", "busy"):
+            env.history_add(hist.RefusalRow(ts=time.time(), outcome=outcome, role="worker"))
+        env.history_add(row("fine"))
+        assert doctor.lock_answer_notes() == [{
+            "id": "lock_answers",
+            "say": "2 calls were answered `lock` (the state lock stayed held 10 s) "
+                   "in the last 14 days; with several lanes running, find the holder",
+        }]
+
+
+def test_doctor_has_no_lock_answer_note_when_none():
+    with TemporaryDirectory() as d, mock.patch.object(env, "config_dir", return_value=Path(d)):
+        assert doctor.lock_answer_notes() == []
+        env.history_add(hist.RefusalRow(ts=time.time(), outcome="busy", role="worker"))
+        env.history_add(row("fine"))
+        assert doctor.lock_answer_notes() == []
