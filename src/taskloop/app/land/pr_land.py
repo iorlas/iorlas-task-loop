@@ -17,8 +17,7 @@ from taskloop.app.land.cmds import Cmds, Runs, Stop
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.gate import GatePass, Problem
 from taskloop.app.land.host import FetchCheckout, Land, Next, OutcomeSteps
-from taskloop.app.land.outbound import last_fetched, target
-from taskloop.app.land.push import stale
+from taskloop.app.land.push import last_fetched, stale, target
 from taskloop.app.land.push_evidence import failure
 from taskloop.stores.runlog import RunLog
 

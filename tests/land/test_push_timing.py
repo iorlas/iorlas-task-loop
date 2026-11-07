@@ -8,7 +8,7 @@ import pytest
 from support.narrow_hosts import FakeOutboundHost
 
 from taskloop.adapters.agent import last_event_t
-from taskloop.app.land.outbound import Outbound
+from taskloop.app.land.push import Outbound
 from taskloop.stores.runlog import RunLog
 from tlkernel import log as rec
 from tlkernel.gitfacts import GitOutcome
@@ -33,9 +33,9 @@ class PushTiming(Case):
         self.tick = StuckTick(SimpleNamespace(log=self.host.log, live_now="", now=self.clock.now), last_event_t)
         self.host.steps.begin("review", "review stage 1")
         self.clock.advance(559)
-        self.enterContext(mock.patch("taskloop.app.land.outbound.uses_lfs", return_value=False))
+        self.enterContext(mock.patch("taskloop.app.land.push.uses_lfs", return_value=False))
         self.enterContext(mock.patch.object(self.host.git, "staged", return_value=False))
-        self.enterContext(mock.patch("taskloop.app.land.outbound.last_fetched", return_value=""))
+        self.enterContext(mock.patch("taskloop.app.land.push.last_fetched", return_value=""))
 
     def records(self):
         return [item.rec for item in self.host.log.log.read_from().items]
