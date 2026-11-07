@@ -26,4 +26,4 @@ class Ctx:
 
 def declare_stage_parts() -> None:
     """The first thing a task-loop process does: say which factory.db parts it carries (no open is allowed before)."""
-    declare_parts(STAGE_PARTS)
+    declare_parts(STAGE_PARTS, complete=True)
