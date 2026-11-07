@@ -11,7 +11,7 @@ from support.narrow import must
 
 from tlkernel import factorydb, factoryparts
 
-# Frozen v2 schema, deliberately independent of the current factorydb.DDL.
+# Frozen v2 schema, deliberately independent of the current factorydb.DDL; its retired kv table stays orphaned.
 V2_DDL = """
 CREATE TABLE source (path TEXT PRIMARY KEY, family TEXT NOT NULL,
   dev INTEGER, ino INTEGER, size INTEGER, mtime_ns INTEGER, head TEXT,

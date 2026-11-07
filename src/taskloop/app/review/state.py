@@ -1,5 +1,5 @@
 """What the review stage keeps between its steps, in one object the engine holds as `engine.review`. `unchecked` and `unverified` are
-the two lists of the checkpoint's `ReviewState` (run/review_glue.py converts at the seams, so the record on disk is the one it always
+the two lists of the checkpoint's `ReviewState` (pipeline/review_glue.py converts at the seams, so the record on disk is the one it always
 was); write, land and the shell still read and write them, so they stay one shared instance until those stages have their own ports
 (docs/design/b-review.md, decision 1). The rest is the stage's own and is not saved."""
 from collections.abc import Callable

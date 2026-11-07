@@ -1,5 +1,6 @@
-"""The owner-look gallery's items: taste items the engine filed into owner-look beads (the bead's kv row, contracts/lookrows.py; metadata
-`looks` before it), with their before and after pictures. Pure: the answers are app/asks/looks.py (the owner's `look` verb).
+"""The owner-look gallery's items: taste items the engine filed into owner-look beads (the bead's look_doc row,
+contracts/lookrows.py; metadata `looks` before it), with their before and after pictures.
+Pure: the answers are app/asks/looks.py (the owner's `look` verb).
 
 An item: {id "<source bead>#<n>", look_bead, bead, title, note, shots [{path, role before|after, label}], status
 open|good|redo, redo_bead, answer_note, answered}. A look bead from before `looks` existed has no metadata: its
@@ -54,7 +55,7 @@ def parse_description(desc: object, look_bead: str) -> list[Item]:
 
 
 def items_of(look_bead: str, shown: Item, held: list[Item] | None = None) -> list[Item]:
-    """Items of one owner-look bead: its kv row (`held`, contracts/lookrows.py) when it has one, else as `bd show` gave it: metadata
+    """Items of one owner-look bead: its look_doc row (`held`, contracts/lookrows.py) when it has one, else as `bd show` gave it: metadata
     `looks` wins, the description is the fallback."""
     if held is not None:
         return [clean(e, look_bead) for e in held if e.get("id")]

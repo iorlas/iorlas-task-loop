@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from tlkernel import factorydb
-from tlkernel.factoryparts import KV
+from tlkernel.factoryparts import LOOK
 from tlkernel.looprows import LoopRows
 from tlkernel.paths import ConfigDir
 
@@ -30,7 +30,6 @@ TABLES = {
     "check_round",
     "ask",
     "ask_ledger",
-    "kv",
     "run_doc",
     "duration_doc",
     "effect",
@@ -155,7 +154,7 @@ class FactoryDbTest(Case):
         self.rw()
         con = self.ro()
         with pytest.raises(sqlite3.OperationalError):
-            con.execute("INSERT INTO kv(k,v,t) VALUES ('key','value',1)")
+            con.execute("INSERT INTO look_doc(k,v,t) VALUES ('key','value',1)")
 
     def test_cas_advances_once_and_rejects_stale_revision(self):
         con = self.rw()
@@ -340,22 +339,23 @@ def test_a_reader_meets_a_database_a_writer_is_still_creating_as_not_there_yet(t
 
 def test_declared_versions_and_reader_needs(tmp_path, monkeypatch):
     monkeypatch.setattr(factorydb._STORE, "parts", None)
+    monkeypatch.setattr(factorydb._STORE, "complete", False)
     monkeypatch.setattr(factorydb._STORE, "needs", None)
     monkeypatch.setattr(factorydb._STORE, "schema", factorydb.SCHEMA)
-    factorydb.declare_parts([KV])
-    assert factorydb.versions() == {"kv": KV.version}
+    factorydb.declare_parts([LOOK])
+    assert factorydb.versions() == {"look": LOOK.version}
     path = tmp_path / "factory.db"
     con = factorydb.open_rw(path)
     assert con is not None
-    con.execute("DELETE FROM schema_part WHERE name='kv'")
+    con.execute("DELETE FROM schema_part WHERE name='look'")
     con.close()
     reader = factorydb.open_ro(path)
     assert reader is not None
     reader.close()
-    factorydb.declare_needs({"kv": 1})
-    factorydb.declare_needs({"kv": 1})
+    factorydb.declare_needs({"look": 1})
+    factorydb.declare_needs({"look": 1})
     with pytest.raises(ValueError, match="different versions"):
-        factorydb.declare_needs({"kv": 2})
+        factorydb.declare_needs({"look": 2})
     for opener in (factorydb.open_ro, factorydb.open_watch):
-        with pytest.raises(factorydb.SchemaError, match="part kv is v0, this process needs v1"):
+        with pytest.raises(factorydb.SchemaError, match="part look is v0, this process needs v1"):
             opener(path)

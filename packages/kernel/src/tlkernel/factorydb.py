@@ -16,7 +16,7 @@ from typing import override
 import sqlite_store
 from sqlite_store import SqlValue
 
-from tlkernel import dbparts, factorymigrate, factoryprune
+from tlkernel import dbparts, factorymigrate, factoryprune, factoryretired
 
 SCHEMA_VERSION = 5  # frozen: the parts (factoryparts, dbparts) carry the versions from here on
 
@@ -36,7 +36,6 @@ OWNERS: dict[str, str] = {
     "ask": "engine",
     "ask_ledger": "engine",
     "park": "engine",  # asks-owned park rows, written through ParkStore
-    "kv": "index",
     "queue_doc": "engine",  # land queue runner and tree assertions through Stores
     "flake_doc": "engine",  # land flake scoring through FlakeBook
 
@@ -82,6 +81,7 @@ class _PartStore(sqlite_store.Store):
         super().__init__(schema)
         self.needs: Mapping[str, int] | None = None
         self.parts: tuple[dbparts.Part, ...] | None = None
+        self.complete = False
         self._launched: set[tuple[int, Path, int, int]] = set()
 
     @override
@@ -94,13 +94,15 @@ class _PartStore(sqlite_store.Store):
         try:
             if readonly:
                 if self.parts is not None:
-                    dbparts.launch(con, readonly=True, parts=self.parts, needs=self.needs)
+                    dbparts.launch(con, readonly=True, parts=self.parts, needs=self.needs,
+                                   complete=self.complete, dropped=factoryretired.DROPPED_PARTS)
             else:
                 assert self.parts is not None
                 stat = Path(path).resolve().stat()
                 identity = (os.getpid(), Path(path).resolve(), stat.st_dev, stat.st_ino)
                 if identity not in self._launched:
-                    dbparts.launch(con, readonly=False, parts=self.parts)
+                    dbparts.launch(con, readonly=False, parts=self.parts,
+                                   complete=self.complete, dropped=factoryretired.DROPPED_PARTS)
                     self._launched.add(identity)
         except BaseException:
             con.close()
@@ -112,12 +114,13 @@ _STORE = _PartStore(SCHEMA)
 SchemaError = sqlite_store.SchemaError
 
 
-def declare_parts(parts: Sequence[dbparts.Part]) -> None:
+def declare_parts(parts: Sequence[dbparts.Part], *, complete: bool = False) -> None:
     """Declare this process's parts once; repeated identical declarations are harmless."""
     declared = tuple(parts)
-    if _STORE.parts is not None and _STORE.parts != declared:
+    if _STORE.parts is not None and (_STORE.parts != declared or _STORE.complete != complete):
         raise ValueError("factory.db parts already declared with a different list")
     _STORE.parts = declared
+    _STORE.complete = complete
     # a fresh file is created whole, with its user_version, in one transaction
     _STORE.schema = replace(_STORE.schema, ddl=dbparts.ddl(declared))
 

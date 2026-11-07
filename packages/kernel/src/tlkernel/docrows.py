@@ -29,9 +29,9 @@ INDEX_DOCS = "index_doc"  # dashboard index pass freshness
 
 WORKTREE_DOCS = "worktree_doc"  # ownership records of worktrees tl made
 DISK_DOCS = "disk_doc"  # the loop's hourly free-space samples
-LOOP_DOCS = "loop_doc"  # the loop stage's repo stop commands and rests
+LOOP_DOCS = "loop_doc"  # the loop stage's repo stop commands, rests and bad versions
 LOOK_DOCS = "look_doc"  # the look stage's owner-look galleries
-LANES_DOCS = "lanes_doc"  # the lanes part's status snapshot and last attempt
+LANES_DOCS = "lanes_doc"  # the lanes part's status snapshot, last attempt and shared notes
 REPORT_DOCS = "report_doc"  # the report stage's document: the reflect digest state
 WORK_DOCS = "work_doc"  # the work stage's documents: the cache of a repo's decision records
 RELEASE_DOCS = "release_doc"  # the release stage's documents: the pin and the last release result
@@ -150,8 +150,8 @@ class RowDoc[T: Rec]:
             con.execute(f"DELETE FROM {d.table} WHERE {d.key_col}=?", (self.k,))
 
 
-def singleton[T: Rec](cfg: ConfigDir, cls: type[T], name: str, quiet: bool = False, *, table: str = "kv") -> RowDoc[T]:
-    """One cold document (a pin, a release result, a snapshot) as the row `name` of `table` (`kv`, or its owner's own table)."""
+def singleton[T: Rec](cfg: ConfigDir, cls: type[T], name: str, quiet: bool = False, *, table: str) -> RowDoc[T]:
+    """One cold document (a pin, a release result, a snapshot) as the row `name` of `table`."""
     return RowDocs(cfg, cls, table=table, key_col="k", body_col="v", prefix=name, quiet=quiet).of("")
 
 

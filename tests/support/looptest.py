@@ -57,7 +57,7 @@ def live(repo):
 
 
 def command_kept(repo):
-    """Whether the repo has a stop command (a `kv` row)."""
+    """Whether the repo has a stop command (a `loop_doc` row)."""
     return files(repo).command().get() is not None
 
 
