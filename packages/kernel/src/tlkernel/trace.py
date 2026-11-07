@@ -1,4 +1,4 @@
-"""RunTrace: one engine run as the report reads it (traces.jsonl, v2). A defaulted field is one the older rows did not carry."""
+"""RunTrace: one engine run as the report reads it (traces.jsonl, v3). A defaulted field is one the older rows did not carry."""
 from typing import Any, ClassVar, final
 
 import msgspec
@@ -38,7 +38,6 @@ class AiCall(Rec):
     status: str
     role: str
     t: float
-    transcript: str = ""
     node_id: int | None = None
     attempt: int | None = None
     run_id: str = ""
@@ -127,7 +126,7 @@ class Fault(Rec):
 
 @final
 class RunTrace(Rec):
-    V: ClassVar[int] = 2
+    V: ClassVar[int] = 3
     run: RunId
     bead: str
     repo_url: str

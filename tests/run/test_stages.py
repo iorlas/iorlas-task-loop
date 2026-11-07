@@ -270,11 +270,7 @@ class Handoff(StagesTest):
     TWO: ClassVar[Any] = dict(PLAN, stages=[PLAN["stages"][0], dict(PLAN["stages"][0], goal="add g")])
 
     def boundary(self, ctx_k, **cfg):
-        path = Path(self.tmp.name, "session.jsonl")
-        n = int(ctx_k * 1000) - 100
-        path.write_text(json.dumps({"type": "user"}) + "\n" + json.dumps({"type": "assistant", "message": {"usage": {
-            "input_tokens": 3, "cache_read_input_tokens": n, "cache_creation_input_tokens": 97}}}) + "\n")
-        extra = {"family": "claude", "transcript": str(path)}
+        extra = {"family": "claude", "usage": {"context_k": ctx_k}}
         return self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]},
                                j_extra={"write": [extra, extra]}, **cfg)
 

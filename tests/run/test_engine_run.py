@@ -351,22 +351,9 @@ class EngineRunTest(EngineTest):
         _rc, s = self.two_writes(ctx_k=500, write_fresh_above_k=0)  # 0: never
         assert s.calls[2][1] == "ref-write"
 
-    def test_a_missing_or_empty_transcript_resumes_as_before(self):
-        for path in ("", "/nonexistent/s.jsonl"):
-            extra = {"transcript": path}
-            with self.store.stub(show=dict(BEAD, description=self.MARK)):
-                _rc, s = self.run_engine({"plan": [self.plan_with(self.RED_ONCE)], "write": [WRITE, WRITE], "review": [CLEAN]},
-                                        j_extra={"write": [extra, extra]})
-            assert s.calls[2][1] == "ref-write", path
-            assert self.MARK not in s.prompts[2]
-            assert self.eng.write.write_rounds[0]["context_k"] is None
-
     def test_round_three_after_a_fresh_start_resumes_the_fresh_session(self):
-        big, small = Path(self.tmp.name, "big.jsonl"), Path(self.tmp.name, "small.jsonl")
-        for f, k in ((big, 160), (small, 40)):
-            f.write_text(json.dumps({"type": "assistant", "message": {"usage": {"input_tokens": k * 1000}}}) + "\n")
         red = procsim.fake("green-on-d4", lambda cwd, env: (0 if procsim.f_txt(cwd) == "d4" else 1, ""))
-        ex = [{"family": "claude", "transcript": str(f)} for f in (big, small, small)]
+        ex = [{"family": "claude", "usage": {"context_k": k}} for k in (160, 40, 40)]
         with self.store.stub(show=dict(BEAD, description=self.MARK)):
             rc, s = self.run_engine({"plan": [self.plan_with(red)], "write": [WRITE] * 3, "review": [CLEAN]}, j_extra={"write": ex})
         assert rc == 0, self.blocked
@@ -436,7 +423,7 @@ class EngineRunTest(EngineTest):
         log = Path(mkdtemp()) / "run.jsonl"
         log.write_text(
             "\n".join(
-                json.dumps({"v": 3, "kind": "step_end", "t": 1.0, "id": "n1", "step": st, "outcome": "done", "exec_seconds": sec}) + "\n"
+                json.dumps({"v": 4, "kind": "step_end", "t": 1.0, "id": "n1", "step": st, "outcome": "done", "exec_seconds": sec}) + "\n"
                 for st, sec in (("checks", 6000), ("checks", 3800), ("write", 900), ("plan", 20))
             )
         )
