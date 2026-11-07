@@ -74,7 +74,13 @@ Directive: entities, DTOs and schemas belong to the stages; one db package route
 
 ### 3.1 Ownership
 
-Each stage owns, in `app/<stage>/store.py`: its record types (msgspec), its tables (DDL), its migration steps, its prune rule, its read API. Examples (from the opus read of `writer_invariants` and the stores, to be verified per stage in the PRs): gate: check_pass, check_round, durations, check_run; asks: ask, ask_ledger, park; slots: locks, tickets, worktrees, leases; release: pins, results; report: reflect state; work: adr; land: followups; pipeline: run, attempt, effects, signals, waits, checkpoints, run log, traces; workers/lanes: status, usage; dash: source, bead, events. `kv` stops being a shared prefix grab-bag: each user gets a table or a typed `Doc`. `ParkStore`, written by asks, loop.take and run.stages, gets one writer (asks) and the others call its port.
+Each stage owns, in `app/<stage>/store.py`: its record types (msgspec), its tables (DDL), its migration steps, its prune rule, its read API.
+Examples (from the opus read of `writer_invariants` and the stores, to be verified per stage in the PRs): gate: check_pass, check_round,
+durations, check_run; asks: ask, ask_ledger, park; slots: locks, tickets, worktrees, leases; release: pins, results; report: reflect state;
+work: adr; land: followups; pipeline: run, attempt, effects, signals, waits, checkpoints, run log, traces; workers/lanes: status, usage;
+dash: source, bead, events. `kv` stops being a shared prefix grab-bag: each user gets a table or a typed `Doc`. Parks now live in the
+asks-owned `park` table, separately from pipeline `wait` rows. `ParkStore`, written by asks, loop.take and run.stages, gets one writer
+(asks) and the others call its port.
 
 ### 3.2 The db package (`taskloop_db`, a kernel)
 

@@ -24,7 +24,9 @@ TABLES = {
     "release_doc",  # a stage that moves its table adds its own line here
     "report_doc",
     "followup",
+    "park",
 }
+
 INDEXES = {
     "run_bead", "run_recent", "run_live", "bead_status", "check_tree", "ask_live",
 }
