@@ -312,6 +312,20 @@ forbidden_modules =
     taskloop.app.launch
 allow_indirect_imports = True
 
+[importlinter:contract:delegate-adapter-behind-stores]
+name = only stores.delegate imports the delegate adapter (adapters.delegate, adapters.runner)
+type = forbidden
+source_modules =
+    taskloop.app
+    taskloop.cli
+    taskloop.hook
+    taskloop.domain
+    taskloop.contracts
+forbidden_modules =
+    taskloop.adapters.delegate
+    taskloop.adapters.runner
+allow_indirect_imports = True
+
 [importlinter:contract:pipeline-imports-no-stage]
 name = The pipeline node reaches a stage only through its ports (docs/design/pipeline-node.md)
 type = forbidden

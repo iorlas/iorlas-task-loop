@@ -13,7 +13,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
 from support.check_host import CheckHostCase
 
-from taskloop.app.run import worker_call
+from taskloop.adapters import delegate as dl
 from taskloop.contracts.paths import RunFiles
 
 CMD = "unity-like-check"
@@ -106,6 +106,6 @@ class Evidence(CheckHostCase):
         assert rows == {"Editor.log", "check.log"}
 
     def test_keeping_evidence_makes_no_model_call(self):
-        with mock.patch.object(worker_call.dg, "call", side_effect=AssertionError("ingest called a model")):
+        with mock.patch.object(dl, "call", side_effect=AssertionError("ingest called a model")):
             eng, _ = self.attempt()
         assert len([r for r in eng.records("evidence") if r["call_id"] == "u"]) == 3

@@ -10,20 +10,19 @@ import traceback
 from pathlib import Path
 from typing import Any, Final
 
-from taskloop.adapters import delegate as dg
 from taskloop.adapters import ident
-from taskloop.adapters.runner import Completed, Seam, completed
 from taskloop.app.launch.selftest_beads import MemoryBeads
-from taskloop.app.release import seams
 from taskloop.app.run.engine import Engine
 from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import env as penv
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.delegateport import Completed, Resolved, Seam, completed
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import parse_bead_id
 from taskloop.contracts.slots import SlotGitError
+from taskloop.stores.delegate import fixed_route, real_route
 
 # an argv list; the plan schema wraps it as an adhoc check
 CHECK: Final = ["test", "-f", "f.txt"]
@@ -60,8 +59,8 @@ def lane(cmd: list[str], **kw: Any) -> Completed:
         ids = [ln.split(". ", 1)[0] for ln in brief.splitlines() if ln[:1] == "A" and ln.split(". ", 1)[0][1:].isdigit()]
         data, node = dict(REVIEW, criteria=[{"item": i, "status": "met", "evidence": "the checks pass"} for i in ids]), "review"
     tokens = {"in": 1, "cached": 0, "out": 1}
-    j: dict[str, Any] = {"contract": dg.CONTRACT, "data": data, "text": "ok", "say": "", "ref": "ref-" + node, "lane": "L", "model": "m",
-         "effort": "e",
+    j: dict[str, Any] = {"contract": real_route().contract_no, "data": data, "text": "ok", "say": "", "ref": "ref-" + node,
+         "lane": "L", "model": "m", "effort": "e",
          "family": "openai" if node == "write" else "claude", "flag": None, "fallback": False, "first_lane": "L", "rung": 0,
          "tokens": tokens, "cost": 0.0, "secs": 1, "run_id": "selftest", "call_id": "selftest", "denied": [], "git_violation": [],
          "warnings": [], "usage": {"tokens": tokens, "cost": 0.0, "secs": 1, "turns": 1, "ref": "ref-" + node}, "stop": None,
@@ -94,7 +93,8 @@ def git_repo(home: Path, wt: Path, git: Git) -> str | None:
 def run_engine(home: Path, wt: Path, env: Env) -> tuple[int, Bead]:
     """(exit code, the bead as the fake bd holds it) after one bead ran through the engine on the scripted lane."""
     cfg = wslots.load_cfg(str(wt), real.git(env))
-    resolved = dg.Resolved(Path("/selftest"), "/selftest/route.py", dg.resolve().contract, "explicit")
+    found = real_route().resolve()
+    resolved = Resolved(Path("/selftest"), "/selftest/route.py", found.contract if isinstance(found, Resolved) else {}, "explicit")
     store = MemoryBeads()
     t1 = parse_bead_id("t-1")
     store.beads[t1] = Bead(id=t1, title="Add f", status="open", acceptance_criteria="f.txt exists")
@@ -105,7 +105,7 @@ def run_engine(home: Path, wt: Path, env: Env) -> tuple[int, Bead]:
             t1,
             str(wt),
             cfg,
-            route=seams.FixedRoute(resolved, Runner()),
+            route=fixed_route(resolved, Runner()),
             store=store,
             env=env,
             spawner=real.spawner(env),
