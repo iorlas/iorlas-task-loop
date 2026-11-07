@@ -5,6 +5,16 @@ from tlkernel.ids import BeadId
 from taskloop.domain.beads import rules
 
 
+def run(store: Beads, root: str, ready: bool, fix: bool, bead: BeadId | None) -> int:
+    """Validate the requested lint mode and run its bead rules."""
+    if ready:
+        return lint_ready(store, root, fix)
+    if fix or not bead:
+        print("usage: tl lint BEAD | tl lint --ready [--fix]")
+        return 2
+    return lint_one(store, root, bead)
+
+
 def has_children(store: Beads, bead: BeadId) -> bool:
     """Does any open bead name this one as its parent."""
     return any(x.parent == bead for x in store.find(BeadQuery()))
