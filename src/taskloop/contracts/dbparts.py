@@ -1,8 +1,8 @@
-"""The parts of factory.db: what a stage registers (its tables, its records, its upgrade steps) and the check every open makes.
+"""The parts of factory.db: what a stage declares (its tables, its records, its upgrade steps) and the check every open makes.
 
 A `Part` is one stage's share of the database: the tables it owns (`ddl`), the records it stores in them, and `steps` that take the
-part from one version to the next (keyed by the version upgraded FROM, as sqlite_store's are). `register` is called when the stage's store
-module is imported. `launch` runs on every open of factory.db, before anything else uses the connection, and compares each registered
+part from one version to the next (keyed by the version upgraded FROM, as sqlite_store's are). The composition root supplies its parts
+explicitly. `launch` runs on every open of factory.db, before anything else uses the connection, and compares each declared
 part with its row in `schema_part`:
 
 - no row: the part's tables are created, or adopted when they all exist and equal the code's; the row is written.
@@ -18,7 +18,7 @@ import functools
 import hashlib
 import json
 import sqlite3
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, field
 
 from sqlite_store import SchemaError, Step, begin_immediate
@@ -56,32 +56,27 @@ class Part:
     prune: tuple[Prune, ...] = ()
 
 
-_REGISTRY: dict[str, Part] = {}
+def _validate(parts: Iterable[Part]) -> tuple[Part, ...]:
+    todo = tuple(parts)
+    names: set[str] = set()
+    owners: dict[str, str] = {}
+    for part in todo:
+        if part.name in names:
+            raise ValueError(f"part {part.name!r} is registered twice")
+        names.add(part.name)
+        for table in part.tables:
+            if table in owners:
+                raise ValueError(f"table {table!r} of part {part.name!r} already belongs to part {owners[table]!r}")
+            owners[table] = part.name
+        for rule in part.prune:
+            if rule.table not in part.tables:
+                raise ValueError(f"part {part.name!r} prunes {rule.table!r}, which is not its table")
+    return todo
 
 
-def register(part: Part) -> Part:
-    """Add a part; a name or a table that is already claimed is a bug in the registering module."""
-    if part.name in _REGISTRY:
-        raise ValueError(f"part {part.name!r} is registered twice")
-    for table in part.tables:
-        owner = next((p.name for p in _REGISTRY.values() if table in p.tables), None)
-        if owner is not None:
-            raise ValueError(f"table {table!r} of part {part.name!r} already belongs to part {owner!r}")
-    for rule in part.prune:
-        if rule.table not in part.tables:
-            raise ValueError(f"part {part.name!r} prunes {rule.table!r}, which is not its table")
-    _REGISTRY[part.name] = part
-    return part
-
-
-def registered() -> tuple[Part, ...]:
-    """The registered parts, in registration order."""
-    return tuple(_REGISTRY.values())
-
-
-def prune_order(parts: Iterable[Part] | None = None) -> tuple[Prune, ...]:
+def prune_order(parts: Iterable[Part]) -> tuple[Prune, ...]:
     """Every part's prune rules in an order that honours `after` (the first ready rule goes first, so declaration order breaks ties)."""
-    todo = [rule for p in (registered() if parts is None else parts) for rule in p.prune]
+    todo = [rule for p in parts for rule in p.prune]
     names = {rule.table for rule in todo}
     for rule in todo:
         if missing := set(rule.after) - names:
@@ -103,9 +98,10 @@ def doc_table(table: str) -> str:
     return f"CREATE TABLE {table} (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL);"
 
 
-def ddl() -> str:
-    """The DDL of every registered part: what a fresh database is created from."""
-    return "\n".join(p.ddl.strip() for p in _REGISTRY.values())
+
+def ddl(parts: Iterable[Part]) -> str:
+    """The joined DDL of the explicitly supplied parts, with ownership validated."""
+    return "\n".join(p.ddl.strip() for p in _validate(parts))
 
 
 def _statements(text: str) -> list[str]:
@@ -160,10 +156,10 @@ def schema_hash(cls: type[Rec]) -> str:
     return hashlib.sha256(json.dumps(_bare(schema.of(cls)), sort_keys=True).encode()).hexdigest()
 
 
-def golden(parts: Iterable[Part] | None = None) -> dict[str, dict[str, object]]:
+def golden(parts: Iterable[Part]) -> dict[str, dict[str, object]]:
     """What the golden file holds per part: its version, DDL fingerprint and each record's `V` and schema hash."""
     return {p.name: {"version": p.version, "ddl": ddl_fingerprint(p), "records": _shapes(p)}
-            for p in (registered() if parts is None else parts)}
+            for p in parts}
 
 
 def _shapes(part: Part) -> dict[str, dict[str, object]]:
@@ -227,11 +223,13 @@ def _launch_part(con: sqlite3.Connection, part: Part, row: tuple[int, str, str] 
     _write_row(con, part)
 
 
-def launch(con: sqlite3.Connection, *, readonly: bool, parts: Iterable[Part] | None = None) -> None:
+def launch(
+    con: sqlite3.Connection, *, readonly: bool, parts: Iterable[Part], needs: Mapping[str, int] | None = None,
+) -> None:
     """The check every open of factory.db makes; raises SchemaError (the open then fails) and leaves the database as it was."""
-    todo = registered() if parts is None else tuple(parts)
+    todo = _validate(parts)
     if readonly:
-        _launch_readonly(con, todo)
+        _launch_readonly(con, todo, needs)
         return
     with begin_immediate(con):
         con.execute(PART_DDL)
@@ -240,7 +238,7 @@ def launch(con: sqlite3.Connection, *, readonly: bool, parts: Iterable[Part] | N
             _launch_part(con, part, stored.get(part.name))
 
 
-def _launch_readonly(con: sqlite3.Connection, parts: Iterable[Part]) -> None:
+def _launch_readonly(con: sqlite3.Connection, parts: Iterable[Part], needs: Mapping[str, int] | None) -> None:
     stored = _stored(con)
     for part in parts:
         row = stored.get(part.name)
@@ -248,6 +246,6 @@ def _launch_readonly(con: sqlite3.Connection, parts: Iterable[Part]) -> None:
             continue
         if row[0] > part.version:
             raise SchemaError(f"factory.db part {part.name} is v{row[0]}, this code knows v{part.version}: update it")
-        if row[0] < (part.version if part.read_from is None else part.read_from):
+        if row[0] < (needs or {}).get(part.name, part.version if part.read_from is None else part.read_from):
             raise SchemaError(
                 f"factory.db part {part.name} is v{row[0]}, this code knows v{part.version}: the writer has not upgraded it yet")
