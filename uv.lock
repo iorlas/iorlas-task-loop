@@ -177,6 +177,7 @@ version = "0"
 source = { editable = "packages/gate" }
 dependencies = [
     { name = "tlkernel" },
+    { name = "tltestkit" },
 ]
 
 [package.dev-dependencies]
@@ -186,7 +187,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "tlkernel", editable = "packages/kernel" }]
+requires-dist = [
+    { name = "tlkernel", editable = "packages/kernel" },
+    { name = "tltestkit", editable = "packages/testkit" },
+]
 
 [package.metadata.requires-dev]
 dev = [
