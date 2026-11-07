@@ -65,6 +65,8 @@ Status: step 0 (WS-MECH) merged; step 1 (artifacts) is the workspace member `pac
 
 Parallel now: step 0 first (this week, one PR); then 1, 2 and 4 together. Hold 5 and 6 until C-PIPELINE lands; hold 7 until B3 lands.
 
+TESTISO (step 4) is done: member tests may import only their own package, declared runtime and dev dependencies, pytest and the standard library. `tests/rules/package_tests.py` checks every member test import (lazy and TYPE_CHECKING too); `tests/rules/test_package_tests.py` runs it in the gate and proves an undeclared sibling fails.
+
 ## 7. Decisions asked of the owner
 
 1. Vendored shelf deps (`atomic_io`, others) in a package: accept `pythonpath = ["../../skills/task-loop/_vendor"]` per package (the spike), or give each vendored dir a manifest so it is declared. Recommendation: accept for now, revisit when a second package needs one.
