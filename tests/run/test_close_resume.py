@@ -18,7 +18,7 @@ from taskloop.app.pipeline import ended
 from taskloop.app.pipeline.closing import Closer
 from taskloop.app.run import engine
 from taskloop.app.run.closer_ports import closer_over
-from taskloop.app.wire import slots as wslots
+from taskloop.app.slots import config as wslots_config
 from taskloop.domain import effects as fx
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
@@ -36,7 +36,7 @@ class Killed(BaseException):
 
 class Base(T.EngineTest):
     def engine(self) -> engine.Engine:
-        c = wslots.load_cfg(str(self.wt), port_git())
+        c = wslots_config.load_cfg(str(self.wt), port_git())
         eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
             git=port_git(), who=who())
         eng.checkpoints.save(step="close")  # the record the keys go into
@@ -94,7 +94,7 @@ class ColdRestart(Base):
         return eng
 
     def cold(self):
-        c = wslots.load_cfg(str(self.wt), port_git())
+        c = wslots_config.load_cfg(str(self.wt), port_git())
         return engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
             git=port_git(), who=who())
 

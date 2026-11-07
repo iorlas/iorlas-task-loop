@@ -29,10 +29,10 @@ from taskloop.app.asks.owner_verbs import OwnerVerbs
 from taskloop.app.doctor import profiles
 from taskloop.app.report import card as cards
 from taskloop.app.report.card import score_of
+from taskloop.app.slots import config as wslots_config
 from taskloop.app.track.trail import now
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import real
-from taskloop.app.wire import slots as wslots
 from taskloop_dash.env import Ports
 
 DASH_ACTOR = "tl-dash"  # the dashboard's bd actor
@@ -148,7 +148,7 @@ def ports(env: Env) -> Ports:
     def slot_source(repo: str) -> SlotSource:
         """What the loops count (origin/main's profile); a profile that does not load shows no lanes, its red row says why."""
         try:
-            return wslots.slot_source(repo, git)
+            return wslots_config.slot_source(repo, git)
         except (Exception, SystemExit):
             return SlotSource(host=hostname(), source="unreadable")
 
@@ -158,12 +158,12 @@ def ports(env: Env) -> Ports:
     def scorecard(repo: str, since: float, until: float) -> Score:
         """`tl report --since --until` for the repo: the one scorecard, read only (no fetch, no write)."""
         who = Identity(actor=DASH_ACTOR, home=str(home.root))
-        base = wslots.load_cfg(repo, git).base
+        base = wslots_config.load_cfg(repo, git).base
         return score_of(cards.scorecard(repo, since, until, base=base, git=git, who=who))
 
     return Ports(store=store, answer=answer_via(home),
                  **owner_writes(owner_intake(wire_asks.store(home), store, now, adrs=lambda repo: AdrStore.at(home, repo),
                                              factory=lambda: factory_store(home), look_rows=LookRows(home)), home),
-                 slot_source=slot_source, slot_dirs=wslots.slot_dirs,
+                 slot_source=slot_source, slot_dirs=wslots_config.slot_dirs,
                  resource_holders=resource_holders, profile_error=quiet(red_row, ""), profile_stamp=quiet(profiles.stamp, None),
                  scorecard=quiet(scorecard, None))

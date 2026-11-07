@@ -15,7 +15,7 @@ from support import procsim
 from support.tmpdir import TemporaryDirectory
 
 from checks.test_checks_speed import SpeedTest
-from taskloop.app.wire import slots as wslots
+from taskloop.app.slots import config as wslots_config
 from tlkernel import config
 
 
@@ -54,7 +54,7 @@ class RetiredKeys(Case):
         config._SAID.clear()
         with contextlib.redirect_stderr(err):
             for _ in range(2):
-                profile = wslots.load_profile(json.loads(f.read_text()))
+                profile = wslots_config.load_profile(json.loads(f.read_text()))
         assert (profile.engine.check_wall_min, profile.engine.checks[0].wall_min) == (20, 90)
         lines = err.getvalue().splitlines()
         assert len(lines) == 2, lines  # one per key, not per load
@@ -76,4 +76,4 @@ class RetiredKeys(Case):
 
     def test_an_unknown_key_still_fails(self):
         with pytest.raises(SystemExit):
-            wslots.load_profile({"engine": {"check_idle_mins": 3}})
+            wslots_config.load_profile({"engine": {"check_idle_mins": 3}})

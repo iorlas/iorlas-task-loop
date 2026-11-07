@@ -24,6 +24,7 @@ class SnapshotStamps(fixtures.ApiFixture):
         ref = gitdir / "refs" / "heads" / "main"
         ref.parent.mkdir(parents=True)
         ref.write_text("a" * 40 + "\n")
+        (gitdir / "HEAD").write_text("ref: refs/heads/main\n")  # a gitdir without HEAD is not a checkout
         (self.repo / ".task-loop.json").write_text('{"engine":{"base":"main"}}')
         marker = self.repo / ".beads" / "last-touched"
         marker.parent.mkdir(exist_ok=True)

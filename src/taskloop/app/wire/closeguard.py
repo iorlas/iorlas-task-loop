@@ -20,9 +20,9 @@ from tlkernel.locator import RunLocator
 from tlkernel.run import RunFinish, RunState
 from tlkernel.slots import git_probe
 
+from taskloop.app.slots import config as wslots_config
 from taskloop.app.track import verbs
 from taskloop.app.track.verbs import Guard
-from taskloop.app.wire import slots as wslots
 from taskloop.stores.real import real_stores
 
 ENGINE: Final[Guard] = lambda bead, reason: ""  # noqa: E731  the engine's own close: its run is the record
@@ -93,7 +93,7 @@ def refusal(who: Identity, store: Beads, git: Git, repo: str, bead: BeadId, reas
 
 def manual(who: Identity, store: Beads, git: Git, repo: str, bead: BeadId, sha: str) -> str:
     """manual-landed-with-sha: the sha must be on the base; it is then recorded as the land."""
-    base = wslots.load_cfg(repo, git).base
+    base = wslots_config.load_cfg(repo, git).base
     if record_land(who, store, git, repo, base, bead, sha, f"manual-landed-with-sha: {sha[:12]} is on {base}") == 0:
         return ""
     return f"{bead}: {sha[:12]} is not an ancestor of {base}: not a land. Fix: tl land {bead} --sha SHA with a sha that is."
