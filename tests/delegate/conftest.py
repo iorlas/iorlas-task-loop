@@ -25,6 +25,17 @@ for _k, _v in _collector_env.items():
     os.environ.pop(_k, None) if _v is None else os.environ.__setitem__(_k, _v)
 
 
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_protocol(item, nextitem):
+    """Restore the worker environment after even cleanups that outlive own_home."""
+    saved = {k: os.environ.get(k) for k in ENV}
+    try:
+        return (yield)
+    finally:
+        for k, v in saved.items():
+            os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def worker_clis():
     """codex, claude and opencode answer `--version` from a folder of ours, first on PATH: a test that probes the worker CLIs spawns the

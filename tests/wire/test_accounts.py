@@ -8,7 +8,11 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from taskloop.adapters import delegate as dg
-from taskloop.app.wire import lanes, setup
+from taskloop.adapters.ident import config_dir
+from taskloop.app.doctor import lanes, setup
+from taskloop.stores.delegate import real_route
+from tlkernel.env import snapshot
+from tlkernel.paths import ConfigDir
 
 
 def row(lane, enabled=True, ready=True, fix=""):
@@ -18,7 +22,7 @@ def row(lane, enabled=True, ready=True, fix=""):
 def shown(op="list", lane=""):
     out = io.StringIO()
     with mock.patch("sys.stdout", out):
-        return lanes.accounts(op, lane), out.getvalue()
+        return lanes.accounts(op, lane, real_route(), ConfigDir(config_dir(snapshot()))), out.getvalue()
 
 
 def test_the_table_names_each_lane_with_its_fix():
@@ -45,6 +49,6 @@ def test_an_unknown_lane_is_an_error_line_not_a_crash():
 
 def test_setup_asks_for_an_account_when_no_enabled_lane_is_ready():
     with mock.patch.object(dg, "accounts", return_value=[row("A", ready=False)]):
-        assert setup.accounts_check().ok is False
+        assert setup.accounts_check(real_route()).ok is False
     with mock.patch.object(dg, "accounts", return_value=[row("A")]):
-        assert setup.accounts_check().ok is True
+        assert setup.accounts_check(real_route()).ok is True
