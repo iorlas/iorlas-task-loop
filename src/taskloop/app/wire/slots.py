@@ -53,3 +53,7 @@ start_worktree = bound(machine.start_worktree)
 live_actors = bound(machine.live_actors)
 worktree = bound(machine.worktree)
 owned_worktrees = bound(machine.owned_worktrees)
+
+named = bound(machine.named)
+any_slot = bound(machine.any_slot)
+give_back = bound(machine.give_back)
