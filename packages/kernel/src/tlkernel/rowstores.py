@@ -2,7 +2,7 @@
 from collections.abc import Callable
 
 from tlkernel import paths
-from tlkernel.docrows import LANES_DOCS, RELEASE_DOCS, REPORT_DOCS, RowDoc, singleton
+from tlkernel.docrows import LANES_DOCS, RELEASE_DOCS, REPORT_DOCS, REPOS_DOCS, RowDoc, singleton
 from tlkernel.docstore import Absent, Present
 from tlkernel.guard import guard
 from tlkernel.loop import BadVersions
@@ -35,11 +35,11 @@ class SharedNotesStore(RowDoc[SharedNotes]):
 
 
 class ReposStore:
-    """The repos index: every repo `tl` has seen, by name, as the `kv` row `repos` of factory.db. Adding one reads and writes under a lock,
-    so two processes never drop a repo. `quiet` (the dashboard): a database that cannot be opened reads as no repos."""
+    """The repos index: every repo `tl` has seen, by name, as the `repos_doc` row `repos` of factory.db. Adding one reads and writes
+    under a lock, so two processes never drop a repo. `quiet` (the dashboard): a database that cannot be opened reads as no repos."""
 
     def __init__(self, cfg: paths.ConfigDir, quiet: bool = False) -> None:
-        self.doc = singleton(cfg, ReposIndex, "repos", quiet)
+        self.doc = singleton(cfg, ReposIndex, "repos", quiet, table=REPOS_DOCS)
         self.lock = cfg.lock_record("repos", "index")
 
     def get(self) -> ReposIndex | None:

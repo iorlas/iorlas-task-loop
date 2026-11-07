@@ -17,6 +17,11 @@
   },
   "version": 2
  },
+ "beadcache": {
+  "ddl": "00965ab1e7343ce0e72af768edb6cc9b8f82058590b8f052a8a195bb2e04eacd",
+  "records": {},
+  "version": 1
+ },
  "dash": {
   "ddl": "bbe9b90d2ab1092cc3ad3229571a4effa2605bcf0cd67ee9497e804c44ec4263",
   "records": {
@@ -44,6 +49,11 @@
     "v": 1
    }
   },
+  "version": 1
+ },
+ "index": {
+  "ddl": "dc4d274154a1813bf8e54e0571a7a5ac4df93687a899f14a180ea39b4fb76649",
+  "records": {},
   "version": 1
  },
  "kv": {
@@ -112,6 +122,11 @@
   },
   "version": 2
  },
+ "receipt": {
+  "ddl": "f72a0818007fad766d4839c420db178ae113fb613f6f72eb9cdf178e4f5c9c88",
+  "records": {},
+  "version": 1
+ },
  "release": {
   "ddl": "1e381a678b118b3184ab8d12259ac1196e3aa5bd12969b4addc7df488323b9bc",
   "records": {
@@ -136,6 +151,16 @@
   },
   "version": 1
  },
+ "repos": {
+  "ddl": "de8111c309ce5235ae5ad33507699b273ac88d0604087a4d543ed82c323ee521",
+  "records": {
+   "ReposIndex": {
+    "schema": "76483ef88da1557f9192a68c03454e665641df390e2172e5166dea7e746e8b0f",
+    "v": 2
+   }
+  },
+  "version": 1
+ },
  "slots": {
   "ddl": "1b8c6bdb1ac8d6d0ffa3e96f93ce71dc020a159d02051aa30fc4b8e3b661be89",
   "records": {
@@ -144,6 +169,11 @@
     "v": 4
    }
   },
+  "version": 1
+ },
+ "ticket": {
+  "ddl": "0f660d7b20c4c7608e1587a18986f353ef328e7bd6b84bd7efda6624c58eecc7",
+  "records": {},
   "version": 1
  },
  "work": {

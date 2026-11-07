@@ -22,13 +22,13 @@ from taskloop.app.checks.runner import Checker
 from taskloop.app.pipeline import ended
 from taskloop.app.pipeline.blocked import Blocked, FixFailed
 from taskloop.app.release import reexec
-from taskloop.app.run.console import say
 from taskloop.app.run.context import RunContext
 from taskloop.app.run.facts import open_facts
 from taskloop.app.run.host import RunHost
 from taskloop.app.run.layout import RunLayout, finish_of, live_run, loop_id_of, loop_of, repo_of
 from taskloop.app.run.stages import run_stages
 from taskloop.app.run.state import carries_state
+from taskloop.app.track.console import say
 from taskloop.domain import outcome as oc
 from taskloop.stores.bundle import Stores
 from taskloop.stores.delegate import real_route

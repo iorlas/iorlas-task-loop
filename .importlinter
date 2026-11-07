@@ -218,8 +218,6 @@ source_modules =
     taskloop.app.track
     taskloop.app.workers
     taskloop.app.write
-    taskloop.app.run.ask_flow
-    taskloop.app.run.bead_env
     taskloop.app.pipeline.blocked
     taskloop.app.pipeline.budget
     taskloop.app.pipeline.waits
@@ -227,11 +225,9 @@ source_modules =
     taskloop.app.pipeline.closing_branch
     taskloop.app.pipeline.closing_decide
     taskloop.app.pipeline.closing_host
-    taskloop.app.run.closer_ports
     taskloop.app.pipeline.closing_notes
     taskloop.app.pipeline.closing_record
     taskloop.app.pipeline.closing_settle
-    taskloop.app.run.console
     taskloop.app.pipeline.crash
     taskloop.app.pipeline.lifecycle
     taskloop.app.pipeline.run
@@ -240,19 +236,14 @@ source_modules =
     taskloop.app.pipeline.ended
     taskloop.app.pipeline.finish
     taskloop.app.pipeline.outcomes
-    taskloop.app.run.preflight
     taskloop.app.pipeline.journal
     taskloop.app.pipeline.reflect
     taskloop.app.pipeline.reflect_prompt
-    taskloop.app.run.reload_ports
     taskloop.app.pipeline.reload
     taskloop.app.pipeline.requests
     taskloop.app.pipeline.resume
     taskloop.app.run.review_glue
     taskloop.app.run.running
-    taskloop.app.run.shared
-    taskloop.app.run.shell
-    taskloop.app.run.stage_checks
     taskloop.app.run.stage_rounds
     taskloop.app.run.stage_run
     taskloop.app.run.stages
@@ -268,33 +259,35 @@ source_modules =
     tlkernel
 forbidden_modules =
     taskloop.app.launch
-    taskloop.app.wire
+    taskloop.app.run.ask_flow
+    taskloop.app.run.bead_env
+    taskloop.app.run.closer_ports
     taskloop.app.run.context
     taskloop.app.run.engine
     taskloop.app.run.entry
+    taskloop.app.run.facts
     taskloop.app.run.fields
     taskloop.app.run.host
     taskloop.app.run.layout
-    taskloop.app.run.facts
     taskloop.app.run.parts_land
     taskloop.app.run.parts_plan
     taskloop.app.run.parts_run
     taskloop.app.run.plumbing
+    taskloop.app.run.preflight
     taskloop.app.run.reload_ports
     taskloop.app.run.run_once
+    taskloop.app.run.shared
+    taskloop.app.run.shell
+    taskloop.app.run.stage_checks
+    taskloop.app.wire
 allow_indirect_imports = True
 ignore_imports =
     # The baseline (tl-e5t0.30): edges that exist today. The contract fails on a new one; each removal shrinks this list, never grows it.
     taskloop.app.run.stage_rounds -> taskloop.app.run.host
     taskloop.app.run.stages -> taskloop.app.run.host
     taskloop.app.prune.runs -> taskloop.app.run.layout
-    taskloop.app.run.ask_flow -> taskloop.app.run.layout
-    taskloop.app.run.preflight -> taskloop.app.run.layout
     taskloop.app.run.stages -> taskloop.app.run.layout
     taskloop.app.run.stages -> taskloop.app.run.run_once
-    taskloop.app.run.closer_ports -> taskloop.app.wire.slots
-    taskloop.app.run.closer_ports -> taskloop.app.wire.closeguard
-    taskloop.app.run.preflight -> taskloop.app.wire.closeguard
     taskloop.app.run.running -> taskloop.app.wire.slots
     taskloop.app.run.stages -> taskloop.app.wire.closeguard
 

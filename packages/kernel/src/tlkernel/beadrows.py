@@ -6,6 +6,7 @@ from pathlib import Path
 
 from tlkernel import factorydb
 from tlkernel.bead import Bead
+from tlkernel.docrows import BEADCACHE_DOCS
 
 type Row = dict[str, object]
 
@@ -19,7 +20,7 @@ def row_of(bead: Bead) -> Row:
 
 def observation(con: sqlite3.Connection, repo_key: str) -> tuple[int | None, float | None, str, float | None]:
     """Marker, last success, error and last attempt, including a successful empty list."""
-    found = con.execute("SELECT v,t FROM kv WHERE k=?", ("beads." + repo_key,)).fetchone()
+    found = con.execute(f"SELECT v,t FROM {BEADCACHE_DOCS} WHERE k=?", ("beads." + repo_key,)).fetchone()
     if found is None:
         return None, None, "", None
     record = json.loads(found[0])
@@ -27,7 +28,7 @@ def observation(con: sqlite3.Connection, repo_key: str) -> tuple[int | None, flo
 
 
 def _record(con: sqlite3.Connection, repo_key: str, marker: int | None, ok_at: float | None, error: str, now: float) -> None:
-    con.execute("INSERT INTO kv(k,v,t) VALUES (?,?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v,t=excluded.t",
+    con.execute(f"INSERT INTO {BEADCACHE_DOCS}(k,v,t) VALUES (?,?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v,t=excluded.t",
                 ("beads." + repo_key, json.dumps({"marker": marker, "ok_at": ok_at, "error": error}), now))
 
 

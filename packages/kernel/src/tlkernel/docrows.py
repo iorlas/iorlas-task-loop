@@ -1,6 +1,6 @@
 """Keyed documents in factory.db with the Doc / DocSet face of the file stores: a checkpoint is a `checkpoint` row (revisioned, so a
-writer that read an older revision can be told), a follow-up outbox is a `kv` row. A key this tl does not know, a body of another `v` or a
-torn one is refused (no backward compatibility)."""
+writer that read an older revision can be told), a follow-up outbox is a `followup` row. A key this tl does not know,
+a body of another `v` or a torn one is refused (no backward compatibility)."""
 import json
 import sqlite3
 import time
@@ -12,6 +12,12 @@ from tlkernel.docstore import Absent, ForeignVersion, JsonStore, Present, Read, 
 from tlkernel.looprows import LoopRows
 from tlkernel.paths import ConfigDir
 from tlkernel.wire import Rec
+
+RECEIPT_DOCS = "receipt_doc"  # owner-command idempotency receipts
+BEADCACHE_DOCS = "bead_doc"  # index-owned tracker observations, separate from bead rows
+REPOS_DOCS = "repos_doc"  # the registered repositories index
+TICKET_DOCS = "ticket_doc"  # persistent slot ticket sequence counters
+INDEX_DOCS = "index_doc"  # dashboard index pass freshness
 
 WORKTREE_DOCS = "worktree_doc"  # ownership records of worktrees tl made
 DISK_DOCS = "disk_doc"  # the loop's hourly free-space samples

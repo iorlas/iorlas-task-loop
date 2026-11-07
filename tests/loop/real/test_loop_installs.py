@@ -27,9 +27,7 @@ import loop.test_loop_more as more
 from taskloop.adapters import childenv
 from taskloop.app.launch import loop_start as wstart
 from taskloop.app.loop.loop import Loop
-from taskloop.app.run import (
-    console,
-)
+from taskloop.app.track import console
 from tlkernel import wire
 from tlkernel.env import snapshot
 from tlkernel.loop import Carry, LoopState
