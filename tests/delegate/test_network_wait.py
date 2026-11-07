@@ -57,3 +57,19 @@ def test_network_never_returns_waits_exactly_cap_and_keeps_stop(monkeypatch):
     assert sleeps == [5, 10, 20, 40, 60, 120, 120, 120, 105]
     assert len(launches) == 1
     assert result == {key: value for key, value in stopped.items() if key != "started"}
+
+
+def test_a_failed_canary_is_the_answer_and_is_not_waited_on(monkeypatch):
+    clock, legs = FakeClock(), []
+    monkeypatch.setattr(net, "net_up", lambda lane: True)
+
+    def launch(d, brief, args, *rest):
+        legs.append(brief)
+        return {"outcome": "network", "started": True, "ref": "canary-session"}
+
+    monkeypatch.setattr(run.launch, "launch_worker", launch)
+    worker = run.Run(argparse.Namespace(resume=None, schema=None), {}, now=clock.now, sleep=clock.advance)
+    result = worker._launch({"lane": "lane", "model": "model"}, "original", "run", 0, RunHooks(), True)
+    assert len(legs) == 1  # the canary only: the real brief is never sent
+    assert result["outcome"] == "network"
+    assert clock.now() - 1_000_000 == 0
