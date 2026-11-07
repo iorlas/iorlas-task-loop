@@ -1,20 +1,21 @@
 """The look judge and what the pictures say to the writer, the reviewer and the verifier: a visual write's render rounds, the judge's
 findings, a look item's verdict."""
 import shutil
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
 
 from tlkernel import workswitch as switch
 from tlkernel.checkpoint import Defect
 from tlkernel.plancheck import StageData
 from tlkernel.stagefacts import RunFacts
+from tlkernel.wire import Open
+
+from tlwork.look import shotspec as looks
+from tlwork.look.host import LookHost, LookPorts
+from tlwork.look.prompts import LOOK_FEEDBACK, LOOK_WRITE_TABLE
+from tlwork.look.state import LookState
 from tlwork.work.matchers import Wording
 from tlwork.work.skip import SkipKind
-
-from taskloop.adapters import looks
-from taskloop.app.look.host import LookHost, LookPorts
-from taskloop.app.look.prompts import LOOK_FEEDBACK, LOOK_WRITE_TABLE
-from taskloop.app.look.state import LookState
 
 NOT_VISUAL = "\nlook: empty when nothing here is visual.\n"
 
@@ -55,19 +56,20 @@ class Judge:
                  for f in d["findings"] if f["verdict"] == "defect"]
         return found, note + d["summary"]
 
-    def unjudged(self, b: Any, rnd: int) -> tuple[list[Defect], str]:
+    def unjudged(self, b: Exception, rnd: int) -> tuple[list[Defect], str]:
         """No lane for the judge: the pictures go unjudged to the owner-look bead; a look judge never parks the bead."""
         hand, ports, state = self.hand, self.ports, self.state
+        why = str(getattr(b, "why", b))
         st = getattr(b, "stop", None)
-        if not b.why.startswith("paused: no lane") or (st is not None and st.permanence == "needs_owner" and st.reason != "no_lane"):
+        if not why.startswith("paused: no lane") or (st is not None and st.permanence == "needs_owner" and st.reason != "no_lane"):
             raise b  # the network (the step resumes), a crash, a login or credit pause: not this node's to swallow
         hand.retry_after = 0.0  # the run goes on: discard the pause retry time
         ports.steps.outcome("skipped", "no lane")
-        ports.warn(f"the look judge had no lane, the pictures are not judged: {b.why[:200]}")
-        state.unjudged[f"look judge, round {rnd}"] = "no lane: " + b.why[:160]
+        ports.warn(f"the look judge had no lane, the pictures are not judged: {why[:200]}")
+        state.unjudged[f"look judge, round {rnd}"] = "no lane: " + why[:160]
         return [], "(not judged: no lane for the look judge)"
 
-    def look_step(self, st: StageData, w: Any, name: str, last: bool = True, *, checks: bool = True,
+    def look_step(self, st: StageData, w: Open, name: str, last: bool = True, *, checks: bool = True,
                   family: str | None = None) -> str:
         """After a visual write: the cheap checks, the shots the writer asked for, the look judge (`family`: the writer's, not yet handed
         on). -> the feedback that sends the writer back with the defects (text and picture paths), or "" to go on to the full checks.
@@ -122,7 +124,7 @@ class Judge:
                 "If the change is clearly logic-only and nothing on screen differs, put a one-line reason in logic_only; "
                 "otherwise leave logic_only empty.")
 
-    def look_review(self, st: StageData, w: Any, fix: bool = False) -> str:
+    def look_review(self, st: StageData, w: Open, fix: bool = False) -> str:
         facts, ports, state = self.facts, self.ports, self.state
         if fix or not ports.pictures.stage_visual(st):
             return ""
@@ -145,7 +147,7 @@ class Judge:
                      "can differ; if not, give a medium finding.")
         return text + NOT_VISUAL
 
-    def look_judged(self, review: Any, st: StageData, w: Any, fix: bool) -> None:
+    def look_judged(self, review: Open, st: StageData, w: Open, fix: bool) -> None:
         """No screenshot and no logic-only reason on a visual stage is a warning; the reviewer's look is kept."""
         facts, ports, state = self.facts, self.ports, self.state
         if fix or not ports.pictures.stage_visual(st):
@@ -157,7 +159,7 @@ class Judge:
                     if ports.pictures.shot_methods() else f"saved no screenshot of any changed screen or state in {facts.evidence_dir}/")
             ports.warn(f"this stage changes visual paths but {what}")
 
-    def look_verify(self, gaps: Any) -> str:
+    def look_verify(self, gaps: Sequence[Open]) -> str:
         facts, ports = self.facts, self.ports
         looked = [n for n, u in enumerate(gaps, 1) if self.is_look(u)]
         if not looked:
@@ -167,7 +169,7 @@ class Judge:
                 f"({seen}), against the task's done-when and any linked decision or reference image. Open each one. settled when it "
                 "matches (evidence names the screenshot and what you saw); wrong when it does not (why says what differs).\n")
 
-    def look_verdict(self, u: Any, v: str, a: Any, why: str) -> tuple[str, Any, str]:
+    def look_verdict(self, u: Open, v: str, a: Open, why: str) -> tuple[str, Open, str]:
         """A look item is settled only on evidence that names a screenshot file. Otherwise it goes back to the writer
         once, noted as not judged (a later verify that settles it clears the note); the second time the run moves on.
         The owner-look bead carries the note. The owner is never asked."""
@@ -192,5 +194,5 @@ class Judge:
         ports.warn("a look item is still not judged; the owner is not asked, it waits in the owner-look bead")
         return "settled", dict(a, evidence="agent could not judge: " + reason), reason
 
-    def is_look(self, u: Any) -> bool:
+    def is_look(self, u: Mapping[str, str]) -> bool:
         return bool(self.ports.pictures.visual_cfg()) and Wording.is_look(u["what"])

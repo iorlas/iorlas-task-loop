@@ -156,7 +156,7 @@ layers =
     wire
     loop
     land
-    write | look
+    write
     report
     reconcile
     release
@@ -275,7 +275,7 @@ source_modules =
     taskloop.app.checks
     taskloop.app.doctor
     taskloop.app.land
-    taskloop.app.look
+    tlwork.look
     taskloop.app.loop
     tlwork.plan
     taskloop.app.prune
@@ -361,7 +361,7 @@ forbidden_modules =
     tlwork.plan
     tlwork.review
     taskloop.domain.write
-    taskloop.domain.look
+    tlwork.look
     taskloop.domain.asks
     taskloop.domain.land
 allow_indirect_imports = True
