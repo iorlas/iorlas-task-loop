@@ -9,13 +9,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.fake_loop_env import slot_loop_env
-from support.memstores import MemTickets
 
 from slots.real.test_worktrees import Rig, git
 from taskloop.app.loop.take import Taker
 from taskloop.app.slots.env import SlotEnv
 from taskloop.app.slots.pool import SlotPool
 from tlkernel.config import SlotsConfig
+from tltestkit.memdoc import MemTickets
 
 
 class SlotRecovery(Rig):

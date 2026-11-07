@@ -4,11 +4,11 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
-from support.memdoc import MemDoc
 from tlkernel.checkpoint import SECTION_TYPES, Checkpoint, CursorBody, join, split
 from tlkernel.docrows import StaleRevision
 from tlkernel.docstore import Absent, ForeignVersion, Present, Read, Torn, refusal
 from tlkernel.wire import Rec, Refused
+from tltestkit.memdoc import MemDoc
 
 
 class MemCheckpointDoc:
