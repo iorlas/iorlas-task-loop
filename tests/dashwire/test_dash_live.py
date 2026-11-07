@@ -36,7 +36,7 @@ class Feed(Case):
             self.refresh(run)
             first = live.page(run)
             n = live.MAX_PAGE + 50
-            put(lf, [{"t": T + 10 + i / 1000, "k": "msg", "text": f"m{i}"} for i in range(n)])
+            put(lf, [{"t": T + 10 + i / 1000, "kind": "msg", "text": f"m{i}"} for i in range(n)])
             self.refresh(run)
             seen, cursor = [], live.decode(first["cursor"])
             for _ in range(5):
@@ -54,7 +54,8 @@ class Feed(Case):
             before = [e.get("text") for e in run.events()]
             assert "between the start and the command" in before
             replacement = lf + ".new"
-            put(replacement, [{"t": T + 6.5, "k": "msg", "text": "x" * 400}, {"t": T + 7, "k": "msg", "text": "after replacement"}], "w")
+            put(replacement, [{"t": T + 6.5, "kind": "msg", "text": "x" * 400},
+                              {"t": T + 7, "kind": "msg", "text": "after replacement"}], "w")
             os.replace(replacement, lf)
             self.refresh(run)
             texts = [e.get("text") for e in run.events()]
@@ -94,22 +95,22 @@ class Feed(Case):
             assert ts == sorted(ts)
             assert [e["seq"].split(":")[0] for e in a["events"]][:3] == ["engine", "engine", "engine"]
             assert len({e["seq"] for e in a["events"]}) == len(a["events"])
-            pairs = {(e["src"], e["k"], e.get("id")) for e in a["events"]}
+            pairs = {(e["src"], e["kind"], e.get("id")) for e in a["events"]}
             assert ("engine", "cmd_end", "m1") in pairs
             assert ("01-write", "cmd_start", "1") in pairs
             assert live.page(run, live.decode(a["cursor"]))["events"] == []  # nothing new: nothing
-            put(lf, [{"t": T + 9, "k": "cmd_end", "id": "1", "exit": 1, "out": "boom", "secs": 2.0}])
+            put(lf, [{"t": T + 9, "kind": "cmd_end", "id": "1", "exit": 1, "out": "boom", "secs": 2.0}])
             with open(lf, "a") as f:
-                f.write(f'{{"t": {T + 10}, "k": "msg", "te')  # a half-written line waits
+                f.write(f'{{"t": {T + 10}, "kind": "msg", "te')  # a half-written line waits
             self.refresh(run)
             b = live.page(run, live.decode(a["cursor"]))
-            assert [(e["k"], e["id"]) for e in b["events"]] == [("cmd_end", "1")]
+            assert [(e["kind"], e["id"]) for e in b["events"]] == [("cmd_end", "1")]
             with open(lf, "a") as f:
                 f.write('xt": "hi"}\n')
             put(log, [typed("warn", T + 11, text="slow")])
             self.refresh(run)
             c = live.page(run, live.decode(b["cursor"]))
-            assert [(x["k"], x["t"]) for x in c["events"]] == [("msg", T + 10), ("warn", T + 11)]
+            assert [(x["kind"], x["t"]) for x in c["events"]] == [("msg", T + 10), ("warn", T + 11)]
             assert live.decode("garbage!") is None
 
     def test_every_engine_kind_passes_through(self):
@@ -127,7 +128,7 @@ class Feed(Case):
                 ],
             )
             self.refresh(run)
-            got = {e["k"]: e for e in live.page(run)["events"]}
+            got = {e["kind"]: e for e in live.page(run)["events"]}
             for k in ("wait_start", "wait_end", "vendor_error", "kill", "lock", "unlock"):
                 assert k in got
             assert (got["wait_end"]["wait_seconds"], got["vendor_error"]["reason"]) == (60, "hung")
@@ -140,7 +141,7 @@ class Feed(Case):
             put(log, [typed("warn", T + 20, text="appended")])
             fresh = live.LiveRun(run.cfg, run.run)
             fresh.refresh()
-            assert [e["k"] for e in live.page(fresh, live.decode(cursor))["events"]] == ["warn"]
+            assert [e["kind"] for e in live.page(fresh, live.decode(cursor))["events"]] == ["warn"]
 
     def test_a_run_without_worker_files(self):
         with TemporaryDirectory() as d:
@@ -166,12 +167,12 @@ class Feed(Case):
 
             def grow(secs):
                 nap(secs)
-                put(lf, [{"t": T + 30, "k": "tool_start", "id": "9", "text": "edit"}])
+                put(lf, [{"t": T + 30, "kind": "tool_start", "id": "9", "text": "edit"}])
 
             now[0], naps[:] = 0.0, []
             got = live.poll(run, live.decode(cur), wait=2, sleep=grow, clock=lambda: now[0])
             assert len(naps) == 1  # a file grew: it returned at once
-            assert [e["k"] for e in got["events"]] == ["tool_start"]
+            assert [e["kind"] for e in got["events"]] == ["tool_start"]
 
 
 class CallSite(Case):
@@ -202,3 +203,12 @@ class CallSite(Case):
             assert os.path.isdir(os.path.dirname(p1))
             src = Path(worker_call.__file__).read_text(encoding="utf-8")
             assert src.count("e.live(") == 1  # the one delegate call site passes it
+
+
+def test_old_worker_tag_is_ignored(tmp_path):
+    bundle, lf = make_run(str(tmp_path))
+    put(lf, [{"k": "msg", "t": T + 20, "text": "old tag"}])
+    run = live.LiveRun(ConfigDir(tmp_path / "task-loop"), bundle.run)
+    ingest(run.cfg, time.time())
+    run.refresh()
+    assert "old tag" not in [event.get("text") for event in run.events()]

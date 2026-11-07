@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping
 from typing import IO, Literal
 
 from taskloop.adapters import deadline, procs
-from taskloop.adapters.childenv import tool_env
+from tlkernel.childenv import tool_env
 from tlkernel.env import Env
 from tlkernel.procport import Hold, Ran, RanBytes, Streamed, WaitTimeout
 

@@ -160,9 +160,9 @@ class Loop(Core):
 
     # ---- passes ------------------------------------------------------------------------------------------------
     def run(self) -> int:
-        for run in runlife.reconcile(self.env.cfgdir, self.env.now()):  # a run whose process is gone is lost once; nobody guesses later
-            self.say(f"run {run} is lost: its process is gone and it recorded no end")
         while True:
+            for run in runlife.reconcile(self.env.cfgdir, self.env.now()):
+                self.say(f"run {run} is lost: its process is gone and it recorded no end")
             code = self.step()
             if code is not None:
                 return code
