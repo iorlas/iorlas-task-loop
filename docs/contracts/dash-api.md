@@ -1,6 +1,6 @@
 # dashboard API: contract
 
-Status: built; the only API the dashboard has. The page (`src/taskloop_dash/static/index.html`) is served at `/`, its modules
+Status: built; the only API the dashboard has. The page (`packages/dash/src/tldash/static/index.html`) is served at `/`, its modules
 beside it, and talks to nothing else.
 Source of truth: `packages/kernel/src/tlkernel/dash.py` (records, enums, `WRITES`). Sample data: `tests/fixtures/dash/` (built by
 `tests/support/dash_fixtures.py` from the round-8b mock; `UPDATE_GOLDEN=1` rewrites it). Test: `tests/contracts/test_dash.py`.
@@ -160,7 +160,7 @@ Tailnet reachability remains an owner access grant; these checks prevent browser
 
 ## Who builds what
 
-- **Frontend** (`taskloop_dash` static assets): layout, filters, deep links, drafts, the 5 s answer hold. It derives nothing
+- **Frontend** (`tldash` static assets): layout, filters, deep links, drafts, the 5 s answer hold. It derives nothing
   listed below.
 - **Backend** (pure builders under `views/`, each with fixture tests): column and marker as pure functions over typed facts,
   status line, passes and pieces, comeback joins, roll-up (`Epic.done/total`), goal roots, lane forecast, learning series,

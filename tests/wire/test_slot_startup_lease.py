@@ -1,8 +1,8 @@
 """A claimed slot is `setup` (starting) only within the startup lease of its claim; past it the start stalled."""
 
 import pytest
-from support.dashlogs import T, bead
 
+from tldash.testing import T, bead
 from tlkernel.slottable import STARTUP_LEASE_S, build_slot_table
 
 

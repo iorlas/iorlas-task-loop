@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 from support.fakes import FakeBeadStore
 
-from taskloop_dash.env import Env, Ports
-from taskloop_dash.index import Indexer, reindex
-from taskloop_dash.readers.beads import Beads
-from taskloop_dash.readers.records import Records
+from tldash.env import Env, Ports
+from tldash.index import Indexer, reindex
+from tldash.readers.beads import Beads
+from tldash.readers.records import Records
 from tlkernel.bead import BdError, Bead
 from tlkernel.beadsport import BdFailure, BeadQuery
 from tlkernel.ids import BeadId

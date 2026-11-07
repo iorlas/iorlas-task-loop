@@ -11,7 +11,7 @@ SECTION = "importlinter:contract:boundary"
 
 @pytest.mark.parametrize(("path", "expected"), [
     (A, "app/plan"), ("src/taskloop/stores/db.py", "stores"),
-    ("src/taskloop_dash/page.py", "taskloop_dash"), ("src/delegate/main.py", "delegate"),
+    ("packages/dash/src/tldash/page.py", "packages/dash"), ("src/delegate/main.py", "delegate"),
     ("packages/kernel/src/tlkernel/ids.py", "packages/kernel"),
     ("src/taskloop/main.py", "taskloop:main.py"), ("src/taskloop/app/main.py", "app:main.py"),
     ("tests/main.py", None), ("dev/main.py", None), ("skills/main.py", None), ("src/taskloop/a.txt", None),

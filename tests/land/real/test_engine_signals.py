@@ -14,9 +14,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from support import gitq
 from support.engine_case import EngineTest, real_git, real_proc
-from support.waits import until
 
 from tltestkit.plans import CLEAN, PLAN, WRITE
+from tltestkit.waits import until
 
 # isort: split
 from taskloop.app.run import engine

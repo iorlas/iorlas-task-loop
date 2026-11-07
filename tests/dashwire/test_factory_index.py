@@ -11,14 +11,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from support.dashlogs import RunScript, T
-from support.waits import settle
 
 from dashwire import test_dash_api as fixtures
-from taskloop_dash.app import Dash
-from taskloop_dash.env import Env
-from taskloop_dash.index import Indexer, reindex
-from taskloop_dash.readers import dbruns, runprojection
+from tldash.app import Dash
+from tldash.env import Env
+from tldash.index import Indexer, reindex
+from tldash.readers import dbruns, runprojection
+from tldash.testing import RunScript, T
 from tlkernel import factorydb
 from tlkernel.ids import loop_key
 from tlkernel.paths import ConfigDir
@@ -27,6 +26,7 @@ from tltestkit.case import Case
 from tltestkit.narrow import must
 from tltestkit.runs import manifest
 from tltestkit.tmpdir import TemporaryDirectory
+from tltestkit.waits import settle
 
 NOW = T + 3600
 
@@ -137,7 +137,7 @@ class FactoryIndex(Case):
 
     def test_restart_parses_only_appended_complete_lines(self):
         self.ingest()
-        with patch("taskloop_dash.jsonl.parse", side_effect=AssertionError("old log reparsed")):
+        with patch("tldash.jsonl.parse", side_effect=AssertionError("old log reparsed")):
             self.ingest()
         path = self.paths[0]
         with path.open("ab") as file:
@@ -177,8 +177,8 @@ class FactoryIndex(Case):
     def test_drawer_and_live_use_only_the_log_reader(self):
         self.ingest()
         dash = Dash(Env(self.cfg.root, clock=lambda: NOW))
-        with patch("taskloop_dash.readers.logs.Logs.records", return_value=()) as history, \
-                patch("taskloop_dash.readers.logs.Logs.read", return_value=((), "")) as tail, \
+        with patch("tldash.readers.logs.Logs.records", return_value=()) as history, \
+                patch("tldash.readers.logs.Logs.read", return_value=((), "")) as tail, \
                 patch("builtins.open", side_effect=AssertionError("caller opened a run log")):
             assert dash.reads.worlds.bead_runs("/repo", "b-0")
             history.assert_called_once_with(self.paths[0].parent.name)
@@ -218,7 +218,7 @@ class FactoryIndex(Case):
         assert world.runs
         assert not first.server.database_error
         now[0] += 6
-        with patch("taskloop_dash.readers.logs.Logs.records", side_effect=AssertionError("unexpected log read for state")):
+        with patch("tldash.readers.logs.Logs.records", side_effect=AssertionError("unexpected log read for state")):
             world, stale = dash.reads.built()
             assert world.runs == {}
             assert stale.server.database_error
@@ -305,10 +305,10 @@ class LogBoundary(fixtures.ApiFixture):
             return original(path, *args, **kw)
 
         with patch("builtins.open", guarded), patch("io.open", guarded), \
-                patch("taskloop_dash.readers.logs.Logs.records", return_value=()) as history, \
-                patch("taskloop_dash.readers.logs.Logs.read", return_value=((), "")) as tail, \
-                patch("taskloop_dash.readers.logs.Logs.console", return_value=[]), \
-                patch("taskloop_dash.readers.logs.Logs.calls", return_value={}):
+                patch("tldash.readers.logs.Logs.records", return_value=()) as history, \
+                patch("tldash.readers.logs.Logs.read", return_value=((), "")) as tail, \
+                patch("tldash.readers.logs.Logs.console", return_value=[]), \
+                patch("tldash.readers.logs.Logs.calls", return_value={}):
             detail = self.dash.reads.bead(loop_key(self.repo), "b-1")
             assert detail is not None
             code, _ = self.dash.live.page(loop_key(self.repo), "b-1")

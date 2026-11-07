@@ -43,7 +43,7 @@ def hint(node: str, row: dict[str, float]) -> str:
     real = "/real/" in node or "/e2e/" in node
     if wall > 2 * cpu + 1:
         if real:
-            return "waits on a real process or socket: wait for its event or file (support.waits.until), not a fixed sleep or the clock"
+            return "waits on a real process or socket: wait for its event or file (tltestkit.waits.until), not a fixed sleep or the clock"
         if row.get("setup_wall", 0) + row.get("teardown_wall", 0) > row.get("call_wall", 0):
             return "waits in setup or teardown (a fixture's process, disk or sqlite work): copy a template or fake the port"
         return "waits: inject the clock (fake_clock), no time.sleep"

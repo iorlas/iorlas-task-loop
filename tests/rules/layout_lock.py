@@ -25,7 +25,7 @@ def node_of(path: str) -> str | None:  # noqa: PLR0911  one return per kind of n
         return None
     if len(parts) >= 4 and parts[0] == "packages" and parts[2] == "src":
         return f"packages/{parts[1]}"
-    if len(parts) >= 3 and parts[:2] in (("src", "taskloop_dash"), ("src", "delegate")):
+    if len(parts) >= 3 and parts[:2] in (("src", "delegate"),):
         return parts[1]
     if len(parts) < 3 or parts[:2] != ("src", "taskloop"):
         return None

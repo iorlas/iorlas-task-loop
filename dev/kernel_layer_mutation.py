@@ -35,7 +35,7 @@ def main() -> int:
     lint = ["uv", "tool", "run", "--with", "msgspec", "--from", f"import-linter@{PINS['pipx:import-linter']}", "lint-imports"]
     cases = [
         ("taskloop", "from taskloop.domain import versions  # seeded\n"),
-        ("dash", "from taskloop_dash import env  # seeded\n"),
+        ("dash", "from tldash import env  # seeded\n"),
         ("delegate", "from delegate import api  # seeded\n"),
     ]
     bad = 0

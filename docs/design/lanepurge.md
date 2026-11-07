@@ -7,7 +7,7 @@ Design note only; no code moves with it. The names are fixed by `docs/glossary.m
 | area | files | lines |
 |---|---|---|
 | src/taskloop | 106 | 463 |
-| src/taskloop_dash (py + static js/css) | 29 | 131 |
+| packages/dash/src/tldash (py + static js/css) | 29 | 131 |
 | src/delegate | 43 | 785 |
 | skills/ (SKILL.md, tl.py, _vendor) | 10 | 54 |
 | tests (tests/delegate 107 and tests/fixtures 59 files in the plain `lane` count) | 289 | 2318 |

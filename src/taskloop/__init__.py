@@ -15,6 +15,6 @@ if _VENDOR not in sys.path:
     sys.path.append(_VENDOR)
 
 if hasattr(sys, "set_lazy_imports"):
-    ours = ("taskloop", "taskloop_dash", "tlkernel", "tl")
+    ours = ("taskloop", "tldash", "tlkernel", "tl")
     sys.set_lazy_imports_filter(lambda importer, name, fromlist=None: name.partition(".")[0] in ours)
     sys.set_lazy_imports("all")

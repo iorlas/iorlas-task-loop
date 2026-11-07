@@ -6,6 +6,7 @@ requires-python = ">=3.15"
 members = [
     "iorlas-task-loop",
     "tlartifacts",
+    "tldash",
     "tlgate",
     "tlkernel",
     "tlpipeline",
@@ -169,6 +170,31 @@ requires-dist = [{ name = "tlkernel", editable = "packages/kernel" }]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "pytest" },
+    { name = "tltestkit", editable = "packages/testkit" },
+]
+
+[[package]]
+name = "tldash"
+version = "0"
+source = { editable = "packages/dash" }
+dependencies = [
+    { name = "tlkernel" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "msgspec" },
+    { name = "pytest" },
+    { name = "tltestkit" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "tlkernel", editable = "packages/kernel" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "msgspec" },
     { name = "pytest" },
     { name = "tltestkit", editable = "packages/testkit" },
 ]

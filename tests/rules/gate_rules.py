@@ -53,7 +53,7 @@ VENDOR = Vendor(VENDOR_DIR, ROOT / "dev" / "vendor.json")
 FILE_CAP, TEST_FILE_CAP, FUNC_CAP = 400, 800, 80
 
 # -- per-repo constants (the only lines that differ between iorlas-task-loop and iorlas-delegate) ------------------------------------
-DASH_PKGS = frozenset({"taskloop_dash"})
+DASH_PKGS = frozenset({"tldash"})
 FOREIGN_NAMES = ()                          # this plugin never names these in src/ text
 PATH_LITERALS = ("engine/", "plan.json", "engine.lock", ".task/", "asks/", "checkpoints/")
 
@@ -322,7 +322,8 @@ class Signals(Case):
         """tl-2ve: the dashboard only reads; bd comes in as `Ports.store` (the engine's BdStore, the one process site)."""
         bad = [
             p.relative_to(ROOT).as_posix()
-            for p in sorted((ROOT / "src" / "taskloop_dash").rglob("*.py"))
+            for p in sorted((ROOT / "packages" / "dash" / "src" / "tldash").rglob("*.py"))
+            if p.name != "testing.py"  # the fixture helpers (RunScript.run writes log lines); not server code
             if re.search(r"\bsubprocess\b|\bPopen\b|\bos\.(system|exec\w*|spawn\w*)\(|\brun\(|\bports\.bd\b", p.read_text(encoding="utf-8"))
         ]
         assert bad == []

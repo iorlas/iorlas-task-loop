@@ -2,7 +2,7 @@
 
 import pytest
 
-from taskloop_dash.readers.beads import row_of
+from tldash.readers.beads import row_of
 from tlkernel import beadrows, factorydb
 from tlkernel.bead import Bead, Dep
 from tlkernel.ids import BeadId

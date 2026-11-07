@@ -6,12 +6,12 @@ import json
 import types
 
 from support import engine_case as te
-from support.dashlogs import RunScript
 
 from taskloop.adapters.agent import last_event_t
 from taskloop.stores.runlog import RunLog
-from taskloop_dash.views import columns, passes
-from taskloop_dash.views.runfacts import run_of
+from tldash.testing import RunScript
+from tldash.views import columns, passes
+from tldash.views.runfacts import run_of
 from tlkernel import log as rec
 from tlkernel.checks import CheckResult, CheckRun
 from tlkernel.dash import Marker

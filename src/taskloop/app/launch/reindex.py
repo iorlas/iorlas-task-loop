@@ -4,9 +4,9 @@ from tlkernel.paths import ConfigDir
 
 from taskloop.adapters import factorybackup
 from taskloop.app.launch.dash_ports import store
-from taskloop_dash.env import Env, Ports
-from taskloop_dash.index import reindex
-from taskloop_dash.readers.records import Records
+from tldash.env import Env, Ports
+from tldash.index import reindex
+from tldash.readers.records import Records
 
 
 def run(cfg: ConfigDir) -> int:

@@ -33,15 +33,15 @@ LEFT = {  # (file, class): constructions; delete a line when the site takes its 
     ("packages/pipeline/src/tlpipeline/reload.py", "RunRows"): 1,
     ("src/taskloop/cli/land.py", "RunLog"): 1,
     ("src/taskloop/cli/land_stack.py", "RunLog"): 1,
-    ("src/taskloop_dash/api/writes.py", "AskStore"): 1,
-    ("src/taskloop_dash/readers/world.py", "AdrStore"): 1,
-    ("src/taskloop_dash/readers/world.py", "LoopRows"): 1,
+    ("packages/dash/src/tldash/api/writes.py", "AskStore"): 1,
+    ("packages/dash/src/tldash/readers/world.py", "AdrStore"): 1,
+    ("packages/dash/src/tldash/readers/world.py", "LoopRows"): 1,
 }
 
 
 def constructions() -> Counter[tuple[str, str]]:
     found: Counter[tuple[str, str]] = Counter()
-    for root in ("src/taskloop", "src/taskloop_dash", "packages/pipeline/src/tlpipeline"):
+    for root in ("src/taskloop", "packages/dash/src/tldash", "packages/pipeline/src/tlpipeline"):
         for path in sorted((ROOT / root).rglob("*.py")):
             rel = path.relative_to(ROOT).as_posix()
             if rel.startswith(STORE_LAYER):

@@ -8,17 +8,17 @@ from tltestkit.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 ROOT = Path(__file__).resolve().parents[2]
-DASH = ROOT / "src" / "taskloop_dash"
+DASH = ROOT / "packages" / "dash" / "src" / "tldash"
 PATHS = ROOT / "packages" / "kernel" / "src" / "tlkernel" / "paths.py"
 PLAIN_PYTHON = {"prepush.py", "layout_migrate.py", "key_migrate.py"}  # no record in the hook (.importlinter); migrators name OLD places
 STAGE_PATHS = {
     ROOT / "src" / name for name in (
         "taskloop/app/land/paths.py", "taskloop/app/asks/paths.py",
         "taskloop/app/release/paths.py", "taskloop/app/prune/paths.py",
-        "taskloop/adapters/layout_paths.py", "taskloop_dash/paths.py",
+        "taskloop/adapters/layout_paths.py",
     )
-} | {ROOT / "packages/artifacts/src/tlartifacts/paths.py", ROOT / "packages/slots/src/tlslots/paths.py"}
-MAKES_CONFIGDIR = {"env.py", "bind.py"}  # where the config root is taken from the process: everything else is handed a ConfigDir
+} | {ROOT / "packages/artifacts/src/tlartifacts/paths.py", ROOT / "packages/slots/src/tlslots/paths.py", DASH / "paths.py"}
+MAKES_CONFIGDIR = {"env.py", "bind.py", "testing.py"}  # where the config root is made: everything else is handed a ConfigDir
 
 
 def state_names() -> set[str]:

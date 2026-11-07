@@ -1,5 +1,5 @@
 """The engine's machine-readable trace (step, call, transition, checks and run records of the typed EngineLog) and the dashboard
-timeline built from it: the contract between the engine and taskloop_dash (tlkernel.log)."""
+timeline built from it: the contract between the engine and tldash (tlkernel.log)."""
 
 import io
 import json
@@ -25,7 +25,7 @@ from support.who import who  # noqa: E402
 
 from taskloop.app.track import verbs  # noqa: E402
 from taskloop.stores.real import real_stores  # noqa: E402
-from taskloop_dash import jsonl  # noqa: E402
+from tldash import jsonl  # noqa: E402
 from tlkernel import log as rec  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlkernel.ids import BeadId  # noqa: E402

@@ -22,13 +22,13 @@ STAGES = {
     "workers": "workers", "checks": "gate", "land": "land", "release": "release", "reconcile": "release", "slots": "slots", "asks": "asks",
     "report": "report", "track": "track", "doctor": "doctor", "lanes": "delegate-glue", "beads": "beads", "layout": "store",
 }
-TOP = {"taskloop_dash": "dash", "delegate": "delegate", "hook": "hook", "cli": "cli", "stores": "store"}
+TOP = {"tldash": "dash", "delegate": "delegate", "hook": "hook", "cli": "cli", "stores": "store"}
 
 
 def stage_of(path):
     """The stage a src file belongs to by its folder (app/<slice>, domain/<slice>, a top-level package), else 'kernel'."""
     parts = path.split("/")
-    if len(parts) > 2 and parts[0] == "packages" and parts[2] == "src" and parts[1] in {"kernel", "slots", "work"}:
+    if len(parts) > 2 and parts[0] == "packages" and parts[2] == "src" and parts[1] in {"dash", "kernel", "slots", "work"}:
         return parts[1]
     if parts[0] != "src":
         return None

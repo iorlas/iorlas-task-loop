@@ -27,7 +27,7 @@ Status: assessment, 2026-11-06 (ARCHVERT, owner directive: stage packages are GO
 | `app/loop/*`, `app/prune/*` | node (loop orchestration, prune) | loop is a node with a root-shaped `take.py` |
 | checks (gate), land, slots, asks, release, report, track, doctor | node | clean already |
 | plan, write, review, look, artifacts | node (**work**) | blocked by `Any` host |
-| `delegate`, `taskloop_dash` | already separate top-level packages | keep; add contracts |
+| `delegate`, `tldash` | already separate top-level packages | keep; add contracts |
 | `contracts/` | kernel + stage-owned contracts mixed | 22 single-consumer contracts move to their stage (C3) |
 
 ## Target

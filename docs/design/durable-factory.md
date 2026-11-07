@@ -965,7 +965,7 @@ licenses and cp315 wheels, psycopg-binary cp315 wheels, Procrastinate/arq/dramat
 both the durable journal of Parts A/B and the dashboard's read model. Order: an indexer extracts state facts from the files first (state files stay the
 source of truth until each family's flip), then the engine writes the DB directly and that family's file path is removed in the same release. The DBOS spike (`spike/dbos-spike-criteria.md`) is the
 alternative this has to beat; nothing here repeats it. Code cited at `~/Workspaces/iorlas-task-loop` `e6c7f2a7` (0.23.293): `tl/` =
-`src/taskloop/`, `dash/` = `src/taskloop_dash/`. Sizes are this devbox's `~/.config/task-loop` (`du`, `wc -l`, today); the Mac's are not
+`src/taskloop/`, `dash/` = `packages/dash/src/tldash/`. Sizes are this devbox's `~/.config/task-loop` (`du`, `wc -l`, today); the Mac's are not
 readable from here (unverified). Every line number below was opened; "(unverified)" marks the rest.
 
 **The finding that changes the plan.** Reading the code, the most likely cause of the slow dashboard is not the number of files.

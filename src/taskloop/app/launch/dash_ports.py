@@ -1,4 +1,4 @@
-"""The dashboard's ports, made from the engine code: the read-only facts the package taskloop_dash may not import (slot capacity),
+"""The dashboard's ports, made from the engine code: the read-only facts the package tldash may not import (slot capacity),
 the owner's writes through the intake, and bd through the engine's adapter."""
 
 import os
@@ -33,7 +33,7 @@ from taskloop.app.report.card import score_of
 from taskloop.app.track.trail import now
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import real, slotfx
-from taskloop_dash.env import Ports
+from tldash.env import Ports
 
 DASH_ACTOR = "tl-dash"  # the dashboard's bd actor
 
@@ -141,7 +141,7 @@ def owner_intake(asks: AskStore, store_of: Callable[[str], Any], clock: Callable
 
 
 def ports(env: Env) -> Ports:
-    """`python3 -m taskloop_dash --ports taskloop.app.launch.dash_ports:ports`: the dashboard builds its ports from the engine's code."""
+    """`python3 -m tldash --ports taskloop.app.launch.dash_ports:ports`: the dashboard builds its ports from the engine's code."""
     git = real.git(env)
     home = ConfigDir(config_dir(env))
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-STATIC = Path(__file__).resolve().parents[2] / "src" / "taskloop_dash" / "static"
+STATIC = Path(__file__).resolve().parents[2] / "packages" / "dash" / "src" / "tldash" / "static"
 SINK = re.compile(r"dangerouslySetInnerHTML|\.innerHTML|\.outerHTML|insertAdjacentHTML|document\.write")
 OURS = [p for p in sorted(STATIC.rglob("*")) if p.suffix in {".js", ".html"} and "vendor" not in p.parts]
 
