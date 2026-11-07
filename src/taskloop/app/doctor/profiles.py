@@ -7,7 +7,6 @@ from pathlib import Path
 from tlkernel import config, profile_at
 from tlkernel.gitport import Git
 from tlkernel.rowstores import ReposStore
-from tlkernel.slots import NotARepo, SlotGitError
 
 from taskloop.adapters.gitmemo import ref_files
 from taskloop.adapters.gitrepo import Sig, git_dirs, is_dir_sig, sig
@@ -17,12 +16,7 @@ FILE = profile_at.FILE
 
 def _base_name(repo: str | Path) -> str:
     """The base ref the working tree's profile names (engine.base), the default when it names none or does not parse."""
-    try:
-        engine = (profile_at.raw_in(repo) or {}).get("engine")
-        name = engine.get("base") if isinstance(engine, dict) else None
-    except (OSError, ValueError, AttributeError):
-        name = None
-    return name if isinstance(name, str) and name else config.RepoProfile().engine.base
+    return profile_at.base_name(repo)
 
 
 def stamp(repo: str | Path) -> tuple[str, tuple[Sig, ...]] | None:
@@ -65,20 +59,7 @@ def stamp(repo: str | Path) -> tuple[str, tuple[Sig, ...]] | None:
 def source(git: Git, repo: str | Path) -> tuple[str, str]:
     """(the profile text, where it came from): what the loop reads, the profile as committed on the base ref ("base <sha7>"),
     the working tree's copy ("working tree") only when the base does not resolve here. ("", ...) when there is no file."""
-    try:
-        commit = git.rev_parse(str(repo), _base_name(repo) + "^{commit}")
-    except NotARepo:
-        commit = ""
-    if commit:
-        try:
-            text = git.show(str(repo), commit, FILE).strip()
-        except SlotGitError:
-            text = ""
-        return text, f"base {commit[:7]}"
-    try:
-        return (Path(repo) / FILE).read_text(encoding="utf-8"), "working tree"
-    except OSError:
-        return "", "working tree"
+    return profile_at.diagnostic_source(git, repo)
 
 
 def red_row(git: Git, repo: str | Path) -> str:
@@ -88,7 +69,7 @@ def red_row(git: Git, repo: str | Path) -> str:
         return ""
     where = f"{Path(repo) / FILE} ({src})"
     try:
-        config.load(json.loads(text))
+        profile_at.parse(text)
     except json.JSONDecodeError as e:
         if src != "working tree":  # the loop reads a base copy that is not JSON as {} (no profile): doctor agrees with it
             return ""

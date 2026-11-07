@@ -98,3 +98,14 @@ def test_the_data_of_an_unrelated_test_folder_or_fixture_folder_is_not_in_the_cl
     got = closure(repo, ["tests/x/test_a.py", "tests/x/test_n.py"], listing(tmp_path))
     assert {"tests/x/data.json", "tests/fixtures/x/b.json", "tests/fixtures/n/c.json", "tests/loose.txt"} <= set(got)
     assert "tests/y/y.json" not in got and "tests/fixtures/other/a.json" not in got
+
+
+def test_a_changed_conftest_selects_only_its_folder_despite_string_mentions(tmp_path):
+    repo = Repo(tree(tmp_path, {**BASE, "tests/x/conftest.py": "",
+                               "src/pkg/unrelated.py": "NAME = 'conftest.py'\n"}))
+    assert select(repo, {"tests/x/conftest.py"}) == ["tests/rules/test_all.py", "tests/x/test_a.py"]
+
+
+def test_a_changed_file_named_in_a_string_still_selects_the_mentioning_file(tmp_path):
+    repo = Repo(tree(tmp_path, {**BASE, "src/pkg/unrelated.py": "NAME = 'b.py'\n"}))
+    assert select(repo, {"src/pkg/b.py"}) == ["tests/rules/test_all.py", "tests/x/test_a.py", "tests/y/test_u.py"]

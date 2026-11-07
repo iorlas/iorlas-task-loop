@@ -58,3 +58,15 @@ class ProfilesOnTheSim(Case):
         assert text == ""
         assert src.startswith("base "), src
         assert profiles.red_row(self.git, self.wt) == ""
+
+    def test_bad_base_json_is_tolerated_but_bad_working_json_names_the_decoder_error(self, monkeypatch):
+        self.commit_profile({})
+        (self.wt / profiles.FILE).write_text('{')
+        self.git.stage(str(self.wt), profiles.FILE)
+        self.git.commit_staged(str(self.wt), 'invalid json')
+        self.git.push(str(self.wt), 'origin', 'HEAD:main')
+        self.git.fetch(str(self.wt))
+        assert profiles.red_row(self.git, self.wt) == ''
+        monkeypatch.setattr(self.git, 'rev_parse', lambda repo, rev: '')
+        row = profiles.red_row(self.git, self.wt)
+        assert '(working tree): not JSON: ' in row

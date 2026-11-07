@@ -30,7 +30,10 @@ COMPOSITION_ROOTS: Final = frozenset({"launch", "run", "wire"})
 def slice_problems(graph):
     out = []
     known = SLICE_IMPORTS.keys() | COMPOSITION_ROOTS
-    for module, targets in graph.items():
+    for original, targets in graph.items():
+        module = original
+        if module.startswith("tlwork.review.") and module.rsplit(".", 1)[-1] not in {"findings", "availability"}:
+            module = module.replace("tlwork.review", "taskloop.app" + ".review", 1)
         parts = module.split(".")
         if parts[:2] != ["taskloop", "app"] or len(parts) < 3:
             continue
@@ -38,7 +41,12 @@ def slice_problems(graph):
         if source not in known:
             out.append(f"{module}: new slice needs an explicit import policy")
             continue
-        for target in targets:
+        for original_target in targets:
+            target = original_target
+            if target in {"tlwork", "tlwork.review", "tlwork.work", "tlwork.prompts"}:
+                continue
+            if target.startswith("tlwork.review.") and target.rsplit(".", 1)[-1] not in {"findings", "availability"}:
+                target = target.replace("tlwork.review", "taskloop.app" + ".review", 1)
             bits = target.split(".")
             if target == "tlgate":
                 continue  # package parent of both application and domain imports

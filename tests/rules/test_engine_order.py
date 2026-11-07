@@ -37,6 +37,9 @@ def api_homes() -> dict[str, Path]:
             for a in n.names if (PIPELINE_SRC / (n.module.replace(".", "/") + ".py")).is_file()}
 
 
+PACKAGE_SRC = {"tlpipeline": "packages/pipeline/src", "tlwork": "packages/work/src", "tlslots": "packages/slots/src"}
+
+
 def imports(tree: ast.Module) -> dict[str, Path]:
     """{imported name: the file of its module} for the app, pipeline and slots imports of one file."""
     found = {}
@@ -45,12 +48,10 @@ def imports(tree: ast.Module) -> dict[str, Path]:
         if isinstance(n, ast.ImportFrom) and n.module == "tlpipeline.api":
             found.update({a.asname or a.name: homes[a.name] for a in n.names if a.name in homes})
             continue
-        if isinstance(n, ast.ImportFrom) and n.module and n.module.startswith(("taskloop.app.", "tlpipeline.", "tlslots.")):
-            if n.module.startswith("tlslots."):
-                base, module = ROOT / "packages/slots/src", n.module
-            else:
-                base, module = ((ROOT / "packages/pipeline/src", n.module) if n.module.startswith("tlpipeline.")
-                                else (APP, n.module.removeprefix("taskloop.app.")))
+        if isinstance(n, ast.ImportFrom) and n.module and n.module.startswith(("taskloop.app.", "tlpipeline.", "tlwork.", "tlslots.")):
+            package = n.module.split(".")[0]
+            base, module = ((ROOT / PACKAGE_SRC[package], n.module) if package in PACKAGE_SRC
+                            else (APP, n.module.removeprefix("taskloop.app.")))
             path = base / (module.replace(".", "/") + ".py")
             found.update({a.asname or a.name: path for a in n.names if path.is_file()})
     return found

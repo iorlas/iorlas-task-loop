@@ -1,7 +1,7 @@
 """The writer's prompts: the first one of a stage, the delta of a resumed writer, and what a fresh writer is told of its predecessor."""
 from typing import Final
 
-from taskloop.domain.prompts.common import DECIDED_RULE, OPTIONS_RULE, READ_RULE
+from tlwork.prompts.common import DECIDED_RULE, OPTIONS_RULE, READ_RULE
 
 REPEAT_RED: Final = ("\nThese checks failed in the last round too:\n%s\nIf one measures a threshold the task does not ask for (the task "
               "says the owner judges it, or the number is the plan's own), do not keep tuning the work to it: list it in "

@@ -51,14 +51,7 @@ def explain(stores: GateStores, git: GateGit, wt: str, cfg: config.EngineConfig,
 
 def profile_of(repo: str, load_profile: Callable[[object], config.RepoProfile]) -> config.EngineConfig:
     """The engine block of the worktree's own .task-loop.json (what a person edited, committed or not)."""
-    path = Path(repo) / profile_at.FILE
-    try:
-        data = profile_at.raw_in(repo)
-    except (OSError, ValueError) as e:
-        raise SystemExit(f"tl check: cannot read {path}: {e}") from None
-    if data is None:
-        raise SystemExit(f"tl check: cannot read {path}: no such file")
-    return load_profile(data).engine
+    return profile_at.working_engine(repo, load_profile)
 
 
 def policy_of(repo: str, git: GateGit, commit: str) -> config.EngineConfig:

@@ -18,9 +18,9 @@ from tlkernel.plancheck import PlanData
 from tlkernel.stagefacts import LeftoverSink
 from tlkernel.stop import Stop
 from tlkernel.wire import Open
+from tlwork.work.ledger import Ledger
 
 from taskloop.adapters.check_probe import PathProbe
-from taskloop.domain.work.ledger import Ledger
 
 
 class Answered(Protocol):

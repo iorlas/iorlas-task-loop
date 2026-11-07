@@ -1,7 +1,7 @@
 """The review stage's writes go through its own state and ledger, not through lists on the engine (docs/design/b-review.md, slice 2)."""
 from support.review_host import FakeReview
 
-from taskloop.app.review.state import ReviewLive
+from tlwork.review.state import ReviewLive
 
 
 def test_a_verifier_answer_is_recorded_with_its_five_fields():

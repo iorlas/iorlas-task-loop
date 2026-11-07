@@ -1,7 +1,7 @@
 """The verifier's prompt."""
 from typing import Final
 
-from taskloop.domain.prompts.common import KIND_LINES
+from tlwork.prompts.common import KIND_LINES
 
 VERIFY_PROMPT: Final = """Before a task lands, you check what its workers could not check themselves. Do not edit files.
 <task>

@@ -1,6 +1,6 @@
 # B-REVIEW: the review stage without the engine (tl-e5t0.33)
 
-Design and slicing only; no code moves with this note. Follows `stage-isolation.md` (sections 1.1 and 7), `facts.md` (the `RunFacts` and ports shape), `attr-map.md` and `engine-order.md`, and takes `b-look.md` as its pattern. Checkpoint on disk unchanged. Measured on origin/main, 2026-11-06, by an AST scan of `src/taskloop/app/review` (attribute reads off the host) and a grep of every writer; nothing was run.
+Design and slicing only; no code moves with this note. Follows `stage-isolation.md` (sections 1.1 and 7), `facts.md` (the `RunFacts` and ports shape), `attr-map.md` and `engine-order.md`, and takes `b-look.md` as its pattern. Checkpoint on disk unchanged. Measured on origin/main, 2026-11-06, by an AST scan of `packages/work/src/tlwork/review` (attribute reads off the host) and a grep of every writer; nothing was run.
 
 ## What the stage is today
 

@@ -1,6 +1,8 @@
 """The work boundary rejects a stage import using the production contract."""
 import configparser
+import contextlib
 import os
+import resource
 import subprocess
 import tomllib
 from pathlib import Path
@@ -18,18 +20,18 @@ def test_work_reaches_no_stage(workdir, stage_import):
     synthetic = configparser.ConfigParser()
     synthetic["importlinter"] = {"root_package": "sample"}
     synthetic["importlinter:contract:work"] = {
-        key: value.replace("taskloop", "sample") if key in {"source_modules", "forbidden_modules"} else value
+        key: value.replace("taskloop", "sample").replace("tlwork", "sample") if key in {"source_modules", "forbidden_modules"} else value
         for key, value in contract.items()
     }
     modules = (contract["source_modules"] + contract["forbidden_modules"]).split()
     for module in modules:
-        folder = workdir.joinpath(*module.replace("taskloop", "sample").split("."))
+        folder = workdir.joinpath(*module.replace("taskloop", "sample").replace("tlwork", "sample").split("."))
         folder.mkdir(parents=True, exist_ok=True)
         for package in (folder, *folder.parents):
             if package == workdir:
                 break
             (package / "__init__.py").touch()
-    (workdir / "sample/domain/work/policy.py").write_text("import sample.domain.plan\n" if stage_import else "VALUE = 1\n")
+    (workdir / "sample/work/policy.py").write_text("import sample.domain.plan\n" if stage_import else "VALUE = 1\n")
     config_path = workdir / "imports.ini"
     with config_path.open("w") as stream:
         synthetic.write(stream)
@@ -37,10 +39,19 @@ def test_work_reaches_no_stage(workdir, stage_import):
     # Share the tool env with the justfile rules recipe; runtests.isolated_env preserves the real uv cache across HOME isolation.
     # The bare mise shim fails outside the repo cwd.
     lint = ["uv", "tool", "run", "--with", "msgspec", "--from", f"import-linter@{pins['pipx:import-linter']}", "lint-imports"]
+
+    def lift_address_space_cap():
+        # The Rust child aborts under the inherited address-space cap.
+        if hasattr(resource, "RLIMIT_AS"):
+            with contextlib.suppress(OSError, ValueError):
+                _, hard = resource.getrlimit(resource.RLIMIT_AS)
+                resource.setrlimit(resource.RLIMIT_AS, (hard, hard))
+
     ran = subprocess.run(
         [*lint, "--config", str(config_path), "--no-cache"],
         cwd=workdir, env={**os.environ, "PYTHONPATH": str(workdir)},
         text=True, capture_output=True, check=False,
+        preexec_fn=lift_address_space_cap,
     )
     output = ran.stdout + ran.stderr
     assert (ran.returncode != 0) == stage_import, output
