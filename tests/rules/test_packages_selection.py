@@ -1,4 +1,5 @@
 """dev/packages.py: a change reaches the packages under it and those that declare them; a file outside every package reaches all."""
+import pytest
 from packages import reached
 
 
@@ -63,3 +64,27 @@ def test_a_dev_group_member_reaches_its_users(tmp_path):
         manifest.parent.mkdir(parents=True)
         manifest.write_text(f'[project]\nname = "{name}"\nversion = "0"\ndependencies = []\n{extra}')
     assert reached(tmp_path, {"packages/testkit/src/tltestkit/plugin.py"}) == ["land", "testkit"]
+
+
+@pytest.mark.parametrize("changed,selected", [
+    ("src/taskloop/app/write/step.py", False), ("dev/packages.py", False),
+    ("uv.lock", False), ("packages/review/src/review/x.py", False),
+    ("packages/delegate/src/delegate/run.py", True), ("packages/delegate/tests/real/test_run.py", True),
+    ("src/delegate/run.py", True), ("tests/delegate/test_run.py", True),
+    ("skills/task-loop/_vendor/any_agent/procs.py", True), ("dev/vendor.json", True),
+    ("packages/testkit/src/tltestkit/plugin.py", True), ("packages/kernel/src/kernel/ids.py", True),
+])
+def test_scoped_member_uses_own_paths_extra_inputs_and_declared_dependencies(tmp_path, changed, selected):
+    root = workspace(tmp_path)
+    manifest = root / "packages/delegate/pyproject.toml"
+    manifest.parent.mkdir()
+    manifest.write_text('[project]\nname = "tldelegate"\ndependencies = ["kernel"]\n')
+    result = reached(root, {changed})
+    assert ("delegate" in result) == selected
+    baseline = set(reached(workspace_without_delegate(root), {changed}))
+    assert set(result) - {"delegate"} == (set() if changed.startswith("packages/delegate/") else baseline)
+
+
+def workspace_without_delegate(root):
+    (root / "packages/delegate/pyproject.toml").unlink()
+    return root

@@ -4,7 +4,8 @@
 
 A changed file always reaches its own package; only public changes reach dependents transitively. With src/*/api.py, public surface is that
 api.py, contracts/ contents and top-level src package testing.py; without api.py every file is public. A changed file outside every
-package (the root pyproject, uv.lock, the justfile, dev/) reaches all of them. The graph is the manifests' (what a package declares is what
+package (the root pyproject, uv.lock, the justfile, dev/) reaches all ordinary members; SCOPED members require their own inputs. The graph
+is the manifests' (what a package declares is what
 its isolated environment contains), never an import scan. Standard library only (docs/design/stage-packages.md section 5)."""
 import argparse
 import re
@@ -13,6 +14,9 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# These members opt out of the root-file fanout. Their own paths and declared
+# dependencies still propagate normally; extra inputs are explicit prefixes.
+SCOPED = {"delegate": ("src/delegate/", "tests/delegate/", "skills/task-loop/_vendor/", "dev/vendor.json", "packages/testkit/")}
 
 
 def members(root: Path) -> dict[str, tuple[str, set[str]]]:
@@ -42,10 +46,11 @@ def reached(root: Path, changed: set[str]) -> list[str]:
     """The directory names of the packages the changed paths reach."""
     graph = members(root)
     folders = {folder: name for name, (folder, _) in graph.items()}
-    if any(not path.startswith("packages/") or path.split("/")[1] not in folders for path in changed):
-        return sorted(folders)  # a file outside every package: the root config, the lock, the tooling
-    out = {path.split("/")[1] for path in changed}
-    propagated = {path.split("/")[1] for path in changed if public(root, path.split("/")[1], path)}
+    outside = any(not path.startswith("packages/") or path.split("/")[1] not in folders for path in changed)
+    out = {path.split("/")[1] for path in changed if path.startswith("packages/") and path.split("/")[1] in folders}
+    out |= {folder for folder, paths in SCOPED.items() if folder in folders and any(p.startswith(paths) for p in changed)}
+    propagated = {path.split("/")[1] for path in changed if path.startswith("packages/") and path.split("/")[1] in folders
+                  and public(root, path.split("/")[1], path)}
     grew = True
     while grew:
         grew = False
@@ -53,7 +58,7 @@ def reached(root: Path, changed: set[str]) -> list[str]:
             if folder not in propagated and any(graph[d][0] in propagated for d in deps):
                 propagated.add(folder)
                 grew = True
-    return sorted(out | propagated)
+    return sorted(out | propagated | (folders.keys() - SCOPED.keys() if outside else set()))
 
 
 def changed_since(root: Path, base: str) -> set[str]:
