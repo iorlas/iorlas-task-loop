@@ -14,7 +14,7 @@ from tlkernel.ids import BeadId, TreeSha
 from tlkernel.paths import ConfigDir
 from tlkernel.plancheck import PlanCheck, PlanData, StageData
 from tlkernel.procport import Spawner
-from tlkernel.stagefacts import Narrate, RepoKey, StepBook
+from tlkernel.stagefacts import LeftoverSink, Narrate, RepoKey, StepBook
 from tlkernel.wire import Open
 
 from taskloop.app.write.state import WriteState
@@ -239,6 +239,9 @@ class NewFiles(Protocol):
 
 
 class WritePorts(PreparePorts, Protocol):
+
+    @property
+    def leftover_sink(self) -> LeftoverSink: ...
     def blocked_for(self, why: str, kind: str, *, spec: AskSpec | None = ...) -> Exception: ...
     @property
     def steps(self) -> StepBook: ...

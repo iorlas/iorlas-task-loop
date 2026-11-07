@@ -11,7 +11,6 @@ from taskloop.app.write.host import WriteHost
 from taskloop.app.write.review_prompt import acceptance_text, review_prompt
 from taskloop.app.write.state import ACCEPT, AGAIN, REPLAN, RoundResult, StageState, carrying
 from taskloop.domain.asks import specs as askspecs
-from taskloop.domain.followups import FollowKey
 from taskloop.domain.lanes import caps
 from taskloop.domain.prompts.common import LATER_CASES, UNCHECKED_TEXT
 from taskloop.domain.review import findings as fnd
@@ -148,8 +147,7 @@ class ReviewRound:
         for why in routed.dropped:
             e.log.note(f"unmet item dropped: {why}")
         for lo in routed.files:
-            if FollowKey.of(e.bead, lo) not in {FollowKey.of(e.bead, x) for x in e.leftovers}:
-                e.leftovers.append(lo)
+            if e.leftover_sink.add_keyed(e.bead, lo):
                 e.checkpoints.keep_pending("review")
                 e.log.note(f"filed as a follow-up bead, not sent back: {lo['title'][:120]}")
         out = fnd.lows_after_first(routed.findings, s.rounds + 1)
@@ -175,7 +173,7 @@ class ReviewRound:
             lines = [f"{f['file']}:{f['line']} [{f['severity']}] {f['fix']}" for f in review["findings"]]
             lines += ["unmet: " + u for u in review["unmet"]]
             e.comment(f"Review (engine, {s.name}{', same family as the writer' if same else ''}): " + "; ".join(lines))
-        e.leftovers += review["leftovers"]
+        e.leftover_sink.extend(review["leftovers"])
         e.checkpoints.keep_pending("review")
         e.hand.note_lows(review["findings"])
 

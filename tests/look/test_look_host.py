@@ -37,3 +37,9 @@ class RenderHandOff(EngineTest):
 def test_the_fake_look_has_every_member_the_stage_reads(workdir):
     look = FakeLook(workdir)
     assert (missing(look.ports, LookPorts), missing(look.hand, LookHost)) == ([], [])
+
+def test_the_fake_look_sink_writes_its_hand_off_list(workdir):
+    look = FakeLook(workdir)
+    lo = {"title": "later"}
+    assert look.ports.leftover_sink.add_titled(lo)
+    assert look.hand.leftovers == [lo]
