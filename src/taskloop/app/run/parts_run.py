@@ -16,6 +16,7 @@ from taskloop.app.pipeline.reflect import Reflector
 from taskloop.app.pipeline.reload import Reload, ReloadHost
 from taskloop.app.pipeline.requests import OwnerRequests
 from taskloop.app.pipeline.resume import Resume, ResumeHost
+from taskloop.app.pipeline.stuck import StuckTick
 from taskloop.app.pipeline.waits import Waits
 from taskloop.app.release.closing import ReexecBook
 from taskloop.app.run.ask_flow import AskFlow
@@ -28,7 +29,6 @@ from taskloop.app.run.shared import Shared
 from taskloop.app.run.shell import Shell
 from taskloop.app.run.stage_checks import StageChecks
 from taskloop.app.run.state import state_names
-from taskloop.app.run.stuck import StuckTick
 from taskloop.app.track.closing import TrailEvents
 from taskloop.app.workers.delegation import Delegation
 
