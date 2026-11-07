@@ -18,8 +18,6 @@ from any_agent.harnesses.codex import CodexHarness
 from any_agent.protocol import LaunchSpec
 from any_agent.supervisor import RunHooks, Supervisor
 from run_support import short_limits
-from support import fake_worker
-from support.fake_worker import Err, Exit, Jump
 from test_route import CFG, T, lanes, need, no_reader, route
 
 from delegate.app import env, harnesses, launch, usage
@@ -29,8 +27,10 @@ from delegate.contracts import codec, stores
 from delegate.contracts import history as hist
 from delegate.domain.health import ledger as health_ledger
 from delegate.domain.lanes.lane import Lane
+from tltestkit import fake_worker
 from tltestkit.case import Case
 from tltestkit.fake_clock import SteppingClock
+from tltestkit.fake_worker import Err, Exit, Jump
 from tltestkit.tmpdir import TemporaryDirectory
 
 
@@ -268,7 +268,7 @@ class ConfigLocation(Case):
 
 
 class WatchdogProc(Case):
-    """delegate-go0 on a worker that is a script (tests/support/fake_worker.py) with the fake clock: a dead stream is stopped through the
+    """delegate-go0 on a worker that is a script (tltestkit.fake_worker) with the fake clock: a dead stream is stopped through the
     tree stop, a chatty one is not."""
 
     def setup_method(self):

@@ -60,6 +60,16 @@ def imports(path: Path) -> list[tuple[int, str]]:
     return sorted(found)
 
 
+def local_import(tests: Path, path: Path, name: str) -> bool:
+    """Bare helpers resolve within this tests tree, never in another member or the root tests."""
+    for folder in path.parents:
+        if folder != tests and tests not in folder.parents:
+            break
+        if (folder / f"{name}.py").is_file() or (folder / name / "__init__.py").is_file():
+            return True
+    return False
+
+
 def problems(root: Path = ROOT) -> list[str]:
     manifests = {path: member_imports(path) for path in sorted((root / "packages").glob("*/pyproject.toml"))}
     members = {name: roots for name, roots, _ in manifests.values()}
@@ -72,7 +82,7 @@ def problems(root: Path = ROOT) -> list[str]:
         third_party = deps - members.keys()
         for path in sorted(tests.rglob("*.py")):
             for line, name in imports(path):
-                if name not in allowed and normalized(name) not in third_party:
+                if name not in allowed and normalized(name) not in third_party and not local_import(tests, path, name):
                     found.append(f"{path.relative_to(root)}:{line} imports {name} (undeclared in {manifest.relative_to(root)})")
         for integration in INTEGRATION.get(manifest.parent.name, ()):
             for path in sorted((root / integration).rglob("*.py")):

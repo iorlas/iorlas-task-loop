@@ -89,3 +89,28 @@ def test_classified_db_integration_is_retained_without_dummy_shell_imports(tmp_p
     for name in ASKS_DB_RUN_INTEGRATION:
         (tests / name).write_text("import tlasks\n", encoding="utf-8")
     assert problems(tmp_path) == []
+
+
+@pytest.mark.parametrize("helper", ["hermetic.py", "routing_support.py", "run_support.py", "delegate_fakes/__init__.py", "test_other.py"])
+@pytest.mark.parametrize("nested", [False, True])
+def test_member_local_helpers_pass(tmp_path, helper, nested):
+    owner = member(tmp_path, "owner", "owner", "own")
+    tests = owner / "tests"
+    path = tests / helper
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("", encoding="utf-8")
+    consumer = tests / "nested" if nested else tests
+    consumer.mkdir(exist_ok=True)
+    (consumer / "test_import.py").write_text(f"import {helper.split('/')[0].removesuffix('.py')}\n", encoding="utf-8")
+    assert problems(tmp_path) == []
+
+
+@pytest.mark.parametrize("name", ["support", "taskloop", "sibling", "unknown_library", "foreign_helper"])
+def test_member_helpers_do_not_open_other_trees(tmp_path, name):
+    owner = member(tmp_path, "owner", "owner", "own")
+    other = member(tmp_path, "other", "other", "sibling")
+    (other / "tests").mkdir()
+    (other / "tests/foreign_helper.py").write_text("", encoding="utf-8")
+    (owner / "tests").mkdir()
+    (owner / "tests/test_import.py").write_text(f"import {name}\n", encoding="utf-8")
+    assert len(problems(tmp_path)) == 1

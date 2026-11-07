@@ -125,4 +125,43 @@ Release R1 (tl-e5t0.19): code carve done in `packages/release/src/tlrelease`, fl
 
 PR-2b moves the light stages’ hold, deferral and park helpers into `tlkernel.holds`, `tlkernel.deferrals` and `tlkernel.askparks`, with caller-supplied storage, clocks and randomness.
 
+
+### S1c prerequisites
+
+Member tests previously inherited collection and Case helpers only
+(`packages/testkit/src/tltestkit/plugin.py:12` and `:19`). Slots adds Case helpers
+and a workdir fixture (`packages/slots/tests/conftest.py:13` and `:19`); asks
+has no conftest. Neither supplied kind limits, timing or process guards.
+`tests/support/procsim.py` no longer exists: the shared implementation is
+`packages/testkit/src/tltestkit/procsim.py:248` (install) and `:264` (check).
+
+The plugin now loads `tltestkit.member_guards`: member paths and capability
+marks select the kind through `tltestkit.limits`, setup/call/teardown have wall
+guards, calls use CPU including waited-for children (instruction-based work for
+logic tests), skipped real tests need not spawn, logic tests prohibit real
+processes/forks/sockets, and real tests must use a real resource. Case cleanups
+run before process teardown. Shared DB caches and leaked threads are checked; the tempfile cache is restored.
+The work counter moved unchanged from root support into testkit; the root
+conftest imports it and keeps its existing hooks. The plugin applies its guards
+only to member tests, so root tests retain their existing wiring.
+
+Root-only setup also includes shell process-adapter registration, complete DB
+part declarations, preload, quarantine/serial policy, worker memory caps,
+worker HOME isolation and temp-cache restoration (`tests/conftest.py:60`,
+`:67`, `:116`, `:259`, `:275`, `:293`). Shell registrations and policy stay in the root;
+delegate retains its own HOME/CLI isolation in `tests/delegate/conftest.py`.
+The delegate move must preserve that conftest. These prerequisites do not move
+or register the delegate member.
+
+`dev/packages.py` exempts the future delegate member from root-file fanout.
+Its own paths, vendored shelf, vendor manifest and testkit changes select it;
+public changes to declared workspace dependencies still propagate to it.
+Existing members retain root-file fanout and dependency selection.
+
+`fake_worker` moves byte-for-byte into testkit. It imports stdlib, testkit and
+vendored `any_agent` (supervisor/process records), with no shell dependency;
+`any_agent` is an existing shelf dependency, not a kernel module. This preserves
+the pure move but is an explicit exception to a literal stdlib/testkit/kernel
+inventory. No compatibility forwarding module remains in root support.
+
 Areas S1 adds the `tlareas` member with flat `policy.py`, kernel-only imports and isolated memory-bead policy tests.
