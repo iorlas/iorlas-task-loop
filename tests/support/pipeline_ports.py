@@ -112,6 +112,10 @@ class FakeHeadHistory:
         self.result = result
         self.calls: list[tuple[str, str, int]] = []
 
+    def ahead_of(self, wt: str, base: str, n: int) -> str:
+        self.calls.append((wt, base, n))
+        return self.result
+
     def since(self, wt: str, head: str, n: int) -> str:
         self.calls.append((wt, head, n))
         return self.result
