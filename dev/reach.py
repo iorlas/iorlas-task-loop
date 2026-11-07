@@ -84,9 +84,14 @@ def report(root, count):
     total = len([p for p in repo.trees if is_test(p)])
     changes = [{f for f in files if f in repo.trees} for files in commit_files(root, count)]
     changes = [c for c in changes if c]
-    counts = [len(select(repo, c)) for c in changes]
+    rules = {p for p in select(repo, set()) if p.startswith("tests/rules/")}
+    selections = [select(repo, c) for c in changes]
+    counts = [len(selected) for selected in selections]
+    beyond = [len(set(selected) - rules) for selected in selections]
     lines = [f"tests {total}, commits measured {len(changes)}"]
     lines.append("selected per commit: " + ", ".join(f"{k} {v}" for k, v in summary(counts).items()) if counts else "no commit to measure")
+    lines.append(f"beyond the always-run tests/rules ({len(rules)} files): " + (
+        ", ".join(f"{k} {v}" for k, v in summary(beyond).items()) if beyond else "no commit to measure"))
     wide = Counter(f for c, n in zip(changes, counts, strict=True) if n * 2 >= total for f in wide_alone(repo, c, total))
     lines.append(f"wide commits {sum(1 for n in counts if n * 2 >= total)}; files that alone select half, by commits:")
     lines += [f"  {n:3d} {f}" for f, n in wide.most_common(15)]
