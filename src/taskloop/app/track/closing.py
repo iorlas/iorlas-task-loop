@@ -1,7 +1,7 @@
 """Bead close and block verbs bound to an actor, store and close guard."""
 from collections.abc import Callable
 
-from taskloop.app.track import verbs
+from taskloop.app.track import trail, verbs
 from taskloop.app.track.verbs import Guard
 from taskloop.contracts import fence
 from taskloop.contracts.beadsport import Beads
@@ -17,3 +17,8 @@ class ClosingBeads:
 
     def block(self, claim: fence.Claim, why: str, say: Callable[[str], None] | None = None) -> int:
         return verbs.block_as(self.who, claim, why, self.store, say)
+
+
+class TrailEvents:
+    def event(self, by: Identity, kind: str, bead: str, **fields: str) -> None:
+        trail.event(by, kind, bead, **fields)

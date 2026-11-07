@@ -1,14 +1,17 @@
 """Recording structural fakes for the pipeline close capabilities."""
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.delegate import Permanence
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.gitport import Git
+from taskloop.contracts.identity import Identity
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.parks import Park
 from taskloop.contracts.review import ReviewState
+from taskloop.contracts.run import NetPause, ReexecNote
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes.pause_reasons import Producer
 
@@ -120,3 +123,40 @@ class FakeReviewRestore:
 
     def apply(self, review: ReviewState, *, unchecked: bool, late: bool = False) -> None:
         self.calls.append((review, unchecked, late))
+
+
+class FakeReexecs:
+    def __init__(self) -> None:
+        self.pauses: list[NetPause] = []
+        self.notes: list[ReexecNote] = []
+        self.dropped: list[BeadId] = []
+        self.execs: list[tuple[list[str], dict[str, str]]] = []
+        self.argv: list[str] | None = ["run-task"]
+        self.error: OSError | None = None
+
+    def net_pause(self, pause: NetPause) -> None:
+        if self.error:
+            raise self.error
+        self.pauses.append(pause)
+
+    def note(self, note: ReexecNote) -> None:
+        self.notes.append(note)
+
+    def args(self, argv: Sequence[str], slot: str, wt: str) -> list[str] | None:
+        return self.argv
+
+    def drop(self, bead: BeadId) -> None:
+        self.dropped.append(bead)
+
+    def exec(self, argv: list[str], env: dict[str, str]) -> None:
+        self.execs.append((argv, env))
+        if self.error:
+            raise self.error
+
+
+class FakeTrail:
+    def __init__(self) -> None:
+        self.events: list[tuple[Identity, str, str, dict[str, str]]] = []
+
+    def event(self, by: Identity, kind: str, bead: str, **fields: str) -> None:
+        self.events.append((by, kind, bead, fields))

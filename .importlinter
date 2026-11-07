@@ -230,7 +230,8 @@ source_modules =
     taskloop.app.run.records
     taskloop.app.pipeline.reflect
     taskloop.app.pipeline.reflect_prompt
-    taskloop.app.run.reload
+    taskloop.app.run.reload_ports
+    taskloop.app.pipeline.reload
     taskloop.app.pipeline.requests
     taskloop.app.pipeline.resume
     taskloop.app.run.review_glue
