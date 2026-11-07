@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from taskloop.stores.real import real_stores
+from tlkernel.docrows import RowDocs
 from tlkernel.flakes import FlakeLog, FlakeRow
 from tlkernel.paths import ConfigDir
 from tlkernel.queue_doc import BuildRow, EntryRow, QueueDoc
@@ -33,12 +34,14 @@ def test_flake_log_round_trip(workdir: Path):
 
 
 def test_the_previous_version_of_the_queue_document_is_refused_not_read_as_absent(workdir: Path):
-    stores = real_stores(ConfigDir(workdir))
-    doc = stores.queue.of("repo-key")
+    cfg = ConfigDir(workdir)
+    real_stores(cfg)  # declares the database parts
+    docs = RowDocs(cfg, QueueDoc, table="kv", key_col="k", body_col="v", prefix="queue:")
+    doc = docs.of("repo-key")
     doc.write(QueueDoc(in_flight=2))
     old = json.dumps({**json.loads(doc.raw() or "{}"), "v": QueueDoc.V - 1})
-    with doc.docs.rows.transaction() as con:
-        con.execute(f"UPDATE {doc.docs.table} SET {doc.docs.body_col}=? WHERE {doc.docs.key_col}=?", (old, doc.k))
+    with docs.rows.transaction() as con:
+        con.execute("UPDATE kv SET v=? WHERE k=?", (old, doc.k))
     assert doc.get() is None
     with pytest.raises(Refused):
         doc.need()
