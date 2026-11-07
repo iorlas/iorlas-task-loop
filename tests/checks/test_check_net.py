@@ -2,8 +2,11 @@
 from unittest import mock
 
 import pytest
+from tlkernel import log as rec
+from tlkernel.kinds import Kind
 
 from taskloop.adapters import check_net
+from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.run.shell import Shell
 
 
@@ -68,11 +71,13 @@ def test_the_setting_on_puts_the_prefix_before_the_check():
     assert argv_of_check(host(True)) == ["netoff", "--", "just", "check"]
 
 
-def test_a_host_that_cannot_isolate_says_so_once_and_still_runs_the_check():
+def test_a_host_that_cannot_isolate_refuses_the_check_with_the_reason():
     h = host(True)
     with mock.patch.object(check_net, "plan", return_value=check_net.Plan((), "this host cannot remove the network")):
-        check_net.said.clear()
-        for _ in range(2):
+        with pytest.raises(Blocked) as refused:
             Shell(h).stream(["just", "check"], None, {}, False, [], 60, "m1", "check", 0.0, mock.Mock())
-    assert h.spawner.stream.call_args.args[0][-2:] == ["just", "check"]
-    assert h.log.note.call_count == 1
+    assert refused.value.kind == Kind.FAULT_INFRA
+    assert "this host cannot remove the network" in str(refused.value)
+    assert "engine.check_net_isolate" in str(refused.value)
+    h.spawner.stream.assert_not_called()
+    assert not any(isinstance(call.args[0], rec.Kill) for call in h.log.emit.call_args_list)
