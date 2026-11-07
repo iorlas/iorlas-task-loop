@@ -6,13 +6,12 @@ from pathlib import Path
 from typing import Protocol
 
 from taskloop.adapters.check_probe import PathProbe
-from taskloop.app.checks.runner import Checker
+from taskloop.app.plan.host import PlanLog, ProbeChecker
 from taskloop.contracts.checks import UNVERIFIED_EXIT, CheckResult
 from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.domain.beads import matchers as acnames
 from taskloop.domain.checks.specs import repo_check
 from taskloop.domain.matchers import clip
-from taskloop.stores.runlog import RunLog
 
 MAX_RUNS = 3  # registered checks one probe runs
 NOT_RUNNABLE = (UNVERIFIED_EXIT, 126, 127)  # could not verify, not executable, not found: the host, not the code
@@ -23,8 +22,8 @@ class ProbeHost(Protocol):
 
     cfg: EngineConfig
     scope: str
-    log: RunLog
-    checker: Checker
+    log: PlanLog
+    checker: ProbeChecker
 
     def now(self) -> float: ...
     def shell_probe(self) -> PathProbe: ...
