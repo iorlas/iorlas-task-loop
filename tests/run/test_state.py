@@ -225,7 +225,8 @@ class OneWriter(Case):
     def test_nothing_but_the_writer_writes_a_checkpoint(self):
         """The record is written only by tlpipeline/checkpoints.py (and the stores that hold it): no other src or engine code opens it."""
         hits = []
-        for path in [*ROOT.joinpath("src").rglob("*.py"), *ROOT.joinpath("skills/task-loop").glob("*.py")]:
+        for path in [*ROOT.joinpath("src").rglob("*.py"), *ROOT.joinpath("packages/slots/src").rglob("*.py"),
+                     *ROOT.joinpath("skills/task-loop").glob("*.py")]:
             rel = path.relative_to(ROOT).as_posix()
             text = path.read_text(encoding="utf-8")
             if ("stores.checkpoints" in text or "checkpoints.of(" in text or "cfg.checkpoint(" in text) and rel not in OK:
@@ -234,7 +235,7 @@ class OneWriter(Case):
 
 
 OK = {"tlpipeline/checkpoints.py", "src/taskloop/stores/books.py", "src/taskloop/stores/real.py",
-      "src/taskloop/app/run/shared.py"}  # shared.py: the sibling's plan is read (siblings()), never written
+      "packages/slots/src/tlslots/shared.py"}  # shared.py: the sibling's plan is read (siblings()), never written
 
 
 class OldCheckpoint(Case):

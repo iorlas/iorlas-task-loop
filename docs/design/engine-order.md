@@ -53,7 +53,7 @@ Layer = 1 + the highest layer among the parts a part uses (construction or runti
 | 1 | `rebase` | `Rebase` (`land/rebase.py`) | - | checkout | 15 |
 | 1 | `reflector` | `Reflector` (`run/reflect.py`) | - | delegation | 21 |
 | 1 | `routing` | `Routing` (`review/routing.py`) | - | checkout | 10 |
-| 1 | `shared` | `Shared` (`run/shared.py`) | - | checkout | 8 |
+| 1 | `shared` | `Shared` (`packages/slots/src/tlslots/shared.py`) | - | checkout | 8 |
 | 1 | `shell` | `Shell` (`run/shell.py`) | - | bead_env | 9 |
 | 1 | `stage_loop` | `StageLoop` (`write/stage_loop.py`) | - | checkout, reload | 7 |
 | 1 | `tree` | `Tree` (`land/tree.py`) | - | briefs, checkout | 14 |

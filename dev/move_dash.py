@@ -120,6 +120,12 @@ def rule_paths(path: str, text: str) -> str:
         vendored = ('# Shelf copies have no manifest: the one undeclared path (docs/design/workspace.md section 4).\n'
                     'VENDORED = {p.name for p in (ROOT / "skills/task-loop/_vendor").iterdir() if p.is_dir()}\n')
         text = text.replace("\n\ndef imports(", "\n" + vendored + "\n\ndef imports(", 1)
+    if path == "tests/rules/gate_rules.py" and 'p.name != "testing.py"' not in text:
+        text = text.replace(
+            '            for p in sorted((ROOT / "packages" / "dash" / "src" / "tldash").rglob("*.py"))\n',
+            '            for p in sorted((ROOT / "packages" / "dash" / "src" / "tldash").rglob("*.py"))\n'
+            '            if p.name != "testing.py"  # the fixture helpers (RunScript.run writes log lines); not server code\n',
+        )
     if path == "tests/rules/layout_lock.py":
         text = text.replace('(("src", "tldash"), ("src", "delegate"))', '(("src", "delegate"),)')
     return text

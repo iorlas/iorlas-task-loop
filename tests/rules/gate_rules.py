@@ -323,6 +323,7 @@ class Signals(Case):
         bad = [
             p.relative_to(ROOT).as_posix()
             for p in sorted((ROOT / "packages" / "dash" / "src" / "tldash").rglob("*.py"))
+            if p.name != "testing.py"  # the fixture helpers (RunScript.run writes log lines); not server code
             if re.search(r"\bsubprocess\b|\bPopen\b|\bos\.(system|exec\w*|spawn\w*)\(|\brun\(|\bports\.bd\b", p.read_text(encoding="utf-8"))
         ]
         assert bad == []

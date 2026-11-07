@@ -9,6 +9,7 @@ from tlkernel.kinds import Kind
 from tlkernel.runlayout import repo_of
 from tlpipeline import api
 from tlslots.engine_lock import HeldLock
+from tlslots.shared import Shared, SharedHost
 
 from taskloop.adapters import deadline, ident, slotcheck
 from taskloop.adapters.agent import last_event_t, new_live
@@ -21,11 +22,15 @@ from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.run.bead_env import bead_env
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.run.reload_ports import installed_newer, locked_slot
-from taskloop.app.run.shared import Shared
 from taskloop.app.run.shell import Shell
 from taskloop.app.run.state import state_names
 from taskloop.app.track.closing import TrailEvents
+from taskloop.app.wire import slotfx
 from taskloop.app.workers.delegation import Delegation
+
+
+def shared_over(host: SharedHost) -> Shared:
+    return Shared(host, fx=slotfx.FX)
 
 
 class ResumeBinding[T](api.ResumeProgress, api.ResumePlanning[T], api.ResumeRecords, api.ReviewOwner, Protocol):
@@ -62,7 +67,7 @@ class RunParts(Plumbing):
     @cached_property
     def records(self: JournalBinding) -> api.Journal:
         return api.Journal(self, self, self, self, self, self, self, lambda: locked_slot(self.held_lock), repo_of, ident.plugin_version)
-    shared = cached_property(Shared)
+    shared = cached_property(shared_over)
     @cached_property
     def stuck(self: api.StuckHost) -> api.StuckTick: return api.StuckTick(self, last_event_t)
     requests = cached_property(api.OwnerRequests)

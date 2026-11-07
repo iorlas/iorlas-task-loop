@@ -15,7 +15,9 @@ Layout-allow: move (module family), node (tlslots), contract. Expected Ratchet-a
 
 **S2. The machine-bound half of wire/slots.py (root -130).** `slot_table`, `slot_env`, `worktrees`, `take/release` move to `tlslots.machine`. Their adapter uses become one injected `SlotsHost` (a frozen dataclass of callables over kernel ports): `bd(repo) -> Beads` (bd_store, peek), `repo_root`, `hostname`, `os_lock`, `event` (track.trail), `stores(config)`. `wire/slots.py` shrinks to the ~25 sloc that build the host. Callers (entry, doctor, loop, cli/slots) keep the same function names through the binding.
 
-**S3. entry's slot take and run/shared.py (root -118).** `take_area`, `_slot_taken`, `run_any_slot` (~48 sloc left in entry after #606) and `shared.py` (82, notes shared by the tasks of one repo) move into tlslots over the same `SlotsHost`. entry keeps run_in/run_bead/_worktree_of.
+**S3a. `run/shared.py` (82 sloc) becomes `tlslots/shared.py`** over a `SharedHost` Protocol, with `Effects` injected (`shared_over` in parts_run.py binds it). Done. The ratchet cannot show the drop (a file leaving the root list counts as 0 at the merge base), so the change carries `root +3` for the binding although the root lost 82.
+
+**S3b. entry's slot take, measured (net about -35, not -100).** `take_area` is area policy (`running.area_lock`, `area_busy`, the queue rule), not slot code: it stays in the root until an areas carve. `run_any_slot` (~36 sloc) and `_slot_taken` (~16) print, return `RunReport` and raise `engine.Blocked`, which the package cannot import: only their decision logic moves into `tlslots/take.py` and returns plain values; entry keeps the wrapper that prints, builds the report and raises. Dropped if root falls under 25 sloc or closure rises with no cuttable edge.
 
 ## Collisions and order
 

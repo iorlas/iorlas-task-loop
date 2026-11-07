@@ -202,7 +202,7 @@ JSON documents go through `JsonStore` (atomic replace, no lock: `tl/contracts/st
 | `events.jsonl`, `traces.jsonl` | `Event`, `RunTrace` | `trail.event` from verbs, loop, engine (`launch/loop.py:248`, `run/reload.py`); traces from engine records | dashboard, `tl trace`, `tl report`, reflect | yes (append) |
 | `sessions/<id>.json` | `SessionIndex` | SessionStart hook (`doctor/install.py:16-24`) | dashboard, trace | no |
 | `repos.json` | `ReposIndex` | `tl register`, loop, any tl verb via `trail` (locked: `stores.py:497-500`) | dashboard (and its 7878 start refusal, `bind.py:91-92`) | yes, locked |
-| `shared/<key>.json` | `SharedNotes` | engine (`run/shared.py:29`) | engine | no; but the key there is `sha1(common dir)[:12]`, not the `repo_key` `paths.shared()` documents |
+| `shared/<key>.json` | `SharedNotes` | engine (`packages/slots/src/tlslots/shared.py:29`) | engine | no; but the key there is `sha1(common dir)[:12]`, not the `repo_key` `paths.shared()` documents |
 | `pinned.json`, `bad-versions.json` | `Pin`, `BadVersions` | `tl pin/rollback` (`release/pins.py`); loop on crash-after-move (`loop/run.py:85`, `loop.py:129`) | loop install choice, engine reload, delegate resolve | pin: no; bad-versions: loop only |
 | `releases/last.json`, `suite-green.json`, `suite-*.log`; `release/<hash>/` clone | `ReleaseResult`, `SuiteGreens` | `dev/release.py`, `dev/suite.py` (`release/flow.py:139-148`, `suite.py:38`) | `tl status`, release cache | no |
 | `reflect-digest.json`, `reflect-view.json` | `ReflectState` | `tl reflect digest`, loop chores daily (`launch/loop.py:158-161`), under `reflect-digest*.lock` (`report/reflect.py:202`, `:236`) | reflect, dashboard | yes, locked |
@@ -217,7 +217,7 @@ JSON documents go through `JsonStore` (atomic replace, no lock: `tl/contracts/st
 loop uses `loop/<key>.<pid>.json` through `LoopFiles` (`tl/app/loop/files.py:32-33`). A grep for `loop_state` finds only those definitions.
 
 DOC/CODE MISMATCH: `tl.py:58` says "State: ~/.config/task-loop : repos.json, events.jsonl, sessions/, dash.*", four of the 40-odd kinds above.
-`tl/contracts/paths.py:1` says "Nothing else in the package names a file or a folder of ours"; these do: `tl/app/run/shared.py:29`,
+`tl/contracts/paths.py:1` says "Nothing else in the package names a file or a folder of ours"; these do: `packages/slots/src/tlslots/shared.py:29`,
 `tl/app/release/suite.py:38`, `:119`, `tl/app/doctor/install.py:36`, `tl/app/wire/slots.py:146`, `tl/app/report/reflect.py:202`, `:236`,
 `tl/app/run/engine.py:351`, `tl/adapters/landlock.py:55`, `tl/app/launch/dash.py:134`, `:142`, `:177`, `tl/app/look/owner_look.py:90`,
 `tl/app/release/clone.py:11`.
@@ -444,7 +444,7 @@ Each item is something that would not fit in one box or one arrow.
 
 6. **Four repo-key schemes.** `ids.loop_key` = folder + sha1(path)[:8] (`tl/contracts/ids.py:117-119`, aliased as `repo_key` in
    `tl/app/wire/slots.py:28`); `ids.repo_key` = sha1(common dir)[:12] (`ids.py:112-114`); `check_files.repo_key` = origin URL name +
-   sha1[:10] (`tl/adapters/check_files.py:44-50`); `shared.py` = sha1(common dir)[:12] by hand (`tl/app/run/shared.py:29`). Loop files key by
+   sha1[:10] (`tl/adapters/check_files.py:44-50`); `shared.py` = sha1(common dir)[:12] by hand (`packages/slots/src/tlslots/shared.py:29`). Loop files key by
    checkout path, results by remote URL: two clones of one repo share check results but not loop state.
 
 7. **The engine lock is a two-process handoff kept in the worker's directory.** The loop writes `.task/engine.lock` before spawning
