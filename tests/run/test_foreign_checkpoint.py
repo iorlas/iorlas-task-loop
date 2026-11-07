@@ -1,4 +1,4 @@
-"""NO BACKWARD COMPATIBILITY (docs/design/compat.md): a checkpoint of a foreign version is refused loudly and the engine starts over."""
+"""NO BACKWARD COMPATIBILITY (docs/design/compat.md): a checkpoint of a foreign version is refused by the reader and the engine."""
 import sys
 from pathlib import Path
 
@@ -9,7 +9,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from support import engine_case as T
-from support.checkpoints import put_ck, read_ck
+from support.checkpoints import put_ck
 from support.spawn import port_git, real_spawner
 from support.who import who
 
@@ -23,7 +23,7 @@ from taskloop.contracts.wire import Refused
 
 
 class ForeignCheckpoint(T.EngineTest):
-    def test_a_foreign_version_is_refused_loudly_and_the_engine_starts_over(self):
+    def test_a_foreign_version_is_refused_by_the_reader_and_the_engine(self):
         c = wslots.load_cfg(str(self.wt), port_git())
         eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
             git=port_git(), who=who())
@@ -35,7 +35,8 @@ class ForeignCheckpoint(T.EngineTest):
         assert isinstance(doc.read(), ForeignVersion)
         with pytest.raises(Refused, match="v99"):
             doc.need()
-        assert read_ck(eng) is None  # absent to a run: nothing is migrated, no crash
-        again = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
-            git=port_git(), who=who())
-        assert again.checkpoints.read() is None
+        with pytest.raises(Refused, match="v99"):  # a run does not read past it either: the owner deletes or restores the record
+            eng.checkpoints.read()
+        with pytest.raises(Refused, match="v99"):
+            engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
+                git=port_git(), who=who())

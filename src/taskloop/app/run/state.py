@@ -117,7 +117,9 @@ class Checkpoints:
         return self.doc
 
     def read(self) -> Checkpoint | None:
-        return self.doc.get()
+        """The stored record, None when there is none. A record of another version or a torn one raises Refused (no backward
+        compatibility: nothing is migrated, nothing is read past)."""
+        return self.doc.need()
 
     def save(self, *, step: str = "", stage: int = 0, rounds: int = 0, n: int = 0, feedback: str = "",
              progress: StageProgress | None = None) -> None:
