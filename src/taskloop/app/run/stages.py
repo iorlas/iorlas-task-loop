@@ -24,11 +24,10 @@ class RoundStages:
         return round_step(self.host, step, ck)
 
 
-def run_stages(runner: RunHost, requested: str | None, *, continuous: bool) -> int:
-    once = RunOnce(runner)
-    standalone = Standalone(runner, rounds=RoundStages(runner), once=lambda: once, lease=once.lease,
-                            closing=ClosingBeads(runner.who, runner.store, guard_for(runner.who, runner.store, runner.git, runner.wt)),
-                            has_land=lambda: has_land(runner.who, runner.bead), repo_of=repo_of,
-                            stage_run=partial(stage_run, stores_factory=real_stores,
-                                              log_factory=real_log))
+def run_stages(e: RunHost, requested: str | None, *, continuous: bool) -> int:
+    once = RunOnce(e)
+    standalone = Standalone(e, e, e, e, e, rounds=RoundStages(e), once=lambda: once, lease=once.lease,
+                            closing=ClosingBeads(e.who, e.store, guard_for(e.who, e.store, e.git, e.wt)),
+                            has_land=lambda: has_land(e.who, e.bead), repo_of=repo_of,
+                            stage_run=partial(stage_run, stores_factory=real_stores, log_factory=real_log))
     return standalone.run_stages(requested, continuous=continuous)
