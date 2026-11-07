@@ -13,17 +13,16 @@ from tlkernel.identity import Identity
 from tlkernel.locator import RunBundle, RunLocator, host_name
 from tlkernel.run import RunFinish, RunManifest, RunState
 from tlkernel.runlife import BEAT_EVERY, JOIN_WAIT
+from tlkernel.stagefacts import RunLogPort
 
-from taskloop.stores.bundle import Stores
-from taskloop.stores.real import real_stores
-from taskloop.stores.runlog import RunLog
+from taskloop.app.pipeline.store_ports import LogFactory, StageStores, StoresFactory
 
 
 @dataclass
-class StageRun:
+class StageRun[S: StageStores, L: RunLogPort]:
     bundle: RunBundle
-    log: RunLog
-    stores: Stores
+    log: L
+    stores: S
     rc: int = 1
     continued: bool = False
     reason: str = ""
@@ -31,7 +30,7 @@ class StageRun:
     answer: RunFinish | None = None  # a one-stage run's own answer (staged, landed, done); else the state alone says it
 
 
-def beat_loop(stopped: threading.Event, locator: RunLocator, run: str, log: RunLog) -> None:
+def beat_loop(stopped: threading.Event, locator: RunLocator, run: str, log: RunLogPort) -> None:
     """The beat thread's body: a tick in the manifest every BEAT_EVERY until `stopped`; an error ends it, and the log says so."""
     try:
         while not stopped.wait(BEAT_EVERY):
@@ -41,8 +40,9 @@ def beat_loop(stopped: threading.Event, locator: RunLocator, run: str, log: RunL
 
 
 @contextmanager
-def stage_run(who: Identity, repo: str, mode: str, *, bundle: RunBundle | None = None,
-              events: bool = True, stores: Stores | None = None, log: RunLog | None = None) -> Generator[StageRun]:
+def stage_run[S: StageStores, L: RunLogPort](who: Identity, repo: str, mode: str, *, stores_factory: StoresFactory[S],
+              log_factory: LogFactory[L], bundle: RunBundle | None = None,
+              events: bool = True, stores: S | None = None, log: L | None = None) -> Generator[StageRun[S, L]]:
     """Open before doing work; keep evidence and record a terminal state on every exit, including exceptions."""
     locator = RunLocator(who.config)
     if bundle is None:
@@ -52,10 +52,10 @@ def stage_run(who: Identity, repo: str, mode: str, *, bundle: RunBundle | None =
     stopped = threading.Event()
     helper: threading.Thread | None = None
     rc, reason = 1, "stage interrupted"
-    stage: StageRun | None = None
+    stage: StageRun[S, L] | None = None
     try:
-        stores = stores or real_stores(who.config)
-        log = log or RunLog(stores.run_log(bundle.run), run_id=bundle.run, host=host_name())
+        stores = stores or stores_factory(who.config)
+        log = log or log_factory(stores.run_log(bundle.run), bundle.run, host_name())
         stage = StageRun(bundle, log, stores)
         locator.beat(bundle.run, time.time())
 

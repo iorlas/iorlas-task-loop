@@ -18,10 +18,10 @@ import support.paths  # noqa: F401
 from support.dashlogs import RunScript, T, bead
 from support.factory_index import ingest, seed_beads
 from support.fakes import FakeBeadStore
+from support.hostname import hostname
 from support.narrow import must
 from support.repos import write_repos
 
-from taskloop.adapters.ident import hostname
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
 from taskloop_dash.http import make_handler

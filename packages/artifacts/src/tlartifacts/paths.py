@@ -1,4 +1,4 @@
-"""Paths owned by taskloop.app.artifacts."""
+"""Paths owned by tlartifacts."""
 from pathlib import Path
 
 from tlkernel.paths import RunFiles

@@ -85,6 +85,27 @@ def test_a_parked_bead_is_not_claimed():
     env.claim.assert_not_called()
 
 
+def test_a_bead_the_engine_refused_to_take_is_unclaimed_and_the_next_one_is_tried():
+    t, env, run = parts(FakeSlots())
+    env.has_areas = False
+    env.claim.return_value = (True, "")
+    run.run.return_value = vd.taken("area busy")
+    cands = [Bead(id=BeadId(bid), title="x", status="open") for bid in ("t-1", "t-2")]
+    t.attempt_all(cands, Where("s1", "d", None, 0.0), True, EngineConfig(), mock.Mock(), mock.Mock())
+    assert env.store.unclaim.call_args_list == [mock.call("t-1"), mock.call("t-2")]
+    assert env.claim.call_count == 2
+
+
+def test_a_taken_verdict_with_a_run_id_is_not_unclaimed():
+    t, env, run = parts(FakeSlots())
+    env.has_areas = False
+    env.claim.return_value = (True, "")
+    run.run.return_value = vd.Verdict(Result.TAKEN, "x", run="r-1")
+    t.attempt_all([Bead(id=BeadId("t-1"), title="x", status="open")], Where("s1", "d", None, 0.0), True,
+                  EngineConfig(), mock.Mock(), mock.Mock())
+    env.store.unclaim.assert_not_called()
+
+
 def test_take_imports_no_stage_package():
     tree = ast.parse(Path(take.__file__).read_text())
     stages = {"asks", "slots", "release", "land", "checks", "plan", "write", "review", "look", "run", "report", "doctor"}
