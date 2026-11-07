@@ -453,7 +453,7 @@ FakeClock.advance(seconds)
 | `src/taskloop/domain/checks/matchers.py:130–168` | 39 | M |
 | `src/taskloop/adapters/suiteout.py:1–43` | 43 | M |
 | `tests/domain/test_diagnostics.py:1–65` | 65 | M |
-| `tests/checks/test_check_trim.py:37–87` | 51 | M |
+| `packages/gate/tests/test_check_trim.py:37–87` | 51 | M |
 | `tests/release/test_parallel_suite.py:32–56` | 25 | M |
 
 **Volume:** 558 M; 0 D; 0 proved third-party replacement lines. Plus 1,488 .log fixture lines: long_green.log 903, shell_exit_only.log 5, compile_error.log 62, unittest_fail.log 65, pytest_many_fail.log 254, pytest_fail.log 66, nunit_fail.log 133; all under tests/fixtures/checklogs. Those are outside the target-extension percentage.
