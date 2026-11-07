@@ -8,7 +8,7 @@ from unittest import mock
 
 from support.memstores import fake_stores
 
-from taskloop.app.land.carry import MERGE, Carry
+from taskloop.app.land.cleanup import MERGE, Carry
 from taskloop.app.land.cmds import Cmds
 from taskloop.stores.runlog import RunLog
 from tlgate.cache import InputKeys, RunMemo

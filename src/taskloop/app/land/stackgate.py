@@ -16,7 +16,7 @@ from tlkernel.ids import CheckId, TreeSha
 from tlkernel.runkey import BaseSha
 from tlkernel.slots import NotARepo
 
-from taskloop.app.land.carry import Carry
+from taskloop.app.land.cleanup import Carry
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.gate import owner_refusal
 from taskloop.stores.bundle import Stores

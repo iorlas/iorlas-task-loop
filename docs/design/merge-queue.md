@@ -3,7 +3,7 @@
 Verdicts: ✅ do, ❌ refuse. Tags on external facts: [V] read in a primary source, [S] secondary report, [I] inference. Anything marked
 `[unverified]` was not re-checked: numeric limits and defaults of other systems came from lossy page summaries and must be re-read before
 they are copied into config. Inputs: land-speed.md, slot-grant.md, stages.md section 6, dashboard/dash-spec.md section 4, and the code under
-`src/taskloop/app/land/` (stack.py, stackgate.py, carry.py, lander.py), `contracts/runkey.py`, `app/checks/cache.py`.
+`src/taskloop/app/land/` (stack.py, stackgate.py, cleanup.py, lander.py), `contracts/runkey.py`, `app/checks/cache.py`.
 
 Decided before this doc, not reopened: bead deps are a scheduling gate only (no child starts or merges before its parent is on main); child
 PRs always branch off main; no stacked PRs; no epic or integration branches by default (trunk, dark flags, queue); branches are updated by
@@ -130,10 +130,10 @@ repaired (section 5), never papered over.
 ### 3.3 Smallest Carry change
 Why Carry is needed: the gate runs on `Q(N)`, whose tree is `T(N)`; the receipt key is `(tree=T(N), base=Q(N-1))`. After A lands, main
 is a new commit `S(A)` with `tree(S(A)) == T(A)`, so the landed commit of B has tree `T(N)` but base `S(A)`; key differs from the receipt
-in `base` only. That is exactly `earlier_pass` (carry.py:325: key differs only in base), except Carry today proves the pass still holds by
+in `base` only. That is exactly `earlier_pass` (cleanup.py:325: key differs only in base), except Carry today proves the pass still holds by
 closure comparison. Here we have a stronger fact: the parent tree is identical.
 
-Change (about 30-60 lines in carry.py and stackgate.py, from the code map): a second carry mode `queue_parent`. A receipt whose `key.base`
+Change (about 30-60 lines in cleanup.py and stackgate.py, from the code map): a second carry mode `queue_parent`. A receipt whose `key.base`
 is the item's recorded `Q(N-1)` counts under `base = main` when `tree(main) == tree(Q(N-1))` and the item's key matches (section 4). Carry
 rewrites it with `carry_over` under the new base, `origin` naming the queue run. No closure command is needed, so checks without
 `closure_cmd` stop missing. The closure mode stays for the non-queue path.
@@ -171,7 +171,7 @@ Result and its limit:
 
 ### 3.5 How a queue commit is gated and keyed, and what `queue_carried` promises (bead tl-7s2f.4, part 3)
 Written before the wiring so the review is of the rule, not of the diff. Code: `domain/land/queue_model.py` (planner), `app/land/queue_refs.py`
-(Q(N)), `app/land/queue_run.py` (runner), `Carry.queue_carried` (carry.py), `QueueKey` (domain/land/queue_key.py), `TreeGuard` (treecheck.py).
+(Q(N)), `app/land/queue_run.py` (runner), `Carry.queue_carried` (cleanup.py), `QueueKey` (domain/land/queue_key.py), `TreeGuard` (treecheck.py).
 
 **Keying of the gate run on Q(N).** The gate for entry N judges a detached worktree at `Q(N)`:
 - `RunKey.tree` = `tree(Q(N))` = `T(N)`, the merge-tree result; this is the tree that will land.

@@ -24,8 +24,8 @@ The 15 files is a goal, not a rule: a file folds only when the fold makes no imp
 | push_judge.py | unchanged | 241 | |
 | record.py | sync, salvage, restart, followups | ~380 | near the cap: may split |
 | fix.py | fixer, fix_outside | ~220 | |
-| tree.py | tree, checkout | ~340 | treecheck (76) stays apart: over the cap with it |
-| cleanup.py | cleanup, carry, closing | ~290 | |
+| tree.py | tree | ~190 | checkout (156) and treecheck (76) stay apart: the tree part reads the checkout part, so one file lifts the engine layer table (tests/rules/test_engine_order.py) by one for every part above it, which is not a pure move |
+| cleanup.py | cleanup, carry | ~250 | closing stays apart: it imports rebase and cleanup, so folding it makes cleanup -> push -> rebase -> cleanup, and cleanup's stores.real import widens the wire closure by 16 |
 | stack.py, cmds.py | stack is 411 lines, over the cap: split, not grown | | cmds stays apart |
 | stackgate.py | unchanged | 193 | |
 | pr.py | forge, pr_land | ~240 | |

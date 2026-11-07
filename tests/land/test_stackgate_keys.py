@@ -8,7 +8,7 @@ from unittest import mock
 import pytest
 from support.memstores import fake_stores
 
-from taskloop.app.land.carry import Carry
+from taskloop.app.land.cleanup import Carry
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.stackgate import StackGate
 from taskloop.stores.runlog import RunLog

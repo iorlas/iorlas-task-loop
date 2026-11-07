@@ -1,5 +1,5 @@
 """dev/affected.py --closure: the files the selected tests can depend on, so that a result can be carried over a base move only when none
-of them changed (app/land/carry.py)."""
+of them changed (app/land/cleanup.py)."""
 from affected import Repo, closure, mark_green, not_green, select
 
 

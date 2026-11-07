@@ -2,7 +2,7 @@
 
 Two builds with equal keys are the same fact. `RunKey` stays the identity of one check's receipt; the key here says which queue state the
 receipts were made for: the base, the heads ahead in order, the head, and the check set the profile at the base declares. A receipt crosses
-from the queue parent to main only through Carry's `queue_parent` mode (app/land/carry.py)."""
+from the queue parent to main only through Carry's `queue_parent` mode (app/land/cleanup.py)."""
 import hashlib
 from collections.abc import Iterable
 from types import MappingProxyType

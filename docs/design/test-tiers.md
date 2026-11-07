@@ -1,7 +1,7 @@
 # Test tiers: keep the behavioral tests, stop paying for all of them on every PR
 
 Epic: tl-wnup (TESTSPEED). Status: **proposal under evaluation** (discovery; nothing here is decided, no work is filed). The existing "devbox canary" (`app/release/canary.py`, an acknowledgement for the Mac pin) is another thing and keeps its name. Terms: docs/glossary.md ("Tests" section). Related: docs/design/merge-queue.md (flakes
-section 7, repair section 2.1), dev/affected.py, `src/taskloop/app/land/carry.py`, `dev/release.py`.
+section 7, repair section 2.1), dev/affected.py, `src/taskloop/app/land/cleanup.py`, `dev/release.py`.
 
 ## 1. The problem and the answer in five lines
 
@@ -55,7 +55,7 @@ Real tests cost 5x their CPU in wall (git and process waits), the unit tests 9x 
 |---|---|---|---|---|---|
 | docs only (this PR) | tests/rules only | 283 | 0 | 0 | 6% |
 | leaf: `app/prune/retention.py` | 87 | 717 | 253 | 0 | 15% |
-| `app/land/carry.py` | 61 | not counted | | | |
+| `app/land/cleanup.py` | 61 | not counted | | | |
 | `app/land/engine.py` | 94 | 738 | 33 | 0 | 15% |
 | `app/run/engine.py` | 180 | 1,700 | 287 | 0 | 35% |
 | `contracts/paths.py` (a hub) | 481 | 4,330 | 728 | 28 | 89% |

@@ -25,7 +25,7 @@ from tltestkit.logs import records
 from support.memstores import fake_stores
 
 from taskloop.adapters import landlock, locks
-from taskloop.app.land.carry import Carry
+from taskloop.app.land.cleanup import Carry
 from taskloop.app.land.cmds import Cmds
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import MODE, Stack
