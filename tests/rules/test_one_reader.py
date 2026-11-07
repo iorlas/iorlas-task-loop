@@ -10,15 +10,10 @@ SCAN = ("src", "packages")
 # fact -> (the call names that read it, the modules that may, each with why). Target for every fact: one module.
 FACTS = {
     "profile": (
-        {"raw_at", "profile_at", "raw_in", "load", "load_profile"},
-        {"profile_at", "config", "slots_config"},
+        {"raw_at", "raw_in", "object_of", "load", "load_profile", "loads"},
+        {"profile_at", "config", "slots_config", "json"},
         {
-            "packages/gate/src/tlgate/authorization.py": "the judged tree's profile for the gate (to fold into the one reader)",
-            "packages/kernel/src/tlkernel/profile_at.py": "THE reader: opens a commit's, tree's or working tree's file",
-            "packages/slots/src/tlslots/config.py": "slots/base section of the profile (to read through profile_at only)",
-            "packages/slots/src/tlslots/profile_facts.py": "doctor facts about the slots section (to fold)",
-            "src/taskloop/app/doctor/profiles.py": "doctor's red row for a bad profile (to fold)",
-            "src/taskloop/app/land/stackgate.py": "the gate of the stack's base commit (to fold)",
+            "packages/kernel/src/tlkernel/profile_at.py": "THE reader: opens and parses every repo profile",
         },
     ),
     "delivery verdict": (
@@ -41,7 +36,18 @@ def readers(tree: ast.Module, calls: set[str], owners: set[str]) -> bool:
     return any(
         isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr in calls
         and isinstance(n.func.value, ast.Name) and n.func.value.id in owners
+        and (n.func.value.id != "json" or n.func.attr == "loads")
+        and (n.func.attr != "loads" or profile_text(n))
         for n in ast.walk(tree)
+    )
+
+
+def profile_text(call: ast.Call) -> bool:
+    """Recognize explicit profile text names or a literal profile path, without tracing data flow."""
+    return bool(call.args) and any(
+        (isinstance(n, ast.Name) and n.id in {"profile_text", "profile"})
+        or (isinstance(n, ast.Constant) and isinstance(n.value, str) and ".task-loop.json" in n.value)
+        for n in ast.walk(call.args[0])
     )
 
 
@@ -64,3 +70,12 @@ def test_the_scan_sees_a_reader():
     tree = ast.parse("x = profile_at.raw_in(repo)\n")
     assert readers(tree, FACTS["profile"][0], FACTS["profile"][1])
     assert not readers(ast.parse("x = other.raw_in(repo)\n"), FACTS["profile"][0], FACTS["profile"][1])
+
+
+def test_profile_scan_distinguishes_typed_consumers_and_explicit_json_readers():
+    calls, owners, _ = FACTS["profile"]
+    for call in ('profile_at.object_of(text)', 'config.load(data)', 'slots_config.load_profile(data)',
+                 'json.loads(profile_text)', 'json.loads((repo / ".task-loop.json").read_text())'):
+        assert readers(ast.parse(call), calls, owners)
+    for call in ('profile_at.profile_at(git, repo, rev)', 'profile_at.typed_in(repo)', 'json.loads(other_text)'):
+        assert not readers(ast.parse(call), calls, owners)
