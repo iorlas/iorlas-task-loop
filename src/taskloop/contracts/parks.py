@@ -65,7 +65,7 @@ class ParkStore:
         """All decodable parks; an unavailable database reads quietly as empty for the dashboard."""
         docs = RowDocs(cfg, Park, table="park", key_col="bead", body_col="body", quiet=True)
         out: dict[str, Park] = {}
-        for bead in docs.keys():
+        for (bead,) in docs.rows.select("SELECT bead FROM park ORDER BY bead"):
             rec = docs.of(bead).get()
             if rec is not None:
                 out[bead] = rec
