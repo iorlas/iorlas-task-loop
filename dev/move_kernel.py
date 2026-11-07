@@ -8,6 +8,7 @@ name the layout by folder or import form). src/tlpaths.py (the one helper that a
 here. Line lengths the longer names push over the lint limit, and tests that read the layout by folder name, are fixed by hand in the PR."""
 import argparse
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -94,6 +95,8 @@ def main() -> None:
     root = Path(ap.parse_args().root)
     new = root / NEW_DIR
     if (root / OLD_DIR).is_dir():
+        if new.exists() and not git(root, "ls-files", NEW_DIR).strip():
+            shutil.rmtree(new)  # left-over ignored files (__pycache__): git mv would nest the folder inside it
         new.parent.mkdir(parents=True, exist_ok=True)
         git(root, "mv", OLD_DIR, NEW_DIR)
     inner = new / "ruff.toml"  # the package's lint file sits at the package root and extends the root's
