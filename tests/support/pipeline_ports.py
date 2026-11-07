@@ -5,6 +5,7 @@ from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.delegate import Permanence
 from taskloop.contracts.enums import Outcome
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.parks import Park
 from taskloop.domain.asks.spec import AskSpec
@@ -90,3 +91,13 @@ class FakeNarrate:
     def warn(self, text: str) -> int:
         self.warnings.append(text)
         return len(self.warnings)
+
+
+class FakeTrustRefusal:
+    def __init__(self, reason: str = "") -> None:
+        self.reason = reason
+        self.calls: list[tuple[Git, str, str, Bead | None]] = []
+
+    def refusal(self, git: Git, wt: str, base: str, bead: Bead | None) -> str:
+        self.calls.append((git, wt, base, bead))
+        return self.reason

@@ -4,9 +4,11 @@ owner. The 2026-10-21 night: three beads (a hand-written .meta against its sibli
 an evidence file that proved it) each waited hours for an ask a supervisor settled in a minute by reading."""
 from typing import Any
 
-from taskloop.app.review.host import ReviewHost
+from taskloop.app.review.host import ReviewHand, ReviewPorts
+from taskloop.app.review.state import ReviewLive
 from taskloop.app.review.verify_prompt import VERIFY_PROMPT
 from taskloop.contracts.answers import VERDICTS
+from taskloop.contracts.stagefacts import RunFacts
 from taskloop.domain import followups
 from taskloop.domain.review import switch, visual
 from taskloop.domain.review.kinds import UNCHECKED_KINDS
@@ -21,20 +23,19 @@ def plural(n: int) -> str:
 
 
 class Verifier:
-    def __init__(self, host: ReviewHost) -> None:
-        self.host = host
+    def __init__(self, facts: RunFacts, ports: ReviewPorts, live: ReviewLive, hand: ReviewHand) -> None:
+        self.facts, self.ports, self.live, self.hand = facts, ports, live, hand
 
     def run(self, gaps: list[Item]) -> list[Item]:
         """The items that still go to the owner."""
-        e = self.host
         if not gaps:
             return gaps
         gaps = self.drop_unused(gaps)
         if not gaps:
             return []
-        gaps, failed = e.settles.settle(gaps)  # tl-bxk.10.19: what the engine proves itself is never asked
-        gaps = e.routing.engine_steps(gaps)
-        off = switch.mode(e.cfg.review, e.budget.labels) == "off"
+        gaps, failed = self.hand.settles.settle(gaps)  # tl-bxk.10.19: what the engine proves itself is never asked
+        gaps = self.hand.routing.engine_steps(gaps)
+        off = switch.mode(self.facts.cfg.review, self.ports.budget.labels) == "off"
         if gaps and (off or not self.visual()):
             asked = self.defer(gaps, review_off=off and self.visual())
             if failed:  # what the engine itself found wrong still goes back to the writer
@@ -48,81 +49,78 @@ class Verifier:
 
     def visual(self) -> bool:
         """Verify runs only on a visual bead: some plan case is look-objective, taste or show (domain/review/visual.py)."""
-        return visual.is_visual((self.host.plan_data or {}).get("cases") or [])
+        return visual.is_visual((self.hand.plan_data or {}).get("cases") or [])
 
     def defer(self, gaps: list[Item], review_off: bool = False) -> list[Item]:
         """The items to ask. A bead that is not visual does not run verify: an item about one of its acceptance lines
         is asked, the others land with the bead and go in one follow-up bead tagged `follow-up` (filed at the close). A visual bead with
         engine.review off is deferred the same way (`review_off`): no verifier call, the skip is the step's typed reason and the
         bead's comment names the skipped check."""
-        e = self.host
         asked = [dict(u, why=u.get("why") or "it names an acceptance criterion")
-                 for u in gaps if visual.names_criterion(u["what"], e.scope or "")]
+                 for u in gaps if visual.names_criterion(u["what"], self.hand.scope or "")]
         rest = [u for u in gaps if u not in asked]
         if rest:
-            lo = followups.unchecked(e.bead, rest, followups.REVIEW_OFF if review_off else followups.NOT_VISUAL)
-            if e.routing.add_leftover(lo):
-                e.checkpoints.keep_pending("verify")
+            lo = followups.unchecked(self.facts.bead, rest, followups.REVIEW_OFF if review_off else followups.NOT_VISUAL)
+            if self.hand.routing.add_leftover(lo):
+                self.ports.checkpoints.keep_pending("verify")
             if review_off:
-                e.steps.begin("verify", f"{len(rest)} unchecked item(s): verify skipped ({SkipKind.REVIEW_OFF})")
-                e.steps.outcome("skipped", SkipKind.REVIEW_OFF)
-            e.comment("Verify (engine): " + ("visual check skipped, verify and look did not run because review is off; landed"
+                self.ports.steps.begin("verify", f"{len(rest)} unchecked item(s): verify skipped ({SkipKind.REVIEW_OFF})")
+                self.ports.steps.outcome("skipped", SkipKind.REVIEW_OFF)
+            self.ports.comment("Verify (engine): " + ("visual check skipped, verify and look did not run because review is off; landed"
                                               if review_off else "not a visual bead, landed")
                       + " with these unchecked, filed as a follow-up: " + "; ".join(u["what"] for u in rest))
-            e.steps.move("land", SkipKind.REVIEW_OFF if review_off else "not_visual",
+            self.ports.steps.move("land", SkipKind.REVIEW_OFF if review_off else "not_visual",
                          f"{len(rest)} item{plural(len(rest))} unchecked, one follow-up bead")
         return asked
 
     def counts(self) -> str:
-        return ", ".join(f"{sum(x['verdict'] == k for x in self.host.review.verified)} {k}" for k in VERDICTS)
+        return ", ".join(f"{sum(x['verdict'] == k for x in self.live.verified)} {k}" for k in VERDICTS)
 
     def drop_unused(self, gaps: list[Item]) -> list[Item]:
         """Items that name a tool the repo does not use are settled as 'not a check here'."""
-        e = self.host
-        unused = [(u, e.settles.unused_tool(u["what"])) for u in gaps]
+        unused = [(u, self.hand.settles.unused_tool(u["what"])) for u in gaps]
         for u, ev in unused:
             if ev:
-                e.review.add_verified(u, "settled", "not a check here", ev)
+                self.live.add_verified(u, "settled", "not a check here", ev)
         left = [u for u, ev in unused if not ev]
         n_drop = len(gaps) - len(left)
         if n_drop:
-            e.steps.move("verify" if left else "land", "not_a_check",
+            self.ports.steps.move("verify" if left else "land", "not_a_check",
                          f"{n_drop} item{plural(n_drop)} name a tool the repo does not use")
         if n_drop and not left:
             self.note(self.counts(), before=True)
         return left
 
     def note(self, counts: str, before: bool = False) -> None:
-        e = self.host
-        e.log.note(f"verify: before land: {counts}")
+        self.ports.log.note(f"verify: before land: {counts}")
         if before:
-            e.comment("Verify (engine): what the workers could not check, before land: " + "; ".join(
-                "{}: {}, {}".format(x["verdict"], x["what"], '"{}"'.format(x["evidence"])) for x in e.review.verified))
+            self.ports.comment("Verify (engine): what the workers could not check, before land: " + "; ".join(
+                "{}: {}, {}".format(x["verdict"], x["what"], '"{}"'.format(x["evidence"]))
+                for x in self.live.verified))
 
     def ask(self, gaps: list[Item]) -> dict[str, Any] | None:
         """The verifier's answer ({"items": []} when there is nothing to ask); None when no verifier could be had."""
-        e = self.host
         if not gaps:
             return {"items": []}
-        items = "".join(f"{n}. {u['what']} ({u['kind']})\n" for n, u in enumerate(gaps, 1)) + e.judge.look_verify(gaps)
-        prompt = VERIFY_PROMPT.format(brief=e.briefs.text(), work=e.settles.work_summary(), evidence=e.evidence_dir,
-                                      checks=e.settles.evidence_text(), where=e.briefing.where("verify"),
-                                      items=items) + e.routing.ledger().text()
+        items = "".join(f"{n}. {u['what']} ({u['kind']})\n" for n, u in enumerate(gaps, 1)) + self.ports.judge.look_verify(gaps)
+        prompt = VERIFY_PROMPT.format(brief=self.ports.briefs.text(), work=self.hand.settles.work_summary(),
+                                      evidence=self.facts.evidence_dir,
+                                      checks=self.hand.settles.evidence_text(), where=self.ports.briefing.where("verify"),
+                                      items=items) + self.hand.routing.ledger().text()
         try:
-            d = e.ai("verify", f"{len(gaps)} unchecked item(s) before land", prompt, writer_family=e.writer_family,
-                        items=len(gaps), at=(e.at_stage, 0, 0)).data
-        except e.Blocked as b:
+            d = self.ports.ai("verify", f"{len(gaps)} unchecked item(s) before land", prompt, writer_family=self.hand.writer_family,
+                        items=len(gaps), at=(self.hand.at_stage, 0, 0)).data
+        except self.ports.Blocked as b:
             if b.kind.name in RAISE_KINDS:
                 raise  # tl-bxk.10.31: the request is malformed for every bead; the network and a kill resume this step, they do not skip it
-            e.warn(f"could not self-verify before land, the owner checks every item: {b.why[:300]}")
+            self.ports.warn(f"could not self-verify before land, the owner checks every item: {b.why[:300]}")
             return None
-        if e.last_flag == "same_family":
-            e.warn("the check before land is from the writer's own model family (no other lane was free)")
+        if self.hand.last_flag == "same_family":
+            self.ports.warn("the check before land is from the writer's own model family (no other lane was free)")
         return d
 
     def judge(self, gaps: list[Item], d: dict[str, Any], failed: list[Item]) -> tuple[list[Item], list[Item]]:
         """(items still open for the owner, items found wrong), the verifier's verdict applied to each gap."""
-        e = self.host
         said: dict[int, Item] = {}
         for a in d["items"]:
             said.setdefault(a["n"], a)
@@ -134,67 +132,64 @@ class Verifier:
             v, why = a["verdict"], a["why"]
             if v == "settled" and not a["evidence"].strip():
                 v, why = "open", "settled without quoted evidence"
-            if e.judge.is_look(u):
-                v, a, why = e.judge.look_verdict(u, v, a, why)
-            kind, source = e.routing.resolve_kind(u, a)
+            if self.ports.judge.is_look(u):
+                v, a, why = self.ports.judge.look_verdict(u, v, a, why)
+            kind, source = self.hand.routing.resolve_kind(u, a)
             u = dict(u, kind=kind, source=source)
             route = ""
             if v == "open":
-                v, a, why, route = e.routing.route_open(u, a, why)
-            e.review.add_verified(u, "open" if route == "unverified" else v, why, a["evidence"])
+                v, a, why, route = self.hand.routing.route_open(u, a, why)
+            self.live.add_verified(u, "open" if route == "unverified" else v, why, a["evidence"])
             if route == "proof":
                 wrong.append(dict(u, why=why, proof_round=True))
             elif v != "settled" and route != "unverified":
                 (wrong if v == "wrong" else still).append(dict(u, why=why))
         self.note(self.counts())
-        e.steps.outcome("wrong" if wrong else "open" if still else "settled", self.counts())
-        e.comment("Verify (engine): what the workers could not check, self-verified read-only before land: " + "; ".join(
+        self.ports.steps.outcome("wrong" if wrong else "open" if still else "settled", self.counts())
+        self.ports.comment("Verify (engine): what the workers could not check, self-verified read-only before land: " + "; ".join(
             "{}: {}, {}".format(x["verdict"], x["what"], ('"{}"'.format(x["evidence"])) if x["verdict"] == "settled" else x["why"])
-            for x in e.review.verified))
+            for x in self.live.verified))
         return still, wrong
 
     def after_clean(self, still: list[Item], counts: str) -> list[Item]:
-        e = self.host
         if still:
-            e.steps.move("ask", "verify_open", f"{len(still)} item{plural(len(still))} only the owner can decide")
-        elif e.review.unverified:
-            n = len(e.review.unverified)
-            e.steps.move("land", "unverified", f"{n} item{plural(n)} land unverified, for the owner")
+            self.ports.steps.move("ask", "verify_open", f"{len(still)} item{plural(len(still))} only the owner can decide")
+        elif self.live.unverified:
+            n = len(self.live.unverified)
+            self.ports.steps.move("land", "unverified", f"{n} item{plural(n)} land unverified, for the owner")
         else:
-            e.steps.move("land", "verified", counts)
+            self.ports.steps.move("land", "verified", counts)
         return still
 
     def settle_wrong(self, still: list[Item], wrong: list[Item]) -> list[Item]:
         """Items found wrong go to a fix round; what the fix leaves unproven is routed again, until no fix round is left."""
-        e = self.host
-        if e.fixes >= e.cfg.max_fix_rounds:
-            e.steps.move("ask", "verify_wrong", f"{len(wrong)} found wrong, no fix round left")
+        if self.hand.fixes >= self.facts.cfg.max_fix_rounds:
+            self.ports.steps.move("ask", "verify_wrong", f"{len(wrong)} found wrong, no fix round left")
             return still + [dict(u, why="found wrong: {}; no fix round left".format(u["why"])) for u in wrong]
-        e.steps.move("fix", "verify_wrong", f"{len(wrong)} found wrong: " + "; ".join(u["why"] for u in wrong))
+        self.ports.steps.move("fix", "verify_wrong", f"{len(wrong)} found wrong: " + "; ".join(u["why"] for u in wrong))
         pending = wrong
         while True:
             left = self.fix_round(still, pending)
             pending = [u for u in left if u.get("proof_round")]
             if not pending:
                 return left
-            if e.fixes >= e.cfg.max_fix_rounds:  # a bead with an unproven checkable item never lands
-                raise e.routing.proof_stuck(pending)
+            if self.hand.fixes >= self.facts.cfg.max_fix_rounds:  # a bead with an unproven checkable item never lands
+                raise self.hand.routing.proof_stuck(pending)
             still = [u for u in left if not u.get("proof_round")]
-            e.steps.move("fix", "verify_unproven", f"{len(pending)} still unproven after the fix round")
+            self.ports.steps.move("fix", "verify_unproven", f"{len(pending)} still unproven after the fix round")
 
     def fix_round(self, still: list[Item], pending: list[Item]) -> list[Item]:
         """One fix round for the pending items; -> the items still unchecked after it, routed. The pending items stay unchecked in the
         fix's checkpoint: a fix round that pauses resumes at land and verifies them again, never lands them; the fix's review adds
         what it leaves unproven."""
-        e = self.host
-        e.review.unchecked = [u for u in e.review.unchecked if u["kind"] not in UNCHECKED_KINDS] + still + pending
-        before = len(e.review.unchecked)
+        self.live.unchecked = [u for u in self.live.unchecked if u["kind"] not in UNCHECKED_KINDS] + still + pending
+        before = len(self.live.unchecked)
         pending = [dict(u, why=u.get("why") or "add a test or check that proves: {}".format(u["what"])) for u in pending]
-        done = e.fixer.fix("verify", "".join("- {}: {}\n".format(u["what"], u["why"]) for u in pending))
+        done = self.ports.fixer.fix("verify", "".join("- {}: {}\n".format(u["what"], u["why"]) for u in pending))
         fixed = {u["what"] for u in pending}
         # what the fix's review added stays
-        e.review.unchecked = [u for u in e.review.unchecked[:before] if u["what"] not in fixed] + e.review.unchecked[before:]
-        left = [u for u in e.review.unchecked if u["kind"] in UNCHECKED_KINDS]
+        self.live.unchecked = [u for u in self.live.unchecked[:before] if u["what"] not in fixed] + self.live.unchecked[before:]
+        left = [u for u in self.live.unchecked if u["kind"] in UNCHECKED_KINDS]
         if done != "accept":
             left += [dict(u, why="found wrong: {}; the fix round did not pass".format(u["why"])) for u in pending]
-        return e.routing.route_left(left)
+        return self.hand.routing.route_left(left)

@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 TEXTS = ("AGENTS.md", "CLAUDE.md", "README.md", "skills/task-loop/SKILL.md")
 BRIEFS = ("src/taskloop/domain/prompts", "src/taskloop/app/*/prompts.py", "src/taskloop/app/write/review_prompt.py",
           "src/taskloop/app/review/verify_prompt.py",
-          "src/taskloop/app/run/reflect_prompt.py")
+          "src/taskloop/app/pipeline/reflect_prompt.py")
 FORBIDDEN = re.compile(
     r"suite\.py|suite-docker|test-fast|test-all|check-all|-n auto"
     r"|\bpytest\s+-\S+"            # pytest with options and no path: the whole suite
