@@ -1,5 +1,5 @@
 """A land whose push is rejected because main moved: a local origin that a second clone advances right before each rejected push, with
-the real land lock held around the land and a trace of what ran inside it (events). Used by EngineTest.run_push_race."""
+the real land lock held around the land and a trace of what ran inside it (events). Used by EngineLandMixin.run_push_race."""
 import os
 import signal
 from contextlib import contextmanager
