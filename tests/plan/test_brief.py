@@ -10,7 +10,6 @@ from tltestkit.cfgs import cfg_with
 from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 import taskloop.app.plan.briefs as mod
 from plan.brief_cases import CASES, beads

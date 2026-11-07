@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import support.paths  # noqa: F401
-
 from asks import test_ask_v3
 from taskloop.app.asks.intake import Intake
 from tlkernel import factorydb

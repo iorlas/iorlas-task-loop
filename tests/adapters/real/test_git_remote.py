@@ -4,7 +4,6 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-import support.paths  # noqa: F401
 from git_porcelain.real import Done, RealRepo
 
 from taskloop.adapters import git_ops

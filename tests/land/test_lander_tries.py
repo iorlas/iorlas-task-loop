@@ -1,16 +1,11 @@
 """The land's tries and its lock, with git answered from a table (tests/support/fakegit.py): no repository, no process.
 What `git` itself does on a rebase or a push race stays in test_engine_land_1 and test_stages_land."""
-import sys
-from pathlib import Path
 
 import pytest
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.fakegit import FakeGit
 from support.narrow_hosts import LandKit, Stopped, table_kit
+
+from tltestkit.case import Case
 
 # isort: split
 from taskloop.app.land.gate import Problem, ProblemKind, mint

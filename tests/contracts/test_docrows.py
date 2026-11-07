@@ -5,7 +5,6 @@ import os
 import shutil
 
 import pytest
-import support.paths  # noqa: F401
 
 from taskloop.stores.real import real_stores
 from tlkernel import scratch

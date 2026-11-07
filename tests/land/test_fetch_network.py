@@ -1,20 +1,14 @@
 """Connectivity failures before work pause the factory rather than failing a bead."""
-import sys
-from pathlib import Path
 from unittest import mock
 
 import pytest
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.rebase import must
 from tlkernel.landmatchers import Push
 from tlkernel.matchers import NetText
 from tlkernel.slots import SlotGitError
+from tltestkit.case import Case
 
 DNS = "fatal: unable to access 'https://github.com/org/repo': Could not resolve host: github.com"
 

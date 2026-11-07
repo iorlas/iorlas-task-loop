@@ -5,7 +5,6 @@ from pathlib import Path
 from threading import Barrier
 
 import pytest
-import support.paths  # noqa: F401
 
 from tlkernel.ids import RunId
 from tlkernel.locator import RunLocator, host_name

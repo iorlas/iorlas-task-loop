@@ -4,7 +4,6 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-import support.paths  # noqa: F401
 from support.shells import quiet_shell
 
 from taskloop.app.release import canary, pins

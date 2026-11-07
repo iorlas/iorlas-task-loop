@@ -1,14 +1,8 @@
 """Every regular expression of the review/verify prose is a named matcher; each has a table of real wording below."""
-import sys
-from pathlib import Path
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from tlkernel import reviewkinds as kinds
 from tlkernel.reviewmatchers import AcceptanceItems, BdDemand, CodeNames, EngineActions, GateProof, Tools, word_in
+from tltestkit.case import Case
 
 
 class Table(Case):

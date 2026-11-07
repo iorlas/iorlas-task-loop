@@ -1,5 +1,4 @@
 """An ADR as a file (`docs/adr/NNNN-title.md`): rendered, parsed back, and what the cache does with the files at the base commit."""
-import support.paths  # noqa: F401
 from support import homes
 
 from tlkernel import adrfiles, adrs

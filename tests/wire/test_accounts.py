@@ -4,8 +4,6 @@ import io
 from types import SimpleNamespace
 from unittest import mock
 
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
-
 # isort: split
 from taskloop.adapters import delegate as dg
 from taskloop.adapters.ident import config_dir

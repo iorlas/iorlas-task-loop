@@ -2,7 +2,6 @@
 import subprocess
 from pathlib import Path
 
-import support.paths  # noqa: F401
 from support import homes
 from support.spawn import port_git
 

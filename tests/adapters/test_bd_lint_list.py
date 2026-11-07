@@ -1,6 +1,5 @@
 """bd's lint error as a list (one section per line, each with its reason): every missing section is named, none with the reason."""
 
-import support.paths  # noqa: F401
 
 from taskloop.adapters import bd
 from taskloop.adapters.bdcreate import with_sections

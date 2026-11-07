@@ -18,7 +18,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402, F401
 
 # isort: split
 import tl  # noqa: E402

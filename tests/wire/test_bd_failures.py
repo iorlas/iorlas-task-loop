@@ -1,8 +1,6 @@
 """Optional tracker reads keep their fallbacks when bd is unavailable."""
 from unittest import mock
 
-import support.paths  # noqa: F401
-
 from taskloop.app.doctor import setup_checks
 from taskloop.app.wire import asks, brief, slots
 from tlkernel.bd_errors import BdCommandFailure

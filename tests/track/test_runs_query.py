@@ -1,12 +1,7 @@
 """RUNSQ: `tl runs show` and `tl runs slow` print the timed rows the engine wrote while it logged; they write nothing."""
 import io
 import json
-import sys
 from contextlib import redirect_stdout
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from taskloop.app.track import runs
 from tlkernel import log, timedrows

@@ -5,7 +5,6 @@ from pathlib import Path
 from tltestkit.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
-import support.paths  # noqa: E402, F401
 
 # isort: split
 from taskloop.domain.lanes import policy as lp  # noqa: E402

@@ -2,18 +2,10 @@
 with a quoted approval."""
 
 import argparse
-import sys
 from datetime import datetime
-from pathlib import Path
 from unittest import mock
 
 import pytest
-
-from tltestkit.case import Case
-from tltestkit.tmpdir import TemporaryDirectory
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
 from support.tiers import domain
@@ -28,7 +20,9 @@ from tlkernel.beadsport import NewBead
 from tlkernel.config import EngineConfig
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
+from tltestkit.case import Case
 from tltestkit.narrow import must
+from tltestkit.tmpdir import TemporaryDirectory
 
 T = 1_000_000.0
 

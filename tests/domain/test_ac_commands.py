@@ -1,13 +1,7 @@
 """AC parsing (tl-9un.1): which commands an acceptance names, and which of them a repo profile registers. Pure functions."""
-import sys
-from pathlib import Path
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 from taskloop.domain.beads import matchers as acnames
+from tltestkit.case import Case
 
 REG = [("unit", ["pytest", "-q"]), ("lint", ["ruff", "check"])]
 

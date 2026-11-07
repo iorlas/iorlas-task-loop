@@ -1,7 +1,6 @@
 """Commands without runs keep push evidence under the explicitly supplied config directory."""
 from pathlib import Path
 
-import support.paths  # noqa: F401
 from support.fakegit import ScriptedGit
 from support.forgesim import ForgeSim
 

@@ -3,8 +3,6 @@
 import json
 from unittest.mock import Mock, patch
 
-import support.paths  # noqa: F401
-
 from taskloop.app.loop import render
 from taskloop.app.loop.queue import Queue, Ranked, Skipped
 from tlkernel.bead import Bead

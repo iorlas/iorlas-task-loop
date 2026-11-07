@@ -1,12 +1,5 @@
 """The ask node presents the v3 fields and unknown-id errors."""
-import sys
-from pathlib import Path
 
-from tltestkit.case import Case
-from tltestkit.tmpdir import TemporaryDirectory
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 
 from taskloop.app.asks import ask_verbs
@@ -16,6 +9,8 @@ from tlkernel.askstore import AskStore
 from tlkernel.dash import OwnerCause
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 BEAD, RUN, T = "t-1", "t-1-20261026-100000", 5000.0
 

@@ -1,16 +1,8 @@
 """The lane usage history (append on each filed snapshot, prune by age), the forecast on synthetic series, the lane-card state map,
 and the Snapshot's lanes decoding strictly."""
 import json
-import sys
-from pathlib import Path
 
 import pytest
-
-from tltestkit.case import Case
-from tltestkit.tmpdir import TemporaryDirectory
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from taskloop.app.doctor import lanes
 from taskloop_dash.views import snapshot
@@ -23,7 +15,9 @@ from tlkernel.paths import ConfigDir
 from tlkernel.snapshots import LaneStatus, StatusSnapshot, WindowStatus
 from tlkernel.stores import UsageHistory
 from tlkernel.usage import USAGE_KEEP_S, UsageRow, forecast, rows_of
+from tltestkit.case import Case
 from tltestkit.narrow import must
+from tltestkit.tmpdir import TemporaryDirectory
 
 T = 1_800_000_000.0
 H = 3600.0

@@ -4,7 +4,6 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-import support.paths  # noqa: F401
 
 from taskloop.app.loop import take
 from taskloop.app.loop import verdict as vd

@@ -6,7 +6,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import support.paths  # noqa: F401
 
 from taskloop.stores.real import real_stores
 from tlkernel import factorydb, wire

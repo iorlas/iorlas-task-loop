@@ -1,7 +1,6 @@
 """dev/runtests.py sizes its workers by the cores the other lanes leave free; the landing gate (TL_TEST_FULL) takes them all."""
 import pytest
 import runtests
-import support.paths  # noqa: F401
 
 BIG = 5000
 

@@ -6,8 +6,6 @@ import tomllib
 from pathlib import Path
 from unittest import mock
 
-import support.paths  # noqa: F401
-
 # isort: split
 from taskloop.adapters.spawner import RealSpawner
 from tlkernel.env import snapshot

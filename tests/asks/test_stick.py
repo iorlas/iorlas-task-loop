@@ -1,14 +1,7 @@
 """Make it stick: each outcome of an answered ask through the Intake verb, its effect and its ledger row."""
-import sys
-from pathlib import Path
 from unittest import mock
 
 import pytest
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
 from support.tiers import domain
@@ -21,6 +14,7 @@ from tlkernel.bead import Bead
 from tlkernel.dash import Stick
 from tlkernel.ids import BeadId
 from tlkernel.ledger import Adr
+from tltestkit.case import Case
 from tltestkit.narrow import must
 
 T = 1000.0

@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import cast
 from unittest import mock
 
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.asked import ans
 from support.engine_case import LandReviewBase, StrayWriteScript
 

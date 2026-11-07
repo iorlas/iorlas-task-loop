@@ -7,7 +7,6 @@ from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
-import support.paths  # noqa: E402, F401
 from support import netgate  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402

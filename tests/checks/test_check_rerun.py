@@ -9,7 +9,6 @@ from typing import Any
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 from checks.test_check_rules import Base
 from tlgate.domain import planref

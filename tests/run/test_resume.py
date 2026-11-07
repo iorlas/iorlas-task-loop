@@ -1,12 +1,5 @@
 """What a resume hands the stage loop once the decision is made: where it goes on, and what it puts back in the engine."""
-import sys
-from pathlib import Path
 from types import SimpleNamespace
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.state import state_names
@@ -17,6 +10,7 @@ from tlkernel.checks import CheckRun
 from tlkernel.plancheck import PlanData
 from tlpipeline.api import Decision, Resume, ReviewGlue
 from tlpipeline.testing import FakeHeadHistory
+from tltestkit.case import Case
 
 PLAN: PlanData = {"summary": "two stages", "stages": [{"goal": "a", "files": [], "checks": []}, {"goal": "b", "files": [], "checks": []}]}
 

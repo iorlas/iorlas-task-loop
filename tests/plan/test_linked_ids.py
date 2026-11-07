@@ -1,8 +1,6 @@
 """Linked briefs treat IDs as opaque and ask the tracker reader to find prose references."""
 from unittest import mock
 
-import support.paths  # noqa: F401
-
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
 from tlkernel.planbrief import linked

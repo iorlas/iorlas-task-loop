@@ -11,7 +11,6 @@ from tltestkit.tmpdir import mkdtemp
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-import support.paths  # noqa: E402, F401
 
 from taskloop.adapters import procs  # noqa: E402
 from tltestkit.procsim import real_proc  # noqa: E402

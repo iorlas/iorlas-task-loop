@@ -1,14 +1,9 @@
 """A check's tags are set once where the check is made; the plan, the conflict fix and the evidence read the tags, never the id or
 command text again."""
-import sys
-from pathlib import Path
 
 import pytest
 
 from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 import msgspec

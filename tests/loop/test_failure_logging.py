@@ -1,18 +1,12 @@
 """Loop catch-alls preserve crash evidence while keeping their exit and retry behavior."""
 import contextlib
-import sys
-from pathlib import Path
 from unittest import mock
 
 import pytest
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
-
 from taskloop.app.loop import loop as module
 from taskloop.app.loop.loop import Loop
+from tltestkit.case import Case
 
 
 class FailureLogging(Case):

@@ -1,14 +1,9 @@
 """tl-f52: the bead lint is conservative and has an escape."""
-import sys
-from pathlib import Path
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.fakes import as_bead as _as_bead
 
 from taskloop.domain.beads import matchers as beadlint
+from tltestkit.case import Case
 from tltestkit.narrow import must
 
 

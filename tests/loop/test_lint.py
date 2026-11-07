@@ -1,13 +1,8 @@
 """tl-7y6.7.1 / .7.2: the bead rule table (a fixture per rule), `tl lint`, and the loop's once-only refusal of a failing bead."""
 import io
-import sys
 from contextlib import redirect_stdout
-from pathlib import Path
 
 from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from support.fakes import FakeBeadStore, as_bead

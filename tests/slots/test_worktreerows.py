@@ -3,7 +3,6 @@ import json
 import uuid
 
 import pytest
-import support.paths  # noqa: F401
 from support import homes
 
 from tlkernel import wire

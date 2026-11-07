@@ -2,8 +2,6 @@
 import json
 from pathlib import Path
 
-import support.paths  # noqa: F401
-
 from taskloop.app.parts import STAGE_PARTS
 from tlkernel import dbparts
 

@@ -1,13 +1,7 @@
 """Missing-setup asks receive one typed engine retry per bead and release."""
-import sys
-from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
 
@@ -23,6 +17,7 @@ from tlkernel.checkpoint import RunState
 from tlkernel.config import load
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
+from tltestkit.case import Case
 from tltestkit.narrow import must
 
 BEAD = BeadId("t-1")
