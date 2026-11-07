@@ -1,7 +1,6 @@
 """A bead parked on an ask that was dropped at upgrade (a v1 or unreadable file) stays visible and is asked again."""
 import json
 import sys
-from argparse import Namespace
 from pathlib import Path
 
 from support.case import Case
@@ -14,9 +13,9 @@ from support.askjson import unreadable_ask
 from support.fake_beads import FakeBeads
 from support.tiers import domain
 
+from taskloop.app.asks import ask_verbs as cli
 from taskloop.app.asks import sweeps
 from taskloop.app.asks.paths import ask_marker
-from taskloop.cli import asks as cli
 from tlkernel.askstore import HAD_PICK, ORPHAN, AskStore
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
@@ -43,7 +42,7 @@ class OrphanTest(Case):
         assert out == [sweeps.orphan_lines(self.asks)[0]]
         assert ORPHAN in out[0]
         listed: list[str] = []
-        cli.run(Namespace(op="list"), self.asks, lambda repo: self.store, lambda: T, "denis", self.cfg, listed.append)
+        cli.run(cli.Arguments(op="list"), self.asks, lambda repo: self.store, lambda: T, "denis", self.cfg, listed.append)
         assert ORPHAN in listed[0]
 
     def test_the_loop_reopens_it_into_the_pick_queue_once(self) -> None:
@@ -64,7 +63,7 @@ class OrphanTest(Case):
     def test_answer_rerun_reopens_it_and_a_closed_bead_drops_the_dead_file(self) -> None:
         out: list[str] = []
         code = cli.run(
-            Namespace(op="answer", bead="tl-7", text=[], rerun=True), self.asks, lambda repo: self.store, lambda: T, "denis",
+            cli.Arguments(op="answer", bead=BeadId("tl-7"), text=(), rerun=True), self.asks, lambda repo: self.store, lambda: T, "denis",
             self.cfg, out.append
         )
         assert (code, self.store.beads[BeadId("tl-7")].status) == (0, "open")
