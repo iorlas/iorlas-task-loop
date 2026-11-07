@@ -56,8 +56,8 @@ def store(repo: str) -> BdStore:
 
 def answer_via(home: ConfigDir) -> AnswerAsk:
     """The dashboard's answer is `tl answer`'s: the same Intake (record, bead opened, receipt comment), only `by` is "dash"."""
-    def answer(repo: str, bead: BeadId, action: AskAction, text: str, amend: bool) -> tuple[Ask | None, str]:
-        return owner_intake(wire_asks.store(home), store, now)(repo).answer(bead, action, text, amend)
+    def answer(repo: str, bead: BeadId, action: AskAction, text: str, amend: bool, expect: str = "") -> tuple[Ask | None, str]:
+        return owner_intake(wire_asks.store(home), store, now)(repo).answer(bead, action, text, amend, expect)
     return answer
 
 

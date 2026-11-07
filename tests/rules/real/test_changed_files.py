@@ -24,7 +24,7 @@ class ChangedFiles(Case):
         if base.returncode != 0:
             pytest.skip("no origin/main to compare with")
         tip = base.stdout.strip()
-        names = set(git("diff", "--no-renames", "--name-only", "--diff-filter=ACMRD", tip).stdout.split())
+        names = set(git("diff", "--name-only", "--no-renames", "--diff-filter=ACMRD", tip).stdout.split())
         names |= set(git("ls-files", "--others", "--exclude-standard").stdout.split())
         paths = sorted(n for n in names if n.startswith("src/") and n.endswith(".py") and "_vendor" not in n)
         before = {n: git("show", f"{tip}:{n}").stdout for n in paths if git("cat-file", "-e", f"{tip}:{n}").returncode == 0}

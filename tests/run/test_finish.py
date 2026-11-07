@@ -14,7 +14,7 @@ from support.engine_case import EngineTest
 from support.plans import CLEAN, PLAN, WRITE
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.app.run.finish import answer, outcome
+from taskloop.app.pipeline.finish import answer, outcome
 from taskloop.contracts import log, runlife, wire
 from taskloop.contracts.checkpoint import EndRec
 from taskloop.contracts.events import Stage

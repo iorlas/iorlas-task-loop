@@ -5,10 +5,10 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.app.land.gitcall import oneline
-from taskloop.app.run.decide import CONFIRMED, OUTSIDE, Decision, World, resume_decision, stage_count
+from taskloop.app.pipeline.decide import CONFIRMED, OUTSIDE, Decision, World, resume_decision, stage_count
 from taskloop.app.run.review_glue import apply_review
 from taskloop.app.run.state import state_names
-from taskloop.contracts import plancheck
+from taskloop.contracts import plancheck, wire
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.enums import AskClass
 from taskloop.contracts.plancheck import PlanData, RoundState
@@ -136,7 +136,13 @@ class Resume:
             e.log.note(f"resuming {ck.run}: every stage was accepted, going straight to land")
             return plan, d.stage, None
         e.log.note(f"resuming {ck.run} at stage {ck.stage + 1}/{stage_count(ck)}, round {ck.rounds + 1} (write {ck.n + 1})")
-        return plan, ck.stage, {"rounds": ck.rounds, "n": ck.n, "feedback": ck.feedback}
+        state: RoundState = {"rounds": ck.rounds, "n": ck.n, "feedback": ck.feedback}
+        if ck.step == "review" and ck.progress is not None and ck.progress.write is not None:  # tl-q3ma
+            e.last_run = e.stores.check_run(ck.run, None).get()
+            if e.last_run is not None:
+                e.stores.check_run(e.run_id, None).write(e.last_run)
+                state["review_from"] = wire.dump(ck.progress)
+        return plan, ck.stage, state
 
     def redo(self, ck: Checkpoint, d: Decision) -> tuple[PlanData | None, int, RoundState | None]:
         """A file a stage promised is gone (the resume is in another slot): that stage runs again."""

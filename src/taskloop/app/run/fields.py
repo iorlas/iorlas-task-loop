@@ -10,12 +10,12 @@ from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.runner import Checker
 from taskloop.app.land.state import LandState
 from taskloop.app.look.state import LookState
+from taskloop.app.pipeline.budget import Budget
+from taskloop.app.pipeline.steps import Steps
 from taskloop.app.plan.state import PlanState
 from taskloop.app.review.state import ReviewLive
-from taskloop.app.run.budget import Budget
 from taskloop.app.run.context import RunContext
 from taskloop.app.run.state import Checkpoints, StateAttrs
-from taskloop.app.run.steps import Steps
 from taskloop.app.workers.calls import Calls
 from taskloop.app.write.state import WriteState
 from taskloop.contracts import fence
@@ -86,7 +86,7 @@ class RunFields(StateAttrs):
                  fresh: bool, claim: fence.Claim | None, who: Identity) -> None:
         self.bead, self.cfg, self.dry, self.verbose = bead, cfg, dry_run, verbose
         self.claim = claim or fence.offline(bead)  # the run's right to act on its bead (app/track/fence.py); offline: nothing to check
-        self.dead: Checkpoint | None = None  # a run died inside its close: its checkpoint, to finish that close (app/run/ended.py)
+        self.dead: Checkpoint | None = None  # a run died inside its close: its checkpoint, to finish that close (app/pipeline/ended.py)
         self.fenced = ""  # why this run was fenced out (its bead or slot taken again), once it was
         self.wt: str = wt
         self.store, self.router = store or beadtools.bd_store(who.actor), route

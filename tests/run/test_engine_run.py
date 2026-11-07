@@ -37,12 +37,9 @@ from support.who import who
 
 from taskloop.adapters import delegate as dl
 from taskloop.app.land.checkout import Checkout
+from taskloop.app.pipeline import outcomes
 from taskloop.app.plan.planner import Planner
-from taskloop.app.run import (
-    engine,
-    entry,
-    outcomes,
-)
+from taskloop.app.run import engine, entry
 from taskloop.app.slots.lease import Lease
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.config import EngineConfig
@@ -270,6 +267,15 @@ class EngineRunTest(EngineTest):
         self.run_engine({"write": [WRITE], "review": [CLEAN]})
         assert sum(1 for c in self.bd_calls if c[:2] == ("create", "Rename x")) == 1
 
+    def test_a_run_parked_in_its_review_resumes_at_the_review_without_a_planner_or_a_writer(self):  # tl-q3ma
+        with self.stop_at("reviewer", 1):
+            self.run_engine({"plan": [self.TWO], "write": [WRITE], "review": [CLEAN]})
+        ck = stored_ck()
+        assert ck is not None and ck.step == "review" and ck.progress is not None
+        rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN, CLEAN]})
+        assert rc == 0
+        assert [c[0] for c in s.calls] == ["reviewer", "worker", "reviewer"]  # stage 1's review, then stage 2 whole
+
     def test_a_run_killed_before_its_close_still_resumes_its_own_dirty_tree(self):
         with self.stop_at("reviewer", 2):
             self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN]})
@@ -278,9 +284,9 @@ class EngineRunTest(EngineTest):
         sh("git", "checkout", "-q", "task/t-1", cwd=self.wt)  # (a parked slot is left detached at the base: back on the bead's branch)
         sh("git", "reset", "-q", "--soft", "HEAD~1", cwd=self.wt)
         self.eng.stores.checkpoints.of("t-1").write(ck.replace(closed=False, head=gitq.git("rev-parse", "HEAD", cwd=str(self.wt))))
-        rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
+        rc, s = self.run_engine({"review": [CLEAN]})
         assert rc == 0
-        assert [c[0] for c in s.calls] == ["worker", "reviewer"]
+        assert [c[0] for c in s.calls] == ["reviewer"]  # its write and checks were green (tl-q3ma)
 
     def test_admit_refuses_a_live_claim_and_a_persons_claim(self):
         ok, why, up = self.admit({"status": "in_progress", "assignee": "tl-61ba34e7",
