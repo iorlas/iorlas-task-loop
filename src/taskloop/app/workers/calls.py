@@ -61,7 +61,6 @@ class Calls:
             "status": "done" if st is None else "stopped",
             "ref": ref,
             "run_id": res.run_id or (worker.run_id if worker else None),
-            "transcript": res.transcript or "",
             "family": res.family or "",
             "lane": lane,
             "model": model,
@@ -109,7 +108,6 @@ class Calls:
                                   cache_write=res.usage.tokens.cache_write if res.usage and res.usage.tokens else None),
                 family=row["family"] or "",
                 flag=row["flag"],
-                transcript=row["transcript"],
                 exit=res.exit_code,
             )
         )
