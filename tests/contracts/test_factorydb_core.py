@@ -25,6 +25,8 @@ TABLES = {
     "release_doc",  # a stage that moves its table adds its own line here
     "report_doc",
     "work_doc",
+    "worktree_doc",
+    "disk_doc",
     "loop_doc",
     "look_doc",
     "lanes_doc",
