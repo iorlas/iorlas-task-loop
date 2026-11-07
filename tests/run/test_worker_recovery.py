@@ -44,7 +44,7 @@ class Recovery(Case):
     def call(self, cwd="/repo", schema=None):
         return call.Call(
             "write", "worker", schema or {"type": "object"}, cwd, "same prompt", "same prompt",
-            None, None, ("write", 1, 0, 0), True, None, "write", "Write",
+            None, None, ("write", 1, 0, 0), "writer", None, "write", "Write",
         )
 
     def saved(self, memo=False):
@@ -74,7 +74,7 @@ class Recovery(Case):
                         self.host.git.rev_parse.return_value = "head-2"
                     self.worker.attach(c)
                     assert c.finished is None
-                    assert c.resume is None
+                    assert c.delta is None
 
     def test_nonsemantic_destinations_allow_completed_reuse(self):
         for memo in (False, True):
@@ -116,13 +116,13 @@ class Recovery(Case):
         st.note_ref("thread-1")
         c = self.call()
         self.worker.attach(c)
-        assert c.resume == "thread-1"
+        assert c.delta == worker_call.worker_recovery.RESUME_AFTER_STOP
         assert c.finished is None
         st.execution_id = ""
         st.save()
         c = self.call()
         self.worker.attach(c)
-        assert c.resume is None
+        assert c.delta is None
         assert c.finished is None
 
     def test_returned_writer_is_bound_to_its_resulting_tree(self):
@@ -212,7 +212,7 @@ class Recovery(Case):
         assert st.execution_id == c.sha
         again = self.call()
         self.worker.attach(again)
-        assert again.resume == "thread-1"
+        assert again.delta == worker_call.worker_recovery.RESUME_AFTER_STOP
         self.host.log.note.assert_called_with("write: compatible interrupted thread thread-1: resuming")
 
     def test_wip_save_does_not_admit_changed_request_semantics(self):
@@ -227,16 +227,16 @@ class Recovery(Case):
         changed.full = "changed prompt"
         for again in (changed, self.call("/other"), self.call(schema={"type": "array"})):
             self.worker.attach(again)
-            assert again.resume is None
+            assert again.delta is None
         self.req = self.req.replace(engine_only=["check"])
         again = self.call()
         self.worker.attach(again)
-        assert again.resume is None
+        assert again.delta is None
         self.req = self.req.replace(engine_only=[])
         with mock.patch("taskloop.app.workers.worker_recovery.PRODUCER", "future"):
             again = self.call()
             self.worker.attach(again)
-            assert again.resume is None
+            assert again.delta is None
 
     def test_unknown_tree_cannot_prove_completed_effects(self):
         self.saved()

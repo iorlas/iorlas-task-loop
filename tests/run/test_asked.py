@@ -22,7 +22,8 @@ from tltestkit.narrow import must
 
 
 def call(node="write", resume_key=True, writer_family=None):
-    return Call(node, "worker", {}, "/repo", "full", "text", None, None, ("k", 1), resume_key, writer_family, None, "t")
+    return Call(node, "worker", {}, "/repo", "full", "text", None, None, ("k", 1),
+                "writer" if resume_key else "k/1", writer_family, None, "t")
 
 
 @pytest.mark.parametrize(("res", "resume_key", "want"), [
