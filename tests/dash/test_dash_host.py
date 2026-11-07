@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from support.case import Case
 
+from taskloop.contracts import factorydb
 from taskloop.contracts.slottable import SlotSource
 from taskloop_dash.cli import dash
 from taskloop_dash.env import Env, Ports
@@ -12,7 +13,8 @@ from taskloop_dash.readers.world import Worlds
 
 class DashboardHost(Case):
     def test_the_launcher_supplies_the_system_host_once(self):
-        with patch("socket.gethostname", return_value="dtomilin-mWG") as hostname, \
+        with patch.object(factorydb._STORE, "parts", None), \
+                patch("socket.gethostname", return_value="dtomilin-mWG") as hostname, \
                 patch.object(dash, "code_version", return_value="v-test"), \
                 patch.object(dash.serve, "main") as serve:
             dash.main([])

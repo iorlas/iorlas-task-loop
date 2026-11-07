@@ -17,11 +17,13 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
+from taskloop.cli.ctx import declare_stage_parts
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 
 
 def main(marker: str) -> None:
+    declare_stage_parts()
     eng = engine.Engine(BeadId("t-1"), os.environ["STATE_WT"], wslots.load_cfg(os.environ["STATE_WT"], port_git()),
                         store=FakeBeadStore(), env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
     eng.log.note("run started")
