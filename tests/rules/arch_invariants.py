@@ -6,12 +6,11 @@ from importgraph import bindings, qualified
 
 # The former per-slice deny contracts, expressed once as allowed direct imports.
 SLICE_IMPORTS: Final = {
-    "artifacts": frozenset(),
     "asks": frozenset(),
     "checks": frozenset(),
     "doctor": frozenset(),
     "land": frozenset({"asks", "checks", "slots"}),
-    "look": frozenset({"artifacts", "asks", "checks"}),
+    "look": frozenset({"asks", "checks"}),
     "loop": frozenset({"asks", "release", "report", "run", "slots"}),
     "parts": frozenset({"checks", "land"}),  # the one list of stage parts imports each stage that owns its tables (store.py)
     "pipeline": frozenset(),
@@ -25,7 +24,7 @@ SLICE_IMPORTS: Final = {
     "slots": frozenset(),
     "track": frozenset(),
     "workers": frozenset({"asks", "checks"}),
-    "write": frozenset({"artifacts", "asks", "checks"}),
+    "write": frozenset({"asks", "checks"}),
 }
 COMPOSITION_ROOTS: Final = frozenset({"launch", "run", "wire"})
 

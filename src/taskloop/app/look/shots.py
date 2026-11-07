@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from tlartifacts import store
+from tlartifacts.keep import Keeper
 from tlkernel.artifact import ArtifactMeta, ArtifactSlot
 from tlkernel.gitport import Git
 from tlkernel.plancheck import StageData
@@ -13,8 +15,6 @@ from tlkernel.stagefacts import RunFacts
 from tlkernel.wire import Refused
 
 from taskloop.adapters import looks
-from taskloop.app.artifacts import store
-from taskloop.app.artifacts.keep import Keeper
 from taskloop.app.look.host import LookHost, LookPorts
 from taskloop.app.look.state import LookState
 from taskloop.domain.checks.matchers import glob_re
