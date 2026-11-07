@@ -101,7 +101,8 @@ def declare_parts(parts: Sequence[dbparts.Part]) -> None:
     if _STORE.parts is not None and _STORE.parts != declared:
         raise ValueError("factory.db parts already declared with a different list")
     _STORE.parts = declared
-    _STORE.schema = replace(_STORE.schema, ddl=dbparts.ddl(declared))  # a fresh file is created whole, with its user_version, in one transaction
+    # a fresh file is created whole, with its user_version, in one transaction
+    _STORE.schema = replace(_STORE.schema, ddl=dbparts.ddl(declared))
 
 
 def prune_older_than(
