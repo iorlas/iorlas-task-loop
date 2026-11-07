@@ -54,7 +54,7 @@ ROUTE = textwrap.dedent('''
             f.write(json.dumps({"v": 1, "pid": w.pid, "pgid": w.pid, "run_id": "run1"}) + "\\n")
             f.flush()
             while mode == "chatty" and time.time() < float(os.environ["CHAT_UNTIL"]):
-                f.write(json.dumps({"t": time.time(), "k": "msg", "text": "still here"}) + "\\n")
+                f.write(json.dumps({"t": time.time(), "kind": "msg", "text": "still here"}) + "\\n")
                 f.flush()
                 time.sleep(0.1)
             if mode == "chatty":

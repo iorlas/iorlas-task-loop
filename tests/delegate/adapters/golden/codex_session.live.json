@@ -6,7 +6,7 @@
   "run_id": "rid"
  },
  {
-  "k": "start",
+  "kind": "start",
   "t": 101.0,
   "harness": "codex",
   "pid": 4242,
@@ -16,13 +16,13 @@
   "role": "worker"
  },
  {
-  "k": "cmd_start",
+  "kind": "cmd_start",
   "t": 103.0,
   "id": "c1",
   "text": "ls"
  },
  {
-  "k": "cmd_end",
+  "kind": "cmd_end",
   "t": 105.0,
   "id": "c1",
   "exit": 0,
@@ -30,70 +30,70 @@
   "out": "a b"
  },
  {
-  "k": "tool_start",
+  "kind": "tool_start",
   "t": 107.0,
   "id": "f1",
   "text": "edit x.py, y.py"
  },
  {
-  "k": "tool_end",
+  "kind": "tool_end",
   "t": 109.0,
   "id": "f1",
   "secs": 2.0
  },
  {
-  "k": "tool_start",
+  "kind": "tool_start",
   "t": 111.0,
   "id": "m1",
   "text": "docs.search"
  },
  {
-  "k": "tool_end",
+  "kind": "tool_end",
   "t": 113.0,
   "id": "m1",
   "secs": 2.0
  },
  {
-  "k": "tool_start",
+  "kind": "tool_start",
   "t": 115.0,
   "id": "w1",
   "text": "web python match"
  },
  {
-  "k": "tool_end",
+  "kind": "tool_end",
   "t": 117.0,
   "id": "w1",
   "secs": 2.0
  },
  {
-  "k": "think",
+  "kind": "think",
   "t": 118.0,
   "text": "plan the change"
  },
  {
-  "k": "msg",
+  "kind": "msg",
   "t": 119.0,
   "text": "done"
  },
  {
-  "k": "raw",
+  "kind": "raw",
   "t": 120.0,
   "type": "item.completed"
  },
  {
-  "k": "raw",
+  "kind": "raw",
   "t": 121.0,
   "type": "weird.event"
  },
  {
-  "k": "tokens",
+  "kind": "tokens",
   "t": 122.0,
   "in": 100,
   "cached": 40,
   "out": 7
  },
  {
-  "k": "end",
+  "kind": "end",
   "t": 123.0,
   "status": "done",
   "secs": 24.0

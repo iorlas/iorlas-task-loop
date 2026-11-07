@@ -42,11 +42,11 @@ class LivePageApi(Case):
         put(self.log, [typed("run_start", T, run_id=RUN, bead=BEAD, worktree=""), typed("beat", T + 1),
                        typed("step_start", T + 2, id="n1", step="write", text="write: x"), typed("beat", T + 3),
                        typed("cmd_start", T + 4, id="m1", text="git fetch -q origin"), typed("cmd_end", T + 5, id="m1", exit=0)])
-        put(self.lf, [{"t": T + 6, "k": "start", "harness": "codex", "lane": "CODEX", "model": "gpt-x", "pid": 1},
-                      {"t": T + 7, "k": "msg", "text": "reading the plan"},
-                      {"t": T + 8, "k": "tool_start", "id": "t1", "text": "Read src/x.py"},
-                      {"t": T + 9, "k": "cmd_start", "id": "1", "text": "pytest -q"},
-                      {"t": T + 10, "k": "cmd_end", "id": "1", "exit": 1, "secs": 2.0, "out": "a\nFAILED test_x\n"}])
+        put(self.lf, [{"t": T + 6, "kind": "start", "harness": "codex", "lane": "CODEX", "model": "gpt-x", "pid": 1},
+                      {"t": T + 7, "kind": "msg", "text": "reading the plan"},
+                      {"t": T + 8, "kind": "tool_start", "id": "t1", "text": "Read src/x.py"},
+                      {"t": T + 9, "kind": "cmd_start", "id": "1", "text": "pytest -q"},
+                      {"t": T + 10, "kind": "cmd_end", "id": "1", "exit": 1, "secs": 2.0, "out": "a\nFAILED test_x\n"}])
 
     def get(self, since="", wait="0"):
         ingest(self.dash.env.config, self.now)
@@ -81,7 +81,7 @@ class LivePageApi(Case):
         put(self.log, [typed("beat", T + 20)])
         quiet = self.get(first.cursor)
         assert (quiet.lines, quiet.cursor == first.cursor) == ([], False)  # log cursor advances past Beats
-        put(self.lf, [{"t": T + 21, "k": "msg", "text": "done"}, {"t": T + 22, "k": "stall", "secs": 61}])
+        put(self.lf, [{"t": T + 21, "kind": "msg", "text": "done"}, {"t": T + 22, "kind": "stall", "secs": 61}])
         more = self.get(quiet.cursor)
         assert [(ln.text, ln.tone) for ln in more.lines] == [("done", ""), ("no output for 61s", "err")]
         assert self.get(more.cursor).lines == []

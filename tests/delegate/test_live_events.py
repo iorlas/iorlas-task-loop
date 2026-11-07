@@ -108,19 +108,23 @@ class LiveFile(Case):
         return [json.loads(x) for x in Path(path).read_text().splitlines()]
 
     def events(self, path):
-        return [e for e in self.lines(path) if "k" in e]  # the first line is the WorkerStarted, which has no kind
+        rows = self.lines(path)
+        assert all("k" not in e for e in rows)
+        # The first line is the WorkerStarted, which has no kind.
+        return [e for e in rows if "kind" in e]
 
     def test_codex(self):
         f = self.base / "sub" / "dir" / "live.jsonl"  # parent dirs are created
         r = self.run_kind("codex", CODEX, f)
         assert r.get("outcome") is None
         ev = self.events(f)
-        assert [e["k"] for e in ev] == ["start", "cmd_start", "cmd_end", "tool_start", "tool_end", "think", "msg", "raw", "tokens", "end"]
+        assert [e["kind"] for e in ev] == [
+            "start", "cmd_start", "cmd_end", "tool_start", "tool_end", "think", "msg", "raw", "tokens", "end"]
         assert (ev[1]["id"], ev[2]["id"], ev[2]["exit"], ev[2]["out"]) == ("c1", "c1", 0, "a b")
         assert len(ev[1]["text"]) == 2000
         assert (ev[3]["id"], ev[3]["text"], ev[4]["id"]) == ("f1", "edit x.py", "f1")
         assert len(ev[5]["text"]) == 500
-        assert ev[7] == {"t": ev[7]["t"], "k": "raw", "type": "weird.event"}  # the type name only, never the payload
+        assert ev[7] == {"t": ev[7]["t"], "kind": "raw", "type": "weird.event"}  # the type name only, never the payload
         assert (ev[8]["in"], ev[8]["cached"], ev[8]["out"]) == (100, 40, 7)
         assert (ev[0]["harness"], ev[0]["role"], ev[0]["effort"], isinstance(ev[0]["pid"], int)) == ("codex", "worker", "high", True)
         first = self.lines(f)[0]
@@ -141,13 +145,13 @@ class LiveFile(Case):
         assert r.get("outcome") is None
         assert parse.call_count == len(CODEX)
         assert (r["tokens"], r["ref"]) == ({"in": 100, "cached": 40, "out": 7}, "th-1")
-        assert self.events(f)[1]["k"] == "cmd_start"
+        assert self.events(f)[1]["kind"] == "cmd_start"
 
     def test_claude(self):
         f = self.base / "live.jsonl"
         assert self.run_kind("claude", CLAUDE, f).get("outcome") is None
         ev = self.events(f)
-        assert [e["k"] for e in ev] == ["start", "cmd_start", "tool_start", "tokens", "cmd_end", "tool_end", "msg", "tokens", "end"]
+        assert [e["kind"] for e in ev] == ["start", "cmd_start", "tool_start", "tokens", "cmd_end", "tool_end", "msg", "tokens", "end"]
         assert (ev[1]["id"], ev[1]["text"], ev[4]["id"], ev[4]["out"]) == ("tu1", "ls", "tu1", "a b")
         assert (ev[2]["id"], ev[2]["text"], ev[5]["id"], ev[5]["out"]) == ("tu2", "Edit skills/x.py", "tu2", "ok")
         assert ev[-1]["cost_usd"] == 0.25
@@ -156,7 +160,7 @@ class LiveFile(Case):
         f = self.base / "live.jsonl"
         assert self.run_kind("opencode", OPENCODE, f).get("outcome") is None
         ev = self.events(f)
-        assert [e["k"] for e in ev] == ["start", "cmd_start", "cmd_end", "tool_start", "tool_end", "tokens", "msg", "tokens", "end"]
+        assert [e["kind"] for e in ev] == ["start", "cmd_start", "cmd_end", "tool_start", "tool_end", "tokens", "msg", "tokens", "end"]
         assert (ev[1]["id"], ev[2]["id"], ev[2]["exit"], ev[2]["secs"]) == ("o1", "o1", 0, 0.5)
         assert (ev[3]["text"], ev[3]["id"], ev[4]["id"]) == ("edit skills/x.py", "o2", "o2")
 
@@ -189,4 +193,4 @@ class LiveFile(Case):
                 lv.message("x" * 50)
             lv.end("done")
         ev = self.events(f)
-        assert (ev[-1]["k"], lv.capped, 0 < len(ev) < 10) == ("end", True, True)
+        assert (ev[-1]["kind"], lv.capped, 0 < len(ev) < 10) == ("end", True, True)

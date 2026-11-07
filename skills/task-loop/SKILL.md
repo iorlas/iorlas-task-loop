@@ -702,6 +702,10 @@ or judge: its own checks are the facts, and accept is a rule (checks green, noth
 After every worker call, reader and reviewer included, the engine checks that the slot is still on the task branch and that the
 slot gained no worktree inside it (other slots add theirs anywhere); a worker that moved either fails the bead (`FAULT_ENGINE`, naming what moved) and nothing is repaired.
 
+Delegate live files use the codec's default `kind` tag on event lines,
+alongside `t` (epoch seconds). The first `WorkerStarted` line is untagged.
+Readers refuse lines tagged only with `k`; old live files are discarded.
+
 The one thing the engine cannot do itself: read your Claude usage. Since delegate 0.18 Claude steps run without a
 reading, but only a fresh reading keeps delegate's reserve for your own sessions, so while an engine runs feed it every
 20 minutes: call `get_usage`, then `$TL usage '<plan.windows as JSON>'`.
