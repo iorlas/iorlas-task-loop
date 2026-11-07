@@ -12,7 +12,7 @@ import pytest
 from support import stepgraph
 
 from taskloop.app.pipeline.cursor import select_step
-from tlkernel.checkpoint import Checkpoint, EndRec
+from tlkernel.checkpoint import Checkpoint, CloseIntent, EndRec, PauseFacts
 from tlkernel.enums import Step
 from tlkernel.locator import RunBundle
 from tlkernel.run import RunManifest, RunState
@@ -31,7 +31,7 @@ def bundle(manifest_next: Step | None, state: RunState = RunState.LOST, run: str
 
 
 def checkpoint(step: str, run: str = "r1", t: float = CK_AT, ended: EndRec | None = None) -> Checkpoint:
-    return Checkpoint(bead="t-1", run=run, t=t, step=step, ended=ended)
+    return Checkpoint(bead="t-1", run=run, t=t, step=step, ended=CloseIntent(outcome=ended, pause=PauseFacts()) if ended else None)
 
 
 def after_kill(step: Step, nxt: Step, point: str) -> tuple[RunBundle, Checkpoint]:

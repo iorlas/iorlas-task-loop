@@ -82,7 +82,7 @@ class Engine(RunHost):
         ck = None if dry_run or self.reexec or pause else self.checkpoints.read()
         self.dead = ck if ended.unfinished(ck) else None
         # exec and an unfinished close retain their run id; a completed network pause retains only its counters
-        dead_run = self.dead.ended.run if self.dead and self.dead.ended else None
+        dead_run = self.dead.ended.outcome.run if self.dead and self.dead.ended else None
         taken = (self.reexec.run if self.reexec else None) or (live_run(self.home, pause.run) if pause else None) or dead_run
         repo = repo_of(self.git, wt)
         layout = RunLayout.open(bead, wt, taken, self.home, repo, self.clock.now(),

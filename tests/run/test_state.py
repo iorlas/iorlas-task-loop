@@ -239,10 +239,11 @@ OK = {"src/taskloop/app/run/state.py", "src/taskloop/stores/books.py", "src/task
 
 class OldCheckpoint(Case):
     """A checkpoint written before the look stage's fields became `engine.look` (tests/fixtures/checkpoint_v3_look.json, dumped by that
-    code): the record on disk is unchanged, so it loads, the look stage sees its fields, and saving writes them back as they were."""
+    code): at the current envelope version, the look stage sees its fields and saving writes them back as they were."""
 
     def test_an_old_checkpoint_gives_the_look_stage_its_fields_and_saves_them_back(self):
         old = json.loads((ROOT / "tests" / "fixtures" / "checkpoint_v3_look.json").read_text(encoding="utf-8"))
+        old["v"] = Checkpoint.V  # this test covers the look fields; foreign envelope versions are refused separately
         ck = wire.load(Checkpoint, old)
         h = Host()
         Resume(h, FakeHeadHistory(), ReviewGlue(h), state_names()).restore(ck, late=True)

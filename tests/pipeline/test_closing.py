@@ -7,7 +7,9 @@ from support.pipeline_ports import FakeAskRules, FakeParkBook
 
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs
+from tlkernel import wire
 from tlkernel.bead import Bead
+from tlkernel.checkpoint import Checkpoint, CloseIntent, EndRec, PauseFacts
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.parks import Park
@@ -58,6 +60,35 @@ def test_pause_applies_the_park_books_retry_and_reason(monkeypatch):
     assert kit.host.retry_after == 500
     assert kit.host.pause_reason == 'no_lane'
     assert not kit.host.asked
+
+
+def test_close_intent_round_trips_inside_checkpoint():
+    intent = CloseIntent(outcome=EndRec(run="dead", kind="engine_crash", fingerprint="fp", detail="crashed"),
+                         pause=PauseFacts(reason="crash", producer="delegate", permanence="transient",
+                                          retry_after=1234, crash_fingerprint="dead-fp", crash_site="write"),
+                         stats="cost=$9.50; minutes=12", plan_summary="dead plan", asked=True)
+    ck = Checkpoint(bead="t-1", run="dead", t=100, ended=intent)
+    assert wire.load(Checkpoint, wire.dump(ck)) == ck
+
+
+def test_resume_restores_dead_runs_pause_and_passes_stats_unchanged(monkeypatch):
+    kit = CloseKit(dry=False)
+    parks = FakeParkBook()
+    kit.closer.parks = parks
+    bead = Bead(id=BeadId("t-1"), title="work", status="open")
+    monkeypatch.setattr("taskloop.app.pipeline.closing.beadtools.peek", lambda *args: bead)
+    intent = CloseIntent(outcome=EndRec(run="dead", kind=Kind.ENGINE_CRASH.value, fingerprint="fp", detail="crashed"),
+                         pause=PauseFacts(reason="dead reason", producer="delegate", permanence="transient",
+                                          retry_after=1234, crash_fingerprint="dead-fp", crash_site="write"),
+                         stats="cost=$9.50; minutes=12", plan_summary="dead plan", asked=True)
+    finish = Mock(side_effect=lambda done, stats: kit.closer.pause(done))
+    monkeypatch.setattr(kit.closer, "finish", finish)
+    kit.closer.resume(Checkpoint(bead="t-1", run="dead", t=100, ended=intent))
+    assert finish.call_args.args[1] == intent.stats
+    assert parks.paused_calls[0][4:] == ("dead reason", 1234, "dead-fp", "delegate", "transient")
+    assert kit.host.crash_site == "write"
+    assert kit.host.plan_summary == "dead plan"
+    assert kit.host.asked
 
 
 @pytest.mark.parametrize("kind", [Kind.ASK_STUCK, Kind.FAULT_INFRA, Kind.LANDED])

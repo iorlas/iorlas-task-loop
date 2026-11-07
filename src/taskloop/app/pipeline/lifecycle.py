@@ -181,7 +181,7 @@ class Lifecycle:
         host = self.host
         ck = host.dead
         assert ck is not None and ck.ended is not None
-        end.outcome, _, _ = stored_end.loaded(ck.ended)
+        end.outcome, _, _ = stored_end.loaded(ck.ended.outcome)
         host.resume.restore(ck, late=True)
         host.plan_data = ck.state.plan_data
         host.plan_summary = (host.plan_data or {}).get("summary", "")
