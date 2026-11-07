@@ -78,7 +78,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # taskloop
 
 from taskloop.adapters import beadtools, gitrepo, ident, landlock
 from taskloop.app.doctor import install
+from taskloop.app.land.lock_cmd import cmd_land_lock
 from taskloop.app.launch import dash as wire_dash
+from taskloop.app.parts import STAGE_PARTS
 from taskloop.app.release import pins
 from taskloop.app.track import trail, verbs
 from taskloop.app.wire import asks as wire_asks
@@ -102,7 +104,6 @@ from taskloop.cli import wait as cli_wait
 from taskloop.cli.ctx import Ctx, declare_stage_parts
 from tlkernel.enums import Step
 from tlkernel.env import snapshot
-from tlkernel.slots import MissingRemote
 
 HERE = Path(__file__).resolve().parent
 
@@ -125,19 +126,8 @@ def v_ask(a: Any, c: Ctx) -> int:
 
 
 def v_land_lock(a: Any, c: Ctx) -> int:
-    """Run a command while holding the repo's land lock (what the engine takes around fetch, rebase, gate, push)."""
-    cmd = list(a.cmd_args)
-    if cmd and cmd[0] == "--":
-        cmd = cmd[1:]
-    if not cmd:
-        print("land-lock: no command (usage: tl.py land-lock [--repo DIR] -- CMD...)", file=sys.stderr)
-        return 2
-    repo = str(Path(a.repo).resolve())
-    try:
-        origin = real.git(c.env).remote_url(repo, "origin")
-    except MissingRemote:
-        origin = ""
-    return landlock.run_locked(cmd, repo, a.wait_min, origin, c.who.config)
+    return cmd_land_lock(a, lambda repo: real.git(c.env).remote_url(repo, "origin"),
+                         lambda cmd, repo, w, o: landlock.run_locked(cmd, repo, w, o, c.who.config))
 
 
 def v_land_stack(a: Any, c: Ctx) -> int:
@@ -439,7 +429,7 @@ VERBS: Final[dict[str, Handler]] = {
     "accounts": lambda a, c: wire_lanes.accounts(a.op, a.lane),
     "worktree": lambda a, c: wslots.worktree(c.git, c.who, a.op, a.self_too),
     "worktrees": lambda a, c: wslots.owned_worktrees(c.git, c.who, a.op),
-    "dash": lambda a, c: wire_dash.run(a.op, c.env, c.spawner),
+    "dash": lambda a, c: wire_dash.run(a.op, c.env, c.spawner, {p.name: p.version for p in STAGE_PARTS}),
     "factory": lambda a, c: cli_factory.run(a, c.env, c.spawner, c.who, c.here),
     "pin": lambda a, c: pins.run_pin(c.env, a.version, a.clear, c.git),
     "rollback": lambda a, c: pins.run_rollback(c.env, c.git),
