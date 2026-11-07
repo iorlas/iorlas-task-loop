@@ -9,9 +9,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Protocol, final
 
-from tlgate import evidence
-from tlgate.domain.specs import engine_digest, gate_items
-from tlgate.host import CheckFault
+from tlgate.api import CheckFault, engine_digest, evidence, gate_items
 from tlkernel import log as rec
 from tlkernel.checks import UNVERIFIED_EXIT, Check, CheckFaultKind, CheckResult, CheckRun
 from tlkernel.config import EngineConfig

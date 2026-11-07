@@ -5,7 +5,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol
 
-from tlgate import evidence as check_evidence
+from tlgate.api import evidence as check_evidence
 from tlkernel import plancheck
 from tlkernel.bead import Bead
 from tlkernel.checkpoint import Checkpoint, PlanStep
