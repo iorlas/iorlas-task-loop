@@ -44,7 +44,7 @@ Rules applied: a design note without code is not "done" (the bead stays valid un
 | tl-7i9k.48 | STILL VALID | P3 | test | Slice 1 only (#264 dev/record_corpus.py); nightly real-lane canary and per-model scorecard not built (no scorecard code in dev/). | none |
 | tl-7i9k.54 | STILL VALID | P3 | code-cut | Only design note docs/design/workeruid.md landed (#266); acceptance (checks/workers run as tlgate) has no code; gated on DQ-07. | none |
 | tl-7i9k.64 | STILL VALID | P3 | code-cut | Manifest has loop_id (#92, tlkernel/run.py:211, engine.py:88) but the run table has no loop column and dev/census.py:70-84 still counts owners as stand-in. Remaining: write column, census use. | none |
-| tl-7y6.11 | STILL VALID | P3 | container | All 3 children closed but TL_ARTIFACTS and repo-declared project tools are absent: either file the missing child or close on the owner word. | #522 |
+| tl-7y6.11 | STILL VALID | P3 | container | All 3 children closed but the artifacts env var and repo-declared project tools are absent: either file the missing child or close on the owner word. | #522 |
 | tl-br2.18 | STILL VALID | P3 | code-cut | No dated startup spans: grep finds no claim/slot-reset/setup/plan-start timing records in src/taskloop/app (app/track/runs.py only prints attempt spans); no commit references the bead. | #531,#533 |
 | tl-sqd3.16 | STILL VALID | P3 | code-cut | No code for a writer-requested engine command (grep engine_command empty); only zoom-out-review.md:169,471 mention it. | none |
 | tl-sqd3.18 | STILL VALID | P3 | code-cut | No RepoId type; repo_key is a bare str at 83 sites (adapters/check_files.py:44 repo_key, tlkernel/reponame.py:43 repo_name, domain/lifecycle/matchers.py:147). | #532 |
