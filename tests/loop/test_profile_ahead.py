@@ -17,6 +17,7 @@ from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.files import EXIT_REASONS
 from taskloop.app.loop.loop import Loop, LoopArgs
 from taskloop.app.loop.run import Where
+from taskloop.app.loop.stages import EngineSlots
 from taskloop.contracts import wire
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import ConfigError, ProfileReadError, RepoProfile
@@ -130,7 +131,8 @@ class ProfileAhead(Rig):
 
         def spawn(*args):
             self.loop_env.profile = mock.Mock(side_effect=SystemExit(EX_CONFIG))
-            self.loop_env.slot_env = mock.Mock(side_effect=SystemExit(EX_CONFIG))
+            assert isinstance(self.loop_env.slots, EngineSlots)
+            self.loop_env.slots.slot_env = mock.Mock(side_effect=SystemExit(EX_CONFIG))
             return child, mock.Mock()
 
         self.loop_env.spawn = spawn
@@ -141,7 +143,7 @@ class ProfileAhead(Rig):
         with (
             mock.patch.object(loop, "acquire", return_value=("s1", self.d1, slot_bead)),
             mock.patch.object(loop.taker, "prepare", return_value=None),
-            mock.patch("taskloop.app.loop.loop.Lease") as lease,
+            mock.patch.object(self.loop_env.slots, "lease") as lease,
             mock.patch.object(loop, "prune"),
             mock.patch.object(loop, "run", side_effect=lambda: loop.work([bead], mock.Mock())),
         ):

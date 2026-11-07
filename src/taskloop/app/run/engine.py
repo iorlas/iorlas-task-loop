@@ -2,13 +2,16 @@
 root of a run: it opens the run's identity, layout and context from the edge, and hands the rest to host.py's parts."""
 import shutil
 import time
+from functools import cached_property
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 from taskloop.adapters import landlock
 from taskloop.adapters.clock import SystemClock
 from taskloop.app.checks.runner import Checker
 from taskloop.app.release import reexec, seams
+from taskloop.app.review.routing import Routing
+from taskloop.app.review.settles import Settles
 from taskloop.app.run import ended
 from taskloop.app.run.blocked import Blocked, FixFailed
 from taskloop.app.run.console import say
@@ -42,6 +45,14 @@ def tool_on_path(name: str) -> str | None:
 
 @carries_state
 class Engine(RunHost):
+    @cached_property
+    def routing(self) -> Routing:
+        return Routing(self, self.git)
+
+    @cached_property
+    def settles(self) -> Settles:
+        return Settles(self, self.git)
+
     def __init__(
         self,
         bead: BeadId,
@@ -111,6 +122,7 @@ class Engine(RunHost):
         self.facts, self.ports = open_facts(self, repo)  # the stages' read path (docs/design/facts.md): the engine's own handles, frozen
 
     @property
+    @override
     def intake_per_day(self) -> int:
         return self.cfg.intake_per_day
 

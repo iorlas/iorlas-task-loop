@@ -1,6 +1,5 @@
 """Notes shared by the tasks of one repo (docs/design/stages.md section 6): the tests known to be flaky, the tasks running beside this
 one, what landed on the base since this branch left it."""
-import hashlib
 import json
 import time
 from pathlib import Path
@@ -8,6 +7,7 @@ from typing import Any
 
 from atomic_io import atomic_write_json
 
+from taskloop.adapters.check_files import repo_key
 from taskloop.adapters.gitrepo import same_dir
 from taskloop.app.slots import engine_lock
 from taskloop.contracts.slots import SlotGitError, git_probe
@@ -24,9 +24,7 @@ class Shared:
         self.e = host
 
     def shared_path(self) -> Path:
-        e = self.e
-        common = git_probe(lambda: e.git.common_dir(e.wt), "") or str(e.wt)
-        return e.home.root / "shared" / f"{hashlib.sha1(common.encode('utf-8')).hexdigest()[:12]}.json"
+        return self.e.home.shared(repo_key(self.e.git, self.e.wt))
 
     def known_flakes(self) -> list[dict[str, Any]]:
         """[{test, note, bead}]: tests known to fail without cause. A writer reports one (flakes); the owner may edit the file."""
