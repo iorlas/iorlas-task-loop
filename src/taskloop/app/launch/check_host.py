@@ -77,8 +77,8 @@ class CliHost:
 
     def sh(self, cmd: Sequence[str], timeout: float = 3600, check: bool = False, save: Path | None = None,
            env: Mapping[str, str] | None = None, pin: bool = False, what: str = "command", cwd: Path | None = None,
-           stop: threading.Event | None = None) -> tuple[int, str]:
-        return self.shell.run(cmd, timeout, check, save, env, pin, what, cwd, stop)
+           stop: threading.Event | None = None, *, network: bool = False) -> tuple[int, str]:
+        return self.shell.run(cmd, timeout, check, save, env, pin, what, cwd, stop, network=network)
 
     def blocked_for(self, why: str, kind: str) -> Exception:
         return RuntimeError(why)
