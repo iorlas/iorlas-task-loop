@@ -12,7 +12,6 @@ from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.dbparts import Part, Prune, doc_table
 from taskloop.contracts.docrows import RELEASE_DOCS, REPORT_DOCS, WORK_DOCS
 from taskloop.contracts.ledger import Adr, LedgerEntry
-from taskloop.contracts.locks import EngineLock
 from taskloop.contracts.parks import Park
 from taskloop.contracts.requests import OwnerRequest
 from taskloop.contracts.run import RunManifest
@@ -94,15 +93,6 @@ CREATE TABLE signal (
         AND NOT EXISTS (SELECT 1 FROM check_round WHERE check_round.run=run.run)""",
               after=("step", "attempt", "effect", "timed", "check_round")),
     ))
-
-SLOTS = Part(
-    name="slots", version=1, tables=("lease",),
-    records=(EngineLock,),
-    ddl="""
-CREATE TABLE lease (kind TEXT NOT NULL CHECK (kind IN ('run','loop','resource','slot')), name TEXT NOT NULL,
-  holder TEXT NOT NULL, run TEXT, host TEXT, pid INTEGER, start_id TEXT, since REAL NOT NULL, beat REAL, until REAL,
-  body TEXT, PRIMARY KEY (kind, name));
-""")
 
 PARK_DDL = "CREATE TABLE park (bead TEXT PRIMARY KEY, t REAL NOT NULL, body TEXT NOT NULL)"
 
