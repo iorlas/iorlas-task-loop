@@ -19,7 +19,7 @@ class ArchitectureInvariants(Case):
     def test_domain_touches_no_world(self):
         bad = [problem for module, tree in production_trees().items() if module.startswith(
             ('taskloop.domain.', 'tlgate.domain.', 'tlslots.liveness', 'tlslots.slot_env',
-             'tlwork.plan.matchers', 'tlwork.plan.stored',
+             'tlwork.look.matchers', 'tlwork.plan.matchers', 'tlwork.plan.stored',
              'tlwork.work.', 'tlwork.prompts.', 'tlwork.review.availability', 'tlwork.review.findings'))
                for problem in domain_world_problems(module, tree)]
         assert bad == []

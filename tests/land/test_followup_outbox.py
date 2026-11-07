@@ -19,7 +19,6 @@ from taskloop.adapters.bd import BdRun, BdStore
 from taskloop.app.land.closing import LandFollowUps
 from taskloop.app.land.host import LandState
 from taskloop.app.land.record import file_follow_ups
-from taskloop.app.look.state import LookState
 from taskloop.app.run.state import StateAttrs, carries_state
 from taskloop.stores.runlog import RunLog
 from tlkernel import fence
@@ -31,6 +30,7 @@ from tlkernel.followkeys import FollowKey
 from tlkernel.ids import BeadId
 from tlpipeline.api import Checkpoints, FileNotes
 from tltestkit.narrow import must
+from tlwork.look.state import LookState
 from tlwork.review.state import ReviewLive
 
 

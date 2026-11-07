@@ -5,10 +5,10 @@ from unittest import mock
 
 from support.spawn import port_git
 
-from taskloop.app.look import shots
 from tlartifacts import store
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
+from tlwork.look import shots
 
 PNG = b"\x89PNG\r\n\x1a\n"
 
@@ -27,6 +27,7 @@ class Host(mock.NonCallableMock):
         self.bead, self.evidence_dir, self.run_dir = "x-1", root / "wt" / "evidence", root / "runs" / run
         self.cfg, self.notes, self.warned = mock.Mock(evidence_cap_mb=cap_mb, look_max_px=1280), [], []
         self.log = mock.Mock(note=self.notes.append)
+        self.downscale = mock.Mock()
         self.home = mock.Mock(artifact_store=lambda: root / "store")
         self.run_id, self.wt, self.artifact_repo = run, root / "wt", "r-1"
         self.ports = mock.Mock(repo=mock.Mock(key=lambda: "r-1"))
@@ -50,9 +51,6 @@ class PicturesKeepOnce(Case):
         self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        p = mock.patch.object(shots.looks, "downscale")
-        p.start()
-        self.addCleanup(p.stop)
 
     def test_a_rerun_of_a_bead_keeps_its_pictures_as_links_to_the_first_runs(self):
         src = png(self.root / "raw" / "a.png", PNG + b"P" * 5000)
@@ -84,3 +82,4 @@ class PicturesKeepOnce(Case):
         host = Host(self.root, "x-1-1")
         host.make_pictures().keep_picture(png(self.root / "raw" / "a.png", b"not a picture"), [], self.root / "base", 1)
         assert len(host.warned) == 1 and "not registered" in host.warned[0]
+        host.downscale.assert_called_once_with(self.root / "raw" / "a.png", self.root / "base" / "a.png", 1280)

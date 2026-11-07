@@ -24,7 +24,7 @@ def stage_packages(packages):
         stages = [name for name in stages if name != "taskloop.app.checks"] + ["tlgate"]
     if "tlslots" in packages:
         stages = [name for name in stages if name != "tlslots"] + ["tlslots"]
-    for stage in ('review', 'plan'):
+    for stage in ('review', 'plan', 'look'):
         if f'tlwork.{stage}' in packages:
             stages = [name for name in stages if name != 'taskloop.app.' + stage] + [f'tlwork.{stage}']
     return stages

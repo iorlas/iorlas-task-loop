@@ -6,7 +6,7 @@ from collections.abc import Generator
 from pathlib import Path
 from urllib.parse import urlencode
 
-from tlkernel import factorydb, gallery
+from tlkernel import bdcreate, bdsafe, factorydb, gallery
 from tlkernel.beadsport import BdFailure, BeadPatch, BeadQuery, NewBead
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId, is_bead_id
@@ -14,10 +14,9 @@ from tlkernel.lookrows import LookRaced, LookRows
 from tlkernel.repourl import repo_url
 from tlkernel.stagefacts import RunFacts
 
-from taskloop.adapters import bdcreate, beadtools
-from taskloop.app.look.host import LookHost, LookPorts
-from taskloop.app.look.state import LookState
-from taskloop.domain.look.matchers import sections
+from tlwork.look.host import LookHost, LookPorts
+from tlwork.look.matchers import sections
+from tlwork.look.state import LookState
 
 LOOK_LABEL = "owner-look"
 
@@ -33,7 +32,7 @@ class OwnerLook:
         cur, seen = hand.bead_parent if is_bead_id(hand.bead_parent) else None, set[BeadId]()
         while cur and cur not in seen and len(seen) < 10:
             seen.add(cur)
-            d = beadtools.peek(ports.store, cur)
+            d = bdsafe.peek(ports.store, cur)
             if d and d.issue_type == "epic":
                 return str(cur)
             cur = d.parent if d and is_bead_id(d.parent) else None
@@ -49,7 +48,7 @@ class OwnerLook:
             return "", ""
         epic, by_epic = self.look_epic() or facts.bead, ("", "")
         for row in rows:
-            d = beadtools.peek(ports.store, row.id) or row
+            d = bdsafe.peek(ports.store, row.id) or row
             if any(x.id == facts.bead for x in d.dependencies):
                 return row.id, d.description
             if epic and not by_epic[0] and d.parent == epic and d.status != "closed":
@@ -108,7 +107,7 @@ class OwnerLook:
         made, err = have, ""
         if have:
             kept = [x for x in sections(old) if not x.startswith(head.split(":")[0] + ":")]
-            if not beadtools.attempt(ports.store.update, BeadId(have), BeadPatch(description="\n\n".join([*kept, section]))):
+            if not bdsafe.attempt(ports.store.update, BeadId(have), BeadPatch(description="\n\n".join([*kept, section]))):
                 err = "bd refused the update"
         else:
             made, err = bdcreate.create_checked(ports.store, NewBead(
@@ -137,7 +136,7 @@ class OwnerLook:
         mine = [{"id": f"{facts.bead}#{k}", "bead": facts.bead, "title": t, "note": " ".join(state.notes)[:600], "shots": shots,
                  "status": "open"}
                 for k, t in enumerate(ports.cases.cases_of("taste"), 1)]
-        shown = beadtools.peek(ports.store, bead_id)
+        shown = bdsafe.peek(ports.store, bead_id)
 
         def refile(old: list[gallery.Item]) -> list[gallery.Item]:
             answered = {x.get("id"): x for x in old if x.get("bead") == facts.bead and x.get("status") in ("good", "redo")}

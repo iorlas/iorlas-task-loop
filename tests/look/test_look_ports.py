@@ -3,9 +3,9 @@ from types import SimpleNamespace
 
 from support.look_host import FakeLook
 
-from taskloop.app.look import shots
 from tlartifacts import store
 from tlkernel.artifact import ArtifactSlot
+from tlwork.look import shots
 
 
 def test_the_epic_is_found_by_walking_the_parents(workdir):

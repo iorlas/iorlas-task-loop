@@ -2,33 +2,35 @@
 the writer's evidence, and the copies kept as artifacts."""
 import glob
 import os
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
 
 from tlartifacts import store
 from tlartifacts.keep import Keeper
 from tlkernel.artifact import ArtifactMeta, ArtifactSlot
 from tlkernel.checkmatchers import glob_re
+from tlkernel.config import VisualConfig
 from tlkernel.gitport import Git
+from tlkernel.looks import Method
 from tlkernel.plancheck import StageData
 from tlkernel.slots import SlotGitError
 from tlkernel.stagefacts import RunFacts
-from tlkernel.wire import Refused
+from tlkernel.wire import Open, Refused
 
-from taskloop.adapters import looks
-from taskloop.app.look.host import LookHost, LookPorts
-from taskloop.app.look.state import LookState
-from taskloop.domain.look.matchers import safe_name
+from tlwork.look import shotspec as looks
+from tlwork.look.host import LookHost, LookPorts
+from tlwork.look.matchers import safe_name
+from tlwork.look.state import LookState
 
 IMAGE_EXT = (".png", ".jpg", ".jpeg")
 IMAGE_KINDS = ("png", "jpg", "gif", "webp")
 MAX_SHOTS, MAX_SHOT_BYTES = 20, 5 * 1024 * 1024
 
 
-def visual_hit(vp: Any, paths: Any) -> bool:
+def visual_hit(vp: VisualConfig | dict[str, object] | None, paths: Sequence[str]) -> bool:
     """True when a path matches an include glob and no exclude glob."""
-    inc = [glob_re(g) for g in vp.include] if vp else []
-    exc = [glob_re(g) for g in vp.exclude] if vp else []
+    inc = [glob_re(g) for g in vp.include] if isinstance(vp, VisualConfig) else []
+    exc = [glob_re(g) for g in vp.exclude] if isinstance(vp, VisualConfig) else []
     return any(any(r.match(p) for r in inc) and not any(r.match(p) for r in exc) for p in paths)
 
 
@@ -97,7 +99,7 @@ class Pictures:
         {} when unset or unreadable (then a visual stage works the old way)."""
         facts, ports, state = self.facts, self.ports, self.state
         if state.shot_cache is None:
-            state.shot_cache = dict[str, Any]()
+            state.shot_cache = {}
             rel = (facts.cfg.shot_table or "").strip()
             if rel:
                 try:
@@ -134,7 +136,7 @@ class Pictures:
         slot = ArtifactSlot(repo=hand.artifact_repo, bead=facts.bead, run=facts.run_id, stage="", attempt=0)
         return [(f, m) for f, m in store.run_listing(facts.home.artifact_store(), slot) if m.role == "before" and m.kind in IMAGE_KINDS]
 
-    def render_shots(self, reqs: Any, rnd: Any) -> tuple[list[str], list[str]]:
+    def render_shots(self, reqs: Sequence[Open], rnd: int) -> tuple[list[str], list[str]]:
         """([picture names under the evidence dir], [errors]): the requested shot methods run by the engine, outside any lane's
         sandbox, each built only from the project's table (looks.build). Full-size copies go to the evidence dir; the judge's
         shrunk ones to <run>/looks/r<rnd>/."""
@@ -161,7 +163,7 @@ class Pictures:
         ports.steps.outcome("rendered" if names else "failed", f"{len(names)} picture{plural}{bad}")
         return names, errs
 
-    def render_one(self, req: Any, rnd: Any, k: int, base: Path) -> tuple[list[Path], Any, str]:
+    def render_one(self, req: Open, rnd: int, k: int, base: Path) -> tuple[list[Path], Method | None, str]:
         """One requested shot method run: (the files it made, its table entry, why not)."""
         facts, ports = self.facts, self.ports
         out_dir = base / "raw" / f"{k}-{safe_name(str(req.get('method') or '?'))}"
@@ -177,7 +179,7 @@ class Pictures:
             return [], m, f"shot method {m['method']} {what}: {tail.strip()[-300:] or 'no output'}"
         return files, m, ""
 
-    def warn_if_untracked(self, m: Any, files: list[Path]) -> None:
+    def warn_if_untracked(self, m: Method, files: list[Path]) -> None:
         facts, ports = self.facts, self.ports
         inside = [f for f in files if str(f).startswith(str(Path(facts.wt)) + os.sep)]
         if inside and not self.git.check_ignore(facts.wt, [str(inside[0])]):
@@ -195,7 +197,7 @@ class Pictures:
         if not self.keeper().keep(f, facts.evidence_dir / name):
             self.note_dropped()
         self.register(f, name, rnd)
-        looks.downscale(f, base / name, facts.cfg.look_max_px)
+        self.ports.downscale(f, base / name, facts.cfg.look_max_px)
         return name
 
     def register(self, f: Path, name: str, rnd: int) -> None:

@@ -20,7 +20,7 @@ def test_every_app_package_and_run_module_is_a_node_or_a_root():
     known = named("source_modules") | named("forbidden_modules")
     found = {f"taskloop.app.{p.name}" for p in APP.iterdir() if p.is_dir() and (p / "__init__.py").exists()}
     found |= {f"taskloop.app.run.{p.stem}" for p in (APP / "run").glob("*.py") if p.stem != "__init__"}
-    found |= {"tlwork.review", "tlwork.plan"}
+    found |= {"tlwork.review", "tlwork.plan", "tlwork.look"}
     found -= {"taskloop.app.run"}
     missing = sorted(found - known)
     assert not missing, f"not classified in the {CONTRACT} contract (.importlinter): {missing}"
