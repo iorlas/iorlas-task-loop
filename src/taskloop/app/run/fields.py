@@ -25,18 +25,17 @@ from tlkernel.wire import Open
 from taskloop.adapters import beadtools, ident, treehash
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.threadflag import ThreadFlag
-from taskloop.app.checks.checklog import CheckLog
-from taskloop.app.checks.runner import Checker
+from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.state import LandState
 from taskloop.app.look.state import LookState
-from taskloop.app.pipeline.budget import Budget
-from taskloop.app.pipeline.steps import Steps
+from taskloop.app.pipeline.checkpoints import Checkpoints
 from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.state import PlanState
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.context import RunContext
-from taskloop.app.run.state import Checkpoints, StateAttrs, checkpoint_hooks, restarted
-from taskloop.app.workers.calls import Calls
+from taskloop.app.run.field_ports import FieldParts
+from taskloop.app.run.sections import checkpoint_hooks, restarted
+from taskloop.app.run.state import StateAttrs
 from taskloop.app.write.state import WriteState
 from taskloop.domain import outcome as oc
 from taskloop.domain.lanes.pause_reasons import Producer
@@ -44,7 +43,7 @@ from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 
 
-class RunFields(StateAttrs):
+class RunFields(StateAttrs, FieldParts):
     killed = ThreadFlag()  # the last sh() of the calling thread was stopped by the engine
     wall_hit = ThreadFlag()  # ...at its wall limit
     tree_memo: tuple[treehash.State, TreeSha] | None = None  # (git status, file stats) -> tree hash, of the last tree_hash()
@@ -78,11 +77,7 @@ class RunFields(StateAttrs):
     moved: bool
     ctx: RunContext
     log: RunLog
-    steps: Steps
-    budget: Budget
-    calls: Calls
-    checklog: CheckLog
-    checker: Checker
+    checkout: Checkout
 
     def __init__(self, bead: BeadId, wt: str, cfg: EngineConfig, dry_run: bool, verbose: bool, store: Any, route: Any,
                  fresh: bool, claim: fence.Claim | None, who: Identity) -> None:
