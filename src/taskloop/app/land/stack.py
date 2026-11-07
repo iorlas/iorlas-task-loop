@@ -4,6 +4,7 @@ Per item: push the branch and see it on the remote, open its PR when it has none
 --match-head-commit, check the forge says MERGED, and (still under the lock) record `tl land` with that PR's own merge commit. A PR
 it replaces is closed only after the replacement merged. After the last, bd's Dolt data is synced. The first failure ends the run with
 the failing command's exit code and leaves every later item untouched. Every command is a row of the run's log (Cmds)."""
+import argparse
 import contextlib
 import os
 import threading
@@ -14,9 +15,12 @@ from pathlib import Path
 
 from tlkernel import log as rec
 from tlkernel.beadsport import Beads, DoltPush
+from tlkernel.env import Env
 from tlkernel.forge import CLOSED, MERGED, OPEN, Pr, StackItem
 from tlkernel.gitport import Git
+from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
+from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
 from tlkernel.profile_changes import ProfileChange
 from tlkernel.queue_doc import QueueDoc
@@ -24,15 +28,17 @@ from tlkernel.slots import MissingRemote
 
 from taskloop.adapters import check_files, landlock
 from taskloop.app.land import cleanup
-from taskloop.app.land.cmds import Cmds, Stop
+from taskloop.app.land.cmds import Cmds, Runs, Stop
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.phases import phase
-from taskloop.app.land.profile_change import diff_sha
+from taskloop.app.land.profile_change import diff_sha, owner_refusal
 from taskloop.app.land.queue_land import Queued, QueueLand
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.land.treecheck import Tested, TreeGuard
 from taskloop.domain.land.matchers import no_dolt_remote
 from taskloop.stores.api import Doc
+from taskloop.stores.bundle import Stores
+from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 
 MODE = "stage:land-stack"
@@ -338,3 +344,67 @@ class Stack:
         self.log.emit(rec.CmdEnd(id=cid, exit=done.code, out=done.text))
         if done.code and not (done.code == 1 and no_dolt_remote(done.text)):
             raise Stop(done.code, f"bd sync failed (exit {done.code}): {done.text.strip()}")
+
+
+def item_of(text: str, beads: dict[str, str], supersedes: dict[str, str]) -> StackItem:
+    """An argument: a PR number or url, or a branch name. `beads` and `supersedes` are keyed by that same text."""
+    tail = text.rstrip("/").rpartition("/pull/")[2] if "/pull/" in text else text
+    pr = int(tail) if tail.isdigit() else 0
+    old = supersedes.get(text, "")
+    return StackItem(branch="" if pr else text, pr=pr, bead=beads.get(text, ""), supersedes=int(old) if old else 0)
+
+
+def pairs(values: list[str], flag: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for v in values:
+        key, eq, val = v.partition("=")
+        if not eq or not key or not val:
+            raise SystemExit(f"land-stack: {flag} wants ITEM=VALUE, got {v!r}")
+        out[key] = val
+    return out
+
+
+def run_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs, store: Beads,
+              tl: list[str], *, record: Callable[[str, str, BeadId, str, str], int],
+              slot: Callable[[str, str], str], slot_base: Callable[[str], str],
+              runlog: Callable[[Stores, str], RunLog],
+              finish: Callable[[str, float, str, str, bool], object], env: Env | None = None) -> tuple[int, list[str]]:
+    """Run the stack and return its exit code and final output lines."""
+    env = env or Env()
+    profile_change = a.profile_change
+    if why := owner_refusal(profile_change, env):
+        return 2, [why]
+    repo = str(Path(a.repo).resolve())
+    beads, old = pairs(a.bead, "--bead"), pairs(a.supersede, "--supersede")
+    for flag, given in (("--bead", beads), ("--supersede", old)):
+        for key in given:
+            if key not in a.items:
+                raise SystemExit(f"land-stack: {flag} {key}=... matches no item; the items given are: {', '.join(a.items)}")
+    items = [item_of(t, beads, old) for t in a.items]
+    locator = RunLocator(who.config)
+    run = locator.create(repo, "", time.time(), mode=MODE, owner=who.actor, session=who.session).run  # the board finds a run through it
+    stores = real_stores(who.config)
+    log = runlog(stores, run)
+    cmds = Cmds(spawner, log, repo, who.config.run_dir(run))
+    lock = lock_path(who.config, git, repo)
+    forge = Forge(cmds, git, repo, a.base, a.method)
+    slot_repo = next((co.path for co in git.checkouts(repo) if co.main), repo)
+
+    def landed(bead: str, sha: str) -> int:
+        """`tl land` and its LANDED row (what `tl trace BEAD`, the board's landings and the close guard read): the one writer."""
+        return record(repo, f"origin/{a.base}", BeadId(bead), sha, f"{MODE}: merged as {sha[:12]}")
+
+    stack = Stack(forge, cmds, log, git, repo, lock, landed, store.dolt_push, who.actor, who.session,
+                  StackGate(cmds, git, stores, repo, f"origin/{a.base}", tl, env), store, a.wait_min,
+                  lambda bead: locator.add_bead(run, bead),
+                  lambda path: bool(slot(slot_repo, path)), slot_base(slot_repo),
+                  cfg=who.config, profile_change=profile_change, jobs=a.jobs)
+    rc = 1
+    try:
+        rc = stack.run(items)
+    finally:  # every exit leaves a terminal state: done, or failed (a raise included)
+        finish(run, time.time(), f"{len(items)} delivered" if rc == 0 else stack.failure_reason or f"exit {rc}",
+               stack.last, rc == 0)
+    lines = [f"land-stack: {stack.failure_reason}"] if stack.failure_reason else []
+    lines.append(f"land-stack {'landed ' + str(len(items)) if rc == 0 else 'stopped, exit ' + str(rc)} (run {run})")
+    return rc, lines
