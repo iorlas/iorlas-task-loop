@@ -80,7 +80,7 @@ class Attempts:
             if c.where == "linux":
                 rc, tail = self._linux(c, argv, env, ids, log, stop)
             else:
-                rc, tail = self.host.sh(argv, timeout=c.wall_min * 60, save=log, what="check", env=env, stop=stop)
+                rc, tail = self.host.sh(argv, timeout=c.wall_min * 60, save=log, what="check", env=env, stop=stop, network=c.network)
         except OSError as error:
             rc = 127 if isinstance(error, FileNotFoundError) else 126
             tail = f"check `{c.id}` could not start `{argv[0]}`: {error}"

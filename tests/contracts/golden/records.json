@@ -798,6 +798,7 @@
   ],
   "tags": [],
   "needs": [],
+  "network": true,
   "pass_files": false,
   "files": [],
   "run_in": "slot",
@@ -1646,6 +1647,7 @@
      "reads": [],
      "lane": "",
      "needs": [],
+     "network": true,
      "pass_files": false,
      "closure_cmd": [],
      "fix": []
@@ -1678,6 +1680,7 @@
      "needs": [
       "unity"
      ],
+     "network": false,
      "pass_files": false,
      "closure_cmd": [],
      "fix": []

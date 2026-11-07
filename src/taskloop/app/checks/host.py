@@ -104,7 +104,8 @@ class CheckHost(Protocol):
     def bead_env(self) -> Mapping[str, str]: ...  # the slot's environment (sh() gives it to every command)
 
     def sh(self, cmd: Sequence[str], timeout: float = ..., check: bool = ..., save: Path | None = ..., env: Mapping[str, str] | None = ...,
-           pin: bool = ..., what: str = ..., cwd: Path | None = ..., stop: threading.Event | None = ...) -> tuple[int, str]:
+           pin: bool = ..., what: str = ..., cwd: Path | None = ..., stop: threading.Event | None = ...,
+           *, network: bool = False) -> tuple[int, str]:
         """Run a command, an argv with no shell: (exit code, the last lines of its output). The whole output goes to `save`."""
         ...
 
@@ -156,6 +157,7 @@ class CleanHost:
 
     def sh(self, cmd: Sequence[str], timeout: float = 3600, check: bool = False, save: Path | None = None,
            env: Mapping[str, str] | None = None, pin: bool = False, what: str = "command", cwd: Path | None = None,
-           stop: threading.Event | None = None) -> tuple[int, str]:
+           stop: threading.Event | None = None,
+           *, network: bool = False) -> tuple[int, str]:
         return self.original.sh(cmd, timeout=timeout, check=check, save=save, env=env, pin=pin,
-                                what=what, cwd=cwd or self.wt, stop=stop)
+                                what=what, cwd=cwd or self.wt, stop=stop, network=network)
