@@ -1,5 +1,6 @@
 """tl-ixc: the engine's worker call under the RetryPlan: its rows, a reviewer's wall-time budget (Overrun), a write that timed out or
-ended by SIGTERM (a RetryDecision with the timeout and the exit), and the `exit` in CallEnd. The policy's own tables are in test_lane_policy; the live file and the stop are in test_write_idle and test_procs."""
+ended by SIGTERM (a RetryDecision with the timeout and the exit), and the `exit` in CallEnd. The policy's own tables are in
+test_lane_policy; the live file and the stop are in test_write_idle and test_procs."""
 
 import sys
 import time
