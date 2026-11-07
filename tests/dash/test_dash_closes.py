@@ -12,7 +12,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.dashlogs import T
-from support.narrow import must
 
 from taskloop_dash.env import Env
 from taskloop_dash.readers.records import Records
@@ -20,6 +19,7 @@ from tlkernel import wire
 from tlkernel.enums import Outcome
 from tlkernel.ids import RunId
 from tlkernel.trace import RunTrace, Stats
+from tltestkit.narrow import must
 
 
 def trace(run: str, outcome: Outcome, ended: float, replans: int = 0) -> RunTrace:

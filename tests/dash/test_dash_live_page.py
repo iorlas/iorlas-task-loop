@@ -10,14 +10,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.dashes import make_dash
 from support.factory_index import ingest
-from support.logs import typed
-from support.runs import manifest
 
 from taskloop_dash.api import live
 from tlkernel import wire
 from tlkernel.dash import LivePage
 from tlkernel.ids import loop_key
 from tlkernel.run import RunState
+from tltestkit.logs import typed
+from tltestkit.runs import manifest
 
 BEAD, RUN = "tl-live.1", "tl-live.1-20261026-100000"
 T = 1793000000.0

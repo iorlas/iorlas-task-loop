@@ -6,6 +6,7 @@ import sys
 import time
 from pathlib import Path
 
+from tltestkit import fake_route
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
@@ -14,11 +15,9 @@ SKILL = ROOT / "skills" / "task-loop"
 for sub in ("dash", "", "tests"):
     sys.path.insert(0, str(SKILL / sub) if sub != "tests" else str(ROOT / "tests"))
 import support.paths  # noqa: E402, F401
-from support import dlcall, fake_route  # noqa: E402
+from support import dlcall  # noqa: E402
 from support.dashlive import BEAD, STAMP, T, make_run, put  # noqa: E402
 from support.factory_index import ingest  # noqa: E402
-from support.logs import typed  # noqa: E402
-from support.narrow import must  # noqa: E402
 
 from taskloop.adapters import agent as live_agent  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
@@ -26,6 +25,8 @@ from taskloop.app.run import engine  # noqa: E402
 from taskloop.app.workers import worker_call  # noqa: E402
 from taskloop_dash.api import live  # noqa: E402
 from tlkernel.paths import ConfigDir  # noqa: E402
+from tltestkit.logs import typed  # noqa: E402
+from tltestkit.narrow import must  # noqa: E402
 
 
 class Feed(Case):

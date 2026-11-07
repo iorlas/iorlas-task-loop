@@ -2,8 +2,8 @@
 import json
 import os
 
-from support.logs import typed
-from support.runs import manifest
+from tltestkit.logs import typed
+from tltestkit.runs import manifest
 
 BEAD, STAMP = "tl-live.1", "20261026-100000"
 T = 1793000000.0

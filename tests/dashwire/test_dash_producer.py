@@ -6,7 +6,6 @@ from types import SimpleNamespace
 
 import pytest
 from support.dashlogs import RunScript, T, bead
-from support.runs import manifest
 
 from taskloop.app.asks import owner_verbs
 from taskloop.app.pipeline import requests
@@ -19,6 +18,7 @@ from taskloop_dash.views.world import ProjectIn
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
 from tlkernel.runlife import Liveness, command_scope, host_name, shown
+from tltestkit.runs import manifest
 from tltestkit.tmpdir import TemporaryDirectory
 
 NOW = 1_800_000_000.0

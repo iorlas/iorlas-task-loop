@@ -29,7 +29,6 @@ from support import (
 )
 from support import slots as sl
 from support.args import Args
-from support.narrow import must
 from support.spawn import port_git, real_spawner
 from support.who import who
 
@@ -57,6 +56,7 @@ from tlkernel.enums import Result
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId, loop_key
 from tlkernel.run import RunReport
+from tltestkit.narrow import must
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 

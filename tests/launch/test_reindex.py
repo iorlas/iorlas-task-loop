@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 import pytest
 from support.dashlogs import RunScript
-from support.narrow import must
 from support.spawn import port_git, real_spawner
 from support.tlmain import tl
 
@@ -18,6 +17,7 @@ from tlkernel.identity import Identity
 from tlkernel.paths import ConfigDir
 from tlkernel.runrows import RunRows
 from tltestkit.case import Case
+from tltestkit.narrow import must
 from tltestkit.tmpdir import TemporaryDirectory
 
 

@@ -56,7 +56,7 @@ T = 1793050200.5
 RUN = ids.RunId.parse("01KBN6Z0M4R5E8YQ2T7C9W3XHD")
 TOK = trace.Tokens(in_=412000, cached=380000, out=5100)
 
-CALL = trace.AiCall(node="write", family="zai", ref="ses_e85d", status="done", role="worker", t=T, transcript="/t/x.jsonl",
+CALL = trace.AiCall(node="write", family="zai", ref="ses_e85d", status="done", role="worker", t=T,
                     node_id=4, attempt=1, run_id="r1", resume=True, lane="ZAI_CODING_SUBSCRIPTION", model="glm-5.3", effort="high",
                     host=False, cost=0.0, tokens=TOK, context_k=35, denied=[trace.Denied(tool="Bash", input={"command": "ls"})],
                     prompt_chars=6598, secs=229.0)
@@ -177,7 +177,6 @@ LOG = {
         cost_source="free",
         family="openai",
         flag="same_family",
-        transcript="/t.jsonl",
         exit=-15,
     ),
     "overrun": _log(log.Overrun, stage="review", budget_s=600.0, elapsed_s=601.5, lane="CLAUDE"),
@@ -556,9 +555,6 @@ OTHERS: dict[str, Rec] = {
         secs=3.0,
         run_id="r1",
         call_id="c1",
-        transcript="/t",
-        transcript_info=delegate.TranscriptInfo(path="/t", kind="codex", from_=0, to=9, bytes=9),
-        transcript_status="ok",
         say="s",
         git_violation=["g"],
         stop=delegate.StopFacts(

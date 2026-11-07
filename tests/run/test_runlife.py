@@ -17,9 +17,6 @@ import support.paths  # noqa: E402, F401
 from support import homes  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from support.factory_index import ingest  # noqa: E402
-from support.logs import typed  # noqa: E402
-from support.narrow import must  # noqa: E402
-from support.runs import manifest  # noqa: E402
 
 from taskloop.app.report import card  # noqa: E402
 from taskloop.app.run import layout  # noqa: E402
@@ -34,6 +31,9 @@ from tlkernel.paths import ConfigDir  # noqa: E402
 from tlkernel.run import RunManifest, RunState  # noqa: E402
 from tlkernel.runlife import BEAT_EVERY, KEEP_DAYS, STALE_AFTER, Liveness, liveness  # noqa: E402
 from tlkernel.trace import RunTrace  # noqa: E402
+from tltestkit.logs import typed  # noqa: E402
+from tltestkit.narrow import must  # noqa: E402
+from tltestkit.runs import manifest  # noqa: E402
 
 BEAD, STAMP = "t-1", "20261026-100000"
 RUN = f"{BEAD}-{STAMP}"

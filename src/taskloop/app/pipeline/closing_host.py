@@ -14,6 +14,7 @@ from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.ports import Clock
+from tlkernel.stagefacts import RunLogPort
 
 from taskloop.app.pipeline.closing_branch import BranchCheckpoints, BranchTree, ReleaseSlotHost, SaveBranchHost
 from taskloop.app.pipeline.closing_decide import DecideHost
@@ -24,7 +25,6 @@ from taskloop.app.pipeline.ports import Slotting
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes.pause_reasons import Producer
-from taskloop.stores.runlog import RunLog
 
 
 class CloseCheckpoints(Protocol):
@@ -63,7 +63,7 @@ class CloseHost(Protocol):
     def bead(self) -> BeadId: ...
     plan_summary: str
     @property
-    def log(self) -> RunLog: ...
+    def log(self) -> RunLogPort: ...
     @property
     def stats(self) -> Mapping[str, int]: ...
     @property

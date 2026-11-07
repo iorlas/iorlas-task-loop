@@ -9,7 +9,6 @@ import support.paths  # noqa: F401
 from support import homes
 from support.checked import run_checked
 from support.engine_case import EngineTest
-from support.narrow import must
 from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.app.asks import intake
@@ -22,6 +21,7 @@ from tlkernel.askenums import AskStatus
 from tlkernel.dash import OwnerCause
 from tlkernel.ids import BeadId
 from tlkernel.ledger import Adr
+from tltestkit.narrow import must
 
 OPTS = [{"label": "Push", "cost": "shared", "answer": "push", "recommended": True},
         {"label": "Hold", "cost": "slow", "answer": "hold", "recommended": False}]

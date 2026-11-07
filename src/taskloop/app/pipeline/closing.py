@@ -4,7 +4,6 @@ a step of its own with its own small host (closing_*.py); the Closer is the orde
 import signal
 import threading
 import time
-from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Protocol, assert_never
 
@@ -24,13 +23,6 @@ from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.interpret import CheckpointLedger, interpret
 from taskloop.domain.lanes import pauses
-
-
-def transcript_stats(sessions: Sequence[Mapping[str, str]]) -> str:
-    """`; write-transcript=<path>` for each distinct file a worker session of the run wrote (a Codex rollout, a Claude transcript), so the
-    reflection comment and the run record can quote it."""
-    files = {s["transcript"]: s["node"] for s in sessions if s.get("transcript")}
-    return "".join(f"; {node}-transcript={path}" for path, node in files.items())
 
 
 class DecideStep(Protocol):
@@ -141,7 +133,6 @@ class Closer:
         e = self.host
         counts = "; ".join(f"{k}={v}" for k, v in e.stats.items())
         stats = f"cost=${e.cost:.2f}; minutes={int((time.time() - e.t0) / 60)}; {counts}"
-        stats += transcript_stats(e.sessions)
         return stats
 
     def finish(self, done: oc.RunOutcome, stats: str) -> None:
