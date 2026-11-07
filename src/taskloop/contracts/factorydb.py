@@ -7,21 +7,20 @@ short transactions; unavailable databases are reported as visible errors.
 import os
 import sqlite3
 import time
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import override
 
 import sqlite_store
 from sqlite_store import SqlValue
 
-from taskloop.contracts import dbparts, factorymigrate, factoryparts, factoryprune, wire
+from taskloop.contracts import dbparts, factorymigrate, factoryprune, wire
 from taskloop.contracts.run import RunManifest
 
 SCHEMA_VERSION = 5  # frozen: the parts (factoryparts, dbparts) carry the versions from here on
 SCHEMA_READ_FROM = 4  # the oldest schema a read-only opener (the dashboard) reads as it is; lower this when a step stays readable
-DDL = factoryparts.DDL  # a fresh database is created from the parts; dbparts.launch checks them on every open
 
 # One owner role per table: other actors submit writes through that role's store.
 # The loop owns leases; the engine records AskStore writes, including
@@ -52,7 +51,7 @@ REVISIONED_TABLES = frozenset({"run", "ask", "bead", "checkpoint"})
 # V1 held derived data only; preserve it before creating authoritative v2.
 SCHEMA = sqlite_store.Schema(
     version=SCHEMA_VERSION,
-    ddl=DDL,
+    ddl="",
     steps=factorymigrate.STEPS,
     name="factory.db",
     revisioned=REVISIONED_TABLES,
@@ -62,25 +61,30 @@ SCHEMA = sqlite_store.Schema(
 
 
 class _PartStore(sqlite_store.Store):
-    """The vendored store, plus the launch check of every registered part on each open (once per writer connection's file)."""
+    """The vendored store, plus the launch check of every declared part on each open (once per writer connection's file)."""
 
     def __init__(self, schema: sqlite_store.Schema) -> None:
         super().__init__(schema)
+        self.parts: tuple[dbparts.Part, ...] | None = None
         self._launched: set[tuple[int, Path, int, int]] = set()
 
     @override
     def _open(self, path: str | os.PathLike[str], *, readonly: bool, shared: bool = False) -> sqlite3.Connection | None:
+        if not readonly and self.parts is None:
+            raise SchemaError("factory.db opened before this process declared its parts (factorydb.declare_parts)")
         con = super()._open(path, readonly=readonly, shared=shared)
         if con is None:
             return None
         try:
             if readonly:
-                dbparts.launch(con, readonly=True)
+                if self.parts is not None:
+                    dbparts.launch(con, readonly=True, parts=self.parts)
             else:
+                assert self.parts is not None
                 stat = Path(path).resolve().stat()
                 identity = (os.getpid(), Path(path).resolve(), stat.st_dev, stat.st_ino)
                 if identity not in self._launched:
-                    dbparts.launch(con, readonly=False)
+                    dbparts.launch(con, readonly=False, parts=self.parts)
                     self._launched.add(identity)
         except BaseException:
             con.close()
@@ -92,7 +96,25 @@ _STORE = _PartStore(SCHEMA)
 SchemaError = sqlite_store.SchemaError
 
 
-prune_older_than = factoryprune.prune_older_than
+def declare_parts(parts: Sequence[dbparts.Part]) -> None:
+    """Declare this process's parts once; repeated identical declarations are harmless."""
+    declared = tuple(parts)
+    if _STORE.parts is not None and _STORE.parts != declared:
+        raise ValueError("factory.db parts already declared with a different list")
+    _STORE.parts = declared
+    # a fresh file is created whole, with its user_version, in one transaction
+    _STORE.schema = replace(_STORE.schema, ddl=dbparts.ddl(declared))
+
+
+def prune_older_than(
+    con: sqlite3.Connection, cutoff_t: float, tables: tuple[str, ...] | None = None,
+    keep_beads: frozenset[str] = frozenset(), dry_run: bool = False,
+) -> dict[str, int]:
+    """Prune the history declared by this process's parts."""
+    if _STORE.parts is None:
+        raise SchemaError("factory.db opened before this process declared its parts (factorydb.declare_parts)")
+    return factoryprune.prune_older_than(
+        con, cutoff_t, tables, keep_beads, dry_run, order=dbparts.prune_order(_STORE.parts))
 
 
 def open_rw(path: str | os.PathLike[str]) -> sqlite3.Connection | None:
