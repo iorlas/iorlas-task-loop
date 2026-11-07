@@ -4,7 +4,8 @@ from unittest import mock
 import support.paths  # noqa: F401
 from support.case import Case
 
-from taskloop.app.wire import asks, brief, doctor, slots
+from taskloop.app.doctor import setup_checks
+from taskloop.app.wire import asks, brief, slots
 from tlkernel.bd_errors import BdCommandFailure
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
@@ -19,8 +20,8 @@ class BdFallbacks(Case):
 
     def test_doctor_skips_bead_lint_when_bd_is_missing(self):
         who = Identity(actor="owner", home=".")
-        with mock.patch.object(doctor, "bd_store", side_effect=BdCommandFailure("tl: bd is not on PATH")):
-            assert doctor.bead_lint_warnings("/repo", who) == []
+        with mock.patch.object(setup_checks, "bd_store", side_effect=BdCommandFailure("tl: bd is not on PATH")):
+            assert setup_checks.bead_lint_warnings("/repo", who) == []
 
     def test_brief_omits_slots_when_bd_is_missing(self):
         who = Identity(actor="owner", home=".")

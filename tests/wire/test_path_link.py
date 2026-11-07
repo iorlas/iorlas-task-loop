@@ -7,8 +7,7 @@ import pytest
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.app.doctor import install
-from taskloop.app.wire import doctor
+from taskloop.app.doctor import install, setup_checks
 from tlkernel.env import Env
 
 
@@ -60,15 +59,15 @@ class PathLink(Case):
 
     def test_the_doctor_line_shows_the_state_and_whether_the_folder_is_on_path(self):
         (self.home / ".local").mkdir()
-        line, foreign = doctor.path_link_line(self.env)
+        line, foreign = setup_checks.path_link_line(self.env)
         assert not foreign
         assert "is missing" in line
         assert "is on PATH" in line
         install.ensure_path_link(self.env)
-        assert doctor.path_link_line(self.env)[0].startswith(f"PATH tl: {self.link} -> the shim")
-        assert "NOT on PATH" in doctor.path_link_line(Env({**self.env.vars, "PATH": "/usr/bin"}))[0]
+        assert setup_checks.path_link_line(self.env)[0].startswith(f"PATH tl: {self.link} -> the shim")
+        assert "NOT on PATH" in setup_checks.path_link_line(Env({**self.env.vars, "PATH": "/usr/bin"}))[0]
         self.link.unlink()
         self.link.write_text("x")
-        line, foreign = doctor.path_link_line(self.env)
+        line, foreign = setup_checks.path_link_line(self.env)
         assert foreign
         assert line.startswith(f"PATH tl is not ours: {self.link}")
