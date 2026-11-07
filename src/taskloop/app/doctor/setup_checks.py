@@ -139,4 +139,3 @@ def disk_run(config: ConfigDir) -> int:
     lines = disk.report(root, shutil.disk_usage(root if root.is_dir() else root.parent).free, disk.read_samples(config))
     print("\n".join(lines))
     return 1 if any(ln.startswith("WARN") for ln in lines) else 0
-
