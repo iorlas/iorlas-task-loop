@@ -149,7 +149,7 @@ flowchart TB
 | Container | Started by, how | Entry | Lifetime | Talks to |
 |---|---|---|---|---|
 | tl.py CLI | person, session, shim `<config>/bin/tl` (`exec uv run --quiet --script tl.py`, `tl/app/doctor/install.py:27-45`) | `skills/task-loop/tl.py:451-456`; verbs table `:405-448` | one call | everything below through `Ctx` (env, Spawner, Git, Identity built once, `tl.py:105-114`) |
-| Loop lane | `tl loop` (`tl.py:363-365`), or `tl factory start` which spawns `sys.executable tl.py loop --repo R --wait-drained` once per missing lane (`tl/cli/factory.py:68-70`, `tl/app/launch/factory.py:97-120`) | `tl/app/loop/loop.py:85-114` | until drained, `--until`, `--max-beads`, stop command, signal; may `execve` into a newer install between beads (`loop.py:353-369`, `tl/app/launch/loop.py:187-199`) | bd, engine children, delegate status, dashboard (indirectly via files) |
+| Loop lane | `tl loop` (`tl.py:363-365`), or `tl factory start` which spawns `sys.executable tl.py loop --repo R --wait-drained` once per missing lane (`tl/cli/factory.py:68-70`, `tl/app/loop/factory.py:97-120`) | `tl/app/loop/loop.py:85-114` | until drained, `--until`, `--max-beads`, stop command, signal; may `execve` into a newer install between beads (`loop.py:353-369`, `tl/app/launch/loop.py:187-199`) | bd, engine children, delegate status, dashboard (indirectly via files) |
 | Engine run | the loop spawns `uv run --script <install>/tl.py run-task BEAD --loop --worktree WT --outcome-file F [--slot S]` (`tl/app/launch/loop.py:235-238`) in its own process group (`:173-176`); or a person/session runs `tl run-task` | `tl/app/run/entry.py:173`, `run_in` `:313-351`, `run_bead` `:365-420` | one bead; may exec into a newer install at a safe point (`tl/app/run/reload.py:113`) | delegate, bd, git, check tools, docker |
 | PreToolUse hook | Claude Code, before each Bash call (`hooks/hooks.json:20-26`) | `hooks/hook.py` -> `tl/hook/main.py:13-14` -> `tl/hook/pretool.py` | under 3 s | nothing (pure) |
 | Session hooks | Claude Code SessionStart and PreCompact, `uv run --quiet --script` (`hooks/hooks.json:4-19`) | `tl/hook/session.py:100-104` | one event | writes `sessions/`, `bin/tl`, `githooks/`, `handoff/` |
@@ -346,7 +346,7 @@ DOC/CODE MISMATCH: `docs/dev/integrations.md:83` "Never read delegate's files"; 
 flowchart TB
     cmd["cli/loop_cmd, cli/factory"]
     launch["app/launch/loop<br/>build LoopEnv, begin_loop, exec_into"]
-    fac["app/launch/factory<br/>lanes, placeholder state, caffeinate"]
+    fac["app/loop/factory<br/>lanes, placeholder state, caffeinate"]
     loopc["app/loop/loop.Loop<br/>pass: refresh, move, chores, queue, work"]
     core["app/loop/core<br/>state publish, stop, nap, exit"]
     queue["app/loop/queue, refuse, hosts, gate, net"]
@@ -384,11 +384,11 @@ flowchart TB
 | `app/loop/settle.Settle` | verdict -> count, rest, set slot aside, network hold, park wake | `apply` | `Rest` writes |
 | `app/loop/files.LoopFiles` | state per pid, stop command, rests, pass log, exits; liveness by pid | `write`, `read`, `live`, `request_stop`, `stop_for`, `rest_bead` (`files.py:27-133`) | `LoopState`, `LoopCommand`, `Rest` |
 | `app/loop/versions.Installs` | which install to run, moves, bad versions | `move_to`, `record_bad` | `BadVersions` |
-| `app/launch/factory` | tops up N lanes under the loop lock; lane N = `factory-lane-N.log` symlink to `factory-<pid>.log`; waits for each child to publish state; `caffeinate -i -w` on the first new child only (`factory.py:97-120`) | `start`, `lane_states`, `log_path`, `lines` | `loop.pid`, lane symlinks |
+| `app/loop/factory` | tops up N lanes under the loop lock; lane N = `factory-lane-N.log` symlink to `factory-<pid>.log`; waits for each child to publish state; `caffeinate -i -w` on the first new child only (`factory.py:97-120`) | `start`, `lane_states`, `log_path`, `lines` | `loop.pid`, lane symlinks |
 
 Lane count defaults to `slots.count` of the profile, minimum 1 (`tl/cli/factory.py:27-33`, `:68`).
 DOC/CODE MISMATCH: `README.md:68-72` describes "a detached loop" with `loop.pid` and `factory.log`; the code starts N lanes with
-`factory-lane-N.log` and `factory-<pid>.log` (`tl/app/launch/factory.py:58-66`), and `factory.log` is only the fallback name (`:31`).
+`factory-lane-N.log` and `factory-<pid>.log` (`tl/app/loop/factory.py:58-66`), and `factory.log` is only the fallback name (`:31`).
 
 ### Dashboard container (short)
 
@@ -436,7 +436,7 @@ Each item is something that would not fit in one box or one arrow.
    bury a run.
 
 5. **Loop state has two writers and a reader that moves files.** `factory._spawn` writes a placeholder `LoopState` for the child pid
-   (`tl/app/launch/factory.py:67-70`) and later patches `log` (`:83-88`) while the child publishes its own (`tl/app/loop/core.py:96`).
+   (`tl/app/loop/factory.py:67-70`) and later patches `log` (`:83-88`) while the child publishes its own (`tl/app/loop/core.py:96`).
    `LoopFiles.live()`, called by `tl status`, `tl factory status`, `tl stop` and the loop, renames a dead loop's file to `died-<pid>.json`
    (`tl/app/loop/files.py:59-61`). The dashboard re-implements the glob without liveness (`src/taskloop_dash/readers/world.py:68-69`) and
    copies `loop_key` (`src/taskloop_dash/readers/loops.py:7-9` duplicates `tl/contracts/ids.py:117-119`): an implicit contract held by
@@ -487,7 +487,7 @@ Each item is something that would not fit in one box or one arrow.
     (`tl/adapters/delegate.py:88-113`); `find_route` adds a newest-in-cache fallback (`:116-129`). Which callers use which was not traced
     (unverified). The engine re-resolves before every call and may switch installs mid-run (`tl/app/run/delegation.py:11-27`).
 
-16. **`caffeinate` covers one lane.** With N lanes, only `children[0]` is watched (`tl/app/launch/factory.py:116-119`); if that lane exits
+16. **`caffeinate` covers one lane.** With N lanes, only `children[0]` is watched (`tl/app/loop/factory.py:116-119`); if that lane exits
     the others run without idle prevention.
 
 17. **Fail-open hooks.** `hook/main.py:22-23` turns every exception into exit 0. For PreToolUse that means "allowed"; for the githook route

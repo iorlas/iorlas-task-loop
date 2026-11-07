@@ -29,7 +29,7 @@ from support.who import who
 from taskloop.adapters import procs, runner
 from taskloop.adapters.delegate import Stopped
 from taskloop.app.run import engine
-from taskloop.app.wire import slots as wslots
+from taskloop.app.slots import config as wslots_config
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 
@@ -96,7 +96,7 @@ class SurvivorBlocksTheRetry(te.EngineTest):
                 return fake_route.answer(self.c, "worker_failed", "r1", worker=worker, exit_code=-15)
 
         script = Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
-        c = wslots.load_cfg(str(self.wt), port_git())
+        c = wslots_config.load_cfg(str(self.wt), port_git())
         with te.delegate_stack(script):
             self.eng = engine.Engine(
                 BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()

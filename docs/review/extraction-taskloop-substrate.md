@@ -253,7 +253,7 @@ transaction(document, lock) -> ContextManager[T]
 | `src/taskloop_dash/jsonl.py:1–62` | 62 | M |
 | `src/taskloop_dash/tails.py:36–52` | 17 | M |
 | `src/taskloop/adapters/runner.py:28–41` | 14 | M |
-| `src/taskloop/app/launch/factory.py:60–71` | 12 | M |
+| `src/taskloop/app/loop/factory.py:60–71` | 12 | M |
 | `_delegate/src/delegate/contracts/stores.py:118–138` | 21 | M |
 | `tests/contracts/test_jsonl.py:24–146` | 123 | M |
 

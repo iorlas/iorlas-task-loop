@@ -2,7 +2,7 @@
 from tlkernel.gitport import Git
 
 from taskloop.adapters import gitrepo
-from taskloop.app.wire import slots as wslots
+from taskloop.app.slots import config as wslots_config
 
 
 def repo_root(path: str | None = None) -> str:
@@ -10,4 +10,4 @@ def repo_root(path: str | None = None) -> str:
 
 
 def default_base(repo: str, git: Git) -> str:
-    return wslots.load_cfg(repo, git).base
+    return wslots_config.load_cfg(repo, git).base
