@@ -58,13 +58,14 @@ allow_indirect_imports = True
 
 # Workspace tests enforce their declared dependencies in tests/rules/test_package_tests.py (TESTISO).
 [importlinter:contract:kernel-imports-nothing-of-ours]
-name = the kernel (tlkernel) imports nothing of ours: no taskloop, no tldash, no delegate
+name = the kernel (tlkernel) imports no application or stage package
 type = forbidden
 source_modules = tlkernel
 forbidden_modules =
     taskloop
     tldash
     delegate
+    tlasks
 allow_indirect_imports = True
 
 [importlinter:contract:kernel-core-is-a-leaf]

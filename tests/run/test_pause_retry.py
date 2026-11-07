@@ -5,7 +5,7 @@ from unittest import mock
 from support import engine_case as te
 
 from taskloop.app.wire import asks as asks_wire
-from tlasks import parks
+from tlkernel import askparks as parks
 from tlkernel.log import Close
 from tlkernel.parks import ParkStore
 
@@ -27,7 +27,8 @@ class Retry(te.EngineTest):
         assert (paused.reason, paused.permanence, paused.retry_at) == ("plan_noop", "needs_owner", 0)
         bead = self.store.show(self.eng.bead)
         assert bead is not None
-        assert parks.skip_of(asks_wire.host(), self.eng.home, bead, now=paused.t + 1_000_000) is not None
+        assert parks.skip_of(asks_wire.host().asks_store(self.eng.home), self.eng.home, bead,
+                             now=paused.t + 1_000_000, store=ParkStore) is not None
         ask = self.asks().get(self.eng.bead)
         assert ask is not None
         assert ask.detail.text == (f"The plan finds nothing to implement for {self.eng.bead}: {summary}. "
@@ -49,7 +50,7 @@ class Retry(te.EngineTest):
         assert self.eng.retry_after == paused.retry_at
         closes = [row.rec for row in self.eng.stores.run_log(self.eng.run_id).read_from(0).items if isinstance(row.rec, Close)]
         assert [row.retry_at for row in closes] == [paused.retry_at]
-        with mock.patch.object(parks, "time", mock.Mock(time=lambda: paused.retry_at)):
+        with mock.patch("tlasks.admission.time", mock.Mock(time=lambda: paused.retry_at)):
             rc, second = self.run_engine({"write": [te.WRITE], "review": [te.CLEAN]})
         assert rc == 0
         assert "plan" not in second.nodes

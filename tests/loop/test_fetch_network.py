@@ -1,4 +1,5 @@
 """A fetch pause keeps each loop alive and bypasses all failure accounting."""
+from random import random
 from unittest import mock
 
 from support.fake_loop_env import slot_loop_env
@@ -7,13 +8,14 @@ from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.net import NetState
 from taskloop.app.loop.settle import Counters, Settle
 from taskloop.app.loop.take import Taker
-from tlasks import parks
+from tlkernel import askparks as parks
 from tlkernel import runoutcome as outcome
 from tlkernel.bead import Bead
 from tlkernel.config import LoopConfig
 from tlkernel.enums import Result
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
+from tlkernel.parks import ParkStore
 from tlkernel.slots import SlotGitError
 from tlslots.testing import Rig
 
@@ -81,7 +83,7 @@ class FetchNetwork(Rig):
         env.probe = mock.Mock(return_value=mock.Mock())
         bid = BeadId("x-1")
         bead = Bead(id=bid, title="work", status="open")
-        rec = parks.paused(env.cfgdir, bead, Kind.PAUSE_NETWORK, "run-1", env.now())
+        rec = parks.paused(env.cfgdir, bead, Kind.PAUSE_NETWORK, "run-1", env.now(), store=ParkStore, draw=random)
         assert rec is not None
         assert (rec.attempts, rec.runs) == ({}, 0)
         files, left = mock.Mock(), mock.Mock()
