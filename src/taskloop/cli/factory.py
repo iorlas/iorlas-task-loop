@@ -15,7 +15,7 @@ from tlkernel.procport import Spawner
 from taskloop.app.launch import dash, loop, repos
 from taskloop.app.launch import factory as binding
 from taskloop.app.loop import factory_verbs
-from taskloop.app.loop.exits import last_by_lane
+from taskloop.app.loop.exits import last_by_loop
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.parts import STAGE_PARTS
 from taskloop.app.wire import real
@@ -42,16 +42,16 @@ def _status(files: LoopFiles, states: list[LoopState], repo: str, version: str, 
     for row in factory_verbs.status_facts(files, states, repo, version):
         print(row)
     wanted = factory_verbs.status_wanted(lambda: loop.profile_of(repo, real.git(env)))
-    print(f"LANES running={len(states)} wanted={wanted}")
-    for rec in last_by_lane(files.cfg.loop_runs(files.key)):
-        print(f"LANE {rec.get('lane', rec['pid'])} LAST EXIT pid={rec['pid']} time={rec.get('t')} "
+    print(f"LOOPS running={len(states)} wanted={wanted}")
+    for rec in last_by_loop(files.cfg.loop_runs(files.key)):
+        print(f"LOOP {rec.get('loop', rec['pid'])} LAST EXIT pid={rec['pid']} time={rec.get('t')} "
               f"reason={rec['reason']} {rec.get('detail', '')}")
     dash.url(env)
     return 0 if states else 1
 
 
 def _logs(a: argparse.Namespace, files: LoopFiles, states: list[LoopState]) -> int:
-    _, path = factory_verbs.logs(files, states, a.lane)
+    _, path = factory_verbs.logs(files, states, a.loop)
     for line in factory_verbs.lines(path, a.n, a.follow):
         print(line, end="", flush=True)
     return 0
@@ -63,11 +63,11 @@ def run(a: argparse.Namespace, env: Env, spawner: Spawner, who: Identity, here: 
     version = binding.version()
     try:
         if a.op == "start":
-            lanes = a.lanes if a.lanes is not None else factory_verbs.wanted(lambda: loop.profile_of(repo, real.git(env)))
+            loops = a.loops if a.loops is not None else factory_verbs.wanted(lambda: loop.profile_of(repo, real.git(env)))
             argv = [sys.executable, str(here / "tl.py"), "loop", "--repo", repo, "--wait-drained"]
-            states, added = factory_verbs.start(files, repo, version, argv, spawner, lanes=lanes,
+            states, added = factory_verbs.start(files, repo, version, argv, spawner, loops=loops,
                                               caffeinate_argv=binding.caffeinate_argv)
-            print(f"started {added} more lane(s)" if added else f"already running ({len(states)} lanes)")
+            print(f"started {added} more loop(s)" if added else f"already running ({len(states)} loops)")
             for row in factory_verbs.facts(files, states, repo, version):
                 print(row)
             return dash.run("ensure", env, spawner, {p.name: p.version for p in STAGE_PARTS})
@@ -91,11 +91,11 @@ def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
         command = operations.add_parser(op)
         command.add_argument("--repo", metavar="DIR")
         if op == "start":
-            command.add_argument("--lanes", type=_positive, metavar="N")
+            command.add_argument("--loops", type=_positive, metavar="N")
         if op == "stop":
             command.add_argument("--now", action="store_true")
         if op == "logs":
-            command.add_argument("--lane", type=_positive, default=1, metavar="K")
+            command.add_argument("--loop", type=_positive, default=1, metavar="K")
             command.add_argument("-n", type=int, default=50)
             command.add_argument("-f", dest="follow", action="store_true")
 

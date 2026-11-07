@@ -22,7 +22,7 @@ Each entry: one plain sentence, an example, and what it is not. Last audited aga
 
 | Term | Means | Example | Not |
 |---|---|---|---|
-| loop | One process that takes one bead at a time into a free slot for one repo. A repo runs up to its wanted count of loops (`tl factory start` tops up to it). What `factory-lane-K.log` and "LANES running=" call a lane is a loop. | Two loops on one repo work two beads at once. | lane, worker, daemon |
+| loop | One process that takes one bead at a time into a free slot for one repo. A repo runs up to its wanted count of loops (`tl factory start` tops up to it). Numbered launcher logs are `factory-loop-K.log`; status prints "LOOPS running=". | Two loops on one repo work two beads at once. | lane, worker, daemon |
 | slot | A persistent worktree set up once and reused task after task; its count is the repo's own concurrency. | A repo with 3 slots runs at most 3 beads at once; a heavy setup is paid once per slot. | floor, workspace |
 | run | One engine pass over one bead, step by step. | `tl run-task tl-abc --worktree DIR` is one run. | job |
 | step | One thing the engine does in a run, named by the `Step` enum: reset, plan, replan, write, checks, review, verify, look, gate, land, close, reflect. | After `write` the engine runs `checks`, then `review`. | task |
@@ -110,7 +110,7 @@ All `planned`. Running example: five PRs A, B, C, D, E wait to land on main (cal
 0. Purge: the word "lane" leaves code, docs, tests, dashboard and the delegate copy in one cut (no alias). Three meanings, three names: delegate lane -> account; check lane -> track; factory lane (a loop process) -> loop. Occurrence counts come from the naming audit (docs/design/naming-audit.md: about 1,760 lines in task-loop and 2,019 in delegate).
 1. Delegate: `lane` becomes `account` in routing.json, `route.py status`/`run` output, docs, skills. The interface is the typed `delegate.api` (docs/design/topology.md), so there is no wire contract to version. 122 files in task-loop mention "lane" today, so the task-loop side is the larger edit.
 2. Dashboard: the "Lanes" panel becomes "Accounts"; the "Floor" tab becomes "Slots".
-3. `tl lanes` becomes `tl accounts`; `tl setup` stops asking about lanes; `checks[].lane` becomes `track` (profile key: a hard cut, shipped one release after the code that reads it, per CLAUDE.md); `tl factory status` prints loops, not lanes.
+3. `tl lanes` becomes `tl accounts`; `tl setup` stops asking about lanes; `checks[].lane` becomes `track` (profile key: a hard cut, shipped one release after the code that reads it, per CLAUDE.md); `tl factory status` prints loops.
 
 ## Visuals rename (with the visuals epic, hard cut)
 
