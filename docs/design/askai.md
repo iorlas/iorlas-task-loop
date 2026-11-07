@@ -39,7 +39,7 @@ reuses the answer and starts the next call with a stale thread.
    `Rec` refuses on a rollback. It stays in memory: `Updates.flag` is applied to the engine by the host, per call. It is not in `RunFacts` (frozen).
 6. **`settle` amends only** the session (`writer.*`), `writer_fallback`/`fallback_lane` and `planner_ref` fields of the checkpoint state. It never
    writes `step`, `applied`, `ended` or any other field.
-7. **Pause stays where it is** (`retry_after`, `pause_role`, `pause_lane` engine fields) in slices 1-2. Moving it into the close intent is the
+7. **Pause stays where it is** (the `retry_after` engine field) in slices 1-2. Moving it into the close intent is the
    last step of the close-intent work (stage-isolation.md section 7), not this bead's.
 
 ## What does not change

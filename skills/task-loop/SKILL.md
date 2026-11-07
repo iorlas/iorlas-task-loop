@@ -67,8 +67,7 @@ stop never counts as a lane failure or toward any retry, replan, ask or storm ca
 (plan, write, review, verify, look, checks, land) waits for the network on the same ref, with a short resume prompt, and
 a finished answer is not asked for again (`done.json`). Past the network wait cap the run pauses (bead open, auto
 label, run id and time budget kept; pause time is not charged) and the next run adopts it. Land detects a push that
-already went through. A paused bead wakes when its lane is usable (delegate's status, loop `GateRole`), not at a
-clock. A writer is a fallback when delegate's answer says `fallback: true`; its first-choice lane is `first_lane`. Each
+already went through. A paused bead wakes at its park's retry time or on the owner. A writer is a fallback when delegate's answer says `fallback: true`; its first-choice lane is `first_lane`. Each
 later write round reads delegate's status: while that lane is out the fallback thread is resumed, once it is not
 the engine asks fresh so the first choice takes over again (transition `fallback_retake`). The trace keeps each session's
 `reason` and `context` and the run's lane manifest. A command the worker was denied shows as a warning; a `sandbox_limit`
@@ -466,7 +465,7 @@ only retries of failed operations (including vendor usage-limit unlocks) carry r
   back to the dir it came from, once, with a red line, and that version is skipped until it is installed again.
   `--pin` stays on the running version.
 - **Constants:** the loop reads the `loop` block of `.task-loop.json` (as committed on the base branch, the working tree when
-  that fails) every pass: `poll`, `heartbeat`, `drained_poll`, `pause_retry`, `fails_to_stop`, `pauses_to_rest`, `rest`,
+  that fails) every pass: `poll`, `heartbeat`, `drained_poll`, `pause_retry`, `fails_to_stop`, `rest`,
   `area_poll`, ... A key left out keeps its default. `slots.count` is read the same way: a slot beyond it is taken no more
   (a run holding it ends normally).
 - **Outcomes** (`run-task --outcome-file`, also its last stdout line as JSON): `landed` → next. `parked` (an ask was

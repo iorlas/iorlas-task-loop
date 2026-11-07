@@ -7,7 +7,6 @@ import shutil
 import stat
 import subprocess
 import sys
-from collections.abc import Callable
 from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any, ClassVar
@@ -30,9 +29,6 @@ from support import (  # noqa: E402
 from support.narrow import must  # noqa: E402
 from support.who import who  # noqa: E402
 
-from taskloop.adapters import (  # noqa: E402
-    delegate as dl,
-)
 from taskloop.adapters import (  # noqa: E402
     ident,
 )
@@ -187,8 +183,8 @@ class Base(Case):
 
 
 def rec(outcome, **kw):
-    return dict({"v": 2, "bead": "x", "outcome": outcome, "why": "", "run": "run-1", "log": "/e.jsonl", "minutes": 1.0, "rounds": 1,
-                 "tests_added": 2, "asked": outcome == "parked", "retry_after": 0.0}, **kw)
+    return dict({"v": 3, "bead": "x", "outcome": outcome, "why": "", "run": "run-1", "log": "/e.jsonl", "minutes": 1.0, "rounds": 1,
+                 "tests_added": 2, "asked": outcome == "parked"}, **kw)
 
 
 class Clock:
@@ -254,14 +250,10 @@ class LoopBase(Base):
     def setup_method(self):
         super().setup_method()
         self.clock = Clock()
-        self.roles: Callable[[], dict[str, dict[str, Any]]] = lambda: {
-            "worker": {"usable": True}
-        }  # delegate's `status --json` roles{}: a test makes it a function of the clock
         self.script, self.hold, self.started, self.during = {}, {}, [], []
         for p in (mock.patch.object(Core, "nap", self.clock.nap),
                   mock.patch.object(wloop.ops, "available_mb", return_value=None),
                   mock.patch.object(wloop, "delegate_route", return_value="/fake/route.py"),
-                  mock.patch.object(dl, "status_json", side_effect=lambda *a: {"roles": self.roles()}),
                   mock.patch.object(real, "spawner", return_value=mock.Mock(
                       start_held=lambda cmd, out=None, extra=None, **kw: (FakeChild(self, cmd, extra), mock.Mock()))),
                   mock.patch.object(Taker, "prepare", return_value=None)):
@@ -289,17 +281,18 @@ class LoopBase(Base):
 
 class Loop(LoopBase):
 
-
-    # tl-7y6.2.8: a paused bead wakes when delegate says its role is usable, not at a clock
-
-
-    def test_the_held_beads_go_across_a_move_to_a_newer_install(self):
+    def test_counters_go_across_a_move_and_old_handovers_are_refused(self):
         st = LoopState(pid=1, started=1.0, t=1.0, repo="r", version="0.0.1", code_dir="/x", actor="tl-a",
-                       carry=Carry(gated={"x-1": ("worker", 5.0)}, ran=1))
+                       carry=Carry(ran=1))
         got, why = parse_handover(json.dumps(wire.dump(st)))
         assert got is not None
-        assert (got.carry.gated, got.carry.ran, why) == ({"x-1": ("worker", 5.0)}, 1, "")
-        got, why = parse_handover(json.dumps({"gated": {"x-1": ["worker", 5.0]}, "ran": 1}))  # an old shape: absent, never trusted
+        assert (got.carry.ran, why) == (1, "")
+        old = wire.dump(st)
+        old["v"] = LoopState.V - 1
+        got, why = parse_handover(json.dumps(old))
+        assert got is None
+        assert "v=2" in why
+        got, why = parse_handover(json.dumps({"ran": 1}))  # an old shape: absent, never trusted
         assert got is None
         assert "v=None" in why
 

@@ -90,7 +90,7 @@ class OutcomeFile(Case):
     def test_a_file_of_the_old_shape_or_an_unknown_outcome_is_a_failure_that_names_the_file(self):
         with TemporaryDirectory() as d:
             for name, text in (("old.json", '{"v": 1, "outcome": "landed", "bead": "t-1"}'),
-                               ("odd.json", '{"v": 2, "outcome": "wat", "bead": "t-1"}'), ("torn.json", "{")):
+                               ("odd.json", '{"v": 3, "outcome": "wat", "bead": "t-1"}'), ("torn.json", "{")):
                 f = Path(d, name)
                 f.write_text(text)
                 v, gave = vd.read(f, 0, Path(d, "x.log"))
@@ -98,6 +98,6 @@ class OutcomeFile(Case):
                 assert not gave, name
                 assert str(f) in v.why, name
             ok = Path(d, "ok.json")
-            ok.write_text('{"v": 2, "outcome": "paused", "bead": "t-1", "kind": "pause_network", "retry_after": 5.0}')
+            ok.write_text('{"v": 3, "outcome": "paused", "bead": "t-1", "kind": "pause_network"}')
             v, gave = vd.read(ok, 0, Path(d, "x.log"))
-            assert (v.outcome, v.kind, v.retry_after, gave) == (Result.PAUSED, "pause_network", 5.0, True)
+            assert (v.outcome, v.kind, gave) == (Result.PAUSED, "pause_network", True)

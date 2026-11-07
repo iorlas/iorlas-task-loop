@@ -8,7 +8,6 @@ import stat
 import subprocess
 import sys
 import time
-from collections.abc import Callable
 from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Any, ClassVar
@@ -36,9 +35,6 @@ from support.spawn import port_git  # noqa: E402
 from support.waits import until  # noqa: E402
 from support.who import who  # noqa: E402
 
-from taskloop.adapters import (  # noqa: E402
-    delegate as dl,
-)
 from taskloop.adapters import (  # noqa: E402
     ident,
 )
@@ -346,8 +342,8 @@ class QueueRuleFromBase(Base):
 
 
 def rec(outcome, **kw):
-    return dict({"v": 2, "bead": "x", "outcome": outcome, "why": "", "run": "run-1", "log": "/e.jsonl", "minutes": 1.0, "rounds": 1,
-                 "tests_added": 2, "asked": outcome == "parked", "retry_after": 0.0}, **kw)
+    return dict({"v": 3, "bead": "x", "outcome": outcome, "why": "", "run": "run-1", "log": "/e.jsonl", "minutes": 1.0, "rounds": 1,
+                 "tests_added": 2, "asked": outcome == "parked"}, **kw)
 
 
 class Clock:
@@ -414,13 +410,9 @@ class LoopBase(Base):
     def setup_method(self):
         super().setup_method()
         self.clock = Clock()
-        self.roles: Callable[[], dict[str, dict[str, Any]]] = lambda: {
-            "worker": {"usable": True}
-        }  # delegate's `status --json` roles{}: a test makes it a function of the clock
         self.script, self.hold, self.started, self.during, self.children = {}, {}, [], [], []
         for p in (mock.patch.object(Core, "nap", self.clock.nap),
                   mock.patch.object(wloop, "delegate_route", return_value="/fake/route.py"),
-                  mock.patch.object(dl, "status_json", side_effect=lambda *a: {"roles": self.roles()}),
                   mock.patch.object(real, "spawner", return_value=mock.Mock(
                       start_held=lambda cmd, out=None, extra=None, **kw: (FakeChild(self, cmd, extra), mock.Mock()))),
                   mock.patch.object(Taker, "prepare", return_value=None)):

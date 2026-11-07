@@ -98,7 +98,7 @@ TRACE = trace.RunTrace(
 
 OUTCOME = run.RunReport(outcome=Result.PARKED, bead=BeadId("tl-1"), run=str(RUN), why_code=WhyCode.STUCK, why="stuck",
                          log="/l", minutes=3.5,
-                         rounds=2, tests_added=4, asked=True, retry_after=None, cost=0.25)
+                         rounds=2, tests_added=4, asked=True, cost=0.25)
 LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", start="99", slot="s1", slot_bead="slot-1")
 CMD = {"pick_label": "auto", "skip_review": config.ReviewSkipConfig(tests=["t/**"]),
        "prepare": config.PrepareConfig(cmd=["dotnet", "restore"], inputs=["**/*.csproj"]),

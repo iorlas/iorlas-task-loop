@@ -99,7 +99,6 @@ class Pick(Case):
         parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient")
         rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _: "", parked=lambda b: parks.skip_of(self.cfg, b, now=100))
         loop = mock.Mock(env=mock.Mock(now=lambda: 100), until=0)
-        loop.gate.held = {}  # a timed pause has no role condition; a bare Mock would be truthy
         assert Loop.idle(loop, rule.rank([bead()], "")) is None
         assert (loop.wait.reason, loop.wait.probe_at) == ("no_lane", 130)
         loop.publish.assert_called_once_with()
@@ -113,8 +112,6 @@ class Pick(Case):
         loop.c.later = {"t-1": 99999}
         loop.c.net_first = []
         loop.files.rests.return_value = {}
-        loop.gate.held = {"t-1": ("worker", 100)}
-        loop.gate.ready.side_effect = lambda bid: bid not in loop.gate.held
         assert Loop.candidates(loop, rule.rank([bead()], "")) == [bead()]
         assert loop.c.later["t-1"] == 130
 
@@ -124,29 +121,26 @@ class Pick(Case):
         if park_run:
             parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, park_run, 100, permanence="transient")
         env = mock.Mock(cfgdir=self.cfg, now=lambda: 100)
-        files, gate, said = mock.Mock(), mock.Mock(), []
+        files, said = mock.Mock(), []
         c = Counters()
-        settle = Settle(env, files, LoopConfig, said.append, c, gate, mock.Mock(), mock.Mock())
-        settle.apply(Verdict(Result.PAUSED, "stopped", run="r1", role="worker"), "t-1", "", False)
+        settle = Settle(env, files, LoopConfig, said.append, c, mock.Mock(), mock.Mock())
+        settle.apply(Verdict(Result.PAUSED, "stopped", run="r1"), "t-1", "", False)
         cooldown = 100 + LoopConfig().fault_cooldown
         files.rest_bead.assert_called_once_with("t-1", cooldown)
         assert c.later == {"t-1": cooldown}
         assert cooldown != 100 + LoopConfig().pause_retry
-        gate.hold.assert_not_called()
         assert any("without a park" in line for line in said)
 
     @pytest.mark.parametrize("permanence,message", [("transient", "retry at"), ("needs_owner", "parked for the owner")])
     def test_matching_parks_supply_the_only_wake(self, permanence, message):
         parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, producer="delegate", permanence=permanence)
         env = mock.Mock(cfgdir=self.cfg, now=lambda: 100)
-        files, gate, said = mock.Mock(), mock.Mock(), []
-        gate.held = {}
+        files, said = mock.Mock(), []
         c = Counters()
-        settle = Settle(env, files, LoopConfig, said.append, c, gate, mock.Mock(), mock.Mock())
+        settle = Settle(env, files, LoopConfig, said.append, c, mock.Mock(), mock.Mock())
         settle.apply(Verdict(Result.PAUSED, run="r1"), "t-1", "", False)
         assert any(message in line for line in said)
         files.rest_bead.assert_not_called()
-        gate.hold.assert_not_called()
         rec = ParkStore(self.cfg).get(bead().id)
         assert rec is not None
         assert c.later == ({"t-1": rec.retry_at} if permanence == "transient" else {})

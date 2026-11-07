@@ -318,7 +318,6 @@ class DeadLane(StagesTest):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [*self.blips(4), te.full(CLEAN, "r", family="openai")]})
         assert rc != 0
         assert not self.closed
-        assert self.eng.pause_role == "reviewer"
         assert (self.eng.retry_after or 0) > 0  # a missing lane is transient: it is retried on a timer
         assert "no lane of another family" in self.eng.log_path.read_text()
 

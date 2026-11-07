@@ -51,7 +51,7 @@ class EngineCrash(EngineTest):
         park = must(ParkStore(e.home).get(e.bead))
         assert (park.reason, park.permanence) == ("engine_crash", "transient")
         assert park.retry_at > park.t
-        assert e.result().retry_after == park.retry_at
+        assert e.retry_after == park.retry_at
         rc, script = self.run_engine({})
         assert rc == 0
         assert script.calls == []
