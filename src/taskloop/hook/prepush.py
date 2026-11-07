@@ -74,7 +74,7 @@ def ours(tl: str) -> bool:
             return False
         con = sqlite3.connect(f"{db.as_uri()}?mode=ro", uri=True, timeout=5)
         try:
-            row = con.execute("SELECT v FROM kv WHERE k = 'repos'").fetchone()
+            row = con.execute("SELECT v FROM repos_doc WHERE k = 'repos'").fetchone()
         finally:
             con.close()
         if row is None:

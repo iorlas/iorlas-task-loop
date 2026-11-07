@@ -4,11 +4,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from tlkernel import factorydb, wire
+from tlkernel.docrows import INDEX_DOCS
 from tlkernel.run import RunManifest
 
 
 def _run_health(con: sqlite3.Connection, now: float) -> str:
-    stamp = con.execute("SELECT t FROM kv WHERE k='index.run.pass'").fetchone()
+    stamp = con.execute(f"SELECT t FROM {INDEX_DOCS} WHERE k='index.run.pass'").fetchone()
     if stamp is None or now - stamp[0] > 5:
         return "database unavailable: indexer's last pass is older than 5 s"
     source = con.execute("SELECT error FROM source WHERE family='run' AND error IS NOT NULL LIMIT 1").fetchone()

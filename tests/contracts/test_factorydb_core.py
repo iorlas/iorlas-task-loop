@@ -20,9 +20,24 @@ from tlkernel.looprows import LoopRows
 from tlkernel.paths import ConfigDir
 
 TABLES = {
-    "source", "bead", "run", "attempt", "step", "lease", "check_pass",
-    "check_round", "ask", "ask_ledger", "kv", "effect", "wait", "signal", "checkpoint", "timed", "schema_part",
-    "release_doc",  # a stage that moves its table adds its own line here
+    "source",
+    "bead",
+    "run",
+    "attempt",
+    "step",
+    "lease",
+    "check_pass",
+    "check_round",
+    "ask",
+    "ask_ledger",
+    "kv",
+    "effect",
+    "wait",
+    "signal",
+    "checkpoint",
+    "timed",
+    "schema_part",
+    "release_doc",
     "report_doc",
     "work_doc",
     "loop_doc",
@@ -30,6 +45,11 @@ TABLES = {
     "lanes_doc",
     "followup",
     "park",
+    "receipt_doc",
+    "bead_doc",
+    "repos_doc",
+    "ticket_doc",
+    "index_doc",
 }
 
 INDEXES = {

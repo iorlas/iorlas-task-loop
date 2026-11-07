@@ -37,6 +37,11 @@ OWNERS: dict[str, str] = {
     "ask_ledger": "engine",
     "park": "engine",  # asks-owned park rows, written through ParkStore
     "kv": "index",
+    "receipt_doc": "owner",  # dashboard command responses through api/writes.py
+    "bead_doc": "index",  # tracker projection observations through beadrows
+    "repos_doc": "engine",  # repository registration through app/track/trail.py
+    "ticket_doc": "loop",  # slot ticket allocation through TicketRows
+    "index_doc": "index",  # indexer pass freshness
     "loop_doc": "loop",  # loop rests/cleanup and owner stop commands through LoopFiles
     "look_doc": "engine",  # engine filing and owner answers through LookRows
     "followup": "engine",  # the land's outbox (app/land/store.py)
