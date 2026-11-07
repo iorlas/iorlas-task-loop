@@ -9,7 +9,7 @@ from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from support import engine_case as T
+from support.engine_land import LandReviewBase
 
 from tlartifacts import store
 from tltestkit.plans import CLEAN, PLAN, WRITE
@@ -38,7 +38,7 @@ class Missing(Case):
                                   show_check.slot_of("r", "b", "x", 1)) == []
 
 
-class ShowRetry(T.LandReviewBase):
+class ShowRetry(LandReviewBase):
     def test_a_missing_artifact_goes_back_to_the_writer_once_and_never_parks(self):
         plan = dict(PLAN, cases=CASES)
         rc, s = self.run_engine({"plan": [plan], "write": [WRITE, WRITE], "review": [CLEAN]})
@@ -49,7 +49,7 @@ class ShowRetry(T.LandReviewBase):
         assert "not registered" not in writes[0]
 
 
-class VisualPathCheck(T.LandReviewBase):
+class VisualPathCheck(LandReviewBase):
     VISUAL: ClassVar = {"include": ["*.txt"], "exclude": []}
 
     def test_a_visual_path_with_no_visual_case_sends_the_plan_back_once(self):
