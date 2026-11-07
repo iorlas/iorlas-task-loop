@@ -285,13 +285,19 @@ class WritePorts(PreparePorts, Protocol):
     def comment(self, text: str) -> None: ...
 
 
+class AmendFlag(Protocol):
+    """The engine's `amend` (the plan stage's amendment context) as write reads it: whether work precedes the plan's first stage."""
+
+    amended: bool
+
+
 class WriteHost(WritePorts, Protocol):
     """Shared run position, state and hand-offs; write-owned memory stays in WriteState."""
 
     bead: BeadId
     at_stage: int
     stage_tree: str
-    amended: bool
+    amend: AmendFlag
     stuck_why: str
     last_run: CheckRun | None
     accepted_new: list[str]

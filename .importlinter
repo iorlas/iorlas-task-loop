@@ -209,8 +209,9 @@ source_modules =
     taskloop.app.write
     taskloop.app.run.ask_flow
     taskloop.app.run.bead_env
-    taskloop.app.run.blocked
+    taskloop.app.pipeline.blocked
     taskloop.app.pipeline.budget
+    taskloop.app.pipeline.waits
     taskloop.app.pipeline.closing
     taskloop.app.pipeline.closing_branch
     taskloop.app.pipeline.closing_decide
@@ -246,7 +247,6 @@ source_modules =
     taskloop.app.pipeline.summaries
     taskloop.app.run.target
     taskloop.app.pipeline.trace
-    taskloop.app.run.waits
     taskloop.stores
     taskloop.domain
     taskloop.adapters
@@ -324,6 +324,7 @@ source_modules =
     taskloop.app.pipeline
 forbidden_modules =
     taskloop.app.asks
+    taskloop.app.checks
     taskloop.app.land
     taskloop.app.look
     taskloop.app.plan
