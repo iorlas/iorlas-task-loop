@@ -1,8 +1,9 @@
 """Queue metrics use merged timings and the flake policy's inclusive week."""
 import pytest
 
-from taskloop.domain.land.queue_flake import WEEK_S, FlakeRow
+from taskloop.domain.land.queue_flake import WEEK_S
 from taskloop.domain.land.queue_metrics import Sample, metrics, percentile
+from tlkernel.flakes import FlakeRow
 
 
 @pytest.mark.parametrize(

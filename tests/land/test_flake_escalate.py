@@ -2,7 +2,7 @@
 import pytest
 
 from taskloop.domain.land.flake_escalate import Escalation, escalate, record
-from taskloop.domain.land.queue_flake import FlakeRow
+from tlkernel.flakes import FlakeRow
 
 
 @pytest.mark.parametrize(
