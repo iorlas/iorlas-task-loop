@@ -1,13 +1,14 @@
 """NETISO slice 1 (tl-7i9k.59): the pure choice of the prefix that takes a check's network away, and its place in the check's argv."""
+
 from unittest import mock
 
 import pytest
-from tlkernel import log as rec
-from tlkernel.kinds import Kind
 
 from taskloop.adapters import check_net
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.run.shell import Shell
+from tlkernel import log as rec
+from tlkernel.kinds import Kind
 
 
 def found(*names):
@@ -73,9 +74,11 @@ def test_the_setting_on_puts_the_prefix_before_the_check():
 
 def test_a_host_that_cannot_isolate_refuses_the_check_with_the_reason():
     h = host(True)
-    with mock.patch.object(check_net, "plan", return_value=check_net.Plan((), "this host cannot remove the network")):
-        with pytest.raises(Blocked) as refused:
-            Shell(h).stream(["just", "check"], None, {}, False, [], 60, "m1", "check", 0.0, mock.Mock())
+    with (
+        mock.patch.object(check_net, "plan", return_value=check_net.Plan((), "this host cannot remove the network")),
+        pytest.raises(Blocked) as refused,
+    ):
+        Shell(h).stream(["just", "check"], None, {}, False, [], 60, "m1", "check", 0.0, mock.Mock())
     assert refused.value.kind == Kind.FAULT_INFRA
     assert "this host cannot remove the network" in str(refused.value)
     assert "engine.check_net_isolate" in str(refused.value)
