@@ -7,7 +7,6 @@ sqlite_store checks; a change to a part is a version bump of the part and a step
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.checkpoint import Checkpoint
-from taskloop.contracts.checks import BaseRedRecord, PassRecord
 from taskloop.contracts.dbparts import Part, Prune, doc_table
 from taskloop.contracts.ledger import LedgerEntry
 from taskloop.contracts.locks import EngineLock
@@ -103,20 +102,6 @@ CREATE TABLE lease (kind TEXT NOT NULL CHECK (kind IN ('run','loop','resource','
   holder TEXT NOT NULL, run TEXT, host TEXT, pid INTEGER, start_id TEXT, since REAL NOT NULL, beat REAL, until REAL,
   body TEXT, PRIMARY KEY (kind, name));
 """)
-
-GATE = Part(
-    name="gate", version=1, tables=("check_pass", "check_round"),
-    records=(PassRecord, BaseRedRecord),
-    ddl="""
-CREATE TABLE check_pass (repo_key TEXT NOT NULL, check_id TEXT NOT NULL, digest TEXT NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('pass','base_red')), tree TEXT, base TEXT, run TEXT, host TEXT, ts REAL NOT NULL,
-  body TEXT NOT NULL,
-  PRIMARY KEY (repo_key, check_id, digest, kind));
-CREATE INDEX check_tree ON check_pass(repo_key, tree, base);
-CREATE TABLE check_round (run TEXT NOT NULL, round INTEGER NOT NULL, ts REAL, body TEXT NOT NULL, PRIMARY KEY (run, round));
-""",
-    prune=(Prune("check_round", f"""ts < ? AND NOT EXISTS (
-        SELECT 1 FROM run AS parent WHERE parent.run=check_round.run AND parent.run NOT IN ({ELIGIBLE}))""", cutoffs=2),))
 
 ASKS = Part(
     name="asks", version=1, tables=("ask", "ask_ledger"),
