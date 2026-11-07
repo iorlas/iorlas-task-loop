@@ -6,7 +6,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 from support.engine_case import EngineTest  # noqa: E402
-from support.plans import CLEAN, PLAN, WRITE  # noqa: E402
+
+from tltestkit.plans import CLEAN, PLAN, WRITE  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "tests"))
 from tlkernel import checktrim as trim  # noqa: E402

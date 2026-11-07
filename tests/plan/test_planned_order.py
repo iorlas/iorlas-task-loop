@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 from support.engine_case import EngineTest
-from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.app.plan import planner
 from taskloop.app.plan.planned import Planned
 from tltestkit.checks import typed
+from tltestkit.plans import CLEAN, PLAN, WRITE
 
 
 @pytest.fixture
