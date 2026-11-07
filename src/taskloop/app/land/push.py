@@ -14,11 +14,10 @@ from tlkernel.ports import Sh
 
 from taskloop.app.land import cleanup
 from taskloop.app.land.gate import GatePass, Problem, ProblemKind
+from taskloop.app.land.host import PUSH_TRIES, PUSH_UP_FAILS, Land, LandState, NetWorker, Next, OutcomeMoveSteps, Phase
 from taskloop.app.land.landed import LandedConfig
 from taskloop.app.land.outbound import pin_head, target
-from taskloop.app.land.parts import NetWorker, OutcomeMoveSteps
 from taskloop.app.land.push_evidence import failure
-from taskloop.app.land.state import PUSH_TRIES, PUSH_UP_FAILS, Land, LandState, Next, Phase
 
 PUSH_TIMEOUT_S = 600.0  # the land command's own limit (the default is an hour: a push stuck on a remote ate 25-48 min, tl-bxk.10.33.1)
 SLOW_PUSH_S = 30.0  # a push (LFS upload plus land command) that takes longer than this says where its time went

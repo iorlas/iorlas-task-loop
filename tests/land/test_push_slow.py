@@ -12,7 +12,7 @@ from support.narrow_hosts import table_kit
 
 from taskloop.app.land import push
 from taskloop.app.land.gate import mint
-from taskloop.app.land.state import Land, Next, Phase
+from taskloop.app.land.host import Land, Next, Phase
 from tlkernel.ids import TreeSha
 from tlkernel.landmatchers import Push as PushText
 from tlkernel.runkey import BaseSha

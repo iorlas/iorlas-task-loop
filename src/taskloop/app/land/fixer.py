@@ -15,8 +15,7 @@ from tlkernel.plancheck import PlanCheck, PlanData, RoundState, StageData
 from tlkernel.ports import Sh
 
 from taskloop.app.land.gitcall import must
-from taskloop.app.land.parts import CaseChecks, StageCheckout
-from taskloop.app.land.state import LandState
+from taskloop.app.land.host import CaseChecks, LandState, StageCheckout
 from taskloop.domain.land.fix_text import FIX_GOAL as GOAL
 from taskloop.domain.land.fix_text import FIX_TEXT as TEXT
 from taskloop.domain.land.fix_text import FIX_WHAT as WHAT
