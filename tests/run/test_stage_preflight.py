@@ -112,7 +112,7 @@ class StagePreflight(Case):
     def test_clean_land_preview_accepts_cached_green_without_writing_slot_folders(self):
         self.a.stage = "land"
         self.cfg = cfg_with(gate=["true"], plan_cmd=["plan-producer"])
-        with mock.patch("tlgate.runner.RunMemo.has", return_value=True) as cached:
+        with mock.patch("tlgate.runner.RunnerMemo.has", return_value=True) as cached:
             assert self.run_in() == 0
         assert cached.called
         self.untouched()

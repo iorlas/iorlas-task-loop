@@ -68,7 +68,7 @@ class KeyedEnv(CheckHostCase):
             memos.append(memo)
             return memo
 
-        with mock.patch("tlgate.runner.RunMemo", side_effect=capture):
+        with mock.patch("tlgate.runner.RunnerMemo", side_effect=capture):
             assert cached_gate(eng.cfg, eng.git, str(eng.wt), eng.stores, eng.env, tree, None)
         assert len(memos) == 1
         key = engine.key(check)

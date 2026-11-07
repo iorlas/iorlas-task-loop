@@ -17,7 +17,8 @@ def judge(remote: str, held: bool, guard: bool = True):
     git.symbolic_ref.return_value = ""
     git.rev_parse.return_value = ""
     request = f"refs/heads/x {SHA} {remote} {'0' * 40}\n"
-    return judge_push("/repo", request, fake_stores(), git, env=Env({}), guard_main=guard, land_lock_held=held)
+    return judge_push("/repo", request, fake_stores(), git,
+                          profile_changes=fake_stores().profile_changes, env=Env({}), guard_main=guard, land_lock_held=held)
 
 
 def test_an_unmarked_push_to_main_is_refused():

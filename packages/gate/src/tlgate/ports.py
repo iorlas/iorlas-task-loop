@@ -9,7 +9,14 @@ from tlkernel.log import EngineLog
 from tlkernel.storeapi import Doc, DocSet, Passes
 
 
-class GateStores(Protocol):
+class ReceiptStores(Protocol):
+    """The pass receipts authorization reads and the memo writes."""
+
+    @property
+    def results(self) -> Callable[[str, str], Passes]: ...
+
+
+class GateStores(ReceiptStores, Protocol):
     @property
     def base_red(self) -> Callable[[str], DocSet[BaseRedRecord]]: ...
     @property
@@ -20,8 +27,6 @@ class GateStores(Protocol):
     def host(self) -> Doc[HostResources]: ...
     @property
     def leases(self) -> Leases: ...
-    @property
-    def results(self) -> Callable[[str, str], Passes]: ...
 
 
 class GateLog(Protocol):
