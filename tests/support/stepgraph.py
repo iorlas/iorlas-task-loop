@@ -1,12 +1,13 @@
-"""The run's step graph as the code writes it: which steps each step can hand on to, read off the source of `stages.start_step`,
-`stages.finish_step` and `stage_rounds.run_round_step` / `round_step` (their `step is Step.X` branches and the `Step.Y` they assign or
+"""The run's step graph as the code writes it: which steps each step can hand on to, read off the source of `Standalone.start_step`,
+`Standalone.finish_step` and `stage_rounds.run_round_step` / `round_step` (their `step is Step.X` branches and the `Step.Y` they assign or
 return in each), so a test never types the edges by hand. A step that ends the run hands on to nothing (None)."""
 import ast
 import inspect
 import textwrap
 from collections.abc import Callable
 
-from taskloop.app.run import stage_rounds, stages
+from taskloop.app.pipeline.standalone import Standalone
+from taskloop.app.run import stage_rounds
 from tlkernel.enums import Step
 
 Graph = dict[Step, set[Step | None]]
@@ -48,9 +49,9 @@ def _chain(fn: Callable[..., object], rest: set[Step]) -> Graph:
 
 def graph() -> Graph:
     out: Graph = {}
-    out.update(_chain(stages.start_step, {Step.PLAN, Step.REPLAN}))
+    out.update(_chain(Standalone.start_step, {Step.PLAN, Step.REPLAN}))
     out[Step.RESET] = {Step.PLAN}
-    out.update(_chain(stages.finish_step, {Step.VERIFY}))
+    out.update(_chain(Standalone.finish_step, {Step.VERIFY}))
     rounds = _chain(stage_rounds.run_round_step, {Step.REVIEW})
     accepted = _steps(ast.parse(textwrap.dedent(inspect.getsource(stage_rounds.round_step))))  # an accepted stage: verify or the next one
     for step, nxt in rounds.items():
