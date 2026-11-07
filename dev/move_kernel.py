@@ -50,6 +50,8 @@ EDITS = (  # (file, old, new)
     # tests and tools that read the layout by folder, import form or depth
     ("dev/killpoints.py", "    from tlkernel.kinds import Kind  # noqa: PLC0415\n    from taskloop.domain import effects as fx",
      "    import tlpaths  # noqa: F401, PLC0415\n    from tlkernel.kinds import Kind  # noqa: PLC0415\n    from taskloop.domain import effects as fx"),
+    ("dev/killpoints.py", "    from tlkernel.checkpoint import Checkpoint  # noqa: PLC0415\n",
+     "    import tlpaths  # noqa: F401, PLC0415\n    from tlkernel.checkpoint import Checkpoint  # noqa: PLC0415\n"),
     ("tests/dash/test_dash_version.py", 'dash.CONTRACTS.name == "contracts"', 'dash.CONTRACTS.name == "tlkernel"'),
     ("tests/domain/test_lane_policy.py", '{"dataclasses", "typing", "taskloop", "__future__", "collections"}',
      '{"dataclasses", "typing", "taskloop", "tlkernel", "__future__", "collections"}'),
