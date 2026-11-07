@@ -1,6 +1,6 @@
 """Keyed documents in factory.db with the Doc / DocSet face of the file stores: a checkpoint is a `checkpoint` row (revisioned, so a
-writer that read an older revision can be told), a follow-up outbox is a `kv` row. Forward-readable: a key this tl does not know is read
-past; a body of another `v` reads as foreign, a torn one as torn, as the file store did."""
+writer that read an older revision can be told), a follow-up outbox is a `kv` row. A key this tl does not know, a body of another `v` or a
+torn one is refused (no backward compatibility)."""
 import json
 import sqlite3
 import time
@@ -55,21 +55,11 @@ class RowDoc[T: Rec]:
         """The decoder of a body; the row's key is the name a refusal gives."""
         return JsonStore(Path(self.k), self.docs.cls)
 
-    def forward(self, text: str) -> str:
-        """Forward-readable: a key this tl does not know (a newer writer's) is read past, by its wire name."""
-        try:
-            body = json.loads(text)
-        except ValueError:
-            return text
-        if isinstance(body, dict):
-            body = {k: v for k, v in body.items() if k in wire.keys(self.docs.cls)}
-        return json.dumps(body)
-
     def read(self) -> Read[T]:
         text = self.raw()
         if text is None:
             return Absent()
-        return self.codec().decode(self.forward(text))
+        return self.codec().decode(text)
 
     def get(self) -> T | None:
         r = self.read()
@@ -110,10 +100,9 @@ class RowDoc[T: Rec]:
         (the revision is checked in the write's transaction; a lost race re-reads and runs `fn` again). False when there is no record.
         `also(con)` runs in the same transaction, before the write: both land or neither (with no record it runs alone)."""
         for _ in range(tries):
-            self.get()  # adopts an older loop's file first, so the row and its revision exist
             d = self.docs
             found = d.rows.select(f"SELECT {d.body_col}, rev FROM {d.table} WHERE {d.key_col}=?", (self.k,)) if d.revisioned else []
-            read = self.codec().decode(self.forward(found[0][0])) if found else None
+            read = self.codec().decode(found[0][0]) if found else None
             if isinstance(read, (Torn, ForeignVersion)):
                 raise wire.Refused(refusal(read))
             if not isinstance(read, Present):
