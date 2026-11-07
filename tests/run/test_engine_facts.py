@@ -13,7 +13,7 @@ from support.plans import FALSE, PLAN, WRITE
 
 from taskloop.adapters.agent import last_event_t
 from taskloop.app.pipeline.stuck import StuckTick
-from taskloop.domain.stuck import StuckWatch
+from taskloop.app.pipeline.stuck_rule import StuckWatch
 from taskloop.stores.runlog import RunLog
 from taskloop_dash.views import columns, passes
 from taskloop_dash.views.runfacts import run_of
