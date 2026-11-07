@@ -1,5 +1,4 @@
 """Every file location, once. Nothing else in the package names a file or a folder of ours."""
-import hashlib
 from pathlib import Path
 from typing import Final, final
 
@@ -75,28 +74,9 @@ class ConfigDir:
         """The owner's audit of profile changes delivered by land-stack."""
         return self.root / "profile-changes.jsonl"
 
-    def ask(self, bead: BeadId | str) -> Path:
-        """Legacy ask input for the one-time importer only."""
-        return self.root / "asks" / (f"{bead}.json")
-
-    def asks_dir(self) -> Path:
-        """Legacy ask directory for the one-time importer only."""
-        return self.root / "asks"
-
-    def ask_beads(self) -> list[str]:
-        """Legacy beads, sorted; used only by the one-time importer."""
-        try:
-            return sorted(p.stem for p in self.asks_dir().glob("*.json"))
-        except OSError:
-            return []
-
     def ask_marker(self, sweep: str) -> Path:
         """When a throttled sweep of the asks last ran (the file's mtime); not an ask, so the store never lists it."""
         return self.root / "asks" / ("." + sweep)
-
-    def ask_ledger(self) -> Path:
-        """Legacy ledger input for the one-time importer only."""
-        return self.root / "ask-ledger.jsonl"
 
     def adr_dir(self, repo_key: str) -> Path:
         return self.repo_dir(repo_key) / "decisions"
@@ -134,14 +114,6 @@ class ConfigDir:
     def lock_file(self, name: str) -> Path:
         """locks/<name>: a lock of the host that is not keyed to one worktree (release, reflect, slot take)."""
         return self.root / "locks" / name
-
-    def result(self, repo_key: str, check: str, digest: str) -> Path:
-        """Legacy importer only: receipt rollback copy under the hashed check ID; current receipts live in factory.db."""
-        return self.root / "results" / repo_key / hashlib.sha1(check.encode("utf-8", "surrogateescape")).hexdigest()[:12] / f"{digest}.json"
-
-    def base_red(self, repo_key: str, digest: str) -> Path:
-        """Legacy importer only: base-red rollback copy; current receipts live in factory.db."""
-        return self.root / "results" / repo_key / "base-red" / f"{digest}.json"
 
     def check_durations(self, repo_key: str) -> Path:
         return self.repo_dir(repo_key) / "durations.json"
