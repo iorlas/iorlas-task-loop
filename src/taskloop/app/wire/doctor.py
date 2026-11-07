@@ -3,6 +3,7 @@ import contextlib
 import os
 import shlex
 import shutil
+import sys
 import time
 from pathlib import Path
 
@@ -10,7 +11,7 @@ from taskloop import contracts
 from taskloop.adapters import delegate, layout_migrate
 from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.ident import claude_dir, config_dir
-from taskloop.app.doctor import disk, ops, profiles
+from taskloop.app.doctor import disk, env_checks, ops, profiles
 from taskloop.app.release import catalog, manifest
 from taskloop.app.report.inputs import repo_traces
 from taskloop.app.slots import watchdog
@@ -186,6 +187,16 @@ def install_problems(plugin_root: Path, env: Env) -> list[str]:
     return out
 
 
+def environment_findings(repo: str, env: Env, git: Git, who: Identity, spawner: Spawner | None) -> list[env_checks.Finding]:
+    """The tools, folders and database the loop needs (env_checks); [] without a spawner (a test that runs no process)."""
+    if spawner is None:
+        return []
+    path = env.get("PATH")
+    return (env_checks.bd_findings(path, spawner, lambda: bd_store(who.actor, repo).find(BeadQuery(status="open")), repo)
+            + env_checks.tool_findings(path, tuple(sys.version_info[:3]), spawner, git, repo)
+            + env_checks.folder_findings(env.get("TMPDIR"), config_dir(env)))
+
+
 def disk_run(config: ConfigDir) -> int:
     """`tl doctor --disk`: the config folder's bytes by area and the free space of its volume. 1 when the volume runs low."""
     root = config.root
@@ -229,7 +240,11 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
     fails = install_problems(plugin_root, env)
     for p in fails:
         print("FAIL " + p)
-    if not warns and not fails:
+    found = environment_findings(repo, env, git, who, spawner)
+    for f in found:
+        print(f.line())
+    fails += [f.text for f in found if f.level == "FAIL"]
+    if not warns and not found and not fails:
         print("ok: no setup problems found in " + repo)
     return 1 if fails else 0
 
