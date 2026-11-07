@@ -242,8 +242,8 @@ source_modules =
     taskloop.app.pipeline.reload
     taskloop.app.pipeline.requests
     taskloop.app.pipeline.resume
+    taskloop.app.run.field_ports
     taskloop.app.run.running
-    taskloop.app.run.state
     taskloop.app.pipeline.steps
     taskloop.app.pipeline.stuck
     taskloop.app.pipeline.summaries
@@ -271,11 +271,13 @@ forbidden_modules =
     taskloop.app.run.preflight
     taskloop.app.run.reload_ports
     taskloop.app.run.run_once
+    taskloop.app.run.sections
     taskloop.app.run.shared
     taskloop.app.run.shell
     taskloop.app.run.stage_checks
     taskloop.app.run.stage_rounds
     taskloop.app.run.stages
+    taskloop.app.run.state
     taskloop.app.wire
 allow_indirect_imports = True
 ignore_imports =
