@@ -147,7 +147,7 @@ class Cleanup(Case):
         assert (done.local_outcome, done.remote_outcome) == ("pending", "gone")
         assert "untracked files" in done.detail
         self.git.dirty_tree = False
-        cleanup.retry_logged(self.git, self.log, cfg=homes.cfg(), fx=FX)
+        cleanup.retry_logged(self.git, self.log, cfg=homes.cfg(), history=self.log.log, fx=FX)
         assert self.git.local == ""
         assert self.git.calls.count(("delete_remote", "wip")) == 1
 
@@ -160,11 +160,12 @@ class Cleanup(Case):
         def leave_slot(*args):
             assert self.git.local == "head"
         tree.leave_slot.side_effect = leave_slot
-        cleanups = LandCleanups(self.git, self.log, homes.cfg(), lambda repo: (lambda path: False), lambda repo: "main", fx=FX)
+        cleanups = LandCleanups(self.git, self.log, homes.cfg(), lambda repo: (lambda path: False), lambda repo: "main",
+                                history=self.log.log, fx=FX)
         ReleaseSlot(host, tree, cleanups).run("task/a", Outcome.LANDED)
         tree.leave_slot.assert_called_once()
         assert self.git.local == ""
-        cleanup.retry_logged(self.git, self.log, cfg=homes.cfg(), fx=FX)
+        cleanup.retry_logged(self.git, self.log, cfg=homes.cfg(), history=self.log.log, fx=FX)
         assert self.git.calls.count(("delete_remote", "wip")) == 1
 
     def test_the_main_checkout_is_kept(self):

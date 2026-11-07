@@ -51,7 +51,7 @@ def closing_ports(e: BindingHost) -> ClosingPorts:
     asks = ClosingAsks(e.home)
     cleanup = LandCleanups(e.git, e.log, e.home,
                            slot_check=lambda repo: (lambda path: bool(slot_of(repo, path, e.who, e.store, strict=True))),
-                           base_of=lambda repo: profile_slots(repo).base, fx=slotfx.FX)
+                           base_of=lambda repo: profile_slots(repo).base, history=e.log.log, fx=slotfx.FX)
     return ClosingPorts(asks, asks, cleanup, ClosingBeads(e.who, e.store, closeguard.ENGINE),
                         LandFollowUps(lambda: file_follow_ups(e)))
 
