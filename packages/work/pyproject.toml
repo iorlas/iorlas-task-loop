@@ -3,11 +3,12 @@ name = "tlwork"
 version = "0"
 description = "Work review and domain rules. Imports the kernel and the gate package (settles reads tlgate.domain.planref)."
 requires-python = ">=3.15"
-dependencies = ["tlkernel", "tlgate"]
+dependencies = ["tlkernel", "tlgate", "tlartifacts"]
 
 [tool.uv.sources]
 tlkernel = { workspace = true }
 tlgate = { workspace = true }
+tlartifacts = { workspace = true }
 tltestkit = { workspace = true }
 
 [build-system]
