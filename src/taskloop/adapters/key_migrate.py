@@ -8,9 +8,9 @@ import re
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import git_probe
 
 OLD_KEY = re.compile(r".+-[0-9a-f]{10}|[0-9a-f]{12}")  # <name>-<10 hex of the url>; 12 hex of the common dir

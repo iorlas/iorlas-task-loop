@@ -14,8 +14,8 @@ from pathlib import Path
 
 from taskloop.adapters import key_migrate, locks
 from taskloop.contracts import factorydb
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.paths import ConfigDir, RunFiles
-from taskloop.contracts.ports import Git
 from taskloop.contracts.rowstores import ReposStore
 
 COMMAND = "tl layout migrate"
