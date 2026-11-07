@@ -43,10 +43,7 @@ class WaitDoc[T: Rec]:
 
     def decode(self, text: str) -> T | None:
         try:
-            body = json.loads(text)
-            if isinstance(body, dict):  # forward-readable: a key this tl does not know (a newer writer's) is read past
-                body = {k: v for k, v in body.items() if k in wire.keys(self.tp)}
-            return wire.load(self.tp, body)
+            return wire.load(self.tp, json.loads(text))
         except (ValueError, TypeError):
             return None
 
