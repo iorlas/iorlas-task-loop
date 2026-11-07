@@ -73,8 +73,8 @@ class Fake(Case):
     # --- the seam itself -------------------------------------------------------------------------------------------
 
     def test_argv_uses_only_flags_the_contract_lists(self):
-        argv = argv_of(self.req(thread="writer", authored_by="a", call_id="c", brief_path="b.md", schema_path="s.json",
-                        writer_exec_allow=[["just", "shot"]]))
+        argv = argv_of(self.req(thread="writer", reviewer_other_family=True, call_id="c", brief_path="b.md", schema_path="s.json",
+                        writer_exec=True))
         assert "--host" not in argv
         assert "--no-wait" not in argv
         flags = {x for x in argv if x.startswith("--")}
