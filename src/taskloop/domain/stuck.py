@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 from tlkernel import log as rec
 from tlkernel.runlife import SAME_RED, silent_limit
+from tlkernel.stuck import red_ends, silent_ends
 
 
 @dataclass
@@ -30,7 +31,8 @@ class StuckWatch:
             else:
                 self.red_said = r.sig
             return
-        self.saw(r.t)
+        if silent_ends(r):
+            self.saw(r.t)
         if isinstance(r, rec.StepStart):
             self.step_id, self.step = r.id, r.step
         elif isinstance(r, rec.StepEnd) and r.id == self.step_id:
@@ -49,11 +51,11 @@ class StuckWatch:
 
     def round(self, r: rec.Checks) -> None:
         sig = r.run.signature() if r.run.failed else ""
-        if not sig or (self.reds and self.reds[-1][0] != sig):
+        if red_ends(self.reds[-1][0] if self.reds else "", r):
             self.reds = []
         if sig:
             self.reds.append((sig, r.t))
-        if sig != self.red_said:
+        if red_ends(self.red_said, r):
             self.red_said = ""
 
     def tick(self, now: float) -> list[rec.Stuck]:

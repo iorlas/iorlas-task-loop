@@ -4,7 +4,7 @@ from unittest import mock
 import pytest
 
 from taskloop.app.run import plumbing
-from taskloop.domain.matchers import redact, secrets_added
+from tlkernel.matchers import redact, secrets_added
 
 KEY = "-----BEGIN " + "RSA PRIVATE KEY-----"
 AWS = "AKIA" + "ABCDEFGHIJKLMNOP"

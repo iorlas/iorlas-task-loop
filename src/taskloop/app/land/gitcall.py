@@ -4,9 +4,8 @@ from collections.abc import Callable
 from typing import Protocol
 
 from tlkernel.gitport import Git
+from tlkernel.matchers import NetText
 from tlkernel.slots import SlotGitError
-
-from taskloop.domain.matchers import NetText
 
 
 class BlockedFor(Protocol):

@@ -8,9 +8,8 @@ from tlkernel import log as rec
 from tlkernel.ask import BudgetLine
 from tlkernel.enums import Outcome
 from tlkernel.kinds import ASK_NAME, ASKS, FINISH, Kind
+from tlkernel.matchers import clip
 from tlkernel.stores import JsonlStore
-
-from taskloop.domain.matchers import clip
 
 DONE = (Outcome.LANDED, Outcome.DONE)
 
