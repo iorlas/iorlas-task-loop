@@ -79,11 +79,10 @@ class SharedNotes(Rec):
 
 @final
 class Pin(Rec):
-    """pinned.json: the install a loop and run-task use; each key optional."""
+    """pinned.json: the install a loop and run-task use; version optional."""
 
-    V: ClassVar[int] = 1
+    V: ClassVar[int] = 2
     task_loop: str | None = msgspec.field(default=None, name="task-loop")
-    delegate: str | None = None
     pinned_at: float | None = None
 
 

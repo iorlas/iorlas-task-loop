@@ -230,10 +230,7 @@ class PinAndRollback(Base):
         self.addCleanup(off_mac.stop)
         for v in ("0.1.0", "0.2.0", "0.10.0"):
             self.layout("iorlas-task-loop", v, "skills/task-loop/tl.py")
-        for v in ("0.5.0", "0.6.0"):
-            self.layout("iorlas-delegate", v, "skills/delegate/route.py")
         self.record("iorlas-task-loop", "0.10.0")
-        self.record("iorlas-delegate", "0.6.0")
 
     def layout(self, plugin, v, main):
         d = self.claude / "plugins" / "cache" / "iorlas-marketplace" / plugin / v
@@ -257,13 +254,12 @@ class PinAndRollback(Base):
     def pinned(self):
         return wire.dump(must(PinStore(homes.cfg()).get()))
 
-    def test_pin_writes_both_versions_and_clear_removes_the_file(self):
-        rc, out, _ = self.pin("0.2.0", "--delegate", "0.5.0")
+    def test_pin_writes_version_and_clear_removes_the_file(self):
+        rc, out, _ = self.pin("0.2.0")
         assert rc == 0, out
         pin = self.pinned()
-        assert (pin["task-loop"], pin["delegate"]) == ("0.2.0", "0.5.0")
-        assert self.pin("--delegate", "0.6.0")[0] == 0  # one side only: the other stays
-        assert (self.pinned()["task-loop"], self.pinned()["delegate"]) == ("0.2.0", "0.6.0")
+        assert pin["task-loop"] == "0.2.0"
+        assert "delegate" not in pin
         assert self.pin("--clear")[0] == 0
         assert PinStore(homes.cfg()).get() is None
         assert self.pin("--clear")[0] == 0  # clearing nothing is fine
@@ -273,17 +269,16 @@ class PinAndRollback(Base):
         assert rc == 2
         assert "0.3.0 is not installed" in err
         assert "0.1.0, 0.2.0, 0.10.0" in err
-        assert self.pin("0.2.0", "--delegate", "9.9.9")[0] == 2
-        assert PinStore(homes.cfg()).get() is None  # not even the valid half
+        assert PinStore(homes.cfg()).get() is None
         shutil.rmtree(self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.1.0/skills")  # half-copied
         assert self.pin("0.1.0")[0] == 2
 
-    def test_rollback_pins_the_previous_version_and_keeps_the_installed_delegate(self):
+    def test_rollback_pins_the_previous_version(self):
         out = io.StringIO()
         with mock.patch.object(sys, "stdout", out):
             assert tl.main(["rollback"]) == 0
         pin = self.pinned()
-        assert (pin["task-loop"], pin["delegate"]) == ("0.2.0", "0.6.0")  # numbers: 0.2.0 comes before 0.10.0
+        assert pin["task-loop"] == "0.2.0"  # numbers: 0.2.0 comes before 0.10.0
         with mock.patch.object(sys, "stdout", out):
             assert tl.main(["rollback"]) == 0  # again: one step further back from the pin
         assert self.pinned()["task-loop"] == "0.1.0"
@@ -292,7 +287,7 @@ class PinAndRollback(Base):
         assert self.pinned()["task-loop"] == "0.1.0"
 
     def test_the_drill_pin_decides_what_loop_picks_then_clear_returns_to_the_newest(self):
-        assert self.pin("0.1.0", "--delegate", "0.5.0")[0] == 0
+        assert self.pin("0.1.0")[0] == 0
         root = self.claude / "plugins/cache/iorlas-marketplace/iorlas-task-loop/0.2.0"
         def target(**kw):
             return wstart.installs(homes.cfg(), snapshot(), here=root / "skills" / "task-loop").target(**kw)
@@ -303,11 +298,20 @@ class PinAndRollback(Base):
         # the CLI end to end, main(argv) with only the scratch dirs in its environment
         cli = ["pin"]
         with mock.patch.object(pins.sys, "platform", "linux"):  # the Mac devbox-ok rule reads origin: not what this test is about
-            r = tl_main(*cli, "0.2.0", "--delegate", "0.5.0", cwd=self.home, env={"HOME": str(self.home)})
+            r = tl_main(*cli, "0.2.0", cwd=self.home, env={"HOME": str(self.home)})
             assert r.returncode == 0, r.stderr
             r = tl_main(*cli, "0.4.0", cwd=self.home, env={"HOME": str(self.home)})
         assert r.returncode == 2
         assert self.pinned()["task-loop"] == "0.2.0"
+
+
+
+def test_pin_rejects_the_removed_delegate_option():
+    err = io.StringIO()
+    with mock.patch.object(sys, "stderr", err), pytest.raises(SystemExit) as stopped:
+        tl.main(["pin", "--delegate", "0.5.0"])
+    assert stopped.value.code == 2
+    assert "unrecognized arguments: --delegate" in err.getvalue()
 
 
 def ask_file(asks, bead, **over):

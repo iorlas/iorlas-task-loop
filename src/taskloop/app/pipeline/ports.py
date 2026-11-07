@@ -53,6 +53,8 @@ class TrustRefusal(Protocol):
 
 
 class HeadHistory(Protocol):
+    def ahead_of(self, wt: str, base: str, n: int) -> str: ...
+
     def since(self, wt: str, head: str, n: int) -> str: ...
 
 
