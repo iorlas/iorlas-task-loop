@@ -164,9 +164,21 @@ def pytest_runtest_setup(item):
     the start of every phase. A patch of either made while setting up (mock.patch of sys.stdout, a redirect) is carried into the call."""
     before = sys.stdout, sys.stderr
     try:
-        return (yield)
+        with test_wall_guard(item):
+            return (yield)
     finally:
         item.stash[_SETUP_STD] = tuple(now if now is not was else None for was, now in zip(before, (sys.stdout, sys.stderr), strict=True))
+
+
+def test_wall_guard(item):
+    return contextlib.nullcontext() if item.stash.get(KIND, "logic") == "live" else wall_guard(
+        hang_s(test_limit(item), float(os.environ.get("TL_TIME_SCALE") or 1)), item.nodeid)
+
+
+@pytest.hookimpl(wrapper=True, trylast=True)
+def pytest_runtest_teardown(item):
+    with test_wall_guard(item):
+        return (yield)
 
 
 @pytest.hookimpl(wrapper=True, trylast=True)
@@ -174,10 +186,8 @@ def pytest_runtest_call(item):
     patched = item.stash.get(_SETUP_STD, (None, None))
     own = sys.stdout, sys.stderr
     cpu, instr = cpu_s(), work.instructions()
-    guard = contextlib.nullcontext() if item.stash.get(KIND, "logic") == "live" else wall_guard(
-        hang_s(test_limit(item), float(os.environ.get("TL_TIME_SCALE") or 1)), item.nodeid)
     try:
-        with guard:
+        with test_wall_guard(item):
             sys.stdout, sys.stderr = (p or o for p, o in zip(patched, own, strict=True))
             return (yield)
     finally:
