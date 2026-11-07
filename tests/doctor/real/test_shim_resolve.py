@@ -6,7 +6,7 @@ from pathlib import Path
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.app.wire import hook
+from taskloop.app.doctor import install
 from tlkernel.env import Env
 
 
@@ -21,7 +21,7 @@ class ShimResolves(Case):
         uv.write_text('#!/bin/sh\nshift 4\necho "$@"\n')  # `uv run --quiet --no-config --script <tl.py> args`: prints tl.py and args
         uv.chmod(0o755)
         self.old = self.install("0.23.99")
-        hook.write_shim(self.old, self.env)
+        install.write_shim(self.old, self.env)
         self.shim = self.root / "config" / "task-loop" / "bin" / "tl"
 
     def install(self, version):

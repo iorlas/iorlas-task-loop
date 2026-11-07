@@ -20,7 +20,7 @@ from taskloop.adapters.git import RealGit  # noqa: E402
 from taskloop.app.checks import authorization  # noqa: E402
 from taskloop.app.checks.cache import InputKeys, RunMemo  # noqa: E402
 from taskloop.app.checks.execution import check_env  # noqa: E402
-from taskloop.app.wire.hook import write_hooks  # noqa: E402
+from taskloop.app.doctor.install import write_hooks  # noqa: E402
 from taskloop.domain.checks.specs import gate_items  # noqa: E402
 from taskloop.stores.real import real_stores  # noqa: E402
 from tlkernel.checks import CheckResult  # noqa: E402

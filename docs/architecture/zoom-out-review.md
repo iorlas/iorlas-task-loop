@@ -193,7 +193,7 @@ proposal, verdict, effort, order.
 ### Z14. The shim and git hooks point at whichever install wrote them last
 
 - **Evidence:** every SessionStart and `tl hooks install` rewrite `<config>/bin/tl` and the 14 hooks for their own plugin root
-  (`tl/app/wire/hook.py:34-77`, `tl/hook/session.py:75-77`), with a non-atomic `write_text` (`wire/hook.py:40-42`); the pre-push runs
+  (`tl/app/doctor/install.py:34-77`, `tl/hook/session.py:75-77`), with a non-atomic `write_text` (`doctor/install.py:40-42`); the pre-push runs
   `<config>/bin/tl judge-push` (`:64`). An engine of install X is judged by install Y; on the Mac, the shim moves only when a Claude
   session starts there. c4-task-loop item 3.
 - **Kind:** state with several writers; coupling. **Severity: P2.**
