@@ -108,3 +108,6 @@ PR A asks code carve: `packages/asks` (`tlasks`) owns asks, admission, holds, ma
 E1 slice 3: `tlwork.look` owns look application and domain code and the shot specification helpers. `tlkernel.bdcreate` owns checked bead creation. Look receives the image downscaler through `LookPorts`, bound by run/host.py; the subprocess adapter stays in the shell. Tests remain in their original directories.
 
 E1 slice 4: `tlwork.write` owns write application and domain code; shared trust-root checks live in `tlkernel.trustroots`. Tests remain in their original directories. E1 is complete: review, plan, look and write live in `tlwork`.
+
+Release R1 (tl-e5t0.19): code carve done in `packages/release/src/tlrelease`, flat modules with no api.py.
+`ReleaseHost` supplies shell effects, bound by `app/launch/release_host.py`; tests stay in `tests/release` until R2.

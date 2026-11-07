@@ -6,8 +6,8 @@ from unittest import mock
 
 from support.shells import quiet_shell
 
-from taskloop.app.release import selfupdate
 from tlkernel.env import Env
+from tlrelease import selfupdate
 
 
 def test_workspace_package_change_selects_the_clones_release_script(tmp_path: Path):

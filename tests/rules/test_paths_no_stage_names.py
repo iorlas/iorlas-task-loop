@@ -6,7 +6,7 @@ STAGE_MODULES = {
     "land": "taskloop.app.land.paths",
     "slot": "tlslots.paths",
     "ask": "tlasks.paths",
-    "release": "taskloop.app.release.paths",
+    "release": "tlrelease.paths",
     "suite": "taskloop.app.prune.paths",
     "dash": "tldash.paths",
     "layout": "taskloop.adapters.layout_paths",
