@@ -13,14 +13,15 @@ import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from tlgate.domain import inputs
-from tlgate.execution import HOST_IDENTITY, LINUX_IDENTITY
-from tlgate.ports import GateStores
 from tlkernel import check_files, wire
 from tlkernel.checks import BaseRedRecord, Check, CheckResult, PassRecord
 from tlkernel.gitport import Git
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.runkey import BaseSha, Digest, RunKey
+
+from tlgate.domain import inputs
+from tlgate.execution import HOST_IDENTITY, LINUX_IDENTITY
+from tlgate.ports import GateStores
 
 NO_DIGEST = Digest("")
 

@@ -4,6 +4,11 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
+from tlkernel import check_files
+from tlkernel.checks import UNVERIFIED_EXIT, Check, CheckFaultKind, CheckResult, Duration, Durations, verdict_of
+from tlkernel.runkey import RunKey
+from tlkernel.stagefacts import CheckLogPort
+
 from tlgate.attempts import Attempts, Outcome
 from tlgate.cache import RunMemo
 from tlgate.domain.durations import CHEAP_S, expected_secs
@@ -18,10 +23,6 @@ from tlgate.lanes import Lanes
 from tlgate.passfiles import files_for, none_why
 from tlgate.resources import LeaseCancelled, Resources
 from tlgate.round import Round
-from tlkernel import check_files
-from tlkernel.checks import UNVERIFIED_EXIT, Check, CheckFaultKind, CheckResult, Duration, Durations, verdict_of
-from tlkernel.runkey import RunKey
-from tlkernel.stagefacts import CheckLogPort
 
 PROJECT_LOG_LINES = 20
 FAILED_FIRST = " failed first"

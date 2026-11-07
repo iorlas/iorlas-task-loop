@@ -5,14 +5,15 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from tlgate.cache import NO_DIGEST, plan_digest
-from tlgate.host import CheckHost
 from tlkernel import rundocs, wire
 from tlkernel.childenv import check_environment
 from tlkernel.config import ConfigError
 from tlkernel.gateplan import GatePlan
 from tlkernel.runkey import Digest
 from tlkernel.slots import SlotGitError
+
+from tlgate.cache import NO_DIGEST, plan_digest
+from tlgate.host import CheckHost
 
 PLAN_TIMEOUT_S = 30.0
 

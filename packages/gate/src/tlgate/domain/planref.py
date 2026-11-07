@@ -3,12 +3,13 @@ one, a read of one, a wrapper of one's command), and the commands a worker is to
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Final, assert_never
 
-from tlgate.domain.cmd import matchers as sh
-from tlgate.domain.names import log_var, rc_var
 from tlkernel.config import CheckSpec, EngineConfig
 from tlkernel.ids import CheckId
 from tlkernel.matchers import clip
 from tlkernel.plancheck import Adhoc, PlanCheck, PlanData, Ref
+
+from tlgate.domain.cmd import matchers as sh
+from tlgate.domain.names import log_var, rc_var
 
 JUST_PLAIN_FLAGS: Final = frozenset({"--unstable", "-q", "--quiet", "-v", "--verbose", "--dry-run", "-n", "--no-deps", "--highlight",
                                      "--no-highlight"})

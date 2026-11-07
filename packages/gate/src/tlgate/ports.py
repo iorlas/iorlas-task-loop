@@ -3,7 +3,6 @@ from collections.abc import Callable
 from typing import Protocol
 
 from any_lease import Leases
-
 from tlkernel.checks import BaseRedRecord, CheckRun, Durations
 from tlkernel.config import HostResources
 from tlkernel.log import EngineLog

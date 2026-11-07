@@ -4,10 +4,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import assert_never
 
+from tlkernel.checks import UNVERIFIED_EXIT, CheckResult, CheckRun
+
 from tlgate.domain import diagnostics, matchers, trim
 from tlgate.domain.diagnostics import CheckDiagnostics
 from tlgate.domain.names import norm
-from tlkernel.checks import UNVERIFIED_EXIT, CheckResult, CheckRun
 
 
 def mark_of(c: CheckResult) -> str:

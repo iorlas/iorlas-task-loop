@@ -15,11 +15,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple, Protocol
 
-from tlgate.domain.matchers import safe_name
 from tlkernel.config import ExecutorConfig
 from tlkernel.ids import CheckId
 from tlkernel.procport import Ran, RanBytes, Streamed
 from tlkernel.slots import SlotGitError
+
+from tlgate.domain.matchers import safe_name
 
 EXECUTOR_DOWN_RC = 255  # ssh's own code for "could not connect": the check did not run
 TAIL_LINES = 40

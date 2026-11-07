@@ -1,8 +1,9 @@
 """pass_files: the files a check is handed as trailing argv (the pre-commit model), and the skip when none match."""
 from collections.abc import Sequence
 
-from tlgate.domain.inputs import matching
 from tlkernel.checks import Check
+
+from tlgate.domain.inputs import matching
 
 
 def files_for(c: Check, changed: Sequence[str], tracked: Sequence[str] | None) -> list[str]:

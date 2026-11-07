@@ -4,15 +4,16 @@ import shlex
 from collections.abc import Sequence
 from typing import Final
 
-from tlgate.domain import produced
-from tlgate.domain.cmd import matchers as sh
-from tlgate.domain.names import norm
-from tlgate.domain.planref import JUST_PLAIN_FLAGS, Plan, adhocs, plan_checks
 from tlkernel.argv import FORM, argv_problems
 from tlkernel.checksport import TreeProbe
 from tlkernel.config import EngineConfig
 from tlkernel.matchers import clip
 from tlkernel.plancheck import Adhoc, Ref
+
+from tlgate.domain import produced
+from tlgate.domain.cmd import matchers as sh
+from tlgate.domain.names import norm
+from tlgate.domain.planref import JUST_PLAIN_FLAGS, Plan, adhocs, plan_checks
 
 GATE_ONLY_TEXT: Final = ("\n\nYour plan was sent back: these checks run a command that runs only in the gate at land (the engine "
                   "runs it once, on the rebased tree), never on a stage's uncommitted tree:\n%s\nRewrite them without "

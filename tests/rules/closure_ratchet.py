@@ -40,8 +40,8 @@ def closures(texts: Mapping[str, str]) -> dict[str, int]:
                     break
                 candidate = candidate.rpartition(".")[0]
     stages = sorted(name for name in packages if name.startswith("taskloop.app.") and name.count(".") == 2)
-    if "tlgate" in packages:
-        stages.append("tlgate")
+    if "tlgate" in packages:  # the gate is its package now; the shell's app/checks (step.py) is glue and keeps no budget of its own
+        stages = [name for name in stages if name != "taskloop.app.checks"] + ["tlgate"]
     counts = {}
     for stage in stages:
         pending = [name for name in modules if name == stage or name.startswith(stage + ".")]
@@ -51,7 +51,7 @@ def closures(texts: Mapping[str, str]) -> dict[str, int]:
             if name not in reached:
                 reached.add(name)
                 pending.extend(edges[name] - reached)
-        key = "gate" if stage == "tlgate" else stage.rsplit(".", 1)[1]
+        key = "checks" if stage == "tlgate" else stage.rsplit(".", 1)[1]
         counts[key] = len(reached)
         counts[key + " (external modules)"] = len(set().union(*(external[name] for name in reached)))
     return counts

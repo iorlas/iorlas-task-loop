@@ -4,17 +4,18 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from pathlib import Path
 
-from tlgate import keydiff
-from tlgate.cache import InputKeys, RunMemo, plan_digest
-from tlgate.domain.specs import gate_items, repo_check
-from tlgate.execution import keyed_env
-from tlgate.ports import GateStores
 from tlkernel import check_files, config, profile_at
 from tlkernel.checks import CheckResult
 from tlkernel.env import Env
 from tlkernel.gitport import Git
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.runkey import BaseSha
+
+from tlgate import keydiff
+from tlgate.cache import InputKeys, RunMemo, plan_digest
+from tlgate.domain.specs import gate_items, repo_check
+from tlgate.execution import keyed_env
+from tlgate.ports import GateStores
 
 
 def profile(git: Git, wt: str, tree: TreeSha) -> config.EngineConfig:

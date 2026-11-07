@@ -4,7 +4,6 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
-from tlgate.ports import GateLog, GateStores
 from tlkernel.checks import CheckFaultKind
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env
@@ -14,6 +13,8 @@ from tlkernel.paths import ConfigDir
 from tlkernel.procport import Spawner
 from tlkernel.stagefacts import CheckLogPort
 from tlkernel.waitenums import WaitWhat
+
+from tlgate.ports import GateLog, GateStores
 
 
 class CheckFault(Exception):

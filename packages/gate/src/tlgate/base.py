@@ -3,12 +3,13 @@ import threading
 import time
 from pathlib import Path
 
+from tlkernel.argv import argv_of
+from tlkernel.checks import Check
+
 from tlgate.base_tree import base_tree
 from tlgate.cache import RunMemo
 from tlgate.domain.names import norm
 from tlgate.host import CheckHost
-from tlkernel.argv import argv_of
-from tlkernel.checks import Check
 
 
 class BaseCheck:

@@ -2,8 +2,9 @@
 import statistics
 from typing import Final
 
-from tlgate.domain.names import norm
 from tlkernel.checks import Duration, Durations
+
+from tlgate.domain.names import norm
 
 CHEAP_S: Final = 5.0  # a median under this counts as free: sub-second noise never reorders a round
 KEEP_RUNS: Final = 9  # durations kept per command

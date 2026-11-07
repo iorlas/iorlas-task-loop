@@ -1,9 +1,10 @@
 """Why a gate step is not green, in words: the first RunKey field where the expected key and the newest stored receipt of that check on
 the judged tree and base part. Display only: it never authorizes anything (RunMemo.result does)."""
-from tlgate.cache import RunMemo
 from tlkernel import wire
 from tlkernel.checks import Check
 from tlkernel.runkey import Digest, RunKey
+
+from tlgate.cache import RunMemo
 
 PLURAL = frozenset({"dependencies", "inputs"})
 INPUTS_HINT = "; gitignored files under its inputs count: judge in the worktree that ran it"

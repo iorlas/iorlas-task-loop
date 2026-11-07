@@ -1,11 +1,12 @@
 """Fixer: the fix command of a check (a formatter) runs before the round, so the tree the checks see is already formatted."""
+from tlkernel.argv import argv_of
+from tlkernel.checks import Check, CheckResult
+
 from tlgate.domain.matchers import output_signature, safe_name
 from tlgate.domain.plan import CheckPlan
 from tlgate.domain.specs import due
 from tlgate.host import CheckHost
 from tlgate.step_env import step_env
-from tlkernel.argv import argv_of
-from tlkernel.checks import Check, CheckResult
 
 
 class Fixer:

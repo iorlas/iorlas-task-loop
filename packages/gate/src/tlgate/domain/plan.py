@@ -2,9 +2,10 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from tlgate.domain.order import CheckOrder
 from tlkernel.checks import Check, CheckResult, Durations
 from tlkernel.ids import CheckId
+
+from tlgate.domain.order import CheckOrder
 
 
 @dataclass(frozen=True)

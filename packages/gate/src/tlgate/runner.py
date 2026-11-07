@@ -2,6 +2,16 @@
 import time
 from collections.abc import Callable, Sequence
 
+from tlkernel import check_files
+from tlkernel.checks import Check, CheckResult, CheckRun, Durations
+from tlkernel.config import EngineConfig
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.ids import TreeSha
+from tlkernel.plancheck import PlanCheck
+from tlkernel.runkey import BaseSha
+from tlkernel.storeapi import Doc
+
 from tlgate import evidence, gateplan
 from tlgate.attempts import Attempts
 from tlgate.base import BaseCheck
@@ -17,15 +27,6 @@ from tlgate.fixer import Fixer
 from tlgate.host import CheckFault, CheckHost, CheckStuck
 from tlgate.ports import GateStores
 from tlgate.round import Round
-from tlkernel import check_files
-from tlkernel.checks import Check, CheckResult, CheckRun, Durations
-from tlkernel.config import EngineConfig
-from tlkernel.env import Env
-from tlkernel.gitport import Git
-from tlkernel.ids import TreeSha
-from tlkernel.plancheck import PlanCheck
-from tlkernel.runkey import BaseSha
-from tlkernel.storeapi import Doc
 
 
 def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: GateStores, env: Env,

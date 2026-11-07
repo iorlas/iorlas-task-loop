@@ -1,12 +1,13 @@
 """WriterSplit: which checks the writer may run itself and which are the engine's alone. Pure."""
 from collections.abc import Mapping, Sequence
 
-from tlgate.domain.matchers import looks_slow
-from tlgate.domain.names import norm
-from tlgate.domain.specs import repo_check
 from tlkernel.argv import argv_of
 from tlkernel.checks import Check
 from tlkernel.config import EngineConfig
+
+from tlgate.domain.matchers import looks_slow
+from tlgate.domain.names import norm
+from tlgate.domain.specs import repo_check
 
 
 class WriterSplit:

@@ -3,12 +3,13 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
-from tlgate.base_tree import clean_tree
-from tlgate.domain import inputs
-from tlgate.host import CheckFault, CheckHost, CleanHost
 from tlkernel.checks import CheckFaultKind
 from tlkernel.gitport import Git
 from tlkernel.ids import TreeSha
+
+from tlgate.base_tree import clean_tree
+from tlgate.domain import inputs
+from tlgate.host import CheckFault, CheckHost, CleanHost
 
 
 class CleanCheckout:

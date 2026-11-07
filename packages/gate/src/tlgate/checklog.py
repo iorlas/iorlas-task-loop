@@ -6,15 +6,16 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol
 
-from tlgate.domain.specs import gate_items, repo_check
-from tlgate.host import CheckHost
-from tlgate.ports import GateLog
 from tlkernel import inputsets
 from tlkernel.argv import text_of
 from tlkernel.checks import Check, CheckResult, CheckRun, Phase
 from tlkernel.config import CheckSpec, EngineConfig
 from tlkernel.ids import CheckId
 from tlkernel.log import CheckEnd, Checks, CheckStart
+
+from tlgate.domain.specs import gate_items, repo_check
+from tlgate.host import CheckHost
+from tlgate.ports import GateLog
 
 
 class CheckLog:

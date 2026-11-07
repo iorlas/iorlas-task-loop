@@ -3,9 +3,10 @@
 The author may write the label by hand; the engine only ever adds it (at the plan and at the land) and never removes one."""
 from collections.abc import Iterable
 
-from tlgate.domain.inputs import touched
 from tlkernel.checks import Check
 from tlkernel.config import EngineConfig, HostResources
+
+from tlgate.domain.inputs import touched
 
 PREFIX = "needs:"
 

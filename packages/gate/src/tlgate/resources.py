@@ -16,12 +16,12 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from any_lease import LeaseCancelledError, Waiting
-
-from tlgate.domain import affinity
-from tlgate.ports import GateStores
 from tlkernel.checks import Check
 from tlkernel.config import EngineConfig
 from tlkernel.waitenums import WaitWhat
+
+from tlgate.domain import affinity
+from tlgate.ports import GateStores
 
 POLL_S = 0.5  # how often a waiting check looks for a free lease
 
