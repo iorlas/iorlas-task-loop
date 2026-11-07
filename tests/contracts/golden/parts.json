@@ -37,6 +37,16 @@
   "records": {},
   "version": 1
  },
+ "duration": {
+  "ddl": "7be5c512821184f0e8c7f0017caaef4b9d86b5ad8d6ceb36d4b006aaca53cfda",
+  "records": {
+   "Durations": {
+    "schema": "cb9255ec514688c32a19e1ef1160e2ee60323bc96356459049b0f56b892fe01e",
+    "v": 2
+   }
+  },
+  "version": 1
+ },
  "gate": {
   "ddl": "58123ec3b52045d7fd0b1b9d88e43ee98422c4a75ce51537ffa9314b640c2110",
   "records": {
@@ -157,6 +167,24 @@
    "ReposIndex": {
     "schema": "76483ef88da1557f9192a68c03454e665641df390e2172e5166dea7e746e8b0f",
     "v": 2
+   }
+  },
+  "version": 1
+ },
+ "rundoc": {
+  "ddl": "115b8456c9639d2c7b3b96e211d3f3ae1298291d3c9e203aeef1483b363d7d45",
+  "records": {
+   "HandoffMirror": {
+    "schema": "577688e7a1f73349f77c69243cc909f649c46a53ea2f63873dd6cf55e707352a",
+    "v": 1
+   },
+   "PrepareStamp": {
+    "schema": "b23109ca757547f76ab3f626568468719c4b03118dd8286000898e84a65153de",
+    "v": 1
+   },
+   "RunCounters": {
+    "schema": "6ac35b297b836540667017fb20ba44adb27f08f381fd7859189696fc4331bca0",
+    "v": 1
    }
   },
   "version": 1

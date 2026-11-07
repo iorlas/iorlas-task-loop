@@ -15,6 +15,7 @@ from pathlib import Path
 from taskloop.adapters import key_migrate, locks
 from taskloop.adapters.layout_paths import layout_journal
 from tlkernel import factorydb
+from tlkernel.docrows import DURATION_DOCS
 from tlkernel.gitport import Git
 from tlkernel.paths import ConfigDir, RunFiles
 from tlkernel.rowstores import ReposStore
@@ -153,7 +154,7 @@ def _rows(cfg: ConfigDir, keys: dict[str, str], *, dry: bool) -> int:
     try:
         if dry:
             return sum(con.execute(sql, args).fetchone()[0] for old in keys for sql, args in (
-                ("SELECT count(*) FROM kv WHERE k=?", (f"durations:{old}",)),
+                (f"SELECT count(*) FROM {DURATION_DOCS} WHERE k=?", (f"durations:{old}",)),
                 ("SELECT count(*) FROM check_pass WHERE repo_key=?", (old,))))
         with con:
             return key_migrate.rekey_rows(keys, lambda sql, args: con.execute(sql, args).rowcount)
