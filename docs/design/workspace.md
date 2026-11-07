@@ -118,6 +118,8 @@ PR-2 moves asks' `test_deferral`, `test_lint`, `test_show`, `test_specs`, `test_
 persistent rows, SQL corruption/recovery, storage races or persisted run manifests. TESTISO names these explicitly; other retained
 asks tests import shell wiring and remain integration tests.
 
+asks PR-3: other packages import tlasks only via api/contracts/testing (PACKAGE_ONLY); the shell keeps module imports because an eager api facade measured wire +30, run +8, launch +2, asks +1, root +1 against the per-stage closure ratchet.
+
 Release R1 (tl-e5t0.19): code carve done in `packages/release/src/tlrelease`, flat modules with no api.py.
 `ReleaseHost` supplies shell effects, bound by `app/launch/release_host.py`; tests stay in `tests/release` until R2.
 
