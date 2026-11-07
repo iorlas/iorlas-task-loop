@@ -2,7 +2,7 @@
 
 from support.fake_beads import FakeBeads
 
-from taskloop.app.asks import ask_verbs
+from tlasks import ask_verbs
 from tlkernel.ask import Ask, SimilarRef, ThreadEntry
 from tlkernel.askenums import AskClass, AskKind, AskStatus
 from tlkernel.askstore import AskStore

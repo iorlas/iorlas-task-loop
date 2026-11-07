@@ -20,13 +20,13 @@ from tltestkit.narrow import must
 # isort: split
 from support.memstores import fake_stores
 
-from taskloop.app.asks import pr_wake, raiser
 from taskloop.app.land import pr_land
 from taskloop.app.land.forge import peek
 from taskloop.app.land.gate import Problem, ProblemKind, mint
 from taskloop.app.land.host import Land
 from taskloop.app.land.pr_land import PrLand
 from taskloop.stores.runlog import RunLog
+from tlasks import pr_wake, raiser
 from tlkernel import askspecs as specs
 from tlkernel import fence, scratch
 from tlkernel.ask import Ask

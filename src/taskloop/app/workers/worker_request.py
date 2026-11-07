@@ -3,6 +3,7 @@
 import json
 from typing import Final, Protocol
 
+from tlasks import trustroots
 from tlgate.domain import planref
 from tlgate.runner import Checker
 from tlkernel import askspecs, childenv
@@ -21,7 +22,6 @@ from tlkernel.plancheck import PlanData
 from tlkernel.stop import Stop
 
 from taskloop.adapters import ident
-from taskloop.app.asks import trustroots
 from taskloop.app.workers import writer_pin
 from taskloop.app.workers.call import Call
 from taskloop.domain.lanes import pin

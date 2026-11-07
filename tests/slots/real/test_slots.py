@@ -30,7 +30,6 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.adapters import pidcheck
-from taskloop.app.asks import admission
 from taskloop.app.launch import loop as wloop
 from taskloop.app.loop.stages import EngineSlots
 from taskloop.app.loop.take import Taker
@@ -38,6 +37,7 @@ from taskloop.app.run import (
     engine,
     entry,
 )
+from taskloop.app.wire import asks as admission
 from taskloop.app.wire import slotfx
 from taskloop.app.wire.slotfx import FX
 from tlkernel.enums import Result

@@ -6,8 +6,8 @@ from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
 from support.tiers import domain
 
-from taskloop.app.asks import intake, raiser
-from taskloop.domain.asks import similar
+from tlasks import intake, raiser
+from tlasks import similar
 from tlkernel import askspecs as specs
 from tlkernel.ask import SimilarRef
 from tlkernel.bead import Bead

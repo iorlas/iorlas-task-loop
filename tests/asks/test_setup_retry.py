@@ -5,9 +5,9 @@ from unittest import mock
 from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
 
-from taskloop.app.asks import raiser, setup_retry
 from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.wire import asks as wire_asks
+from tlasks import raiser, setup_retry
 from tlkernel import askspecs as specs
 from tlkernel.ask import AskAnswer
 from tlkernel.askenums import AskKind, AskStatus

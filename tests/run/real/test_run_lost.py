@@ -15,10 +15,10 @@ from support import engine_case as te
 from support import homes
 from support.dashes import make_dash
 
-from taskloop.app.asks import owner_verbs as requests
 from taskloop.app.loop.loop import Loop
 from taskloop.app.report import card
 from taskloop.cli import wait
+from tlasks import owner_verbs as requests
 from tldash.testing import ingest
 from tlkernel import runlife
 from tlkernel.ids import loop_key

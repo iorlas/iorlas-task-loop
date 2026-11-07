@@ -14,8 +14,8 @@ from tlkernel.ids import BeadId
 from tlkernel.lookrows import LookRows
 from tlkernel.paths import ConfigDir
 
-from taskloop.app.asks import intake, sweeps
-from taskloop.app.asks import owner_verbs as requests
+from tlasks import intake, sweeps
+from tlasks import owner_verbs as requests
 
 Out = Callable[[str], None]
 FLAG_ACTIONS: Final[tuple[AskAction, ...]] = ("rerun", "confirm", "split")  # `tl answer --rerun|--confirm|--split`

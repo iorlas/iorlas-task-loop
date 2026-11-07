@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "dev"))
 from importgraph import targets_of
 
 TREES = ("src/taskloop", "packages/kernel/src/tlkernel", "packages/gate/src/tlgate",
-         "packages/work/src/tlwork", "packages/slots/src/tlslots")
+         "packages/work/src/tlwork", "packages/slots/src/tlslots", "packages/asks/src/tlasks")
 
 
 def stage_packages(packages):
@@ -24,6 +24,8 @@ def stage_packages(packages):
         stages = [name for name in stages if name != "taskloop.app.checks"] + ["tlgate"]
     if "tlslots" in packages:
         stages = [name for name in stages if name != "tlslots"] + ["tlslots"]
+    if "tlasks" in packages:
+        stages = [name for name in stages if name != "taskloop.app." + "asks"] + ["tlasks"]
     for stage in ('review', 'plan'):
         if f'tlwork.{stage}' in packages:
             stages = [name for name in stages if name != 'taskloop.app.' + stage] + [f'tlwork.{stage}']
@@ -33,7 +35,7 @@ def stage_packages(packages):
 def closures(texts: Mapping[str, str]) -> dict[str, int]:
     """Count reachable local files and distinct external module roots for each stage."""
     modules = {path.removeprefix("packages/kernel/").removeprefix("packages/gate/")
-               .removeprefix("packages/work/").removeprefix("packages/slots/").removeprefix("src/")
+               .removeprefix("packages/work/").removeprefix("packages/slots/").removeprefix("packages/asks/").removeprefix("src/")
                .removesuffix(".py").replace("/", ".").removesuffix(".__init__"):
                path for path in texts if path.startswith(tuple(tree + "/" for tree in TREES)) and path.endswith(".py")}
     packages = {name for name, path in modules.items() if path.endswith("/__init__.py")}
@@ -64,7 +66,7 @@ def closures(texts: Mapping[str, str]) -> dict[str, int]:
             if name not in reached:
                 reached.add(name)
                 pending.extend(edges[name] - reached)
-        key = "checks" if stage == "tlgate" else ("slots" if stage == "tlslots" else stage.rsplit(".", 1)[-1])
+        key = "checks" if stage == "tlgate" else ({"tlslots": "slots", "tlasks": "asks"}.get(stage, stage.rsplit(".", 1)[-1]))
         counts[key] = len(reached)
         counts[key + " (external modules)"] = len(set().union(*(external[name] for name in reached)))
     return counts

@@ -10,8 +10,9 @@ from support.fakes import FakeBeadStore
 from support.spawn import port_git
 from support.who import who
 
-from taskloop.app.asks import admission, parks
 from taskloop.app.run import running as wrunning
+from taskloop.app.wire import asks as admission
+from tlasks import parks
 from tlkernel import beadpark as park
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind

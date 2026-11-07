@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, NotRequired, TypedDict
 
+from tlasks import intake
 from tlkernel import lifecyclematchers as matchers
 from tlkernel import paths, runlife, wire
 from tlkernel.bead import Comment
@@ -27,7 +28,6 @@ from tlkernel.stores import LoopLog
 from tlkernel.trace import RunTrace
 
 from taskloop.adapters import beadtools, gitrepo
-from taskloop.app.asks import intake
 from taskloop.app.reconcile.lost import lost_work
 from taskloop.app.report.inputs import bead_status, landed_of, prefix, read_jsonl, repo_traces
 from taskloop.app.report.landphases import land_stats, tries_of

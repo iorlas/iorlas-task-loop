@@ -34,10 +34,10 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.adapters import delegate as dl
-from taskloop.app.asks import admission
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.run import engine, entry, running
 from taskloop.app.track import outcome_line
+from taskloop.app.wire import asks as admission
 from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.write.matchers import count_tests
 from tlgate.domain import retry

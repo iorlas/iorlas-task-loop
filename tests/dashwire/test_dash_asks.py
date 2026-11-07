@@ -14,7 +14,7 @@ from support.dashes import make_dash
 from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
 
-from taskloop.app.asks import intake, raiser
+from tlasks import intake, raiser
 from tldash.testing import T, bead
 from tldash.views import bead_detail, snapshot
 from tldash.views.board import Board

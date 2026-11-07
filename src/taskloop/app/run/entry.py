@@ -10,6 +10,7 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
+from tlasks import setup_retry
 from tlkernel import childenv, fence
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BeadPatch, Beads
@@ -32,13 +33,13 @@ from tlslots import engine_lock
 
 from taskloop.adapters import beadtools, gitrepo, ident
 from taskloop.adapters import halt as halting
-from taskloop.app.asks import admission, setup_retry
 from taskloop.app.loop.queue import has_areas
 from taskloop.app.reconcile import leases
 from taskloop.app.run import preflight, running
 from taskloop.app.run.engine import Blocked, Engine
 from taskloop.app.track import console, verbs
 from taskloop.app.track.outcome_line import append_output, pause_line, report
+from taskloop.app.wire import asks as admission
 from taskloop.app.wire import slotfx
 from taskloop.app.wire import slots as wslots
 from taskloop.stores.real import real_stores

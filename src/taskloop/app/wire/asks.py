@@ -1,7 +1,11 @@
 """The owner's inbox on this machine: the AskStore of the config dir and the throttled passes over it (close the ask of a closed bead,
 park the unanswered, shout about an answer no run used)."""
 from collections.abc import Callable
+from typing import Concatenate
 
+from tlasks import admission, parks, pr_wake, setup_retry, sweeps
+from tlasks.host import AsksHost
+from tlasks.paths import ask_marker
 from tlkernel.askstore import AskStore
 from tlkernel.bd_errors import BdCommandFailure
 from tlkernel.beadsport import BdFailure
@@ -10,10 +14,8 @@ from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
 
-from taskloop.adapters import ident
+from taskloop.adapters import beadtools, ident
 from taskloop.adapters.beadtools import bd_store
-from taskloop.app.asks import pr_wake, setup_retry, sweeps
-from taskloop.app.asks.paths import ask_marker
 from taskloop.app.land import forge
 from taskloop.app.land.cmds import Runs
 from taskloop.app.track.trail import now
@@ -61,3 +63,21 @@ def sweep_asks(who: Identity, home: ConfigDir, say: Callable[[str], None] = prin
         sweeps.reask_orphans(store(home), bd_store(who.actor), ask_marker(home, "orphans"), now(), cfg.pick_label or "",
             cfg.needs_info_label or "", say)
     sweeps.shout(store(home), ask_marker(home, "unused"), now(), say)
+
+
+def host() -> AsksHost:
+    return AsksHost(beadtools.bd_store, beadtools.peek, ident.hostname, store)
+
+
+def bound[**P, R](fn: Callable[Concatenate[AsksHost, P], R]) -> Callable[P, R]:
+    def call(*args: P.args, **kwargs: P.kwargs) -> R:
+        return fn(host(), *args, **kwargs)
+    return call
+
+
+release_dead = bound(admission.release_dead)
+admit = bound(admission.admit)
+parked = bound(admission.parked)
+gate = bound(parks.gate)
+skip_of = bound(parks.skip_of)
+entering = bound(parks.entering)

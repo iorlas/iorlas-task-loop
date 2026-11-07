@@ -6,23 +6,22 @@ from importgraph import bindings, qualified
 
 # The former per-slice deny contracts, expressed once as allowed direct imports.
 SLICE_IMPORTS: Final = {
-    "asks": frozenset(),
     "checks": frozenset(),
     "doctor": frozenset(),
-    "land": frozenset({"asks", "checks"}),
-    "look": frozenset({"asks", "checks"}),
-    "loop": frozenset({"asks", "release", "report", "run"}),
+    "land": frozenset({"checks"}),
+    "look": frozenset({"checks"}),
+    "loop": frozenset({"release", "report", "run"}),
     "parts": frozenset({"checks", "land"}),  # the one list of stage parts imports each stage that owns its tables (store.py)
-    "plan": frozenset({"asks", "checks"}),
+    "plan": frozenset({"checks"}),
     # prune -> slots: D-PRUNE is the cross-part runner, so it reads slot_state_roots
     "prune": frozenset({"reconcile", "release", "run", "track"}),
     "reconcile": frozenset({"release"}),
     "release": frozenset({"checks"}),
-    "report": frozenset({"asks", "reconcile"}),
-    "review": frozenset({"asks", "checks"}),
+    "report": frozenset({"reconcile"}),
+    "review": frozenset({"checks"}),
     "track": frozenset(),
-    "workers": frozenset({"asks", "checks"}),
-    "write": frozenset({"asks", "checks"}),
+    "workers": frozenset({"checks"}),
+    "write": frozenset({"checks"}),
 }
 COMPOSITION_ROOTS: Final = frozenset({"launch", "run", "wire"})
 

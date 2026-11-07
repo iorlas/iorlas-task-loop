@@ -103,3 +103,5 @@ E1 slice 1: `packages/work` (`tlwork`) owns review application code and review, 
 Dash is carved into `packages/dash` (`tldash`), with isolated package tests.
 
 E1 slice 2: `tlwork.plan` owns plan application and domain code. Shared bead IDs, bead matchers and owner metadata keys live in `tlkernel`; plan receives the existing `TreeProbe` protocol. Tests remain in their original directories.
+
+PR A asks code carve: `packages/asks` (`tlasks`) owns asks, admission, holds, matching, time specifications and parks. Tests remain in `tests/asks`; machine services come through `AsksHost`, built per call by `app/wire/asks.py`.

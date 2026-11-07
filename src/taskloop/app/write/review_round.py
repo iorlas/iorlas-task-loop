@@ -4,6 +4,7 @@ the writer, until the rounds are used up."""
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from tlasks import trustroots
 from tlgate.evidence import compact
 from tlkernel import askspecs
 from tlkernel import lanecaps as caps
@@ -14,7 +15,6 @@ from tlwork.review import findings as fnd
 from tlwork.review.availability import ReviewUnavailable
 from tlwork.work.skip import SkipKind
 
-from taskloop.app.asks import trustroots
 from taskloop.app.write import review_skip
 from taskloop.app.write.host import WriteHost
 from taskloop.app.write.review_prompt import acceptance_text, review_prompt

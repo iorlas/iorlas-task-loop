@@ -8,13 +8,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from tlasks import trustroots
 from tlkernel import askspecs
 from tlkernel import log as rec
 from tlkernel.bead import Bead
 from tlkernel.lanesliveness import LIVENESS
 
 from taskloop.adapters.deadline import DeadlineExpired, deadline
-from taskloop.app.asks import trustroots
 from taskloop.app.land import gate
 from taskloop.app.land.fix import FixOutside
 from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind

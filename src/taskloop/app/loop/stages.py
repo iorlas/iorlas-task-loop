@@ -6,6 +6,8 @@ import sys
 from collections.abc import Callable, Iterable, Mapping
 
 from jsonl_log import close_held
+from tlasks import deferral, parks
+from tlasks.host import AsksHost
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, Beads
 from tlkernel.branches import task_branch
@@ -24,7 +26,6 @@ from tlslots.lease import Lease
 from tlslots.pool import SlotPool
 from tlslots.reset import setup
 
-from taskloop.app.asks import deferral, parks
 from taskloop.app.loop.env import ReloadNote
 from taskloop.app.loop.ports import LeaseHandle
 
@@ -83,14 +84,14 @@ class EngineSlots:
 
 
 class EngineAsks:
-    def __init__(self, cfgdir: ConfigDir, now: Callable[[], float]) -> None:
-        self.cfgdir, self.now = cfgdir, now
+    def __init__(self, cfgdir: ConfigDir, now: Callable[[], float], asks_host: Callable[[], AsksHost]) -> None:
+        self.cfgdir, self.now, self.asks_host = cfgdir, now, asks_host
 
     def held(self, b: Bead) -> bool:
-        return parks.gate(self.cfgdir, b, now=self.now()) is not None
+        return parks.gate(self.asks_host(), self.cfgdir, b, now=self.now()) is not None
 
     def skip_of(self, b: Bead) -> Skip | None:
-        return parks.skip_of(self.cfgdir, b, now=self.now())
+        return parks.skip_of(self.asks_host(), self.cfgdir, b, now=self.now())
 
     def profile_ahead(self, b: Bead, run: str, why: str) -> None:
         parks.profile_ahead(self.cfgdir, b, run, self.now(), why)

@@ -19,7 +19,6 @@ from tlslots import engine_lock
 
 from taskloop.adapters import bdbackup, beadtools, factorybackup, ident, ram
 from taskloop.adapters.bd import BdStore
-from taskloop.app.asks import admission
 from taskloop.app.doctor import disk
 from taskloop.app.doctor import lanes as wlanes
 from taskloop.app.loop import stages
@@ -29,6 +28,7 @@ from taskloop.app.release import reexec
 from taskloop.app.report import reflect
 from taskloop.app.run.running import running
 from taskloop.app.track import console, trail, verbs
+from taskloop.app.wire import asks as admission
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import slotfx
 from taskloop.app.wire import slots as wslots

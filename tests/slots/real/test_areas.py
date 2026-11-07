@@ -22,6 +22,7 @@ from loop.test_loop import rec
 from support import homes
 
 # isort: split
+from slots.test_slots import Slots
 from support import (
     looptest,
     tlbd,
@@ -31,8 +32,6 @@ from support.args import Args
 from support.spawn import port_git, real_spawner
 from support.who import who
 
-from slots.test_slots import Slots
-from taskloop.app.asks import admission
 from taskloop.app.launch import loop as wloop
 from taskloop.app.loop.core import Core
 from taskloop.app.loop.loop import Loop
@@ -41,6 +40,7 @@ from taskloop.app.run import (
     entry,
 )
 from taskloop.app.track import verbs
+from taskloop.app.wire import asks as admission
 from taskloop.app.wire import slots as wslots
 from taskloop.stores.ticketrows import TicketRows
 from tlkernel.config import LoopConfig

@@ -3,7 +3,8 @@
 from pathlib import Path
 
 from asks import test_ask_v3
-from taskloop.app.asks.intake import Intake
+
+from tlasks.intake import Intake
 from tlkernel import factorydb
 from tlkernel.askstore import AskStore
 from tlkernel.paths import ConfigDir

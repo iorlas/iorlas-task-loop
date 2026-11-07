@@ -29,11 +29,11 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.adapters import pidcheck
-from taskloop.app.asks import admission
 from taskloop.app.launch import dash as dash_server
 from taskloop.app.run import (
     entry,
 )
+from taskloop.app.wire import asks as admission
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire.slotfx import FX
 from tlkernel.config import SlotsConfig

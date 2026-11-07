@@ -13,9 +13,9 @@ from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
 from support.tiers import domain
 
-from taskloop.app.asks import intake, raiser, sweeps
-from taskloop.app.asks.paths import ask_marker
-from taskloop.domain.asks import similar
+from tlasks import intake, raiser, sweeps
+from tlasks import similar
+from tlasks.paths import ask_marker
 from tlkernel import askspecs as specs
 from tlkernel import wire
 from tlkernel.ask import Ask, AskAnswer, SimilarRef, ThreadEntry

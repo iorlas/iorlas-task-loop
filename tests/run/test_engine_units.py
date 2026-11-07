@@ -16,7 +16,7 @@ from unittest import mock
 
 import pytest
 
-from taskloop.app.asks import admission
+from taskloop.app.wire import asks as admission
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 

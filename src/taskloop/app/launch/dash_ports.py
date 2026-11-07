@@ -6,6 +6,8 @@ import shutil
 from collections.abc import Callable
 from typing import Any
 
+from tlasks.intake import Intake
+from tlasks.owner_verbs import OwnerVerbs
 from tlkernel.adrs import AdrStore
 from tlkernel.ask import Ask, AskAction
 from tlkernel.askstore import AskStore
@@ -25,8 +27,6 @@ from tlslots import config as wslots_config
 from taskloop.adapters.bd import BdStore
 from taskloop.adapters.ident import config_dir, hostname
 from taskloop.adapters.locks import resource_holders
-from taskloop.app.asks.intake import Intake
-from taskloop.app.asks.owner_verbs import OwnerVerbs
 from taskloop.app.doctor import profiles
 from taskloop.app.report import card as cards
 from taskloop.app.report.card import score_of
