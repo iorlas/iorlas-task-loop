@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 import pytest
-from support.narrow_hosts import FakeOutboundHost
+from support.narrow_land import FakeOutboundHost
 
 from taskloop.adapters.agent import last_event_t
 from taskloop.app.land.push import Outbound

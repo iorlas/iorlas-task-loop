@@ -2,7 +2,8 @@
 
 import pytest
 from support.fakegit import FakeGit
-from support.narrow_hosts import FakeLandedHost, FakeLandRebaseHost, Stopped
+from support.narrow_hosts import Stopped
+from support.narrow_land import FakeLandedHost, FakeLandRebaseHost
 
 from tltestkit.case import Case
 
