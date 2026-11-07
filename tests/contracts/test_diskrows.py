@@ -32,7 +32,7 @@ def test_samples_come_back_oldest_first_and_a_new_sample_drops_those_past_fourte
 
 
 def test_a_foreign_kv_row_is_not_a_sample(con):
-    con.execute("INSERT INTO kv(k,v,t) VALUES ('beads.x','{}',1)")
+    con.execute("INSERT INTO kv(k,v,t) VALUES ('unrelated.x','{}',1)")
     assert diskrows.samples(con) == []
 
 

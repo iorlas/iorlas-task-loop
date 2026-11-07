@@ -10,6 +10,7 @@ from taskloop_dash.index.beadpass import BeadPass
 from taskloop_dash.index.facts import Facts, append, decode, encode
 from tlkernel import factorydb, log, runfacts
 from tlkernel.beadsport import Beads
+from tlkernel.docrows import INDEX_DOCS
 from tlkernel.locator import RunBundle, RunLocator
 from tlkernel.paths import ConfigDir
 
@@ -49,7 +50,7 @@ class Indexer:
         with factorydb.begin_immediate(self.con):
             runfacts.clear_facts(self.con)
             self.con.execute("DELETE FROM source WHERE family='run'")
-            self.con.execute("DELETE FROM kv WHERE k='index.run.pass'")
+            self.con.execute(f"DELETE FROM {INDEX_DOCS} WHERE k='index.run.pass'")
         self.pending = None
 
     def pass_once(self, budget: float = 0.2) -> bool:
@@ -76,7 +77,7 @@ class Indexer:
             if finished:
                 self._sweep()
                 self.pending = None
-            self.con.execute("INSERT INTO kv(k,v,t) VALUES ('index.run.pass','ok',?) "
+            self.con.execute(f"INSERT INTO {INDEX_DOCS}(k,v,t) VALUES ('index.run.pass','ok',?) "
                              "ON CONFLICT(k) DO UPDATE SET v=excluded.v,t=excluded.t", (self.clock(),))
         return finished
 
