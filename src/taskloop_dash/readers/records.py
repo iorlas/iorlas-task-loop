@@ -4,7 +4,6 @@ bead's claims make. Each is one file or folder under the config dir (tlkernel.pa
 import json
 import os
 from dataclasses import dataclass
-from typing import Any
 
 from taskloop_dash.env import Env
 from tlkernel import events, wire
@@ -15,8 +14,6 @@ from tlkernel.run import NetPause
 from tlkernel.runlife import RETAIN
 from tlkernel.trace import RunTrace
 from tlkernel.waitrows import NET_PAUSE, open_records
-
-Span = dict[str, Any]
 
 
 @dataclass(frozen=True)
