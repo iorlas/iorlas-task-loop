@@ -1,6 +1,6 @@
 """The dashboard's answers for one recorded state: a run per way a run can end (the close each Kind writes), read through the API
 (snapshot, bead drawer). The golden file is the answer as the page reads it; it changes only when a
-field was wrong. `GOLDEN_WRITE=1 uv run pytest tests/dash/test_dash_golden.py` rewrites it."""
+field was wrong. `GOLDEN_WRITE=1 uv run pytest tests/dashwire/test_dash_golden.py` rewrites it."""
 
 import json
 import os
@@ -25,7 +25,7 @@ from tlkernel.dash import BeadDetail, Snapshot
 from tlkernel.ids import loop_key
 from tltestkit.repos import write_repos
 
-GOLDEN = Path(__file__).with_name("golden") / "closes.json"
+GOLDEN = Path(__file__).resolve().parents[1] / "dash" / "golden" / "closes.json"
 NOW = T + 36_000
 # (name, close outcome word, why_code, why): what the closer writes for each Kind (app/run/trace.WHY_CODE, outcome.RunOutcome.word)
 CLOSES = [
