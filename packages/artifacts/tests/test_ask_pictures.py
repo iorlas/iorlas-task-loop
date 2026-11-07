@@ -1,22 +1,20 @@
 """A stuck or decision ask carries the pictures the failing check left (tl-3qz): registered in the store, named on the ask."""
 from pathlib import Path
 
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
+import pytest
 
-from taskloop.app.artifacts import ask_pictures, store
+from tlartifacts import ask_pictures, store
 from tlkernel.artifact import ArtifactSlot
 from tlkernel.paths import RunFiles
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 32
 
 
-class AskPictures(Case):
-    def setup_method(self):
-        tmp = TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.run_dir = Path(tmp.name) / "run"
-        self.root = Path(tmp.name) / "store"
+class AskPictures:
+    @pytest.fixture(autouse=True)
+    def _dirs(self, tmp_path):
+        self.run_dir = tmp_path / "run"
+        self.root = tmp_path / "store"
         self.slot = ArtifactSlot(repo="r-1", bead="t-1", run="RUN", stage="ask", attempt=1)
 
     def attempt(self, check: str, n: int, **files: bytes) -> Path:

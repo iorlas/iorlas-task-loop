@@ -13,8 +13,8 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as T
 from support.plans import CLEAN, PLAN, WRITE
 
-from taskloop.app.artifacts import store
 from taskloop.app.write import show_check
+from tlartifacts import store
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 32
 CASES = [{"criterion": "the board is shown", "check": None, "class": "show",

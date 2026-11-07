@@ -70,3 +70,7 @@ Prompts and schema versions are attributes of the package, not of the contract.
 No file moved on the real tree and no workspace was created in it; the numbers above are an import scan, and the isolated-run proof is the toy
 workspace of stage-packages.md section 1. The first real proof is WORKSPACE-3, which can fail on a hidden import (a test reaching `support`
 fixtures that need the engine); that is why review goes first and alone.
+
+## 6. E1 implementation
+
+Step 1 done: artifacts is the workspace member `packages/artifacts` (`tlartifacts`), with isolated package tests.

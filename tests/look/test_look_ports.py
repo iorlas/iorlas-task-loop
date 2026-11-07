@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 from support.look_host import FakeLook
 
-from taskloop.app.artifacts import store
 from taskloop.app.look import shots
+from tlartifacts import store
 from tlkernel.artifact import ArtifactSlot
 
 

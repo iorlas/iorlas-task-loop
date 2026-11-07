@@ -15,10 +15,10 @@ PLAIN_PYTHON = {"prepush.py", "layout_migrate.py", "key_migrate.py"}  # no recor
 STAGE_PATHS = {
     ROOT / "src" / name for name in (
         "taskloop/app/land/paths.py", "taskloop/app/slots/paths.py", "taskloop/app/asks/paths.py",
-        "taskloop/app/release/paths.py", "taskloop/app/prune/paths.py", "taskloop/app/artifacts/paths.py",
+        "taskloop/app/release/paths.py", "taskloop/app/prune/paths.py",
         "taskloop/adapters/layout_paths.py", "taskloop_dash/paths.py",
     )
-}
+} | {ROOT / "packages/artifacts/src/tlartifacts/paths.py"}
 MAKES_CONFIGDIR = {"env.py", "bind.py"}  # where the config root is taken from the process: everything else is handed a ConfigDir
 
 
