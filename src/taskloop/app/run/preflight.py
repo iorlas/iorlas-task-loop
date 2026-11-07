@@ -3,9 +3,9 @@ from pathlib import Path
 
 from taskloop.app.checks import gateplan
 from taskloop.app.checks.runner import cached_gate
+from taskloop.app.pipeline.cursor import select_step
 from taskloop.app.run.console import say
 from taskloop.app.run.layout import repo_of
-from taskloop.app.run.stages import select_step
 from taskloop.app.run.state import read_checkpoint
 from taskloop.app.wire.closeguard import has_land
 from taskloop.contracts.config import EngineConfig
