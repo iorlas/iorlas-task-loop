@@ -9,11 +9,12 @@ from pathlib import Path
 from tlkernel.env import Env
 
 from taskloop.app.doctor import setup, setup_apply
+from taskloop.app.slots import profile_facts
 
 
-def answers_of(a: argparse.Namespace, repo: Path) -> dict[str, str]:
+def answers_of(a: argparse.Namespace, repo: Path, facts: setup.ProfileFacts) -> dict[str, str]:
     """--answers FILE (a JSON object of question id -> answer) over --yes (every default)."""
-    given = {q.id: q.default for q in setup.repo_part(repo).questions} if a.yes else {}
+    given = {q.id: q.default for q in setup.repo_part(repo, facts).questions} if a.yes else {}
     if a.answers:
         given.update({str(k): str(v) for k, v in json.loads(Path(a.answers).read_text(encoding="utf-8")).items()})
     return given
@@ -25,10 +26,10 @@ def cmd_setup(a: argparse.Namespace, env: Env, plugin_root: Path, out: Callable[
     if a.apply:
         if sh is None:
             raise SystemExit("tl setup --apply needs a spawner")
-        code, lines = setup_apply.apply(plugin_root, env, repo, answers_of(a, repo), sh)
+        code, lines = setup_apply.apply(plugin_root, env, repo, answers_of(a, repo, profile_facts), sh, profile_facts)
         out("\n".join(lines))
         return code
-    plan = setup.plan(plugin_root, env, repo)
+    plan = setup.plan(plugin_root, env, repo, profile_facts)
     out(setup.as_json(plan) if a.json else setup.render(plan))
     return 0 if all(c.ok for c in plan.checks) else 1
 

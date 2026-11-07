@@ -81,12 +81,14 @@ def open_pr(repo: Path, profile: dict[str, object], sh: Runs) -> tuple[bool, str
     return (True, pr.out.strip()) if pr.exit == 0 else failed("pr create", pr)
 
 
-def apply(plugin_root: Path, env: Env, repo: Path | None, answers: Mapping[str, str], sh: Runs) -> tuple[int, list[str]]:
+def apply(
+    plugin_root: Path, env: Env, repo: Path | None, answers: Mapping[str, str], sh: Runs, facts: setup.ProfileFacts
+) -> tuple[int, list[str]]:
     """-> (exit code, report lines). A question left unanswered opens no PR."""
     lines = [f"fixed {fix}" for fix in machine_fixes(plugin_root, env)] or ["machine: nothing to fix"]
     if repo is None:
         return 0, lines
-    asks = setup.repo_part(repo).questions
+    asks = setup.repo_part(repo, facts).questions
     if not asks:
         return 0, lines
     missing = [q.id for q in asks if q.id not in answers]
