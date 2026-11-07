@@ -5,6 +5,7 @@ Actions are described to the owner, never executed; stores are never written.
 from tlkernel.gitport import Git
 from tlkernel.queue_doc import QueueDoc
 from tlkernel.queue_state import QueueState
+from tlkernel.wire import Refused
 
 from taskloop.adapters.check_files import repo_key
 from taskloop.domain.land.queue_persist import from_doc
@@ -42,7 +43,12 @@ def findings(doc: QueueDoc | None, state: QueueState | None, git: Git, repo: str
 def report(stores: Stores, git: Git, repo: str, main_ref: str, now: float) -> list[str]:
     """Read the repo's queue documents and print each violation as a FAIL line."""
     key = repo_key(git, repo)
-    lines = findings(stores.queue.of(key).get(), stores.queue_state.of(key).get(), git, repo, main_ref, now)
+    try:
+        document = stores.queue.of(key).need()
+    except Refused as e:
+        print(f"FAIL queue: {e}")
+        return [str(e)]
+    lines = findings(document, stores.queue_state.of(key).get(), git, repo, main_ref, now)
     for line in lines:
         print(f"FAIL queue: {line}")
     return lines

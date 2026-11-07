@@ -13,6 +13,7 @@ from taskloop.app.land.queue_refs import Made
 from taskloop.app.land.stack import HeadMoved, Stack
 from tlkernel.forge import CLOSED, OPEN, StackItem
 from tlkernel.queue_doc import QueueDoc
+from tlkernel.wire import Refused
 
 
 class FakeRefs:
@@ -36,6 +37,11 @@ class FakeDoc:
         self.writes = []
 
     def get(self):
+        return self.value
+
+    def need(self):
+        if isinstance(self.value, Exception):
+            raise self.value
         return self.value
 
     def write(self, value):
@@ -159,3 +165,11 @@ def test_overlap_enqueue_result_caps_the_controller_at_one():
     with mock.patch.object(queue_land, "recover"), mock.patch.object(queue_land, "enqueue", return_value=1):
         world.run()
     assert all(doc.in_flight == 1 for doc in world.stack.queue_doc.writes)
+
+
+def test_a_foreign_version_queue_document_is_refused_loudly():
+    world = World()
+    world.stack.queue_doc.value = Refused("queue document is of another version (v 1, this code knows 2)")
+    with pytest.raises(Stop, match="another version"):
+        world.run()
+    assert world.stack.queue_doc.writes == []
