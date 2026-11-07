@@ -16,7 +16,6 @@ from taskloop.domain.matchers import secrets_added
 from taskloop.stores.bundle import Stores
 
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
-MAIN_MARKERS = ("release:", "land")  # the holder of the land lock while tl's own land push or release pushes to the base branch
 
 
 class PushStatus(IntEnum):
@@ -63,9 +62,9 @@ def push_tips(stdin: str) -> tuple[PushTip, ...]:
 
 class PushJudge:
     def __init__(self, repo: str, stores: Stores, git: Git, env: Env, clock: Clock | None = None, *, guard_main: bool = False,
-                 lock_holder: str = "") -> None:
+                 land_lock_held: bool = False) -> None:
         self.repo, self.stores, self.git = repo, stores, git
-        self.guard_main, self.lock_holder = guard_main, lock_holder
+        self.guard_main, self.land_lock_held = guard_main, land_lock_held
         self.env = env
         self.clock = clock or SystemClock()
         self.unproven: list[CheckId] = []
@@ -178,9 +177,9 @@ class PushJudge:
         return PushDecision(PushStatus.REFUSED, leaks) if leaks else decision
 
     def unmarked(self, tips: tuple[PushTip, ...], base: str) -> tuple[str, ...]:
-        """With the guard on (docs/design/merge-queue.md 8.1): a push to the base branch is tl's own (a land push or a release, which hold
-        the land lock and name themselves in it) or it is refused. Pushes to any other branch never meet this."""
-        if not self.guard_main or self.lock_holder.startswith(MAIN_MARKERS):
+        """With the guard on (docs/design/merge-queue.md 8.1): a push to the base branch is tl's own (a land push or a release holds
+        the repo's land lock while it pushes) or it is refused. Pushes to any other branch never meet this."""
+        if not self.guard_main or self.land_lock_held:
             return ()
         return tuple(f"{tip.ref} ({tip.sha[:12]}) goes to {base} outside `tl land` and the release: land it through the PR flow"
                      for tip in tips if tip.remote_ref == base)
@@ -215,10 +214,10 @@ class PushJudge:
 
 
 def judge_push(repo: str, stdin: str, stores: Stores, git: Git, *, env: Env, clock: Clock | None = None, guard_main: bool = False,
-               lock_holder: str = "") -> PushDecision:
+               land_lock_held: bool = False) -> PushDecision:
     """Only this application boundary interprets the request. Failed observations never authorize transport."""
     try:
         tips = push_tips(stdin)
-        return PushJudge(repo, stores, git, env, clock, guard_main=guard_main, lock_holder=lock_holder).judge(tips)
+        return PushJudge(repo, stores, git, env, clock, guard_main=guard_main, land_lock_held=land_lock_held).judge(tips)
     except Exception as err:
         return PushDecision(PushStatus.UNAVAILABLE, (f"delivery judge unavailable: {err}",))

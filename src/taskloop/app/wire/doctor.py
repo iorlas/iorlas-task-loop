@@ -8,10 +8,10 @@ import time
 from pathlib import Path
 
 from taskloop import contracts
-from taskloop.adapters import delegate, landlock, layout_migrate
+from taskloop.adapters import delegate, layout_migrate
 from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.ident import claude_dir, config_dir
-from taskloop.app.doctor import disk, env_checks, guard_rails, ops, profiles
+from taskloop.app.doctor import disk, env_checks, ops, profiles, rails
 from taskloop.app.release import catalog, manifest
 from taskloop.app.report.inputs import repo_traces
 from taskloop.app.slots import watchdog
@@ -195,43 +195,6 @@ def disk_run(config: ConfigDir) -> int:
     return 1 if any(ln.startswith("WARN") for ln in lines) else 0
 
 
-def github_slug(git: Git, repo: str) -> str:
-    """owner/name of the repo's origin on github.com, '' for any other remote."""
-    host, _, path = landlock.canonical_remote(git.remote_url(repo, "origin")).partition("/")
-    return path if host == "github.com" and path.count("/") == 1 else ""
-
-
-def print_guard_rails(env: Env, git: Git) -> int:
-    slug = github_slug(git, git.toplevel(".") or os.getcwd())
-    if not slug:
-        print("origin is not a github.com repo: no guard rails to print")
-        return 1
-    sys.stdout.write(guard_rails.print_calls(slug))
-    return 0
-
-
-def guard_rail_fails(plugin_root: Path, env: Env, git: Git, repo: str, spawner: Spawner, checks: list[str]) -> list[str]:
-    """tl-7s2f.14: ruleset, branch protection and hook drift of main, each a FAIL (docs/design/merge-queue.md 8.1)."""
-    out = guard_rails.hook_findings(ConfigDir(config_dir(env)).hooks_dir(), expected_pre_push(plugin_root, env),
-                                    [(c.path, git.config_get(c.path, "core.hooksPath")) for c in git.checkouts(repo)])
-    slug = github_slug(git, repo)
-    if slug:
-        out += guard_rails.ruleset_findings(lambda path: spawner.run(["gh", "api", path], cwd=repo, timeout_s=60), slug, checks)
-    return out
-
-
-def expected_pre_push(plugin_root: Path, env: Env) -> str:
-    root = config_dir(env)
-    install = hook.readable_install(plugin_root)
-    if install is None:
-        return ""
-    quoted = {"{hook}": install / "hooks" / "hook.py", "{tl}": root / "bin" / "tl"}
-    text = hook.GIT_HOOK.replace("{name}", "pre-push")
-    for key, path in quoted.items():
-        text = text.replace(key, shlex.quote(str(path)))
-    return text
-
-
 def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner | None = None) -> int:
     repo = git.toplevel(".") or os.getcwd()
     if profiles.report(git, repo, ReposStore(ConfigDir(config_dir(env)))):  # a bad profile is a red row of its repo, not a traceback
@@ -272,10 +235,8 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
         lambda: bd_store(who.actor, repo).find(BeadQuery(status="open")), repo)
     sys.stdout.write("".join(f.line() + "\n" for f in found))
     fails += [f.text for f in found if f.level == "FAIL"]
-    if spawner is not None:
-        rails = guard_rail_fails(plugin_root, env, git, repo, spawner, [c.id for c in source[0].engine.gate_checks])
-        print("".join(f"FAIL {r}\n" for r in rails), end="")
-        fails += rails
+    fails += rails.report(ConfigDir(config_dir(env)), hook.GIT_HOOK, hook.readable_install(plugin_root), git, repo, spawner,
+                          [c.id for c in source[0].engine.gate_checks])
     if not warns and not found and not fails:
         print("ok: no setup problems found in " + repo)
     return 1 if fails else 0

@@ -77,6 +77,7 @@ except ModuleNotFoundError:
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # taskloop ships in the plugin dir; importing it adds _vendor
 
 from taskloop.adapters import beadtools, gitrepo, ident, landlock
+from taskloop.app.doctor import rails
 from taskloop.app.launch import dash as wire_dash
 from taskloop.app.launch import reindex
 from taskloop.app.release import pins
@@ -417,7 +418,7 @@ def v_doctor(a: Any, c: Ctx) -> int:
     if a.disk:
         return doctor.disk_run(c.who.config)
     if a.print_guard_rails:
-        return doctor.print_guard_rails(c.env, c.git)
+        return rails.print_calls(c.git)
     return doctor.run(c.here.parents[1], c.env, c.git, c.who, c.spawner)
 
 

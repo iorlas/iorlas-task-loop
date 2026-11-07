@@ -12,7 +12,7 @@ from support import procsim
 
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.doctor import guard_rails as gr
-from taskloop.app.wire.doctor import github_slug
+from taskloop.app.doctor.rails import github_slug
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.procport import Ran
 
