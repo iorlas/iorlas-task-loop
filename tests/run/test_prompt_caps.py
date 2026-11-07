@@ -17,13 +17,13 @@ from taskloop.app.run import engine
 from taskloop.app.write import prompts as write
 from taskloop.app.write import review_prompt as review
 from taskloop.domain.lanes.roles import ROLES
-from taskloop.domain.prompts import common
 from tlkernel import lanecaps as caps
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind, Task, fault_of
 from tlslots import config as wslots_config
 from tltestkit import fake_route
+from tlwork.prompts import common
 
 
 class Table(Case):

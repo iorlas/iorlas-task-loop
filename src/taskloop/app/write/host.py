@@ -18,9 +18,9 @@ from tlkernel.plancheck import PlanCheck, PlanData, StageData
 from tlkernel.procport import Spawner
 from tlkernel.stagefacts import LeftoverSink, Narrate, RepoKey, StepBook
 from tlkernel.wire import Open
+from tlwork.work.ledger import Ledger
 
 from taskloop.app.write.state import WriteState
-from taskloop.domain.work.ledger import Ledger
 
 
 class CaseBook(Protocol):

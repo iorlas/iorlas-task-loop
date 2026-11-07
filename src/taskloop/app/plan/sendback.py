@@ -8,6 +8,7 @@ from tlgate.domain import lint, planref
 from tlkernel import plancheck
 from tlkernel.plancheck import PlanData
 from tlkernel.stagefacts import RunFacts
+from tlwork.prompts.anchors import MAX_ANCHORS, unanchored
 
 from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.assume import assume
@@ -23,7 +24,6 @@ from taskloop.app.plan.prompts import (
 )
 from taskloop.app.plan.state import PlanState
 from taskloop.domain.plan.matchers import gate_only_criteria
-from taskloop.domain.prompts.anchors import MAX_ANCHORS, unanchored
 
 
 @dataclass

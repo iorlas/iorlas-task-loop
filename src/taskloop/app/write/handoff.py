@@ -9,10 +9,10 @@ from typing import Any
 from tlkernel import rundocs
 from tlkernel.gitport import Git
 from tlkernel.run import HandoffMirror, Round
+from tlwork.review.findings import blocks
 
 from taskloop.app.write.host import HandoffHost
 from taskloop.app.write.prompts import DONE_SO_FAR, STAGES_DONE, WRITE_RESUME_PROMPT
-from taskloop.domain.review.findings import blocks
 
 HANDOFF_CAP = 1500  # characters of round history one prompt carries (tl-bxk.13.6)
 

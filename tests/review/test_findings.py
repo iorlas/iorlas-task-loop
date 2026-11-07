@@ -10,8 +10,8 @@ from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from taskloop.domain.review import findings as fnd
-from taskloop.domain.work.ledger import Ledger
+from tlwork.review import findings as fnd
+from tlwork.work.ledger import Ledger
 
 SENDBACKS = json.loads((Path(__file__).resolve().parents[1] / "fixtures" / "sendbacks.json").read_text(encoding="utf-8"))
 

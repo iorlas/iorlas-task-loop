@@ -11,7 +11,6 @@ from taskloop.app.plan.briefs import Briefs
 from taskloop.app.plan.cases import Cases
 from taskloop.app.plan.planner import Planner
 from taskloop.app.plan.state import PlanState
-from taskloop.domain.work.ledger import Ledger
 from tlkernel.asked import Asked
 from tlkernel.askspec import AskSpec
 from tlkernel.config import EngineConfig
@@ -19,6 +18,7 @@ from tlkernel.gitfacts import TreeEntry
 from tlkernel.plancheck import PlanData
 from tlkernel.stop import Stop
 from tlpipeline.api import LeftoverQueue
+from tlwork.work.ledger import Ledger
 
 
 class PlanGit(FakeGit):

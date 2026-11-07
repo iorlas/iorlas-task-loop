@@ -4,7 +4,7 @@ from support.engine_case import EngineTest
 from support.host_conformance import missing
 from support.review_host import FakeReview
 
-from taskloop.app.review.host import ReviewHand, ReviewPorts
+from tlwork.review.host import ReviewHand, ReviewPorts
 
 
 class ReviewHandConformance(EngineTest):

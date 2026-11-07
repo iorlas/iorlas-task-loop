@@ -1,8 +1,8 @@
 """Is a bead visual: the planner's case classes decide (domain/work/visual.py); visual_paths is only a check; `show` items are
 checked against the artifacts the stage attempt registered."""
 
-from taskloop.domain.work import visual as v
 from tltestkit.case import Case
+from tlwork.work import visual as v
 
 
 def case(cls: str, **kw: object) -> dict[str, object]:

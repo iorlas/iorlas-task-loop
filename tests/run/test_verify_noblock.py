@@ -12,12 +12,12 @@ from support.builders import make_engine
 from support.engine_case import engine
 
 import tltestkit.shellkit
-from taskloop.app.review import verify_prompt as vp
-from taskloop.domain.prompts import common as cp
 from tlkernel import answers
 from tlkernel.plancheck import PlanData
 from tltestkit.cfgs import plan_of
 from tltestkit.plans import BEAD, CLEAN, PLAN, WRITE, verdict
+from tlwork.prompts import common as cp
+from tlwork.review import verify_prompt as vp
 
 # lifesim-yxbb.7 and lifesim-fld.25.16: the engine files follow-up beads after the land
 YXBB_7 = {"what": "Follow-up beads for table, chairs, sink, plates and second bed: the engine files them from the plan's "

@@ -14,12 +14,14 @@ from rules import ratchet_change
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "dev"))
 from importgraph import targets_of
 
-TREES = ("src/taskloop", "packages/kernel/src/tlkernel", "packages/gate/src/tlgate", "packages/slots/src/tlslots")
+TREES = ("src/taskloop", "packages/kernel/src/tlkernel", "packages/gate/src/tlgate",
+         "packages/work/src/tlwork", "packages/slots/src/tlslots")
 
 
 def closures(texts: Mapping[str, str]) -> dict[str, int]:
     """Count reachable local files and distinct external module roots for each stage."""
-    modules = {path.removeprefix("packages/kernel/").removeprefix("packages/gate/").removeprefix("packages/slots/").removeprefix("src/")
+    modules = {path.removeprefix("packages/kernel/").removeprefix("packages/gate/")
+               .removeprefix("packages/work/").removeprefix("packages/slots/").removeprefix("src/")
                .removesuffix(".py").replace("/", ".").removesuffix(".__init__"):
                path for path in texts if path.startswith(tuple(tree + "/" for tree in TREES)) and path.endswith(".py")}
     packages = {name for name, path in modules.items() if path.endswith("/__init__.py")}
@@ -44,6 +46,8 @@ def closures(texts: Mapping[str, str]) -> dict[str, int]:
         stages = [name for name in stages if name != "taskloop.app.checks"] + ["tlgate"]
     if "tlslots" in packages:
         stages = [name for name in stages if name != "tlslots"] + ["tlslots"]
+    if "tlwork.review" in packages:
+        stages = [name for name in stages if name != "taskloop.app" + ".review"] + ["tlwork.review"]
     counts = {}
     for stage in stages:
         # a package's testing.py is its fakes for tests (the charter's third public name): not part of the production closure

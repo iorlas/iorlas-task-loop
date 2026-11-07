@@ -2,8 +2,7 @@
 read here; the rule is the domain's."""
 from tlkernel.config import EngineConfig
 from tlkernel.gitport import Git
-
-from taskloop.domain.work.skip import SkipKind, decide
+from tlwork.work.skip import SkipKind, decide
 
 
 def why(git: Git, wt: str, start: str, now: str, cfg: EngineConfig, *, maps_acceptance: bool) -> tuple[SkipKind, ...]:
