@@ -17,6 +17,7 @@ The rules, all in this file, none of them stored or switchable:
               closure of the changed files; a changed test file selects itself.
   strings     a Python file whose string constants name a changed file (its basename: "tl.py", "vendor.json") depends on it. This is how a
               test that runs a script by path, or reads a data file, is tied to it; a changed data file reaches tests only this way.
+              Files named conftest.py are excluded: only the conftest rule couples them.
   directories a data file under tests/<dir>/ selects tests/<dir>; under tests/fixtures/<dir>/ it selects tests/<dir> when that exists.
   discovery   a module that lists the modules of a package at run time (pkgutil.iter_modules, walk_packages, importlib.import_module of a
               computed name) depends on every file under each package it imports. A new record module reaches the test that asks every
@@ -207,14 +208,14 @@ def under(repo, folder):
 def data_dependents(repo, path):
     """The Python files and test folders a changed non-Python file reaches."""
     file = Path(path)
-    hit = {p for p, said in repo.mentions.items() if file.name in said}
+    hit = {p for p, said in repo.mentions.items() if file.name != "conftest.py" and file.name in said}
     parts = file.parts
     if parts[0] == "tests" and len(parts) > 2:
         folder = parts[2] if parts[1] == "fixtures" and len(parts) > 3 else parts[1]
         if folder != "fixtures":
             hit |= under(repo, f"tests/{folder}")
         if parts[1] == "fixtures":
-            hit |= {p for p, said in repo.mentions.items() if file.parent.name in said and is_test(p)}
+            hit |= {p for p, said in repo.mentions.items() if file.parent.name != "conftest.py" and file.parent.name in said and is_test(p)}
     return hit
 
 
@@ -231,7 +232,9 @@ def seeds(repo, changed):
     for path in changed:
         exists = (repo.root / path).exists()
         if path in repo.trees:
-            start |= {path} | ({p for p, said in repo.mentions.items() if Path(path).name in said} if not is_test(path) else set())
+            start |= {path}
+            if not is_test(path) and Path(path).name != "conftest.py":
+                start |= {p for p, said in repo.mentions.items() if Path(path).name in said}
         elif path.endswith(".py") and not exists:
             extra |= deleted_slice(repo, path)
         elif exists:
@@ -280,6 +283,7 @@ def closure(repo, tests, tracked=None):
                 reached.add(target)
                 todo.append(target)
     named = set().union(*(repo.mentions.get(p, set()) for p in reached)) if reached else set()
+    named.discard("conftest.py")
     if tracked is None:
         listed = git(repo.root, "ls-files")
         tracked = listed.split("\n") if listed is not None else [p.relative_to(repo.root).as_posix() for p in repo.root.rglob("*")]
