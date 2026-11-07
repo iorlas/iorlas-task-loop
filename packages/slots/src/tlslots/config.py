@@ -9,7 +9,6 @@ from tlkernel.bead import Bead
 from tlkernel.config import EngineConfig, RepoProfile, SlotsConfig
 from tlkernel.gitport import Git
 from tlkernel.paths import TASK_EXCLUDE
-from tlkernel.slots import NotARepo, SlotGitError
 from tlkernel.slottable import WORKTREE, SlotSource
 
 from tlslots.effects import Effects
@@ -26,27 +25,14 @@ def profile(repo: str, base: str | None, git: Git) -> dict[str, Any]:
 
 def profile_source(repo: str, base: str | None, git: Git) -> tuple[dict[str, Any], str]:
     """The profile and its exact commit, or an empty commit for the working-tree fallback."""
-    try:
-        commit = git.rev_parse(repo, base + "^{commit}") if base else ""
-    except NotARepo:
-        commit = ""  # a folder not yet initialized has only its local profile
-    path = Path(repo) / profile_at.FILE
-    if commit:
-        try:
-            return profile_at.raw_at(git, repo, commit) or {}, commit
-        except (SlotGitError, ValueError) as err:
-            raise config.ProfileReadError(str(path), commit, err) from err
-    try:
-        return profile_at.raw_in(repo) or {}, ""
-    except (OSError, ValueError) as err:
-        raise config.ProfileReadError(str(path), "", err) from err
+    return profile_at.source(git, repo, base)
 
 
 
 def load_profile(data: Any) -> RepoProfile:
     """A parsed .task-loop.json as a RepoProfile; an unknown key or a wrong type exits, naming it. A retired key is said once."""
     try:
-        return config.load(data, say_to=sys.stderr)
+        return profile_at.typed(data, say_to=sys.stderr)
     except config.ConfigError as e:
         print(f"task-loop: {e}", file=sys.stderr)
         raise SystemExit(os.EX_CONFIG) from e
@@ -81,7 +67,7 @@ def profile_slots(repo: str, git: Git | None = None) -> SlotsConfig:
     if git is not None:
         return cfg_source(repo, git)[0].slots
     try:
-        return load_profile(profile_at.raw_in(repo) or {}).slots
+        return local_profile(repo).slots
     except (OSError, ValueError):
         return SlotsConfig()
 
@@ -137,3 +123,12 @@ def exclude_local(git: Git, repo: str, *patterns: str) -> None:
 def prio_of(bead: Bead | None) -> int:
     """The priority number of a bead (0 = P0), DEFAULT_PRIO when it has none."""
     return bead.priority if bead and bead.priority is not None else DEFAULT_PRIO
+
+
+def local_profile(repo: str) -> RepoProfile:
+    """The local typed profile with the slots command's configuration exit status."""
+    try:
+        return profile_at.typed_in(repo, say_to=sys.stderr)
+    except config.ConfigError as e:
+        print(f"task-loop: {e}", file=sys.stderr)
+        raise SystemExit(os.EX_CONFIG) from e
