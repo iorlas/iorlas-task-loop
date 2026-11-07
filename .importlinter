@@ -278,7 +278,6 @@ source_modules =
     taskloop.app.track
     taskloop.app.workers
     taskloop.app.write
-    taskloop.app.run.field_ports
     taskloop.stores
     taskloop.domain
     taskloop.adapters
@@ -292,6 +291,7 @@ forbidden_modules =
     taskloop.app.run.engine
     taskloop.app.run.entry
     taskloop.app.run.facts
+    taskloop.app.run.field_ports
     taskloop.app.run.fields
     taskloop.app.run.host
     taskloop.app.run.layout
