@@ -11,8 +11,8 @@ from support.pipeline_ports import FakeHeadHistory
 
 from taskloop.app.pipeline.decide import Decision
 from taskloop.app.pipeline.resume import Resume
+from taskloop.app.pipeline.review_glue import ReviewGlue
 from taskloop.app.review.state import ReviewLive
-from taskloop.app.run.review_glue import ReviewGlue
 from taskloop.app.run.state import state_names
 from tlkernel import wire
 from tlkernel.answers import WriteAnswerLook
