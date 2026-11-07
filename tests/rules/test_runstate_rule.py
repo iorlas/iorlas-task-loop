@@ -121,3 +121,10 @@ class LivenessIsRecorded(Case):
     def test_the_allow_lists_name_files_that_exist(self):
         for rel in ALLOWS_BEAT | ALLOWS_STALE | ALLOWS_PID_ALIVE | ALLOWS_LOST:
             assert (ROOT / rel).is_file(), rel
+
+
+def test_read_verbs_do_not_reconcile():
+    roots = [SRC / "taskloop" / part for part in ("app/asks", "app/report", "cli")]
+    bad = [f"{f.relative_to(ROOT)}:{line}" for root in roots for f in sorted(root.rglob("*.py"))
+           for line, name in names(parsed(f)[1]) if name == "reconcile"]
+    assert bad == [], "read verbs use runlife.shown; only the loop and doctor reconcile"
