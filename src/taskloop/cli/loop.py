@@ -4,11 +4,12 @@ import signal
 import threading
 from typing import Any
 
+from tlrelease.versions import Installs
+
 from taskloop.app.loop import render
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.loop import Loop, LoopArgs
-from taskloop.app.loop.versions import Installs
 
 
 def emit(result: tuple[list[str], int]) -> int:

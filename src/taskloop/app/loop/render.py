@@ -7,11 +7,11 @@ from collections.abc import Sequence
 from tlkernel.ago import ago
 from tlkernel.loop import LoopState
 from tlkernel.reconcile import LoopFact, loop_absent
+from tlrelease.versions import Installs
 
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.queue import Queue, rank_ready
-from taskloop.app.loop.versions import Installs
 
 
 def cmd_next(env: LoopEnv, only: Sequence[str], as_json: bool) -> tuple[list[str], int]:

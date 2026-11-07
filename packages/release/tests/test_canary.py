@@ -5,19 +5,17 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from support.release_world import release_host
-from support.shells import quiet_shell
-
-from taskloop.adapters import ident
 from tlkernel.env import Env
 from tlkernel.gitfacts import Ref
 from tlkernel.paths import ConfigDir
 from tlkernel.slots import SlotGitError
 from tlkernel.snapshots import Pin
-from tlrelease import canary, pins
-from tlrelease.shell import Abort
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
+
+from tlrelease import canary, pinning, pins
+from tlrelease.shell import Abort
+from tlrelease.testing import FakeReleaseHost, quiet_shell
 
 
 class Canary(Case):
@@ -25,6 +23,10 @@ class Canary(Case):
         tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.config = Path(tmp.name) / "task-loop"
+        self.rig = FakeReleaseHost(Path(tmp.name))
+        plugin = self.rig.root / ".claude-plugin" / "plugin.json"
+        plugin.parent.mkdir()
+        plugin.write_text('{"repository":"origin"}')
         self.git = mock.Mock()
         self.git.ls_remote.return_value = []
 
@@ -63,15 +65,15 @@ class Canary(Case):
     def test_mac_pin_is_refused_until_canary_acknowledgement(self):
         env = Env({"XDG_CONFIG_HOME": str(self.config.parent), "CLAUDE_CONFIG_DIR": str(self.config.parent / "claude")})
         with (
-            mock.patch.object(pins, "on_mac", return_value=True),
-            mock.patch.object(pins, "installed_version", return_value="1.2.2"),
-            mock.patch.object(pins, "cache_dirs", return_value={"1.2.3": Path("/installed")}),
+            mock.patch.object(pinning, "on_mac", return_value=True),
+            mock.patch.object(pinning, "installed_version", return_value="1.2.2"),
+            mock.patch.object(pinning, "cache_dirs", return_value={"1.2.3": Path("/installed")}),
         ):
-            _, why = pins.set_pin(env, "1.2.3", git=self.git, host=release_host())
+            _, why = pinning.set_pin(env, "1.2.3", git=self.git, host=self.rig.host)
             assert "devbox-ok" in why
-            assert pins.pin_store(ConfigDir(ident.config_dir(env))).get() is None
+            assert pins.pin_store(ConfigDir(self.rig.config_dir(env))).get() is None
             self.acknowledge()
-            pin, why = pins.set_pin(env, "1.2.3", git=self.git, host=release_host())
+            pin, why = pinning.set_pin(env, "1.2.3", git=self.git, host=self.rig.host)
             assert why == ""
             assert pin.task_loop == "1.2.3"
 
@@ -85,27 +87,27 @@ class Canary(Case):
     def test_installing_a_version_does_not_authorize_the_first_standing_pin(self):
         env = Env({"XDG_CONFIG_HOME": str(self.config.parent), "CLAUDE_CONFIG_DIR": str(self.config.parent / "claude")})
         with (
-            mock.patch.object(pins, "on_mac", return_value=True),
-            mock.patch.object(pins, "installed_version", return_value="1.2.3"),
-            mock.patch.object(pins, "cache_dirs", return_value={"1.2.3": Path("/installed")}),
+            mock.patch.object(pinning, "on_mac", return_value=True),
+            mock.patch.object(pinning, "installed_version", return_value="1.2.3"),
+            mock.patch.object(pinning, "cache_dirs", return_value={"1.2.3": Path("/installed")}),
         ):
-            _, why = pins.set_pin(env, "1.2.3", git=self.git, host=release_host())
+            _, why = pinning.set_pin(env, "1.2.3", git=self.git, host=self.rig.host)
             assert "devbox-ok" in why
             self.acknowledge()
-            assert pins.run_pin(env, "1.2.3", False, self.git, host=release_host()) == 0
+            assert pinning.run_pin(env, "1.2.3", False, self.git, host=self.rig.host) == 0
 
     def test_mac_rollback_and_night_repin_need_no_network_or_new_acknowledgement(self):
         env = Env({"XDG_CONFIG_HOME": str(self.config.parent), "CLAUDE_CONFIG_DIR": str(self.config.parent / "claude")})
-        pins.pin_store(ConfigDir(ident.config_dir(env))).write(Pin(task_loop="1.2.4"))
+        pins.pin_store(ConfigDir(self.rig.config_dir(env))).write(Pin(task_loop="1.2.4"))
         with (
-            mock.patch.object(pins, "on_mac", return_value=True),
-            mock.patch.object(pins, "previous_version", return_value="1.2.3"),
-            mock.patch.object(pins, "cache_dirs", return_value={"1.2.3": Path("/old"), "1.2.4": Path("/new")}),
+            mock.patch.object(pinning, "on_mac", return_value=True),
+            mock.patch.object(pinning, "previous_version", return_value="1.2.3"),
+            mock.patch.object(pinning, "cache_dirs", return_value={"1.2.3": Path("/old"), "1.2.4": Path("/new")}),
         ):
-            assert pins.run_rollback(env, self.git, host=release_host()) == 0
-            assert pins.run_pin(env, "1.2.3", False, self.git, host=release_host()) == 0
-            assert pins.read_pin(ConfigDir(ident.config_dir(env))).task_loop == "1.2.3"
-            pins.clear_pin(ConfigDir(ident.config_dir(env)))
-            assert pins.run_rollback(env, self.git, host=release_host()) == 0
-            assert pins.read_pin(ConfigDir(ident.config_dir(env))).task_loop == "1.2.3"
+            assert pinning.run_rollback(env, self.git, host=self.rig.host) == 0
+            assert pinning.run_pin(env, "1.2.3", False, self.git, host=self.rig.host) == 0
+            assert pins.read_pin(ConfigDir(self.rig.config_dir(env))).task_loop == "1.2.3"
+            pins.clear_pin(ConfigDir(self.rig.config_dir(env)))
+            assert pinning.run_rollback(env, self.git, host=self.rig.host) == 0
+            assert pins.read_pin(ConfigDir(self.rig.config_dir(env))).task_loop == "1.2.3"
         self.git.ls_remote.assert_not_called()

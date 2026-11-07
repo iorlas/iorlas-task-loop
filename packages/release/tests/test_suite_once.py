@@ -4,15 +4,14 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from support.release_world import release_host
-from support.shells import quiet_shell
-
 from tlkernel.env import Env
 from tlkernel.gitfacts import StatusRow
-from tlrelease import flow
-from tlrelease.shell import Abort
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
+
+from tlrelease import flow
+from tlrelease.shell import Abort
+from tlrelease.testing import FakeReleaseHost, quiet_shell
 
 
 class SuiteOnce(Case):
@@ -20,6 +19,7 @@ class SuiteOnce(Case):
         tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
+        self.rig = FakeReleaseHost(self.root)
         self.env = Env({"XDG_CONFIG_HOME": str(self.root / "cfg"), "XDG_CACHE_HOME": str(self.root / "cache")})
 
     def test_bump_checks_the_tree_before_mutating_version_or_manifest(self):
@@ -42,7 +42,7 @@ class SuiteOnce(Case):
             assert not port.commit_staged.called
 
         with mock.patch.object(flow.gate, "verify", side_effect=verify):
-            assert flow.bump_and_commit(repo, flow.Request("fix"), sh, host=release_host()) == "1.2.4"
+            assert flow.bump_and_commit(repo, flow.Request("fix"), sh, host=self.rig.host) == "1.2.4"
         assert seen == ['{"version":"1.2.3"}\n']
         assert "1.2.4" in plugin.read_text()
         port.commit_staged.assert_called_once_with(str(repo), "1.2.4: fix" + flow.publish.TRAILER)
@@ -90,5 +90,5 @@ class SuiteOnce(Case):
             return mock.Mock(returncode=0, stdout="", stderr="")
 
         sh = replace(quiet_shell(), port=port, env=Env({"TL_GREEN_LEDGER": "1"}), run=run)
-        flow.gate.gate(repo, sh, host=release_host())
+        flow.gate.gate(repo, sh, host=self.rig.host)
         assert seen["TL_GREEN_LEDGER"] == ""

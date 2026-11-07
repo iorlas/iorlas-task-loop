@@ -6,7 +6,7 @@ from importgraph import bindings, qualified
 
 # State authority, rather than a budget of write sites. Reads are unrestricted.
 WRITERS: Final = {
-    'PinStore': {'tlrelease.pins'},
+    'PinStore': {'tlrelease.pins', 'tlrelease.pinning'},
     'HostResourcesStore': {'taskloop.app.doctor.setup_apply'},
     'StatusStore': {'taskloop.app.doctor.lanes'},
     'StatusTriedStore': {'taskloop.app.doctor.lanes'},
@@ -15,10 +15,10 @@ WRITERS: Final = {
     'ReflectStateStore': {'taskloop.app.report.reflect'},
     'ParkStore': {'tlasks.parks', 'tlpipeline.standalone', 'tlkernel.parks'},
     'TraceStore': {'tlpipeline.journal', 'tlkernel.finish_projection'},
-    'BadVersionStore': {'taskloop.app.loop.versions'},
+    'BadVersionStore': {'tlrelease.versions'},
     'HandoffMirrorStore': {'tlwork.write.handoff'},
-    'ReexecNoteStore': {'tlrelease.reexec', 'tlrelease.closing'},
-    'NetPauseStore': {'tlrelease.reexec', 'tlrelease.closing'},
+    'ReexecNoteStore': {'tlrelease.reexec'},
+    'NetPauseStore': {'tlrelease.reexec'},
     'RunCountersStore': {'tlpipeline.reload'},
     'EngineLockStore': {'tlslots.engine_lock'},
     'RunManifestStore': {'tlkernel.runrows'},

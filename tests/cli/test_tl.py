@@ -25,7 +25,7 @@ from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.app.wire import usage as usage_cmd  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlkernel.rowstores import PinStore, ReposStore  # noqa: E402
-from tlrelease import pins  # noqa: E402
+from tlrelease import pinning  # noqa: E402
 
 # isort: split
 import contextlib  # noqa: E402
@@ -225,7 +225,7 @@ class PinAndRollback(Base):
         p.start()
         self.addCleanup(p.stop)
         # the Mac standing pin asks origin for a devbox-ok tag (tests/release/test_canary.py): these are about the pin file
-        off_mac = mock.patch.object(pins.sys, "platform", "linux")
+        off_mac = mock.patch.object(pinning.sys, "platform", "linux")
         off_mac.start()
         self.addCleanup(off_mac.stop)
         for v in ("0.1.0", "0.2.0", "0.10.0"):
@@ -297,7 +297,7 @@ class PinAndRollback(Base):
         assert target() == ("0.10.0", root.parent / "0.10.0")
         # the CLI end to end, main(argv) with only the scratch dirs in its environment
         cli = ["pin"]
-        with mock.patch.object(pins.sys, "platform", "linux"):  # the Mac devbox-ok rule reads origin: not what this test is about
+        with mock.patch.object(pinning.sys, "platform", "linux"):  # the Mac devbox-ok rule reads origin: not what this test is about
             r = tl_main(*cli, "0.2.0", cwd=self.home, env={"HOME": str(self.home)})
             assert r.returncode == 0, r.stderr
             r = tl_main(*cli, "0.4.0", cwd=self.home, env={"HOME": str(self.home)})
