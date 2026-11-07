@@ -10,11 +10,11 @@ from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.paths import TASK_EXCLUDE, ConfigDir
 from tlkernel.slots import SlotGitError
+from tlkernel.stagefacts import Narrate
 from tlslots.api import Effects, engine_busy, leave_slot
 
 from taskloop.app.land.host import BeginSteps, FetchCheckout, StageCheckout
 from taskloop.app.land.rebase import must
-from taskloop.stores.runlog import RunLog
 
 
 class TreeConfig(Protocol):
@@ -58,7 +58,7 @@ class TreeHost(Protocol):
     @property
     def briefs(self) -> TreeBriefs: ...
     @property
-    def log(self) -> RunLog: ...
+    def log(self) -> Narrate: ...
     def comment(self, text: str) -> None: ...
     def warn(self, text: str) -> None: ...
     def blocked_for(self, why: str, kind: str) -> Exception: ...

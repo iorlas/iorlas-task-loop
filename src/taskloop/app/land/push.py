@@ -16,6 +16,7 @@ from tlkernel.ids import BeadId
 from tlkernel.landmatchers import Push, lfs_in, no_dolt_remote
 from tlkernel.landmatchers import Push as PushText
 from tlkernel.ports import Clock, Sh
+from tlkernel.stagefacts import Narrate
 
 from taskloop.app.land import cleanup
 from taskloop.app.land.gate import GatePass, Problem, ProblemKind
@@ -33,7 +34,6 @@ from taskloop.app.land.host import (
     Phase,
 )
 from taskloop.app.land.push_evidence import failure
-from taskloop.stores.runlog import RunLog
 
 
 def is_push(argv: list[str]) -> bool:
@@ -103,7 +103,7 @@ class OutboundHost(Protocol):
     @property
     def dry(self) -> bool: ...
     @property
-    def log(self) -> RunLog: ...
+    def log(self) -> Narrate: ...
     @property
     def clock(self) -> Clock: ...
     @property
