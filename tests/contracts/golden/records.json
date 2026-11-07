@@ -397,7 +397,7 @@
   ]
  },
  "QueueDoc": {
-  "v": 1,
+  "v": 2,
   "entries": [
    {
     "branch": "topic",
@@ -407,6 +407,7 @@
     "tree": "tree",
     "ref": "refs/tl/queue/topic",
     "reason": "",
+    "after": "first",
     "base": "base",
     "ahead": [
      "first"

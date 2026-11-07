@@ -105,7 +105,11 @@ class Reload:
 
     def carry_done_memo(self, paused: Path) -> None:
         """The answers the paused run already took go on under this run's id: no finished call is asked again."""
-        RunRows(self.host.home).carry_done_steps(paused.name, self.host.run_id)
+        with RunRows(self.host.home).transaction() as con:
+            con.execute("INSERT INTO step (run,key,try,attempt,status,started,ended,input_digest,result,fingerprint,calls) "
+                        "SELECT ?,key,try,attempt,status,started,ended,input_digest,result,fingerprint,calls "
+                        "FROM step WHERE run=? AND status='done' ON CONFLICT(run,key,try) DO NOTHING",
+                        (self.host.run_id, paused.name))
 
     def save_net_pause(self) -> None:
         """The run paused for the network: keep its counters for the next run of this bead. Its terminal answer stays immutable;

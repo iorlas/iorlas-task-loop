@@ -123,7 +123,7 @@ def reconcile(entries: Sequence[Entry], facts: Facts) -> list[Action]:
             resets.add(e.branch)
             if build and build.lease_expires <= facts.now and facts.alive.get(build.pid) == build.start_id:
                 kills.add((e.branch, build.pid))
-        if e.phase in (Phase.BUILT, Phase.GATING, Phase.GREEN) and e.ref not in facts.refs:
+        if e.phase in (Phase.BUILT, Phase.GATING, Phase.GREEN, Phase.RED) and e.ref not in facts.refs:
             resets.add(e.branch)
     killed_pids = {pid for _, pid in kills}
     resets.update(e.branch for e in queue if e.phase is Phase.GATING
@@ -152,7 +152,7 @@ def apply_actions(entries: Sequence[Entry], actions: Sequence[Action]) -> list[E
     out = list(entries)
     for action in actions:
         if isinstance(action, ResetPending):
-            out = [e.replace(phase=Phase.WAITING, q="", tree="", ref="")
+            out = [e.replace(phase=Phase.WAITING, q="", tree="", ref="", after="")
                    if e.branch == action.branch else e for e in out]
         elif isinstance(action, AssertAndRecord):
             out = [e.replace(phase=Phase.MERGED) if e.branch == action.branch else e for e in out]
