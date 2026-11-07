@@ -20,9 +20,8 @@ from support.shells import quiet_shell
 from taskloop.adapters.git import RealGit
 from taskloop.app.prune import runs, verb
 from taskloop.app.reconcile.sweep import sweep
-from taskloop.app.run import layout
-from taskloop.app.run.layout import RunLayout
 from taskloop.stores.real import real_stores
+from tlkernel import runlayout as layout
 from tlkernel.bead import BdError, Bead
 from tlkernel.beadsport import BdFailure, Beads
 from tlkernel.checkpoint import Checkpoint
@@ -32,6 +31,7 @@ from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir, RunFiles
 from tlkernel.run import RunState
+from tlkernel.runlayout import RunLayout
 from tltestkit.runs import manifest
 
 DAY = 86400

@@ -208,7 +208,7 @@ Held/in-flight PRs: #189 LAYOUT-2 (36 files, `paths.py` only naming point), #190
 pix and the Mac ran a release with #184; delete RowDocs adoption, importers, loop file stores, dead path methods), #191 ISOLATION-D (design, Agent Protocol in contracts), #192/#193 test and delegate lease.
 
 **Rule: no step edits a file named by `gh pr diff <n> --name-only` for #189, #190, #186, #187 until that PR lands.** The reviewer's overlap list: `config` is imported by
-`wire/{doctor,slots}.py` (#189, #190), `release/gate.py` (#189), `stores/{bundle,real}.py` (#186, #187) → **C1 after #189/#190**; `ports` by `run/layout.py`, `report/reflect.py`,
+`wire/{doctor,slots}.py` (#189, #190), `release/gate.py` (#189), `stores/{bundle,real}.py` (#186, #187) → **C1 after #189/#190**; `ports` by `packages/kernel/src/tlkernel/runlayout.py`, `report/reflect.py`,
 `wire/{slots,doctor}.py`, `track/verbs.py`, `tl.py` → **C2 after #189/#190**; C3 touches rows #186 (`lockrows, waitrows, worktreerows, signalrows, parks, rundocs, adrs`), #187 (`askrows, finish, receiptrows, runrows, locator`) and #189 (`locator, receiptrows, runrows`) change → **C3 per-file after those**;
 `app/wire/slots.py` (#189) → **X1 after #189**; S1 touches `tl.py`, `gate_rules.py` (#190), dash readers (#186/#187), tests (#189/#186) → **S1 after all four**. What can go **now**: M0, P2, the NetText cut, the two domain moves into land.
 
