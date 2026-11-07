@@ -21,7 +21,7 @@ from tlkernel.kinds import ASKS, PAUSES, Kind, kind_named
 from tlkernel.locator import RunLocator
 from tlkernel.log import EngineLog, decode
 from tlkernel.rowstores import ReleaseResultStore
-from tlkernel.runlife import Liveness, liveness
+from tlkernel.runlife import Liveness
 from tlkernel.stores import LoopLog
 from tlkernel.trace import RunTrace
 
@@ -60,14 +60,14 @@ def crashes(
         if since <= t < until and r.outcome is Result.FAILED and not r.run_id and r.why.startswith("failed: no outcome from run-task"):
             out[f"loop:{r.bead}:{r.t}"] = {"bead": r.bead, "t": t, "run": None, "why": r.why[:200]}
     traced = {str(r.run) for r in traces}
-    runlife.reconcile(cfg, now)
     for b in RunLocator(cfg).of_repo(repo):
         if b.run in traced or not since <= b.started < until or not b.log.exists():
             continue
         bead, t = b.bead, b.started
-        if liveness(b.manifest) is not Liveness.LOST:
+        if runlife.shown(b.manifest, now) is not Liveness.LOST:
             continue
-        out[b.run] = {"bead": bead, "t": t, "run": b.run, "why": f"the run is lost: {b.manifest.reason[:120]}"}
+        reason = b.manifest.reason or runlife.lost_reason(b.manifest, now)
+        out[b.run] = {"bead": bead, "t": t, "run": b.run, "why": f"the run is lost: {reason[:120]}"}
     for r in traces:  # the engine caught it and closed (run_once): an engine bug all the same
         if overlaps(r, since, until) and kind_named(r.kind) is Kind.FAULT_ENGINE:
             out[str(r.run)] = {"bead": r.bead, "t": r.started, "run": str(r.run), "why": r.why[:200]}

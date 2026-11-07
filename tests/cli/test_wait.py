@@ -10,6 +10,7 @@ from tltestkit.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.logs import typed, write_log
+from support.narrow import must
 from support.runs import manifest
 
 from taskloop.cli import wait
@@ -17,7 +18,7 @@ from tlkernel.ask import Ask
 from tlkernel.askenums import AskClass, AskKind, AskStatus
 from tlkernel.askstore import AskStore
 from tlkernel.ids import BeadId
-from tlkernel.locator import host_name
+from tlkernel.locator import RunLocator, host_name
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
 
@@ -83,10 +84,12 @@ class WaitCase(Case):
         self.log(state=RunState.LOST)
         assert self.go("--bead", BEAD)[0] == wait.CRASHED
 
-    def test_a_killed_engine_is_reconciled_to_lost_by_the_wait_itself(self):
+    def test_wait_sees_a_killed_engine_as_lost_without_writing(self):
         self.log(beat=T - 400, host=host_name(), pid=4_194_303)  # running, stale, and nobody's pid
+        before = must(RunLocator(self.cfg).get(RUN)).manifest
         rc, _ = self.go("--bead", BEAD)
         assert (rc, self.out[0].startswith("lost: " + RUN)) == (wait.CRASHED, True)
+        assert must(RunLocator(self.cfg).get(RUN)).manifest == before
 
     def test_a_silent_log_is_no_sign_of_death(self):
         self.log(beat=T - 99_999)  # no record for a day, and no host to probe: the recorded state is running
