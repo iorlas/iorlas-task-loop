@@ -1,11 +1,10 @@
-"""Push evidence, outbound LFS and bead delivery, recovery of earlier lands, and the push in the lock."""
+"""Outbound LFS and bead delivery, recovery of earlier lands, and the push in the lock."""
 import os
 import shutil
 import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from pathlib import Path
-from time import time_ns
 from typing import Protocol
 
 from tlkernel import fence
@@ -16,10 +15,8 @@ from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.landmatchers import Push, lfs_in, no_dolt_remote
 from tlkernel.landmatchers import Push as PushText
-from tlkernel.paths import ConfigDir
 from tlkernel.ports import Clock, Sh
 
-from taskloop.adapters.git_base import push_error_line
 from taskloop.app.land import cleanup
 from taskloop.app.land.gate import GatePass, Problem, ProblemKind
 from taskloop.app.land.host import (
@@ -35,23 +32,8 @@ from taskloop.app.land.host import (
     OutcomeSteps,
     Phase,
 )
-from taskloop.app.land.paths import land_push, push_log
+from taskloop.app.land.push_evidence import failure
 from taskloop.stores.runlog import RunLog
-
-
-def failure(output: str, run_dir: Path | None, branch: str, config: ConfigDir | None = None) -> str:
-    """Keep every attempt separately; commands without a run use the user's land-push folder."""
-    stamp = time_ns()
-    name = branch.replace("/", "_").replace("\\", "_") or "detached"
-    if run_dir is not None:
-        path = push_log(run_dir, stamp)
-    elif config is not None:
-        path = land_push(config, stamp, name)
-    else:
-        raise ValueError("push evidence needs a run directory or config directory")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(output, encoding="utf-8")
-    return f"full push output: {path}\n{push_error_line(output)}"
 
 
 def is_push(argv: list[str]) -> bool:

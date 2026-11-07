@@ -19,7 +19,8 @@ The 15 files is a goal, not a rule: a file folds only when the fold makes no imp
 | lander.py | Lander (`finish`, `land` loop, `outside`, `emit`) | 315 | then `tries.py` cut (step 2) |
 | gate.py | gate, verified, profile_change | ~280 | |
 | rebase.py | rebase, land_rebase, recheck, commit, gitcall | ~340 | |
-| push.py | push, outbound, push_evidence, landed | ~420 | |
+| push.py | push, outbound, landed | ~400 | push_evidence stays apart: the wire closure reaches it through cmds, and folding it drags push, gate and host into wire |
+| push_evidence.py | unchanged | 23 | |
 | push_judge.py | unchanged | 241 | |
 | record.py | sync, salvage, restart, followups | ~380 | near the cap: may split |
 | fix.py | fixer, fix_outside | ~220 | |
