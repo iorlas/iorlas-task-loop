@@ -21,6 +21,7 @@ class EntryRow(Rec):
     tree: str = ""
     ref: str = ""
     reason: str = ""
+    after: str = ""
     base: str = ""
     ahead: list[str] = msgspec.field(default_factory=list)
     check_set: str = ""
@@ -28,7 +29,7 @@ class EntryRow(Rec):
 
 
 class QueueDoc(Rec):
-    V: ClassVar[int] = 1
+    V: ClassVar[int] = 2
     entries: list[EntryRow] = msgspec.field(default_factory=list)
     in_flight: int = 1
     last_base: str = ""
