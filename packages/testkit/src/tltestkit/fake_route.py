@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import ClassVar
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[1]
+ROOT = HERE.parents[3]
 CONTRACT_FILE = ROOT / "src" / "delegate" / "data" / "contract.json"
 FIXTURE_DIR = ROOT / "tests" / "delegate" / "contract" / "fixtures"
 

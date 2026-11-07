@@ -9,7 +9,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as T
-from support import fake_route, gitq
+from support import gitq
 from support.engine_case import engine
 from support.fakes import must_bead
 from support.plans import BEAD, CLEAN, PLAN, WRITE, verdict
@@ -24,6 +24,7 @@ from tlkernel.artifact import ArtifactMeta
 from tlkernel.config import RepoProfile, VisualConfig
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
+from tltestkit import fake_route
 
 VISUAL = {"include": ["*.txt"], "exclude": ["docs/**"]}
 LOOK_ASK = "Whether smiles-front.png matches the rung B ladder image. Only the owner can judge the look."

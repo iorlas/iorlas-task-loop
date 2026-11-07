@@ -22,7 +22,6 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from support import engine_case as te
-from support import fake_route
 from support.spawn import port_git, real_spawner
 from support.who import who
 
@@ -35,6 +34,7 @@ from tlkernel.config import ConfigError, EngineConfig, load
 from tlkernel.delegate import DelegateResult
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
+from tltestkit import fake_route
 
 POSIX = os.name != "nt"
 MIN = 60.0
