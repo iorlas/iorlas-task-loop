@@ -403,6 +403,31 @@ twice does nothing the second time. It fixes:
 Zuul's 2024 orphaned-changes report [S] and Tide's partial-merge TODO [V] are the failure shapes. Pattern is the slot watchdog
 (slot-grant.md (b)): a pure function plus a heal, one incident row per episode.
 
+**How bead (g) is built (decided 2026-11-07, for review).** Written before the code so the review is of the rule. Three slices, in this order:
+1. *Reconcile, pure (domain, no store, can start now).* `domain/land/queue_reconcile.py`:
+   `reconcile(entries: Sequence[Entry], facts: Facts) -> list[Action]`, where `Facts` holds the observed world as plain values: the queue
+   refs that exist, the worktrees that exist, the pids that are alive (with their start ids), `main_sha`, the forge state of each PR
+   (`open | merged(merge_sha) | closed`), and the clock. `Action` is a closed set of frozen dataclasses: `KillBuild`, `RemoveWorktree`,
+   `DropRef`, `ResetPending(branch)`, `AssertAndRecord(branch, merge_sha)`, `NotifyEjected(branch)`. The rules are the bullets above, one
+   function each; the result is sorted so the same input gives the same list. Tests: a table per rule; a property test that
+   `apply(reconcile(x)) == x'` and `reconcile(x') == []` (twice equals once); a crash simulation (`tests/land/test_queue_crash_sim.py`)
+   that cuts the sequence eject, rebuild, merge at every step boundary with a fake clock and fake pids and asserts that one reconcile
+   leaves every item with a live build for its current QueueKey or in `pending`, and no ref or worktree that no entry names.
+2. *The record and its store (after the contracts move to packages/kernel).* **One document per repo**, not a row per entry: the queue is
+   tens of items, and a document replace is already one SQLite transaction (`RowDocs` on the `kv` table, prefix `queue:`, next to
+   `queue-state:` of section 2). No new table, no schema file. `QueueDoc(V=1)`: `entries` (the planner's `Entry` plus the QueueKey
+   fields `base`, `ahead`, `check_set`, and per build `pid`, `start_id`, `lease_expires`, `worktree`), `in_flight` (the AIMD value),
+   `last_base`. The freeze flag and incidents stay in `QueueState` (they have a different writer and lifetime). **Events are not in the
+   document:** ejections and resets are engine-log rows (the existing log), flake rows are their own `DocSet` of the last 30 days. The
+   single writer is the runner thread (`QueueRun` gets one `on_change(entries)` callback that replaces the document); the dashboard and
+   `tl doctor` only read. Revisit the document shape if a queue ever holds more than a few hundred entries. This is the schema/family
+   decision the bead asks to record against sqlite-store-plan.md.
+3. *Wiring.* `QueueLand.run` calls `reconcile` once before it builds anything and applies the actions through the existing ports (git,
+   spawner, forge); `tl doctor` calls the same function and prints the actions without applying them (`app/doctor/queue.py`). A
+   merged-but-not-recorded PR is `AssertAndRecord`: the tree assertion first (`TreeGuard.verify`), then `tl land`; the merge is never
+   repeated. Dark: nothing runs unless `engine.land_queue` is on.
+Files are out: the interim JSON file of the first paragraph is dropped, because factory.db is available now and a file repeats the slot-grant races.
+
 **Visibility** (extends dash-spec.md section 4 Floor; names are suggestions):
 - Floor: a **land lock** segment on the bead line while the item holds the lock (gate runs outside it, so the segment is short and
   honest); a new row group "Queue" with one row per gate in flight (gate running, waiting on culprit, green waiting for merge).

@@ -26,7 +26,6 @@ SCHEMA_READ_FROM = 4  # the oldest schema a read-only opener (the dashboard) rea
 # The loop owns leases; the engine records AskStore writes, including
 # owner answers. Lease reconciliation must use the loop store's guarded verbs,
 # not cas_update (leases and the ask ledger have no revision column).
-# DB-04+ must route today's engine park writes through the loop-owned wait store.
 OWNERS: dict[str, str] = {
     "source": "index",
     "bead": "index",  # Cached tracker projection; parent is an opaque field.
@@ -38,6 +37,7 @@ OWNERS: dict[str, str] = {
     "check_round": "engine",
     "ask": "engine",
     "ask_ledger": "engine",
+    "park": "engine",
     "kv": "index",
     "followup": "engine",  # the land's outbox (app/land/store.py)
     "effect": "engine",
@@ -45,6 +45,7 @@ OWNERS: dict[str, str] = {
     "signal": "owner",
     "timed": "engine",  # what the engine log's end records timed: tl runs show|slow read these
     "report_doc": "engine",  # the report part's reflect digest state (tl reflect)
+    "work_doc": "engine",  # the work part's decision-record cache (plan refreshes it)
     "release_doc": "engine",  # the release part's pin and last result (tl pin, tl release)
     "checkpoint": "engine",  # one row per bead across runs; the engine writes it with the revision it read
 }

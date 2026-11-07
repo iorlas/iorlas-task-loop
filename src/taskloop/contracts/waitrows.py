@@ -1,6 +1,5 @@
-"""Parks, network pauses and re-exec notes as `wait` rows in factory.db: one open row per (kind, bead) with the record in `facts`.
-`wake_at` is the epoch a transient park wakes (0/NULL: waits for the owner). A deleted row keeps its place as evidence with `cleared`
-set."""
+"""Network pauses and re-exec notes as `wait` rows in factory.db: one open row per (kind, bead) with the record in `facts`.
+A deleted row keeps its place as evidence with `cleared` set."""
 import json
 import sqlite3
 import time
@@ -11,7 +10,7 @@ from taskloop.contracts.looprows import LoopRows
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.wire import Rec
 
-PARK, NET_PAUSE, REEXEC = "park", "net_pause", "reexec"
+NET_PAUSE, REEXEC = "net_pause", "reexec"
 
 
 class WaitDoc[T: Rec]:

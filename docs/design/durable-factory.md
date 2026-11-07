@@ -1092,7 +1092,8 @@ CREATE TABLE kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL, stamp TEX
 | `attempt`, `lease(kind='run')` | the manifest's `heartbeat/pid/host/attempts` and `runlife.is_lost` (`tl/contracts/runlife.py:49-52`) |
 | `step` | the checkpoint cursor and `done.json` (journal slice S4, Part A section 4) |
 | `bead` | One cached bd listing per repo, gated by `.beads/last-touched`; full dashboard row in `body`, marker and health in `kv`. The indexer alone writes it; bd/Dolt remains authoritative. No file cache |
-| `wait` (Part A) | `parks/`, `pauses/`, `reexec/`, `runs/<run>/pause.json`, `reexec.json` |
+| `park` (asks) | `parks/` |
+| `wait` (Part A) | `pauses/`, `reexec/`, `runs/<run>/pause.json`, `reexec.json` |
 | `signal` (Part A) | `runs/<run>/owner-request.json` + lock |
 | `effect` (Part A) | `checkpoint.applied`, `landed/<bead>.json`, `followups/<bead>.json` |
 | `check_pass`, `check_round` | `results/**`, `base-red/`, `runs/<run>/engine-checks[.rN].json` (the logs stay files) |
@@ -1160,7 +1161,7 @@ These files are evidence and recovery input, never a second run-state resolution
   match the expected state facts. Log-reader fixtures cover rotation and retained tails without copying logs into the DB.
 
 **Phase 2: run state is the journal (Part A slices S1-S4, in the order of line 33).** The manifest becomes `run` + `attempt` +
-`lease`; parks, pauses and reexec become `wait`; the checkpoint becomes `step` + `effect`; owner requests become `signal`. These are the
+`lease`; parks become asks-owned `park` rows, pauses and reexec become `wait`; the checkpoint becomes `step` + `effect`; owner requests become `signal`. These are the
 journal's own slices. This section only adds that they write the same `run` row the dashboard reads, so there is no second projection.
 - Each family flips directly to row-only writes with CAS `rev`; delete its file writer, indexer slice and file reader in the same release.
   DB corrupt: the loop starts no new run (a `wait(kind=owner)` cannot be written either, so
