@@ -1,17 +1,19 @@
 """The work boundary rejects a stage import using the production contract."""
 import configparser
 import os
-import shutil
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
+
+ROOT = Path(__file__).resolve().parents[3]
 
 
 @pytest.mark.parametrize("stage_import", [False, True])
 def test_work_reaches_no_stage(workdir, stage_import):
     config = configparser.ConfigParser()
-    config.read(Path(__file__).resolve().parents[3] / ".importlinter")
+    config.read(ROOT / ".importlinter")
     contract = next(config[s] for s in config.sections() if config[s].get("name") == "domain/work reaches no stage")
     synthetic = configparser.ConfigParser()
     synthetic["importlinter"] = {"root_package": "sample"}
@@ -31,10 +33,10 @@ def test_work_reaches_no_stage(workdir, stage_import):
     config_path = workdir / "imports.ini"
     with config_path.open("w") as stream:
         synthetic.write(stream)
-    executable = shutil.which("lint-imports")
-    assert executable, "lint-imports must be installed"
+    pins = tomllib.loads((ROOT / "mise.toml").read_text(encoding="utf-8"))["tools"]
+    lint = ["uv", "tool", "run", "--from", f"import-linter@{pins['pipx:import-linter']}", "lint-imports"]  # the pinned tool, as `just rules`
     ran = subprocess.run(
-        [executable, "--config", str(config_path), "--no-cache"],
+        [*lint, "--config", str(config_path), "--no-cache"],
         cwd=workdir, env={**os.environ, "PYTHONPATH": str(workdir)},
         text=True, capture_output=True, check=False,
     )
