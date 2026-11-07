@@ -1,4 +1,5 @@
 """Trust-root refusal runs before the land's commit, fetch, gate, or push."""
+from contextlib import nullcontext
 from unittest.mock import Mock
 
 import pytest
@@ -20,7 +21,7 @@ class LandTrustRoots(Case):
         host.store.show.return_value = bead
         parts = Mock()
         with pytest.raises(Blocked) as caught:
-            Lander(host, parts).finish(bead)
+            Lander(host, parts, deadline=lambda seconds, scope: nullcontext()).finish(bead)
         assert caught.value.kind == Kind.ASK_DECISION
         assert "mise.toml" in caught.value.why
         assert parts.mock_calls == []

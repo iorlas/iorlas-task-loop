@@ -7,6 +7,7 @@ from support.fakegit import FakeGit
 from support.narrow_hosts import Stopped
 from support.narrow_land import table_kit
 
+from taskloop.adapters.deadline import deadline
 from taskloop.app.land.gate import Problem, ProblemKind
 from taskloop.app.land.host import Placing
 from tlkernel.lanesliveness import LIVENESS, LivenessCaps
@@ -45,6 +46,7 @@ class Liveness(Case):
         kit = self.kit()
         caps = LivenessCaps(judge_s=0.02)
         timer = FakeDeadline()
+        kit.lander.deadline = deadline
         with timer.patched(), mock.patch("taskloop.app.land.lander.LIVENESS", caps), \
                 mock.patch.object(kit.lander, "optimistic", return_value=False), \
                 mock.patch.object(kit.lander, "placing", return_value=Placing.INSIDE), \
