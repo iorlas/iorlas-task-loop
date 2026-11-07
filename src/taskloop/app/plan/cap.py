@@ -36,9 +36,9 @@ class ReplanCap:
         by_ask = a is not None and a.ask_class == AskClass.CAP_REACHED
         bead = peek(e.store, e.bead) or Bead(id=e.bead, title="", status="")
         by_override = bead.metadata.get(intake.OVERRIDE) == "replan-cap"
-        if e.cap_granted or not (by_ask or by_override):
+        if e.plan_state.cap_granted or not (by_ask or by_override):
             return
-        e.cap_granted = True
+        e.plan_state.cap_granted = True
         rerun = a is not None and a.answer is not None and a.answer.action == "rerun"
         said = a.id if a else ""
         if not (by_override or rerun):

@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.taker import real_taker
 from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -15,7 +16,6 @@ from taskloop.app.asks import parks
 from taskloop.app.loop.loop import Loop
 from taskloop.app.loop.queue import QueueRule
 from taskloop.app.loop.run import Where
-from taskloop.app.loop.take import Taker
 from taskloop.app.loop.verdict import Verdict
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import EngineConfig
@@ -80,7 +80,7 @@ class Pick(Case):
         env = mock.Mock(cfgdir=self.cfg, now=mock.Mock(return_value=129), claim=mock.Mock(return_value=(True, "")))
         runner = mock.Mock()
         runner.run.return_value = Verdict(Result.LANDED)
-        taker = Taker(env, runner, mock.Mock(), mock.Mock(), mock.Mock(), {})
+        taker = real_taker(env, runner, mock.Mock(), mock.Mock(), mock.Mock(), {})
         at = Where(slot="", wt="/fake", slot_bead=None, started=100)
         rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _: "")
         assert taker.attempt_all([bead()], at, False, EngineConfig(), rule, mock.Mock()).verdict is None

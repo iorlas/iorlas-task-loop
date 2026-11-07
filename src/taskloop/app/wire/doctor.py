@@ -3,6 +3,7 @@ import contextlib
 import os
 import shlex
 import shutil
+import sys
 import time
 from pathlib import Path
 
@@ -10,7 +11,7 @@ from taskloop import contracts
 from taskloop.adapters import delegate, layout_migrate
 from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.ident import claude_dir, config_dir
-from taskloop.app.doctor import disk, ops, profiles
+from taskloop.app.doctor import disk, env_checks, ops, profiles
 from taskloop.app.release import catalog, manifest
 from taskloop.app.report.inputs import repo_traces
 from taskloop.app.slots import watchdog
@@ -229,7 +230,12 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
     fails = install_problems(plugin_root, env)
     for p in fails:
         print("FAIL " + p)
-    if not warns and not fails:
+    found: list[env_checks.Finding] = [] if spawner is None else env_checks.all_findings(  # no spawner: a test that runs no process
+        env.get("PATH"), env.get("TMPDIR"), config_dir(env), tuple(sys.version_info[:3]), spawner, git,
+        lambda: bd_store(who.actor, repo).find(BeadQuery(status="open")), repo)
+    sys.stdout.write("".join(f.line() + "\n" for f in found))
+    fails += [f.text for f in found if f.level == "FAIL"]
+    if not warns and not found and not fails:
         print("ok: no setup problems found in " + repo)
     return 1 if fails else 0
 

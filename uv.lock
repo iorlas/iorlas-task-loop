@@ -1,6 +1,12 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.15"
+
+[manifest]
+members = [
+    "iorlas-task-loop",
+    "tltestkit",
+]
 
 [[package]]
 name = "colorama"
@@ -41,6 +47,7 @@ dependencies = [
 dev = [
     { name = "pytest" },
     { name = "pytest-xdist" },
+    { name = "tltestkit" },
 ]
 
 [package.metadata]
@@ -50,6 +57,7 @@ requires-dist = [{ name = "msgspec", specifier = "==0.22.0" }]
 dev = [
     { name = "pytest" },
     { name = "pytest-xdist" },
+    { name = "tltestkit", editable = "packages/testkit" },
 ]
 
 [[package]]
@@ -135,3 +143,18 @@ sdist = { url = "https://files.pythonhosted.org/packages/78/b4/439b179d1ff526791
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ca/31/d4e37e9e550c2b92a9cbc2e4d0b7420a27224968580b5a447f420847c975/pytest_xdist-3.8.0-py3-none-any.whl", hash = "sha256:202ca578cfeb7370784a8c33d6d05bc6e13b4f25b5053c30a152269fd10f0b88", size = 46396, upload-time = "2025-07-01T13:30:56.632Z" },
 ]
+
+[[package]]
+name = "tltestkit"
+version = "0"
+source = { editable = "packages/testkit" }
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest" }]

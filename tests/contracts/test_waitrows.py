@@ -38,13 +38,13 @@ class WaitRows(Case):
         self.parks.drop(B)
         assert self.parks.get(B) is None
 
-    def test_a_row_from_a_newer_writer_and_one_from_an_older_writer_both_read(self):
+    def test_a_row_with_an_unknown_key_is_refused_and_one_lacking_fields_takes_defaults(self):
         self.parks.put(self.park())
         with self.parks.doc(B).rows.transaction() as con:
             body = json.loads(con.execute("SELECT facts FROM wait").fetchone()[0])
             newer = {**body, "from_the_future": 1}
             con.execute("UPDATE wait SET facts=?", (json.dumps(newer),))
-        assert self.parks.get(B) == self.park()  # the newer key is read past
+        assert self.parks.get(B) is None  # the unknown key is refused, never read past
         older = {k: v for k, v in body.items() if k not in ("reason", "permanence", "retry_at", "attempts", "fingerprint")}
         with self.parks.doc(B).rows.transaction() as con:
             con.execute("UPDATE wait SET facts=?", (json.dumps(older),))
@@ -59,8 +59,7 @@ class WaitRows(Case):
         with pytest.raises(factorydb.sqlite3.Error):
             self.parks.get(B)
 
-    def test_a_record_with_a_renamed_wire_key_keeps_it_when_unknown_keys_are_dropped(self):
-
+    def test_a_record_with_a_renamed_wire_key_round_trips(self):
         note = ReexecNote(run="r", bead=B, frm="0.1.0", to="0.2.0", step="land", from_dir="/d", t=1.0)
         doc = WaitDoc(self.cfg, "reexec", B, ReexecNote)
         doc.write(note)

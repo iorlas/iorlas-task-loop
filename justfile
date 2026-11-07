@@ -5,8 +5,12 @@ gate: check
     TL_TEST_FULL=1 uv run python dev/runtests.py
 
 # The tests this change can break (dev/affected.py picks them from the diff against origin/main; tests/rules always; all kinds, one run). Each test runs once per tree.
-test:
+test: test-packages
     uv run python dev/runtests.py
+
+# Each workspace package's tests, alone in a fresh environment of its own declared dependencies (docs/design/stage-packages.md section 5).
+test-packages:
+    for p in packages/*/; do uv run --isolated --package "tl$(basename $p)" --group dev pytest -q -p no:cacheprovider "$p" || exit 1; done
 
 # INNER LOOP ONLY, never the gate: pytest-testmon reruns what the code you edited reaches in the paths you name (docs/dev/test-inner-loop.md). It follows Python imports, not
 # config or data files, so a green run here proves nothing about those: `just test` (dev/affected.py) is the gate. First run per path builds .testmondata.
