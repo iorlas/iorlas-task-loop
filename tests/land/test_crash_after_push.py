@@ -2,7 +2,8 @@
 effects, the landed fact and bd's data, each applied once by key. Killed before or between them, a second engine (a new Sync over the
 same checkpoint) does the effects that are missing and none that was done: one landed fact, one bd sync, one truth."""
 import pytest
-from support.narrow_hosts import BdOut, FakeSyncHost, Stopped
+from support.narrow_hosts import Stopped
+from support.narrow_land import BdOut, FakeSyncHost
 
 from taskloop.app.land.record import Sync
 

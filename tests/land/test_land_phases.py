@@ -3,7 +3,7 @@ from itertools import count
 from unittest import mock
 
 from support.fakegit import FakeGit
-from support.narrow_hosts import table_kit
+from support.narrow_land import table_kit
 
 # isort: split
 from taskloop.app.land.host import Land
