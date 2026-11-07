@@ -57,8 +57,8 @@ class AdmissionAuthors(Case):
                 note = Comment(author=author, text="Blocked: leave it parked", created_at="2")
                 store = Mock()
                 store.comments.return_value = [block, note]
-                with patch("taskloop.app.run.entry.AskStore.at") as asks:
-                    asks.return_value.get.return_value = None
+                with patch("taskloop.app.run.entry.real_stores") as stores:
+                    stores.return_value.asks.get.return_value = None
                     why = _blocked_by_engine(bead, store, ConfigDir("/unused"), "owner")
                 assert bool(why) == expected
 
