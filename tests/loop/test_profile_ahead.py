@@ -130,7 +130,7 @@ class ProfileAhead(Rig):
 
         def spawn(*args):
             self.loop_env.profile = mock.Mock(side_effect=SystemExit(EX_CONFIG))
-            self.loop_env.slot_env = mock.Mock(side_effect=SystemExit(EX_CONFIG))
+            self.loop_env.slots.slot_env = mock.Mock(side_effect=SystemExit(EX_CONFIG))
             return child, mock.Mock()
 
         self.loop_env.spawn = spawn
