@@ -5,18 +5,12 @@ from functools import cached_property
 from tlkernel import plancheck
 from tlkernel.paths import PLAN_FILE
 
-from taskloop.app.plan.briefs import Briefs
-from taskloop.app.plan.cases import Cases
-from taskloop.app.plan.planner import Planner
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.write.briefing import Briefing
 from taskloop.app.write.stage_loop import StageLoop
 
 
 class PlanParts(Plumbing):
-    cases = cached_property(Cases)
-    briefs = cached_property(Briefs)
-    planner = cached_property(Planner)
     briefing = cached_property(Briefing)
     stage_loop = cached_property(StageLoop)
 

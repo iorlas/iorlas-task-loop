@@ -12,20 +12,23 @@ from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.asks.closing import ClosingTrust
 from taskloop.app.land.closing import LandHistory
 from taskloop.app.pipeline.reflect import Reflector
+from taskloop.app.pipeline.reload import Reload, ReloadHost
 from taskloop.app.pipeline.requests import OwnerRequests
 from taskloop.app.pipeline.resume import Resume, ResumeHost
 from taskloop.app.pipeline.waits import Waits
+from taskloop.app.release.closing import ReexecBook
 from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.run.bead_env import bead_env
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.run.records import Records
-from taskloop.app.run.reload import Reload
+from taskloop.app.run.reload_ports import installed_newer, locked_slot
 from taskloop.app.run.review_glue import ReviewGlue
 from taskloop.app.run.shared import Shared
 from taskloop.app.run.shell import Shell
 from taskloop.app.run.stage_checks import StageChecks
 from taskloop.app.run.state import state_names
 from taskloop.app.run.stuck import StuckTick
+from taskloop.app.track.closing import TrailEvents
 from taskloop.app.workers.delegation import Delegation
 
 
@@ -36,7 +39,9 @@ class RunParts(Plumbing):
     ask_flow = cached_property(AskFlow)
     stage_checks = cached_property(StageChecks)
     shell = cached_property(Shell)
-    reload = cached_property(Reload)
+    @cached_property
+    def reload(self: ReloadHost) -> Reload:
+        return Reload(self, ReexecBook(self.home), TrailEvents(), lambda: installed_newer(self.env), locked_slot)
     records = cached_property(Records)
     shared = cached_property(Shared)
     stuck = cached_property(StuckTick)
