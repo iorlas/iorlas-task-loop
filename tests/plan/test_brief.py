@@ -1,10 +1,11 @@
 """The brief renderer: the text stays byte-identical to the golden set, and the section boundaries cover it exactly."""
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 from unittest import mock
 
 from support.case import Case
+from support.cfgs import cfg_with
+from support.plan_host import FakePlan
 from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -13,7 +14,7 @@ import support.paths  # noqa: F401
 import taskloop.app.plan.briefs as mod
 from plan.brief_cases import CASES, beads
 from taskloop.app.asks import intake
-from taskloop.app.plan.briefs import ENGINE_LABELS, Briefs
+from taskloop.app.plan.briefs import ENGINE_LABELS
 from taskloop.app.plan.prompts import PLAN_BRIEF_KB, PLAN_PROMPT
 from taskloop.domain.plan import brief as bf
 from tlkernel.bead import Bead, Comment
@@ -87,8 +88,9 @@ class Diff(Case):
 class FitsTheLimit(Case):
     def brief(self, bead: Bead, comments: list[Comment], kb: float = 5) -> bf.Brief:
         owner = "a" if comments and comments[0].author == "a" else "denis"
-        host = SimpleNamespace(cfg=SimpleNamespace(brief_kb=kb, owner_author=owner))
-        return Briefs(host).fit(bead, comments, "", 0)
+        with TemporaryDirectory() as d:
+            plan = FakePlan(Path(d), cfg_with(brief_kb=kb, owner_author=owner))
+            return plan.briefs.fit(bead, comments, "", 0)
 
     def test_a_brief_that_grows_over_five_reruns_stays_under_the_limit_oldest_comments_first(self):
         bead = Bead(id=BeadId("t-1"), title="Add f", status="open", description="Add the file f.", acceptance_criteria="f exists")
@@ -120,19 +122,14 @@ class FitsTheLimit(Case):
 
     def test_export_warns_naming_the_bead_text_size_when_the_text_alone_is_over_the_limit(self):
         bead = Bead(id=BeadId("t-1"), title="T", status="open", description="d" * 7000)
-        warns, notes = [], []
         with TemporaryDirectory() as d:
-            store = SimpleNamespace(comments=lambda i: [Comment(author="a", text="one"), Comment(author="a", text="two")],
-                                    show=lambda i: bead)
-            host = SimpleNamespace(
-                cfg=SimpleNamespace(brief_kb=5, pick_label="", needs_info_label="", owner_author="a"),
-                store=store, bead="t-1", run_dir=Path(d),
-                brief_file=Path(d) / "b.md", answered=None, warn=warns.append, log=SimpleNamespace(note=notes.append))
-            with mock.patch.object(mod, "peek", lambda store, bead_id: bead):
-                Briefs(host).export()
-        assert len(warns) == 1
-        assert "bead's own text is 7 KB" in warns[0]
-        assert "1 oldest comments left out" in notes[0]
+            plan = FakePlan(Path(d), cfg_with(brief_kb=5, pick_label="", needs_info_label="", owner_author="a"))
+            plan.ports.store.notes["t-1"] = [Comment(author="a", text="one"), Comment(author="a", text="two")]
+            with mock.patch.object(mod, "peek", lambda store, bead_id: bead), mock.patch.object(plan.ports.log, "note") as note:
+                plan.briefs.export()
+                assert "1 oldest comments left out" in note.call_args[0][0]
+        assert len(plan.ports.warned) == 1
+        assert "bead's own text is 7 KB" in plan.ports.warned[0]
 
 
 def test_a_bead_field_cannot_forge_an_engine_section_of_the_brief():
