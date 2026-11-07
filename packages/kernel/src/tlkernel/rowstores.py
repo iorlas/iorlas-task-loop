@@ -2,7 +2,7 @@
 from collections.abc import Callable
 
 from tlkernel import paths
-from tlkernel.docrows import RELEASE_DOCS, REPORT_DOCS, RowDoc, singleton
+from tlkernel.docrows import LANES_DOCS, RELEASE_DOCS, REPORT_DOCS, RowDoc, singleton
 from tlkernel.docstore import Absent, Present
 from tlkernel.guard import guard
 from tlkernel.loop import BadVersions
@@ -21,12 +21,12 @@ from tlkernel.snapshots import (
 
 class StatusStore(RowDoc[StatusSnapshot]):
     def __init__(self, cfg: paths.ConfigDir, quiet: bool = False) -> None:
-        super().__init__(singleton(cfg, StatusSnapshot, "snapshot:delegate.status", quiet).docs, "")
+        super().__init__(singleton(cfg, StatusSnapshot, "snapshot:delegate.status", quiet, table=LANES_DOCS).docs, "")
 
 
 class StatusTriedStore(RowDoc[StatusTried]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(singleton(cfg, StatusTried, "snapshot:delegate.tried").docs, "")
+        super().__init__(singleton(cfg, StatusTried, "snapshot:delegate.tried", table=LANES_DOCS).docs, "")
 
 
 class SharedNotesStore(RowDoc[SharedNotes]):
