@@ -61,7 +61,7 @@ class Judge:
         st = getattr(b, "stop", None)
         if not b.why.startswith("paused: no lane") or (st is not None and st.permanence == "needs_owner" and st.reason != "no_lane"):
             raise b  # the network (the step resumes), a crash, a login or credit pause: not this node's to swallow
-        hand.retry_after, hand.pause_role, hand.pause_lane = 0.0, "", ""  # the run goes on: _ai had noted a pause for the loop
+        hand.retry_after = 0.0  # the run goes on: discard the pause retry time
         ports.steps.outcome("skipped", "no lane")
         ports.warn(f"the look judge had no lane, the pictures are not judged: {b.why[:200]}")
         state.unjudged[f"look judge, round {rnd}"] = "no lane: " + b.why[:160]

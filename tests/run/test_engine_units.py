@@ -158,13 +158,13 @@ class Outcome(T.EngineTest):
         self.run_engine({"plan": [PLAN], "write": [stop("rate_limited", at=due, say="out")]})
         r = self.eng.result()
         assert r.outcome == "paused"
-        assert (r.retry_after or 0.0) == pytest.approx(due, abs=1)
+        assert self.eng.retry_after == pytest.approx(due, abs=1)
 
     def test_a_logged_out_worker_is_paused_with_no_time(self):
         out = stop("logged_out", family="claude", say="Failed to authenticate")
         self.run_engine({"plan": [out]})
         r = self.eng.result()
-        assert (r.outcome, r.retry_after, r.asked) == ("paused", 0, False)
+        assert (r.outcome, self.eng.retry_after, r.asked) == ("paused", 0, False)
 
     def test_an_engine_error_is_failed(self):
         with mock.patch.object(Planner, "plan", side_effect=RuntimeError("boom")):
@@ -195,8 +195,9 @@ class Outcome(T.EngineTest):
     def test_a_hand_run_pause_prints_the_exact_resume_time_and_ends_with_the_outcome(self):
         due = time.time() + 1800
         made = mock.Mock()
+        made.return_value.retry_after = due
         made.return_value.run.return_value = 2
-        made.return_value.result.return_value = RunReport(outcome=Result.PAUSED, bead=BeadId("t-1"), retry_after=due,
+        made.return_value.result.return_value = RunReport(outcome=Result.PAUSED, bead=BeadId("t-1"),
                                                                   why="paused: no lane for write until 09:36")
         a = mock.Mock(id="t-1", branch=None, pr=None, worktree=str(Path(self.tmp.name, "slot")), slot=None, dry_run=False, fresh=False,
                       quiet=True, outcome_file=None)
@@ -206,7 +207,7 @@ class Outcome(T.EngineTest):
                 contextlib.chdir(self.wt), redirect_stdout(out), mock.patch.object(signal, "signal"):  # pyrefly: ignore[missing-attribute]
             entry.main(a, self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())  # pyrefly: ignore[missing-attribute]
         lines = out.getvalue().strip().splitlines()
-        assert json.loads(lines[-1])["retry_after"] == due  # the loop reads the last line: still the outcome
+        assert json.loads(lines[-1])["outcome"] == "paused"  # the loop reads the last line: still the outcome
         assert any(
                 "PAUSED t-1: the lane is back at {}; rerun then: tl run-task t-1".format(
                     time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(due))
@@ -216,8 +217,8 @@ class Outcome(T.EngineTest):
             ), lines
 
     def test_a_pause_with_no_time_says_so(self):
-        assert "no time" in entry.pause_line(RunReport(outcome=Result.PAUSED, bead=BeadId("t-1"), retry_after=0))
-        assert entry.pause_line(RunReport(outcome=Result.LANDED, bead=BeadId("t-1"))) == ""
+        assert "no time" in entry.pause_line(RunReport(outcome=Result.PAUSED, bead=BeadId("t-1")), 0)
+        assert entry.pause_line(RunReport(outcome=Result.LANDED, bead=BeadId("t-1")), 0) == ""
 
     def test_a_refused_claim_is_taken_and_keeps_exit_1(self):
         f = Path(self.tmp.name, "out.json")
@@ -235,7 +236,6 @@ class DelegateLauncher(T.EngineTest):
         assert rc != 0
         assert not self.closed
         assert [c[2] for c in s.calls if c[0] == "reviewer"] == ["openai"]
-        assert self.eng.pause_role == "reviewer"
         assert not any("same family" in str(c) for c in self.bd_calls if c[:2] == ("comments", "add"))
 
     def test_lane_out_waits_then_runs(self):

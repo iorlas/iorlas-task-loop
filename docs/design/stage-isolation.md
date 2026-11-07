@@ -36,7 +36,7 @@ Replace "the stage gets the engine" with three things, each explicit:
 
 **(c) Owned state**: the 111 single-stage attributes become a `<Stage>State` dataclass in `app/<stage>/state.py`. The root creates it and keeps it in a map keyed by stage; the stage gets only its own. It is saved in the checkpoint as that stage's section (today `run/state.py` and `contracts/checkpoint.py` list `look_notes`, `look_done`, `rendered_names`, ... as engine fields): each stage defines `<Stage>Checkpoint`, the Checkpoint record holds `sections: dict[str, bytes-typed]` decoded by the stage that owns it. Old checkpoints read through a migration owned by the stage.
 
-**(d) Hand-offs** (the ~84): a value one stage produces and another consumes becomes a **return value or an event**, not a field both read. `retry_after`/`pause_role`/`pause_lane` written by look into the engine become a `Pause` value look returns and the pipeline records. `leftovers` becomes `Leftover` records returned by the stage and appended by the pipeline. The consumer's port names what it needs (`FollowupSink.add(leftover)`).
+**(d) Hand-offs** (the ~84): a value one stage produces and another consumes becomes a **return value or an event**, not a field both read. `retry_after` written by look into the engine become a `Pause` value look returns and the pipeline records. `leftovers` becomes `Leftover` records returned by the stage and appended by the pipeline. The consumer's port names what it needs (`FollowupSink.add(leftover)`).
 
 Stage entry becomes constructor injection: `Judge(facts, ports, state)`, not `Judge(engine)`. No `Any` host survives; `except e.Blocked` becomes a typed result or exception owned by the stage.
 

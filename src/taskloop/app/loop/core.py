@@ -13,7 +13,6 @@ from tlkernel.loop import Carry, LoopState, LoopWait, QueueRow
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.files import LoopFiles, StopMode
-from taskloop.app.loop.gate import GateRole
 from taskloop.app.loop.net import NetState
 from taskloop.app.loop.settle import Counters
 
@@ -45,8 +44,6 @@ class Core:
         self.c = Counters(fails=list(carry.fails), ran=carry.ran, later=dict(carry.later),
                           warned=list(carry.warned))
         self.sigterm = threading.Event()  # SIGTERM or Ctrl-C to the loop itself: end the running bead as `tl stop --now` does
-        self.gate = GateRole(env.roles, env.now, self.tune().gate_cache, self.tune().gate_unknown)
-        self.gate.held = {k: (v[0], v[1]) for k, v in carry.gated.items()}
         self.net = NetState(self.tune().net_probe)
         self.log: Path | None = None
         self.rows: list[QueueRow] = []
@@ -89,7 +86,7 @@ class Core:
     def carry(self) -> Carry:
         c = self.c
         return Carry(fails=list(c.fails), ran=c.ran, later=dict(c.later),
-                     gated=dict(self.gate.held), warned=list(c.warned), until=self.until, wt=self.wt, back=self.carry_in.back,
+                     warned=list(c.warned), until=self.until, wt=self.wt, back=self.carry_in.back,
                      moved_at=self.carry_in.moved_at, fallback=self.carry_in.fallback)
 
     def running(self, now: Running | None) -> None:

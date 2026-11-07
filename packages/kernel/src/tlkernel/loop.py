@@ -52,8 +52,6 @@ class Carry(Rec):
     fails: list[str] = msgspec.field(default_factory=list)
     ran: int = 0
     later: dict[str, float] = msgspec.field(default_factory=dict)
-    pauses: dict[str, int] = msgspec.field(default_factory=dict)
-    gated: dict[str, tuple[str, float]] = msgspec.field(default_factory=dict)
     warned: list[str] = msgspec.field(default_factory=list)
     until: float = 0.0
     wt: str = ""
@@ -65,7 +63,7 @@ class Carry(Rec):
 class LoopState(Rec):
     """loop/<repo_key>.<pid>.json, rewritten by the loop every pass; the dashboard and `tl status` read it."""
 
-    V: ClassVar[int] = 2
+    V: ClassVar[int] = 3
     pid: int
     started: float
     t: float

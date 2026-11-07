@@ -150,11 +150,10 @@ def append_output(stream: Any) -> Any:
         fcntl.fcntl(fd, fcntl.F_SETFL, fcntl.fcntl(fd, fcntl.F_GETFL) | os.O_APPEND)
 
 
-def pause_line(rec: RunReport) -> Any:
+def pause_line(rec: RunReport, due: float) -> str:
     """A paused run's one line for whoever reran it by hand: the exact time the lane is back (tl-bxk.10.6)."""
     if rec.outcome is not Result.PAUSED:
         return ""
-    due = rec.retry_after or 0.0
     if not due:
         return f"PAUSED {rec.bead}: no time the lane frees (login, network or setup); rerun when fixed: tl run-task {rec.bead}"
     return "PAUSED {}: the lane is back at {}; rerun then: tl run-task {}".format(
@@ -425,7 +424,7 @@ def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: En
     rc = eng.run(stage=getattr(a, "stage", None), continuous=bool(getattr(a, "loop", False)))
     with defer_stop(None):  # the outcome line is what the loop reads: a stop waits for it
         rec = eng.result()
-        if pause_line(rec):
-            say(pause_line(rec))
+        if pause_line(rec, eng.retry_after):
+            say(pause_line(rec, eng.retry_after))
         report(a, rec)
     return rc

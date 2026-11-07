@@ -124,8 +124,6 @@ class LookHost(Protocol):
     @property
     def writer_family(self) -> str | None: ...
     retry_after: float
-    pause_role: str
-    pause_lane: str
     leftovers: list[dict[str, str]]
     @property
     def review(self) -> OwnerItems: ...

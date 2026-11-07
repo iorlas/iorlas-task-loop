@@ -10,7 +10,6 @@ from support.fake_loop_env import slot_loop_env
 
 from taskloop.app.asks import parks
 from taskloop.app.loop import verdict as vd
-from taskloop.app.loop.gate import GateRole
 from taskloop.app.loop.net import NetState
 from taskloop.app.loop.settle import Counters, Settle
 from taskloop.app.loop.take import Taker
@@ -50,7 +49,7 @@ class FetchNetwork(Rig):
                 files, left = mock.Mock(), mock.Mock()
                 counts, net = Counters(), NetState(60)
                 settle = Settle(env, files, LoopConfig, self.out.append, counts,
-                                GateRole(lambda: {}, lambda: 0.0), net, left)
+                                net, left)
                 v = vd.Verdict(Result.PAUSED, f"paused: `git fetch -q origin`: {DNS}", kind=vd.NETWORK,
                                pre_engine=bool(lane % 2))
                 assert settle.apply(v, "x-1", "s1", True) is None
@@ -97,7 +96,7 @@ class FetchNetwork(Rig):
         assert (rec.attempts, rec.runs) == ({}, 0)
         files, left = mock.Mock(), mock.Mock()
         counts, net = Counters(), NetState()
-        settle = Settle(env, files, LoopConfig, self.out.append, counts, GateRole(lambda: {}, lambda: 0.0), net, left)
+        settle = Settle(env, files, LoopConfig, self.out.append, counts, net, left)
         v = vd.Verdict(Result.PAUSED, DNS, kind=vd.NETWORK, run="run-1")
         assert settle.apply(v, bid, "s1", True) is None
         assert net.down
