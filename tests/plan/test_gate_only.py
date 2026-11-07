@@ -8,10 +8,10 @@ import support.paths  # noqa: F401
 from support.cfgs import cfg_with
 from support.checks import typed
 from support.engine_case import EngineTest
+from support.plan_host import FakePlan
 from support.plans import CLEAN, HAS_F, PLAN, WRITE
 
 from taskloop.app.plan.planner import Planner
-from taskloop.app.plan.sendback import SendBack
 from taskloop.contracts.plancheck import adhoc
 from taskloop.domain.checks import lint
 
@@ -59,17 +59,18 @@ class GateOnly(EngineTest):
         assert note in (self.eng.run_dir / "plan.json").read_text()
         assert any(note in c[3] for c in self.bd_calls if c[:2] == ("comments", "add"))
 
-    def test_gate_checks_in_risks_and_cases_are_left_to_land_too(self):
-        host = mock.Mock(cfg=cfg_with(gate_only=["echo gate"]))
+    def test_gate_checks_in_risks_and_cases_are_left_to_land_too(self, workdir):
+        plan = FakePlan(workdir, cfg_with(gate_only=["echo gate"]))
         data = typed(dict(PLAN, risks=[{"what": "risk", "check": "echo gate"}],
                           cases=[{"criterion": "f.txt exists", "check": "echo gate"}]))
-        with mock.patch.object(lint, "dry_check", return_value=[]):
-            SendBack(host).after_rewrite(data)
+        with (mock.patch.object(lint, "dry_check", return_value=[]),
+              mock.patch.object(plan.ports.log, "note") as note):
+            plan.planner.sendback.after_rewrite(data)
+            note.assert_called_once()
         assert data["risks"][0]["check"] is None
         assert data["cases"][0]["check"] is None
         assert data["cases"][0]["proved_by"] == "engine_step"
         assert data["cases"][0]["via"] == "land gate"
-        assert lint.gate_only_checks(data, host.cfg) == []
+        assert lint.gate_only_checks(data, plan.facts.cfg) == []
         assert lint.ledger_problems(data) == []
         assert len(data["assumptions"]) == 1
-        host.log.note.assert_called_once()

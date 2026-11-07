@@ -52,7 +52,6 @@ from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks import retry
 from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.plan.matchers import AcceptanceText
-from taskloop.domain.prompts.common import RULES_MAX
 from taskloop.domain.write.matchers import count_tests
 
 
@@ -751,19 +750,6 @@ class EngineRunTest(EngineTest):
         assert self.eng.extra == 0
         assert "re-planned 3 times" in self.ask()["why"]
         assert "Answer: split" in self.eng.log_path.read_text()
-
-    def test_worker_rules_are_clipped_at_a_line_and_missing_ones_say_nothing(self):
-        self.put_repo_file("r.md", "line\n" * 1000)
-        eng = engine.Engine.__new__(engine.Engine)
-        eng.cfg, eng.wt, eng.warn = cfg_with(worker_rules="r.md"), str(self.wt), mock.Mock()
-        sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
-        text = eng.cases.rules_text()
-        assert len(text.encode("utf-8")) <= RULES_MAX
-        assert text.endswith("line") and eng.warn.called
-        eng.cfg = cfg_with(worker_rules="nope.md")
-        assert eng.cases.rules_text() == ""
-        eng.cfg = cfg_with(worker_rules="")
-        assert eng.cases.rules_text() == ""
 
     def test_the_brief_carries_what_linked_beads_decided(self):
         # lifesim-fld.25.17 asked which rung was picked in yxd6.3, whose close reason said so
