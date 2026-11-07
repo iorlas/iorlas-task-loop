@@ -7,7 +7,7 @@ from typing import Any
 
 from taskloop.adapters import check_net, childenv
 from taskloop.adapters.gitrepo import pinned_env
-from taskloop.app.run.blocked import Blocked
+from taskloop.app.pipeline.blocked import Blocked
 from taskloop.contracts import log as rec
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.kinds import Kind

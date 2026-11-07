@@ -7,7 +7,7 @@ from pathlib import Path
 
 from taskloop.adapters import beadtools
 from taskloop.adapters import halt as halting
-from taskloop.app.run.blocked import Blocked, FixFailed, blocked_for
+from taskloop.app.pipeline.blocked import Blocked, FixFailed, blocked_for
 from taskloop.app.run.console import say
 from taskloop.app.run.fields import RunFields
 from taskloop.app.track import trail

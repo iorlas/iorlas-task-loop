@@ -11,9 +11,9 @@ from support.case import Case
 from support.fake_deadline import FakeDeadline
 from support.narrow_hosts import FakeWaitsHost
 
-from taskloop.app.run.blocked import Blocked
+from taskloop.app.pipeline.blocked import Blocked
+from taskloop.app.pipeline.waits import Waits
 from taskloop.app.run.run_once import RunOnce
-from taskloop.app.run.waits import Waits
 from taskloop.contracts import log as rec
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.kinds import Kind
