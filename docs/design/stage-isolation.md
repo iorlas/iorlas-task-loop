@@ -62,6 +62,8 @@ Today's shell is fat: `run` + `loop` + `launch` + `wire` + `prune` = 113 files /
 - **node `loop`**, **node `prune`**: stay, each with its own ports (`Claim`, `Take`, ...). `loop/take.py` imports 3 stages today and is a root-shaped file inside a node: it moves to the root or takes ports.
 - **roots**: `engine` (construct pipeline + stages + states, bind ports), `entry`, `run_once`, `launch/*`, `wire/*`, `cli`, `hook`, `tl.py`.
 
+C-THIN (a), tl-e5t0.40.1: `run/ask_flow`, `bead_env`, `closer_ports`, `preflight`, `reload_ports`, `shared`, `shell` and `stage_checks` are composition files: they bind ports across slices and stay in `run/`. The proposed composition classification of `stage_rounds`, `stage_run`, `review_glue` and `running` is blocked by imports from `run.stages`, `run.state` and `prune.verb`; they remain logic sources in `nobody-imports-a-root`. `stages`, `state` and `target` keep their existing classification. No import exceptions are widened.
+
 Keeping them thin, mechanically:
 
 1. import-linter: nodes never import roots; roots are leaves of the graph (a `forbidden` contract per root package).

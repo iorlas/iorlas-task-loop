@@ -8,7 +8,7 @@ The pipeline is the code that decides **which stage runs next and what a run is 
 
 ## 2. Measured: what moves, what does not
 
-`run/` is 5,050 sloc (6,759 lines; the bead's "about 6,100 sloc" is lines, and includes the workers node). By owner:
+`run/` is 5,050 sloc (6,759 lines; the bead's "about 6,100 sloc" is lines, and includes the workers node). Historical ownership estimate before C-THIN (a):
 
 | group | sloc | files |
 |---|---|---|
@@ -16,11 +16,20 @@ The pipeline is the code that decides **which stage runs next and what a run is 
 | **workers** (C-WORKERS, tl-e5t0.37, not this bead) | 589 | worker_call, worker_request, worker_identity, worker_recovery, delegation, writer_pin |
 | **root, stays** | 1,854 | entry 336, lane_acts 178, records 168, fields 136, layout 102, engine 97, shell 79, shared 82, calls 82, plumbing 62, preflight 62, parts_* 143, context 54, console 49, host 33, running 34, ask_flow 60, ... |
 
-So the node is about **2,600 sloc**, not 6,100; after the workers node goes too, `run/` keeps about 1,850, and C-THIN (.40) takes that to construction only. `ask_flow`, `records`, `shared`, `shell`, `lane_acts`, `fields` and `layout` are neither pipeline nor workers: they are run facts and run state (FACTS, `stages.md`), listed in section 6 as the open question.
+C-THIN (a), tl-e5t0.40.1 supersedes the ownership estimate for these run modules:
+
+| classification | modules |
+|---|---|
+| **composition, stays in run** | ask_flow, bead_env, closer_ports, preflight, reload_ports, shared, shell, stage_checks |
+| **logic, move blocked by existing imports** | stage_rounds and stage_run (run.stages), review_glue (run.state), running (prune.verb) |
+
+The four blocked modules remain source modules in `nobody-imports-a-root`; `stages`, `state` and `target` are unchanged. No file moves or new import exceptions accompany this classification.
+
+So the node is about **2,600 sloc**, not 6,100; after the workers node goes too, `run/` keeps about 1,850, and C-THIN (.40) takes that to construction only. `ask_flow`, `records`, `shared`, `shell`, `lane_acts`, `fields` and `layout` are neither pipeline nor workers: the wiring modules `ask_flow`, `shared` and `shell` are now composition roots; the remaining ownership questions are listed in section 6.
 
 How much of the node is already free of the Engine:
 
-- **0 host attrs, leaf modules**: steps, budget, blocked, outcomes, finish, ended, done_memo, summaries, trace, decide, stage_run, closer_host. About 520 sloc; they move first and need no port.
+- **0 host attrs, leaf modules**: steps, budget, blocked, outcomes, finish, ended, done_memo, summaries, trace, decide, closer_host. The historical estimate was about 520 sloc; `stage_run` stays in run because `run.stages` imports it.
 - **Narrow hosts already**: the close family (`closer_*`, 10 to 14 attrs each, behind `CloseHost`/`CloserHost`) and `stuck` (3), `requests` (8), `stage_checks` (6).
 - **Wide**: `run_once` 67 attrs, `stages` 43, `resume` 29, `reload` 21, `reflect` 22. These are the real work; they are where the stages' hand-offs hide.
 
@@ -78,7 +87,7 @@ Rules, all written in the PR that moves the module (the HOSTBAN mechanism of #34
 
 ## 6. Open points (decided by the owner or by the B-* beads, not here)
 
-1. **`ask_flow`, `records`, `shared`, `shell`, `lane_acts`, `fields`, `layout` (about 900 sloc).** They are used by both the pipeline and the stages. `records` (run log, manifest, heartbeat) is pipeline-shaped (it is the run's own journal); `ask_flow` belongs to asks; `shell`/`shared`/`lane_acts` are run facts. The recommendation: `records` moves with the pipeline as `pipeline/journal.py` behind a `RunJournal` port the stages already see as `StepBook`/`Narrate`; the others stay in the root until their owners move them. Not decided here.
+1. **`ask_flow`, `records`, `shared`, `shell`, `lane_acts`, `fields`, `layout` (about 900 sloc).** They are used by both the pipeline and the stages. `records` (run log, manifest, heartbeat) is pipeline-shaped (it is the run's own journal); `ask_flow` belongs to asks; `shell`/`shared`/`lane_acts` are run facts. The recommendation: `records` moves with the pipeline as `pipeline/journal.py` behind a `RunJournal` port the stages already see as `StepBook`/`Narrate`; the others stay in the root until their owners move them. C-THIN (a) subsequently classified `ask_flow`, `shell` and `shared` as composition roots that stay in run.
 2. **`e.Blocked` as an attribute of the host.** The pipeline can import the exception class itself (`contracts`-level, as `fence.Fenced` is), which removes `e.Blocked` and `e.blocked_for`. The `Blocked`/`FixFailed` classes are in `run/blocked.py` (31 sloc, 0 host attrs) and carry an outcome; they move to `contracts` or `pipeline` in slice P1. Needs the architect's kernel-rename (`tlkernel`) to be settled, so P1 does not move them yet.
 3. **`reload.safe_point`** execs the process into a newer install; `Exec` is control flow. It stays a pipeline port (`Reloading`) so a test can assert "a safe point was offered before land" without exec.
 4. **The checkpoint is not touched.** `CKPT` (.29) is last; the pipeline composes the existing `RunState` from the stage states through `CheckpointsPort`.
