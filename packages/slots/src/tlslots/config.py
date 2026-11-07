@@ -9,7 +9,7 @@ from tlkernel.bead import Bead
 from tlkernel.config import EngineConfig, RepoProfile, SlotsConfig
 from tlkernel.gitport import Git
 from tlkernel.paths import TASK_EXCLUDE
-from tlkernel.slottable import WORKTREE, SlotSource
+from tlkernel.slottable import WORKTREE, SlotSource, SlotTable
 
 from tlslots.effects import Effects
 from tlslots.env import DEFAULT_PRIO
@@ -149,3 +149,18 @@ def local_profile(repo: str) -> RepoProfile:
     except config.ConfigError as e:
         print(f"task-loop: {e}", file=sys.stderr)
         raise SystemExit(os.EX_CONFIG) from e
+
+
+def status_footer(repo: str, git: Git, table: SlotTable) -> tuple[str, ...]:
+    """The effective slot count and the table's configuration revision, including empty tables."""
+    selected = selected_profile(repo, git)
+    return (
+        f"slots: {selected.cfg.slots.count} ({selected.slots_source})",
+        f"(slots.count {table.configured} from {table.source}{' ' + table.source_sha[:7] if table.source_sha else ''})",
+    )
+
+
+def configured_slots(repo: str, git: Git) -> tuple[int, str]:
+    """The doctor's effective slot count and its source label."""
+    selected = selected_profile(repo, git)
+    return selected.cfg.slots.count, selected.slots_source
