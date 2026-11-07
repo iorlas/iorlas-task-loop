@@ -44,7 +44,7 @@ class CheckExecutor:
         self.slot: CheckExecutor | None = None  # clean gate: the same round, with slot attempts and resource leases
 
     def run_group(self, plan: CheckPlan, rnd: int) -> Round:
-        """Run every step of the plan, in order, as one block (the cheap checks first, the Unity group last)."""
+        """Run every step of the plan, in order, as one block (the cheap checks first, the editor group last)."""
         self.memo.checks = {step.check.id: step.check for step in plan.steps}
         st = Round(rnd, results=list(plan.skipped), env=dict(self.checklog.env))
         self.logs.mkdir(exist_ok=True)
@@ -170,7 +170,7 @@ class CheckExecutor:
         if st.red and (c.group != st.red or expected_secs(c.cmd, self.history) >= CHEAP_S or step.queued
                        or any(d in st.red_skipped for d in step.env)):
             # a red group skips the groups after it, and any red skips every expensive check (the cheap ones of its own group run to
-            # the end, so the writer sees all the cheap failures at once; the Unity group never runs after a red)
+            # the end, so the writer sees all the cheap failures at once; the editor group never runs after a red)
             return CheckResult.skipped(c, st.red + FAILED_FIRST)
         if not self.everything and c.id not in self.fix_red:
             decision = self.planned
@@ -277,7 +277,7 @@ class CheckExecutor:
 
     def _project_log(self, c: Check, seen: str, log: Path) -> str:
         """A red analyzer whose output shows no compile error because the project files could not be regenerated: the first
-        PROJECT_LOG_LINES error lines of the log Unity wrote for that, in the output the writer sees (and in the saved log)."""
+        PROJECT_LOG_LINES error lines of the log the editor wrote for that, in the output the writer sees (and in the saved log)."""
         path = c.tail_log or self.host.cfg.project_log
         if not path or cs_error_lines(seen, 1):
             return ""

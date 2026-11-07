@@ -66,7 +66,7 @@ class Settles:
     # -- the checks the engine runs
     def gate_names(self) -> list[str]:
         """Names a verify item can use for a check the engine runs by itself (the gate, a configured check, a plan stage check or case):
-        its id, its command, and the command without its runner (`just unity-tests` -> unity-tests)."""
+        its id, its command, and the command without its runner (`just smoke-tests` -> smoke-tests)."""
         stages = (self.hand.plan_data or {}).get("stages") or []
         checks = [c for st in stages for c in st["checks"]] + self.ports.cases.case_checks()
         cmds = [c.cmd for c in self.facts.cfg.checks] + planref.commands(checks, self.facts.cfg)
