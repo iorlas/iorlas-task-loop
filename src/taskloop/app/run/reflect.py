@@ -5,6 +5,7 @@ from typing import Any
 from taskloop.adapters import childenv
 from taskloop.adapters import delegate as dg
 from taskloop.app.asks import trustroots
+from taskloop.app.run.reflect_prompt import REFLECT_PROMPT
 from taskloop.contracts import answers
 from taskloop.contracts import log as rec
 from taskloop.contracts.delegate import RunRequest
@@ -12,7 +13,6 @@ from taskloop.contracts.schema import unstrict
 from taskloop.contracts.stores import JsonlStore
 from taskloop.domain.lanes import caps
 from taskloop.domain.matchers import clip
-from taskloop.domain.prompts.reflect import REFLECT_PROMPT
 
 
 class Reflector:
