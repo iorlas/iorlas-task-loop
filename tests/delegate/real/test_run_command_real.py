@@ -246,8 +246,11 @@ class RunCommand(RunBase):
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_running_command_keeps_the_long_silence_limit(self):
         self.fast_clock()
-        _, r = self.run_it(mode="tool_open", timeout=4)
+        _, r = self.run_it(mode="tool_open", role="reviewer", timeout=4)
         assert why(r) == "timeout"
+        assert [(a["kind"], a["outcome"]) for a in r["attempts"]] == [("first", "timeout"), ("worker_retry", "timeout")]
+        assert len(self.args_seen().splitlines()) == 2
+        assert "answer_done_process_alive" not in r.get("warnings", [])
 
     @real_proc("delegate: a worker, git or CLI process")
     @pytest.mark.skipif(sys.platform != "darwin", reason="macOS only")
@@ -305,12 +308,18 @@ class RunCommand(RunBase):
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_timeout_kills_the_whole_process_group(self):
-        code, r = self.run_it(mode="hang", timeout=1)
+        # Keep every child's PID: the retry must kill its process group too.
+        script = self.base / "bin" / "codex"
+        script.write_text(self.FAKE_CODEX.replace('> "$FAKE_PIDFILE"', '>> "$FAKE_PIDFILE"'))
+        code, r = self.run_it(mode="hang", role="reviewer", timeout=1)
         assert (code, why(r)) == (0, "timeout")
-        pid = int(Path(os.environ["FAKE_PIDFILE"]).read_text())
+        assert [(a["kind"], a["outcome"]) for a in r["attempts"]] == [("first", "timeout"), ("worker_retry", "timeout")]
+        pids = Path(os.environ["FAKE_PIDFILE"]).read_text().splitlines()
+        assert len(pids) == len(set(pids)) == 2
         time.sleep(0.3)
-        with pytest.raises(OSError):
-            os.kill(pid, 0)
+        for pid in pids:
+            with pytest.raises(OSError):
+                os.kill(int(pid), 0)
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_status_json_has_a_health_row_per_pair_with_leases_and_last_failures(self):

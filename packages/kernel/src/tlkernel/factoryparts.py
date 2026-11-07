@@ -185,9 +185,22 @@ REPORT = Part(name="report", version=1, tables=(REPORT_DOCS,), records=(ReflectS
 
 WORK = Part(name="work", version=1, tables=(WORK_DOCS,), records=(Adr,), ddl=doc_table(WORK_DOCS))
 
-LOOP = Part(name="loop", version=1, tables=(LOOP_DOCS,), records=(LoopCommand, Rest, BadVersions), ddl=doc_table(LOOP_DOCS))
+
+def loop_bad_versions(con: sqlite3.Connection) -> None:
+    """loop v1 -> v2: the BadVersions record joined the part; no stored row changes."""
+
+
+LOOP = Part(name="loop", version=2, tables=(LOOP_DOCS,), records=(LoopCommand, Rest, BadVersions), ddl=doc_table(LOOP_DOCS),
+            steps={1: loop_bad_versions})
 LOOK = Part(name="look", version=1, tables=(LOOK_DOCS,), records=(), ddl=doc_table(LOOK_DOCS))
-LANES = Part(name="lanes", version=1, tables=(LANES_DOCS,), records=(StatusSnapshot, StatusTried, SharedNotes), ddl=doc_table(LANES_DOCS))
+
+
+def lanes_shared_notes(con: sqlite3.Connection) -> None:
+    """lanes v1 -> v2: the SharedNotes record joined the part; no stored row changes."""
+
+
+LANES = Part(name="lanes", version=2, tables=(LANES_DOCS,), records=(StatusSnapshot, StatusTried, SharedNotes),
+             ddl=doc_table(LANES_DOCS), steps={1: lanes_shared_notes})
 
 RECEIPT = Part(name="receipt", version=1, tables=(RECEIPT_DOCS,), records=(), ddl=doc_table(RECEIPT_DOCS))
 BEADCACHE = Part(name="beadcache", version=1, tables=(BEADCACHE_DOCS,), records=(), ddl=doc_table(BEADCACHE_DOCS))

@@ -42,6 +42,7 @@ from taskloop.app.loop.queue import QueueRule
 from taskloop.app.run import (
     entry,
 )
+from taskloop.app.slots import config as wslots_config
 from taskloop.app.slots import (
     engine_lock,
     marks,
@@ -208,7 +209,7 @@ class Areas(AreasBase):
         assert wloop.running(str(self.repo), port_git(), who()) == {}
 
     def cfg_slots(self):
-        return wslots.profile_slots(str(self.repo))
+        return wslots_config.profile_slots(str(self.repo))
 
     def test_a_hand_run_in_a_busy_area_warns_and_runs(self):
         bd = self.lanes({"x-1": [], "x-2": []}, {"x-1": "live", "x-2": "live"})
@@ -243,7 +244,7 @@ class Line(Slots):
 
     def setup_method(self):
         super().setup_method()
-        self.cfg = wslots.profile_slots(str(self.repo))
+        self.cfg = wslots_config.profile_slots(str(self.repo))
 
     def tickets(self):
         return sl.ticket_names(self.repo)

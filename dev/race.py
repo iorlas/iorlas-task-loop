@@ -57,6 +57,7 @@ import support.paths  # noqa: E402, F401
 from process_lock import LockHeldError, ProcessLock  # noqa: E402
 
 from taskloop.adapters import ident  # noqa: E402
+from taskloop.app.slots import config as wslots_config  # noqa: E402
 from taskloop.app.slots import (  # noqa: E402
     marks,
 )
@@ -153,7 +154,7 @@ class Race:
         sh("git", "push", "-q", "origin", "HEAD:main", cwd=r, env=env)
         sh("git", "branch", "-q", "--set-upstream-to", "origin/main", cwd=r, env=env)
         sh("git", "config", "core.hooksPath", str(h / "hooks"), cwd=r, env=env)
-        wslots.exclude_local(real.git(snapshot()), str(r), ".slots/", ".task/")
+        wslots_config.exclude_local(real.git(snapshot()), str(r), ".slots/", ".task/")
         for s in SLOTS:
             sh("git", "worktree", "add", "-q", "--detach", str(r / ".slots" / s), "origin/main", cwd=r, env=env)
         beads = {b: {"id": b, "title": "bead " + b, "status": "open", "priority": 2, "issue_type": "task",

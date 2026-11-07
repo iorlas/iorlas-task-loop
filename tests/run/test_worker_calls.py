@@ -21,7 +21,7 @@ from support.who import who
 from taskloop.adapters import delegate as dl
 from taskloop.adapters.delegate import Stopped
 from taskloop.app.run import engine
-from taskloop.app.wire import slots as wslots
+from taskloop.app.slots import config as wslots_config
 from taskloop.domain.lanes import retry
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
@@ -34,24 +34,21 @@ def napper(nap):
 
 
 class RetryRows(Case):
-    def test_six_kinds_and_every_limit_is_one_row(self):
+    def test_remaining_kinds_and_every_limit_is_one_row(self):
         got = {r.kind: (r.limit, r.then) for r in retry.ROWS}
         assert got == {
                 "invalid_output": (1, "fault"),
                 "denied_read": (1, "fault"),
                 "denied_secret": (1, "fault"),
                 "resume_refused": (1, "fault"),
-                "crash": (2, "fault"),
                 "worker_failed": (1, "ask"),
             }
 
-    def test_left_and_rest_read_the_rows(self):
-        assert [retry.PLAN.rest("crash", n) for n in (0, 1, 5)] == [30.0, 120.0, 120.0]
 
 
 class Calls(te.EngineTest):
     def go(self, script):
-        c = wslots.load_cfg(str(self.wt), port_git())
+        c = wslots_config.load_cfg(str(self.wt), port_git())
         nap = mock.Mock()
         with te.delegate_stack(script), mock.patch("taskloop.app.workers.lane_acts.time", napper(nap)):
             self.eng = engine.Engine(
@@ -94,7 +91,7 @@ class Calls(te.EngineTest):
         assert dec
         assert dec[0]["plan"] == "worker_failed"
         assert dec[0]["exit"] == -15
-        assert dec[0]["action"] in ("reroute", "new_thread", "retry", "ask")
+        assert dec[0]["action"] == "ask"
 
     def test_call_end_carries_the_exit_of_the_worker(self):
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.full(te.WRITE, "w1", exit_code=0)], "review": [te.CLEAN]})

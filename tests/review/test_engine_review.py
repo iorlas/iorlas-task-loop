@@ -21,7 +21,7 @@ from support.spawn import port_git
 
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.run import engine
-from taskloop.app.wire import slots as wslots
+from taskloop.app.slots import config as wslots_config
 
 
 class EngineReviewTest(EngineTest):
@@ -198,7 +198,7 @@ class EngineReviewTest(EngineTest):
         assert "ruff" in self.card()
 
     def test_prose_that_happens_to_name_a_tool_still_goes_to_the_verifier(self):
-        cfg = wslots.load_cfg(str(self.wt), port_git())
+        cfg = wslots_config.load_cfg(str(self.wt), port_git())
         with mock.patch.object(engine, "tool_on_path", return_value=None):
             for what in ("the biome transition fades in", "no black screen between lots"):
                 assert self.unused(what, cfg) == "", what
@@ -210,10 +210,10 @@ class EngineReviewTest(EngineTest):
         sh("git", "add", "-A", cwd=self.wt)
         sh("git", "commit", "-qm", "tools", cwd=self.wt)
         with mock.patch.object(engine, "tool_on_path", return_value=None):
-            assert self.unused("nobody ran csharpier on src/", wslots.load_cfg(str(self.wt), port_git())) == ""
+            assert self.unused("nobody ran csharpier on src/", wslots_config.load_cfg(str(self.wt), port_git())) == ""
 
     def test_only_the_unused_tool_item_is_dropped_the_rest_go_to_the_verifier(self):
-        cfg = wslots.load_cfg(str(self.wt), port_git())
+        cfg = wslots_config.load_cfg(str(self.wt), port_git())
         with mock.patch.object(engine, "tool_on_path", side_effect=self.no_ruff):
             assert "not a check here" in self.unused(self.RUFF["what"], cfg, self.no_ruff)
             assert self.unused(self.GAPS[1]["what"], cfg, self.no_ruff) == ""

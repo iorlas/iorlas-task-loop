@@ -36,8 +36,8 @@ from taskloop.adapters import (
 )
 from taskloop.app.asks import admission
 from taskloop.app.run import running as wrunning
+from taskloop.app.slots import config as wslots_config
 from taskloop.app.wire import asks as wasks
-from taskloop.app.wire import slots as wslots
 from taskloop.domain.checks import matchers
 from taskloop.domain.checks.cmd import matchers as sh_matchers
 from taskloop.domain.land.matchers import _TRANSIENT as TRANSIENT_PUSH
@@ -115,7 +115,7 @@ class StaleTree(StagesTest):
         e = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
@@ -158,7 +158,7 @@ class StaleTree(StagesTest):
         e = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
@@ -216,7 +216,7 @@ class SlotHygiene(StagesTest):
         e = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
@@ -358,11 +358,12 @@ class Contracts(StagesTest):
         assert not TRANSIENT_PUSH.search("remote: error: GH006: Protected branch update failed")
         assert TRANSIENT_PUSH.search("fatal: unable to access 'https://x/': Could not resolve host: x")
 
-    def test_a_delegate_crash_is_retried_fresh_and_the_run_goes_on(self):
+    def test_a_delegate_crash_fails_at_once(self):
         crash = fake_route.NO_ANSWER  # route.py died: delegate printed no answer
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [crash, CLEAN]})
-        assert rc == 0, self.blocked
-        assert [c[0] for c in s.calls] == ["planner", "worker", "reviewer", "reviewer"]
+        assert rc == 2
+        assert self.eng.kind.value == "fault_crashed"
+        assert [c[0] for c in s.calls] == ["planner", "worker", "reviewer"]
         assert "delegate crashed" in self.eng.log_path.read_text()
 
     def test_the_wip_commit_skips_the_pre_commit_hook_and_a_failed_one_is_loud(self):
@@ -406,11 +407,11 @@ class Contracts(StagesTest):
                 for c in self.bd_calls
             )
 
-    def test_a_delegate_that_keeps_crashing_pauses_the_bead_and_asks_nobody(self):
+    def test_a_delegate_crash_faults_without_asking(self):
         crash = fake_route.NO_ANSWER
-        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [crash, crash, crash]})
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [crash]})
         assert rc != 0
-        assert self.eng.why.startswith("failed: delegate crashed 3 times on the review step"), self.eng.why
+        assert self.eng.why.startswith("failed: delegate crashed on the review step"), self.eng.why
         assert not self.eng.asked  # a machine fault: the bead stays open, labelled engine-fault, nobody is asked
         assert self.blocked == []
         assert any(c[:3] == ("label", "add", "t-1") and c[3] == "engine-fault" for c in self.bd_calls), self.bd_calls

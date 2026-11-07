@@ -41,9 +41,9 @@ from taskloop.app.land.checkout import Checkout
 from taskloop.app.pipeline import outcomes
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine, entry, running
+from taskloop.app.slots import config as wslots_config
 from taskloop.app.slots.lease import Lease
 from taskloop.app.track import outcome_line
-from taskloop.app.wire import slots as wslots
 from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks import retry
 from taskloop.domain.lanes.matchers import read_only_command
@@ -672,7 +672,8 @@ class EngineRunTest(EngineTest):
             return real(this, cmd, **kw)
         with mock.patch.object(fake_route.Script, "__call__", crash):
             rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        assert rc == 0, self.blocked  # delegate died once: again after a rest, then it went on
+        assert rc == 2
+        assert self.eng.kind.value == "fault_crashed"
 
     def test_a_stop_is_a_pause_with_the_bead_open_and_never_a_fault(self):
         with self.stop_at("worker", 1):
@@ -686,14 +687,15 @@ class EngineRunTest(EngineTest):
     def test_the_trace_records_reason_context_and_the_lanes(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [stop("worker_failed"), WRITE],
                                  "review": [CLEAN]})
-        assert rc == 0
-        assert self.eng.sessions[1]["reason"] == "worker_failed"
-        assert self.eng.sessions[-1]["context"]["instructions"] == ["/repo/AGENTS.md"]
+        assert rc == 2
+        assert self.eng.kind.value == "fault_infra"
+        assert self.eng.sessions[-1]["reason"] == "worker_failed"
+        assert self.eng.sessions[0]["context"]["instructions"] == ["/repo/AGENTS.md"]
         trace = [json.loads(ln) for ln in (homes.config_dir() / "traces.jsonl").read_text().splitlines()][-1]
         assert trace["lanes"] == {}
 
     def test_a_refused_delegate_blocks_before_any_step(self):
-        c = wslots.load_cfg(str(self.wt), port_git())
+        c = wslots_config.load_cfg(str(self.wt), port_git())
         refusal = dl.Refusal("skew_delegate_older", "delegate speaks contract 2")
         script = fake_route.Script({})
         with (

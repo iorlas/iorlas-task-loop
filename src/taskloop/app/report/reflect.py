@@ -134,13 +134,21 @@ def is_closed(who: Identity, bead: BeadId, repo: str) -> bool:
     return row is not None and row.status == "closed"
 
 
-def _update_known(who: Identity, c: dict[str, Any], repo: str, bead: str, state: dict[str, Any], dry: bool, res: dict[str,
-    Any]) -> dict[str, Any]:
+def _update_known(
+    who: Identity, c: dict[str, Any], repo: str, bead: str, state: dict[str, Any], dry: bool, res: dict[str, Any]
+) -> dict[str, Any]:
     """The cause already has a bead: comment on it the runs it has not been told of."""
     entry: dict[str, Any] | None = next((e for e in state.get("filed", []) if e.get("bead") == bead and e.get("repo") == repo), None)
     if entry is None:  # an open bead found by title: remember it, so its runs are commented once
-        entry = {"cause": c["cause"], "repo": repo, "bead": bead, "tokens": sorted(c["tokens"]), "files": c["files"], "runs": [],
-                 "at": time.time()}
+        entry = {
+            "cause": c["cause"],
+            "repo": repo,
+            "bead": bead,
+            "tokens": sorted(c["tokens"]),
+            "files": c["files"],
+            "runs": [],
+            "at": time.time(),
+        }
         if not dry:
             state.setdefault("filed", []).append(entry)
     new = [r_ for r_ in c["runs"] if r_ not in entry["runs"]]
@@ -159,8 +167,9 @@ def _update_known(who: Identity, c: dict[str, Any], repo: str, bead: str, state:
     return res
 
 
-def file_cluster(who: Identity, c: dict[str, Any], state: dict[str, Any], dry: bool = False,
-    repos: Sequence[str] | None = None) -> dict[str, Any]:
+def file_cluster(
+    who: Identity, c: dict[str, Any], state: dict[str, Any], dry: bool = False, repos: Sequence[str] | None = None
+) -> dict[str, Any]:
     """File or update the bead for one recurring cause. -> {action: filed|commented|skipped|none, bead, repo, cause, runs}."""
     repo = owner_repo(c, who.config, repos)
     res = {"cause": c["cause"], "title": c["title"], "repo": repo, "runs": c["runs"], "bead": "", "action": "none"}
@@ -180,22 +189,38 @@ def file_cluster(who: Identity, c: dict[str, Any], state: dict[str, Any], dry: b
     if dry:
         return res
     try:
-        new_id = beadtools.bd_store(who.actor, repo).create(NewBead(title=title, priority=3, labels=["reflect",
-            "cause-{}".format(c["cause"])],
-                                                  description=description(c, old), acceptance_criteria=acceptance(c)))
+        new_id = beadtools.bd_store(who.actor, repo).create(
+            NewBead(
+                title=title,
+                priority=3,
+                labels=["reflect", "cause-{}".format(c["cause"])],
+                description=description(c, old),
+                acceptance_criteria=acceptance(c),
+            )
+        )
     except BdFailure:
         new_id = ""
     if not new_id:
         res["action"] = "failed"
         return res
     res["bead"] = new_id
-    state.setdefault("filed", []).append({"cause": c["cause"], "repo": repo, "bead": new_id, "tokens": sorted(c["tokens"]),
-                                          "files": c["files"], "runs": c["runs"], "at": time.time()})
+    state.setdefault("filed", []).append(
+        {
+            "cause": c["cause"],
+            "repo": repo,
+            "bead": new_id,
+            "tokens": sorted(c["tokens"]),
+            "files": c["files"],
+            "runs": c["runs"],
+            "at": time.time(),
+        }
+    )
     return res
 
 
-def digest(who: Identity, since: float, until: float, dry: bool = False, traces: str | Path | None = None,
-           repos: Sequence[str] | None = None) -> dict[str, Any]:
+def digest(
+    who: Identity, since: float, until: float, dry: bool = False, traces: str | Path | None = None, repos: Sequence[str] | None = None
+) -> dict[str, Any]:
     """-> {window, clusters: [...], actions: [...]}. Files and updates beads unless dry; one digest at a time (a manual run and
     the daily one never both file the cause), the state saved after every bead so a crash loses none."""
     if dry:
@@ -207,14 +232,20 @@ def digest(who: Identity, since: float, until: float, dry: bool = False, traces:
         return {"since": since, "until": until, "items": 0, "clusters": [], "actions": [], "busy": True}
 
 
-def _digest(who: Identity, since: float, until: float, dry: bool, traces: str | Path | None,
-    repos: Sequence[str] | None) -> dict[str, Any]:
+def _digest(who: Identity, since: float, until: float, dry: bool, traces: str | Path | None, repos: Sequence[str] | None) -> dict[str, Any]:
     cs = cluster(items(who.config, since, until, traces))
     out: dict[str, Any] = {"since": since, "until": until, "items": sum(len(c["items"]) for c in cs), "clusters": [], "actions": []}
     state = read_state(who.config)
     for c in cs:
-        row = {"cause": c["cause"], "title": c["title"], "runs": len(c["runs"]), "run_ids": c["runs"], "beads": c["beads"],
-               "files": c["files"], "recurring": is_recurring(c)}
+        row = {
+            "cause": c["cause"],
+            "title": c["title"],
+            "runs": len(c["runs"]),
+            "run_ids": c["runs"],
+            "beads": c["beads"],
+            "files": c["files"],
+            "recurring": is_recurring(c),
+        }
         out["clusters"].append(row)
         if row["recurring"]:
             a = file_cluster(who, c, state, dry, repos)
@@ -247,3 +278,33 @@ def maybe_run(spawner: Spawner, env: Env, cfg: ConfigDir, now: float | None = No
         return ""
     return "started"
 
+
+def report_digest(who: Identity, since_text: str | None, until_text: str | None, *, dry_run: bool, as_json: bool) -> int:
+    now = time.time()
+
+    def at(text: str | None, default: float) -> float:
+        return matchers.window_time(text, now) if text else default
+
+    st = read_state(who.config)
+    last = float(st.get("until") or 0) or now - DAY  # the last digest's end, 3 days back at most
+    since = at(since_text, max(now - 3 * DAY, last))
+    d = digest(who, since, at(until_text, now), dry=dry_run)
+    if not dry_run and not since_text and not d.get("busy"):
+        st = read_state(who.config)
+        st["until"] = now
+        write_state(who.config, st)
+    if as_json:
+        print(json.dumps(d, indent=1, default=str))
+        return 0
+    print(
+        "{:d} bad items in {:d} causes, {:d} recurring{}".format(
+            int(d["items"]), len(d["clusters"]), len(d["actions"]), " (dry run)" if dry_run else ""
+        )
+    )
+    for x in d["actions"]:
+        print(
+            "  {!s:<9} [{}] {} -> {} {} ({:d} runs)".format(
+                x["action"], x["cause"], x["title"][:60], Path(x["repo"]).name or "?", x["bead"] or "-", len(x["runs"])
+            )
+        )
+    return 0

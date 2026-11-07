@@ -53,7 +53,7 @@ class Guarded(Case):
         Guarded.n += 1
         self.bead = BeadId(f"cg-{Guarded.n}")
         self.bd = FakeBeads(actor="tl-me")
-        patch = mock.patch.object(closeguard.wslots, "load_cfg", return_value=mock.Mock(base="origin/main"))
+        patch = mock.patch.object(closeguard.wslots_config, "load_cfg", return_value=mock.Mock(base="origin/main"))
         patch.start()
         self.addCleanup(patch.stop)
 
