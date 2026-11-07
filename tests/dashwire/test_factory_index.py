@@ -12,7 +12,7 @@ from unittest.mock import patch
 import pytest
 from support.dashlogs import RunScript, T
 
-from dash import test_dash_api as fixtures
+from dashwire import test_dash_api as fixtures
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env
 from taskloop_dash.index import Indexer, reindex
