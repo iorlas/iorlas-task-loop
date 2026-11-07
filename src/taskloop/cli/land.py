@@ -41,7 +41,7 @@ def cmd_land(who: Identity, bead: BeadId, sha: str, store: Beads, git: Git, work
     # Direct pushes preserve ancestry. A newer task tip (local or remote) is not part of this receipt.
     checked_head = head if head and git.is_ancestor(where, head, full) else full
     checked_remote = remote_oid if remote_oid and git.is_ancestor(where, remote_oid, full) else ""
-    prior = cleanup.previous(who.config, bead, repo, branch, full)
+    prior = cleanup.previous(who.config, bead, repo, branch, full, real_stores(who.config).run_log)
     row = cleanup.record(log, repo, branch, checked_head, full, "origin", checked_remote, prior)
     cleanup.retry(git, log, row, lambda path: bool(slot_of(repo, path, who, store, strict=True)), profile_slots(repo).base,
                   cfg=who.config, fx=slotfx.FX)
