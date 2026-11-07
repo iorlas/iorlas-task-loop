@@ -32,9 +32,9 @@ from support.narrow import must  # noqa: E402
 from taskloop.adapters import childenv, delegate_wire  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.app.loop.net import NetState  # noqa: E402
+from taskloop.app.workers import call_state as cs  # noqa: E402
 from taskloop.domain import outcome as oc  # noqa: E402
 from taskloop.domain.lanes import policy as lp  # noqa: E402
-from taskloop.stores import call_state as cs  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlkernel.kinds import Kind  # noqa: E402
 

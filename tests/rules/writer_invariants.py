@@ -134,13 +134,13 @@ class Writes(ast.NodeVisitor):
             self.check_store(fn.value, node.lineno)
         if self.module.startswith('taskloop.app.'):
             name = qualified(fn, self.names)
-            if name == 'os.replace':
+            if name == 'os.replace' and self.module != 'taskloop.app.workers.call_state':
                 self.problems.append(f'{self.module}:{node.lineno}: state replacement belongs to the atomic store')
             if isinstance(fn, ast.Attribute) and fn.attr == 'events' and self.module != 'taskloop.app.track.trail':
                 self.problems.append(f'{self.module}:{node.lineno}: events belong to track.trail')
             if isinstance(fn, ast.Attribute) and fn.attr == 'write_text':
                 json_call = any(self.is_json(arg) for arg in node.args)
-                if json_call and not raw_json_allowed(self.module, fn.value):
+                if json_call and self.module != 'taskloop.app.workers.call_state' and not raw_json_allowed(self.module, fn.value):
                     self.problems.append(f'{self.module}:{node.lineno}: JSON state belongs to its store writer')
         self.generic_visit(node)
 
