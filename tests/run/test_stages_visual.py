@@ -30,7 +30,6 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from run.test_stages import StagesTest
-from taskloop.app.artifacts import store
 from taskloop.app.asks import admission
 from taskloop.app.land.rebase import MAX_REBASE_RESETS
 from taskloop.app.pipeline import outcomes
@@ -38,6 +37,7 @@ from taskloop.app.plan.prompts import REPLAN_CAP
 from taskloop.app.run import running as wrunning
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.track import verbs
+from tlartifacts import store
 from tlkernel.artifact import ArtifactSlot
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId

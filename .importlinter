@@ -7,6 +7,7 @@ root_packages =
     delegate
     taskloop_dash
     tlkernel
+    tlartifacts
     msgspec
     re
     urllib
@@ -37,7 +38,6 @@ allow_indirect_imports = True
 ignore_imports =
     taskloop.adapters.** -> re
     taskloop.domain.**.matchers -> re
-    taskloop.domain.matchers -> re
     delegate.domain.**.matchers -> re
 
 [importlinter:contract:contracts-no-network-or-processes]
@@ -50,6 +50,7 @@ forbidden_modules =
     multiprocessing
 allow_indirect_imports = True
 
+# Workspace tests enforce their declared dependencies in tests/rules/test_package_tests.py (TESTISO).
 [importlinter:contract:kernel-imports-nothing-of-ours]
 name = the kernel (tlkernel) imports nothing of ours: no taskloop, no taskloop_dash, no delegate
 type = forbidden
@@ -169,7 +170,7 @@ layers =
     reconcile
     release
     checks
-    track | doctor | artifacts
+    track | doctor
     slots
     asks
 
@@ -221,11 +222,21 @@ forbidden_modules =
     delegate.entry
 allow_indirect_imports = True
 
+[importlinter:contract:package-artifacts-imports-only-the-kernel]
+name = The artifacts package (tlartifacts) imports the kernel and third parties, never the tree or another package
+type = forbidden
+source_modules =
+    tlartifacts
+forbidden_modules =
+    taskloop
+    taskloop_dash
+    delegate
+allow_indirect_imports = True
+
 [importlinter:contract:nobody-imports-a-root]
 name = Nobody imports a root: nodes, run's logic modules and the layers below never import launch, wire or run's composition files
 type = forbidden
 source_modules =
-    taskloop.app.artifacts
     taskloop.app.asks
     taskloop.app.checks
     taskloop.app.doctor
@@ -315,7 +326,7 @@ ignore_imports =
 name = A converted stage imports no host (not the Engine, run, wire or launch)
 type = forbidden
 source_modules =
-    taskloop.app.artifacts
+    tlartifacts
     taskloop.app.checks
     taskloop.app.doctor
     taskloop.app.loop

@@ -14,6 +14,7 @@ from tlkernel import log as rec
 from tlkernel.dash import Phase
 from tlkernel.log import CallTokens
 from tlkernel.runlife import Liveness
+from tlkernel.stuck import open_episode
 from tlkernel.trace import Tokens
 from tlkernel.wire import Rec
 
@@ -81,7 +82,7 @@ class Run:
     exit_code: int | None  # the last call's worker exit code, when it gave one
     said: tuple[rec.Said, ...] = ()  # the engine's comments (and the owner's notes it passed on), oldest first
     assumed: int = 0  # Assumed records: what the planner planned around
-    stuck: rec.Stuck | None = None  # the stuck episode still open at the run's newest record (stuck_of)
+    stuck: rec.Stuck | None = None  # the stuck episode still open at the run's newest record (open_episode)
     waits: tuple[Wait, ...] = ()  # the ended waits (a lane, the network, a resource, a lock ...)
     records: tuple[rec.EngineLog, ...] = ()  # drawer-only rows, never attached by the snapshot fold
     budgets: tuple[StepBudget, ...] = ()
@@ -140,20 +141,6 @@ def open_wait(records: Sequence[rec.EngineLog]) -> rec.WaitStart | None:
     return list(waits.values())[-1] if waits else None
 
 
-def stuck_of(records: Sequence[rec.EngineLog]) -> rec.Stuck | None:
-    """The newest Stuck whose episode is still open: a silent one until any later record but a Beat or a Stuck, a same_red one until
-    a later round that is green or red another way (domain/stuck.py writes them by the same rule)."""
-    last: rec.Stuck | None = None
-    for r in records:
-        if isinstance(r, rec.Stuck):
-            last = r
-        elif last is None or isinstance(r, rec.Beat):
-            continue
-        elif last.why == "silent" or (isinstance(r, rec.Checks) and (not r.run.failed or r.run.signature() != last.sig)):
-            last = None
-    return last
-
-
 def run_of(name: str, records: Sequence[rec.EngineLog], now: float) -> Run:
     """Whole-log convenience wrapper; readers keep FoldState and append to it instead."""
     return run_from(name, fold(FoldState(), records), now)
@@ -205,7 +192,7 @@ def latest(state: FoldState, r: rec.EngineLog) -> FoldState:
     """Single-value facts and the stuck episode; never keep unshown rows."""
     state = state.replace(first_t=r.t if state.first_t is None else state.first_t,
                           last_t=max(state.last_t, r.t) if state.first_t is not None else r.t,
-                          stuck=stuck_of([state.stuck, r]) if state.stuck else stuck_of([r]))
+                          stuck=open_episode([state.stuck, r]) if state.stuck else open_episode([r]))
     if isinstance(r, rec.RunStart) and state.start is None:
         return state.replace(start=r)
     if isinstance(r, rec.CallEnd):
