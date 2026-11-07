@@ -1,5 +1,5 @@
 """Review behaviour on fake ports, without constructing the Engine."""
-from support.review_host import FakeReview
+from tlwork.testing import FakeReview
 
 
 def test_leftovers_are_visible_in_the_ledger_and_added_once(workdir):
