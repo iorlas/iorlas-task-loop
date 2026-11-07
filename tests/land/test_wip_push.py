@@ -15,7 +15,7 @@ from tltestkit.plans import CLEAN, PLAN, WRITE
 
 # isort: split
 from taskloop.adapters.git import RealGit
-from taskloop.app.land.outbound import Outbound
+from taskloop.app.land.push import Outbound
 from taskloop.app.run.engine import Engine
 from tlkernel.gitfacts import GitOutcome
 
@@ -42,7 +42,7 @@ class WipPush(EngineTest):
         def fetched(_git, wt, remote, ref):  # the engine's git is scripted here: read the real clone for what it last fetched
             return gitq.git("rev-parse", "--verify", "-q", f"refs/remotes/{remote}/{ref.removeprefix('refs/heads/')}", cwd=str(wt))
 
-        with mock.patch.object(RealGit, "push_lease", spy), mock.patch("taskloop.app.land.outbound.last_fetched", fetched):
+        with mock.patch.object(RealGit, "push_lease", spy), mock.patch("taskloop.app.land.push.last_fetched", fetched):
             rc, _ = self.run_engine(RUN)
         assert rc == 0, self.blocked
         assert seen == [WIP] * len(seen)
@@ -115,7 +115,7 @@ class WipPush(EngineTest):
             ),
         )
         (self.wt / ".gitattributes").write_text("*.bin filter=lfs diff=lfs merge=lfs -text\n")
-        with mock.patch("taskloop.app.land.outbound.shutil.which", return_value="/usr/bin/git-lfs"):
+        with mock.patch("taskloop.app.land.push.shutil.which", return_value="/usr/bin/git-lfs"):
             Outbound(e).wip_push(1)
         assert [c[0] for c in calls] == ["lfs", "push"]
 

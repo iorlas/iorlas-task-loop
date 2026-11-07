@@ -240,7 +240,7 @@ R1 applies only where named. Moving an Engine method into a file and passing the
 | app/land/gate.py | Gate checks and proof token | C/E, capture/issue ordering; D.F02 | U ⚠; R |
 | app/land/lander.py | Optimistic/locked delivery state machine | E/C/S, host/parts split still aliases Engine; R1 | R ⚠; R |
 | app/land/lander_host.py | Union of land host surfaces | E/C/S, typing sum does not hide transaction; R1 | R ❌; V |
-| app/land/outbound.py | Delivery argv/LFS/data sync | E/S, exact pushed ref and separate effects | U ⚠; R |
+| app/land/push.py | Delivery argv/LFS/data sync | E/S, exact pushed ref and separate effects | U ⚠; R |
 | app/land/push.py | Validate token and push under land lock | E/C/S, proof authority, fence and ambiguous remote result | U ⚠; R |
 | app/land/rebase.py | Resume-branch rebase and recovery choice | E/S/P, conflict snapshot, salvage limits and restart | U ⚠; R |
 | app/land/restart.py | Preserve conflicting branch and reset planning | E/S/P, state invalidation spans host members | U ⚠; R |

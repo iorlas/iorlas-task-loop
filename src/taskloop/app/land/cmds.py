@@ -10,7 +10,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.procport import Ran
 from tlkernel.slots import SlotGitError
 
-from taskloop.app.land.push_evidence import failure
+from taskloop.app.land.push import failure
 from taskloop.stores.runlog import RunLog
 
 T = TypeVar("T")
