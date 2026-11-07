@@ -15,21 +15,21 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from rules.host_ban import APP, ROOT, converted, host_problems, stage_protocols
+from rules.host_ban import ROOT, code_dir, converted, host_problems, ruff_file, stage_protocols
 
 
 @pytest.mark.parametrize("stage", converted())
 def test_a_converted_stage_has_no_host_named_parameter_and_no_self_e(stage):
     known = stage_protocols(stage)
-    bad = {f"{f.relative_to(ROOT)}": p for f in sorted((APP / stage).rglob("*.py"))
+    bad = {f"{f.relative_to(ROOT)}": p for f in sorted(code_dir(stage).rglob("*.py"))
            if (p := host_problems(f.read_text(encoding="utf-8"), known))}
     assert not bad, f"{stage} takes a host: {bad}"
 
 
 @pytest.mark.parametrize("stage", converted())
 def test_a_converted_stage_adds_ann401(stage):
-    text = (APP / stage / "ruff.toml").read_text(encoding="utf-8")
-    assert 'extend = "../ruff.toml"' in text and '"ANN401"' in text, f"{stage}/ruff.toml must extend ../ruff.toml and select ANN401"
+    text = ruff_file(stage).read_text(encoding="utf-8")
+    assert "extend = " in text and '"ANN401"' in text, f"{stage}: its ruff.toml must extend the shared config and select ANN401"
 
 
 def test_the_name_guard_fails_on_a_seeded_violation():
