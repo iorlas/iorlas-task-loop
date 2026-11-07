@@ -58,7 +58,7 @@ Storage only. The in-memory `Checkpoint` and the flat `RunState` (engine attribu
 | owner | section record | fields |
 |---|---|---|
 | plan | `PlanSection` | plan_data, brief_hash, snap, planner_ref, planned, replans, extra, rebase_resets, plan_log |
-| write | `WriteSection` | writer, writer_family, writer_fallback, fallback_lane, handoff, stage_tree, denials |
+| write | `WriteSection` | writer, writer_family (opaque progress identity), handoff, stage_tree, denials |
 | land | `LandSection` | pending_land_validation, leftovers, followup_ids, fixes |
 | look | `LookSection` | look_notes, look_unjudged, look_done, rendered_names, last_reqs, render_stale (LOOK_FIELDS plus render_stale) |
 | review | `ReviewState` (existing) | review |

@@ -101,8 +101,8 @@ class PreparedCall:
 def prepare_call(input: NodeInput, context: ExecutionContext, producer: str) -> PreparedCall:
     r = input.request
     semantics = digest([
-        producer, input.node, input.prompt, input.schema, r.role, r.task, r.authored_by,
-        r.thread, r.unattended, r.timeout_s, r.idle_s, sorted(r.only_family), sorted(r.engine_only), r.engine_only_advisory,
-        r.writer_exec_allow, sorted(r.read_roots), *([r.instructions_ref] if r.instructions_ref else []),
+        producer, input.node, input.prompt, input.schema, r.role, r.task, r.reviewer_other_family,
+        r.thread, r.boundary, r.unattended, r.timeout_s, r.idle_s, r.prefer, sorted(r.engine_only), r.engine_only_advisory,
+        r.writer_exec, *([r.instructions_ref] if r.instructions_ref else []),
     ])
     return PreparedCall(r, semantics, context)

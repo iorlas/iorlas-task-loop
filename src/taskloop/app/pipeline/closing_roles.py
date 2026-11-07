@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from typing import Protocol
 
 from tlkernel import fence
+from tlkernel import runoutcome as oc
+from tlkernel.askspec import AskSpec
 from tlkernel.beadsport import Beads
 from tlkernel.checkpoint import Checkpoint, CloseIntent
 from tlkernel.delegate import Permanence
@@ -14,8 +16,6 @@ from tlkernel.ports import Clock
 from tlkernel.stagefacts import RunLogPort
 
 from taskloop.app.pipeline.closing_record import RecordRecords
-from taskloop.domain import outcome as oc
-from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes.pause_reasons import Producer
 
 

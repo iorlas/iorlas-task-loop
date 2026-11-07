@@ -15,7 +15,6 @@ from jsonl_log.cursor import _parse  # shelf lacks: a public parse of in-memory 
 
 from support.memcheckpoints import MemCheckpointRows
 from support.memdoc import MemDoc
-from taskloop.stores.api import DocSet
 from taskloop.stores.books import CheckpointBook
 from taskloop.stores.bundle import Stores
 from taskloop.stores.files import temp_leases
@@ -34,6 +33,7 @@ from tlkernel.profile_changes import ProfileChange
 from tlkernel.queue_doc import QueueDoc
 from tlkernel.queue_state import QueueState
 from tlkernel.rotating import RotatingJsonl
+from tlkernel.storeapi import DocSet
 from tlkernel.stores import JsonlStore
 from tlkernel.trace import RunTrace
 
@@ -118,17 +118,20 @@ class MemLockTable:
     def hold(self, what: LockWhat, ident: str, holder: str, *, timeout: float | None = None,
              waiting: Callable[[LockRecord | None], None] | None = None) -> Generator[LockRecord]:
         key = (what.value, ident)
-        end = None if timeout is None else time.monotonic() + timeout
+        limit = 30.0 if timeout is None else timeout
+        end = time.monotonic() + limit
         told = False
         with self.cond:
             while (cur := self.held.get(key)) is not None and self.alive(cur.pid):
                 if waiting is not None and not told:
                     told = True
                     waiting(cur)
-                left = None if end is None else end - time.monotonic()
-                if left is not None and left <= 0:
+                left = end - time.monotonic()
+                if left <= 0:
+                    if timeout is None:
+                        raise AssertionError(f"lock {what.value}-{ident} did not settle in {limit:g} s")
                     raise LockTimeout("{}-{}".format(*key), cur)
-                self.cond.wait(0.05 if left is None else min(left, 0.05))
+                self.cond.wait(min(left, 0.05))
             rec = LockRecord(what=what, holder=holder, pid=self.pid, t=time.time())
             self.held[key] = rec
         try:

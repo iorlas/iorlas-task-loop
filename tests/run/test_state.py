@@ -52,10 +52,8 @@ SAMPLE: dict[str, Any] = {
     "accepted": [0],
     "accepted_new": ["f.txt"],
     "denials": ["rm"],
-    "writer": WriterSession(delegate="w1", ctx=5, seen=["a"], last_stage=True),
+    "writer": WriterSession(seen=["a"], last_stage=True),
     "writer_family": "codex",
-    "writer_fallback": True,
-    "fallback_lane": "L",
     "look_notes": ["n"],
     "look_unjudged": {"i": "why"},
     "look_done": 1,
@@ -164,7 +162,7 @@ class Park(Case):
         snap = BriefSnap(fields={"now": "1"}, issue_type="", deps=[], comments=[])
         b.state.snap, b.state.brief_hash, b.state.plan_data = snap, "now", None
         ck = stored(b)
-        Resume(b, FakeHeadHistory(), ReviewGlue(b), state_names()).restore(ck, late=True)
+        Resume(b, b, b, FakeHeadHistory(), ReviewGlue(b), state_names()).restore(ck, late=True)
         kept = set(KEEP_FOR_ACTIVE)
         for name in state_names():
             if name in kept:
@@ -176,7 +174,7 @@ class Park(Case):
 
     def test_an_edit_from_outside_hands_back_only_what_every_resume_keeps(self):
         _a, b = self.parked()
-        Resume(b, FakeHeadHistory(), ReviewGlue(b), state_names()).restore(stored(b), late=False)
+        Resume(b, b, b, FakeHeadHistory(), ReviewGlue(b), state_names()).restore(stored(b), late=False)
         for name in LATE:
             assert getattr(b.state, name) == getattr(RunState(), name), name
         assert (b.filed, b.unfiled) == ([], [])  # filed titles are the late ones too
@@ -220,7 +218,7 @@ class Park(Case):
         assert (ck.step, ck.stage) == ("write", 2)
         b = Host()
         b.stores = a.stores
-        Resume(b, FakeHeadHistory(), ReviewGlue(b), state_names()).restore(ck, late=False)
+        Resume(b, b, b, FakeHeadHistory(), ReviewGlue(b), state_names()).restore(ck, late=False)
         assert b.leftovers == a.leftovers
         assert b.leftovers[0]["origin"] == "review"
         assert restarted(b.state).leftovers == a.leftovers
@@ -249,9 +247,11 @@ class OldCheckpoint(Case):
     def test_an_old_checkpoint_gives_the_look_stage_its_fields_and_saves_them_back(self):
         old = json.loads((ROOT / "tests" / "fixtures" / "checkpoint_v3_look.json").read_text(encoding="utf-8"))
         old["v"] = Checkpoint.V  # this test covers the look fields; foreign envelope versions are refused separately
+        old["state"]["writer"].pop("delegate", None)
+        old["state"]["writer"].pop("ctx", None)
         ck = wire.load(Checkpoint, old)
         h = Host()
-        Resume(h, FakeHeadHistory(), ReviewGlue(h), state_names()).restore(ck, late=True)
+        Resume(h, h, h, FakeHeadHistory(), ReviewGlue(h), state_names()).restore(ck, late=True)
         assert (h.look.notes, h.look.unjudged, h.look.done) == (
             ["the main screen shows the list"], {"look judge, round 2": "no lane: busy"}, 2)
         reqs = [{"method": "Shots", "names": ["home.png"]}]

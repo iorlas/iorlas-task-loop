@@ -48,7 +48,7 @@ def ck(step="write", stage=1) -> Checkpoint:
 class Apply(Case):
     def test_a_mid_stage_resume_goes_on_at_the_same_stage_and_round(self):
         h = Host()
-        plan, stage, state = Resume(h, FakeHeadHistory(), ReviewGlue(h), state_names()).apply(ck(), Decision(kind="resume", stage=1))
+        plan, stage, state = Resume(h, h, h, FakeHeadHistory(), ReviewGlue(h), state_names()).apply(ck(), Decision(kind="resume", stage=1))
         assert (plan, stage, state) == (PLAN, 1, {"rounds": 2, "n": 3, "feedback": "fb"})
         assert (h.state.plan_data, h.plan_summary, h.state.accepted, h.published) == (PLAN, "two stages", [0], 1)
 
@@ -58,7 +58,7 @@ class Apply(Case):
         written: list[object] = []
         h.stores = SimpleNamespace(check_run=lambda rid, _: SimpleNamespace(get=lambda: run, write=written.append))
         progress = StageProgress(write=ANSWER)
-        _, _, state = Resume(h, FakeHeadHistory(), ReviewGlue(h), state_names()).apply(
+        _, _, state = Resume(h, h, h, FakeHeadHistory(), ReviewGlue(h), state_names()).apply(
             ck(step="review").replace(progress=progress), Decision(kind="resume", stage=1))
         assert state == {"rounds": 2, "n": 3, "feedback": "fb", "review_from": wire.dump(progress)}
         assert (h.last_run, written) == (run, [run])
@@ -67,13 +67,13 @@ class Apply(Case):
         h = Host()
         h.stores = SimpleNamespace(check_run=lambda rid, _: SimpleNamespace(get=lambda: None))
         progress = StageProgress(write=ANSWER)
-        _, _, state = Resume(h, FakeHeadHistory(), ReviewGlue(h), state_names()).apply(
+        _, _, state = Resume(h, h, h, FakeHeadHistory(), ReviewGlue(h), state_names()).apply(
             ck(step="review").replace(progress=progress), Decision(kind="resume", stage=1))
         assert state == {"rounds": 2, "n": 3, "feedback": "fb"}
 
     def test_every_stage_accepted_goes_straight_to_land_with_no_stage_state(self):
         h = Host()
-        plan, stage, state = Resume(h, FakeHeadHistory(), ReviewGlue(h), state_names()).apply(
+        plan, stage, state = Resume(h, h, h, FakeHeadHistory(), ReviewGlue(h), state_names()).apply(
             ck(step="land", stage=2), Decision(kind="land", stage=2, why="confirmed"))
         assert (plan, stage, state) == (PLAN, 2, None)
         assert "straight to land" in h.notes[-1]

@@ -38,8 +38,8 @@ def sample() -> Checkpoint:
     base = other(Checkpoint)
     state = base.state.replace(
         planner_ref="planner", planned=2, replans=3, extra=4, rebase_resets=5,
-        fixes=6, accepted_new=["new"], denials=["denied"], writer_family="family", writer_fallback=True,
-        fallback_lane="lane", stage_tree="tree", leftovers=[{"title": "left"}], followup_ids={"left": "tl-2"},
+        fixes=6, accepted_new=["new"], denials=["denied"], writer_family="family",
+        stage_tree="tree", leftovers=[{"title": "left"}], followup_ids={"left": "tl-2"},
         look_notes=["note"], look_unjudged={"look": "busy"}, look_done=7, render_stale=True,
     )
     return base.replace(state=state, closed=True, gate_tail="tail", progress=StageProgress(red=1, failed=["check"]))
@@ -213,7 +213,7 @@ def test_pipeline_v2_upgrade_adds_sections_without_migrating_checkpoints():
         dbparts.launch(con, readonly=False, parts=[pipeline])
         assert con.execute("SELECT rev, body FROM checkpoint").fetchall() == [(7, body)]
         assert con.execute("SELECT * FROM checkpoint_section").fetchall() == []
-        assert con.execute("SELECT version FROM schema_part WHERE name='pipeline'").fetchone() == (3,)
+        assert con.execute("SELECT version FROM schema_part WHERE name='pipeline'").fetchone() == (pipeline.version,)
     finally:
         con.close()
 

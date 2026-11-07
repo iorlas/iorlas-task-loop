@@ -23,11 +23,12 @@ import support.paths  # noqa: E402, F401
 from support import dlcall  # noqa: E402
 from support.argv_of import argv_of  # noqa: E402
 
-from taskloop.adapters import childenv, delegate_wire  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
+from taskloop.adapters import delegate_wire  # noqa: E402
 from taskloop.app.workers import call_state as cs  # noqa: E402
-from taskloop.domain import outcome as oc  # noqa: E402
 from taskloop.domain.lanes import policy as lp  # noqa: E402
+from tlkernel import childenv  # noqa: E402
+from tlkernel import runoutcome as oc  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlkernel.kinds import Kind  # noqa: E402
 from tltestkit.narrow import must  # noqa: E402
@@ -72,8 +73,8 @@ class Fake(Case):
     # --- the seam itself -------------------------------------------------------------------------------------------
 
     def test_argv_uses_only_flags_the_contract_lists(self):
-        argv = argv_of(self.req(thread="writer", authored_by="a", call_id="c", brief_path="b.md", schema_path="s.json",
-                        writer_exec_allow=[["just", "shot"]]))
+        argv = argv_of(self.req(thread="writer", reviewer_other_family=True, call_id="c", brief_path="b.md", schema_path="s.json",
+                        writer_exec=True))
         assert "--host" not in argv
         assert "--no-wait" not in argv
         flags = {x for x in argv if x.startswith("--")}

@@ -2,10 +2,9 @@
 
 from pathlib import Path
 
-from support.checked import run_checked
-
 from taskloop.adapters.git import RealGit
 from tlkernel.env import snapshot
+from tltestkit.checked import run_checked
 
 
 def git(cwd: Path, *args: str) -> None:

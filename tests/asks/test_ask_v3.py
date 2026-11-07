@@ -16,7 +16,8 @@ from support.tiers import domain
 
 from taskloop.app.asks import intake, raiser, sweeps
 from taskloop.app.asks.paths import ask_marker
-from taskloop.domain.asks import similar, specs
+from taskloop.domain.asks import similar
+from tlkernel import askspecs as specs
 from tlkernel import wire
 from tlkernel.ask import Ask, AskAnswer, SimilarRef, ThreadEntry
 from tlkernel.askenums import AskStatus

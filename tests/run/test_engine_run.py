@@ -12,10 +12,11 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes, procsim
 from support.aging import age
 from support.cfgs import PROFILE_PATTERNS
-from support.engine_case import CAP_PARKS, EngineTest, full, no_repo, sh, stop
+from support.engine_case import CAP_PARKS, EngineTest, full, no_repo, stop
 from support.plans import BEAD, CAT_ENV, CLEAN, FALSE, PLAN, WRITE, review, verdict
 
 from tltestkit.checks import ck
+from tltestkit.shellkit import sh
 
 # isort: split
 import hashlib
@@ -42,11 +43,11 @@ from taskloop.app.run import engine, entry, running
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.slots.lease import Lease
 from taskloop.app.track import outcome_line
-from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks import retry
 from taskloop.domain.lanes.matchers import read_only_command
-from taskloop.domain.plan.matchers import AcceptanceText
 from taskloop.domain.write.matchers import count_tests
+from tlkernel import checkmatchers as check_matchers
+from tlkernel.acceptancetext import AcceptanceText
 from tlkernel.config import EngineConfig
 from tlkernel.enums import Result
 from tlkernel.env import snapshot
@@ -339,27 +340,18 @@ class EngineRunTest(EngineTest):
         assert re.search(r"log: \S+checks[\\/]\d\d-.*\.r1\.log", fix)
         assert len(fix[fix.index("These checks fail"):]) > 500
 
-    def test_the_threshold_defaults_by_the_session_family(self):
-        _rc, s = self.two_writes(family="openai", ctx_k=90)  # codex: 100, claude would go on to 150
-        assert s.calls[2][1] == "ref-write"
-        _rc, s = self.two_writes(family="openai", ctx_k=110)
-        assert s.calls[2][1] is None
-        assert "fresh writer: session at 110k" in self.eng.log_path.read_text()
-
-    def test_write_fresh_above_k_is_the_repos_to_set(self):
-        _rc, s = self.two_writes(ctx_k=60, write_fresh_above_k=50)
-        assert s.calls[2][1] is None
-        _rc, s = self.two_writes(ctx_k=500, write_fresh_above_k=0)  # 0: never
+    def test_context_size_does_not_remove_the_delta(self):
+        _rc, s = self.two_writes(family="openai", ctx_k=500)
         assert s.calls[2][1] == "ref-write"
 
-    def test_round_three_after_a_fresh_start_resumes_the_fresh_session(self):
+    def test_later_rounds_keep_sending_deltas_at_any_context_size(self):
         red = procsim.fake("green-on-d4", lambda cwd, env: (0 if procsim.f_txt(cwd) == "d4" else 1, ""))
         ex = [{"family": "claude", "usage": {"context_k": k}} for k in (160, 40, 40)]
         with self.store.stub(show=dict(BEAD, description=self.MARK)):
             rc, s = self.run_engine({"plan": [self.plan_with(red)], "write": [WRITE] * 3, "review": [CLEAN]}, j_extra={"write": ex})
         assert rc == 0, self.blocked
-        assert [c[1] for c in s.calls[1:4]] == [None, None, "ref-write"]  # fresh at 160k, then resumed
-        assert self.MARK in s.prompts[2]
+        assert [c[1] for c in s.calls[1:4]] == [None, "ref-write", "ref-write"]
+        assert self.MARK not in s.prompts[2]
         assert self.MARK not in s.prompts[3]
 
     def test_a_resumed_write_gets_the_engines_brief_back_in_the_worktree(self):

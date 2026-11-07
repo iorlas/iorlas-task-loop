@@ -1,9 +1,9 @@
 """Recording structural fakes for the pipeline close capabilities."""
 from collections.abc import Callable, Sequence
 
-from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes.pause_reasons import Producer
 from tlkernel import fence
+from tlkernel.askspec import AskSpec
 from tlkernel.bead import Bead
 from tlkernel.checkpoint import Checkpoint
 from tlkernel.delegate import Permanence
@@ -177,3 +177,11 @@ class FakeRoundSteps:
     def round_step(self, step: Step, ck: Checkpoint | None) -> Step:
         self.calls.append((step, ck))
         return self.following
+
+
+class FakeVersion:
+    def __init__(self, value: str = "test") -> None:
+        self.value = value
+
+    def __call__(self) -> str:
+        return self.value

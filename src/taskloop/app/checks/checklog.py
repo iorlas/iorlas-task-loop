@@ -14,12 +14,12 @@ from tlkernel.ids import CheckId
 from tlkernel.log import CheckEnd, Checks, CheckStart
 
 from taskloop.app.checks.host import CheckHost
+from taskloop.app.checks.ports import GateLog
 from taskloop.domain.checks.specs import gate_items, repo_check
-from taskloop.stores.runlog import RunLog
 
 
 class CheckLog:
-    def __init__(self, log: RunLog) -> None:
+    def __init__(self, log: GateLog) -> None:
         self.log = log
         self.env: dict[str, str] = {}
         self.logged: set[CheckId] = set()

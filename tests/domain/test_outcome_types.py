@@ -12,8 +12,8 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from taskloop.app.loop import verdict as vd
-from taskloop.domain import outcome as oc
-from taskloop.domain.asks import specs as askspecs
+from tlkernel import askspecs
+from tlkernel import runoutcome as oc
 from tlkernel.checks import RoundVerdict, round_verdict_of
 from tlkernel.enums import Outcome, Result
 from tlkernel.kinds import ASKS, FAULTS, FINISH, PAUSES, Action, Infra, Kind, Owner, Task, fault_of

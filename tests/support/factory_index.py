@@ -1,5 +1,6 @@
 """Prepare fixture runs through the production indexer before asking a view to read."""
 
+from support.waits import settle
 from taskloop_dash.index import Indexer
 from tlkernel import beadrows, factorydb
 from tlkernel.ids import loop_key
@@ -9,8 +10,7 @@ from tlkernel.paths import ConfigDir
 def ingest(cfg, now):
     cfg = cfg if isinstance(cfg, ConfigDir) else ConfigDir(cfg)
     with Indexer(cfg, clock=lambda: now) as index:
-        while not index.pass_once():
-            pass
+        settle(index)
 
 
 def seed_beads(cfg, repo, beads, now):

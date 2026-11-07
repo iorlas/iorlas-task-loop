@@ -18,6 +18,7 @@ from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
 from support.plans import PLAN, WRITE
 
+import tltestkit.shellkit
 from taskloop.app.asks import ask_verbs, intake, owner_verbs
 from taskloop.app.pipeline import requests
 from taskloop.app.run.layout import prune_run_logs
@@ -85,10 +86,13 @@ class RequestFile(Case):
 
         t = threading.Thread(target=taker)
         t.start()
-        for i in range(60):
-            owner_verbs.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", note=f"n{i}")
-        stop.set()
-        t.join()
+        try:
+            for i in range(60):
+                owner_verbs.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", note=f"n{i}")
+        finally:
+            stop.set()
+            t.join(30)
+        assert not t.is_alive(), "owner request taker did not settle in 30 s"
         got = requests.take(self.cfg, RUN)
         taken.extend(n.text for n in (got.notes if got else []))
         assert taken == [f"n{i}" for i in range(60)]
@@ -180,7 +184,7 @@ class EngineRequests(te.EngineTest):
         assert (close.outcome.value, close.why_code) == ("blocked", WhyCode.PAUSED)
         assert close.why.startswith("parked: by the owner")
         assert self.eng.checkpoints.read() is not None
-        te.sh("git", "rev-parse", "--verify", "-q", "task/t-1", cwd=self.wt)  # the branch is kept
+        tltestkit.shellkit.sh("git", "rev-parse", "--verify", "-q", "task/t-1", cwd=self.wt)  # the branch is kept
         assert self.eng.result().outcome == "parked"
 
     def test_stop_ends_the_run_through_the_halt_path(self):

@@ -1,4 +1,4 @@
-"""Every recoverable lane termination leaves evidence even when disk writes fail."""
+"""Every recoverable loop termination leaves evidence even when disk writes fail."""
 import errno
 import io
 from contextlib import redirect_stderr
@@ -18,13 +18,13 @@ from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
 
-class LaneExits(Case):
+class LoopExits(Case):
     def setup_method(self):
         temp = TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.files = LoopFiles(ConfigDir(Path(temp.name)), "repo", lambda _: True, lambda: 42)
         self.directory = self.files.runs()
-        (self.directory / "factory-lane-2.log").symlink_to("factory-123.log")
+        (self.directory / "factory-loop-2.log").symlink_to("factory-123.log")
         self.env = Mock(pid=123, repo="/repo", version="1", code_dir="/code")
         self.env.cfgdir = self.files.cfg
         self.env.profile.return_value = RepoProfile()
@@ -43,7 +43,7 @@ class LaneExits(Case):
             "low_disk", "system_exit", "lost",
         )
 
-    def test_clean_and_signal_exit_once_with_lane_pid_time_and_reason(self):
+    def test_clean_and_signal_exit_once_with_loop_pid_time_and_reason(self):
         for signalled in (False, True):
             with self.subTest(signalled=signalled):
                 loop = self.loop()
@@ -53,7 +53,7 @@ class LaneExits(Case):
                     assert loop.main() == 0
                 loop.write_exit()  # an atexit callback cannot duplicate the line
                 rec = self.records()[-1]
-                assert (rec["pid"], rec["t"], rec["lane"]) == (123, 42, 2)
+                assert (rec["pid"], rec["t"], rec["loop"]) == (123, 42, 2)
                 assert rec["reason"] == ("signal" if signalled else "drained")
         assert len(self.records()) == 2
 
@@ -93,7 +93,7 @@ class LaneExits(Case):
         self.env.sleep.assert_called_once()
         loop.write_exit()  # the normal boundary and a later callback still write only once
         assert len(self.records()) == 1
-        assert (self.records()[0]["reason"], self.records()[0]["lane"]) == ("signal", 2)
+        assert (self.records()[0]["reason"], self.records()[0]["loop"]) == ("signal", 2)
         self.env.fetch.assert_not_called()
         self.env.claim.assert_not_called()
 
@@ -147,12 +147,12 @@ class LaneExits(Case):
         assert len(self.records()) == 1
         assert self.records()[0]["reason"] == "low_disk"
 
-    def test_last_exit_per_lane_skips_torn_and_legacy_lines(self):
+    def test_last_exit_per_loop_skips_torn_and_legacy_lines(self):
         path = self.directory / "factory.log"
         path.write_text('legacy output\n{"pid":\n[]\n')
         for pid, reason in ((123, "crash"), (456, "signal"), (123, "low_disk")):
             self.files.write_exit({"pid": pid, "t": 42, "started": 40, "reason": reason})
-        assert [(r["lane"], r["reason"]) for r in exits.last_by_lane(self.directory)] == [(2, "low_disk"), (456, "signal")]
+        assert [(r["loop"], r["reason"]) for r in exits.last_by_loop(self.directory)] == [(2, "low_disk"), (456, "signal")]
 
 
 def test_exit_row_carries_config_hash_and_a_crash_never_has_empty_detail(tmp_path):

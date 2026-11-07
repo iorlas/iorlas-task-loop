@@ -1,5 +1,5 @@
 """Shared review switch policy."""
-from taskloop.domain.work import switch
+from tlkernel import workswitch as switch
 from tltestkit.case import Case
 
 

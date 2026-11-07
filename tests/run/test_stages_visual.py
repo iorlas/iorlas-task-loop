@@ -24,6 +24,7 @@ from support.plans import BEAD, CLEAN, FALSE, PLAN, WRITE
 from support.spawn import port_git, real_spawner
 from support.who import who
 
+import tltestkit.shellkit
 from run.test_stages import StagesTest
 from taskloop.app.asks import admission
 from taskloop.app.land.rebase import MAX_REBASE_RESETS
@@ -77,12 +78,12 @@ class VisualWork(StagesTest):
         procsim.fake("shot-tool", self.shot(0), args=True)
         procsim.fake("shot-tool-fails", self.shot(3), args=True)
         base = Path(self.tmp.name, "base-files")
-        te.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        tltestkit.shellkit.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
         (base / "shots.json").write_text(json.dumps(self.TABLE))
-        te.sh("git", "add", "-A", cwd=base)
-        te.sh("git", "commit", "-qm", "shot table", cwd=base)
-        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
-        te.sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "add", "-A", cwd=base)
+        tltestkit.shellkit.sh("git", "commit", "-qm", "shot table", cwd=base)
+        tltestkit.shellkit.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+        tltestkit.shellkit.sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
 
     def go(self, answers, table="shots.json", **cfg):
         raw = {"visual_paths": self.VIS, "shot_table": table}
@@ -143,7 +144,8 @@ class VisualWork(StagesTest):
 
     def test_the_judge_is_from_the_other_family_like_the_review(self):
         _rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
-        assert s.calls[2][2] is not None  # authored-by: the writer's family
+        assert s.requests[2].reviewer_other_family
+        assert s.results[2]["family"] != s.results[1]["family"]
 
     def test_a_defect_goes_back_to_the_writer_as_text_then_a_second_render_passes(self):
         defect = self.judged(("main.png, top right", "The Save button is clipped at the right edge"))
@@ -194,10 +196,10 @@ class VisualWork(StagesTest):
     def test_the_planner_is_told_the_rule_and_the_repos_shot_methods(self):
         base = Path(self.tmp.name, "base-files")
         (base / "lifesim.json").write_text((Path(__file__).resolve().parents[1] / "fixtures" / "lifesim_shot_table.json").read_text())
-        te.sh("git", "add", "-A", cwd=base)
-        te.sh("git", "commit", "-qm", "lifesim table", cwd=base)
-        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
-        te.sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "add", "-A", cwd=base)
+        tltestkit.shellkit.sh("git", "commit", "-qm", "lifesim table", cwd=base)
+        tltestkit.shellkit.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+        tltestkit.shellkit.sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
         _rc, s = self.go({"plan": [PLAN], "write": [self.write()], "review": [CLEAN]}, table="lifesim.json")
         planner = s.prompts[0]
         assert "changes how something looks" in planner
@@ -266,15 +268,15 @@ class VisualWork(StagesTest):
         (e.evidence_dir / "main.png").write_bytes(b"x")
         assert e.pictures.shots() == ["main.png"]
 
-    @te.POSIX_CHECK
+    @tltestkit.shellkit.POSIX_CHECK
     def test_a_failed_shot_command_is_a_defect_even_if_it_left_a_picture(self):
         self.TABLE["methods"][0]["argv"] = ["shot-tool-fails", "{out}", "{args}"]
         try:
             base = Path(self.tmp.name, "base-files")
             (base / "shots.json").write_text(json.dumps(self.TABLE))
-            te.sh("git", "commit", "-qam", "failing shot", cwd=base)
-            te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
-            te.sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
+            tltestkit.shellkit.sh("git", "commit", "-qam", "failing shot", cwd=base)
+            tltestkit.shellkit.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+            tltestkit.shellkit.sh("git", "pull", "-q", "origin", "main", cwd=self.wt)
             _rc, s = self.go({"plan": [PLAN], "write": [self.write(), self.write()], "review": [CLEAN]})
         finally:
             self.TABLE["methods"][0]["argv"] = ["shot-tool", "{out}", "{args}"]
@@ -370,18 +372,18 @@ class ResumeCount(StagesTest):
 
     def behind_branch(self, conflict=False):
         """task/t-1 with one commit of earlier work, and main moved on (touching the same file when `conflict`)."""
-        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
         (self.wt / ("a.txt" if conflict else "g.txt")).write_text("earlier work\n")
-        te.sh("git", "add", "-A", cwd=self.wt)
-        te.sh("git", "commit", "-qm", "wip (t-1): blocked", cwd=self.wt)
-        te.sh("git", "checkout", "-q", "-", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "add", "-A", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "commit", "-qm", "wip (t-1): blocked", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-q", "-", cwd=self.wt)
         base = Path(self.tmp.name, "base-moves")
-        te.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        tltestkit.shellkit.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
         (base / ("a.txt" if conflict else "h.txt")).write_text("main moved on\n")
-        te.sh("git", "add", "-A", cwd=base)
-        te.sh("git", "commit", "-qm", "main moves", cwd=base)
-        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
-        te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "add", "-A", cwd=base)
+        tltestkit.shellkit.sh("git", "commit", "-qm", "main moves", cwd=base)
+        tltestkit.shellkit.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+        tltestkit.shellkit.sh("git", "fetch", "-q", "origin", cwd=self.wt)
 
     def test_the_owners_answer_is_no_failed_plan_even_at_the_limit(self):
         ask = dict(WRITE, question="Which format?")
@@ -447,19 +449,19 @@ class ResumeCount(StagesTest):
     def wip_branch(self, steps, main, files=("a.txt",)):
         """task/t-1 with one wip commit per entry of `steps` (the text every file in `files` gets), a checkpoint mid-stage, and
         main moved on to `main` in the same files. The slot is left detached at the base, as a parked run leaves it."""
-        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
         for n, text in enumerate(steps):
             for f in files:
                 (self.wt / f).write_text(text + "\n")
-            te.sh("git", "add", "-A", cwd=self.wt)
-            te.sh("git", "commit", "-qm", f"wip (t-1): {n}", cwd=self.wt)
+            tltestkit.shellkit.sh("git", "add", "-A", cwd=self.wt)
+            tltestkit.shellkit.sh("git", "commit", "-qm", f"wip (t-1): {n}", cwd=self.wt)
         base = Path(self.tmp.name, "base-moves")
-        te.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        tltestkit.shellkit.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
         for f in files:
             (base / f).write_text(main + "\n")
-        te.sh("git", "add", "-A", cwd=base)
-        te.sh("git", "commit", "-qm", "main moves", cwd=base)
-        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+        tltestkit.shellkit.sh("git", "add", "-A", cwd=base)
+        tltestkit.shellkit.sh("git", "commit", "-qm", "main moves", cwd=base)
+        tltestkit.shellkit.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
         e = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
@@ -471,7 +473,7 @@ class ResumeCount(StagesTest):
         e.tree.reset(must_bead(BEAD))
         e.plan_data = plan_of(PLAN)
         e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")
-        te.sh("git", "checkout", "-q", "--detach", "origin/main", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-q", "--detach", "origin/main", cwd=self.wt)
 
     def last_trace(self):
         return json.loads((homes.config_dir() / "traces.jsonl").read_text().splitlines()[-1])

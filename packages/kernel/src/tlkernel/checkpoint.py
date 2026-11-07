@@ -1,4 +1,4 @@
-"""Checkpoint: where a run stopped, so the next run on the same bead resumes there (cursor and section rows, v5).
+"""Checkpoint: where a run stopped, so the next run on the same bead resumes there (cursor and section rows, v6).
 
 Two parts. `RunState` is everything the run carries across a park, one typed value; adding a field is one edit here (the
 engine reads and writes it through `engine.state`, `dump()` is the payload). `Checkpoint` is that state plus where the run
@@ -30,11 +30,8 @@ class Handoff(Rec, frozen=False):
 
 @final
 class WriterSession(Rec, frozen=False):
-    """The writer's thread: its delegate session, how much context it holds (k tokens, None = unknown), the brief and plan hashes it has
-    seen, and whether the last stage's note reached it."""
+    """The brief and plan hashes the writer has seen, and whether the last stage's note reached it."""
 
-    delegate: str | None = None
-    ctx: float | None = None
     seen: list[str] = msgspec.field(default_factory=list)
     last_stage: bool = False
 
@@ -88,9 +85,7 @@ class RunState(Rec, frozen=False, forbid_unknown_fields=False):
     accepted_new: list[str] = msgspec.field(default_factory=list)
     denials: list[str] = msgspec.field(default_factory=list)
     writer: WriterSession = msgspec.field(default_factory=WriterSession)
-    writer_family: str | None = None
-    writer_fallback: bool = False
-    fallback_lane: str = ""
+    writer_family: str | None = None  # opaque delegate-reported writer identity for restoring stage progress
     look_notes: list[str] = msgspec.field(default_factory=list)
     look_unjudged: dict[str, str] = msgspec.field(default_factory=dict)
     look_done: int = 0
@@ -116,7 +111,7 @@ class RunState(Rec, frozen=False, forbid_unknown_fields=False):
 @final
 class EndRec(Rec):
     """The final outcome of a run (after POLICY and any escalation), kept before the close's first effect, with what the effects read of
-    the decision: a restart rebuilds the same plan from it. `spec` is the ask (domain/asks/spec.AskSpec) as JSON text."""
+    the decision: a restart rebuilds the same plan from it. `spec` is the ask (tlkernel/askspec.AskSpec) as JSON text."""
 
     run: str  # the run that closed (its id is in every key; the checkpoint's own `run` is the run that saved it)
     kind: str
@@ -180,7 +175,7 @@ class StageProgress(Rec):
 
 @final
 class Checkpoint(Rec):
-    V: ClassVar[int] = 5
+    V: ClassVar[int] = 7
     bead: str
     run: str
     t: float
@@ -220,11 +215,9 @@ class PlanSection(Rec):
 class WriteSection(Rec):
     """Persisted write progress."""
 
-    V: ClassVar[int] = 1
+    V: ClassVar[int] = 3
     writer: WriterSession = msgspec.field(default_factory=WriterSession)
-    writer_family: str | None = None
-    writer_fallback: bool = False
-    fallback_lane: str = ""
+    writer_family: str | None = None  # opaque delegate-reported writer identity for restoring stage progress
     handoff: Handoff = msgspec.field(default_factory=Handoff)
     stage_tree: str = ""
     denials: list[str] = msgspec.field(default_factory=list)
@@ -267,7 +260,7 @@ class Shared(Rec):
 class CursorBody(Rec):
     """Checkpoint envelope without stage-owned state."""
 
-    V: ClassVar[int] = 5
+    V: ClassVar[int] = 7
     bead: str
     run: str
     t: float

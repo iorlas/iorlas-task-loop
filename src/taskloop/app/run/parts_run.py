@@ -4,9 +4,10 @@ import threading
 from functools import cached_property
 from typing import Any, Protocol
 
+from tlkernel import childenv
 from tlkernel.kinds import Kind
 
-from taskloop.adapters import childenv, deadline, ident, slotcheck
+from taskloop.adapters import deadline, ident, slotcheck
 from taskloop.adapters.agent import last_event_t, new_live
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.asks.closing import ClosingTrust
@@ -14,9 +15,9 @@ from taskloop.app.checks.step import StageChecks
 from taskloop.app.land.closing import LandHistory
 from taskloop.app.pipeline.journal import Journal, JournalHost
 from taskloop.app.pipeline.reflect import Reflector
-from taskloop.app.pipeline.reload import Reload, ReloadHost
+from taskloop.app.pipeline.reload import Reload, ReloadChoice, ReloadCounters, ReloadTransfer
 from taskloop.app.pipeline.requests import OwnerRequests
-from taskloop.app.pipeline.resume import Resume, ResumeHost
+from taskloop.app.pipeline.resume import Resume, ResumePlanning, ResumeProgress, ResumeRecords
 from taskloop.app.pipeline.review_glue import ReviewGlue, ReviewLists, ReviewOwner
 from taskloop.app.pipeline.stuck import StuckHost, StuckTick
 from taskloop.app.pipeline.waits import Waits, WaitsHost
@@ -34,12 +35,12 @@ from taskloop.app.track.closing import TrailEvents
 from taskloop.app.workers.delegation import Delegation
 
 
-class ResumeBinding[T](ResumeHost[T], ReviewOwner, Protocol):
+class ResumeBinding[T](ResumeProgress, ResumePlanning[T], ResumeRecords, ReviewOwner, Protocol):
     @property
     def review(self) -> ReviewLists: ...
 
 
-class ReloadBinding(ReloadHost, Protocol):
+class ReloadBinding(ReloadCounters, ReloadTransfer, ReloadChoice, Protocol):
     @property
     def held_lock(self) -> HeldLock: ...
 
@@ -61,23 +62,24 @@ class RunParts(Plumbing):
     shell = cached_property(Shell)
     @cached_property
     def reload(self: ReloadBinding) -> Reload:
-        return Reload(self, ReexecBook(self.home), TrailEvents(), lambda: installed_newer(self.env),
+        return Reload(self, self, self, ReexecBook(self.home), TrailEvents(), lambda: installed_newer(self.env),
                       lambda: locked_slot(self.held_lock), childenv, ident)
 
     @cached_property
     def records(self: JournalBinding) -> Journal:
-        return Journal(self, lambda: locked_slot(self.held_lock), repo_of)
+        return Journal(self, lambda: locked_slot(self.held_lock), repo_of, ident.plugin_version)
     shared = cached_property(Shared)
     @cached_property
     def stuck(self: StuckHost) -> StuckTick: return StuckTick(self, last_event_t)
     requests = cached_property(OwnerRequests)
 
     @cached_property
-    def resume[T](self: ResumeBinding[T]) -> Resume[T]: return Resume(self, LandHistory(self.git), ReviewGlue(self), state_names())
+    def resume[T](self: ResumeBinding[T]) -> Resume[T]:
+        return Resume(self, self, self, LandHistory(self.git), ReviewGlue(self), state_names())
 
     @cached_property
     def reflector(self) -> Reflector:
-        return Reflector(self, ClosingTrust(), childenv.delegate_call_env)
+        return Reflector(self, self, self, ClosingTrust(), childenv.delegate_call_env)
 
     def sh(self, cmd: Any, timeout: float = 3600, check: bool = False, save: Any = None, env: Any = None, pin: bool = False,
            what: str = "command", cwd: Any = None, stop: threading.Event | None = None, *, network: bool = False) -> tuple[int, str]:

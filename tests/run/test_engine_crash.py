@@ -12,8 +12,8 @@ from support.engine_case import EngineTest
 from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.domain import effects
-from taskloop.domain import outcome as oc
 from taskloop.domain.lanes import pauses
+from tlkernel import runoutcome as oc
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
 from tlkernel.parks import ParkStore

@@ -36,7 +36,6 @@ from contracts import samples as S  # noqa: E402
 from support import (  # noqa: E402
     tlbd,
 )
-from support.checked import run_checked  # noqa: E402
 from support.spawn import real_spawner  # noqa: E402
 from support.tlmain import tl_main  # noqa: E402
 from support.who import who  # noqa: E402
@@ -49,6 +48,7 @@ from tlkernel.ask import Ask  # noqa: E402
 from tlkernel.askstore import AskStore  # noqa: E402
 from tlkernel.ids import BeadId  # noqa: E402
 from tlkernel.paths import ConfigDir  # noqa: E402
+from tltestkit.checked import run_checked  # noqa: E402
 from tltestkit.narrow import must  # noqa: E402
 
 

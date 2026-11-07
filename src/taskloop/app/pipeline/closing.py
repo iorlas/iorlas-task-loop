@@ -7,20 +7,20 @@ import time
 from dataclasses import dataclass, replace
 from typing import Protocol, assert_never
 
+from tlkernel import askspecs
+from tlkernel import runoutcome as oc
 from tlkernel.checkpoint import Checkpoint, Notes
 from tlkernel.enums import Outcome
 from tlkernel.kinds import ASKS, PAUSES, Kind
 from tlkernel.parks import Park
 from tlkernel.run import RunFinish
 
-from taskloop.adapters import beadtools
 from taskloop.app.pipeline import ended as stored_end
+from taskloop.app.pipeline.adapter_ports import PeekBead
 from taskloop.app.pipeline.closing_roles import CloseReport, CloseResources, CloseState
 from taskloop.app.pipeline.outcomes import DONE
 from taskloop.app.pipeline.ports import AskRules, ParkBook
 from taskloop.domain import effects
-from taskloop.domain import outcome as oc
-from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.interpret import CheckpointLedger, interpret
 from taskloop.domain.lanes import pauses
 
@@ -70,10 +70,11 @@ class Closer:
     """The close of a run: the order of its steps."""
 
     def __init__(self, state: CloseState, resources: CloseResources, report: CloseReport,
-                 parts: CloseParts, rules: AskRules, parks: ParkBook) -> None:
+                 parts: CloseParts, rules: AskRules, parks: ParkBook, peek: PeekBead) -> None:
         self.state = state
         self.resources = resources
         self.report = report
+        self.peek = peek
         self.rules = rules
         self.parks = parks
         self.decide = parts.decide
@@ -149,7 +150,7 @@ class Closer:
         """Persist pause wakes; the close plan files an empty plan's owner ask."""
         if self.resources.dry or done.finished or (done.kind is not Kind.NOOP and done.kind not in PAUSES):
             return
-        bead = beadtools.peek(self.resources.store, self.resources.bead)
+        bead = self.peek(self.resources.store, self.resources.bead)
         if bead is None:
             return
         rec = self.parks.paused( bead, done.kind, self.resources.run_id, self.resources.clock.now(), reason=self.state.pause_reason,

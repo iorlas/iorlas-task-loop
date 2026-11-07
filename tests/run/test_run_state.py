@@ -26,8 +26,8 @@ from taskloop.app.pipeline.finish import terminal_state
 from taskloop.app.pipeline.lifecycle import Ended, Lifecycle
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
-from taskloop.domain import outcome as oc
-from taskloop.domain.asks import specs as askspecs
+from tlkernel import askspecs
+from tlkernel import runoutcome as oc
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
 from tlkernel.run import RunManifest, RunState

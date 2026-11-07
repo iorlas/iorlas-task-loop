@@ -3,8 +3,8 @@ writer and the verifier differ (tl-bxk.10.28). Pure; the facts about the repo co
 from collections.abc import Callable, Collection
 from typing import Final
 
-from taskloop.domain.review.matchers import CodeNames, EngineActions
 from tlkernel.answers import LEGACY_KINDS, ROUTED_KINDS
+from tlkernel.reviewmatchers import CodeNames, EngineActions
 
 UNCHECKED_KINDS: Final = ROUTED_KINDS + LEGACY_KINDS  # one of these unchecked is verified before the land
 # a kind may move only toward a stricter route (never to a looser one): the engine settles the loosest, asks the strictest

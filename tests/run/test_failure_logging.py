@@ -1,10 +1,10 @@
 """Best-effort run operations leave tracebacks when they fail instead of hiding missing evidence."""
-
 import sys
 from pathlib import Path
 from unittest import mock
 
-from taskloop.adapters import childenv, ident
+from taskloop.adapters import closes, ident
+from tlkernel import childenv
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -17,7 +17,7 @@ from taskloop.app.pipeline.closing_decide import Decide
 from taskloop.app.pipeline.journal import Journal
 from taskloop.app.pipeline.reflect import Reflector
 from taskloop.app.pipeline.reload import Reload
-from taskloop.domain import outcome as oc
+from tlkernel import runoutcome as oc
 from tlkernel.enums import Outcome
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
@@ -34,7 +34,7 @@ class FailureLogging(Case):
         host.clock.now.return_value = 100
         with mock.patch("taskloop.adapters.closes.recent_closes", side_effect=OSError("unreadable")), \
                 mock.patch.object(Decide, "repo_id", return_value="repo"):
-            assert Decide(host).run(oc.make(Kind.PAUSE_LANE, "paused")) == Kind.PAUSE_LANE
+            assert Decide(host, closes.recent_closes).run(oc.make(Kind.PAUSE_LANE, "paused")) == Kind.PAUSE_LANE
         self.assert_traceback(host.warn.call_args.args[0], "could not read retry history: unreadable")
 
     def test_settle_failure_is_logged_and_does_not_replace_the_run_outcome(self):
@@ -43,13 +43,13 @@ class FailureLogging(Case):
                 host = mock.Mock(run_id="r1")
                 with mock.patch("taskloop.app.pipeline.journal.RunLocator"), \
                         mock.patch("taskloop.app.pipeline.journal.finish_run", side_effect=error):
-                    Journal(host, lambda: "", lambda _git, _wt: "repo").settle(RunState.PARKED, "paused")
+                    Journal(host, lambda: "", lambda _git, _wt: "repo", ident.plugin_version).settle(RunState.PARKED, "paused")
                 self.assert_traceback(host.warn.call_args.args[0], "could not settle run r1")
 
     def test_reflection_catch_all_logs_traceback(self):
         host = mock.Mock()
         host.git.diff_entries.return_value = []
-        reflector = Reflector(host, ClosingTrust(), childenv.delegate_call_env)
+        reflector = Reflector(host, host, host, ClosingTrust(), childenv.delegate_call_env)
         with mock.patch.object(reflector, "worth_asking", return_value=True), \
                 mock.patch.object(reflector, "reflect_prompt", side_effect=RuntimeError("prompt")):
             assert reflector.reflect_run("done", "finished") is None
@@ -65,5 +65,5 @@ class FailureLogging(Case):
     def test_reload_lookup_catch_all_logs_traceback(self):
         host = mock.Mock(dry=False, argv=["run-task", "t-1"])
         host.newer_fn.side_effect = RuntimeError("lookup")
-        Reload(host, FakeReexecs(), FakeTrail(), lambda: None, lambda: "", childenv, ident).safe_point("land")
+        Reload(host, host, host, FakeReexecs(), FakeTrail(), lambda: None, lambda: "", childenv, ident).safe_point("land")
         self.assert_traceback(host.warn.call_args.args[0], "RuntimeError: lookup")

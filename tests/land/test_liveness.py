@@ -9,7 +9,7 @@ from support.narrow_hosts import Stopped, table_kit
 
 from taskloop.app.land.gate import Problem, ProblemKind
 from taskloop.app.land.state import Placing
-from taskloop.domain.lanes.liveness import LIVENESS, LivenessCaps
+from tlkernel.lanesliveness import LIVENESS, LivenessCaps
 from tltestkit.case import Case
 
 

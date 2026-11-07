@@ -1,8 +1,8 @@
 """`Checks` over an argv: the command is exec'd as given, in its own process group, with no shell in between."""
 
-from taskloop.adapters.childenv import check_environment
 from taskloop.adapters.procs import capture as run_group
 from tlkernel.checksport import CheckResult, CheckSpec
+from tlkernel.childenv import check_environment
 from tlkernel.env import Env
 
 TIMEOUT_NOTE = "\n(timed out after %g min: everything the check started was stopped)"

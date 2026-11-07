@@ -1,6 +1,7 @@
 """Engine values at the manifest's single terminal-write boundary."""
 import json
 
+from tlkernel import runoutcome as oc
 from tlkernel import wire
 from tlkernel.checkpoint import EndRec
 from tlkernel.enums import Result
@@ -9,7 +10,6 @@ from tlkernel.run import RunFinish, RunState
 
 from taskloop.app.pipeline import ended
 from taskloop.app.pipeline import trace as runtrace
-from taskloop.domain import outcome as oc
 
 
 def terminal_state(outcome: oc.RunOutcome) -> RunState:

@@ -3,17 +3,17 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
+from tlkernel import runoutcome as oc
 from tlkernel import wire
 from tlkernel.ask import AskDetail, AskOption
 from tlkernel.askenums import AskClass
+from tlkernel.askspec import AskSpec
 from tlkernel.checkpoint import Checkpoint, CloseIntent, EndRec, PauseFacts, Producer
 from tlkernel.dash import OwnerCause
 from tlkernel.delegate import Permanence
 from tlkernel.kinds import Kind
 
 from taskloop.domain import effects
-from taskloop.domain import outcome as oc
-from taskloop.domain.asks.spec import AskSpec
 
 
 def spec_text(spec: AskSpec | None) -> str:

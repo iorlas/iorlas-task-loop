@@ -148,7 +148,7 @@ delegate says a subscription lane is out.
 An ask is one record, `~/.config/task-loop/asks/<bead>.json` (`tlkernel.ask.Ask`, `v` 2; an older or unknown `v` reads as
 no ask), written only through `AskStore`. It has a class, one decision sentence (at most 120 characters, ends in `?`), at most 3
 `tried` bullets and 2-5 options, recommended first, each with its consequence and a typed action; the card text is rendered from those
-fields (`domain/asks/text.py`), never copied from a worker. The engine lints every ask before it files one; a failed lint files nothing
+fields (`tlkernel/asktext.py`), never copied from a worker. The engine lints every ask before it files one; a failed lint files nothing
 and the stop is an engine fault. Owner classes: open_question, external_fact, unproven, no_progress, cap_reached, over_budget,
 missing_criteria, too_big. Infra trouble (lane failure, schema or bad request, sandbox denial, stale base, missing tool or recipe, a
 wrong tree) is never an ask: the bead stays open with an engine fault.
@@ -275,11 +275,10 @@ review: `off`, or the label `review-off` on a bead, lands a stage write, checks,
 `skipped`, reason `review-off`); `sampled` reviews every Nth stage and the last. The last stage maps the acceptance: with review off a
 deterministic check stands in (each acceptance item must be named by a plan case, which the engine runs); an item no case names gets the
 review after all. The drawer header shows `review: on|off|sampled`.
-**Writer family.** `engine.writer_family` (a list, e.g. `["openai"]`) pins the write node: every `worker` call carries `--only-family F`
-(delegate 0.54+), so the writer is never another family; the planner and the reviewer (and the reflect call) are not filtered, the reviewer
-stays the other family through `--authored-by`. The label `writer-family:<f>` on a bead overrides the list. When delegate cannot place the
-write (`only_family_unready`, or `no_lane` while pinned) the run pauses with the pin and the reason in words. With `["openai"]` and review
-off, no call reaches the claude family but the planner and reflect (tests/review/test_writer_family.py); `tl doctor` prints the setting.
+**Writer policy.** The profile keeps product booleans: `engine.writer_exec` (default false) requests host execution for the writer;
+`engine.reviewer_other_family` (default true) requests another family for reviewer calls. Delegate's routing settings own the writer pin,
+exec grant and read roots. The bead label `writer-family:<f>` is forwarded as an opaque `prefer` string on worker calls. A refused
+preference pauses with its reason; `tl doctor` prints the booleans. Profiles carrying retired harness keys are refused as unknown.
 **Who runs a check.** A repo check is the writer's to run when its longest green run took at most `engine.writer_check_max_s`, or says
 `"writer": true` (`false`: never) or its own `"writer_check_max_s"`; a `run: gate` check always is the engine's. `"tail_log"` names a log of the tree
 whose first 20 `error CS` lines join a red's output when it shows none (the analyzers default to `client/Logs/unity-project-files.log`).
@@ -441,7 +440,7 @@ It keeps polling an empty queue; repeating start prints `already running`. Start
 print PID, version, repo, log path and dashboard addresses; status includes current beads when known and exits 1 when not running.
 `tl factory stop [--repo DIR] [--now]` uses the same graceful stop as `tl stop`, targeting each live loop's recorded PID and start time.
 `tl factory logs [--repo DIR] [-n N] [-f]` prints the last 50 lines by default and optionally follows the console log.
-The first lane's PID is `loop.pid` under `<config>/loop/<repo-key>/`; each `factory-lane-K.log` links to its `factory-<pid>.log`.
+The first loop's PID is `loop.pid` under `<config>/loop/<repo-key>/`; each `factory-loop-K.log` links to its `factory-<pid>.log`.
 On macOS an available `caffeinate -i -w <pid>` prevents idle sleep while the first newly launched loop lives. No OS service
 is installed; manually run `tl factory start` again after a reboot. Start/stop also work from a phone's SSH terminal on the host.
 Stopping a repo's factory leaves the shared dashboard available.

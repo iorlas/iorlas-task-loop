@@ -4,15 +4,16 @@ owner. The 2026-10-21 night: three beads (a hand-written .meta against its sibli
 an evidence file that proved it) each waited hours for an ask a supervisor settled in a minute by reading."""
 from typing import Any
 
+from tlkernel import followkeys as followups
+from tlkernel import workswitch as switch
 from tlkernel.answers import VERDICTS
+from tlkernel.reviewkinds import UNCHECKED_KINDS
 from tlkernel.stagefacts import RunFacts
 
 from taskloop.app.review.host import ReviewHand, ReviewPorts
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.review.verify_prompt import VERIFY_PROMPT
-from taskloop.domain import followups
-from taskloop.domain.review.kinds import UNCHECKED_KINDS
-from taskloop.domain.work import switch, visual
+from taskloop.domain.work import visual
 from taskloop.domain.work.skip import SkipKind
 
 Item = dict[str, Any]
