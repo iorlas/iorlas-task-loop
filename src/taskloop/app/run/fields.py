@@ -77,7 +77,10 @@ class RunFields(StateAttrs, FieldParts):
     moved: bool
     ctx: RunContext
     log: RunLog
-    checkout: Checkout
+
+    @property
+    def checkout(self) -> Checkout:  # LandParts builds it on first use
+        raise NotImplementedError
 
     def __init__(self, bead: BeadId, wt: str, cfg: EngineConfig, dry_run: bool, verbose: bool, store: Any, route: Any,
                  fresh: bool, claim: fence.Claim | None, who: Identity) -> None:

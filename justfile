@@ -45,7 +45,7 @@ tools:
 # Static gate: ruff + pyrefly + import-linter contracts. Seconds. The structural rules (caps, placement, ratchets) are tests/rules, run by `just test`.
 check: lint types rules
 
-# lint and types look only at the .py files this change touches (against origin/main, plus the working tree); lint-all and types-all read the whole tree.
+# lint looks only at the .py files this change touches (against origin/main, plus the working tree); lint-all reads the whole tree; types always does.
 lint:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -57,13 +57,8 @@ lint-all:
     set -euo pipefail
     uv tool run "ruff@$(just pin ruff)" check
 
+# The whole tree, not the changed files: a signature change breaks callers in files the change did not touch (tl-cbj4). About 1 s wall, 8 s CPU.
 types:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    files=$(just changed)
-    [ -z "$files" ] || { unset VIRTUAL_ENV; uv sync --frozen -q; echo "$files" | xargs uv tool run "pyrefly@$(just pin pipx:pyrefly)" check; }
-
-types-all:
     #!/usr/bin/env bash
     set -euo pipefail
     unset VIRTUAL_ENV  # a caller under `uv run --script` (release.py) passes its script env, which has no dev group
