@@ -60,6 +60,24 @@ def test_preflight_and_rerun(tmp_path, monkeypatch):
     assert carve.plan(tmp_path) == ({}, [], [])
 
 
+def test_rerun_preserves_historic_move_scripts_and_tests(tmp_path, monkeypatch):
+    tree(tmp_path)
+    historic = [tmp_path / 'dev/move_write_kernel.py',
+                tmp_path / 'tests/dev/test_move_write_kernel.py']
+    text = f'from {carve.APP} import parks\n'
+    for path in historic:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+    current = tmp_path / 'dev/current.py'
+    current.write_text(text)
+    monkeypatch.setattr(sys, 'argv', ['carve_asks', '--root', str(tmp_path)])
+    carve.main()
+    carve.main()
+    assert all(path.read_text() == text for path in historic)
+    assert current.read_text() == 'from tlasks import parks\n'
+    assert carve.plan(tmp_path) == ({}, [], [])
+
+
 def test_domain_collision_chooses_a_free_name(tmp_path, monkeypatch):
     app, _domain = tree(tmp_path, clash=True)
     (app / 'intake.py').write_text('from taskloop' '.domain.asks import hold\n')

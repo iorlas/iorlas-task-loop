@@ -4,7 +4,7 @@ from tlkernel import wire
 from tlkernel.answers import WriteAnswerLook
 from tlkernel.checkpoint import StageProgress
 
-from taskloop.app.write.state import StageState
+from tlwork.write.state import StageState
 
 
 def progress_of(s: StageState) -> StageProgress:

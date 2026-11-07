@@ -2,13 +2,13 @@
 and where strays go."""
 import shutil
 from pathlib import Path
-from typing import Any
 
 from tlkernel.gitport import Git
 from tlkernel.newfiles import new_file_kind
+from tlkernel.wire import Open
 
-from taskloop.app.write.host import NewFilesHost
-from taskloop.app.write.review_prompt import NEW_FILES_TEXT
+from tlwork.write.host import NewFilesHost
+from tlwork.write.review_prompt import NEW_FILES_TEXT
 
 
 class NewFiles:
@@ -48,7 +48,7 @@ class NewFiles:
     def new_files_brief(self, unexplained: list[str]) -> str:
         return NEW_FILES_TEXT + "".join(f"- {p}\n<content>\n{self.new_file_view(p)}\n</content>\n" for p in unexplained)
 
-    def undecided_new(self, unexplained: list[str], review: Any) -> list[str]:
+    def undecided_new(self, unexplained: list[str], review: Open) -> list[str]:
         """The unexplained files the review neither accepted nor rejected (a .meta follows the file it belongs to)."""
         said = set(review.get("accept_files") or []) | set(review.get("reject_files") or [])
         return [p for p in unexplained if p not in said and not (p.endswith(".meta") and p[:-5] in said)]

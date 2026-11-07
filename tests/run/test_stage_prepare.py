@@ -3,13 +3,13 @@ from unittest import mock
 
 from support.engine_case import EngineTest
 
-from taskloop.app.write.prepare import PREPARED, Prepare
-from taskloop.app.write.rounds import run_round_step
-from taskloop.app.write.state import RoundResult, StageState
 from tlkernel.enums import Step
 from tlkernel.procport import Ran
 from tltestkit.cfgs import plan_of
 from tltestkit.plans import PLAN
+from tlwork.write.prepare import PREPARED, Prepare
+from tlwork.write.rounds import run_round_step
+from tlwork.write.state import RoundResult, StageState
 
 
 class StagePrepare(EngineTest):

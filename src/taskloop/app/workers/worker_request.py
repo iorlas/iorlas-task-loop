@@ -3,10 +3,9 @@
 import json
 from typing import Final, Protocol
 
-from tlasks import trustroots
 from tlgate.domain import planref
 from tlgate.runner import Checker
-from tlkernel import askspecs, childenv
+from tlkernel import askspecs, childenv, trustroots
 from tlkernel import lanecaps as caps
 from tlkernel import log as rec
 from tlkernel.askspec import AskSpec

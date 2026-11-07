@@ -16,7 +16,7 @@ WRITERS: Final = {
     'ParkStore': {'tlasks.parks', 'tlpipeline.standalone', 'tlkernel.parks'},
     'TraceStore': {'tlpipeline.journal', 'tlkernel.finish_projection'},
     'BadVersionStore': {'taskloop.app.loop.versions'},
-    'HandoffMirrorStore': {'taskloop.app.write.handoff'},
+    'HandoffMirrorStore': {'tlwork.write.handoff'},
     'ReexecNoteStore': {'taskloop.app.release.reexec', 'taskloop.app.release.closing'},
     'NetPauseStore': {'taskloop.app.release.reexec', 'taskloop.app.release.closing'},
     'RunCountersStore': {'tlpipeline.reload'},

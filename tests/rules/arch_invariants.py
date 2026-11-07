@@ -27,7 +27,8 @@ COMPOSITION_ROOTS: Final = frozenset({"launch", "run", "wire"})
 
 
 def app_module(module):
-    for stage, domain in (("review", {"findings", "availability"}), ("plan", {"matchers", "stored"}), ("look", {"matchers", "shotspec"})):
+    for stage, domain in (("review", {"findings", "availability"}), ("plan", {"matchers", "stored"}),
+                          ("look", {"matchers", "shotspec"}), ("write", {"matchers"})):
         if module.startswith(f"tlwork.{stage}.") and module.rsplit(".", 1)[-1] not in domain:
             return module.replace(f"tlwork.{stage}", "taskloop.app." + stage, 1)
     return module
@@ -47,7 +48,7 @@ def slice_problems(graph):
             continue
         for original_target in targets:
             target = original_target
-            if target in {"tlwork", "tlwork.review", "tlwork.work", "tlwork.prompts", "tlwork.plan", "tlwork.look"}:
+            if target in {"tlwork", "tlwork.review", "tlwork.work", "tlwork.prompts", "tlwork.plan", "tlwork.look", "tlwork.write"}:
                 continue
             target = app_module(target)
             bits = target.split(".")

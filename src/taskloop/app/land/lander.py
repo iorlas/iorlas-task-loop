@@ -8,8 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from tlasks import trustroots
-from tlkernel import askspecs
+from tlkernel import askspecs, trustroots
 from tlkernel import log as rec
 from tlkernel.bead import Bead
 from tlkernel.lanesliveness import LIVENESS

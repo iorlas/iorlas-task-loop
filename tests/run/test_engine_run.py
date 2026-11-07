@@ -39,7 +39,6 @@ from taskloop.app.run import engine, entry, running
 from taskloop.app.track import outcome_line
 from taskloop.app.wire import asks as wasks
 from taskloop.domain.lanes.matchers import read_only_command
-from taskloop.domain.write.matchers import count_tests
 from tlasks import admission
 from tlgate.domain import retry
 from tlkernel import checkmatchers as check_matchers
@@ -59,6 +58,7 @@ from tltestkit.cfgs import cfg_with
 from tltestkit.logs import records
 from tltestkit.tmpdir import mkdtemp
 from tlwork.plan.planner import Planner
+from tlwork.write.matchers import count_tests
 
 
 class EngineRunTest(EngineTest):

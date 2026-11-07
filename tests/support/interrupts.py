@@ -15,7 +15,6 @@ from taskloop.adapters import halt, landlock
 from taskloop.app.land.fix import Fixer
 from taskloop.app.land.push import pin_head
 from taskloop.app.run import engine
-from taskloop.app.write.stage_loop import StageLoop
 from taskloop.stores.bundle import Stores
 from tlgate import evidence as check_evidence
 from tlkernel.kinds import Kind
@@ -23,6 +22,7 @@ from tlkernel.paths import ConfigDir
 from tlpipeline.api import Checkpoints, Steps
 from tltestkit import fake_route
 from tltestkit.fake_clock import FakeClock
+from tlwork.write.stage_loop import StageLoop
 
 
 class IdleHeartbeat:

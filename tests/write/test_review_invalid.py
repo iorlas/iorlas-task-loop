@@ -5,13 +5,13 @@ from support.builders import make_engine
 from support.engine_case import EngineTest, stop
 from support.fakes import FakeClock
 
-from taskloop.app.write.state import StageState
 from tlkernel.enums import Outcome
 from tlkernel.kinds import Kind
 from tltestkit import fake_route
 from tltestkit.cfgs import plan_of
 from tltestkit.logs import records
 from tltestkit.plans import BEAD, CLEAN, PLAN, WRITE
+from tlwork.write.state import StageState
 
 
 class ReviewInvalid(EngineTest):

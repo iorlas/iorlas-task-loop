@@ -8,8 +8,8 @@ from tlgate.domain.inputs import matching
 from tlkernel import rundocs
 from tlkernel.checkmatchers import expand_braces
 
-from taskloop.app.write.host import PreparePorts
-from taskloop.app.write.state import StageState
+from tlwork.write.host import PreparePorts
+from tlwork.write.state import StageState
 
 PREPARED = "prepared"
 

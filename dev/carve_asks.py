@@ -133,6 +133,9 @@ def rewrites(root: Path, domains: dict[str, str]) -> tuple[list[tuple[Path, str]
         for path in sorted((root / folder).rglob('*.py')):
             if '_vendor' in path.parts or path.name == Path(__file__).name:
                 continue
+            relative = path.relative_to(root)
+            if relative.match('dev/move_*.py') or relative.match('tests/dev/test_move_*.py'):
+                continue
             text = path.read_text()
             try:
                 new, unsupported = rewrite(text, domains)

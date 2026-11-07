@@ -106,3 +106,5 @@ E1 slice 2: `tlwork.plan` owns plan application and domain code. Shared bead IDs
 
 PR A asks code carve: `packages/asks` (`tlasks`) owns asks, admission, holds, matching, time specifications and parks. Tests remain in `tests/asks`; machine services come through `AsksHost`, built per call by `app/wire/asks.py`.
 E1 slice 3: `tlwork.look` owns look application and domain code and the shot specification helpers. `tlkernel.bdcreate` owns checked bead creation. Look receives the image downscaler through `LookPorts`, bound by run/host.py; the subprocess adapter stays in the shell. Tests remain in their original directories.
+
+E1 slice 4: `tlwork.write` owns write application and domain code; shared trust-root checks live in `tlkernel.trustroots`. Tests remain in their original directories. E1 is complete: review, plan, look and write live in `tlwork`.

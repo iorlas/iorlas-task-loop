@@ -5,8 +5,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import msgspec
 
-from taskloop.app.write.state import WriteState
 from tlkernel.checkpoint import RunState
+from tlwork.write.state import WriteState
 
 OWNED = {"write_rounds", "last_summary", "lane_notes", "strays"}
 

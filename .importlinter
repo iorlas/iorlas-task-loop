@@ -157,7 +157,6 @@ layers =
     wire
     loop
     land
-    write
     report
     reconcile
     release
@@ -297,7 +296,7 @@ source_modules =
     tlasks
     taskloop.app.track
     taskloop.app.workers
-    taskloop.app.write
+    tlwork.write
     taskloop.stores
     taskloop.domain
     taskloop.adapters
@@ -371,7 +370,7 @@ forbidden_modules =
     taskloop.app
     tlwork.plan
     tlwork.review
-    taskloop.domain.write
+    tlwork.write
     tlwork.look
     tlasks
     taskloop.domain.land

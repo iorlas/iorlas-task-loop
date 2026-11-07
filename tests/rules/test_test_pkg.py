@@ -15,7 +15,7 @@ def tree(root: Path) -> None:
         "write/body.py": "from taskloop.app" + ".look import api\n",
         "look/__init__.py": "from ..checks import api\n",
         "checks/__init__.py": "",
-        "checks/api.py": "import taskloop.app.write.body\n",
+        "checks/api.py": "import taskloop.app" + ".write.body\n",
         "plan/api.py": "",
         "plan/__init__.py": "",
     }

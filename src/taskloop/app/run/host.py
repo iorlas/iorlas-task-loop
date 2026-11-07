@@ -17,6 +17,7 @@ from tlwork.review.link_check import LinkCheck
 from tlwork.review.routing import Routing
 from tlwork.review.settles import Settles
 from tlwork.review.verifier import Verifier
+from tlwork.write.handoff import Handoff
 
 from taskloop.adapters import links, looks
 from taskloop.app.run.closer_ports import closer_over
@@ -25,7 +26,6 @@ from taskloop.app.run.parts_plan import PlanParts
 from taskloop.app.run.parts_run import RunParts
 from taskloop.app.workers import asked
 from taskloop.app.workers.worker_call import Ops, WorkerCall
-from taskloop.app.write.handoff import Handoff
 from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.lanes.says import stop_say, stop_why
 from taskloop.stores.runports import RunPorts

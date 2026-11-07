@@ -5,7 +5,7 @@ from pathlib import Path
 
 from rules.gate_rules import parsed
 
-APP_WRITE = Path(__file__).resolve().parents[2] / "src/taskloop/app/write"
+APP_WRITE = Path(__file__).resolve().parents[2] / "packages/work/src/tlwork/write"
 ROUNDS = ("write_round.py", "check_round.py", "review_round.py")
 HANDED = {"last_run", "stuck_why", "last_summary", "writer_family", "write_rounds", "stats"}  # engine fields a round's result carries
 HOST = {"e", "host"}
