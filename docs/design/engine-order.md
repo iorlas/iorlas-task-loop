@@ -57,7 +57,7 @@ Layer = 1 + the highest layer among the parts a part uses (construction or runti
 | 1 | `shell` | `Shell` (`run/shell.py`) | - | bead_env | 9 |
 | 1 | `stage_loop` | `StageLoop` (`write/stage_loop.py`) | - | checkout, reload | 7 |
 | 1 | `tree` | `Tree` (`land/tree.py`) | - | briefs, checkout | 14 |
-| 2 | `fixer` | `Fixer` (`land/fixer.py`) | - | cases, checkout, stage_loop | 12 |
+| 2 | `fixer` | `Fixer` (`land/fix.py`) | - | cases, checkout, stage_loop | 12 |
 | 2 | `hand` | `Handoff` (`write/handoff.py`) | - | briefs, cases, checkout, routing | 16 |
 | 2 | `judge` | `Judge` (`look/judge.py`) | - | cases, pictures, stage_checks | 25 |
 | 2 | `link_check` | `LinkCheck` (`review/link_check.py`) | - | checkout, routing | 6 |

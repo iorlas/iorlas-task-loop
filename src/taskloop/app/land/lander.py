@@ -16,7 +16,7 @@ from tlkernel.lanesliveness import LIVENESS
 from taskloop.adapters.deadline import DeadlineExpired, deadline
 from taskloop.app.asks import trustroots
 from taskloop.app.land import gate
-from taskloop.app.land.fix_outside import FixOutside
+from taskloop.app.land.fix import FixOutside
 from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
 from taskloop.app.land.host import Land, Next, Phase, Placing
 from taskloop.app.land.lander_host import LanderHost, LandHost

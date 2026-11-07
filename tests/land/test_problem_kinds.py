@@ -4,7 +4,7 @@ from unittest.mock import Mock
 from tltestkit.case import Case
 
 # isort: split
-from taskloop.app.land.fix_outside import CAUSE, FixOutside
+from taskloop.app.land.fix import CAUSE, FixOutside
 from taskloop.app.land.gate import Problem, ProblemKind
 from taskloop.domain.land.fix_text import FIX_GOAL, FIX_TEXT, FIX_WHAT
 
