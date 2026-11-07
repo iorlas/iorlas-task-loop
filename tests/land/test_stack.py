@@ -56,7 +56,7 @@ from tlkernel.locks import LockTimeout
 from tlkernel.paths import ConfigDir
 from tlkernel.runkey import BaseSha
 from tlkernel.slots import Checkout, NotARepo, SlotGitError
-from tlpipeline.finish import answer
+from tlpipeline.api import answer
 
 OID: dict[str, str] = {"task/a": "a" * 40, "task/b": "b" * 40}
 

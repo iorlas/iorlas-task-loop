@@ -22,7 +22,7 @@ from tlkernel.dash import Result
 from tlkernel.ids import BeadId, loop_key
 from tlkernel.lookrows import LookRows
 from tlkernel.run import RunState
-from tlpipeline import requests
+from tlpipeline.api import requests
 from tltestkit.logs import typed
 from tltestkit.narrow import must
 from tltestkit.repos import write_repos

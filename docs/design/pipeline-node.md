@@ -153,7 +153,7 @@ P5 (lifecycle and run) is the large slice and waits for the rename freeze; P6 do
 | **P6b** | `requests.py` (151) | Two halves: run consumption and owner verbs using `asks.intake.Intake`, `receipt` | **split**, no port: `pipeline/requests.py` owns `OwnerRequests`, constants, `take` and `peek`, with a local narrow host Protocol and direct `pipeline.blocked.Blocked`; `asks/owner_verbs.py` owns `OwnerVerbs`, `post`, `live`, `newest_run`, using Intake and receipt in asks | run binds `OwnerRequests`; dashboard/CLI use asks owner verbs; all importers follow, no shim |
 | **P6c** | `reload.py` (136) | `loop.versions.Installs`, `release.catalog/pins/reexec`, `slots.engine_lock`, `track.trail`, `adapters.halt.RUN_SLOT`, `ident` | `Reloader` port set: `NewerInstall.newer(env) -> (version, dir) or None`; `ReexecBook` (`net_pause`, `note`, `drop`); `Handoff.exec(argv, env)`; `Trail.event(...)`; the `engine_lock` slot read becomes a plain `slot: str` argument | release/loop/track classes in their stages; bound in `run/` |
 | **P6d** | `reflect.py` (79), `reflect_prompt.py` | `asks.trustroots.refusal(git, wt, base, bead)`; `tlkernel.childenv.delegate_call_env` | `TrustRefusal.refusal(wt, base, bead) -> str or None` port; `childenv` is in the kernel (allowed), so no port for it | asks (`asks/closing.py`) |
-| **P6e** | `resume.py` (196) | `land.gitcall.oneline`; `run.review_glue.apply_review`; `run.state.state_names` | `HeadHistory.oneline(wt, new, old, n) -> str` (land); `apply_review` and `state_names` are run-local: they move with `resume` only if their own imports are free of a stage, else `ReviewRestore.apply(review, *, unchecked, late)` port and `state_names` passed as a tuple | land (`land/closing.py`), root binder |
+| **P6e** | `resume.py` (196) | `land.rebase.oneline`; `run.review_glue.apply_review`; `run.state.state_names` | `HeadHistory.oneline(wt, new, old, n) -> str` (land); `apply_review` and `state_names` are run-local: they move with `resume` only if their own imports are free of a stage, else `ReviewRestore.apply(review, *, unchecked, late)` port and `state_names` passed as a tuple | land (`land/closing.py`), root binder |
 
 Rules as in section 9: a port class lives in the stage that implements it; the pipeline holds the Protocols (`pipeline/ports.py`); each moved file takes `self.host`; `.importlinter` lists and the converted-stage contracts follow the move. Each slice lands green with behaviour unchanged. Order by lowest risk: P6a, P6d, P6b, P6e, P6c.
 
@@ -280,4 +280,6 @@ R1–R6 are done: the pipeline lives in `packages/pipeline` (`tlpipeline`), `run
 
 The 16-member ceiling ratchet in `packages/pipeline/tests/test_role_ceiling.py` scans every pipeline Protocol’s own members. Its `OVER` table records existing exceptions and only shrinks as roles narrow.
 
-Remaining: `tl-e5t0.39.21` (`api.py`) and narrowing `CheckpointHost` (18 own members).
+API done (`tl-e5t0.39.21`): `tlpipeline.api` is the public surface; the rule `tests/rules/test_package_surface.py` fails on any outside import of another tlpipeline module.
+
+Remaining: narrowing `CheckpointHost` (18 own members).

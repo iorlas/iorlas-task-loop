@@ -23,13 +23,13 @@ from tlkernel.procport import Spawner
 from tlkernel.review import Unfiled
 from tlkernel.run import Reexec
 from tlkernel.wire import Open
-from tlpipeline.checkpoints import Checkpoints
+from tlpipeline.api import Checkpoints
 
 from taskloop.adapters import beadtools, ident, treehash
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.land.checkout import Checkout
-from taskloop.app.land.state import LandState
+from taskloop.app.land.host import LandState
 from taskloop.app.look.state import LookState
 from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.state import PlanState

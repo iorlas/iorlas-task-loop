@@ -17,8 +17,7 @@ from taskloop.app.look.state import LookState
 from tlkernel.asked import Asked, Updates
 from tlkernel.checkpoint import RunState
 from tlkernel.config import EngineConfig
-from tlpipeline.blocked import Blocked
-from tlpipeline.leftover_queue import LeftoverQueue
+from tlpipeline.api import Blocked, LeftoverQueue
 
 
 class FakeLookPorts:

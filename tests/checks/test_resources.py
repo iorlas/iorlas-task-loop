@@ -22,7 +22,7 @@ from tltestkit.procsim import real_proc
 from any_lease import Leases
 from support.memstores import fake_stores
 
-from taskloop.app.land import verified
+from taskloop.app.land import gate
 from taskloop.app.wire.brief import held_resources
 from tlgate import resources
 from tlgate.domain.inputs import touched
@@ -243,14 +243,14 @@ class Deferral(Case):
 
     def test_a_deferred_check_with_unchanged_inputs_is_passed_over_and_named(self):
         run = CheckRun(round=1, results=[self.deferred(False)])
-        assert (verified.refusal(run), verified.passed_over(run)) == ("", ["u"])
+        assert (gate.refusal(run), gate.passed_over(run)) == ("", ["u"])
 
     def test_a_deferred_check_with_changed_inputs_waits_for_a_host_with_the_resource(self):
         run = CheckRun(round=1, results=[self.deferred(True)])
-        assert verified.kind_of(run) == "PAUSE_MOVED"
-        assert "labelled needs:unity" in verified.refusal(run)
-        assert verified.moves(run) == ["unity"]
+        assert gate.kind_of(run) == "PAUSE_MOVED"
+        assert "labelled needs:unity" in gate.refusal(run)
+        assert gate.moves(run) == ["unity"]
 
     def test_another_unverified_check_keeps_the_land_a_fault(self):
         other = CheckResult(id=CheckId("r"), cmd="r", group="tests", exit=UNVERIFIED_EXIT, status="unverified")
-        assert verified.kind_of(CheckRun(round=1, results=[self.deferred(True), other])) == "FAULT_LAND"
+        assert gate.kind_of(CheckRun(round=1, results=[self.deferred(True), other])) == "FAULT_LAND"

@@ -17,7 +17,7 @@ from tltestkit.plans import CLEAN, PLAN, WRITE
 from taskloop.app.plan.planner import Planner
 from tlgate import resources
 from tlkernel.config import HostResources
-from tlpipeline.waits import Waits
+from tlpipeline.api import Waits
 
 ANSWERS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 UNITY = {"unity": {"limit": 1}}

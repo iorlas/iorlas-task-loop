@@ -16,7 +16,7 @@ from support.fake_beads import FakeBeads
 from support.fakegit import ScriptedGit
 from support.memstores import fake_stores
 
-from taskloop.app.land.state import LandState
+from taskloop.app.land.host import LandState
 from taskloop.app.look.state import LOOK_FIELDS, LookState
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.sections import checkpoint_hooks, restarted
@@ -30,9 +30,7 @@ from tlkernel.review import (
     Unfiled,
 )
 from tlkernel.run import Round
-from tlpipeline.checkpoints import Checkpoints
-from tlpipeline.resume import KEEP_FOR_ACTIVE, LATE, Resume
-from tlpipeline.review_glue import ReviewGlue
+from tlpipeline.api import KEEP_FOR_ACTIVE, LATE, Checkpoints, Resume, ReviewGlue
 from tlpipeline.testing import FakeHeadHistory
 
 ROOT = Path(__file__).resolve().parents[2]

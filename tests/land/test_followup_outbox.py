@@ -19,7 +19,7 @@ from support.memstores import fake_stores
 from taskloop.adapters.bd import BdRun, BdStore
 from taskloop.app.land.closing import LandFollowUps
 from taskloop.app.land.followups import file_follow_ups
-from taskloop.app.land.state import LandState
+from taskloop.app.land.host import LandState
 from taskloop.app.look.state import LookState
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.state import StateAttrs, carries_state
@@ -31,8 +31,7 @@ from tlkernel.checkpoint import RunState
 from tlkernel.enums import Outcome
 from tlkernel.followkeys import FollowKey
 from tlkernel.ids import BeadId
-from tlpipeline.checkpoints import Checkpoints
-from tlpipeline.closing_notes import FileNotes
+from tlpipeline.api import Checkpoints, FileNotes
 from tltestkit.narrow import must
 
 

@@ -3,8 +3,7 @@ from collections.abc import Callable
 from typing import Any
 
 from tlkernel.envvars import EnvVar
-from tlpipeline.lifecycle import Lifecycle
-from tlpipeline.run import RunBody
+from tlpipeline.api import Lifecycle, RunBody
 
 from taskloop.adapters import beadtools, deadline, ident
 from taskloop.app.land.closing import LandHistory

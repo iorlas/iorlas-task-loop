@@ -7,7 +7,7 @@ from typing import Protocol
 from tlkernel.checks import CheckFaultKind
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env
-from tlkernel.gitport import Git
+from tlkernel.gitport import GateGit
 from tlkernel.ids import TreeSha
 from tlkernel.paths import ConfigDir
 from tlkernel.procport import Spawner
@@ -116,7 +116,7 @@ class CheckHost(Protocol):
     def tree_writer(self) -> TreeWriter: ...
 
     @property
-    def git(self) -> Git: ...
+    def git(self) -> GateGit: ...
 
     def warn(self, text: str) -> None: ...
     def halt_point(self, when: bool = ..., wait: float = ...) -> None: ...

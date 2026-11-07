@@ -25,8 +25,8 @@ from taskloop.app.asks import pr_wake, raiser
 from taskloop.app.land import pr_land
 from taskloop.app.land.forge import peek
 from taskloop.app.land.gate import Problem, ProblemKind, mint
+from taskloop.app.land.host import Land
 from taskloop.app.land.pr_land import PrLand
-from taskloop.app.land.state import Land
 from taskloop.stores.runlog import RunLog
 from tlkernel import askspecs as specs
 from tlkernel import fence, scratch
@@ -39,7 +39,7 @@ from tlkernel.gitfacts import GitOutcome, LogRow
 from tlkernel.ids import BeadId, TreeSha
 from tlkernel.kinds import Kind
 from tlkernel.runkey import BaseSha
-from tlpipeline.blocked import Blocked, blocked_for
+from tlpipeline.api import Blocked, blocked_for
 
 BEAD = BeadId("t-1")
 BRANCH = "task/t-1"
