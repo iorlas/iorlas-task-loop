@@ -241,7 +241,7 @@ Beads (children of tl-e5t0.39): R1 tl-e5t0.39.1, R2 .2, R3 .3, R4a .4, R4b .5, R
 | `taskloop.adapters` (13 files) | `beadtools` (5), `ident` (3), `childenv` (2), `repourl.repo_url` (2), `closes`, `deadline` (2), `halt.RUN_SLOT`, `agent.last_event_t`, `looks.Methods` (run_roles) | **R6b**: pure helpers (`repourl`, `deadline`, `ident` reads) move to the kernel or become constructor values; the rest are ports bound by the root (`BeadTools`, `Clock/Deadline`, `ChildEnv`, `StuckClock`) |
 | `taskloop.domain` (24 files) | `domain.outcome` (14 files: the run's outcome vocabulary), `domain.asks.spec/specs` (6), `domain.effects` (4), `domain.lanes` (`caps`, `pauses`, `pin`, `liveness`, `pause_reasons.Producer`), `domain.plan.*` (`brief`, `matchers`), `domain.followups`, `domain.checks`, `domain.interpret`, `domain.stuck`, `domain.work`, `domain.review.kinds`, `domain.land.matchers`, `domain.lifecycle`, `domain.matchers.clip` | **R6c**: the run-end vocabulary (`outcome`, `effects`, `asks.spec`, `pause_reasons`) is shared with stages and the dashboard, so it goes to the kernel by the precedent of WORKKERNEL (tl-e5t0.70, `domain/work`); pipeline-only rules (`stuck`, `interpret`, `lifecycle`) move into the package; the plan/review/land matchers become values passed in |
 
-**R6a part 1 done (#537):** checkpoints, standalone, waits, reload, steps, stage_run no longer import `taskloop.stores` (ports in `pipeline/store_ports.py`); closing_branch, closing_host, closing_notes, closing_record and journal remain, waiting for the B3 lane.
+**R6a done (#537 and this PR): app/pipeline imports no taskloop.stores**
 
 Order and collisions:
 
@@ -253,3 +253,19 @@ Order and collisions:
 Beads: R6a `tl-e5t0.39.12`, R6b `.13`, R6c `.14`; R6 (`.11`) depends on all three.
 
 R6b part 1 done: stuck.py, reload.py, reflect.py, waits.py, run.py, run_roles.py, standalone.py; remaining: closing*.py, lifecycle.py, journal.py
+
+## 14. R6c split: the domain imports of the pipeline, measured (added 2026-11-07, after R6a and R6b)
+
+Pipeline files import 22 `taskloop.domain` modules (section 13). Consumers outside the pipeline (src, tests, packages) and the module's own `taskloop`/`tlkernel` imports decide where each goes. A module goes to the kernel (`packages/kernel`, by a history-preserving `git mv` plus an import rewrite over src, tests and docs (the pattern of `dev/move_kernel.py` and `dev/split_enums.py`), no shim) when other stages or the dashboard also use it; into `app/pipeline` when only the pipeline does; the pipeline takes a value instead when it only needs a constant.
+
+| cluster | modules (consumers outside pipeline) | destination | PR |
+|---|---|---|---|
+| pipeline-only | `interpret` (2), `stuck` (2) | `app/pipeline` (their only deps are `tlkernel`) | **R6c1** |
+| small pure helpers | `lanes.caps` (5), `lanes.liveness` (4), `followups` (5), `work.switch` (4), `checks.trim` (3) + `checks.matchers` (18), `review.kinds` (3) | kernel (no `taskloop` deps beyond each other) | **R6c2** |
+| the plan/land matchers | `plan.brief` (7), `plan.matchers` (5, needs `domain.checks`), `land.matchers` (9) | kernel, or the pipeline receives the three values it uses (`COMMENTS_ONLY`, `AcceptanceText`, `without_prefix`) as constructor arguments if a move drags more than two further modules | **R6c3** |
+| the run-end vocabulary | `outcome` (27), `lifecycle.matchers` (11), `asks.spec` (19), `asks.lint`, `asks.text`, `asks.specs` (27) | kernel (the WORKKERNEL precedent, tl-e5t0.70); `outcome` needs `asks.spec`, `lifecycle` and `tlkernel.reconcile`, so they move together | **R6c4** |
+| pause and effect words | `effects` (9), `lanes.pauses` (13), `lanes.pause_reasons` (11), `beads.park` | kernel; B3-5 (#554, merged) edited `pauses` and `pause_reasons`, so this is free to start | **R6c5** |
+
+Order: R6c1 and R6c2 first (small, independent); R6c3 after R6c2 (`plan.matchers` needs `checks`); R6c4 and R6c5 are the large sweeps (27 and 13 consumers) and run one at a time, each as one PR with `Layout-allow: move` and a closure line. Each PR ends with `grep taskloop.domain` of its modules empty in `app/pipeline`. R6c (`tl-e5t0.39.14`) closes when the last of them lands; R6 (`.11`) follows.
+
+Beads: R6c1 `tl-e5t0.39.15`, R6c2 `.16`, R6c3 `.17`, R6c4 `.18`, R6c5 `.19`.

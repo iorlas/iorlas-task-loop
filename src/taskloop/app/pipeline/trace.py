@@ -7,33 +7,34 @@ from typing import Any
 from tlkernel import ids, wire
 from tlkernel import trace as t
 from tlkernel.enums import Outcome, WhyCode
+from tlkernel.kinds import Kind
 from tlkernel.wire import Rec
 
 WHY_CODE: Mapping[str, WhyCode] = MappingProxyType(
     {
-        "ask_decision": WhyCode.OWNER_DECISION,
-        "ask_stuck": WhyCode.STUCK,
-        "ask_budget": WhyCode.OVER_BUDGET,
-        "ask_ticket": WhyCode.TICKET,
-        "wait_ask": WhyCode.NEEDS_HUMAN,
-        "pause_lane": WhyCode.LANE_OUT,
-        "pause_network": WhyCode.NETWORK,
-        "engine_crash": WhyCode.PAUSED,
-        "pause_killed": WhyCode.STOPPED_BY_COORDINATOR,
-        "pause_moved": WhyCode.RESOURCE,
-        "owner_park": WhyCode.PAUSED,
+        Kind.ASK_DECISION.value: WhyCode.OWNER_DECISION,
+        Kind.ASK_STUCK.value: WhyCode.STUCK,
+        Kind.ASK_BUDGET.value: WhyCode.OVER_BUDGET,
+        Kind.ASK_TICKET.value: WhyCode.TICKET,
+        Kind.WAIT_ASK.value: WhyCode.NEEDS_HUMAN,
+        Kind.PAUSE_LANE.value: WhyCode.LANE_OUT,
+        Kind.PAUSE_NETWORK.value: WhyCode.NETWORK,
+        Kind.ENGINE_CRASH.value: WhyCode.PAUSED,
+        Kind.PAUSE_KILLED.value: WhyCode.STOPPED_BY_COORDINATOR,
+        Kind.PAUSE_MOVED.value: WhyCode.RESOURCE,
+        Kind.OWNER_PARK.value: WhyCode.PAUSED,
         "noop": WhyCode.PAUSED,
-        "fault_denied": WhyCode.NEEDS_HUMAN,
-        "fault_base_red": WhyCode.GATE_RED,
-        "fault_bad_request": WhyCode.SCHEMA_INVALID,
-        "fault_land": WhyCode.CHECK_BEFORE_LAND,
-        "fault_infra": WhyCode.FAILED,
-        "fault_slot": WhyCode.FAILED,
-        "fault_stale_base": WhyCode.FAILED,
-        "fault_plan": WhyCode.FAILED,
-        "fault_engine": WhyCode.FAILED,
-        "fault_contract_skew": WhyCode.FAILED,
-        "fault_crashed": WhyCode.FAILED,
+        Kind.FAULT_DENIED.value: WhyCode.NEEDS_HUMAN,
+        Kind.FAULT_BASE_RED.value: WhyCode.GATE_RED,
+        Kind.FAULT_BAD_REQUEST.value: WhyCode.SCHEMA_INVALID,
+        Kind.FAULT_LAND.value: WhyCode.CHECK_BEFORE_LAND,
+        Kind.FAULT_INFRA.value: WhyCode.FAILED,
+        Kind.FAULT_SLOT.value: WhyCode.FAILED,
+        Kind.FAULT_STALE_BASE.value: WhyCode.FAILED,
+        Kind.FAULT_PLAN.value: WhyCode.FAILED,
+        Kind.FAULT_ENGINE.value: WhyCode.FAILED,
+        Kind.FAULT_CONTRACT_SKEW.value: WhyCode.FAILED,
+        Kind.FAULT_CRASHED.value: WhyCode.FAILED,
     }
 )
 

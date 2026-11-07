@@ -116,6 +116,7 @@ class CheckSpec(Rec):
     reads: list[CheckId] = msgspec.field(default_factory=list)  # checks whose log and exit code it reads: it runs after them
     lane: str = ""  # checks of one lane run in order, lanes run in parallel; the first red cancels the other lanes ("": the default lane)
     needs: list[str] = msgspec.field(default_factory=list)  # engine.resources it holds a machine-wide lease on while it runs
+    network: bool = False  # allow network access even when engine.check_net_isolate is enabled
     pass_files: bool = False  # the changed files (those matching `when`) are appended to argv; none: the check is skipped
     # argv + `--base REV` prints the files the check's result depends on for the diff against REV, one per line (dev/affected.py --closure).
     # A pass on an earlier base is carried to a moved base when that closure is the same in the branch and in its merge with the base.

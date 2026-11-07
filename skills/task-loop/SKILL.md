@@ -313,6 +313,10 @@ file of that worktree, through the engine's own runner and the same result store
 thing it writes there; no bd, no bead, no run folder). No ID: the gate's steps, those `when` makes due; `--all` ignores `when`; IDs run
 just those checks, whatever their `run`. One line per step (id, `ok` / `FAILED` / `cached` / `skipped (why)`, seconds), then the tail of
 each red step; exit 0 when all are green, 1 otherwise. `--list` prints the registry (id, run, group, when, argv), one line each, exit 0.
+**`network`.** A check with `"network": true` runs with network access even when `engine.check_net_isolate` is on. The default is
+`false`: the engine applies its network-removing prefix, and refuses the check if this host cannot isolate it. This applies to the
+check, its base run and its fix command. Changing this permission also changes the check's cache key.
+
 **`pass_files`.** A check with `"pass_files": true` is handed the changed files as trailing argv (the pre-commit model; a linter reads only
 what changed), filtered by its `when` globs (no `when`: every changed file). A path that starts with `-` is written `./path`. Changed = in a
 stage round the bead's diff from its base; in `tl check` the diff from the merge-base with `engine.base`, untracked files included;

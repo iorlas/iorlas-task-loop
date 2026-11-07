@@ -67,9 +67,6 @@ class RunRequest(Rec):
     instructions_ref: str = ""  # --instructions-ref: a commit whose instruction files the worker reads instead of the work tree's
     tools: list[ToolBinding] = msgspec.field(default_factory=list)  # delegate.api takes them typed, not as flags
 
-    def env(self) -> dict[str, str]:
-        return {"DELEGATE_LIVE_FILE": self.live_file} if self.live_file else {}
-
 
 @final
 class Retry(Rec):

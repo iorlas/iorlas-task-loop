@@ -148,7 +148,7 @@ def call(
             with contextlib.suppress(ValueError):  # for the trace only (the runner takes `request`); a refused request has none
                 argv = wire_req.to_argv(resolved.route, contract=dict(c))
             wall = (req.timeout_s + BACKSTOP_S) if req.timeout_s else None
-            p = runner(argv, cwd=req.cwd or None, env=dict(env, **req.env()), timeout=wall, request=wire_req)
+            p = runner(argv, cwd=req.cwd or None, env=dict(env), timeout=wall, request=wire_req)
     except (Stopped, subprocess.TimeoutExpired) as e:
         why = e.why if isinstance(e, Stopped) else "its wall limit ran out"
         return Answer(
