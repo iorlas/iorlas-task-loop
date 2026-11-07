@@ -1,6 +1,5 @@
 """Starting a loop and looking at the others: its identity, the installs on the machine, what runs on it."""
 
-import json
 import os
 import shutil
 import uuid
@@ -9,7 +8,6 @@ from pathlib import Path
 
 from tlkernel import paths
 from tlkernel.env import Env
-from tlkernel.envvars import EnvVar
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.procport import Spawner
@@ -26,7 +24,7 @@ from taskloop.app.launch.repos import repo_root
 from taskloop.app.loop import render
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.files import LoopFiles
-from taskloop.app.loop.loop import parse_handover
+from taskloop.app.loop.loop import loop_identity
 from taskloop.app.track import trail
 from taskloop.app.wire import slotfx
 from taskloop.app.wire import slots as wslots
@@ -47,15 +45,8 @@ def begin_loop(repo: str, env: Env) -> tuple[str, str, Identity]:
     identity the loop and its children act as)."""
     start_cwd = os.getcwd()
     os.chdir(repo)  # every tl helper and bd call works on the current directory's repo
-    inherited, _ = parse_handover(env.get(EnvVar.TL_LOOP_STATE))  # set when this process is the same loop, exec'd into a newer install
-    # an actor of its own, never the session's: bd lets an actor re-claim its own bead, so two loops (or a loop and a hand run)
-    # started from one session would both win one claim. run-task re-claims as this actor (one for both).
-    own = Env({k: v for k, v in env.vars.items() if k != EnvVar.TASK_LOOP_ACTOR.value})
-    if not ident.identity(own).session:  # without a Claude session the actor would be per folder: two loops would share it
-        own = own.with_(EnvVar.TASK_LOOP_SESSION, "loop-" + uuid.uuid4().hex[:12])
-    session = ident.identity(own)
-    loop_actor = (inherited.actor if inherited else "") or f"{session.actor}-{uuid.uuid4().hex[:6]}"
-    return start_cwd, session.actor, Identity(actor=loop_actor, home=session.home, session=session.session)
+    session_actor, actor, session = loop_identity(env, ident.identity, lambda: uuid.uuid4().hex)
+    return start_cwd, session_actor, Identity(actor=actor, home=session.home, session=session.session)
 
 
 def live_work(git: Git, who: Identity) -> list[tuple[str, str]]:
@@ -97,14 +88,3 @@ def command(
     start_cwd, session, who = begin_loop(repo, env)
     loop_env = wloop.build(repo, session_actor=session, here=here, now=now, start_cwd=start_cwd, env=env, spawner=spawner, git=git, who=who)
     return [], run(loop_env, files, installs(loop_env.cfgdir, env, here, now))
-
-
-def cutover_lines(git: Git, who: Identity, as_json: bool) -> tuple[list[str], int]:
-    live = live_work(git, who)
-    if as_json:
-        lines = [json.dumps({"live": [{"kind": k, "what": w} for k, w in live]})]
-    elif live:
-        lines = ["\n".join(f"LIVE {w}" for _, w in live)]
-    else:
-        lines = ["CLEAR: no live loop or run"]
-    return lines, 1 if live else 0

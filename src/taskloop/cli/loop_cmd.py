@@ -13,6 +13,7 @@ from tlkernel.procport import Spawner
 from taskloop.app.launch import loop as wloop
 from taskloop.app.launch import loop_start as wstart
 from taskloop.app.launch import repos
+from taskloop.app.loop import render
 from taskloop.app.track import trail
 from taskloop.cli import loop as cli
 
@@ -52,4 +53,4 @@ def cmd_loop(
 
 
 def cmd_cutover(a: Any, git: Git, who: Identity) -> int:
-    return cli.emit(wstart.cutover_lines(git, who, a.json))
+    return cli.emit(render.cutover_lines(wstart.live_work(git, who), a.json))

@@ -3,10 +3,14 @@
 import json
 from unittest.mock import Mock, patch
 
-from taskloop.app.loop import render
+from taskloop.app.loop import factory_verbs, render
+from taskloop.app.loop.loop import loop_identity
 from taskloop.app.loop.queue import Queue, Ranked, Skipped
+from tlkernel import wire
 from tlkernel.bead import Bead
 from tlkernel.config import RepoProfile
+from tlkernel.env import Env
+from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.loop import LoopState, Skip
 
@@ -126,3 +130,70 @@ def test_queue_diagnostics_precede_next_json():
     with patch.object(render, "rank_ready", side_effect=rank):
         assert render.cmd_next(env, [], True) == (["queue diagnostic", '{"pick": null, "reason": "", "next": [], "skipped": []}'], 1)
     env.fetch.assert_called_once_with()
+
+
+def test_cutover_text_and_json_are_exact():
+    assert render.cutover_lines([], False) == (["CLEAR: no live loop or run"], 0)
+    live = [("loop", "loop pid 7"), ("run", "run in /é")]
+    assert render.cutover_lines(live, False) == (["LIVE loop pid 7\nLIVE run in /é"], 1)
+    assert render.cutover_lines(live, True) == (
+        ['{"live": [{"kind": "loop", "what": "loop pid 7"}, {"kind": "run", "what": "run in /\\u00e9"}]}'], 1)
+    assert render.cutover_lines([], True) == (['{"live": []}'], 0)
+
+
+def test_factory_stop_and_logs_results():
+    files = Mock()
+    files.request_stop.return_value = []
+    rows, code = factory_verbs.stop_lines(files, False, "actor")
+    assert (list(rows), code) == (["not running"], 1)
+    files.request_stop.return_value = [Mock(pid=7), Mock(pid=8)]
+    for now, text in [(True, "NOW"), (False, "after the current bead")]:
+        rows, code = factory_verbs.stop_lines(files, now, "actor")
+        assert (list(rows), code) == ([f"STOP {text}: loop pid 7", f"STOP {text}: loop pid 8"], 0)
+    with patch.object(factory_verbs, "logs", return_value=(Mock(), "path")), patch.object(
+        factory_verbs, "lines", return_value=iter(["line\n", "partial"])) as tail:
+        rows, code = factory_verbs.log_lines(files, [], 2, 3, True)
+        assert (list(rows), code) == (["line\n", "partial"], 0)
+        tail.assert_called_once_with("path", 3, True)
+
+
+def test_factory_start_target_and_status_order():
+    files, profile, spawn, awake, dash = (Mock() for _ in range(5))
+    with patch.object(factory_verbs, "wanted", return_value=3) as wanted, patch.object(
+        factory_verbs, "start", return_value=([], 2)) as start, patch.object(factory_verbs, "facts", return_value=["facts"]):
+        assert list(factory_verbs.start_lines(files, "repo", "v", [], spawn, None, profile, awake)) == [
+            "started 2 more loop(s)", "facts"]
+        wanted.assert_called_once_with(profile)
+        assert start.call_args.kwargs == {"loops": 3, "caffeinate_argv": awake}
+        start.return_value = ([], 0)
+        assert list(factory_verbs.start_lines(files, "repo", "v", [], spawn, 1, profile, awake)) == [
+            "already running (0 loops)", "facts"]
+        assert wanted.call_count == 1
+    with patch.object(factory_verbs, "status_facts", return_value=["facts"]), patch.object(
+        factory_verbs, "status_wanted", return_value="?"), patch.object(factory_verbs, "last_by_loop", return_value=[
+            {"pid": 7, "t": 42, "reason": "clean"}]):
+        rows, code = factory_verbs.status_lines(files, [], "repo", "v", profile, dash)
+        assert next(rows) == "facts"
+        dash.assert_not_called()
+        assert list(rows) == ["LOOPS running=0 wanted=?", "LOOP 7 LAST EXIT pid=7 time=42 reason=clean "]
+        assert code == 1
+        dash.assert_called_once_with()
+
+
+def test_loop_identity_ignores_session_actor_and_preserves_handover():
+    seen = []
+
+    def identity(env):
+        seen.append(env)
+        session = env.get("TASK_LOOP_SESSION")
+        return Identity(actor="session-actor", home="/home", session=session)
+
+    tokens = iter(["a" * 32, "b" * 32])
+    actor, loop_actor, session = loop_identity(Env({"TASK_LOOP_ACTOR": "inherited"}), identity, lambda: next(tokens))
+    assert (actor, loop_actor, session.session) == ("session-actor", "session-actor-bbbbbb", "loop-aaaaaaaaaaaa")
+    assert all("TASK_LOOP_ACTOR" not in env.vars for env in seen)
+    state = LoopState(pid=7, started=1, t=1, repo="r", version="v", code_dir="c", actor="old-loop")
+    token = Mock(side_effect=AssertionError("handover needs no new token"))
+    actor, loop_actor, session = loop_identity(
+        Env({"TASK_LOOP_SESSION": "existing", "TL_LOOP_STATE": json.dumps(wire.dump(state))}), identity, token)
+    assert (actor, loop_actor, session.session) == ("session-actor", "old-loop", "existing")
