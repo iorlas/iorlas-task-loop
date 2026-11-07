@@ -187,16 +187,6 @@ def install_problems(plugin_root: Path, env: Env) -> list[str]:
     return out
 
 
-def environment_findings(repo: str, env: Env, git: Git, who: Identity, spawner: Spawner | None) -> list[env_checks.Finding]:
-    """The tools, folders and database the loop needs (env_checks); [] without a spawner (a test that runs no process)."""
-    if spawner is None:
-        return []
-    path = env.get("PATH")
-    return (env_checks.bd_findings(path, spawner, lambda: bd_store(who.actor, repo).find(BeadQuery(status="open")), repo)
-            + env_checks.tool_findings(path, tuple(sys.version_info[:3]), spawner, git, repo)
-            + env_checks.folder_findings(env.get("TMPDIR"), config_dir(env)))
-
-
 def disk_run(config: ConfigDir) -> int:
     """`tl doctor --disk`: the config folder's bytes by area and the free space of its volume. 1 when the volume runs low."""
     root = config.root
@@ -240,9 +230,10 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
     fails = install_problems(plugin_root, env)
     for p in fails:
         print("FAIL " + p)
-    found = environment_findings(repo, env, git, who, spawner)
-    for f in found:
-        print(f.line())
+    found: list[env_checks.Finding] = [] if spawner is None else env_checks.all_findings(  # no spawner: a test that runs no process
+        env.get("PATH"), env.get("TMPDIR"), config_dir(env), tuple(sys.version_info[:3]), spawner, git,
+        lambda: bd_store(who.actor, repo).find(BeadQuery(status="open")), repo)
+    sys.stdout.write("".join(f.line() + "\n" for f in found))
     fails += [f.text for f in found if f.level == "FAIL"]
     if not warns and not found and not fails:
         print("ok: no setup problems found in " + repo)

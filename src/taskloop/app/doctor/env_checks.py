@@ -130,3 +130,8 @@ def folder_findings(tmpdir: str, config: Path) -> list[Finding]:
     if not os.access(target, os.W_OK):
         out.append(Finding("FAIL", f"the config folder {config} is not writable", f"chmod u+w {target}"))
     return out
+
+
+def all_findings(path: str, tmpdir: str, config: Path, python: tuple[int, ...], run: Runner, git: Configs, opens: Callable[[], object],
+                 repo: str) -> list[Finding]:
+    return bd_findings(path, run, opens, repo) + tool_findings(path, python, run, git, repo) + folder_findings(tmpdir, config)
