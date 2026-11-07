@@ -5,12 +5,14 @@ import json
 import os
 import random
 import shutil
+from contextlib import suppress
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from support.dashlogs import RunScript, T
+from support.waits import settle
 
 from dash import test_dash_api as fixtures
 from taskloop_dash.app import Dash
@@ -73,8 +75,7 @@ class FactoryIndex(Case):
 
     def ingest(self, **kw):
         with Indexer(self.cfg, clock=lambda: NOW, **kw) as index:
-            while not index.pass_once(budget=0.2):
-                pass
+            settle(index, budget=0.2)
 
     def check_interruptions(self, seeds):
         reindex(self.cfg, clock=lambda: NOW)
@@ -92,11 +93,8 @@ class FactoryIndex(Case):
             with self.subTest(seed=seed):
                 with Indexer(self.cfg, clock=lambda: NOW, on_record=interrupt) as index:
                     index.clear()
-                    try:
-                        while not index.pass_once():
-                            pass
-                    except InterruptedError:
-                        pass
+                    with suppress(InterruptedError):
+                        settle(index)
                 self.ingest()
                 assert self.rows() == expected
                 assert self.sources() == expected_sources

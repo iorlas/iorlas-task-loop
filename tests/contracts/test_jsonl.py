@@ -2,6 +2,7 @@
 import json
 import sys
 import threading
+import time
 from pathlib import Path
 from unittest import mock
 
@@ -113,10 +114,13 @@ class JsonlTest(Case):
         t.start()
         seen: list[tuple[int, int]] = []
         cursor = 0
+        end = time.monotonic() + 30.0
         while not stop.is_set() or cursor < self.path.stat().st_size:
+            assert time.monotonic() < end, "JSONL writer and cursor did not settle in 30 s"
             entries, cursor = self.j.read_from(cursor)
             seen += [(e.start, e.data["i"]) for e in entries]
-        t.join()
+        t.join(30)
+        assert not t.is_alive(), "JSONL writer did not settle in 30 s"
         assert seen == written  # no entry lost, none twice, every offset the one append returned
 
     def test_tail_returns_the_last_entries_oldest_first_across_chunks(self):
