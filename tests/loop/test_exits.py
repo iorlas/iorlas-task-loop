@@ -39,7 +39,7 @@ class LaneExits(Case):
 
     def test_exit_reason_vocabulary(self):
         assert EXIT_REASONS == (
-            "drained", "until", "max_beads", "stop_request", "signal", "storm", "crash", "profile_ahead",
+            "drained", "until", "max_beads", "stop_request", "signal", "crash", "profile_ahead",
             "low_disk", "system_exit", "lost",
         )
 

@@ -438,7 +438,7 @@ class LoopSelfUpdate(LoopBase):
         os.environ["TL_LOOP_STATE"] = self.execs[0][2]
         with self.running_from(self.cache / "0.2.0" / "skills" / "task-loop"):
             assert self.run_loop() == 0
-        assert "WAIT: 2 runs gave no outcome" in self.out
+        assert "WAIT: 2 runs gave no outcome" not in self.out
         assert [b for b, _ in self.started] == ["x-1", "x-2", "x-3"]
         assert self.execs[0][4] == actor
 

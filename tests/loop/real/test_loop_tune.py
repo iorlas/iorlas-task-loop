@@ -27,20 +27,19 @@ class Tune(LoopBase):
         (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": 2}, "engine": {}, **block}))
 
     def test_a_loop_block_overrides_a_constant_and_a_missing_key_keeps_the_default(self):
-        self.config(loop={"fails_to_stop": 1})
+        self.config(loop={"poll": 1})
         self.beads({"x-1": [rec("failed")], "x-2": [rec("landed")]})
         assert self.run_loop() == 0
         assert [b for b, _ in self.started] == ["x-1", "x-2"]
-        assert "WAIT: 1 runs gave no outcome" in self.out
-        assert LoopConfig().fails_to_stop == 2
+        assert "WAIT:" not in self.out
         assert LoopConfig().poll == 2
 
     def test_a_changed_block_applies_at_the_next_pass(self):
         self.beads({"x-1": [rec("landed")], "x-2": [rec("failed")], "x-3": [rec("landed")]})
-        self.during.append(lambda: self.config(loop={"fails_to_stop": 1}))
+        self.during.append(lambda: self.config(loop={"poll": 1}))
         assert self.run_loop() == 0
         assert [b for b, _ in self.started] == ["x-1", "x-2", "x-3"]
-        assert "WAIT: 1 runs gave no outcome" in self.out
+        assert "WAIT:" not in self.out
 
     @staticmethod
     def meta(bd, slot_bead, meta):

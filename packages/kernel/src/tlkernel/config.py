@@ -145,7 +145,7 @@ class LoopConfig(Rec):
     """The `loop` block: the loop's constants. A key left out keeps the code default; read again at every tick."""
 
     poll: float = 2  # seconds between looks at a running child (stop command, slot lease)
-    wait_poll: float = 30  # seconds between probes of a resource or storm wait
+    wait_poll: float = 30  # seconds between probes of a resource wait
     heartbeat: float = 60  # the slot bead's lease is kept alive this often while a bead runs
     drained_poll: float = 300  # --wait-drained: how often an empty queue is looked at again
     pause_retry: float = 900  # a bead another session holds, or a pause with no delegate to ask: try it again after this
@@ -154,11 +154,9 @@ class LoopConfig(Rec):
     logs_kept: int = 5
     slot_fails_to_set_aside: int = 2  # same bead's quick failures in one slot before requiring recovery or different work
     quick_fail_min: float = 1.5  # a failed run shorter than this, in minutes, is an instant failure
-    fails_to_stop: int = 2  # runs with no verdict before a storm cooldown wait
     rest: float = 3600
     area_poll: float = 60
     area_say: float = 600
-    fault_cooldown: float = 1800
     absent: float = 600  # ready beads, no live loop and no beat for this long: the loop is absent
     reload_fallback: float = 120  # a run-task that dies this soon after a re-exec is put back on the version it came from
     keep_days: float = 14  # `tl prune`: run data past this goes (30 days at least; not a bead not closed), a merged tree idle this long
