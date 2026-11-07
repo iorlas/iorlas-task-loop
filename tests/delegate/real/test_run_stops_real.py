@@ -87,9 +87,14 @@ class RunStops(RunBase):
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_later_event_resets_the_answer_grace(self):
         self.real_clock()
-        self.fast_clock(grace=1, stall=900)
-        _, r = self.run_it(mode="progress_then_work", timeout=4)
+        self.fast_clock(grace=0.5, stall=900)
+        script = self.base / "bin" / "codex"
+        script.write_text(self.FAKE_CODEX.replace("sleep 0.5", "sleep 0.2"))
+        _, r = self.run_it(mode="progress_then_work", role="reviewer", timeout=1)
         assert why(r) == "timeout"
+        assert [(a["kind"], a["outcome"]) for a in r["attempts"]] == [("first", "timeout"), ("worker_retry", "timeout")]
+        assert len(self.args_seen().splitlines()) == 2
+        assert "answer_done_process_alive" not in r.get("warnings", [])
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_stalled_model_request_is_stopped_and_the_stream_tail_is_logged(self):

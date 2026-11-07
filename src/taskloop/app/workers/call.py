@@ -29,7 +29,7 @@ class Call:
         self.writer, self.resume, self.key, self.resume_key, self.writer_family = writer, resume or None, key, resume_key, writer_family
         self.step, self.title, self.visual = step, title, False
         self.tries = 1  # calls that came back with no valid answer, from 1: two at most (RetryPlan invalid_output)
-        self.counts: dict[str, float] = {"attempt": 0, "crashes": 0, "resume_refused": 0}  # Ctx's counters
+        self.counts: dict[str, float] = {"attempt": 0, "resume_refused": 0}  # Ctx's counters
         self.denied_retried = False
         self.secret_fp = False  # the last denial was a `secrets` stop on a heredoc body that merely names .env
         self.was_resumed = bool(resume)

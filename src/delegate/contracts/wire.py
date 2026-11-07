@@ -156,7 +156,7 @@ class Tokens:
     out: int | None
 
 
-AttemptKind = Literal["first", "canary", "network_rerun", "lane_poll", "lane_wait", "schema_reask", "reroute"]
+AttemptKind = Literal["first", "canary", "network_rerun", "lane_poll", "lane_wait", "worker_retry", "schema_reask", "reroute"]
 
 
 @record

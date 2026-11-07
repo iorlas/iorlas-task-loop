@@ -38,9 +38,9 @@ class Exhaustive(Case):
         assert len(lp.LEGAL) == 20
         assert len(set(lp.LEGAL)) == 20
         assert set(lp.TABLE) == set(lp.LEGAL)
-        actions = (lp.Retry, lp.NewThread, lp.Reroute, lp.Yield, lp.Fail)
+        actions = (lp.NewThread, lp.Reroute, lp.Yield, lp.Fail)
         for scope, perm, retry in lp.LEGAL:
-            for c in (ctx(), ctx(resumed=True, attempt=2, crashes=9, denied_retried=True)):
+            for c in (ctx(), ctx(resumed=True, attempt=2, denied_retried=True)):
                 a = lp.decide(stop(scope, perm, retry, ref="r1", resumable=True, retry_at=NOW + 60), c)
                 assert isinstance(a, actions), (scope, perm, retry)
 
@@ -54,7 +54,7 @@ class Exhaustive(Case):
     def test_no_action_asks_the_owner_and_no_yield_is_a_fault(self):
         for scope, perm, retry in lp.LEGAL:
             a = lp.decide(
-                stop(scope, perm, retry, retry_at=NOW + 9999), ctx(attempt=5, crashes=5, denied_retried=True)
+                stop(scope, perm, retry, retry_at=NOW + 9999), ctx(attempt=5, denied_retried=True)
             )
             if isinstance(a, lp.Yield):
                 assert kind_of(a) in PAUSES
@@ -95,7 +95,7 @@ class Incidents(Case):
 
     def test_exit_15_is_a_kill_pause_never_a_fail_or_an_ask(self):
         for facts in (("machine", "transient", "none"), ("machine", "needs_owner", "none"), ("machine", "transient", "poll")):
-            a = lp.decide(stop(*facts, signal=15, reason="killed"), ctx(crashes=9))
+            a = lp.decide(stop(*facts, signal=15, reason="killed"), ctx())
             assert kind_of(a) == Kind.PAUSE_KILLED, facts
 
 
@@ -128,17 +128,6 @@ class Incidents(Case):
             a = lp.decide(s, c)
             assert (type(a), kind_of(a)) == (lp.Fail, Kind.FAULT_DENIED)
 
-    def test_a_failed_worker_is_tried_once_more_resumed_when_it_can_be(self):
-        assert lp.decide(stop("bead", resumable=True, ref="r"), ctx()) == lp.Retry(NOW, "r", "attempt", "worker_failed")
-        assert lp.decide(stop("bead"), ctx()) == lp.NewThread("", "attempt", "worker_failed")
-        assert kind_of(lp.decide(stop("bead"), ctx(attempt=1))) == Kind.FAULT_INFRA
-
-    def test_a_delegate_crash_rests_then_retries_fresh_then_is_a_fault(self):
-        s = stop("machine", "transient", "none")
-        assert lp.decide(s, ctx()) == lp.Retry(NOW + 30, "", "crashes", "crash")
-        assert lp.decide(s, ctx(crashes=1)) == lp.Retry(NOW + 120, "", "crashes", "crash")
-        assert kind_of(lp.decide(s, ctx(crashes=2))) == Kind.FAULT_CRASHED
-
     def test_no_lane_and_setup_pause_the_lane(self):
         assert kind_of(lp.decide(stop("machine", "transient", "predicted", retry_at=NOW + 900), ctx())) == Kind.PAUSE_LANE
         assert kind_of(lp.decide(stop("machine", "needs_owner", "none", fix="tl doctor"), ctx())) == Kind.PAUSE_LANE
@@ -157,3 +146,21 @@ def test_predicted_lane_always_parks_or_starts_fresh():
         a = only(lp.Yield, lp.decide(s, ctx()))
         assert (a.kind, a.retry_after) == ("PAUSE_LANE", NOW + gap)
         assert lp.decide(s, ctx(resumed=True)) == lp.NewThread("lane_out")
+
+
+def test_failed_worker_only_gets_a_fresh_engine_prompt_when_resumed():
+    s = stop("bead", resumable=True, ref="r")
+    assert kind_of(lp.decide(s, ctx())) == Kind.FAULT_INFRA
+    assert lp.decide(s, ctx(resumed=True)) == lp.NewThread("", "attempt", "worker_failed")
+    assert kind_of(lp.decide(s, ctx(resumed=True, attempt=1))) == Kind.FAULT_INFRA
+
+
+def test_delegate_crash_fails_immediately():
+    assert lp.decide(stop("machine"), ctx()) == lp.Fail("FAULT_CRASHED", "machine/transient/none")
+
+
+def test_hurt_write_only_reroutes_resumed_calls():
+    s = stop("bead", exit_code=-15, lane="lane", model="model")
+    assert lp.decide(s, ctx(resumed=True, node="write")) == lp.Reroute("model", "attempt", "worker_failed")
+    assert kind_of(lp.decide(s, ctx(node="write"))) == Kind.ASK_STUCK
+    assert kind_of(lp.decide(s, ctx(resumed=True, node="write", attempt=1))) == Kind.ASK_STUCK
