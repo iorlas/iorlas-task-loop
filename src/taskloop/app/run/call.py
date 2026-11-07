@@ -1,9 +1,9 @@
 """One AI step in flight: its prompts, thread and counters, which change between its delegate calls."""
 from typing import Any
 
-from taskloop.adapters import delegate as dg
 from taskloop.app.run import worker_identity
 from taskloop.contracts.asked import Updates
+from taskloop.contracts.delegateport import Answer
 from taskloop.stores import call_state as callstate
 
 
@@ -35,7 +35,7 @@ class Call:
         self.was_resumed = bool(resume)
         self.out_on = ""  # the lane that went out under this step (the writer's fallback lane)
         self.up_now: bool | None = None  # the network probe at the last network stop
-        self.finished: dg.Answer | None = None  # an answer the last run left on disk
+        self.finished: Answer | None = None  # an answer the last run left on disk
         self.state: callstate.CallState | None = None
         self.prepared: worker_identity.PreparedCall | None = None
         self.sha = ""

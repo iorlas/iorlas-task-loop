@@ -21,6 +21,7 @@ import support.paths  # noqa: E402, F401
 from support import homes  # noqa: E402
 from support.spawn import port_git  # noqa: E402
 
+from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.app.release import pins  # noqa: E402
 from taskloop.app.wire import usage as usage_cmd  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
@@ -159,7 +160,7 @@ class UsageCLI(Base):
             got.append(reading)
             return {"ts": 1.0, "lanes": {"CLAUDE_SUBSCRIPTION": {"five": 6.0, "week": 4.0, "out": False}},
                     "cockpit": {"lanes": [{"id": "CLAUDE_SUBSCRIPTION", "state": "ready"}]}}
-        with mock.patch.object(usage_cmd.dg, "status_json", side_effect=status):
+        with mock.patch.object(dl, "status_json", side_effect=status):
             out = io.StringIO()
             with mock.patch.object(sys, "stdout", out):
                 rc = usage_cmd.feed("[]", real_spawner(), snapshot())

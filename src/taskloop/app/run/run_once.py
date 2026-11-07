@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from taskloop.adapters import beadtools, ident
-from taskloop.adapters import delegate as dg
 from taskloop.adapters.deadline import DeadlineExpired, deadline
 from taskloop.app.land.gitcall import oneline
 from taskloop.app.pipeline import ended as stored_end
@@ -17,6 +16,7 @@ from taskloop.app.run.crash import parked_crash
 from taskloop.app.run.reload import Exec
 from taskloop.app.slots.lease import Lease
 from taskloop.contracts import fence
+from taskloop.contracts.delegateport import Refusal
 from taskloop.contracts.enums import AskClass, Step
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.kinds import Kind
@@ -135,13 +135,13 @@ class RunOnce:
         self.beat()
         e.delegation.route()
         if not e.route:
-            why = e.refusal or dg.Refusal("not_installed")
+            why = e.refusal or Refusal("not_installed")
             raise e.Blocked(f"failed: delegate refused the call setup ({why.kind} {why.detail})", kind=Kind.FAULT_CONTRACT_SKEW)
         problem = pin.exec_allow_problem(e.cfg.writer_exec_allow, e.cfg.writer_family, bead.labels,
                                          e.contract.get("contract", 0), e.contract.get("capabilities", []))
         if problem:
             raise e.Blocked(problem, kind=Kind.FAULT_CONTRACT_SKEW)
-        e.log.note(f"workers: delegate {e.route} (contract {dg.CONTRACT})")
+        e.log.note(f"workers: delegate {e.route} (contract {e.router.contract_no})")
         e.log.note("task-loop {}".format(ident.plugin_version() or "(unknown version)"))
         e.tree.reset(bead)
         e.budget.labels = list(bead.labels)
