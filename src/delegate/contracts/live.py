@@ -10,6 +10,7 @@ from dataclasses import field
 from typing import ClassVar, Literal
 
 from delegate.contracts.codec import ABSENT, Absent, record, table_of
+from delegate.contracts.json_types import Json
 
 
 @record
@@ -140,3 +141,29 @@ LIVE_EVENTS = table_of(
     LiveStart, LiveCmdStart, LiveCmdEnd, LiveToolStart, LiveToolEnd, LiveMsg, LiveThink, LiveTokens, LiveStall, LiveRetry, LiveEnd, LiveRaw
 )
 LIVE_FILE_MAX = 20 * 1024 * 1024  # a live file past this stops growing; the call goes on
+
+
+@record
+class LiveFile:
+    """One live stream, named without its storage suffix."""
+
+    name: str
+    mtime: float
+
+
+@record
+class LiveLine:
+    """An event and the byte offset where its line begins."""
+
+    offset: int
+    event: dict[str, Json]
+
+
+@record
+class LiveRead:
+    """Complete events, the next byte cursor, and an opaque file identity."""
+
+    lines: list[LiveLine]
+    cursor: int
+    ident: int
+    reset: bool
