@@ -1,4 +1,4 @@
-"""`tl lanes`: ask delegate for its status once (`route.py status --json`, spends no quota) and file it as the StatusSnapshot the
+"""`tl lanes`: ask delegate for its status once (`delegate.api.status`, spends no quota) and file it as the StatusSnapshot the
 dashboard reads, and each window's use into the usage history. `tl usage` files it too, on its way. The dashboard never runs delegate."""
 import time
 from collections.abc import Callable

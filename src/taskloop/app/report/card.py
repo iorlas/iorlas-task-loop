@@ -51,7 +51,7 @@ def crashes(
 ) -> list[dict[str, Any]]:
     """Engine crashes: the loop saw run-task exit with no outcome; a run in the window with no trace whose manifest says `lost`
     (the reconciler: its heartbeat went stale and its process is gone); or a trace closed as an engine fault (an exception the engine
-    caught). A run's .stderr is route.py's, where a worker's test tracebacks land too: never read."""
+    caught). A run's .stderr is delegate's, where a worker's test tracebacks land too: never read."""
     now = time.time() if now is None else now
     out: dict[Any, dict[str, Any]] = {}
     loop_lines = [i.rec for i in LoopLog(cfg, loop_key(repo)).read_from(0).items]

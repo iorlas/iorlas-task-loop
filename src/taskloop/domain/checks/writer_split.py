@@ -34,7 +34,7 @@ class WriterSplit:
 
     def engine_recipes(self, stage_checks: Sequence[str] = ()) -> list[str]:
         """The bare `just` recipe names of the configured checks, the gate and the plan's stage checks (`stage_checks`) a writer must not
-        run: delegate's guard blocks them (`route.py run --engine-only`). Only a check that is exactly `just <recipe>` has a recipe name."""
+        run: delegate's guard blocks them. Only a check that is exactly `just <recipe>` has a recipe name."""
         out: list[str] = []
         for cmd in [self.cfg.gate_text, *(k.cmd for k in self.repo), *stage_checks]:
             toks = argv_of(cmd) if cmd else []
