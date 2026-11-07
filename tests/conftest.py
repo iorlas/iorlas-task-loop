@@ -2,8 +2,8 @@
 
 A test's kind comes from its path, never from a hand marker: a file under tests/e2e/ is `e2e` (a whole flow), a file under a `real/`
 folder (tests/<slice>/real/ or packages/<stage>/tests/real/) is `real` (real git, processes or sockets), anything else is logic (fakes,
-in process, fast). A single test's `@needs(capability, reason)` (or the older `@real_proc(reason)` / `@real_git(reason)`) folds into `real`. Guards
-(tests/support/procsim.py): a logic test that spawns, forks or runs real git fails; a `real` test that never spawns fails.
+in process, fast). A single test's `@needs(capability, reason)` (or the older `@real_proc(reason)` / `@real_git(reason)`) folds into
+`real`. Guards (tests/support/procsim.py): a logic test that spawns, forks or runs real git fails; a `real` test that never spawns fails.
 A test over its kind's time limit fails (tltestkit.limits)."""
 import contextlib
 import ctypes
