@@ -19,9 +19,10 @@ from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
 from tlkernel.profile_changes import ProfileChange
+from tlkernel.queue_doc import QueueDoc
 from tlkernel.slots import MissingRemote
 
-from taskloop.adapters import landlock
+from taskloop.adapters import check_files, landlock
 from taskloop.app.land import cleanup
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
@@ -31,6 +32,7 @@ from taskloop.app.land.queue_land import Queued, QueueLand
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.land.treecheck import Tested, TreeGuard
 from taskloop.domain.land.matchers import no_dolt_remote
+from taskloop.stores.api import Doc
 from taskloop.stores.runlog import RunLog
 
 MODE = "stage:land-stack"
@@ -73,6 +75,10 @@ class Stack:
         self.synced = False  # bd sync was tried
         self.last = ""  # the merge commit of the last item delivered
         self.pending: list[rec.LandCleanup] = []
+
+    @property
+    def queue_doc(self) -> Doc[QueueDoc]:
+        return self.gate.stores.queue.of(check_files.repo_key(self.git, self.repo))
 
     def run(self, items: list[StackItem]) -> int:
         """Deliver the items in order; -> 0, or the exit code of the first failure."""

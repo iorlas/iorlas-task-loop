@@ -97,3 +97,24 @@ def test_a_red_gate_ejects_its_entry_and_what_is_green_ahead_of_it_still_merges(
 @pytest.mark.parametrize("n", [1, 2])
 def test_an_empty_queue_ends(n):
     assert World(n).run.run([]) == []
+
+
+@pytest.mark.parametrize("red,conflict", [(frozenset(), frozenset()), (frozenset({"ha"}), frozenset()),
+                                          (frozenset(), frozenset({"ha"}))])
+def test_on_change_observes_initial_entries_and_every_transition(red, conflict):
+    world = World(1, red=red, conflict=conflict)
+    snapshots = []
+    world.run.on_change = lambda entries: snapshots.append(list(entries))
+    entries = world.run.run(ITEMS[:1])
+    expected = [Phase.WAITING]
+    if conflict:
+        expected += [Phase.EJECTED]
+    else:
+        expected += [Phase.BUILT, Phase.GATING, Phase.EJECTED if red else Phase.GREEN]
+        if not red:
+            expected += [Phase.MERGED]
+    expected += [expected[-1]]  # Ref removal is also an observed event.
+    if conflict:
+        expected.pop()  # A conflict never acquired a ref.
+    assert [rows[0].phase for rows in snapshots] == expected
+    assert snapshots[-1] == entries

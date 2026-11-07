@@ -3,21 +3,28 @@ Q(N-1) up to `jobs` at once, and merged in order through `Stack.deliver`, which 
 `Stack(queue=True)` comes here, and anything the queue cannot judge (a PR already merged or closed, a profile change, one item) takes the
 serial path unchanged."""
 import threading
+import time
+from collections.abc import Callable
 from typing import Protocol, final
 
 from tlkernel.beadsport import Beads
 from tlkernel.forge import OPEN, Pr, StackItem
 from tlkernel.gitport import Git
+from tlkernel.queue_doc import QueueDoc
 from tlkernel.wire import Rec
 
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.queue_enqueue import enqueue
+from taskloop.app.land.queue_recover import recover
 from taskloop.app.land.queue_refs import QueueRefs
 from taskloop.app.land.queue_run import QueueRun
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.land.treecheck import TreeGuard
 from taskloop.domain.land.queue_model import Entry, Phase
+from taskloop.domain.land.queue_persist import to_doc
+from taskloop.stores.api import Doc
+from taskloop.stores.runlog import RunLog
 
 
 @final
@@ -42,6 +49,11 @@ class Host(Protocol):
     forge: Forge
     gate: StackGate
     trees: TreeGuard
+    log: RunLog
+    record: Callable[[str, str], int]
+
+    @property
+    def queue_doc(self) -> Doc[QueueDoc]: ...
 
     def resolve(self, item: StackItem) -> tuple[str, str, Pr | None]: ...
     def item(self, item: StackItem) -> None: ...
@@ -66,6 +78,9 @@ class QueueLand:
 
     def run(self, items: list[StackItem]) -> None:
         stack = self.stack
+        doc = stack.queue_doc
+        if (stale := doc.get()) is not None:
+            recover(stack, stale, time.time())
         if not queueable(stack, items):
             for item in items:
                 stack.item(item)
@@ -81,7 +96,8 @@ class QueueLand:
         stack.forge.fetch()
         main = stack.git.rev_parse(stack.repo, stack.trees.main_ref)
         refs = QueueRefs(stack.cmds, stack.repo)
-        queue = QueueRun(refs, self.gate, self.merge, in_flight=in_flight, main=main)
+        queue = QueueRun(refs, self.gate, self.merge, in_flight=in_flight, main=main,
+                         on_change=lambda entries: doc.write(to_doc(entries, {}, in_flight=in_flight, last_base=main)))
         try:
             entries = queue.run(heads)
         finally:
