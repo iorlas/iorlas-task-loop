@@ -1,7 +1,6 @@
 """`tl setup (--plan | --apply) [--repo DIR] [--json] [--answers FILE | --yes]`: what a machine and a repo still need, and making it so.
 --plan looks only. --apply makes the safe machine fixes and, for a repo with no profile, opens a PR with the owner's answers."""
 import argparse
-import json
 import os
 from collections.abc import Callable
 from pathlib import Path
@@ -14,10 +13,7 @@ from taskloop.app.launch import setup_ports
 
 def answers_of(a: argparse.Namespace, repo: Path, facts: setup.ProfileFacts) -> dict[str, str]:
     """--answers FILE (a JSON object of question id -> answer) over --yes (every default)."""
-    given = {q.id: q.default for q in setup.repo_part(repo, facts).questions} if a.yes else {}
-    if a.answers:
-        given.update({str(k): str(v) for k, v in json.loads(Path(a.answers).read_text(encoding="utf-8")).items()})
-    return given
+    return setup.answers(repo, facts, a.yes, a.answers)
 
 
 def cmd_setup(a: argparse.Namespace, env: Env, plugin_root: Path, out: Callable[[str], None] = print,
@@ -32,7 +28,7 @@ def cmd_setup(a: argparse.Namespace, env: Env, plugin_root: Path, out: Callable[
         return code
     plan = setup.plan(plugin_root, env, repo, setup_ports.facts, setup_ports.route())
     out(setup.as_json(plan) if a.json else setup.render(plan))
-    return 0 if all(c.ok for c in plan.checks) else 1
+    return setup.verdict(plan)
 
 
 def add_parser(sp: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
