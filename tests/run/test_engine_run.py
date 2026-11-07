@@ -9,13 +9,14 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import gitq, homes, procsim
+from support import gitq, homes
 from support.aging import age
-from support.cfgs import PROFILE_PATTERNS
 from support.engine_case import CAP_PARKS, EngineTest, full, no_repo, stop
-from support.plans import BEAD, CAT_ENV, CLEAN, FALSE, PLAN, WRITE, review, verdict
 
+from tltestkit import procsim
+from tltestkit.cfgs import PROFILE_PATTERNS
 from tltestkit.checks import ck
+from tltestkit.plans import BEAD, CAT_ENV, CLEAN, FALSE, PLAN, WRITE, review, verdict
 from tltestkit.shellkit import sh
 
 # isort: split
@@ -28,7 +29,6 @@ from pathlib import Path
 from unittest import mock
 
 from support.briefs import bead_diff, bead_snapshot, brief_digest, linked_text
-from support.cfgs import cfg_with
 from support.checkpoints import drop_ck, stored_ck
 from support.fakes import as_bead, as_comment, must_bead
 from support.spawn import port_git, real_spawner
@@ -37,15 +37,14 @@ from support.who import who
 from taskloop.adapters import delegate as dl
 from taskloop.app.asks import admission
 from taskloop.app.land.checkout import Checkout
-from taskloop.app.pipeline import outcomes
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine, entry, running
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.slots.lease import Lease
 from taskloop.app.track import outcome_line
-from taskloop.domain.checks import retry
 from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.write.matchers import count_tests
+from tlgate.domain import retry
 from tlkernel import checkmatchers as check_matchers
 from tlkernel.acceptancetext import AcceptanceText
 from tlkernel.config import EngineConfig
@@ -55,7 +54,9 @@ from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.run import RunReport
 from tlkernel.waitenums import WaitWhat
+from tlpipeline.api import outcomes
 from tltestkit import fake_route
+from tltestkit.cfgs import cfg_with
 from tltestkit.logs import records
 from tltestkit.tmpdir import mkdtemp
 

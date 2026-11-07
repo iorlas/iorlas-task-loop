@@ -10,13 +10,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.check_host import CheckHostCase
-from support.procsim import real_proc
 from support.waits import until
 
+from tltestkit.procsim import real_proc
 from tltestkit.shellkit import POSIX_CHECK, PY, shq
 
 # isort: split
-from taskloop.domain.checks.specs import gate_items
+from tlgate.domain.specs import gate_items
 
 
 def alive(pid: int) -> bool:

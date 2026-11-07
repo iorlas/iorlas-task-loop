@@ -7,11 +7,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.engine_case import EngineTest
-from support.plans import BEAD, CLEAN, PLAN, WRITE
+
+from tltestkit.plans import BEAD, CLEAN, PLAN, WRITE
 
 # isort: split
-from support import procsim
-
+from tltestkit import procsim
 from tltestkit.logs import records
 
 ANSWERS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}

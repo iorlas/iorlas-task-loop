@@ -11,10 +11,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.adapters import delegate, delegate_wire
-from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from taskloop.app.workers.lane_acts import LaneActs
-from taskloop.domain.lanes import pauses, policy
+from taskloop.domain.lanes import policy
+from tlkernel import lanepauses as pauses
 from tlkernel.delegate import RunRequest
+from tlpipeline.api import Blocked, blocked_for
 
 
 class PauseProducers(Case):

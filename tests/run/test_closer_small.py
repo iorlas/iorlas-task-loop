@@ -3,29 +3,29 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+from taskloop.adapters import beadtools
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.narrow_hosts import CloseKit, FakeReleaseSlotHost, FakeSettleHost
-from support.pipeline_ports import FakeParkBook
+
+from tlpipeline.testing import FakeParkBook
 
 # isort: split
-from support.pipeline_ports import FakeLandCleanup
-
 from taskloop.app.asks import raiser
-from taskloop.app.pipeline.closing_branch import ReleaseSlot
-from taskloop.app.pipeline.closing_settle import Settle
 from taskloop.app.track.closing import ClosingBeads
 from taskloop.app.wire import closeguard
-from taskloop.domain import effects as fx
 from tlkernel import askspecs
+from tlkernel import closeeffects as fx
 from tlkernel import runoutcome as oc
 from tlkernel.bead import Bead
 from tlkernel.enums import Outcome
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.log import Note
+from tlpipeline.api import ReleaseSlot, Settle
+from tlpipeline.testing import FakeLandCleanup
 
 
 class Effects(Case):
@@ -64,14 +64,15 @@ class Settling(Case):
         done = oc.make(Kind.NOOP, "noop: the plan found nothing to implement: umbrella")
         host = FakeSettleHost(oc.apply(done, "t-1", [], 1000.0))
         host.store.beads[BeadId("t-1")] = Bead(id=BeadId("t-1"), title="t", status="in_progress", assignee="me")
-        assert Settle(host, ClosingBeads(host.who, host.store, closeguard.ENGINE), FakeParkBook()).leave_open(done.kind, done.detail) == 0
+        assert Settle(host, ClosingBeads(host.who, host.store, closeguard.ENGINE), FakeParkBook(),
+            beadtools.peek, beadtools.attempt).leave_open(done.kind, done.detail) == 0
         held = host.store.beads[BeadId("t-1")]
         assert (held.status, held.assignee) == ("open", "")
 
     def test_a_pause_lets_the_bead_go_open_and_unassigned(self):
         host = FakeSettleHost(oc.apply(oc.make(Kind.PAUSE_LANE, "the lane is out"), "t-1", [], 1000.0))
         host.store.beads[BeadId("t-1")] = Bead(id=BeadId("t-1"), title="t", status="in_progress", assignee="me")
-        settling = Settle(host, ClosingBeads(host.who, host.store, closeguard.ENGINE), FakeParkBook())
+        settling = Settle(host, ClosingBeads(host.who, host.store, closeguard.ENGINE), FakeParkBook(), beadtools.peek, beadtools.attempt)
         rc = settling.leave_open(Kind.PAUSE_LANE, "the lane is out")
         assert rc == 0
         held = host.store.beads[BeadId("t-1")]

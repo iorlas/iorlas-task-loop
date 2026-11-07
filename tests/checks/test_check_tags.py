@@ -13,8 +13,8 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 # isort: split
 import msgspec
 
-from taskloop.domain.checks.plan import CheckPlan
-from taskloop.domain.checks.specs import diff_check, gate_items, repo_check, tags_of, wall_limit
+from tlgate.domain.plan import CheckPlan
+from tlgate.domain.specs import diff_check, gate_items, repo_check, tags_of, wall_limit
 from tlkernel.checks import Check, CheckResult, Durations, Phase
 from tlkernel.config import CheckSpec, EngineConfig
 from tlkernel.ids import CheckId

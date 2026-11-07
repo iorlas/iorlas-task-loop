@@ -5,19 +5,19 @@ import time
 from functools import cached_property
 from pathlib import Path
 
+from tlgate.domain import affinity
 from tlkernel import askspecs, fence
 from tlkernel.askspec import AskSpec
 from tlkernel.kinds import Kind
 from tlkernel.log import Assumed, Said
 from tlkernel.matchers import redact
+from tlpipeline.api import Blocked, FixFailed, blocked_for
 
 from taskloop.adapters import beadtools
 from taskloop.adapters import halt as halting
-from taskloop.app.pipeline.blocked import Blocked, FixFailed, blocked_for
 from taskloop.app.run.fields import RunFields
 from taskloop.app.track import trail
 from taskloop.app.track.console import say
-from taskloop.domain.checks import affinity
 
 
 class Plumbing(RunFields):

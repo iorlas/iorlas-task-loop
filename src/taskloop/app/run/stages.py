@@ -3,12 +3,11 @@ from functools import partial
 
 from tlkernel.checkpoint import Checkpoint
 from tlkernel.enums import Step
+from tlkernel.runlayout import repo_of
+from tlpipeline.api import Standalone, stage_run
 
 from taskloop.adapters import beadtools
-from taskloop.app.pipeline.stage_run import stage_run
-from taskloop.app.pipeline.standalone import Standalone
 from taskloop.app.run.host import RunHost
-from taskloop.app.run.layout import repo_of
 from taskloop.app.run.run_once import RunOnce
 from taskloop.app.track.closing import ClosingBeads
 from taskloop.app.wire.closeguard import guard_for, has_land

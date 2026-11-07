@@ -6,13 +6,11 @@ from functools import cached_property
 from tlkernel import plancheck
 from tlkernel.asked import Asked
 from tlkernel.stagefacts import RunFacts
+from tlpipeline.api import Closer, LeftoverQueue, summaries
 
 from taskloop.app.look.judge import Judge
 from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.look.shots import Pictures
-from taskloop.app.pipeline import summaries
-from taskloop.app.pipeline.closing import Closer
-from taskloop.app.pipeline.leftover_queue import LeftoverQueue
 from taskloop.app.plan.briefs import Briefs
 from taskloop.app.plan.cases import Cases
 from taskloop.app.plan.planner import Planner
@@ -41,7 +39,7 @@ class RunHost(LandParts, PlanParts, RunParts):
     replan_first: bool
 
     @property
-    def intake_per_day(self) -> int:  # the Engine's: CloserHost reads it
+    def intake_per_day(self) -> int:  # the Engine's: DecideHost reads it
         raise NotImplementedError
 
     def on_path(self, name: str) -> str | None:

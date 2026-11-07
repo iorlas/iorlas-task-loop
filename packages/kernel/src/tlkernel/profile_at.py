@@ -1,9 +1,9 @@
-"""The one place a repo's `.task-loop.json` is opened: a commit or tree through the Git port, or a working tree's file."""
+"""The one place a repo's `.task-loop.json` is opened: a commit or tree through the GateGit port, or a working tree's file."""
 import json
 from pathlib import Path
 
 from tlkernel import config
-from tlkernel.gitport import Git
+from tlkernel.gitport import GateGit
 from tlkernel.slots import SlotGitError
 
 FILE = ".task-loop.json"
@@ -17,7 +17,7 @@ def object_of(text: str) -> dict[str, object]:
     return data
 
 
-def raw_at(git: Git, repo: str, rev: str) -> dict[str, object] | None:
+def raw_at(git: GateGit, repo: str, rev: str) -> dict[str, object] | None:
     """The profile committed at `rev` (a commit or a tree), parsed but not yet typed; None when the commit has no profile.
     SlotGitError when git cannot answer, ValueError when the file is not a JSON object."""
     try:
@@ -32,7 +32,7 @@ def raw_at(git: Git, repo: str, rev: str) -> dict[str, object] | None:
     return object_of(text)
 
 
-def profile_at(git: Git, repo: str, rev: str) -> config.RepoProfile | None:
+def profile_at(git: GateGit, repo: str, rev: str) -> config.RepoProfile | None:
     """The typed profile committed at `rev`, None when there is none; ConfigError for a key it does not know."""
     data = raw_at(git, repo, rev)
     return None if data is None else config.load(data)

@@ -1,6 +1,5 @@
-"""Small typed fakes of what a slice reads of the engine (app/pipeline/waits.py WaitsHost, app/land/outbound.py OutboundHost): a class that
+"""Small typed fakes of what a slice reads of the engine (tlpipeline/waits.py WaitsHost, app/land/outbound.py OutboundHost): a class that
 has just those members, so the type checker proves the fake is enough and a slice that reads one more member breaks the test's types."""
-
 import contextlib
 import tempfile
 import threading
@@ -13,25 +12,18 @@ from typing import Any
 import support.paths  # noqa: F401
 from support import homes
 from support.fake_beads import FakeBeads
-from support.fake_clock import FakeClock
 from support.fakegit import FakeGit, ScriptedGit
 from support.memstores import fake_stores
-from support.pipeline_ports import FakeAskRules, FakeParkBook
 from support.who import who
-from taskloop.app.land.commit import Commit
+from taskloop.adapters import beadtools
 from taskloop.app.land.fix_outside import FixOutside
 from taskloop.app.land.gate import Gate, GateChecker, GateCheckout
-from taskloop.app.land.land_rebase import LandRebase
+from taskloop.app.land.host import LandState
 from taskloop.app.land.landed import Landed
 from taskloop.app.land.lander import GateStep, Lander, LandParts
 from taskloop.app.land.push import Pusher
-from taskloop.app.land.recheck import Recheck
-from taskloop.app.land.state import LandState
+from taskloop.app.land.rebase import Commit, LandRebase, Recheck
 from taskloop.app.land.sync import Sync
-from taskloop.app.pipeline.budget import Budget
-from taskloop.app.pipeline.closing import CloseParts, Closer
-from taskloop.app.pipeline.steps import Steps
-from taskloop.domain.lanes.pause_reasons import Producer
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 from tlkernel import fence
@@ -47,9 +39,13 @@ from tlkernel.enums import Outcome
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId, TreeSha
 from tlkernel.kinds import Kind
+from tlkernel.pausereasons import Producer
 from tlkernel.plancheck import PlanCheck, PlanData, StageData
 from tlkernel.ports import Clock
 from tlkernel.run import RunFinish
+from tlpipeline.api import Budget, CloseParts, Closer, Steps
+from tlpipeline.testing import FakeAskRules, FakeParkBook
+from tltestkit.fake_clock import FakeClock
 
 
 class FakeWaitsHost:
@@ -621,7 +617,7 @@ def table_kit(table: FakeGit, **kw: Any) -> LandKit:
     return LandKit(table, table.sh, **kw)
 
 
-# ---- the close: one small fake per step (app/pipeline/closing_*.py) ----
+# ---- the close: one small fake per step (tlpipeline/closing_*.py) ----
 
 
 class Said:
@@ -697,7 +693,7 @@ class CloseRecords:
 
 
 class FakeCloseHost(Said):
-    """CloseHost: the Closer's own flow, over an in-memory log. `dry` keeps the checkpoint out of it."""
+    """Close flow roles: the Closer's own flow, over an in-memory log. `dry` keeps the checkpoint out of it."""
 
     def __init__(self, dry: bool = True, disp: oc.Disposition | None = None) -> None:
         super().__init__()
@@ -802,7 +798,7 @@ class CloseKit:
         self.slot = SpySlot()
         self.calls: list[str] = []
         self.closer = Closer(
-            self.host,
+            self.host, self.host, self.host,
             CloseParts(
                 decide=SpyDecide(),
                 branch=SpyBranch(self.calls),
@@ -812,4 +808,4 @@ class CloseKit:
                 reflect=SpyReflect(),
                 settle=SpySettle(),
             ), FakeAskRules(), FakeParkBook(),
-        )
+            beadtools.peek)

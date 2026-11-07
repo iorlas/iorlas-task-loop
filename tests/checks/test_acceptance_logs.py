@@ -4,11 +4,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support import procsim
 from support.check_host import CheckHostCase
 
 from tlkernel.checks import Check
 from tlkernel.ids import CheckId
+from tltestkit import procsim
 
 
 class AcceptanceLogs(CheckHostCase):

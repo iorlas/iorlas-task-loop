@@ -15,13 +15,9 @@ import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.fakegit import ScriptedGit
 from support.memstores import fake_stores
-from support.pipeline_ports import FakeHeadHistory
 
-from taskloop.app.land.state import LandState
+from taskloop.app.land.host import LandState
 from taskloop.app.look.state import LOOK_FIELDS, LookState
-from taskloop.app.pipeline.checkpoints import Checkpoints
-from taskloop.app.pipeline.resume import KEEP_FOR_ACTIVE, LATE, Resume
-from taskloop.app.pipeline.review_glue import ReviewGlue
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.sections import checkpoint_hooks, restarted
 from taskloop.app.run.state import STATE_ONLY, StateAttrs, attr_names, carries_state, state_names
@@ -34,6 +30,8 @@ from tlkernel.review import (
     Unfiled,
 )
 from tlkernel.run import Round
+from tlpipeline.api import KEEP_FOR_ACTIVE, LATE, Checkpoints, Resume, ReviewGlue
+from tlpipeline.testing import FakeHeadHistory
 
 ROOT = Path(__file__).resolve().parents[2]
 # a value that is not the default, for each field: the park test fails on a new field until it is listed here
@@ -226,7 +224,7 @@ class Park(Case):
 
 class OneWriter(Case):
     def test_nothing_but_the_writer_writes_a_checkpoint(self):
-        """The record is written only by app/pipeline/checkpoints.py (and the stores that hold it): no other src or engine code opens it."""
+        """The record is written only by tlpipeline/checkpoints.py (and the stores that hold it): no other src or engine code opens it."""
         hits = []
         for path in [*ROOT.joinpath("src").rglob("*.py"), *ROOT.joinpath("skills/task-loop").glob("*.py")]:
             rel = path.relative_to(ROOT).as_posix()
@@ -236,7 +234,7 @@ class OneWriter(Case):
         assert hits == []
 
 
-OK = {"src/taskloop/app/pipeline/checkpoints.py", "src/taskloop/stores/books.py", "src/taskloop/stores/real.py",
+OK = {"tlpipeline/checkpoints.py", "src/taskloop/stores/books.py", "src/taskloop/stores/real.py",
       "src/taskloop/app/run/shared.py"}  # shared.py: the sibling's plan is read (siblings()), never written
 
 

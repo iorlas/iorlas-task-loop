@@ -4,12 +4,8 @@ from types import SimpleNamespace
 from unittest import mock
 
 import pytest
-from support.pipeline_ports import FakeBeadClosing, FakeRoundSteps
 
 from taskloop.adapters import beadtools
-from taskloop.app.pipeline import standalone as standalone_module
-from taskloop.app.pipeline import standalone_roles
-from taskloop.app.pipeline.standalone import Standalone
 from tlkernel import fence
 from tlkernel.bead import Bead
 from tlkernel.checkpoint import Checkpoint
@@ -20,6 +16,9 @@ from tlkernel.locator import RunLocator
 from tlkernel.parks import Park, ParkStore
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
+from tlpipeline.api import Standalone, standalone_roles
+from tlpipeline.api import standalone as standalone_module
+from tlpipeline.testing import FakeBeadClosing, FakeRoundSteps
 
 
 def roles():
@@ -65,7 +64,7 @@ def test_next_step_selects_from_previous_checkpoint_fresh_and_requested(workdir)
     old = locator.create("repo", parts.journalling.bead, 1)
     locator.end(old.run, 2, RunState.DONE)
     ck = Checkpoint(bead=parts.journalling.bead, run="prior", t=1, step="gate")
-    with mock.patch("taskloop.app.pipeline.standalone.select_step", return_value=Step.LAND) as select:
+    with mock.patch("tlpipeline.standalone.select_step", return_value=Step.LAND) as select:
         assert standalone(parts).next_step(locator, ck, "land") is Step.LAND
     select.assert_called_once_with(locator.get(old.run), ck, False, "land")
 

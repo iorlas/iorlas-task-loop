@@ -11,11 +11,11 @@ from pathlib import Path
 import pytest
 from support import stepgraph
 
-from taskloop.app.pipeline.cursor import select_step
 from tlkernel.checkpoint import Checkpoint, CloseIntent, EndRec, PauseFacts
 from tlkernel.enums import Step
 from tlkernel.locator import RunBundle
 from tlkernel.run import RunManifest, RunState
+from tlpipeline.api import select_step
 
 S = Step
 GRAPH = stepgraph.graph()  # read off the code (tests/support/stepgraph.py), not typed here

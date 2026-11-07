@@ -10,7 +10,7 @@ from support.fakegit import FakeGit
 from support.narrow_hosts import table_kit
 
 # isort: split
-from taskloop.app.land.state import Land
+from taskloop.app.land.host import Land
 from tlkernel import log as rec
 
 

@@ -10,7 +10,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.cfgs import cfg_with
 from support.fakes import FakeBeadStore, FakeClock, FakeRouter
 from support.memstores import fake_stores
 from support.stdout import stdout_in
@@ -19,7 +18,6 @@ from support.tlmain import tl
 from taskloop.app.asks import admission
 from taskloop.app.run import entry
 from taskloop.app.run.engine import Engine
-from taskloop.app.run.layout import RunLayout
 from tlkernel.config import EngineConfig, SlotsConfig
 from tlkernel.enums import Result, Step
 from tlkernel.env import Env
@@ -29,7 +27,9 @@ from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.locator import RunLocator
 from tlkernel.run import RunReport, RunState
+from tlkernel.runlayout import RunLayout
 from tlkernel.runrows import RunRows
+from tltestkit.cfgs import cfg_with
 
 
 @stdout_in("output")
@@ -113,7 +113,7 @@ class StagePreflight(Case):
     def test_clean_land_preview_accepts_cached_green_without_writing_slot_folders(self):
         self.a.stage = "land"
         self.cfg = cfg_with(gate=["true"], plan_cmd=["plan-producer"])
-        with mock.patch("taskloop.app.checks.runner.RunMemo.has", return_value=True) as cached:
+        with mock.patch("tlgate.runner.RunMemo.has", return_value=True) as cached:
             assert self.run_in() == 0
         assert cached.called
         self.untouched()

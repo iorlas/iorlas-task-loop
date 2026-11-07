@@ -10,9 +10,7 @@ import pytest
 import support.paths  # noqa: F401
 from support import homes
 from support.engine_case import EngineTest
-from support.plans import CLEAN, PLAN, WRITE
 
-from taskloop.app.pipeline.finish import answer, outcome
 from tlkernel import askspecs as specs
 from tlkernel import log, runlife, wire
 from tlkernel import runoutcome as oc
@@ -26,7 +24,9 @@ from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
 from tlkernel.runrows import RunRows
 from tlkernel.stores import EventLog, LoopLog, RunLog, TraceStore
+from tlpipeline.api import answer, outcome
 from tltestkit.case import Case
+from tltestkit.plans import CLEAN, PLAN, WRITE
 from tltestkit.tmpdir import TemporaryDirectory
 
 

@@ -5,9 +5,9 @@ from unittest import mock
 import pytest
 import support.paths  # noqa: F401
 
-from taskloop.app.checks.clean import isolated
-from taskloop.app.checks.host import CheckFault
 from taskloop.app.land.gate import FAULTS
+from tlgate.clean import isolated
+from tlgate.host import CheckFault
 from tlkernel.checks import CheckFaultKind
 from tltestkit.case import Case
 
@@ -17,7 +17,7 @@ class DirtySlot(Case):
         host = SimpleNamespace(wt="slot", git=mock.Mock(), checkout=mock.Mock())
         host.git.rev_parse.side_effect = ["head", "committed-tree"]
         host.checkout.tree_hash.return_value = "dirty-tree"
-        with mock.patch("taskloop.app.checks.clean.clean_tree") as checkout, pytest.raises(CheckFault) as fault, isolated(host):
+        with mock.patch("tlgate.clean.clean_tree") as checkout, pytest.raises(CheckFault) as fault, isolated(host):
             pytest.fail("dirty slot accepted")
         assert fault.value.kind == CheckFaultKind.DIRTY_SLOT
         checkout.assert_not_called()

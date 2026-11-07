@@ -8,12 +8,11 @@ import pytest
 from support.narrow_hosts import FakeWaitsHost
 
 from taskloop.adapters import deadline
-from taskloop.app.pipeline.blocked import Blocked
-from taskloop.app.pipeline.waits import Waits
 from tlkernel import log as rec
 from tlkernel.kinds import Kind
 from tlkernel.lanesliveness import LIVENESS
 from tlkernel.waitenums import WaitWhat
+from tlpipeline.api import Blocked, Waits
 
 
 def test_wait_books_seconds_outside_the_budget():
@@ -71,7 +70,7 @@ def test_lock_deadline_pauses_lane_and_books_wait(monkeypatch):
 def test_over_budget_raises_budget_ask(monkeypatch):
     host = FakeWaitsHost()
     host.budget.charge(float(host.cfg.budget_usd) + 1)
-    monkeypatch.setattr("taskloop.app.pipeline.waits.outcomes.run_breakdown", lambda *_: [])
+    monkeypatch.setattr("tlpipeline.waits.outcomes.run_breakdown", lambda *_: [])
     with pytest.raises(Blocked, match="over budget") as stopped:
         Waits(host, deadline).budget_check()
     assert stopped.value.kind is Kind.ASK_BUDGET

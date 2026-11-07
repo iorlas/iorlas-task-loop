@@ -4,17 +4,15 @@ from types import SimpleNamespace
 from unittest import mock
 
 import pytest
-from support.pipeline_ports import FakeHeadHistory, FakeNarrate
 
 from taskloop.adapters import beadtools, ident
-from taskloop.app.pipeline import run, run_roles
-from taskloop.app.pipeline.blocked import Blocked
-from taskloop.app.pipeline.run import RunBody
 from tlkernel.bead import Bead
 from tlkernel.checkpoint import RunState
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.plancheck import PlanData, RoundState
+from tlpipeline.api import Blocked, RunBody, run, run_roles
+from tlpipeline.testing import FakeHeadHistory, FakeNarrate
 
 
 def roles():

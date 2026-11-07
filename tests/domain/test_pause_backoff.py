@@ -10,10 +10,10 @@ from tltestkit.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.domain.lanes import pauses
-from taskloop.domain.lanes.pause_reasons import Reason, Unknown, parse
+from tlkernel import lanepauses as pauses
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
+from tlkernel.pausereasons import Reason, Unknown, parse
 
 
 class Backoff(Case):

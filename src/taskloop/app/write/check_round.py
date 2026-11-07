@@ -3,10 +3,10 @@ the writer calls impossible, red tries used up, or the rounds used up ask for a 
 at once (ASK_STUCK): it is not the code, so the writer is not asked and nothing is retried."""
 from typing import Any
 
+from tlgate import evidence as check_evidence
 from tlkernel import askspecs
 from tlkernel.plancheck import StageData
 
-from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.write.host import WriteHost
 from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.prompts import REPEAT_RED
@@ -50,7 +50,7 @@ class CheckRound:
         if failed:
             return self.red(s, run, failed, prev_red, out)
         s.red = 0
-        if run.unverified:  # not green, and not the writer's to fix: review goes on, the land refuses (app/land/verified.py)
+        if run.unverified:  # not green, and not the writer's to fix: review goes on, the land refuses (app/land/gate.py)
             e.steps.move("review", "checks_unverified", check_evidence.round_outcome(run))
             return ""
         e.steps.move("review", "checks_green", f"{len(run.passed)} passed")

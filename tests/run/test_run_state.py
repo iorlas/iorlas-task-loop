@@ -16,14 +16,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import homes
 from support.engine_case import EngineTest
-from support.plans import CLEAN, PLAN, WRITE
+
+from tltestkit.plans import CLEAN, PLAN, WRITE
 
 # isort: split
 from support.lifecycle import lifecycle
 
-from taskloop.app.pipeline.closing import Closer
-from taskloop.app.pipeline.finish import terminal_state
-from taskloop.app.pipeline.lifecycle import Ended, Lifecycle
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
 from tlkernel import askspecs
@@ -31,6 +29,7 @@ from tlkernel import runoutcome as oc
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
 from tlkernel.run import RunManifest, RunState
+from tlpipeline.api import Closer, Ended, Lifecycle, terminal_state
 
 LANDS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 

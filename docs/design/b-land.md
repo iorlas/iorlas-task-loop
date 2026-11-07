@@ -8,7 +8,7 @@ Measured on origin/main, 2026-11-07: `app/land` holds no `Any`. All 18 parts tak
 
 ## Slice 2 as built: LandState
 
-`app/land/state.py::LandState`, held as `engine.land_state`, takes the six plain engine attributes only the land and its resume rebase touch: `gate_log`, `salvage_tail`, `rebase_orig`, `rebase_pre`, `salvaged`, `remote_oid` (was `land_remote_oid`). Readers outside land: `run/state.py` (gate log for the red tail), `run/records.py` (salvaged), `run/parts_land.py` (remote oid). Left on the engine because they are checkpoint fields (`RunState`) or read by the checkpoint seams: `pending_land_validation`, `landed_sha`, `left_dirty`, `task_branch`, `branch`, `tree_memo`, `fixes`.
+`app/land/host.py::LandState`, held as `engine.land_state`, takes the six plain engine attributes only the land and its resume rebase touch: `gate_log`, `salvage_tail`, `rebase_orig`, `rebase_pre`, `salvaged`, `remote_oid` (was `land_remote_oid`). Readers outside land: `run/state.py` (gate log for the red tail), `run/records.py` (salvaged), `run/parts_land.py` (remote oid). Left on the engine because they are checkpoint fields (`RunState`) or read by the checkpoint seams: `pending_land_validation`, `landed_sha`, `left_dirty`, `task_branch`, `branch`, `tree_memo`, `fixes`.
 
 ## Slice 3 as built: the gate tests off the engine
 

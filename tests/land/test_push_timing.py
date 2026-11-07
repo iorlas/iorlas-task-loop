@@ -10,15 +10,12 @@ from support.narrow_hosts import FakeOutboundHost
 
 from taskloop.adapters.agent import last_event_t
 from taskloop.app.land.outbound import Outbound
-from taskloop.app.pipeline.budget import Budget
-from taskloop.app.pipeline.outcomes import run_breakdown
-from taskloop.app.pipeline.steps import Steps
-from taskloop.app.pipeline.stuck import StuckTick
 from taskloop.stores.runlog import RunLog
 from tlkernel import log as rec
 from tlkernel.gitfacts import GitOutcome
 from tlkernel.runlife import silent_limit
 from tlkernel.stores import JsonlStore
+from tlpipeline.api import Budget, Steps, StuckTick, run_breakdown
 from tltestkit.case import Case
 from tltestkit.narrow import must
 from tltestkit.tmpdir import TemporaryDirectory

@@ -9,11 +9,11 @@ from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support import procsim
 from support.check_host import CheckHostCase
 from support.fakegit import FakeGit
 from support.narrow_hosts import Stopped, table_kit
 
+from tltestkit import procsim
 from tltestkit.checks import res
 from tltestkit.narrow import must
 
@@ -21,9 +21,9 @@ from tltestkit.narrow import must
 from support.memstores import fake_stores
 from support.spawn import port_git
 
-from taskloop.app.checks import evidence
-from taskloop.app.checks.cache import InputKeys, RunMemo, key_digest
-from taskloop.app.land import verified
+from taskloop.app.land import gate
+from tlgate import evidence
+from tlgate.cache import InputKeys, RunMemo, key_digest
 from tlkernel.bead import Bead
 from tlkernel.checkenums import CheckStatus
 from tlkernel.checks import UNVERIFIED_EXIT, Check, CheckResult, CheckRun, PassRecord, verdict_of
@@ -101,5 +101,5 @@ class Land(Case):
         assert cm.value.kind == "FAULT_LAND"
 
     def test_nothing_unverified_is_no_refusal(self):
-        assert verified.refusal(CheckRun(round=1, results=[res("ok", 0)])) == ""
-        assert not verified.deferred(unverified())
+        assert gate.refusal(CheckRun(round=1, results=[res("ok", 0)])) == ""
+        assert not gate.deferred(unverified())

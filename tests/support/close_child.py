@@ -17,7 +17,6 @@ import support.paths  # noqa: F401
 from support.fakes import FakeBeadStore
 from support.spawn import port_git, real_spawner
 from support.who import who
-from taskloop.app.pipeline.closing import Closer
 from taskloop.app.run import engine
 from taskloop.app.slots import config as wslots_config
 from taskloop.cli.ctx import declare_stage_parts
@@ -25,6 +24,7 @@ from tlkernel import runoutcome as oc
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
+from tlpipeline.api import Closer
 
 
 class Journal(list):
@@ -65,8 +65,8 @@ def main(argv: list[str]) -> None:
             os.replace(argv[3] + ".tmp", argv[3])  # the parent waits for the marker to exist: it must never see it empty
             time.sleep(120)  # the parent kills this process by its pid
         write(journal, {"effect": type(eff).__name__, "stats": a[1],
-                        "pause_reason": self.host.pause_reason, "retry_after": self.host.retry_after,
-                        "crash_fingerprint": self.host.crash_fingerprint})
+                        "pause_reason": self.state.pause_reason, "retry_after": self.state.retry_after,
+                        "crash_fingerprint": self.state.crash_fingerprint})
         real(self, eff, *a)
 
     Closer.apply = apply  # type: ignore[method-assign]

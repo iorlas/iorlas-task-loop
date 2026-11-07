@@ -7,6 +7,7 @@ from unittest import mock
 
 import pytest
 
+from taskloop.adapters import beadtools
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -18,10 +19,8 @@ from support.memstores import fake_stores
 from taskloop.adapters.bd import BdRun, BdStore
 from taskloop.app.land.closing import LandFollowUps
 from taskloop.app.land.followups import file_follow_ups
-from taskloop.app.land.state import LandState
+from taskloop.app.land.host import LandState
 from taskloop.app.look.state import LookState
-from taskloop.app.pipeline.checkpoints import Checkpoints
-from taskloop.app.pipeline.closing_notes import FileNotes
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.state import StateAttrs, carries_state
 from taskloop.stores.runlog import RunLog
@@ -32,6 +31,7 @@ from tlkernel.checkpoint import RunState
 from tlkernel.enums import Outcome
 from tlkernel.followkeys import FollowKey
 from tlkernel.ids import BeadId
+from tlpipeline.api import Checkpoints, FileNotes
 from tltestkit.narrow import must
 
 
@@ -155,7 +155,7 @@ class FollowupOutbox(Case):
         h = self.host()
         h.leftovers = []  # only the durable queue knows what still needs filing
         h.store.refuse_create = [BdError(kind="other", text="offline")]
-        notes = FileNotes(h, LandFollowUps(lambda: file_follow_ups(h))).run(Outcome.FAILED)
+        notes = FileNotes(h, LandFollowUps(lambda: file_follow_ups(h)), beadtools.attempt).run(Outcome.FAILED)
         assert (notes.filed, notes.unfiled) == (0, 1)
         assert any("durable outbox" in call.args[0] for call in h.warn.call_args_list)
         assert len(must(h.stores.followups.of(h.bead).need()).pending) == 1

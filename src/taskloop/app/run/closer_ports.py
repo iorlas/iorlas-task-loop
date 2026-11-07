@@ -4,18 +4,12 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from tlkernel.identity import Identity
+from tlpipeline import api
 
+from taskloop.adapters import beadtools, closes
 from taskloop.app.asks.closing import ClosingAsks
 from taskloop.app.land.closing import LandCleanups, LandFollowUps
 from taskloop.app.land.followups import FollowUpCheckpoints, FollowUpHost, file_follow_ups
-from taskloop.app.pipeline.closing import CloseParts, Closer
-from taskloop.app.pipeline.closing_branch import ReleaseSlot, SaveBranch
-from taskloop.app.pipeline.closing_decide import Decide
-from taskloop.app.pipeline.closing_host import CloseAllCheckpoints, CloserHost
-from taskloop.app.pipeline.closing_notes import FileNotes, Reflect
-from taskloop.app.pipeline.closing_record import RecordRun
-from taskloop.app.pipeline.closing_settle import Settle
-from taskloop.app.pipeline.ports import AskRules, BeadClosing, FollowUps, LandCleanup, ParkBook
 from taskloop.app.slots.config import profile_slots
 from taskloop.app.track.closing import ClosingBeads
 from taskloop.app.wire import closeguard
@@ -23,11 +17,19 @@ from taskloop.app.wire.slots import slot_of
 from taskloop.stores.runlog import RunLog
 
 
-class BindingCheckpoints(CloseAllCheckpoints, FollowUpCheckpoints, Protocol):
+class BindingCheckpoints(api.CloseCheckpoints, api.BranchCheckpoints, api.NotesCheckpoints, api.ReflectCheckpoints,
+                         FollowUpCheckpoints, Protocol):
     pass
 
 
-class BindingHost(CloserHost, FollowUpHost, Protocol):
+class BindingTree(api.BranchTree, api.Slotting, Protocol):
+    pass
+
+
+class BindingHost(api.CloseState, api.CloseRuntime, api.CloseStats, api.DecideHost, api.SaveBranchHost, api.ReleaseSlotHost,
+                  api.RecordHost, api.FileNotesHost, api.ReflectHost, api.SettleHost, FollowUpHost, Protocol):
+    @property
+    def tree(self) -> BindingTree: ...
     @property
     def log(self) -> RunLog: ...
     @property
@@ -38,11 +40,11 @@ class BindingHost(CloserHost, FollowUpHost, Protocol):
 
 @dataclass(frozen=True)
 class ClosingPorts:
-    asks: ParkBook
-    rules: AskRules
-    cleanup: LandCleanup
-    beads: BeadClosing
-    follow_ups: FollowUps
+    asks: api.ParkBook
+    rules: api.AskRules
+    cleanup: api.LandCleanup
+    beads: api.BeadClosing
+    follow_ups: api.FollowUps
 
 
 def closing_ports(e: BindingHost) -> ClosingPorts:
@@ -53,11 +55,11 @@ def closing_ports(e: BindingHost) -> ClosingPorts:
     return ClosingPorts(asks, asks, cleanup, ClosingBeads(e.who, e.store, closeguard.ENGINE),
                         LandFollowUps(lambda: file_follow_ups(e)))
 
-def closer_over(host: BindingHost, after_save: Callable[[], None] | None = None) -> Closer:
+def closer_over(host: BindingHost, after_save: Callable[[], None] | None = None) -> api.Closer:
     """The Closer over the engine: each step gets the host typed as that step's own Protocol."""
     ports = closing_ports(host)
-    return Closer(host, CloseParts(
-        decide=Decide(host), branch=SaveBranch(host, after_save),
-        slot=ReleaseSlot(host, host.tree, ports.cleanup), record=RecordRun(host),
-        notes=FileNotes(host, ports.follow_ups), reflect=Reflect(host),
-        settle=Settle(host, ports.beads, ports.asks)), ports.rules, ports.asks)
+    return api.Closer(host, host, host, api.CloseParts(
+        decide=api.Decide(host, closes.recent_closes), branch=api.SaveBranch(host, after_save),
+        slot=api.ReleaseSlot(host, host.tree, ports.cleanup), record=api.RecordRun(host),
+        notes=api.FileNotes(host, ports.follow_ups, beadtools.attempt), reflect=api.Reflect(host),
+        settle=api.Settle(host, ports.beads, ports.asks, beadtools.peek, beadtools.attempt)), ports.rules, ports.asks, beadtools.peek)

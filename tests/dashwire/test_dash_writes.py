@@ -14,7 +14,6 @@ from asks.samples import MOCKS
 from support.dashes import make_dash
 from support.look_world import world
 
-from taskloop.app.pipeline import requests
 from tlkernel import factorydb, wire
 from tlkernel.askenums import AskStatus
 from tlkernel.askstore import AskStore
@@ -23,6 +22,7 @@ from tlkernel.dash import Result
 from tlkernel.ids import BeadId, loop_key
 from tlkernel.lookrows import LookRows
 from tlkernel.run import RunState
+from tlpipeline.api import requests
 from tltestkit.logs import typed
 from tltestkit.narrow import must
 from tltestkit.repos import write_repos

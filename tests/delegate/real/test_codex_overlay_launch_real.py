@@ -7,9 +7,9 @@ from pathlib import Path
 from unittest import mock
 
 from run_support import RunBase
-from support.procsim import real_proc
 
 from delegate.app import env, launch
+from tltestkit.procsim import real_proc
 
 
 class WiredOverlay(RunBase):

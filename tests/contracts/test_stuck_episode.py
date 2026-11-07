@@ -1,13 +1,13 @@
 """One rule for when a stuck episode ends: tlkernel.stuck, read by the engine's StuckWatch and by the dashboard's run fold."""
 import pytest
 
-from taskloop.app.pipeline.stuck_rule import StuckWatch
 from taskloop_dash.views import runfacts
 from tlkernel import log as rec
 from tlkernel.checks import CheckResult, CheckRun
 from tlkernel.ids import CheckId
 from tlkernel.runlife import SAME_RED, silent_limit
 from tlkernel.stuck import open_episode, red_ends, silent_ends
+from tlpipeline.api import StuckWatch
 
 T = 1_800_000_000.0
 SILENT = rec.Stuck(t=T + 1, why="silent", step="write", since=T, limit_s=silent_limit("write"))

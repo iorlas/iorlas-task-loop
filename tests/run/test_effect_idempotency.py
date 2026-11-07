@@ -7,17 +7,18 @@ import typing
 
 import pytest
 from support.narrow_hosts import FakeSettleHost
-from support.pipeline_ports import FakeParkBook
 
-from taskloop.app.pipeline.closing_settle import Settle
+from taskloop.adapters import beadtools
 from taskloop.app.track.closing import ClosingBeads
 from taskloop.app.wire import closeguard
-from taskloop.domain import effects as fx
 from tlkernel import askspecs
+from tlkernel import closeeffects as fx
 from tlkernel import runoutcome as oc
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
+from tlpipeline.api import Settle
+from tlpipeline.testing import FakeParkBook
 
 # effect class -> the outcome whose settling it is. One case per kind of settling the plan can end in.
 SETTLING = {
@@ -60,10 +61,10 @@ def test_settling_the_bead_twice_leaves_it_as_the_first_time_did(case, monkeypat
     cls, done = SETTLING[case]
     host = held_host(done)
     before = bead_state(host)
-    Settle(host, ClosingBeads(host.who, host.store, closeguard.ENGINE), FakeParkBook()).run(done, "")
+    Settle(host, ClosingBeads(host.who, host.store, closeguard.ENGINE), FakeParkBook(), beadtools.peek, beadtools.attempt).run(done, "")
     first = bead_state(host)
     assert first != before  # the first application did something, or the repeat proves nothing
-    Settle(host, ClosingBeads(host.who, host.store, closeguard.ENGINE), FakeParkBook()).run(done, "")
+    Settle(host, ClosingBeads(host.who, host.store, closeguard.ENGINE), FakeParkBook(), beadtools.peek, beadtools.attempt).run(done, "")
     assert bead_state(host) == first
     assert fx.settling(done).__class__ is cls
 

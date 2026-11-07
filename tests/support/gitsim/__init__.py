@@ -18,8 +18,8 @@ from unittest import mock
 
 import stream_proc
 
-from support import procsim
 from taskloop.adapters import procs
+from tltestkit import procsim
 
 from . import diffs, read, rebase, refs, remote, status, trees, write
 from .ctx import Ctx

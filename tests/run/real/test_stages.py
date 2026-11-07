@@ -6,18 +6,16 @@ from typing import Any, ClassVar, cast
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
-from support import (
-    procsim,
-    tools,
-)
+from support import tools
 from support.builders import make_engine
 from support.engine_case import lint
-from support.plans import CLEAN, HAS_F, PLAN, WRITE
 
 from taskloop.adapters.check_probe import PathProbe
 from tlkernel import childenv
 from tlkernel.argv import argv_of
 from tlkernel.env import snapshot
+from tltestkit import procsim
+from tltestkit.plans import CLEAN, HAS_F, PLAN, WRITE
 
 
 class StagesTest(te.EngineTest):

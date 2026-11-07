@@ -5,12 +5,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import procsim
 from support.check_host import CheckHostCase
-from support.plans import CLEAN, PLAN, WRITE
+
+from tltestkit import procsim
+from tltestkit.plans import CLEAN, PLAN, WRITE
 
 # isort: split
-from taskloop.domain.checks.specs import due, engine_digest, gate_items, items_of
+from tlgate.domain.specs import due, engine_digest, gate_items, items_of
 from tlkernel.checks import Check
 from tlkernel.ids import CheckId
 from tltestkit.logs import records

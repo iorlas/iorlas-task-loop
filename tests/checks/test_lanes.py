@@ -13,14 +13,15 @@ from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import procsim
 from support.check_host import CheckHostCase
 
+from tltestkit import procsim
+
 # isort: split
-from taskloop.app.checks import lanes
-from taskloop.app.checks.round import Round
-from taskloop.domain.checks.plan import CheckPlan, Step
-from taskloop.domain.checks.specs import gate_items
+from tlgate import lanes
+from tlgate.domain.plan import CheckPlan, Step
+from tlgate.domain.specs import gate_items
+from tlgate.round import Round
 from tlkernel.checks import Check
 from tlkernel.config import ConfigError, load
 from tlkernel.ids import CheckId

@@ -14,15 +14,15 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as T
 from support.asked import ans
 from support.builders import make_engine
-from support.cfgs import plan_of
 from support.engine_case import engine
-from support.plans import BEAD, CLEAN, PLAN, WRITE, verdict
 
 import tltestkit.shellkit
 from taskloop.app.review import verify_prompt as vp
 from taskloop.domain.prompts import common as cp
 from tlkernel import answers
 from tlkernel.plancheck import PlanData
+from tltestkit.cfgs import plan_of
+from tltestkit.plans import BEAD, CLEAN, PLAN, WRITE, verdict
 
 # lifesim-yxbb.7 and lifesim-fld.25.16: the engine files follow-up beads after the land
 YXBB_7 = {"what": "Follow-up beads for table, chairs, sink, plates and second bed: the engine files them from the plan's "

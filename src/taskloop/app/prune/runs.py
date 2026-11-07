@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from tlkernel import factorydb
+from tlkernel import runlayout as layout
 from tlkernel.bd_errors import BdCommandFailure
 from tlkernel.beadsport import BdFailure, BeadQuery, Beads
 from tlkernel.locator import RunBundle, RunLocator
@@ -15,7 +16,6 @@ from tlkernel.runlife import KEEP_DAYS
 
 from taskloop.app.prune.paths import suite_logs
 from taskloop.app.prune.traces import prune_traces
-from taskloop.app.run import layout
 from taskloop.app.track import trail
 
 

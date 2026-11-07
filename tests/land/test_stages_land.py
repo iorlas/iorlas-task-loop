@@ -15,10 +15,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from run.test_stages import StagesTest
 from support import engine_case as te
-from support import gitq, homes, procsim, tlbd
+from support import gitq, homes, tlbd
 from support.checkpoints import put_ck, read_ck
 from support.engine_case import engine, lint
-from support.plans import CLEAN, FALSE, HAS_F, PLAN, WRITE
 from support.pushsim import pusher
 from support.spawn import port_git, real_spawner
 from support.who import who
@@ -32,7 +31,7 @@ from taskloop.app.asks import admission
 from taskloop.app.run import running as wrunning
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.wire import asks as wasks
-from taskloop.domain.checks.cmd import matchers as sh_matchers
+from tlgate.domain.cmd import matchers as sh_matchers
 from tlkernel import checkmatchers as matchers
 from tlkernel import wire
 from tlkernel.ask import Ask
@@ -40,8 +39,9 @@ from tlkernel.env import snapshot
 from tlkernel.gitfacts import GitOutcome
 from tlkernel.ids import BeadId
 from tlkernel.landmatchers import _TRANSIENT as TRANSIENT_PUSH
-from tltestkit import fake_route
+from tltestkit import fake_route, procsim
 from tltestkit.checks import typed
+from tltestkit.plans import CLEAN, FALSE, HAS_F, PLAN, WRITE
 
 
 class StaleTree(StagesTest):

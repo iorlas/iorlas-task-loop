@@ -6,6 +6,7 @@ command by hand. Still not green: it stops with the check's exit code. Each refu
 from its newest receipt on the tree and base. A commit with no gate step passes. Its plan_cmd identifies the producer of planned skips."""
 import threading
 
+from tlgate import authorization
 from tlkernel import config, profile_at, scratch
 from tlkernel.argv import text_of
 from tlkernel.env import Env
@@ -15,10 +16,9 @@ from tlkernel.ids import CheckId, TreeSha
 from tlkernel.runkey import BaseSha
 from tlkernel.slots import NotARepo
 
-from taskloop.app.checks import authorization
 from taskloop.app.land.carry import Carry
 from taskloop.app.land.cmds import Cmds, Stop
-from taskloop.app.land.profile_change import owner_refusal
+from taskloop.app.land.gate import owner_refusal
 from taskloop.stores.bundle import Stores
 
 

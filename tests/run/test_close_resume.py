@@ -14,19 +14,18 @@ from support.checkpoints import read_ck
 from support.spawn import port_git, real_spawner
 from support.who import who
 
-from taskloop.app.pipeline import ended
-from taskloop.app.pipeline.closing import Closer
 from taskloop.app.run import engine
 from taskloop.app.run.closer_ports import closer_over
 from taskloop.app.slots import config as wslots_config
-from taskloop.domain import effects as fx
 from tlkernel import askspecs, wire
+from tlkernel import closeeffects as fx
 from tlkernel import runoutcome as oc
 from tlkernel.checkpoint import EndRec
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
+from tlpipeline.api import Closer, ended
 
 
 class Killed(BaseException):

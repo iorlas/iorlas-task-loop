@@ -12,22 +12,16 @@ from tltestkit.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.memstores import fake_stores
-from support.plans import PLAN
 from support.tlmain import tl_main
 
 from taskloop.app.land.gate import Gate, Problem, ProblemKind
-from taskloop.app.pipeline.blocked import Blocked
-from taskloop.app.pipeline.closing_record import RecordRun
-from taskloop.app.pipeline.cursor import parse_step
-from taskloop.app.pipeline.finish import answer
-from taskloop.app.pipeline.steps import Steps
 from taskloop.app.plan.keep import PlanKeeper
 from taskloop.app.plan.planned import Planned
 from taskloop.app.run.stages import run_stages
 from taskloop.app.write.rounds import round_step
 from taskloop.app.write.state import ACCEPT, StageState
-from taskloop.domain import effects
 from taskloop.stores.runlog import RunLog
+from tlkernel import closeeffects as effects
 from tlkernel import log as rec
 from tlkernel import runoutcome as oc
 from tlkernel.bead import Bead
@@ -41,7 +35,9 @@ from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
 from tlkernel.parks import Park, ParkStore
 from tlkernel.run import RunManifest, RunState
+from tlpipeline.api import Blocked, RecordRun, Steps, answer, parse_step
 from tltestkit.checks import typed
+from tltestkit.plans import PLAN
 
 
 class SelectedStage(Case):

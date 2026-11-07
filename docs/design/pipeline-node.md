@@ -153,7 +153,7 @@ P5 (lifecycle and run) is the large slice and waits for the rename freeze; P6 do
 | **P6b** | `requests.py` (151) | Two halves: run consumption and owner verbs using `asks.intake.Intake`, `receipt` | **split**, no port: `pipeline/requests.py` owns `OwnerRequests`, constants, `take` and `peek`, with a local narrow host Protocol and direct `pipeline.blocked.Blocked`; `asks/owner_verbs.py` owns `OwnerVerbs`, `post`, `live`, `newest_run`, using Intake and receipt in asks | run binds `OwnerRequests`; dashboard/CLI use asks owner verbs; all importers follow, no shim |
 | **P6c** | `reload.py` (136) | `loop.versions.Installs`, `release.catalog/pins/reexec`, `slots.engine_lock`, `track.trail`, `adapters.halt.RUN_SLOT`, `ident` | `Reloader` port set: `NewerInstall.newer(env) -> (version, dir) or None`; `ReexecBook` (`net_pause`, `note`, `drop`); `Handoff.exec(argv, env)`; `Trail.event(...)`; the `engine_lock` slot read becomes a plain `slot: str` argument | release/loop/track classes in their stages; bound in `run/` |
 | **P6d** | `reflect.py` (79), `reflect_prompt.py` | `asks.trustroots.refusal(git, wt, base, bead)`; `tlkernel.childenv.delegate_call_env` | `TrustRefusal.refusal(wt, base, bead) -> str or None` port; `childenv` is in the kernel (allowed), so no port for it | asks (`asks/closing.py`) |
-| **P6e** | `resume.py` (196) | `land.gitcall.oneline`; `run.review_glue.apply_review`; `run.state.state_names` | `HeadHistory.oneline(wt, new, old, n) -> str` (land); `apply_review` and `state_names` are run-local: they move with `resume` only if their own imports are free of a stage, else `ReviewRestore.apply(review, *, unchecked, late)` port and `state_names` passed as a tuple | land (`land/closing.py`), root binder |
+| **P6e** | `resume.py` (196) | `land.rebase.oneline`; `run.review_glue.apply_review`; `run.state.state_names` | `HeadHistory.oneline(wt, new, old, n) -> str` (land); `apply_review` and `state_names` are run-local: they move with `resume` only if their own imports are free of a stage, else `ReviewRestore.apply(review, *, unchecked, late)` port and `state_names` passed as a tuple | land (`land/closing.py`), root binder |
 
 Rules as in section 9: a port class lives in the stage that implements it; the pipeline holds the Protocols (`pipeline/ports.py`); each moved file takes `self.host`; `.importlinter` lists and the converted-stage contracts follow the move. Each slice lands green with behaviour unchanged. Order by lowest risk: P6a, P6d, P6b, P6e, P6c.
 
@@ -207,9 +207,9 @@ Each PR is one bead (child of tl-e5t0.39, label `auto`), lands green, behaviour 
 | **R4a** run values leave the Engine | `RunBody`, `Standalone`, `Lifecycle`, `Closer` and `stage_rounds` read and write `RunState` (the kernel record already behind `StateField`) passed as a value, not `host.done / accepted / stage_tree / replans / extra / stats / plan_data / pending_land_validation`; `run/state.py` forwards only the fields the stages still read through the Engine, the rest are deleted | pipeline/run, standalone, lifecycle, closing*, run/state, run/fields, tests/run/test_state | 0 | none | R1 (stage_rounds touches the same fields); not B3 (it does not touch parks, pauses or pause_reasons) |
 | **R4b** `RunBody` ports | `RunHost` becomes separate role Protocol arguments (at most 16 members each), with the Engine passed for every role by `run/run_once.py`; roles preserve lazy cached-property access and read the current `RunState` rather than eagerly constructing a frozen ports dataclass | pipeline/run, pipeline/run_roles, run/run_once, tests/pipeline/test_run | 0 | none | R4a |
 | **R4c** `Standalone` ports | `StandaloneHost` becomes separate role Protocols (at most 16 own members each), with the Engine passed for every role by `run/stages.py`; inherited journalling members remain exempt until R4d; `once`, `lease`, `rounds` stay as constructor arguments | pipeline/standalone, run/stages, tests/pipeline/test_standalone | 0 | none | R4b |
-| **R4d** journal ports | `RecordHost` (41) in `pipeline/journal.py` is cut into `RunLog` (heartbeat, manifest, log lines) and `RunLedger` (stats, trace) ports; the rows modules stay | pipeline/journal, summaries, trace, tests/pipeline/test_journal | 0 | none | B3-4 (transcript kinds leave trace/journal); after it lands |
+| **R4d** journal ports | `JournalHost` becomes separate role Protocols (at most 16 own members each), with the Engine passed for every role by `run/parts_run.py`; `RecordHost` and `ended.HostFacts` stay separate role arguments; the rows modules stay | pipeline/journal, summaries, trace, tests/pipeline/test_journal | 0 | none | B3-4 (transcript kinds leave trace/journal); after it lands |
 | **R4e** resume, reflect, reload | `ResumeHost`, `ReflectHost`, `ReloadHost` become separate role Protocols (at most 16 own members each), with the Engine passed for every role by `run/parts_run.py` | pipeline/resume, reflect, reload, run/reload_ports | 0 | none | B3-1 and B3-2 (they delete `resume` machinery: land first, then narrow what is left) |
-| **R4f** closer host | `closing_host.py` (89 sloc, 31 members) is replaced by the ports of section 9 given to `Closer` directly; `run/closer_ports.py` stays the one binder | pipeline/closing*, run/closer_ports | 0 | none | B3 parks / pauses / pause_reasons / policy rows (touches `closing.py`, `closing_settle.py`); after B3-5 |
+| **R4f** closer host | `closing_host.py` deleted; `CloseState`, `CloseRuntime`, and `CloseStats` role Protocols are given to `Closer` directly; `run/closer_ports.py` stays the one binder | pipeline/closing*, run/closer_ports | 0 | none | B3 parks / pauses / pause_reasons / policy rows (touches `closing.py`, `closing_settle.py`); after B3-5 |
 | **R5** run is construction | a rules test: no `app/run` module outside the composition list defines a class with logic (names from `.importlinter`), no host Protocol in `app/pipeline` over 16 members (ratchet: the list only shrinks), the `run.*` source entries of `nobody-imports-a-root` are gone; docs: `stage-isolation.md` section 2 marks the node done; `dev/root_report.py` numbers recorded | tests/rules, .importlinter, docs | -N | none (a contract entry is removed, not added) | R1 to R4f |
 | **R6** pipeline package | carve to `packages/pipeline/{src/taskloop_pipeline, tests}` per the charter: public surface `api.py`, `contracts/`, `testing.py` (the fakes of `support/pipeline_ports.py`); `git mv`, no code change | packages/pipeline, pyproject, .importlinter | measured by `dev/reach.py`; must not grow | `node pipeline becomes a workspace package` | pix-wspike's layout decision (tl-e5t0.65), R5 |
 
@@ -229,7 +229,11 @@ Each PR is one bead (child of tl-e5t0.39, label `auto`), lands green, behaviour 
 | host replacement | a frozen dataclass of ports per entry (`RunPorts`, `StandalonePorts`), built in the existing binder files; no new root file (a new root needs `Layout-allow: node`) |
 | the 16-member ceiling | a ratchet in `tests/rules` (R5), list only shrinks |
 
+R4g: LifecycleHost split into role Protocols
+
 Beads (children of tl-e5t0.39): R1 tl-e5t0.39.1, R2 .2, R3 .3, R4a .4, R4b .5, R4c .6, R4d .7, R4e .8, R4f .9, R5 .10, R6 .11.
+
+R6 done: the pipeline is packages/pipeline (tlpipeline)
 
 ## 13. R6 is not a pure move: what the package imports today (added 2026-11-07, after docs/design/workspace.md)
 
@@ -238,7 +242,7 @@ Beads (children of tl-e5t0.39): R1 tl-e5t0.39.1, R2 .2, R3 .3, R4a .4, R4b .5, R
 | layer | modules and who imports them (pipeline files) | settle by |
 |---|---|---|
 | `taskloop.stores` (11 files) | `stores.runlog.RunLog` (7: closing_branch, closing_host, closing_record, stage_run, standalone_roles, steps, waits), `stores.bundle.Stores` (5), `tlkernel.storeapi` `Log` / `Doc` / `AmendDoc` (3; now in kernel), `stores.real.real_stores` (stage_run) | **R6a**: the pipeline owns the Protocols it needs (`RunLog`, `Stores` slices) in `pipeline/ports.py` or the kernel record modules; `stores` implements them; `stage_run` receives `real_stores` from the binder |
-| `taskloop.adapters` (13 files) | `beadtools` (5), `ident` (3), `childenv` (2), `repourl.repo_url` (2), `closes`, `deadline` (2), `halt.RUN_SLOT`, `agent.last_event_t`, `looks.Methods` (run_roles) | **R6b**: pure helpers (`repourl`, `deadline`, `ident` reads) move to the kernel or become constructor values; the rest are ports bound by the root (`BeadTools`, `Clock/Deadline`, `ChildEnv`, `StuckClock`) |
+| `taskloop.adapters` | R6b done (#542 and this PR): app/pipeline imports no taskloop.adapters |
 | `taskloop.domain` (24 files) | `domain.outcome` (14 files: the run's outcome vocabulary), `domain.asks.spec/specs` (6), `domain.effects` (4), `domain.lanes` (`caps`, `pauses`, `pin`, `liveness`, `pause_reasons.Producer`), `domain.plan.*` (`brief`, `matchers`), `domain.followups`, `domain.checks`, `domain.interpret`, `domain.stuck`, `domain.work`, `domain.review.kinds`, `domain.land.matchers`, `domain.lifecycle`, `domain.matchers.clip` | **R6c**: the run-end vocabulary (`outcome`, `effects`, `asks.spec`, `pause_reasons`) is shared with stages and the dashboard, so it goes to the kernel by the precedent of WORKKERNEL (tl-e5t0.70, `domain/work`); pipeline-only rules (`stuck`, `interpret`, `lifecycle`) move into the package; the plan/review/land matchers become values passed in |
 
 **R6a done (#537 and this PR): app/pipeline imports no taskloop.stores**
@@ -264,8 +268,24 @@ Pipeline files import 22 `taskloop.domain` modules (section 13). Consumers outsi
 | small pure helpers | `lanes.caps` (5), `lanes.liveness` (4), `followups` (5), `work.switch` (4), `checks.trim` (3) + `checks.matchers` (18), `review.kinds` (3) | kernel (no `taskloop` deps beyond each other) | **R6c2** |
 | the plan/land matchers | `plan.brief` (7), `plan.matchers` (5, needs `domain.checks`), `land.matchers` (9) | kernel, or the pipeline receives the three values it uses (`COMMENTS_ONLY`, `AcceptanceText`, `without_prefix`) as constructor arguments if a move drags more than two further modules | **R6c3** — done: plan.brief (planbrief), land.matchers (landmatchers) and AcceptanceText (acceptancetext) moved to the kernel; plan.matchers stays in the domain (gate_only_criteria needs domain.checks.lint) |
 | the run-end vocabulary | `outcome` (27), `lifecycle.matchers` (11), `asks.spec` (19), `asks.lint`, `asks.text`, `asks.specs` (27) | kernel (the WORKKERNEL precedent, tl-e5t0.70); `outcome` needs `asks.spec`, `lifecycle` and `tlkernel.reconcile`, so they move together | **R6c4** |
-| pause and effect words | `effects` (9), `interpret`, `lanes.pauses` (13), `lanes.pause_reasons` (11), `beads.park` | kernel; B3-5 (#554, merged) edited `pauses` and `pause_reasons`, so this is free to start | **R6c5** |
+| pause and effect words | `effects` (9), `lanes.pauses` (13), `lanes.pause_reasons` (11), `beads.park` | kernel | **R6c5** — done: pause and effect words moved to the kernel (closeeffects, effectinterpret, lanepauses, pausereasons, beadpark) |
 
 Order: R6c1 and R6c2 first (small, independent); R6c3 after R6c2 (`plan.matchers` needs `checks`); R6c4 and R6c5 are the large sweeps (27 and 13 consumers) and run one at a time, each as one PR with `Layout-allow: move` and a closure line. Each PR ends with `grep taskloop.domain` of its modules empty in `app/pipeline`. R6c (`tl-e5t0.39.14`) closes when the last of them lands; R6 (`.11`) follows.
 
 Beads: R6c1 `tl-e5t0.39.15`, R6c2 `.16`, R6c3 `.17`, R6c4 `.18`, R6c5 `.19`.
+
+## 15. Status
+
+R1–R6 are done: the pipeline lives in `packages/pipeline` (`tlpipeline`), `run/` holds construction, and pipeline tests run on stage fakes.
+
+The 16-member ceiling ratchet in `packages/pipeline/tests/test_role_ceiling.py` scans every pipeline Protocol’s own members. Its `OVER` table records existing exceptions and only shrinks as roles narrow.
+
+API done (`tl-e5t0.39.21`): `tlpipeline.api` is the public surface; the rule `tests/rules/test_package_surface.py` fails on any outside import of another tlpipeline module.
+
+Remaining: narrowing `CheckpointHost` (18 own members).
+
+## 16. Root moves
+
+- `wire/closeguard.py` binds storage, work detection and land recording; `tlpipeline/closeguard.py` owns typed reasons and close refusal.
+- `run/preflight.py` binds stores, git, printing and cached gates; `tlpipeline/admission.py` owns read-only admission and preview decisions.
+- `run/entry.py` binds lease release, parked/admit and claim adapters; `tlpipeline/admission.py` sequences them. Reopening remains inside the existing asks admission rule.

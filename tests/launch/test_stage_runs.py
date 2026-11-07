@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.tlmain import tl_main
 
-from taskloop.app.pipeline.stage_run import stage_run
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 from tlkernel.checks import CheckResult, CheckRun
@@ -22,6 +21,7 @@ from tlkernel.identity import Identity
 from tlkernel.ids import CheckId
 from tlkernel.locator import RunLocator
 from tlkernel.run import RunState
+from tlpipeline.api import stage_run
 
 
 class StageRuns(Case):
@@ -109,9 +109,9 @@ class StageRuns(Case):
         stopped, thread = mock.Mock(), mock.Mock()
         stopped.wait.side_effect = [False, True]
         ticks = itertools.count(1000)
-        with mock.patch("taskloop.app.pipeline.stage_run.threading.Event", return_value=stopped), \
-             mock.patch("taskloop.app.pipeline.stage_run.threading.Thread", return_value=thread) as make_thread, \
-             mock.patch("taskloop.app.pipeline.stage_run.time.time", side_effect=lambda: float(next(ticks))), \
+        with mock.patch("tlpipeline.stage_run.threading.Event", return_value=stopped), \
+             mock.patch("tlpipeline.stage_run.threading.Thread", return_value=thread) as make_thread, \
+             mock.patch("tlpipeline.stage_run.time.time", side_effect=lambda: float(next(ticks))), \
              stage_run(self.who, str(self.repo), "stage:check", stores_factory=real_stores,
                        log_factory=lambda rows, run_id, machine: RunLog(rows, run_id=run_id, host=machine)) as stage:
             before = self.locator.runs()[-1].manifest.heartbeat
@@ -125,8 +125,8 @@ class StageRuns(Case):
     def test_a_heartbeat_that_cannot_be_written_is_logged_when_it_ends_the_beat_thread(self):
         stopped, thread = mock.Mock(), mock.Mock()
         stopped.wait.side_effect = [False, True]
-        with mock.patch("taskloop.app.pipeline.stage_run.threading.Event", return_value=stopped), \
-             mock.patch("taskloop.app.pipeline.stage_run.threading.Thread", return_value=thread) as make_thread, \
+        with mock.patch("tlpipeline.stage_run.threading.Event", return_value=stopped), \
+             mock.patch("tlpipeline.stage_run.threading.Thread", return_value=thread) as make_thread, \
              mock.patch.object(RunLog, "warn") as warn, \
              stage_run(self.who, str(self.repo), "stage:check", stores_factory=real_stores,
                        log_factory=lambda rows, run_id, machine: RunLog(rows, run_id=run_id, host=machine)) as stage:

@@ -9,10 +9,10 @@ from tlkernel import childenv
 from tlkernel import log as rec
 from tlkernel.argv import text_of
 from tlkernel.kinds import Kind
+from tlpipeline.api import Blocked
 
 from taskloop.adapters import check_net
 from taskloop.adapters.gitrepo import pinned_env
-from taskloop.app.pipeline.blocked import Blocked
 
 CHECK_NICE = ("nice", "-n", "10")  # a check runs below the owner's editor, browser and network clients (docs/design/gate-host.md 2.2 C)
 

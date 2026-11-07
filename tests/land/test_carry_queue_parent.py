@@ -6,12 +6,12 @@ from unittest import mock
 import pytest
 from support.memstores import fake_stores
 
-from taskloop.app.checks.cache import InputKeys, RunMemo
-from taskloop.app.checks.execution import check_env
 from taskloop.app.land.carry import Carry
 from taskloop.app.land.cmds import Cmds
-from taskloop.domain.checks.specs import repo_check
 from taskloop.stores.runlog import RunLog
+from tlgate.cache import InputKeys, RunMemo
+from tlgate.domain.specs import repo_check
+from tlgate.execution import check_env
 from tlkernel import check_files, childenv
 from tlkernel.checks import CheckResult
 from tlkernel.config import load

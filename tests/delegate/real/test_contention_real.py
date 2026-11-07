@@ -11,11 +11,11 @@ from pathlib import Path
 
 import hermetic  # noqa: F401
 from stream_proc import stop_tree
-from support.procsim import real_proc
 
 from delegate.contracts.state import Dwell
 from delegate.contracts.stores import StateStore
 from tltestkit.case import Case
+from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory
 
 T = 1_800_000_000

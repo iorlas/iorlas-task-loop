@@ -3,7 +3,6 @@ from unittest.mock import Mock
 
 import pytest
 from support.narrow_hosts import CloseKit
-from support.pipeline_ports import FakeAskRules, FakeParkBook
 
 from tlkernel import askspecs as specs
 from tlkernel import runoutcome as oc
@@ -13,6 +12,7 @@ from tlkernel.checkpoint import Checkpoint, CloseIntent, EndRec, PauseFacts
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.parks import Park
+from tlpipeline.testing import FakeAskRules, FakeParkBook
 
 
 def test_ask_lint_converts_invalid_ask_to_engine_fault(monkeypatch):
@@ -34,7 +34,7 @@ def test_pause_passes_run_facts_without_home(monkeypatch):
     parks = FakeParkBook()
     kit.closer.parks = parks
     bead = Bead(id=BeadId('t-1'), title='work', status='open')
-    monkeypatch.setattr('taskloop.app.pipeline.closing.beadtools.peek', lambda *args: bead)
+    monkeypatch.setattr(kit.closer, 'peek', lambda *args: bead)
     kit.closer.pause(oc.make(Kind.PAUSE_LANE, 'paused'))
     assert len(parks.paused_calls) == 1
     call = parks.paused_calls[0]
@@ -55,7 +55,7 @@ def test_pause_applies_the_park_books_retry_and_reason(monkeypatch):
     rec = Park(bead=bead.id, hash='hash', runs=1, run=kit.host.run_id, t=100,
                reason='no_lane', retry_at=500, permanence='transient')
     kit.closer.parks = FakeParkBook(rec)
-    monkeypatch.setattr('taskloop.app.pipeline.closing.beadtools.peek', lambda *args: bead)
+    monkeypatch.setattr(kit.closer, 'peek', lambda *args: bead)
     kit.closer.pause(oc.make(Kind.PAUSE_LANE, 'paused'))
     assert kit.host.retry_after == 500
     assert kit.host.pause_reason == 'no_lane'
@@ -76,7 +76,7 @@ def test_resume_restores_dead_runs_pause_and_passes_stats_unchanged(monkeypatch)
     parks = FakeParkBook()
     kit.closer.parks = parks
     bead = Bead(id=BeadId("t-1"), title="work", status="open")
-    monkeypatch.setattr("taskloop.app.pipeline.closing.beadtools.peek", lambda *args: bead)
+    monkeypatch.setattr(kit.closer, "peek", lambda *args: bead)
     intent = CloseIntent(outcome=EndRec(run="dead", kind=Kind.ENGINE_CRASH.value, fingerprint="fp", detail="crashed"),
                          pause=PauseFacts(reason="dead reason", producer="delegate", permanence="transient",
                                           retry_after=1234, crash_fingerprint="dead-fp", crash_site="write"),

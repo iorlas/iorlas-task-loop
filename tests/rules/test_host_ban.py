@@ -15,13 +15,13 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from rules.host_ban import ROOT, code_dir, converted, host_problems, ruff_file, stage_protocols
+from rules.host_ban import ROOT, converted, host_problems, ruff_file, stage_files, stage_protocols
 
 
 @pytest.mark.parametrize("stage", converted())
 def test_a_converted_stage_has_no_host_named_parameter_and_no_self_e(stage):
     known = stage_protocols(stage)
-    bad = {f"{f.relative_to(ROOT)}": p for f in sorted(code_dir(stage).rglob("*.py"))
+    bad = {f"{f.relative_to(ROOT)}": p for f in stage_files(stage)
            if (p := host_problems(f.read_text(encoding="utf-8"), known))}
     assert not bad, f"{stage} takes a host: {bad}"
 

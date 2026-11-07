@@ -3,13 +3,12 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol
 
+from tlgate import evidence as check_evidence
+from tlgate.host import CheckFault, CheckStuck
+from tlgate.runner import Checker
 from tlkernel.checks import CheckFaultKind, CheckRun
 from tlkernel.kinds import Kind
 from tlkernel.plancheck import StageData
-
-from taskloop.app.checks import evidence as check_evidence
-from taskloop.app.checks.host import CheckFault, CheckStuck
-from taskloop.app.checks.runner import Checker
 
 
 class CheckStepHost(Protocol):

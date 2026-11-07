@@ -3,13 +3,13 @@ from unittest.mock import Mock
 
 import pytest
 
-from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from taskloop.app.write.review_round import ReviewRound
 from taskloop.app.write.state import RoundStop
 from tlkernel.bead import Bead
 from tlkernel.gitfacts import DiffEntry
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
+from tlpipeline.api import Blocked, blocked_for
 from tltestkit.case import Case
 
 

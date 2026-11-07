@@ -6,18 +6,18 @@ from typing import Any, ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.cfgs import cfg_with
 from support.engine_case import EngineTest
-from support.plans import CLEAN, FALSE, PLAN, WRITE
 
-from taskloop.app.checks import evidence
-from taskloop.domain.checks import lint, planref
+from tlgate import evidence
+from tlgate.domain import lint, planref
 from tlkernel import wire
 from tlkernel.checks import CheckRun
 from tlkernel.ids import CheckId
 from tlkernel.plancheck import adhoc
+from tltestkit.cfgs import cfg_with
 from tltestkit.checks import ck, typed
 from tltestkit.narrow import must
+from tltestkit.plans import CLEAN, FALSE, PLAN, WRITE
 
 ST = {"checks": [], "files": []}
 

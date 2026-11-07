@@ -34,7 +34,7 @@ def test_dashboard_tests_import_no_shell_modules():
 
 
 @pytest.mark.parametrize("statement", ["import taskloop", "import taskloop.app.run as run", "from taskloop import app",
-                                       "from taskloop.app.run import layout", "from dashwire import test_dash_api"])
+                                       "from taskloop.app.run import engine", "from dashwire import test_dash_api"])
 def test_rule_finds_lazy_shell_imports(tmp_path: Path, statement: str):
     folder = tmp_path / "tests" / "dash" / "real"
     folder.mkdir(parents=True)

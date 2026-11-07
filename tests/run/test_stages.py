@@ -10,27 +10,22 @@ from typing import Any, ClassVar, cast
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
-from support import (
-    gitq,
-    procsim,
-)
+from support import gitq
 from support.builders import make_engine
-from support.cfgs import plan_of
 from support.checkpoints import put_ck, read_ck
 from support.engine_case import engine, lint
 from support.engine_locks import put_lock
 from support.fakes import must_bead
-from support.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE
 from support.spawn import port_git, real_spawner
 from support.who import who
 
 import tltestkit.shellkit
 from taskloop.adapters import pidcheck
 from taskloop.adapters.check_probe import PathProbe
-from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.write.handoff import HANDOFF_CAP
-from taskloop.domain.checks import planref
+from tlgate import evidence as check_evidence
+from tlgate.domain import planref
 from tlkernel import childenv, rundocs
 from tlkernel.acceptancetext import AcceptanceText
 from tlkernel.answers import IRREVERSIBLE
@@ -38,8 +33,11 @@ from tlkernel.argv import argv_of
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId, CheckId
 from tlkernel.plancheck import PlanData, adhoc
+from tltestkit import procsim
+from tltestkit.cfgs import plan_of
 from tltestkit.checks import ck, res, typed
 from tltestkit.narrow import must
+from tltestkit.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE
 
 
 class StagesTest(te.EngineTest):

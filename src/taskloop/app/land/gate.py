@@ -1,29 +1,28 @@
-"""The land gate on the rebased tree: the registry's gate steps (engine.checks with run gate or both), run through the same check
-machinery a stage's round uses (Checker.run_items): groups in order, a red group skips the groups after it, a step green at its inputs on
-this tree and base is skipped and logged as cached, each step has its own start and end row (seconds, exit) in the check log. A green
-gate is nothing but its steps' green results in the per-check cache: the same tree is not gated twice (a push rejected and tried again, a
-re-land after the network came back)."""
+"""The land gate on the rebased tree, refusals for unverified checks, and owner-only profile delivery."""
+
+import hashlib
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
 from pathlib import Path
 from types import MappingProxyType
 from typing import Protocol, final
 
+from tlgate import evidence
+from tlgate.domain.specs import engine_digest, gate_items
+from tlgate.host import CheckFault
 from tlkernel import log as rec
-from tlkernel.checks import Check, CheckFaultKind, CheckRun
+from tlkernel.checks import UNVERIFIED_EXIT, Check, CheckFaultKind, CheckResult, CheckRun
 from tlkernel.config import EngineConfig
+from tlkernel.env import Env
+from tlkernel.envvars import registered
 from tlkernel.gitport import Git
 from tlkernel.ids import TreeSha
 from tlkernel.runkey import BaseSha, Digest
 from tlkernel.stagefacts import RunLogPort
 
-from taskloop.app.checks import evidence
-from taskloop.app.checks.host import CheckFault
-from taskloop.app.land import verified
-from taskloop.app.land.state import LandState
-from taskloop.domain.checks.specs import engine_digest, gate_items
+from taskloop.app.land.host import LandState
 
 FAULTS = MappingProxyType({CheckFaultKind.STALE_BASE: "FAULT_STALE_BASE", CheckFaultKind.KILLED: "PAUSE_KILLED",
                          CheckFaultKind.DIRTY_SLOT: "FAULT_SLOT",})
@@ -150,15 +149,15 @@ class Gate:
         except CheckFault as fault:
             e.log.emit(rec.GateEnd(exit=fault.rc, exec_seconds=round(time.time() - started)))
             raise e.blocked_for(fault.text, FAULTS[fault.kind]) from fault
-        if verified.refusal(run):
+        if refusal(run):
             e.log.emit(rec.GateEnd(exit=1, exec_seconds=round(time.time() - started)))
-            raise verified.stop(run, e)
+            raise stop(run, e)
         e.halt_point()  # a stop ended a step, which then reports itself red: the run stops here, not in a fix round
-        reds = [c for c in run.results if c.red and not verified.deferred(c)]
+        reds = [c for c in run.results if c.red and not deferred(c)]
         skipped = not reds and all(c.cached or c.exit is None for c in run.results)
         if skipped:
             e.log.note(f"gate skipped: every step already passed on tree {tree[:12]}")
-        passed = verified.passed_over(run)
+        passed = passed_over(run)
         if passed:
             e.log.note(f"gate passed past deferred checks (no such resource here, inputs unchanged): {', '.join(passed)}")
         stale = False
@@ -181,3 +180,88 @@ class Gate:
         names = ", ".join(c.id for c in reds)
         e.steps.outcome("gate red", names)
         return Problem(ProblemKind.GATE, f"gate steps red: {names}\n" + evidence.failure_brief(reds, e.run_dir), names)
+
+
+def deferred(c: CheckResult) -> bool:
+    """True when the land may go on past this unverified check: the host lacks a resource it needs (tl-7k8.5) and the diff did not
+    touch anything it reads, so a host that has the resource has nothing new to verify."""
+    return bool(c.deferred) and not c.inputs_changed
+
+
+def passed_over(run: CheckRun) -> list[str]:
+    """The ids of the checks the land goes on past because they were deferred (the land's note names them)."""
+    return [c.id for c in run.unverified if deferred(c)]
+
+
+def _held(run: CheckRun) -> list[CheckResult]:
+    return [c for c in run.unverified if not deferred(c)]
+
+
+def waiting(run: CheckRun) -> list[CheckResult]:
+    """The unverified checks that wait for a host that has their resource (deferred, and their inputs changed)."""
+    return [c for c in _held(run) if c.deferred]
+
+
+def kind_of(run: CheckRun) -> str:
+    """The outcome kind of a refusal: PAUSE_MOVED (to a host with the resource) when every check held waits for one, else FAULT_LAND."""
+    held = _held(run)
+    return "PAUSE_MOVED" if held and len(waiting(run)) == len(held) else "FAULT_LAND"
+
+
+def moves(run: CheckRun) -> list[str]:
+    """The resources the bead must move to a host for: what the waiting checks need and this host lacks."""
+    return sorted({r for c in waiting(run) for r in c.deferred})
+
+
+def refusal(run: CheckRun) -> str:
+    """'' when the land may go on; else the message naming every unverified check that is not deferred."""
+    held = _held(run)
+    if not held:
+        return ""
+    names = ", ".join(f"`{c.id[:80]}`" for c in held)
+    if kind_of(run) == "PAUSE_MOVED":
+        need = ", ".join(moves(run))
+        return (f"paused: not landed: check {names} needs {need}, which this host does not have, and this diff changes what it reads; "
+                f"the branch is kept, the bead is labelled needs:{need} and goes back to the queue for a host that has it")
+    return (f"failed: not landed: required check {names} is unverified (it exited {UNVERIFIED_EXIT}: it could not verify what it checks), "
+            "and an unverified check is not a pass; the branch is kept. Make the check able to run (the tool, host or resource it "
+            "lacks), then run the bead again")
+
+
+def latest(last: CheckRun | None, saved: Callable[[], CheckRun | None]) -> CheckRun | None:
+    """The last round of the engine's checks: in memory, else the saved one (after a resume)."""
+    return last or saved()
+
+
+class Blocks(Protocol):
+    def blocked_for(self, why: str, kind: str) -> Exception: ...
+    def move_host(self, needs: list[str], why: str) -> Exception: ...
+
+
+def stop(run: CheckRun, host: Blocks) -> Exception:
+    """The stop for a run `refusal` refuses: a move to a capable host (the needs label set, the bead released), else a land fault."""
+    why = refusal(run)
+    return host.move_host(moves(run), why) if kind_of(run) == "PAUSE_MOVED" else host.blocked_for(why, kind_of(run))
+
+
+def refuse(run: CheckRun | None, host: Blocks) -> list[str]:
+    """A required check that could not verify is no pass: nothing is committed or pushed. -> the deferred checks the land goes on
+    past (it says so in a note)."""
+    if run and refusal(run):
+        raise stop(run, host)
+    return passed_over(run) if run else []
+
+
+def owner_refusal(text: str | None, env: Env) -> str:
+    if text is None:
+        return ""
+    settings = ("TASK_LOOP_DASH_",)
+    if any(registered(name) and not name.startswith(settings) for name in env.vars):
+        return "profile change is an owner decision; not available to the engine or a lane"
+    if len(text.strip()) < 12 or not any(char.isdigit() for char in text):
+        return "land-stack: --profile-change requires the owner's words and a timestamp (at least 12 characters and a digit)"
+    return ""
+
+
+def diff_sha(git: Git, repo: str, base: str, tip: str) -> str:
+    return hashlib.sha256(git.profile_diff(repo, base, tip).encode("utf-8")).hexdigest()

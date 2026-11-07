@@ -15,18 +15,16 @@ from tlkernel.lanesliveness import LIVENESS
 
 from taskloop.adapters.deadline import DeadlineExpired, deadline
 from taskloop.app.asks import trustroots
-from taskloop.app.land import verified
-from taskloop.app.land.commit import Commit
+from taskloop.app.land import gate
 from taskloop.app.land.fix_outside import FixOutside
 from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
-from taskloop.app.land.land_rebase import LandRebase
+from taskloop.app.land.host import Land, Next, Phase, Placing
 from taskloop.app.land.landed import Landed
 from taskloop.app.land.lander_host import LanderHost, LandHost
 from taskloop.app.land.outbound import Outbound
 from taskloop.app.land.pr_land import PrLand
 from taskloop.app.land.push import Pusher
-from taskloop.app.land.recheck import Recheck
-from taskloop.app.land.state import Land, Next, Phase, Placing
+from taskloop.app.land.rebase import Commit, LandRebase, Recheck
 from taskloop.app.land.sync import Sync
 from taskloop.domain.lanes.notes import NET_WAIT_CAP_S
 
@@ -114,7 +112,7 @@ class Lander:
             raise e.blocked_for(why, "ASK_DECISION", spec=askspecs.open_question(why, None, "decision"))
         if e.pending_land_validation:
             raise e.blocked_for("land retry validation still needs accepted checks and review; branch kept", "FAULT_LAND")
-        skipped = verified.refuse(verified.latest(e.last_run, lambda: e.stores.check_run(e.run_dir.name, None).get()), e)
+        skipped = gate.refuse(gate.latest(e.last_run, lambda: e.stores.check_run(e.run_dir.name, None).get()), e)
         if skipped:
             e.log.note(f"landing with deferred checks (no such resource here, inputs unchanged): {', '.join(skipped)}")
         merged = self.pr.settled() if self.pr else ""  # a PR the owner merged since: its merge commit is the land

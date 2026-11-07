@@ -8,11 +8,10 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.check_host import CheckHostCase
 
 # isort: split
-from support import procsim
-
 from tlkernel import check_files, childenv
 from tlkernel.checks import Durations
 from tlkernel.envvars import EnvVar
+from tltestkit import procsim
 
 
 def show(cwd, env):

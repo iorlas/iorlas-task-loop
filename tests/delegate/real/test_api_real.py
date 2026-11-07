@@ -5,10 +5,10 @@ import threading
 import time
 
 from run_support import RunBase
-from support.procsim import real_proc
 
 from delegate import api
 from delegate.contracts.wire import RunResult
+from tltestkit.procsim import real_proc
 
 LIMIT_S = 60  # each test runs a fake CLI and git
 

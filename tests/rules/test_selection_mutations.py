@@ -17,7 +17,7 @@ import affected  # noqa: E402
 MUTATIONS = {
     "a function body in a leaf module": ("src/taskloop/domain/beads/rules.py", "tests/loop/test_lint.py"),
     "a signature in contracts": ("packages/kernel/src/tlkernel/ids.py", "tests/contracts/test_wire.py"),
-    "a test support helper": ("tests/support/procsim.py", "tests/land/test_pr_land.py"),
+    "a testkit helper": ("packages/testkit/src/tltestkit/procsim.py", "tests/land/test_engine_land_1.py"),
     "the import-linter contracts": (".importlinter", "tests/rules/gate_rules.py"),
     "a constant in a vendored package": ("skills/task-loop/_vendor/any_clock/clock.py", "tests/land/test_push_timing.py"),
     "a script that tests run by path": ("skills/task-loop/tl.py", "tests/cli/test_tl.py"),

@@ -6,10 +6,10 @@ from unittest import mock
 from support.lifecycle import lifecycle
 
 from taskloop.adapters.deadline import DeadlineExpired
-from taskloop.app.pipeline.lifecycle import Ended
 from tlkernel import fence
 from tlkernel.kinds import Kind
 from tlkernel.run import RunState
+from tlpipeline.api import Ended
 
 
 def host():
@@ -47,7 +47,7 @@ def test_failing_close_still_settles():
     run = lifecycle(h)
     end = Ended()
     with mock.patch.object(run, "close", side_effect=OSError("disk")), \
-            mock.patch("taskloop.app.pipeline.lifecycle.RunLocator") as locator:
+            mock.patch("tlpipeline.lifecycle.RunLocator") as locator:
         locator.return_value.get.return_value = None
         run.close_out(mock.Mock(), end)
     assert end.outcome.kind is Kind.ENGINE_CRASH

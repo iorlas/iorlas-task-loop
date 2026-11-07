@@ -14,19 +14,17 @@ from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.fake_clock import FakeClock
 from support.fakegit import FakeGit
 from support.memstores import fake_stores
 from support.narrow_hosts import FakePushHost, Stopped
 
 from taskloop.app.land.cmds import Cmds, Stop
-from taskloop.app.land.gate import mint
-from taskloop.app.land.profile_change import owner_refusal
+from taskloop.app.land.gate import mint, owner_refusal
+from taskloop.app.land.host import Land
 from taskloop.app.land.push import Pusher
 from taskloop.app.land.push_judge import PushStatus, judge_push
 from taskloop.app.land.stack import Stack
 from taskloop.app.land.stackgate import StackGate
-from taskloop.app.land.state import Land
 from taskloop.app.launch.check import run_check
 from taskloop.cli.land_stack import add_parser, cmd_land_stack
 from tlkernel.config import load
@@ -37,6 +35,7 @@ from tlkernel.gitfacts import TreeEntry
 from tlkernel.ids import TreeSha
 from tlkernel.profile_changes import ProfileChange
 from tlkernel.runkey import BaseSha
+from tltestkit.fake_clock import FakeClock
 
 TEXT = 'Denis: "I approve this profile" 2026-11-02T12:00Z'
 PATCH = 'diff --git a/.task-loop.json b/.task-loop.json\n-old\n+new\n'
@@ -202,11 +201,11 @@ class OwnerJudge(Case):
 
     def test_fresh_matching_row_allows_but_only_with_base_evidence(self):
         self.audit()
-        with mock.patch("taskloop.app.checks.authorization.results", return_value={"base-check": mock.Mock()}) as results:
+        with mock.patch("tlgate.authorization.results", return_value={"base-check": mock.Mock()}) as results:
             assert self.judge().status == PushStatus.ALLOWED
         assert [step.id for step in results.call_args.args[3].gate_checks] == ["base-check"]
-        with (mock.patch("taskloop.app.checks.authorization.results", return_value={"base-check": None}),
-              mock.patch("taskloop.app.checks.authorization.explain", return_value={"base-check": "env differs (expected a1 found b2)"})):
+        with (mock.patch("tlgate.authorization.results", return_value={"base-check": None}),
+              mock.patch("tlgate.authorization.explain", return_value={"base-check": "env differs (expected a1 found b2)"})):
             decision = self.judge()
         assert decision.status == PushStatus.REFUSED
         assert "base-check (env differs (expected a1 found b2))" in decision.reasons[0]
@@ -249,7 +248,7 @@ class PolicyCheck(Case):
         args = argparse.Namespace(policy_commit="base", ids=[], all=False, staged=False, list=False)
         stage = mock.Mock()
         stage.bundle.repo = "/repo"
-        with (mock.patch("taskloop.app.checks.authorization.profile", return_value=cfg) as profile,
+        with (mock.patch("tlgate.authorization.profile", return_value=cfg) as profile,
               mock.patch("taskloop.app.launch.check.profile_of", side_effect=AssertionError("tip profile used")),
               mock.patch("taskloop.app.launch.check.CliHost") as host,
               mock.patch("taskloop.app.launch.check.Checker") as checker, redirect_stdout(io.StringIO())):

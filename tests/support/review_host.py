@@ -6,7 +6,6 @@ from types import SimpleNamespace
 
 from support.facts import fake_facts
 from support.fakegit import FakeGit
-from taskloop.app.pipeline.leftover_queue import LeftoverQueue
 from taskloop.app.review.link_check import LinkCheck
 from taskloop.app.review.routing import Routing
 from taskloop.app.review.settles import Settles
@@ -18,6 +17,7 @@ from tlkernel.config import EngineConfig
 from tlkernel.gitfacts import GrepHit
 from tlkernel.kinds import Kind
 from tlkernel.stop import Stop
+from tlpipeline.api import LeftoverQueue
 
 
 class ReviewGit(FakeGit):

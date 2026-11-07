@@ -10,9 +10,8 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
-from support import gitq, homes, procsim
+from support import gitq, homes
 from support.builders import make_engine
-from support.cfgs import cfg_with, plan_of
 from support.checkpoints import read_ck
 from support.engine_case import engine
 from support.fakes import (
@@ -20,7 +19,6 @@ from support.fakes import (
     must_bead,
 )
 from support.imagetools import without_image_tools
-from support.plans import BEAD, CLEAN, FALSE, PLAN, WRITE
 from support.spawn import port_git, real_spawner
 from support.who import who
 
@@ -28,7 +26,6 @@ import tltestkit.shellkit
 from run.test_stages import StagesTest
 from taskloop.app.asks import admission
 from taskloop.app.land.rebase import MAX_REBASE_RESETS
-from taskloop.app.pipeline import outcomes
 from taskloop.app.plan.prompts import REPLAN_CAP
 from taskloop.app.run import running as wrunning
 from taskloop.app.slots import config as wslots_config
@@ -40,7 +37,10 @@ from tlkernel.ids import BeadId
 from tlkernel.lookrows import LookRows
 from tlkernel.run import Round
 from tlkernel.slots import SlotGitError
-from tltestkit import fake_route
+from tlpipeline.api import outcomes
+from tltestkit import fake_route, procsim
+from tltestkit.cfgs import cfg_with, plan_of
+from tltestkit.plans import BEAD, CLEAN, FALSE, PLAN, WRITE
 
 
 class VisualWork(StagesTest):

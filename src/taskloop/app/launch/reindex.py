@@ -1,8 +1,8 @@
 """Launch the dashboard's one-shot indexer for `tl doctor --reindex`."""
 
-from tlkernel import factorybackup
 from tlkernel.paths import ConfigDir
 
+from taskloop.adapters import factorybackup
 from taskloop.app.launch.dash_ports import store
 from taskloop_dash.env import Env, Ports
 from taskloop_dash.index import reindex

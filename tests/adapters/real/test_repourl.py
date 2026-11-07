@@ -5,7 +5,7 @@ from pathlib import Path
 
 from support.spawn import port_git
 
-from taskloop.adapters.repourl import repo_url
+from tlkernel.repourl import repo_url
 from tltestkit.case import Case
 from tltestkit.checked import run_checked
 from tltestkit.tmpdir import TemporaryDirectory

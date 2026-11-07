@@ -13,19 +13,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.engine_case import EngineTest
 from support.narrow_hosts import BdOut, FakeOutboundHost, FakeSyncHost
-from support.plans import CLEAN, PLAN, WRITE
 
 from tltestkit.logs import records
+from tltestkit.plans import CLEAN, PLAN, WRITE
 
 # isort: split
 from taskloop.app.land import outbound
 from taskloop.app.land.lander import Lander
 from taskloop.app.land.sync import Sync as AfterLand
-from taskloop.app.pipeline.blocked import Blocked, blocked_for
-from taskloop.domain.lanes import pauses
+from tlkernel import lanepauses as pauses
 from tlkernel import runoutcome as oc
 from tlkernel.enums import Result
 from tlkernel.kinds import Kind
+from tlpipeline.api import Blocked, blocked_for
 
 ATTR = "*.bin filter=lfs diff=lfs merge=lfs -text\n"
 RUN = ({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
