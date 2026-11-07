@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.app.asks import parks
-from taskloop.app.run.blocked import Blocked, blocked_for
+from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from taskloop.app.run.closer import Closer
 from taskloop.app.workers.lane_acts import LaneActs
 from taskloop.contracts.bead import Bead

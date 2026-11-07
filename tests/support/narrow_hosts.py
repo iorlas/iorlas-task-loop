@@ -1,4 +1,4 @@
-"""Small typed fakes of what a slice reads of the engine (app/run/waits.py WaitsHost, app/land/outbound.py OutboundHost): a class that
+"""Small typed fakes of what a slice reads of the engine (app/pipeline/waits.py WaitsHost, app/land/outbound.py OutboundHost): a class that
 has just those members, so the type checker proves the fake is enough and a slice that reads one more member breaks the test's types."""
 
 import contextlib
