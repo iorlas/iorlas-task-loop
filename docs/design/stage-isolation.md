@@ -57,7 +57,7 @@ Definition: a root only **constructs and binds**. It may import any node; nothin
 
 Today's shell is fat: `run` + `loop` + `launch` + `wire` + `prune` = 113 files / 10,157 sloc, about 4,060 wiring and about 6,100 logic. Split:
 
-- **node `pipeline`**: `stages`, `closer*`, `steps`, `budget`, `blocked`, `waits`, `reload`, `reflect`, `requests`, `resume`, `stuck`. It sequences the stages through their ports; it owns the run's step order and the close. It imports the stage ports, never the Engine.
+- **node `pipeline`**: done as `packages/pipeline` (`tlpipeline`), with `run/` reduced to composition roots. Pipeline tests run on stage fakes. It owns `stages`, `closer*`, `steps`, `budget`, `blocked`, `waits`, `reload`, `reflect`, `requests`, `resume`, `stuck`. It sequences the stages through their ports; it owns the run's step order and the close. It imports the stage ports, never the Engine.
 - **node `workers`**: `worker_call`, `worker_request`, `delegation` (the AI-call machinery and delegate glue, today about 14 app importers of `adapters.delegate`): the one node that talks to the delegate library; every stage gets it as `AskAi`.
 - **node `loop`**, **node `prune`**: stay, each with its own ports (`Claim`, `Take`, ...). `loop/take.py` imports 3 stages today and is a root-shaped file inside a node: it moves to the root or takes ports.
 - **roots**: `engine` (construct pipeline + stages + states, bind ports), `entry`, `run_once`, `launch/*`, `wire/*`, `cli`, `hook`, `tl.py`.

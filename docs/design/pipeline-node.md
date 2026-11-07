@@ -276,4 +276,10 @@ Beads: R6c1 `tl-e5t0.39.15`, R6c2 `.16`, R6c3 `.17`, R6c4 `.18`, R6c5 `.19`.
 
 ## 15. Status
 
-API done: tlpipeline.api is the public surface; rule tests/rules/test_package_surface.py
+R1–R6 are done: the pipeline lives in `packages/pipeline` (`tlpipeline`), `run/` holds construction, and pipeline tests run on stage fakes.
+
+The 16-member ceiling ratchet in `packages/pipeline/tests/test_role_ceiling.py` scans every pipeline Protocol’s own members. Its `OVER` table records existing exceptions and only shrinks as roles narrow.
+
+API done (`tl-e5t0.39.21`): `tlpipeline.api` is the public surface; the rule `tests/rules/test_package_surface.py` fails on any outside import of another tlpipeline module.
+
+Remaining: narrowing `CheckpointHost` (18 own members).
