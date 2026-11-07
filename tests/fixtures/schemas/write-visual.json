@@ -182,6 +182,13 @@
   "question": {
    "type": "string"
   },
+  "run_checks": {
+   "description": "declared requestable engine check ids to run after this write",
+   "items": {
+    "type": "string"
+   },
+   "type": "array"
+  },
   "shots": {
    "items": {
     "additionalProperties": false,

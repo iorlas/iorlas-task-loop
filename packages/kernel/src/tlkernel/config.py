@@ -108,6 +108,7 @@ class CheckSpec(Rec):
     inputs_only: bool = False
     exclude: list[str] = msgspec.field(default_factory=list)
     env: dict[str, str] = msgspec.field(default_factory=dict)
+    requestable: bool = False  # the writer may ask the engine to run this check
     writer: bool | None = None  # true: the writer may run it whatever it costs; false: never; absent: by how long it takes
     writer_check_max_s: float | None = None  # this check's own cut for "too slow for the writer" (else engine.writer_check_max_s)
     tail_log: str = ""  # a log of the tree whose first compile errors join this check's red output when it shows none
@@ -214,6 +215,7 @@ class EngineConfig(Rec):
     shot_table: str = ""
     delegate: str = ""
     untracked_ignore: list[str] = msgspec.field(default_factory=list)
+    max_run_checks: int = 2  # writer-requested checks per write round
     checks: list[CheckSpec] = msgspec.field(default_factory=list)
     input_sets: dict[str, list[str]] = msgspec.field(default_factory=dict)  # name -> globs; a check's inputs, exclude and when say "@name"
     hatch: list[str] = msgspec.field(default_factory=list)  # files whose change forces every check with inputs or when (the gate's own)

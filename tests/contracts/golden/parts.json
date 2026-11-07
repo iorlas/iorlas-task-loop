@@ -225,16 +225,20 @@
    "5": {
     "ddl": "f94a96c041c623a99498925ddad0f3ff5d873e369d5a2926759efd271884e142",
     "record": "30cb5c0d6acc4b2cf00421713d6f49a8171ef70b589d58fd227cf5a8e84389ac"
+   },
+   "6": {
+    "ddl": "f94a96c041c623a99498925ddad0f3ff5d873e369d5a2926759efd271884e142",
+    "record": "0158c45826d6cf4c2beb3671ab1bd749bb1e03e8a942f3ba0734d9c4fccfbfd3"
    }
   },
   "records": {
    "Checkpoint": {
-    "schema": "aee579c1250312f7e8ee9d96d01d9f639e9bcb140684f8c95affb91e1a799b4c",
-    "v": 7
+    "schema": "1c8a3677ec1728c097b891bedd0ce4b9a3acf9e4a6695e245ee15281e8e9fbbb",
+    "v": 8
    },
    "CursorBody": {
-    "schema": "55549caf3df6098166fcd6aa8ed78a5d4de9af47e6cbf3f35ea1284d8c480c75",
-    "v": 7
+    "schema": "630b6fba427b94c265697716b20df6c48d631f4068f7854365942faaf4fb5c15",
+    "v": 8
    },
    "LandSection": {
     "schema": "4915ab557b09945f880817f72485d3134b76bfb71ca86b05a9f5352e92ab03d6",
@@ -265,7 +269,7 @@
     "v": 3
    }
   },
-  "version": 5
+  "version": 6
  },
  "queue": {
   "ddl": "1dd05e74b215da8cd44d94d45afaf4b0e4dd1be7efbd6ac8b9a522562f3a9cee",

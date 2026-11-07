@@ -32,6 +32,11 @@ class CheckRound:
         run = e.stage_checks.stoppable(stage, s.name, acceptance_first=s.acc_first,
                                        conflict_fix=s.state.get("conflict_fix"), round=s.rounds + 1, **s.meta)
         s.run = out.run = run
+        if s.run_checks:
+            requested = e.stage_checks.requested(s.run_checks, s.name, round=s.rounds + 1, **s.meta)
+            s.request_feedback += "\nRequested engine checks (informational):\n" + check_evidence.failure_brief(
+                requested.results, e.run_dir)
+            s.run_checks = []
         e.stores.check_run(e.run_dir.name, None).write(run)
         _added, removed = out.tests = count_tests(e.checkout.task_diff(), e.cfg.test_pattern)
         if removed:

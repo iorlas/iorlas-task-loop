@@ -24,7 +24,7 @@ class WriterSplit:
         return next((k for k in self.repo if norm(k.cmd) == want), None)
 
     def engine_only(self, cmd: str) -> bool:
-        if norm(cmd) in {norm(k.cmd) for k in self.cfg.checks if k.run == "gate"}:
+        if norm(cmd) in {norm(k.cmd) for k in self.cfg.checks if k.run == "gate" or k.requestable}:
             return True
         spec = self._spec(cmd)
         if spec is not None and spec.writer is not None:

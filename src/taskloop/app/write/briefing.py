@@ -31,6 +31,11 @@ class Briefing:
                 text += ("\nThe engine runs these after you; do not run them:\n" if failed is None else
                          "\nThese failed checks are slow: the engine re-runs them; fix from the output above, do not run them:\n"
                          ) + "".join(f"- {c}\n" for c in slow).rstrip("\n")
+            requestable = [c.id for c in e.cfg.checks if c.requestable]
+            if requestable:
+                text += (f"\nYou cannot run requestable engine checks yourself. Ask via run_checks (at most "
+                         f"{e.cfg.max_run_checks} ids per round); their output returns in the next write:\n"
+                         + "\n".join(f"- {cid}" for cid in requestable))
             if fast:
                 text += "\nYou may run these:\n" + "\n".join(f"- {c}" for c in fast)
             if getattr(e, "branch", ""):

@@ -95,11 +95,15 @@ def delegate_policy(con: sqlite3.Connection) -> None:
     """pipeline v4 -> v5: delegate owns fallback state; older checkpoints remain foreign."""
 
 
+def engine_check_requests(con: sqlite3.Connection) -> None:
+    """pipeline v5 -> v6: writer answers and stage progress carry engine check requests; older checkpoints remain foreign."""
+
+
 PIPELINE = Part(
-    name="pipeline", version=5,
+    name="pipeline", version=6,
     tables=("run", "attempt", "step", "effect", "wait", "checkpoint", CHECKPOINT_SECTIONS, "timed", "signal"),
     records=(RunManifest, Checkpoint, CursorBody, PlanSection, WriteSection, LandSection, LookSection, ReviewState, OwnerRequest),
-    steps={1: close_intent, 2: checkpoint_sections, 3: writer_thread, 4: delegate_policy},
+    steps={1: close_intent, 2: checkpoint_sections, 3: writer_thread, 4: delegate_policy, 5: engine_check_requests},
     ddl=f"""
 CREATE TABLE run (run TEXT PRIMARY KEY, repo TEXT NOT NULL, repo_key TEXT NOT NULL, bead TEXT NOT NULL DEFAULT '',
   mode TEXT NOT NULL DEFAULT '', owner TEXT, session TEXT, loop TEXT, worktree TEXT, branch TEXT, sha TEXT,

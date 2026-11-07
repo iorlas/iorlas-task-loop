@@ -9,6 +9,7 @@ import msgspec
 
 from tlkernel import schema
 from tlkernel.artifact import Role
+from tlkernel.ids import CheckId
 from tlkernel.plancheck import CHECK_DOC, PlanCheck
 from tlkernel.wire import Rec, load
 
@@ -177,6 +178,8 @@ class WriteAnswer(Rec):
     bad_checks: list[BadCheck]
     new_cases: list[NewCase]
     unchecked: list[Unchecked]
+    run_checks: Annotated[list[CheckId], msgspec.Meta(description="declared requestable engine check ids to run after this write")] = (
+        msgspec.field(default_factory=list))
     shots: list[Shot] = msgspec.field(default_factory=list)
     flakes: list[Flake] = msgspec.field(default_factory=list)
     handoff: Annotated[
