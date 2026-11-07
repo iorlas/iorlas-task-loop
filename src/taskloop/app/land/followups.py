@@ -4,11 +4,14 @@ from collections.abc import Mapping, Sequence
 from typing import Protocol
 
 from taskloop.adapters import bdcreate
+from taskloop.app.land import store
 from taskloop.app.asks import deferral as intake
 from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads, NewBead
 from taskloop.contracts.ids import BeadId
 from taskloop.domain import followups as fu
 from taskloop.stores.runlog import RunLog
+
+PART = store.LAND  # the land's part of factory.db: this module is the writer, so importing it registers the part
 
 
 class FollowUpCheckpoints(Protocol):

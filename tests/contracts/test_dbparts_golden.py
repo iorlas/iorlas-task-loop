@@ -4,8 +4,10 @@ from pathlib import Path
 
 import support.paths  # noqa: F401
 
-from taskloop.contracts import dbparts, factoryparts  # noqa: F401
+from taskloop.app.land.store import LAND
+from taskloop.contracts import dbparts, factoryparts
 
+STAGE_PARTS = (factoryparts.KV, LAND)  # a part registers when its module is imported, and an unused import does not import it
 GOLDEN = Path(__file__).parent / "golden" / "parts.json"
 HINT = "bump the part's version, add its step, then run `uv run python dev/part_golden.py`"
 
