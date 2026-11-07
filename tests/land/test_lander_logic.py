@@ -12,7 +12,7 @@ from support.fakegit import FakeGit
 from support.narrow_hosts import FakeLandedHost, FakeLandRebaseHost, Stopped
 
 # isort: split
-from taskloop.app.land.landed import Landed
+from taskloop.app.land.push import Landed
 from taskloop.app.land.rebase import LandRebase
 from tlkernel.landmatchers import Push
 

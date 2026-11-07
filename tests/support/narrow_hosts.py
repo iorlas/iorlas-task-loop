@@ -1,4 +1,4 @@
-"""Small typed fakes of what a slice reads of the engine (tlpipeline/waits.py WaitsHost, app/land/outbound.py OutboundHost): a class that
+"""Small typed fakes of what a slice reads of the engine (tlpipeline/waits.py WaitsHost, app/land/push.py OutboundHost): a class that
 has just those members, so the type checker proves the fake is enough and a slice that reads one more member breaks the test's types."""
 import contextlib
 import tempfile
@@ -19,9 +19,8 @@ from taskloop.adapters import beadtools
 from taskloop.app.land.fix_outside import FixOutside
 from taskloop.app.land.gate import Gate, GateChecker, GateCheckout
 from taskloop.app.land.host import LandState
-from taskloop.app.land.landed import Landed
 from taskloop.app.land.lander import GateStep, Lander, LandParts
-from taskloop.app.land.push import Pusher
+from taskloop.app.land.push import Landed, Pusher
 from taskloop.app.land.rebase import Commit, LandRebase, Recheck
 from taskloop.app.land.sync import Sync
 from taskloop.stores.bundle import Stores
