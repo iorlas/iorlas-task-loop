@@ -403,7 +403,8 @@ class DelegateLauncher(T.EngineTest):
 
     def test_a_failure_after_work_still_fails(self):
         worked = stop("worker_failed", tokens={"in": 90000, "cached": 0, "out": 4000}, say="codex: turn failed")
-        rc, _s = self.run_engine({"plan": [PLAN], "write": [worked, worked]})
+        rc, script = self.run_engine({"plan": [PLAN], "write": [worked]})
+        assert [c[0] for c in script.calls].count("worker") == 1
         assert rc == 2
         assert self.said().startswith("Engine failed:"), self.said()
 

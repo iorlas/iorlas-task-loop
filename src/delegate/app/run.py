@@ -151,7 +151,11 @@ class Run:
             return self.emit("caller", **who, call_id=call_id, say="empty brief: pass it on stdin or with --brief FILE", **self.extra)
         self.git_before = git.state(h.cwd)
         res = self._run(d, lanes, t, who, brief)
-        if isinstance(res, dict) and res.get("outcome") == "schema_invalid" and not self.a.resume:
+        if (
+            isinstance(res, dict)
+            and not self.a.resume
+            and (res.get("outcome") == "schema_invalid" or run_legs.hurt_write(res, self.a))
+        ):
             res = self._reroute(res, brief)
         return self._emit_res(res)
 
@@ -168,9 +172,9 @@ class Run:
         return Path(self.a.brief).read_text(encoding="utf-8", errors="replace") if self.a.brief else sys.stdin.read()
 
     def _reroute(self, res: dict[str, Json], brief: str) -> dict[str, Json] | int:
-        """One fresh attempt after the re-ask failed; each attempt has already kept its own history and usage."""
+        """One fresh attempt on another pair; each attempt has already kept its own history and usage."""
         pair = (as_str(res["lane"]), as_str(res["model"]))
-        if self.attempts and self.attempts[-1]["outcome"] is None:
+        if res.get("outcome") == "schema_invalid" and self.attempts and self.attempts[-1]["outcome"] is None:
             self.attempts[-1]["outcome"] = "schema_invalid"  # the re-ask launched fine too; its answer is what failed
         d, lanes, warnings, t = decide.decision(self.a, self.cfg, self.unattended, frozenset((pair,)), apply=True)
         if (
@@ -329,6 +333,7 @@ class Run:
             res = launch_one(brief, a, "reroute" if self.rerouted else "first")
             res = run_legs.network(res, launch_one, brief, a, as_str(d["lane"]), self.now, self.sleep)
             res = run_legs.lane_wait(res, launch_one, brief, a, self.now, self.sleep, self.wall)
+            res = run_legs.retry(res, launch_one, brief, a)
         if res.get("outcome") is None and a.schema:
             res = self._schema(res, launch_one)
         res.pop("started", None)  # the launcher's own bookkeeping, whichever launch (first, re-ask) produced `res`
