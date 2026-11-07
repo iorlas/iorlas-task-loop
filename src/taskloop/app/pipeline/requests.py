@@ -94,7 +94,7 @@ class OwnerRequests:
             self.host.halt.set()
             self.host.halt_point()
         if got.park:
-            self.host.steps.move("pause", "owner_park", f"the owner parked it before {step}")
+            self.host.steps.move("pause", Kind.OWNER_PARK.value, f"the owner parked it before {step}")
             raise Blocked(PARKED_WHY, kind=Kind.OWNER_PARK)
 
     def prompt_tail(self) -> str:

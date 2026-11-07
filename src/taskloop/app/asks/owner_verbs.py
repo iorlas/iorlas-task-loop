@@ -29,8 +29,7 @@ def post(cfg: ConfigDir, run: str, by: str, now: float, *, repo: str, bead: str,
 
 
 def live(cfg: ConfigDir, run: str, now: float) -> bool:
-    """Whether a run is live after reconciling engines whose processes died."""
-    runlife.reconcile(cfg, now)
+    """Whether the recorded run state is live."""
     b = RunLocator(cfg).get(run) if run else None
     return b is not None and liveness(b.manifest) is Liveness.LIVE
 
@@ -96,19 +95,20 @@ CODES: Final = f"""exit codes:
 
 def repo_runs(cfg: ConfigDir, repo: str, now: float) -> list[str]:
     """The runs of this repo that are live now: a run belongs to the repo its manifest names."""
-    runlife.reconcile(cfg, now)
-    return [b.run for b in RunLocator(cfg).of_repo(repo) if liveness(b.manifest) is Liveness.LIVE]
+    return [b.run for b in RunLocator(cfg).of_repo(repo) if runlife.shown(b.manifest, now) in (Liveness.LIVE, Liveness.SUSPECT)]
 
 
 def verdict(cfg: ConfigDir, run: str, now: float) -> tuple[int, str] | None:
     """How the run stands, from its recorded state: None while it lives, else (exit code, the line)."""
-    runlife.reconcile(cfg, now)
     b = RunLocator(cfg).get(run)
     if b is None:
         return NO_RUN, f"no run: {run} has no manifest"
     m = b.manifest
     why = f": {m.reason}" if m.reason else ""
+    life = runlife.shown(m, now)
     if m.state.live:
+        if life is Liveness.LOST:
+            return CRASHED, f"lost: {run}: {runlife.lost_reason(m, now)}"
         return None
     if m.state is RunState.LOST:
         return CRASHED, f"lost: {run}{why}"

@@ -162,10 +162,11 @@ def start(files: LoopFiles, repo: str, version: str, argv: list[str], spawner: S
     # The child uses the same lock to publish; wait outside the launch lock.
     if children:
         states.extend(_wait(files, children, sleep))
-        keep_awake = caffeinate_argv(children[0][0].pid)
-        if keep_awake:
-            with contextlib.suppress(FileNotFoundError):
-                spawner.start(keep_awake, stdin="null", out="null")
+        for child, _ in children:
+            keep_awake = caffeinate_argv(child.pid)
+            if keep_awake:
+                with contextlib.suppress(FileNotFoundError):
+                    spawner.start(keep_awake, stdin="null", out="null")
     return list(lane_states(files, states).values()), len(children)
 
 

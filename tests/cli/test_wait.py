@@ -15,10 +15,11 @@ from tlkernel.ask import Ask
 from tlkernel.askenums import AskClass, AskKind, AskStatus
 from tlkernel.askstore import AskStore
 from tlkernel.ids import BeadId
-from tlkernel.locator import host_name
+from tlkernel.locator import RunLocator, host_name
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
 from tltestkit.logs import typed, write_log
+from tltestkit.narrow import must
 from tltestkit.runs import manifest
 
 BEAD, RUN, T = "t-1", "t-1-20261026-100000", 5000.0
@@ -83,10 +84,12 @@ class WaitCase(Case):
         self.log(state=RunState.LOST)
         assert self.go("--bead", BEAD)[0] == wait.CRASHED
 
-    def test_a_killed_engine_is_reconciled_to_lost_by_the_wait_itself(self):
+    def test_wait_sees_a_killed_engine_as_lost_without_writing(self):
         self.log(beat=T - 400, host=host_name(), pid=4_194_303)  # running, stale, and nobody's pid
+        before = must(RunLocator(self.cfg).get(RUN)).manifest
         rc, _ = self.go("--bead", BEAD)
         assert (rc, self.out[0].startswith("lost: " + RUN)) == (wait.CRASHED, True)
+        assert must(RunLocator(self.cfg).get(RUN)).manifest == before
 
     def test_a_silent_log_is_no_sign_of_death(self):
         self.log(beat=T - 99_999)  # no record for a day, and no host to probe: the recorded state is running

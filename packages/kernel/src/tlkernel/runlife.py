@@ -89,8 +89,8 @@ def command_scope(cfg: ConfigDir, repo: str, bead: str, run: str, now: float) ->
 
 
 def reconcile(cfg: ConfigDir, now: float) -> list[str]:
-    """WRITE `lost` for every run `is_lost` finds, once. Called only by tl processes: loop start, `tl doctor`, `tl wait`, `tl report` and
-    the owner-request gate. The dashboard never calls it (it only reads: `shown`). -> the run ids marked."""
+    """WRITE `lost` for every run `is_lost` finds, once. Called at the start of every loop pass and by `tl doctor`.
+    Readers use `shown` without writing. -> the run ids marked."""
     where, host = RunLocator(cfg), host_name()
     marked: list[str] = []
     for b in where.runs():
