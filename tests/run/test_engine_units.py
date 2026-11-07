@@ -45,7 +45,6 @@ from support.cfgs import cfg_with  # noqa: E402
 from support.checks import res  # noqa: E402
 from support.engine_case import BRIEFS, full, sh, shown, stop, stored_brief  # noqa: E402
 from support.fakes import as_bead, as_comment  # noqa: E402
-from support.logs import records  # noqa: E402
 from support.narrow import must  # noqa: E402
 from support.plans import CLEAN, PLAN, WRITE, finding, review, verdict  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
@@ -240,12 +239,6 @@ class DelegateLauncher(T.EngineTest):
         assert [c[2] for c in s.calls if c[0] == "reviewer"] == ["openai"]
         assert not any("same family" in str(c) for c in self.bd_calls if c[:2] == ("comments", "add"))
 
-    def test_lane_out_waits_then_runs(self):
-        out = stop("rate_limited", at=time.time() + 30, say="codex out")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
-        assert rc == 0
-        assert [c[0] for c in s.calls].count("worker") == 2
-
     # lifesim-d5f.58 2026-10-21: a resumed Codex writer answered lane_out for an hour and the bead paused; delegate never
     # switches lanes on a resume, but a fresh call gets the role's next rung (Sonnet on the claude lane) at once
     OUT_LONG = stop("rate_limited", at=time.time() + 3600, say="cannot continue t now")
@@ -256,7 +249,7 @@ class DelegateLauncher(T.EngineTest):
         with self.lanes(OPENAI_SUBSCRIPTION=True):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L, self.FRESH, self.FRESH],
                                      "review": [review(unmet=["more"]), review(unmet=["more"]), CLEAN]})
-        assert rc == 0, self.blocked  # no wait: the lane is out for an hour, past lane_wait_min
+        assert rc == 0, self.blocked  # the resumed writer moves to a fresh thread
         workers = [(c, p) for c, p in zip(s.calls, s.prompts, strict=False) if c[0] == "worker"]
         assert [c[1] for c, _ in workers] == [None, "ref-write", None, "w2"]  # Codex still out: resumed
         assert [c[2] for c in s.calls if c[0] == "reviewer"] == ["openai", "xai", "xai"]
@@ -399,12 +392,6 @@ class DelegateLauncher(T.EngineTest):
                             for c in self.bd_calls)
         assert "needs a human" not in self.eng.log_path.read_text()
 
-    def test_a_resumed_write_told_busy_polls_and_goes_on(self):
-        busy = stop("busy", "ref-write", say="state lock held")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, busy, WRITE], "review": [review(unmet=["more"]), CLEAN]})
-        assert rc == 0, self.blocked
-        assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write", None]
-
     def test_the_writer_brief_has_no_sandbox_or_git_text(self):
         # delegate 0.29 owns what the worker is told about its sandbox, escalation and git (worker-run v2)
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
@@ -413,35 +400,6 @@ class DelegateLauncher(T.EngineTest):
         for gone in ("sandbox", "escalat", "permissions", "You have the host", "no commits", "no pushing"):
             assert gone not in w, gone
         assert "Never run the gate" in w
-
-    # lifesim 2026-10-20: woken from sleep, Codex ended its turn after 12 s with a vendor error and no tokens; delegate
-    # 0.26 answered failed and the engine closed two beads as failed
-    QUICK = stop("vendor_blip", "w1", say="codex failed before any work: workspace routing discovery failed")
-
-    def test_a_failure_before_any_work_waits_and_retries(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [self.QUICK, self.QUICK, WRITE], "review": [CLEAN]})
-        assert rc == 0, self.blocked
-        assert [c[0] for c in s.calls].count("worker") == 3
-        log = self.eng.log_path.read_text()
-        assert "vendor_blip" in log
-        assert "did not match the required output schema" not in "".join(s.prompts)
-
-    def test_a_failure_before_any_work_that_keeps_coming_pauses_the_bead_open(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [self.QUICK] * 4 + [stop("no_lane", say="every lane is out")]})
-        assert rc == 2
-        assert self.blocked == []  # paused, not failed: the bead stays open for the next run
-        assert any(c[:1] == ("update",) and "open" in c for c in self.bd_calls)
-        assert "workspace routing discovery failed" in self.eng.log_path.read_text()
-        assert [c[0] for c in s.calls].count("worker") == 5  # three polls, one other pick, then the pause
-
-    # tl-bxk.10.22: the dashboard says which lane a run waits for and until when
-    def test_a_wait_for_a_lane_records_the_lane_and_when_it_ends(self):
-        out = stop("rate_limited", at=time.time() + 120, lane="OPENAI_SUBSCRIPTION")
-        rc, _s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
-        assert rc == 0, self.blocked
-        waits = records(self.eng, "wait_start")
-        assert [w["holder"] for w in waits] == ["OPENAI_SUBSCRIPTION"]
-        assert waits[0]["until"] > time.time() + 30
 
     def test_a_failure_after_work_still_fails(self):
         worked = stop("worker_failed", tokens={"in": 90000, "cached": 0, "out": 4000}, say="codex: turn failed")

@@ -1,6 +1,5 @@
-"""tl-ixc: the engine's worker call under the RetryPlan: its seven rows, a reviewer's wall-time budget (Overrun), busy answers that cost
-at most three sleeps, a write that timed out or ended by SIGTERM (a RetryDecision with the timeout and the exit), and the `exit` in
-CallEnd. The policy's own tables are in test_lane_policy; the live file and the stop are in test_write_idle and test_procs."""
+"""tl-ixc: the engine's worker call under the RetryPlan: its rows, a reviewer's wall-time budget (Overrun), a write that timed out or
+ended by SIGTERM (a RetryDecision with the timeout and the exit), and the `exit` in CallEnd. The policy's own tables are in test_lane_policy; the live file and the stop are in test_write_idle and test_procs."""
 
 import sys
 import time
@@ -34,21 +33,18 @@ def napper(nap):
 
 
 class RetryRows(Case):
-    def test_seven_kinds_and_every_limit_is_one_row(self):
+    def test_six_kinds_and_every_limit_is_one_row(self):
         got = {r.kind: (r.limit, r.then) for r in retry.ROWS}
         assert got == {
                 "invalid_output": (1, "fault"),
                 "denied_read": (1, "fault"),
                 "denied_secret": (1, "fault"),
-                "lane_poll": (3, "reroute"),
                 "resume_refused": (1, "fault"),
                 "crash": (2, "fault"),
                 "worker_failed": (1, "ask"),
             }
 
     def test_left_and_rest_read_the_rows(self):
-        assert retry.PLAN.left("lane_poll", 2)
-        assert not retry.PLAN.left("lane_poll", 3)
         assert [retry.PLAN.rest("crash", n) for n in (0, 1, 5)] == [30.0, 120.0, 120.0]
 
 
@@ -81,14 +77,6 @@ class Calls(te.EngineTest):
         assert over[0]["stage"] == "review"
         assert over[0]["budget_s"] == 600.0  # the default: review_budget_min 10
         assert script.nodes.count("review") == 1  # the hung call never answered; the next rung did (the loop went on)
-
-    def test_four_busy_answers_cost_at_most_three_sleeps(self):
-        busy = te.stop("busy", "ref-write", say="state lock held")
-        script = fake_route.Script(
-            {"plan": [te.PLAN], "write": [te.WRITE, busy, busy, busy, busy, te.WRITE], "review": [te.review(unmet=["more"]), te.CLEAN]}
-        )
-        _rc, nap = self.go(script)
-        assert nap.call_count <= 3
 
     def test_a_write_that_timed_out_gets_a_retry_decision_with_the_timeout_and_the_exit(self):
         class Script(fake_route.Script):
