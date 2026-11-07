@@ -6,6 +6,7 @@ from typing import Final, Protocol
 from tlkernel import childenv
 from tlkernel import log as rec
 from tlkernel.beadsport import Beads
+from tlkernel.check_files import repo_key
 from tlkernel.config import EngineConfig
 from tlkernel.delegate import RunRequest, ToolBinding
 from tlkernel.delegateport import Answer
@@ -16,7 +17,6 @@ from tlkernel.plancheck import PlanData
 from tlkernel.stop import Stop
 
 from taskloop.adapters import ident
-from taskloop.adapters.check_files import repo_key
 from taskloop.app.asks import trustroots
 from taskloop.app.checks.runner import Checker
 from taskloop.app.workers import writer_pin

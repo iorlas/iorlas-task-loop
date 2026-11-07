@@ -8,7 +8,6 @@ from unittest import mock
 import pytest
 from support.memstores import fake_stores
 
-from taskloop.adapters import check_files
 from taskloop.app.checks.cache import InputKeys, RunMemo
 from taskloop.app.checks.execution import check_env
 from taskloop.app.checks.keydiff import first_difference
@@ -17,7 +16,7 @@ from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.stackgate import StackGate
 from taskloop.domain.checks.specs import repo_check
 from taskloop.stores.runlog import RunLog
-from tlkernel import childenv
+from tlkernel import check_files, childenv
 from tlkernel.checks import CheckResult
 from tlkernel.config import load
 from tlkernel.env import Env

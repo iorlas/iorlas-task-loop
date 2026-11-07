@@ -68,10 +68,11 @@ class Shell:
                started: float, stop: threading.Event) -> Any:
         e = self.e
         extra = {**childenv.WORKER_MARK, **e.bead_env, **(pinned_env(e.wt) if pin else {}), **(env or {})}
+        network = self.no_network() if what in {"check", "check fix"} else ()
         try:
             if what in {"check", "check fix"}:
                 with childenv.check_environment(e.env.vars, extra, scratch_home=e.cfg.check_scratch_home) as clean:
-                    argv = [*check_nice(e.env.vars.get("PATH", "")), *self.no_network(), *cmd]
+                    argv = [*check_nice(e.env.vars.get("PATH", "")), *network, *cmd]
                     return e.spawner.stream(argv, cwd=None if cwd is None else str(cwd), env={}, extra=clean,
                                             on_output=chunks.append, timeout_s=timeout, stop=stop)
             return e.spawner.stream(list(cmd), cwd=None if cwd is None else str(cwd), extra=extra, on_output=chunks.append,
@@ -84,13 +85,12 @@ class Shell:
             raise
 
     def no_network(self) -> tuple[str, ...]:
-        """engine.check_net_isolate: the prefix that takes a check's network away. A host that cannot says so once and runs the check."""
+        """engine.check_net_isolate: take a check's network away, or refuse it with the host's reason when isolation is on."""
         if not self.e.cfg.check_net_isolate:
             return ()
         found = check_net.current()
-        if found.warning and found.warning not in check_net.said:
-            check_net.said.add(found.warning)
-            self.e.log.note(found.warning)
+        if found.warning:
+            raise Blocked(f"{found.warning} (engine.check_net_isolate is on)", kind=Kind.FAULT_INFRA)
         return found.prefix
 
     def killed(self, res: Any, rc: int, what: str, timeout: float, started: float) -> str:
