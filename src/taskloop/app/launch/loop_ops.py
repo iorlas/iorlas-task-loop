@@ -22,12 +22,12 @@ from tlkernel.slots import SlotGitError, git_probe
 
 from taskloop.adapters import beadtools, childenv, ident, ram
 from taskloop.adapters.bd import BdStore
+from taskloop.app.asks import admission
 from taskloop.app.doctor import disk
 from taskloop.app.loop.env import ReloadNote
 from taskloop.app.reconcile import leases
 from taskloop.app.release import reexec
 from taskloop.app.report import reflect
-from taskloop.app.run import entry
 from taskloop.app.run.running import running
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import console, trail, verbs
@@ -86,7 +86,7 @@ def _bd(store: BdStore, argv: list[str]) -> tuple[int, str, str]:
 def claim(repo: str, store: Beads, bead: BeadId, wt: str, slot: str, git: Git, who: Identity,
           now: Callable[[], float] = trail.now) -> tuple[bool, str]:
     # a paused run's claim was released by the step's sweep; a live claim stops here
-    ok, why = entry.admit(bead, repo, git, who, store, now())
+    ok, why = admission.admit(bead, repo, git, who, store, now(), running_now=running)
     if not ok:
         return False, why
     return verbs.claim(who, bead, store, git, wt, slot) == 0, "claimed by another session"

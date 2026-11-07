@@ -34,6 +34,7 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from slots.test_slots import Slots
+from taskloop.app.asks import admission
 from taskloop.app.launch import loop as wloop
 from taskloop.app.loop.core import Core
 from taskloop.app.loop.loop import Loop
@@ -383,7 +384,7 @@ class ReviewFixes(AreasBase):
         made.return_value.run.return_value = 0
         made.return_value.result.side_effect = lambda: RunReport(outcome=Result.LANDED, bead=BeadId("t"))
         made.return_value.log_path = Path(self.home, "e.jsonl")
-        with mock.patch.object(entry, "admit", return_value=(True, "")), mock.patch.object(verbs, "claim", return_value=0), \
+        with mock.patch.object(admission, "admit", return_value=(True, "")), mock.patch.object(verbs, "claim", return_value=0), \
                 mock.patch.object(entry, "Engine", made), mock.patch.object(signal, "signal"), \
                 mock.patch.object(entry, "take_area", side_effect=area), redirect_stdout(io.StringIO()):
             ths = [threading.Thread(target=run, args=("x-1", "s1")), threading.Thread(target=run, args=("x-2", "s2"))]

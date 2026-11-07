@@ -261,7 +261,7 @@ flowchart TB
 | `dash-imports-contracts-only` (`:94-106`) | `taskloop_dash` imports only contracts | holds statically. **At runtime the dashboard process imports `taskloop.app.launch.dash_ports` by name** (`src/taskloop_dash/cli/dash.py:31-36`, `tl/app/launch/dash.py:147`), which pulls in `app.asks.intake`, `app.asks.owner_verbs`, `adapters.bd` (`dash_ports.py:9-27`). The import rule constrains source, not the process. |
 | `only-launch-imports-dash` (`:108-115`) | | holds. |
 | `app-slices-acyclic` (`:117-136`) + per-slice forbidden lists (`:141-503`) | order launch > prune > run > wire > loop > land > write/review/plan/look > report > checks > reconcile > release/track/doctor > slots > asks | Static cross-slice imports found by grep match every contract: land -> checks, slots; plan -> asks, checks; write -> checks; loop -> asks, slots; report -> asks, reconcile; reconcile -> release; prune -> reconcile, release, run, track; wire -> asks, doctor, loop, release, slots, track; run -> 13 slices; launch -> 13 slices. No `importlib.import_module` under `src/` outside `hook/main.py`. |
-| `app-cli-spawn-through-the-spawner` (`:505-514`) | app and cli never import `adapters.procs` or `stream_proc` | not checked line by line (unverified). `tl/app/run/entry.py:3`, `:151` uses `fcntl` directly; `tl/hook/prepush.py:14-18` uses `subprocess` (hook is not in that contract). |
+| `app-cli-spawn-through-the-spawner` (`:505-514`) | app and cli never import `adapters.procs` or `stream_proc` | not checked line by line (unverified). `tl/app/track/outcome_line.py:2`, `:30` uses `fcntl` directly; `tl/hook/prepush.py:14-18` uses `subprocess` (hook is not in that contract). |
 | ruff TID251 bans (`src/taskloop/contracts/ruff.toml`, `stores/ruff.toml`) | subprocess, socket, threading out of contracts/stores | not opened (unverified). |
 
 Effects inside "contracts", the lowest layer: `JsonStore` reads and writes files (`tl/contracts/stores.py:90-121`), `fence.take` writes bd
@@ -273,7 +273,9 @@ metadata (`tl/contracts/fence.py:71-78`), `runlife.reconcile` rewrites manifests
 
 ```mermaid
 flowchart TB
-    entry["app/run/entry<br/>admit, claim, slot, locks"]
+    entry["app/run/entry<br/>bind admission, claim, slot, locks"]
+    admission["app/asks/admission<br/>dead claims, holds, retries, parks"]
+    entry --> admission
     engine["app/run/engine.Engine<br/>composition root and host"]
     runonce["app/run/run_once, stages<br/>step cursor"]
     ctx["app/run/context, records,<br/>state.Checkpoints, layout"]
@@ -313,7 +315,8 @@ flowchart TB
 
 | Component | Responsibility | Public interface | Depends on | Owns (data contract) |
 |---|---|---|---|---|
-| `app/run/entry` | front door: worktree or slot, area lock, engine lock, admission (blocked bead reopened, foreign claim refused), bd claim, fence generation, one outcome line | `main`, `run_in`, `run_bead`, `admit`, `parked`, `preview` (`entry.py:98-420`) | wire.slots, slots.engine_lock, track.verbs, contracts.fence | `RunReport` outcome line / `--outcome-file` (`entry.py:165-171`) |
+| `app/run/entry` | front door: worktree or slot, area lock, engine lock, admission (blocked bead reopened, foreign claim refused), bd claim, fence generation, one outcome line | `main`, `run_in`, `run_bead`, `preview` (`entry.py`) | wire.slots, slots.engine_lock, track.verbs, contracts.fence | `RunReport` outcome line / `--outcome-file` (`track/outcome_line.py:44-49`) |
+| `app/asks/admission` | dead claims, foreign claims, holds, blocked retries and parked beads | `release_dead`, `admit`, `parked` | asks.intake, asks.parks, domain.asks.hold; release, running and output callables supplied by composition | admission verdict |
 | `app/run/engine.Engine` | holds every collaborator; each part is a `cached_property` built over the engine itself (`engine.py:190-200`) | `run`, `result`, `ai`, `sh`, `run_checks`, `blocked_for`, `warn`, `record_land` ... (`engine.py:196-404`) | 50 imports from 14 slices and 8 adapters (`engine.py:12-63`) | none of its own; aliases `RunState` fields onto itself (`state.py:98-101`) |
 | `app/run/run_once`, `stages` | step cursor: next step from manifest and checkpoint; claim checks, stages, land, close-out that always runs | `RunOnce.go`, `run_stages`, `select_step`, `one_stage` (`run_once.py:35-241`, `stages.py:44-350`) | ParkStore, RunLocator | step order `Step` enum (`contracts/enums.py`) |
 | `app/run/context`, `records`, `layout`, `state` | run identity and files; engine log, trace line; checkpoint read-modify-write behind the fence | `RunContext.open`, `RunLayout.open`, `Checkpoints.read/save/writer` (`state.py:104-121`) | stores, contracts.fence | `Checkpoint` v3, `RunTrace`, `EngineLog` |
@@ -450,7 +453,7 @@ Each item is something that would not fit in one box or one arrow.
    (`tl/app/slots/engine_lock.py:79-89`, `tl/app/loop/run.py:67`). The file sits in `.task/` of the worktree the writer edits
    (`tl/contracts/paths.py:276-281`). The current `EngineLock` is also a module global (`engine_lock.py:141`, `entry.py:339`).
 
-8. **Claims are taken twice by two processes under one actor.** The loop claims through `entry.admit` + `verbs.claim`
+8. **Claims are taken twice by two processes under one actor.** The loop claims through `asks.admission.admit` + `verbs.claim`
    (`tl/app/launch/loop.py:164-170`); the child run-task claims again and bumps the fence generation (`tl/app/run/entry.py:387-396`),
    relying on bd letting an actor re-claim its own bead (`launch/loop.py:295-297`). The fence then fails open when bd cannot be read
    (`tl/contracts/fence.py:87-90`) and `take` is a separate read and update (`fence.py:71-78`).

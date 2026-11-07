@@ -16,8 +16,7 @@ from support.plans import PLAN, WRITE, review
 from support.spawn import port_git
 from support.who import who
 
-from taskloop.app.asks import parks
-from taskloop.app.run import entry
+from taskloop.app.asks import admission, parks
 from taskloop.app.run import running as wrunning
 from taskloop.domain.beads import park
 from tlkernel.ids import BeadId
@@ -34,24 +33,24 @@ class Entry(te.EngineTest):
     def test_a_parked_bead_is_refused_at_the_entry_until_its_text_changes(self):
         store = FakeBeadStore().put(BEAD)
         parks.ended(self.cfg(), must(store.show(BeadId("t-1"))), Kind.ASK_STUCK, "run-1", 1.0)
-        why = entry.parked(BeadId("t-1"), False, str(self.wt), who(), store)
+        why = admission.parked(BeadId("t-1"), False, str(self.wt), who(), store)
         assert "unchanged" in why
-        assert entry.parked(BeadId("t-1"), True, str(self.wt), who(), store) == ""  # the owner asks for it
+        assert admission.parked(BeadId("t-1"), True, str(self.wt), who(), store) == ""  # the owner asks for it
         store.put(dict(BEAD, description="Add f, with the header."))
-        assert entry.parked(BeadId("t-1"), False, str(self.wt), who(), store) == ""
+        assert admission.parked(BeadId("t-1"), False, str(self.wt), who(), store) == ""
 
     def test_the_third_run_on_one_text_is_refused_even_with_fresh(self):
         store = FakeBeadStore().put(BEAD)
         for n in (1, 2):
             parks.ended(self.cfg(), must(store.show(BeadId("t-1"))), Kind.ASK_STUCK, f"run-{n}", float(n))
-        assert "change the description" in entry.parked(BeadId("t-1"), True, str(self.wt), who(), store)
+        assert "change the description" in admission.parked(BeadId("t-1"), True, str(self.wt), who(), store)
 
     def test_an_answered_ask_runs_the_bead_and_starts_the_count_again(self):
         store = FakeBeadStore().put(BEAD)
         for n in (1, 2):
             parks.ended(self.cfg(), must(store.show(BeadId("t-1"))), Kind.ASK_STUCK, f"run-{n}", float(n))
         with mock.patch.object(parks, "answered", return_value=True):
-            assert entry.parked(BeadId("t-1"), False, str(self.wt), who(), store) == ""
+            assert admission.parked(BeadId("t-1"), False, str(self.wt), who(), store) == ""
         assert ParkStore(self.cfg()).get(BeadId("t-1")) is None
 
     def test_a_run_that_ends_on_a_question_records_the_text_hash_and_lets_go_of_the_claim(self):
@@ -71,17 +70,17 @@ class Entry(te.EngineTest):
     def test_fresh_takes_over_a_live_lease_when_no_engine_runs_the_bead(self):
         store = FakeBeadStore()
         with store.stub(show=self.claimed()), mock.patch.object(wrunning, "running", return_value={"t-2": "s1"}):  # ANOTHER bead runs
-            ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=store, fresh=True)
+            ok, why = admission.admit(BeadId("t-1"), str(self.wt), port_git(), who(), store=store, fresh=True, running_now=wrunning.running)
         assert (ok, why) == (True, "reopened")
         assert store.calls[0] == ("update", "t-1", "--status", "open", "--if-assignee", "tl-2be89f88", "--assignee", "")
 
     def test_without_fresh_that_claim_stays_and_with_an_engine_on_the_bead_fresh_does_not_take_it(self):
         store = FakeBeadStore()
         with store.stub(show=self.claimed()), mock.patch.object(wrunning, "running", return_value={}):
-            ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=store)
+            ok, why = admission.admit(BeadId("t-1"), str(self.wt), port_git(), who(), store=store, running_now=wrunning.running)
         assert not ok
         assert "a live claim" in why
         with store.stub(show=self.claimed()), mock.patch.object(wrunning, "running", return_value={"t-1": "s2"}):
-            ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=store, fresh=True)
+            ok, why = admission.admit(BeadId("t-1"), str(self.wt), port_git(), who(), store=store, fresh=True, running_now=wrunning.running)
         assert not ok
         assert "a live claim" in why

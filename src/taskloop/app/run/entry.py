@@ -1,10 +1,6 @@
 """The run-task entry: the slot or worktree a run takes, the admission of its bead (a blocked one reopened), and the one outcome line."""
 import contextlib
-import fcntl
-import json
-import os
 import signal
-import stat
 import sys
 import threading
 import time
@@ -14,12 +10,11 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
-from atomic_io import atomic_write_text
-from tlkernel import fence, wire
+from tlkernel import fence
 from tlkernel.bead import Bead
-from tlkernel.beadsport import BdFailure, BeadPatch, Beads
+from tlkernel.beadsport import BeadPatch, Beads
 from tlkernel.config import EngineConfig
-from tlkernel.enums import AskStatus, Result
+from tlkernel.enums import Result
 from tlkernel.env import Env
 from tlkernel.envvars import EnvVar
 from tlkernel.fence import SLOT_GEN
@@ -27,146 +22,24 @@ from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
-from tlkernel.locator import RunLocator
-from tlkernel.paths import ConfigDir
 from tlkernel.procport import Spawner
 from tlkernel.run import Reexec, RunReport
 
 from taskloop.adapters import beadtools, childenv, gitrepo, ident
 from taskloop.adapters import halt as halting
-from taskloop.app.asks import intake, parks, setup_retry
+from taskloop.app.asks import admission, setup_retry
 from taskloop.app.loop.queue import has_areas
 from taskloop.app.reconcile import leases
 from taskloop.app.run import preflight, running, target
 from taskloop.app.run.engine import Blocked, Engine
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import console, verbs
+from taskloop.app.track.outcome_line import append_output, pause_line, report
 from taskloop.app.wire import slots as wslots
-from taskloop.domain.asks import hold
-from taskloop.domain.plan.brief import owner_written
 from taskloop.stores.real import real_stores
 
 say = console.say
 TL_PY = Path(__file__).resolve().parents[4] / "skills" / "task-loop" / "tl.py"
-
-
-def release_dead(repo: Any, git: Git, who: Identity, store: Any = None) -> None:
-    """The reconcile sweep's lease rules, before a run takes its bead: a dead run's claim (a crashed or paused one, a restarted session's
-    old actor) is given back by the same rule `tl prune` and the loop's step use."""
-    for line in leases.release_dead(repo, store or beadtools.bd_store(who.actor, repo), running.running(repo, git, who, store),
-        ident.hostname(), time.time()):
-        say(line)
-
-
-def _foreign_claim(b: Any, repo: Any, git: Git, who: Identity, store: Any, fresh: bool = False) -> str:
-    """Why another actor's claim on the bead stops a run-task, "" when it does not: the sweep already gave back every dead one, so a claim
-    that is left is live (a lease running, or a run on it). A blocked bead is the actor's still: it goes only when its engine is gone;
-    so does any claim the owner's --fresh asks for (tl-159): the check is per bead (is an engine on THIS bead), never per actor."""
-    bead_id, holder = b.id, b.assignee
-    if not holder.startswith("tl-"):
-        return f"claimed by {holder}"
-    if (b.status == "blocked" or fresh) and bead_id not in running.running(repo, git, who, store):
-        return ""
-    logs = [b.log for b in RunLocator(who.config).of_bead(bead_id) if b.log.exists()]
-    return f"another run of {bead_id} is still running as {holder} (a live claim)" + (f"; its engine log: {logs[-1]}" if logs else "")
-
-
-def _blocked_by_engine(b: Any, store: Any, home: ConfigDir, owner_author: str) -> str:
-    """Why a bead the engine blocked stays blocked ("" when a plain retry may reopen it)."""
-    bead_id = b.id
-    held = [d.id for d in b.dependencies if d.type == "blocks" and d.status != "closed"]
-    if held:
-        return "blocked by {}".format(", ".join(held))
-    cs = store.comments(bead_id)
-    blocks = [c for c in cs if intake.engine_written(c) and c.text.startswith("Blocked:")]
-    if not blocks:
-        return "blocked by a person, not by the engine"
-    after = [c for c in cs if c.created_at > blocks[-1].created_at and owner_written(c, owner_author)]
-    ask = real_stores(home).asks.get(bead_id)
-    asking = ask is not None and ask.consumed is None and ask.status in (AskStatus.OPEN, AskStatus.PARKED, AskStatus.ANSWERED)
-    if ask is not None and asking and ask.answer is not None:  # tl-gy4: an answer filed on the ask (dashboard, tl ask answer) is an answer
-        after, asking = after[:0], False  # whether or not a comment followed the block; the run's check_ask consumes it
-    if ask is not None and asking and not after:
-        return f"waiting for the answer to ask {ask.id} ({ask.kind.value})"
-    if after and not asking:
-        return "{} commented after the engine blocked it; read that first".format(after[-1].author or "someone")
-    return ""
-
-
-def admit(bead_id: Any, repo: Any, git: Git, who: Identity, store: Any = None, at: Any = None, fresh: bool = False,
-          owner_author: str = "") -> Any:
-    """(ok, why): whether run-task may take the bead, never taking what a person holds. A bead the engine blocked is reopened for a
-    plain retry, or when a comment after the block answers the open ask; it stays blocked when a person commented after the block with
-    no ask open (they may have parked it), while an ask waits unanswered, or while another bead blocks it. A claim by another actor
-    that is still live stops it (dead ones are given back by `release_dead`, the reconcile lease rules, which runs first); `fresh` (the
-    owner's rerun) also takes a claim whose lease still runs when no engine is on the bead."""
-    store = store or beadtools.bd_store(who.actor, repo)
-    b = beadtools.peek(store, bead_id) or Bead(id=bead_id, title="", status="")
-    holder, me = b.assignee, who.actor
-    if hold.held(b.metadata, at or time.time()):
-        return False, f"held by the owner ({b.metadata[intake.HOLD]}): `tl hold {bead_id} --release` lets it go"
-    if holder and holder != me:
-        why = _foreign_claim(b, repo, git, who, store, fresh)
-        if why:
-            return False, why
-    takeover = bool(fresh and holder and holder != me)  # _foreign_claim let it through: no engine runs the bead
-    if b.status != "blocked" and not takeover:
-        return True, ""
-    why = _blocked_by_engine(b, store, who.config, owner_author) if b.status == "blocked" else ""
-    if why:
-        return False, why
-    # tl-kwo: only if the claim is still the one just read (bd applies --if-assignee atomically): two loops looking at one freed bead
-    # must not both reopen and then both claim
-    guard = bool(holder and holder != me)
-    try:
-        store.update(bead_id, BeadPatch(status="open", if_assignee=holder if guard else "", assignee=""))
-    except BdFailure:
-        if guard:
-            return False, f"the claim of {bead_id} changed hands just now ({holder} no longer holds it): not taken"
-    return True, "reopened"
-
-
-def parked(bead_id: BeadId, fresh: bool, repo: str, who: Identity, store: Beads | None = None) -> str:
-    """Why run-task will not take a bead whose run ended on a question ("" when it may): its text is unchanged (--fresh or an answer
-    lets it run), or this would be the third run on that text (nothing does). An answered ask starts the count again (tl-7y6.7.3)."""
-    b = beadtools.peek(store or beadtools.bd_store(who.actor, repo), bead_id)
-    cfg = who.config
-    verdict = parks.gate(cfg, b, fresh=fresh) if b else None
-    if b and verdict is None:
-        parks.entering(cfg, b)
-    return verdict.why if verdict else ""
-
-
-def append_output(stream: Any) -> Any:
-    """Write a stream that is a file at the end of that file, wherever another writer left it: a second
-    `run-task ... > log` on the same log truncates it, and a live run writing on at its old offset leaves a hole of NUL
-    bytes. A terminal, a pipe or a stream with no descriptor is left as it is."""
-    try:
-        fd = stream.fileno()
-        regular = stat.S_ISREG(os.fstat(fd).st_mode)
-    except (OSError, ValueError):  # no descriptor (a captured stream) or a closed one: nothing to keep in order
-        return
-    if regular:
-        fcntl.fcntl(fd, fcntl.F_SETFL, fcntl.fcntl(fd, fcntl.F_GETFL) | os.O_APPEND)
-
-
-def pause_line(rec: RunReport) -> Any:
-    """A paused run's one line for whoever reran it by hand: the exact time the lane is back (tl-bxk.10.6)."""
-    if rec.outcome is not Result.PAUSED:
-        return ""
-    due = rec.retry_after or 0.0
-    if not due:
-        return f"PAUSED {rec.bead}: no time the lane frees (login, network or setup); rerun when fixed: tl run-task {rec.bead}"
-    return "PAUSED {}: the lane is back at {}; rerun then: tl run-task {}".format(
-        rec.bead, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(due)), rec.bead)
-
-
-def report(a: Any, rec: RunReport) -> Any:
-    """The outcome as the run's last stdout line, and in --outcome-file when the loop names one."""
-    line = json.dumps(wire.dump(rec), ensure_ascii=False)
-    if getattr(a, "outcome_file", None):
-        atomic_write_text(Path(a.outcome_file), line + "\n", fsync=False)
-    say(line)
 
 
 def main(a: Any, store: Any = None, *, env: Env, spawner: Spawner, git: Git, who: Identity) -> Any:
@@ -385,11 +258,12 @@ def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: En
             return RunReport(outcome=Result.FAILED, bead=a.id, why=why)
     # a stop during the sweep, admit and claim waits for them, then the engine closes the run as stopped (trace, bead)
     with defer_stop(None) as stop:
-        release_dead(repo, git, who, store)
-        if why := parked(a.id, bool(getattr(a, "fresh", False)), repo, who, store):
+        admission.release_dead(repo, git, who, store, release=leases.release_dead, running_now=running.running, say=say)
+        if why := admission.parked(a.id, bool(getattr(a, "fresh", False)), repo, who, store):
             print(f"TAKEN: {why}")
             return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
-        ok, why = admit(a.id, repo, git, who, store, fresh=bool(getattr(a, "fresh", False)), owner_author=cfg.owner_author)
+        ok, why = admission.admit(a.id, repo, git, who, store, fresh=bool(getattr(a, "fresh", False)), owner_author=cfg.owner_author,
+                                  running_now=running.running)
         if not ok:
             print(f"TAKEN: {why}")
             return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)

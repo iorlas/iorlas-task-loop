@@ -60,9 +60,10 @@ from support.waits import until  # noqa: F401
 from support.who import who
 from taskloop.adapters import delegate as dl
 from taskloop.adapters import delegate as lroute  # noqa: F401
+from taskloop.app.asks import admission
 from taskloop.app.run import (
     engine,
-    entry,
+    running,
 )
 from taskloop.app.wire import slots as wslots
 from taskloop.app.write.newfiles import NewFiles
@@ -283,7 +284,8 @@ class EngineTest(SlotWorld):
         if ask:
             self.asks().put(wire.load(Ask, {**ask, "bead": "t-1"}))
         with self.store.stub(show=dict(BEAD, **bead), comments=list(comments)):
-            ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=self.store, owner_author="denis")
+            ok, why = admission.admit(BeadId("t-1"), str(self.wt), port_git(), who(), store=self.store, owner_author="denis",
+                                      running_now=running.running)
         updates = [c for c in self.bd_calls if c[:1] == ("update",)]
         return ok, why, updates
 

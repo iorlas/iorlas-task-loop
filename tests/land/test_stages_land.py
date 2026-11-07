@@ -34,7 +34,7 @@ from taskloop.adapters import (
     bd,
     bdcreate,
 )
-from taskloop.app.run import entry
+from taskloop.app.asks import admission
 from taskloop.app.run import running as wrunning
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import slots as wslots
@@ -526,7 +526,7 @@ class ClaimPerBead(StagesTest):
 
     def admit_when(self, bead, running):
         with self.store.stub(show=bead), mock.patch.object(wrunning, "running", return_value=running), self.store.stub(comments=[]):
-            return entry.admit("o67g", str(self.wt), port_git(), who(), store=self.store)
+            return admission.admit(BeadId("o67g"), str(self.wt), port_git(), who(), store=self.store, running_now=wrunning.running)
 
     BEAD: ClassVar[Any] = {
         "id": "o67g",
@@ -555,7 +555,7 @@ class ClaimPerBead(StagesTest):
             self.store.stub(comments=cs),
             self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=1)),
         ):
-            ok, why = entry.admit("o67g", str(self.wt), port_git(), who(), store=self.store)
+            ok, why = admission.admit(BeadId("o67g"), str(self.wt), port_git(), who(), store=self.store, running_now=wrunning.running)
         assert not ok
         assert "changed hands" in why
 

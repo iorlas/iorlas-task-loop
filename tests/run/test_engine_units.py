@@ -18,6 +18,8 @@ import pytest
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
+from taskloop.app.asks import admission
+
 ROOT = Path(__file__).resolve().parents[2]
 import support.paths  # noqa: E402, F401
 from support import gitq  # noqa: E402
@@ -25,6 +27,7 @@ from support.checkpoints import read_ck  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.app.plan.planner import Planner  # noqa: E402
+from taskloop.app.track import outcome_line  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.domain import outcome as oc  # noqa: E402
 from tlkernel import answers  # noqa: E402
@@ -188,7 +191,7 @@ class Outcome(T.EngineTest):
         made = mock.Mock()
         made.return_value.run.return_value = 0
         made.return_value.result.return_value = RunReport(outcome=Result.LANDED, bead=BeadId("t-1"))
-        with mock.patch.object(entry, "admit", return_value=(True, "")), mock.patch.object(entry, "Engine", made):
+        with mock.patch.object(admission, "admit", return_value=(True, "")), mock.patch.object(entry, "Engine", made):
             rc, rec, last = self.main(f)
         assert (rc, rec["outcome"], last["outcome"]) == (0, "landed", "landed")
 
@@ -202,7 +205,7 @@ class Outcome(T.EngineTest):
                       quiet=True, outcome_file=None)
         Path(a.worktree).mkdir(exist_ok=True)
         out = io.StringIO()
-        with mock.patch.object(entry, "admit", return_value=(True, "")), mock.patch.object(entry, "Engine", made), \
+        with mock.patch.object(admission, "admit", return_value=(True, "")), mock.patch.object(entry, "Engine", made), \
                 contextlib.chdir(self.wt), redirect_stdout(out), mock.patch.object(signal, "signal"):  # pyrefly: ignore[missing-attribute]
             entry.main(a, self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())  # pyrefly: ignore[missing-attribute]
         lines = out.getvalue().strip().splitlines()
@@ -216,12 +219,12 @@ class Outcome(T.EngineTest):
             ), lines
 
     def test_a_pause_with_no_time_says_so(self):
-        assert "no time" in entry.pause_line(RunReport(outcome=Result.PAUSED, bead=BeadId("t-1"), retry_after=0))
-        assert entry.pause_line(RunReport(outcome=Result.LANDED, bead=BeadId("t-1"))) == ""
+        assert "no time" in outcome_line.pause_line(RunReport(outcome=Result.PAUSED, bead=BeadId("t-1"), retry_after=0))
+        assert outcome_line.pause_line(RunReport(outcome=Result.LANDED, bead=BeadId("t-1"))) == ""
 
     def test_a_refused_claim_is_taken_and_keeps_exit_1(self):
         f = Path(self.tmp.name, "out.json")
-        with mock.patch.object(entry, "admit", return_value=(False, "claimed by denis")):
+        with mock.patch.object(admission, "admit", return_value=(False, "claimed by denis")):
             rc, rec, _last = self.main(f)
         assert (rc, rec["outcome"]) == (1, "taken")
         assert "denis" in rec["why"]
