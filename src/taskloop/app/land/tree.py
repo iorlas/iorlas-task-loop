@@ -1,5 +1,4 @@
 """The slot's tree between runs: reset onto the task branch, the wip commit that saves a stopped run's work, leaving the slot."""
-from tlslots.effects import Effects
 import shutil
 import time
 from pathlib import Path
@@ -11,11 +10,12 @@ from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.paths import TASK_EXCLUDE, ConfigDir
 from tlkernel.slots import SlotGitError
+from tlslots.effects import Effects
+from tlslots.engine_lock import engine_busy
+from tlslots.reset import leave_slot
 
 from taskloop.app.land.host import BeginSteps, FetchCheckout, StageCheckout
 from taskloop.app.land.rebase import must
-from tlslots.engine_lock import engine_busy
-from tlslots.reset import leave_slot
 from taskloop.stores.runlog import RunLog
 
 

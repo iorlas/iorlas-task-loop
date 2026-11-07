@@ -4,7 +4,6 @@ Per item: push the branch and see it on the remote, open its PR when it has none
 --match-head-commit, check the forge says MERGED, and (still under the lock) record `tl land` with that PR's own merge commit. A PR
 it replaces is closed only after the replacement merged. After the last, bd's Dolt data is synced. The first failure ends the run with
 the failing command's exit code and leaves every later item untouched. Every command is a row of the run's log (Cmds)."""
-from tlslots.effects import Effects
 import argparse
 import contextlib
 import os
@@ -30,6 +29,7 @@ from tlkernel.profile_changes import ProfileChange
 from tlkernel.queue_doc import QueueDoc
 from tlkernel.slots import MissingRemote
 from tlkernel.storeapi import Doc
+from tlslots.effects import Effects
 
 from taskloop.adapters import landlock
 from taskloop.app.land import cleanup

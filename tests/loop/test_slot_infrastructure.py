@@ -8,7 +8,6 @@ from support.fake_loop_env import slot_loop_env
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.settle import Counters, Settle
 from taskloop.app.loop.take import Taker
-from tlslots.pool import Slot
 from tlkernel import lanepauses as pauses
 from tlkernel.bead import BdError, Bead
 from tlkernel.beadsport import BdFailure
@@ -16,6 +15,7 @@ from tlkernel.config import LoopConfig
 from tlkernel.enums import Result
 from tlkernel.ids import BeadId
 from tlkernel.slots import SlotFail, SlotGitError
+from tlslots.pool import Slot
 
 
 class Infrastructure(Rig):

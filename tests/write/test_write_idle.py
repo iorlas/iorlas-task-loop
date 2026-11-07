@@ -27,12 +27,12 @@ from support.who import who
 from taskloop.adapters import runner
 from taskloop.adapters.delegate import Stopped
 from taskloop.app.run import engine
-from tlslots import config as wslots_config
 from tlkernel import wire
 from tlkernel.config import ConfigError, EngineConfig, load
 from tlkernel.delegate import DelegateResult
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
+from tlslots import config as wslots_config
 from tltestkit import fake_route
 
 POSIX = os.name != "nt"

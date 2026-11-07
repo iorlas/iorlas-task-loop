@@ -12,9 +12,9 @@ from tlkernel.beadsport import BdFailure, BeadPatch
 from tlkernel.slots import SlotFail
 
 from tlslots.env import SlotEnv
+from tlslots.liveness import LIMITS, Kind, Limits, SlotFact, Violation, Waiter, violations
 from tlslots.marks import hold_of
 from tlslots.pool import SlotPool
-from tlslots.liveness import LIMITS, Kind, Limits, SlotFact, Violation, Waiter, violations
 
 EVERY = 30.0       # seconds between two looks by one caller
 RELOG = 1800.0     # an episode that goes on is logged again after this

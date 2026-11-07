@@ -23,13 +23,13 @@ from support.dashes import make_dash  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
 from support.who import who  # noqa: E402
 
-from tlslots import config as wslots_config  # noqa: E402
 from taskloop.app.track import verbs  # noqa: E402
 from taskloop.stores.real import real_stores  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402
 from tlkernel import log as rec  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlkernel.ids import BeadId  # noqa: E402
+from tlslots import config as wslots_config  # noqa: E402
 
 engine = te.engine
 DASH = make_dash()

@@ -17,16 +17,16 @@ from tlkernel.paths import ConfigDir
 from tlkernel.procport import Child, Spawner
 from tlkernel.run import ReexecNote
 from tlkernel.slots import SlotFail, SlotGitError
-
-from taskloop.app.asks import deferral, parks
-from taskloop.app.loop.env import ReloadNote
-from taskloop.app.loop.ports import LeaseHandle
 from tlslots import aside, owned, watchdog
 from tlslots import line as slots_line
 from tlslots.env import SlotEnv
 from tlslots.lease import Lease
 from tlslots.pool import SlotPool
 from tlslots.reset import setup
+
+from taskloop.app.asks import deferral, parks
+from taskloop.app.loop.env import ReloadNote
+from taskloop.app.loop.ports import LeaseHandle
 
 
 class EngineSlots:

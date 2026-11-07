@@ -6,7 +6,6 @@ import shutil
 from collections.abc import Callable
 from typing import Any
 
-from taskloop.app.wire import slotfx
 from tlkernel.adrs import AdrStore
 from tlkernel.ask import Ask, AskAction
 from tlkernel.askstore import AskStore
@@ -21,6 +20,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.ports import AnswerAsk
 from tlkernel.rowstores import ReposStore
 from tlkernel.slottable import SlotSource
+from tlslots import config as wslots_config
 
 from taskloop.adapters.bd import BdStore
 from taskloop.adapters.ident import config_dir, hostname
@@ -30,10 +30,9 @@ from taskloop.app.asks.owner_verbs import OwnerVerbs
 from taskloop.app.doctor import profiles
 from taskloop.app.report import card as cards
 from taskloop.app.report.card import score_of
-from tlslots import config as wslots_config
 from taskloop.app.track.trail import now
 from taskloop.app.wire import asks as wire_asks
-from taskloop.app.wire import real
+from taskloop.app.wire import real, slotfx
 from taskloop_dash.env import Ports
 
 DASH_ACTOR = "tl-dash"  # the dashboard's bd actor

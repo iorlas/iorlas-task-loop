@@ -1,7 +1,6 @@
 """Record a direct push land and clean its task refs after verifying that they reached the base."""
 import time
 
-from taskloop.app.wire import slotfx
 from tlkernel.beadsport import Beads
 from tlkernel.branches import task_branch
 from tlkernel.finish import finish_run
@@ -11,10 +10,10 @@ from tlkernel.ids import BeadId
 from tlkernel.locator import RunLocator
 from tlkernel.log import RunStart
 from tlpipeline.api import land_answer
+from tlslots.config import load_cfg, profile_slots
 
 from taskloop.app.land import cleanup
-from tlslots.config import load_cfg, profile_slots
-from taskloop.app.wire import closeguard
+from taskloop.app.wire import closeguard, slotfx
 from taskloop.app.wire.slots import slot_of
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
@@ -44,6 +43,7 @@ def cmd_land(who: Identity, bead: BeadId, sha: str, store: Beads, git: Git, work
     checked_remote = remote_oid if remote_oid and git.is_ancestor(where, remote_oid, full) else ""
     prior = cleanup.previous(who.config, bead, repo, branch, full)
     row = cleanup.record(log, repo, branch, checked_head, full, "origin", checked_remote, prior)
-    cleanup.retry(git, log, row, lambda path: bool(slot_of(repo, path, who, store, strict=True)), profile_slots(repo).base, cfg=who.config, fx=slotfx.FX)
+    cleanup.retry(git, log, row, lambda path: bool(slot_of(repo, path, who, store, strict=True)), profile_slots(repo).base,
+                  cfg=who.config, fx=slotfx.FX)
     finish_run(who.config, run, land_answer(time.time(), sha=full))
     return 0

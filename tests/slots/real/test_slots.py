@@ -8,10 +8,10 @@ import json
 import os
 import signal
 import subprocess
-from dataclasses import replace
 import sys
 import time
 from contextlib import redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -29,7 +29,6 @@ from support.fake_loop_env import slot_env_of
 from support.spawn import port_git, real_spawner
 from support.who import who
 
-from taskloop.app.wire.slotfx import FX
 from taskloop.adapters import pidcheck
 from taskloop.app.asks import admission
 from taskloop.app.launch import loop as wloop
@@ -39,15 +38,16 @@ from taskloop.app.run import (
     engine,
     entry,
 )
-from tlslots import (
-    engine_lock,
-)
+from taskloop.app.wire.slotfx import FX
 from tlkernel.enums import Result
 from tlkernel.env import snapshot
 from tlkernel.ids import loop_key
 from tlkernel.kinds import Kind
 from tlkernel.lockrows import EngineLockRows
 from tlkernel.run import RunReport
+from tlslots import (
+    engine_lock,
+)
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 
@@ -222,7 +222,8 @@ class LiveEngineBackstop(Slots):
         k = sleeper()
         self.kids.append(k)
         put_lock(self.slot("s1"), {"pid": 0, "bead": "x-0"})
-        with mock.patch(__name__ + ".FX", replace(FX, running_for=mock.Mock(return_value=["r1"]))):  # delegate names the run whose worker k stands for
+        # delegate names the run whose worker k stands for
+        with mock.patch(__name__ + ".FX", replace(FX, running_for=mock.Mock(return_value=["r1"]))):
             assert "run r1" in engine_lock.engine_busy(homes.cfg(), self.slot("s1"), fx=FX)
             self.run_loop("--max-beads", "1")
         assert self.started == [("x-1", "s2")]

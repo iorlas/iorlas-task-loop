@@ -3,17 +3,16 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from taskloop.app.wire import slotfx
 from tlkernel.identity import Identity
 from tlpipeline import api
+from tlslots.config import profile_slots
 
 from taskloop.adapters import beadtools, closes
 from taskloop.app.asks.closing import ClosingAsks
 from taskloop.app.land.closing import LandCleanups, LandFollowUps
 from taskloop.app.land.followups import FollowUpCheckpoints, FollowUpHost, file_follow_ups
-from tlslots.config import profile_slots
 from taskloop.app.track.closing import ClosingBeads
-from taskloop.app.wire import closeguard
+from taskloop.app.wire import closeguard, slotfx
 from taskloop.app.wire.slots import slot_of
 from taskloop.stores.runlog import RunLog
 

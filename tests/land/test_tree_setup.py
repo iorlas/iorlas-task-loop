@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from taskloop.app.wire.slotfx import FX
 from taskloop.app.land.tree import Tree
+from taskloop.app.wire.slotfx import FX
 from taskloop.app.write.briefing import Briefing
 
 

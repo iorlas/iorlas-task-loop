@@ -4,7 +4,6 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import IO
 
-from taskloop.app.wire import slotfx
 from tlkernel import childenv, paths
 from tlkernel.beadsport import Beads
 from tlkernel.env import Env
@@ -15,6 +14,8 @@ from tlkernel.ids import BeadId
 from tlkernel.landed import landed_by
 from tlkernel.procport import Child, Hold, Spawner
 from tlkernel.slots import git_probe
+from tlslots import config as wslots_config
+from tlslots import engine_lock
 
 from taskloop.adapters import bdbackup, beadtools, factorybackup, ident, ram
 from taskloop.adapters.bd import BdStore
@@ -27,10 +28,9 @@ from taskloop.app.reconcile import leases
 from taskloop.app.release import reexec
 from taskloop.app.report import reflect
 from taskloop.app.run.running import running
-from tlslots import config as wslots_config
-from tlslots import engine_lock
 from taskloop.app.track import console, trail, verbs
 from taskloop.app.wire import asks as wasks
+from taskloop.app.wire import slotfx
 from taskloop.app.wire import slots as wslots
 from taskloop.stores.delegate import real_route
 

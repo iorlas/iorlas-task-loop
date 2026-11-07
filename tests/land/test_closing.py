@@ -1,6 +1,4 @@
 """Land's closing adapters bind the filer and repo-specific cleanup inputs."""
-from taskloop.app.wire.slotfx import FX
-from tlslots.effects import Effects
 from collections.abc import Callable
 from pathlib import Path
 
@@ -10,9 +8,11 @@ from support.memstores import fake_stores
 
 from taskloop.app.land import cleanup
 from taskloop.app.land.closing import LandCleanups, LandFollowUps
+from taskloop.app.wire.slotfx import FX
 from taskloop.stores.runlog import RunLog
 from tlkernel.gitport import Git
 from tlkernel.paths import ConfigDir
+from tlslots.effects import Effects
 
 
 def test_followups_returns_filers_list():

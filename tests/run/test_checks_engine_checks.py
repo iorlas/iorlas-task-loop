@@ -32,7 +32,6 @@ from taskloop.app.run import (
     engine,
     entry,
 )
-from tlslots import config as wslots_config
 from taskloop.domain.write.matchers import count_tests
 from tlgate import evidence as check_evidence
 from tlgate.domain import lint
@@ -45,6 +44,7 @@ from tlkernel.ids import BeadId, CheckId
 from tlkernel.plancheck import Adhoc, adhoc
 from tlkernel.reviewmatchers import Tools
 from tlkernel.waitenums import WaitWhat
+from tlslots import config as wslots_config
 from tltestkit.cfgs import cfg_with
 from tltestkit.checks import ck, res, typed
 from tltestkit.narrow import must

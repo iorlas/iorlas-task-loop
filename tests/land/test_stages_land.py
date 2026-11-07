@@ -28,7 +28,6 @@ from taskloop.adapters import (
 )
 from taskloop.app.asks import admission
 from taskloop.app.run import running as wrunning
-from tlslots import config as wslots_config
 from taskloop.app.wire import asks as wasks
 from tlgate.domain.cmd import matchers as sh_matchers
 from tlkernel import checkmatchers as matchers
@@ -38,6 +37,7 @@ from tlkernel.env import snapshot
 from tlkernel.gitfacts import GitOutcome
 from tlkernel.ids import BeadId
 from tlkernel.landmatchers import _TRANSIENT as TRANSIENT_PUSH
+from tlslots import config as wslots_config
 from tltestkit import fake_route, procsim
 from tltestkit.checks import typed
 from tltestkit.plans import CLEAN, FALSE, HAS_F, PLAN, WRITE

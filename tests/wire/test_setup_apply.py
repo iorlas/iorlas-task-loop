@@ -6,14 +6,14 @@ from pathlib import Path
 
 from taskloop.adapters.ident import config_dir
 from taskloop.app.doctor import setup, setup_apply
-from tlslots import config as slots_config
-from tlslots import profile_facts
 from taskloop.cli import setup as cli_setup
 from taskloop.stores.delegate import real_route
 from taskloop.stores.real import real_stores
 from tlkernel.env import Env
 from tlkernel.paths import ConfigDir
 from tlkernel.procport import Ran
+from tlslots import config as slots_config
+from tlslots import profile_facts
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 

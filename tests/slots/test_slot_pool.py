@@ -18,16 +18,16 @@ from support.fake_beads import FakeBeads
 from support.fake_slot_git import FakeSlotGit
 
 from taskloop.adapters.git import classify
-from tlslots.env import SlotEnv
-from tlslots.lease import Lease
-from tlslots.line import wait_slot, waiting_line
-from tlslots.pool import SlotPool
 from taskloop.cli import slots as cli
 from tlkernel import paths
 from tlkernel.bead import Bead
 from tlkernel.config import SlotsConfig
 from tlkernel.ids import BeadId
 from tlkernel.slots import BranchPinned, Checkout, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
+from tlslots.env import SlotEnv
+from tlslots.lease import Lease
+from tlslots.line import wait_slot, waiting_line
+from tlslots.pool import SlotPool
 from tltestkit.memdoc import MemTickets
 
 ME = "tl-me"

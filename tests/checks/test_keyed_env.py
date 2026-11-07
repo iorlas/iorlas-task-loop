@@ -5,13 +5,13 @@ from unittest import mock
 from support.check_host import CheckHostCase
 
 from taskloop.app.launch.check_host import CliHost
-from tlslots.slot_env import slot_env
 from tlgate import authorization
 from tlgate.cache import RunMemo
 from tlgate.domain.specs import gate_items
 from tlgate.execution import check_env
 from tlgate.runner import Checker, cached_gate
 from tlkernel.runkey import BaseSha
+from tlslots.slot_env import slot_env
 from tltestkit import procsim
 
 

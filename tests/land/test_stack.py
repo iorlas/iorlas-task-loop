@@ -24,7 +24,6 @@ from tltestkit.logs import records
 # isort: split
 from support.memstores import fake_stores
 
-from taskloop.app.wire.slotfx import FX
 from taskloop.adapters import landlock, locks
 from taskloop.app.land.carry import Carry
 from taskloop.app.land.cmds import Cmds
@@ -34,6 +33,7 @@ from taskloop.app.land.stackgate import StackGate
 from taskloop.app.track import runs
 from taskloop.app.track.verbs import trace
 from taskloop.app.wire import closeguard
+from taskloop.app.wire.slotfx import FX
 from taskloop.cli.land_stack import cmd_land_stack
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog

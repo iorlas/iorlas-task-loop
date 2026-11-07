@@ -1,14 +1,14 @@
 """Cleanup after a recorded land: compare the checked oids, log the result, and keep failures retryable."""
-from tlslots.effects import Effects
 from collections.abc import Callable
 
 from tlkernel import log as rec
 from tlkernel.gitport import Git
 from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
-
+from tlslots.effects import Effects
 from tlslots.engine_lock import engine_busy
 from tlslots.reset import leave_slot
+
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 

@@ -3,7 +3,6 @@ from functools import cached_property
 from pathlib import Path
 from typing import override
 
-from taskloop.app.wire import slotfx
 from tlkernel.repourl import repo_url
 
 from taskloop.adapters import landlock
@@ -18,6 +17,7 @@ from taskloop.app.land.salvage import Salvage
 from taskloop.app.land.tree import Tree
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.track import verbs
+from taskloop.app.wire import slotfx
 from taskloop.app.write.newfiles import NewFiles
 
 

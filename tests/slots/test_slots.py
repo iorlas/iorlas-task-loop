@@ -28,22 +28,22 @@ from support.engine_locks import put_lock
 from support.spawn import port_git, real_spawner
 from support.who import who
 
-from taskloop.app.wire.slotfx import FX
 from taskloop.adapters import pidcheck
 from taskloop.app.asks import admission
 from taskloop.app.launch import dash as dash_server
 from taskloop.app.run import (
     entry,
 )
-from tlslots import (
-    engine_lock,
-)
-from tlslots.paths import engine_lock as engine_lock_path
 from taskloop.app.wire import slots as wslots
+from taskloop.app.wire.slotfx import FX
 from tlkernel.config import SlotsConfig
 from tlkernel.enums import Result
 from tlkernel.env import snapshot
 from tlkernel.run import RunReport
+from tlslots import (
+    engine_lock,
+)
+from tlslots.paths import engine_lock as engine_lock_path
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 

@@ -11,9 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import homes
 
 from taskloop.app.wire.slotfx import FX
-from tlslots import engine_lock
 from tlkernel.lockrows import EngineLockRows
 from tlkernel.wire import Refused
+from tlslots import engine_lock
 from tltestkit.narrow import must
 
 TORN = '{"v": 1, "pid": 12'

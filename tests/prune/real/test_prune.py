@@ -14,14 +14,13 @@ from tltestkit.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from support import homes
 
-from taskloop.app.wire.slotfx import FX
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.prune import verb
 from taskloop.app.reconcile import apply, observe
 from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.release.shell import of
-from tlslots import engine_lock
+from taskloop.app.wire.slotfx import FX
 from tlkernel.bead import BdError, Bead
 from tlkernel.beadsport import BdFailure, Beads
 from tlkernel.config import LoopConfig
@@ -30,6 +29,7 @@ from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.landed import Landed as LandedRec
 from tlkernel.paths import ConfigDir
+from tlslots import engine_lock
 
 DAY = 86400
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"}

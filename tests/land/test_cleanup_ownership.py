@@ -1,4 +1,5 @@
 """A live engine or surviving worker keeps its checkout during landing and resume."""
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest import mock
 
@@ -7,12 +8,12 @@ from support import homes
 from support.memstores import fake_stores
 
 from land.test_cleanup import CleanupGit
-from taskloop.app.wire.slotfx import FX
 from taskloop.app.land import cleanup
 from taskloop.app.land.tree import Tree
-from tlslots.reset import leave_slot
+from taskloop.app.wire.slotfx import FX
 from taskloop.stores.runlog import RunLog
 from tlkernel.locks import EngineLock
+from tlslots.reset import leave_slot
 from tltestkit.case import Case
 
 
@@ -31,7 +32,8 @@ class Ownership(Case):
                          EngineLock(pid=0, started=1, bead="a")):
                 with self.subTest(slot=slot, lock=lock):
                     self.lock.return_value = lock
-                    why = cleanup.tidy_local(self.git, "/repo", self.log, "task/a", "head", lambda _, slot=slot: slot, cfg=homes.cfg(), fx=self.fx)
+                    why = cleanup.tidy_local(self.git, "/repo", self.log, "task/a", "head", lambda _, slot=slot: slot,
+                                         cfg=homes.cfg(), fx=self.fx)
                     assert ("pid 987654" in why) or ("run r1" in why)
                     assert self.git.calls == []
                     assert self.git.local == "head"
@@ -44,7 +46,8 @@ class Ownership(Case):
                 with self.subTest(slot=slot, lock=lock):
                     self.git = CleanupGit()
                     self.lock.return_value = lock
-                    why = cleanup.tidy_local(self.git, "/repo", self.log, "task/a", "head", lambda _, slot=slot: slot, cfg=homes.cfg(), fx=self.fx)
+                    why = cleanup.tidy_local(self.git, "/repo", self.log, "task/a", "head", lambda _, slot=slot: slot,
+                                         cfg=homes.cfg(), fx=self.fx)
                     assert why == ""
                     assert self.git.ran("detach" if slot else "remove")
 

@@ -6,12 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from atomic_io import atomic_write_json
-from taskloop.app.wire import slotfx
 from tlkernel.check_files import repo_key
 from tlkernel.slots import SlotGitError, git_probe
+from tlslots import engine_lock
 
 from taskloop.adapters.gitrepo import same_dir
-from tlslots import engine_lock
+from taskloop.app.wire import slotfx
 
 FLAKE_DAYS = 14  # how long a writer-reported flaky test stays in the shared notes
 

@@ -23,9 +23,9 @@ from taskloop.app.doctor import (  # noqa: E402
     install,
     setup_checks,
 )
-from tlslots import config as wslots_config  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
+from tlslots import config as wslots_config  # noqa: E402
 from tltestkit.checked import run_checked  # noqa: E402
 
 

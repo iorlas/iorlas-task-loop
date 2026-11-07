@@ -38,7 +38,6 @@ from taskloop.app.run import (
     engine,
     running,
 )
-from tlslots import config as wslots_config
 from taskloop.app.write.newfiles import NewFiles
 from taskloop.domain.lanes import policy as lp  # noqa: F401
 from tlgate.domain import (
@@ -52,6 +51,7 @@ from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.plancheck import adhoc
+from tlslots import config as wslots_config
 from tltestkit import fake_route, procsim
 from tltestkit.cfgs import argv_cfg, cfg_with
 from tltestkit.checked import run_checked  # noqa: F401

@@ -1,6 +1,5 @@
 """Make a slot ready for a bead: a clean tree on the bead's branch, a dead session's work committed where it was (never
 wiped), ignored setup output kept. All of git goes through the Git port; its typed errors become a SlotFail."""
-from tlslots.effects import Effects
 import hashlib
 import os
 from collections.abc import Callable
@@ -14,6 +13,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.slots import BranchPinned, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
 
 from tlslots import owned
+from tlslots.effects import Effects
 from tlslots.engine_lock import engine_busy
 from tlslots.env import SlotEnv, stamp
 from tlslots.paths import slot_setup_mark

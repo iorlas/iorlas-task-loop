@@ -4,8 +4,8 @@ from unittest import mock
 
 import pytest
 
-from taskloop.app.wire.slotfx import FX
 from taskloop.app.land import stack
+from taskloop.app.wire.slotfx import FX
 from tlkernel.env import Env
 
 

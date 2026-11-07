@@ -26,9 +26,9 @@ from taskloop.adapters import halt as halting
 from taskloop.app.run import (
     engine,
 )
-from tlslots import config as wslots_config
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
+from tlslots import config as wslots_config
 
 
 class EngineChecksTest(EngineTest):

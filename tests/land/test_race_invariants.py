@@ -18,10 +18,7 @@ every land under the land lock, rebased, pushed once   test_every_land_holds_the
 every release a distinct version                       test_every_release_takes_a_distinct_version
 nothing left held after all exit                       test_nothing_is_left_held_after_everyone_is_done
 """
-from taskloop.app.wire.slotfx import FX
-
 import contextlib
-from dataclasses import replace
 import io
 import json
 import os
@@ -37,6 +34,8 @@ import pytest
 import support.who as support_who
 from support import homes
 from support.shells import quiet_shell
+
+from taskloop.app.wire.slotfx import FX
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # python3 -m unittest tests.test_race_invariants, from the repo root
 from loop import test_loop
@@ -65,8 +64,6 @@ from taskloop.app.run import (
     entry,
     running,
 )
-from tlslots import config as wslots_config
-from tlslots import engine_lock, marks, reset
 from taskloop.app.track import (
     trail,
     verbs,
@@ -78,6 +75,8 @@ from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.lockrows import EngineLockRows
 from tlkernel.slots import Checkout, SlotGitError
+from tlslots import config as wslots_config
+from tlslots import engine_lock, marks, reset
 from tltestkit.cfgs import cfg_with
 from tltestkit.fake_clock import FakeClock
 from tltestkit.narrow import must

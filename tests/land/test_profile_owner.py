@@ -17,7 +17,6 @@ from support.fakegit import FakeGit
 from support.memstores import fake_stores
 from support.narrow_hosts import FakePushHost, Stopped
 
-from taskloop.app.wire.slotfx import FX
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.gate import mint, owner_refusal
 from taskloop.app.land.host import Land
@@ -26,6 +25,7 @@ from taskloop.app.land.push_judge import PushStatus, judge_push
 from taskloop.app.land.stack import Stack
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.launch.check import run_check
+from taskloop.app.wire.slotfx import FX
 from taskloop.cli.land_stack import add_parser, cmd_land_stack
 from tlkernel.config import load
 from tlkernel.env import Env

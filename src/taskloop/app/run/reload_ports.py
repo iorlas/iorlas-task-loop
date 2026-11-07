@@ -3,11 +3,11 @@ from pathlib import Path
 
 from tlkernel.env import Env
 from tlkernel.paths import ConfigDir
+from tlslots.engine_lock import HeldLock
 
 from taskloop.adapters import ident
 from taskloop.app.loop.versions import Installs
 from taskloop.app.release import catalog, pins
-from tlslots.engine_lock import HeldLock
 from taskloop.app.track import trail
 
 

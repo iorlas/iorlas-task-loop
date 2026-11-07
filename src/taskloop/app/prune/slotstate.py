@@ -7,9 +7,9 @@ from typing import Final, Protocol
 from tlkernel.ids import loop_key
 from tlkernel.paths import ConfigDir
 from tlkernel.slots import Checkout, SlotGitError
+from tlslots.paths import slot_state_roots
 
 from taskloop.app.prune.runs import Gone, size_of
-from tlslots.paths import slot_state_roots
 
 MIN_AGE_DAYS: Final = 14
 

@@ -17,10 +17,10 @@ def rewrite(text: str) -> tuple[str, list[str]]:
             errors.append(f'line {node.lineno}: unsupported app slots parent binding')
         if node.module == 'taskloop.domain' and any(a.name in DOMAINS for a in node.names):
             errors.append(f'line {node.lineno}: unsupported domain slots parent binding')
-        if node.module and (node.module == APP or node.module.startswith(APP + '.') or
-                            node.module in {'taskloop.domain.' + name for name in DOMAINS}):
-            if any(a.name == '*' for a in node.names):
-                errors.append(f'line {node.lineno}: unsupported slots star import')
+        in_stage = node.module and (node.module == APP or node.module.startswith(APP + '.') or
+                                    node.module in {'taskloop.domain.' + name for name in DOMAINS})
+        if in_stage and any(a.name == '*' for a in node.names):
+            errors.append(f'line {node.lineno}: unsupported slots star import')
     text = text.replace(APP, 'tlslots')
     for name, target in DOMAINS.items():
         text = text.replace('taskloop.domain.' + name, 'tlslots.' + target)

@@ -14,12 +14,12 @@ from support.fake_beads import FakeBeads
 from support.forgesim import ForgeSim
 
 # isort: split
-from taskloop.app.wire.slotfx import FX
 from taskloop.adapters.git import RealGit
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import Stack
 from taskloop.app.land.stackgate import StackGate
+from taskloop.app.wire.slotfx import FX
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 from tlkernel.beadsport import DoltPush

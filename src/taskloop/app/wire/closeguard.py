@@ -21,8 +21,8 @@ from tlkernel.locator import RunLocator
 from tlkernel.run import RunFinish, RunState
 from tlkernel.slots import git_probe
 from tlpipeline.api import closeguard
-
 from tlslots import config as wslots_config
+
 from taskloop.app.track import verbs
 from taskloop.app.track.verbs import Guard
 from taskloop.stores.real import real_stores

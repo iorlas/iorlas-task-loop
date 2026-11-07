@@ -12,7 +12,6 @@ from support.spawn import port_git
 
 from taskloop.adapters import procs
 from taskloop.app.doctor import setup_checks
-from tlslots.config import cfg_source
 from tlgate.cache import InputKeys
 from tlgate.domain import durations, inputs, lint, planref
 from tlgate.domain.names import norm
@@ -22,6 +21,7 @@ from tlkernel.argv import text_of
 from tlkernel.checks import Check, Duration, Durations
 from tlkernel.ids import CheckId
 from tlkernel.plancheck import adhoc
+from tlslots.config import cfg_source
 from tltestkit import procsim
 from tltestkit.cfgs import cfg_with
 from tltestkit.checks import ck, typed

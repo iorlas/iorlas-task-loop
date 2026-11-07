@@ -7,7 +7,6 @@ import uuid
 from collections.abc import Callable
 from pathlib import Path
 
-from taskloop.app.wire import slotfx
 from tlkernel import paths
 from tlkernel.env import Env
 from tlkernel.envvars import EnvVar
@@ -15,6 +14,7 @@ from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.procport import Spawner
 from tlkernel.rowstores import ReposStore
+from tlslots import engine_lock
 
 from taskloop.adapters import ident
 from taskloop.app.doctor import profiles
@@ -27,8 +27,8 @@ from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.loop import parse_handover
 from taskloop.app.loop.versions import Installs
 from taskloop.app.release import catalog, pins
-from tlslots import engine_lock
 from taskloop.app.track import trail
+from taskloop.app.wire import slotfx
 from taskloop.app.wire import slots as wslots
 
 

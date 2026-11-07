@@ -34,14 +34,14 @@ from support.who import who
 
 from slots.test_slots import Slots
 from taskloop.app.loop.queue import QueueRule
-from tlslots import config as wslots_config
-from tlslots.pool import Slot, SlotPool
 from taskloop.app.wire import slots as wslots
 from tlkernel import fence
 from tlkernel.bead import BdError
 from tlkernel.beadsport import BdFailure
 from tlkernel.fence import SLOT_GEN
 from tlkernel.ids import BeadId
+from tlslots import config as wslots_config
+from tlslots.pool import Slot, SlotPool
 from tltestkit.cfgs import cfg_with
 from tltestkit.narrow import must
 

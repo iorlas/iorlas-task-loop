@@ -3,7 +3,6 @@ import argparse
 import socket
 from functools import partial
 
-from taskloop.app.wire import slotfx
 from tlkernel.beadsport import Beads
 from tlkernel.env import Env
 from tlkernel.finish import finish_run
@@ -11,11 +10,11 @@ from tlkernel.finish_projection import history
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlpipeline.api import land_answer
+from tlslots.config import profile_slots
 
 from taskloop.app.land.cmds import Runs
 from taskloop.app.land.stack import item_of, pairs, run_stack
-from tlslots.config import profile_slots
-from taskloop.app.wire import closeguard
+from taskloop.app.wire import closeguard, slotfx
 from taskloop.app.wire.slots import slot_of
 from taskloop.stores.runlog import RunLog
 

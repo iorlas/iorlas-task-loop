@@ -16,10 +16,10 @@ from support.fakes import FakeBeadStore
 from support.spawn import port_git, real_spawner
 from support.who import who
 from taskloop.app.run import engine
-from tlslots import config as wslots_config
 from taskloop.cli.ctx import declare_stage_parts
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
+from tlslots import config as wslots_config
 
 
 def main(marker: str) -> None:

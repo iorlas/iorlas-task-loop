@@ -13,10 +13,10 @@ from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.procport import Spawner
 from tlpipeline.api import StageRun, stage_run
+from tlslots import config as wslots_config
 
 from taskloop.app.launch.check_host import CliHost
 from taskloop.app.launch.staged import staged_tree
-from tlslots import config as wslots_config
 from taskloop.stores import runlog
 from taskloop.stores.bundle import Stores
 from taskloop.stores.real import real_stores

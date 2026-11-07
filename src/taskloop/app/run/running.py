@@ -4,18 +4,18 @@ import time
 from pathlib import Path
 from typing import Any
 
-from taskloop.app.wire import slotfx
 from tlkernel.beadsport import Beads
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId, is_bead_id
 from tlkernel.lockenums import LockWhat
+from tlslots import engine_lock
 
 from taskloop.adapters import beadtools
 from taskloop.adapters.locks import hold_path
 from taskloop.app.loop.queue import QueueRule, area_busy_text
-from tlslots import engine_lock
 from taskloop.app.track import console
+from taskloop.app.wire import slotfx
 from taskloop.app.wire import slots as wslots
 
 

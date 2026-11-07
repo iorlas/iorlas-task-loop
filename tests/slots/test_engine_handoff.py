@@ -1,14 +1,15 @@
 """A reexec through uv hands the engine lock to a new Python pid for the same bead."""
 import contextlib
+from dataclasses import replace
 from unittest import mock
 
 from support import homes
 
 from taskloop.app.wire.slotfx import FX
-from tlslots import engine_lock
 from tlkernel.env import Env
 from tlkernel.locks import EngineLock as Lock
 from tlkernel.run import Reexec
+from tlslots import engine_lock
 from tltestkit.case import Case
 
 

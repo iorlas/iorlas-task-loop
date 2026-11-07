@@ -9,7 +9,6 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from taskloop.app.wire import slotfx
 from tlkernel.bd_errors import BdCommandFailure
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, BeadQuery, Beads
@@ -22,19 +21,20 @@ from tlkernel.paths import TASK_EXCLUDE
 from tlkernel.procport import Spawner
 from tlkernel.slots import NotARepo, SlotFail, SlotGitError, SlotTable
 from tlkernel.slottable import LiveSlot, build_slot_table
-
-from taskloop.adapters.beadtools import bd_store, peek
-from taskloop.adapters.gitrepo import repo_root
-from taskloop.adapters.ident import hostname
-from taskloop.adapters.landlock import os_lock
 from tlslots import line as slots_line
 from tlslots import owned
 from tlslots.config import exclude_local, prio_of, profile_slots, slot_dir, slot_excludes, slot_source
 from tlslots.engine_lock import drop_engine_lock, engine_busy, lock_pid
 from tlslots.env import DEFAULT_PRIO, SlotEnv, stamp
 from tlslots.pool import SlotPool, machine_slots
+
+from taskloop.adapters.beadtools import bd_store, peek
+from taskloop.adapters.gitrepo import repo_root
+from taskloop.adapters.ident import hostname
+from taskloop.adapters.landlock import os_lock
 from taskloop.app.track import trail
 from taskloop.app.track.trail import event
+from taskloop.app.wire import slotfx
 from taskloop.stores.real import real_stores
 
 

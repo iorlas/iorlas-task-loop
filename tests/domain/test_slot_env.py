@@ -12,8 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import engine_case as te
 from support.builders import make_engine
 
-from tlslots import slot_env
 from tlkernel import config
+from tlslots import slot_env
 
 KEYS = ("TMPDIR", "TMP", "TEMP", "TL_SLOT")
 

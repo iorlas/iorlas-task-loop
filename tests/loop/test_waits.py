@@ -7,13 +7,13 @@ from support.fake_loop_env import slot_loop_env
 from taskloop.app.loop.loop import Loop, LoopArgs
 from taskloop.app.loop.verdict import Verdict
 from taskloop.app.loop.waits import blocked
-from tlslots import aside
-from tlslots.pool import Slot
 from tlkernel.bead import Bead
 from tlkernel.config import LoopConfig, RepoProfile
 from tlkernel.enums import Result
 from tlkernel.ids import BeadId
 from tlkernel.slots import SlotFail
+from tlslots import aside
+from tlslots.pool import Slot
 
 
 class Waits(Rig):

@@ -6,10 +6,10 @@ from unittest import mock
 import pytest
 from support.memstores import fake_stores
 
-from taskloop.app.wire.slotfx import FX
 from taskloop.app.land.cmds import Stop
 from taskloop.app.land.stack import Stack
 from taskloop.app.land.treecheck import Tested
+from taskloop.app.wire.slotfx import FX
 from tlkernel import check_files
 from tlkernel.forge import MERGED, OPEN, Pr, StackItem
 from tlkernel.gitport import Git

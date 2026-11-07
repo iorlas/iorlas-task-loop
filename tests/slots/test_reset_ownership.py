@@ -8,11 +8,11 @@ from git_porcelain.errors import GitUnavailable
 
 from slots.test_slot_pool import Rig
 from taskloop.adapters.git import RealGit
-from tlslots import reset
 from tlkernel.bead import Bead
 from tlkernel.env import Env
 from tlkernel.ids import BeadId
 from tlkernel.slots import Checkout, GitReadFailure
+from tlslots import reset
 
 
 class ResetOwnership(Rig):
