@@ -1,10 +1,10 @@
 """WriterSplit: which checks the writer may run itself and which are the engine's alone. Pure."""
 from collections.abc import Mapping, Sequence
 
-from taskloop.domain.checks.matchers import looks_slow
 from taskloop.domain.checks.names import norm
 from taskloop.domain.checks.specs import repo_check
 from tlkernel.argv import argv_of
+from tlkernel.checkmatchers import looks_slow
 from tlkernel.checks import Check
 from tlkernel.config import EngineConfig
 

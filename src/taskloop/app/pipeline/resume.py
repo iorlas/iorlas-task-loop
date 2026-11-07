@@ -28,8 +28,6 @@ LATE = (
     "accepted_new",
     "writer",
     "writer_family",
-    "writer_fallback",
-    "fallback_lane",
 )  # only a checkpoint this engine left (HEAD is where it was) hands these on
 GATE_NOTE = (
     "Every stage was accepted, then the gate failed on the tree rebased onto the latest base (often another task landed "

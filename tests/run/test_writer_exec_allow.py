@@ -1,110 +1,46 @@
-"""tl-auky: contract-4 writer grants are explicit, admitted, scoped and part of recovery identity."""
-import json
+"""Engine requests carry product choices; delegate owns execution grants."""
 from unittest import mock
 
 import pytest
-import support.paths  # noqa: F401
-from support import engine_case as te
-from support.argv_of import argv_of
 
+from taskloop.adapters import delegate as adapter
 from taskloop.adapters import delegate_wire
 from taskloop.app.workers import worker_identity, worker_request
-from taskloop.domain.lanes import pin
-from tlkernel import config
+from tlkernel.config import EngineConfig
 from tlkernel.delegate import RunRequest
-from tltestkit import fake_route
-from tltestkit.case import Case
-
-GRANT = [["just", "unity-shot"], ["tool", "an argument"]]
 
 
-class WriterGrant(Case):
-    def test_contract_four_parses_and_three_is_a_violation(self):
-        assert delegate_wire.result_of({"contract": 4, "stop": None}).stop is None
-        stop = delegate_wire.result_of({"contract": 3, "stop": None}).stop
-        assert stop is not None
-        assert stop.reason == "contract_violation"
-
-    def test_profile_shape_and_default(self):
-        assert config.load({}).engine.writer_exec_allow == []
-        assert config.load({"engine": {"writer_exec_allow": GRANT}}).engine.writer_exec_allow == GRANT
-        for value in (None, "just shot", {}, ["just"], [[]], [[""]], [["just", ""]], [["just", 1]]):
-            with self.subTest(value=value), pytest.raises(config.ConfigError, match="writer_exec_allow"):
-                config.load({"engine": {"writer_exec_allow": value}})
-
-    def test_only_writer_calls_carry_compact_json_and_empty_sends_no_flag(self):
-        for node, role in (("write", "worker"), ("plan", "planner"), ("review", "reviewer"),
-                           ("reflect", "reviewer"), ("read", "reader")):
-            for grant in ([], GRANT):
-                with self.subTest(node=node, grant=grant):
-                    host = mock.Mock(session="s", bead="t-1")
-                    host.cfg = config.EngineConfig(writer_family=["openai"], writer_exec_allow=grant)
-                    host.budget.labels, host.plan_data = [], None
-                    host.git.diff_entries.return_value = []
-                    host.checker.split.return_value.engine_recipes.return_value = []
-                    call = mock.Mock(node=node, role=role, cwd="/w", title="T", thread="worker/1", writer=None)
-                    with mock.patch.object(worker_request.planref, "stage_commands", return_value=[]):
-                        req = worker_request.request(host, call, "live", 60, 30)
-                    argv = argv_of(req)
-                    if role == "worker" and grant:
-                        assert json.loads(argv[argv.index("--writer-exec-allow") + 1]) == [["just", "unity-shot"], ["tool", "an argument"]]
-                    else:
-                        assert "--writer-exec-allow" not in argv
-
-    def test_a_changed_grant_changes_the_request_fingerprint(self):
-        req = RunRequest(role="worker", brief_path="b", cwd="/w", schema_path="s")
-        ctx = worker_identity.ExecutionContext("/w", "/w", "tree", "tree", "head", "head")
-
-        def fingerprint(grant):
-            data = worker_identity.NodeInput("write", "prompt", {}, req.replace(writer_exec_allow=grant))
-            return worker_identity.prepare_call(data, ctx, "contract-4").semantics
-
-        assert fingerprint([]) != fingerprint(GRANT)
-        assert fingerprint(GRANT) != fingerprint([["just", "other"]])
-
-    def test_grant_capability_is_an_advertised_list_under_contract_four(self):
-        for contract, capabilities in ((3, ["writer_exec_allow"]), (4, None), (4, "writer_exec_allow"), (4, [])):
-            with self.subTest(contract=contract, capabilities=capabilities):
-                assert "capability" in pin.exec_allow_problem(GRANT, ["openai"], [], contract, capabilities)
+def test_contract_four_parses_and_three_is_a_violation():
+    assert delegate_wire.result_of({"contract": 4, "stop": None}).stop is None
+    stop = delegate_wire.result_of({"contract": 3, "stop": None}).stop
+    assert stop is not None
+    assert stop.reason == "contract_violation"
 
 
-class Admission(te.EngineTest):
-    def test_missing_capability_refuses_before_any_worker_but_empty_is_fine(self):
-        handshake = {**fake_route.CONTRACT, "capabilities": []}
-        with mock.patch.dict(fake_route.CONTRACT, handshake, clear=True):
-            rc, script = self.run_engine({"plan": [te.PLAN]}, writer_family=["openai"], writer_exec_allow=GRANT)
-        assert rc == 2
-        assert script.nodes == []
-        assert "writer_exec_allow" in self.said()
-        assert "capability" in self.said()
-
-    def test_empty_grant_does_not_require_capability(self):
-        only_reviewers_cap = {**fake_route.CONTRACT, "capabilities": ["instructions_ref"]}  # reviewer calls need it
-        with mock.patch.dict(fake_route.CONTRACT, only_reviewers_cap, clear=True):
-            rc, script = self.run_engine({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
-        assert rc == 0
-        assert "write" in script.nodes
-        assert all("--writer-exec-allow" not in argv for argv in script.argvs)
-
-    def test_nonempty_grant_requires_exact_openai_profile_and_effective_pin(self):
-        for family, labels in (([], []), (["claude"], []), (["openai", "xai"], []),
-                               (["openai"], ["writer-family:xai"])):
-            with self.subTest(family=family, labels=labels), self.store.stub(show=dict(te.BEAD, labels=labels)):
-                rc, script = self.run_engine({"plan": [te.PLAN]}, writer_family=family,
-                                             writer_exec_allow=GRANT)
-                assert rc == 2
-                assert script.nodes == []
-                assert "openai" in self.said()
-
-    def test_admitted_grant_reaches_only_the_writer(self):
-        rc, script = self.run_engine({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]},
-                                     writer_family=["openai"], writer_exec_allow=[*GRANT, [te.HAS_F]])  # the plan's own check runs too
-        assert rc == 0
-        assert "write" in script.nodes
-        for node, argv in zip(script.nodes, script.argvs, strict=True):
-            assert ("--writer-exec-allow" in argv) == (node == "write")
+@pytest.mark.parametrize("role", ["worker", "planner", "reviewer", "reader"])
+def test_request_scopes_product_flags(role):
+    host = mock.Mock(session="s", bead="t-1")
+    host.cfg = EngineConfig(writer_exec=True)
+    host.budget.labels, host.plan_data = ["writer-family:codex-ish"], None
+    host.git.diff_entries.return_value = []
+    host.git.rev_parse.return_value = "base"
+    host.checker.split.return_value.engine_recipes.return_value = []
+    call = mock.Mock(node="write" if role == "worker" else role, role=role, cwd="/w", title="T", thread="writer")
+    with mock.patch.object(worker_request.planref, "stage_commands", return_value=[]):
+        req = worker_request.request(host, call, "live", 60, 30)
+    assert req.prefer == ("codex-ish" if role == "worker" else "")
+    assert req.writer_exec is (role == "worker")
+    assert req.reviewer_other_family is (role == "reviewer")
+    mapped = adapter.api_request(req, {})
+    assert (mapped.prefer, mapped.writer_exec, mapped.reviewer_other_family) == (
+        req.prefer, req.writer_exec, req.reviewer_other_family)
+    assert not mapped.only_family and not mapped.writer_exec_allow and not mapped.read_roots and mapped.authored_by is None
 
 
-for _name in dir(te.EngineTest):
-    if _name.startswith("test_") and _name not in Admission.__dict__:
-        setattr(Admission, _name, None)
+@pytest.mark.parametrize("change", [{"writer_exec": True}, {"prefer": "codex-ish"}, {"reviewer_other_family": True}])
+def test_product_choices_change_identity(change):
+    req = RunRequest(role="worker", brief_path="b", cwd="/w", schema_path="s")
+    ctx = worker_identity.ExecutionContext("/w", "/w", "tree", "tree", "head", "head")
+    def fingerprint(request):
+        return worker_identity.prepare_call(worker_identity.NodeInput("write", "prompt", {}, request), ctx, "contract-4").semantics
+    assert fingerprint(req) != fingerprint(req.replace(**change))

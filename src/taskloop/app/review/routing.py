@@ -4,6 +4,7 @@ plan (what it defers, what it leaves to the engine) is read before the item's ki
 from typing import Any
 
 from tlkernel import askspecs
+from tlkernel import reviewkinds as kinds
 from tlkernel.gitport import Git
 from tlkernel.plancheck import PlanData
 from tlkernel.stagefacts import RunFacts
@@ -11,7 +12,6 @@ from tlkernel.stop import Stop
 
 from taskloop.app.review.host import ReviewHand, ReviewPorts
 from taskloop.app.review.state import ReviewLive
-from taskloop.domain.review import kinds
 from taskloop.domain.work.ledger import Ledger
 from taskloop.domain.work.matchers import Wording, word_set
 

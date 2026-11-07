@@ -44,8 +44,6 @@ class StateAttrs:
     denials: list[str]
     writer: WriterSession
     writer_family: str | None
-    writer_fallback: bool
-    fallback_lane: str
     render_stale: bool
     handoff: Handoff
     stage_tree: str

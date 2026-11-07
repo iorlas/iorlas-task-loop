@@ -5,7 +5,7 @@ and the last `tail_lines` lines, within `cap` bytes; the full log stays on disk 
 A green check is one line. Generic: unittest, pytest, dotnet/NUnit/xUnit, compilers, shell exit-only output."""
 from typing import Final
 
-from taskloop.domain.checks.matchers import is_failure, is_name, is_noise
+from tlkernel.checkmatchers import is_failure, is_name, is_noise
 
 CAP: Final = 4096
 TAIL: Final = 40
