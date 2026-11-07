@@ -13,6 +13,7 @@ from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from tlgate.api import ReceiptStores
 from tlkernel import check_files
 from tlkernel import log as rec
 from tlkernel.beadsport import Beads, DoltPush
@@ -37,12 +38,10 @@ from taskloop.app.land.cmds import Cmds, Runs, Stop
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.gate import diff_sha, owner_refusal
 from taskloop.app.land.host import phase
-from taskloop.app.land.ports import StackLog
+from taskloop.app.land.ports import ProfileChanges, QueueDocs, QueueStates, StackLog
 from taskloop.app.land.queue_land import Queued, QueueLand
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.land.treecheck import Tested, TreeGuard
-from taskloop.stores.bundle import Stores
-from taskloop.stores.real import real_stores
 
 MODE = "stage:land-stack"
 LOCK_BUSY = 75
@@ -68,8 +67,9 @@ class Stack:
                  named: Callable[[str], None] = lambda _bead: None,
                  is_slot: Callable[[str], bool] = lambda _path: False, slot_base: str = "", *, cfg: ConfigDir,
                  profile_change: str | None = None, jobs: int = 1, assert_trees: bool = False, queue: bool = False,
-                 fx: Effects) -> None:
+                 fx: Effects, queue_docs: QueueDocs, queue_state: QueueStates, profile_changes: ProfileChanges) -> None:
         self.fx = fx
+        self.queue_docs, self.profile_changes = queue_docs, profile_changes
         self.forge, self.cmds, self.log, self.git, self.repo, self.lock = forge, cmds, log, git, repo, lock
         self.record, self.sync, self.owner, self.session, self.wait_min = record, sync, owner, session, wait_min
         self.gate, self.named = gate, named  # named(bead): the run's manifest learns each bead
@@ -80,7 +80,7 @@ class Stack:
         self.jobs = jobs  # gates run at once before the serial merges
         self.assert_trees = assert_trees  # dark: judge the tested tree against the landed one (treecheck.py); off until the queue rolls out
         self.queue = queue  # dark: land through the merge queue (queue_land.py); the CLI turns it on only at the rollout
-        self.trees = TreeGuard(cmds, git, gate.stores, repo, f"{forge.remote}/{forge.base}")
+        self.trees = TreeGuard(cmds, git, queue_state, repo, f"{forge.remote}/{forge.base}")
         self.recorded = 0
         self.synced = False  # bd sync was tried
         self.last = ""  # the merge commit of the last item delivered
@@ -88,7 +88,7 @@ class Stack:
 
     @property
     def queue_doc(self) -> Doc[QueueDoc]:
-        return self.gate.stores.queue.of(check_files.repo_key(self.git, self.repo))
+        return self.queue_docs.of(check_files.repo_key(self.git, self.repo))
 
     def run(self, items: list[StackItem]) -> int:
         """Deliver the items in order; -> 0, or the exit code of the first failure."""
@@ -210,7 +210,7 @@ class Stack:
         digest = self.cmds.port(f"git diff {base} {tip} -- .task-loop.json",
                                 lambda: diff_sha(self.git, self.repo, base, tip))
         try:
-            self.gate.stores.profile_changes.append(ProfileChange(
+            self.profile_changes.append(ProfileChange(
                 t=time.time(), owner_text=self.profile_change, repo=self.repo, branch=branch,
                 tip=tip, base=base, diff_sha=digest, pid=os.getpid()))
         except OSError as err:
@@ -371,7 +371,8 @@ def pairs(values: list[str], flag: str) -> dict[str, str]:
 def run_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs, store: Beads,
               tl: list[str], *, record: Callable[[str, str, BeadId, str, str], int],
               slot: Callable[[str, str], str], slot_base: Callable[[str], str],
-              runlog: Callable[[Stores, str], StackLog],
+              runlog: Callable[[str], StackLog], receipts: ReceiptStores,
+              queue_docs: QueueDocs, queue_state: QueueStates, profile_changes: ProfileChanges,
               finish: Callable[[str, float, str, str, bool], object], fx: Effects, env: Env | None = None) -> tuple[int, list[str]]:
     """Run the stack and return its exit code and final output lines."""
     env = env or Env()
@@ -387,8 +388,7 @@ def run_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs, sto
     items = [item_of(t, beads, old) for t in a.items]
     locator = RunLocator(who.config)
     run = locator.create(repo, "", time.time(), mode=MODE, owner=who.actor, session=who.session).run  # the board finds a run through it
-    stores = real_stores(who.config)
-    log = runlog(stores, run)
+    log = runlog(run)
     cmds = Cmds(spawner, log, repo, who.config.run_dir(run))
     lock = lock_path(who.config, git, repo)
     forge = Forge(cmds, git, repo, a.base, a.method)
@@ -399,10 +399,11 @@ def run_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs, sto
         return record(repo, f"origin/{a.base}", BeadId(bead), sha, f"{MODE}: merged as {sha[:12]}")
 
     stack = Stack(forge, cmds, log, git, repo, lock, landed, store.dolt_push, who.actor, who.session,
-                  StackGate(cmds, git, stores, repo, f"origin/{a.base}", tl, env), store, a.wait_min,
+                  StackGate(cmds, git, receipts, repo, f"origin/{a.base}", tl, env), store, a.wait_min,
                   lambda bead: locator.add_bead(run, bead),
                   lambda path: bool(slot(slot_repo, path)), slot_base(slot_repo),
-                  cfg=who.config, profile_change=profile_change, jobs=a.jobs, fx=fx)
+                  cfg=who.config, profile_change=profile_change, jobs=a.jobs, fx=fx,
+                  queue_docs=queue_docs, queue_state=queue_state, profile_changes=profile_changes)
     rc = 1
     try:
         rc = stack.run(items)

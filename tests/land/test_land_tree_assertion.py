@@ -43,7 +43,9 @@ class World:
         self.stores = fake_stores()
         gate = mock.Mock(stores=self.stores)
         self.stack = Stack(self.forge, self.cmds, mock.Mock(stamp={}), self.git, "/repo", Path(lock) / "lock", mock.Mock(return_value=0),
-                           mock.Mock(), "o", "s", gate, mock.Mock(), cfg=mock.Mock(), assert_trees=True, fx=FX)
+                           mock.Mock(), "o", "s", gate, mock.Mock(), cfg=mock.Mock(), assert_trees=True,
+                          fx=FX, queue_docs=self.stores.queue, queue_state=self.stores.queue_state,
+                      profile_changes=self.stores.profile_changes)
 
     def during_merge(self) -> None:
         """Hook for a third party's push between the prediction and the merge."""

@@ -44,7 +44,7 @@ class PushPolicy(Case):
             env = snapshot()
 
             decision = judge_push(str(repo), f"refs/heads/topic {tip} refs/heads/topic {'0' * 40}\n",
-                                  fake_stores(), RealGit(env), env=env)
+                                  fake_stores(), RealGit(env), profile_changes=fake_stores().profile_changes, env=env)
             assert decision.status == PushStatus.REFUSED
             assert decision.reasons[0].startswith("profile_changed: refs/heads/topic")
             assert not canary.exists()

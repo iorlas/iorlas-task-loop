@@ -21,7 +21,7 @@ from tlkernel.runkey import BaseSha, Digest, RunKey
 
 from tlgate.domain import inputs
 from tlgate.execution import HOST_IDENTITY, LINUX_IDENTITY
-from tlgate.ports import GateStores
+from tlgate.ports import GateStores, ReceiptStores
 
 NO_DIGEST = Digest("")
 
@@ -82,13 +82,13 @@ def plan_digest(cmd: list[str] | None) -> Digest:
     return Digest(hashlib.sha1(json.dumps(cmd).encode()).hexdigest() if cmd is not None else "")
 
 
-class RunMemo:
+class RunMemo[S: ReceiptStores = ReceiptStores]:
     """The result store of one repo, asked and written for one tree and base. `run_id` and `host` are who writes (the provenance of a
     pass). What this block has run is kept in memory by its complete resolved requirement."""
 
-    def __init__(self, stores: GateStores, repo: str, keys: InputKeys, base: BaseSha, engine_env: Mapping[str, str], run_id: str = "",
+    def __init__(self, stores: S, repo: str, keys: InputKeys, base: BaseSha, engine_env: Mapping[str, str], run_id: str = "",
                  executor: str = "") -> None:
-        self.stores, self.repo, self.keys, self.base, self.engine_env = stores, repo, keys, base, engine_env
+        self._stores, self.repo, self.keys, self.base, self.engine_env = stores, repo, keys, base, engine_env
         self.run_id, self.host = run_id, platform.node()
         self.executor = executor  # engine.executor.host: where an `in: linux` check ran, part of its key
         self.system = f"{platform.system()}-{platform.machine()}"
@@ -96,6 +96,10 @@ class RunMemo:
         self.slot_keys: InputKeys | None = None
         self.checks: dict[CheckId, Check] = {}
         self.receipts: dict[CheckId, PassRecord] = {}
+
+    @property
+    def stores(self) -> S:
+        return self._stores
 
     def env_of(self, c: Check) -> Digest:
         """The shared receipt environment plus the check's declared env, which can override it."""
@@ -228,6 +232,10 @@ class RunMemo:
         docs.of(key_digest(rec.key)).write(rec)
         docs.keep_newest(KEEP)
 
+
+class RunnerMemo(RunMemo[GateStores]):
+    """A running gate also caches observations of the untouched base."""
+
     def base_was_red(self, c: Check) -> bool | None:
         """True or False when the command has run on this base (by any runner of the repo); None when it has not."""
         rec = self.stores.base_red(self.repo).of(key_digest(self.base_key(c))).get()
@@ -239,7 +247,7 @@ class RunMemo:
             BaseRedRecord(key=key, red=red, run_id=self.run_id, host=self.host, ts=time.time()))
 
 
-def is_green(stores: GateStores, repo: str, step: CheckId, tree: TreeSha, base: BaseSha, plan: Digest | None = NO_DIGEST) -> bool:
+def is_green(stores: ReceiptStores, repo: str, step: CheckId, tree: TreeSha, base: BaseSha, plan: Digest | None = NO_DIGEST) -> bool:
     """Historical display query only. Delivery must use RunMemo.result with the resolved requirement."""
     return green_result(stores, repo, step, tree, base, plan) is not None
 
@@ -249,7 +257,7 @@ def satisfied(res: CheckResult) -> bool:
     return not res.cancelled and (res.status == "passed" or (res.status == "skipped" and res.planned))
 
 
-def green_result(stores: GateStores, repo: str, step: CheckId, tree: TreeSha, base: BaseSha,
+def green_result(stores: ReceiptStores, repo: str, step: CheckId, tree: TreeSha, base: BaseSha,
                  plan: Digest | None = NO_DIGEST) -> CheckResult | None:
     """Historical display evidence; this ID-only query must never authorize delivery."""
     docs = stores.results(repo, step)
