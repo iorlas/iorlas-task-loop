@@ -8,11 +8,12 @@ One call at a time per process: `run` sets the request's environment (DELEGATE_L
 import json
 import os
 from collections.abc import Callable
+from dataclasses import replace
 
 from stream_proc import proc_start
 
 from delegate.adapters import procs
-from delegate.app import answer, doctor, env, net
+from delegate.app import answer, doctor, env, net, threads
 from delegate.app import run as run_app
 from delegate.app import status as status_app
 from delegate.cli import parser
@@ -67,12 +68,17 @@ def run(request: RunRequest, started: Callable[[Handle], None] | None = None) ->
     wanted = request.env()
     before = {k: os.environ.get(k) for k in wanted}
     try:
-        args = parser.build().parse_args(request.to_argv("route.py", contract=contract)[2:])  # [python, route.py, "run", ROLE, ...]
         os.environ.update(wanted)
-        call = run_app.Run(args, env.load_routing(), unattended=request.unattended, idle_s=request.idle_s, log=lambda line: None)
-        if started:
-            call.on_started = lambda run_id, w: started(Handle(run_id=run_id, pid=w.pid, pgid=w.pgid, start=w.start))
-        return codec.from_json(RunResult, call.call())
+        planned = threads.plan(request, env.load_state()) if request.thread else None
+        res = _run(request, started, contract, planned)
+        if planned and planned.resume and threads.needs_fresh(res):
+            env.update_state(lambda state: state.threads.pop(planned.key, None))
+            fresh = threads.plan(replace(request, thread="", resume=None), env.load_state())
+            fresh = replace(fresh, key=planned.key, brief_text=fresh.brief_text + threads.TAKEOVER_NOTE, takeover=True)
+            res = threads.merge(res, _run(request, started, contract, fresh))
+        if planned:
+            env.update_state(lambda state: threads.settle(state, planned.key, res))
+        return res
     except (Exception, SystemExit) as error:
         return _failed(request, f"{type(error).__name__}: {error}")
     finally:
@@ -81,6 +87,23 @@ def run(request: RunRequest, started: Callable[[Handle], None] | None = None) ->
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+
+
+def _run(
+    request: RunRequest,
+    started: Callable[[Handle], None] | None,
+    contract: dict[str, Json],
+    planned: threads.ThreadPlan | None,
+) -> RunResult:
+    effective = replace(request, resume=planned.resume) if planned else request
+    args = parser.build().parse_args(effective.to_argv("route.py", contract=contract)[2:])
+    call = run_app.Run(
+        args, env.load_routing(), unattended=request.unattended, idle_s=request.idle_s,
+        brief=planned.brief_text if planned else None, log=lambda line: None,
+    )
+    if started:
+        call.on_started = lambda run_id, w: started(Handle(run_id=run_id, pid=w.pid, pgid=w.pgid, start=w.start))
+    return codec.from_json(RunResult, call.call())
 
 
 def status(claude_usage: Json = None) -> Status:
