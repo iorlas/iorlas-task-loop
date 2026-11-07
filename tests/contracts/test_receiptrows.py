@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 import pytest
 import support.paths  # noqa: F401
-from support.memstores import MemDocSet
 
 from taskloop.stores.real import real_stores
 from tlkernel import factorydb, wire
@@ -18,6 +17,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.receiptrows import DbDocSet
 from tlkernel.runkey import BaseSha, Digest, RunKey
 from tltestkit.case import Case
+from tltestkit.memdoc import MemDocSet
 from tltestkit.tmpdir import TemporaryDirectory
 
 
