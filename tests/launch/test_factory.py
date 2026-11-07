@@ -14,6 +14,7 @@ from support.tmpdir import TemporaryDirectory
 from taskloop.adapters import factory as adapter
 from taskloop.app.loop import factory_verbs
 from taskloop.app.loop.files import LoopFiles
+from taskloop.app.parts import STAGE_PARTS
 from taskloop.cli import factory as cli
 from tlkernel.config import RepoProfile, SlotsConfig
 from tlkernel.env import Env
@@ -186,7 +187,7 @@ class Factory(Case):
                 assert cli.run(args, Env({}), self.spawn, who, Path("/code")) == 0
             argv = start.call_args.args[3]
             assert argv[1:] == ["/code/tl.py", "loop", "--repo", "/repo", "--wait-drained"]
-            dash.assert_called_once_with("ensure", Env({}), self.spawn)
+            dash.assert_called_once_with("ensure", Env({}), self.spawn, {p.name: p.version for p in STAGE_PARTS})
             assert ("already running" if already else "started") in output.getvalue()
         self.spawn.start.assert_not_called()
 

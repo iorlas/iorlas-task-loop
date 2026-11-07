@@ -17,6 +17,7 @@ from taskloop.app.launch import factory as binding
 from taskloop.app.loop import factory_verbs
 from taskloop.app.loop.exits import last_by_lane
 from taskloop.app.loop.files import LoopFiles
+from taskloop.app.parts import STAGE_PARTS
 from taskloop.app.wire import real
 
 
@@ -69,7 +70,7 @@ def run(a: argparse.Namespace, env: Env, spawner: Spawner, who: Identity, here: 
             print(f"started {added} more lane(s)" if added else f"already running ({len(states)} lanes)")
             for row in factory_verbs.facts(files, states, repo, version):
                 print(row)
-            return dash.run("ensure", env, spawner)
+            return dash.run("ensure", env, spawner, {p.name: p.version for p in STAGE_PARTS})
         if a.op == "stop":
             return _stop(a, files, who)
         states = files.live()
