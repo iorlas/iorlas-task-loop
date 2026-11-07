@@ -6,7 +6,6 @@ from typing import Any, ClassVar
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import json
 import time
-import types
 from contextlib import contextmanager
 from unittest import mock
 
@@ -17,10 +16,10 @@ from support.plans import BEAD, CLEAN, FALSE, PLAN, STILL_OPEN, WRITE, finding, 
 # isort: split
 from support.cfgs import cfg_with
 from support.narrow import must
+from support.review_host import FakeReview
 from support.spawn import port_git
 
 from taskloop.app.land.checkout import Checkout
-from taskloop.app.review.settles import Settles
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
 
@@ -143,7 +142,10 @@ class EngineReviewTest(EngineTest):
         return None if name == "ruff" else "/usr/bin/" + name
 
     def unused(self, what, cfg, on_path=lambda name: None):
-        return Settles(types.SimpleNamespace(wt=str(self.wt), cfg=cfg, on_path=on_path), port_git()).unused_tool(what)
+        review = FakeReview(self.wt, cfg)
+        review.ports.on_path = on_path
+        review.settles.git = port_git()
+        return review.settles.unused_tool(what)
 
     @contextmanager
     def ruff_cannot_start(self):

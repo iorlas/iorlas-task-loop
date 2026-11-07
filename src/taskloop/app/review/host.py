@@ -1,16 +1,12 @@
-"""What the review stage reads and writes of the engine that runs it: one Protocol, so the stage has no hidden reach into the Engine
-(docs/design/b-review.md, slice 3; the same shape as look/host.py). The stage's own parts that read each other (`settles`, `routing`,
-`judge`-style views) are typed by the verbs the reader calls."""
+"""Review capabilities and shared hand-offs, injected separately from frozen run facts and stage-owned live state."""
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
-from taskloop.app.review.state import ReviewLive
 from taskloop.contracts.asked import Asked
 from taskloop.contracts.checks import Check, CheckRun
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.ids import BeadId, TreeSha
+from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.plancheck import PlanCheck, PlanData
 from taskloop.contracts.stop import Stop
 from taskloop.contracts.wire import Open
@@ -101,12 +97,9 @@ class RoutingView(Protocol):
     def add_unverified(self, u: Open, why: str) -> None: ...
 
 
-class ReviewHost(Protocol):
-    bead: BeadId
-    wt: str
-    cfg: EngineConfig
-    run_dir: Path
-    evidence_dir: Path
+class ReviewHand(Protocol):
+    """Shared hand-offs and the review parts that read each other."""
+
     scope: str
     plan_data: PlanData | None
     last_run: CheckRun | None
@@ -117,7 +110,14 @@ class ReviewHost(Protocol):
     @property
     def writer_family(self) -> str | None: ...
     @property
-    def review(self) -> ReviewLive: ...
+    def settles(self) -> SettlesView: ...
+    @property
+    def routing(self) -> RoutingView: ...
+
+
+class ReviewPorts(Protocol):
+    """The capabilities review calls on the rest of the run."""
+
     @property
     def steps(self) -> ReviewSteps: ...
     @property
@@ -140,10 +140,6 @@ class ReviewHost(Protocol):
     def fixer(self) -> FixRound: ...
     @property
     def checkpoints(self) -> PendingKeeper: ...
-    @property
-    def settles(self) -> SettlesView: ...
-    @property
-    def routing(self) -> RoutingView: ...
     @property
     def Blocked(self) -> type[Stop]: ...
 

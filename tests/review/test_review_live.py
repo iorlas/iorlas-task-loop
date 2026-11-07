@@ -1,9 +1,6 @@
 """The review stage's writes go through its own state and ledger, not through lists on the engine (docs/design/b-review.md, slice 2)."""
-from types import SimpleNamespace
+from support.review_host import FakeReview
 
-from support.fakegit import FakeGit
-
-from taskloop.app.review.routing import Routing
 from taskloop.app.review.state import ReviewLive
 
 
@@ -20,9 +17,10 @@ def test_an_unverified_item_is_kept_once_by_its_text():
     assert live.unverified == [{"what": "w", "kind": "k", "why": "first", "source": "s"}]
 
 
-def test_a_leftover_is_added_once_by_title_and_says_whether_it_was_new():
-    host = SimpleNamespace(leftovers=[{"title": "t"}])
-    routing = Routing(host, FakeGit())
+def test_a_leftover_is_added_once_by_title_and_says_whether_it_was_new(workdir):
+    review = FakeReview(workdir)
+    host, routing = review.hand, review.routing
+    host.leftovers = [{"title": "t"}]
     assert routing.add_leftover({"title": "t", "why": "again"}) is False
     assert routing.add_leftover({"title": "u"}) is True
     assert host.leftovers == [{"title": "t"}, {"title": "u"}]

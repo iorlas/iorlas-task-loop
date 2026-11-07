@@ -8,12 +8,17 @@ from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.look.shots import Pictures
 from taskloop.app.pipeline import summaries
 from taskloop.app.pipeline.closing import Closer
+from taskloop.app.review.link_check import LinkCheck
+from taskloop.app.review.routing import Routing
+from taskloop.app.review.settles import Settles
+from taskloop.app.review.verifier import Verifier
 from taskloop.app.run.closer_ports import closer_over
 from taskloop.app.run.parts_land import LandParts
 from taskloop.app.run.parts_plan import PlanParts
 from taskloop.app.run.parts_run import RunParts
 from taskloop.app.workers import asked
 from taskloop.app.workers.worker_call import Ops, WorkerCall
+from taskloop.app.write.handoff import Handoff
 from taskloop.contracts import plancheck
 from taskloop.contracts.stagefacts import RunFacts
 from taskloop.domain.lanes.matchers import read_only_command
@@ -33,6 +38,13 @@ class RunHost(LandParts, PlanParts, RunParts):
     def intake_per_day(self) -> int:  # the Engine's: CloserHost reads it
         raise NotImplementedError
 
+    def on_path(self, name: str) -> str | None:
+        raise NotImplementedError
+
+    @cached_property
+    def hand(self) -> Handoff:
+        return Handoff(self, self.git)
+
     @cached_property
     def pictures(self) -> Pictures:
         return Pictures(self.facts, self, self.look, self, self.git)
@@ -44,6 +56,22 @@ class RunHost(LandParts, PlanParts, RunParts):
     @cached_property
     def judge(self) -> Judge:
         return Judge(self.facts, self, self.look, self)
+
+    @cached_property
+    def routing(self) -> Routing:
+        return Routing(self.facts, self, self.review, self, self.git)
+
+    @cached_property
+    def settles(self) -> Settles:
+        return Settles(self.facts, self, self.review, self, self.git)
+
+    @cached_property
+    def link_check(self) -> LinkCheck:
+        return LinkCheck(self.facts, self, self.review, self)
+
+    @cached_property
+    def verifier(self) -> Verifier:
+        return Verifier(self.facts, self, self.review, self)
 
     @cached_property
     def worker(self) -> WorkerCall:
