@@ -12,9 +12,9 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes
 from support.engine_case import ENGINE_BASH, POSIX_CHECK, EngineTest, _cells, no_repo, sh, stop
 from support.gitsim import verbs
-from support.plans import CLEAN, FALSE, HAS_F, PLAN, WRITE, finding, review
 
 from tltestkit.checks import typed
+from tltestkit.plans import CLEAN, FALSE, HAS_F, PLAN, WRITE, finding, review
 
 # isort: split
 import contextlib
@@ -26,7 +26,6 @@ from pathlib import Path
 from unittest import mock
 
 from support import procsim
-from support.cfgs import cfg_with
 from support.interrupts import Interrupter, Recovery, RecoveryRig
 
 from taskloop.adapters import (
@@ -38,6 +37,7 @@ from taskloop.domain.checks import lint
 from taskloop.domain.plan.matchers import gate_only_criteria
 from tlkernel.config import EngineConfig
 from tltestkit import fake_route
+from tltestkit.cfgs import cfg_with
 from tltestkit.logs import records
 from tltestkit.narrow import must
 

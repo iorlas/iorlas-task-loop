@@ -283,11 +283,11 @@ A `packages/` move of dash costs S1a (~35 files of mechanics) + ~116 moved files
 | write, review, look | 18 | 12 | 3 |
 | all folders | 553 | | 313 (57%) |
 
-Cause of the wide ones: `tests/support/engine_case.py` (596 sloc, imported by 108 tests: run 32, checks 26, land 16, review 7, write 6, plan 6), `builders.make_engine` (457 src files forward through `app/run/engine.py`), `looptest`, `slots`. T0a moved `cfg_with`, `plan_of` and `argv_cfg` to `support/cfgs.py` (reaches 8 src files); of the 32 importers of `builders`, 26 only needed those. T0b is the engine harness: the 26 checks tests and 16 land tests that subclass `EngineTest` to exercise one stage through the whole engine.
+Cause of the wide ones: `tests/support/engine_case.py` (596 sloc, imported by 108 tests: run 32, checks 26, land 16, review 7, write 6, plan 6), `builders.make_engine` (457 src files forward through `app/run/engine.py`), `looptest`, `slots`. T0a moved `cfg_with`, `plan_of` and `argv_cfg` to `tltestkit/cfgs.py` (reaches 8 src files); of the 32 importers of `builders`, 26 only needed those. T0b is the engine harness: the 26 checks tests and 16 land tests that subclass `EngineTest` to exercise one stage through the whole engine.
 
 ## 10. Measured after T0 (2026-11-06): what is left worth doing
 
-T0a (`support/cfgs.py`) and T0b (`support/plans.py`: PLAN, WRITE, CLEAN, BEAD and the plan/review builders out of `engine_case`, 62 importers rewritten) are done. Result on 604 tests, 108 commits: selection per commit median 273, mean 264, p90 453, max 604; tests within ≤ 3 stages 316 of 557 (was 313 of 553). **The hub split alone moved reach by ~1%.** What still reaches far is the engine harness itself (checks, land, run, review, write, loop tests subclass `EngineTest`), which is a rewrite of those tests onto the stage's own fake, not a file split.
+T0a (`tltestkit/cfgs.py`) and T0b (`tltestkit/plans.py`: PLAN, WRITE, CLEAN, BEAD and the plan/review builders out of `engine_case`, 62 importers rewritten) are done. Result on 604 tests, 108 commits: selection per commit median 273, mean 264, p90 453, max 604; tests within ≤ 3 stages 316 of 557 (was 313 of 553). **The hub split alone moved reach by ~1%.** What still reaches far is the engine harness itself (checks, land, run, review, write, loop tests subclass `EngineTest`), which is a rewrite of those tests onto the stage's own fake, not a file split.
 
 Median stages reached per test folder: loop 14, checks 12, run 12, review 12, write 12, look 12, launch 11, land 10, wire 10, doctor 10, hook 10; dash 1, delegate 1, adapters 0, contracts 0.
 

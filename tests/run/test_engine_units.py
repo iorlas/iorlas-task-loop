@@ -41,10 +41,8 @@ from tlkernel.schema import unstrict  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import engine_case as T  # noqa: E402
 from support.briefs import brief_digest  # noqa: E402
-from support.cfgs import cfg_with  # noqa: E402
 from support.engine_case import BRIEFS, full, sh, shown, stop, stored_brief  # noqa: E402
 from support.fakes import as_bead, as_comment  # noqa: E402
-from support.plans import CLEAN, PLAN, WRITE, finding, review, verdict  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
 from support.who import who  # noqa: E402
 
@@ -60,8 +58,10 @@ from taskloop.domain.checks import (  # noqa: E402
 )
 from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
 from tlkernel.checks import Duration, Durations  # noqa: E402
+from tltestkit.cfgs import cfg_with  # noqa: E402
 from tltestkit.checks import res  # noqa: E402
 from tltestkit.narrow import must  # noqa: E402
+from tltestkit.plans import CLEAN, PLAN, WRITE, finding, review, verdict  # noqa: E402
 
 
 class FailureBriefAndDurations(Case):

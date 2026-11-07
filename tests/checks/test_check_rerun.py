@@ -11,15 +11,15 @@ from tltestkit.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
-from support.cfgs import cfg_with
-from support.plans import PLAN
 
 from checks.test_check_rules import Base
 from taskloop.domain.checks import planref
 from tlkernel import answers, plancheck
 from tlkernel.ids import CheckId
 from tlkernel.plancheck import Adhoc, PlanData, Ref, adhoc
+from tltestkit.cfgs import cfg_with
 from tltestkit.checks import ck, typed
+from tltestkit.plans import PLAN
 
 REPO: list[dict[str, Any]] = [{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"}]
 UNITY = CheckId("unity-tests")

@@ -1,9 +1,8 @@
 """A planner's own check argv runs on the host: when the profile lists what may run (engine.writer_exec_allow), an argv outside it, and
 outside the program words of the registered checks, is refused with the list that rejected it."""
-from support.cfgs import cfg_with
-
 from taskloop.domain.checks import planref
 from tlkernel.plancheck import adhoc
+from tltestkit.cfgs import cfg_with
 
 ALLOW = [["python3", "-m", "unittest"], ["just", "test"]]
 

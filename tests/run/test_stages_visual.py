@@ -12,7 +12,6 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import gitq, homes, procsim
 from support.builders import make_engine
-from support.cfgs import cfg_with, plan_of
 from support.checkpoints import read_ck
 from support.engine_case import engine
 from support.fakes import (
@@ -20,7 +19,6 @@ from support.fakes import (
     must_bead,
 )
 from support.imagetools import without_image_tools
-from support.plans import BEAD, CLEAN, FALSE, PLAN, WRITE
 from support.spawn import port_git, real_spawner
 from support.who import who
 
@@ -40,6 +38,8 @@ from tlkernel.lookrows import LookRows
 from tlkernel.run import Round
 from tlkernel.slots import SlotGitError
 from tltestkit import fake_route
+from tltestkit.cfgs import cfg_with, plan_of
+from tltestkit.plans import BEAD, CLEAN, FALSE, PLAN, WRITE
 
 
 class VisualWork(StagesTest):

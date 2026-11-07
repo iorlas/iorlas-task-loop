@@ -11,16 +11,17 @@ from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.engine_case import EXIT_127, EngineTest, sh, stop, without_shims
-from support.plans import BEAD, CLEAN, FALSE, PLAN, STILL_OPEN, WRITE, finding, review, verdict
+
+from tltestkit.plans import BEAD, CLEAN, FALSE, PLAN, STILL_OPEN, WRITE, finding, review, verdict
 
 # isort: split
-from support.cfgs import cfg_with
 from support.review_host import FakeReview
 from support.spawn import port_git
 
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.run import engine
 from taskloop.app.slots import config as wslots_config
+from tltestkit.cfgs import cfg_with
 from tltestkit.narrow import must
 
 

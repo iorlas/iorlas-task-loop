@@ -8,8 +8,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, procsim
 from support.engine_case import EngineTest
-from support.plans import CLEAN, PLAN, WRITE
 from support.world import pid_gone
+
+from tltestkit.plans import CLEAN, PLAN, WRITE
 
 # isort: split
 import os

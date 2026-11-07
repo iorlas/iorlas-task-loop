@@ -2,16 +2,16 @@
 from unittest import mock
 
 from support.builders import make_engine
-from support.cfgs import plan_of
 from support.engine_case import EngineTest, stop
 from support.fakes import FakeClock
-from support.plans import BEAD, CLEAN, PLAN, WRITE
 
 from taskloop.app.write.state import StageState
 from tlkernel.enums import Outcome
 from tlkernel.kinds import Kind
 from tltestkit import fake_route
+from tltestkit.cfgs import plan_of
 from tltestkit.logs import records
+from tltestkit.plans import BEAD, CLEAN, PLAN, WRITE
 
 
 class ReviewInvalid(EngineTest):

@@ -18,11 +18,11 @@ from support import (
     procsim,
 )
 from support.engine_case import stop
-from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.app.release import reexec
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
+from tltestkit.plans import CLEAN, PLAN, WRITE
 
 SAY = "codex: Reconnecting... waiting for network (Connection failed: error sending request)"
 

@@ -5,9 +5,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.engine_case import CAP_PARKS, EngineTest, sh, stop
-from support.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, review
 
 from tltestkit.checks import typed
+from tltestkit.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, review
 
 # isort: split
 import json
@@ -15,7 +15,6 @@ from pathlib import Path
 from unittest import mock
 
 from support import procsim
-from support.cfgs import cfg_with
 
 from taskloop.app.plan import prompts as pp
 from taskloop.app.plan.planner import Planner
@@ -32,6 +31,7 @@ from tlkernel.config import EngineConfig
 from tlkernel.ids import CheckId
 from tlkernel.kinds import Kind
 from tltestkit import fake_route
+from tltestkit.cfgs import cfg_with
 from tltestkit.logs import records
 
 

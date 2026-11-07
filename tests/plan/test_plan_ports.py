@@ -3,9 +3,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from support.cfgs import cfg_with
 from support.plan_host import FakePlan
-from support.plans import HAS_F, PLAN
 
 from taskloop.app.asks import intake
 from taskloop.app.plan import adrsync
@@ -16,7 +14,9 @@ from tlkernel.bead import Bead
 from tlkernel.ledger import Adr
 from tlkernel.plancheck import adhoc
 from tlkernel.stop import Stop
+from tltestkit.cfgs import cfg_with
 from tltestkit.checks import typed
+from tltestkit.plans import HAS_F, PLAN
 
 
 def test_outside_scope_is_filed_once_and_taste_stays(workdir):
