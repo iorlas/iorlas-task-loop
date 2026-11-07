@@ -11,7 +11,7 @@ from tlkernel.beadsport import Beads
 from tlkernel.forge import OPEN, Pr, StackItem
 from tlkernel.gitport import Git
 from tlkernel.queue_doc import QueueDoc
-from tlkernel.wire import Rec
+from tlkernel.wire import Rec, Refused
 
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
@@ -80,7 +80,11 @@ class QueueLand:
     def run(self, items: list[StackItem]) -> None:
         stack = self.stack
         doc = stack.queue_doc
-        if (stale := doc.get()) is not None:
+        try:
+            stale = doc.need()  # a queue document of another version or a torn one is refused, never read as no queue
+        except Refused as e:
+            raise Stop(1, f"queue: {e}") from None
+        if stale is not None:
             recover(stack, stale, time.time())
         if not queueable(stack, items):
             for item in items:
@@ -124,6 +128,6 @@ class QueueLand:
         left = [e for e in entries if e.phase not in (Phase.MERGED, Phase.EJECTED)]
         for e in entries:
             if e.phase is Phase.EJECTED:
-                raise Stop(1, f"queue: {e.branch} ejected ({e.reason}); {merged} merged, {len(entries) - merged - 1} left untouched")
+                raise Stop(1, f"queue: {e.branch} ejected ({e.reason}); {merged} merged, {len(left)} left unmerged")
         if left:
             raise Stop(1, f"queue: {len(left)} left unmerged after {merged} merged")

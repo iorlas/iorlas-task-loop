@@ -8,6 +8,7 @@ from taskloop.app.doctor.queue import findings, report
 from taskloop.domain.land.queue_model import Entry, Phase
 from taskloop.domain.land.queue_persist import to_doc
 from tlkernel.queue_state import Incident, QueueState
+from tlkernel.wire import Refused
 
 
 def document(phase=Phase.WAITING):
@@ -54,7 +55,7 @@ def test_recovery_is_described(phase, refs, paths, expected):
 def test_report_prints_without_writing_stores():
     doc = document(Phase.GATING)
     queue_doc = Mock()
-    queue_doc.get.return_value = doc
+    queue_doc.need.return_value = doc
     state_doc = Mock()
     state_doc.get.return_value = None
     stores = Mock()
@@ -63,7 +64,18 @@ def test_report_prints_without_writing_stores():
     with patch("builtins.print") as printed:
         lines = report(stores, git_port(), "repo", "origin/main", 10)
     printed.assert_called_once_with(f"FAIL queue: {lines[0]}")
-    assert queue_doc.get() == document(Phase.GATING)
-    assert queue_doc.method_calls == [("get", (), {}), ("get", (), {})]
+    assert queue_doc.need() == document(Phase.GATING)
+    assert queue_doc.method_calls == [("need", (), {}), ("need", (), {})]
     assert state_doc.method_calls == [("get", (), {})]
     assert stores.queue.of.call_args == stores.queue_state.of.call_args
+
+
+def test_report_fails_on_a_queue_document_of_another_version():
+    queue_doc = Mock()
+    queue_doc.need.side_effect = Refused("queue document is of another version")
+    stores = Mock()
+    stores.queue.of.return_value = queue_doc
+    with patch("builtins.print") as printed:
+        lines = report(stores, git_port(), "repo", "origin/main", 10)
+    assert lines == ["queue document is of another version"]
+    printed.assert_called_once_with("FAIL queue: queue document is of another version")
