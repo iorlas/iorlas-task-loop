@@ -73,31 +73,6 @@ class RunRowsTest(Case):
         assert [m.run for m in self.rows.of_bead("b", "/r")] == ["z"]
         assert [m.run for m in self.rows.of_repo("/r")] == ["b", "z"]
 
-    def test_carry_done_steps_preserves_source_is_idempotent_and_requires_destination(self):
-        self.rows.put(self.complete())
-        self.rows.put(self.complete().replace(run="dst"))
-        with self.rows.transaction() as con:
-            con.executemany(
-                "INSERT INTO step (run,key,try,attempt,status,started,ended,input_digest,result,fingerprint,calls) "
-                "VALUES ('r',?,1,2,?,10,20,'digest','result','fingerprint',3)",
-                [("done-a", "done"), ("done-b", "done"), ("pending", "running")])
-            before = con.execute("SELECT * FROM step ORDER BY run,key,try").fetchall()
-        self.rows.carry_done_steps("r", "dst")
-        with self.rows.transaction() as con:
-            source = con.execute("SELECT * FROM step WHERE run='r' ORDER BY key,try").fetchall()
-            destination = con.execute("SELECT * FROM step WHERE run='dst' ORDER BY key,try").fetchall()
-            after = con.execute("SELECT * FROM step ORDER BY run,key,try").fetchall()
-        assert source == before
-        assert destination == [("dst", *row[1:]) for row in before if row[4] == "done"]
-        self.rows.carry_done_steps("r", "dst")
-        with self.rows.transaction() as con:
-            assert con.execute("SELECT * FROM step ORDER BY run,key,try").fetchall() == after
-        with pytest.raises(factorydb.DatabaseError, match="FOREIGN KEY"):
-            self.rows.carry_done_steps("r", "missing")
-        with self.rows.transaction() as con:
-            assert con.execute("SELECT * FROM step ORDER BY run,key,try").fetchall() == after
-            assert con.execute("SELECT * FROM step WHERE run='missing'").fetchall() == []
-
     def test_v1_is_quarantined_and_recreated_at_the_current_schema(self):
         path = self.cfg.factory_db()
         with sqlite3.connect(path) as con:

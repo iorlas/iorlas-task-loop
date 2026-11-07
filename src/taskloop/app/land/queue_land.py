@@ -128,6 +128,6 @@ class QueueLand:
         left = [e for e in entries if e.phase not in (Phase.MERGED, Phase.EJECTED)]
         for e in entries:
             if e.phase is Phase.EJECTED:
-                raise Stop(1, f"queue: {e.branch} ejected ({e.reason}); {merged} merged, {len(entries) - merged - 1} left untouched")
+                raise Stop(1, f"queue: {e.branch} ejected ({e.reason}); {merged} merged, {len(left)} left unmerged")
         if left:
             raise Stop(1, f"queue: {len(left)} left unmerged after {merged} merged")

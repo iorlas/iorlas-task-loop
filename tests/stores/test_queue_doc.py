@@ -16,7 +16,7 @@ def test_queue_document_round_trip(workdir: Path):
     cfg = ConfigDir(workdir)
     doc = QueueDoc(entries=[EntryRow(
         branch="topic", head="head", phase="gating", q="q", tree="tree", ref="ref", reason="reason",
-        base="base", ahead=["first"], check_set="checks",
+        base="base", ahead=["first"], check_set="checks", after="first",
         build=BuildRow(pid=42, start_id="start", lease_expires=123.5, worktree="build-dir"))],
         in_flight=2, last_base="base")
     real_stores(cfg).queue.of("repo-key").write(doc)
