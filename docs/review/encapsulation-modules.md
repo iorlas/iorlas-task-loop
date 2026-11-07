@@ -228,7 +228,7 @@ R1 applies only where named. Moving an Engine method into a file and passing the
 | app/run/requests.py | Live owner command post/take/consume | E/A/F, exact logical run identity and beat/step ordering | U ⚠; R |
 | app/run/resume.py | Observe world, restore/amend/restart plan | E/P, checkpoint strictness and config compatibility | U ⚠; R |
 | app/run/run_once.py | Execute attempt through mandatory close | E/P/C, all shared host state and outcome precedence; R1 | R ⚠; R |
-| app/run/shared.py | Cross-bead notes/flakes/context | E/F, stale neighbors and advisory versus authoritative data | U ⚠; R |
+| packages/slots/src/tlslots/shared.py | Cross-bead notes/flakes/context | E/F, stale neighbors and advisory versus authoritative data | U ⚠; R |
 | app/run/stages.py | Continuous and standalone step dispatch | E/P/C, cursor/round/session recovery and stage selector | U ⚠; R |
 | app/run/state.py | Checkpoint writer plus automatic writable aliases | E/F, caller mutation schedule not hidden; R1 | R ⚠; R |
 | app/run/trace.py | Typed trace conversion | E/Q/W, incomplete source mappings and clipped facts | U ⚠; R |
