@@ -160,10 +160,14 @@ Result and its limit:
 - "Squash of A has exactly A-head's tree" is **true only when A's head already contains the main it is squashed onto**. The general true
   statement is: `tree(squash(A onto main')) == merge-tree(main', A)`. The queue therefore never uses a head tree; it builds `T(N)` from
   `merge-tree` and compares trees at landing.
-- Not covered by the experiment: criss-cross histories with several merge bases (recursive/ort picks a synthetic base; the queue chain and
-  the real main may pick differently), renames, GitHub's server squash. Layer 1 of section 2 exists for these; bead (a) re-runs the
-  experiment with a property test (random edits, 1,000 cases) and one real PR pair against GitHub on a throwaway repo before bead (c)
-  starts.
+- Property test (bead a, `tests/land/real/test_queue_tree_equality.py`, git 2.54.0, 2026-11-07): 1,000 seeded cases of 2-4 PRs of 1-3
+  commits each (edit, add, delete, rename; branched stale from the base or from a main that moved on), the `merge-tree` chain
+  `Q1..Qn` against `git merge --squash` onto the moving main. 2,126 PRs compared, 0 tree inequalities; 851 PRs the queue ejected on a
+  conflict, and in every one the squash conflicted too (no case where one side was clean and the other not).
+- Renames (a rename in one PR, an edit of the renamed file in another, a third PR after them): queue trees == squash trees. Equal.
+- Criss-cross (two branches merging each other, `merge-base --all` returns 2 bases): queue trees == squash trees. Equal.
+- Still unverified: GitHub's server-side squash. The real PR pair was not run: the `gh` token has no `delete_repo` scope, so a throwaway
+  repo could not be removed afterwards. Layer 1 and the post-land assertion of section 2 (bead l) stay the guard for it.
 
 ## 4. Result key
 

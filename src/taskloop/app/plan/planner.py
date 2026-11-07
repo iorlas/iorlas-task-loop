@@ -9,6 +9,7 @@ from typing import Any
 from taskloop.app.plan import assume
 from taskloop.app.plan.cap import ReplanCap
 from taskloop.app.plan.decisions import Decisions
+from taskloop.app.plan.host import PlanHost
 from taskloop.app.plan.prompt import PlanPrompt
 from taskloop.app.plan.sendback import SendBack
 from taskloop.contracts import plancheck
@@ -30,7 +31,7 @@ REPLAN_TAIL = 12500  # characters of replan.md the planner reads
 
 
 class Planner:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: PlanHost) -> None:
         self.e = host
         self.cap = ReplanCap(host)
         self.prompts = PlanPrompt(host, host.git)
@@ -41,7 +42,7 @@ class Planner:
     def ask(self, prompt: str, step: str, title: str, mode: str = "plan") -> PlanData:
         """One planner answer, its checks validated before any write; the bad ones go back once."""
         e = self.e
-        data = e.ai("plan", title, prompt, step=step, mode=mode, at=(e.planned, 0, 0)).data
+        data = plancheck.plan_of(e.ai("plan", title, prompt, step=step, mode=mode, at=(e.planned, 0, 0)).data)
         if self.fits(data):  # keep the answer through a stop, but revalidate it before any write
             e.plan_data = copy.deepcopy(data)
             e.checkpoints.save(stage=0, rounds=0, n=0, feedback="", step="plan")
@@ -69,7 +70,7 @@ class Planner:
     def fits(self, data: PlanData) -> bool:
         """A plan worth keeping through a stop: it has stages, asks nothing, and is not a split ask."""
         return bool(data["stages"] and not data["question"].strip() and (
-            len(data["stages"]) <= int(self.e.cfg.max_stages) or self.cap.kept_whole()))
+            len(data["stages"]) <= self.e.cfg.max_stages or self.cap.kept_whole()))
 
     def add_leftovers(self, data: PlanData) -> None:
         """The follow-up work the plan wants filed: filed at the close with the reviews' leftovers. Only a plan the run goes on with
@@ -86,7 +87,7 @@ class Planner:
         owner = (bool(old) and not again and why_amend.startswith("bead changed: the owner answered")
                  and not (e.answered and e.answered.ask_class == AskClass.CAP_REACHED))  # a cap ask answered 'split' stays blocked
         owner = owner or (bool(old) and not again and why_amend.startswith(f"bead changed ({COMMENTS_ONLY})"))  # tl-9un.12
-        if not owner and e.planned >= 1 + int(e.cfg.max_replans) + e.extra:
+        if not owner and e.planned >= 1 + e.cfg.max_replans + e.extra:
             raise self.cap.blocked()
         if not owner:
             e.planned += 1
@@ -222,7 +223,7 @@ class Planner:
     def finish(self, data: PlanData) -> PlanData:
         e = self.e
         self.move_if_lacking(data)
-        big = int(e.cfg.max_stages)
+        big = e.cfg.max_stages
         if len(data["stages"]) > big and not self.cap.kept_whole():
             why = f"ticket: the plan has {len(data['stages'])} stages (more than {big}): the bead may be too big for one task"
             raise e.blocked_for(why, "ASK_TICKET", spec=askspecs.too_big([st["goal"] for st in data["stages"]], big))
