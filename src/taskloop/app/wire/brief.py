@@ -1,6 +1,5 @@
 """The facts of `tl status --brief` and the handoff, read from the stores (LoopFiles, AskStore, the slot beads, the catalog and the pin):
 no reader of its own."""
-
 import hashlib
 import json
 from pathlib import Path
@@ -31,7 +30,7 @@ RECENT = 5
 def running_version(plugin_root: Path) -> str:
     try:
         return str(json.loads((plugin_root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")).get("version") or "")
-    except OSError, ValueError, AttributeError:
+    except (OSError, ValueError, AttributeError):
         return ""
 
 
@@ -48,24 +47,17 @@ def slot_lines(repo: str, who: Identity, now: float, git: Git) -> tuple[str, ...
     or a readable profile has none."""
     try:
         table = wslots.slot_table(repo, who, git, now)
-    except BdCommandFailure, SystemExit, OSError, ValueError, BdFailure:
+    except (BdCommandFailure, SystemExit, OSError, ValueError, BdFailure):
         return ()
     return tuple(line_of(v) for v in table.slots if v.state != "retiring") + (
         (f"(slots.count {table.configured} from {table.source}{' ' + table.source_sha[:7] if table.source_sha else ''})",)
-        if table.slots
-        else ()
-    )
+        if table.slots else ())
 
 
 def line_of(v: SlotView) -> str:
-    what = {
-        "free": "free",
-        "held": f"held by {v.holder}: {v.held_reason}",
-        "running": f"running {v.bead}".rstrip(),
-        "setup": f"starting {v.bead}",
-        "claimed": f"claimed by {v.holder or '?'}, no live run",
-        "dead": f"claimed by {v.holder or '?'}, folder missing",
-    }.get(v.state, v.state)
+    what = {"free": "free", "held": f"held by {v.holder}: {v.held_reason}", "running": f"running {v.bead}".rstrip(),
+            "setup": f"starting {v.bead}", "claimed": f"claimed by {v.holder or '?'}, no live run",
+            "dead": f"claimed by {v.holder or '?'}, folder missing"}.get(v.state, v.state)
     return f"{v.id}: {what}" + (" (above slots.count)" if v.beyond_count else "")
 
 
@@ -90,20 +82,12 @@ def build(repo: str, plugin_root: Path, now: float, env: Env, who: Identity | No
     recent = tuple(f"{i.rec.bead} {i.rec.outcome.value} ({i.rec.minutes} min)" for i in files.log_rows(RECENT).items)
     pin = pins.read_pin(cfg).task_loop
     return Brief(
-        repo=repo,
-        now=now,
+        repo=repo, now=now,
         loops=tuple(LoopLine(st.pid, st.started, st.bead or "", st.slot or "", st.version) for st in loops),
-        last_beat=last_beat,
-        last_exit=str(last.get("reason") or ""),
-        asks=asks,
-        slots=slot_lines(repo, who, now, git) if who and git else (),
-        resources=held_resources(cfg),
-        recent=recent,
-        version=running_version(plugin_root),
-        installed=catalog.installed_version(claude_dir(env)),
-        pinned=(pin or ""),
-        shim_sha256=shim_sha256(cfg.root),
-    )
+        last_beat=last_beat, last_exit=str(last.get("reason") or ""), asks=asks,
+        slots=slot_lines(repo, who, now, git) if who and git else (), resources=held_resources(cfg), recent=recent,
+        version=running_version(plugin_root), installed=catalog.installed_version(claude_dir(env)), pinned=(pin or ""),
+        shim_sha256=shim_sha256(cfg.root))
 
 
 def handoff_file(repo: str, env: Env) -> Path:

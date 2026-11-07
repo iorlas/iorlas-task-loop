@@ -68,7 +68,8 @@ def closures(texts: Mapping[str, str]) -> dict[str, int]:
             if name not in reached:
                 reached.add(name)
                 pending.extend(edges[name] - reached)
-        key = "checks" if stage == "tlgate" else ({"tlslots": "slots", "tlasks": "asks", "tlrelease": "release"}.get(stage, stage.rsplit(".", 1)[-1]))
+        names = {"tlgate": "checks", "tlslots": "slots", "tlasks": "asks", "tlrelease": "release"}
+        key = names.get(stage, stage.rsplit(".", 1)[-1])
         counts[key] = len(reached)
         counts[key + " (external modules)"] = len(set().union(*(external[name] for name in reached)))
     return counts

@@ -13,4 +13,3 @@ extend-select = ["ANN401"]
 "delegate.contracts".msg = "task-loop imports delegate.api and nothing else of delegate"
 "delegate.entry".msg = "task-loop imports delegate.api and nothing else of delegate"
 "subprocess".msg = "a stage starts a process through the Spawner handed down from the edge (tlkernel.procport), never subprocess"
-
