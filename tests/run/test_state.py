@@ -18,10 +18,12 @@ from support.pipeline_ports import FakeHeadHistory
 
 from taskloop.app.land.state import LandState
 from taskloop.app.look.state import LOOK_FIELDS, LookState
+from taskloop.app.pipeline.checkpoints import Checkpoints
 from taskloop.app.pipeline.resume import KEEP_FOR_ACTIVE, LATE, Resume
 from taskloop.app.pipeline.review_glue import ReviewGlue
 from taskloop.app.review.state import ReviewLive
-from taskloop.app.run.state import Checkpoints, StateAttrs, attr_names, carries_state, checkpoint_hooks, restarted, state_names
+from taskloop.app.run.sections import checkpoint_hooks, restarted
+from taskloop.app.run.state import StateAttrs, attr_names, carries_state, state_names
 from taskloop.app.write.state import WriteState
 from tlkernel import fence, wire
 from tlkernel.checkpoint import BriefSnap, Checkpoint, Handoff, PlanStep, RunState, WriterSession
@@ -81,7 +83,7 @@ class Host(StateAttrs, SimpleNamespace):
     def __init__(self) -> None:
         self.state = RunState()
         self.dry = False
-        self.bead, self.stores = "t-1", fake_stores()
+        self.bead, self.stores = BeadId("t-1"), fake_stores()
         self.store, self.claim = FakeBeads(), fence.offline(BeadId("t-1"))
         self.checkpoints = Checkpoints(self, checkpoint_hooks(lambda: self.state))
         self.run_id = "t-1-20260101-000000"
@@ -224,7 +226,7 @@ class Park(Case):
 
 class OneWriter(Case):
     def test_nothing_but_the_writer_writes_a_checkpoint(self):
-        """The record is written only by app/run/state.py (and the stores that hold it): no other src or engine code opens it."""
+        """The record is written only by app/pipeline/checkpoints.py (and the stores that hold it): no other src or engine code opens it."""
         hits = []
         for path in [*ROOT.joinpath("src").rglob("*.py"), *ROOT.joinpath("skills/task-loop").glob("*.py")]:
             rel = path.relative_to(ROOT).as_posix()
@@ -234,7 +236,7 @@ class OneWriter(Case):
         assert hits == []
 
 
-OK = {"src/taskloop/app/run/state.py", "src/taskloop/stores/books.py", "src/taskloop/stores/real.py",
+OK = {"src/taskloop/app/pipeline/checkpoints.py", "src/taskloop/stores/books.py", "src/taskloop/stores/real.py",
       "src/taskloop/app/run/shared.py"}  # shared.py: the sibling's plan is read (siblings()), never written
 
 

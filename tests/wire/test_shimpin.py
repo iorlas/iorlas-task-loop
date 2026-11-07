@@ -7,8 +7,7 @@ import pytest
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.app.doctor import install
-from taskloop.app.wire import doctor
+from taskloop.app.doctor import install, setup_checks
 from tlkernel.env import Env
 
 
@@ -110,13 +109,9 @@ class ShimPin(Case):
                     f = self.config / "githooks/pre-push"
                     f.chmod(0o755)
                     f.write_text(f.read_text().replace(str(new), str(self.old)))
-                with mock.patch.object(doctor.catalog, "installed_version", return_value=""), \
-                        mock.patch.object(doctor.catalog, "cache_dirs", return_value={}):
-                    findings = doctor.install_problems(self.old, self.env)
+                findings = setup_checks.install_problems(self.old, self.config, lambda: [])
                 assert len(findings) == 1
                 assert "older than newest installed task-loop 0.23.100" in findings[0]
                 assert ("shim" if stale == "shim" else "pre-push") in findings[0]
         self.write(new)
-        with mock.patch.object(doctor.catalog, "installed_version", return_value=""), \
-                mock.patch.object(doctor.catalog, "cache_dirs", return_value={}):
-            assert doctor.install_problems(self.old, self.env) == []
+        assert setup_checks.install_problems(self.old, self.config, lambda: []) == []
