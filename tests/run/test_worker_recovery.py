@@ -44,7 +44,7 @@ class Recovery(Case):
     def call(self, cwd="/repo", schema=None):
         return call.Call(
             "write", "worker", schema or {"type": "object"}, cwd, "same prompt", "same prompt",
-            None, None, ("write", 1, 0, 0), "writer", None, "write", "Write",
+            None, ("write", 1, 0, 0), "writer", "write", "Write",
         )
 
     def saved(self, memo=False):
@@ -90,7 +90,7 @@ class Recovery(Case):
         for memo in (False, True):
             self.req = base
             self.saved(memo)
-            for changes in ({"engine_only": ["check"]}, {"only_family": ["openai"]},
+            for changes in ({"engine_only": ["check"]}, {"prefer": "codex-ish"},
                             {"engine_only_advisory": True}, {"timeout_s": 9}):
                 with self.subTest(memo=memo, changes=changes):
                     self.req = base.replace(**changes)
@@ -319,7 +319,7 @@ def test_the_memo_is_published_before_the_answer_is_marked_consumed(tmp_path):
     order = []
     state = mock.Mock()
     state.consumed.side_effect = lambda: order.append("consumed")
-    c = mock.Mock(state=state, key=(1,), sha="x", node="plan", writer_family=None)
+    c = mock.Mock(state=state, key=(1,), sha="x", node="plan")
     host = SimpleNamespace(run_dir=tmp_path)
     worker = worker_call.WorkerCall(host, mock.Mock())
     keep = mock.patch.object(worker_call.asked, "settle", side_effect=lambda *a: order.append("keep"))

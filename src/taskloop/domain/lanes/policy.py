@@ -10,9 +10,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final, get_args
 
-from taskloop.domain.lanes.pause_reasons import Producer
 from taskloop.domain.lanes.retry import PLAN, RetryPlan
 from tlkernel.delegate import REASON_TIMEOUT, DelegateResult, Permanence, RetryKind, Scope
+from tlkernel.pausereasons import Producer
 
 SCOPES: Final[tuple[Scope, ...]] = get_args(Scope)
 PERMANENCES: Final[tuple[Permanence, ...]] = get_args(Permanence)

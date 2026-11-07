@@ -27,12 +27,12 @@ from tltestkit.runs import manifest  # noqa: E402
 
 # isort: split
 import tl  # noqa: E402
-from support.checked import run_checked  # noqa: E402
 
 from taskloop.adapters.delegate import DelegateRoute  # noqa: E402
 from taskloop.app.report import planner  # noqa: E402
 from taskloop.app.report.inputs import read_jsonl  # noqa: E402
 from tlkernel import lifecyclematchers as matchers  # noqa: E402
+from tltestkit.checked import run_checked  # noqa: E402
 
 T0 = datetime(2026, 10, 21, 6, 0).timestamp()  # the window's start in the fixtures: local 06:00
 MIN = 60.0

@@ -23,7 +23,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 ROOT = Path(__file__).resolve().parents[2]
 import support.paths  # noqa: E402, F401
 from support import gitq  # noqa: E402
-from support.checkpoints import read_ck  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.app.plan.planner import Planner  # noqa: E402
@@ -42,7 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import engine_case as T  # noqa: E402
 from support.briefs import brief_digest  # noqa: E402
 from support.cfgs import cfg_with  # noqa: E402
-from support.engine_case import BRIEFS, full, sh, shown, stop, stored_brief  # noqa: E402
+from support.engine_case import BRIEFS, full, stop, stored_brief  # noqa: E402
 from support.fakes import as_bead, as_comment  # noqa: E402
 from support.plans import CLEAN, PLAN, WRITE, finding, review, verdict  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
@@ -62,6 +61,7 @@ from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
 from tlkernel.checks import Duration, Durations  # noqa: E402
 from tltestkit.checks import res  # noqa: E402
 from tltestkit.narrow import must  # noqa: E402
+from tltestkit.shellkit import sh, shown  # noqa: E402
 
 
 class FailureBriefAndDurations(Case):
@@ -235,7 +235,7 @@ class DelegateLauncher(T.EngineTest):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [same]})
         assert rc != 0
         assert not self.closed
-        assert [c[2] for c in s.calls if c[0] == "reviewer"] == ["openai"]
+        assert all(r.reviewer_other_family for r in s.requests if r.role == "reviewer")
         assert not any("same family" in str(c) for c in self.bd_calls if c[:2] == ("comments", "add"))
 
     # lifesim-d5f.58 2026-10-21: a resumed Codex writer answered lane_out for an hour and the bead paused; delegate never
@@ -257,40 +257,10 @@ class DelegateLauncher(T.EngineTest):
     BACK = full(WRITE, "w3", family="openai", lane="OPENAI_SUBSCRIPTION", model="gpt")
     OUT_L: ClassVar[Any] = dict(OUT_LONG, lane="OPENAI_SUBSCRIPTION")
 
-    def transitions(self):
-        return [json.loads(ln) for ln in self.eng.log_path.read_text().splitlines() if '"transition"' in ln]
 
-    def lanes(self, **out):
-        """`route.py status --json` lanes: name -> {out}."""
-        return mock.patch.object(lroute, "status_json", return_value={"lanes": {k: {"out": v} for k, v in out.items()}})
 
-    def test_a_fallback_writer_is_asked_fresh_once_its_lane_is_back_and_codex_takes_over(self):
-        with self.lanes(OPENAI_SUBSCRIPTION=False, CLAUDE_SUBSCRIPTION=False):
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.FRESH, self.BACK, WRITE],
-                                     "review": [review(unmet=["more"])] * 3 + [CLEAN]}, max_rounds=5)
-        assert rc == 0, self.blocked
-        workers = [(c, p) for c, p in zip(s.calls, s.prompts, strict=False) if c[0] == "worker"]
-        # round 3: Codex's lane is back, so delegate routes afresh; round 4 resumes Codex's new thread
-        assert [c[1] for c, _ in workers] == [None, "ref-write", None, "w3"]
-        requests = [r for r in s.requests if r.role == "worker"]
-        assert [bool(r.delta_file) for r in requests] == [False, True, False, True]
-        assert [c[2] for c in s.calls if c[0] == "reviewer"] == ["openai", "xai", "openai", "openai"]
-        assert any(t["cause"] == "fallback_retake" and t["to"] == "write" for t in self.transitions())
 
-    def test_a_fallback_writer_is_resumed_while_its_lane_is_still_out(self):
-        with self.lanes(OPENAI_SUBSCRIPTION=True, CLAUDE_SUBSCRIPTION=False):
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.FRESH, self.FRESH],
-                                     "review": [review(unmet=["more"])] * 2 + [CLEAN]})
-        assert rc == 0, self.blocked
-        assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write", "w2"]
-        assert not any(t["cause"] == "fallback_retake" for t in self.transitions())
 
-    def test_a_lane_the_status_does_not_know_never_makes_a_fallback(self):
-        with self.lanes(CLAUDE_SUBSCRIPTION=False):  # Codex is not configured on this machine at all
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.FRESH, self.FRESH],
-                                     "review": [review(unmet=["more"])] * 2 + [CLEAN]})
-        assert rc == 0, self.blocked
-        assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write", None]
 
     def test_the_first_choice_writer_still_resumes_and_no_status_is_read(self):
         with mock.patch.object(lroute, "status_json") as st:
@@ -300,51 +270,14 @@ class DelegateLauncher(T.EngineTest):
         assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write", "ref-write"]
         st.assert_not_called()
 
-    def test_a_fallback_writer_is_retaken_in_the_next_run_once_its_lane_is_back(self):
-        with self.lanes(OPENAI_SUBSCRIPTION=True):
-            busy = stop("no_lane", family="claude")
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.FRESH, busy],
-                                     "review": [review(unmet=["more"]), review(unmet=["more"])]})
-        assert rc == 2  # round 3 resumed the fallback (Codex still out) and paused
-        ck = read_ck(self.eng).state
-        assert ck.writer.seen
-        assert ck.fallback_lane == "OPENAI_SUBSCRIPTION"
-        with self.lanes(OPENAI_SUBSCRIPTION=False):
-            rc, s = self.run_engine({"write": [self.BACK], "review": [CLEAN]})
-        assert rc == 0, self.blocked
-        assert s.calls[0][:2] == ("worker", None)
-        assert not s.requests[0].delta_file
-        assert s.calls[1] == ("reviewer", None, "openai")
 
     # contract 4: an answer that picked a lane says whether it is a fallback (and from which first lane, when it can)
     SONNET_FB: ClassVar[Any] = dict(FRESH, rung=1, fallback=True, fallback_reason="ceiling", first_lane="OPENAI_SUBSCRIPTION")
     CODEX_FIRST: ClassVar[Any] = dict(BACK, rung=0, fallback=False, fallback_reason=None)
     no_checks: ClassVar[Any] = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[])])  # FRESH writes no f.txt
 
-    def test_the_answer_a_fallback_answer_is_retaken_fresh_once_its_first_lane_is_back(self):
-        with self.lanes(OPENAI_SUBSCRIPTION=False):
-            rc, s = self.run_engine({"plan": [self.no_checks], "write": [self.SONNET_FB, self.CODEX_FIRST, self.CODEX_FIRST],
-                                     "review": [review(unmet=["more"])] * 2 + [CLEAN]})
-        assert rc == 0, self.blocked
-        assert [c[1] for c in s.calls if c[0] == "worker"] == [None, None, "w3"]
-        assert [c[2] for c in s.calls if c[0] == "reviewer"] == ["xai", "openai", "openai"]
 
-    def test_the_answer_a_fallback_answer_is_resumed_while_its_first_lane_is_out(self):
-        with self.lanes(OPENAI_SUBSCRIPTION=True):
-            rc, s = self.run_engine({"plan": [self.no_checks], "write": [self.SONNET_FB, self.SONNET_FB],
-                                     "review": [review(unmet=["more"]), CLEAN]})
-        assert rc == 0, self.blocked
-        assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "w2"]
 
-    def test_the_answer_a_fallback_answer_with_no_lane_known_is_asked_fresh_next_round(self):
-        anon = dict(self.SONNET_FB)
-        anon.pop("first_lane")
-        with mock.patch.object(lroute, "status_json") as st:
-            rc, s = self.run_engine({"plan": [self.no_checks], "write": [anon, self.CODEX_FIRST],
-                                     "review": [review(unmet=["more"]), CLEAN]})
-        assert rc == 0, self.blocked
-        assert [c[1] for c in s.calls if c[0] == "worker"] == [None, None]
-        st.assert_not_called()
 
     def test_the_answer_a_first_choice_answer_is_resumed(self):
         with mock.patch.object(lroute, "status_json") as st:

@@ -8,21 +8,21 @@ from dataclasses import dataclass, replace
 from typing import Protocol, assert_never
 
 from tlkernel import askspecs
+from tlkernel import closeeffects as effects
+from tlkernel import lanepauses as pauses
 from tlkernel import runoutcome as oc
 from tlkernel.checkpoint import Checkpoint, Notes
+from tlkernel.effectinterpret import CheckpointLedger, interpret
 from tlkernel.enums import Outcome
 from tlkernel.kinds import ASKS, PAUSES, Kind
 from tlkernel.parks import Park
 from tlkernel.run import RunFinish
 
-from taskloop.adapters import beadtools
 from taskloop.app.pipeline import ended as stored_end
+from taskloop.app.pipeline.adapter_ports import PeekBead
 from taskloop.app.pipeline.closing_host import CloseHost
 from taskloop.app.pipeline.outcomes import DONE
 from taskloop.app.pipeline.ports import AskRules, ParkBook
-from taskloop.domain import effects
-from taskloop.domain.interpret import CheckpointLedger, interpret
-from taskloop.domain.lanes import pauses
 
 
 class DecideStep(Protocol):
@@ -69,8 +69,9 @@ class CloseParts:
 class Closer:
     """The close of a run: the order of its steps."""
 
-    def __init__(self, host: CloseHost, parts: CloseParts, rules: AskRules, parks: ParkBook) -> None:
-        self.host = host
+    def __init__(self, context: CloseHost, parts: CloseParts, rules: AskRules, parks: ParkBook, peek: PeekBead) -> None:
+        self.host = context
+        self.peek = peek
         self.rules = rules
         self.parks = parks
         self.decide = parts.decide
@@ -151,7 +152,7 @@ class Closer:
         e = self.host
         if e.dry or done.finished or (done.kind is not Kind.NOOP and done.kind not in PAUSES):
             return
-        bead = beadtools.peek(e.store, e.bead)
+        bead = self.peek(e.store, e.bead)
         if bead is None:
             return
         rec = self.parks.paused( bead, done.kind, e.run_id, e.clock.now(), reason=e.pause_reason,

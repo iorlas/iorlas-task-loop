@@ -11,16 +11,16 @@ A case is a folder tests/fixtures/exchanges/<role>/<case>/ (role: planner, write
 
 `replay` runs the engine with the fake route (tltestkit.fake_route.Script) answering the recorded role's call with answer.json, then checks
 that the parser takes the answer, the engine called the roles meta.json lists, the call's input is input.txt, and its size is under
-the role's cap (domain/lanes/caps). A prompt, schema or parser change that breaks a recorded exchange fails here."""
+the role's cap (tlkernel/lanecaps). A prompt, schema or parser change that breaks a recorded exchange fails here."""
 import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from taskloop.domain.lanes import caps
 from taskloop.domain.lanes.roles import ROLES
 from tlkernel import answers
+from tlkernel import lanecaps as caps
 
 ROOT = Path(__file__).resolve().parents[2]
 EXCHANGES = ROOT / "tests" / "fixtures" / "exchanges"

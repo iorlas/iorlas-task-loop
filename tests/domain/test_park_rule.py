@@ -1,4 +1,4 @@
-"""tl-7y6.7.3: park is a state transition. The rule (domain/beads/park.py) and the d5f.39 replay: 7 runs on an unchanged bead."""
+"""tl-7y6.7.3: park is a state transition. The rule (tlkernel/beadpark.py) and the d5f.39 replay: 7 runs on an unchanged bead."""
 import json
 import sys
 from pathlib import Path
@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
-from taskloop.domain.beads import park
+from tlkernel import beadpark as park
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
 from tlkernel.parks import Park

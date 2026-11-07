@@ -1,10 +1,10 @@
 """Fixer: the fix command of a check (a formatter) runs before the round, so the tree the checks see is already formatted."""
 from tlkernel.argv import argv_of
+from tlkernel.checkmatchers import output_signature, safe_name
 from tlkernel.checks import Check, CheckResult
 
 from taskloop.app.checks.host import CheckHost
 from taskloop.app.checks.step_env import step_env
-from taskloop.domain.checks.matchers import output_signature, safe_name
 from taskloop.domain.checks.plan import CheckPlan
 from taskloop.domain.checks.specs import due
 

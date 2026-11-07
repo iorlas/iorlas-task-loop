@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from support.checked import run_checked
 from taskloop.adapters.git import RealGit
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.fixer import Fixer
@@ -18,6 +17,7 @@ from taskloop.app.run import engine
 from tlkernel.checks import CheckRun
 from tlkernel.kinds import Kind
 from tlkernel.waitenums import WaitWhat
+from tltestkit.checked import run_checked
 from tltestkit.checks import ck, res
 
 RETRY_RED = ("checks", "checks_fixed", "checks_exhausted", "review_exhausted")

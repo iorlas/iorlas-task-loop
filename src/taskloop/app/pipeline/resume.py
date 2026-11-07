@@ -5,6 +5,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel import planbrief as brief
 from tlkernel import plancheck, wire
 from tlkernel.ask import Ask
 from tlkernel.askenums import AskClass
@@ -16,7 +17,6 @@ from tlkernel.wire import Open
 
 from taskloop.app.pipeline.decide import CONFIRMED, OUTSIDE, Decision, World, resume_decision, stage_count
 from taskloop.app.pipeline.ports import HeadHistory, ReviewRestore
-from taskloop.domain.plan import brief
 
 KEEP_FOR_ACTIVE = ("plan_data", "accepted", "extra", "planner_ref", "brief_hash", "snap", "review")  # restored one by one, not copied over
 LATE = (
@@ -28,8 +28,6 @@ LATE = (
     "accepted_new",
     "writer",
     "writer_family",
-    "writer_fallback",
-    "fallback_lane",
 )  # only a checkpoint this engine left (HEAD is where it was) hands these on
 GATE_NOTE = (
     "Every stage was accepted, then the gate failed on the tree rebased onto the latest base (often another task landed "

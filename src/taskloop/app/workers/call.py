@@ -17,23 +17,20 @@ class Call:
         cwd: Any,
         full: str,
         text: str,
-        writer: str | None,
         delta: str | None,
         key: tuple[Any, ...],
         thread: str,
-        writer_family: str | None,
         step: str | None,
         title: str,
     ) -> None:
         self.node, self.role, self.schema, self.cwd, self.full, self.text = node, role, schema, cwd, full, text
-        self.writer, self.delta, self.key, self.thread, self.writer_family = writer, delta, key, thread, writer_family
+        self.delta, self.key, self.thread = delta, key, thread
         self.step, self.title, self.visual = step, title, False
         self.boundary = False
         self.tries = 1  # calls that came back with no valid answer, from 1: two at most (RetryPlan invalid_output)
         self.counts: dict[str, float] = {"attempt": 0}  # Ctx's counters
         self.denied_retried = False
         self.secret_fp = False  # the last denial was a `secrets` stop on a heredoc body that merely names .env
-        self.out_on = ""  # the lane that went out under this step (the writer's fallback lane)
         self.finished: Answer | None = None  # an answer the last run left on disk
         self.state: callstate.CallState | None = None
         self.prepared: worker_identity.PreparedCall | None = None

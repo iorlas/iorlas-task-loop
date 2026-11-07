@@ -12,10 +12,11 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes, procsim
 from support.aging import age
 from support.cfgs import PROFILE_PATTERNS
-from support.engine_case import CAP_PARKS, EngineTest, full, no_repo, sh, stop
+from support.engine_case import CAP_PARKS, EngineTest, full, no_repo, stop
 from support.plans import BEAD, CAT_ENV, CLEAN, FALSE, PLAN, WRITE, review, verdict
 
 from tltestkit.checks import ck
+from tltestkit.shellkit import sh
 
 # isort: split
 import hashlib
@@ -42,11 +43,11 @@ from taskloop.app.run import engine, entry, running
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.slots.lease import Lease
 from taskloop.app.track import outcome_line
-from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks import retry
 from taskloop.domain.lanes.matchers import read_only_command
-from taskloop.domain.plan.matchers import AcceptanceText
 from taskloop.domain.write.matchers import count_tests
+from tlkernel import checkmatchers as check_matchers
+from tlkernel.acceptancetext import AcceptanceText
 from tlkernel.config import EngineConfig
 from tlkernel.enums import Result
 from tlkernel.env import snapshot

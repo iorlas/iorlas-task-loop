@@ -7,7 +7,6 @@ from types import SimpleNamespace
 from unittest import mock
 
 from support.argv_checks import ArgvChecks
-from support.checked import run_checked
 from support.tlmain import tl_main
 
 from taskloop.adapters.spawner import RealSpawner
@@ -18,6 +17,7 @@ from tlkernel.childenv import CHECK_SECRETS
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env
 from tltestkit.case import Case
+from tltestkit.checked import run_checked
 from tltestkit.tmpdir import TemporaryDirectory
 
 

@@ -18,6 +18,7 @@ from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
 from support.plans import PLAN, WRITE
 
+import tltestkit.shellkit
 from taskloop.app.asks import ask_verbs, intake, owner_verbs
 from taskloop.app.pipeline import requests
 from taskloop.app.run.layout import prune_run_logs
@@ -183,7 +184,7 @@ class EngineRequests(te.EngineTest):
         assert (close.outcome.value, close.why_code) == ("blocked", WhyCode.PAUSED)
         assert close.why.startswith("parked: by the owner")
         assert self.eng.checkpoints.read() is not None
-        te.sh("git", "rev-parse", "--verify", "-q", "task/t-1", cwd=self.wt)  # the branch is kept
+        tltestkit.shellkit.sh("git", "rev-parse", "--verify", "-q", "task/t-1", cwd=self.wt)  # the branch is kept
         assert self.eng.result().outcome == "parked"
 
     def test_stop_ends_the_run_through_the_halt_path(self):

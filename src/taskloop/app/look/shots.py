@@ -8,6 +8,7 @@ from typing import Any
 from tlartifacts import store
 from tlartifacts.keep import Keeper
 from tlkernel.artifact import ArtifactMeta, ArtifactSlot
+from tlkernel.checkmatchers import glob_re
 from tlkernel.gitport import Git
 from tlkernel.plancheck import StageData
 from tlkernel.slots import SlotGitError
@@ -17,7 +18,6 @@ from tlkernel.wire import Refused
 from taskloop.adapters import looks
 from taskloop.app.look.host import LookHost, LookPorts
 from taskloop.app.look.state import LookState
-from taskloop.domain.checks.matchers import glob_re
 from taskloop.domain.look.matchers import safe_name
 
 IMAGE_EXT = (".png", ".jpg", ".jpeg")

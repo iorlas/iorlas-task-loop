@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Protocol
 
 from tlkernel import answers
+from tlkernel import lanecaps as caps
 from tlkernel import log as rec
 from tlkernel.bead import Bead
 from tlkernel.delegate import DelegateResult, RunRequest
@@ -20,7 +21,6 @@ from tlkernel.wire import Open
 from taskloop.app.pipeline.adapter_ports import DelegateEnv
 from taskloop.app.pipeline.ports import TrustRefusal
 from taskloop.app.pipeline.reflect_prompt import REFLECT_PROMPT
-from taskloop.domain.lanes import caps
 
 
 class ReflectConfig(Protocol):

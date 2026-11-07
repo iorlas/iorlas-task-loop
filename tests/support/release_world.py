@@ -20,7 +20,6 @@ import support.paths  # noqa: F401
 from support import homes
 
 # isort: split
-from support.checked import run_checked
 from support.fakes import FakeBeadStore
 from taskloop.adapters import beadtools
 from taskloop.adapters.git import RealGit
@@ -29,6 +28,7 @@ from taskloop.app.release.shell import say
 from taskloop.app.wire import closeguard
 from tlkernel.env import snapshot
 from tlkernel.procport import Ran, Spawner
+from tltestkit.checked import run_checked
 
 PLUGIN = ".claude-plugin/plugin.json"
 MARKET = ".claude-plugin/marketplace.json"

@@ -15,10 +15,10 @@ from support.narrow_hosts import FakeWaitsHost
 from taskloop.adapters import deadline
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.waits import Waits
-from taskloop.domain.lanes.liveness import LIVENESS
 from tlkernel import log as rec
 from tlkernel.config import EngineConfig
 from tlkernel.kinds import Kind
+from tlkernel.lanesliveness import LIVENESS
 from tltestkit.case import Case
 
 
@@ -44,7 +44,7 @@ class RunDeadline(Case):
         def timed(secs: float, what: str) -> contextlib.AbstractContextManager[None]:
             seen.append(secs)
             return contextlib.nullcontext()
-        with mock.patch("taskloop.app.pipeline.lifecycle.deadline", side_effect=timed), \
+        with mock.patch.object(once, "deadline", side_effect=timed), \
                 mock.patch.object(once, "body"), mock.patch.object(once, "close_out"):
             once.go()
         assert seen == [45 * 60]

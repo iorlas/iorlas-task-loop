@@ -10,6 +10,7 @@ from tlkernel import lifecyclematchers as lifecycle
 from tlkernel import log as rec
 from tlkernel import plancheck, wire
 from tlkernel import runoutcome as oc
+from tlkernel import workswitch as switch
 from tlkernel.ask import Ask
 from tlkernel.checkpoint import CloseIntent, EndRec
 from tlkernel.config import EngineConfig
@@ -23,18 +24,17 @@ from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
+from tlkernel.repourl import repo_url
 from tlkernel.run import LoopLogLine, Reexec, RunFinish, RunManifest, RunState
 from tlkernel.slots import git_probe
 from tlkernel.trace import RunTrace
 
-from taskloop.adapters import ident
-from taskloop.adapters.repourl import repo_url
 from taskloop.app.pipeline import ended, summaries
 from taskloop.app.pipeline import trace as runtrace
+from taskloop.app.pipeline.adapter_ports import Version
 from taskloop.app.pipeline.closing_record import RecordHost, RecordRun
 from taskloop.app.pipeline.finish import answer
 from taskloop.app.pipeline.finish import outcome as finished_outcome
-from taskloop.domain.work import switch
 
 
 class JournalCall(Protocol):
@@ -143,8 +143,9 @@ class JournalHost(RecordHost, ended.HostFacts, Protocol):
 
 
 class Journal:
-    def __init__(self, host: JournalHost, slot: Callable[[], str], repo_of: Callable[[Git, str | Path], str]) -> None:
-        self.host, self.slot, self.repo_of = host, slot, repo_of
+    def __init__(self, context: JournalHost, slot: Callable[[], str], repo_of: Callable[[Git, str | Path], str], version: Version) -> None:
+        self.host, self.slot, self.repo_of = context, slot, repo_of
+        self.version = version
 
     def origin(self) -> dict[str, str]:
         """Why this run started and the run before it: the checkpoint's run when there was one, else the bead's previous
@@ -170,7 +171,7 @@ class Journal:
         e.run_logged = True
         if e.reexec:  # the run record is in the log already (the exec kept the log): a note says what happened
             fallback = " (fallback after a crash)" if e.reexec.fallback else ""
-            e.log.note(f"task-loop {ident.plugin_version() or '?'} took over run {e.run_id} from {e.reexec.frm}{fallback}")
+            e.log.note(f"task-loop {self.version() or '?'} took over run {e.run_id} from {e.reexec.frm}{fallback}")
             return
         bundle = RunLocator(e.home).get(e.run_id)
         why = self.origin()
@@ -259,7 +260,7 @@ class Journal:
                         worktree=e.wt,
                         branch=git_probe(lambda: e.git.branch(e.wt), ""),
                         coordinator_session=e.session,
-                        version=ident.plugin_version(),
+                        version=self.version(),
                         started=e.t0,
                         ended=record.ended,
                         outcome=outcome,

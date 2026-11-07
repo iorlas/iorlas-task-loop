@@ -13,7 +13,7 @@ from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.settle import Counters, Settle
 from taskloop.app.loop.take import Taker
 from taskloop.app.slots.pool import Slot
-from taskloop.domain.lanes import pauses
+from tlkernel import lanepauses as pauses
 from tlkernel.bead import BdError, Bead
 from tlkernel.beadsport import BdFailure
 from tlkernel.config import LoopConfig

@@ -8,8 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
-from taskloop.domain import effects as fx
 from tlkernel import askspecs
+from tlkernel import closeeffects as fx
 from tlkernel import runoutcome as oc
 from tlkernel.kinds import ASKS, FINISH, PAUSES, Kind
 

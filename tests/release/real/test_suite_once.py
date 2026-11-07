@@ -12,7 +12,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.checked import run_checked
 
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
@@ -24,6 +23,7 @@ from tlkernel.env import Env
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.paths import ConfigDir
 from tlkernel.runkey import BaseSha
+from tltestkit.checked import run_checked
 
 
 class Verify(Case):
