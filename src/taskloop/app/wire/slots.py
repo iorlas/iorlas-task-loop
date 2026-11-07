@@ -214,6 +214,13 @@ def wait_slot(repo: str, cfg: SlotsConfig, why: str, bead: str = "", stop: Calla
     return slots_line.wait_slot(slot_env(repo, store, cfg, spawner=spawner, git=git, who=who), why, bead, stop, sleep, poll, on_wait, prio)
 
 
+def uninitialised(repo: str, cfg: SlotsConfig, store: Beads | None = None, *, spawner: Spawner, git: Git, who: Identity) -> str:
+    """Why no slot can ever come free (the profile counts slots, this machine has no slot bead), or "": a waiter would queue for good."""
+    if cfg.count < 1 or SlotPool(slot_env(repo, store, cfg, spawner=spawner, git=git, who=who)).slots():
+        return ""
+    return f"no slots on {hostname()}: run `tl slot init` ({cfg.count} in the profile)"
+
+
 def take_named_slot(repo: str, name: str, cfg: SlotsConfig, why: str, bead: str = "",
                     store: Beads | None = None, *, spawner: Spawner, git: Git, who: Identity) -> tuple[BeadId | None, str]:
     """(slot bead, "") when this session now holds slot `name`, or (None, why not)."""

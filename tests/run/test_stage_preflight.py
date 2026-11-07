@@ -19,7 +19,7 @@ from support.tlmain import tl
 from taskloop.app.run import entry
 from taskloop.app.run.engine import Engine
 from taskloop.app.run.layout import RunLayout
-from taskloop.contracts.config import EngineConfig
+from taskloop.contracts.config import EngineConfig, SlotsConfig
 from taskloop.contracts.enums import Result, Step
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitfacts import StatusRow
@@ -241,3 +241,14 @@ class StagePreflight(Case):
         assert opened is not None
         manifest = opened.manifest
         assert (manifest.mode, manifest.owner, manifest.session, manifest.attempts) == ("auto-next", "mac-owner", "mac-session", 2)
+
+    def test_any_slot_without_slot_beads_says_so_instead_of_queueing(self):
+        """tl-erhs: slots.count is set but `tl slot init` never ran, so no slot can come free: --wait must not queue for good."""
+        self.a.slot, self.a.worktree, self.a.dry_run, self.a.wait = "any", None, False, True
+        with mock.patch.object(entry.wslots, "profile_slots", return_value=SlotsConfig(count=2)), \
+                mock.patch.object(entry.wslots, "wait_slot") as wait:
+            report = entry.run_any_slot(self.a, str(self.wt), self.cfg, self.store, env=self.env,
+                                        spawner=self.spawner, git=self.git, who=self.who)
+        wait.assert_not_called()
+        assert report.outcome is Result.TAKEN
+        assert "tl slot init" in report.why
