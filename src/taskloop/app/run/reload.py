@@ -30,7 +30,7 @@ class Exec(BaseException):
 
 def newer(env: Env, root: Path = ident.PLUGIN_ROOT) -> tuple[str, Path] | None:
     """(version, dir) of the install the loop would move to, or None: the engine's step-boundary look."""
-    found = Installs(ConfigDir(ident.config_dir(env)), root, lambda: catalog.installed_version("task-loop", ident.claude_dir(env)),
+    found = Installs(ConfigDir(ident.config_dir(env)), root, lambda: catalog.installed_version(ident.claude_dir(env)),
                      lambda: pins.read_pin(env).task_loop or "", now=trail.now).move_to()
     return (found.version, found.dir) if found else None
 

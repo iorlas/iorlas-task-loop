@@ -48,8 +48,8 @@
                                                  the M2 scorecard of a window (see SKILL.md, Report)
   tl.py lost [--repo DIR] [--since T] [--json]  bead-branch commits that are not landed, reclaimed or pending
   tl.py dash ensure|stop|status|url             the dashboard server (one per machine)
-  tl.py pin [VERSION] [--delegate V] [--clear]  pin the plugin install a loop and run-task use (owner override; the loop never pins)
-  tl.py rollback                                pin the previous task-loop version (the delegate stays as it is)
+  tl.py pin [VERSION] [--clear]                 pin the plugin install a loop and run-task use (owner override; the loop never pins)
+  tl.py rollback                                pin the previous task-loop version
   tl.py cutover check [--json]                  live runs and loops on this machine; exit 1 if any (docs/cutover.md)
   tl.py status [--brief] [--json] [--repo DIR]  loop RUNNING or NOT RUNNING, asks, slots, versions, recent beads (<= 40 lines, 8 KB)
   tl.py wait --bead ID|--any [--timeout S]      block until the run ends or an ask opens; one line, the exit code says which (--help)
@@ -279,7 +279,6 @@ def loop_parsers(sp):
     p.add_argument("--json", action="store_true")
     p = sp.add_parser("pin", help="pin the plugin install loops and runs use (owner override; --clear removes the pin)")
     p.add_argument("version", nargs="?", help="task-loop version (a cache dir under ~/.claude/plugins/cache)")
-    p.add_argument("--delegate", metavar="V", help="delegate version")
     p.add_argument("--clear", action="store_true")
     sp.add_parser("rollback", help="pin the previous task-loop version")
     p = sp.add_parser("cutover", help="cutover check: live runs and loops; exit 1 if any (docs/cutover.md)")
@@ -453,7 +452,7 @@ VERBS: Final[dict[str, Handler]] = {
     "worktrees": lambda a, c: wslots.owned_worktrees(c.git, c.who, a.op),
     "dash": lambda a, c: wire_dash.run(a.op, c.env, c.spawner),
     "factory": lambda a, c: cli_factory.run(a, c.env, c.spawner, c.who, c.here),
-    "pin": lambda a, c: pins.run_pin(c.env, a.version, a.delegate, a.clear, c.git),
+    "pin": lambda a, c: pins.run_pin(c.env, a.version, a.clear, c.git),
     "rollback": lambda a, c: pins.run_rollback(c.env, c.git),
     "doctor": v_doctor,
     "slot": v_slot,

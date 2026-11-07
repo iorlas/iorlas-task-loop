@@ -183,8 +183,8 @@ def install_problems(plugin_root: Path, env: Env) -> list[str]:
     if OWNERSHIP not in agents.splitlines():
         out.append(f"{plugin_root / 'AGENTS.md'} has no '{OWNERSHIP}' section (who may write the checkout, the cache, the ports)")
     claude = claude_dir(env)
-    version = catalog.installed_version("task-loop", claude)
-    installed = catalog.cache_dirs("task-loop", claude).get(version)
+    version = catalog.installed_version(claude)
+    installed = catalog.cache_dirs(claude).get(version)
     if installed:
         out += [f"installed task-loop {version}: {p}" for p in manifest.verify(installed)]
     return out
