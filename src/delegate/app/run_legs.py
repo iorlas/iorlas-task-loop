@@ -90,3 +90,43 @@ def lane_wait(
         )
         res = merge(res, again)
     return res
+
+
+def worker_failure(res: dict[str, Json]) -> bool:
+    """Only transient bead failures belong to the one worker retry."""
+    facts = answer.result(as_opt_str(res.get("outcome")), **{k: v for k, v in res.items() if k != "outcome"})
+    stop = as_opt_obj(facts.get("stop")) or {}
+    retry = as_opt_obj(stop.get("retry")) or {}
+    return (
+        stop.get("scope") == "bead"
+        and stop.get("permanence") == "transient"
+        and retry.get("kind") in ("none", "predicted")
+        and stop.get("reason") in ("worker_failed", "timeout")
+    )
+
+
+def hurt_write(res: dict[str, Json], args: env.Args) -> bool:
+    """A timed-out or terminated writer must move to another pair."""
+    return (
+        getattr(args, "role", None) == "worker"
+        and worker_failure(res)
+        and (res.get("outcome") == "timeout" or res.get("exit_code") == -15)
+    )
+
+
+def retry(
+    res: dict[str, Json],
+    launch_one: Callable[[str, env.Args, str], dict[str, Json]],
+    brief: str,
+    args: env.Args,
+) -> dict[str, Json]:
+    """Retry one real worker leg, resuming only a resumable session; keep both charges."""
+    if not worker_failure(res) or hurt_write(res, args):
+        return res
+    ref = as_opt_str(res.get("ref")) if res.get("resumable") else None
+    again = launch_one(
+        CONTINUE_NOTE if ref else brief,
+        argparse.Namespace(**dict(vars(args), resume=ref)),
+        "worker_retry",
+    )
+    return merge(res, again)
