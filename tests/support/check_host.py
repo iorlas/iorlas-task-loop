@@ -11,9 +11,9 @@ from support.facts import fake_facts
 from support.memstores import fake_stores
 from support.who import who
 from support.world import MARKERS, SlotWorld
+from taskloop.app.checks.shell import Shell
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.run import bead_env
-from taskloop.app.run.shell import Shell
 from taskloop.stores.bundle import Stores
 from tlgate.runner import Checker
 from tlgate.testing import RecordedWaits

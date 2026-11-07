@@ -5,7 +5,7 @@ from unittest import mock
 import pytest
 
 from taskloop.adapters import check_net
-from taskloop.app.run.shell import Shell
+from taskloop.app.checks.shell import Shell
 from tlgate.domain.inputs import config_digest
 from tlgate.domain.specs import repo_check
 from tlkernel import log as rec
@@ -65,7 +65,7 @@ def host(isolate):
 
 def argv_of_check(h):
     with mock.patch.object(check_net, "plan", return_value=check_net.Plan(("netoff", "--"), "")), \
-            mock.patch("taskloop.app.run.shell.check_nice", return_value=()):
+            mock.patch("taskloop.app.checks.shell.check_nice", return_value=()):
         Shell(h).stream(["just", "check"], None, {}, False, [], 60, "m1", "check", 0.0, mock.Mock())
     return h.spawner.stream.call_args.args[0]
 
@@ -95,7 +95,7 @@ def test_a_host_that_cannot_isolate_refuses_the_check_with_the_reason():
 def test_network_permission_on_a_host_that_cannot_isolate(network):
     h = host(True)
     with mock.patch.object(check_net, "current", return_value=check_net.Plan((), "cannot remove the network")), \
-            mock.patch("taskloop.app.run.shell.check_nice", return_value=()):
+            mock.patch("taskloop.app.checks.shell.check_nice", return_value=()):
         if network:
             Shell(h).stream(["just", "check"], None, {}, False, [], 60, "m1", "check", 0.0, mock.Mock(), network=True)
             assert h.spawner.stream.call_args.args[0] == ["just", "check"]

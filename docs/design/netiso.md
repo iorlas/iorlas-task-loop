@@ -21,7 +21,7 @@ So the bead's blocker "no current host can run it" is already false for pix. A p
 
 ## Where the change goes
 
-One place builds a check's argv: `app/run/shell.py` `RunShell.stream`, the branch `what in {"check", "check fix"}`, which already prefixes
+One place builds a check's argv: `app/checks/shell.py` `RunShell.stream`, the branch `what in {"check", "check fix"}`, which already prefixes
 `check_nice(PATH)`. The new prefix goes next to it, from a pure function in `adapters/` (a new `check_net.py`):
 
 ```

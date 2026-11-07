@@ -150,7 +150,7 @@ class Sim:
 
     def sp_stream(self, real: Callable[..., Any]) -> Callable[..., Any]:
         def run(argv: Any, *, cwd: Any = None, env: Any = None, on_stdout: Any = None, on_stderr: Any = None, **kw: Any) -> Any:
-            bare = procsim.unniced(argv) if isinstance(argv, (list, tuple)) else argv  # app/run/shell.py
+            bare = procsim.unniced(argv) if isinstance(argv, (list, tuple)) else argv  # app/checks/shell.py
             if not is_git(bare):
                 return real(argv, cwd=cwd, env=env, on_stdout=on_stdout, on_stderr=on_stderr, **kw)
             rc, out, err = self.answer(list(bare), cwd, env, b"")
