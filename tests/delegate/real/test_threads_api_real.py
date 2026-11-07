@@ -10,7 +10,6 @@ from support.procsim import real_proc
 from delegate import api
 from delegate.app import env
 
-
 LIMIT_S = 60  # each test runs a fake CLI and git
 
 
