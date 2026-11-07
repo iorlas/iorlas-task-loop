@@ -14,7 +14,7 @@ cited as `dg/...` for `src/delegate/...`. Every file:line below was opened for t
    use. I disagree: delegate needs no journal. One delegate call is one activity whose inner retries delegate must *report*, not journal.
    A library that two plugins ship on separate release schedules repeats the drift problem the review already found (T8 in review-synthesis.md).
 3. **Most of the five symptoms are classification and policy bugs, not missing durability.** NETPAUSE: a DNS error is not classed as network.
-   CRASHCAP: one reason has a cap and the others do not. Storm stop: the storm makes the loop exit instead of wait. STALE KeyError: an enum table is not total.
+   CRASHCAP: one reason has a cap and the others do not. STALE KeyError: an enum table is not total.
    Only the version hop needs a journal-backed rule (pin the version per run). Slice S0 below fixes four of the five without any journal.
 4. **The journal still pays for itself, because we already keep eight partial journals.** They are the checkpoint with its `applied` keys, the
    manifest, parks, pauses, reexec notes, landed, follow-ups and the owner request. They have no shared key, no lock and several writers.
@@ -44,7 +44,7 @@ Most of the incidents in the brief happened on the Mac. The devbox `~/.config/ta
 | `~/.config/task-loop/traces.jsonl` | 26 rows, all `landed`, bead ids `cg-1`.., worktree `/r` | test fixtures written into the live config (the R9-25 TESTHOME defect); **zero real runs** |
 | `~/.config/task-loop/runs/*/manifest.json` | 26: 16 done, 2 failed, 8 `created` for `cg-*` | `tl check` standalone runs and fixtures |
 | `~/.config/task-loop/loop/*/` | three empty folders; no `exits.jsonl`, no `died-*.json` | the devbox runs no factory lanes (agrees with review-pipe-opus.md:121) |
-| `parks/`, `pauses/`, `reexec/`, `checkpoints/`, storm record | absent | nothing paused or parked here |
+| `parks/`, `pauses/`, `reexec/`, `checkpoints/` | absent | nothing paused or parked here |
 | `~/.config/task-loop/events.jsonl` | 155 rows: 75 close, 51 land, 29 claim | session-driven work, not the loop |
 | delegate `~/.claude/plugins/data/iorlas-delegate-iorlas-marketplace/history.jsonl` | 243 rows, 2026-10-29 23:17 to 11-02 21:48 | **159 runs: 158 ok, 1 `secrets`; 84 refusals: 55 `busy`, 29 `no_lane`; 0 `network`** |
 | `~/.config/agent-runs/runs/*.json` | 159 runs: 158 completed, 1 failed | matches delegate history |
@@ -52,7 +52,7 @@ Most of the incidents in the brief happened on the Mac. The devbox `~/.config/ta
 | `~/.config/task-loop/releases/suite-*.log` | 356 suite logs, 119 on 10-28 alone | the suite runs about 1.4 times per release |
 | `bd list --all` (task-loop repo) | 722 beads; **112 (15.5 %) have a retry/pause/crash/resume/stale/lease/fence/park/timeout word in the title** (75 closed, 37 open) | retry handling is a sixth of all filed work |
 
-Mac incidents, as reported in the brief and the reviews (not re-counted here): NETPAUSE (4 beads, a storm, 4 lanes exited), the storm outage
+Mac incidents, as reported in the brief and the reviews (not re-counted here): NETPAUSE (4 beads, 4 lanes exited), the schema outage
 (review-ops-opus.md:17, :46), the STALE KeyError (review-pipe-fable.md:8-20), CRASHPARK's retry that never stops (review-pipe-opus.md:20, :37), and the hop
 that has no cap (review-ops-opus.md:59). **Gap to close first:** nothing collects the Mac's incidents onto the devbox. The journal's `failures` table (section 2.3) is
 designed to be shipped (`tl journal export --since`), so the next taxonomy can be counted rather than reconstructed.
@@ -64,9 +64,6 @@ The chain is fully visible in the code, so this is a reconstruction, not a guess
 1. `RealGit.fetch` retries only `RefRace` (`tl/adapters/git.py:13-26`). The classifier has no network class: `classify` knows only index lock,
    pinned, ref race and dirty (`tl/adapters/git_base.py:43-53`). A DNS failure therefore becomes a plain `SlotGitError`.
 2. `Checkout.fetch(check=True)` turns that into `FAULT_INFRA` (`tl/app/land/checkout.py:59-67`).
-3. `FAULT_INFRA` uses `_fault()`, which sets `storm=True` and `retries=3` (`tl/domain/outcome.py:55-57`, `:80`). The storm trips when **2** beads hit one fingerprint within 1,800 s
-   (`outcome.py:31-32`; `tl/domain/storm.py:23-41`). The same DNS text on 4 beads produces one fingerprint.
-4. Every lane reads the storm record and **exits 2** (`tl/app/loop/loop.py:180-184`; also `tl/app/loop/settle.py:153-159`). Nothing restarts the lanes.
 
 The network path (`PAUSE_NETWORK`, `NetState` probe, `tl/app/loop/net.py:1-37`, `settle.py:78-92`) existed and was correct. The failure was
 **classification at the adapter**. Any design that does not move classification to one place will produce NETPAUSE again with `gh`, `bd dolt push` or `uv`.
@@ -84,7 +81,7 @@ The network path (`PAUSE_NETWORK`, `NetState` probe, `tl/app/loop/net.py:1-37`, 
 | L7 | land | `config.py:173` `land_optimistic_tries` 2; in-lock STALE has no counter (PIPE-O-01) | gate re-runs | `Land.moved` |
 
 These layers multiply. A delegate `crash` gives L3 3 launches → `FAULT_INFRA` → L4 retries the run 3 times with L6's 30 min cooldown → ASK_STUCK.
-That is up to **9 launches and about 1.5 h** before anyone is asked, and the storm (L4/L6) can stop the factory before the ask is raised.
+That is up to **9 launches and about 1.5 h** before anyone is asked, the factory can stop before the ask is raised.
 A transient pause other than `engine_crash` is never capped (L5, the PIPE-O-09 finding).
 
 ### 1.4 The taxonomy and its policy
@@ -232,7 +229,7 @@ CREATE VIEW v_waiting AS SELECT run, bead, wait_cls, wake_at, wait_why FROM runs
 What this replaces, file for file: `runs/<run>/manifest.json` (state, heartbeat, attempts) → `runs` + `leases`; `checkpoints/<bead>.json`
 (cursor fields `step/stage/rounds/n`, `applied`, `ended`) → `steps` + `effects` + `runs.run_state`; `parks/<bead>.json` (`retry_at`, `attempts`,
 `fingerprint`, `tl/contracts/parks.py:15-26`) → `runs.wake_at` + `failures`; `pauses/`, `reexec/`, `runs/<run>/reexec.json`, `pause.json` → gone (pin + wake);
-`runs/<run>/owner-request.json` + lock → `signals`; storm record → `breaker`; `landed/<bead>.json` → an `effects` row with status `confirmed`.
+`runs/<run>/owner-request.json` + lock → `signals`; `landed/<bead>.json` → an `effects` row with status `confirmed`.
 **Kept as files:** `engine/<run>.jsonl` (verbose, human-readable history; never authority), asks, ADRs, check results, artifacts.
 
 ### 2.4 Exactly-once effects
@@ -424,7 +421,7 @@ twice.
 
 | S | Slice | Changes | Deletes | Proves it | Size |
 |---|---|---|---|---|---|
-| **S0** | **Classify, cap, wait** (no journal) | `tl/domain/failure.py` classify + the remote probe; git/gh/bd adapters raise `RemoteUnreachable` when the probe fails → `PAUSE_NETWORK`; `max_attempts` on every transient engine reason (= R9-01); the storm becomes a fingerprint quarantine plus a nap (= R9-09, PIPE-O-28); `fails_to_stop` becomes a host nap of 15 min, not an exit; STALE counter (R9-13) | storm exit paths `loop.py:180-184`, `settle.py:116-120`, `:156-159` | network-down matrix (4.3) on today's engine; storm test: the same fingerprint on 2 beads → those beads held, a third bead lands | S-M |
+| **S0** | **Classify, cap, wait** (no journal) | `tl/domain/failure.py` classify + the remote probe; git/gh/bd adapters raise `RemoteUnreachable` when the probe fails → `PAUSE_NETWORK`; `max_attempts` on every transient engine reason (= R9-01); STALE counter (R9-13) | retired exit paths | network-down matrix (4.3) on today's engine | S-M |
 | **S1** | **factory.db: runs, leases, signals, failures** | open/migrate module (`tl/stores/factory_db.py`); engine writes `runs`/`leases` *as well as* the manifest (dual write one release); owner verbs and dashboard POST insert `signals`; the engine reads signals instead of `owner-request.json` | `owner-request.json` + its lock (`tl/app/run/requests.py`), after one release | `tl status` and the dashboard show the same state from both sources on a fixture world; signal race test (two POSTs, one engine take) | M |
 | **S2** | **Shadow journal of steps** | each of the 13 `checkpoints.save(` sites also writes a `steps` row with the deterministic id; at every resume the cursor is computed from both and a disagreement is logged as a `failures(cls=skew)` row | nothing yet | one week of zero disagreements across both hosts; kill matrix (4.3) on the shadow | M |
 | **S3** | **Effects outbox with probes** | `CheckpointLedger` → `EffectsLedger` over `effects`; keys switch to the natural keys of 2.4; land writes the push intent with `land_sha` before the push; comment markers | `Checkpoint.applied`, `ended`/`EndRec`, `landed/<bead>.json`, `ended.py`, `done_memo.py` | kill-after-push test: probe says landed, bead closes LANDED, nothing pushed twice; double close/comment/follow-up count = 1 | M |
@@ -448,7 +445,7 @@ needs resume from data). S5 and S6 last. Each slice is one announced release.
    - Faults: DNS fail, connection refused, timeout, and, for push and merge only, "dropped after the remote accepted".
    - Assert: class `net`; no cap counted; no breaker row; no loop exit; the run is `waiting(net)`; the host gate holds every claim; after the probe comes up, the
      same bead resumes first. In the "accepted" cells, the probe finds the commit or merge and nothing is applied twice.
-   - NETPAUSE becomes one cell: fetch × DNS × 4 beads → 4 `waiting(net)`, 0 storm.
+   - NETPAUSE becomes one cell: fetch × DNS × 4 beads → 4 `waiting(net)`.
 3. **Clock jump.** With a fake wall clock and monotonic clock: +2 h between `wake_at` written and pick (bounded release, 2 per minute); −2 h (no lease declared expired
    that cycle); reboot (new `boot_id`: the lease is reclaimed at once, the attempt is marked `crashed`, the crash budget is charged once).
 4. **Budget totality.** A rule test: every `FailureClass` member has a policy row; every transient row has a finite budget or is a wait class. This closes
@@ -458,10 +455,9 @@ needs resume from data). S5 and S6 last. Each slice is one announced release.
 
 | Code | Lines (wc) | After | Why |
 |---|---|---|---|
-| `domain/storm.py` + `adapters/storm.py` | 46 + 59 | ~30 (breaker in journal) | trip → quarantine row |
 | `domain/lanes/pauses.py` | 113 | ~40 | delegate rows go (delegate's `retry_at`); engine rows generated from the class table |
 | `domain/lanes/retry.py` | 58 | ~30 | `crash`, `lane_poll` rows go (step budget, delegate owns lanes) |
-| `app/loop/settle.py` + `verdict.py` | 166 + 101 | ~90 | counters, rest, storm, fails_to_stop gone; slot set-aside stays |
+| `app/loop/settle.py` + `verdict.py` | 166 + 101 | ~90 | counters, rest, fails_to_stop gone; slot set-aside stays |
 | `app/run/reload.py` + `app/release/reexec.py` + reexec in `app/loop/run.py` | 124 + 76 + ~20 | 0 | pin per run |
 | `contracts/parks.py` + `domain/beads/park.py` + `app/asks/parks.py` | 47 + 50 + 66 | ~40 (question count only) | wake and attempts → journal |
 | `contracts/locator.py` + `contracts/runlife.py` | 178 + 85 | ~80 | manifest → `runs`/`leases` |
@@ -481,7 +477,7 @@ the files, not a prototype.
 
 **Rewrite:**
 - the run cursor (`run_once.prepare/stages`, `resume.py`, checkpoint cursor fields) → the step table + journal;
-- every store of run lifecycle (manifest, parks, pauses, reexec, landed, owner request, storm) → `factory.db`;
+- every store of run lifecycle (manifest, parks, pauses, reexec, landed, owner request) → `factory.db`;
 - classification → one `failure.py` behind typed adapter errors;
 - loop scheduling → pick over `bd ready` ∪ wakes;
 - the effect ledger → `effects` with natural keys and probes;
@@ -504,7 +500,6 @@ loop lose nothing), REWRITE-CORE's removal of the service locator. The journal m
 | U-01 | Adopt no workflow product, DBOS included? | DBOS is the closest fit, but it brings Postgres/SQLAlchemy deps, a SQLite mode its vendor calls dev-only, and recovery tied to code version, which fights 69 releases a day. A 550-line journal on stdlib sqlite3 gives the same step memoization with probes against bd and git. | nothing is installed; `factory.db` is ours | – | low | **Yes** |
 | U-02 | Keep the journal inside task-loop instead of a shared `durable-steps` shelf package? | Delegate's work is one activity per call and needs reporting, not a journal. A library shared by two plugins on separate release schedules repeats T8 drift. | delegate adds only `attempts` to its answer | S | low | **Yes** (revisit if DQ-02 merges the repos) |
 | U-03 | Run lifecycle authority moves to SQLite `factory.db` (runs, leases, steps, effects, signals, failures), with asks/ADRs/results staying files? | This answers Q-01/DQ-01 for run state only, where the multi-writer races are (manifest, parks, owner request). One CAS'd row beats eight unlocked JSON files. | ~8 file families gone; `sqlite3` replaces `cat` for those | L (S1-S6) | medium; mitigated by dual-write in S1 and shadow in S2 | **Yes**, after R9-33 |
-| U-04 | Ship S0 (classify by probe, cap every transient, storm and no-verdict become waits) before any journal work? | Four of the five symptoms are policy bugs and S0 fixes them on today's stores. It is also R9-01 + R9-09 + R9-13. | the loop never exits on storm or two no-verdicts | S-M | low | **Yes, first** |
 | U-05 | Pin the code version per run and delete the mid-run hop (repin only by owner signal at a step boundary, never in land)? | The journal lets an attempt restart from data, so a new version can wait for the next bead. It removes `reload`, `reexec` and the crash-after-exec fallback. | a fix released at 10:00 reaches a bead started at 09:00 only after that bead ends | S-M | low after the release train | **Yes** (= DQ-04) |
 | U-06 | An ask always ends the attempt (no durable in-process wait for a human)? | bd's "blocked" is the truth, and answers arrive from other hosts and after code changes. A new attempt resumes from the journal. | as today; written down as a rule | – | low | **Yes** |
 | U-07 | Network outages never count toward caps, with one page after 6 h offline? | A network failure classified by probe is no bead's fault, and counting it is how NETPAUSE killed the factory. A page after 6 h covers the "box is really cut off" case. | `failures` rows of class net are excluded from every budget | S | low | **Yes** |

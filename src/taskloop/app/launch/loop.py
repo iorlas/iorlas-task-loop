@@ -123,7 +123,6 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         chores=lambda: ops.chores(repo, spawner, env, git, who, store if isinstance(store, BdStore) else None),
         release_dead=lambda: ops.release_dead(repo, store, now(), git, who),
         ask_lines=lambda: ask_sweeps.orphan_lines(wasks.store(cfg)),
-        storm=lambda: ops.storm(repo, cfg, now, git=git),
         probe=lambda: make_probe(repo, env, git),
         event=functools.partial(trail.event, who),
         pid_alive=pidcheck.pid_alive,

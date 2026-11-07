@@ -30,9 +30,9 @@ class FailureLogging(Case):
     def test_retry_history_read_failure_is_logged_before_using_empty_history(self):
         host = mock.Mock(bead=BeadId("t-1"))
         host.clock.now.return_value = 100
-        with mock.patch("taskloop.adapters.storm.recent_closes", side_effect=OSError("unreadable")), \
+        with mock.patch("taskloop.adapters.closes.recent_closes", side_effect=OSError("unreadable")), \
                 mock.patch.object(Decide, "repo_id", return_value="repo"):
-            assert Decide(host, mock.Mock()).run(oc.make(Kind.PAUSE_LANE, "paused")) == Kind.PAUSE_LANE
+            assert Decide(host).run(oc.make(Kind.PAUSE_LANE, "paused")) == Kind.PAUSE_LANE
         self.assert_traceback(host.warn.call_args.args[0], "could not read retry history: unreadable")
 
     def test_settle_failure_is_logged_and_does_not_replace_the_run_outcome(self):

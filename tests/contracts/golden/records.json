@@ -968,8 +968,7 @@
   "asked": true,
   "cost": 0.25,
   "kind": "",
-  "fingerprint": "",
-  "storm": ""
+  "fingerprint": ""
  },
  "LoopLogLine": {
   "v": 4,
@@ -1798,11 +1797,9 @@
    "logs_kept": 5,
    "slot_fails_to_set_aside": 2,
    "quick_fail_min": 1.5,
-   "fails_to_stop": 2,
    "rest": 3600,
    "area_poll": 60,
    "area_say": 600,
-   "fault_cooldown": 1800,
    "absent": 600,
    "reload_fallback": 120,
    "keep_days": 14,
