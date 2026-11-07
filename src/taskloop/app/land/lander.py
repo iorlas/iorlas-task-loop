@@ -15,7 +15,7 @@ from tlkernel.lanesliveness import LIVENESS
 
 from taskloop.adapters.deadline import DeadlineExpired, deadline
 from taskloop.app.asks import trustroots
-from taskloop.app.land import verified
+from taskloop.app.land import gate
 from taskloop.app.land.commit import Commit
 from taskloop.app.land.fix_outside import FixOutside
 from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
@@ -114,7 +114,7 @@ class Lander:
             raise e.blocked_for(why, "ASK_DECISION", spec=askspecs.open_question(why, None, "decision"))
         if e.pending_land_validation:
             raise e.blocked_for("land retry validation still needs accepted checks and review; branch kept", "FAULT_LAND")
-        skipped = verified.refuse(verified.latest(e.last_run, lambda: e.stores.check_run(e.run_dir.name, None).get()), e)
+        skipped = gate.refuse(gate.latest(e.last_run, lambda: e.stores.check_run(e.run_dir.name, None).get()), e)
         if skipped:
             e.log.note(f"landing with deferred checks (no such resource here, inputs unchanged): {', '.join(skipped)}")
         merged = self.pr.settled() if self.pr else ""  # a PR the owner merged since: its merge commit is the land
