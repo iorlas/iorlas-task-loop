@@ -18,7 +18,6 @@ from taskloop.domain.review.availability import ReviewUnavailable
 
 ASK_KINDS: Final = ("ASK_STUCK",)
 VERBS: Final = {
-    lp.Retry: "retry",
     lp.NewThread: "new_thread",
     lp.Reroute: "reroute",
     lp.Yield: "pause",
@@ -55,12 +54,10 @@ class LaneActs:
         return waited, up is not False
 
     def ctx_of(self, c: Any) -> lp.Ctx:
-        k, now = c.counts, self.e.clock.now()
+        k = c.counts
         return lp.Ctx(
-            now,
             bool(c.resume),
             k["attempt"],
-            k["crashes"],
             c.denied_retried,
             c.secret_fp,
             c.node,
@@ -88,8 +85,6 @@ class LaneActs:
         """Do what lane_policy.decide said about a stopped call. A Yield or Fail ends the step (Blocked); the rest set up the next call."""
         self.record(c, stop, a)
         step = c.step or c.node
-        if isinstance(a, lp.Retry):
-            return self.rest(c, res, stop, a, step)
         if isinstance(a, lp.NewThread):
             self.e.steps.move(
                 step, "denied_retry" if a.note == "apply_patch" else "lane_out", "%s: a new thread" % (stop.reason or "the lane is out")
@@ -124,22 +119,6 @@ class LaneActs:
         e.steps.move("pause", "paused", f"lane for {c.node}: only the writer's own family ({c.writer_family}) answered")
         raise self.wc.ops.blocked(why, "PAUSE_LANE")
 
-    def rest(self, c: Any, res: DelegateResult, stop: lp.Stop, a: lp.Retry, step: str) -> None:
-        e = self.e
-        secs = max(0.0, a.not_before - e.clock.now())
-        if secs:
-            e.warn(f"{c.node}: delegate crashed ({(res.say or stop.reason)[:160]}), trying again in {int(secs)} s")
-            e.steps.move(
-                step,
-                "delegate_crash",
-                f"delegate crashed ({stop.reason}): {int(secs)} s",
-            )
-            wid = e.waits.start(WaitWhat.DELEGATE_CRASH, stop.lane or "", e.clock.now() + secs)
-            e.halt_point(wait=secs)
-            e.waits.add(secs, WaitWhat.DELEGATE_CRASH, wid)
-        self.wc.charge(c, a.charges, secs)
-        return self.wc.again(c, a.resume, note="")
-
     def end(self, c: Any, res: DelegateResult, stop: lp.Stop, a: lp.Yield | lp.Fail) -> None:
         """An exhausted invalid review is unavailable; other stops end the step with their Blocked outcome."""
         if (c.node, a.kind, stop.reason) == ("review", "FAULT_INFRA", "schema_invalid"):
@@ -166,5 +145,5 @@ class LaneActs:
         if isinstance(a, lp.Yield) and pinned and stop.reason in pin.STOP_REASONS:  # the pin found no ready lane: say it
             warm = writer_pin.warm(e.cfg, str(e.bead), e.plan_data, e.budget.labels) if c.role == pin.PINNED_ROLE else ""
             raise ops.blocked(pin.stop_why(c.node, pinned, stop.reason, res.say or stop.fix, stop.fix, warm), a.kind, stop)
-        why = ops.stop_why(c.node, a.kind, stop, res.say, retry_after, c.counts["crashes"] + 1, res.denied, now=e.clock.now())
+        why = ops.stop_why(c.node, a.kind, stop, res.say, retry_after, 1, res.denied, now=e.clock.now())
         raise ops.blocked(why, a.kind, stop)

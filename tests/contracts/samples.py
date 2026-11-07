@@ -50,6 +50,7 @@ from tlkernel.ids import BeadId, CheckId, TreeSha, loop_key
 from tlkernel.lockenums import LockWhat
 from tlkernel.runkey import BaseSha, Digest, RunKey
 from tlkernel.waitenums import WaitWhat
+from tlkernel.wire import Rec
 
 T = 1793050200.5
 RUN = ids.RunId.parse("01KBN6Z0M4R5E8YQ2T7C9W3XHD")
@@ -311,7 +312,7 @@ REVIEW_STATE = review.ReviewState(
     unverified=[review.Unverified(what="u", kind="taste")],
     verified=[trace.Verified(what="w", kind="checkable", verdict="settled", evidence="e", why="y")], filed=["f"],
     unfiled=[review.Unfiled(title="t", why="lint")])
-OTHERS = {
+OTHERS: dict[str, Rec] = {
     "ProfileChange": profile_changes.ProfileChange(t=T, owner_text='Denis: "approved" 2026-11-02T12:00Z', repo="/repo",
                                                    branch="topic", tip="tip", base="base", diff_sha="sha256", pid=42),
     "Epic": dash.Epic(id="t-epic", project=loop_key("/repos/task-loop"), title="Active epic", open=True, done=1, total=2),
@@ -633,3 +634,7 @@ OTHERS = {
 def other[T](cls: type[T]) -> T:
     """The OTHERS sample of this record class, typed."""
     return cast(T, OTHERS[cls.__name__])
+
+_cursor, _sections = checkpoint.split(other(checkpoint.Checkpoint))
+OTHERS.update(CursorBody=_cursor, Shared=_cursor.shared)
+OTHERS.update({type(section).__name__: section for section in _sections.values()})

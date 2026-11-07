@@ -1,4 +1,6 @@
 """Starting a loop and looking at the others: its identity, the installs on the machine, what runs on it."""
+
+import json
 import os
 import shutil
 import uuid
@@ -10,11 +12,17 @@ from tlkernel.env import Env
 from tlkernel.envvars import EnvVar
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
+from tlkernel.procport import Spawner
 from tlkernel.rowstores import ReposStore
 
 from taskloop.adapters import ident
 from taskloop.app.doctor import profiles
+from taskloop.app.launch import loop as wloop
 from taskloop.app.launch.loop import HERE, live_loops
+from taskloop.app.launch.repos import repo_root
+from taskloop.app.loop import render
+from taskloop.app.loop.env import LoopEnv
+from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.loop import parse_handover
 from taskloop.app.loop.versions import Installs
 from taskloop.app.release import catalog, pins
@@ -25,9 +33,9 @@ from taskloop.app.wire import slots as wslots
 
 def installs(cfg: paths.ConfigDir, env: Env, here: Path = HERE, now: Callable[[], float] = trail.now) -> Installs:
     """The installs of task-loop on this machine."""
-    return Installs(cfg, here.parents[1], lambda: catalog.installed_version(ident.claude_dir(env)),
-                    lambda: pins.read_pin(env).task_loop or "",
-                    now=now)
+    return Installs(
+        cfg, here.parents[1], lambda: catalog.installed_version(ident.claude_dir(env)), lambda: pins.read_pin(env).task_loop or "", now=now
+    )
 
 
 def other_red_rows(git: Git, repo: str, cfg: paths.ConfigDir) -> list[str]:
@@ -40,9 +48,7 @@ def begin_loop(repo: str, env: Env) -> tuple[str, str, Identity]:
     identity the loop and its children act as)."""
     start_cwd = os.getcwd()
     os.chdir(repo)  # every tl helper and bd call works on the current directory's repo
-    inherited, _ = parse_handover(
-        env.get(EnvVar.TL_LOOP_STATE)
-    )  # set when this process is the same loop, exec'd into a newer install
+    inherited, _ = parse_handover(env.get(EnvVar.TL_LOOP_STATE))  # set when this process is the same loop, exec'd into a newer install
     # an actor of its own, never the session's: bd lets an actor re-claim its own bead, so two loops (or a loop and a hand run)
     # started from one session would both win one claim. run-task re-claims as this actor (one for both).
     own = Env({k: v for k, v in env.vars.items() if k != EnvVar.TASK_LOOP_ACTOR.value})
@@ -65,3 +71,41 @@ def live_work(git: Git, who: Identity) -> list[tuple[str, str]]:
             if busy:
                 out.append(("run", f"run in {wt}: {busy}"))
     return out
+
+
+def command(
+    repo_arg: str,
+    op: str,
+    last: int,
+    env: Env,
+    spawner: Spawner,
+    git: Git,
+    who: Identity,
+    here: Path,
+    now: Callable[[], float],
+    run: Callable[[LoopEnv, LoopFiles, Installs], int],
+) -> tuple[list[str], int]:
+    """Select status or start only after checking this repo's profile."""
+    repo = repo_root(repo_arg)
+    if profiles.red_row(git, repo):
+        return [profiles.red_row(git, repo)], 1
+    loop_env = wloop.build(repo, here=here, now=now, env=env, spawner=spawner, git=git, who=who)
+    files = wloop.files_of(repo, who.config, now)
+    if op == "status":
+        rows = other_red_rows(git, repo, who.config)
+        lines, code = render.cmd_status(loop_env, files, installs(loop_env.cfgdir, env, here, now), last)
+        return rows + lines, code
+    start_cwd, session, who = begin_loop(repo, env)
+    loop_env = wloop.build(repo, session_actor=session, here=here, now=now, start_cwd=start_cwd, env=env, spawner=spawner, git=git, who=who)
+    return [], run(loop_env, files, installs(loop_env.cfgdir, env, here, now))
+
+
+def cutover_lines(git: Git, who: Identity, as_json: bool) -> tuple[list[str], int]:
+    live = live_work(git, who)
+    if as_json:
+        lines = [json.dumps({"live": [{"kind": k, "what": w} for k, w in live]})]
+    elif live:
+        lines = ["\n".join(f"LIVE {w}" for _, w in live)]
+    else:
+        lines = ["CLEAR: no live loop or run"]
+    return lines, 1 if live else 0

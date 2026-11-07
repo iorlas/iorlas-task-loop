@@ -1,5 +1,9 @@
 """Delivery queries resolve the judged profile and require its complete check identities."""
 
+from collections.abc import Callable
+from contextlib import AbstractContextManager
+from pathlib import Path
+
 from tlkernel import config
 from tlkernel.checks import CheckResult
 from tlkernel.env import Env
@@ -44,3 +48,40 @@ def explain(stores: Stores, git: Git, wt: str, cfg: config.EngineConfig, tree: T
     """{step: the first key field where its expected key and its newest receipt on this tree and base part}; display only."""
     memo = memo_for(stores, git, wt, cfg, tree, base, env)
     return {c.id: keydiff.why_red(memo, c, plan_digest(cfg.plan_cmd)) for c in gate_items(cfg) if c.id in steps}
+
+
+def profile_of(repo: str, load_profile: Callable[[object], config.RepoProfile]) -> config.EngineConfig:
+    """The engine block of the worktree's own .task-loop.json (what a person edited, committed or not)."""
+    path = Path(repo) / profile_at.FILE
+    try:
+        data = profile_at.raw_in(repo)
+    except (OSError, ValueError) as e:
+        raise SystemExit(f"tl check: cannot read {path}: {e}") from None
+    if data is None:
+        raise SystemExit(f"tl check: cannot read {path}: no such file")
+    return load_profile(data).engine
+
+
+def policy_of(repo: str, git: Git, commit: str) -> config.EngineConfig:
+    """Delivery checks use the committed base registry; ordinary tl check uses the worktree."""
+    return profile(git, repo, TreeSha(commit))
+
+
+def with_base(cfg: config.EngineConfig, commit: str | None) -> config.EngineConfig:
+    """`tl check --base-commit SHA`: the run's base (what receipts are keyed at, and what the changed files are measured against) is that
+    commit, not the base branch. The merge queue gates Q(N) at Q(N-1) (docs/design/merge-queue.md 3.5). No commit: `cfg` as it is."""
+    return cfg.replace(base=commit) if commit else cfg
+
+
+def selected_profile(policy: config.EngineConfig | None, commit: str | None,
+                     working: Callable[[], config.EngineConfig],
+                     committed: Callable[[str], config.EngineConfig]) -> config.EngineConfig:
+    """An explicitly bound policy wins over the committed or working registry."""
+    return policy if policy is not None else committed(commit) if commit else working()
+
+
+def checkout(staged: bool, index: Callable[[], AbstractContextManager[tuple[str | Path, list[str] | None]]],
+             working: AbstractContextManager[tuple[str | Path, list[str] | None]],
+             ) -> AbstractContextManager[tuple[str | Path, list[str] | None]]:
+    """Choose the index snapshot only when staged files were requested."""
+    return index() if staged else working

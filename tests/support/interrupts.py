@@ -17,9 +17,9 @@ from taskloop.adapters import halt, landlock
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.land.fixer import Fixer
 from taskloop.app.land.outbound import pin_head
+from taskloop.app.pipeline.checkpoints import Checkpoints
 from taskloop.app.pipeline.steps import Steps
 from taskloop.app.run import engine
-from taskloop.app.run.state import Checkpoints
 from taskloop.app.write.stage_loop import StageLoop
 from taskloop.stores.bundle import Stores
 from tlkernel.kinds import Kind

@@ -35,7 +35,7 @@ class DelegatePauseFacts(Case):
                                                        permanence=permanence, retry=retry))
                 stop = policy.stop_of(result)
                 assert stop is not None
-                action = policy.decide(stop, policy.Ctx(now=100))
+                action = policy.decide(stop, policy.Ctx())
                 assert isinstance(action, policy.Yield)
                 host = mock.Mock(dry=False, home=mock.Mock(), bead=bead.id, run_id="r1", asked=False)
                 host.cfg.writer_family, host.cfg.second_writer_family, host.plan_data, host.budget.labels = [], "", None, []

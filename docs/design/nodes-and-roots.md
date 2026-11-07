@@ -40,6 +40,8 @@ kernel:   contracts (shared records) + taskloop_db (connection, migrations runne
 
 Rules (import-linter, one contract each): roots may import nodes, nodes never import roots; `layers` among nodes from the measured edge list (land > work > gate/asks/slots, release > gate, report > asks/release; gate, slots, asks, track, doctor independent); each node imports the kernel and other nodes only through their `api` module (`forbidden` for the rest); every node's host is a Protocol in the node, never `Any`.
 
+Documented exception: `hook/prepush.py` stays a root with its branches by design: the git hot path is stdlib-only and imports no record (see .importlinter `hot-hook-path-is-light`), so it is not folded into a node.
+
 ## Persistence (Denis: "does one store package defeat isolation?")
 
 Opus read (this session, verified on the repo): **yes, as long as there is one schema.** `contracts/factorydb.py` is one `DDL` (16 tables),
