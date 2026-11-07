@@ -13,7 +13,7 @@ from dataclasses import replace
 from stream_proc import proc_start
 
 from delegate.adapters import procs
-from delegate.app import answer, doctor, env, net, threads
+from delegate.app import answer, doctor, env, live, net, threads
 from delegate.app import run as run_app
 from delegate.app import status as status_app
 from delegate.cli import parser
@@ -22,6 +22,7 @@ from delegate.contracts import status as status_wire
 from delegate.contracts.codec import record
 from delegate.contracts.history import RunRow
 from delegate.contracts.json_types import Json, as_str
+from delegate.contracts.live import LiveFile, LiveLine, LiveRead
 from delegate.contracts.routing import Routing
 from delegate.contracts.state import StateDoc
 from delegate.contracts.status import Status
@@ -31,6 +32,9 @@ __all__ = [
     "Account",
     "AgentRef",
     "Handle",
+    "LiveFile",
+    "LiveLine",
+    "LiveRead",
     "RunRequest",
     "RunResult",
     "Status",
@@ -42,6 +46,8 @@ __all__ = [
     "cancel",
     "contract",
     "history",
+    "live_files",
+    "live_read",
     "network",
     "run",
     "set_account",
@@ -219,3 +225,13 @@ def network(hosts: tuple[str, ...] = ()) -> bool:
 def cancel(handle: Handle) -> WorkerEnd:
     """Stop the worker and its tree. A worker that already ended is a clean WorkerEnd."""
     return procs.kill_tree(procs.Orphan(procs.Worker(pid=handle.pid, pgid=handle.pgid, start=handle.start)))
+
+
+def live_files(live_dir: str) -> list[LiveFile]:
+    """The worker streams in a folder, sorted by name."""
+    return live.files(live_dir)
+
+
+def live_read(live_dir: str, name: str, cursor: int = 0, ident: int = 0) -> LiveRead:
+    """Complete worker events after a byte cursor, with rotation and shrink detection."""
+    return live.read(live_dir, name, cursor, ident)
