@@ -13,6 +13,8 @@ from tlkernel.looprows import LoopRows
 from tlkernel.paths import ConfigDir
 from tlkernel.wire import Rec
 
+QUEUE_DOCS = "queue_doc"  # merge queue entries and tree assertion state
+FLAKE_DOCS = "flake_doc"  # per-repository flake score logs
 RUN_DOCS = "run_doc"  # small per-run documents and once-per-run notes
 DURATION_DOCS = "duration_doc"  # check durations by repository
 
