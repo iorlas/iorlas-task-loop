@@ -12,12 +12,12 @@ from support.memstores import fake_stores
 from support.narrow_hosts import FakeGateHost
 
 from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
-from taskloop.contracts.checks import Check, CheckRun
-from taskloop.contracts.config import CheckSpec, EngineConfig
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.specs import engine_digest
 from taskloop.stores.runlog import RunLog
+from tlkernel.checks import Check, CheckRun
+from tlkernel.config import CheckSpec, EngineConfig
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.runkey import BaseSha
 
 
 class MovingGit(ScriptedGit):

@@ -7,17 +7,17 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
+import hermetic  # noqa: F401  (a home of its own for every test)
 from any_agent.harnesses import opencode_sandbox
 from any_agent.harnesses.opencode import OpenCodeHarness
 from any_agent.supervisor import RunHooks
-from delegate.app import env, launch
-from delegate.app.settle import Settler
+from delegate_fakes.fake_run import replay
 from support.procsim import real_proc
 from support.tmpdir import TemporaryDirectory
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-from delegate_fakes.fake_run import replay
 from test_route import CFG, decide, lanes
+
+from delegate.app import env, launch
+from delegate.app.settle import Settler
 
 
 class DeepSeekTests:

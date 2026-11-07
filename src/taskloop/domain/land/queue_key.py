@@ -8,8 +8,8 @@ from collections.abc import Iterable
 from types import MappingProxyType
 from typing import final
 
-from taskloop.contracts.runkey import BaseSha, Digest, RunKey
-from taskloop.contracts.wire import Rec
+from tlkernel.runkey import BaseSha, Digest, RunKey
+from tlkernel.wire import Rec
 
 # The RunKey fields the profile at the base fixes: they make the check set. A field added to RunKey must be in one of these two tables
 # (tests/land/test_queue_key.py), so a new input to a receipt cannot slip past the queue's key.

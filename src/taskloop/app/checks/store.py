@@ -2,9 +2,9 @@
 
 The part is a plain value; app/parts.py lists it (tests/rules/test_stage_parts.py fails until it does).
 docs/design/stage-isolation.md 3.1."""
-from taskloop.contracts.checks import BaseRedRecord, PassRecord
-from taskloop.contracts.dbparts import Part, Prune
-from taskloop.contracts.factoryparts import ELIGIBLE
+from tlkernel.checks import BaseRedRecord, PassRecord
+from tlkernel.dbparts import Part, Prune
+from tlkernel.factoryparts import ELIGIBLE
 
 GATE = Part(
     name="gate", version=1, tables=("check_pass", "check_round"),

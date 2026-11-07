@@ -3,8 +3,9 @@ head(N)` made, parent Q(N-1), kept under refs/tl/queue/<n>-<short head>. Local o
 queue. A conflict is a result (`Conflict`), not an exception. Every git call is a row of the run (Cmds)."""
 from typing import final
 
+from tlkernel.wire import Rec
+
 from taskloop.app.land.cmds import Cmds, Stop
-from taskloop.contracts.wire import Rec
 
 PREFIX = "refs/tl/queue/"
 

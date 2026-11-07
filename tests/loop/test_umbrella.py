@@ -9,10 +9,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.app.loop.queue import QueueRule, rank_ready
-from taskloop.contracts.bead import BdError, Bead
-from taskloop.contracts.beadsport import BdFailure, BeadQuery
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.ids import BeadId
+from tlkernel.bead import BdError, Bead
+from tlkernel.beadsport import BdFailure, BeadQuery
+from tlkernel.config import EngineConfig
+from tlkernel.ids import BeadId
 
 
 def bead(name, status="open", parent="", issue_type="task"):

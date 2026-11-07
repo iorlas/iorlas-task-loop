@@ -12,12 +12,12 @@ from support.case import Case
 from support.narrow import must
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.contracts import attemptrows, factorydb
-from taskloop.contracts.enums import Outcome, Result
-from taskloop.contracts.finish import finish_run
-from taskloop.contracts.locator import RunLocator, host_name
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import RunFinish, RunState
+from tlkernel import attemptrows, factorydb
+from tlkernel.enums import Outcome, Result
+from tlkernel.finish import finish_run
+from tlkernel.locator import RunLocator, host_name
+from tlkernel.paths import ConfigDir
+from tlkernel.run import RunFinish, RunState
 
 
 class AttemptRows(Case):

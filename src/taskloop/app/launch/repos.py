@@ -1,7 +1,8 @@
 """The repo a verb works on: its root from the current directory, and the base branch its profile names."""
+from tlkernel.gitport import Git
+
 from taskloop.adapters import gitrepo
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.gitport import Git
 
 
 def repo_root(path: str | None = None) -> str:

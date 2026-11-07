@@ -1,8 +1,9 @@
 """The absent-loop finding for one repo: the loop registry's live loops and the ready beads, judged by the reconcile diff."""
 from collections.abc import Sequence
 
-from taskloop.contracts.loop import LoopState
-from taskloop.contracts.reconcile import LoopFact
+from tlkernel.loop import LoopState
+from tlkernel.reconcile import LoopFact
+
 from taskloop.domain.reconcile.diff import diff
 from taskloop.domain.reconcile.facts import NoLoop, Observed, RepoView
 

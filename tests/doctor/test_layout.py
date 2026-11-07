@@ -4,8 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from taskloop.app.wire import doctor
-from taskloop.contracts import config
 from taskloop.domain.layout import matchers as layout
+from tlkernel import config
 
 
 def profile(*checks: dict, slots: dict | None = None) -> config.RepoProfile:

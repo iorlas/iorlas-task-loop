@@ -3,8 +3,8 @@ import time
 from typing import Any
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from taskloop.contracts.delegate_status import snapshot_of
-from taskloop.contracts.rowstores import StatusStore
+from tlkernel.delegate_status import snapshot_of
+from tlkernel.rowstores import StatusStore
 
 
 def lane(**kw: Any) -> dict[str, Any]:

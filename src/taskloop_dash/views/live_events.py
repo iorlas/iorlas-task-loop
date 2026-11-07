@@ -3,8 +3,8 @@ appended to its call's live file. Every event carries `seq` (file tag + byte off
 
 from typing import Any
 
-from taskloop.contracts import wire
 from taskloop_dash.jsonrec import Json
+from tlkernel import wire
 
 ENGINE = "engine"
 

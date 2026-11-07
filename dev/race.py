@@ -62,9 +62,9 @@ from taskloop.app.slots import (  # noqa: E402
 )
 from taskloop.app.wire import real  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
-from taskloop.contracts.env import snapshot  # noqa: E402
-from taskloop.contracts.locator import RunLocator  # noqa: E402
-from taskloop.contracts.paths import ConfigDir  # noqa: E402
+from tlkernel.env import snapshot  # noqa: E402
+from tlkernel.locator import RunLocator  # noqa: E402
+from tlkernel.paths import ConfigDir  # noqa: E402
 
 PY = sys.executable
 BEADS = [f"w-{i}" for i in range(1, 7)]

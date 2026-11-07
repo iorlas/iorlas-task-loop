@@ -6,6 +6,11 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel import fence
+from tlkernel.beadsport import Beads
+from tlkernel.gitport import Git
+from tlkernel.ports import Sh
+
 from taskloop.app.land import cleanup
 from taskloop.app.land.gate import GatePass, Problem, ProblemKind
 from taskloop.app.land.landed import LandedConfig
@@ -13,10 +18,6 @@ from taskloop.app.land.outbound import pin_head, target
 from taskloop.app.land.parts import NetWorker, OutcomeMoveSteps
 from taskloop.app.land.push_evidence import failure
 from taskloop.app.land.state import PUSH_TRIES, PUSH_UP_FAILS, Land, LandState, Next, Phase
-from taskloop.contracts import fence
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ports import Sh
 from taskloop.domain.land.matchers import Push as PushText
 
 PUSH_TIMEOUT_S = 600.0  # the land command's own limit (the default is an hour: a push stuck on a remote ate 25-48 min, tl-bxk.10.33.1)

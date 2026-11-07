@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.append(str(ROOT / "skills" / "task-loop" / "_vendor"))
 
 from taskloop.app.parts import STAGE_PARTS  # noqa: E402
-from taskloop.contracts import dbparts  # noqa: E402
+from tlkernel import dbparts  # noqa: E402
 
 if __name__ == "__main__":
     target = ROOT / "tests" / "contracts" / "golden" / "parts.json"

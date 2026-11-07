@@ -3,6 +3,9 @@ The Engine (engine.py) opens a run into this; the steps (stages.py, crash.py) ar
 from functools import cached_property
 from typing import Any
 
+from tlkernel import plancheck
+from tlkernel.stagefacts import RunFacts
+
 from taskloop.app.look.judge import Judge
 from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.look.shots import Pictures
@@ -22,8 +25,6 @@ from taskloop.app.run.parts_run import RunParts
 from taskloop.app.workers import asked
 from taskloop.app.workers.worker_call import Ops, WorkerCall
 from taskloop.app.write.handoff import Handoff
-from tlkernel import plancheck
-from tlkernel.stagefacts import RunFacts
 from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.lanes.says import stop_say, stop_why
 from taskloop.stores.runports import RunPorts

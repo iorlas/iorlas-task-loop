@@ -7,9 +7,10 @@ import subprocess
 import sys
 
 from any_agent.protocol import LaunchSpec
-from delegate.app import codex_policy, env
 from support.case import Case
 from support.procsim import real_proc
+
+from delegate.app import codex_policy, env
 
 
 def rules_at(home):

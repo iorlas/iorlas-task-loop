@@ -4,6 +4,10 @@ reaches the reviewer. The writer's or the reviewer's question is the owner's. Th
 ReviewRound; the host (the engine) lends the run's state."""
 from collections.abc import Callable
 
+from tlkernel import wire
+from tlkernel.checkpoint import StageProgress
+from tlkernel.plancheck import PlanData, RoundState
+
 from taskloop.app.write.check_round import CheckRound
 from taskloop.app.write.host import WriteHost
 from taskloop.app.write.prepare import PREPARED, Prepare
@@ -11,9 +15,6 @@ from taskloop.app.write.progress import progress_of, restore_progress
 from taskloop.app.write.review_round import ReviewRound
 from taskloop.app.write.state import AGAIN, RoundResult, RoundStop, StageState
 from taskloop.app.write.write_round import WriteRound
-from taskloop.contracts import wire
-from taskloop.contracts.checkpoint import StageProgress
-from taskloop.contracts.plancheck import PlanData, RoundState
 
 
 class StageLoop:

@@ -2,9 +2,9 @@
 import support.paths  # noqa: F401
 from support import homes
 
-from taskloop.contracts import adrfiles, adrs
-from taskloop.contracts.adrs import AdrStore
-from taskloop.contracts.ledger import Adr
+from tlkernel import adrfiles, adrs
+from tlkernel.adrs import AdrStore
+from tlkernel.ledger import Adr
 
 REPO = "/r/adr-files"
 

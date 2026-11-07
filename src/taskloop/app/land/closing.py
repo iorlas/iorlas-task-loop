@@ -1,10 +1,11 @@
 """Follow-up filing and cleanup capabilities bound by the run's root."""
 from collections.abc import Callable
 
+from tlkernel.gitport import Git
+from tlkernel.paths import ConfigDir
+
 from taskloop.app.land import cleanup
 from taskloop.app.land.gitcall import oneline
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.paths import ConfigDir
 from taskloop.stores.runlog import RunLog
 
 

@@ -4,7 +4,7 @@ none of it is stored, published or sent to a worker."""
 from collections.abc import Mapping
 from typing import Any, Final
 
-from taskloop.contracts.plancheck import PlanData
+from tlkernel.plancheck import PlanData
 
 PLAN_ONLY: Final = ("question", "options", "decided", "unresolved")
 STAGE_ONLY: Final = ("hard",)

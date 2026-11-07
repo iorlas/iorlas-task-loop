@@ -17,9 +17,9 @@ from any_lease import Leases
 from atomic_io import atomic_write_json
 from process_lock import LockHeldError, ProcessLock, held
 
-from taskloop.contracts import paths, wire
-from taskloop.contracts.enums import LockWhat
-from taskloop.contracts.locks import LockRecord, LockTimeout
+from tlkernel import paths, wire
+from tlkernel.enums import LockWhat
+from tlkernel.locks import LockRecord, LockTimeout
 
 POLL = 0.01
 POLL_MAX = 0.1

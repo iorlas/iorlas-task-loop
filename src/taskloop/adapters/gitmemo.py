@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters.gitrepo import Dirs, Sig, git_dirs, is_dir_sig, sig
-from taskloop.contracts.env import Env
+from tlkernel.env import Env
 
 COMMON_ARGS = ("rev-parse", "--path-format=absolute", "--git-common-dir")
 BAD_NAME = re.compile(r"[~^@:{}*?\\[\s]|\.\.|\.lock$|^-|^[0-9a-f]{4,40}$")

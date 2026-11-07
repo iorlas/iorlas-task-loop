@@ -2,11 +2,11 @@
 from pathlib import Path
 
 from atomic_io import atomic_write_text
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
 
 from taskloop.app.wire import brief
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
 from taskloop.domain.brief import handoff_text
 
 

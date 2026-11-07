@@ -13,8 +13,8 @@ from git_porcelain.real import RealRepo
 from taskloop.adapters.git_base import classify
 from taskloop.adapters.git_ops import LandGit
 from taskloop.adapters.git_pool import UnpinnedRepo, pool_error, pool_errors, pool_read_error, remote_error
-from taskloop.contracts.gitfacts import ConfigEntry, GitOutcome, GrepHit, LogRow, Pick, Ref, StatusRow, TreeEntry
-from taskloop.contracts.slots import BranchPinned, Checkout, GitReadFailure, MissingRevision, NotARepo, NotAWorktree, SlotGitError
+from tlkernel.gitfacts import ConfigEntry, GitOutcome, GrepHit, LogRow, Pick, Ref, StatusRow, TreeEntry
+from tlkernel.slots import BranchPinned, Checkout, GitReadFailure, MissingRevision, NotARepo, NotAWorktree, SlotGitError
 
 
 class RealGit(LandGit):

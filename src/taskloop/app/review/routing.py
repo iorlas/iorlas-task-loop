@@ -3,12 +3,13 @@ goes to the writer for a test, an item no check can prove lands unverified for t
 plan (what it defers, what it leaves to the engine) is read before the item's kind."""
 from typing import Any
 
+from tlkernel.gitport import Git
+from tlkernel.plancheck import PlanData
+from tlkernel.stagefacts import RunFacts
+from tlkernel.stop import Stop
+
 from taskloop.app.review.host import ReviewHand, ReviewPorts
 from taskloop.app.review.state import ReviewLive
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.plancheck import PlanData
-from taskloop.contracts.stagefacts import RunFacts
-from taskloop.contracts.stop import Stop
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.plan.matchers import word_set
 from taskloop.domain.review import kinds

@@ -3,9 +3,9 @@ import pytest
 from support.narrow import must
 
 from taskloop.app.doctor import ops
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.ids import RunId
-from taskloop.contracts.trace import AiCall, RunTrace
+from tlkernel.enums import Outcome
+from tlkernel.ids import RunId
+from tlkernel.trace import AiCall, RunTrace
 
 
 def run(n: int, bead: str, *families: str, role: str = "worker") -> RunTrace:

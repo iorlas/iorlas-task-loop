@@ -13,11 +13,11 @@ from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from taskloop.app.pipeline.reflect import Reflector
 from taskloop.app.run.entry import _blocked_by_engine
 from taskloop.app.workers.worker_request import request
-from taskloop.contracts.bead import Bead, Comment
-from taskloop.contracts.gitfacts import DiffEntry
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.bead import Bead, Comment
+from tlkernel.gitfacts import DiffEntry
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.paths import ConfigDir
 
 
 class ReviewerTrustRoots(Case):

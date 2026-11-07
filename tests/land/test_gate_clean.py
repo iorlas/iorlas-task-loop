@@ -14,10 +14,10 @@ from support.gate_rig import GateCase
 
 from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
 from taskloop.app.pipeline.blocked import Blocked
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.procport import Ran
-from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.checks.specs import gate_items
+from tlkernel.envvars import EnvVar
+from tlkernel.procport import Ran
+from tlkernel.slots import SlotGitError
 
 
 class CleanGate(GateCase):

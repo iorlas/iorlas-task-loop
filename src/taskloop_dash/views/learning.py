@@ -7,10 +7,10 @@ run (the traces keep replans, not look send-backs); `causes` counts asks only, s
 import time
 from collections.abc import Sequence
 
-from taskloop.contracts.dash import CauseCount, Learning, OwnerCause, Stick
-from taskloop.contracts.ledger import LedgerEntry
 from taskloop_dash.views.ledger import by_ask
 from taskloop_dash.views.world import World
+from tlkernel.dash import CauseCount, Learning, OwnerCause, Stick
+from tlkernel.ledger import LedgerEntry
 
 WEEKS = 8
 DURABLE = (Stick.ADR, Stick.REF, Stick.FACTORY, Stick.FIX, Stick.DEMOTE)

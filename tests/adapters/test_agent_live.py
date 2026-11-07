@@ -4,7 +4,7 @@ from pathlib import Path
 
 from delegate import api
 from taskloop.adapters.agent import ApiAgent, last_event_t, new_live
-from taskloop.contracts.delegate import LiveStart
+from tlkernel.delegate import LiveStart
 
 
 def lines(path: Path, *rows: object) -> None:

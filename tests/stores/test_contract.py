@@ -22,8 +22,8 @@ from support.procsim import real_proc
 from support.tiers import contract
 
 from taskloop.adapters.locks import ProcessLockTable
-from taskloop.contracts import paths
-from taskloop.contracts.enums import LockWhat
+from tlkernel import paths
+from tlkernel.enums import LockWhat
 
 SUITES = [suites.DocContract, suites.AskContract, suites.CheckpointContract, suites.LogContract, suites.LockContract,
           suites.TicketContract]

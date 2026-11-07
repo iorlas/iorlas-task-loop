@@ -1,8 +1,8 @@
 """delegate-xzx: the read-only filter reads shell words: a quoted separator is part of the word, and for/while loops over reads pass."""
 
-from delegate.domain.policy.shell import read_only_problem
-
 import hermetic  # noqa: F401  (a home of its own for every test)
+
+from delegate.domain.policy.shell import read_only_problem
 
 PASS = (
     "sed -n '1466p;854p;12p' f",

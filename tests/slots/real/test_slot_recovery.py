@@ -15,7 +15,7 @@ from slots.real.test_worktrees import Rig, git
 from taskloop.app.loop.take import Taker
 from taskloop.app.slots.env import SlotEnv
 from taskloop.app.slots.pool import SlotPool
-from taskloop.contracts.config import SlotsConfig
+from tlkernel.config import SlotsConfig
 
 
 class SlotRecovery(Rig):

@@ -10,19 +10,20 @@ import os
 import time
 from pathlib import Path
 
+from tlkernel.enums import LockWhat
+from tlkernel.env import Env
+from tlkernel.envvars import EnvVar
+from tlkernel.ids import loop_key
+from tlkernel.lockrows import EngineLockRows
+from tlkernel.locks import EngineLock as Lock
+from tlkernel.paths import ConfigDir
+from tlkernel.run import Reexec
+from tlkernel.wire import Refused
+
 from taskloop.adapters.agent import running_for
 from taskloop.adapters.locks import hold_path
 from taskloop.adapters.pidcheck import proc_alive, proc_start
 from taskloop.app.slots.env import stamp
-from taskloop.contracts.enums import LockWhat
-from taskloop.contracts.env import Env
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.lockrows import EngineLockRows
-from taskloop.contracts.locks import EngineLock as Lock
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import Reexec
-from taskloop.contracts.wire import Refused
 
 
 def _store(cfg: ConfigDir, wt: str | Path) -> EngineLockRows:

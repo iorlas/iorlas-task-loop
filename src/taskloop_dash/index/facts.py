@@ -2,9 +2,9 @@
 
 import json
 
-from taskloop.contracts import log, wire
-from taskloop.contracts.wire import Rec
 from taskloop_dash.views.runfacts import FoldState, fold
+from tlkernel import log, wire
+from tlkernel.wire import Rec
 
 
 class Facts(Rec):

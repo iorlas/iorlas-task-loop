@@ -29,10 +29,10 @@ from support.plans import CLEAN, PLAN, WRITE, verdict
 
 from taskloop.app.loop.gate import GateRole
 from taskloop.app.release import reexec
-from taskloop.contracts.config import LoopConfig
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.locator import RunLocator
 from taskloop.stores import call_state as callstate
+from tlkernel.config import LoopConfig
+from tlkernel.kinds import Kind
+from tlkernel.locator import RunLocator
 
 SAY = "codex: Reconnecting... waiting for network (Connection failed: error sending request)"
 REPLAY = te.ROOT / "tests" / "fixtures" / "replay" / "5ban16_plan_network_drop.jsonl"

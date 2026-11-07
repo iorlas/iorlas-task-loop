@@ -10,8 +10,8 @@ from support.who import who
 from taskloop.app.look.state import LOOK_FIELDS
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId
 
 
 def make_engine(wt, bead="t-1", cfg=None, script=None, attrs=None, **seams):

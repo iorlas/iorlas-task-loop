@@ -22,13 +22,13 @@ from taskloop.adapters import (
 )
 from taskloop.app.checks.cache import InputKeys
 from taskloop.app.wire import doctor
-from taskloop.contracts.argv import text_of
-from taskloop.contracts.checks import Check, Duration, Durations
-from taskloop.contracts.ids import CheckId
-from taskloop.contracts.plancheck import adhoc
 from taskloop.domain.checks import durations, inputs, lint, planref
 from taskloop.domain.checks.names import norm
 from taskloop.domain.checks.order import CheckOrder
+from tlkernel.argv import text_of
+from tlkernel.checks import Check, Duration, Durations
+from tlkernel.ids import CheckId
+from tlkernel.plancheck import adhoc
 
 
 def ignored_paths(wt, globs, exclude=()):

@@ -22,10 +22,10 @@ from taskloop.adapters import delegate as dl
 from taskloop.adapters.delegate import Stopped
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import RunFiles
 from taskloop.domain.lanes import retry
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId
+from tlkernel.paths import RunFiles
 
 
 def napper(nap):

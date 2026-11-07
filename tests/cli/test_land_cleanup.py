@@ -13,12 +13,12 @@ from support.fakegit import ScriptedGit
 
 # isort: split
 from taskloop.cli.land import cmd_land
-from taskloop.contracts.gitfacts import Ref
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.slots import Checkout
 from taskloop.stores.real import real_stores
+from tlkernel.gitfacts import Ref
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId
+from tlkernel.locator import RunLocator
+from tlkernel.slots import Checkout
 
 
 class DirectGit(ScriptedGit):

@@ -6,9 +6,10 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from tlkernel.env import Env
+from tlkernel.paths import ConfigDir, default_root
+
 from taskloop.app.wire import doctor, hook, slots
-from taskloop.contracts.env import Env
-from taskloop.contracts.paths import ConfigDir, default_root
 from taskloop.stores.delegate import real_route
 
 

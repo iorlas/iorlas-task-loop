@@ -5,15 +5,16 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel.artifact import ArtifactMeta
+from tlkernel.asked import Asked
+from tlkernel.beadsport import Beads
+from tlkernel.checks import CheckRun
+from tlkernel.config import VisualConfig
+from tlkernel.plancheck import StageData
+from tlkernel.stagefacts import Narrate, RepoKey
+from tlkernel.wire import Open
+
 from taskloop.adapters.looks import Methods
-from taskloop.contracts.artifact import ArtifactMeta
-from taskloop.contracts.asked import Asked
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.checks import CheckRun
-from taskloop.contracts.config import VisualConfig
-from taskloop.contracts.plancheck import StageData
-from taskloop.contracts.stagefacts import Narrate, RepoKey
-from taskloop.contracts.wire import Open
 
 
 class OwnerItems(Protocol):

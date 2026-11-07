@@ -9,15 +9,15 @@ import hashlib
 import json
 import time
 
-from taskloop.contracts import wire
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.dash import AskCard, BeadCard, BeadDetail, Column, Epic, Piece, Project, ServerInfo, Slot, Snapshot
-from taskloop.contracts.dashcost import CostPage
 from taskloop_dash.views import floor, learning, ledger, needs, passes, queue
 from taskloop_dash.views.askcards import ask_card, look_card, stale_of
 from taskloop_dash.views.board import Board, is_infra, is_work, when
 from taskloop_dash.views.lanecards import lane_cards
 from taskloop_dash.views.world import ProjectIn, World
+from tlkernel import wire
+from tlkernel.bead import Bead
+from tlkernel.dash import AskCard, BeadCard, BeadDetail, Column, Epic, Piece, Project, ServerInfo, Slot, Snapshot
+from tlkernel.dashcost import CostPage
 
 BACKLOG_MAX = 200
 

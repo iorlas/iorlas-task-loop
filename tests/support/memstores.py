@@ -14,28 +14,28 @@ from typing import Any, override
 from jsonl_log import Entry, decode_object
 from jsonl_log.cursor import _parse  # shelf lacks: a public parse of in-memory bytes
 
-from taskloop.contracts import events, log, wire
-from taskloop.contracts.adrs import AdrStore
-from taskloop.contracts.ask import Ask
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.checkpoint import Checkpoint
-from taskloop.contracts.checks import BaseRedRecord, CheckRun, Durations, PassRecord
-from taskloop.contracts.config import HostResources
-from taskloop.contracts.docstore import Absent, ForeignVersion, Present, Read, Torn, refusal
-from taskloop.contracts.enums import LockWhat
-from taskloop.contracts.followups import FollowupOutbox
-from taskloop.contracts.ledger import Adr, AdrUse, LedgerEntry
-from taskloop.contracts.locks import LockRecord, LockTimeout, Ticket, pid_alive
-from taskloop.contracts.profile_changes import ProfileChange
-from taskloop.contracts.queue_state import QueueState
-from taskloop.contracts.rotating import RotatingJsonl
-from taskloop.contracts.stores import JsonlStore
-from taskloop.contracts.trace import RunTrace
-from taskloop.contracts.wire import Refused
 from taskloop.stores.api import AmendDoc, DocSet
 from taskloop.stores.books import CheckpointBook
 from taskloop.stores.bundle import Stores
 from taskloop.stores.files import temp_leases
+from tlkernel import events, log, wire
+from tlkernel.adrs import AdrStore
+from tlkernel.ask import Ask
+from tlkernel.askstore import AskStore
+from tlkernel.checkpoint import Checkpoint
+from tlkernel.checks import BaseRedRecord, CheckRun, Durations, PassRecord
+from tlkernel.config import HostResources
+from tlkernel.docstore import Absent, ForeignVersion, Present, Read, Torn, refusal
+from tlkernel.enums import LockWhat
+from tlkernel.followups import FollowupOutbox
+from tlkernel.ledger import Adr, AdrUse, LedgerEntry
+from tlkernel.locks import LockRecord, LockTimeout, Ticket, pid_alive
+from tlkernel.profile_changes import ProfileChange
+from tlkernel.queue_state import QueueState
+from tlkernel.rotating import RotatingJsonl
+from tlkernel.stores import JsonlStore
+from tlkernel.trace import RunTrace
+from tlkernel.wire import Refused
 
 
 class MemDoc[T](AmendDoc[T]):

@@ -1,9 +1,10 @@
 """A stage's progress inside a round, as the checkpoint keeps it (StageProgress): written by the standalone step runner after each step
 and by StageLoop when a round's checks are green, read back where a stage goes on."""
+from tlkernel import wire
+from tlkernel.answers import WriteAnswerLook
+from tlkernel.checkpoint import StageProgress
+
 from taskloop.app.write.state import StageState
-from taskloop.contracts import wire
-from taskloop.contracts.answers import WriteAnswerLook
-from taskloop.contracts.checkpoint import StageProgress
 
 
 def progress_of(s: StageState) -> StageProgress:

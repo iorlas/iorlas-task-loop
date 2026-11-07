@@ -1,11 +1,12 @@
 """Bead close and block verbs bound to an actor, store and close guard."""
 from collections.abc import Callable
 
+from tlkernel import fence
+from tlkernel.beadsport import Beads
+from tlkernel.identity import Identity
+
 from taskloop.app.track import verbs
 from taskloop.app.track.verbs import Guard
-from taskloop.contracts import fence
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.identity import Identity
 
 
 class ClosingBeads:

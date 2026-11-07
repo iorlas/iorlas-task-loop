@@ -3,9 +3,9 @@ import threading
 import time
 from collections.abc import Callable
 
-from taskloop.contracts import wire
-from taskloop.contracts.log import EngineLog, Note, Warn
 from taskloop.stores.api import Log
+from tlkernel import wire
+from tlkernel.log import EngineLog, Note, Warn
 
 
 class RunLog:

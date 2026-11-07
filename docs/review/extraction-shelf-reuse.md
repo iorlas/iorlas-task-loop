@@ -132,7 +132,7 @@ testing.GitWorld().install(stack)     # proposed simulator facade
 
 **Job:** strictly encode/decode versioned, tagged values and derive their JSON Schema without owning application record definitions.
 
-**Donors:** src/taskloop/contracts/wire.py:1-101; schema.py:1-147; _delegate/src/delegate/contracts/codec.py:1-229; schema.py:1-104: **581 runtime lines**. Tests/contracts/test_wire.py:121-199 (79) and tests/contracts/test_schema.py:83-116 (34) supply **113 test lines**, re-expressed over neutral record fixtures. **694 total**. The app's complete-record coverage tests, samples and JSON goldens stay.
+**Donors:** packages/kernel/src/tlkernel/wire.py:1-101; schema.py:1-147; _delegate/src/delegate/contracts/codec.py:1-229; schema.py:1-104: **581 runtime lines**. Tests/contracts/test_wire.py:121-199 (79) and tests/contracts/test_schema.py:83-116 (34) supply **113 test lines**, re-expressed over neutral record fixtures. **694 total**. The app's complete-record coverage tests, samples and JSON goldens stay.
 
 **Public interface:**
 
@@ -163,7 +163,7 @@ strict(schema); unstrict(data, schema); prune(data, schema)
 
 **Job:** give a typed file four explicit read outcomes and serialize read/modify/write under one lock.
 
-**Donors:** src/taskloop/contracts/stores.py:44-120 (77); src/taskloop/stores/files.py:20-37 (18); _delegate/src/delegate/contracts/stores.py:91-102 (12). Tests/stores/suites.py:33-60 (28), replacing LoopState/Rest fixtures with neutral records. **107 runtime + 28 test = 135**.
+**Donors:** packages/kernel/src/tlkernel/stores.py:44-120 (77); src/taskloop/stores/files.py:20-37 (18); _delegate/src/delegate/contracts/stores.py:91-102 (12). Tests/stores/suites.py:33-60 (28), replacing LoopState/Rest fixtures with neutral records. **107 runtime + 28 test = 135**.
 
 **Public interface:**
 
@@ -192,7 +192,7 @@ Documents(path_of, codec).of(key); Documents.keys()
 
 **Job:** own complete-line cursor reads, bounded tails, typed pages, append descriptor pooling and predicate compaction.
 
-**Donors:** src/taskloop/contracts/rotating.py:1-21 (21); adapters/applog.py:1-91 (91); contracts/stores.py:122-167 (46), :206-224 (19); src/taskloop_dash/jsonl.py:1-62 (62); tails.py:36-52 (17); _delegate/src/delegate/contracts/stores.py:118-135 (18), :40-46 (7): **281 runtime lines**.
+**Donors:** packages/kernel/src/tlkernel/rotating.py:1-21 (21); adapters/applog.py:1-91 (91); contracts/stores.py:122-167 (46), :206-224 (19); src/taskloop_dash/jsonl.py:1-62 (62); tails.py:36-52 (17); _delegate/src/delegate/contracts/stores.py:118-135 (18), :40-46 (7): **281 runtime lines**.
 
 **Tests moving:** tests/contracts/test_jsonl.py:24-144 (121), tests/contracts/test_rotation.py:15-34 (20), tests/stores/suites.py:131-186 (56): **197**, after neutralizing record fixtures. App family/path assertions in the remainder stay. **478 total**.
 
@@ -455,7 +455,7 @@ format_wait(seconds, *, dialect) -> str
 
 **Job:** remove a virtualenv from a child environment and derive an installed plugin's data root without owning app layout.
 
-**Donors:** src/taskloop/adapters/childenv.py:16-27 (12); src/taskloop/contracts/paths.py:10-14 (5); _delegate/src/delegate/app/env.py:33-41 (9): **26 runtime**, **0 tests credited**.
+**Donors:** src/taskloop/adapters/childenv.py:16-27 (12); packages/kernel/src/tlkernel/paths.py:10-14 (5); _delegate/src/delegate/app/env.py:33-41 (9): **26 runtime**, **0 tests credited**.
 
 **Public interface:**
 
@@ -648,7 +648,7 @@ extract_token_counts(usage) -> tuple[int, int, int, int]  # existing
 
 **Job:** provide sortable opaque identifiers/numeric versions and observe complete installed-plugin versions.
 
-**Donors:** src/taskloop/contracts/ids.py:32-85 (54), :88-107 (20); src/taskloop/app/release/catalog.py:13-54 (42): **116 runtime**, **0 tests credited**.
+**Donors:** packages/kernel/src/tlkernel/ids.py:32-85 (54), :88-107 (20); src/taskloop/app/release/catalog.py:13-54 (42): **116 runtime**, **0 tests credited**.
 
 **Public interface:**
 
@@ -892,12 +892,12 @@ These refusals name actual rules. They do not prohibit extracting mechanics alre
 | Bead lifecycle/actor fencing — src/taskloop/adapters/bd.py:245-260; bdcreate.py:1-36; bdsafe.py:1-22 | Beads.claim/close/update remains app-owned. close first fences the assignee via update, then closes; a generic bd client must not absorb that factory authority. Generic process/JSON substrate is R2/R5. |
 | Gate evidence/admission — src/taskloop/app/checks/cache.py:113-196, :245-268 | RunMemo.key/result and satisfied retain “only satisfied exact requirements authorize delivery,” producer receipt identity, planned-skip versus pass and historical-display distinctions. R8 may hash selected inputs; it cannot choose which inputs authorize land. |
 | Retry/rest tables — src/taskloop/domain/lanes/retry.py:29-38; pauses.py:24-83 | PLAN/rule keep invalid-output retry counts, denied-secret fresh-thread handling, reroute/ask/fault choices and unknown-reason owner wake. R23 moves only arithmetic. |
-| Config/profile rules — src/taskloop/contracts/config.py:322-411; _delegate/src/delegate/app/env.py:67-96 | load/typed_routing keep cross-lane-read rejection, mangled-ID collision, container requirements, retired/replaced keys and owner profile precedence. graphlib.TopologicalSorter is already used; no second cycle-sorter saving is invented. |
-| Path/layout identity — src/taskloop/contracts/paths.py:16-288, except R13 | ConfigDir/RunFiles/RepoDirs name authoritative asks, checkpoints, run output and worker scratch. Path joins are already pathlib calls. Exporting these layouts exports the app's persisted model. |
+| Config/profile rules — packages/kernel/src/tlkernel/config.py:322-411; _delegate/src/delegate/app/env.py:67-96 | load/typed_routing keep cross-lane-read rejection, mangled-ID collision, container requirements, retired/replaced keys and owner profile precedence. graphlib.TopologicalSorter is already used; no second cycle-sorter saving is invented. |
+| Path/layout identity — packages/kernel/src/tlkernel/paths.py:16-288, except R13 | ConfigDir/RunFiles/RepoDirs name authoritative asks, checkpoints, run output and worker scratch. Path joins are already pathlib calls. Exporting these layouts exports the app's persisted model. |
 | Safe-point version hop — src/taskloop/app/release/reexec.py:21-76; selfupdate.py:17-37; src/taskloop/app/run/reload.py:29-124 | Reload.safe_point/switch and owner pin/rollback retain checkpoint/counter carryover, slot ownership, bad-version fallback and close suppression after exec. R20 observes installs; it does not select or activate one. |
 | Worker contract and lane pricing — _delegate/src/delegate/app/watch.py:43-86; domain/cost/accounting.py:49-64; app/usage.py:49-83, :124-170 | Turn.verdict, usage-to-Lane mapping and price-source choices retain completion grace/tool exemptions, spend-block/98% thresholds, stale-data policy, free/subscription lane rules. R19 may decode vendor facts only. |
 | CLI dispatch and owner surfaces — skills/task-loop/tl.py:1-460; _delegate/src/delegate/cli/parser.py:1 | Verb names, flags, exit outcomes and owner-only actions are app API. Extract proven parser scaffolding only after verb-cli's positional/remainder parity; do not count the whole CLI as a reusable library. |
-| Dashboard semantic views — src/taskloop_dash/views/live_lines.py:43-99; src/taskloop/contracts/dash.py:1-562 | Engine/worker events map to specific factory phases, owner needs and outcome tones. HTTP and text mechanics move, factory view schemas stay. |
+| Dashboard semantic views — src/taskloop_dash/views/live_lines.py:43-99; packages/kernel/src/tlkernel/dash.py:1-562 | Engine/worker events map to specific factory phases, owner needs and outcome tones. HTTP and text mechanics move, factory view schemas stay. |
 | Dashboard access policy — src/taskloop_dash/bind.py:20-93 | allowed_addr/bind_refusal keep unauthenticated Tailscale/loopback access, installed-copy ownership of port 7878 and required registered state. R9 only binds the already-approved address set. |
 
 The app holdouts for every refused rule must pin valid decisions, malformed/unknown refusal, and ordered side effects. New generic package contracts supplement those holdouts; they do not replace them.
@@ -931,7 +931,7 @@ The 25 largest remaining files/spans follow. The sizes are current wc counts, wi
 | tests/contracts/samples.py:1-600 — 600 | ❌ One sample per app record, proving schema completeness and actual wire compatibility. |
 | dev/dash_check.html:1-582 — 582 | ❓ Mixed browser harness. Split load/visibility/viewport/tap-size facts from SCENARIOS; app keeps board/drawer/owner-action expectations. Test a neutral page plus unchanged dashboard scenarios before approving measured spans. No guessed 582-line saving. |
 | tests/e2e/test_release.py:1-570 — 570 | ❌ Release clone ownership, reexec, suite-before-publication and package activation semantics. R17's manifest checks are below this flow. |
-| src/taskloop/contracts/dash.py:1-562 — 562 | ❌ Factory view/request schemas, paired project/bead identity and owner actions. |
+| packages/kernel/src/tlkernel/dash.py:1-562 — 562 | ❌ Factory view/request schemas, paired project/bead identity and owner actions. |
 | tests/land/test_stack.py:1-549 — 549 | ❌ Ordered PR/branch delivery, each merge SHA attribution, first-failure stop and land-lock scope. |
 | tests/plan/test_engine_plan.py:1-546 — 546 | ❌ Plan/replan/acceptance semantics and worker answer handling. |
 | tests/rules/gate_rules.py:1-726 minus R22's 186 — 540 | ❓ Mixed remaining gate. Retain app layer/path/cap rules; next test must separate generic signal/shell/import/vendor observers from their app allowlists and legacy folder table. R22's measured split already counts 186; no second credit. |

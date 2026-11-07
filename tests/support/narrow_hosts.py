@@ -31,25 +31,25 @@ from taskloop.app.land.sync import Sync
 from taskloop.app.pipeline.budget import Budget
 from taskloop.app.pipeline.closing import CloseParts, Closer
 from taskloop.app.pipeline.steps import Steps
-from taskloop.contracts import fence
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import Beads, DoltPush
-from taskloop.contracts.checkpoint import Checkpoint, EndRec, Notes
-from taskloop.contracts.checks import Check, CheckRun
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.delegate import Permanence
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId, TreeSha
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.plancheck import PlanCheck, PlanData, StageData
-from taskloop.contracts.ports import Clock
-from taskloop.contracts.run import RunFinish
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes.pause_reasons import Producer
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
+from tlkernel import fence
+from tlkernel.bead import Bead
+from tlkernel.beadsport import Beads, DoltPush
+from tlkernel.checkpoint import Checkpoint, EndRec, Notes
+from tlkernel.checks import Check, CheckRun
+from tlkernel.config import EngineConfig
+from tlkernel.delegate import Permanence
+from tlkernel.enums import Outcome
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId, TreeSha
+from tlkernel.kinds import Kind
+from tlkernel.plancheck import PlanCheck, PlanData, StageData
+from tlkernel.ports import Clock
+from tlkernel.run import RunFinish
 
 
 class FakeWaitsHost:

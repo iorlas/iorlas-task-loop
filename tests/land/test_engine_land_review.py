@@ -17,7 +17,7 @@ from support.narrow import must
 from support.plans import CLEAN, PLAN, WRITE, verdict
 
 from taskloop.app.run import engine
-from taskloop.contracts.checks import CheckRun
+from tlkernel.checks import CheckRun
 
 
 class LandReview(LandReviewBase):

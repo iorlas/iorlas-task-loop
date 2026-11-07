@@ -38,14 +38,14 @@ from taskloop.app.run import entry
 from taskloop.app.run import running as wrunning
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import wire
-from taskloop.contracts.ask import Ask
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.gitfacts import GitOutcome
-from taskloop.contracts.ids import BeadId
 from taskloop.domain.checks import matchers
 from taskloop.domain.checks.cmd import matchers as sh_matchers
 from taskloop.domain.land.matchers import _TRANSIENT as TRANSIENT_PUSH
+from tlkernel import wire
+from tlkernel.ask import Ask
+from tlkernel.env import snapshot
+from tlkernel.gitfacts import GitOutcome
+from tlkernel.ids import BeadId
 
 
 class StaleTree(StagesTest):

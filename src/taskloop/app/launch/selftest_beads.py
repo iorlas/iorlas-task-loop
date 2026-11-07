@@ -3,9 +3,9 @@
 sorted and unique, metadata values are strings, a write to an unknown bead is refused)."""
 from typing import Any
 
-from taskloop.contracts.bead import BdError, Bead, Comment, Dep
-from taskloop.contracts.beadsport import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
-from taskloop.contracts.ids import BeadId, parse_bead_id
+from tlkernel.bead import BdError, Bead, Comment, Dep
+from tlkernel.beadsport import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
+from tlkernel.ids import BeadId, parse_bead_id
 
 
 class MemoryBeads:

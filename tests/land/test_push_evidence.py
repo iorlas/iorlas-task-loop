@@ -13,9 +13,9 @@ from support.memstores import fake_stores
 
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.slots import SlotGitError
 from taskloop.stores.runlog import RunLog
+from tlkernel.paths import ConfigDir
+from tlkernel.slots import SlotGitError
 
 
 class RefusingGit(ScriptedGit):

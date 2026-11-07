@@ -10,18 +10,19 @@ import traceback
 from pathlib import Path
 from typing import Any, Final
 
+from tlkernel import env as penv
+from tlkernel.bead import Bead
+from tlkernel.delegateport import Completed, Resolved, Seam, completed
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.ids import parse_bead_id
+from tlkernel.slots import SlotGitError
+
 from taskloop.adapters import ident
 from taskloop.app.launch.selftest_beads import MemoryBeads
 from taskloop.app.run.engine import Engine
 from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import env as penv
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.delegateport import Completed, Resolved, Seam, completed
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import parse_bead_id
-from taskloop.contracts.slots import SlotGitError
 from taskloop.stores.delegate import fixed_route, real_route
 
 # an argv list; the plan schema wraps it as an adhoc check

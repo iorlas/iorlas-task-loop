@@ -4,14 +4,14 @@ import io
 import json
 import sys
 
+import hermetic  # noqa: F401  (a home of its own for every test)
+from test_route import _call, route
+
 from delegate.app import launch
 from delegate.domain.policy import worker
 from delegate.domain.policy.matchers import secret_hit
 from delegate.domain.policy.shell import read_only_problem
 from delegate.domain.policy.worker import is_policy_denial
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-from test_route import _call, route
 
 
 class SecretGuard:

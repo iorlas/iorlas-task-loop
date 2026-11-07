@@ -2,11 +2,12 @@
 import json
 from functools import cached_property
 
+from tlkernel import plancheck
+from tlkernel.paths import PLAN_FILE
+
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.write.briefing import Briefing
 from taskloop.app.write.stage_loop import StageLoop
-from tlkernel import plancheck
-from tlkernel.paths import PLAN_FILE
 
 
 class PlanParts(Plumbing):

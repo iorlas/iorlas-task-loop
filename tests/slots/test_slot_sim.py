@@ -14,11 +14,11 @@ from taskloop.app.slots import aside, watchdog
 from taskloop.app.slots.env import stamp
 from taskloop.app.slots.line import order
 from taskloop.app.slots.pool import Slot
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import BeadPatch
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.slots import SlotFail
 from taskloop.domain.slot_liveness import LIMITS, Kind
+from tlkernel.bead import Bead
+from tlkernel.beadsport import BeadPatch
+from tlkernel.ids import BeadId
+from tlkernel.slots import SlotFail
 
 STEP = 45.0
 SLACK = watchdog.EVERY + 2 * STEP  # a look every EVERY s, a step of up to STEP s before it, one more before the check
@@ -178,7 +178,7 @@ class Sim(Rig):
             if slot.name in self.broken:
                 raise SlotFail("slot_broken", "setup failed")
 
-        with patch("taskloop.contracts.locks.pid_alive", side_effect=lambda p: p in self.alive), \
+        with patch("tlkernel.locks.pid_alive", side_effect=lambda p: p in self.alive), \
                 patch.object(Slot, "ready_for"), patch.object(aside, "setup", side_effect=setup):
             for _ in range(STEPS):
                 self.t[0] += self.rng.uniform(1, STEP)

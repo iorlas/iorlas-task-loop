@@ -1,8 +1,8 @@
 """What the land keeps in factory.db: the follow-up outbox, one row per bead (the follow-ups its close has not filed yet).
 
 The part is listed in app/parts.py (STAGE_PARTS). docs/design/stage-isolation.md 3.1."""
-from taskloop.contracts.dbparts import Part
-from taskloop.contracts.followups import FollowupOutbox
+from tlkernel.dbparts import Part
+from tlkernel.followups import FollowupOutbox
 
 TABLE = "followup"
 

@@ -7,10 +7,11 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 import pytest
+from support.case import Case
+
 from delegate.app import answer
 from delegate.contracts import codec, live, schema, wire
 from delegate.contracts.json_types import arr
-from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[3]
 

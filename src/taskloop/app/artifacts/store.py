@@ -8,11 +8,11 @@ import json
 from pathlib import Path
 
 from atomic_io import atomic_write_bytes
+from tlkernel.artifact import SIDECAR_SUFFIX, ArtifactMeta, ArtifactSlot
+from tlkernel.wire import Refused, dump, load
 
 from taskloop.app.artifacts import rules
 from taskloop.app.artifacts.keep import CAP_BYTES, Keeper
-from taskloop.contracts.artifact import SIDECAR_SUFFIX, ArtifactMeta, ArtifactSlot
-from taskloop.contracts.wire import Refused, dump, load
 
 
 def run_folder(root: Path, slot: ArtifactSlot) -> Path:

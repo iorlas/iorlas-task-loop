@@ -18,14 +18,14 @@ from taskloop.app.pipeline.closing_branch import ReleaseSlot
 from taskloop.app.pipeline.closing_settle import Settle
 from taskloop.app.track.closing import ClosingBeads
 from taskloop.app.wire import closeguard
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.log import Note
 from taskloop.domain import effects as fx
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
+from tlkernel.bead import Bead
+from tlkernel.enums import Outcome
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.log import Note
 
 
 class Effects(Case):

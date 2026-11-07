@@ -8,6 +8,19 @@ import shutil
 from collections.abc import Callable
 from pathlib import Path
 
+from tlkernel import paths
+from tlkernel.beadsport import Beads
+from tlkernel.config import RepoProfile
+from tlkernel.enums import LockWhat
+from tlkernel.env import Env
+from tlkernel.envvars import EnvVar
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+from tlkernel.ids import new_loop_id
+from tlkernel.loop import LoopState
+from tlkernel.procport import Spawner
+from tlkernel.rowstores import ReposStore
+
 from taskloop.adapters import beadtools, childenv, ident, pidcheck
 from taskloop.adapters import storm as storm_file
 from taskloop.adapters.bd import BdStore
@@ -28,18 +41,6 @@ from taskloop.app.slots import engine_lock
 from taskloop.app.track import trail
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import paths
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.config import RepoProfile
-from taskloop.contracts.enums import LockWhat
-from taskloop.contracts.env import Env
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import new_loop_id
-from taskloop.contracts.loop import LoopState
-from taskloop.contracts.procport import Spawner
-from taskloop.contracts.rowstores import ReposStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.beads import rules as beadlint
 from taskloop.stores.delegate import make_probe as make_net_probe

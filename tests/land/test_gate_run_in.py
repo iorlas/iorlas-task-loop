@@ -16,8 +16,8 @@ from taskloop.app.checks.clean import isolated
 from taskloop.app.checks.host import CheckFault
 from taskloop.app.checks.runner import cached_gate
 from taskloop.app.land.gate import Gate, GatePass, Problem
-from taskloop.contracts.checks import CheckFaultKind
 from taskloop.domain.checks.specs import gate_items
+from tlkernel.checks import CheckFaultKind
 
 
 class SlotGate(GateCase):

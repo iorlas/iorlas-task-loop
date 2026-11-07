@@ -4,9 +4,9 @@ from unittest import mock
 import support.paths  # noqa: F401
 from support.case import Case
 
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.ids import BeadId
 from taskloop.domain.plan.brief import linked
+from tlkernel.bead import Bead
+from tlkernel.ids import BeadId
 
 
 class LinkedIds(Case):

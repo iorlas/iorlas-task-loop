@@ -31,7 +31,7 @@ class DetachedFactory(Case):
                 "from pathlib import Path\n"
                 "from taskloop.adapters import procs\n"
                 "from taskloop.adapters.spawner import RealSpawner\n"
-                "from taskloop.contracts.env import Env\n"
+                "from tlkernel.env import Env\n"
                 f"with open({str(root / 'log')!r}, 'ab') as out:\n"
                 f" child = RealSpawner(Env({{}})).start({[sys.executable, '-c', standin, str(proof)]!r}, out=out)\n"
                 f"Path({str(recorded)!r}).write_text(json.dumps({{'pid': child.pid, 'start': procs.proc_start(child.pid)}}))\n"

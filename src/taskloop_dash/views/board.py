@@ -4,15 +4,15 @@ import statistics
 from collections.abc import Sequence
 from typing import Literal
 
-from taskloop.contracts.ask import Ask
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.dash import BeadCard, Column, Marker, Phase, Totals
-from taskloop.contracts.enums import AskStatus
-from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop_dash.tails import parse_ts
 from taskloop_dash.views import columns, floor, names, passes, phases
 from taskloop_dash.views.runfacts import Run
 from taskloop_dash.views.world import ProjectIn, World
+from tlkernel.ask import Ask
+from tlkernel.bead import Bead
+from tlkernel.dash import BeadCard, Column, Marker, Phase, Totals
+from tlkernel.enums import AskStatus
+from tlkernel.ids import BeadId, is_bead_id
 
 SLOT, LOOK = "slot", "owner-look"  # the labels of the loop's own beads: never cards
 EPIC = "epic"

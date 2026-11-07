@@ -14,13 +14,13 @@ from taskloop.app.loop.gate import GateRole
 from taskloop.app.loop.net import NetState
 from taskloop.app.loop.settle import Counters, Settle
 from taskloop.app.loop.take import Taker
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.config import LoopConfig
-from taskloop.contracts.enums import Result
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.slots import SlotGitError
 from taskloop.domain import outcome, storm
+from tlkernel.bead import Bead
+from tlkernel.config import LoopConfig
+from tlkernel.enums import Result
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.slots import SlotGitError
 
 DNS = "fatal: unable to access 'https://github.com/org/repo': Could not resolve host: github.com"
 

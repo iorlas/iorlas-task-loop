@@ -3,9 +3,9 @@ import os
 from pathlib import Path
 
 from taskloop.app.prune import slotstate
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.slots import Checkout
+from tlkernel.ids import loop_key
+from tlkernel.paths import ConfigDir
+from tlkernel.slots import Checkout
 
 DAY = 86400.0
 NOW = 100 * DAY

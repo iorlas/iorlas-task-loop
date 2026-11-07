@@ -4,6 +4,16 @@ import hashlib
 import json
 from pathlib import Path
 
+from tlkernel.bd_errors import BdCommandFailure
+from tlkernel.beadsport import BdFailure
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+from tlkernel.ids import loop_key
+from tlkernel.paths import ConfigDir
+from tlkernel.rowstores import ReposStore
+from tlkernel.slots import SlotView
+
 from taskloop.adapters import pidcheck
 from taskloop.adapters.ident import claude_dir, config_dir
 from taskloop.adapters.locks import resource_holders
@@ -12,15 +22,6 @@ from taskloop.app.loop.files import LoopFiles
 from taskloop.app.release import catalog, pins
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.bd_errors import BdCommandFailure
-from taskloop.contracts.beadsport import BdFailure
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.rowstores import ReposStore
-from taskloop.contracts.slots import SlotView
 from taskloop.domain.brief import AskLine, Brief, LoopLine, ResourceLine, status_json, status_lines
 
 RECENT = 5

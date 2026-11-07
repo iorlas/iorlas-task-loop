@@ -8,8 +8,6 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.reconcile import Lease, LoopFact, SlotFact
 from taskloop.domain.reconcile.diff import DAY, diff
 from taskloop.domain.reconcile.facts import (
     Action,
@@ -28,6 +26,8 @@ from taskloop.domain.reconcile.facts import (
     RepoView,
     Worktree,
 )
+from tlkernel.ids import BeadId
+from tlkernel.reconcile import Lease, LoopFact, SlotFact
 
 NOW = 100 * DAY
 A1, B2, SB1 = BeadId("a-1"), BeadId("b-2"), BeadId("sb-1")

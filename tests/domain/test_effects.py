@@ -8,10 +8,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
-from taskloop.contracts.kinds import ASKS, FINISH, PAUSES, Kind
 from taskloop.domain import effects as fx
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
+from tlkernel.kinds import ASKS, FINISH, PAUSES, Kind
 
 REL = fx.ReleaseSlot("task/t-1", 3)
 HEAD = [fx.SaveBranch(), fx.RecordRun()]

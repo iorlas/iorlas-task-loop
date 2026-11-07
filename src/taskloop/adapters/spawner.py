@@ -8,8 +8,8 @@ from typing import IO, Literal
 
 from taskloop.adapters import deadline, procs
 from taskloop.adapters.childenv import tool_env
-from taskloop.contracts.env import Env
-from taskloop.contracts.procport import Hold, Ran, RanBytes, Streamed, WaitTimeout
+from tlkernel.env import Env
+from tlkernel.procport import Hold, Ran, RanBytes, Streamed, WaitTimeout
 
 GRACE_S = procs.STOP_GRACE_S
 

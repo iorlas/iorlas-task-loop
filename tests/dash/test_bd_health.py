@@ -6,13 +6,13 @@ from support.factory_index import ingest, seed_beads
 from support.fakes import FakeBeadStore
 from support.repos import write_repos
 
-from taskloop.contracts import beadrows, factorydb
-from taskloop.contracts.bead import BdError
-from taskloop.contracts.beadsport import BdFailure
-from taskloop.contracts.ids import BeadId, loop_key
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
 from taskloop_dash.index import Indexer
+from tlkernel import beadrows, factorydb
+from tlkernel.bead import BdError
+from tlkernel.beadsport import BdFailure
+from tlkernel.ids import BeadId, loop_key
 
 ERROR = "other: database locked\nretry later"
 

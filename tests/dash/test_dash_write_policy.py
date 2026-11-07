@@ -11,8 +11,8 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts.dash import WRITES
 from taskloop_dash.http import make_handler
+from tlkernel.dash import WRITES
 
 HOST = "127.0.0.1:7878"
 HEADERS = {"Host": HOST, "Origin": f"http://{HOST}", "X-Taskloop-Dash": "1", "Content-Type": "application/json"}

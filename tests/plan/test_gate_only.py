@@ -12,8 +12,8 @@ from support.plan_host import FakePlan
 from support.plans import CLEAN, HAS_F, PLAN, WRITE
 
 from taskloop.app.plan.planner import Planner
-from tlkernel.plancheck import adhoc
 from taskloop.domain.checks import lint
+from tlkernel.plancheck import adhoc
 
 
 class GateOnly(EngineTest):

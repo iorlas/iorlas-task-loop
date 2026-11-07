@@ -5,7 +5,7 @@ from pathlib import Path
 
 from taskloop.adapters.childenv import tool_env
 from taskloop.adapters.gitrepo import pinned_env
-from taskloop.contracts.env import snapshot
+from tlkernel.env import snapshot
 
 
 def git(*args: str, cwd: str | Path) -> str:

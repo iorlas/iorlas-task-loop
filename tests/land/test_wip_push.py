@@ -16,7 +16,7 @@ from support.plans import CLEAN, PLAN, WRITE
 from taskloop.adapters.git import RealGit
 from taskloop.app.land.outbound import Outbound
 from taskloop.app.run.engine import Engine
-from taskloop.contracts.gitfacts import GitOutcome
+from tlkernel.gitfacts import GitOutcome
 
 RUN = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 WIP = ("origin", "HEAD:refs/heads/task/t-1")

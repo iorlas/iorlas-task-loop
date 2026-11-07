@@ -3,8 +3,8 @@ import json
 from argparse import Namespace
 from typing import Protocol
 
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.procport import Ran
+from tlkernel.ids import BeadId
+from tlkernel.procport import Ran
 
 TASK = "task/"
 

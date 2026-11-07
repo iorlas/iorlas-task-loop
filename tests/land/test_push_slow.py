@@ -13,9 +13,9 @@ from support.narrow_hosts import table_kit
 from taskloop.app.land import push
 from taskloop.app.land.gate import mint
 from taskloop.app.land.state import Land, Next, Phase
-from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.land.matchers import Push as PushText
+from tlkernel.ids import TreeSha
+from tlkernel.runkey import BaseSha
 
 TIMED_OUT = (124, "\n(timed out after 10 min: the engine stopped it and everything it started)")
 

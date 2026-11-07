@@ -7,8 +7,8 @@ from slots.test_slot_pool import Rig
 from taskloop.app.slots import aside
 from taskloop.app.slots.marks import mark_held
 from taskloop.app.slots.pool import Slot
-from taskloop.contracts.beadsport import BeadPatch
-from taskloop.contracts.slots import SlotFail
+from tlkernel.beadsport import BeadPatch
+from tlkernel.slots import SlotFail
 
 
 class Aside(Rig):

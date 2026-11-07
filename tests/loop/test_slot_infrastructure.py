@@ -13,13 +13,13 @@ from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.settle import Counters, Settle
 from taskloop.app.loop.take import Taker
 from taskloop.app.slots.pool import Slot
-from taskloop.contracts.bead import BdError, Bead
-from taskloop.contracts.beadsport import BdFailure
-from taskloop.contracts.config import LoopConfig
-from taskloop.contracts.enums import Result
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.slots import SlotFail, SlotGitError
 from taskloop.domain.lanes import pauses
+from tlkernel.bead import BdError, Bead
+from tlkernel.beadsport import BdFailure
+from tlkernel.config import LoopConfig
+from tlkernel.enums import Result
+from tlkernel.ids import BeadId
+from tlkernel.slots import SlotFail, SlotGitError
 
 
 class Infrastructure(Rig):

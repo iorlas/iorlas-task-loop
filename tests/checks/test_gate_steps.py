@@ -12,9 +12,9 @@ from support.plans import CLEAN, PLAN, WRITE
 # isort: split
 from support.logs import records
 
-from taskloop.contracts.checks import Check
-from taskloop.contracts.ids import CheckId
 from taskloop.domain.checks.specs import due, engine_digest, gate_items, items_of
+from tlkernel.checks import Check
+from tlkernel.ids import CheckId
 
 STEP = "true"
 RED_ON_D2 = procsim.default("red-on-d2", lambda cwd, env: (1 if procsim.f_txt(cwd) == "d2" else 0, f"step saw {procsim.f_txt(cwd)}"))

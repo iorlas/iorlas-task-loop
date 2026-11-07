@@ -5,11 +5,11 @@ outcome. An ask that ended unanswered (closed, withdrawn, or replaced by a newer
 that were answered. A row is open only while its ask is the bead's live ask."""
 from collections.abc import Sequence
 
-from taskloop.contracts.ask import Ask
-from taskloop.contracts.dash import AdrRow, LedgerRow, Similar
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.ledger import LedgerEntry
 from taskloop_dash.views.world import ProjectIn, World
+from tlkernel.ask import Ask
+from tlkernel.dash import AdrRow, LedgerRow, Similar
+from tlkernel.ids import loop_key
+from tlkernel.ledger import LedgerEntry
 
 LEDGER_MAX = 500
 PRUNE_AFTER_S = 30 * 86400  # a decision no plan cited for 30 days is offered for pruning (dash-spec 7.2)

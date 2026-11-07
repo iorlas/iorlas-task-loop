@@ -18,9 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from taskloop.contracts import answers
 from taskloop.domain.lanes import caps
 from taskloop.domain.lanes.roles import ROLES
+from tlkernel import answers
 
 ROOT = Path(__file__).resolve().parents[2]
 EXCHANGES = ROOT / "tests" / "fixtures" / "exchanges"

@@ -11,12 +11,12 @@ from taskloop.app.review.routing import Routing
 from taskloop.app.review.settles import Settles
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.review.verifier import Verifier
-from taskloop.contracts.asked import Asked
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.gitfacts import GrepHit
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.stop import Stop
 from taskloop.domain.asks.spec import AskSpec
+from tlkernel.asked import Asked
+from tlkernel.config import EngineConfig
+from tlkernel.gitfacts import GrepHit
+from tlkernel.kinds import Kind
+from tlkernel.stop import Stop
 
 
 class ReviewGit(FakeGit):

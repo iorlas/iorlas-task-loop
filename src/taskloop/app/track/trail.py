@@ -9,18 +9,18 @@ from pathlib import Path
 from typing import Any, Final
 
 from jsonl_log import JsonlLog, held
+from tlkernel import events, wire
+from tlkernel.beadsport import BdFailure, Beads
+from tlkernel.events import Event, EventRec
+from tlkernel.guard import guard
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId
+from tlkernel.locator import RunLocator
+from tlkernel.paths import ConfigDir
+from tlkernel.rotating import NO_ROTATION
+from tlkernel.rowstores import ReposStore
 
 from taskloop.adapters.gitrepo import repo_root
-from taskloop.contracts import events, wire
-from taskloop.contracts.beadsport import BdFailure, Beads
-from taskloop.contracts.events import Event, EventRec
-from taskloop.contracts.guard import guard
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.rotating import NO_ROTATION
-from taskloop.contracts.rowstores import ReposStore
 from taskloop.stores.real import real_stores
 
 SOURCE: Final = "task-loop"

@@ -4,8 +4,8 @@ import time
 from dataclasses import asdict, dataclass
 from typing import Final
 
-from taskloop.contracts.ago import ago
 from taskloop.domain import versions
+from tlkernel.ago import ago
 
 STATUS_LINES: Final = 40
 STATUS_BYTES: Final = 8 * 1024

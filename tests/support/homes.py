@@ -3,8 +3,8 @@ the way the edge reads it: a snapshot taken now, so a test that patches the envi
 from pathlib import Path
 
 from taskloop.adapters import ident
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.env import snapshot
+from tlkernel.paths import ConfigDir
 
 
 def config_dir() -> Path:

@@ -12,7 +12,7 @@ import support.paths  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[2]
 DASH = ROOT / "src" / "taskloop_dash"
-PATHS = ROOT / "src" / "taskloop" / "contracts" / "paths.py"
+PATHS = ROOT / "packages" / "kernel" / "src" / "tlkernel" / "paths.py"
 PLAIN_PYTHON = {"prepush.py", "layout_migrate.py", "key_migrate.py"}  # no record in the hook (.importlinter); migrators name OLD places
 MAKES_CONFIGDIR = {"env.py", "bind.py"}  # where the config root is taken from the process: everything else is handed a ConfigDir
 

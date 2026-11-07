@@ -12,8 +12,8 @@ import support.paths  # noqa: F401
 from taskloop.adapters import delegate, delegate_wire
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from taskloop.app.workers.lane_acts import LaneActs
-from taskloop.contracts.delegate import RunRequest
 from taskloop.domain.lanes import pauses, policy
+from tlkernel.delegate import RunRequest
 
 
 class PauseProducers(Case):

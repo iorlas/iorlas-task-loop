@@ -12,8 +12,8 @@ import support.paths  # noqa: F401
 from support import engine_case as te
 from support.builders import make_engine
 
-from taskloop.contracts import config
 from taskloop.domain import slot_env
+from tlkernel import config
 
 KEYS = ("TMPDIR", "TMP", "TEMP", "TL_SLOT")
 

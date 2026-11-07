@@ -11,12 +11,11 @@ from pathlib import Path
 from typing import ClassVar
 from unittest import mock
 
+import hermetic  # noqa: F401  (a home of its own for every test)
 from any_agent.harnesses import opencode_sandbox
 from support.case import Case
 from support.fake_clock import SteppingClock
 from support.tmpdir import TemporaryDirectory
-
-import hermetic  # noqa: F401  (a home of its own for every test)
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "delegate"))
 import shutil
@@ -25,11 +24,12 @@ from any_agent import watch
 from any_agent.harnesses import claude
 from any_agent.harnesses.opencode import OpenCodeHarness
 from any_agent.supervisor import RunHooks
+from support import fake_worker
+from support.fake_worker import Jump
+
 from delegate.adapters import codex_account, git
 from delegate.app import env, harnesses, launch
 from delegate.contracts.json_types import Json
-from support import fake_worker
-from support.fake_worker import Jump
 
 T = 1_000_000.0
 LIMIT_S = 30  # replays wait out the grace and stall limits (about 4 s each)

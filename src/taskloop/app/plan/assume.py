@@ -3,8 +3,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
-from taskloop.contracts.plancheck import PlanData
-from taskloop.contracts.wire import Open
+from tlkernel.plancheck import PlanData
+from tlkernel.wire import Open
+
 from taskloop.domain.plan.matchers import word_set
 
 

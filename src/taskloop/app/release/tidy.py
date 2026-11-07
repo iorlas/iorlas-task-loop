@@ -1,8 +1,8 @@
 """Leftovers of a branch that has landed: its worktrees and the branch itself. Plain `git worktree remove` only (it refuses a tree with
 changes or untracked files, and a locked one), never --force; the branch goes only when patch for patch it is on origin/main.
 All of it through the Git port."""
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.slots import SlotGitError
+from tlkernel.gitport import Git
+from tlkernel.slots import SlotGitError
 
 BASE = "origin/main"
 

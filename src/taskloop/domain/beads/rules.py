@@ -5,8 +5,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final
 
-from taskloop.contracts.bead import Bead
 from taskloop.domain.beads import matchers
+from tlkernel.bead import Bead
 
 MAX_TOUCHES: Final = 8
 NEEDS_AC: Final = "needs-ac"  # the label the loop puts on a bead it refused

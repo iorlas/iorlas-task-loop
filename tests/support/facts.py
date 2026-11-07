@@ -13,19 +13,19 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.pipeline.steps import Steps
-from taskloop.contracts import fence
-from taskloop.contracts.checkpoint import Checkpoint, StageProgress
-from taskloop.contracts.checks import Check, CheckResult, CheckRun
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.plancheck import PlanCheck
-from taskloop.contracts.ports import Clock
-from taskloop.contracts.stagefacts import RunFacts
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 from taskloop.stores.runports import RunPorts
+from tlkernel import fence
+from tlkernel.checkpoint import Checkpoint, StageProgress
+from tlkernel.checks import Check, CheckResult, CheckRun
+from tlkernel.config import EngineConfig
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId
+from tlkernel.paths import ConfigDir
+from tlkernel.plancheck import PlanCheck
+from tlkernel.ports import Clock
+from tlkernel.stagefacts import RunFacts
 
 
 class MemCheckpoints:

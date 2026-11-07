@@ -4,12 +4,13 @@ the check runner, with its cache and limits; any other command is only looked up
 in the repo). What comes back is a planner fact: a missing program, a check that already passes, a check this host cannot run."""
 from pathlib import Path
 
-from taskloop.app.plan.amend import AmendState
-from taskloop.app.plan.host import PlanHand, PlanPorts
-from taskloop.app.plan.state import PlanState
 from tlkernel.checks import UNVERIFIED_EXIT, CheckResult
 from tlkernel.config import CheckSpec
 from tlkernel.stagefacts import RunFacts
+
+from taskloop.app.plan.amend import AmendState
+from taskloop.app.plan.host import PlanHand, PlanPorts
+from taskloop.app.plan.state import PlanState
 from taskloop.domain.beads import matchers as acnames
 from taskloop.domain.checks.specs import repo_check
 from taskloop.domain.matchers import clip

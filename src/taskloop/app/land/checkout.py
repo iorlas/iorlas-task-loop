@@ -4,12 +4,13 @@ what to stage."""
 from collections.abc import Mapping
 from typing import Protocol
 
+from tlkernel.gitfacts import StatusRow
+from tlkernel.gitport import Git
+from tlkernel.ids import TreeSha
+from tlkernel.slots import SlotGitError
+from tlkernel.stagefacts import RunLogPort
+
 from taskloop.adapters import treehash
-from taskloop.contracts.gitfacts import StatusRow
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.slots import SlotGitError
-from taskloop.contracts.stagefacts import RunLogPort
 from taskloop.domain.matchers import NetText
 from taskloop.domain.write.newfiles import new_file_kind
 

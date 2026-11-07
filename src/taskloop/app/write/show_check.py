@@ -2,9 +2,10 @@
 role) must be in the artifact store for this write's attempt. A miss goes back to the writer once as a retry reason; it never parks."""
 from pathlib import Path
 
+from tlkernel.artifact import ArtifactSlot
+from tlkernel.plancheck import Open
+
 from taskloop.app.artifacts import store
-from taskloop.contracts.artifact import ArtifactSlot
-from taskloop.contracts.plancheck import Open
 from taskloop.domain.review import visual
 
 SHOW_BACK = ("\nThe plan's `show` items name pictures or files that must be registered with the artifact_add tool for this write, with "

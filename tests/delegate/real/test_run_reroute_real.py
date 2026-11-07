@@ -3,17 +3,17 @@
 from dataclasses import replace
 from unittest import mock
 
+import routing_support as support
+from run_support import RunBase
+from support.procsim import real_proc
+from test_route import CFG, lanes, why
+
 from delegate.adapters import git
 from delegate.app import env, launch
 from delegate.contracts import history as hist
 from delegate.contracts.routing import CallArgs, Step
 from delegate.domain.holds.book import HoldBook
 from delegate.domain.routing.router import Router
-from support.procsim import real_proc
-
-import routing_support as support
-from run_support import RunBase
-from test_route import CFG, lanes, why
 
 
 class RunReroute(RunBase):

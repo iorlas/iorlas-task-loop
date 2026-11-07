@@ -1,9 +1,9 @@
 """QueueKey (merge-queue.md section 4): a build is reusable only under an equal key; each invalidation event changes one input."""
 import pytest
 
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 from taskloop.domain.land.queue_key import CHECK_SET_FIELDS, OTHER_FIELDS, QueueKey, check_set_hash
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.runkey import BaseSha, Digest, RunKey
 
 
 def run_key(**kw: str) -> RunKey:

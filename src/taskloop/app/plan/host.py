@@ -2,8 +2,6 @@
 from collections.abc import Callable, Sequence
 from typing import Protocol
 
-from taskloop.adapters.check_probe import PathProbe
-from taskloop.adapters.looks import Methods
 from tlkernel.adrs import AdrStore
 from tlkernel.ask import AskAnswer
 from tlkernel.asked import Asked
@@ -17,6 +15,9 @@ from tlkernel.ids import TreeSha
 from tlkernel.plancheck import PlanData
 from tlkernel.stop import Stop
 from tlkernel.wire import Open
+
+from taskloop.adapters.check_probe import PathProbe
+from taskloop.adapters.looks import Methods
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.review.ledger import Ledger
 

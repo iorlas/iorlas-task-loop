@@ -2,13 +2,14 @@
 `tlkernel.adrs.AdrStore`, a cache of the repo's `docs/adr` files at the base commit."""
 import time
 
+from tlkernel.adrs import AdrStore
+from tlkernel.plancheck import PlanData
+from tlkernel.stagefacts import RunFacts
+
 from taskloop.app.plan import adrsync
 from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.host import PlanHand, PlanPorts
 from taskloop.app.plan.state import PlanState
-from tlkernel.adrs import AdrStore
-from tlkernel.plancheck import PlanData
-from tlkernel.stagefacts import RunFacts
 
 SHOWN = 20  # the newest ADRs a plan prompt carries
 TEXT_CAP = 600

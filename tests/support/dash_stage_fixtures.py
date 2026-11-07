@@ -1,6 +1,6 @@
 """Recorded stage-log examples for the dashboard contract and browser checks."""
 
-from taskloop.contracts import dash as D
+from tlkernel import dash as D
 
 
 def attempt(id: str, text: str, t: float) -> D.StageAttempt:

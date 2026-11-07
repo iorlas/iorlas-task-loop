@@ -12,7 +12,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from taskloop.adapters import landlock
 from taskloop.app.release import clone
 from taskloop.app.release.push import release_lock_path
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.paths import ConfigDir
 
 HOME = ConfigDir(Path("/c"))
 SPELLINGS = ["git@github.com:iorlas/task-loop.git", "ssh://git@github.com/iorlas/task-loop", "ssh://git@github.com:22/iorlas/task-loop.git",

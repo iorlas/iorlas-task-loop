@@ -4,13 +4,14 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel import fence
+from tlkernel.asked import Fallback, SessionUpdate, Updates
+from tlkernel.checkpoint import Checkpoint, RunState, WriterSession
+from tlkernel.delegate import DelegateResult
+from tlkernel.run import CallIdentity
+
 from taskloop.app.workers import done_memo
 from taskloop.app.workers.call import Call
-from taskloop.contracts import fence
-from taskloop.contracts.asked import Fallback, SessionUpdate, Updates
-from taskloop.contracts.checkpoint import Checkpoint, RunState, WriterSession
-from taskloop.contracts.delegate import DelegateResult
-from taskloop.contracts.run import CallIdentity
 from taskloop.domain.lanes.roles import READ_ONLY_NODES
 
 

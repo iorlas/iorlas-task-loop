@@ -5,13 +5,13 @@ import os
 import time
 from collections.abc import Callable
 
-from taskloop.contracts import factorydb, log, runfacts
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.locator import RunBundle, RunLocator
-from taskloop.contracts.paths import ConfigDir
 from taskloop_dash import jsonl
 from taskloop_dash.index.beadpass import BeadPass
 from taskloop_dash.index.facts import Facts, append, decode, encode
+from tlkernel import factorydb, log, runfacts
+from tlkernel.beadsport import Beads
+from tlkernel.locator import RunBundle, RunLocator
+from tlkernel.paths import ConfigDir
 
 HEAD = 256  # digest the first min(256, previous size) bytes before trusting a cursor
 CHUNK = 256 * 1024

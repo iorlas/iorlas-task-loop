@@ -5,10 +5,11 @@ import os
 from pathlib import Path
 from unittest import mock
 
+from support.tmpdir import TemporaryDirectory
+
 from delegate.app import env
 from delegate.contracts.json_types import obj
 from delegate.contracts.stores import ConfigStore
-from support.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[3]
 

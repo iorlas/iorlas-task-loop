@@ -3,8 +3,8 @@
 from support.case import Case
 from support.dashlogs import RunScript, T
 
-from taskloop.contracts.delegate import LiveMsg
 from taskloop_dash.views import passes, stage_logs
+from tlkernel.delegate import LiveMsg
 
 
 class StageLogs(Case):

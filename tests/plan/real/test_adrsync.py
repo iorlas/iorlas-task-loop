@@ -7,9 +7,9 @@ from support import homes
 from support.spawn import port_git
 
 from taskloop.app.plan import adrsync
-from taskloop.contracts import adrfiles
-from taskloop.contracts.adrs import AdrStore
-from taskloop.contracts.ledger import Adr
+from tlkernel import adrfiles
+from tlkernel.adrs import AdrStore
+from tlkernel.ledger import Adr
 
 REPO = "/r/adrsync-real"
 

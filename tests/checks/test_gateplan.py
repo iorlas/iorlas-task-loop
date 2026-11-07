@@ -13,13 +13,13 @@ from support.plans import FALSE
 from taskloop.adapters.childenv import CHECK_SECRETS
 from taskloop.app.checks.cache import is_green, plan_digest
 from taskloop.app.checks.gateplan import PlanDecision, parse, skipped
-from taskloop.contracts.config import ConfigError
-from taskloop.contracts.env import Env
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.procport import Ran
-from taskloop.contracts.runkey import BaseSha
-from taskloop.contracts.slots import GitReadFailure
 from taskloop.domain.checks.specs import gate_items
+from tlkernel.config import ConfigError
+from tlkernel.env import Env
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.procport import Ran
+from tlkernel.runkey import BaseSha
+from tlkernel.slots import GitReadFailure
 
 
 def step(name="coverage", run=False, **extra):

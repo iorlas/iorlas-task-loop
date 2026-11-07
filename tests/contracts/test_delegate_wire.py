@@ -11,8 +11,8 @@ import support.paths  # noqa: F401
 from contracts import samples as S
 from taskloop.adapters import delegate as dl
 from taskloop.adapters import delegate_wire
-from taskloop.contracts import delegate, wire
 from taskloop.domain.lanes import policy as lp
+from tlkernel import delegate, wire
 
 
 class Contract4(Case):

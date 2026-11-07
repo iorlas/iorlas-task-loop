@@ -6,12 +6,12 @@ import threading
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from taskloop.adapters.bd import BdStore
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.paths import default_root
 from taskloop_dash import serve
 from taskloop_dash.app import Dash
 from taskloop_dash.cli import dash as dash_cli
 from taskloop_dash.env import Env, Ports
+from tlkernel.env import snapshot
+from tlkernel.paths import default_root
 
 
 def adapter_store(repo):

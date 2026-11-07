@@ -6,7 +6,7 @@ from pathlib import Path
 from support.fakegit import FakeGit
 
 from taskloop.adapters import layout_migrate as lm
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.paths import ConfigDir
 
 RUN = "t-1-20261015-100000"
 KEY = "repo-12345678"

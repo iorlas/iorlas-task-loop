@@ -17,17 +17,17 @@ from taskloop.app.checks.keydiff import first_difference
 from taskloop.app.land.carry import Carry
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.stackgate import StackGate
-from taskloop.contracts.checks import CheckResult
-from taskloop.contracts.config import load
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitfacts import TreeEntry
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.procport import Ran
-from taskloop.contracts.runkey import BaseSha, Digest
-from taskloop.contracts.slots import Checkout, NotARepo
 from taskloop.domain.checks.specs import repo_check
 from taskloop.stores.runlog import RunLog
+from tlkernel.checks import CheckResult
+from tlkernel.config import load
+from tlkernel.env import Env
+from tlkernel.gitfacts import TreeEntry
+from tlkernel.gitport import Git
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.procport import Ran
+from tlkernel.runkey import BaseSha, Digest
+from tlkernel.slots import Checkout, NotARepo
 
 OID, TREE, BASE = "1550b77c" + "0" * 32, TreeSha("tree-1"), BaseSha("base-1")
 INPUTS = ["src/**"]

@@ -5,16 +5,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from tlkernel.beadsport import BdFailure, Beads
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId
+from tlkernel.landed import Landed, landed_by
+from tlkernel.paths import ConfigDir
+from tlkernel.slots import git_probe
+from tlkernel.trace import RunTrace
+
 from taskloop.adapters import beadtools
 from taskloop.adapters.bdids import prefix_of
-from taskloop.contracts.beadsport import BdFailure, Beads
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.landed import Landed, landed_by
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.slots import git_probe
-from taskloop.contracts.trace import RunTrace
 from taskloop.stores.real import real_stores
 
 

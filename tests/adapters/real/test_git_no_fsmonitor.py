@@ -7,7 +7,7 @@ from pathlib import Path
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters.git import RealGit
-from taskloop.contracts.env import Env, snapshot
+from tlkernel.env import Env, snapshot
 
 
 def sh(*a, cwd):

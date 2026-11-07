@@ -4,12 +4,12 @@ import copy
 import json
 from unittest.mock import patch
 
+import hermetic  # noqa: F401  (a home of its own for every test)
+from test_route import CFG, decide, lanes
+
 from delegate.app import decide as dec
 from delegate.app import env, usage
 from delegate.domain.lanes.lane import Lane
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-from test_route import CFG, decide, lanes
 
 
 class DeepSeekTests:

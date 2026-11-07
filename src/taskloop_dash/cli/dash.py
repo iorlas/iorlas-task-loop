@@ -10,13 +10,13 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import ModuleType
 
-from taskloop import contracts
-from taskloop.contracts import env as penv
-from taskloop.contracts.factorydb import declare_parts
-from taskloop.contracts.paths import default_root
+import tlkernel as contracts
 from taskloop_dash import serve
 from taskloop_dash.env import Env, Ports
 from taskloop_dash.parts import DASH_PARTS
+from tlkernel import env as penv
+from tlkernel.factorydb import declare_parts
+from tlkernel.paths import default_root
 
 PACKAGE = Path(__file__).resolve().parents[1]
 CONTRACTS = Path(contracts.__file__).resolve().parent  # the records it reads and the commands it sends

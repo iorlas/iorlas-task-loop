@@ -5,14 +5,14 @@ import os
 from pathlib import Path
 from typing import ClassVar
 
+import hermetic  # noqa: F401  (a home of its own for every test)
 from any_agent.harnesses import claude
+from support.tmpdir import TemporaryDirectory
+from test_route import need, route
+
 from delegate.adapters import codex_account
 from delegate.contracts.json_types import Json
 from delegate.domain.cost import accounting as usage
-from support.tmpdir import TemporaryDirectory
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-from test_route import need, route
 
 # Two consecutive real Codex rollout token_count totals of one thread (2026-10-20, a resumed thread):
 # the second is cumulative, not the second call's own.

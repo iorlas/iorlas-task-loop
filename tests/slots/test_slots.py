@@ -37,10 +37,10 @@ from taskloop.app.slots import (
     engine_lock,
 )
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.config import SlotsConfig
-from taskloop.contracts.enums import Result
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.run import RunReport
+from tlkernel.config import SlotsConfig
+from tlkernel.enums import Result
+from tlkernel.env import snapshot
+from tlkernel.run import RunReport
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 

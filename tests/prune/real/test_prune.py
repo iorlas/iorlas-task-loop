@@ -23,14 +23,14 @@ from taskloop.app.reconcile import apply, observe
 from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.release.shell import of
 from taskloop.app.slots import engine_lock
-from taskloop.contracts.bead import BdError, Bead
-from taskloop.contracts.beadsport import BdFailure, Beads
-from taskloop.contracts.config import LoopConfig
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.landed import Landed as LandedRec
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.bead import BdError, Bead
+from tlkernel.beadsport import BdFailure, Beads
+from tlkernel.config import LoopConfig
+from tlkernel.env import snapshot
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId
+from tlkernel.landed import Landed as LandedRec
+from tlkernel.paths import ConfigDir
 
 DAY = 86400
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"}

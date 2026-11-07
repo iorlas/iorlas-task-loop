@@ -6,8 +6,8 @@ from pathlib import Path
 
 from taskloop.app.wire import handoff, real
 from taskloop.app.wire import hook as index
-from taskloop.contracts.env import Env, snapshot
-from taskloop.contracts.gitport import Git
+from tlkernel.env import Env, snapshot
+from tlkernel.gitport import Git
 
 
 def context_out(text: str) -> str:

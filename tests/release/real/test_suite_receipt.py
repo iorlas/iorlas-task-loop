@@ -14,12 +14,12 @@ from taskloop.app.checks import authorization
 from taskloop.app.land.push_judge import PushStatus, judge_push
 from taskloop.app.release import flow, gate, shell
 from taskloop.app.release.push import push_main
-from taskloop.contracts.env import Env
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.specs import gate_items
 from taskloop.stores.real import real_stores
+from tlkernel.env import Env
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.paths import ConfigDir
+from tlkernel.runkey import BaseSha
 
 
 class ReleaseReceipt(Case):

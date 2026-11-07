@@ -9,8 +9,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 from taskloop.adapters.ident import config_dir, identity
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.identity import Identity
+from tlkernel.env import snapshot
+from tlkernel.identity import Identity
 
 PER_THREAD: dict[str, str] | None = None
 _serving = threading.local()

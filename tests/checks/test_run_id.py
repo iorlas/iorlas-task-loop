@@ -11,8 +11,8 @@ from support.check_host import CheckHostCase
 from support import procsim
 
 from taskloop.adapters import check_files, childenv
-from taskloop.contracts.checks import Durations
-from taskloop.contracts.envvars import EnvVar
+from tlkernel.checks import Durations
+from tlkernel.envvars import EnvVar
 
 
 def show(cwd, env):

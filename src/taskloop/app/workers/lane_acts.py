@@ -5,10 +5,11 @@ timeout and the exit it was made on. The network gate (probe, backoff, the pause
 import time
 from typing import Any, Final
 
+from tlkernel import log as rec
+from tlkernel.delegate import DelegateResult
+from tlkernel.enums import WaitWhat
+
 from taskloop.app.workers import writer_pin
-from taskloop.contracts import log as rec
-from taskloop.contracts.delegate import DelegateResult
-from taskloop.contracts.enums import WaitWhat
 from taskloop.domain.lanes import pin
 from taskloop.domain.lanes import policy as lp
 from taskloop.domain.lanes.notes import NET_BACKOFF, NOTES

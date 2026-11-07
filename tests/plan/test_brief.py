@@ -16,9 +16,9 @@ from plan.brief_cases import CASES, beads
 from taskloop.app.asks import intake
 from taskloop.app.plan.briefs import ENGINE_LABELS
 from taskloop.app.plan.prompts import PLAN_BRIEF_KB, PLAN_PROMPT
+from taskloop.domain.plan import brief as bf
 from tlkernel.bead import Bead, Comment
 from tlkernel.ids import BeadId
-from taskloop.domain.plan import brief as bf
 
 GOLDEN = Path(__file__).resolve().parents[1] / "fixtures" / "brief_golden"
 

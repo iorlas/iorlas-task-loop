@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 from taskloop.adapters.git import RealGit
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.slots import SlotGitError
+from tlkernel.env import snapshot
+from tlkernel.slots import SlotGitError
 
 
 def sh(*a: str, cwd: Path) -> str:

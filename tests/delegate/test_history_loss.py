@@ -6,12 +6,12 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from unittest import mock
 
+import hermetic  # noqa: F401
+from support.tmpdir import TemporaryDirectory
+
 from delegate.app import doctor, env
 from delegate.contracts import history as hist
 from delegate.contracts import stores
-from support.tmpdir import TemporaryDirectory
-
-import hermetic  # noqa: F401
 
 
 def row(run_id: str) -> hist.CanaryRow:

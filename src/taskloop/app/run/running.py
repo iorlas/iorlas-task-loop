@@ -4,17 +4,18 @@ import time
 from pathlib import Path
 from typing import Any
 
+from tlkernel.beadsport import Beads
+from tlkernel.enums import LockWhat
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId, is_bead_id
+
 from taskloop.adapters import beadtools
 from taskloop.adapters.locks import hold_path
 from taskloop.app.loop.queue import QueueRule, area_busy_text
 from taskloop.app.run import console
 from taskloop.app.slots import engine_lock
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.enums import LockWhat
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId, is_bead_id
 
 
 def running(repo: str, git: Git, who: Identity, store: Beads | None = None) -> dict[BeadId, str]:

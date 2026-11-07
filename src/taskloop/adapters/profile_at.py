@@ -2,9 +2,9 @@
 import json
 from pathlib import Path
 
-from taskloop.contracts import config
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.slots import SlotGitError
+from tlkernel import config
+from tlkernel.gitport import Git
+from tlkernel.slots import SlotGitError
 
 FILE = ".task-loop.json"
 

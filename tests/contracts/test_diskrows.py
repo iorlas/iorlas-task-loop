@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from taskloop.contracts import diskrows
+from tlkernel import diskrows
 
 DAY = 86400.0
 GB = 1 << 30

@@ -3,10 +3,10 @@ stages are stages.py; the composition root (launch/loop.py) builds them into the
 from collections.abc import Callable
 from typing import Protocol, Self
 
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.loop import Skip
+from tlkernel.bead import Bead
+from tlkernel.beadsport import Beads
+from tlkernel.ids import BeadId
+from tlkernel.loop import Skip
 
 
 class LeaseHandle(Protocol):

@@ -13,11 +13,11 @@ from support.narrow import must
 from support.plans import CLEAN, FALSE, PLAN, WRITE
 
 from taskloop.app.checks import evidence
-from taskloop.contracts import wire
-from taskloop.contracts.checks import CheckRun
-from taskloop.contracts.ids import CheckId
-from taskloop.contracts.plancheck import adhoc
 from taskloop.domain.checks import lint, planref
+from tlkernel import wire
+from tlkernel.checks import CheckRun
+from tlkernel.ids import CheckId
+from tlkernel.plancheck import adhoc
 
 ST = {"checks": [], "files": []}
 

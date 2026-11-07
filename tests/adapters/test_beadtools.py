@@ -6,11 +6,11 @@ import support.paths  # noqa: F401
 from support.case import Case
 
 from taskloop.adapters import beadtools
-from taskloop.contracts import bdsafe
-from taskloop.contracts.bd_errors import BdCommandFailure
-from taskloop.contracts.bead import BdError, Bead
-from taskloop.contracts.beadsport import BdFailure
-from taskloop.contracts.ids import BeadId
+from tlkernel import bdsafe
+from tlkernel.bd_errors import BdCommandFailure
+from tlkernel.bead import BdError, Bead
+from tlkernel.beadsport import BdFailure
+from tlkernel.ids import BeadId
 
 
 class BeadTools(Case):

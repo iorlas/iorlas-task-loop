@@ -30,11 +30,11 @@ from taskloop.adapters import runner
 from taskloop.adapters.delegate import Stopped
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import wire
-from taskloop.contracts.config import ConfigError, EngineConfig, load
-from taskloop.contracts.delegate import DelegateResult
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId
+from tlkernel import wire
+from tlkernel.config import ConfigError, EngineConfig, load
+from tlkernel.delegate import DelegateResult
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId
 
 POSIX = os.name != "nt"
 MIN = 60.0

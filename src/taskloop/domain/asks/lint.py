@@ -5,8 +5,8 @@ An ask has a class, a decision (one sentence of 120 characters or less that ends
 a denied command, a stale base, a missing tool) is a class lint refuses: it never reaches the owner as a question."""
 from typing import Final
 
-from taskloop.contracts.ask import Ask
-from taskloop.contracts.enums import AskClass, AskKind
+from tlkernel.ask import Ask
+from tlkernel.enums import AskClass, AskKind
 
 INFRA: Final = frozenset({AskClass.LANE_FAILURE, AskClass.BAD_REQUEST, AskClass.SANDBOX_DENIAL, AskClass.STALE_BASE, AskClass.MISSING_TOOL})
 KIND_OF: Final = {

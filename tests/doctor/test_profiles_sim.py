@@ -15,7 +15,7 @@ from support import gitsim
 
 from taskloop.adapters.git import RealGit
 from taskloop.app.doctor import profiles
-from taskloop.contracts.env import snapshot
+from tlkernel.env import snapshot
 
 BAD = {"engine": {"checks": [{"id": "t", "cmd": "just test"}]}}
 

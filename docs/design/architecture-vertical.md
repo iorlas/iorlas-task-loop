@@ -65,7 +65,7 @@ Option judgments:
   (SCAN has no `packages`: **the 400/80/800 caps silently stop applying there**), `arch_rules.py:16`, `temp_ratchet.py:12`, `layer_ratchet.py:28`; ~20 tests build `ROOT/"src"/"delegate"` or `"taskloop_dash"`.
   MANIFEST needs nothing (hashes every tracked file); PEP 723 pin equality is unaffected.
 - **Rule conflicts to amend in S1a:** CLAUDE.md says "Tests live in `tests/<slice>/`" and the layer-by-path guard keys on it → amend both; per-package `contracts.py` must be a **`contracts/` directory**
-  with its own `ruff.toml` (the TID251 bans on subprocess/socket/threading are directory-scoped, per-file ignores are forbidden); `hot-hook` must also forbid the kernel and every package `contracts` (it names `taskloop.contracts` only).
+  with its own `ruff.toml` (the TID251 bans on subprocess/socket/threading are directory-scoped, per-file ignores are forbidden); `hot-hook` must also forbid the kernel and every package `contracts` (it names `tlkernel` only).
 - ✅ **Public surface of a package = `api.py` (functions + Protocols the package offers) and `contracts.py` (records it exchanges),
   `testing.py` (its fakes).** Other packages import only these three names (`taskloop_land.api`, `.contracts`, `.testing`). Enforced by one
   import-linter `forbidden` contract per package pair set; same pattern as `taskloop-does-not-import-delegate` already in `.importlinter`.
@@ -94,7 +94,7 @@ Remaining cuts (direct src imports, re-counted by the reviewer):
 
 ## 2. Contracts: owner of each, minimal shared kernel
 
-Measured on `src/taskloop/contracts` (90 files, 7905 sloc): consumers per file counted over direct imports from other src slices.
+Measured on `packages/kernel/src/tlkernel` (90 files, 7905 sloc): consumers per file counted over direct imports from other src slices.
 
 | bucket | files | sloc | rule | verdict |
 |---|---|---|---|---|
@@ -122,7 +122,7 @@ The 9+ bucket, judged. Kernel = what has no owner stage because **every** stage 
 Minimal kernel: **8 files, ≈ 626 sloc nbnc (≈ 8% of today's contracts; 536 by the gate's SLOC rule)**; it is a leaf (imports only itself: `paths→env,ids`, `env→envvars,ids`, `identity→paths,wire`, `bead→ids,wire`), but `identity` hangs on `paths`, so it also waits for #189. Rule: a file enters the kernel only with ≥ 4 owner stages importing it and no
 stage-specific field; the kernel imports nothing of taskloop (import-linter: kernel is the bottom layer; today `contracts` imports upward via
 records, see cycle table). `msgspec` stays confined to kernel + `contracts.py` files of packages (the `msgspec-in-contracts-only` contract changes
-from path `taskloop.contracts` to the glob `taskloop_*.contracts` and `taskloop_kernel`).
+from path `tlkernel` to the glob `taskloop_*.contracts` and `taskloop_kernel`).
 
 Options judged:
 - ❌ **Keep one `contracts/` folder, add owner tags.** Same hub; the reach numbers do not move (all 90 files reached by avg 304 tests, wire.py by 449).

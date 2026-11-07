@@ -11,9 +11,9 @@ import support.paths  # noqa: F401
 from support import homes
 
 from taskloop.app.slots import engine_lock
-from taskloop.contracts.env import Env
-from taskloop.contracts.locks import EngineLock as Lock
-from taskloop.contracts.run import Reexec
+from tlkernel.env import Env
+from tlkernel.locks import EngineLock as Lock
+from tlkernel.run import Reexec
 
 
 class ReexecHandoff(Case):

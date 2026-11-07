@@ -27,8 +27,8 @@ from taskloop.adapters.git import RealGit
 from taskloop.app.release import flow, gate, shell
 from taskloop.app.release.shell import say
 from taskloop.app.wire import closeguard
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.procport import Ran, Spawner
+from tlkernel.env import snapshot
+from tlkernel.procport import Ran, Spawner
 
 PLUGIN = ".claude-plugin/plugin.json"
 MARKET = ".claude-plugin/marketplace.json"

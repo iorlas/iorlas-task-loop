@@ -14,10 +14,10 @@ from support.narrow_hosts import FakeWaitsHost
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.waits import Waits
 from taskloop.app.run.run_once import RunOnce
-from taskloop.contracts import log as rec
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.kinds import Kind
 from taskloop.domain.lanes.liveness import LIVENESS
+from tlkernel import log as rec
+from tlkernel.config import EngineConfig
+from tlkernel.kinds import Kind
 
 
 class RunDeadline(Case):

@@ -9,10 +9,10 @@ import support.paths  # noqa: F401
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.contracts.ids import RunId
-from taskloop.contracts.locator import RunLocator, host_name
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import RunState
+from tlkernel.ids import RunId
+from tlkernel.locator import RunLocator, host_name
+from tlkernel.paths import ConfigDir
+from tlkernel.run import RunState
 
 T0 = 1793050200.0
 

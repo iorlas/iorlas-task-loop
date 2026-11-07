@@ -3,8 +3,9 @@ any branch, is never touched. Its git goes through the Git port."""
 import hashlib
 from pathlib import Path
 
+from tlkernel.slots import SlotGitError
+
 from taskloop.app.release.shell import Abort, Shell, fetch_or_abort
-from taskloop.contracts.slots import SlotGitError
 
 
 def clone_dir(config: Path, url: str) -> Path:

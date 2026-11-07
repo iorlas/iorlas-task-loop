@@ -1,7 +1,7 @@
 """The engine tests' plain data: the plan, write and review answers, the bead and the procsim check names; no engine, no git."""
 from typing import Any
 
-from taskloop.contracts.plancheck import adhoc
+from tlkernel.plancheck import adhoc
 
 HAS_F = "has-f"  # a procsim fake: exit 0 iff f.txt exists in the check's directory
 

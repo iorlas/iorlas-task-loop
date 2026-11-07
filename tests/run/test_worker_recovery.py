@@ -11,14 +11,14 @@ from support.narrow import must
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.workers import call, done_memo, worker_call
-from taskloop.contracts import factorydb, wire
-from taskloop.contracts.delegate import RunRequest
-from taskloop.contracts.delegateport import Answer
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import DoneEntry, RunManifest
-from taskloop.contracts.runrows import RunRows
 from taskloop.stores import call_state
+from tlkernel import factorydb, wire
+from tlkernel.delegate import RunRequest
+from tlkernel.delegateport import Answer
+from tlkernel.locator import RunLocator
+from tlkernel.paths import ConfigDir
+from tlkernel.run import DoneEntry, RunManifest
+from tlkernel.runrows import RunRows
 
 
 class Recovery(Case):

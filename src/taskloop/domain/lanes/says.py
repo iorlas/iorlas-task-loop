@@ -5,10 +5,10 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from taskloop.contracts.delegate import REASON_ENGINE_ONLY_UNENFORCED, Denial
 from taskloop.domain.lanes import pin
 from taskloop.domain.lanes.denials import command_of
 from taskloop.domain.lanes.policy import Stop
+from tlkernel.delegate import REASON_ENGINE_ONLY_UNENFORCED, Denial
 
 
 def stop_say(stop: Stop) -> str:

@@ -9,8 +9,8 @@ from support.check_host import CheckHostCase
 
 from taskloop.adapters.childenv import CHECK_SECRETS, check_env, check_environment, current_env, delegate_call_env, tool_env
 from taskloop.adapters.git import RealGit
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.env import Env
+from tlkernel.config import EngineConfig
+from tlkernel.env import Env
 
 
 class CheckEnvironmentTest(Case):

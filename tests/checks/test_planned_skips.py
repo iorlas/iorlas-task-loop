@@ -8,11 +8,11 @@ from support.check_host import CheckHostCase
 from support.plans import FALSE
 
 from taskloop.app.checks.cache import is_green
-from taskloop.contracts import wire
-from taskloop.contracts.checks import CheckResult
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.specs import gate_items
+from tlkernel import wire
+from tlkernel.checks import CheckResult
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.runkey import BaseSha
 
 
 class PlannedSkips(CheckHostCase):

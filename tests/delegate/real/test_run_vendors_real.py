@@ -8,8 +8,15 @@ import time
 from pathlib import Path
 from unittest import mock
 
+import hermetic  # noqa: F401  (a home of its own for every test)
 import pytest
+import routing_support as support
 import stream_proc
+from run_support import RunBase, short_limits
+from stream_proc import proc_start
+from support.procsim import real_proc
+from test_route import _call, at, route, why
+
 from delegate.app import answer, env, launch, net
 from delegate.app import decide as dec
 from delegate.app.env import PUSH_REFUSED
@@ -17,13 +24,6 @@ from delegate.contracts import stops
 from delegate.contracts.state import RefRecord
 from delegate.domain.policy import worker
 from delegate.domain.policy.worker import is_policy_denial
-from stream_proc import proc_start
-from support.procsim import real_proc
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
-from run_support import RunBase, short_limits
-from test_route import _call, at, route, why
 
 DECLINED = "the reviewer declined the escalation"
 REFUSED = "the CLI's permission check refused the call"

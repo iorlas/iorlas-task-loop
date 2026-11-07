@@ -3,10 +3,10 @@
 import pytest
 import support.paths  # noqa: F401
 
-from taskloop.contracts import beadrows, factorydb
-from taskloop.contracts.bead import Bead, Dep
-from taskloop.contracts.ids import BeadId
 from taskloop_dash.readers.beads import row_of
+from tlkernel import beadrows, factorydb
+from tlkernel.bead import Bead, Dep
+from tlkernel.ids import BeadId
 
 
 @pytest.fixture

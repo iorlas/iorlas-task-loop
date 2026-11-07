@@ -6,10 +6,10 @@ import sys
 from pathlib import Path
 from unittest import mock
 
-from delegate.app import env, launch
+from run_support import RunBase
 from support.procsim import real_proc
 
-from run_support import RunBase
+from delegate.app import env, launch
 
 
 class WiredOverlay(RunBase):

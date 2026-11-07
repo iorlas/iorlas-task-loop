@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from taskloop.app.doctor import disk
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.paths import ConfigDir
 
 GB = 1 << 30
 

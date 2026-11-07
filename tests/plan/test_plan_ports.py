@@ -11,12 +11,12 @@ from support.plans import HAS_F, PLAN
 from taskloop.app.asks import intake
 from taskloop.app.plan import adrsync
 from taskloop.app.plan.planned import Planned
+from taskloop.domain.prompts.common import RULES_MAX
 from tlkernel import adrfiles
 from tlkernel.bead import Bead
 from tlkernel.ledger import Adr
 from tlkernel.plancheck import adhoc
 from tlkernel.stop import Stop
-from taskloop.domain.prompts.common import RULES_MAX
 
 
 def test_outside_scope_is_filed_once_and_taste_stays(workdir):

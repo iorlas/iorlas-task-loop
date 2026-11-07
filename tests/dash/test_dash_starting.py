@@ -3,13 +3,13 @@
 from support.case import Case
 from support.dashlogs import RunScript, T, bead
 
-from taskloop.contracts.dash import Column
-from taskloop.contracts.events import Claim, SlotSetup, SlotTake, Stage
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.reconcile import Stray
 from taskloop_dash.views.floor import slot_of
 from taskloop_dash.views.snapshot import build
 from taskloop_dash.views.world import ProjectIn, World
+from tlkernel.dash import Column
+from tlkernel.events import Claim, SlotSetup, SlotTake, Stage
+from tlkernel.ids import BeadId
+from tlkernel.reconcile import Stray
 
 NOW = T + 120
 CLAIMED = "2027-01-15T08:00:00Z"  # T

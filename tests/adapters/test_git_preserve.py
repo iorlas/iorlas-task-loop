@@ -12,8 +12,8 @@ from git_porcelain.testing import FakeRepo
 from support.case import Case
 
 from taskloop.adapters.git import RealGit
-from taskloop.contracts.env import Env
-from taskloop.contracts.slots import BranchPinned, DirtyTree, GitReadFailure, IndexLocked, RefRace, SlotGitError
+from tlkernel.env import Env
+from tlkernel.slots import BranchPinned, DirtyTree, GitReadFailure, IndexLocked, RefRace, SlotGitError
 
 
 class GitPreserveTest(Case):

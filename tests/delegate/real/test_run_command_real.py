@@ -10,21 +10,21 @@ import time
 from pathlib import Path
 from unittest import mock
 
+import hermetic  # noqa: F401  (a home of its own for every test)
 import pytest
+import routing_support as support
 from any_agent.harnesses import opencode_sandbox as box
+from run_support import RunBase
+from stream_proc import proc_start
+from support.procsim import real_proc
+from test_route import at, obj, route, why
+
 from delegate.app import env, harnesses, status, usage
 from delegate.app.fleet import Fleet
 from delegate.contracts.routing import Settings
 from delegate.contracts.state import StateDoc, UsageCache
 from delegate.domain.lanes import leases
 from delegate.domain.lanes.lane import Lane
-from stream_proc import proc_start
-from support.procsim import real_proc
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
-from run_support import RunBase
-from test_route import at, obj, route, why
 
 
 class RunCommand(RunBase):

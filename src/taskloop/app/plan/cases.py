@@ -4,14 +4,15 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
-from taskloop.app.plan.amend import AmendState
-from taskloop.app.plan.host import PlanHand, PlanPorts
-from taskloop.app.plan.state import PlanState
 from tlkernel import plancheck
 from tlkernel.checks import CheckResult
 from tlkernel.plancheck import PlanCheck, PlanData
 from tlkernel.stagefacts import RunFacts
 from tlkernel.wire import Open
+
+from taskloop.app.plan.amend import AmendState
+from taskloop.app.plan.host import PlanHand, PlanPorts
+from taskloop.app.plan.state import PlanState
 from taskloop.domain.checks import planref
 from taskloop.domain.plan.matchers import evidence_files, word_set
 from taskloop.domain.plan.stored import role_view

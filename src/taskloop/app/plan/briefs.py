@@ -3,15 +3,16 @@ pile up on every rerun: 40 of one consumer run's 45 KB brief). Inline, never a p
 engine's files live outside it so the worker cannot change them."""
 import hashlib
 
+from tlkernel.bdsafe import peek
+from tlkernel.bead import Bead
+from tlkernel.ids import BeadId
+from tlkernel.stagefacts import RunFacts
+
 from taskloop.adapters.bdids import mentioned_ids
 from taskloop.app.asks import intake
 from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.host import PlanHand, PlanPorts
 from taskloop.app.plan.state import PlanState
-from tlkernel.bdsafe import peek
-from tlkernel.bead import Bead
-from tlkernel.ids import BeadId
-from tlkernel.stagefacts import RunFacts
 from taskloop.domain.asks import text as asktext
 from taskloop.domain.plan import brief as bf
 

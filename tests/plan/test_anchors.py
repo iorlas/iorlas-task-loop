@@ -8,10 +8,10 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts import answers
-from taskloop.contracts.plancheck import PlanData, adhoc
 from taskloop.domain.plan.stored import role_view, stored
 from taskloop.domain.prompts.anchors import anchors_text, unanchored
+from tlkernel import answers
+from tlkernel.plancheck import PlanData, adhoc
 
 ANCHOR = {"path": "src/a.py", "lines": "10-40", "symbol": "Thing.run", "why": "the loop to change"}
 STAGE = {"goal": "g", "files": ["src/a.py", "src/new.py"], "anchors": [ANCHOR], "read_first": ["docs/a.md"],

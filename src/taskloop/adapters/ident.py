@@ -6,10 +6,10 @@ from pathlib import Path
 
 from taskloop.adapters import layout_migrate
 from taskloop.adapters.gitrepo import pinned_env
-from taskloop.contracts.env import Env
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.paths import ConfigDir, default_root
+from tlkernel.env import Env
+from tlkernel.envvars import EnvVar
+from tlkernel.identity import Identity
+from tlkernel.paths import ConfigDir, default_root
 
 
 def config_dir(env: Env) -> Path:

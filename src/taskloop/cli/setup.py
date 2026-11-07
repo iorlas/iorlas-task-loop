@@ -6,8 +6,9 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 
+from tlkernel.env import Env
+
 from taskloop.app.wire import setup, setup_apply
-from taskloop.contracts.env import Env
 
 
 def answers_of(a: argparse.Namespace, repo: Path) -> dict[str, str]:

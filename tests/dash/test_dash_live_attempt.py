@@ -8,9 +8,9 @@ from support.factory_index import ingest
 from support.narrow import must
 
 from dash.test_dash_live import make_run
-from taskloop.contracts import factorydb
-from taskloop.contracts.paths import ConfigDir
 from taskloop_dash.api import live
+from tlkernel import factorydb
+from tlkernel.paths import ConfigDir
 
 
 def set_attempt(cfg: ConfigDir, run: str, n: int) -> None:

@@ -5,9 +5,9 @@ from typing import Any
 from taskloop.adapters.bdids import mentioned_ids
 from taskloop.app.asks import intake
 from taskloop.app.plan.briefs import ENGINE_LABELS
-from taskloop.contracts.bead import Bead, Comment
-from taskloop.contracts.checkpoint import BriefSnap
 from taskloop.domain.plan import brief as bf
+from tlkernel.bead import Bead, Comment
+from tlkernel.checkpoint import BriefSnap
 
 
 def brief_digest(bead: Bead, comments: Sequence[Comment], owner_only: bool = False, ignore: Sequence[str] = ()) -> str:

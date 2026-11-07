@@ -14,11 +14,11 @@ from taskloop.app.pipeline.resume import Resume
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.review_glue import ReviewGlue
 from taskloop.app.run.state import state_names
-from taskloop.contracts import wire
-from taskloop.contracts.answers import WriteAnswerLook
-from taskloop.contracts.checkpoint import Checkpoint, RunState, StageProgress
-from taskloop.contracts.checks import CheckRun
-from taskloop.contracts.plancheck import PlanData
+from tlkernel import wire
+from tlkernel.answers import WriteAnswerLook
+from tlkernel.checkpoint import Checkpoint, RunState, StageProgress
+from tlkernel.checks import CheckRun
+from tlkernel.plancheck import PlanData
 
 PLAN: PlanData = {"summary": "two stages", "stages": [{"goal": "a", "files": [], "checks": []}, {"goal": "b", "files": [], "checks": []}]}
 

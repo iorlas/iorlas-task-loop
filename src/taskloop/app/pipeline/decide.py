@@ -9,7 +9,8 @@ the decision; nothing here reads or writes anything.
 from dataclasses import dataclass
 from typing import Literal
 
-from taskloop.contracts.checkpoint import Checkpoint
+from tlkernel.checkpoint import Checkpoint
+
 from taskloop.domain.plan.brief import COMMENTS_ONLY
 
 OUTSIDE = "the branch changed outside the engine"

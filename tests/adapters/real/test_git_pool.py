@@ -16,8 +16,8 @@ from support.checked import run_checked
 
 from taskloop.adapters import treehash
 from taskloop.adapters.git import RealGit
-from taskloop.contracts.env import Env, snapshot
-from taskloop.contracts.slots import SlotGitError
+from tlkernel.env import Env, snapshot
+from tlkernel.slots import SlotGitError
 
 
 class RealGitPoolTest(Case):

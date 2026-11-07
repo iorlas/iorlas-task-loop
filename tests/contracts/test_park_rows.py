@@ -10,10 +10,10 @@ import support.paths  # noqa: F401
 from support.case import Case
 from support.narrow import must
 
-from taskloop.contracts import dbparts, factorydb, factoryparts, scratch
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.parks import Park, ParkStore
-from taskloop.contracts.paths import ConfigDir
+from tlkernel import dbparts, factorydb, factoryparts, scratch
+from tlkernel.ids import BeadId
+from tlkernel.parks import Park, ParkStore
+from tlkernel.paths import ConfigDir
 
 B = BeadId("t-1")
 

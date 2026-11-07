@@ -2,9 +2,9 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from taskloop.contracts.checks import Check, CheckResult, Durations
-from taskloop.contracts.ids import CheckId
 from taskloop.domain.checks.order import CheckOrder
+from tlkernel.checks import Check, CheckResult, Durations
+from tlkernel.ids import CheckId
 
 
 @dataclass(frozen=True)

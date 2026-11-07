@@ -15,20 +15,20 @@ from support.checks import res
 from support.dashlogs import RunScript, T, bead
 from support.narrow import must
 
-from taskloop.contracts import wire
-from taskloop.contracts.ask import Ask, AskOption
-from taskloop.contracts.bead import Comment, Dep
-from taskloop.contracts.checks import CheckRun
-from taskloop.contracts.dash import BeadDetail, CheckCount, Column, Marker, Snapshot
-from taskloop.contracts.delegate import LiveCmdEnd, LiveCmdStart, LiveTokens
-from taskloop.contracts.enums import AskClass, AskKind, AskStatus
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.log import RunStart
-from taskloop.contracts.loop import LoopState, QueueRow, Skip
-from taskloop.contracts.parks import Park
 from taskloop_dash.views import bead_detail, snapshot
 from taskloop_dash.views.board import Board, review_of
 from taskloop_dash.views.world import LookItem, ProjectIn, World
+from tlkernel import wire
+from tlkernel.ask import Ask, AskOption
+from tlkernel.bead import Comment, Dep
+from tlkernel.checks import CheckRun
+from tlkernel.dash import BeadDetail, CheckCount, Column, Marker, Snapshot
+from tlkernel.delegate import LiveCmdEnd, LiveCmdStart, LiveTokens
+from tlkernel.enums import AskClass, AskKind, AskStatus
+from tlkernel.ids import BeadId
+from tlkernel.log import RunStart
+from tlkernel.loop import LoopState, QueueRow, Skip
+from tlkernel.parks import Park
 
 NOW = T + 3600
 
