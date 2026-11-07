@@ -4,11 +4,10 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
+from tlgate.base_tree import clean_tree
+from tlgate.host import CheckoutView
 from tlkernel.gitport import Git
 from tlkernel.ids import TreeSha
-
-from taskloop.app.checks.base_tree import clean_tree
-from taskloop.app.checks.host import CheckoutView
 
 
 class StagedCheckout:

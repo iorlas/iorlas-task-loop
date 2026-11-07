@@ -14,19 +14,19 @@ from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.plans import CLEAN, PLAN, WRITE
 
+from tltestkit.plans import CLEAN, PLAN, WRITE
 from tltestkit.procsim import real_proc
 
 # isort: split
 from any_lease import Leases
 from support.memstores import fake_stores
 
-from taskloop.app.checks import resources
-from taskloop.app.checks.resources import Resources
 from taskloop.app.land import verified
 from taskloop.app.wire.brief import held_resources
-from taskloop.domain.checks.inputs import touched
+from tlgate import resources
+from tlgate.domain.inputs import touched
+from tlgate.resources import Resources
 from tlkernel.checks import UNVERIFIED_EXIT, Check, CheckResult, CheckRun
 from tlkernel.config import ConfigError, EngineConfig, HostResources, ResourceSpec, load
 from tlkernel.ids import CheckId

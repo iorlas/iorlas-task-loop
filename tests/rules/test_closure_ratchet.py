@@ -34,3 +34,15 @@ def run():
 def test_new_stage_and_empty_graph():
     assert closures({}) == {}
     assert closures({"src/taskloop/app/new/__init__.py": "import os"}) == {"new": 1, "new (external modules)": 1}
+
+
+def test_gate_member_is_the_checks_stage_and_the_shell_glue_keeps_no_budget():
+    counts = closures({
+        "src/taskloop/app/checks/__init__.py": "",
+        "src/taskloop/app/checks/step.py": "from tlgate.runner import Checker",
+        "packages/gate/src/tlgate/__init__.py": "",
+        "packages/gate/src/tlgate/runner.py": "from tlgate.domain import plan",
+        "packages/gate/src/tlgate/domain/__init__.py": "",
+        "packages/gate/src/tlgate/domain/plan.py": "import json",
+    })
+    assert counts == {"checks": 4, "checks (external modules)": 1}

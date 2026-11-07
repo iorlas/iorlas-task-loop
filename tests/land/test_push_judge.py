@@ -13,9 +13,9 @@ import support.paths  # noqa: F401
 from support.fakegit import FakeGit
 from support.memstores import fake_stores
 
-from taskloop.app.checks.cache import InputKeys, RunMemo, plan_digest
 from taskloop.app.land.push_judge import PushStatus, judge_push
-from taskloop.domain.checks.specs import gate_items
+from tlgate.cache import InputKeys, RunMemo, plan_digest
+from tlgate.domain.specs import gate_items
 from tlkernel.checks import CheckResult
 from tlkernel.config import load
 from tlkernel.env import Env
@@ -81,7 +81,7 @@ class PushJudge(Case):
     def test_non_base_tips_need_no_receipts_or_checks(self):
         self.git.replies[("rev_parse", "HEAD")] = "task/x"
         for remote in ("refs/heads/task/x", "refs/heads/wip/x", "refs/heads/topic"):
-            with self.subTest(remote=remote), mock.patch("taskloop.app.checks.authorization.results") as evidence:
+            with self.subTest(remote=remote), mock.patch("tlgate.authorization.results") as evidence:
                 decision = self.judge(self.request("task/x", remote=remote))
                 assert decision.status == PushStatus.ALLOWED
                 assert decision.reasons == ()
@@ -95,7 +95,7 @@ class PushJudge(Case):
 
     def test_mixed_push_checks_only_the_base_tip(self):
         request = self.request("task/x", remote="refs/heads/task/x") + self.request("head")
-        with mock.patch("taskloop.app.checks.authorization.results", return_value={"suite": None}) as evidence:
+        with mock.patch("tlgate.authorization.results", return_value={"suite": None}) as evidence:
             decision = self.judge(request)
         assert decision.status == PushStatus.REFUSED
         assert len(decision.reasons) == 1
@@ -124,7 +124,7 @@ class PushJudge(Case):
         changed = [TreeEntry(mode="100644", kind="blob", oid="changed", path=".task-loop.json")]
         self.ls_tree.side_effect = lambda repo, rev, path: changed if rev == "task-tree" else original
         request = self.request("head") + self.request("task/x", remote="refs/heads/task/x")
-        with mock.patch("taskloop.app.checks.authorization.results") as evidence:
+        with mock.patch("tlgate.authorization.results") as evidence:
             decision = self.judge(request)
         assert decision.status == PushStatus.REFUSED
         assert decision.reasons[0].startswith("profile_changed: refs/heads/task/x ")
@@ -163,7 +163,7 @@ class PushJudge(Case):
 
     def test_a_feature_branch_may_be_rewritten_with_only_the_profile_check(self):
         for remote in ("refs/heads/task/x", "refs/heads/topic"):
-            with self.subTest(remote=remote), mock.patch("taskloop.app.checks.authorization.results") as evidence:
+            with self.subTest(remote=remote), mock.patch("tlgate.authorization.results") as evidence:
                 decision = self.judge(self.request("head", remote=remote, old="elsewhere"))
                 assert decision.status == PushStatus.ALLOWED
                 evidence.assert_not_called()
@@ -262,7 +262,7 @@ class PushJudge(Case):
         for policy, tip in ((original, changed), (original, []), ([], changed)):
             with self.subTest(policy=policy, tip=tip):
                 self.ls_tree.side_effect = lambda repo, rev, path, policy=policy, tip=tip: policy if rev == "policy-tree" else tip
-                with mock.patch("taskloop.app.checks.authorization.results") as evidence:
+                with mock.patch("tlgate.authorization.results") as evidence:
                     decision = self.judge()
                 assert decision.status == PushStatus.REFUSED
                 assert decision.reasons == (

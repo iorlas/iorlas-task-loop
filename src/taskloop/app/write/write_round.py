@@ -1,6 +1,7 @@
 """WriteRound: the writer's half of a round. The prompt (the whole one, or the delta of a resumed writer), the call, what the answer
 means (a question, an accepted requirement that decides it, shots a visual stage owes) and the cases it adds."""
 
+from tlgate.domain import planref
 from tlkernel import askspecs
 
 from taskloop.app.write import show_check
@@ -8,7 +9,6 @@ from taskloop.app.write.host import WriteHost
 from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.prompts import SHOTS_FIX, write_prompt
 from taskloop.app.write.state import AGAIN, REPLAN, RoundResult, StageState, carrying
-from taskloop.domain.checks import planref
 from taskloop.domain.prompts.anchors import anchors_text
 from taskloop.domain.prompts.common import DECIDED_TEXT, LATER_CASES, UNCHECKED_TEXT
 

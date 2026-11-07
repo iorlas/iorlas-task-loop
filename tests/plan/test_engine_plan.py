@@ -5,17 +5,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.engine_case import CAP_PARKS, EngineTest, stop
-from support.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, review
 
 from tltestkit.checks import typed
+from tltestkit.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, review
 from tltestkit.shellkit import sh
 
 # isort: split
 import json
 from pathlib import Path
 from unittest import mock
-
-from support.cfgs import cfg_with
 
 from taskloop.app.plan import prompts as pp
 from taskloop.app.plan.planner import Planner
@@ -24,14 +22,15 @@ from taskloop.app.plan.sendback import SendBack
 from taskloop.app.run import engine
 from taskloop.app.write import prompts as wp
 from taskloop.app.write import review_prompt as rp
-from taskloop.domain.checks import planref
-from taskloop.domain.checks.names import log_var
 from taskloop.domain.prompts.common import RULES_MAX
+from tlgate.domain import planref
+from tlgate.domain.names import log_var
 from tlkernel import answers, plancheck
 from tlkernel.config import EngineConfig
 from tlkernel.ids import CheckId
 from tlkernel.kinds import Kind
 from tltestkit import fake_route, procsim
+from tltestkit.cfgs import cfg_with
 from tltestkit.logs import records
 
 

@@ -8,14 +8,14 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.engine_case import EngineTest
-from support.plans import CLEAN, PLAN, WRITE
 
 from tltestkit.logs import records
+from tltestkit.plans import CLEAN, PLAN, WRITE
 
 # isort: split
 
-from taskloop.app.checks import resources
 from taskloop.app.plan.planner import Planner
+from tlgate import resources
 from tlkernel.config import HostResources
 from tlpipeline.waits import Waits
 

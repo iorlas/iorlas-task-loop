@@ -8,7 +8,6 @@ import types
 import support.paths  # noqa: F401
 from support import engine_case as te
 from support.dashlogs import RunScript
-from support.plans import FALSE, PLAN, WRITE
 
 from taskloop.adapters.agent import last_event_t
 from taskloop.stores.runlog import RunLog
@@ -25,6 +24,7 @@ from tlpipeline.stuck_rule import StuckWatch
 from tltestkit.case import Case
 from tltestkit.memdoc import MemLog
 from tltestkit.narrow import must
+from tltestkit.plans import FALSE, PLAN, WRITE
 
 T = 1_800_000_000.0
 WRITE_LIMIT = silent_limit("write")

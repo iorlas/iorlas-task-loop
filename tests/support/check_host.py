@@ -7,16 +7,15 @@ from pathlib import Path
 from typing import Any
 
 import support.paths  # noqa: F401
-from support.cfgs import cfg_with
 from support.facts import fake_facts
 from support.memstores import fake_stores
 from support.who import who
 from support.world import MARKERS, SlotWorld
-from taskloop.app.checks.runner import Checker
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.run import bead_env
 from taskloop.app.run.shell import Shell
 from taskloop.stores.bundle import Stores
+from tlgate.runner import Checker
 from tlkernel import wire
 from tlkernel.checks import CheckRun
 from tlkernel.config import EngineConfig
@@ -24,6 +23,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.plancheck import StageData
 from tlkernel.ports import Clock
 from tlkernel.waitenums import WaitWhat
+from tltestkit.cfgs import cfg_with
 
 
 class RecordedWaits:

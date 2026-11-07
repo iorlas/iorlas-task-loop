@@ -9,8 +9,8 @@ from tltestkit.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
-from taskloop.domain.checks.inputs import reads_digest, touched
-from taskloop.domain.checks.specs import due, repo_check
+from tlgate.domain.inputs import reads_digest, touched
+from tlgate.domain.specs import due, repo_check
 from tlkernel import inputsets
 from tlkernel.config import ConfigError, load
 

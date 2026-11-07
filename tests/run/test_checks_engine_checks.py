@@ -9,10 +9,10 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq
 from support.aging import age
 from support.engine_case import EngineTest
-from support.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE
 from support.world import no_repo
 
 from tltestkit import procsim
+from tltestkit.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE
 from tltestkit.shellkit import sh
 
 # isort: split
@@ -24,21 +24,20 @@ from pathlib import Path
 from unittest import mock
 
 from support.briefs import brief_digest, linked_text
-from support.cfgs import cfg_with
 from support.fakes import as_bead, must_bead
 from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.adapters.check_probe import PathProbe
-from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.run import (
     engine,
     entry,
 )
 from taskloop.app.slots import config as wslots_config
-from taskloop.domain.checks import lint
-from taskloop.domain.checks.writer_split import WriterSplit
 from taskloop.domain.write.matchers import count_tests
+from tlgate import evidence as check_evidence
+from tlgate.domain import lint
+from tlgate.domain.writer_split import WriterSplit
 from tlkernel import answers, childenv, plancheck
 from tlkernel import checkmatchers as check_matchers
 from tlkernel.config import EngineConfig
@@ -47,6 +46,7 @@ from tlkernel.ids import BeadId, CheckId
 from tlkernel.plancheck import Adhoc, adhoc
 from tlkernel.reviewmatchers import Tools
 from tlkernel.waitenums import WaitWhat
+from tltestkit.cfgs import cfg_with
 from tltestkit.checks import ck, res, typed
 from tltestkit.narrow import must
 

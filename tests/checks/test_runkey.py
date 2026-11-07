@@ -14,18 +14,18 @@ from tltestkit.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.check_host import CheckHostCase
-from support.plans import CLEAN, PLAN, WRITE
 
 from tltestkit import procsim
 from tltestkit.checks import ck, res
 from tltestkit.narrow import must
+from tltestkit.plans import CLEAN, PLAN, WRITE
 
 # isort: split
 from support.memstores import fake_stores
 from support.spawn import port_git
 
-from taskloop.app.checks.cache import KEEP, InputKeys, RunMemo, green_result, is_green, key_digest, plan_digest
 from taskloop.stores.real import real_stores
+from tlgate.cache import KEEP, InputKeys, RunMemo, green_result, is_green, key_digest, plan_digest
 from tlkernel import paths, wire
 from tlkernel.checks import Check, CheckResult, PassRecord
 from tlkernel.ids import CheckId, TreeSha

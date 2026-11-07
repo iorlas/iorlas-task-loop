@@ -3,14 +3,14 @@ from types import SimpleNamespace
 from unittest import mock
 
 import pytest
-from support.cfgs import cfg_with
 
-from taskloop.app.checks import runner
-from taskloop.app.checks.clean import guard_slot
-from taskloop.app.checks.host import CheckFault
+from tlgate import runner
+from tlgate.clean import guard_slot
+from tlgate.host import CheckFault
 from tlkernel.checks import CheckFaultKind
 from tlkernel.config import EngineConfig
 from tlkernel.ids import TreeSha
+from tltestkit.cfgs import cfg_with
 
 
 def host(ignored: list[str], cfg: EngineConfig | None = None, tree: str = "t", head_tree: str = "t") -> SimpleNamespace:

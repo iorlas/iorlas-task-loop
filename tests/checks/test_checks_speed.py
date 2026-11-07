@@ -8,25 +8,25 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.cfgs import cfg_with
 from support.check_host import CheckHostCase
-from support.plans import FALSE, PLAN
 from support.spawn import port_git
 
 from taskloop.adapters import procs
-from taskloop.app.checks.cache import InputKeys
 from taskloop.app.doctor import setup_checks
 from taskloop.app.slots.config import cfg_source
-from taskloop.domain.checks import durations, inputs, lint, planref
-from taskloop.domain.checks.names import norm
-from taskloop.domain.checks.order import CheckOrder
+from tlgate.cache import InputKeys
+from tlgate.domain import durations, inputs, lint, planref
+from tlgate.domain.names import norm
+from tlgate.domain.order import CheckOrder
 from tlkernel import check_files
 from tlkernel.argv import text_of
 from tlkernel.checks import Check, Duration, Durations
 from tlkernel.ids import CheckId
 from tlkernel.plancheck import adhoc
 from tltestkit import procsim
+from tltestkit.cfgs import cfg_with
 from tltestkit.checks import ck, typed
+from tltestkit.plans import FALSE, PLAN
 from tltestkit.shellkit import sh
 
 

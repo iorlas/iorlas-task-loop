@@ -23,7 +23,6 @@ from support.checkpoints import read_ck  # noqa: E402
 sys.path.insert(0, str(ROOT / "tests"))
 from support import engine_case as te  # noqa: E402
 from support import looptest  # noqa: E402
-from support.cfgs import cfg_with  # noqa: E402
 from support.fake_beads import FakeBeads  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
@@ -49,6 +48,7 @@ from tlkernel.env import Env, snapshot  # noqa: E402
 from tlkernel.ids import BeadId  # noqa: E402
 from tlkernel.rowstores import BadVersionStore  # noqa: E402
 from tlkernel.run import Reexec, ReexecNote  # noqa: E402
+from tltestkit.cfgs import cfg_with  # noqa: E402
 from tltestkit.narrow import must  # noqa: E402
 
 PLAN_DEF = "    def plan(self, again: bool = False) -> Planned:\n"
