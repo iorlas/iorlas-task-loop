@@ -129,7 +129,7 @@ def member_procs(request, member_filesystem):
 
 
 def forget_factory_db() -> None:
-    """Close the shared factory.db handle and its cache if a test imported tlkernel.factorydb (it needs vendored paths a plugin cannot assume)."""
+    """Close the shared factory.db handle and cache if a test imported tlkernel.factorydb (a plugin cannot assume its vendored paths)."""
     db = sys.modules.get("tlkernel.factorydb")
     if db is not None:
         db.close_shared()
