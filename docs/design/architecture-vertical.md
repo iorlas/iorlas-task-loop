@@ -320,3 +320,21 @@ Decision for Denis: rewrite stage tests (checks, land, review, write, loop) off 
 | stage progress on the engine path | never saved: a run parked in checks or review resumed at write | `step="review"` + `StageProgress` saved when a round's checks are green (tl-q3ma, #387) |
 
 Not done, by design of the slices: slice 2 (hand-offs by value for `accepted_new`/`unchecked`/`leftovers`, `stats`) waits for ASKAI slice 2; the write tests still build the stage on the `EngineTest` fixture, not on their own fakes (the stage-test rewrite of the Decision above). T-BUDGET (tl-e5t0.55) ratchets these numbers.
+
+## 11. Per-slice trackers for the selection median (tl-e5t0.81, 2026-11-08)
+
+The median is 226 of 752 tests in total and 143 beyond the 83 always-run `tests/rules` files (`dev/reach.py --commits 40` on main, 2026-11-08, 37 commits measured; it prints both numbers). Of a typical engine-touching commit's ~190–205 selected tests, 83 are the always-run rules. The target in the acceptance text is unchanged. The slices below are as seen by a typical engine-touching change: `src/taskloop/app/land/lander.py` selects 205.
+
+| slice | selected now | owner bead | what moves it | target |
+|---|---|---|---|---|
+| tests/rules | 83 (always) | tl-e5t0.81 probe | the rules probe; see the bead | set by the owning bead; none invented here |
+| tests/run | 48 | tl-e5t0.81 itself and the run carve | the run carve | set by the owning bead; none invented here |
+| tests/land | 27 (16 for a run/engine.py change) | land carve tl-e5t0.20 | the land carve | set by the owning bead; none invented here |
+| tests/review | 8 | tl-e5t0.80 (work) | the work carve | set by the owning bead; none invented here |
+| tests/plan | 7 | tl-e5t0.80 (work) | the work carve | set by the owning bead; none invented here |
+| tests/write | 6 | tl-e5t0.80 (work) | the work carve | set by the owning bead; none invented here |
+| tests/slots | 5 | tl-e5t0.78 | the slots carve | set by the owning bead; none invented here |
+| tests/asks | 3 | tl-e5t0.79 | the asks carve | set by the owning bead; none invented here |
+| tests/domain | 3 | the nearest SURFACE bead | the owning SURFACE change | set by the owning bead; none invented here |
+
+Kernel records (ids 606, config 450, checkpoint 421, answers 437) are wide by nature and set p75/p90, not the median. Moving the engine-class test files off the engine core was simulated to change the median only 225 → 221 (top 5), 218 (top 10 and 20) because the same tests reach it through kernel records and `tests/support`, so the tracker is per-slice, not a single number.
