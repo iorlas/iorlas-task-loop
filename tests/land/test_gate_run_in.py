@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import procsim
 from support.engine_case import EngineTest
+from support.gate_rig import GateCase
 from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.app.checks.clean import isolated
@@ -19,7 +20,7 @@ from taskloop.contracts.checks import CheckFaultKind
 from taskloop.domain.checks.specs import gate_items
 
 
-class SlotGate(EngineTest):
+class SlotGate(GateCase):
     def engine(self, checks, **cfg):
         eng = self.checks_engine(checks=checks, **cfg)
         (self.wt / ".gitignore").write_text(".task/\nsetup.txt\n")
@@ -152,6 +153,10 @@ class SlotGate(EngineTest):
         with pytest.raises(CheckFault, match="changed its judged tree"):
             eng.checker.run_items(gate_items(eng.cfg), clean=True)
         assert not eng.checker.gate_green(clean=True)
+
+
+class SlotGateFlow(EngineTest):
+    """One whole run: the setup stays in the slot and the clean gate's checkout lands."""
 
     def test_client_change_lands_with_setup_only_in_the_slot(self):
         seen = []
