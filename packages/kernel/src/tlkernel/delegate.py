@@ -16,7 +16,6 @@ TtlSource = Literal["vendor_default", "observed", "unknown"]
 CostSource = Literal["harness", "unknown", "free"]
 Accounting = Literal["exact", "estimated", "unknown"]
 DenialKind = Literal["policy", "sandbox_limit", "secret"]
-TranscriptKind = Literal["codex", "claude", "opencode_export"]
 WorkerEndKind = Literal["ok", "error", "timeout", "worker_survived"]
 REASON_TIMEOUT: Final = "timeout"  # the wire id of a worker that did not finish within --timeout
 REASON_ONLY_FAMILY: Final = "only_family_unready"  # a worker call pinned by --only-family found no ready step of those families
@@ -130,17 +129,6 @@ class Denial(Rec):
 
 
 @final
-class TranscriptInfo(Rec):
-    """The transcript file and the byte window this call wrote."""
-
-    path: str
-    kind: TranscriptKind
-    from_: int = msgspec.field(name="from")
-    to: int
-    bytes: int
-
-
-@final
 class Survivor(Rec):
     pid: int
     start: str | None = None
@@ -183,9 +171,6 @@ class DelegateResult(Rec):
     secs: float = 0.0
     run_id: str | None = None
     call_id: str | None = None
-    transcript: str | None = None
-    transcript_info: TranscriptInfo | None = None
-    transcript_status: str | None = None
     say: str = ""
     git_violation: list[str] = msgspec.field(default_factory=list)
     usage: Usage | None = None

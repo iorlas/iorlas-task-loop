@@ -16,7 +16,7 @@ from tlkernel.stores import RunLog
 
 
 def row(kind: str, t: float, **kw):
-    return {"v": 3, "kind": kind, "t": t, "run_id": "R1", "bead": "tl-x", **kw}
+    return {"v": 4, "kind": kind, "t": t, "run_id": "R1", "bead": "tl-x", **kw}
 
 
 FIXTURE = [

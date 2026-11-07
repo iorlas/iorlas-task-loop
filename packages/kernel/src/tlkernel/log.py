@@ -1,4 +1,4 @@
-"""EngineLog: the union of records an engine run appends to engine/<run>.jsonl (v2). Start/end pairs share an `id`, unique
+"""EngineLog: the union of records an engine run appends to engine/<run>.jsonl (v4). Start/end pairs share an `id`, unique
 within the file; an end without its start, or the reverse, is a run that died in between."""
 from typing import ClassVar, Literal, final
 
@@ -12,7 +12,7 @@ from tlkernel.wire import Rec, load
 
 
 class LogRec(Row):
-    V: ClassVar[int] = 3
+    V: ClassVar[int] = 4
 
 
 @final
@@ -83,7 +83,6 @@ class CallEnd(LogRec, tag="call_end"):
     cost_source: str = ""  # delegate's usage.cost_source (harness, free, unknown); "" in a log written before it: cost 0 then is not known
     family: str = ""
     flag: str | None = None
-    transcript: str = ""
     exit: int | None = None  # the worker's exit code (delegate's answer `exit_code`; negative: ended by that signal)
 
 
