@@ -18,6 +18,7 @@ from tlkernel.locator import RunBundle, RunLocator
 from tlkernel.parks import ParkStore
 from tlkernel.plancheck import PlanData, RoundState
 from tlkernel.run import RunFinish, RunState
+from tlkernel.stagefacts import RunLogPort
 from tlkernel.wire import Open
 
 from taskloop.adapters import beadtools
@@ -28,12 +29,11 @@ from taskloop.app.pipeline.cursor import select_step, stage_kind
 from taskloop.app.pipeline.finish import stage_answer, terminal_state
 from taskloop.app.pipeline.lifecycle import LeaseLike
 from taskloop.app.pipeline.ports import BeadClosing, RoundSteps
+from taskloop.app.pipeline.store_ports import StandaloneStores
 from taskloop.domain import effects
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.plan.matchers import AcceptanceText
-from taskloop.stores.bundle import Stores
-from taskloop.stores.runlog import RunLog
 
 
 @runtime_checkable
@@ -69,7 +69,7 @@ class StageResult(Protocol):
 
 class StageLifecycle(Protocol):
     def __call__(self, who: Identity, repo: str, mode: str, *, bundle: RunBundle,
-                 events: bool, stores: Stores, log: RunLog) -> AbstractContextManager[StageResult]: ...
+                 events: bool, stores: StandaloneStores, log: RunLogPort) -> AbstractContextManager[StageResult]: ...
 
 
 class Checkpoints(Protocol):
@@ -143,7 +143,7 @@ class StandaloneHost[T](RecordHost, CrashHost, Protocol):
     @property
     def who(self) -> Identity: ...
     @property
-    def stores(self) -> Stores: ...
+    def stores(self) -> StandaloneStores: ...
     @property
     def git(self) -> Git: ...
     @property

@@ -230,3 +230,9 @@ Each PR is one bead (child of tl-e5t0.39, label `auto`), lands green, behaviour 
 | the 16-member ceiling | a ratchet in `tests/rules` (R5), list only shrinks |
 
 Beads (children of tl-e5t0.39): R1 tl-e5t0.39.1, R2 .2, R3 .3, R4a .4, R4b .5, R4c .6, R4d .7, R4e .8, R4f .9, R5 .10, R6 .11.
+
+## 13. Pipeline package dependency removal
+
+| dependency | status |
+|---|---|
+| stores | R6a part 1 done: checkpoints, standalone, waits, reload, steps, stage_run; closing_branch/closing_host/closing_notes/closing_record/journal remain (wait for B3 lane) |
