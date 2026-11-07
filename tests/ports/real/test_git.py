@@ -8,13 +8,13 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
-from support.checked import run_checked
 
 from ports.git_contract import GitContract, contract
 from ports.git_contract_land import LandContract
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.git_ops import LandGit
 from tlkernel.env import snapshot
+from tltestkit.checked import run_checked
 
 
 @contract

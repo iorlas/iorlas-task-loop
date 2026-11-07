@@ -12,7 +12,8 @@ import shutil
 import time
 
 import pytest
-from support.checked import run_checked
+
+from tltestkit.checked import run_checked
 
 LIVE_PATH = os.pathsep.join(part for part in os.get_exec_path() if not os.path.basename(part).startswith("tl-nobd-"))
 BD = shutil.which("bd", path=LIVE_PATH)
