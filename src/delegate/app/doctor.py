@@ -7,6 +7,7 @@ import os
 
 from delegate.app import env, onboard
 from delegate.contracts import codec
+from delegate.contracts.history import RefusalRow
 from delegate.contracts.json_types import Json, arr, as_str, obj
 from delegate.contracts.routing import split_retired
 from delegate.contracts.state import Profile
@@ -55,6 +56,14 @@ def history_loss_notes() -> list[dict[str, str]]:
              "may be missing them. Delete the file once read."}]
 
 
+def lock_answer_notes() -> list[dict[str, str]]:
+    n = sum(1 for row in env.history_store().rows() if isinstance(row, RefusalRow) and row.outcome == "lock")
+    if not n:
+        return []
+    return [{"id": "lock_answers", "say": f"{n} calls were answered `lock` (the state lock stayed held 10 s) "
+             "in the last 14 days; with several lanes running, find the holder"}]
+
+
 def notes(cfg: dict[str, Json]) -> list[dict[str, str]]:
     out: list[dict[str, str]] = [
         {
@@ -75,7 +84,7 @@ def notes(cfg: dict[str, Json]) -> list[dict[str, str]]:
             }
             for k in split_retired(obj(json.load(f).get("settings")))[1]
         ]
-    return out + leftovers() + history_loss_notes() + smoke_problems(cfg)
+    return out + leftovers() + history_loss_notes() + lock_answer_notes() + smoke_problems(cfg)
 
 
 PROFILE_VALUES = ("enabled", "declined")
