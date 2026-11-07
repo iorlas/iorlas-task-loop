@@ -2,8 +2,9 @@
 from unittest import mock
 
 from taskloop.adapters import deadline
-from tlpipeline.lifecycle import Lifecycle, LifecycleHost
+from tlpipeline.lifecycle import Lifecycle
 
 
-def lifecycle(host: LifecycleHost) -> Lifecycle:
-    return Lifecycle(host, body=mock.Mock(), lease=mock.Mock(return_value=mock.Mock()), reexecs=mock.Mock(), deadline=deadline.deadline)
+def lifecycle(host) -> Lifecycle:
+    return Lifecycle(host, host, host, host, body=mock.Mock(), lease=mock.Mock(return_value=mock.Mock()),
+                     reexecs=mock.Mock(), deadline=deadline.deadline)
