@@ -303,3 +303,15 @@ Contract hubs, files that alone select at least half the suite (commits out of 1
 What this means for Denis's ask. Independent test bases per package are not reachable by moving directories: the width sits in two places, the engine test harness and the shared contract hubs. The contract splits that had a real audience are done (ports #217, stores #224); the rest measured at ≤ 4%. A `packages/` carve is justified only when a stage's tests stop subclassing `EngineTest`; that is the decision for Denis (below), not a mechanical step.
 
 Decision for Denis: rewrite stage tests (checks, land, review, write, loop) off `EngineTest` onto per-stage fakes (large, the only change that cuts the 10-14 stage reach), or accept 273-median selection and keep the current layout.
+
+## B-WRITE report (tl-e5t0.34, 2026-11-07)
+
+| | before (b-write.md, 2026-11-06) | after slices 1 and 3 + tl-q3ma |
+|---|---|---|
+| write-owned engine attributes (`write_rounds`, `last_summary`, `lane_notes`, `strays`) | 4 on the engine | 0: `engine.write` (`WriteState`, not checkpointed; #376) |
+| `host: Any` in `app/write` | 8 classes | 0: `app/write/host.py` Protocols (`WriteHost` and narrow hosts; #396) |
+| engine attributes `app/write` reads or assigns (distinct `e.X`) | ~62 | 58 by grep; now named in `write/host.py` instead of hidden behind `Any` |
+| `app/write` imports of other app slices | | `artifacts`, `asks`, `checks` |
+| stage progress on the engine path | never saved: a run parked in checks or review resumed at write | `step="review"` + `StageProgress` saved when a round's checks are green (tl-q3ma, #387) |
+
+Not done, by design of the slices: slice 2 (hand-offs by value for `accepted_new`/`unchecked`/`leftovers`, `stats`) waits for ASKAI slice 2; the write tests still build the stage on the `EngineTest` fixture, not on their own fakes (the stage-test rewrite of the Decision above). T-BUDGET (tl-e5t0.55) ratchets these numbers.

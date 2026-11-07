@@ -7,6 +7,7 @@ from typing import Any
 from taskloop.app.asks import trustroots
 from taskloop.app.checks.evidence import compact
 from taskloop.app.write import review_skip
+from taskloop.app.write.host import WriteHost
 from taskloop.app.write.review_prompt import acceptance_text, review_prompt
 from taskloop.app.write.state import ACCEPT, AGAIN, REPLAN, RoundResult, StageState, carrying
 from taskloop.domain.asks import specs as askspecs
@@ -24,7 +25,7 @@ CASES_RAN = ("The engine ran every case above with the checks, so a case is neve
 
 
 class ReviewRound:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: WriteHost) -> None:
         self.e = host
 
     def run(self, s: StageState) -> RoundResult:
@@ -36,7 +37,7 @@ class ReviewRound:
 
     def go(self, s: StageState, out: RoundResult) -> str:
         e = self.e
-        why = trustroots.refusal(e.git, str(e.wt), e.cfg.base, e.store.show(e.bead))
+        why = trustroots.refusal(e.git, e.wt, e.cfg.base, e.store.show(e.bead))
         if why:
             raise e.blocked_for(why, "ASK_DECISION", spec=askspecs.open_question(why, None, "decision"))
         if self.switched_off(s) or self.skipped(s):
@@ -76,7 +77,7 @@ class ReviewRound:
         `skipped` with the typed reason. The final stage always needs a reviewer, regardless of plan cases or green checks."""
         e = self.e
         m = switch.mode(e.cfg.review, e.budget.labels)
-        if switch.reviews(m, stage=s.i, last=s.last, every=int(e.cfg.review_every)):
+        if switch.reviews(m, stage=s.i, last=s.last, every=e.cfg.review_every):
             return False
         said = SkipKind.REVIEW_OFF if m == "off" else SkipKind.REVIEW_SAMPLED
         if not s.fix:  # nobody judges the writer's unchecked items now: they stay open for verify at land, never dropped
@@ -94,7 +95,7 @@ class ReviewRound:
         e = self.e
         if s.fix or s.wrote_unchecked or e.review.unchecked:
             return False
-        why = review_skip.why(e.git, str(e.wt), e.stage_tree or e.checkout.base_sha(), e.checkout.tree_hash(), e.cfg,
+        why = review_skip.why(e.git, e.wt, e.stage_tree or e.checkout.base_sha(), e.checkout.tree_hash(), e.cfg,
                           maps_acceptance=s.last)
         if not why:
             return False
@@ -120,7 +121,7 @@ class ReviewRound:
         text += (CASES_RAN if s.last and e.cases.case_checks() else "") + self.open_items(s)
         text += "" if s.last else LATER_CASES
         text += e.routing.ledger().text() + e.hand.seen_lows_text() + e.shared.flakes_text() + UNCHECKED_TEXT
-        text += e.judge.look_review(st, s.w, s.fix)
+        text += e.judge.look_review(st, s.w, bool(s.fix))
         return text + (e.newfiles.new_files_brief(kinds["unexplained"]) if kinds["unexplained"] else "")
 
     def items(self, s: StageState) -> list[tuple[str, str]]:
@@ -165,7 +166,7 @@ class ReviewRound:
         checks = s.run.results
         judged = e.cases.out_of_scope(e.cases.engine_unproven(review.get("unchecked") or [], checks))
         e.review.unchecked = e.review.unchecked + judged if s.fix else judged
-        e.judge.look_judged(review, s.st, s.w, s.fix)
+        e.judge.look_judged(review, s.st, s.w, bool(s.fix))
         e.link_check.link_judged(review)
         same = e.last_flag == "same_family"
         if same:
@@ -207,7 +208,7 @@ class ReviewRound:
         s.rounds += 1
         out.rounds += 1
         stuck = out.stuck_why = "the review still sends it back: " + "; ".join(open_)
-        if s.rounds >= int(e.cfg.max_rounds):
+        if s.rounds >= e.cfg.max_rounds:
             (e.run_dir / "replan.md").write_text(stuck)
             e.steps.move("replan", "rounds_used", f"review sent it back: {said}; {s.rounds} rounds used")
             return REPLAN

@@ -27,7 +27,8 @@ class TornReflect(Case):
         self.addCleanup(env.stop)
         self.key = "reflect:digest"
         with LoopRows(homes.cfg(), "").transaction() as con:
-            con.execute("INSERT INTO kv (k, v, t) VALUES (?, ?, 0) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (self.key, self.torn))
+            con.execute("INSERT INTO report_doc (k, v, t) VALUES (?, ?, 0) ON CONFLICT(k) DO UPDATE SET v=excluded.v",
+                        (self.key, self.torn))
 
     torn = '{"v": 1, "filed"'
 
@@ -37,4 +38,4 @@ class TornReflect(Case):
         assert self.key in str(ctx.value)
         with pytest.raises(Refused):
             rd.due(homes.cfg())
-        assert LoopRows(homes.cfg(), "").select("SELECT v FROM kv WHERE k=?", (self.key,)) == [(self.torn,)]
+        assert LoopRows(homes.cfg(), "").select("SELECT v FROM report_doc WHERE k=?", (self.key,)) == [(self.torn,)]
