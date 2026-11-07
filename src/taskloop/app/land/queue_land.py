@@ -15,6 +15,7 @@ from tlkernel.wire import Rec
 
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
+from taskloop.app.land.queue import InFlight
 from taskloop.app.land.queue_enqueue import enqueue
 from taskloop.app.land.queue_recover import recover
 from taskloop.app.land.queue_refs import QueueRefs
@@ -92,12 +93,14 @@ class QueueLand:
             heads.append((branch, oid))
         beads_of = {branch: item.bead or (branch.removeprefix("task/") if branch.startswith("task/") else "")
                     for branch, item in self.items.items()}
-        in_flight = enqueue(stack, heads, beads_of)
+        cap = enqueue(stack, heads, beads_of)
+        flight = InFlight(cap=1 if cap == 1 else stack.jobs)
+        flight.current = min(flight.cap, max(1, stale.in_flight)) if stale is not None else 1
         stack.forge.fetch()
         main = stack.git.rev_parse(stack.repo, stack.trees.main_ref)
         refs = QueueRefs(stack.cmds, stack.repo)
-        queue = QueueRun(refs, self.gate, self.merge, in_flight=in_flight, main=main,
-                         on_change=lambda entries: doc.write(to_doc(entries, {}, in_flight=in_flight, last_base=main)))
+        queue = QueueRun(refs, self.gate, self.merge, flight=flight, main=main,
+                         on_change=lambda entries: doc.write(to_doc(entries, {}, in_flight=flight.current, last_base=main)))
         try:
             entries = queue.run(heads)
         finally:
