@@ -13,6 +13,7 @@ from tlkernel.looprows import LoopRows
 from tlkernel.paths import ConfigDir
 from tlkernel.wire import Rec
 
+LANES_DOCS = "lanes_doc"  # the lanes part's status snapshot and last attempt
 REPORT_DOCS = "report_doc"  # the report stage's document: the reflect digest state
 WORK_DOCS = "work_doc"  # the work stage's documents: the cache of a repo's decision records
 RELEASE_DOCS = "release_doc"  # the release stage's documents: the pin and the last release result
