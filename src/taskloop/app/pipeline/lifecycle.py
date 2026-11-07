@@ -8,13 +8,13 @@ from typing import Protocol
 from tlkernel import fence
 from tlkernel.beadsport import Beads
 from tlkernel.checkpoint import Checkpoint
+from tlkernel.checkpoint import RunState as CheckpointState
 from tlkernel.enums import Step
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
 from tlkernel.log import Beat
 from tlkernel.paths import ConfigDir
-from tlkernel.plancheck import PlanData
 from tlkernel.run import RunState
 
 from taskloop.adapters.deadline import DeadlineExpired, deadline
@@ -85,11 +85,11 @@ class LifecycleLog(Protocol):
 class LifecycleHost(CrashHost, Protocol):
     prev_ck: str
     fenced: str
-    plan_data: PlanData | None
     plan_summary: str
-    accepted: list[int]
     branch: str
 
+    @property
+    def state(self) -> CheckpointState: ...
     @property
     def store(self) -> Beads: ...
     @property
@@ -183,9 +183,9 @@ class Lifecycle:
         assert ck is not None and ck.ended is not None
         end.outcome, _, _ = stored_end.loaded(ck.ended.outcome)
         host.resume.restore(ck, late=True)
-        host.plan_data = ck.state.plan_data
-        host.plan_summary = (host.plan_data or {}).get("summary", "")
-        host.accepted = list(ck.state.accepted)
+        host.state.plan_data = ck.state.plan_data
+        host.plan_summary = (host.state.plan_data or {}).get("summary", "")
+        host.state.accepted = list(ck.state.accepted)
         host.branch = ck.branch
 
     def beat(self) -> None:
