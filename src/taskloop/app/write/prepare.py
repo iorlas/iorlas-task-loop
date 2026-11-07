@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Protocol
 
-from taskloop.app.checks.host import CheckHost
+from taskloop.app.write.host import PreparePorts
 from taskloop.app.write.state import StageState
 from taskloop.contracts import rundocs
 from taskloop.domain.checks.inputs import matching
@@ -13,7 +13,7 @@ from taskloop.domain.checks.matchers import expand_braces
 PREPARED = "prepared"
 
 
-class PrepareHost(CheckHost, Protocol):
+class PrepareHost(PreparePorts, Protocol):
     def blocked_for(self, why: str, kind: str) -> Exception: ...
 
 
@@ -52,7 +52,7 @@ class Prepare:
             if not force and have is not None and have.fingerprint == fingerprint and newest <= have.ns:
                 return False
             stamp.delete()
-            ran = e.spawner.run(cfg.cmd, cwd=str(e.wt), extra=e.bead_env, timeout_s=cfg.timeout_min * 60)
+            ran = e.spawner.run(cfg.cmd, cwd=e.wt, extra=e.bead_env, timeout_s=cfg.timeout_min * 60)
             tail = "stdout:\n" + ran.out[-4000:] + "\nstderr:\n" + ran.err[-4000:]
             status = "timed out" if ran.timed_out else f"exit {ran.exit}"
             e.log.note(f"engine.prepare {status}\n{tail}")

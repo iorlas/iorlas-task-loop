@@ -66,11 +66,11 @@ class RecordHost(Protocol):
 
 class RecordRun:
     def __init__(self, host: RecordHost) -> None:
-        self.e = host
+        self.host = host
 
     def run(self, record: RunFinish, stats: str) -> None:
         """The run's log and trace: the close node, the reflection, the owner's question."""
-        e = self.e
+        e = self.host
         if self.closed():
             e.records.file_trace(record)
             return
@@ -95,14 +95,14 @@ class RecordRun:
     def close(self, record: RunFinish) -> None:
         if self.closed():
             return
-        retry_at = ParkStore(self.e.home).retry_at(self.e.bead, self.e.run_id)
-        self.e.log.emit(rec.Close(t=record.ended, outcome=record.outcome, why_code=record.why_code, sha=record.sha,
+        retry_at = ParkStore(self.host.home).retry_at(self.host.bead, self.host.run_id)
+        self.host.log.emit(rec.Close(t=record.ended, outcome=record.outcome, why_code=record.why_code, sha=record.sha,
                                   why=record.why[:500], retry_at=retry_at))
 
     def closed(self) -> bool:
-        return any(isinstance(i.rec, rec.Close) for i in self.e.log.log.read_from(0).items)
+        return any(isinstance(i.rec, rec.Close) for i in self.host.log.log.read_from(0).items)
 
     def stage(self, record: RunFinish, stats: str) -> None:
         """A standalone stage keeps its simple Close and trace; it does not run the whole engine's reflection."""
         self.close(record)
-        self.e.records.file_trace(record)
+        self.host.records.file_trace(record)

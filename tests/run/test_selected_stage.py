@@ -16,12 +16,12 @@ from support.plans import PLAN
 from support.tlmain import tl_main
 
 from taskloop.app.land.gate import Gate, Problem, ProblemKind
+from taskloop.app.pipeline.closing_record import RecordRun
 from taskloop.app.pipeline.cursor import parse_step
 from taskloop.app.pipeline.finish import answer
 from taskloop.app.pipeline.steps import Steps
 from taskloop.app.plan.planned import Planned
 from taskloop.app.run.blocked import Blocked
-from taskloop.app.run.closer_record import RecordRun
 from taskloop.app.run.parts_plan import PlanParts
 from taskloop.app.run.stages import round_step, run_stages
 from taskloop.app.write.state import ACCEPT, StageState
