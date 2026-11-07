@@ -84,7 +84,8 @@ class Reload(te.EngineTest):
         elif plant:
             shutil.copytree(SRC, d, ignore=shutil.ignore_patterns("dash"))  # with __pycache__: the child imports warm, only the
             shutil.copytree(ROOT / "src", d.parents[1] / "src")  # planted file (newer mtime) compiles again
-            shutil.copytree(ROOT / "packages", d.parents[1] / "packages", ignore=shutil.ignore_patterns("tests"))  # tlpaths: each src/ joins the path
+            # tlpaths puts each package's src/ on the path
+            shutil.copytree(ROOT / "packages", d.parents[1] / "packages", ignore=shutil.ignore_patterns("tests"))
         else:
             d.parent.mkdir(parents=True)
             d.symlink_to(SRC, target_is_directory=True)
