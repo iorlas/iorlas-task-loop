@@ -20,12 +20,12 @@ import support.paths  # noqa: F401
 import jsonl_log as jsonl
 import suites
 from rigs import FakeRig, RealRig
-from support.procsim import real_proc
 from support.tiers import contract
 
 from taskloop.adapters.locks import ProcessLockTable
 from tlkernel import paths
 from tlkernel.lockenums import LockWhat
+from tltestkit.procsim import real_proc
 
 SUITES = [suites.DocContract, suites.AskContract, suites.CheckpointContract, suites.LogContract, suites.LockContract,
           suites.TicketContract]

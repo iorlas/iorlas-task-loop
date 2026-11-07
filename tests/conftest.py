@@ -3,7 +3,8 @@
 A test's kind comes from its path, never from a hand marker: a file under tests/e2e/ is `e2e` (a whole flow), a file under a `real/`
 folder (tests/<slice>/real/ or packages/<stage>/tests/real/) is `real` (real git, processes or sockets), anything else is logic (fakes,
 in process, fast). A single test's `@needs(capability, reason)` (or the older `@real_proc(reason)` / `@real_git(reason)`) folds into
-`real`. Guards (tests/support/procsim.py): a logic test that spawns, forks or runs real git fails; a `real` test that never spawns fails.
+`real`. Guards (packages/testkit/src/tltestkit/procsim.py): a logic test that spawns, forks or runs real git fails; a `real` test that
+never spawns fails.
 A test over its kind's time limit fails (tltestkit.limits)."""
 import contextlib
 import ctypes
@@ -45,13 +46,16 @@ os.environ["TMPDIR"] = tempfile.tempdir = os.path.realpath(tempfile.gettempdir()
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 pytest.register_assert_rewrite("support")  # the helpers of tests/support assert too: show the operands, as in a test file
 import support.paths  # noqa: E402, F401  (ROOT/src on sys.path; after the bytecode setup above)
-from support import procsim, work  # noqa: E402
+from support import work  # noqa: E402
 from support.scope import delegate_wanted  # noqa: E402
 
+from taskloop.adapters import procs  # noqa: E402
 from taskloop.app.parts import STAGE_PARTS  # noqa: E402
 from tlkernel import factorydb, scratch  # noqa: E402
+from tltestkit import procsim  # noqa: E402
 from tltestkit.limits import hang_s, kind_of_parts, limit_for  # noqa: E402
 
+procsim.SHELL_PROCESS_ADAPTERS.append(procs)
 factorydb.declare_parts(STAGE_PARTS, complete=True)
 
 
@@ -230,8 +234,8 @@ def filesystem_cache():
 
 @pytest.fixture(autouse=True)
 def procs(request):
-    """The process sim of this test (tests/support/procsim.py): fakes answer the checks, a real spawn (git too) fails a logic test, and a
-    `real` test that spawned nothing fails."""
+    """The process sim of this test (packages/testkit/src/tltestkit/procsim.py): fakes answer the checks, a real spawn (git too) fails
+    a logic test, and a `real` test that spawned nothing fails."""
     kind = request.node.stash.get(KIND, "logic")
     world = procsim.Procs(request.node.nodeid, guarded=kind == "logic")
     with contextlib.ExitStack() as stack:

@@ -7,8 +7,8 @@ from pathlib import Path
 from unittest import mock
 
 from any_agent.harnesses.claude import ClaudeHarness
-from support.procsim import real_proc
 
+from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory
 
 HERE = Path(__file__).resolve().parent.parent

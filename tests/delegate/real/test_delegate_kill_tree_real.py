@@ -17,13 +17,13 @@ from any_agent.harnesses.codex import CodexHarness
 from any_agent.protocol import LaunchSpec
 from any_agent.supervisor import RunHooks, Supervisor
 from stream_proc import alive, proc_start
-from support.procsim import real_proc
 
 from delegate.adapters import codex_account, procs
 from delegate.app import lease, usage
 from delegate.app.publish import LiveSink
 from delegate.contracts.state import Lease
 from tltestkit.case import Case
+from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory
 
 # A fake of the Codex CLI: a node-shim analogue that starts a native child in a session of its own; the child ignores SIGTERM.

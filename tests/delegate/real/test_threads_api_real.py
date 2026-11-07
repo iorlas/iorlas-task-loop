@@ -5,10 +5,10 @@ from dataclasses import replace
 from pathlib import Path
 
 from run_support import RunBase
-from support.procsim import real_proc
 
 from delegate import api
 from delegate.app import env
+from tltestkit.procsim import real_proc
 
 LIMIT_S = 60  # each test runs a fake CLI and git
 

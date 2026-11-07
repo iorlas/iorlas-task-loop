@@ -12,11 +12,11 @@ from pathlib import Path
 import hermetic  # noqa: F401  (a home of its own for every test)
 import pytest
 import run_support as T
-from support.procsim import real_proc
 from test_route import route
 
 from delegate.app import doctor, env
 from delegate.contracts.stores import StateStore, StateUnreadable
+from tltestkit.procsim import real_proc
 
 FIX = Path(__file__).resolve().parent.parent / "fixtures"
 ROUTE_PY = Path(str(route.__file__))
