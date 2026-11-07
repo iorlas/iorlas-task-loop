@@ -20,7 +20,6 @@ from taskloop.app.land.closing import LandFollowUps
 from taskloop.app.land.host import LandState
 from taskloop.app.land.record import file_follow_ups
 from taskloop.app.look.state import LookState
-from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.state import StateAttrs, carries_state
 from taskloop.stores.runlog import RunLog
 from tlkernel import fence
@@ -32,6 +31,7 @@ from tlkernel.followkeys import FollowKey
 from tlkernel.ids import BeadId
 from tlpipeline.api import Checkpoints, FileNotes
 from tltestkit.narrow import must
+from tlwork.review.state import ReviewLive
 
 
 class Killed(BaseException):

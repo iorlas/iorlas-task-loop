@@ -10,11 +10,11 @@ from tlkernel.answers import VERDICTS
 from tlkernel.reviewkinds import UNCHECKED_KINDS
 from tlkernel.stagefacts import RunFacts
 
-from taskloop.app.review.host import ReviewHand, ReviewPorts
-from taskloop.app.review.state import ReviewLive
-from taskloop.app.review.verify_prompt import VERIFY_PROMPT
-from taskloop.domain.work import visual
-from taskloop.domain.work.skip import SkipKind
+from tlwork.review.host import ReviewHand, ReviewPorts
+from tlwork.review.state import ReviewLive
+from tlwork.review.verify_prompt import VERIFY_PROMPT
+from tlwork.work import visual
+from tlwork.work.skip import SkipKind
 
 Item = dict[str, Any]
 RAISE_KINDS = ("FAULT_BAD_REQUEST", "PAUSE_NETWORK", "PAUSE_KILLED")

@@ -1,22 +1,37 @@
 """The links a task adds to a text file, opened from the engine's host (the writer's sandbox has no network)."""
-from typing import Any
+from collections.abc import Callable
+from typing import Any, Literal, Protocol
 
 from tlkernel.matchers import clip
 from tlkernel.stagefacts import RunFacts
 
-from taskloop.adapters import links
-from taskloop.app.review.host import ReviewHand, ReviewPorts
-from taskloop.app.review.state import ReviewLive
-from taskloop.domain.review.findings import engine_finding
-from taskloop.domain.work.matchers import Wording
+from tlwork.review.findings import engine_finding
+from tlwork.review.host import ReviewHand, ReviewPorts
+from tlwork.review.state import ReviewLive
+from tlwork.work.matchers import Wording
 
 Answer = dict[str, Any]  # a review answer: the dict the reviewer wrote
 
 LINK_CAP = 200  # links opened per review
 
 
+class Links(Protocol):
+    UNKNOWN: Literal["not checked in time"]
+
+    def added_urls(self, diff: str,
+                   exts: tuple[str, ...] = (".md", ".markdown", ".txt", ".rst", ".adoc")) -> list[tuple[str, str, str]]: ...
+
+    def check_all(self, urls: object, fn: Callable[[str], tuple[bool, str]] = ..., workers: int = 8,
+                  deadline: float = 120) -> dict[str, tuple[bool, str]]: ...
+
+    def check(self, url: str, timeout: float = 15) -> tuple[bool, str]: ...
+
+    def network_down(self, why: str) -> bool: ...
+
+
 class LinkCheck:
-    def __init__(self, facts: RunFacts, ports: ReviewPorts, live: ReviewLive, hand: ReviewHand) -> None:
+    def __init__(self, facts: RunFacts, ports: ReviewPorts, live: ReviewLive, hand: ReviewHand, links: Links) -> None:
+        self.links = links
         self.facts, self.ports, self.live, self.hand = facts, ports, live, hand
 
     def link_judged(self, review: Answer) -> None:
@@ -27,7 +42,7 @@ class LinkCheck:
         if not self.facts.cfg.check_links:
             return
         try:
-            found = links.added_urls(self.ports.checkout.task_diff())
+            found = self.links.added_urls(self.ports.checkout.task_diff())
         except Exception as err:  # no diff to read is no check, never a failed run
             self.ports.warn(f"link check skipped: {err}")
             return
@@ -36,11 +51,11 @@ class LinkCheck:
             return
         todo = [u for u in todo if self.live.link_tries.get(u, 0) < 2][:LINK_CAP]  # each link is opened twice at most, 200 per review
         try:
-            got = links.check_all(todo, fn=self.live.link_fn or links.check)
+            got = self.links.check_all(todo, fn=self.live.link_fn or self.links.check)
         except Exception as err:  # opening links must never stop a run
             self.ports.warn(f"link check skipped: {err}")
             return
-        if len(got) >= 3 and all(not ok and links.network_down(why) for ok, why in got.values()):
+        if len(got) >= 3 and all(not ok and self.links.network_down(why) for ok, why in got.values()):
             first = next(iter(got.values()))[1]
             self.ports.warn(f"link check skipped: none of {len(got)} links could be reached at all ({first}): this host looks offline")
             return
@@ -53,7 +68,7 @@ class LinkCheck:
             if ok:
                 self.live.link_ok.add(url)
                 self.live.link_bad.pop(url, None)
-            elif why != links.UNKNOWN:  # out of time is no verdict
+            elif why != self.links.UNKNOWN:  # out of time is no verdict
                 self.live.link_bad[url] = why
 
     def report(self, found: list[tuple[str, str, str]], review: Answer) -> None:

@@ -21,7 +21,6 @@ from taskloop.app.plan.sendback import SendBack
 from taskloop.app.run import engine
 from taskloop.app.write import prompts as wp
 from taskloop.app.write import review_prompt as rp
-from taskloop.domain.prompts.common import RULES_MAX
 from tlgate.domain import planref
 from tlgate.domain.names import log_var
 from tlkernel import answers, plancheck
@@ -31,6 +30,7 @@ from tlkernel.kinds import Kind
 from tltestkit import fake_route, procsim
 from tltestkit.cfgs import cfg_with
 from tltestkit.logs import records
+from tlwork.prompts.common import RULES_MAX
 
 
 class EnginePlanTest(EngineTest):

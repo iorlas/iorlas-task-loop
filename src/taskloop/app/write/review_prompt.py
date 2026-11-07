@@ -1,7 +1,7 @@
 """The reviewer's prompt."""
 from typing import Final
 
-from taskloop.domain.prompts.common import DECIDED_RULE, OPTIONS_RULE, READ_RULE
+from tlwork.prompts.common import DECIDED_RULE, OPTIONS_RULE, READ_RULE
 
 REVIEW_PROMPT: Final = """You review one stage of a task, from another model family than the writer. Do not edit files.
 <task>

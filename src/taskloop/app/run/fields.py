@@ -24,6 +24,7 @@ from tlkernel.review import Unfiled
 from tlkernel.run import Reexec
 from tlkernel.wire import Open
 from tlpipeline.api import Checkpoints
+from tlwork.review.state import ReviewLive
 
 from taskloop.adapters import beadtools, ident, treehash
 from taskloop.adapters.check_probe import PathProbe
@@ -33,7 +34,6 @@ from taskloop.app.land.host import LandState
 from taskloop.app.look.state import LookState
 from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.state import PlanState
-from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.context import RunContext
 from taskloop.app.run.field_ports import FieldParts
 from taskloop.app.run.sections import checkpoint_hooks, restarted

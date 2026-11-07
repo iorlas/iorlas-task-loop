@@ -6,11 +6,7 @@ from types import SimpleNamespace
 
 from support.facts import fake_facts
 from support.fakegit import FakeGit
-from taskloop.app.review.link_check import LinkCheck
-from taskloop.app.review.routing import Routing
-from taskloop.app.review.settles import Settles
-from taskloop.app.review.state import ReviewLive
-from taskloop.app.review.verifier import Verifier
+from taskloop.adapters import links
 from tlkernel.asked import Asked
 from tlkernel.askspec import AskSpec
 from tlkernel.config import EngineConfig
@@ -18,6 +14,11 @@ from tlkernel.gitfacts import GrepHit
 from tlkernel.kinds import Kind
 from tlkernel.stop import Stop
 from tlpipeline.api import LeftoverQueue
+from tlwork.review.link_check import LinkCheck
+from tlwork.review.routing import Routing
+from tlwork.review.settles import Settles
+from tlwork.review.state import ReviewLive
+from tlwork.review.verifier import Verifier
 
 
 class ReviewGit(FakeGit):
@@ -97,5 +98,5 @@ class FakeReview:
         self.git = ReviewGit()
         self.routing = self.hand.routing = Routing(self.facts, self.ports, self.live, self.hand, self.git)
         self.settles = self.hand.settles = Settles(self.facts, self.ports, self.live, self.hand, self.git)
-        self.link_check = LinkCheck(self.facts, self.ports, self.live, self.hand)
+        self.link_check = LinkCheck(self.facts, self.ports, self.live, self.hand, links)
         self.verifier = Verifier(self.facts, self.ports, self.live, self.hand)

@@ -8,9 +8,10 @@ Used by: plan, review, write.
 from collections.abc import Collection, Iterable, Sequence
 from typing import Final
 
-from taskloop.domain.work.matchers import word_set
 from tlkernel.checkmatchers import glob_re
 from tlkernel.plancheck import Open
+
+from tlwork.work.matchers import word_set
 
 VISUAL_CLASSES: Final = frozenset({"look-objective", "taste", "show"})
 
