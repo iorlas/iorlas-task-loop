@@ -4,17 +4,16 @@ from pathlib import Path
 
 import support.paths  # noqa: F401
 
-from taskloop.app.land.store import LAND
-from taskloop.contracts import dbparts, factoryparts
+from taskloop.app.parts import STAGE_PARTS
+from taskloop.contracts import dbparts
 
-STAGE_PARTS = (factoryparts.KV, LAND)  # a part registers when its module is imported, and an unused import does not import it
 GOLDEN = Path(__file__).parent / "golden" / "parts.json"
 HINT = "bump the part's version, add its step, then run `uv run python dev/part_golden.py`"
 
 
 def test_every_part_matches_its_golden_fingerprint():
     golden = json.loads(GOLDEN.read_text())
-    now = json.loads(json.dumps(dbparts.golden()))
+    now = json.loads(json.dumps(dbparts.golden(STAGE_PARTS)))
     assert set(now) == set(golden), f"parts added or removed: {HINT}"
     for name, want in golden.items():
         have = now[name]

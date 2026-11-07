@@ -12,7 +12,6 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from taskloop.app.land.store import LAND
 from taskloop.app.look.state import LOOK_FIELDS
 from taskloop.app.run.review_glue import review_of
 from taskloop.contracts import fence, wire
@@ -88,9 +87,6 @@ class StateAttrs:
 
 def state_names() -> tuple[str, ...]:
     return tuple(name for name in wire.names(RunState) if name not in NOT_ATTRS)
-
-
-STAGE_PARTS = (LAND,)  # the factory.db parts this module's writers use (the outbox): registered before any open; an unused import is lazy
 
 
 def attr_names() -> tuple[str, ...]:

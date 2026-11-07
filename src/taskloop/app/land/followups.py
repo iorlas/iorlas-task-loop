@@ -10,6 +10,7 @@ from taskloop.contracts.ids import BeadId
 from taskloop.domain import followups as fu
 from taskloop.stores.runlog import RunLog
 
+
 class FollowUpCheckpoints(Protocol):
     def keep_filed(self, lost: list[dict[str, str]] | None = ...) -> None: ...
     def keep_pending(self, origin: str = ...) -> None: ...

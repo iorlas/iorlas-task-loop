@@ -14,7 +14,6 @@ from support.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.app.land.store import LAND
 from taskloop.contracts import factorydb
 from taskloop.contracts.looprows import LoopRows
 from taskloop.contracts.paths import ConfigDir
@@ -29,9 +28,6 @@ TABLES = {
 INDEXES = {
     "run_bead", "run_recent", "run_live", "bead_status", "check_tree", "ask_live",
 }
-
-
-STAGE_PARTS = (LAND,)  # a stage's tables exist once its store module is imported, and an unused import does not import it
 
 
 class FactoryDbTest(Case):

@@ -29,7 +29,9 @@ BEAD, RUN = "t-1", "r1"
 def child(config: str, kill: str, seed: bool) -> int:
     """The process that dies: the real interpreter and checkpoint ledger, a world file for the effects."""
     sys.path[:0] = [str(ROOT / "src"), str(ROOT / "skills" / "task-loop" / "_vendor")]
+    from taskloop.app.parts import STAGE_PARTS  # noqa: PLC0415
     from taskloop.contracts.checkpoint import Checkpoint  # noqa: PLC0415
+    from taskloop.contracts.factorydb import declare_parts  # noqa: PLC0415
     from taskloop.contracts.kinds import Kind  # noqa: PLC0415
     from taskloop.contracts.paths import ConfigDir  # noqa: PLC0415
     from taskloop.domain import effects as fx  # noqa: PLC0415
@@ -37,6 +39,7 @@ def child(config: str, kill: str, seed: bool) -> int:
     from taskloop.domain.interpret import CheckpointLedger, interpret  # noqa: PLC0415
     from taskloop.stores.real import real_stores  # noqa: PLC0415
 
+    declare_parts(STAGE_PARTS)
     signal.signal(signal.SIGTERM, signal.SIG_IGN)  # only SIGKILL ends it: no handler, no cleanup, no finally
     at, _, phase = kill.partition(":")
     doc = real_stores(ConfigDir(config)).checkpoints.of(BEAD)
