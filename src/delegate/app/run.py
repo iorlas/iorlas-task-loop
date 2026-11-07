@@ -16,7 +16,7 @@ from pathlib import Path
 from any_agent.supervisor import RunHooks
 
 from delegate.adapters import git, opencode_size, procs, transcript_size
-from delegate.app import answer, cockpit, codex_policy, decide, env, harnesses, launch, net, settle, usage
+from delegate.app import answer, cockpit, codex_policy, decide, env, harnesses, launch, run_legs, settle, usage
 from delegate.app.launch import how_of
 from delegate.app.lease import RunLease
 from delegate.app.run_end import file_size, history_row, transcript_info, worker_ended
@@ -45,9 +45,12 @@ class Run:
         idle_s: float | None = None,
         brief: str | None = None,
         log: Callable[[str], None] | None = None,
+        now: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], object] = time.sleep,
     ):
         """`brief` given: the call reads no file and no stdin. `log` receives the lines the CLI prints on stderr (default: stderr)."""
         self.a, self.cfg, self.unattended, self.idle_s, self.given_brief = a, cfg, unattended, idle_s, brief
+        self.now, self.sleep = now, sleep
         self.log = log or (lambda line: print(line, file=sys.stderr, flush=True))
         self.out: dict[str, Json] = {}  # the answer, set by emit
         self.on_started: Callable[[str, procs.Worker], None] | None = None  # (run_id, worker): the worker exists
@@ -322,10 +325,7 @@ class Run:
 
         res = self._canary(launch_one, d, a) if canary_due else None  # the one probe before full traffic; None = it passed
         res = res or launch_one(brief, a, "reroute" if self.rerouted else "first")
-        if res.get("outcome") == "network" and not res.pop("started", False) and net.net_up(as_str(d["lane"])):
-            res = launch_one(
-                brief, a, "network_rerun"
-            )  # dropped before the vendor had a session and the net is back: nothing to resume, nothing lost, so run it again, once
+        res = run_legs.network(res, launch_one, brief, a, as_str(d["lane"]), self.now, self.sleep)
         if res.get("outcome") is None and a.schema:
             res = self._schema(res, launch_one)
         res.pop("started", None)  # the launcher's own bookkeeping, whichever launch (first, re-ask) produced `res`
@@ -363,13 +363,7 @@ class Run:
             )
             if self.attempts and self.attempts[-2:-1] and self.attempts[-2]["outcome"] is None:
                 self.attempts[-2]["outcome"] = "schema_invalid"  # the first leg launched fine; its answer is what failed
-            tok = [x for x in (as_opt_obj(res.get("tokens")), as_opt_obj(again.get("tokens"))) if x]
-            again["tokens"] = {k: sum(as_num(x.get(k)) or 0 for x in tok) for k in ("in", "cached", "out")} if tok else None
-            again["acct"] = accounting.merge(as_opt_obj(res.get("acct")), as_opt_obj(again.get("acct")))
-            again["cost"] = (as_num(res.get("cost")) or 0) + (as_num(again.get("cost")) or 0)
-            again["cumulative"] = again.get("cumulative") or res.get("cumulative")
-            again["denied"] = [*arr(res.get("denied")), *arr(again.get("denied"))]
-            res = again
+            res = run_legs.merge(res, again)
             why = (
                 None
                 if res.get("outcome")

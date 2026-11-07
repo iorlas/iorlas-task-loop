@@ -88,7 +88,6 @@ class WorkerCall:
                     and self.refused(c, res, res.denied)
                 ):
                     continue
-                self.acts.note_net(c, stop)
                 self.acts.act(c, res, stop, lp.decide(stop, self.acts.ctx_of(c)))
                 continue
             if self.acts.same_family(c, res):
@@ -372,11 +371,11 @@ class WorkerCall:
         e.warn(f"{c.node} was denied {said} and found another way")
         return False
 
-    def again(self, c: Call, resume: str = "", note: str = "", stop: lp.Stop | None = None) -> None:
+    def again(self, c: Call, resume: str = "", note: str = "") -> None:
         """The next call of this step: on thread `resume` with a short note of why, else on a new thread with the whole prompt."""
         if resume:
             c.resume = resume
-            c.text = callstate.NETWORK_RESUME_DELTA if stop is not None and stop.reason == "network" else RESUME_AFTER_STOP
+            c.text = RESUME_AFTER_STOP
         else:
             c.text = c.full + (FRESH_WRITER_TEXT if c.resume else "") + note
             c.resume = None
@@ -384,7 +383,7 @@ class WorkerCall:
     def charge(self, c: Call, name: str, secs: float = 0.0) -> None:
         if name == "denied_retried":
             c.denied_retried = True
-        elif name in ("waited_lane_s", "waited_net_s"):
+        elif name == "waited_lane_s":
             c.counts[name] += secs
         elif name:
             c.counts[name] += 1

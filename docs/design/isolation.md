@@ -3,7 +3,7 @@
 Owner's rule (2026-11-05): task-loop has no clue which harness is underneath. The factory never calls `stop_pid`; it calls `stop` on
 an agent. Principles: no optionality, no backward compatibility, no redundancy, isolation, injected classes.
 
-Status: proposal, awaiting the owner. Epic tl-hwv5; children tl-hwv5.2 (A, process), .3 (B, harness), .4 (C, delegate internals).
+Status: accepted by Denis, 2026-11-07. Epic tl-hwv5; children tl-hwv5.2 (A, process), .3 (B, harness), .4 (C, delegate internals).
 
 ## Where the code is today (read 2026-11-06, origin/main 99154664)
 
@@ -94,11 +94,11 @@ calls use it; `FakeApi` and `procsim` for AI workers go with A4. Real-process te
 
 | Decision | Status |
 |---|---|
-| Agent is a Protocol in `contracts/`, adapter over delegate (option 4) | proposed |
-| Pull `events()`, no callbacks | proposed |
-| `stop` = proven dead or `StopFailed` | proposed |
-| Terminal outcomes only; `retry_after` the single extra field | proposed |
-| Library vs stdio, DELEGATEHOME (tl-w7lt.37) | open, owner's; not needed for A1 to A3 |
+| Agent is a Protocol in `contracts/`, adapter over delegate (option 4) | accepted, 2026-11-07, Denis: "Protocol then protocol. Accept as written" |
+| Pull `events()`, no callbacks | accepted, 2026-11-07, Denis: "Protocol then protocol. Accept as written" |
+| `stop` = proven dead or `StopFailed` | accepted, 2026-11-07, Denis: "Protocol then protocol. Accept as written" |
+| Terminal outcomes only; `retry_after` the single extra field | accepted, 2026-11-07, Denis: "Protocol then protocol. Accept as written" |
+| Library vs stdio, DELEGATEHOME (tl-w7lt.37) | accepted, 2026-11-07, Denis: "Protocol then protocol. Accept as written" |
 
 ## B2b: the behaviour change that needs the owner (written 2026-11-06)
 
@@ -119,4 +119,6 @@ resume counters and the in-process waits. **Old and new, for a stop the engine s
 
 What is lost: the engine can no longer say WHICH lane is out or why (the dashboard gets it from `lanes()`, C1), and a short lane-out
 under 180 s now pauses the bead instead of waiting in the same run. **Decision for the owner:** is `Failed(retry_after)` enough, with no
-lane name in the engine? Recommended: yes. Until answered, B2b is not built.
+lane name in the engine? Recommended: yes. Accepted by Denis on 2026-11-07: "Protocol then protocol. Accept as written".
+
+B2b-1 done (2026-11-07): delegate owns worker network waits and resumes; engine network stops pause immediately.
