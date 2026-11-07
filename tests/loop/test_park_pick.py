@@ -41,7 +41,7 @@ class Pick(Case):
         self.cfg = ConfigDir(Path(self.tmp.name))
 
     def rank(self, b):
-        rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _b: "", parked=lambda x: asks_wire.skip_of(self.cfg, x))
+        rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _b: "", parked=lambda x: parks.skip_of(asks_wire.host(), self.cfg, x))
         return rule.rank([b], "")
 
     def test_a_bead_with_no_question_behind_it_is_taken(self):
@@ -74,7 +74,7 @@ class Pick(Case):
         assert ParkStore(self.cfg).get(bead().id) == rec
         for now, ready in ((129.999, False), (130, True), (131, True)):
             rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _: "",
-                             parked=lambda b, now=now: asks_wire.skip_of(self.cfg, b, now=now))
+                             parked=lambda b, now=now: parks.skip_of(asks_wire.host(), self.cfg, b, now=now))
             q = rule.rank([bead()], "")
             assert bool(q.ranked) == ready
             if not ready:
@@ -99,7 +99,8 @@ class Pick(Case):
 
     def test_a_queue_of_timed_pauses_waits_instead_of_exiting_drained(self):
         parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient")
-        rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _: "", parked=lambda b: asks_wire.skip_of(self.cfg, b, now=100))
+        rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _: "",
+            parked=lambda b: parks.skip_of(asks_wire.host(), self.cfg, b, now=100))
         loop = mock.Mock(env=mock.Mock(now=lambda: 100), until=0)
         assert Loop.idle(loop, rule.rank([bead()], "")) is None
         assert (loop.wait.reason, loop.wait.probe_at) == ("no_lane", 130)

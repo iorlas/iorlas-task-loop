@@ -16,7 +16,7 @@ from support.tlmain import tl
 
 from taskloop.app.run import entry
 from taskloop.app.run.engine import Engine
-from taskloop.app.wire import asks as admission
+from tlasks import admission
 from tlkernel.config import EngineConfig, SlotsConfig
 from tlkernel.enums import Result, Step
 from tlkernel.env import Env

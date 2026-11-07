@@ -1,9 +1,8 @@
 """The owner's inbox on this machine: the AskStore of the config dir and the throttled passes over it (close the ask of a closed bead,
 park the unanswered, shout about an answer no run used)."""
 from collections.abc import Callable
-from typing import Concatenate
 
-from tlasks import admission, parks, pr_wake, setup_retry, sweeps
+from tlasks import pr_wake, setup_retry, sweeps
 from tlasks.host import AsksHost
 from tlasks.paths import ask_marker
 from tlkernel.askstore import AskStore
@@ -67,17 +66,3 @@ def sweep_asks(who: Identity, home: ConfigDir, say: Callable[[str], None] = prin
 
 def host() -> AsksHost:
     return AsksHost(beadtools.bd_store, beadtools.peek, ident.hostname, store)
-
-
-def bound[**P, R](fn: Callable[Concatenate[AsksHost, P], R]) -> Callable[P, R]:
-    def call(*args: P.args, **kwargs: P.kwargs) -> R:
-        return fn(host(), *args, **kwargs)
-    return call
-
-
-release_dead = bound(admission.release_dead)
-admit = bound(admission.admit)
-parked = bound(admission.parked)
-gate = bound(parks.gate)
-skip_of = bound(parks.skip_of)
-entering = bound(parks.entering)

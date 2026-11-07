@@ -37,9 +37,9 @@ from taskloop.app.run import (
     engine,
     entry,
 )
-from taskloop.app.wire import asks as admission
 from taskloop.app.wire import slotfx
 from taskloop.app.wire.slotfx import FX
+from tlasks import admission
 from tlkernel.enums import Result
 from tlkernel.env import snapshot
 from tlkernel.ids import loop_key

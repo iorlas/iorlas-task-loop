@@ -33,9 +33,9 @@ from taskloop.app.launch import dash as dash_server
 from taskloop.app.run import (
     entry,
 )
-from taskloop.app.wire import asks as admission
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire.slotfx import FX
+from tlasks import admission
 from tlkernel.config import SlotsConfig
 from tlkernel.enums import Result
 from tlkernel.env import snapshot

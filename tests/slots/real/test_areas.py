@@ -40,9 +40,9 @@ from taskloop.app.run import (
     entry,
 )
 from taskloop.app.track import verbs
-from taskloop.app.wire import asks as admission
 from taskloop.app.wire import slots as wslots
 from taskloop.stores.ticketrows import TicketRows
+from tlasks import admission
 from tlkernel.config import LoopConfig
 from tlkernel.enums import Result
 from tlkernel.env import snapshot

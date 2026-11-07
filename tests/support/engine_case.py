@@ -36,9 +36,10 @@ from taskloop.app.run import (
     engine,
     running,
 )
-from taskloop.app.wire import asks as admission
+from taskloop.app.wire import asks as wasks
 from taskloop.app.write.newfiles import NewFiles
 from taskloop.domain.lanes import policy as lp  # noqa: F401
+from tlasks import admission
 from tlgate.domain import (
     lint,  # noqa: F401
 )
@@ -280,7 +281,7 @@ class EngineTest(SlotWorld):
         if ask:
             self.asks().put(wire.load(Ask, {**ask, "bead": "t-1"}))
         with self.store.stub(show=dict(BEAD, **bead), comments=list(comments)):
-            ok, why = admission.admit(BeadId("t-1"), str(self.wt), port_git(), who(), store=self.store, owner_author="denis",
+            ok, why = admission.admit(wasks.host(), BeadId("t-1"), str(self.wt), port_git(), who(), store=self.store, owner_author="denis",
                                       running_now=running.running)
         updates = [c for c in self.bd_calls if c[:1] == ("update",)]
         return ok, why, updates
