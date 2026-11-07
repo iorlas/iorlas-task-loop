@@ -221,7 +221,7 @@ R1 applies only where named. Moving an Engine method into a file and passing the
 | app/run/entry.py | Bind admission dependencies/claim/select directory/start engine | E/S/L, multiple pre-engine exits and release ordering | U ⚠; R |
 | app/run/fields.py | Initialize mutable Engine fields | E, full field taxonomy and persistent/ephemeral split; R1 | R ❌; V |
 | app/run/lane_acts.py | Execute retry/wait/reroute/yield policy | E/D/L, original stop, family and durable wake | U ⚠; R |
-| app/run/layout.py | Run layout plus age-based pruning | E/F, open/adopt identity and retention exemptions | U ⚠; R |
+| packages/kernel/src/tlkernel/runlayout.py | Run layout plus age-based pruning | E/F, open/adopt identity and retention exemptions | U ⚠; R |
 | app/run/preflight.py | Read-only admission preview | E/C/P, preview cannot authorize later mutation | U ⚠; R |
 | app/run/records.py | Start/terminal record and trace assembly | E/Q, aliased counters and clipped causality | U ⚠; R |
 | app/run/reload.py | Adopt version and transfer counters | E/F/D, compatibility and rollback; A.F04 | U ⚠; R |
