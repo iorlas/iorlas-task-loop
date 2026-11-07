@@ -13,9 +13,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.run import NetPause, Reexec, ReexecNote
 from tlkernel.waitrows import NET_PAUSE, REEXEC, WaitDoc
 
-from taskloop.domain.lanes import policy as lp
-
-NET_PAUSE_ADOPT_S = lp.KNOBS["net_pause_max_s"]  # a run paused for the network is taken up again by the next run-task within this long
+NET_PAUSE_ADOPT_S = 21600  # a run paused for the network is taken up again by the next run-task within this long
 
 
 def reexec_store(home: ConfigDir, bead: BeadId) -> WaitDoc[ReexecNote]:

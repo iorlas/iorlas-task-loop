@@ -1,6 +1,6 @@
 """What the engine does about a stopped call: `lanes.policy.decide` says what, this does it. Retries and waits set up the next call of
 the step; a pause or a fault ends the step as a `Blocked` (built by the host's ops). Every decision is a `RetryDecision` record with the
-timeout and the exit it was made on. The network gate (probe, backoff, the pause hint) lives here too."""
+timeout and the exit it was made on. The lander's git push network wait lives here too."""
 
 import time
 from typing import Any, Final
@@ -20,7 +20,6 @@ ASK_KINDS: Final = ("ASK_STUCK",)
 VERBS: Final = {
     lp.Retry: "retry",
     lp.Wait: "wait",
-    lp.WaitNet: "wait_net",
     lp.NewThread: "new_thread",
     lp.Reroute: "reroute",
     lp.Yield: "pause",
@@ -35,14 +34,6 @@ class LaneActs:
     def net_up(self) -> bool | None:
         """True, False, or None (the probe could not run): the host's probe, else delegate's `route.py net`."""
         return self.e.delegation.net_probe().up()
-
-    def note_net(self, c: Any, stop: lp.Stop) -> None:
-        """A stop of the machine that polls (the network): ask the probe now. Up at a stop is counted: three in five minutes mean the
-        calls fail for something the probe cannot see (a proxy, DNS), which the policy pauses visibly."""
-        if (stop.scope, stop.permanence, stop.retry_kind) == ("machine", "transient", "poll"):
-            c.up_now = self.net_up()
-            if c.up_now is True:
-                self.e.net_up_times.append(self.e.clock.now())
 
     def await_net(self, up: bool | None, max_s: float) -> tuple[float, bool]:
         """Wait until the probe passes, at most max_s (backoff NET_BACKOFF); `up` is the probe's last answer. -> (seconds waited,
@@ -65,8 +56,7 @@ class LaneActs:
         return waited, up is not False
 
     def ctx_of(self, c: Any) -> lp.Ctx:
-        k, now, e = c.counts, self.e.clock.now(), self.e
-        e.net_up_times = [t for t in e.net_up_times if now - t < lp.KNOBS["net_probe_window_s"]]
+        k, now = c.counts, self.e.clock.now()
         return lp.Ctx(
             now,
             bool(c.resume),
@@ -74,8 +64,6 @@ class LaneActs:
             k["polls"],
             k["crashes"],
             k["waited_lane_s"],
-            k["waited_net_s"],
-            len(e.net_up_times),
             c.denied_retried,
             c.secret_fp,
             c.node,
@@ -103,8 +91,6 @@ class LaneActs:
         """Do what lane_policy.decide said about a stopped call. A Yield or Fail ends the step (Blocked); the rest set up the next call."""
         self.record(c, stop, a)
         step = c.step or c.node
-        if isinstance(a, lp.WaitNet):
-            return self.wait_net(c, res, stop, a)
         if isinstance(a, (lp.Retry, lp.Wait)):
             return self.rest(c, res, stop, a, step)
         if isinstance(a, lp.NewThread):
@@ -157,7 +143,7 @@ class LaneActs:
             e.halt_point(wait=secs)
             e.waits.add(secs, WaitWhat.DELEGATE_CRASH if crash else WaitWhat.LANE, wid)
         self.wc.charge(c, a.charges, secs)
-        return self.wc.again(c, a.resume, stop=stop, note="")
+        return self.wc.again(c, a.resume, note="")
 
     def end(self, c: Any, res: DelegateResult, stop: lp.Stop, a: lp.Yield | lp.Fail) -> None:
         """An exhausted invalid review is unavailable; other stops end the step with their Blocked outcome."""
@@ -171,8 +157,6 @@ class LaneActs:
         if isinstance(a, lp.Yield):
             retry_after = a.retry_after if a.retry_after > e.clock.now() else 0.0  # a hint: the loop wakes the bead when its role is usable
             e.retry_after, e.pause_role, e.pause_lane = retry_after, c.role, stop.lane
-            if a.banner:
-                e.warn(f"the network looks up but delegate calls keep failing: {ops.stop_say(stop)}")
             e.steps.outcome("paused", stop.reason)
             e.steps.move(
                 "pause",
@@ -189,23 +173,3 @@ class LaneActs:
             raise ops.blocked(pin.stop_why(c.node, pinned, stop.reason, res.say or stop.fix, stop.fix, warm), a.kind, stop)
         why = ops.stop_why(c.node, a.kind, stop, res.say, retry_after, c.counts["crashes"] + 1, res.denied, now=e.clock.now())
         raise ops.blocked(why, a.kind, stop)
-
-    def wait_net(self, c: Any, res: DelegateResult, stop: lp.Stop, a: lp.WaitNet) -> None:
-        """The network is down: probe until it is back (backoff), at most a.max_s; then the same thread goes on with a short note, no
-        counter charged. Out of time the run yields, the loop probes and wakes the bead."""
-        e = self.e
-        e.warn(
-            "{}: no network ({}); resuming {} when it is back".format(
-                c.node, (res.say or stop.reason)[:120], ("thread " + a.resume) if a.resume else "on a new thread"
-            )
-        )
-        waited, back = self.await_net(c.up_now, a.max_s)
-        c.counts["waited_net_s"] += waited
-        if not back:
-            return self.act(c, res, stop, lp.Yield("PAUSE_NETWORK", self.wc.ops.stop_say(stop)))
-        e.steps.move(
-            c.step or c.node,
-            "network_wait",
-            f"the network was down {int(waited)} s; the step goes on in {('thread ' + a.resume) if a.resume else 'a new thread'}",
-        )
-        self.wc.again(c, a.resume, stop=stop)

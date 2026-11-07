@@ -38,9 +38,9 @@ class Exhaustive(Case):
         assert len(lp.LEGAL) == 20
         assert len(set(lp.LEGAL)) == 20
         assert set(lp.TABLE) == set(lp.LEGAL)
-        actions = (lp.Retry, lp.Wait, lp.WaitNet, lp.NewThread, lp.Reroute, lp.Yield, lp.Fail)
+        actions = (lp.Retry, lp.Wait, lp.NewThread, lp.Reroute, lp.Yield, lp.Fail)
         for scope, perm, retry in lp.LEGAL:
-            for c in (ctx(), ctx(resumed=True, attempt=2, polls=9, crashes=9, waited_net_s=9999, denied_retried=True)):
+            for c in (ctx(), ctx(resumed=True, attempt=2, polls=9, crashes=9, denied_retried=True)):
                 a = lp.decide(stop(scope, perm, retry, ref="r1", resumable=True, retry_at=NOW + 60), c)
                 assert isinstance(a, actions), (scope, perm, retry)
 
@@ -54,7 +54,7 @@ class Exhaustive(Case):
     def test_no_action_asks_the_owner_and_no_yield_is_a_fault(self):
         for scope, perm, retry in lp.LEGAL:
             a = lp.decide(
-                stop(scope, perm, retry, retry_at=NOW + 9999), ctx(attempt=5, polls=5, crashes=5, waited_net_s=9999, denied_retried=True)
+                stop(scope, perm, retry, retry_at=NOW + 9999), ctx(attempt=5, polls=5, crashes=5, denied_retried=True)
             )
             if isinstance(a, lp.Yield):
                 assert kind_of(a) in PAUSES
@@ -80,37 +80,11 @@ class Exhaustive(Case):
         assert "outcome" not in tops
 
 
-class Network(Case):
-    NET = ("machine", "transient", "poll")
-
-    def test_a_network_stop_waits_for_the_net_and_resumes_the_same_ref(self):
-        a = lp.decide(stop(*self.NET, ref="sess-1", partial=True), ctx(resumed=True))
-        w = only(lp.WaitNet, a)
-        assert (type(a), w.resume, w.max_s) == (lp.WaitNet, "sess-1", 600)
-        assert only(lp.WaitNet, lp.decide(stop(*self.NET), ctx())).resume == ""  # no session was ever opened
-
-    def test_a_network_stop_charges_nothing_and_never_reroutes(self):
-        c = ctx(attempt=0, crashes=0, polls=0, waited_lane_s=0)
-        a = lp.decide(stop(*self.NET, ref="r"), c)
-        assert a.charges == ""
-        assert not isinstance(a, (lp.Reroute, lp.NewThread, lp.Retry, lp.Fail))
-
-    def test_past_the_cap_the_run_yields_pause_network(self):
-        a = lp.decide(stop(*self.NET, ref="r"), ctx(waited_net_s=600))
-        assert (type(a), kind_of(a)) == (lp.Yield, Kind.PAUSE_NETWORK)
-        assert a.charges == ""
-        assert not oc.POLICY[kind_of(a)].storm
-
-    def test_the_wait_shrinks_with_what_was_waited(self):
-        assert only(lp.WaitNet, lp.decide(stop(*self.NET), ctx(waited_net_s=450))).max_s == 150
-
-    def test_a_probe_that_says_up_at_three_stops_pauses_with_a_banner_and_a_doubling_backoff(self):
-        a = lp.decide(stop(*self.NET), ctx(net_up_stops=3))
-        p = only(lp.Yield, a)
-        assert (kind_of(a), p.banner, p.retry_after) == (Kind.PAUSE_NETWORK, True, NOW + 1800)
-        assert only(lp.Yield, lp.decide(stop(*self.NET), ctx(net_up_stops=5))).retry_after == NOW + 7200
-        assert only(lp.Yield, lp.decide(stop(*self.NET), ctx(net_up_stops=40))).retry_after == NOW + 21600
-        assert type(lp.decide(stop(*self.NET), ctx(net_up_stops=2))) is lp.WaitNet
+def test_network_stop_pauses_immediately():
+    action = lp.decide(stop("machine", "transient", "poll", ref="sess-1", partial=True), ctx(resumed=True))
+    assert isinstance(action, lp.Yield)
+    assert (action.kind, action.retry_after, action.banner, action.charges) == ("PAUSE_NETWORK", 0, False, "")
+    assert not oc.POLICY[Kind.PAUSE_NETWORK].storm
 
 
 class Incidents(Case):
@@ -121,7 +95,7 @@ class Incidents(Case):
 
     def test_exit_15_is_a_kill_pause_never_a_fail_or_an_ask(self):
         for facts in (("machine", "transient", "none"), ("machine", "needs_owner", "none"), ("machine", "transient", "poll")):
-            a = lp.decide(stop(*facts, signal=15, reason="killed"), ctx(crashes=9, waited_net_s=9999))
+            a = lp.decide(stop(*facts, signal=15, reason="killed"), ctx(crashes=9))
             assert kind_of(a) == Kind.PAUSE_KILLED, facts
 
     def test_busy_polls_three_times_then_moves_on(self):

@@ -1,5 +1,4 @@
-"""The fake route.py process (tl-7y6.4.3), contract 4, and the network-resume done-when (tl-7y6.2.13): a vendor that drops
-mid-stream twice and then succeeds is one step, one ref, no lane out, no retry counted. """
+"""The fake route.py process (tl-7y6.4.3), contract 4, and checkpoint reattachment."""
 import contextlib
 import io
 import json
@@ -23,15 +22,12 @@ import support.paths  # noqa: E402, F401
 from support import (  # noqa: E402
     dlcall,
     fake_route,
-    netgate,
 )
 from support.argv_of import argv_of  # noqa: E402
-from support.fake_clock import FakeClock  # noqa: E402
 from support.narrow import must  # noqa: E402
 
 from taskloop.adapters import childenv, delegate_wire  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
-from taskloop.app.loop.net import NetState  # noqa: E402
 from taskloop.app.workers import call_state as cs  # noqa: E402
 from taskloop.domain import outcome as oc  # noqa: E402
 from taskloop.domain.lanes import policy as lp  # noqa: E402
@@ -179,55 +175,6 @@ class Fake(Case):
             ]
         }
         assert [d.kind for d in delegate_wire.denied_of(j["denied"])] == ["policy"]
-
-    # --- the done-when: drops twice, then succeeds ------------------------------------------------------------------
-
-    def drive(self, steps, probe, key=("write", 1, 0, 1)):
-        """The executor loop of the engine (R21's), in miniature: call, decide, wait for the net, resume the same ref."""
-        self.script_with(steps)
-        clk, net = FakeClock(), NetState()
-        st = cs.begin(self.dir / "ck", "run-1", "t-1", key, role="worker", now=clk.now())
-        resume, ctx_kw, actions, calls = "", {}, [], 0
-        while True:
-            calls += 1
-            r = self.call(resume=resume)
-            if r.ref:
-                st.note_ref(r.ref, clk.now())
-            if r.stop is None:
-                st.returned(r.raw, self.dir / "ck" / "write-1.raw.json", clk.now())
-                return r, st, actions, calls, clk
-            a = lp.decide(r.stop, lp.Ctx(now=clk.now(), resumed=bool(resume), **ctx_kw))
-            actions.append(a)
-            if not isinstance(a, lp.WaitNet):
-                return r, st, actions, calls, clk
-            net.mark_down(clk.now())
-            t0 = clk.now()
-            while not net.poll(probe, clk.now()):
-                clk.advance(netgate.PROBE_EVERY)
-            ctx_kw["waited_net_s"] = ctx_kw.get("waited_net_s", 0) + (clk.now() - t0)
-            resume = a.resume
-
-    def test_a_vendor_that_drops_twice_then_succeeds_is_one_step_with_one_ref(self):
-        probe = netgate.FakeProbe([False, False, True, False, True])
-        r, st, actions, calls, _ = self.drive([{"step": "network", "partial": True}, {"step": "network", "partial": True}, "done"], probe)
-        assert (r.done, r.stop, calls) == (True, None, 3)
-        assert {r.ref, st.ref} == {"fake-1"}                       # the ref of call 1 is the ref of the answer
-        runs = [a for a in self.argv_log() if a[0] == "run"]
-        assert len(runs) == 3
-        assert "--resume" not in runs[0]
-        assert [a[a.index("--resume") + 1] for a in runs[1:]] == ["fake-1", "fake-1"]
-        assert len(actions) == 2
-        assert all(isinstance(a, lp.WaitNet) and a.resume == "fake-1" and a.charges == "" for a in actions)
-        assert st.phase == "returned"
-        assert must(cs.reattach(cs.load_for(self.dir / "ck", "t-1", ("write", 1, 0, 1))))[0] == "answer"
-
-    def test_a_dropped_call_charges_no_counter_and_marks_no_lane(self):
-        r, _st, actions, _calls, _clk = self.drive(["network", "done"], netgate.FakeProbe([False, True]))
-        a = actions[0]
-        for charged in ("attempt", "crashes", "polls", "waited_lane_s"):
-            assert a.charges != charged
-        assert not isinstance(a, (lp.Reroute, lp.NewThread, lp.Retry, lp.Fail))
-        assert r.done
 
     def test_a_restart_after_the_first_drop_resumes_the_ref_from_the_call_state(self):
         self.script_with(["network", "done"])

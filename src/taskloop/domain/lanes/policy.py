@@ -2,7 +2,7 @@
 
 `decide(stop, ctx, cfg, plan)` has no sleep, no git, no bd and no IO. The key is (scope, permanence, retry_kind), A3's facts;
 `stop.reason` is wording; the one place it is read is `worker_failed` (a timeout or a -15 exit gets another lane first). The output is one
-of seven Actions (61-integration sec 5.5): Retry | Wait | WaitNet | NewThread | Reroute | Yield | Fail. A Yield or Fail names the
+of six Actions (61-integration sec 5.5): Retry | Wait | NewThread | Reroute | Yield | Fail. A Yield or Fail names the
 outcome Kind by its name (the app maps it); every retry count is a row of `retry.PLAN`.
 
 A network stop charges nothing: not `attempt`, not `crashes`, not `polls`, not `waited_lane_s`, no ask, replan or storm
@@ -25,11 +25,7 @@ RETRY_KINDS: Final[tuple[RetryKind, ...]] = get_args(RetryKind)
 # Engine scheduling policy; these knobs are not fields or defaults in delegate's schema.
 KNOBS: Final = {
     "wait_cap_s": 180,  # a lane back sooner than this is waited for in-process; later it is a PAUSE_LANE with a wake time
-    "net_wait_cap_s": 600,  # one call waits this long for the network, then yields PAUSE_NETWORK
-    "net_probe_up_stops": 3,  # network stops while the probe said up, inside net_probe_window_s: a proxy or DNS fault
-    "net_probe_window_s": 300,
-    "net_pause_s": 1800,  # that pause; doubles with each further such stop
-    "net_pause_max_s": 21600,
+    "net_wait_cap_s": 600,  # the lander waits this long for its git push network retry
     "poll_s": 20,  # the wait of a poll when the stop names none
 }
 
@@ -103,8 +99,6 @@ class Ctx:
     polls: int = 0
     crashes: int = 0
     waited_lane_s: float = 0.0
-    waited_net_s: float = 0.0
-    net_up_stops: int = 0  # network stops in the last net_probe_window_s whose probe said up
     denied_retried: bool = False
     secret_fp: bool = False  # the denial was `secrets` on a heredoc body that names .env (denials.secret_false_positive)
     node: str = ""
@@ -125,13 +119,6 @@ class Wait:
     resume: str = ""
     charges: str = "waited_lane_s"
     plan: str = ""
-
-
-@dataclass(frozen=True)
-class WaitNet:
-    resume: str  # the ref to resume once the probe passes ("" = a new thread)
-    max_s: float  # most this call may still wait for the network
-    charges: str = ""
 
 
 @dataclass(frozen=True)
@@ -168,7 +155,7 @@ class Fail:
     plan: str = ""
 
 
-Action = Retry | Wait | WaitNet | NewThread | Reroute | Yield | Fail
+Action = Retry | Wait | NewThread | Reroute | Yield | Fail
 Knobs = Mapping[str, float]
 
 
@@ -186,17 +173,6 @@ def _fail(kind: str, stop: Stop, plan: str = "") -> Fail:
 
 def _excluded(stop: Stop) -> str:
     return stop.lane if stop.scope == "lane" or not stop.model else stop.model
-
-
-def _network(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
-    """machine, transient, poll: the network (or a lock) is the machine's. Resume the same thread when the probe passes."""
-    if ctx.net_up_stops >= cfg["net_probe_up_stops"]:  # the probe says up and the calls say down: visible, never silent
-        over = ctx.net_up_stops - cfg["net_probe_up_stops"]
-        return _yield("PAUSE_NETWORK", stop, ctx.now + min(cfg["net_pause_s"] * (2**over), cfg["net_pause_max_s"]), True)
-    left = cfg["net_wait_cap_s"] - ctx.waited_net_s
-    if left <= 0:
-        return _yield("PAUSE_NETWORK", stop)
-    return WaitNet(stop.ref if (ctx.resumed or stop.ref) else "", left)
 
 
 def _machine_predicted(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
@@ -296,7 +272,7 @@ def _lane_none(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
 
 # The table. Every legal tuple has a row; a new reason is a delegate classifier line, never a row here.
 TABLE: Final[dict[tuple[str, str, str], Callable[[Stop, Ctx, Knobs, RetryPlan], Action]]] = {
-    ("machine", "transient", "poll"): _network,
+    ("machine", "transient", "poll"): lambda stop, ctx, cfg, plan: _yield("PAUSE_NETWORK", stop),
     ("machine", "transient", "predicted"): _machine_predicted,
     ("machine", "transient", "none"): _machine_none,
     ("machine", "needs_owner", "none"): _machine_owner,

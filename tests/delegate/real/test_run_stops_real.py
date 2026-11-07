@@ -212,7 +212,7 @@ class RunStops(RunBase):
         ):
             _, r = self.run_it(mode="drop_early")
         assert (why(r), r["stop"]["scope"]) == ("network", "machine")
-        assert self.launches() == 1  # no in-call wait or retry loop: the engine decides
+        assert self.launches() == 1  # the in-call wait expired
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_dropped_stream_keeps_the_ref_in_the_answer_the_stop_and_the_refs_table(self):

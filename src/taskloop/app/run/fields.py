@@ -107,7 +107,6 @@ class RunFields(StateAttrs):
         self.route = ""
         self.contract: Open | None = None
         self.probe: Any = None  # the network probe (a test's); None: delegate's `route.py net`
-        self.net_up_times: list[float] = []  # when a network stop came while the probe said up (three in five minutes pause the run)
         self.at_stage = 0  # the stage a call belongs to, for its key
         self.pause_role, self.pause_lane = "", ""  # the role and lane a paused run waits for: the loop wakes the bead when it is usable
         self.pause_reason = ""  # typed delegate reason; otherwise the close uses the engine outcome kind
