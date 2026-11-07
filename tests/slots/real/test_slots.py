@@ -38,6 +38,7 @@ from taskloop.app.run import (
     engine,
     entry,
 )
+from taskloop.app.wire import slotfx
 from taskloop.app.wire.slotfx import FX
 from tlkernel.enums import Result
 from tlkernel.env import snapshot
@@ -223,7 +224,7 @@ class LiveEngineBackstop(Slots):
         self.kids.append(k)
         put_lock(self.slot("s1"), {"pid": 0, "bead": "x-0"})
         # delegate names the run whose worker k stands for
-        with mock.patch(__name__ + ".FX", replace(FX, running_for=mock.Mock(return_value=["r1"]))):
+        with mock.patch.object(slotfx, "FX", replace(FX, running_for=mock.Mock(return_value=["r1"]))):
             assert "run r1" in engine_lock.engine_busy(homes.cfg(), self.slot("s1"), fx=FX)
             self.run_loop("--max-beads", "1")
         assert self.started == [("x-1", "s2")]

@@ -129,7 +129,7 @@ class Invariants(test_loop.Base):
         support_who.PER_THREAD = self.actors
         self.out = io.StringIO()
         rebind(self, trail.now, self.clock.now)
-        rebind(self, FX, replace(FX, proc_alive=lambda pid, start="": int(pid) in self.live,
+        rebind(self, FX, replace(FX, proc_alive=lambda pid, start="": int(str(pid)) in self.live,
                                  proc_start=lambda pid: f"T{pid}"))
         rebind(self, pidcheck.proc_alive, lambda pid, start="": int(pid) in self.live)
         rebind(self, pidcheck.proc_start, lambda pid: f"T{pid}")

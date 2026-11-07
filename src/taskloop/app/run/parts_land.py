@@ -1,5 +1,5 @@
 """The land side of a run: the tree, the rebase and its salvage, the fixer, the lander, and the receipt a land leaves."""
-from functools import cached_property
+from functools import cached_property, partial
 from pathlib import Path
 from typing import override
 
@@ -22,9 +22,7 @@ from taskloop.app.write.newfiles import NewFiles
 
 
 class LandParts(Plumbing):
-    @cached_property
-    def tree(self) -> Tree:
-        return Tree(self, fx=slotfx.FX)
+    tree = cached_property(partial(Tree, fx=slotfx.FX))
     rebase = cached_property(Rebase)
     restart = cached_property(Restart)
     fixer = cached_property(Fixer)
