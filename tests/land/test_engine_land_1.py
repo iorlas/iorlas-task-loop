@@ -55,7 +55,8 @@ class EngineLand1Test(EngineTest):
         assert any(remote in a for a in meta) and any("origin/main" in a for a in meta), meta
         assert any(c[:2] == ("comments", "add") and "Reflect (engine)" in c[3] for c in self.bd_calls)
         # the facets of this one run, each of which used to be a run of its own
-        assert ("reviewer", None, "openai") in s.calls  # every green stage gets a cross-family review
+        assert s.requests[2].reviewer_other_family
+        assert s.results[2]["family"] != s.results[1]["family"]
         rv = s.prompts[2]
         assert "git diff HEAD" not in rv
         assert "<diff>\ndiff --git a/f.txt b/f.txt" in rv  # the stage's diff, inline (tl-bxk.10.18)

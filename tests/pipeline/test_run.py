@@ -21,7 +21,7 @@ def roles():
     return SimpleNamespace(
         leasing=SimpleNamespace(stop_pending=False, halt=SimpleNamespace(is_set=lambda: False),
                                 store=SimpleNamespace(), bead="t-1", dry=True,
-                                cfg=SimpleNamespace(writer_exec_allow=[], writer_family=[], base="main",
+                                cfg=SimpleNamespace(writer_exec=False, reviewer_other_family=True, base="main",
                                                     max_replans=1, max_rounds=3)),
         delegating=SimpleNamespace(delegation=mock.Mock(), route="delegate", refusal=None,
                                    contract={"contract": 1, "capabilities": []}, router=SimpleNamespace(contract_no=1)),

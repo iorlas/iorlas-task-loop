@@ -118,17 +118,20 @@ class MemLockTable:
     def hold(self, what: LockWhat, ident: str, holder: str, *, timeout: float | None = None,
              waiting: Callable[[LockRecord | None], None] | None = None) -> Generator[LockRecord]:
         key = (what.value, ident)
-        end = None if timeout is None else time.monotonic() + timeout
+        limit = 30.0 if timeout is None else timeout
+        end = time.monotonic() + limit
         told = False
         with self.cond:
             while (cur := self.held.get(key)) is not None and self.alive(cur.pid):
                 if waiting is not None and not told:
                     told = True
                     waiting(cur)
-                left = None if end is None else end - time.monotonic()
-                if left is not None and left <= 0:
+                left = end - time.monotonic()
+                if left <= 0:
+                    if timeout is None:
+                        raise AssertionError(f"lock {what.value}-{ident} did not settle in {limit:g} s")
                     raise LockTimeout("{}-{}".format(*key), cur)
-                self.cond.wait(0.05 if left is None else min(left, 0.05))
+                self.cond.wait(min(left, 0.05))
             rec = LockRecord(what=what, holder=holder, pid=self.pid, t=time.time())
             self.held[key] = rec
         try:

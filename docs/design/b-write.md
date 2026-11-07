@@ -34,7 +34,7 @@ Counts are from a grep for `e.X = / += / .append / .add` in `app/write`; the tab
 
 ## Collisions, in the order they bite
 
-1. **ASKAI slice 2** moves the writes of `writer`, `writer_family`, `writer_fallback`, `fallback_lane`, `last_flag` and `planner_ref` out of `worker_call` into the host's `ai()`. B-WRITE must not touch `write_round.py` lines 83 and 146 (`e.writer_family = ...`, `s.wfam`) before it lands; after it, those lines become `asked.session`. **B-WRITE slice 2 waits for ASKAI slice 2.**
+1. **ASKAI slice 2** moves the writes of `writer`, `writer_family`, `last_flag` and `planner_ref` out of `worker_call` into the host's `ai()`. B-WRITE must not touch `write_round.py` lines 83 and 146 (`e.writer_family = ...`, `s.wfam`) before it lands; after it, those lines become `asked.session`. **B-WRITE slice 2 waits for ASKAI slice 2.**
 2. **B-LOOK slice 2** edits `write_round.py:44` (`render_stale`) and `:120` (`artifact_repo`), and `stage_loop.py:37`. **B-WRITE slices touching `write_round` and `stage_loop` come after B-LOOK slice 2.**
 3. **B-LOOK slice 3** changes `LookHost` to the hand-offs below (`unverified`, `leftovers`, `retry_after`, `pause_*`); B-WRITE's `leftovers` row is the same field: whichever slice lands first defines the `Leftover` return value and the other uses it.
 4. **ENGINE-ORDER** (pix-hardening) edits `app/write/newfiles.py` (the new-file kind, PR #306 landed it): `NewFiles` is migrated last for that reason.

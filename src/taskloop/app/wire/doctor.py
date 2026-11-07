@@ -29,11 +29,9 @@ from taskloop.app.doctor.setup_checks import (
     slot_warnings,
 )
 from taskloop.app.release import catalog, manifest
-from taskloop.app.report.inputs import repo_traces
 from taskloop.app.slots import watchdog
 from taskloop.app.slots.config import cfg_source
 from taskloop.app.wire import slots as wslots
-from taskloop.domain.lanes import pin
 from taskloop.stores.delegate import real_route
 from taskloop.stores.real import real_stores
 
@@ -58,17 +56,13 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
     warns = git_warnings(repo, source, git) + layout_warnings(repo, source, git)
     warns += bead_lint_warnings(repo, lambda: bd_store(who.actor, repo)) + slot_warns
     warns += [link_line] if foreign else []
-    warns += [] if source[0].engine.writer_exec_allow else [
-        "plan check argv unrestricted: the profile lists no engine.writer_exec_allow, so a planner's own check may run any command"]
     warns += ops.clone_warnings(config_dir(env), git)
     lib = real_route().resolve()
     warns += [gap] if (gap := ops.capability_gap(lib.contract if isinstance(lib, Resolved) else {})) else []
     warns += [f"run {r} is lost: its process is gone and it recorded no end" for r in runlife.reconcile(who.config, time.time())]
     print(f"contracts: {Path(contracts.__file__).resolve().parent}")
-    print(f"engine: {pin.describe(pin.families(source[0].engine.writer_family, []))}")
-    print(f"engine: {pin.describe_second(source[0].engine.second_writer_family)}")
-    if second := source[0].engine.second_writer_family:
-        print(ops.second_share_line(second, *ops.second_share(repo_traces(repo, git, ConfigDir(config_dir(env))).runs, second)))
+    for line in ops.product_lines(source[0].engine.writer_exec, source[0].engine.reviewer_other_family):
+        print(f"engine: {line}")
     for w in warns:
         print("WARN " + w)
     if legacy := legacy_line(config_dir(env)):

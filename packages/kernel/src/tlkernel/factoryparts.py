@@ -87,11 +87,19 @@ def checkpoint_sections(con: sqlite3.Connection) -> None:
     con.execute(SECTION_DDL)
 
 
+def writer_thread(con: sqlite3.Connection) -> None:
+    """pipeline v3 -> v4: the writer's session ref and context leave the checkpoint (delegate keeps the thread); old bodies stay foreign."""
+
+
+def delegate_policy(con: sqlite3.Connection) -> None:
+    """pipeline v4 -> v5: delegate owns fallback state; older checkpoints remain foreign."""
+
+
 PIPELINE = Part(
-    name="pipeline", version=3,
+    name="pipeline", version=5,
     tables=("run", "attempt", "step", "effect", "wait", "checkpoint", CHECKPOINT_SECTIONS, "timed", "signal"),
     records=(RunManifest, Checkpoint, CursorBody, PlanSection, WriteSection, LandSection, LookSection, ReviewState, OwnerRequest),
-    steps={1: close_intent, 2: checkpoint_sections},
+    steps={1: close_intent, 2: checkpoint_sections, 3: writer_thread, 4: delegate_policy},
     ddl=f"""
 CREATE TABLE run (run TEXT PRIMARY KEY, repo TEXT NOT NULL, repo_key TEXT NOT NULL, bead TEXT NOT NULL DEFAULT '',
   mode TEXT NOT NULL DEFAULT '', owner TEXT, session TEXT, loop TEXT, worktree TEXT, branch TEXT, sha TEXT,
