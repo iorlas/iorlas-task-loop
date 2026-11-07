@@ -10,11 +10,11 @@ from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
+from tlkernel.planbrief import owner_written
 
 from taskloop.adapters import beadtools, ident
 from taskloop.app.asks import intake, parks
 from taskloop.domain.asks import hold
-from taskloop.domain.plan.brief import owner_written
 from taskloop.stores.real import real_stores
 
 

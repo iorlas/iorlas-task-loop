@@ -30,8 +30,8 @@ from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.write.handoff import HANDOFF_CAP
 from taskloop.domain.checks import planref
-from taskloop.domain.plan.matchers import AcceptanceText
 from tlkernel import rundocs
+from tlkernel.acceptancetext import AcceptanceText
 from tlkernel.answers import IRREVERSIBLE
 from tlkernel.argv import argv_of
 from tlkernel.config import EngineConfig

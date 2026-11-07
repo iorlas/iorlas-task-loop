@@ -1,11 +1,11 @@
-"""The brief functions the way the tests call them (the engine no longer has them: domain/plan/brief.py and app/plan/briefs.py)."""
+"""The brief functions the way the tests call them (the engine no longer has them: tlkernel/planbrief.py and app/plan/briefs.py)."""
 from collections.abc import Sequence
 from typing import Any
 
 from taskloop.adapters.bdids import mentioned_ids
 from taskloop.app.asks import intake
 from taskloop.app.plan.briefs import ENGINE_LABELS
-from taskloop.domain.plan import brief as bf
+from tlkernel import planbrief as bf
 from tlkernel.bead import Bead, Comment
 from tlkernel.checkpoint import BriefSnap
 

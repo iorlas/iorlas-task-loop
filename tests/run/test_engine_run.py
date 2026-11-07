@@ -44,9 +44,9 @@ from taskloop.app.slots.lease import Lease
 from taskloop.app.track import outcome_line
 from taskloop.domain.checks import retry
 from taskloop.domain.lanes.matchers import read_only_command
-from taskloop.domain.plan.matchers import AcceptanceText
 from taskloop.domain.write.matchers import count_tests
 from tlkernel import checkmatchers as check_matchers
+from tlkernel.acceptancetext import AcceptanceText
 from tlkernel.config import EngineConfig
 from tlkernel.enums import Result
 from tlkernel.env import snapshot

@@ -2,6 +2,7 @@
 from collections.abc import Callable
 
 from tlkernel import fence
+from tlkernel.acceptancetext import AcceptanceText
 from tlkernel.askenums import AskClass
 from tlkernel.bead import Bead
 from tlkernel.delegateport import Refusal
@@ -19,7 +20,6 @@ from taskloop.app.pipeline.run_roles import Delegating, GitMoves, Leasing, RunRe
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.lanes import pin
-from taskloop.domain.plan.matchers import AcceptanceText
 
 
 class RunBody[T]:

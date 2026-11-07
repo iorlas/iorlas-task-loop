@@ -10,6 +10,7 @@ from tlkernel.answers import ASSUMPTION, IRREVERSIBLE
 from tlkernel.askenums import AskClass
 from tlkernel.checkpoint import PlanStep
 from tlkernel.matchers import clip
+from tlkernel.planbrief import COMMENTS_ONLY
 from tlkernel.plancheck import PlanData
 from tlkernel.stagefacts import RunFacts
 
@@ -27,7 +28,6 @@ from taskloop.app.plan.state import PlanState
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.checks import affinity
 from taskloop.domain.checks.specs import repo_check
-from taskloop.domain.plan.brief import COMMENTS_ONLY
 from taskloop.domain.plan.stored import stored
 from taskloop.domain.prompts.common import DECIDED_TEXT
 from taskloop.domain.work import visual

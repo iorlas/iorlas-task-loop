@@ -6,11 +6,11 @@ from tlkernel import fence
 from tlkernel.beadsport import BeadPatch, Beads
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Infra, Kind, Owner, Task
+from tlkernel.landmatchers import without_prefix
 
 from taskloop.adapters import beadtools
 from taskloop.app.pipeline.ports import BeadClosing, ParkBook
 from taskloop.domain import outcome as oc
-from taskloop.domain.land.matchers import without_prefix
 
 
 class SettleConfig(Protocol):
