@@ -2,7 +2,7 @@
 
 Scope: the 72 open, non-hold children of REVIEW9 (tl-7i9k), ZOOMOUT (tl-sqd3), REVIEWFIX (tl-br2), ENCAPSULATION (tl-3cl), DASHBACK (tl-xvl) and the stage epic tl-7y6, judged against main at the time of writing and the open PRs then (#519, #522, #526, #529, #531, #533 and the pipeline R4 lane). Evidence was read by subagents with grep and git log, then spot-checked by hand for the top picks (tl-br2.20, tl-br2.5, tl-7i9k.31, tl-7i9k.41, tl-sqd3.7). Closed beads carry the verdict in their reason; STILL VALID beads keep their text.
 
-Totals: STILL VALID 45, ALREADY DONE 20, WON'T DO 6, DUPLICATE 1.
+Totals: STILL VALID 46, ALREADY DONE 19, WON'T DO 6, DUPLICATE 1.
 
 Rules applied: a design note without code is not "done" (the bead stays valid until its acceptance holds); a container epic with open children stays open and has no work of its own; a bead whose premise a later decision removed (delegate as a library, no hosted CI, no OS service, no backward compatibility) is WON'T DO. Beads in progress under another lane are marked.
 
@@ -55,17 +55,17 @@ Rules applied: a design note without code is not "done" (the bead stays valid un
 | tl-7y6.4 | STILL VALID | - | container | Container epic: 2 children still open; stage carves (#529) supersede its S3 plan, so judge it when those 2 close. | #529 |
 | tl-w7lt | STILL VALID | - | container | Container epic: 11 of 41 children still open; no work of its own. | none |
 | tl-7i9k.56 | STILL VALID | - | container | Umbrella with 2 open children (tl-7i9k.56.1 DURABLE-MODULE, tl-7i9k.56.2 COMPOSE-RULE) that this triage did not cover (grandchildren); it closes with them. Not closed: the first pass said WON'T DO and tl refused the close. | none |
-| tl-7i9k.13 | ALREADY DONE | - | - | | Slices 1-6 landed: #272, #274 (dev/killpoints.py real SIGKILL), #275; tests/run/test_crash_matrix.py and dev/killpoints.py exist. Bead is in_progress only as bookkeeping; close it. | none |
+| tl-7i9k.18 | STILL VALID | - | owner-action | Slice 1 shipped (#241, queue.py skips unordered children), but slice 2 (turn the Order: lines of zoom-out-review.md into bd dep add, label tl-sqd3 'ordered') says it stays open and is the owner's; the bead cannot close until then. | none |
+| tl-7i9k.13 | ALREADY DONE | - | - | Slices 1-6 are all met: #265 (step graph), #268 (effect idempotency table, tests/run/test_effect_idempotency.py), #272 (write-ahead outcome, crash after push has one truth), #274 (dev/killpoints.py SIGKILL at every effect), #275 (slice 6 design note: lost runs resume through the ordinary loop). The one measurement that note proposes is split out as tl-yc53. | none |
 | tl-7i9k.17 | ALREADY DONE | - | - | | pin.warm_second sha1%10 (#250), wired dark behind engine.second_writer_family (#252), doctor share line (#296); tests/run/test_second_family.py, tests/domain/test_writer_pin.py exist. | none |
-| tl-7i9k.18 | ALREADY DONE | - | - | | Slice 1 (queue skips unordered children of 'ordered' epic) landed in #241, src/taskloop/app/loop/queue.py. Slice 2 is an owner action (apply labels), not code; close. | none |
 | tl-7i9k.42 | ALREADY DONE | - | - | | First slice shipped: retried stick files one bead, hold set during a redo is kept (#244). Remaining RW-14 ideas belong to later slices, not this titled slice. | none |
 | tl-7i9k.45 | ALREADY DONE | - | - | | DGRUN 2-4 landed (#239 attempts ladder, #243 Hung record, #246 pure decide); delegate/app/run.py:61,166 reports attempts. Rest is closed by dgrun-rewrite series. | none |
-| tl-7i9k.47 | ALREADY DONE | - | - | | dev/census.py plus first reading docs/architecture/census-2026-11-06.md landed in #259. | none |
+| tl-7i9k.47 | ALREADY DONE | - | - | All of the acceptance is met: dev/census.py, tests/census/test_census.py (kind/step counts, window, gate inside/outside lock, modes and owners, Engine count) and the first reading docs/architecture/census-2026-11-06.md (#259). The loop-id follow-up is tl-7i9k.64. | none |
 | tl-7i9k.49 | ALREADY DONE | - | - | | Host/Origin/X-Taskloop-Dash write guard in taskloop_dash/http.py:53; XSS rule test (#288); fixed 500 (#231). Tailscale identity/funnel not in code, but bind is tailnet-only; close, file residue if wanted. | none |
-| tl-7i9k.50 | ALREADY DONE | - | - | | Daily bd export (seven kept) and monthly restore drill landed in #254; packages/kernel/src/tlkernel/bdbackup.py exists. | none |
-| tl-7i9k.51 | ALREADY DONE | - | - | | #257 SLOTASIDE: 30/60/120 probes; src/taskloop/app/slots/aside.py exists; acceptance (tests/loop/test_waits.py, tests/slots/test_aside.py) covered. Close. | none |
+| tl-7i9k.50 | ALREADY DONE | - | - | All of the acceptance is met (#254): tlkernel/bdbackup.py nightly export (7 kept), monthly restore drill, wired in launch/loop_ops.py, tests/contracts/test_bdbackup.py covers 9 days to 7 files, same-day once, failing bd, truncated/mismatch/lower-count drill. | none |
+| tl-7i9k.51 | ALREADY DONE | - | - | All of the acceptance is met (#257): probes at 30/60/120/120/120 (tests/loop/test_waits.py:88-100), tests/slots/test_aside.py, slots/aside.py. | none |
 | tl-7i9k.52 | ALREADY DONE | - | - | | #255 VERSIONCENSUS: status versions block (loops, shim sha256, skew) in domain/versions.py, wire/brief.py, doctor/ops.py. | none |
-| tl-7i9k.63 | ALREADY DONE | - | - | | Look items are a kv row look:<bead> by compare-and-set; packages/kernel/src/tlkernel/lookrows.py docstring; landed in #251. | none |
+| tl-7i9k.63 | ALREADY DONE | - | - | All of the acceptance is met (#251): look items are the look:<bead> row of factory.db written by compare-and-set (tlkernel/lookrows.py), no look-bead metadata write, tests/asks/test_look_row.py covers both race orders, a hold set mid-answer, old-metadata move and the gallery reading the row. | none |
 | tl-7y6.6 | ALREADY DONE | - | container | Epic container with all 16 children closed; the umbrella adds no work. | none |
 | tl-br2.10 | ALREADY DONE | - | - | | f7fc10a3 (#107) publishes the recovery memo before consuming the answer, with a test in tests/run/test_worker_recovery.py. | none |
 | tl-br2.16 | ALREADY DONE | - | - | | #139 LANDTIME: tl runs show/slow time the land's fetch, rebase and push from engine-log start/end records, which was the ask (record dated spans). | none |
@@ -108,6 +108,6 @@ Reserve: tl-sqd3.35 (the "k" shim in adapters/agent.py), tl-7i9k.38 (app/land st
 
 ## Closing status
 
-20 of the 28 non-valid beads were closed. Eight refused, none forced: tl-7i9k.13, .18, .47, .50, .51, .63 and tl-br2.16 are assigned to another actor (a close needs the assignee or --force); tl-7i9k.56 has open children (see above). Their verdicts stand; the assignee closes them, or the lead says to force.
+20 of the beads judged non-valid were closed. Not closed: tl-7i9k.13, .47, .50, .51 and .63 are fully met clause by clause (cites in the table) and wait for the lead's force-close, because they are assigned to the owner; tl-br2.16 has another assignee and is left alone; tl-7i9k.18 and tl-7i9k.56 turned out to be open (see the table). tl-yc53 is the new bead for the one measurement the CRASHMATRIX slice-6 note proposed.
 
 Scope note: only direct children of the six parents were triaged. Grandchildren (for example tl-7i9k.56.1/.2, tl-7y6.6.x) are a second pass.
