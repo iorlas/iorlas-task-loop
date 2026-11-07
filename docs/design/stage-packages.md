@@ -137,3 +137,15 @@ B-LAND, C-*) -> D-DB (after #219 and #232).
 Spike script: the toy workspace is rebuilt by the steps in this section's tables; it is 4 members, 60 lines, and every row of section 1 is one
 command (`uv run --isolated --package`, `ruff check`, `lint-imports`, a 20-line closure script). It is not committed; WORKSPACE redoes it on the
 real tree and commits the result.
+
+## Adding a member: the checklist
+
+Use folder `packages/<stage>`, project `tl<stage>`, and import root `tl<stage>`.
+Each member still needs entries in:
+
+- `ruff.toml` `src`.
+- `pyrefly.toml` `search-path`.
+- `.importlinter` `root_packages` and its package contract.
+- The converted-stages contract when the stage is converted.
+
+The rules and mutation tools' Python paths, affected-test scan roots and visibility, production architecture trees, and package selection now discover `packages/*/src` or member manifests automatically. `just test-pkg <stage>` detects a member manifest and runs its isolated environment.

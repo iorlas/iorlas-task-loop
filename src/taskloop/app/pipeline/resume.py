@@ -8,7 +8,7 @@ from typing import Protocol
 from tlkernel import plancheck, wire
 from tlkernel.ask import Ask
 from tlkernel.askenums import AskClass
-from tlkernel.checkpoint import BriefSnap, Checkpoint
+from tlkernel.checkpoint import Checkpoint, RunState
 from tlkernel.checks import CheckRun
 from tlkernel.gitport import Git
 from tlkernel.plancheck import PlanData, RoundState
@@ -87,26 +87,18 @@ class ResumeHost[T](Protocol):
     ck_run: str
     resumed: bool
     answered: Ask | None
-    snap: BriefSnap | None
     wt: str
     left_dirty: bool
-    brief_hash: str
-    extra: int
-    planner_ref: str
-    pending_land_validation: str
-    plan_data: PlanData | None
     plan_summary: str
-    accepted: list[int]
     last_run: CheckRun | None
     run_id: str
     run_dir: Path
-    done: list[str]
     verify_answer: str
 
     @property
     def git(self) -> Git: ...
     @property
-    def state(self) -> object: ...
+    def state(self) -> RunState: ...
     @property
     def checkpoints(self) -> ResumeCheckpoints: ...
     @property
@@ -164,17 +156,17 @@ class Resume[T]:
         given = a is not None and a.answer is not None
         words = host.planner.cap.answered_words() if a is not None or ck is not None else ""
         snap_diff = quiet = req = None
-        if ck is not None and ck.state.snap is not None and host.snap is not None:
-            snap_diff = brief.diff(ck.state.snap, host.snap, words)
-            quiet = brief.diff(ck.state.snap, host.snap, words, comments=False)
-            req = brief.diff(ck.state.snap, host.snap, "", comments=False)
+        if ck is not None and ck.state.snap is not None and host.state.snap is not None:
+            snap_diff = brief.diff(ck.state.snap, host.state.snap, words)
+            quiet = brief.diff(ck.state.snap, host.state.snap, words, comments=False)
+            req = brief.diff(ck.state.snap, host.state.snap, "", comments=False)
         return World(
             fresh=host.fresh,
             branch=host.git.branch(host.wt),
             head=host.git.rev_parse(host.wt, "HEAD"),
             parent=host.git.rev_parse(host.wt, "HEAD~1") if host.left_dirty else "",
             left_dirty=host.left_dirty,
-            brief_hash=host.brief_hash,
+            brief_hash=host.state.brief_hash,
             answered=a is not None,
             answer_given=given,
             answer_external_fact=a is not None and a.ask_class == AskClass.EXTERNAL_FACT,
@@ -201,9 +193,9 @@ class Resume[T]:
             if name not in KEEP_FOR_ACTIVE and (late or name not in LATE):
                 setattr(host.state, name, getattr(saved, name))
         self.review.apply(saved.review, unchecked=False, late=late)
-        host.extra = host.extra + saved.extra
-        host.planner_ref = saved.planner_ref or host.planner_ref
-        self.host.pending_land_validation = saved.pending_land_validation or (ck.feedback if ck.step == "land-verify-red" else "")
+        host.state.extra = host.state.extra + saved.extra
+        host.state.planner_ref = saved.planner_ref or host.state.planner_ref
+        self.host.state.pending_land_validation = saved.pending_land_validation or (ck.feedback if ck.step == "land-verify-red" else "")
         self.host.checkpoints.keep_pending()
 
     def apply(self, ck: Checkpoint, d: Decision) -> tuple[PlanData | None, int, RoundState | None]:
@@ -216,7 +208,7 @@ class Resume[T]:
         if ck.step == "plan" and plan is not None:
             host.log.note(f"resuming {ck.run}: validating the saved draft plan before any write")
             return host.planner.take(host.planner.resume_draft(plan)), 0, None
-        host.plan_data, host.plan_summary, host.accepted = plan, (plan or {})["summary"], list(ck.state.accepted)
+        host.state.plan_data, host.plan_summary, host.state.accepted = plan, (plan or {})["summary"], list(ck.state.accepted)
         host.publish_plan()
         if d.redo_from is not None:
             return self.redo(ck, d)
@@ -238,9 +230,9 @@ class Resume[T]:
         """A file a stage promised is gone (the resume is in another slot): that stage runs again."""
         host, again = self.host, d.stage
         host.log.note(f"resuming {ck.run}: a file stage {again + 1} promised is missing, so that stage runs again")
-        host.accepted = [k for k in host.accepted if k < again]
+        host.state.accepted = [k for k in host.state.accepted if k < again]
         redo = {st["goal"] for st in (ck.state.plan_data or {})["stages"][again:]}
-        host.done = [g for g in host.done if g not in redo]
+        host.state.done = [g for g in host.state.done if g not in redo]
         host.review.unchecked = []
         return ck.state.plan_data, again, None
 
@@ -248,11 +240,11 @@ class Resume[T]:
         """The plan is made again: the old one is kept for the planner to amend, with why and what changed."""
         host = self.host
         if d.verify_answer:
-            host.plan_data, host.plan_summary = ck.state.plan_data, (ck.state.plan_data or {})["summary"]
+            host.state.plan_data, host.plan_summary = ck.state.plan_data, (ck.state.plan_data or {})["summary"]
             host.verify_answer = d.verify_answer
             asked = host.answered.id if host.answered else ""
             host.log.note(f"the owner answered verify ask {asked} with more than a yes: planning what it asks, "
-                          f"keeping {len(host.done)} stage(s)")
+                          f"keeping {len(host.state.done)} stage(s)")
             return None, 0, None
         host.amend.resume_into(ck.state.plan_data, d.amend_why)
         if d.kind == "replan":
@@ -262,8 +254,10 @@ class Resume[T]:
             host.log.note(f"the branch changed since the checkpoint of {ck.run}: amending its plan")
             host.amend.resume_into(ck.state.plan_data, d.amend_why, self.outside_text(ck))
             return None, 0, None
-        host.log.note(f"the bead changed since the checkpoint of {ck.run}: amending its plan, keeping {len(host.done)} accepted stage(s)")
-        text = d.amend_text + "\nAccepted stages (their work is in the tree): " + ("; ".join(host.done) or "none")
+        host.log.note(
+            f"the bead changed since the checkpoint of {ck.run}: amending its plan, keeping {len(host.state.done)} accepted stage(s)"
+        )
+        text = d.amend_text + "\nAccepted stages (their work is in the tree): " + ("; ".join(host.state.done) or "none")
         host.amend.resume_into(ck.state.plan_data, d.amend_why, text)
         return None, 0, None
 
@@ -271,7 +265,7 @@ class Resume[T]:
         host = self.host
         gate = ck.step == "gate-red"
         host.log.note(
-            f"the gate was red at land in {ck.run}: re-planning with its output, keeping {len(host.done)} accepted stage(s)"
+            f"the gate was red at land in {ck.run}: re-planning with its output, keeping {len(host.state.done)} accepted stage(s)"
             if gate
             else f"retry validation failed in {ck.run}: re-planning the unaccepted fix"
         )
