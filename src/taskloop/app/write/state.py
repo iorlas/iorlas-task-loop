@@ -50,6 +50,17 @@ def carrying(out: RoundResult) -> Generator[None]:
         raise RoundStop(out, ex) from None
 
 
+class WriteState:
+    """What the write stage owns across the whole run (the engine's `write`). None of it is checkpointed; the trace and the closing
+    records read it."""
+
+    def __init__(self) -> None:
+        self.write_rounds: list[Open] = []  # per write round: resumed, input tokens, turns, prompt chars, context k, why fresh
+        self.last_summary = ""  # the last write's summary: a fresh writer is told it
+        self.lane_notes: list[str] = []  # steps that ran on the writer's own family, with delegate's warning
+        self.strays: list[str] = []  # unaccepted untracked files moved to evidence/strays before the land gate (tl-bxk.10.24)
+
+
 class StageState:
     def __init__(self, plan: PlanData, i: int, state: RoundState | None) -> None:
         self.i, self.state = i, state or RoundState()
