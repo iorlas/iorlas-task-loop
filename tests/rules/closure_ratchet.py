@@ -44,7 +44,8 @@ def closures(texts: Mapping[str, str]) -> dict[str, int]:
         stages = [name for name in stages if name != "taskloop.app.checks"] + ["tlgate"]
     counts = {}
     for stage in stages:
-        pending = [name for name in modules if name == stage or name.startswith(stage + ".")]
+        # a package's testing.py is its fakes for tests (the charter's third public name): not part of the production closure
+        pending = [name for name in modules if (name == stage or name.startswith(stage + ".")) and not name.endswith(".testing")]
         reached: set[str] = set()
         while pending:
             name = pending.pop()
