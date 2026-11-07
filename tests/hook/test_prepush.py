@@ -1,5 +1,7 @@
 """The stdlib hook forwards the whole request and refuses an unavailable judge."""
 import io
+import json
+import sqlite3
 import subprocess
 import sys
 from contextlib import redirect_stderr
@@ -126,3 +128,23 @@ def test_ours_is_false_without_a_registry_and_true_when_it_cannot_be_read(workdi
     assert prepush.ours(str(tl)) is False
     (workdir / "task-loop" / "factory.db").write_bytes(b"not a database")
     assert prepush.ours(str(tl)) is True
+
+
+def test_registered_repo_is_read_from_repos_doc(tmp_path):
+    tl = tmp_path / "bin" / "tl"
+    tl.parent.mkdir()
+    tl.touch()
+    con = sqlite3.connect(tmp_path / "factory.db")
+    try:
+        con.execute("CREATE TABLE repos_doc (k TEXT PRIMARY KEY, v TEXT)")
+        con.execute("INSERT INTO repos_doc VALUES ('repos', ?)",
+                    (json.dumps({"repos": {"repo": {"path": "/registered"}}}),))
+        con.commit()
+    finally:
+        con.close()
+    result = subprocess.CompletedProcess([], 0, "/registered/.git\n", "")
+    with mock.patch.object(prepush.subprocess, "run", return_value=result):
+        assert prepush.ours(str(tl))
+    result.stdout = "/unregistered/.git\n"
+    with mock.patch.object(prepush.subprocess, "run", return_value=result):
+        assert not prepush.ours(str(tl))
