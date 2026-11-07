@@ -217,8 +217,17 @@ class Script:
         self.requests.append(kw.get("request"))
         self.stop, self.obs, self.secs, self.worker = {}, {}, 0.0, None
         schema = json.loads(Path(opt(cmd, "--schema")).read_text(encoding="utf-8"))
-        j = self.reply(cmd[3], Path(opt(cmd, "--brief")).read_text(encoding="utf-8"), schema, opt(cmd, "--cwd"), opt(cmd, "--resume"),
+        request = kw.get("request")
+        threads = getattr(self, "threads", {})
+        thread = request.thread if request else ""
+        delta = request.delta_file if request else None
+        resume = threads.get(thread) if delta else None
+        prompt = Path(delta or opt(cmd, "--brief")).read_text(encoding="utf-8")
+        j = self.reply(cmd[3], prompt, schema, opt(cmd, "--cwd"), resume,
                        opt(cmd, "--authored-by"), kw.get("timeout"))
+        if isinstance(j, dict) and j.get("ref") and thread:
+            threads[thread] = j["ref"]
+        self.threads = threads
         if j == NO_ANSWER:
             return subprocess.CompletedProcess(cmd, 1, "", "route.py exit 1, no answer object")
         return subprocess.CompletedProcess(cmd, 0, json.dumps(j), "")

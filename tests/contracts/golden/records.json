@@ -1808,6 +1808,7 @@
   }
  },
  "RunRequest": {
+  "v": 1,
   "role": "worker",
   "brief_path": "/b.md",
   "cwd": "/w",
@@ -1816,7 +1817,8 @@
   "parent": "p",
   "task": "t",
   "title": "T",
-  "resume": "ses",
+  "thread": "writer",
+  "delta_path": "/delta.md",
   "authored_by": "openai",
   "call_id": "c1",
   "timeout_s": 2820,
