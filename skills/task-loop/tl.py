@@ -304,6 +304,7 @@ def check_parser(sp):
     p.add_argument("--staged", action="store_true", help="judge the index (a pre-commit hook); pass_files steps get the staged files")
     p.add_argument("--list", action="store_true", help="print the registry (id, run, group, when, argv) and exit 0")
     p.add_argument("--policy-commit", metavar="SHA", help="run the delivery gate from this committed base profile")
+    p.add_argument("--base-commit", metavar="SHA", help="key the receipts at this commit, not the base branch (merge queue gate)")
 
 
 def artifact_parser(sp):

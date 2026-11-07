@@ -2,9 +2,9 @@
 from collections.abc import Callable, Mapping
 from typing import Protocol
 
-from taskloop.app.run import outcomes
-from taskloop.app.run.finish import outcome as finished_outcome
-from taskloop.app.run.steps import Open
+from taskloop.app.pipeline import outcomes
+from taskloop.app.pipeline.finish import outcome as finished_outcome
+from taskloop.app.pipeline.steps import Open
 from taskloop.contracts import log as rec
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId

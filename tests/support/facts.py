@@ -12,7 +12,7 @@ from support.memstores import MemDoc, fake_stores
 from support.spawn import port_git, real_spawner
 from support.who import who
 from taskloop.app.checks.checklog import CheckLog
-from taskloop.app.run.steps import Steps
+from taskloop.app.pipeline.steps import Steps
 from taskloop.contracts import fence
 from taskloop.contracts.checkpoint import Checkpoint, StageProgress
 from taskloop.contracts.checks import Check, CheckResult, CheckRun

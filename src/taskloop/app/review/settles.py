@@ -5,6 +5,7 @@ import shlex
 from typing import Any, Final, NewType
 
 from taskloop.app.review.host import ReviewHost
+from taskloop.contracts.checks import CheckResult
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.checks import planref
@@ -28,7 +29,7 @@ def lint_argv(tool: str) -> LintArgv | None:
 
 class Settles:
     def __init__(self, host: ReviewHost, git: Git) -> None:
-        self.e = host
+        self.host = host
         self.git = git
 
     # -- tools the repo does not use
@@ -39,14 +40,14 @@ class Settles:
         tools = Tools.named(what)
         if not tools:
             return ""
-        engine_text = " ".join(str(c) for c in self.e.cfg.checks)
+        engine_text = " ".join(str(c) for c in self.host.cfg.checks)
         said = []
         for t in tools:
             try:
-                used = bool(self.git.grep(self.e.wt, t, fixed=True, word=True))
+                used = bool(self.git.grep(self.host.wt, t, fixed=True, word=True))
             except SlotGitError:  # no git tree to read: no evidence, the item stays
                 return ""
-            if used or word_in(t, engine_text) or self.e.on_path(t):
+            if used or word_in(t, engine_text) or self.host.on_path(t):
                 return ""
             said.append(f"git grep -w -I {t}: no match in the tracked tree nor the engine's gate and checks; which {t}: not found")
         return "not a check here: the repo does not use it ({})".format("; ".join(said))
@@ -63,7 +64,7 @@ class Settles:
     def gate_names(self) -> list[str]:
         """Names a verify item can use for a check the engine runs by itself (the gate, a configured check, a plan stage check or case):
         its id, its command, and the command without its runner (`just unity-tests` -> unity-tests)."""
-        e = self.e
+        e = self.host
         stages = (e.plan_data or {}).get("stages") or []
         cmds = [c.cmd for c in e.cfg.checks] + planref.commands([c for st in stages for c in st["checks"]] + e.cases.case_checks(), e.cfg)
         names = [c.id for c in e.cfg.checks]
@@ -73,19 +74,19 @@ class Settles:
             names += [c] + ([rest] if rest != c and ("-" in rest or "_" in rest) else [])
         return [n.lower() for n in dict.fromkeys(names) if len(n) >= 4]
 
-    def log_path_of(self, c: Any, full: bool = True) -> str:
+    def log_path_of(self, c: CheckResult, full: bool = True) -> str:
         """The saved log of a check: absolute in the trace; in a prompt relative to the engine's run folder, since a path into it is a file
         no step can read (the brief is inline, never a path outside the worktree)."""
-        return str(self.e.run_dir / c.log if full else c.log) if c.log else "none (cached: same tree and base, earlier result)"
+        return str(self.host.run_dir / c.log if full else c.log) if c.log else "none (cached: same tree and base, earlier result)"
 
     def checks_now(self) -> tuple[list[Any], bool]:
         """(the engine's last check results, whether they ran on the tree as it is now). After a resume the saved engine-checks.json
         stands in for the brief; its tree is unknown, so it settles nothing."""
-        run = self.e.last_run
+        run = self.host.last_run
         if run is None:
-            saved = self.e.stores.check_run(self.e.run_dir.name, None).get()
+            saved = self.host.stores.check_run(self.host.run_dir.name, None).get()
             return (saved.results if saved else []), False
-        return run.results, bool(run.tree) and run.tree == self.e.checkout.tree_hash()
+        return run.results, bool(run.tree) and run.tree == self.host.checkout.tree_hash()
 
     def evidence_text(self, checks: list[Any] | None = None, current: bool | None = None) -> str:
         """The engine's check results as brief text: per check id, group, command, status, exit code, duration, log path; said plainly to
@@ -104,7 +105,7 @@ class Settles:
                     "the tree as it is now" if current else "an earlier tree (files changed since: weigh them accordingly)",
                     "\n".join(out)))
 
-    def row(self, c: Any) -> str:
+    def row(self, c: CheckResult) -> str:
         if c.status == "skipped" or c.exit is None:
             what = "skipped (%s)" % (c.why or "no reason given")
         else:
@@ -119,8 +120,8 @@ class Settles:
 
     def work_summary(self) -> str:
         """The task's changed files with their line counts, untracked files included."""
-        tree = self.e.checkout.tree_hash()
-        return (self.git.diff(self.e.wt, self.e.checkout.base_sha(), tree, stat=True) if tree else "") or "(no files changed)"
+        tree = self.host.checkout.tree_hash()
+        return (self.git.diff(self.host.wt, self.host.checkout.base_sha(), tree, stat=True) if tree else "") or "(no files changed)"
 
     # -- settling
     def settle(self, gaps: list[Item]) -> tuple[list[Item], list[Item]]:
@@ -143,7 +144,7 @@ class Settles:
         return left, failed
 
     def settled(self, u: Item, evidence: str, why: str, verdict: str = "settled") -> None:
-        self.e.review.add_verified(u, verdict, why, evidence)
+        self.host.review.add_verified(u, verdict, why, evidence)
 
     def by_name(self, u: Item, names: list[str], results: list[Any]) -> bool:
         what = " ".join(u["what"].split()).lower()
@@ -157,7 +158,7 @@ class Settles:
         return True
 
     def by_results(self, u: Item, results: list[Any], current: bool) -> bool:
-        if self.e.judge.is_look(u):
+        if self.host.judge.is_look(u):
             return False
         proof = self.proof(u["what"], results, current)
         if proof:
@@ -166,7 +167,7 @@ class Settles:
 
     def run_lint(self, u: Item, cmd: LintArgv) -> Item | None:
         """None: the tool cannot start here (the verifier and the owner still judge it); {} settled; else the wrong item."""
-        rc, tail = self.e.sh(list(cmd), timeout=600)
+        rc, tail = self.host.sh(list(cmd), timeout=600)
         if rc in (126, 127):
             return None
         out = f"ran `{shlex.join(cmd)}`: exit {rc}" + ((" " + tail[-300:]) if rc else "")

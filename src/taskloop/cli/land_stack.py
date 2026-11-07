@@ -9,7 +9,7 @@ from taskloop.app.land.forge import Forge
 from taskloop.app.land.profile_change import owner_refusal
 from taskloop.app.land.stack import MODE, Stack, lock_path
 from taskloop.app.land.stackgate import StackGate
-from taskloop.app.run.finish import land_answer
+from taskloop.app.pipeline.finish import land_answer
 from taskloop.app.wire import closeguard
 from taskloop.app.wire.slots import profile_slots, slot_of
 from taskloop.contracts.beadsport import Beads

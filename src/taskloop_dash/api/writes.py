@@ -172,7 +172,7 @@ class Writes:
         if not text and action == "text":
             return Result(ok=False, message="Write an answer first.")
         try:
-            _done, problem = self.env.ports.answer(a.repo, a.bead, action, text, why == "answered")
+            _done, problem = self.env.ports.answer(a.repo, a.bead, action, text, why == "answered", a.id)
         except OSError as err:
             return Result(ok=False, message=f"The dashboard cannot run bd ({err.strerror}). Nothing was changed.")
         return refused(problem) if problem else Result(ok=True)
