@@ -1,9 +1,4 @@
-"""What git says of a worktree: the tree it would commit now (without touching the real index), the state that decides that tree, and the
-paths the base's .gitignore files ignore."""
-import contextlib
-import os
-import tempfile
-from collections.abc import Iterable
+"""Worktree identities and ignore rules from the Git port and vendored porcelain."""
 from pathlib import Path
 
 from git_porcelain import real_cache, real_parse
@@ -62,16 +57,3 @@ def ignore_rules(base: str, lines_of: dict[str, list[str]]) -> list[str]:
                 rules.append(f"{neg}/{d}/**/{pat}")
     return rules
 
-
-def ignored_by(git: Git, wt: str | Path, rules: list[str], paths: Iterable[str]) -> set[str]:
-    """The subset of `paths` that `rules` ignore (the user's own global excludes are not replaced; only the rules given are read)."""
-    with tempfile.NamedTemporaryFile("w", suffix=".ignore", delete=False, encoding="utf-8") as f:
-        f.write("\n".join(rules) + "\n")
-        ex = f.name
-    try:
-        return set(git.check_ignore(str(wt), list(paths), excludes=ex))
-    except SlotGitError:
-        return set()
-    finally:
-        with contextlib.suppress(OSError):
-            os.unlink(ex)

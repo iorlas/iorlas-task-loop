@@ -11,8 +11,8 @@ import pytest
 from git_porcelain import real_env
 from git_porcelain.real import RealRepo
 
-from taskloop.adapters import treehash
 from taskloop.adapters.git import RealGit
+from tlkernel import treehash
 from tlkernel.env import Env, snapshot
 from tlkernel.slots import SlotGitError
 from tltestkit.case import Case

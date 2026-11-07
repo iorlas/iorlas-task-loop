@@ -14,9 +14,9 @@ from tlkernel.paths import ConfigDir
 from tlkernel.ports import Clock
 from tlkernel.runkey import BaseSha
 from tlkernel.slots import MissingRemote
+from tlkernel.systemclock import SystemClock
 
 from taskloop.adapters import landlock, locks
-from taskloop.adapters.clock import SystemClock
 from taskloop.app.land.gate import diff_sha
 from taskloop.stores.bundle import Stores
 

@@ -3,7 +3,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, ClassVar
 
-from tlkernel import fence
+from tlkernel import fence, treehash
 from tlkernel import runoutcome as oc
 from tlkernel.argv import text_of
 from tlkernel.checkpoint import Checkpoint, RunState
@@ -26,7 +26,7 @@ from tlkernel.wire import Open
 from tlpipeline.api import Checkpoints
 from tlwork.review.state import ReviewLive
 
-from taskloop.adapters import beadtools, ident, treehash
+from taskloop.adapters import beadtools, ident
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.land.checkout import Checkout

@@ -12,6 +12,7 @@ from tlkernel import askspecs
 from tlkernel import log as rec
 from tlkernel.bead import Bead
 from tlkernel.lanesliveness import LIVENESS
+from tlkernel.netretry import NET_WAIT_CAP_S
 
 from taskloop.adapters.deadline import DeadlineExpired, deadline
 from taskloop.app.asks import trustroots
@@ -24,7 +25,6 @@ from taskloop.app.land.pr_land import PrLand
 from taskloop.app.land.push import Landed, Outbound, Pusher
 from taskloop.app.land.rebase import Commit, LandRebase, Recheck
 from taskloop.app.land.record import Sync
-from taskloop.domain.lanes.notes import NET_WAIT_CAP_S
 
 
 class GateStep(Protocol):
