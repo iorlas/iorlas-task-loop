@@ -1,8 +1,7 @@
 """Plan argv admission has no profile-owned harness grant."""
-from support.cfgs import cfg_with
-
 from tlgate.domain import planref
 from tlkernel.plancheck import adhoc
+from tltestkit.cfgs import cfg_with
 
 
 def test_adhoc_commands_do_not_consult_a_harness_grant():

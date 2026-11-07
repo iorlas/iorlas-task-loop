@@ -12,7 +12,6 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes
 from support.askjson import unreadable_ask
 from support.engine_case import EngineTest, ask_rec, stop
-from support.plans import BEAD, CAT_ENV, CLEAN, PLAN, WRITE, review, verdict
 
 from taskloop.adapters import (
     links,
@@ -20,6 +19,7 @@ from taskloop.adapters import (
 from taskloop.app.land.checkout import Checkout
 from tlgate.domain import retry
 from tlkernel.ids import BeadId
+from tltestkit.plans import BEAD, CAT_ENV, CLEAN, PLAN, WRITE, review, verdict
 from tltestkit.runs import manifest
 
 

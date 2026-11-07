@@ -15,8 +15,9 @@ from run import test_stages_visual
 from support import engine_case as te
 from support import gitq
 from support.engine_case import real_git, stop
-from support.plans import CLEAN, PLAN, WRITE
 from support.pushsim import CUT, pusher
+
+from tltestkit.plans import CLEAN, PLAN, WRITE
 
 SAY = "codex: Reconnecting... waiting for network (Connection failed: error sending request)"
 REPLAY = te.ROOT / "tests" / "fixtures" / "replay" / "5ban16_plan_network_drop.jsonl"

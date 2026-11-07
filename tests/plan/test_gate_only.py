@@ -5,15 +5,15 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.cfgs import cfg_with
 from support.engine_case import EngineTest
 from support.plan_host import FakePlan
-from support.plans import CLEAN, HAS_F, PLAN, WRITE
 
 from taskloop.app.plan.planner import Planner
 from tlgate.domain import lint
 from tlkernel.plancheck import adhoc
+from tltestkit.cfgs import cfg_with
 from tltestkit.checks import typed
+from tltestkit.plans import CLEAN, HAS_F, PLAN, WRITE
 
 
 class GateOnly(EngineTest):

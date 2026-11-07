@@ -20,7 +20,6 @@ import support.paths  # noqa: E402, F401
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from support import engine_case as T  # noqa: E402
 from support.engine_case import full, real_git, stop  # noqa: E402
-from support.plans import PLAN, WRITE  # noqa: E402
 from support.spawn import (  # noqa: E402
     port_git,
     real_spawner,
@@ -36,6 +35,7 @@ from tlgate.domain import (  # noqa: E402
     lint,  # noqa: F401
 )
 from tlkernel.env import snapshot  # noqa: E402
+from tltestkit.plans import PLAN, WRITE  # noqa: E402
 
 
 class Outcome(T.EngineTest):

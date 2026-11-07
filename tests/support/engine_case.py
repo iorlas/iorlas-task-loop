@@ -25,24 +25,8 @@ from contracts import samples as S
 
 from support import gitq
 from support.builders import make_engine
-from support.cfgs import argv_cfg, cfg_with
 from support.checkpoints import flat_ck, stored_ck
 from support.fakes import FakeBeadStore
-from support.plans import (  # noqa: F401  (the tests' old import point)
-    BEAD,
-    CAT_ENV,
-    CLEAN,
-    FALSE,
-    HAS_F,
-    PLAN,
-    RED_ONCE,
-    ROUTE,
-    STILL_OPEN,
-    WRITE,
-    finding,
-    review,
-    verdict,
-)
 from support.push_race import PushRace
 from support.spawn import port_git, real_spawner
 from support.waits import until  # noqa: F401
@@ -69,10 +53,26 @@ from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.plancheck import adhoc
 from tltestkit import fake_route, procsim
+from tltestkit.cfgs import argv_cfg, cfg_with
 from tltestkit.checked import run_checked  # noqa: F401
 from tltestkit.checks import res
 from tltestkit.logs import records
 from tltestkit.narrow import must
+from tltestkit.plans import (  # noqa: F401  (the tests' old import point)
+    BEAD,
+    CAT_ENV,
+    CLEAN,
+    FALSE,
+    HAS_F,
+    PLAN,
+    RED_ONCE,
+    ROUTE,
+    STILL_OPEN,
+    WRITE,
+    finding,
+    review,
+    verdict,
+)
 from tltestkit.procsim import real_proc  # noqa: F401
 from tltestkit.shellkit import sh
 

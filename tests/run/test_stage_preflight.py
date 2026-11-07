@@ -10,7 +10,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.cfgs import cfg_with
 from support.fakes import FakeBeadStore, FakeClock, FakeRouter
 from support.memstores import fake_stores
 from support.stdout import stdout_in
@@ -30,6 +29,7 @@ from tlkernel.ids import BeadId
 from tlkernel.locator import RunLocator
 from tlkernel.run import RunReport, RunState
 from tlkernel.runrows import RunRows
+from tltestkit.cfgs import cfg_with
 
 
 @stdout_in("output")

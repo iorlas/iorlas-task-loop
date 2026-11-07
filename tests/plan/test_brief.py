@@ -3,10 +3,10 @@ import sys
 from pathlib import Path
 from unittest import mock
 
-from support.cfgs import cfg_with
 from support.plan_host import FakePlan
 
 from tltestkit.case import Case
+from tltestkit.cfgs import cfg_with
 from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))

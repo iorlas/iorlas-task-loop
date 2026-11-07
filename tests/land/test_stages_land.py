@@ -18,7 +18,6 @@ from support import engine_case as te
 from support import gitq, homes, tlbd
 from support.checkpoints import put_ck, read_ck
 from support.engine_case import engine, lint
-from support.plans import CLEAN, FALSE, HAS_F, PLAN, WRITE
 from support.pushsim import pusher
 from support.spawn import port_git, real_spawner
 from support.who import who
@@ -42,6 +41,7 @@ from tlkernel.ids import BeadId
 from tlkernel.landmatchers import _TRANSIENT as TRANSIENT_PUSH
 from tltestkit import fake_route, procsim
 from tltestkit.checks import typed
+from tltestkit.plans import CLEAN, FALSE, HAS_F, PLAN, WRITE
 
 
 class StaleTree(StagesTest):
