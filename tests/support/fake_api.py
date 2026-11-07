@@ -15,8 +15,8 @@ from unittest import mock
 
 from stream_proc import proc_start
 
-from support import fake_route
 from taskloop.adapters import runner
+from tltestkit import fake_route
 
 
 class FakeApi:

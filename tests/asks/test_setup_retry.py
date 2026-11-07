@@ -10,7 +10,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
-from support.narrow import must
 
 from taskloop.app.asks import raiser, setup_retry
 from taskloop.app.run.ask_flow import AskFlow
@@ -24,6 +23,7 @@ from tlkernel.checkpoint import RunState
 from tlkernel.config import load
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
+from tltestkit.narrow import must
 
 BEAD = BeadId("t-1")
 WHY = "failed: the configured check `unity` needs something this tree lacks: client/ is not set up"

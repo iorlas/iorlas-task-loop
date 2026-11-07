@@ -15,9 +15,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
 from support.check_host import CheckHostCase
-from support.checks import ck, res
-from support.narrow import must
 from support.plans import CLEAN, PLAN, WRITE
+
+from tltestkit.checks import ck, res
+from tltestkit.narrow import must
 
 # isort: split
 from support.memstores import fake_stores

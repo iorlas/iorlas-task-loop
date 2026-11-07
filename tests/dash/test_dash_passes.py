@@ -8,9 +8,9 @@ from tltestkit.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.dashlogs import RunScript, T
-from support.narrow import must
 
 from taskloop_dash.views import passes
+from tltestkit.narrow import must
 
 NOW = T + 20_000
 

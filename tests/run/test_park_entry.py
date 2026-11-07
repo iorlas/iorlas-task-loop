@@ -11,7 +11,6 @@ from support import homes
 # isort: split
 from support import engine_case as te
 from support.fakes import FakeBeadStore
-from support.narrow import must
 from support.plans import PLAN, WRITE, review
 from support.spawn import port_git
 from support.who import who
@@ -22,6 +21,7 @@ from taskloop.domain.beads import park
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.parks import ParkStore
+from tltestkit.narrow import must
 
 BEAD = {"id": "t-1", "title": "Add f", "status": "open", "description": "Add f.", "acceptance_criteria": "- f.txt exists", "metadata": {}}
 

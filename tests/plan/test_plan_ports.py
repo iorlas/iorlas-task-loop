@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 from support.cfgs import cfg_with
-from support.checks import typed
 from support.plan_host import FakePlan
 from support.plans import HAS_F, PLAN
 
@@ -17,6 +16,7 @@ from tlkernel.bead import Bead
 from tlkernel.ledger import Adr
 from tlkernel.plancheck import adhoc
 from tlkernel.stop import Stop
+from tltestkit.checks import typed
 
 
 def test_outside_scope_is_filed_once_and_taste_stays(workdir):
