@@ -128,28 +128,6 @@ def module_imports(tree, edit, aliases, reports):
         edit(imp, replacement)
 
 
-def move_storm(root, outputs):
-    """Keep launch.loop below the fan-out cap after adding its config dependency."""
-    loop = 'src/taskloop/app/launch/loop.py'
-    ops = 'src/taskloop/app/launch/loop_ops.py'
-    if not (root / loop).exists() or not (root / ops).exists():
-        return
-    text = outputs.get(loop, (root / loop).read_text())
-    node = next((n for n in ast.parse(text).body if isinstance(n, ast.FunctionDef) and n.name == 'storm'), None)
-    if node is None:
-        return
-    lines = text.splitlines(keepends=True)
-    block = ''.join(lines[node.lineno - 1:node.end_lineno])
-    del lines[node.lineno - 1:(node.end_lineno or node.lineno) + 2]
-    outputs[loop] = ''.join(lines).replace('storm=lambda: storm(', 'storm=lambda: ops.storm(')
-    additions = ("from taskloop.adapters import storm as storm_file\n"
-                 "from taskloop.adapters.repourl import repo_url\n"
-                 "from taskloop.app.loop.env import Storm\n"
-                 "from taskloop.domain import outcome as oc\n")
-    original = outputs.get(ops, (root / ops).read_text())
-    outputs[ops] = original.replace('import contextlib', additions + '\nimport contextlib', 1) + '\n\n' + block
-
-
 def migrate(root, names):
     outputs, reports = {}, []
     for name in names:
@@ -176,7 +154,6 @@ def migrate(root, names):
         outputs[str(WIRE)] = outputs[str(WIRE)].replace('import contextlib',
             'from taskloop.app.slots.config import ' + ', '.join(sorted(used)) + '\n\nimport contextlib', 1)
         outputs[str(CONFIG)] = (HEADER + '\n\n\n'.join(blocks)).rstrip('\n') + '\n'
-    move_storm(root, outputs)
     changed = []
     for name, text in outputs.items():
         path = root / name
