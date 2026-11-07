@@ -27,7 +27,7 @@ def _no_store(repo: str) -> Beads:
     raise OSError(2, "bd is not installed")
 
 
-def _no_answer(repo: str, bead: BeadId, action: AskAction, text: str, amend: bool) -> tuple[Ask | None, str]:
+def _no_answer(repo: str, bead: BeadId, action: AskAction, text: str, amend: bool, expect: str = "") -> tuple[Ask | None, str]:
     raise OSError(2, "bd is not installed")
 
 
