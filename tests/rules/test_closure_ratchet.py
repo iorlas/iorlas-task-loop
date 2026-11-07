@@ -77,3 +77,13 @@ def test_work_review_keeps_its_identity_and_reaches_moved_domain():
         "packages/work/src/tlwork/work/ledger.py": "import dataclasses",
     })
     assert counts == {"review": 3, "review (external modules)": 1}
+
+
+def test_asks_member_keeps_its_stage_identity_and_reaches_its_domain():
+    counts = closures({
+        "packages/asks/src/tlasks/__init__.py": "",
+        "packages/asks/src/tlasks/admission.py": "from tlasks import hold",
+        "packages/asks/src/tlasks/hold.py": "from tlkernel.ids import BeadId",
+        "packages/kernel/src/tlkernel/ids.py": "import typing",
+    })
+    assert counts == {"asks": 4, "asks (external modules)": 1}

@@ -13,7 +13,7 @@ from tlkernel.run import RunState
 from tlkernel.runlife import Liveness, liveness
 from tlkernel.signalrows import SignalRows
 
-from taskloop.app.asks.intake import Intake, receipt
+from tlasks.intake import Intake, receipt
 
 
 def post(cfg: ConfigDir, run: str, by: str, now: float, *, repo: str, bead: str,

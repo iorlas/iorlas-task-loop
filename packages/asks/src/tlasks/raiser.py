@@ -12,7 +12,7 @@ from tlkernel.beadsport import BdFailure, BeadPatch, Beads
 from tlkernel.enums import WhyCode
 from tlkernel.ids import BeadId, parse_bead_id
 
-from taskloop.domain.asks import similar
+from tlasks import similar
 
 PARK_AFTER_S = 3 * 86400
 WHY_CAP = 4000

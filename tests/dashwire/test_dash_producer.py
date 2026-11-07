@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from delegate import api
-from taskloop.app.asks import owner_verbs
+from tlasks import owner_verbs
 from tldash.api import live
 from tldash.readers.logs import live_event
 from tldash.testing import RunScript, T, bead

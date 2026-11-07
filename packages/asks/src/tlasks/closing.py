@@ -9,7 +9,7 @@ from tlkernel.parks import Park
 from tlkernel.paths import ConfigDir
 from tlkernel.pausereasons import Producer
 
-from taskloop.app.asks import parks, raiser
+from tlasks import parks, raiser
 
 
 class ClosingAsks:

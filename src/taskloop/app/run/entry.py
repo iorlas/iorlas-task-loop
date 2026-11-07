@@ -10,6 +10,7 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
+from tlasks import admission, setup_retry
 from tlkernel import childenv, fence
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BeadPatch, Beads
@@ -32,13 +33,13 @@ from tlslots import engine_lock
 
 from taskloop.adapters import beadtools, gitrepo, ident
 from taskloop.adapters import halt as halting
-from taskloop.app.asks import admission, setup_retry
 from taskloop.app.loop.queue import has_areas
 from taskloop.app.reconcile import leases
 from taskloop.app.run import preflight, running
 from taskloop.app.run.engine import Blocked, Engine
 from taskloop.app.track import console, verbs
 from taskloop.app.track.outcome_line import append_output, pause_line, report
+from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import slotfx
 from taskloop.app.wire import slots as wslots
 from taskloop.stores.real import real_stores
@@ -268,10 +269,10 @@ def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: En
     # a stop during the sweep, admit and claim waits for them, then the engine closes the run as stopped (trace, bead)
     with defer_stop(None) as stop:
         why = pipeline_admission.enter(a.id,
-            release_dead=lambda: admission.release_dead(repo, git, who, store, release=leases.release_dead,
+            release_dead=lambda: admission.release_dead(wasks.host(), repo, git, who, store, release=leases.release_dead,
                                                         running_now=running.running, say=say),
-            parked=lambda: admission.parked(a.id, bool(getattr(a, "fresh", False)), repo, who, store),
-            admit=lambda: admission.admit(a.id, repo, git, who, store, fresh=bool(getattr(a, "fresh", False)),
+            parked=lambda: admission.parked(wasks.host(), a.id, bool(getattr(a, "fresh", False)), repo, who, store),
+            admit=lambda: admission.admit(wasks.host(), a.id, repo, git, who, store, fresh=bool(getattr(a, "fresh", False)),
                                          owner_author=cfg.owner_author, running_now=running.running),
             claim=lambda: verbs.claim(who, a.id, store or beadtools.bd_store(who.actor, repo), git, wt, a.slot),
             say=say, taken=print)

@@ -4,6 +4,7 @@ import threading
 from functools import cached_property
 from typing import Any, Protocol
 
+from tlasks.closing import ClosingTrust
 from tlkernel import childenv
 from tlkernel.kinds import Kind
 from tlkernel.runlayout import repo_of
@@ -14,7 +15,6 @@ from tlslots.shared import Shared, SharedHost
 from taskloop.adapters import deadline, ident, slotcheck
 from taskloop.adapters.agent import last_event_t, new_live
 from taskloop.adapters.check_probe import PathProbe
-from taskloop.app.asks.closing import ClosingTrust
 from taskloop.app.checks.step import StageChecks
 from taskloop.app.land.closing import LandHistory
 from taskloop.app.release.closing import ReexecBook

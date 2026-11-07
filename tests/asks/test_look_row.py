@@ -2,7 +2,7 @@
 neither order loses the other's write; the owner's hold on the look bead is not touched by either."""
 from support.look_world import world
 
-from taskloop.app.asks import looks
+from tlasks import looks
 from tlkernel import gallery
 from tlkernel.ids import BeadId
 from tlkernel.lookrows import LookRaced, LookRows

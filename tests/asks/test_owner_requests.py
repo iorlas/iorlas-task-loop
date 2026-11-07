@@ -17,8 +17,8 @@ from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
 
 import tltestkit.shellkit
-from taskloop.app.asks import ask_verbs, intake, owner_verbs
 from taskloop.cli import asks as cli
+from tlasks import ask_verbs, intake, owner_verbs
 from tlkernel import log as rec
 from tlkernel.beadsport import NewBead
 from tlkernel.enums import WhyCode

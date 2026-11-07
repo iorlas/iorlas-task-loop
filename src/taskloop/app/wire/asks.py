@@ -2,6 +2,9 @@
 park the unanswered, shout about an answer no run used)."""
 from collections.abc import Callable
 
+from tlasks import pr_wake, setup_retry, sweeps
+from tlasks.host import AsksHost
+from tlasks.paths import ask_marker
 from tlkernel.askstore import AskStore
 from tlkernel.bd_errors import BdCommandFailure
 from tlkernel.beadsport import BdFailure
@@ -10,10 +13,8 @@ from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
 
-from taskloop.adapters import ident
+from taskloop.adapters import beadtools, ident
 from taskloop.adapters.beadtools import bd_store
-from taskloop.app.asks import pr_wake, setup_retry, sweeps
-from taskloop.app.asks.paths import ask_marker
 from taskloop.app.land import forge
 from taskloop.app.land.cmds import Runs
 from taskloop.app.track.trail import now
@@ -61,3 +62,7 @@ def sweep_asks(who: Identity, home: ConfigDir, say: Callable[[str], None] = prin
         sweeps.reask_orphans(store(home), bd_store(who.actor), ask_marker(home, "orphans"), now(), cfg.pick_label or "",
             cfg.needs_info_label or "", say)
     sweeps.shout(store(home), ask_marker(home, "unused"), now(), say)
+
+
+def host() -> AsksHost:
+    return AsksHost(beadtools.bd_store, beadtools.peek, ident.hostname, store)

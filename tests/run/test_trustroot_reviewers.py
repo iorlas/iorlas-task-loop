@@ -7,9 +7,10 @@ from unittest.mock import Mock, patch
 import pytest
 from support.engine_case import EngineTest
 
-from taskloop.app.asks.admission import _blocked_by_engine
-from taskloop.app.asks.closing import ClosingTrust
+from taskloop.app.wire.asks import host
 from taskloop.app.workers.worker_request import request
+from tlasks.admission import _blocked_by_engine
+from tlasks.closing import ClosingTrust
 from tlkernel import childenv
 from tlkernel.bead import Bead, Comment
 from tlkernel.gitfacts import DiffEntry
@@ -59,9 +60,9 @@ class AdmissionAuthors(Case):
                 note = Comment(author=author, text="Blocked: leave it parked", created_at="2")
                 store = Mock()
                 store.comments.return_value = [block, note]
-                with patch("taskloop.app.asks.admission.real_stores") as stores:
+                with patch("taskloop.app.wire.asks.real_stores") as stores:
                     stores.return_value.asks.get.return_value = None
-                    why = _blocked_by_engine(bead, store, ConfigDir("/unused"), "owner")
+                    why = _blocked_by_engine(host(), bead, store, ConfigDir("/unused"), "owner")
                 assert bool(why) == expected
 
 
