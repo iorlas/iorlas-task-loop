@@ -13,8 +13,8 @@ from support.narrow_hosts import FakeWaitsHost
 
 # isort: split
 from taskloop.app.pipeline import trace as runtrace
-from taskloop.app.run.blocked import Blocked
-from taskloop.app.run.waits import Waits
+from taskloop.app.pipeline.blocked import Blocked
+from taskloop.app.pipeline.waits import Waits
 from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.ids import RunId
 from taskloop.contracts.kinds import Kind
