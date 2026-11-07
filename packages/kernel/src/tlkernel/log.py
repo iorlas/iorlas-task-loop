@@ -5,8 +5,9 @@ from typing import ClassVar, Literal, final
 import msgspec
 
 from tlkernel.checks import CheckRun
-from tlkernel.enums import Outcome, WaitWhat, WhyCode
+from tlkernel.enums import Outcome, WhyCode
 from tlkernel.row import Row
+from tlkernel.waitenums import WaitWhat
 from tlkernel.wire import Rec, load
 
 

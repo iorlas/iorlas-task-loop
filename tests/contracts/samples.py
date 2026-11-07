@@ -44,9 +44,12 @@ from tlkernel import (
     usage,
     worktrees,
 )
-from tlkernel.enums import AskClass, AskKind, AskStatus, LockWhat, Outcome, Result, WaitWhat, WhyCode
+from tlkernel.askenums import AskClass, AskKind, AskStatus
+from tlkernel.enums import Outcome, Result, WhyCode
 from tlkernel.ids import BeadId, CheckId, TreeSha, loop_key
+from tlkernel.lockenums import LockWhat
 from tlkernel.runkey import BaseSha, Digest, RunKey
+from tlkernel.waitenums import WaitWhat
 
 T = 1793050200.5
 RUN = ids.RunId.parse("01KBN6Z0M4R5E8YQ2T7C9W3XHD")
@@ -98,7 +101,7 @@ TRACE = trace.RunTrace(
 
 OUTCOME = run.RunReport(outcome=Result.PARKED, bead=BeadId("tl-1"), run=str(RUN), why_code=WhyCode.STUCK, why="stuck",
                          log="/l", minutes=3.5,
-                         rounds=2, tests_added=4, asked=True, retry_after=None, cost=0.25)
+                         rounds=2, tests_added=4, asked=True, cost=0.25)
 LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", start="99", slot="s1", slot_bead="slot-1")
 CMD = {"pick_label": "auto", "skip_review": config.ReviewSkipConfig(tests=["t/**"]),
        "prepare": config.PrepareConfig(cmd=["dotnet", "restore"], inputs=["**/*.csproj"]),

@@ -73,13 +73,6 @@ def lane(name: str) -> Lane | None:
     return next((x for x in lanes() if x.name == name), None)
 
 
-def roles_usable() -> dict[str, bool | None]:
-    """Per role: usable now (True | False), or None when delegate cannot say."""
-    raw = status_json().get("roles")
-    return {str(r): (v.get("usable") if isinstance(v, dict) and isinstance(v.get("usable"), bool) else None)
-            for r, v in (raw.items() if isinstance(raw, dict) else [])}
-
-
 def run_history(since: float = 0.0) -> list[RunRecord]:
     """delegate's finished runs after `since` (`api.history`): the one read of them."""
     return [dict(r) for r in api.history(since)]
@@ -202,9 +195,6 @@ class DelegateRoute:
 
     def lane(self, name: str) -> Lane | None:
         return lane(name)
-
-    def roles_usable(self) -> dict[str, bool | None]:
-        return roles_usable()
 
     def status_snapshot(self, claude_usage: object = None) -> StatusSnapshot:
         return status_snapshot(claude_usage)

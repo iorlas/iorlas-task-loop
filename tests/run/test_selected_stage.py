@@ -62,7 +62,7 @@ class SelectedStage(Case):
         e.claim, e.fresh, e.moved = None, False, False
         e.dry = False
         e.retry_after = 0.0
-        e.pause_reason, e.pause_role, e.pause_lane = "", "", ""
+        e.pause_reason = ""
         e.writer_family, e.replan_first = None, False
         e.landed_sha = ""
         e.Blocked, e.kind, e.why = Blocked, Kind.FAULT_ENGINE, ""

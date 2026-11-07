@@ -73,7 +73,7 @@ class FakeLookHand:
     def __init__(self) -> None:
         self.bead_parent, self.bead_title = "", "Add f"
         self.at_stage, self.last_flag, self.writer_family = 0, "", "claude"
-        self.retry_after, self.pause_role, self.pause_lane = 0.0, "", ""
+        self.retry_after = 0.0
         self.leftovers: list[dict[str, str]] = []
         self.review = SimpleNamespace(unverified=[])
         self.artifact_repo, self.render_stale = "", False

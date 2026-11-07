@@ -6,7 +6,7 @@ from typing import ClassVar, Literal, assert_never, final, override
 
 import msgspec
 
-from tlkernel.enums import CheckStatus
+from tlkernel.checkenums import CheckStatus
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.row import Row
 from tlkernel.runkey import BaseSha, Digest, RunKey

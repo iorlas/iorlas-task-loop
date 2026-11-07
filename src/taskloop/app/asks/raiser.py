@@ -4,9 +4,10 @@ from dataclasses import dataclass
 
 from tlkernel.adrs import AdrStore
 from tlkernel.ask import Ask
+from tlkernel.askenums import AskStatus
 from tlkernel.askstore import HAD_PICK, AskStore
 from tlkernel.beadsport import BdFailure, BeadPatch, Beads
-from tlkernel.enums import AskStatus, WhyCode
+from tlkernel.enums import WhyCode
 from tlkernel.ids import BeadId, parse_bead_id
 
 from taskloop.domain.asks import similar

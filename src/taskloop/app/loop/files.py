@@ -11,7 +11,7 @@ from typing import Literal
 from tlkernel import paths
 from tlkernel.docrows import LOOP_DOCS
 from tlkernel.docstore import Page
-from tlkernel.enums import LockWhat
+from tlkernel.lockenums import LockWhat
 from tlkernel.loop import LoopCommand, LoopState, LoopTarget, Rest, StopRequest
 from tlkernel.looprows import DIED, DocRow, LoopRows
 from tlkernel.run import LoopLogLine

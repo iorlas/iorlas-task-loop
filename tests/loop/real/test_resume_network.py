@@ -7,8 +7,6 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from support.case import Case
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 from support import homes
@@ -20,8 +18,6 @@ from support import gitq
 from support.engine_case import real_git, stop
 from support.plans import CLEAN, PLAN, WRITE
 from support.pushsim import CUT, pusher
-
-from taskloop.app.loop.gate import GateRole
 
 SAY = "codex: Reconnecting... waiting for network (Connection failed: error sending request)"
 REPLAY = te.ROOT / "tests" / "fixtures" / "replay" / "5ban16_plan_network_drop.jsonl"
@@ -113,19 +109,6 @@ class Land(NetBase):
         subjects = gitq.git("log", "--format=%s", "origin/main", cwd=str(self.wt)).splitlines()  # pyrefly: ignore[missing-attribute]
         assert sum("(t-1)" in x for x in subjects) == 1
 
-
-class Gate(Case):
-    """GateRole: a paused bead waits for delegate to call its role usable; a time hint never blocks; unknown fails open."""
-
-    def setup_method(self):
-        self.t = 1_800_000_000.0
-        self.roles: dict[str, bool | None] = {"worker": False}
-        self.reads = 0
-        self.gate = GateRole(self.read, now=lambda: self.t)
-
-    def read(self):
-        self.reads += 1
-        return self.roles
 
 
 class ResumeLook(test_stages_visual.VisualWork):

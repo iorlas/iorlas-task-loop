@@ -38,8 +38,6 @@ class Verdict:
     run: str | None = None
     log: str | None = None
     run_log: str = ""
-    retry_after: float = 0.0
-    role: str = ""
     storm: str = ""
     fingerprint: str = ""
     pre_engine: bool = False  # the engine never started: no verdict on the bead
@@ -107,6 +105,6 @@ def read(path: Path, rc: int | None, log_path: Path, version: str = "unknown") -
         return Verdict(Result.FAILED, f"failed: outcome file {path} is not a RunReport v{RunReport.V}: {err}; see {log_path}"), False
     return Verdict(
         outcome=raw.outcome, why=raw.why, kind=raw.kind, minutes=raw.minutes, rounds=raw.rounds, tests_added=raw.tests_added,
-        asked=raw.asked, run=raw.run, log=raw.log, retry_after=raw.retry_after or 0.0, role=raw.role, storm=raw.storm,
+        asked=raw.asked, run=raw.run, log=raw.log, storm=raw.storm,
         fingerprint=raw.fingerprint,
         slot_fault="slot_broken" if raw.kind == FAULT_SLOT else None), True

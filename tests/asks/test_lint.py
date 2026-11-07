@@ -11,7 +11,7 @@ from support.tiers import domain
 
 from asks import samples
 from taskloop.domain.asks.lint import INFRA, KIND_OF, lint
-from tlkernel.enums import AskClass, AskKind
+from tlkernel.askenums import AskClass, AskKind
 
 GOOD = samples.MOCKS["lifesim-22b3"]
 

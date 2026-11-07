@@ -7,8 +7,8 @@ from pathlib import Path
 
 from tlkernel import plancheck
 from tlkernel.answers import ASSUMPTION, IRREVERSIBLE
+from tlkernel.askenums import AskClass
 from tlkernel.checkpoint import PlanStep
-from tlkernel.enums import AskClass
 from tlkernel.plancheck import PlanData
 from tlkernel.stagefacts import RunFacts
 

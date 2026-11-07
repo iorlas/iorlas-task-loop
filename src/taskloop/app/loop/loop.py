@@ -74,7 +74,7 @@ class Loop(Core):
         super().__init__(env, files, inherited)
         self.installs, self.args = installs, args
         self.until = self.until if inherited else end_time(args.until, env.now())
-        self.settle = Settle(env, files, self.tune, self.say, self.c, self.gate, self.net, self.left)
+        self.settle = Settle(env, files, self.tune, self.say, self.c, self.net, self.left)
         self.runner = BeadRun(env, files, installs, self.tune, self.stop_mode, self.running, self.beat, self.say)
         self.taker = Taker(env, self.runner, self.tune, self.say, self.record, self.c.later)
         self.refuser = Refuser(env.store, self.say)  # lint refusals: one label and comment per bead, one line per loop
@@ -289,8 +289,7 @@ class Loop(Core):
             rec = ParkStore(self.env.cfgdir).get(row.bead.id)
             if rec and rec.reason and rec.permanence == "transient":
                 c.later[row.bead.id] = rec.retry_at
-                self.gate.held.pop(row.bead.id, None)
-        cands = [r.bead for r in q.ranked if c.later.get(r.bead.id, 0) <= now and self.gate.ready(r.bead.id)]
+        cands = [r.bead for r in q.ranked if c.later.get(r.bead.id, 0) <= now]
         cands.sort(key=lambda b: b.id not in c.net_first)  # a bead the network paused goes first, the same one (stable sort)
         if cands and cands[0].id not in c.net_first:
             c.net_first = []
@@ -300,15 +299,14 @@ class Loop(Core):
         env, c = self.env, self.c
         retries = [s.skip.until for s in q.skipped if s.skip.kind == "parked" and s.skip.until is not None]
         if q.ranked or retries:
-            wakes = [self.gate.next_look(r.bead.id) if r.bead.id in self.gate.held and c.later.get(r.bead.id, 0) <= env.now()
-                     else c.later[r.bead.id] for r in q.ranked]
+            wakes = [c.later[r.bead.id] for r in q.ranked]
             wake = min([*wakes, *retries])
-            self.say("every ready bead waits for a lane or another session: looking again at "
+            self.say("every ready bead waits for a retry or another session: looking again at "
                      + time.strftime("%H:%M:%S", time.localtime(wake)))
-            self.wait = LoopWait(reason="no_lane", wake="role usable or retry due", probe_at=wake)
+            self.wait = LoopWait(reason="no_lane", wake="retry due", probe_at=wake)
             self.publish()
             delay = max(1, wake - env.now())
-            self.nap(min(self.tune().gate_cache, delay) if self.gate.held else delay, self.until)
+            self.nap(delay, self.until)
             return None
         areas = q.areas()
         if areas:  # not drained: those beads run once their area frees; --until still ends the loop

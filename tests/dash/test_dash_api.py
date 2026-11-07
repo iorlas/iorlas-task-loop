@@ -27,11 +27,11 @@ from taskloop_dash.env import Env, Ports
 from taskloop_dash.http import make_handler
 from tlkernel import wire
 from tlkernel.ask import Ask, AskOption
+from tlkernel.askenums import AskClass, AskKind, AskStatus
 from tlkernel.askstore import AskStore
 from tlkernel.beadsport import BeadQuery
 from tlkernel.dash import BeadDetail, Snapshot
 from tlkernel.dashcost import CostPage
-from tlkernel.enums import AskClass, AskKind, AskStatus
 from tlkernel.ids import BeadId, loop_key
 from tlkernel.locator import RunLocator
 

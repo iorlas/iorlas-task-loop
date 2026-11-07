@@ -44,10 +44,10 @@ from taskloop.domain.review.matchers import Tools
 from taskloop.domain.write.matchers import count_tests
 from tlkernel import answers, plancheck
 from tlkernel.config import EngineConfig
-from tlkernel.enums import WaitWhat
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId, CheckId
 from tlkernel.plancheck import Adhoc, adhoc
+from tlkernel.waitenums import WaitWhat
 
 
 class EngineChecksTest(EngineTest):

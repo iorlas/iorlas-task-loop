@@ -3,7 +3,7 @@ from typing import ClassVar, final
 
 import stream_proc
 
-from tlkernel.enums import LockWhat
+from tlkernel.lockenums import LockWhat
 from tlkernel.wire import Rec
 
 

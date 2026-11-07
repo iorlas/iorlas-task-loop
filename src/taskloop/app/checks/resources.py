@@ -18,7 +18,7 @@ from typing import Protocol
 from any_lease import LeaseCancelledError, Waiting
 from tlkernel.checks import Check
 from tlkernel.config import EngineConfig
-from tlkernel.enums import WaitWhat
+from tlkernel.waitenums import WaitWhat
 
 from taskloop.domain.checks import affinity
 from taskloop.stores.bundle import Stores

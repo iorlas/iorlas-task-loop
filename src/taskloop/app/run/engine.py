@@ -7,7 +7,6 @@ from typing import Any, override
 
 from tlkernel import fence, rundocs
 from tlkernel.config import EngineConfig
-from tlkernel.enums import Result
 from tlkernel.env import Env
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
@@ -130,10 +129,8 @@ class Engine(RunHost):
         finish = finish_of(self.home, self.run_id)
         kind = Kind(finish.kind) if finish else self.kind
         out = finish.result if finish else oc.POLICY[kind].loop
-        paused = out is Result.PAUSED or kind is Kind.ENGINE_CRASH
         return RunReport(outcome=out, bead=self.bead, why=(finish.why if finish else self.why)[:500],
                          run=self.run_id, log=str(self.log_path),
                          minutes=round(((finish.ended if finish else time.time()) - self.t0) / 60, 1), rounds=self.stats["rounds"],
-                         tests_added=self.stats["tests_added"], asked=self.asked, retry_after=self.retry_after if paused else 0.0,
-                         cost=round(self.cost, 2), kind=kind.value, fingerprint=self.fp, storm=self.storm,
-                         role=self.pause_role if paused else "", lane=self.pause_lane if paused else "")
+                         tests_added=self.stats["tests_added"], asked=self.asked,
+                         cost=round(self.cost, 2), kind=kind.value, fingerprint=self.fp, storm=self.storm)

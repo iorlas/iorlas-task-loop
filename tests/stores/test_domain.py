@@ -18,8 +18,9 @@ from support.tiers import domain
 
 from taskloop.stores.runlog import RunLog
 from tlkernel.ask import AskAnswer
-from tlkernel.enums import AskStatus, LockWhat
+from tlkernel.askenums import AskStatus
 from tlkernel.ids import BeadId
+from tlkernel.lockenums import LockWhat
 
 
 @domain

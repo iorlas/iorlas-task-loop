@@ -2,11 +2,11 @@
 allows one more run."""
 
 
+from tlkernel.askenums import AskClass
 from tlkernel.bdsafe import attempt, peek
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BeadPatch
 from tlkernel.checkpoint import Checkpoint
-from tlkernel.enums import AskClass
 from tlkernel.stagefacts import RunFacts
 
 from taskloop.app.asks import intake

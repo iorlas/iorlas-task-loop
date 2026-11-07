@@ -7,7 +7,7 @@ from typing import Any, Final
 
 from tlkernel import log as rec
 from tlkernel.delegate import DelegateResult
-from tlkernel.enums import WaitWhat
+from tlkernel.waitenums import WaitWhat
 
 from taskloop.app.workers import writer_pin
 from taskloop.domain.lanes import pin
@@ -118,7 +118,7 @@ class LaneActs:
         e = self.e
         if c.state is not None:
             c.state.consumed()
-        e.retry_after, e.pause_role, e.pause_lane = 0.0, c.role, res.lane or ""
+        e.retry_after = 0.0
         e.pause_reason = "same_family"
         e.pause_producer = "engine"
         e.pause_permanence = None
@@ -155,8 +155,8 @@ class LaneActs:
         e.pause_permanence = stop.permanence if stop.permanence in ("transient", "needs_owner") else None
         retry_after = 0.0
         if isinstance(a, lp.Yield):
-            retry_after = a.retry_after if a.retry_after > e.clock.now() else 0.0  # a hint: the loop wakes the bead when its role is usable
-            e.retry_after, e.pause_role, e.pause_lane = retry_after, c.role, stop.lane
+            retry_after = a.retry_after if a.retry_after > e.clock.now() else 0.0  # the Park uses this as its earliest retry time
+            e.retry_after = retry_after
             e.steps.outcome("paused", stop.reason)
             e.steps.move(
                 "pause",

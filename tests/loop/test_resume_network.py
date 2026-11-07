@@ -7,8 +7,6 @@ from collections import Counter
 from pathlib import Path
 from unittest import mock
 
-from support.case import Case
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import homes
@@ -18,14 +16,11 @@ from support import engine_case as te
 from support import (
     netgate,
     procsim,
-    tlbd,
 )
 from support.engine_case import stop
 from support.plans import CLEAN, PLAN, WRITE
 
-from taskloop.app.loop.gate import GateRole
 from taskloop.app.release import reexec
-from tlkernel.config import LoopConfig
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
 
@@ -125,8 +120,7 @@ class Pause(NetBase):
         first = self.eng
         r = first.result()
         assert (r.outcome, r.kind) == ("paused", Kind.PAUSE_NETWORK.value)
-        assert r.role == "reviewer"
-        assert (r.retry_after or 0) > 0  # the network pause is transient: retried on a timer
+        assert first.retry_after > 0  # the Park receives the retry time
         assert (self.blocked, self.ask()) == ([], None)
         assert not [c for c in self.bd_calls if c[:2] == ("label", "add")]  # no auto label, no engine-fault label
         assert any(c[:1] == ("update",) and "open" in c for c in self.bd_calls)
@@ -170,57 +164,6 @@ class Pause(NetBase):
         out = stop("rate_limited", at=time.time() + 3 * 3600, lane="OPENAI_SUBSCRIPTION")
         self.run_engine({"plan": [PLAN], "write": [out]})
         r = self.eng.result()
-        assert (r.outcome, r.kind, r.role, r.lane) == ("paused", "pause_lane", "worker", "OPENAI_SUBSCRIPTION")
+        assert (r.outcome, r.kind) == ("paused", "pause_lane")
 
 
-class Gate(Case):
-    """GateRole: a paused bead waits for delegate to call its role usable; a time hint never blocks; unknown fails open."""
-
-    def setup_method(self):
-        self.t = 1_800_000_000.0
-        self.roles: dict[str, bool | None] = {"worker": False}
-        self.reads = 0
-        self.gate = GateRole(self.read, now=lambda: self.t)
-
-    def read(self):
-        self.reads += 1
-        return self.roles
-
-    def test_a_bead_wakes_when_its_role_is_usable(self):
-        self.gate.hold("x-1", "worker")
-        assert not self.gate.ready("x-1")
-        self.t += LoopConfig().gate_cache + 1
-        self.roles["worker"] = True
-        assert self.gate.ready("x-1")
-        assert "x-1" not in self.gate.held  # woken once
-        assert self.gate.ready("x-2")  # a bead that is not held is never gated
-
-    def test_the_view_is_cached_for_30_seconds(self):
-        self.gate.hold("x-1", "worker")
-        for _ in range(5):
-            self.gate.ready("x-1")
-            self.t += 5
-        assert self.reads == 1
-        self.t += LoopConfig().gate_cache
-        self.gate.ready("x-1")
-        assert self.reads == 2
-
-    def test_an_unknown_role_fails_open_after_the_unknown_wait_and_not_before(self):
-        self.roles.clear()
-        self.gate.hold("x-1", "worker")
-        self.t += LoopConfig().gate_unknown - 1
-        assert not self.gate.ready("x-1")
-        self.t += 2
-        assert self.gate.ready("x-1")
-
-    def test_a_role_that_is_down_keeps_the_bead_waiting_however_long(self):
-        self.gate.hold("x-1", "worker")
-        self.t += 10 * 3600
-        assert not self.gate.ready("x-1")
-
-    def test_nothing_is_written_back(self):
-        self.gate.hold("x-1", "worker")
-        with tlbd.bd_boundary() as bd, mock.patch.object(Path, "write_text") as wt:
-            self.gate.ready("x-1")
-        bd.assert_not_called()
-        wt.assert_not_called()
