@@ -7,6 +7,7 @@ shows up.
 """
 import json
 import os
+import pwd
 import shutil
 import time
 
@@ -24,15 +25,17 @@ def test_two_hosts_claim_without_pulling_and_merge_last_write_wins(world):
     env = {key: value for key, value in os.environ.items() if not key.startswith("BEADS_")}
     # This characterization intentionally bypasses support.paths' fake-bd guard.
     env["PATH"] = LIVE_PATH
+    # Mise needs the real home; cwd and BEADS_DIR keep bd state in the test world.
+    env["HOME"] = pwd.getpwuid(os.getuid()).pw_dir
     remote = (world / "remote").as_uri()
     hosts = {name: world / name for name in ("a", "c")}
     for host in hosts.values():
         host.mkdir()
 
-    def run(name, *args):
+    def run(name: str, *args: str):
         host = hosts[name]
         host_env = {**env, "BEADS_DIR": str(host / ".beads"), "BEADS_ACTOR": f"host-{name}"}
-        argv = [BD, *args[1:]] if args[0] == "bd" else list(args)
+        argv: list[str] = [str(BD), *args[1:]] if args[0] == "bd" else list(args)
         return run_checked(argv, host, env=host_env, text=True, timeout=120)
 
     run("a", "git", "init")
