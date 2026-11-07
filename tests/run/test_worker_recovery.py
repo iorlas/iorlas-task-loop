@@ -10,7 +10,7 @@ from support.case import Case
 from support.narrow import must
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.app.run import call, done_memo, worker_call
+from taskloop.app.workers import call, done_memo, worker_call
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.delegate import RunRequest
 from taskloop.contracts.delegateport import Answer
@@ -105,7 +105,7 @@ class Recovery(Case):
             c = self.call(schema={"type": "array"})
             self.worker.attach(c)
             assert c.finished is None
-            with mock.patch("taskloop.app.run.worker_recovery.PRODUCER", "future"):
+            with mock.patch("taskloop.app.workers.worker_recovery.PRODUCER", "future"):
                 c = self.call()
                 self.worker.attach(c)
                 assert c.finished is None
@@ -189,7 +189,7 @@ class Recovery(Case):
         self.worker.attach(again)
         assert again.finished is None
         self.req = self.req.replace(engine_only=[])
-        with mock.patch("taskloop.app.run.worker_recovery.PRODUCER", "future"):
+        with mock.patch("taskloop.app.workers.worker_recovery.PRODUCER", "future"):
             again = self.call()
             self.worker.attach(again)
             assert again.finished is None
@@ -234,7 +234,7 @@ class Recovery(Case):
         self.worker.attach(again)
         assert again.resume is None
         self.req = self.req.replace(engine_only=[])
-        with mock.patch("taskloop.app.run.worker_recovery.PRODUCER", "future"):
+        with mock.patch("taskloop.app.workers.worker_recovery.PRODUCER", "future"):
             again = self.call()
             self.worker.attach(again)
             assert again.resume is None

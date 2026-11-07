@@ -4,7 +4,6 @@ The host (the engine) lends the run's state."""
 import contextlib
 import copy
 from pathlib import Path
-from typing import Any
 
 from taskloop.app.plan import assume
 from taskloop.app.plan.cap import ReplanCap
@@ -32,7 +31,7 @@ REPLAN_TAIL = 12500  # characters of replan.md the planner reads
 
 class Planner:
     def __init__(self, host: PlanHost) -> None:
-        self.e = host
+        self.host = host
         self.cap = ReplanCap(host)
         self.prompts = PlanPrompt(host, host.git)
         self.decisions = Decisions(host)
@@ -41,7 +40,7 @@ class Planner:
     # -- one planner answer
     def ask(self, prompt: str, step: str, title: str, mode: str = "plan") -> PlanData:
         """One planner answer, its checks validated before any write; the bad ones go back once."""
-        e = self.e
+        e = self.host
         data = plancheck.plan_of(e.ai("plan", title, prompt, step=step, mode=mode, at=(e.planned, 0, 0)).data)
         if self.fits(data):  # keep the answer through a stop, but revalidate it before any write
             e.plan_data = copy.deepcopy(data)
@@ -50,7 +49,7 @@ class Planner:
 
     def validate(self, data: PlanData, prompt: str, step: str) -> PlanData:
         """Validate a new or checkpointed draft; send a rejected answer back once before accepting it."""
-        e = self.e
+        e = self.host
         p = self.sendback.find(data)
         if p.any():  # asked once to rewrite them, like an invalid answer; not a counted re-plan
             why = self.sendback.text(p)
@@ -70,19 +69,19 @@ class Planner:
     def fits(self, data: PlanData) -> bool:
         """A plan worth keeping through a stop: it has stages, asks nothing, and is not a split ask."""
         return bool(data["stages"] and not data["question"].strip() and (
-            len(data["stages"]) <= self.e.cfg.max_stages or self.cap.kept_whole()))
+            len(data["stages"]) <= self.host.cfg.max_stages or self.cap.kept_whole()))
 
     def add_leftovers(self, data: PlanData) -> None:
         """The follow-up work the plan wants filed: filed at the close with the reviews' leftovers. Only a plan the run goes on with
         adds them, so a plan that asks the owner is not filed twice by the plan after the answer."""
-        have = {lo["title"] for lo in self.e.leftovers}
-        self.e.leftovers += [lo for lo in data["leftovers"] if lo["title"] not in have]
-        self.e.checkpoints.keep_pending("plan")
+        have = {lo["title"] for lo in self.host.leftovers}
+        self.host.leftovers += [lo for lo in data["leftovers"] if lo["title"] not in have]
+        self.host.checkpoints.keep_pending("plan")
 
     # -- the run's plan
-    def count(self, old: Any, again: bool, why: str) -> None:
+    def count(self, old: PlanData | None, again: bool, why: str) -> None:
         """The planner is about to run: against the cap, unless the owner's answer or edit of the bead caused it (tl-19i)."""
-        e = self.e
+        e = self.host
         why_amend = e.amend_why or ""
         owner = (bool(old) and not again and why_amend.startswith("bead changed: the owner answered")
                  and not (e.answered and e.answered.ask_class == AskClass.CAP_REACHED))  # a cap ask answered 'split' stays blocked
@@ -97,7 +96,7 @@ class Planner:
             e.amend_text = "The bead is the same as when the old plan was made."
 
     def plan(self, again: bool = False) -> PlanData:
-        e = self.e
+        e = self.host
         old = e.old_plan or (e.plan_data if again and e.plan_data else None)
         e.amended = e.amended or bool(old)  # tl-bxk.10.24: work exists before this plan's first stage
         why = ""
@@ -115,7 +114,7 @@ class Planner:
     def cover_visual(self, data: PlanData, prompt: str, step: str) -> PlanData:
         """tl-jvpm.15: `visual_paths` only checks the planner's judgement. A plan that has stages in a visual path and no look-objective,
         taste or show case goes back once (not a counted re-plan); the second answer stands."""
-        e = self.e
+        e = self.host
         vp = e.cfg.visual_paths
         if e.plan_state.visual_back or not (vp and vp.include) or not data["stages"] or visual.is_visual(data.get("cases") or []):
             return data
@@ -130,7 +129,7 @@ class Planner:
 
     def settle_question(self, data: PlanData, prompt: str, step: str) -> PlanData:
         """A question an accepted requirement answers, or about a step that can be undone, is no ask: the planner plans again once."""
-        e = self.e
+        e = self.host
         q = data["question"].strip()
         decided = data["decided"].strip() if q else ""
         if decided and not e.plan_state.decided:  # tl-bxk.10.3: no owner ask, the planner plans again
@@ -148,7 +147,7 @@ class Planner:
 
     def assume_question(self, data: PlanData, prompt: str, step: str) -> PlanData:
         """tl-ntp: a question about anything that can be undone is an assumption, not an ask (82 item 1)."""
-        e = self.e
+        e = self.host
         asked = data["question"].strip()
         data = assume.assume_question(data, e.assumed, e.ask_flow.raise_soft)
         if not data["stages"] and not data.get("leftovers") and not e.leftovers and not e.plan_state.assumed:
@@ -167,7 +166,7 @@ class Planner:
 
     def accept(self, data: PlanData, again: bool) -> PlanData:
         """The answer is the run's plan, or a stop: a question for the owner, a finished-work plan, a plan with no stages or too many."""
-        e = self.e
+        e = self.host
         if self.fits(data):
             e.plan_data = data  # a SIGTERM from here on resumes with this plan (d5f.38 lost a finished 1.1M plan before its checkpoint)
             e.checkpoints.save(stage=0, rounds=0, n=0, feedback="", step="write")
@@ -194,7 +193,7 @@ class Planner:
     def finished_work(self, data: PlanData, again: bool) -> PlanData:
         """tl-bxk.13.2: the work is done and only the filing is left: the engine files and closes. Never after a failed stage (a
         re-plan), and never over work no review accepted: that tree is not "done"."""
-        e = self.e
+        e = self.host
         if not e.done and not e.landed_sha and not e.checkout.task_diff().strip():
             self.add_leftovers(data)
             stored(data)
@@ -212,7 +211,7 @@ class Planner:
     def move_if_lacking(self, data: PlanData) -> None:
         """Bead affinity (tl-7k8.8): the planned files hit a repo check that needs a resource this host lacks: the needs label is set and
         the bead goes back to the queue for a host that has it."""
-        e = self.e
+        e = self.host
         files = sorted({f for s in data["stages"] for f in s["files"]})
         need = affinity.planned([repo_check(k, e.cfg) for k in e.cfg.checks], files, e.cfg, e.stores.host.need())
         if need:
@@ -221,7 +220,7 @@ class Planner:
                                     f"{names}; the bead is labelled needs:{names} and goes back to the queue for a host that has it")
 
     def finish(self, data: PlanData) -> PlanData:
-        e = self.e
+        e = self.host
         self.move_if_lacking(data)
         big = e.cfg.max_stages
         if len(data["stages"]) > big and not self.cap.kept_whole():

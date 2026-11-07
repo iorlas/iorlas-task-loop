@@ -8,8 +8,8 @@ import support.paths  # noqa: F401
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.app.run import done_memo
 from taskloop.app.run.reload import Reload
+from taskloop.app.workers import done_memo
 from taskloop.contracts import factorydb
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
