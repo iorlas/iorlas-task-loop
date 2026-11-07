@@ -148,3 +148,15 @@ def render(p: Plan) -> str:
 
 def as_json(p: Plan) -> str:
     return json.dumps(asdict(p), indent=2)
+
+
+def answers(repo: Path, facts: ProfileFacts, defaults: bool, answer_file: str | None) -> dict[str, str]:
+    """Explicit answers override the requested question defaults."""
+    given = {q.id: q.default for q in repo_part(repo, facts).questions} if defaults else {}
+    if answer_file:
+        given.update({str(k): str(v) for k, v in json.loads(Path(answer_file).read_text(encoding="utf-8")).items()})
+    return given
+
+
+def verdict(p: Plan) -> int:
+    return 0 if all(c.ok for c in p.checks) else 1

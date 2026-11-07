@@ -184,7 +184,8 @@ class StackCase(Case):
         forge = Forge(cmds, self.git, str(self.repo), "main")
         gate = StackGate(cmds, self.git, self.stores, str(self.repo), "origin/main", ["tl"])
         stack = Stack(forge, cmds, log, self.git, str(self.repo), lock, self.record, lambda: self.synced, "tl-me", "sess-1", gate,
-                      FakeBeads(actor="tl-me"), named=self.beads.append, cfg=self.cfg, **kw, fx=FX, queue_docs=self.stores.queue,
+                      FakeBeads(actor="tl-me"), named=self.beads.append, hold_land=landlock.os_lock, cfg=self.cfg, **kw,
+                      fx=FX, queue_docs=self.stores.queue,
                       queue_state=self.stores.queue_state, profile_changes=self.stores.profile_changes)
         self.rc = stack.run(list(items))
         done = oc.make(Kind.LANDED if self.rc == 0 else Kind.FAULT_LAND,

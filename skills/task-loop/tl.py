@@ -104,7 +104,7 @@ from taskloop.cli import wait as cli_wait
 from taskloop.cli.ctx import Ctx, declare_stage_parts
 from tlkernel.enums import Step
 from tlkernel.env import snapshot
-from tlrelease import pins
+from tlrelease import pinning
 
 HERE = Path(__file__).resolve().parent
 
@@ -322,24 +322,10 @@ def build_parser():
     return ap
 
 
-def lazy(module: str, name: str) -> Handler:
-    """A verb whose module is imported when the verb runs (the engine and the loop are heavy; `tl actor` should not load them)."""
-    def call(a: Any, c: Ctx) -> int:
-        return int(getattr(importlib.import_module(module), name)(a))
-    return call
-
-
 def lazy_env(module: str, name: str) -> Handler:
     """A lazy verb that takes the environment too: `name(a, env=..., git=..., who=...)`."""
     def call(a: Any, c: Ctx) -> int:
         return int(getattr(importlib.import_module(module), name)(a, env=c.env, git=c.git, who=c.who))
-    return call
-
-
-def of_args(fn: Callable[..., int], *names: str) -> Handler:
-    """A verb that is a function of some of its parsed arguments, by name."""
-    def call(a: Any, c: Ctx) -> int:
-        return fn(*[getattr(a, n) for n in names])
     return call
 
 
@@ -432,8 +418,8 @@ VERBS: Final[dict[str, Handler]] = {
     "worktrees": lambda a, c: wslots.owned_worktrees(c.git, c.who, a.op),
     "dash": lambda a, c: wire_dash.run(a.op, c.env, c.spawner, {p.name: p.version for p in STAGE_PARTS}),
     "factory": lambda a, c: cli_factory.run(a, c.env, c.spawner, c.who, c.here),
-    "pin": lambda a, c: pins.run_pin(c.env, a.version, a.clear, c.git, host=release_host()),
-    "rollback": lambda a, c: pins.run_rollback(c.env, c.git, host=release_host()),
+    "pin": lambda a, c: pinning.run_pin(c.env, a.version, a.clear, c.git, host=release_host()),
+    "rollback": lambda a, c: pinning.run_rollback(c.env, c.git, host=release_host()),
     "doctor": cli_doctor.run,
     "slot": v_slot,
     "ask": v_ask, "answer": v_ask, "hint": v_ask, "hold": v_ask, "override": v_ask, "park": v_ask, "note": v_ask,

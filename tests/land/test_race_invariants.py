@@ -53,6 +53,7 @@ from support.stdout import stdout_in
 
 from taskloop.adapters import (
     beadtools,
+    deadline,
     landlock,
     pidcheck,
 )
@@ -555,7 +556,8 @@ class Invariants(test_loop.Base):
                 joined.set()
             return self.real_os_lock(*a, **kw)
         with self.watching(watch):
-            self.together({"X": section(lander_over(eng()).lock()), "Y": section(lander_over(eng()).lock()),
+            self.together({"X": section(lander_over(eng(), deadline=deadline.deadline).lock()),
+                           "Y": section(lander_over(eng(), deadline=deadline.deadline).lock()),
                            "Z": section(landlock.os_lock(landlock.land_lock_path(homes.cfg(), url), "release: z"))})
         assert (most[0], sorted(entered)) == (1, ["X", "Y", "Z"])
         o = self.releases()

@@ -1,5 +1,5 @@
 """The land side of a run: the tree, the rebase and its salvage, the fixer, the lander, and the receipt a land leaves."""
-from functools import cached_property
+from functools import cached_property, partial
 from pathlib import Path
 from typing import override
 
@@ -9,10 +9,13 @@ from tlkernel.storeapi import Doc
 from tlwork.api import NewFiles
 
 from taskloop.adapters import landlock
+from taskloop.adapters.deadline import deadline
+from taskloop.adapters.ignored import ignored_by
 from taskloop.app.land import cleanup
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.fix import Fixer
-from taskloop.app.land.lander import lander_over
+from taskloop.app.land.lander import Lander, lander_over
+from taskloop.app.land.lander_host import LanderHost
 from taskloop.app.land.push import target
 from taskloop.app.land.rebase import Rebase
 from taskloop.app.land.record import Restart, Salvage
@@ -26,6 +29,10 @@ def tree_over(host: TreeHost) -> Tree:
     return Tree(host, fx=slotfx.FX)
 
 
+def lander_bound(host: LanderHost) -> Lander:
+    return lander_over(host, deadline=deadline)
+
+
 class LandParts(Plumbing):
     @property
     def latest_check(self) -> Doc[CheckRun]:
@@ -35,12 +42,13 @@ class LandParts(Plumbing):
     rebase = cached_property(Rebase)
     restart = cached_property(Restart)
     fixer = cached_property(Fixer)
-    lander = cached_property(lander_over)
+
+    lander = cached_property(lander_bound)
 
     @cached_property
     @override
     def checkout(self) -> Checkout:
-        return Checkout(self)
+        return Checkout(self, ignore_rules=partial(ignored_by, self.git, self.wt))
 
     @cached_property
     def salvage(self) -> Salvage:

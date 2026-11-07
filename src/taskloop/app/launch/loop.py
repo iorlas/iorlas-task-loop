@@ -99,7 +99,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         cfgdir=cfg,
         store=store,
         slots=EngineSlots(lambda: wslots.slot_env(repo, store, profile().slots, now, spawner=spawner, git=git, who=who)),
-        asks=EngineAsks(cfg, now, wasks.host),
+        asks=EngineAsks(cfg, now, wasks.host().asks_store),
         profile=profile,
         fetch=lambda: ops.fetch(repo, git),
         lint=lambda b: beadlint.why(b, repo, lambda: lintrun.has_children(store, b.id)),

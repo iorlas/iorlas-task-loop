@@ -14,12 +14,12 @@ from tlkernel.envvars import EnvVar
 from tlkernel.ids import BeadId
 from tlkernel.procport import WaitTimeout
 from tlkernel.run import Reexec
+from tlrelease.versions import Installs
 
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.core import Running
 from taskloop.app.loop.env import Child, Hold, LoopEnv
 from taskloop.app.loop.files import LoopFiles, StopMode
-from taskloop.app.loop.versions import Installs
 
 
 @dataclass

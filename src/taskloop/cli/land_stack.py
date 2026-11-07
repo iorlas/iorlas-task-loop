@@ -15,7 +15,7 @@ from tlslots.config import profile_slots
 from taskloop.app.land.cmds import Runs
 from taskloop.app.land.gate import owner_refusal
 from taskloop.app.land.stack import item_of, pairs, run_stack
-from taskloop.app.wire import closeguard, slotfx
+from taskloop.app.wire import closeguard, landfx, slotfx
 from taskloop.app.wire.slots import slot_of
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
@@ -30,6 +30,7 @@ def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs
         return 2
     stores = real_stores(who.config)
     rc, lines = run_stack(a, who, git, spawner, store, tl, env=env, fx=slotfx.FX,
+                         land_lock_path=partial(landfx.land_lock_path, who.config), hold_land=landfx.os_lock,
                          record=partial(closeguard.record_land, who, store, git),
                          slot=partial(slot_of, who=who, store=store, strict=True),
                          slot_base=lambda repo: profile_slots(repo).base,

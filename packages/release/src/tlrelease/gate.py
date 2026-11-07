@@ -13,15 +13,26 @@ from tlgate.cache import RunMemo
 from tlgate.domain.specs import gate_items
 from tlkernel.checks import Check, CheckResult
 from tlkernel.config import EngineConfig
+from tlkernel.env import Env
 from tlkernel.envvars import EnvVar
+from tlkernel.gitport import Git
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.paths import ConfigDir
 from tlkernel.runkey import BaseSha, RunKey
 from tlkernel.slots import SlotGitError
 
+from tlrelease import suiteout
 from tlrelease.host import ReleaseHost
 from tlrelease.paths import releases_dir
 from tlrelease.shell import Abort, Shell, say
+
+
+@dataclass(frozen=True)
+class GateHost(ReleaseHost):
+    """The release flow's additional gate authorization capability."""
+
+    memo_for: Callable[[Git, str, EngineConfig, TreeSha, BaseSha, Env], RunMemo]
+
 
 LONG = 3 * 3600.0  # a hang guard for a whole gate run
 
@@ -35,11 +46,12 @@ def save_output(out: str, env_dir: Path) -> Path:
     return f
 
 
-def red(out: str, what: str, sh: Shell, *, host: ReleaseHost) -> Abort:
-    log = save_output(out, host.config_dir(sh.env))
+def red(out: str, what: str, config: Path) -> Abort:
+    log = save_output(out, config)
     lines = out.splitlines()
-    return Abort(f"the gate is red ({what}); nothing released:\n{host.suite_report(out) or chr(10).join(lines[-40:])}\nfull output: {log}",
-                 log, host.failing_tests(out))
+    report = suiteout.failure_report(out) or chr(10).join(lines[-40:])
+    return Abort(f"the gate is red ({what}); nothing released:\n{report}\nfull output: {log}",
+                 log, suiteout.failing_tests(out))
 
 
 def just(*recipe: str) -> list[str]:
@@ -60,7 +72,7 @@ def suite_check(repo: Path, sh: Shell) -> tuple[Check, EngineConfig] | None:
     return (found[0], cfg) if found else None
 
 
-def gate(repo: Path, sh: Shell, host: ReleaseHost) -> None:
+def gate(repo: Path, sh: Shell, host: GateHost) -> None:
     """The repo's one declared gate: the command of the profile's suite check (`just gate`: `just check`, then `just test`, the tests this
     change can break), else `just check` alone. A receipt is written only after this whole command is green, so a hit proves both.
     `just` comes from PATH, else through mise; the config paths mise must trust are exported."""
@@ -75,7 +87,7 @@ def gate(repo: Path, sh: Shell, host: ReleaseHost) -> None:
     say("running the gate: " + " ".join(cmd))
     ran = sh.run(cmd, repo, check=False, extra=trusted, timeout_s=LONG)
     if ran.returncode:
-        raise red(ran.stdout + ran.stderr, f"`{' '.join(cmd)}` exit {ran.returncode}", sh, host=host)
+        raise red(ran.stdout + ran.stderr, f"`{' '.join(cmd)}` exit {ran.returncode}", host.config_dir(sh.env))
     say("gate green")
 
 
@@ -96,7 +108,7 @@ class Receipt:
                                                  note=note), 0, "")
 
 
-def receipt(repo: Path, sh: Shell, *, host: ReleaseHost) -> Receipt | None:
+def receipt(repo: Path, sh: Shell, *, host: GateHost) -> Receipt | None:
     """The receipt the gate on HEAD's tree is known by (None: the repo declares no suite check, so nothing can be remembered)."""
     found = suite_check(repo, sh)
     if found is None:
@@ -114,7 +126,7 @@ def receipt(repo: Path, sh: Shell, *, host: ReleaseHost) -> Receipt | None:
     return Receipt(memo, check, key)
 
 
-def verify(repo: Path, sh: Shell, checks: Callable[[Path, Shell, ReleaseHost], None] = gate, *, host: ReleaseHost) -> bool:
+def verify(repo: Path, sh: Shell, checks: Callable[[Path, Shell, GateHost], None] = gate, *, host: GateHost) -> bool:
     """The gate on the tree at `repo`'s HEAD (nothing uncommitted), run once: a green receipt of this tree under this check command (the
     RunKey store, which `tl gate` and the pre-push judge share) skips it, and the log says so (True). A miss says why. Only a green run
     writes a receipt; a red one raises and writes nothing."""
@@ -130,7 +142,7 @@ def verify(repo: Path, sh: Shell, checks: Callable[[Path, Shell, ReleaseHost], N
     return False
 
 
-def record_receipt(repo: Path, sh: Shell, *, host: ReleaseHost) -> None:
+def record_receipt(repo: Path, sh: Shell, *, host: GateHost) -> None:
     """Publish the verified release bump under the receipt of the bumped tree, so the pre-push judge reuses it."""
     found = receipt(repo, sh, host=host)
     if found is not None:

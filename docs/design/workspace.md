@@ -120,3 +120,5 @@ asks tests import shell wiring and remain integration tests.
 
 Release R1 (tl-e5t0.19): code carve done in `packages/release/src/tlrelease`, flat modules with no api.py.
 `ReleaseHost` supplies shell effects, bound by `app/launch/release_host.py`; tests stay in `tests/release` until R2.
+
+PR-2b moves the light stages’ hold, deferral and park helpers into `tlkernel.holds`, `tlkernel.deferrals` and `tlkernel.askparks`, with caller-supplied storage, clocks and randomness.

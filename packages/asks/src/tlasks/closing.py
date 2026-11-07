@@ -1,15 +1,18 @@
 """Ask validation and park transitions bound to a closing run's config directory."""
+from random import random
+
+from tlkernel import askparks as parks
 from tlkernel import trustroots
 from tlkernel.askspec import AskSpec
 from tlkernel.bead import Bead
 from tlkernel.delegate import Permanence
 from tlkernel.gitport import Git
 from tlkernel.kinds import Kind
-from tlkernel.parks import Park
+from tlkernel.parks import Park, ParkStore
 from tlkernel.paths import ConfigDir
 from tlkernel.pausereasons import Producer
 
-from tlasks import parks, raiser
+from tlasks import raiser
 
 
 class ClosingAsks:
@@ -23,10 +26,10 @@ class ClosingAsks:
                not_before: float = 0.0, fingerprint: str = "", producer: Producer | None = None,
                permanence: Permanence | None = None) -> Park:
         return parks.paused(self.cfg, bead, kind, run, now, reason=reason, not_before=not_before,
-                            fingerprint=fingerprint, producer=producer, permanence=permanence)
+                            fingerprint=fingerprint, producer=producer, permanence=permanence, store=ParkStore, draw=random)
 
     def ended(self, bead: Bead, kind: Kind, run: str, now: float) -> None:
-        parks.ended(self.cfg, bead, kind, run, now)
+        parks.ended(self.cfg, bead, kind, run, now, store=ParkStore)
 
 
 class ClosingTrust:
