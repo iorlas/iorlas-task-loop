@@ -177,3 +177,57 @@ Rules as in section 9: a port class lives in the stage that implements it; the p
 | `OwnerRequests` | `at_beat` only peeks and sets the stop flag; `at_step` takes the rows, on the main thread, at a step boundary; `drop` sets `closing` first so nothing is taken any more |
 | `Closer` and its ports (`ParkBook`, `BeadClosing`, `LandCleanup`, `Slotting`) | called on the main thread inside `stop_deferred`; none may start a thread or wait for the lease thread |
 | `Reexecs`, `Trail`, `HeadHistory`, `ReviewRestore`, `TrustRefusal`, `AskRules`, `FollowUps` | called on the main thread only; each is a plain function over its own store, with no state of its own |
+
+## 12. State on main 8f570e25 and the closing sequence (added 2026-11-07, tl-e5t0.39 plan; supersedes the slice order of section 7 where they differ)
+
+**What is done.** Slices P1 to P6 and D-PIPELINE landed: `app/pipeline` holds 3,500 sloc in 41 modules (cursor, lifecycle, run body, standalone step entry, the whole close family, waits, requests, reload, reflect, resume, journal, checkpoints, stuck, crash, target, stage_run, review_glue), behind the `pipeline-imports-no-stage` and `converted-stages-take-no-host` contracts. All six B-* and C-WORKERS dependencies are closed. `RunBody`, `Standalone`, `Lifecycle` and the closer are typed by small per-module Protocols, and `tests/pipeline/` (17 files) runs them on fakes (`support.pipeline_ports`).
+
+**What is left**, measured by an AST scan of `src/taskloop/app/run` (1,643 sloc, 27 files; `dev/root_report.py`: root 4,069 sloc, 151 Engine attributes):
+
+| item | sloc / branches | state | blocker |
+|---|---|---|---|
+| `stage_rounds.py` | 68 / 30 | a standalone write/look/checks/review round; reads 12 host attrs; imports `app.write.*`, so it cannot enter `app/pipeline` | none; its port (`RoundStages` in `standalone.py`) exists |
+| `stage_checks.py` | 37 / 3 | `StageChecks(host: Any)`; the checks stage's own step | none |
+| `running.py` | 34 / 9 | which beads run now; `prune.verb` imports it and it imports `wire.slots` (the one baseline edge) | the `wire/slots` port design (tl-e5t0.40.6 row) |
+| `stages.py`, `run_once.py` | 21 + 22 | binders (build `Standalone`, `RunBody`, `Lifecycle` over the Engine) | stay as construction |
+| `state.py` | 46 / 2 | `StateField` forwards 30 `RunState` fields onto the Engine; this, not logic, is most of the 151 attributes | R4a below |
+| the other `run/` files (entry 264, fields 131, layout 103, plumbing 66, parts_* 138, context 76, engine 118, host 98, shell 83, shared 85, ask_flow 60, preflight 65, closer_ports 57, facts 22, ...) | about 1,400 | construction and composition roots (C-THIN a, `.importlinter` lists them); `entry` take-area and `preflight` branches are C-THIN's (tl-e5t0.40.6), not this bead's | C-THIN |
+| the pipeline's own hosts | `RunHost` (run.py) 47 members, `StandaloneHost` 41, `RecordHost` (journal) 41, `CloserHost` 31, `resume` 30, `lifecycle` 28, `reflect` 22, `reload` 21 | still "the Engine seen through a Protocol"; each module reads the run's values (`done`, `accepted`, `stage_tree`, `replans`, `stats`, `plan_data`, `pending_land_validation`) as host attributes | the PRs R4a to R4f |
+
+So the 6,100 sloc of the bead text are gone from the root; what remains of its acceptance ("run/ holds only construction; pipeline tests run on stage fakes") is: three logic modules move out (R1 to R3), the run's values stop being Engine attributes (R4a), and each wide host becomes a port bundle the root builds (R4b to R4f), then a ratchet keeps it so (R5).
+
+### PR sequence
+
+Each PR is one bead (child of tl-e5t0.39, label `auto`), lands green, behaviour unchanged, and states in its body the closure delta from `dev/reach.py` (the expectation below is a direction, not a measurement: a PR whose closure rises needs `Ratchet-allow: closure +N <reason>`). A node move is one `Layout-allow: move <reason of 4+ words>` line in the commit; a new package or root is `node`; a loosened contract is `contract`. Tightening a contract (removing a source entry) needs none.
+
+| PR | does | files | closure (expected) | Layout-allow | needs |
+|---|---|---|---|---|---|
+| **R1** stage_rounds to write | `round_step` and helpers move to `app/write/rounds.py`; `run/stages.py` keeps `RoundStages` as the binder; `run.stage_rounds` leaves the contract's source list | run/stage_rounds, run/stages, app/write/rounds, tests/run/test_selected_stage, test_stage_prepare, tests/write/test_round_result, tests/support/stepgraph, .importlinter | 0 to -1 (a root edge becomes an in-node one) | `move stage_rounds joins the write stage` | none; **first PR that can start now** |
+| **R2** stage_checks to checks | `StageChecks` over a `CheckStepHost` Protocol into `app/checks/step.py`; `parts_run.py` binds | run/stage_checks, run/parts_run, app/checks, tests of the stoppable path | 0 | `move stage_checks joins the checks stage` | none; parallel with R1 (disjoint files) |
+| **R3** running to slots | `running`, `area_lock`, `area_busy` into `app/slots/running.py` over a `SlotView` port that `wire` binds; `prune.verb`, `launch/loop*`, `cli/prune`, `entry` import the new home; the baseline edges `run.running -> wire.slots` and `prune.runs -> run.layout` shrink | run/running, app/slots, prune/verb, launch/loop, loop_ops, cli/prune, run/entry, .importlinter | -1 or 0 | `move running joins the slots stage` | the `wire/slots` port design (tl-e5t0.40.6); start after that note, else R3 designs the port itself |
+| **R4a** run values leave the Engine | `RunBody`, `Standalone`, `Lifecycle`, `Closer` and `stage_rounds` read and write `RunState` (the kernel record already behind `StateField`) passed as a value, not `host.done / accepted / stage_tree / replans / extra / stats / plan_data / pending_land_validation`; `run/state.py` forwards only the fields the stages still read through the Engine, the rest are deleted | pipeline/run, standalone, lifecycle, closing*, run/state, run/fields, tests/run/test_state | 0 | none | R1 (stage_rounds touches the same fields); not B3 (it does not touch parks, pauses or pause_reasons) |
+| **R4b** `RunBody` ports | `RunHost` (47 members) becomes a frozen `RunPorts` dataclass of the 20 stage ports plus `RunState`; the binder is `run/run_once.py` (already the binder) | pipeline/run, run/run_once, tests/pipeline/test_run, support/pipeline_ports | 0 | none | R4a |
+| **R4c** `Standalone` ports | `StandaloneHost` (41) becomes `StandalonePorts`; `once`, `lease`, `rounds` stay as constructor arguments | pipeline/standalone, run/stages, tests/pipeline/test_standalone | 0 | none | R4b |
+| **R4d** journal ports | `RecordHost` (41) in `pipeline/journal.py` is cut into `RunLog` (heartbeat, manifest, log lines) and `RunLedger` (stats, trace) ports; the rows modules stay | pipeline/journal, summaries, trace, tests/pipeline/test_journal | 0 | none | B3-4 (transcript kinds leave trace/journal); after it lands |
+| **R4e** resume, reflect, reload | `resume.py` (30), `reflect.py` (22), `reload.py` (21) take their ports from section 10 as constructor values, not `host` | pipeline/resume, reflect, reload, run/reload_ports | 0 | none | B3-1 and B3-2 (they delete `resume` machinery: land first, then narrow what is left) |
+| **R4f** closer host | `closing_host.py` (89 sloc, 31 members) is replaced by the ports of section 9 given to `Closer` directly; `run/closer_ports.py` stays the one binder | pipeline/closing*, run/closer_ports | 0 | none | B3 parks / pauses / pause_reasons / policy rows (touches `closing.py`, `closing_settle.py`); after B3-5 |
+| **R5** run is construction | a rules test: no `app/run` module outside the composition list defines a class with logic (names from `.importlinter`), no host Protocol in `app/pipeline` over 16 members (ratchet: the list only shrinks), the `run.*` source entries of `nobody-imports-a-root` are gone; docs: `stage-isolation.md` section 2 marks the node done; `dev/root_report.py` numbers recorded | tests/rules, .importlinter, docs | -N | none (a contract entry is removed, not added) | R1 to R4f |
+| **R6** pipeline package | carve to `packages/pipeline/{src/taskloop_pipeline, tests}` per the charter: public surface `api.py`, `contracts/`, `testing.py` (the fakes of `support/pipeline_ports.py`); `git mv`, no code change | packages/pipeline, pyproject, .importlinter | measured by `dev/reach.py`; must not grow | `node pipeline becomes a workspace package` | pix-wspike's layout decision (tl-e5t0.65), R5 |
+
+### Order against the other lanes
+
+- **B3 (pix-deleg-iso, tl-hwv5.3.1 to .5, and C-b/C-c).** It touches `app/asks/parks.py`, `pipeline/closing*.py`, `pauses.py`, `pause_reasons.py` and the policy rows, and deletes resume, transcript and context machinery in `pipeline/resume.py`, `journal.py`, `trace.py`. R1, R2, R3 and R4a to R4c touch none of these files and run now; **R4d, R4e, R4f wait for B3-4, B3-1/2 and B3-5** (narrowing code that B3 is deleting would only conflict). Sibling PRs share `.importlinter` only in different list lines.
+- **Package split (pix-wspike, tl-e5t0.65).** R6 is the last PR and the only one the layout spike gates; R1 to R5 are layout-neutral (they move code between existing `app/<node>` folders, which a later `git mv` carries). The package's public surface needs R4 first: a package whose ports are the Engine seen through a 47-member Protocol cannot offer `api.py`.
+- **C-THIN (tl-e5t0.40.5/.6).** R1 to R3 and R5 take the `run.stage_rounds`, `run.stage_checks`, `run.running` entries out of `nobody-imports-a-root`; they are the same items as tl-e5t0.40.5's first two criteria, so those two close with R3 and R1. The remaining `run/` root sloc (entry, preflight, shell, shared) is C-THIN's.
+- **CKPT (tl-e5t0.29).** Untouched: `Checkpoints` already lives in `app/pipeline`; R4a keeps `RunState` as is.
+
+### Decisions (proposed)
+
+| decision | proposal |
+|---|---|
+| a standalone round belongs to | the write stage (it owns `StageState`, `Prepare`, progress); the pipeline reaches it through `RoundStages` |
+| the run's values | one `RunState` value passed to the pipeline; the Engine's `StateField` forwarders are removed as callers stop using them |
+| host replacement | a frozen dataclass of ports per entry (`RunPorts`, `StandalonePorts`), built in the existing binder files; no new root file (a new root needs `Layout-allow: node`) |
+| the 16-member ceiling | a ratchet in `tests/rules` (R5), list only shrinks |
+
+Beads (children of tl-e5t0.39): R1 tl-e5t0.39.1, R2 .2, R3 .3, R4a .4, R4b .5, R4c .6, R4d .7, R4e .8, R4f .9, R5 .10, R6 .11.
