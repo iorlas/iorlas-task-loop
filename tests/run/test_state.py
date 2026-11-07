@@ -14,6 +14,7 @@ from support.fake_beads import FakeBeads
 from support.fakegit import ScriptedGit
 from support.memstores import fake_stores
 
+from taskloop.app.land.state import LandState
 from taskloop.app.look.state import LOOK_FIELDS, LookState
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.resume import KEEP_FOR_ACTIVE, LATE, Resume
@@ -85,7 +86,7 @@ class Host(StateAttrs):
         self.review.unverified = [{"what": "v", "kind": "", "why": "", "source": ""}]
         self.filed, self.unfiled = [], []
         self.look = LookState(lambda: self.state)
-        self.task_branch, self.gate_log, self.head = "task/t-1", None, "h0"
+        self.task_branch, self.land_state, self.head = "task/t-1", LandState(), "h0"
 
     @property
     def git(self) -> HeadGit:
