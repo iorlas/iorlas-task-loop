@@ -73,7 +73,7 @@ class EngineCleanup(EngineTest):
             rc, _ = self.run_engine(RUN)
         assert rc == 0, self.blocked
         assert moved
-        cleanup.retry_logged(self.eng.git, self.eng.log, cfg=homes.cfg(), fx=FX)
+        cleanup.retry_logged(self.eng.git, self.eng.log, cfg=homes.cfg(), history=self.eng.log.log, fx=FX)
         assert gitq.git("ls-remote", "origin", "refs/heads/task/t-1", cwd=main).split()[0] == moved[0]
         done = records(self.eng, "land_cleanup")[-1]
         assert (done["local_outcome"], done["remote_outcome"]) == ("gone", "pending")
