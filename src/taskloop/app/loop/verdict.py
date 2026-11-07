@@ -6,12 +6,13 @@ from pathlib import Path
 from tlkernel import wire
 from tlkernel.config import ProfileReadError
 from tlkernel.enums import Result
+from tlkernel.kinds import Kind
 from tlkernel.matchers import NetText
 from tlkernel.run import RunReport
 from tlkernel.slots import SlotFailCode
 
-NETWORK = "pause_network"
-FAULT_SLOT = "fault_slot"
+NETWORK = Kind.PAUSE_NETWORK.value
+FAULT_SLOT = Kind.FAULT_SLOT.value
 PROFILE_AHEAD = "profile_ahead"
 SETUP_OWN_TREE = "setup_own_tree"
 

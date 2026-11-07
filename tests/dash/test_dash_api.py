@@ -173,12 +173,12 @@ class Api(ApiFixture):
         assert bundle is not None
         bundle.live.mkdir(parents=True, exist_ok=True)
         path = bundle.live / "01-plan.jsonl"
-        path.write_text(json.dumps({"k": "msg", "t": T + 3001, "text": "planner summary"}) + "\n")
+        path.write_text(json.dumps({"kind": "msg", "t": T + 3001, "text": "planner summary"}) + "\n")
         code, body, headers = self.get("/api/bead", {"project": loop_key(self.repo), "id": "b-1"})
         assert code == 200
         d = wire.load(BeadDetail, json.loads(body))
         assert d.passes[0].logs[0].roles[0].attempts[0].lines[0].text == "planner summary"
-        path.write_text(json.dumps({"k": "msg", "t": T + 3001, "text": "updated planner summary"}) + "\n")
+        path.write_text(json.dumps({"kind": "msg", "t": T + 3001, "text": "updated planner summary"}) + "\n")
         self.now += 4
         self.get("/api/bead", {"project": loop_key(self.repo), "id": "b-1"})
         self.dash.reads.wait()

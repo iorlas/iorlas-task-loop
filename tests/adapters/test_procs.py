@@ -4,7 +4,7 @@ import os
 
 import support.paths  # noqa: F401
 
-from taskloop.adapters import childenv
+from tlkernel import childenv
 from tltestkit.case import Case
 
 POSIX = os.name != "nt"

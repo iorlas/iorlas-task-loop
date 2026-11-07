@@ -41,7 +41,7 @@ Every number below that does not come from that table is marked **(est.)** with 
   (`app/checks/attempts.py:73-77`). `Shell.stream` adds the worker mark and the slot env (`app/run/shell.py:57`), and
   `RealSpawner._env` builds the child from `tool_env` (`adapters/spawner.py:54-55`). `tool_env` passes on only the
   allowlist: `PATH HOME USER LANG TERM TMPDIR SHELL GIT_* UV SSH_*`, `LC_*`, `GIT_CONFIG_*` and registered
-  `TL_*`/`TASK_LOOP_*` names (`adapters/childenv.py:32-49`, `:67-73`). **A `DOTNET_*` variable exported in the owner's
+  `TL_*`/`TASK_LOOP_*` names (`tlkernel/childenv.py:32-49`, `:67-73`). **A `DOTNET_*` variable exported in the owner's
   shell or the factory's environment never reaches a check.** It has to be declared in the check's `env` in `.task-loop.json`
   (`contracts/config.py:100`, `contracts/checks.py:70`) or exported by the repo itself (the lifesim justfile already
   exports telemetry opt-outs).

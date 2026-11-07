@@ -4,7 +4,6 @@ from collections.abc import Callable
 
 from any_lease import Leases
 
-from taskloop.stores.api import Doc, DocSet, LockTable, Log, Passes, Tickets
 from taskloop.stores.books import CheckpointBook
 from tlkernel.adrs import AdrStore
 from tlkernel.askstore import AskStore
@@ -17,6 +16,7 @@ from tlkernel.log import EngineLog
 from tlkernel.profile_changes import ProfileChange
 from tlkernel.queue_doc import QueueDoc
 from tlkernel.queue_state import QueueState
+from tlkernel.storeapi import Doc, DocSet, LockTable, Log, Passes, Tickets
 from tlkernel.trace import RunTrace
 
 

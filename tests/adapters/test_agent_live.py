@@ -22,8 +22,8 @@ def test_no_file_no_worker_and_no_events(workdir):
 
 def test_the_first_line_is_the_worker_and_the_start_event_says_where_it_ran(workdir):
     live = Path(workdir) / "live.jsonl"
-    started = {"k": "start", "t": 1.0, "harness": "h", "pid": 7, "lane": "L", "model": "m", "effort": "e"}
-    lines(live, {"v": 1, "pid": 7, "pgid": 7, "run_id": "r1"}, started, {"k": "nope", "t": 2.0})
+    started = {"kind": "start", "t": 1.0, "harness": "h", "pid": 7, "lane": "L", "model": "m", "effort": "e"}
+    lines(live, {"v": 1, "pid": 7, "pgid": 7, "run_id": "r1"}, started, {"kind": "nope", "t": 2.0})
     a = agent(live)
     worker = a.worker()
     assert worker is not None and worker.pid == 7
@@ -38,3 +38,11 @@ def test_the_live_file_of_a_call_is_numbered_in_the_runs_folder_and_its_age_is_r
     assert last_event_t(path) == 0.0  # not written yet
     Path(path).write_text("{}\n", encoding="utf-8")
     assert last_event_t(path) > 0.0
+
+
+def test_old_tag_is_ignored_like_an_unknown_record(workdir):
+    live = Path(workdir) / "live.jsonl"
+    lines(live, {"k": "start", "t": 1.0, "harness": "h", "pid": 7},
+          {"kind": "nope", "t": 2.0}, {"k": "msg", "t": 3.0, "text": "old"})
+    a = agent(live)
+    assert (a.worker(), a.start_event(), a.events()) == (None, None, [])

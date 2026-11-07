@@ -6,6 +6,7 @@ Policy, decided by the owner on 2026-11-07: "I don't care about old runs and bac
 
 - A change to a stored format (a record's fields or `V`, a table, a config shape, a log layout) is made directly, in one release. Nothing reads the old shape.
 - Not kept: N-1 or N+1 readers, two-release add/remove steps, compat shims, deprecation periods, "legacy" code paths, dual reads or writes, fallbacks to files.
+- Delegate live events use the codec default `kind` tag. Lines carrying only the former `k` tag are refused or skipped as undecodable records; readers never translate it.
 - Old data is discarded. When a migration tool exists (a database migration; later a file-storage one) it migrates; until then there is nothing to migrate.
 - Exceptions: data in git history, and anything the owner names.
 

@@ -4,9 +4,10 @@ import threading
 from functools import cached_property
 from typing import Any, Protocol
 
+from tlkernel import childenv
 from tlkernel.kinds import Kind
 
-from taskloop.adapters import childenv, deadline, ident, slotcheck
+from taskloop.adapters import deadline, ident, slotcheck
 from taskloop.adapters.agent import last_event_t, new_live
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.asks.closing import ClosingTrust

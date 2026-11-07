@@ -6,8 +6,8 @@ from unittest.mock import Mock
 import pytest
 from support.pipeline_ports import FakeTrustRefusal
 
-from taskloop.adapters import childenv
 from taskloop.app.pipeline.reflect import Reflector
+from tlkernel import childenv
 
 
 def host():

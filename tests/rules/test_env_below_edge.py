@@ -62,7 +62,7 @@ IDENTITY_SITES = frozenset({"src/taskloop/adapters/ident.py", "src/taskloop/app/
 HANDOVERS = "TL_REEXEC|TL_LOOP_STATE|TL_RELEASE_REEXEC"
 HANDOVER_NAME = re.compile(rf"EnvVar\.(?:{HANDOVERS})\b|[\"'](?:{HANDOVERS})[\"']")
 HANDOVER_OK = re.compile(r"\.get\(EnvVar\.|exec_env\(|\bEnvVar\.\w+\.value: \w+")  # a read of it, the one writer, a child's `extra`
-HANDOVER_FILES = ("packages/kernel/src/tlkernel/envvars.py", "src/taskloop/adapters/childenv.py")
+HANDOVER_FILES = ("packages/kernel/src/tlkernel/envvars.py", "packages/kernel/src/tlkernel/childenv.py")
 
 
 def ambient_ports(text: str) -> list[str]:
