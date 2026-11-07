@@ -8,13 +8,12 @@ from pathlib import Path
 from tlkernel.loop import LoopState
 from tlkernel.procport import Child, Spawner
 
-from taskloop.adapters import factory as platform_factory
-from taskloop.adapters.ident import plugin_version
 from taskloop.app.loop.files import LoopFiles
 
 
-def version() -> str:
-    return plugin_version() or "unknown"
+def no_keep_awake(pid: int) -> list[str]:
+    """The default keep-awake: none (the launcher passes the platform one)."""
+    return []
 
 
 def recorded_pid(files: LoopFiles) -> int:
@@ -100,7 +99,8 @@ def _wait(files: LoopFiles, children: list[tuple[Child, Path]], sleep: Callable[
 
 
 def start(files: LoopFiles, repo: str, version: str, argv: list[str], spawner: Spawner,
-          sleep: Callable[[float], None] = time.sleep, *, lanes: int = 1) -> tuple[list[LoopState], int]:
+          sleep: Callable[[float], None] = time.sleep, *, lanes: int = 1,
+          caffeinate_argv: Callable[[int], list[str]] = no_keep_awake) -> tuple[list[LoopState], int]:
     """Top up under the loop lock; return all lanes and the number newly launched."""
     if lanes < 1:
         raise ValueError("lanes must be at least 1")
@@ -118,7 +118,7 @@ def start(files: LoopFiles, repo: str, version: str, argv: list[str], spawner: S
     # The child uses the same lock to publish; wait outside the launch lock.
     if children:
         states.extend(_wait(files, children, sleep))
-        keep_awake = platform_factory.caffeinate_argv(children[0][0].pid)
+        keep_awake = caffeinate_argv(children[0][0].pid)
         if keep_awake:
             with contextlib.suppress(FileNotFoundError):
                 spawner.start(keep_awake, stdin="null", out="null")

@@ -106,7 +106,7 @@ class Factory(Case):
             args = argparse.Namespace(op="stop", repo=None, now=now)
             with (patch.object(cli.repos, "repo_root", return_value="/repo"),
                   patch.object(cli.loop, "files_of", return_value=self.files),
-                  patch.object(factory, "version", return_value="1"),
+                  patch.object(cli, "plugin_version", return_value="1"),
                   patch.object(self.files, "request_stop", wraps=self.files.request_stop) as stop,
                   redirect_stdout(io.StringIO())):
                 assert cli.run(args, Env({}), self.spawn, who, Path("/code")) == 0
@@ -145,7 +145,7 @@ class Factory(Case):
             output = io.StringIO()
             with (patch.object(cli.repos, "repo_root", return_value="/repo"),
                   patch.object(cli.loop, "files_of", return_value=self.files),
-                  patch.object(factory, "version", return_value="1"),
+                  patch.object(cli, "plugin_version", return_value="1"),
                   patch.object(cli.dash, "url", side_effect=lambda _: print("DASHBOARD http://localhost:7878")),
                   patch.object(cli.loop, "profile_of", return_value=RepoProfile()),
                   redirect_stdout(output)):
@@ -160,7 +160,8 @@ class Factory(Case):
     def test_caffeinate_is_started_through_the_same_detached_port(self):
         with (patch.object(adapter.platform, "system", return_value="Darwin"),
               patch.object(adapter.shutil, "which", return_value="/usr/bin/caffeinate")):
-            factory.start(self.files, "/repo", "1", ["python", "tl.py", "loop"], self.spawn, self.publish)
+            factory.start(self.files, "/repo", "1", ["python", "tl.py", "loop"], self.spawn, self.publish,
+                          caffeinate_argv=adapter.caffeinate_argv)
         assert self.spawn.start.call_args.args[0] == ["/usr/bin/caffeinate", "-i", "-w", "123"]
         assert self.spawn.start.call_args.kwargs == {"stdin": "null", "out": "null"}
 
@@ -177,7 +178,7 @@ class Factory(Case):
             output = io.StringIO()
             with (patch.object(cli.repos, "repo_root", return_value="/repo"),
                   patch.object(cli.loop, "files_of", return_value=self.files),
-                  patch.object(factory, "version", return_value="1"),
+                  patch.object(cli, "plugin_version", return_value="1"),
                   patch.object(cli.loop, "profile_of", return_value=RepoProfile()),
                   patch.object(factory, "start", return_value=([self.state], 0 if already else 1)) as start,
                   patch.object(cli.dash, "run", return_value=0) as dash,
@@ -224,7 +225,7 @@ class Lanes(Case):
 
     def start(self, lanes=3):
         with patch.object(adapter, "caffeinate_argv", return_value=[]):
-            return factory.start(self.files, "/repo", "1", [], self.spawn, self.publish, lanes=lanes)
+            return factory.start(self.files, "/repo", "1", [], self.spawn, self.publish, lanes=lanes, caffeinate_argv=adapter.caffeinate_argv)
 
     def invoke(self, op, *, count=3, profile_error=None, **options):
         args = argparse.Namespace(op=op, repo=None, lanes=None, lane=1, n=50, follow=False, now=False)
