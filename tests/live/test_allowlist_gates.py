@@ -1,4 +1,4 @@
-"""Live: a real gate still passes under the child-env allowlist (adapters/childenv.py).
+"""Live: a real gate still passes under the child-env allowlist (tlkernel/childenv.py).
 
 task-loop's own gate (`just check`: ruff, pyrefly, import-linter, the rule tests) and lifesim's registered static checks (text,
 blueprint: its `.task-loop.json` at origin/main, minus the gate keys this engine no longer reads) run through `tl check`. A variable a

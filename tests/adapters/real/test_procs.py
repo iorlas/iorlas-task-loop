@@ -11,7 +11,8 @@ from unittest import mock
 import pytest
 import support.paths  # noqa: F401
 
-from taskloop.adapters import childenv, procs
+from taskloop.adapters import procs
+from tlkernel import childenv
 from tlkernel.env import snapshot
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory

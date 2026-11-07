@@ -5,7 +5,7 @@ Status: design, no code. Docs only until the lead answers. Read from origin/main
 ## Why
 
 A check is the candidate's code: a test, a build, a script the writer or planner chose. With the owner's network it can fetch, upload and
-push. CHECKENV (0.23.317) cleaned the environment (`adapters/childenv.py` `ALLOWED`); the network was left open because no host could
+push. CHECKENV (0.23.317) cleaned the environment (`tlkernel/childenv.py` `ALLOWED`); the network was left open because no host could
 remove it. The bead's acceptance is: no network for a check unless the repo's profile says `network: true`; refuse (never silently
 run with network) where a host cannot remove it; one real test per host.
 

@@ -25,9 +25,9 @@ import pytest
 from support.procsim import real_proc
 from support.release_world import IDENTITY, MARKET, PLUGIN, World, git
 
-from taskloop.adapters import childenv, landlock
+from taskloop.adapters import landlock
 from taskloop.app.release import canary, clone, manifest, publish, selfupdate, shell
-from tlkernel import wire
+from tlkernel import childenv, wire
 from tlkernel.env import Env, snapshot
 from tlkernel.envvars import EnvVar
 from tlkernel.paths import ConfigDir
