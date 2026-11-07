@@ -20,7 +20,7 @@ from dash import test_dash_api as fixtures
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env
 from taskloop_dash.index import Indexer, reindex
-from taskloop_dash.readers import dbruns
+from taskloop_dash.readers import dbruns, runprojection
 from tlkernel import factorydb
 from tlkernel.ids import loop_key
 from tlkernel.paths import ConfigDir
@@ -236,9 +236,9 @@ class FactoryIndex(Case):
 
         with patch.object(Path, "open", blocked):
             self.ingest()
-        assert "source unreadable" in factorydb.database_error(self.cfg.factory_db(), NOW)
+        assert "source unreadable" in runprojection.database_error(self.cfg.factory_db(), NOW)
         self.ingest()
-        assert factorydb.database_error(self.cfg.factory_db(), NOW) == ""
+        assert runprojection.database_error(self.cfg.factory_db(), NOW) == ""
 
     def test_vanished_run_folder_preserves_state_facts(self):
         self.ingest()
