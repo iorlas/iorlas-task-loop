@@ -8,11 +8,14 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.narrow_hosts import CloseKit, FakeReleaseSlotHost, FakeSettleHost
+from support.pipeline_ports import FakeParkBook
 
 # isort: split
 from taskloop.app.asks import raiser
+from taskloop.app.pipeline.closing_settle import Settle
 from taskloop.app.run.closer_branch import ReleaseSlot
-from taskloop.app.run.closer_settle import Settle
+from taskloop.app.track.closing import ClosingBeads
+from taskloop.app.wire import closeguard
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId
@@ -59,14 +62,15 @@ class Settling(Case):
         done = oc.make(Kind.NOOP, "noop: the plan found nothing to implement: umbrella")
         host = FakeSettleHost(oc.apply(done, "t-1", [], 1000.0))
         host.store.beads[BeadId("t-1")] = Bead(id=BeadId("t-1"), title="t", status="in_progress", assignee="me")
-        assert Settle(host).leave_open(done.kind, done.detail) == 0
+        assert Settle(host, ClosingBeads(host.who, host.store, closeguard.ENGINE), FakeParkBook()).leave_open(done.kind, done.detail) == 0
         held = host.store.beads[BeadId("t-1")]
         assert (held.status, held.assignee) == ("open", "")
 
     def test_a_pause_lets_the_bead_go_open_and_unassigned(self):
         host = FakeSettleHost(oc.apply(oc.make(Kind.PAUSE_LANE, "the lane is out"), "t-1", [], 1000.0))
         host.store.beads[BeadId("t-1")] = Bead(id=BeadId("t-1"), title="t", status="in_progress", assignee="me")
-        rc = Settle(host).leave_open(Kind.PAUSE_LANE, "the lane is out")
+        settling = Settle(host, ClosingBeads(host.who, host.store, closeguard.ENGINE), FakeParkBook())
+        rc = settling.leave_open(Kind.PAUSE_LANE, "the lane is out")
         assert rc == 0
         held = host.store.beads[BeadId("t-1")]
         assert (held.status, held.assignee) == ("open", "")

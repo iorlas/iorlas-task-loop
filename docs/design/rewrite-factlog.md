@@ -7,7 +7,7 @@ Design note only; no code moves with it. Acceptance of the bead (REWRITE-05 in `
 The engine log (`runs/<run>/engine.jsonl`, 40 typed records in `contracts/log.py`) already holds the calls, steps, checks, waits, land receipts and `Close`. At the close the engine also writes a `RunTrace` (`contracts/trace.py`, 166 lines, V2, 36 fields) to `traces.jsonl` (177 lines on the devbox now), built by hand:
 
 - `app/run/records.py:133` `file_trace` (198 lines in the file) passes ~25 fields to `app/run/trace.py` `run_trace` (117 lines), which copies them into the record. Of these, 13 come from the engine's in-memory state (`e.cost`, `e.stats`, `e.sessions`, `e.verified`, `e.write_rounds`, `e.strays`, `e.reflection`, `e.lane_notes`, `e.salvaged`, `e.route`, ...), the rest from the run's identity and the close.
-- `app/run/closer_record.py` (108) writes the log's `Close` and the trace in one place; `app/reconcile/lost.py` and `commits.py` write a trace for a run that died (`salvaged`, `backfilled`).
+- `app/pipeline/closing_record.py` (108) writes the log's `Close` and the trace in one place; `app/reconcile/lost.py` and `commits.py` write a trace for a run that died (`salvaged`, `backfilled`).
 
 So a fact such as "this call cost 0.4 USD, 12k tokens" exists once in the log (`CallEnd.tokens`, `.cost`) and again in `RunTrace.sessions[].tokens`. If the run dies before the close, only the log has it.
 
