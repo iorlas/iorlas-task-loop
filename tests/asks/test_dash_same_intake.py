@@ -1,6 +1,5 @@
 """One code path: an answer from the dashboard and `tl answer` leave the same ask record and the same bead comments."""
 import sys
-from argparse import Namespace
 from pathlib import Path
 
 from support.case import Case
@@ -14,8 +13,8 @@ from support.narrow import must
 
 from asks.dash_ports import answering
 from asks.samples import MOCKS
+from taskloop.app.asks import ask_verbs as cli_asks
 from taskloop.app.asks import ledgercomments
-from taskloop.cli import asks as cli_asks
 from tlkernel.askstore import AskStore
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
@@ -37,7 +36,8 @@ class SameIntake(Case):
         with TemporaryDirectory() as a, TemporaryDirectory() as b:
             tl_store, tl_asks = world(a)
             dash_store, dash_asks = world(b)
-            args = Namespace(op="answer", bead="b-1", text=["go", "with", "A"], amend=False, option=None, rerun=False, confirm=False,
+            args = cli_asks.Arguments(op="answer", bead=BeadId("b-1"), text=("go", "with", "A"),
+                             amend=False, option=None, rerun=False, confirm=False,
                              split=False, verdict=None)
             cli_asks.run(args, tl_asks, lambda repo: tl_store, lambda: 1000.0, "dash", ConfigDir(a), lambda _line: None)
             dash = make_dash(answering(lambda repo: dash_store, b), config=b)
