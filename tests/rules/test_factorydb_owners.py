@@ -9,7 +9,7 @@ from support.case import Case
 from rules.gate_rules import parsed
 from taskloop.app.parts import STAGE_PARTS
 from tlkernel.dbparts import ddl
-from tlkernel.factorydb import OWNERS
+from tlkernel.tableowners import OWNERS
 
 RUN_FILE_READERS = {"tlkernel.runrows"}
 

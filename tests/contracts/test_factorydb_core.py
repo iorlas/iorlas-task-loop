@@ -16,7 +16,7 @@ import support.paths  # noqa: F401
 
 from taskloop_dash.needs import NEEDS
 from taskloop_dash.parts import DASH_PARTS
-from tlkernel import factorydb
+from tlkernel import factorydb, tableowners
 from tlkernel.factoryparts import LOOK
 from tlkernel.looprows import LoopRows
 from tlkernel.paths import ConfigDir
@@ -178,8 +178,8 @@ class FactoryDbTest(Case):
 
     def test_owners_cover_exactly_the_created_tables(self):
         tables = {row[0] for row in self.rw().execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        assert set(factorydb.OWNERS) == tables - {"schema_part"}  # the kernel's own table: every open writes it
-        assert set(factorydb.OWNERS.values()) <= {"index", "engine", "loop", "owner", "gate"}
+        assert set(tableowners.OWNERS) == tables - {"schema_part"}  # the kernel's own table: every open writes it
+        assert set(tableowners.OWNERS.values()) <= {"index", "engine", "loop", "owner", "gate"}
 
     def test_cas_rejects_unrevisioned_tables_and_missing_transaction(self):
         con = self.rw()
@@ -223,7 +223,7 @@ class FactoryDbTest(Case):
 
     def test_bead_projection_is_index_owned_and_revisioned(self):
         con = self.rw()
-        assert factorydb.OWNERS["bead"] == "index"
+        assert tableowners.OWNERS["bead"] == "index"
         assert con.execute("PRAGMA foreign_key_list(bead)").fetchall() == []
         con.execute("INSERT INTO bead(id,repo_key,status,updated,fetched) VALUES ('opaque.id','repo','open',1,2)")
         assert con.execute("SELECT title,priority,type,parent,assignee,labels,rev,body FROM bead").fetchone() == (

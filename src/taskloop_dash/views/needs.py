@@ -5,7 +5,7 @@ something of (labels), a blocked bead, a bead the loop will not take again (the 
 gives the time), a run paused for the network, a lane that is out, a slot held, set aside or whose setup failed, a claim nothing runs
 under, a stalled loop and an absent one. A bead appears once, under the first kind that names it.
 
-Not shown, because no record the dashboard may read holds it: the storm stop (its file is read by an adapter, not by contracts), the
+Not shown, because no record the dashboard may read holds it: the
 network wait of a loop that has no bead in it (in memory only), and a Park whose bead the queue does not list (no live loop)."""
 
 from collections.abc import Sequence

@@ -9,7 +9,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
-from support import homes
 
 # isort: split
 from run import test_stages_visual
@@ -56,7 +55,6 @@ class NetBase(te.EngineTest):
         assert (eng.stats["replans"], eng.stats["rounds"]) == (0, 0)
         assert (self.blocked, self.ask()) == ([], None)
         assert not [c for c in self.bd_calls if c[:2] == ("label", "add")], self.bd_calls
-        assert not (list((homes.config_dir() / "storm").glob("*.json")) if (homes.config_dir() / "storm").is_dir() else [])
 
     def thread_of(self, s, node):
         """(resume ref of each call of `node`, in order)."""
