@@ -1,5 +1,6 @@
 """Argument parser and shell bindings for `tl land-stack`."""
 import argparse
+import socket
 from functools import partial
 
 from tlkernel.beadsport import Beads
@@ -15,6 +16,7 @@ from taskloop.app.pipeline.finish import land_answer
 from taskloop.app.slots.config import profile_slots
 from taskloop.app.wire import closeguard
 from taskloop.app.wire.slots import slot_of
+from taskloop.stores.runlog import RunLog
 
 __all__ = ("add_parser", "cmd_land_stack", "item_of", "pairs")
 
@@ -25,6 +27,7 @@ def cmd_land_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs
                          record=partial(closeguard.record_land, who, store, git),
                          slot=partial(slot_of, who=who, store=store, strict=True),
                          slot_base=lambda repo: profile_slots(repo).base,
+                         runlog=lambda stores, run: RunLog(stores.run_log(run), echo=None, run_id=run, host=socket.gethostname()),
                          finish=lambda run, now, why, sha, ok: finish_run(
                              who.config, run, land_answer(now, why, sha=sha, ok=ok),
                              partial(history, who.config, with_trace=False)))

@@ -7,7 +7,6 @@ the failing command's exit code and leaves every later item untouched. Every com
 import argparse
 import contextlib
 import os
-import socket
 import threading
 import time
 from collections.abc import Callable, Generator
@@ -38,6 +37,7 @@ from taskloop.app.land.stackgate import StackGate
 from taskloop.app.land.treecheck import Tested, TreeGuard
 from taskloop.domain.land.matchers import no_dolt_remote
 from taskloop.stores.api import Doc
+from taskloop.stores.bundle import Stores
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 
@@ -367,6 +367,7 @@ def pairs(values: list[str], flag: str) -> dict[str, str]:
 def run_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs, store: Beads,
               tl: list[str], *, record: Callable[[str, str, BeadId, str, str], int],
               slot: Callable[[str, str], str], slot_base: Callable[[str], str],
+              runlog: Callable[[Stores, str], RunLog],
               finish: Callable[[str, float, str, str, bool], object], env: Env | None = None) -> tuple[int, list[str]]:
     """Run the stack and return its exit code and final output lines."""
     env = env or Env()
@@ -383,7 +384,7 @@ def run_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs, sto
     locator = RunLocator(who.config)
     run = locator.create(repo, "", time.time(), mode=MODE, owner=who.actor, session=who.session).run  # the board finds a run through it
     stores = real_stores(who.config)
-    log = RunLog(stores.run_log(run), echo=None, run_id=run, host=socket.gethostname())
+    log = runlog(stores, run)
     cmds = Cmds(spawner, log, repo, who.config.run_dir(run))
     lock = lock_path(who.config, git, repo)
     forge = Forge(cmds, git, repo, a.base, a.method)
