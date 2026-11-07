@@ -34,7 +34,7 @@ PLAN: dict[str, Any] = {
 
 WRITE = {
     "summary": "wrote f",
-    "checks_run": [{"cmd": "test -f f.txt", "exit": 0}],
+    "run_checks": [], "checks_run": [{"cmd": "test -f f.txt", "exit": 0}],
     "question": "",
     "options": [],
     "decided": "",

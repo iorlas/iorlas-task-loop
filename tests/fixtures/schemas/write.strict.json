@@ -189,6 +189,16 @@
   "question": {
    "type": "string"
   },
+  "run_checks": {
+   "description": "declared requestable engine check ids to run after this write",
+   "items": {
+    "type": "string"
+   },
+   "type": [
+    "array",
+    "null"
+   ]
+  },
   "shots": {
    "items": {
     "additionalProperties": false,
@@ -287,6 +297,7 @@
   "bad_checks",
   "new_cases",
   "unchecked",
+  "run_checks",
   "shots",
   "flakes",
   "handoff",
