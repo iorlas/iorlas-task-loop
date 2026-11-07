@@ -4,6 +4,7 @@ import os
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from tlkernel.envvars import EnvVar
 from tlkernel.ids import BeadId, parse_bead_id
@@ -33,6 +34,14 @@ class Env:
 
 def snapshot() -> Env:
     return Env(dict(os.environ))
+
+
+def bd_env(cwd: str | None, base: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Inherit bd's environment, trusting its working directory for this child only (including mise shims)."""
+    env = dict(os.environ if base is None else base)
+    trusted = env.get("MISE_TRUSTED_CONFIG_PATHS", "")
+    env["MISE_TRUSTED_CONFIG_PATHS"] = ":".join(filter(None, (trusted, str(Path(cwd or ".").resolve()))))
+    return env
 
 
 def ambient(name: str, default: str = "") -> str:

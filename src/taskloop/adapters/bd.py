@@ -19,6 +19,7 @@ from beads_client.runner import BdRun, Runner
 from taskloop.adapters import procs
 from tlkernel.bead import BdError, Bead, Comment, Dep
 from tlkernel.beadsport import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
+from tlkernel.env import bd_env
 from tlkernel.ids import BeadId, parse_bead_id
 
 T = TypeVar("T")
@@ -46,7 +47,7 @@ def db_version(cwd: str | None) -> str:
 def subprocess_runner(argv: list[str], cwd: str | None, timeout: float | None = None) -> BdRun:
     """The one `bd` process call. A timeout is code 124."""
     try:
-        r = procs.run(argv, cwd=cwd, timeout=timeout, inherit_stdin=False)
+        r = procs.run(argv, cwd=cwd, env=bd_env(cwd), timeout=timeout, inherit_stdin=False)
     except OSError as e:
         return BdRun(127, "", f"bd: {e}")
     except subprocess.TimeoutExpired:
