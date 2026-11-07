@@ -12,6 +12,7 @@ from taskloop.app.land.queue_land import Queued, QueueLand
 from taskloop.app.land.queue_refs import Made
 from taskloop.app.land.stack import HeadMoved, Stack
 from tlkernel.forge import CLOSED, OPEN, StackItem
+from tlkernel.queue_doc import QueueDoc
 
 
 class FakeRefs:
@@ -29,6 +30,19 @@ class FakeRefs:
         FakeRefs.kept.discard(ref)
 
 
+class FakeDoc:
+    def __init__(self):
+        self.value = None
+        self.writes = []
+
+    def get(self):
+        return self.value
+
+    def write(self, value):
+        self.value = value
+        self.writes.append(value)
+
+
 class World:
     def __init__(self, *, states=(OPEN, OPEN, OPEN), red=frozenset(), profile_change=None) -> None:
         FakeRefs.kept = set()
@@ -36,6 +50,7 @@ class World:
         self.serial, self.delivered, self.judged = [], [], []
         pr = {n: SimpleNamespace(state=s) for n, s in zip(self.names, states, strict=False)}
         self.stack = SimpleNamespace(
+            queue_doc=FakeDoc(),
             profile_change=profile_change, jobs=1, repo="/r", cmds=None, last="", trees=SimpleNamespace(main_ref="origin/main"),
             resolve=lambda item: (item.branch, "h" + item.branch, pr[item.branch]), item=lambda item: self.serial.append(item.branch),
             forge=SimpleNamespace(fetch=lambda: None),
@@ -103,3 +118,22 @@ def test_refusing_enqueue_builds_no_refs_and_merges_nothing(branch, bead):
     assert FakeRefs.kept == set()
     assert world.delivered == []
     assert world.judged == []
+
+
+def test_run_persists_initial_entries_and_every_change():
+    world = World()
+    world.run()
+    doc = world.stack.queue_doc
+    assert [e.phase for e in doc.writes[0].entries] == ["waiting"] * 3
+    assert [e.branch for e in doc.value.entries] == world.names
+    assert all(e.phase == "merged" for e in doc.value.entries)
+    assert len(doc.writes) > 3
+
+
+def test_stale_document_is_recovered_once_before_new_run():
+    world = World()
+    stale = QueueDoc(entries=[], in_flight=1, last_base="old")
+    world.stack.queue_doc.value = stale
+    with mock.patch.object(queue_land, "recover") as recovery:
+        world.run()
+    recovery.assert_called_once_with(world.stack, stale, mock.ANY)

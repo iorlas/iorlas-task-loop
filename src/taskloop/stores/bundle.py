@@ -14,6 +14,7 @@ from tlkernel.events import Event
 from tlkernel.followups import FollowupOutbox
 from tlkernel.log import EngineLog
 from tlkernel.profile_changes import ProfileChange
+from tlkernel.queue_doc import QueueDoc
 from tlkernel.queue_state import QueueState
 from tlkernel.trace import RunTrace
 
@@ -28,6 +29,7 @@ class Stores:
     adrs: Callable[[str], AdrStore]  # the decision store of a repo (its path)
     checkpoints: CheckpointBook
     followups: DocSet[FollowupOutbox]
+    queue: DocSet[QueueDoc]  # one per repo (repo key): the merge queue's entries, builds, gates in flight; its runner thread writes
     queue_state: DocSet[QueueState]  # one per repo (repo key): the tree assertion's incidents and the queue's freeze flag
     results: Callable[[str, str], Passes]  # the passes of a check of a repo (repo key, check id), one per run key
     base_red: Callable[[str], DocSet[BaseRedRecord]]  # whether a check was red on its base, one per run key (repo key)

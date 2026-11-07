@@ -12,9 +12,9 @@ from support.pipeline_ports import FakeLandCleanup, FakeReexecs, FakeTrail
 from taskloop.app.asks.closing import ClosingTrust
 from taskloop.app.pipeline.closing_branch import ReleaseSlot
 from taskloop.app.pipeline.closing_decide import Decide
+from taskloop.app.pipeline.journal import Journal
 from taskloop.app.pipeline.reflect import Reflector
 from taskloop.app.pipeline.reload import Reload
-from taskloop.app.run.records import Records
 from taskloop.domain import outcome as oc
 from tlkernel.enums import Outcome
 from tlkernel.ids import BeadId
@@ -39,9 +39,9 @@ class FailureLogging(Case):
         for error in (OSError("disk"), ValueError("record")):
             with self.subTest(error=type(error).__name__):
                 host = mock.Mock(run_id="r1")
-                with mock.patch("taskloop.app.run.records.RunLocator"), \
-                        mock.patch("taskloop.app.run.records.finish_run", side_effect=error):
-                    Records(host).settle(RunState.PARKED, "paused")
+                with mock.patch("taskloop.app.pipeline.journal.RunLocator"), \
+                        mock.patch("taskloop.app.pipeline.journal.finish_run", side_effect=error):
+                    Journal(host, lambda: "", lambda _git, _wt: "repo").settle(RunState.PARKED, "paused")
                 self.assert_traceback(host.warn.call_args.args[0], "could not settle run r1")
 
     def test_reflection_catch_all_logs_traceback(self):
