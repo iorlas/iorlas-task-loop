@@ -1,5 +1,6 @@
 """Each extracted document is written to its owning table, leaving kv empty."""
 import pytest
+from support.narrow import must
 
 from taskloop.stores.ticketrows import TicketRows
 from taskloop_dash.index import Indexer
@@ -15,7 +16,7 @@ def cfg(tmp_path):
 
 
 def assert_row(cfg, table, key):
-    con = factorydb.open_rw(cfg.factory_db())
+    con = must(factorydb.open_rw(cfg.factory_db()))
     try:
         assert con.execute(f"SELECT k FROM {table} WHERE k=?", (key,)).fetchone() == (key,)
         assert con.execute("SELECT k FROM kv WHERE k=?", (key,)).fetchone() is None
@@ -24,7 +25,7 @@ def assert_row(cfg, table, key):
 
 
 def test_receipts_own_their_rows(cfg):
-    con = factorydb.open_rw(cfg.factory_db())
+    con = must(factorydb.open_rw(cfg.factory_db()))
     try:
         with factorydb.begin_immediate(con):
             receipts.put(con, "click", {"ok": True}, 10)
@@ -35,7 +36,7 @@ def test_receipts_own_their_rows(cfg):
 
 
 def test_bead_cache_owns_observations_including_empty_listings(cfg):
-    con = factorydb.open_rw(cfg.factory_db())
+    con = must(factorydb.open_rw(cfg.factory_db()))
     try:
         with factorydb.begin_immediate(con):
             beadrows.replace_repo(con, "repo", [], 7, 10)
