@@ -131,5 +131,5 @@ class NeededPartRefused(Env):
         with mock.patch.object(factorydb._STORE, "needs", None), mock.patch("taskloop_dash.serve.start") as start:
             code, err = self.run_server(self.dev, "--port", "0", "--bind", "127.0.0.1")
         assert code != 0
-        assert "part pipeline is v0, this process needs v1" in err
+        assert "part pipeline is v0, this process needs v2" in err
         start.assert_not_called()
