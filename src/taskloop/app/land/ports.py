@@ -1,5 +1,7 @@
-"""Narrow storage and log capabilities used by land."""
-from collections.abc import MutableMapping
+"""Narrow storage, log and shell capabilities used by land."""
+from collections.abc import Callable, MutableMapping
+from contextlib import AbstractContextManager
+from pathlib import Path
 from typing import Protocol
 
 from tlkernel.profile_changes import ProfileChange
@@ -18,3 +20,20 @@ class StackLog(RunLogPort, Protocol):
 
     @property
     def stamp(self) -> MutableMapping[str, str]: ...
+
+
+class Deadline(Protocol):
+    def __call__(self, seconds: float, scope: str) -> AbstractContextManager[None]: ...
+
+
+class HoldLand(Protocol):
+    def __call__(self, path: Path | str, holder: str, waiting: Callable[[str], None] | None,
+                 timeout: float | None) -> AbstractContextManager[Path | str]: ...
+
+
+class LandLockPath(Protocol):
+    def __call__(self, url: str) -> Path: ...
+
+
+class IgnoreRules(Protocol):
+    def __call__(self, rules: list[str], paths: list[str]) -> set[str]: ...

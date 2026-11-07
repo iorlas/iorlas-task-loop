@@ -1,6 +1,7 @@
 """CliHost: standalone checks through the engine's runner, cache and persistent run evidence."""
 import threading
 from collections.abc import Mapping, Sequence
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,7 @@ from tlkernel.procport import Spawner
 from tlkernel.waitenums import WaitWhat
 
 from taskloop.adapters import ident
+from taskloop.adapters.ignored import ignored_by
 from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.launch.staged import StagedCheckout
@@ -71,7 +73,7 @@ class CliHost:
         self.plan_data: Mapping[str, object] | None = None
         self.steps: Any = None  # the step book is the engine's; a person's run has none
         self.shell, self.waits = Shell(self), _Waits()
-        whole = Checkout(self)
+        whole = Checkout(self, ignore_rules=partial(ignored_by, git, str(wt)))
         self.tree_writer = whole
         self.checkout: CheckoutView = StagedCheckout(whole, staged) if staged is not None else whole
 

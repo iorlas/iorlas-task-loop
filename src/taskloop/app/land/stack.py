@@ -32,13 +32,12 @@ from tlkernel.slots import MissingRemote
 from tlkernel.storeapi import Doc
 from tlslots.api import Effects
 
-from taskloop.adapters import landlock
 from taskloop.app.land import cleanup
 from taskloop.app.land.cmds import Cmds, Runs, Stop
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.gate import diff_sha, owner_refusal
 from taskloop.app.land.host import phase
-from taskloop.app.land.ports import ProfileChanges, QueueDocs, QueueStates, StackLog
+from taskloop.app.land.ports import HoldLand, LandLockPath, ProfileChanges, QueueDocs, QueueStates, StackLog
 from taskloop.app.land.queue_land import Queued, QueueLand
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.land.treecheck import Tested, TreeGuard
@@ -52,13 +51,13 @@ class HeadMoved(Stop):
     """The PR's head is no longer the commit the gate judged: nothing is merged."""
 
 
-def lock_path(home: ConfigDir, git: Git, repo: str) -> Path:
+def lock_path(land_lock_path: LandLockPath, git: Git, repo: str) -> Path:
     """The repo's land lock: the one the engine lands under."""
     try:
         url = git.remote_url(repo, "origin")
     except MissingRemote:
         url = ""
-    return landlock.land_lock_path(home, url or repo)
+    return land_lock_path(url or repo)
 
 
 class Stack:
@@ -67,8 +66,10 @@ class Stack:
                  named: Callable[[str], None] = lambda _bead: None,
                  is_slot: Callable[[str], bool] = lambda _path: False, slot_base: str = "", *, cfg: ConfigDir,
                  profile_change: str | None = None, jobs: int = 1, assert_trees: bool = False, queue: bool = False,
-                 fx: Effects, queue_docs: QueueDocs, queue_state: QueueStates, profile_changes: ProfileChanges) -> None:
+                 hold_land: HoldLand, fx: Effects, queue_docs: QueueDocs, queue_state: QueueStates,
+                 profile_changes: ProfileChanges) -> None:
         self.fx = fx
+        self.hold_land = hold_land
         self.queue_docs, self.profile_changes = queue_docs, profile_changes
         self.forge, self.cmds, self.log, self.git, self.repo, self.lock = forge, cmds, log, git, repo, lock
         self.record, self.sync, self.owner, self.session, self.wait_min = record, sync, owner, session, wait_min
@@ -307,7 +308,7 @@ class Stack:
         sid = self.log.next_id("s")
         self.log.emit(rec.StepStart(id=sid, step="land:lock-wait"))
         try:
-            with landlock.os_lock(self.lock, holder, self.waiting, None if self.wait_min is None else self.wait_min * 60):
+            with self.hold_land(self.lock, holder, self.waiting, None if self.wait_min is None else self.wait_min * 60):
                 self.log.emit(rec.StepEnd(id=sid, step="land:lock-wait", outcome="done", wait_seconds=time.monotonic() - t0))
                 self.log.emit(rec.Lock(what="land", holder=holder))
                 try:
@@ -369,7 +370,7 @@ def pairs(values: list[str], flag: str) -> dict[str, str]:
 
 
 def run_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs, store: Beads,
-              tl: list[str], *, record: Callable[[str, str, BeadId, str, str], int],
+              tl: list[str], *, land_lock_path: LandLockPath, hold_land: HoldLand, record: Callable[[str, str, BeadId, str, str], int],
               slot: Callable[[str, str], str], slot_base: Callable[[str], str],
               runlog: Callable[[str], StackLog], receipts: ReceiptStores,
               queue_docs: QueueDocs, queue_state: QueueStates, profile_changes: ProfileChanges,
@@ -390,7 +391,7 @@ def run_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs, sto
     run = locator.create(repo, "", time.time(), mode=MODE, owner=who.actor, session=who.session).run  # the board finds a run through it
     log = runlog(run)
     cmds = Cmds(spawner, log, repo, who.config.run_dir(run))
-    lock = lock_path(who.config, git, repo)
+    lock = lock_path(land_lock_path, git, repo)
     forge = Forge(cmds, git, repo, a.base, a.method)
     slot_repo = next((co.path for co in git.checkouts(repo) if co.main), repo)
 
@@ -402,7 +403,7 @@ def run_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs, sto
                   StackGate(cmds, git, receipts, repo, f"origin/{a.base}", tl, env), store, a.wait_min,
                   lambda bead: locator.add_bead(run, bead),
                   lambda path: bool(slot(slot_repo, path)), slot_base(slot_repo),
-                  cfg=who.config, profile_change=profile_change, jobs=a.jobs, fx=fx,
+                  hold_land=hold_land, cfg=who.config, profile_change=profile_change, jobs=a.jobs, fx=fx,
                   queue_docs=queue_docs, queue_state=queue_state, profile_changes=profile_changes)
     rc = 1
     try:
