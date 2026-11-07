@@ -1,15 +1,26 @@
 """The sweeps over open asks: close those whose bead is closed or gone, park those nobody answered in three days, and find answers no
 run has used. Each is throttled by the mtime of a marker file, so the loop and `tl` can both call it freely."""
 import contextlib
+import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from tlkernel.ago import ago
-from tlkernel.ask import Ask
-from tlkernel.askenums import AskStatus
+from tlkernel.ask import Ask, AskAnswer
+from tlkernel.askenums import AskClass, AskStatus
 from tlkernel.askstore import HAD_PICK, ORPHAN, AskStore
+from tlkernel.bd_errors import BdCommandFailure
 from tlkernel.beadsport import BdFailure, BeadPatch, BeadQuery, Beads
+from tlkernel.config import EngineConfig
+from tlkernel.forge import OPEN, Pr, pr_waited_on
+from tlkernel.identity import Identity
 from tlkernel.ids import BeadId, is_bead_id
+from tlkernel.paths import ConfigDir
+
+from tlasks import release
+from tlasks.host import AsksHost
+from tlasks.paths import ask_marker
 
 UNUSED_ANSWER_S = 30 * 60
 EVERY_S = 600
@@ -143,3 +154,113 @@ def shout(asks: AskStore, marker: Path, now: float, say: Callable[[str], None], 
 
 def fault_line(ask: Ask, now: float) -> str:
     return f"FAULT: ask {ask.id} of {ask.bead} was answered {ago(now, ask.answered or now)} and no run has used the answer"
+
+
+RETRIED = "setup_retry_versions"
+
+
+def remaining_versions(text: str, version: str) -> list[str] | None:
+    """Fail closed on malformed retry budgets; keep every release so a rollback cannot reset one."""
+    try:
+        raw = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(raw, list):
+        return None
+    versions = [v for v in raw if isinstance(v, str)]
+    return versions if len(versions) == len(raw) and version not in versions else None
+
+
+def retry_setup(asks: AskStore, store: Beads, bead: BeadId, version: str, now: float,
+                cfg: EngineConfig, *, starting: bool = False) -> bool:
+    """Answer only missing-setup asks: at engine start, or once the failing gate check uses the slot.
+
+    Reserve the release in bead metadata before answering, so replacing an ask or restarting the loop cannot reset the budget.
+    The normal typed answer wakes the park; restore only the pick label that parking actually removed.
+    """
+    ask = asks.get(bead)
+    if (not version or ask is None or ask.answer is not None or ask.consumed is not None
+            or ask.status not in (AskStatus.OPEN, AskStatus.PARKED) or "is not set up" not in ask.why.lower()):
+        return False
+    words = ask.why.replace("`", " ").replace(":", " ").replace(",", " ").split()
+    if not starting and not any(c.run_in == "slot" and c.id in words for c in cfg.gate_checks):
+        return False
+    shown = store.show(bead)
+    if shown is None or shown.status == "closed":
+        return False
+    versions = remaining_versions(shown.metadata.get(RETRIED, "[]"), version)
+    if versions is None:
+        return False
+    store.update(bead, BeadPatch(set_metadata={RETRIED: json.dumps([*versions, version])}))
+    _, why = asks.answer(bead, ask.id, AskAnswer(action="rerun", text="retry", t=now, by=f"engine:{version}"))
+    if why:
+        return False
+    release.requeue(store, bead, shown, cfg)
+    return True
+
+
+def wake_decided(asks: AskStore, store: Beads, view: Callable[[int], Pr | None], repo: str, now: float, cfg: EngineConfig) -> list[BeadId]:
+    """Answer each unanswered PR_OPEN ask of this repo whose PR is no longer open. -> the beads woken."""
+    woken: list[BeadId] = []
+    for ask in asks.live():
+        if ask.ask_class != AskClass.PR_OPEN or ask.repo != repo or ask.answer is not None:
+            continue
+        try:
+            shown = store.show(ask.bead)
+            number = pr_waited_on(shown.metadata) if shown else 0
+            pr = view(number) if number else None
+            if shown is None or shown.status == "closed" or pr is None or pr.state == OPEN:
+                continue
+            _, why = asks.answer(ask.bead, ask.id, AskAnswer(action="rerun", text=pr.state.lower(), t=now, by="engine:pr"))
+            if why:
+                continue
+            release.requeue(store, ask.bead, shown, cfg)
+        except BdFailure:
+            continue
+        woken.append(ask.bead)
+    return woken
+
+
+@dataclass(frozen=True)
+class SweepHost(AsksHost):
+    asks_store: Callable[[ConfigDir], AskStore]
+
+
+def sweep(h: SweepHost, which: str, who: Identity, home: ConfigDir, every: int = 600) -> list[str]:
+    """The throttled sweeps over open asks: close those of closed or missing beads, park those unanswered in 3 days."""
+    fn = close_stale if which == "close" else park_stale
+    try:
+        return list(fn(h.asks_store(home), lambda repo: h.bd(who.actor, repo), ask_marker(home, "swept" if which == "close" else "parked"),
+                       h.now(),
+            every))
+    except BdCommandFailure:  # no bd on this machine
+        return []
+
+
+def wake_prs(h: SweepHost, who: Identity, home: ConfigDir, view: Callable[[int], Pr | None], cfg: EngineConfig, repo: str,
+             every: int = 120) -> list[BeadId]:
+    """The loop's look at the PRs its PR-mode lands wait on (throttled by a marker): a merged or closed one wakes its bead."""
+    if cfg.land_mode != "pr" or not due(ask_marker(home, "pr"), every, h.now()):
+        return []
+    touch(ask_marker(home, "pr"))
+    return wake_decided(h.asks_store(home), h.bd(who.actor, repo), view, repo, h.now(), cfg)
+
+
+def sweep_asks(h: SweepHost, who: Identity, home: ConfigDir, say: Callable[[str], None] = print, cfg: EngineConfig | None = None,
+               repo: str = "") -> None:
+    """The loop's pass over asks: close the stale, park the unanswered, and shout about an answer no run used for 30 minutes (an engine
+    fault, not the owner's). The three are throttled by marker files, so any caller may call it as often as it likes."""
+    sweep(h, "close", who, home)
+    sweep(h, "park", who, home)
+    if cfg:
+        asks = h.asks_store(home)
+        for ask in asks.live():
+            if not repo or ask.repo != repo:
+                continue
+            try:
+                retry_setup(asks, h.bd(who.actor, ask.repo), ask.bead, h.plugin_version(), h.now(), cfg)
+            except BdFailure:
+                continue
+        reask_orphans(h.asks_store(home), h.bd(who.actor, ""), ask_marker(home, "orphans"), h.now(), cfg.pick_label or "",
+            cfg.needs_info_label or "", say)
+    shout(h.asks_store(home), ask_marker(home, "unused"), h.now(), say)

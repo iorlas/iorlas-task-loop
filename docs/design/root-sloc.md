@@ -16,6 +16,15 @@ Everything in the table that has a destination can leave: **1650 sloc**. That la
 
 Net root 4030 -> about 3650. The slots carve is the largest cut left (docs/design/slots-carve.md); gate moves wait for the land-gate move.
 
+Asks PR B (tl-e5t0.18), measured against e2a55cea: root **3463 -> 3388 sloc (-75)**, 75 -> 74 files,
+247 -> 234 branches, 11 long functions and 150 engine attributes unchanged. Forward closures (local files):
+launch **482 -> 480 (-2)**, run **413 -> 406 (-7)**, wire **199 -> 197 (-2)**. These repay PR A's
++4 root sloc and +2/+5/+2 shell closure rise. Asks stays at 106 files / 37 external module roots;
+launch/run/wire external roots stay at 68/65/50. `closure_ratchet.problems()` reports no rises.
+Retry and PR polling now share the sweeps node; admission and report read `engine_written` from `tlasks.hold`
+without importing the owner-intake implementation. Repo and question helpers are bound in `parts_run` so the
+flow does not pull the kernel's whole run-layout and text modules into the asks closure.
+
 ## Destination map
 
 Packages that exist: `kernel`, `gate`, `artifacts`, `pipeline`, `testkit`. Not carved yet (their rows wait on the carve in `stage-carves.md`): slots (tl-e5t0.17), asks (.18), release (.19), land (.20), work. `app/doctor`, `app/report` and `app/land` are ordinary slices that exist now.
@@ -48,13 +57,13 @@ Packages that exist: `kernel`, `gate`, `artifacts`, `pipeline`, `testkit`. Not c
 | `app/launch/check_host.py` | 63 | 0 | 50 | gate package (CliHost) | gate exists; needs its runner/cache/evidence ports |
 | `app/run/preflight.py` | 63 | 14 | 55 | pipeline (read-only admission and plans) | packages/pipeline exists; no blocker |
 | `app/wire/lanes.py` | 60 | 8 | 50 | app/doctor or a new app/lanes slice | files delegate's status as the snapshot; rules, not binding |
-| `app/run/ask_flow.py` | 59 | 7 | 50 | asks package | asks carve (tl-e5t0.18) |
+| `app/run/ask_flow.py` | 0 | 0 | 0 | moved to `tlasks.flow` in asks PR B (tl-e5t0.18) | 59 root sloc removed; injected host and shell-bound helpers |
 | `app/run/context.py` | 54 | 0 | 0 | stays | run construction |
 | `app/run/closer_ports.py` | 50 | 0 | 0 | stays | binding |
 | `cli/asks.py` | 48 | 5 | 0 | stays | argparse wiring |
 | `app/run/parts_land.py` | 47 | 2 | 0 | stays | run construction |
 | `app/run/state.py` | 44 | 1 | 0 | stays | engine attributes bound to RunState |
-| `app/wire/asks.py` | 44 | 6 | 35 | asks package (throttled passes over the inbox) | asks carve (tl-e5t0.18) |
+| `app/wire/asks.py` | 27 | 0 | 0 | sweeps moved to `tlasks.sweeps` in asks PR B (tl-e5t0.18) | 47 -> 27 root sloc; host and forwarding bindings remain |
 | `app/launch/check.py` | 42 | 0 | 0 | stays | binding |
 | `cli/land_stack.py` | 42 | 1 | 30 | land package / app/land | argparse stays (~12); shell bindings move with the land carve (tl-e5t0.20) |
 | `cli/land.py` | 40 | 1 | 30 | app/land | records a direct-push land and cleans refs: a rule; land carve (tl-e5t0.20) |
