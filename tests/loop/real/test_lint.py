@@ -8,10 +8,10 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 # isort: split
 from support import looptest
 from support.fakes import as_bead
-from support.narrow import must
 
 from loop.test_loop import LoopBase, bead, rec
 from taskloop.domain.beads import rules
+from tltestkit.narrow import must
 
 GOOD = {"id": "t-1", "title": "t", "status": "open", "issue_type": "task", "description": "do it", "acceptance_criteria": "- it works"}
 

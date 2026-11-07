@@ -7,9 +7,9 @@ from unittest.mock import patch
 import pytest
 import support.paths  # noqa: F401
 from sqlite_store import Store
-from support.narrow import must
 
 from tlkernel import factorydb, factoryparts
+from tltestkit.narrow import must
 
 # Frozen v2 schema, deliberately independent of the current factorydb.DDL; its retired kv table stays orphaned.
 V2_DDL = """

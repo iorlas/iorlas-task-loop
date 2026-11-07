@@ -15,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from contracts import samples as S
 from support import homes
-from support.narrow import must
 from support.who import who
 
 from taskloop.app.track import trail
@@ -27,6 +26,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.snapshots import LaneStatus, StatusSnapshot, WindowStatus
 from tlkernel.stores import UsageHistory
 from tlkernel.usage import USAGE_KEEP_S
+from tltestkit.narrow import must
 
 T = S.T
 
