@@ -1,6 +1,6 @@
 """Verify runs only on a visual bead (tl-7y6.7.5): another bead lands with its unchecked items in one follow-up bead tagged `follow-up`,
 filed once; an item that names an acceptance criterion is still asked; the acceptance-mapping review is not skipped."""
-from support import engine_case as T
+from support.engine_land import LandReviewBase
 
 from tlkernel.beadsport import BeadQuery
 from tlkernel.config import ReviewSkipConfig
@@ -14,7 +14,7 @@ CRITERION = {"what": "whether f.txt exists once the stage has run twice", "kind"
 SETTLED = {"items": [verdict(1, "settled", evidence="\"x\"")]}
 
 
-class VerifyVisual(T.LandReviewBase):
+class VerifyVisual(LandReviewBase):
     def go(self, items, bead=PLAIN, verify=None, plan=NOT_VISUAL, **cfg):
         answers = {"plan": [plan], "write": [WRITE], "review": [dict(CLEAN, unchecked=items)]}
         if verify:
