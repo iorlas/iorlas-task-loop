@@ -80,6 +80,9 @@ class FakeCheckHost:
     def blocked_for(self, why: str, kind: str) -> Exception:
         return RuntimeError(why)
 
+    def blocked_stuck(self, why: str, what: str, rounds: int, signature: str) -> Exception:
+        return RuntimeError(why)
+
     def halt_point(self, when: bool = True, wait: float = 0) -> None:
         return None
 
