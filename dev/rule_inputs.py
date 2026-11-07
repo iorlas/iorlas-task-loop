@@ -103,8 +103,8 @@ RULES_BY_PATH = {
         "src/taskloop/app/loop/ruff.toml",
         "src/taskloop/app/reconcile/**/*.py",
         "src/taskloop/app/reconcile/ruff.toml",
-        "src/taskloop/app/release/**/*.py",
-        "src/taskloop/app/release/ruff.toml",
+        "packages/release/src/**/*.py",
+        "packages/release/ruff.toml",
     ),
     "tests/rules/test_kernel_has_no_effects.py": (
         "packages/kernel/src/tlkernel/**/*.py",
