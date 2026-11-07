@@ -39,7 +39,7 @@ from taskloop.stores.runlog import RunLog
 from tlkernel import fence
 from tlkernel.bead import Bead
 from tlkernel.beadsport import Beads, DoltPush
-from tlkernel.checkpoint import Checkpoint, EndRec, Notes
+from tlkernel.checkpoint import Checkpoint, CloseIntent, Notes
 from tlkernel.checks import Check, CheckRun
 from tlkernel.config import EngineConfig
 from tlkernel.delegate import Permanence
@@ -746,7 +746,7 @@ class FakeCloseHost(Said):
 
 
 class CloseKeys(Keys):
-    def keep_end(self, end: EndRec) -> None:
+    def keep_end(self, intent: CloseIntent) -> None:
         pass
 
     def drop_unless_fenced(self) -> None:

@@ -31,12 +31,12 @@ class ForeignCheckpoint(T.EngineTest):
         doc = eng.stores.checkpoints.of(eng.bead)
         assert isinstance(doc, RowDoc)
         with doc.docs.rows.transaction() as con:  # the install that wrote it is another version
-            con.execute("UPDATE checkpoint SET body=json_set(body, '$.v', 99) WHERE bead=?", (eng.bead,))
+            con.execute("UPDATE checkpoint SET body=json_set(body, '$.v', 3) WHERE bead=?", (eng.bead,))
         assert isinstance(doc.read(), ForeignVersion)
-        with pytest.raises(Refused, match="v99"):
+        with pytest.raises(Refused, match="v3"):
             doc.need()
-        with pytest.raises(Refused, match="v99"):  # a run does not read past it either: the owner deletes or restores the record
+        with pytest.raises(Refused, match="v3"):  # a run does not read past it either: the owner deletes or restores the record
             eng.checkpoints.read()
-        with pytest.raises(Refused, match="v99"):
+        with pytest.raises(Refused, match="v3"):
             engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
                 git=port_git(), who=who())

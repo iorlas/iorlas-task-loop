@@ -148,6 +148,6 @@ class ColdRestart(Base):
         dead = self.killed_at(fx.BlockBead, outcome=ask)
         bundle = RunLocator(dead.home).get(dead.run_id)
         assert bundle is not None and bundle.manifest.finish is not None
-        assert read_ck(dead).ended == wire.load(EndRec, bundle.manifest.finish.end)
+        assert read_ck(dead).ended.outcome == wire.load(EndRec, bundle.manifest.finish.end)
         self.cold().run()
         assert sum(1 for c in self.bd_calls if c[:1] == ("block",) or "blocked" in c) == 1

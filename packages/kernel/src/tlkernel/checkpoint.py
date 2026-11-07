@@ -1,4 +1,4 @@
-"""Checkpoint: where a run stopped, so the next run on the same bead resumes there (checkpoints/<bead>.json, v3).
+"""Checkpoint: where a run stopped, so the next run on the same bead resumes there (checkpoints/<bead>.json, v4).
 
 Two parts. `RunState` is everything the run carries across a park, one typed value; adding a field is one edit here (the
 engine reads and writes it through `engine.state`, `dump()` is the payload). `Checkpoint` is that state plus where the run
@@ -7,12 +7,13 @@ stood: branch, head, step and the stage counters. The big nested parts the plann
 this module never opens. A checkpoint of another `v` is refused (Refused): nothing is migrated.
 """
 
-from typing import Any, ClassVar, final
+from typing import Any, ClassVar, Literal, final
 
 import msgspec
 
 from tlkernel import wire
 from tlkernel.answers import WriteAnswerLook
+from tlkernel.delegate import Permanence
 from tlkernel.plancheck import PlanData
 from tlkernel.review import ReviewState
 from tlkernel.run import Round
@@ -135,6 +136,32 @@ class EndRec(Rec):
     leftovers: list[dict[str, str]] = msgspec.field(default_factory=list)  # the close's snapshot; RunState owns the queue
 
 
+Producer = Literal["delegate", "engine"]
+
+
+@final
+class PauseFacts(Rec):
+    """The pause facts the close needs after the engine that knew them died."""
+
+    reason: str = ""
+    producer: Producer = "engine"
+    permanence: Permanence | None = None
+    retry_after: float = 0.0
+    crash_fingerprint: str = ""
+    crash_site: str = ""
+
+
+@final
+class CloseIntent(Rec):
+    """The outcome and facts kept before the close's first effect."""
+
+    outcome: EndRec
+    pause: PauseFacts
+    stats: str = ""
+    plan_summary: str = ""
+    asked: bool = False
+
+
 @final
 class Notes(Rec):
     """What the FileNotes effect did: the follow-ups filed and the ones bd refused (Reflect says these counts)."""
@@ -159,7 +186,7 @@ class StageProgress(Rec):
 
 @final
 class Checkpoint(Rec):
-    V: ClassVar[int] = 3
+    V: ClassVar[int] = 4
     bead: str
     run: str
     t: float
@@ -173,7 +200,7 @@ class Checkpoint(Rec):
     feedback: str = ""
     gate_tail: str = ""
     applied: list[str] = msgspec.field(default_factory=list)  # keys of the close effects already applied (domain/effects.key_of)
-    ended: EndRec | None = None  # the close's outcome, stored before its first effect: a restart finishes the close from it
+    ended: CloseIntent | None = None  # the close's outcome, stored before its first effect: a restart finishes the close from it
     notes: Notes | None = None  # the FileNotes result
     state: RunState = msgspec.field(default_factory=RunState)
     progress: StageProgress | None = None
