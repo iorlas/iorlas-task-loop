@@ -93,5 +93,15 @@
    }
   },
   "version": 1
+ },
+ "work": {
+  "ddl": "19eaf35ccb078f06a05ffd07539b053ee30b8368c019bae62edf207e1195c4e9",
+  "records": {
+   "Adr": {
+    "schema": "2fb6fae03b95bbb707e04fe6af07747b1006fd8fdf2d5db502f5320290e84770",
+    "v": 1
+   }
+  },
+  "version": 1
  }
 }
