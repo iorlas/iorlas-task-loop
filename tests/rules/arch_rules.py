@@ -12,8 +12,9 @@ MAX_FANOUT = 40
 TEST_SUPPORT = "testkit"  # the workspace member that is test support, not production: the production rules do not cover it
 
 
-def production_trees(root=ROOT):
-    trees = {}
+def production_sources(root=ROOT):
+    """Module names and paths, without reading or parsing source text."""
+    sources = {}
     members = (p.relative_to(root).as_posix() for p in sorted(root.glob("packages/*/src")) if p.parent.name != TEST_SUPPORT)
     for path in py_files(root, ("src", *members, "skills", "dev")):
         parts = path.relative_to(root).with_suffix("").parts
@@ -23,13 +24,25 @@ def production_trees(root=ROOT):
             parts = parts[3:]
         if parts[-1] == "__init__":
             parts = parts[:-1]
-        trees[".".join(parts)] = parsed(path)[1]
-    return trees
+        sources[".".join(parts)] = path
+    return sources
 
 
-def graph_of(trees):
+def production_trees(root=ROOT):
+    return {name: parsed(path)[1] for name, path in production_sources(root).items()}
+
+
+def production_graph(source_prefix, root=ROOT):
+    """Imports from selected sources, resolved against every production module."""
+    sources = production_sources(root)
+    trees = {name: parsed(path)[1] for name, path in sources.items() if name.startswith(source_prefix)}
+    return graph_of(trees, sources)
+
+
+def graph_of(trees, modules=None):
     """All explicit imports, including lazy/TYPE_CHECKING imports and relative package imports."""
-    packages = {name for name in trees if any(other.startswith(name + '.') for other in trees)}
+    modules = trees if modules is None else modules
+    packages = {name for name in modules if any(other.startswith(name + '.') for other in modules)}
     graph = {module: set() for module in trees}
     for module, tree in trees.items():
         for target in targets_of(module, tree, packages):
@@ -37,7 +50,7 @@ def graph_of(trees):
             parts = target.split('.')
             for end in range(1, len(parts) + 1):
                 name = '.'.join(parts[:end])
-                if name in trees and (name != module or target == module):
+                if name in modules and (name != module or target == module):
                     graph[module].add(name)
     return graph
 
