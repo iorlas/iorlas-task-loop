@@ -10,35 +10,14 @@ from tlkernel.identity import Identity
 from tlkernel.loop import LoopState
 from tlkernel.paths import ConfigDir
 from tlkernel.procport import Spawner
-from tlkernel.slots import SlotGitError
 
 from taskloop.app.artifacts import server
 from taskloop.app.launch import dash, loop, repos
 from taskloop.app.launch import factory as binding
-from taskloop.app.loop import factory
+from taskloop.app.loop import factory_verbs
 from taskloop.app.loop.exits import last_by_lane
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.wire import real
-
-
-def facts(files: LoopFiles, states: list[LoopState], repo: str, version: str) -> None:
-    print("REPO " + repo)
-    if not states:
-        print("not running")
-        print("VERSION " + version)
-        print("LOG " + str(factory.log_path(files)))
-    for st in states:
-        print(f"PID {st.pid}\nVERSION {st.version}\nLOG {factory.log_path(files, st)}")
-        print("BEAD " + (st.bead or "-"))
-
-
-def _wanted(repo: str, env: Env) -> int:
-    try:
-        return max(1, loop.profile_of(repo, real.git(env)).slots.count)
-    except SystemExit as error:
-        raise RuntimeError("cannot read repo profile") from error
-    except SlotGitError as error:
-        raise RuntimeError(f"cannot read repo profile: {error}") from error
 
 
 def _positive(value: str) -> int:
@@ -49,8 +28,8 @@ def _positive(value: str) -> int:
 
 
 def _stop(a: argparse.Namespace, files: LoopFiles, who: Identity) -> int:
-    stopped = files.request_stop(a.now, who.actor)
-    if not stopped:
+    stopped = factory_verbs.stop(files, a.now, who.actor)
+    if stopped is None:
         print("not running")
         return 1
     for st in stopped:
@@ -58,11 +37,21 @@ def _stop(a: argparse.Namespace, files: LoopFiles, who: Identity) -> int:
     return 0
 
 
+def _status(files: LoopFiles, states: list[LoopState], repo: str, version: str, env: Env) -> int:
+    for row in factory_verbs.status_facts(files, states, repo, version):
+        print(row)
+    wanted = factory_verbs.status_wanted(lambda: loop.profile_of(repo, real.git(env)))
+    print(f"LANES running={len(states)} wanted={wanted}")
+    for rec in last_by_lane(files.cfg.loop_runs(files.key)):
+        print(f"LANE {rec.get('lane', rec['pid'])} LAST EXIT pid={rec['pid']} time={rec.get('t')} "
+              f"reason={rec['reason']} {rec.get('detail', '')}")
+    dash.url(env)
+    return 0 if states else 1
+
+
 def _logs(a: argparse.Namespace, files: LoopFiles, states: list[LoopState]) -> int:
-    state = factory.lane_states(files, states).get(a.lane)
-    if state is None:
-        raise RuntimeError(f"no live lane {a.lane}")
-    for line in factory.lines(factory.log_path(files, state), a.n, a.follow):
+    _, path = factory_verbs.logs(files, states, a.lane)
+    for line in factory_verbs.lines(path, a.n, a.follow):
         print(line, end="", flush=True)
     return 0
 
@@ -73,29 +62,20 @@ def run(a: argparse.Namespace, env: Env, spawner: Spawner, who: Identity, here: 
     version = binding.version()
     try:
         if a.op == "start":
-            lanes = a.lanes if a.lanes is not None else _wanted(repo, env)
+            lanes = a.lanes if a.lanes is not None else factory_verbs.wanted(lambda: loop.profile_of(repo, real.git(env)))
             argv = [sys.executable, str(here / "tl.py"), "loop", "--repo", repo, "--wait-drained"]
-            states, added = factory.start(files, repo, version, argv, spawner, lanes=lanes,
-                                          caffeinate_argv=binding.caffeinate_argv)
+            states, added = factory_verbs.start(files, repo, version, argv, spawner, lanes=lanes,
+                                              caffeinate_argv=binding.caffeinate_argv)
             print(f"started {added} more lane(s)" if added else f"already running ({len(states)} lanes)")
-            facts(files, states, repo, version)
+            for row in factory_verbs.facts(files, states, repo, version):
+                print(row)
             return dash.run("ensure", env, spawner)
         if a.op == "stop":
             return _stop(a, files, who)
         states = files.live()
         if a.op == "logs":
             return _logs(a, files, states)
-        facts(files, list(factory.lane_states(files, states).values()), repo, version)
-        try:
-            wanted = str(_wanted(repo, env))
-        except RuntimeError:
-            wanted = "?"  # status must answer even when the profile cannot be read
-        print(f"LANES running={len(states)} wanted={wanted}")
-        for rec in last_by_lane(files.cfg.loop_runs(files.key)):
-            print(f"LANE {rec.get('lane', rec['pid'])} LAST EXIT pid={rec['pid']} time={rec.get('t')} "
-                  f"reason={rec['reason']} {rec.get('detail', '')}")
-        dash.url(env)
-        return 0 if states else 1
+        return _status(files, states, repo, version, env)
     except (OSError, RuntimeError, ValueError) as error:
         print(f"tl factory: {error}", file=sys.stderr)
         return 1
