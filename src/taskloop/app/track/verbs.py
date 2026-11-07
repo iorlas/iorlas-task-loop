@@ -226,6 +226,6 @@ def runs(a: argparse.Namespace, cfg: ConfigDir) -> int:
     return runq.show(a.run, cfg) if a.op == "show" else runq.slow(cfg, a.top, a.by, a.runs)
 
 
-def layout(config: ConfigDir, now: float) -> int:
+def layout(config: ConfigDir, now: float, git: Git) -> int:
     """`tl layout migrate`: the old config dir becomes the target tree (adapters/layout_migrate.py)."""
-    return layout_migrate.migrate(config, print, now)
+    return layout_migrate.migrate(config, print, now, git)

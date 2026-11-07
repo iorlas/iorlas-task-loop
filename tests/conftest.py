@@ -4,7 +4,7 @@ A test's kind comes from its path, never from a hand marker: a file under tests/
 folder (tests/<slice>/real/) is `real` (real git, processes or sockets), anything else is logic (fakes, in process, fast). The older
 A single test's `@needs(capability, reason)` (or the older `@real_proc(reason)` / `@real_git(reason)`) folds into `real`. Guards
 (tests/support/procsim.py): a logic test that spawns, forks or runs real git fails; a `real` test that never spawns fails.
-A test over its kind's time limit fails (LIMITS_S)."""
+A test over its kind's time limit fails (tltestkit.limits)."""
 import contextlib
 import ctypes
 import importlib
@@ -39,6 +39,7 @@ pytest.register_assert_rewrite("support")  # the helpers of tests/support assert
 import support.paths  # noqa: E402, F401  (ROOT/src on sys.path; after the bytecode setup above)
 from support import procsim, work  # noqa: E402
 from support.scope import delegate_wanted  # noqa: E402
+from tltestkit.limits import hang_s, kind_of_parts, limit_for  # noqa: E402
 
 from taskloop.contracts import factorydb, scratch  # noqa: E402
 
@@ -64,16 +65,7 @@ SERIAL = {
 WORKER_MB = int(os.environ.get("TL_WORKER_MB") or 2048)
 
 
-# Seconds of work a test's call may do, by kind, set from measured runs under 8 xdist workers (2026-10-30): logic max 1.4 s (the gitsim
-# engine tests; 311 of 2261 pass 0.2 s, the target the limit comes down to as they speed up), real max 4.4 s, e2e max 2.5 s.
-# TL_TIME_SCALE multiplies them. A busy host stretches the wall clock of a healthy test 5x to 100x (every core taken, swap, a virus scanner)
-# and its CPU time 2x to 4x, so neither is the measure of a logic test: it is the work, in seconds an idle host needs (support/work.py,
-# the instructions the process retired where the kernel counts them, else its CPU time). Real and e2e tests are limited by the CPU time of
-# the process and the children it waited for. The wall clock only catches a hang: HANG_S (times TL_TIME_SCALE), no limit of its own.
-WALL_FACTOR = 10
-HANG_S = 300.0
-LIMITS_S = {"logic": 2.0, "real": 15.0, "e2e": 30.0, "live": 3600.0}
-RULES_LIMIT_S = 15.0
+# The limits and the kind of a test by its path are tltestkit.limits (packages/testkit): every package inherits them, none copies them.
 TESTS_DIR = Path(__file__).resolve().parent
 
 
@@ -82,13 +74,9 @@ def kind_of(item) -> str:
     here = Path(str(item.path)).resolve()
     if TESTS_DIR not in here.parents:  # this file loaded as a plugin (-p conftest) into a tree that is not ours
         return "logic"
-    parts = here.relative_to(TESTS_DIR).parts
-    if parts[0] in ("e2e", "live"):  # live (tests/live, explicit-only) runs the real pieces: no guard, no limit
-        return parts[0]
     func = getattr(item, "obj", None)
-    if "real" in parts[:-1] or item.get_closest_marker("real_proc") or item.get_closest_marker("needs") or getattr(func, "real_git", None):
-        return "real"
-    return "logic"
+    marked = bool(item.get_closest_marker("real_proc") or item.get_closest_marker("needs") or getattr(func, "real_git", None))
+    return kind_of_parts(here.relative_to(TESTS_DIR).parts, marked_real=marked)
 
 
 def quarantined_ids():
@@ -117,15 +105,13 @@ def pytest_runtest_makereport(item, call):
     report = outcome.get_result()
     if call.when == "call" and report.skipped:
         item.stash[SKIPPED] = True  # a skipped test spawned nothing, and a real one is not failed for it
-    limit = LIMITS_S[item.stash.get(KIND, "logic")]
-    if (TESTS_DIR / "rules") in Path(str(item.path)).parents:
-        limit = max(limit, RULES_LIMIT_S)  # the gate's rules read the whole tree
-    limit = max(limit, getattr(item.module, "LIMIT_S", 0))  # a module that says why it is heavier (a simulation) names its own
+    limit = limit_for(item.stash.get(KIND, "logic"), rules=(TESTS_DIR / "rules") in Path(str(item.path)).parents,
+                      module_limit=getattr(item.module, "LIMIT_S", 0))  # a module that says why it is heavier names its own
     kind, wall = item.stash.get(KIND, "logic"), call.duration
     if CPU_S not in item.stash:  # a subtest's own report, made inside the call: the whole call is judged when it ends
         return
     used = item.stash.get(WORK_S, item.stash[CPU_S]) if kind == "logic" else item.stash[CPU_S]
-    hang = max(HANG_S * float(os.environ.get("TL_TIME_SCALE") or 1), limit * WALL_FACTOR)
+    hang = hang_s(limit, float(os.environ.get("TL_TIME_SCALE") or 1))
     if call.when == "call" and report.passed and (used > limit or wall > hang):
         report.outcome = "failed"
         why = f"over its {limit:.2f} s limit" if used > limit else f"over the {hang:.0f} s a test may take before it counts as hung"
