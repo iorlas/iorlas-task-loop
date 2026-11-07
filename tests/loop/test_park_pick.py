@@ -4,6 +4,8 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
@@ -17,9 +19,10 @@ from taskloop.app.loop.queue import QueueRule
 from taskloop.app.loop.run import Where
 from taskloop.app.loop.stages import EngineAsks
 from taskloop.app.loop.take import Taker
+from taskloop.app.loop.settle import Counters, Settle
 from taskloop.app.loop.verdict import Verdict
 from tlkernel.bead import Bead
-from tlkernel.config import EngineConfig
+from tlkernel.config import EngineConfig, LoopConfig
 from tlkernel.enums import Result
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
@@ -115,3 +118,35 @@ class Pick(Case):
         loop.gate.ready.side_effect = lambda bid: bid not in loop.gate.held
         assert Loop.candidates(loop, rule.rank([bead()], "")) == [bead()]
         assert loop.c.later["t-1"] == 130
+
+
+    @pytest.mark.parametrize("park_run", [None, "older-run"])
+    def test_unparked_pause_is_rested_as_an_engine_fault(self, park_run):
+        if park_run:
+            parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, park_run, 100, permanence="transient")
+        env = mock.Mock(cfgdir=self.cfg, now=lambda: 100)
+        files, gate, said = mock.Mock(), mock.Mock(), []
+        c = Counters()
+        settle = Settle(env, files, LoopConfig, said.append, c, gate, mock.Mock(), mock.Mock())
+        settle.apply(Verdict(Result.PAUSED, "stopped", run="r1", role="worker"), "t-1", "", False)
+        cooldown = 100 + LoopConfig().fault_cooldown
+        files.rest_bead.assert_called_once_with("t-1", cooldown)
+        assert c.later == {"t-1": cooldown}
+        assert cooldown != 100 + LoopConfig().pause_retry
+        gate.hold.assert_not_called()
+        assert any("without a park" in line for line in said)
+
+    @pytest.mark.parametrize("permanence,message", [("transient", "retry at"), ("needs_owner", "parked for the owner")])
+    def test_matching_parks_supply_the_only_wake(self, permanence, message):
+        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, producer="delegate", permanence=permanence)
+        env = mock.Mock(cfgdir=self.cfg, now=lambda: 100)
+        files, gate, said = mock.Mock(), mock.Mock(), []
+        gate.held = {}
+        c = Counters()
+        settle = Settle(env, files, LoopConfig, said.append, c, gate, mock.Mock(), mock.Mock())
+        settle.apply(Verdict(Result.PAUSED, run="r1"), "t-1", "", False)
+        assert any(message in line for line in said)
+        files.rest_bead.assert_not_called()
+        gate.hold.assert_not_called()
+        rec = ParkStore(self.cfg).get(bead().id)
+        assert c.later == ({"t-1": rec.retry_at} if permanence == "transient" else {})
