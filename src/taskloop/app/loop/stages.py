@@ -8,6 +8,7 @@ from collections.abc import Callable, Iterable, Mapping
 from jsonl_log import close_held
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, Beads
+from tlkernel.branches import task_branch
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.landed import Landed
@@ -194,7 +195,7 @@ def landed_on_base(repo: str, wt: str, bead_id: BeadId, git: Git, base_of: Calla
     rec = record()
     if rec is not None:
         return git.is_ancestor(wt, rec.sha, base)
-    branch = getattr(peek(), "metadata", {}).get("branch") or "task/" + bead_id
+    branch = getattr(peek(), "metadata", {}).get("branch") or task_branch(bead_id)
     with contextlib.suppress(SlotGitError):
         git.fetch(wt)
     tip = git.rev_parse(wt, "refs/heads/" + branch)

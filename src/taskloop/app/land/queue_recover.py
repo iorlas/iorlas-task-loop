@@ -2,6 +2,7 @@
 from collections.abc import Callable, Sequence
 from typing import Protocol
 
+from tlkernel.branches import bead_of
 from tlkernel.gitport import Git
 from tlkernel.queue_doc import QueueDoc
 
@@ -62,7 +63,7 @@ class Recover:
         pr = host.forge.find(entry.branch, entry.head)
         if pr is None:
             raise Stop(1, f"queue: PR disappeared for {entry.branch}")
-        bead = entry.branch.removeprefix("task/") if entry.branch.startswith("task/") else ""
+        bead = bead_of(entry.branch) or ""
         host.trees.verify(Tested(parent="", parent_tree="", tree=entry.tree),
                           host.git.rev_parse(host.repo, action.merge_sha + "^"), action.merge_sha, pr.number, bead)
         if bead:

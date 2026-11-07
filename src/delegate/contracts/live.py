@@ -1,6 +1,6 @@
 """The live file (DELEGATE_LIVE_FILE): what a worker is doing right now, one JSON object per line.
 
-The first line is a WorkerStarted (no `k`): where the worker process is. Every other line is a LiveEvent: `t` (epoch) and `k` (kind), then
+The first line is a WorkerStarted (no `kind`): where the worker process is. Every other line is a LiveEvent: `t` (epoch) and `kind`, then
 the kind's fields. Kinds that open and close something come in _start/_end pairs, matched by `id`. `prov` marks a row derived before the
 harness confirmed it. A value the harness did not give is left out of the line, not written as null (`exit` of cmd_end is the exception:
 null = unknown).
@@ -22,7 +22,6 @@ class WorkerStarted:
 
 @record
 class LiveRec:
-    TAG: ClassVar[str] = "k"
     t: float
 
 

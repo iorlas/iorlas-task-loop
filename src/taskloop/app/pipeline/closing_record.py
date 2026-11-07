@@ -12,8 +12,8 @@ from tlkernel.run import RunFinish
 from taskloop.app.pipeline import outcomes
 from taskloop.app.pipeline.finish import outcome as finished_outcome
 from taskloop.app.pipeline.steps import Open
+from taskloop.app.pipeline.store_ports import RecordLog
 from taskloop.domain import outcome as oc
-from taskloop.stores.runlog import RunLog
 
 
 class RecordSteps(Protocol):
@@ -54,7 +54,7 @@ class RecordHost(Protocol):
     @property
     def run_id(self) -> str: ...
     @property
-    def log(self) -> RunLog: ...
+    def log(self) -> RecordLog: ...
     @property
     def steps(self) -> RecordSteps: ...
     @property

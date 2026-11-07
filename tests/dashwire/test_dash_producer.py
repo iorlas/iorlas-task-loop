@@ -4,12 +4,16 @@ hand-made record stands in for what the engine writes."""
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from support.dashlogs import RunScript, T, bead
 
 from taskloop.app.asks import owner_verbs
 from taskloop.app.pipeline import requests
 from taskloop_dash.api import live
+from taskloop_dash.readers.logs import live_event
 from taskloop_dash.views.floor import slot_of
+from taskloop_dash.views.live_events import decode_worker
+from taskloop_dash.views.live_lines import retype
 from taskloop_dash.views.world import ProjectIn
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
@@ -74,9 +78,22 @@ def test_an_engine_log_removed_by_retention_between_polls_is_not_an_error():
         bundle = manifest(cfg, RUN, BEAD, NOW, repo=REPO, state=RunState.DONE)
         log = Path(bundle.log)
         log.parent.mkdir(parents=True, exist_ok=True)
-        log.write_text('{"k":"run_start"}\n')
+        log.write_text('{"kind":"run_start"}\n')
         run = live.LiveRun(cfg, RUN)
         run.refresh()
         log.unlink()
         run.refresh()
         assert isinstance(live.page(run)["events"], list)  # no raise; what was already read may remain
+
+
+def test_worker_lines_require_the_default_kind_tag():
+    assert decode_worker({"kind": "msg", "t": NOW, "text": "hi"})["kind"] == "msg"
+    with pytest.raises(ValueError, match="not a worker event"):
+        decode_worker({"k": "msg", "t": NOW, "text": "old"})
+
+
+def test_typed_worker_readers_refuse_the_old_tag():
+    old = {"k": "msg", "t": NOW, "text": "old"}
+    with pytest.raises(ValueError):
+        live_event(old)
+    assert retype(dict(old, src="01-write", seq="01-write:0")) is None
