@@ -18,7 +18,6 @@ from any_agent.classify import classify
 from any_agent.supervisor import LaneGoneWatcher
 from run_support import RunBase, short_limits
 from support.fake_worker import Err, Exit, Jump
-from support.procsim import real_proc
 from test_route import CFG, at, need, no_reader, obj, route, why
 
 from delegate.app import answer, env, gaps, launch, net, usage
@@ -29,6 +28,7 @@ from delegate.contracts.routing import Settings
 from delegate.contracts.state import StateDoc
 from delegate.domain.health import ledger as health_ledger
 from delegate.domain.lanes.lane import Lane
+from tltestkit.procsim import real_proc
 
 THREAD = '{"type":"thread.started","thread_id":"thread-123"}'
 ANSWER = '{"type":"item.completed","item":{"id":"i9","type":"agent_message","text":"{\\"findings\\": []}"}}'

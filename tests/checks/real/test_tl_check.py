@@ -6,9 +6,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from support import procsim
 from support.tlmain import tl_main
 
+from tltestkit import procsim
 from tltestkit.case import Case
 from tltestkit.checked import run_checked
 from tltestkit.tmpdir import TemporaryDirectory

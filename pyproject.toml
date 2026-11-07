@@ -34,6 +34,6 @@ markers = [
     "live: a scenario that runs the real pieces (git remote, processes, dashboard); only `just test-live` / `pytest -m live` collects tests/live",
     "real: real git, processes or sockets; set by a real/ folder, or by @real_proc(reason) / @real_git(reason) on one test (tests/conftest.py)",
     "e2e: a whole flow (tests/e2e/); set by the folder",
-    "needs(capability, reason): one test needs a capability a logic test lacks (process, git, real_clock, long_run, network, thread_race); folds into real (tests/support/procsim.py)",
-    "real_proc(reason): one test starts real processes; folds into real (tests/support/procsim.py)",
+    "needs(capability, reason): one test needs a capability a logic test lacks (process, git, real_clock, long_run, network, thread_race); folds into real (packages/testkit/src/tltestkit/procsim.py)",
+    "real_proc(reason): one test starts real processes; folds into real (packages/testkit/src/tltestkit/procsim.py)",
 ]

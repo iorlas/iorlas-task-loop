@@ -3,9 +3,10 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from support.procsim import real_proc
 from support.waits import until
 from support.world import pid_gone
+
+from tltestkit.procsim import real_proc
 
 
 @real_proc("an unreaped child stays in proc as a zombie")

@@ -10,11 +10,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 import routing_support as support
-from support.procsim import real_proc
 from test_route import CFG, T, route
 
 from delegate.app import cockpit, env, harnesses, onboard, status, usage
 from delegate.domain.lanes.lane import Lane
+from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory
 
 HOUR = 3600

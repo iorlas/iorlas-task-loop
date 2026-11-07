@@ -6,11 +6,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import gitq, procsim
+from support import gitq
 from support.aging import age
 from support.engine_case import EngineTest
 from support.world import no_repo
 
+from tltestkit import procsim
 from tltestkit.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE
 from tltestkit.shellkit import sh
 

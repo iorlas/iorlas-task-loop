@@ -9,11 +9,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.argv_checks import ArgvChecks
 from support.fake_checks import FakeChecks, failed, hung, passed
-from support.procsim import real_proc
 from support.tags import contract, domain
 
 from tlkernel.checksport import Checks, CheckSpec
 from tlkernel.env import snapshot
+from tltestkit.procsim import real_proc
 
 
 class ChecksContract:

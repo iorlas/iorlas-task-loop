@@ -6,10 +6,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import gitq, procsim
+from support import gitq
 from support.engine_case import EngineTest
 from support.world import pid_gone
 
+from tltestkit import procsim
 from tltestkit.plans import CLEAN, PLAN, WRITE
 
 # isort: split

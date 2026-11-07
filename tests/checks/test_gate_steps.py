@@ -5,9 +5,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import procsim
 from support.check_host import CheckHostCase
 
+from tltestkit import procsim
 from tltestkit.plans import CLEAN, PLAN, WRITE
 
 # isort: split

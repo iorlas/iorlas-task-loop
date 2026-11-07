@@ -13,9 +13,9 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import procsim
 from support.check_host import CheckHostCase
 
+from tltestkit import procsim
 from tltestkit.checks import ck, res
 from tltestkit.narrow import must
 from tltestkit.plans import CLEAN, PLAN, WRITE

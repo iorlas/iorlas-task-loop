@@ -26,7 +26,6 @@ import time
 from pathlib import Path
 from unittest import mock
 
-from support import procsim
 from support.interrupts import Interrupter, Recovery, RecoveryRig
 
 from taskloop.adapters import (
@@ -37,7 +36,7 @@ from taskloop.app.run import engine
 from taskloop.domain.checks import lint
 from taskloop.domain.plan.matchers import gate_only_criteria
 from tlkernel.config import EngineConfig
-from tltestkit import fake_route
+from tltestkit import fake_route, procsim
 from tltestkit.cfgs import cfg_with
 from tltestkit.logs import records
 from tltestkit.narrow import must

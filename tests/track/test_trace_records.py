@@ -11,9 +11,10 @@ from pathlib import Path
 
 from run import test_engine_units
 from support import engine_case as te
-from support import homes, procsim
+from support import homes
 from support.engine_case import stop
 
+from tltestkit import procsim
 from tltestkit.plans import CLEAN, FALSE, PLAN, WRITE, review
 
 ROOT = Path(__file__).resolve().parents[2]

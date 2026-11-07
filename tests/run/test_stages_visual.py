@@ -10,7 +10,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
-from support import gitq, homes, procsim
+from support import gitq, homes
 from support.builders import make_engine
 from support.checkpoints import read_ck
 from support.engine_case import engine
@@ -38,7 +38,7 @@ from tlkernel.ids import BeadId
 from tlkernel.lookrows import LookRows
 from tlkernel.run import Round
 from tlkernel.slots import SlotGitError
-from tltestkit import fake_route
+from tltestkit import fake_route, procsim
 from tltestkit.cfgs import cfg_with, plan_of
 from tltestkit.plans import BEAD, CLEAN, FALSE, PLAN, WRITE
 

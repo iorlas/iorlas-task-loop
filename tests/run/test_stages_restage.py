@@ -4,10 +4,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import gitq, procsim
+from support import gitq
 
 import tltestkit.shellkit
 from run.test_stages import StagesTest
+from tltestkit import procsim
 from tltestkit.plans import CLEAN, PLAN, WRITE
 
 HAS_G = procsim.default("has-g", lambda cwd, env: (0 if (cwd / "g.txt").exists() else 1, ""))

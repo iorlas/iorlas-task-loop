@@ -9,10 +9,11 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import gitq, homes, procsim
+from support import gitq, homes
 from support.aging import age
 from support.engine_case import CAP_PARKS, EngineTest, full, no_repo, stop
 
+from tltestkit import procsim
 from tltestkit.cfgs import PROFILE_PATTERNS
 from tltestkit.checks import ck
 from tltestkit.plans import BEAD, CAT_ENV, CLEAN, FALSE, PLAN, WRITE, review, verdict

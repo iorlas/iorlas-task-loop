@@ -8,7 +8,6 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import procsim
 from support.check_host import CheckHostCase
 from support.spawn import port_git
 
@@ -24,6 +23,7 @@ from tlkernel.argv import text_of
 from tlkernel.checks import Check, Duration, Durations
 from tlkernel.ids import CheckId
 from tlkernel.plancheck import adhoc
+from tltestkit import procsim
 from tltestkit.cfgs import cfg_with
 from tltestkit.checks import ck, typed
 from tltestkit.plans import FALSE, PLAN
