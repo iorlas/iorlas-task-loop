@@ -53,14 +53,13 @@ class EnsureFlow(Case):
         p = mock.patch.dict(os.environ, env)
         p.start()
         self.addCleanup(p.stop)
-        for name, val in (("code_version", "v1"), ("expected_binds", ["127.0.0.1", "100.1.2.3"]),
-                          ("tailscale_ip", None)):
+        for name, val in (("code_version", "v1"), ("expected_binds", ["127.0.0.1", "100.1.2.3"])):
             q = mock.patch.object(dash_server, name, _const(val))
             q.start()
             self.addCleanup(q.stop)
 
     def teardown_method(self):
-        # dash_server.run leaves dash.log open; the mocked Popen keeps it alive in a cycle, and Windows will not delete an open file
+        # dash_server.launch leaves dash.log open; the mocked Popen keeps it alive in a cycle, and Windows will not delete an open file
         gc.collect()
         self.tmp.cleanup()
 
@@ -72,7 +71,7 @@ class EnsureFlow(Case):
                 mock.patch.object(dash_server, "stop_server", side_effect=lambda v=None, *a, **k: stops.append(v)), \
                 mock.patch.object(procs, "spawn", side_effect=lambda *a, **k: popens.append(a) or proc), \
                 mock.patch.object(dash_server.time, "sleep"):
-            rc = dash_server.run("ensure", snapshot(), spawner=real_spawner(), installed=INSTALLED,
+            rc = dash_server.launch("ensure", snapshot(), spawner=real_spawner(), tailscale=lambda: None, installed=INSTALLED,
                                  root=ROOT, home=Path(self.tmp.name) / "task-loop")
         return rc, stops, popens
 
@@ -115,7 +114,7 @@ class EnsureFlow(Case):
                 mock.patch.object(dash_server, "log_tail", return_value="bind 100.1.2.3:7878 failed (held by pid 99)"), \
                 mock.patch.object(dash_server.time, "sleep"), \
                 mock.patch("builtins.print") as pr:
-            rc = dash_server.run("ensure", snapshot(), spawner=real_spawner(), installed=INSTALLED,
+            rc = dash_server.launch("ensure", snapshot(), spawner=real_spawner(), tailscale=lambda: None, installed=INSTALLED,
                                  root=ROOT, home=Path(self.tmp.name) / "task-loop")
         assert rc == 1
         out = " ".join(str(c.args[0]) for c in pr.call_args_list)
@@ -133,7 +132,7 @@ class EnsureFlow(Case):
             with mock.patch.object(dash_server, "ping", ping), mock.patch.object(dash_server, "stop_server", stop), \
                     mock.patch.object(procs, "spawn", return_value=proc) as popen, \
                     mock.patch.object(dash_server.time, "sleep"):
-                rc = dash_server.run("ensure", snapshot(), spawner=real_spawner(), installed=INSTALLED,
+                rc = dash_server.launch("ensure", snapshot(), spawner=real_spawner(), tailscale=lambda: None, installed=INSTALLED,
                                  root=ROOT, home=Path(self.tmp.name) / "task-loop")
         assert rc == 0
         stop.assert_not_called()

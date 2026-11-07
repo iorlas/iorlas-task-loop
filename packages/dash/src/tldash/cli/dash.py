@@ -7,11 +7,9 @@ and says nothing for the facts only the engine holds."""
 import argparse
 import hashlib
 import importlib
-import ipaddress
 import itertools
 import json
 import os
-import shutil
 import socket
 import sys
 import time
@@ -89,36 +87,18 @@ def inet_addrs(listing: str) -> list[str]:
     return [ip for ip in ips if ip.count(".") == 3 and all(p.isdigit() for p in ip.split("."))]
 
 
-def tailscale_ip(spawn: Spawner) -> str | None:
-    """This machine's Tailscale IPv4 (the launcher asks; the dashboard server runs no process)."""
-    app = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
-    exe = shutil.which("tailscale") or (app if os.path.exists(app) else None)
-    try:
-        if exe:
-            r = spawn.run([exe, "ip", "-4"], timeout_s=3.0)
-            if r.exit == 0 and r.out.strip():
-                return r.out.strip().splitlines()[0]
-        for cmd in (["ip", "-4", "-o", "addr"], ["ifconfig"]):
-            for ip in inet_addrs(spawn.run(cmd, timeout_s=3.0).out):
-                if ipaddress.ip_address(ip) in dash_bind.CGNAT:
-                    return ip
-    except OSError:
-        pass
-    return None
-
-
-def default_binds(env: ProcessEnv, spawner: Spawner) -> list[str]:
+def default_binds(env: ProcessEnv, tailscale: Callable[[], str | None]) -> list[str]:
     """What the installed server binds: TASK_LOOP_DASH_BIND, else loopback and the Tailscale address."""
     given = [x.strip() for x in env.get(EnvVar.TASK_LOOP_DASH_BIND).split(",") if x.strip()]
     if given:
         return given
-    ts = tailscale_ip(spawner)
+    ts = tailscale()
     return ["127.0.0.1"] + ([ts] if ts else [])
 
 
-def expected_binds(env: ProcessEnv, spawner: Spawner) -> list[str]:
+def expected_binds(env: ProcessEnv, tailscale: Callable[[], str | None]) -> list[str]:
     """The addresses the installed server would bind now."""
-    return default_binds(env, spawner)
+    return default_binds(env, tailscale)
 
 
 def free_port() -> int:
@@ -210,7 +190,7 @@ def log_tail(home: Path, n: int = 5) -> str:
         return ""
 
 
-def start_server(port: int, env: ProcessEnv, spawner: Spawner, root: Path, home: Path,
+def start_server(port: int, env: ProcessEnv, spawner: Spawner, tailscale: Callable[[], str | None], root: Path, home: Path,
                  bind: str | None = None) -> tuple[dict[str, Any] | None, str]:
     """Start detached; wait until it answers. Returns (version dict or None, failure text)."""
     log = open(home / "dash.log", "ab")  # noqa: SIM115  the detached child keeps it
@@ -218,7 +198,7 @@ def start_server(port: int, env: ProcessEnv, spawner: Spawner, root: Path, home:
     path = {"PYTHONPATH": os.pathsep.join([
         str(root / "src"), str(root / "packages/dash/src"), str(root / "skills/task-loop/_vendor"), *more,
     ])}  # the server imports tlkernel: not in the allowlist
-    bind = bind or ",".join(default_binds(env, spawner))
+    bind = bind or ",".join(default_binds(env, tailscale))
     # sys.executable, not uv: the server imports tlkernel (msgspec), and tl.py, which starts it, runs under `uv run --script`
     cmd = [sys.executable, "-m", "tldash", "--ports", "taskloop.app.launch.dash_ports:ports", "--port", str(port), "--bind", bind]
     proc = spawner.start(cmd, extra=path, cwd=str(home), out=log)
@@ -237,10 +217,10 @@ def print_urls(v: dict[str, Any] | None, port: int) -> None:
         print("DASHBOARD " + u)
 
 
-def ensure_dev(env: ProcessEnv, spawner: Spawner, root: Path, home: Path) -> int:
+def ensure_dev(env: ProcessEnv, spawner: Spawner, tailscale: Callable[[], str | None], root: Path, home: Path) -> int:
     """tests/dev: own random loopback port; the installed server on :7878 stays untouched."""
     port = free_port()
-    v, err = start_server(port, env, spawner, root, home, "127.0.0.1")
+    v, err = start_server(port, env, spawner, tailscale, root, home, "127.0.0.1")
     if not v:
         print("tl: " + err)
         return 1
@@ -248,7 +228,8 @@ def ensure_dev(env: ProcessEnv, spawner: Spawner, root: Path, home: Path) -> int
     return 0
 
 
-def ensure(env: ProcessEnv, spawner: Spawner, installed: Mapping[str, int], root: Path, home: Path) -> int:
+def ensure(env: ProcessEnv, spawner: Spawner, tailscale: Callable[[], str | None], installed: Mapping[str, int],
+           root: Path, home: Path) -> int:
     """Running and current, else replace it (a stale one: files deleted, old version, or missing an address)."""
     (home / "dash.token").unlink(missing_ok=True)  # the dash had a token once; it has no auth now
     port = port_of(env)
@@ -257,7 +238,7 @@ def ensure(env: ProcessEnv, spawner: Spawner, installed: Mapping[str, int], root
         print(f"tl: port {port} is held by something that is not a task-loop dashboard; not touching it")
         return 1
     if v:
-        why = stale_reason(v, code_version(), expected_binds(env, spawner), installed)
+        why = stale_reason(v, code_version(), expected_binds(env, tailscale), installed)
         if not why:
             print_urls(v, port)
             return 0
@@ -266,7 +247,7 @@ def ensure(env: ProcessEnv, spawner: Spawner, installed: Mapping[str, int], root
         if ping(port):
             print("tl: could not stop the running dashboard (pid {})".format(v.get("pid")))
             return 1
-    v, err = start_server(port, env, spawner, root, home)
+    v, err = start_server(port, env, spawner, tailscale, root, home)
     if not v:
         print("tl: " + err)
         return 1
@@ -281,11 +262,12 @@ def url(env: ProcessEnv) -> int:
     return 0
 
 
-def run(op: str, env: ProcessEnv, spawner: Spawner, installed: Mapping[str, int], root: Path, home: Path) -> int:
+def launch(op: str, env: ProcessEnv, spawner: Spawner, tailscale: Callable[[], str | None], installed: Mapping[str, int],
+           root: Path, home: Path) -> int:
     port = port_of(env)
     dev = dash_bind.is_dev_checkout(root) and EnvVar.TASK_LOOP_DASH_PORT not in env
     if dev and op == "ensure":
-        return ensure_dev(env, spawner, root, home)
+        return ensure_dev(env, spawner, tailscale, root, home)
     if op == "stop":
         v = ping(port)
         # Never stop the installed server from a dev checkout.
@@ -296,4 +278,4 @@ def run(op: str, env: ProcessEnv, spawner: Spawner, installed: Mapping[str, int]
         v = ping(port)
         print(json.dumps(v) if v else "DOWN")
         return 0 if v else 1
-    return url(env) if op == "url" else ensure(env, spawner, installed, root, home)
+    return url(env) if op == "url" else ensure(env, spawner, tailscale, installed, root, home)

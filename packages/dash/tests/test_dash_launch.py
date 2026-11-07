@@ -1,6 +1,5 @@
 """Dashboard launch compatibility and development binding rules."""
 from pathlib import Path
-from unittest import mock
 
 from tlkernel.dash import READ_PROTOCOL
 from tlkernel.env import Env as ProcessEnv
@@ -112,6 +111,5 @@ class DevCheckout(Case):
 
     def test_the_server_alone_binds_loopback_on_7878_and_the_launcher_adds_tailscale(self):
         assert bind.plan(None, None, dev=False, process=ProcessEnv()) == (["127.0.0.1"], 7878)  # the server runs no network tool
-        with mock.patch.object(dash_server, "tailscale_ip", return_value="100.1.2.3"):
-            assert dash_server.default_binds(ProcessEnv(), spawner=mock.Mock()) == ["127.0.0.1", "100.1.2.3"]
+        assert dash_server.default_binds(ProcessEnv(), tailscale=lambda: "100.1.2.3") == ["127.0.0.1", "100.1.2.3"]
         assert dash_server.inet_addrs("2: eth0 inet 100.64.0.5/32 scope global\n inet6 fe80::1/64 inet bogus") == ["100.64.0.5"]
