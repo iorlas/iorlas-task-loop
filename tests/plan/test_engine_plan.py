@@ -193,7 +193,7 @@ class EnginePlanTest(EngineTest):
         with self.store.stub(comments=own), self.store.stub(show=labelled):
             rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         assert rc == 0, self.blocked
-        assert [c[0] for c in s.calls] == ["worker", "reviewer"]
+        assert [c[0] for c in s.calls] == ["reviewer"]  # the write and checks were green: the review goes on (tl-q3ma)
         assert "outcome=failed" not in s.prompts[0]  # tl-7y6.6.2: no engine record in the brief, so none in the prompt
 
     def test_the_last_stage_note_reaches_a_resumed_writer(self):
