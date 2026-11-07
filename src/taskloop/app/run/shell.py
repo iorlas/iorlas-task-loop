@@ -68,9 +68,7 @@ class Shell:
                started: float, stop: threading.Event, *, network: bool = False) -> Any:
         e = self.e
         extra = {**childenv.WORKER_MARK, **e.bead_env, **(pinned_env(e.wt) if pin else {}), **(env or {})}
-        network_prefix = ()
-        if what in {"check", "check fix"}:
-            network_prefix = () if network else self.no_network()
+        network_prefix = self.no_network() if what in {"check", "check fix"} and not network else ()
         try:
             if what in {"check", "check fix"}:
                 with childenv.check_environment(e.env.vars, extra, scratch_home=e.cfg.check_scratch_home) as clean:
