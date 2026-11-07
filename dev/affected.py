@@ -36,6 +36,7 @@ tests/live is explicit-only and is never selected. There is no flag for a wider 
 """
 import argparse
 import ast
+import gc
 import hashlib
 import os
 import subprocess
@@ -90,11 +91,17 @@ class Repo:
         self.nodes = {}
         self.module = {}    # relative path -> dotted name in its root
         self.mentions = {}  # relative path -> basenames of its string constants
-        for key, folder in ROOTS.items():
-            self.scan(key, folder)
-        self.edges = defaultdict(set)
-        for path, (key, tree) in self.trees.items():
-            self.edges[path] = self.imports_of(path, key, tree)
+        was_on = gc.isenabled()
+        gc.disable()  # two thousand syntax trees are built and kept: the collector would scan them again and again (40% of the build)
+        try:
+            for key, folder in ROOTS.items():
+                self.scan(key, folder)
+            self.edges = defaultdict(set)
+            for path, (key, tree) in self.trees.items():
+                self.edges[path] = self.imports_of(path, key, tree)
+        finally:
+            if was_on:
+                gc.enable()
         self.link_discovery()
 
     def scan(self, key, folder):
@@ -115,7 +122,7 @@ class Repo:
                 if package:
                     self.packages[key].add(name)
             self.trees[rel] = (key, tree)
-            nodes = self.nodes[rel] = list(ast.walk(tree))
+            nodes = self.nodes[rel] = relevant(tree)
             self.module[rel] = name or rel
             self.mentions[rel] = {s.rsplit("/", 1)[-1] for s in strings_of(nodes)}
 
@@ -151,6 +158,23 @@ class Repo:
             for target in targets:
                 back[target].add(path)
         return back
+
+
+KEPT = (ast.Import, ast.ImportFrom, ast.ClassDef, ast.Call, ast.Constant)
+
+
+def relevant(tree):
+    """The nodes of a tree that the readers below look at (imports, classes, calls, constants), in ast.walk's order (breadth first). The
+    walk of every file is the largest cost of reading a checkout, so the readers loop over these and not over every node."""
+    seen = [tree]
+    for node in seen:
+        for field in node._fields:
+            child = getattr(node, field, None)
+            if isinstance(child, list):
+                seen += [c for c in child if isinstance(c, ast.AST)]
+            elif isinstance(child, ast.AST):
+                seen.append(child)
+    return [n for n in seen if isinstance(n, KEPT)]
 
 
 def strings_of(nodes):
