@@ -5,6 +5,7 @@ LanderHost is only their sum: the Lander hands each step the host typed as that 
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel.askspec import AskSpec
 from tlkernel.beadsport import Beads
 from tlkernel.checks import CheckRun
 from tlkernel.gitport import Git
@@ -21,7 +22,6 @@ from taskloop.app.land.pr_land import PrHost
 from taskloop.app.land.push import PushHost
 from taskloop.app.land.recheck import RecheckCheckpoints, RecheckHost
 from taskloop.app.land.sync import SyncCheckpoints, SyncHost
-from taskloop.domain.asks.spec import AskSpec
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 

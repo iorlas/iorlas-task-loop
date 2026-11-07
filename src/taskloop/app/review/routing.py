@@ -3,6 +3,7 @@ goes to the writer for a test, an item no check can prove lands unverified for t
 plan (what it defers, what it leaves to the engine) is read before the item's kind."""
 from typing import Any
 
+from tlkernel import askspecs
 from tlkernel import reviewkinds as kinds
 from tlkernel.gitport import Git
 from tlkernel.plancheck import PlanData
@@ -11,7 +12,6 @@ from tlkernel.stop import Stop
 
 from taskloop.app.review.host import ReviewHand, ReviewPorts
 from taskloop.app.review.state import ReviewLive
-from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.work.ledger import Ledger
 from taskloop.domain.work.matchers import Wording, word_set
 
@@ -143,4 +143,3 @@ class Routing:
             self.add_unverified(dict(u, kind=k), "a follow-up bead for the owner is filed at land")
         else:
             out.append(dict(u, kind=k, proof_round=True) if k == "checkable" else u)
-

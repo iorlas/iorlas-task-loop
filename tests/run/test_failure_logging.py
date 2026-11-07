@@ -18,7 +18,7 @@ from taskloop.app.pipeline.closing_decide import Decide
 from taskloop.app.pipeline.journal import Journal
 from taskloop.app.pipeline.reflect import Reflector
 from taskloop.app.pipeline.reload import Reload
-from taskloop.domain import outcome as oc
+from tlkernel import runoutcome as oc
 from tlkernel.enums import Outcome
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, NotRequired, TypedDict
 
+from tlkernel import lifecyclematchers as matchers
 from tlkernel import paths, runlife, wire
 from tlkernel.bead import Comment
 from tlkernel.dashhealth import Score
@@ -32,7 +33,6 @@ from taskloop.app.report.inputs import bead_status, landed_of, prefix, read_json
 from taskloop.app.report.landphases import land_stats, tries_of
 from taskloop.app.report.mainstate import main_state
 from taskloop.app.report.planner import input_tokens, planner_line, planner_stats
-from taskloop.domain.lifecycle import matchers
 
 M2: Final = {"beads": 10, "landed_no_ask": 7}  # at least; lost and crashes must be 0 (docs/roadmap.md)
 
