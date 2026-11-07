@@ -10,6 +10,7 @@ from support import engine_case as T
 from support.asked import ans
 from support.builders import make_engine
 from support.engine_case import engine
+from support.engine_land import LandReviewBase
 
 import tltestkit.shellkit
 from tlkernel import answers
@@ -51,7 +52,7 @@ def open_as(*kinds, source=SOURCE):
                       for n, k in enumerate(kinds, 1)]}
 
 
-class NoBlock(T.LandReviewBase):
+class NoBlock(LandReviewBase):
 
     def go(self, items, verify=None, extra_reviews=(), bead=BEAD, writes=1, plan=PLAN_LEFT, **cfg):
         answers = {"plan": [plan], "write": [WRITE] * writes, "review": [dict(CLEAN, unchecked=items), *extra_reviews]}

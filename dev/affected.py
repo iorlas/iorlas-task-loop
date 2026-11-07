@@ -9,7 +9,7 @@ The changed files are the diff against BASE (default: the merge base of HEAD and
 and the untracked files included, or exactly the PATHs given with --changed. The graph is read from the syntax trees under `--root`
 (default: this checkout) and never by importing anything. Standard library only; it knows nothing of the project it sits in.
 
-The rules, all in this file, none of them stored or switchable:
+The rules, fixed here and in rule_inputs.py, none of them switchable:
   graph       a node is a Python file under src/, tests/, dev/, skills/task-loop/ and its _vendor/ (the vendored packages); an edge is
               an import (lazy and TYPE_CHECKING ones too). A name resolves in the importer's roots, first hit wins
               (a test sees tests/, dev/, src/, the
@@ -28,7 +28,8 @@ The rules, all in this file, none of them stored or switchable:
   config      pyproject.toml, uv.lock, mise.toml, mise.lock select tests/rules and tests/release; .importlinter, ruff.toml, pyrefly.toml and
               the justfile select tests/rules.
   deleted     a deleted src/taskloop file has no node left to follow: it selects the tests/ folder that mirrors its slice.
-  always      tests/rules (they read the whole tree and take seconds), so a change that selects nothing else still runs them.
+  always      whole-tree and change-based rules, plus unclassified rule files (safe default); scoped rules follow path globs
+              in rule_inputs.py or their normal import closure. Config changes still select every rule.
 ledger      a test file is green when the key of everything it can depend on (its whole closure: imports, conftests, every data file
             under tests/, the files its code names, the config, and the python version) is in the ledger, a file of keys that
             `--mark-green` appends to after a green run. `--skip-green` leaves those out; tests/rules are never left out. A changed key
@@ -46,6 +47,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from importgraph import bindings, qualified, targets_of
+from rule_inputs import ALWAYS_RULES, RULES_BY_PATH, matches
 
 HERE = Path(__file__).resolve().parent.parent
 PACKAGES = sorted(src.parent.name for src in (HERE / "packages").glob("*/src"))
@@ -256,7 +258,9 @@ def select(repo, changed):
             if parent not in reached:
                 reached.add(parent)
                 todo.append(parent)
-    chosen = {p for p in reached if is_test(p)} | extra | under(repo, ALWAYS)
+    rules = under(repo, ALWAYS)
+    scoped = {test for test, globs in RULES_BY_PATH.items() if any(matches(p, g) for p in changed for g in globs)}
+    chosen = {p for p in reached if is_test(p)} | extra | (rules - RULES_BY_PATH.keys()) | (rules & ALWAYS_RULES) | (rules & scoped)
     for path in reached:
         if path.endswith("conftest.py"):
             chosen |= under(repo, path.rsplit("/", 1)[0])
