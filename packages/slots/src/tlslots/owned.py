@@ -1,13 +1,13 @@
 """Worktrees tl owns: the one function that makes a worktree (`create`, which records who made it), the survey that tells owned from
 foreign from orphaned, and `clean`, which removes only an owned worktree that is merged and clean and says what a refusal would lose."""
 import contextlib
-import hashlib
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from tlkernel.gitport import Git, SlotGit
+from tlkernel.ids import loop_key
 from tlkernel.paths import ConfigDir
 from tlkernel.slots import SlotGitError
 from tlkernel.worktreerows import WorktreeDocs
@@ -26,8 +26,8 @@ def docs(cfg: ConfigDir, repo_key: str) -> WorktreeDocs:
 
 
 def key_of(path: str) -> str:
-    rp = os.path.realpath(path)
-    return f"{Path(rp).name}-{hashlib.sha1(rp.encode()).hexdigest()[:8]}"
+    """A worktree record's key: the one key ids.loop_key makes of a folder."""
+    return loop_key(path)
 
 
 def create(git: SlotGit, cfg: ConfigDir, repo_key: str, repo: str, path: str, ref: str, *, kind: str, run: str, bead: str, host: str,
