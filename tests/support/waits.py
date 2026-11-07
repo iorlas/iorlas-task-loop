@@ -1,4 +1,5 @@
 """Wait for a condition, not for a fixed time: poll quickly, give up at a limit that only a broken test reaches."""
+import subprocess
 import time
 from threading import Event
 
@@ -24,5 +25,9 @@ def until_marker(marker, child, limit=30.0):
     """Wait for a child process to write its marker; a child that exits first fails the test with its stderr."""
     assert until(lambda: marker.exists() or child.poll() is not None, limit=limit), "the child never wrote its marker"
     if not marker.exists():
-        err = child.stderr.read().decode() if child.stderr else ""
+        try:
+            _, stderr = child.communicate(timeout=5)
+            err = stderr.decode() if stderr else ""
+        except subprocess.TimeoutExpired:
+            err = "stderr was unreadable"
         raise AssertionError(f"the child exited ({child.returncode}) before it wrote its marker: {err}")
