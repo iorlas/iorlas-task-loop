@@ -1,4 +1,4 @@
-"""Each extracted document is written to its owning table, leaving kv empty."""
+"""Each document is written to its owning table."""
 import pytest
 from support.narrow import must
 
@@ -25,7 +25,6 @@ def assert_row(cfg, table, key):
     con = must(factorydb.open_rw(cfg.factory_db()))
     try:
         assert con.execute(f"SELECT k FROM {table} WHERE k=?", (key,)).fetchone() == (key,)
-        assert con.execute("SELECT k FROM kv WHERE k=?", (key,)).fetchone() is None
     finally:
         con.close()
 

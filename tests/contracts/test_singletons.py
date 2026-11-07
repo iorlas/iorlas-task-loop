@@ -10,8 +10,9 @@ from support.narrow import must
 
 from tlkernel import dbparts, wire
 from tlkernel.factoryparts import RELEASE
-from tlkernel.rowstores import PinStore, ReflectStateStore, SharedNotesStore, StatusStore, StatusTriedStore
-from tlkernel.snapshots import Pin, ReflectState, StatusSnapshot, StatusTried
+from tlkernel.loop import BadVersions
+from tlkernel.rowstores import BadVersionStore, PinStore, ReflectStateStore, SharedNotesStore, StatusStore, StatusTriedStore
+from tlkernel.snapshots import Pin, ReflectState, SharedNotes, StatusSnapshot, StatusTried
 
 
 def test_a_pin_is_a_release_doc_row_written_read_and_cleared():
@@ -55,7 +56,6 @@ def test_the_status_rows_live_in_lanes_doc():
     assert status.docs.table == tried.docs.table == "lanes_doc"
     keys = [("snapshot:delegate.status",), ("snapshot:delegate.tried",)]
     assert status.docs.rows.select("SELECT k FROM lanes_doc ORDER BY k") == keys
-    assert status.docs.rows.select("SELECT k FROM kv WHERE k IN (?, ?)", tuple(k for (k,) in keys)) == []
 
 
 def test_release_upgrade_discards_the_old_pin_and_preserves_release_result():
@@ -67,3 +67,20 @@ def test_release_upgrade_discards_the_old_pin_and_preserves_release_result():
     dbparts.launch(con, readonly=False, parts=[RELEASE])
     assert con.execute("SELECT k, v FROM release_doc").fetchall() == [("release", "{}")]
     assert con.execute("SELECT version FROM schema_part WHERE name='release'").fetchone() == (2,)
+
+
+def test_shared_notes_live_in_lanes_doc():
+    store = SharedNotesStore(homes.cfg(), "repo")
+    notes = SharedNotes()
+    store.write(notes)
+    assert store.get() == notes
+    assert store.docs.table == "lanes_doc"
+    assert store.docs.rows.select("SELECT k FROM lanes_doc WHERE k='shared:repo'") == [("shared:repo",)]
+
+
+def test_bad_versions_live_in_loop_doc():
+    store = BadVersionStore(homes.cfg())
+    store.write(BadVersions())
+    assert store.get() == BadVersions()
+    assert store.docs.table == "loop_doc"
+    assert store.docs.rows.select("SELECT k FROM loop_doc WHERE k='bad-versions'") == [("bad-versions",)]

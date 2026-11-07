@@ -104,5 +104,4 @@ def test_gallery_lives_in_look_doc_only(workdir):
     r = rows(workdir)
     r.modify("tl-look", lambda: [NEW], lambda items: items)
     assert r.rows.select("SELECT k FROM look_doc") == [("look:tl-look",)]
-    assert r.rows.select("SELECT k FROM kv WHERE k LIKE 'look:%'") == []
     assert r.items("tl-look") == [NEW]

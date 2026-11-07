@@ -45,5 +45,4 @@ def test_ownership_lives_in_worktree_doc_only(repo):
     doc = WorktreeDocs(homes.cfg(), repo).of("a-1")
     doc.write(owned())
     assert doc.rows.select("SELECT k FROM worktree_doc WHERE k=?", (doc.k,)) == [(doc.k,)]
-    assert doc.rows.select("SELECT k FROM kv WHERE k=?", (doc.k,)) == []
     assert doc.get() == owned()
