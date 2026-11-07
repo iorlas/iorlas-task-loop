@@ -1,16 +1,23 @@
-"""The Engine satisfies ReviewHost: every member the review stage names is on the engine a run builds."""
+"""The Engine satisfies ReviewHand: every member the review stage names is on the engine a run builds."""
 from support.builders import make_engine
 from support.engine_case import EngineTest
 from support.host_conformance import missing
+from support.review_host import FakeReview
 
-from taskloop.app.review.host import ReviewHost
+from taskloop.app.review.host import ReviewHand, ReviewPorts
 
 
-class ReviewHostConformance(EngineTest):
+class ReviewHandConformance(EngineTest):
     def test_the_engine_has_every_member_the_review_stage_reads(self):
-        assert missing(make_engine(self.wt, store=self.store), ReviewHost) == []
+        eng = make_engine(self.wt, store=self.store)
+        assert (missing(eng, ReviewHand), missing(eng, ReviewPorts)) == ([], [])
 
     def test_the_check_names_a_member_the_host_lacks(self):
         eng = make_engine(self.wt, store=self.store)
-        del eng.review
-        assert missing(eng, ReviewHost) == ["review"]
+        del eng.steps
+        assert missing(eng, ReviewPorts) == ["steps"]
+
+
+def test_the_fake_review_has_every_member_the_stage_reads(workdir):
+    review = FakeReview(workdir)
+    assert (missing(review.hand, ReviewHand), missing(review.ports, ReviewPorts)) == ([], [])

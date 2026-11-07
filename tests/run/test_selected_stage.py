@@ -10,7 +10,9 @@ from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.checks import typed
 from support.memstores import fake_stores
+from support.plans import PLAN
 from support.tlmain import tl_main
 
 from taskloop.app.land.gate import Gate, Problem, ProblemKind
@@ -19,6 +21,8 @@ from taskloop.app.pipeline.closing_record import RecordRun
 from taskloop.app.pipeline.cursor import parse_step
 from taskloop.app.pipeline.finish import answer
 from taskloop.app.pipeline.steps import Steps
+from taskloop.app.plan.keep import PlanKeeper
+from taskloop.app.plan.planned import Planned
 from taskloop.app.run.stages import round_step, run_stages
 from taskloop.app.write.state import ACCEPT, StageState
 from taskloop.contracts import log as rec
@@ -62,6 +66,9 @@ class SelectedStage(Case):
         e.landed_sha = ""
         e.Blocked, e.kind, e.why = Blocked, Kind.FAULT_ENGINE, ""
         e.plan_data = None
+        data = typed(PLAN)
+        e.planner.plan.return_value = Planned(plan_data=data, summary=data["summary"], planned=1)
+        e.planner.take.side_effect = lambda p: PlanKeeper(e).take(p)
         e.checkpoints.read.return_value = None
         e.store.show.return_value = Bead(id=e.bead, title="stage task", status="open")
         e.lander.gate.green.return_value = False
@@ -105,6 +112,15 @@ class SelectedStage(Case):
         self.e.checkpoints.save.assert_called_once_with(step=Step.LAND, stage=0)
         closes = [row.rec for row in self.e.stores.run_log(self.e.run_id).read_from(0).items if isinstance(row.rec, rec.Close)]
         assert [row.retry_at for row in closes] == [0.0]
+
+    def test_standalone_plan_stores_the_planned_result(self):
+        p = self.e.planner.plan.return_value
+        rc, manifest = self.invoke("plan")
+        assert rc == 0
+        assert manifest.next_step is Step.WRITE
+        self.e.planner.take.assert_called_once_with(p)
+        assert self.e.plan_data is p.plan_data
+        assert (self.e.plan_summary, self.e.planned) == (p.summary, p.planned)
 
     def test_standalone_empty_plan_files_its_owner_ask(self):
         self.e.planner.plan.side_effect = Blocked("noop: no work", kind=Kind.NOOP)

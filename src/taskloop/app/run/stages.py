@@ -186,7 +186,7 @@ def start_step(e: RunHost, step: Step, bead: Bead) -> Step:
         e.tree.reset(bead)
         following = Step.PLAN
     else:
-        e.plan_data = e.planner.plan(again=step is Step.REPLAN)
+        e.planner.take(e.planner.plan(again=step is Step.REPLAN))
         following = Step.WRITE
     e.checkpoints.save(step=following, stage=0)
     return following

@@ -23,6 +23,7 @@ TABLES = {
     "check_round", "ask", "ask_ledger", "kv", "effect", "wait", "signal", "checkpoint", "timed", "schema_part",
     "release_doc",  # a stage that moves its table adds its own line here
     "report_doc",
+    "work_doc",
     "followup",
     "park",
 }
