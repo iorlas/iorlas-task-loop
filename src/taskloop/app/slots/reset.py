@@ -6,6 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TypeVar
 
+from tlkernel.branches import task_branch
 from tlkernel.gitport import SlotGit
 from tlkernel.matchers import NetText
 from tlkernel.paths import ConfigDir
@@ -102,15 +103,15 @@ def keep_work(slot: SlotView) -> None:
 def check_out(slot: SlotView, bead: str) -> None:
     env, d, base = slot.env, slot.dir, slot.env.cfg.base
     what = f"slot {slot.name}"
-    if bead and retrying(env, what, lambda: env.git.has_branch(d, "task/" + bead)):
+    if bead and retrying(env, what, lambda: env.git.has_branch(d, task_branch(bead))):
         # the bead's branch holds its earlier runs' work: check it out as it is, never reset it to base (a forced reset
         # here wiped a bead's reviewed work on 2026-10-19; the engine rebases at land)
-        held = retrying(env, what, lambda: free_branch(slot, "task/" + bead))
+        held = retrying(env, what, lambda: free_branch(slot, task_branch(bead)))
         if held:  # a live run has it: this bead is not for this slot now (never a failure)
             raise SlotFail("bead_pinned", held)
-        retrying(env, what, lambda: env.git.checkout(d, "task/" + bead))
+        retrying(env, what, lambda: env.git.checkout(d, task_branch(bead)))
     elif bead:
-        retrying(env, what, lambda: env.git.checkout_new(d, "task/" + bead, base))
+        retrying(env, what, lambda: env.git.checkout_new(d, task_branch(bead), base))
     else:
         retrying(env, what, lambda: env.git.checkout_detached(d, base))
 
