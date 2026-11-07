@@ -49,8 +49,8 @@ def test_row(verdict: Verdict, how: str | None) -> None:
 def test_score() -> None:
     rows = [FlakeRow(test="flaky", t=t, how="retry") for t in (89.0, 90.0, 95.0, 100.0, 101.0)]
     rows.append(FlakeRow(test="other", t=95.0, how="main"))
-    assert score(rows, "flaky", now=100.0, window_s=10.0) == 3
-    assert score(rows, "missing", now=100.0, window_s=10.0) == 0
+    assert score(rows, "flaky", now=100.0, week_s=10.0) == 3
+    assert score(rows, "missing", now=100.0, week_s=10.0) == 0
     assert score([], "flaky", now=100.0) == 0
     assert score([FlakeRow(test="flaky", t=0.0, how="main")], "flaky", now=7 * 86400) == 1
 

@@ -6,7 +6,7 @@ from typing import Final, final
 from taskloop.contracts.wire import Rec
 from taskloop.domain.checks.retry import retry_allowed
 
-WINDOW_S: Final = 7 * 86400
+WEEK_S: Final = 7 * 86400
 
 
 @final
@@ -51,6 +51,6 @@ def row(test: str, t: float, verdict: Verdict, retry: Attempt | None) -> FlakeRo
     return None
 
 
-def score(rows: Sequence[FlakeRow], test: str, now: float, window_s: float = WINDOW_S) -> int:
-    """Count this test's events in the inclusive rolling window, excluding future events."""
-    return sum(r.test == test and now - window_s <= r.t <= now for r in rows)
+def score(rows: Sequence[FlakeRow], test: str, now: float, week_s: float = WEEK_S) -> int:
+    """Count this test's events in the inclusive week, excluding future events."""
+    return sum(r.test == test and now - week_s <= r.t <= now for r in rows)
