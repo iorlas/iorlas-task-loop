@@ -7,7 +7,7 @@ from taskloop.app.write.state import WriteState
 from taskloop.contracts.asked import Asked
 from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.checkpoint import Handoff as HandoffState
-from taskloop.contracts.checkpoint import WriterSession
+from taskloop.contracts.checkpoint import StageProgress, WriterSession
 from taskloop.contracts.checks import CheckResult, CheckRun
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.gitport import Git
@@ -46,7 +46,7 @@ class Checkout(Protocol):
 
 
 class Checkpoints(Protocol):
-    def save(self, *, step: str = ..., stage: int = ..., rounds: int = ..., n: int = ..., feedback: str = ...) -> None: ...
+    def save(self, *, step: str = ..., stage: int = ..., rounds: int = ..., n: int = ..., feedback: str = ..., progress: StageProgress | None = ...) -> None: ...
     def keep_pending(self, origin: str = ...) -> None: ...
 
 
