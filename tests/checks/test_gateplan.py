@@ -7,7 +7,6 @@ from unittest import mock
 
 import pytest
 from support.check_host import CheckHostCase
-from support.plans import FALSE
 
 from taskloop.app.checks.cache import is_green, plan_digest
 from taskloop.app.checks.gateplan import PlanDecision, parse, skipped
@@ -20,6 +19,7 @@ from tlkernel.procport import Ran
 from tlkernel.runkey import BaseSha
 from tlkernel.slots import GitReadFailure
 from tltestkit.narrow import must
+from tltestkit.plans import FALSE
 
 
 def step(name="coverage", run=False, **extra):

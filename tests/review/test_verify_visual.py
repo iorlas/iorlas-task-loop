@@ -6,11 +6,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import engine_case as T
-from support.plans import BEAD, CLEAN, PLAN, WRITE, verdict
 
 from tlkernel.beadsport import BeadQuery
 from tlkernel.config import ReviewSkipConfig
 from tlkernel.followkeys import key_label, unchecked
+from tltestkit.plans import BEAD, CLEAN, PLAN, WRITE, verdict
 
 PLAIN = dict(BEAD, labels=[])  # f.txt, "f.txt exists": nothing visual about it
 NOT_VISUAL = dict(PLAN, cases=[])  # no look-objective, taste or show case: the planner says nothing is to be seen

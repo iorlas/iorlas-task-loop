@@ -16,7 +16,6 @@ from support import engine_case as te
 from support import homes
 from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
-from support.plans import PLAN, WRITE
 
 import tltestkit.shellkit
 from taskloop.app.asks import ask_verbs, intake, owner_verbs
@@ -32,6 +31,7 @@ from tlkernel.run import RunState
 from tltestkit.case import Case
 from tltestkit.logs import typed
 from tltestkit.narrow import must
+from tltestkit.plans import PLAN, WRITE
 from tltestkit.runs import manifest
 from tltestkit.tmpdir import TemporaryDirectory
 

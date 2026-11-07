@@ -7,14 +7,14 @@ from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.cfgs import cfg_with
 from support.engine_case import EngineTest
-from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.domain.checks import lint
 from tlkernel.checksport import TreeProbe
 from tlkernel.ids import CheckId
 from tlkernel.plancheck import PlanCheck, PlanData, Ref, StageData, adhoc
+from tltestkit.cfgs import cfg_with
+from tltestkit.plans import CLEAN, PLAN, WRITE
 
 OUTPUT = "tests/Sim.Scenarios/bin/Debug/net10.0/Sim.Scenarios"
 TYPO = "tests/Sim.Scenarios/bin/Debug/net10.0/Sim.Scenenarios"
