@@ -47,6 +47,21 @@ EDITS = (  # (file, old, new)
      'VISIBLE = {"src": ("src", "kernel", "vendor"), "tests": ("tests", "dev", "src", "kernel", "vendor"),\n'
      '           "dev": ("dev", "src", "kernel", "vendor"), "kernel": ("kernel", "vendor"), "vendor": ("vendor",), "tl": ("src", "kernel", "vendor")}'),
     ("justfile", "PYTHONPATH=src:skills/task-loop/_vendor uv tool run", "PYTHONPATH=src:packages/kernel/src:skills/task-loop/_vendor uv tool run"),
+    # tests and tools that read the layout by folder, import form or depth
+    ("dev/killpoints.py", "    from tlkernel.kinds import Kind  # noqa: PLC0415\n    from taskloop.domain import effects as fx",
+     "    import tlpaths  # noqa: F401, PLC0415\n    from tlkernel.kinds import Kind  # noqa: PLC0415\n    from taskloop.domain import effects as fx"),
+    ("tests/dash/test_dash_version.py", 'dash.CONTRACTS.name == "contracts"', 'dash.CONTRACTS.name == "tlkernel"'),
+    ("tests/domain/test_lane_policy.py", '{"dataclasses", "typing", "taskloop", "__future__", "collections"}',
+     '{"dataclasses", "typing", "taskloop", "tlkernel", "__future__", "collections"}'),
+    ("tests/rules/test_envvars.py", 'CODE = tuple((ROOT / "src").rglob("*.py"))',
+     'CODE = (*(ROOT / "src").rglob("*.py"), *(ROOT / "packages/kernel/src").rglob("*.py"))'),
+    ("tests/rules/test_selection_mutations.py", 'p.count("/") == 3', 'p.count("/") == 4'),
+    ("dev/reach.py", '    parts = path.split("/")\n    if parts[0] != "src":',
+     '    parts = path.split("/")\n    if parts[:3] == ["packages", "kernel", "src"]:\n        return "kernel"\n    if parts[0] != "src":'),
+    ("tests/rules/arch_rules.py", '    for path in py_files(root, ("src", "skills", "dev")):\n        parts = path.relative_to(root).with_suffix("").parts\n        if parts[0] == "src":\n            parts = parts[1:]',
+     '    for path in py_files(root, ("src", "packages/kernel/src", "skills", "dev")):\n        parts = path.relative_to(root).with_suffix("").parts\n        if parts[0] == "src":\n            parts = parts[1:]\n        elif parts[:3] == ("packages", "kernel", "src"):\n            parts = parts[3:]'),
+    ("justfile", 'for p in packages/*/; do uv run', 'for p in packages/*/; do [ -d "$p/tests" ] || continue; uv run'),
+    ("justfile", 'for p in $(python3 dev/packages.py); do uv run', 'for p in $(python3 dev/packages.py); do [ -d "packages/$p/tests" ] || continue; uv run'),
     ("dev/hostban_mutation.py", '"PYTHONPATH": "src:skills', '"PYTHONPATH": "src:packages/kernel/src:skills'),
 )
 
