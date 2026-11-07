@@ -17,9 +17,10 @@ import support.paths  # noqa: F401
 from support.fakes import FakeBeadStore
 from support.spawn import port_git, real_spawner
 from support.who import who
+from taskloop.app.pipeline.closing import Closer
 from taskloop.app.run import engine
-from taskloop.app.run.closer import Closer
 from taskloop.app.wire import slots as wslots
+from taskloop.cli.ctx import declare_stage_parts
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
@@ -44,6 +45,7 @@ def write(path: str, row: dict) -> None:
 
 
 def main(argv: list[str]) -> None:
+    declare_stage_parts()
     mode, journal = argv[0], argv[-1] if argv[0] == "restart" else argv[2]
     store = FakeBeadStore()
     store.calls = Journal(journal)

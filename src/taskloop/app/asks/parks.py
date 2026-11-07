@@ -7,6 +7,7 @@ from random import random
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.delegate import Permanence
+from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import ASKS, FINISH, PAUSES, Kind
 from taskloop.contracts.loop import Skip
 from taskloop.contracts.parks import Park, ParkStore
@@ -55,6 +56,16 @@ def paused(cfg: ConfigDir, b: Bead, kind: Kind, run: str, now: float, *, reason:
         return None
     return ParkStore(cfg).change(b.id, lambda old: pauses.after_pause(old, b, run, now, reason, draw, not_before,
                                                                      fingerprint=fingerprint, producer=producer, permanence=permanence))
+
+
+def profile_ahead(cfg: ConfigDir, b: Bead, run: str, now: float, why: str) -> None:
+    """The loop's pick found the bead's profile ahead of this checkout (or its setup on its own tree): park it for a short, random time."""
+    ParkStore(cfg).change(b.id, lambda old: pauses.after_pause(old, b, run, now, why, lambda: 0.5))
+
+
+def finished(cfg: ConfigDir, b: BeadId) -> None:
+    """A stage run that finished the bead: no park is kept."""
+    ParkStore(cfg).drop(b)
 
 
 def ended(cfg: ConfigDir, b: Bead, kind: Kind, run: str, now: float) -> None:

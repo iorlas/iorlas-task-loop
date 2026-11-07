@@ -15,9 +15,7 @@ from taskloop.contracts.beadsport import BdFailure, BeadPatch
 from taskloop.contracts.config import ConfigError, EngineConfig, LoopConfig
 from taskloop.contracts.enums import Result
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.parks import ParkStore
 from taskloop.contracts.slots import SlotFail, SlotGitError
-from taskloop.domain.lanes import pauses
 
 
 @dataclass
@@ -80,9 +78,8 @@ class Taker:
     def _park_profile_ahead(self, b: Bead, v: vd.Verdict) -> None:
         if v.kind in (vd.PROFILE_AHEAD, vd.SETUP_OWN_TREE):
             env = self.env
-            store = ParkStore(env.cfgdir)
             run = v.run or f"profile-ahead-{env.pid}-{env.now()}"
-            store.change(b.id, lambda old: pauses.after_pause(old, b, run, env.now(), v.kind, lambda: 0.5))
+            env.asks.profile_ahead(b, run, v.kind)
 
     def _held(self, bid: str, at: Where, held: vd.Verdict) -> Taken | None:
         """A bead that is not to be run now: recorded and cooled (a network pause is neither), and a pre-engine failure ends the pass."""

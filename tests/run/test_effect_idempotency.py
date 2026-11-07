@@ -7,8 +7,11 @@ import typing
 
 import pytest
 from support.narrow_hosts import FakeSettleHost
+from support.pipeline_ports import FakeParkBook
 
-from taskloop.app.run.closer_settle import Settle
+from taskloop.app.pipeline.closing_settle import Settle
+from taskloop.app.track.closing import ClosingBeads
+from taskloop.app.wire import closeguard
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
@@ -25,14 +28,14 @@ SETTLING = {
     "leave open after a pause": (fx.LeaveBead, oc.make(Kind.PAUSE_LANE, "the lane is out")),
 }
 NOT_HERE = {
-    fx.SaveBranch: "closer_branch: the wip commit of a clean tree is no commit (tests/run/test_closer_branch*.py)",
-    fx.RecordRun: "a no-op: finish_run already projected the answer (closer.apply)",
+    fx.SaveBranch: "closing_branch: the wip commit of a clean tree is no commit (tests/pipeline/test_closing_branch.py)",
+    fx.RecordRun: "a no-op: finish_run already projected the answer (closing.apply)",
     fx.NoteDry: "a log note",
     fx.NoteWait: "a log note",
     fx.RaiseAsk: "the ask store keeps one ask per bead (tests/asks)",
-    fx.FileNotes: "the notes are kept in the checkpoint and filed once (closer_notes)",
+    fx.FileNotes: "the notes are kept in the checkpoint and filed once (closing_notes)",
     fx.Reflect: "the comment is deduped per (bead, kind, fingerprint) per hour",
-    fx.ReleaseSlot: "leaves the slot only while its generation is the lease's (closer_branch.ReleaseSlot)",
+    fx.ReleaseSlot: "leaves the slot only while its generation is the lease's (closing_branch.ReleaseSlot)",
     fx.DropCheckpoint: "dropping a dropped checkpoint is a no-op",
     fx.RecordLand: "the landed store keys by sha",
     fx.BdSync: "bd sync of nothing new is a no-op",
@@ -50,14 +53,17 @@ def held_host(done: oc.RunOutcome) -> FakeSettleHost:
 
 
 @pytest.mark.parametrize("case", SETTLING)
-def test_settling_the_bead_twice_leaves_it_as_the_first_time_did(case):
+def test_settling_the_bead_twice_leaves_it_as_the_first_time_did(case, monkeypatch):
+    monkeypatch.setattr("taskloop.app.track.verbs.event", lambda *args, **kwargs: None)
+    monkeypatch.setattr("taskloop.app.track.verbs.prune_events", lambda *args: None)
+    monkeypatch.setattr("taskloop.app.track.verbs.provenance", lambda *args, **kwargs: None)
     cls, done = SETTLING[case]
     host = held_host(done)
     before = bead_state(host)
-    Settle(host).run(done, "")
+    Settle(host, ClosingBeads(host.who, host.store, closeguard.ENGINE), FakeParkBook()).run(done, "")
     first = bead_state(host)
     assert first != before  # the first application did something, or the repeat proves nothing
-    Settle(host).run(done, "")
+    Settle(host, ClosingBeads(host.who, host.store, closeguard.ENGINE), FakeParkBook()).run(done, "")
     assert bead_state(host) == first
     assert fx.settling(done).__class__ is cls
 
