@@ -10,7 +10,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from taskloop.app.run import worker_identity
+from taskloop.app.workers import worker_identity
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import CallIdentity, DoneEntry
