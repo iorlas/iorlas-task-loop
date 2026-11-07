@@ -26,7 +26,7 @@ from taskloop.app.land.gate import Problem, ProblemKind, mint
 from taskloop.app.land.host import Land
 from taskloop.app.land.pr_land import PrLand
 from taskloop.stores.runlog import RunLog
-from tlasks import pr_wake, raiser
+from tlasks import raiser, sweeps
 from tlkernel import askspecs as specs
 from tlkernel import fence, scratch
 from tlkernel.ask import Ask
@@ -220,7 +220,7 @@ def asking(sim_state: str):
 class Waking(Case):
     def wake(self, state: str, asks, store, sim):
         cfg = load({}).engine
-        return pr_wake.wake_decided(asks, store, lambda n: peek(sim, "/repo", n), "/repo", 5.0, cfg)
+        return sweeps.wake_decided(asks, store, lambda n: peek(sim, "/repo", n), "/repo", 5.0, cfg)
 
     def test_a_merged_pr_answers_the_ask_and_opens_the_bead(self):
         asks, store, sim, _ = asking("MERGED")

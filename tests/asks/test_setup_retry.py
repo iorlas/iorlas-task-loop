@@ -5,9 +5,9 @@ from unittest import mock
 from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
 
-from taskloop.app.run.ask_flow import AskFlow
+from taskloop.app.run.parts_run import ask_flow_over
 from taskloop.app.wire import asks as wire_asks
-from tlasks import raiser, setup_retry
+from tlasks import raiser, sweeps
 from tlkernel import askspecs as specs
 from tlkernel.ask import AskAnswer
 from tlkernel.askenums import AskKind, AskStatus
@@ -40,7 +40,7 @@ class SetupRetry(Case):
         return must(raiser.raise_ask(self.asks, spec, at)[0])
 
     def retry(self, version="1.0", starting=False):
-        return setup_retry.retry_setup(self.asks, self.store, BEAD, version, 2, self.cfg, starting=starting)
+        return sweeps.retry_setup(self.asks, self.store, BEAD, version, 2, self.cfg, starting=starting)
 
     def test_slot_gate_configuration_answers_and_restores_the_queue(self):
         assert self.retry()
@@ -69,8 +69,8 @@ class SetupRetry(Case):
     def test_engine_ask_flow_answers_and_consumes_the_setup_ask(self):
         host = SimpleNamespace(stores=SimpleNamespace(asks=self.asks), store=self.store, bead=BEAD, cfg=self.cfg,
                                dry=False, state=RunState(brief_hash="brief"), fresh=False, briefs=mock.Mock(), log=mock.Mock())
-        with mock.patch("taskloop.app.run.ask_flow.ident.plugin_version", return_value="1.0"):
-            AskFlow(host).check()
+        with mock.patch("taskloop.app.run.parts_run.ident.plugin_version", return_value="1.0"):
+            ask_flow_over(host).check()
         assert host.answered.answer.text == "retry"
         assert must(self.asks.get(BEAD)).consumed is not None
         host.briefs.export.assert_called_once()
@@ -107,9 +107,9 @@ class SetupRetry(Case):
     def test_bad_budget_and_unknown_version_fail_closed(self):
         for value in ("broken", "{}", "[1]", '["1.0"]'):
             with self.subTest(value=value):
-                self.store.beads[BEAD].metadata[setup_retry.RETRIED] = value
+                self.store.beads[BEAD].metadata[sweeps.RETRIED] = value
                 assert not self.retry(starting=True)
-        self.store.beads[BEAD].metadata.pop(setup_retry.RETRIED)
+        self.store.beads[BEAD].metadata.pop(sweeps.RETRIED)
         assert not self.retry(version="", starting=True)
 
     def test_loop_sweep_requeues_only_asks_of_its_own_repository(self):
@@ -119,7 +119,7 @@ class SetupRetry(Case):
         who = Identity(actor="engine", home="/unused")
         with (mock.patch.object(wire_asks, "store", return_value=self.asks),
               mock.patch.object(wire_asks, "bd_store", return_value=self.store),
-              mock.patch.object(wire_asks, "sweep"),
+              mock.patch.object(wire_asks.sweeps, "sweep"),
               mock.patch.object(wire_asks, "now", return_value=2),
               mock.patch.object(wire_asks.ident, "plugin_version", return_value="1.0"),
               mock.patch.object(wire_asks.sweeps, "reask_orphans"),

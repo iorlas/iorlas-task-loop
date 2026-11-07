@@ -122,8 +122,11 @@ def _parse_checks(items: Sequence[Open]) -> None:
 
 
 def plan_of(raw: Open) -> PlanData:
-    """A planner's answer (the wire form, a dict) as the PlanData the engine keeps: the same keys, a shallow copy."""
-    return PlanData(**raw)
+    """A shallow copy of a planner's answer, a null irreversible action stored as an empty string."""
+    plan = PlanData(**raw)
+    if plan.get("irreversible", "") is None:  # a null is no action; an absent key stays absent (prompts render the plan as it came)
+        plan["irreversible"] = ""
+    return plan
 
 
 def parse(plan: Open) -> None:

@@ -303,7 +303,6 @@ source_modules =
     tlkernel
 forbidden_modules =
     taskloop.app.launch
-    taskloop.app.run.ask_flow
     taskloop.app.run.bead_env
     taskloop.app.run.closer_ports
     taskloop.app.run.context
