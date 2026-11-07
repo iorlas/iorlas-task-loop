@@ -4,7 +4,7 @@ from collections.abc import Callable
 from taskloop.contracts import paths
 from taskloop.contracts.docrows import RowDoc, singleton
 from taskloop.contracts.docstore import Absent, Present
-from taskloop.contracts.factoryparts import RELEASE_DOCS
+from taskloop.contracts.factoryparts import RELEASE_DOCS, REPORT_DOCS
 from taskloop.contracts.guard import guard
 from taskloop.contracts.loop import BadVersions
 from taskloop.contracts.reponame import repo_name
@@ -121,4 +121,4 @@ class BadVersionStore(RowDoc[BadVersions]):
 
 class ReflectStateStore(RowDoc[ReflectState]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(singleton(cfg, ReflectState, "reflect:digest").docs, "")
+        super().__init__(singleton(cfg, ReflectState, "reflect:digest", table=REPORT_DOCS).docs, "")
