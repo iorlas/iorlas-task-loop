@@ -232,7 +232,7 @@ source_modules =
     taskloop.app.pipeline.reflect_prompt
     taskloop.app.run.reload
     taskloop.app.run.requests
-    taskloop.app.run.resume
+    taskloop.app.pipeline.resume
     taskloop.app.run.review_glue
     taskloop.app.run.running
     taskloop.app.run.shared
