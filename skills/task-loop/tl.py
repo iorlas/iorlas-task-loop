@@ -77,14 +77,13 @@ except ModuleNotFoundError:
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # taskloop ships in the plugin dir; importing it adds _vendor
 
 from taskloop.adapters import beadtools, gitrepo, ident, landlock
-from taskloop.app.doctor import rails
+from taskloop.app.doctor import install, rails
 from taskloop.app.launch import dash as wire_dash
 from taskloop.app.launch import reindex
 from taskloop.app.release import pins
 from taskloop.app.track import trail, verbs
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import doctor, real
-from taskloop.app.wire import hook as hook_wire
 from taskloop.app.wire import lanes as wire_lanes
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire import usage as wire_usage
@@ -409,7 +408,7 @@ def v_stop(a: Any, c: Ctx) -> int:
 
 
 def repo_of(a: Any, c: Ctx) -> str:
-    return a.repo or hook_wire.main_checkout(c.git, str(Path.cwd()))
+    return a.repo or install.main_checkout(c.git, str(Path.cwd()))
 
 
 def v_doctor(a: Any, c: Ctx) -> int:
@@ -496,7 +495,7 @@ def main(argv: list[str] | None = None, here: Path = HERE, now: Callable[[], flo
     if stop:
         print(stop, file=sys.stderr)
         return os.EX_CONFIG
-    hook_wire.heal(a.cmd, here.parents[1], env)
+    install.heal(a.cmd, here.parents[1], env)
     return cli_bd.required(VERBS[a.cmd], a, ctx)
 
 

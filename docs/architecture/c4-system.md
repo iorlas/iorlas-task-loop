@@ -302,7 +302,7 @@ is kept. Crash = what a `kill -9` of a writer leaves. `C` = `~/.config/task-loop
 | `snapshots/delegate.*.json`, `usage-history.jsonl` | `StatusSnapshot` | tl lanes, tl usage, loop chores every 20 min | dashboard lane cards | overwritten | stale copy of delegate's own snapshot |
 | `events.jsonl`, `traces.jsonl` | JSONL | verbs, loop, engine | dashboard, reports, reflect | rotated | partial last line, skipped |
 | `sessions/`, `handoff/K.md`, `repos.json` (locked) | JSON, markdown | session hooks, `tl handoff`, `tl register` | dashboard, SessionStart | long | fine |
-| `bin/tl`, `githooks/*` (14) | sh scripts | **every SessionStart of every install, `tl hooks install`; last writer wins** (`tl/app/wire/hook.py:34-77`) | git, every shim user | until rewritten | a shim pointing at a removed install: every push refused, or (exception path) allowed |
+| `bin/tl`, `githooks/*` (14) | sh scripts | **every SessionStart of every install, `tl hooks install`; last writer wins** (`tl/app/doctor/install.py:34-77`) | git, every shim user | until rewritten | a shim pointing at a removed install: every push refused, or (exception path) allowed |
 | `pinned.json`, `bad-versions.json` | `Pin`, `BadVersions` | owner; loop on crash-after-move | loop, engine reload, delegate resolve | until cleared | fine |
 | `releases/`, `suite-green.json`, `release/<hash>/` clone | JSON, a clone | release, suite | status, release | long | a clone mid-release: next release resets it |
 | `dash.pid`, `dash.json` | JSON | **launcher and server** | launcher | process life | stale pid |

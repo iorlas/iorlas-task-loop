@@ -8,7 +8,7 @@ read back by `tl handoff show` and by the SessionStart hook after a compaction. 
 
 `<config>/handoff/<repo key>.md`, `<config>` = `$XDG_CONFIG_HOME/task-loop` or `~/.config/task-loop`
 (`ConfigDir.handoff`). `<repo key>` = `<main checkout folder name>-<first 8 hex of sha1 of its path>` (`contracts.ids.loop_key`).
-A worktree or slot shares the file of its main checkout (`app/wire/hook.main_checkout`). One file, rewritten whole:
+A worktree or slot shares the file of its main checkout (`app/doctor/install.main_checkout`). One file, rewritten whole:
 the writer makes `<file>.<pid>.tmp` beside it and `os.replace`s it, so a reader never sees half a file.
 
 ## Format

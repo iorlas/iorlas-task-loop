@@ -7,7 +7,8 @@ import pytest
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.app.wire import doctor, hook
+from taskloop.app.doctor import install
+from taskloop.app.wire import doctor
 from tlkernel.env import Env
 
 
@@ -30,11 +31,11 @@ class ShimPin(Case):
         return root
 
     def write(self, root):
-        hook.write_shim(root, self.env)
-        assert len(hook.write_hooks(root, self.env)) == len(hook.HOOK_NAMES)
+        install.write_shim(root, self.env)
+        assert len(install.write_hooks(root, self.env)) == len(install.HOOK_NAMES)
 
     def files(self):
-        return [self.config / "bin/tl", *(self.config / "githooks" / n for n in hook.HOOK_NAMES)]
+        return [self.config / "bin/tl", *(self.config / "githooks" / n for n in install.HOOK_NAMES)]
 
     def assert_targets(self, root):
         assert str(root / "skills/task-loop/tl.py") in self.files()[0].read_text()
@@ -89,8 +90,8 @@ class ShimPin(Case):
                     raise PermissionError("unreadable install")
                 return read(path)
             with self.subTest(name=name), mock.patch.object(Path, "read_bytes", unreadable):
-                hook.write_shim(self.old, self.env)
-                assert hook.write_hooks(self.old, self.env) == []
+                install.write_shim(self.old, self.env)
+                assert install.write_hooks(self.old, self.env) == []
             assert before == [f.read_bytes() for f in self.files()]
 
     def test_doctor_reports_shim_or_hook_skew_in_one_finding(self):
@@ -101,11 +102,11 @@ class ShimPin(Case):
                 if stale != "hook":  # a resolving shim is never stale: the fixed form of an older writer is
                     shim = self.config / "bin/tl"
                     shim.chmod(0o755)
-                    shim.write_text(hook.SHIM.replace("{tl}", str(self.old / "skills/task-loop/tl.py")))
+                    shim.write_text(install.SHIM.replace("{tl}", str(self.old / "skills/task-loop/tl.py")))
                 if stale == "shim":
-                    hook.write_hooks(new, self.env)
+                    install.write_hooks(new, self.env)
                 elif stale == "hook":
-                    hook.write_shim(new, self.env)
+                    install.write_shim(new, self.env)
                     f = self.config / "githooks/pre-push"
                     f.chmod(0o755)
                     f.write_text(f.read_text().replace(str(new), str(self.old)))

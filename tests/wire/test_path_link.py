@@ -7,7 +7,8 @@ import pytest
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.app.wire import doctor, hook
+from taskloop.app.doctor import install
+from taskloop.app.wire import doctor
 from tlkernel.env import Env
 
 
@@ -24,38 +25,38 @@ class PathLink(Case):
 
     def test_it_links_when_local_exists_and_is_idempotent(self):
         (self.home / ".local").mkdir()
-        hook.ensure_path_link(self.env)
+        install.ensure_path_link(self.env)
         assert self.link.is_symlink()
         assert os.readlink(self.link) == str(self.shim)
-        assert hook.link_state(self.env) == "ours"
-        hook.ensure_path_link(self.env)
+        assert install.link_state(self.env) == "ours"
+        install.ensure_path_link(self.env)
         assert os.readlink(self.link) == str(self.shim)
 
     def test_it_makes_no_local_folder_on_a_machine_without_one(self):
-        hook.ensure_path_link(self.env)
+        install.ensure_path_link(self.env)
         assert not (self.home / ".local").exists()
-        assert hook.link_state(self.env) == "missing"
+        assert install.link_state(self.env) == "missing"
 
     def test_a_link_made_by_hand_to_the_shim_is_ours_and_a_different_tl_is_never_replaced(self):
         self.link.parent.mkdir(parents=True)
         self.link.symlink_to(self.shim)  # dangling until the shim is written: still ours
-        assert hook.link_state(self.env) == "ours"
+        assert install.link_state(self.env) == "ours"
         self.link.unlink()
         self.link.write_text("#!/bin/sh\necho other tl\n")
-        hook.ensure_path_link(self.env)
+        install.ensure_path_link(self.env)
         assert not self.link.is_symlink()
-        assert hook.link_state(self.env) == "foreign"
+        assert install.link_state(self.env) == "foreign"
         elsewhere = self.home / "elsewhere"
         elsewhere.write_text("")
         self.link.unlink()
         self.link.symlink_to(elsewhere)
-        hook.ensure_path_link(self.env)
+        install.ensure_path_link(self.env)
         assert os.readlink(self.link) == str(elsewhere)
 
     def test_it_never_raises(self):
         (self.home / ".local").mkdir()
         with mock.patch.object(Path, "symlink_to", side_effect=PermissionError("read-only home")):
-            hook.ensure_path_link(self.env)
+            install.ensure_path_link(self.env)
 
     def test_the_doctor_line_shows_the_state_and_whether_the_folder_is_on_path(self):
         (self.home / ".local").mkdir()
@@ -63,7 +64,7 @@ class PathLink(Case):
         assert not foreign
         assert "is missing" in line
         assert "is on PATH" in line
-        hook.ensure_path_link(self.env)
+        install.ensure_path_link(self.env)
         assert doctor.path_link_line(self.env)[0].startswith(f"PATH tl: {self.link} -> the shim")
         assert "NOT on PATH" in doctor.path_link_line(Env({**self.env.vars, "PATH": "/usr/bin"}))[0]
         self.link.unlink()

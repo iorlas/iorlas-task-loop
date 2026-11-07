@@ -20,8 +20,8 @@ from support.tlmain import tl_main  # noqa: E402
 from support.who import who  # noqa: E402
 
 from taskloop.adapters.git import RealGit  # noqa: E402
+from taskloop.app.doctor import install  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402
-from taskloop.app.wire import hook as hook_wire  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 
@@ -153,7 +153,7 @@ class DoctorSource(Case):
 
     def test_reports_exact_commit_when_ok(self):
         commit = self.advance_base(self.config("good", "old.txt"))
-        hook_wire.write_hooks(ROOT, snapshot())  # the pre-push judge is installed: the doctor fails without it
+        install.write_hooks(ROOT, snapshot())  # the pre-push judge is installed: the doctor fails without it
         out = self.doctor(cli=True)  # the one run through tl.main
         assert "base origin/main at commit " + commit in out
         assert "ok: no setup problems found in " + shown(self.wt) in out
