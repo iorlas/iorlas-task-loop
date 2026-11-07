@@ -28,14 +28,14 @@ SETTLING = {
     "leave open after a pause": (fx.LeaveBead, oc.make(Kind.PAUSE_LANE, "the lane is out")),
 }
 NOT_HERE = {
-    fx.SaveBranch: "closer_branch: the wip commit of a clean tree is no commit (tests/run/test_closer_branch*.py)",
-    fx.RecordRun: "a no-op: finish_run already projected the answer (closer.apply)",
+    fx.SaveBranch: "closing_branch: the wip commit of a clean tree is no commit (tests/pipeline/test_closing_branch.py)",
+    fx.RecordRun: "a no-op: finish_run already projected the answer (closing.apply)",
     fx.NoteDry: "a log note",
     fx.NoteWait: "a log note",
     fx.RaiseAsk: "the ask store keeps one ask per bead (tests/asks)",
     fx.FileNotes: "the notes are kept in the checkpoint and filed once (closing_notes)",
     fx.Reflect: "the comment is deduped per (bead, kind, fingerprint) per hour",
-    fx.ReleaseSlot: "leaves the slot only while its generation is the lease's (closer_branch.ReleaseSlot)",
+    fx.ReleaseSlot: "leaves the slot only while its generation is the lease's (closing_branch.ReleaseSlot)",
     fx.DropCheckpoint: "dropping a dropped checkpoint is a no-op",
     fx.RecordLand: "the landed store keys by sha",
     fx.BdSync: "bd sync of nothing new is a no-op",
