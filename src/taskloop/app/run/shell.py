@@ -29,12 +29,13 @@ class Shell:
 
     def run(self, cmd: Any, timeout: float = 3600, check: bool = False, save: Any = None, env: Any = None, pin: bool = False,
             what: str = "command", cwd: Any = None,
-            stop: threading.Event | None = None) -> tuple[int, str]:
+            stop: threading.Event | None = None, *, network: bool = False) -> tuple[int, str]:
         """A command: an argv list, exec'd as given (no shell, no quoting rules; a string is a programming error), run by stream-proc
         in a group of its own. It ends by itself, at `timeout` seconds of wall time (exit 124; its tree is stopped), or when
         the run's halt is set. Nothing else stops it: a quiet command may be waiting. pin=True: an engine git command, run with
         GIT_DIR/GIT_WORK_TREE of the slot; checks and gates run unpinned (they may run git on other repos). `stop`: the flag of one
-        lane of a gate (a first red elsewhere sets it) in place of the run's halt, which the lanes' owner passes on to it."""
+        lane of a gate (a first red elsewhere sets it) in place of the run's halt, which the lanes' owner passes on to it.
+        `network=True`: a check or check fix may use the network, bypassing isolation and its host refusal."""
         e = self.e
         if isinstance(cmd, str):
             raise TypeError(f"a command is an argv list, never a string: {cmd[:80]!r}")
@@ -48,7 +49,7 @@ class Shell:
         started = time.time()
         chunks: list[str] = []
         e.killed = e.wall_hit = False
-        res = self.stream(cmd, cwd, env, pin, chunks, timeout, cid, what, started, stop or e.halt)
+        res = self.stream(cmd, cwd, env, pin, chunks, timeout, cid, what, started, stop or e.halt, network=network)
         rc = 124 if res.timed_out == "wall" else -res.signal if res.signal else res.returncode or 0
         text = "".join(chunks)
         if res.timed_out:  # only a stop the engine performed; a command that exits 124 by itself is not a kill
@@ -65,14 +66,14 @@ class Shell:
         return rc, tail
 
     def stream(self, cmd: Any, cwd: Any, env: Any, pin: bool, chunks: list[str], timeout: float, cid: str, what: str,
-               started: float, stop: threading.Event) -> Any:
+               started: float, stop: threading.Event, *, network: bool = False) -> Any:
         e = self.e
         extra = {**childenv.WORKER_MARK, **e.bead_env, **(pinned_env(e.wt) if pin else {}), **(env or {})}
-        network = self.no_network() if what in {"check", "check fix"} else ()
+        network_prefix = self.no_network() if what in {"check", "check fix"} and not network else ()
         try:
             if what in {"check", "check fix"}:
                 with childenv.check_environment(e.env.vars, extra, scratch_home=e.cfg.check_scratch_home) as clean:
-                    argv = [*check_nice(e.env.vars.get("PATH", "")), *network, *cmd]
+                    argv = [*check_nice(e.env.vars.get("PATH", "")), *network_prefix, *cmd]
                     return e.spawner.stream(argv, cwd=None if cwd is None else str(cwd), env={}, extra=clean,
                                             on_output=chunks.append, timeout_s=timeout, stop=stop)
             return e.spawner.stream(list(cmd), cwd=None if cwd is None else str(cwd), extra=extra, on_output=chunks.append,

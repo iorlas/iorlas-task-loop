@@ -151,19 +151,18 @@ def without(env: Mapping[str, str], *names: str) -> dict[str, str]:
 
 
 GIT_PIN_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")  # the engine's own git is pinned; no child inherits a pin
-KEEP = ("CLAUDE_CONFIG_DIR",)  # a worker on a custom Claude login must find it
 
 
 WORKER_MARK = {"TASK_LOOP_WORKER": "1", "DELEGATE_DEPTH": "1"}  # what a child of the engine is told: it never delegates further
 
 
 def child_env_of(env: Mapping[str, str], extra: Mapping[str, str] | None = None) -> dict[str, str]:
-    """`env` without what an agent session exports (CLAUDE_*, ANTHROPIC_*, DELEGATE_*, MCP_*, OTEL_*, CODEX_COMPANION*) and without
-    TASK_LOOP_* and the git pins, but with CLAUDE_CONFIG_DIR. Credentials stay: delegate scrubs its workers itself (its own
-    app-only scrub does the same); a worker never delegates further (DELEGATE_DEPTH=1)."""
+    """`env` without what an agent session exports, TASK_LOOP_* and the git pins.
+    Credentials stay: delegate scrubs its workers itself; a worker never delegates further (DELEGATE_DEPTH=1).
+    """
     gone = (*child_env.APP_PREFIXES, "TASK_LOOP_")
     drop = (*child_env.APP_NAMES, *GIT_PIN_VARS)
-    out = {k: v for k, v in child_env.without_venv(env).items() if k in KEEP or not (k.startswith(gone) or k in drop or k in HANDOVERS)}
+    out = {k: v for k, v in child_env.without_venv(env).items() if not (k.startswith(gone) or k in drop or k in HANDOVERS)}
     out.update(WORKER_MARK)
     out.update(hooks_vars(out, env))
     out.update(extra or {})

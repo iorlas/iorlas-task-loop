@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import Protocol, final
 
 from tlkernel.beadsport import Beads
+from tlkernel.branches import bead_of
 from tlkernel.forge import OPEN, Pr, StackItem
 from tlkernel.gitport import Git
 from tlkernel.queue_doc import QueueDoc
@@ -95,7 +96,7 @@ class QueueLand:
             branch, oid, _pr = stack.resolve(item)
             self.items[branch] = item
             heads.append((branch, oid))
-        beads_of = {branch: item.bead or (branch.removeprefix("task/") if branch.startswith("task/") else "")
+        beads_of = {branch: item.bead or (bead_of(branch) or "")
                     for branch, item in self.items.items()}
         cap = enqueue(stack, heads, beads_of)
         flight = InFlight(cap=1 if cap == 1 else stack.jobs)

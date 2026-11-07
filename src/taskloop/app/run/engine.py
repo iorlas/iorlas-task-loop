@@ -28,6 +28,7 @@ from taskloop.app.run.host import RunHost
 from taskloop.app.run.layout import RunLayout, finish_of, live_run, loop_id_of, loop_of, repo_of
 from taskloop.app.run.stages import run_stages
 from taskloop.app.run.state import carries_state
+from taskloop.app.slots.engine_lock import HeldLock
 from taskloop.app.track.console import say
 from taskloop.domain import outcome as oc
 from taskloop.stores.bundle import Stores
@@ -62,7 +63,9 @@ class Engine(RunHost):
         git: Git,
         who: Identity,
         mode: str = "task",
+        held_lock: HeldLock | None = None,
     ) -> None:
+        self.held_lock = held_lock if held_lock is not None else HeldLock()
         route = route or real_route()
         self.env = env  # the process environment, taken once at the edge (tl.py); every child is built from it
         self.spawner = spawner

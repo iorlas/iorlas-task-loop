@@ -31,6 +31,11 @@ class Venv(Case):
         assert "VIRTUAL_ENV" not in out
         assert out["PATH"] == "/usr/bin"
 
+    def test_worker_env_drops_session_configuration_without_a_keep_exception(self):
+        out = childenv.child_env_of({"CLAUDE_CONFIG_DIR": "/session", "CUSTOM_API_KEY": "credential"})
+        assert "CLAUDE_CONFIG_DIR" not in out
+        assert out["CUSTOM_API_KEY"] == "credential"
+
     def test_the_process_environment_is_cleaned(self):
         from tlkernel import env as penv  # noqa: PLC0415
         with penv.patched({"VIRTUAL_ENV": "/venv"}):

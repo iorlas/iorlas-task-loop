@@ -32,9 +32,10 @@ class CheckEnvironmentTest(Case):
         assert "core.hooksPath" in tool_env(base).values()
 
     def test_a_call_to_delegate_carries_no_depth_mark_but_any_other_child_does(self):
-        env = Env({"PATH": "/bin"})
+        env = Env({"PATH": "/bin", "CLAUDE_CONFIG_DIR": "/session"})
         assert current_env(env)["DELEGATE_DEPTH"] == "1"
         out = delegate_call_env(env, {"X": "1"})
+        assert "CLAUDE_CONFIG_DIR" not in out
         assert "DELEGATE_DEPTH" not in out
         assert (out["TASK_LOOP_WORKER"], out["X"]) == ("1", "1")
 
