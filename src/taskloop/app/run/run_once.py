@@ -14,7 +14,7 @@ from taskloop.app.slots.lease import Lease
 class RunOnce:
     def __init__(self, host: Any) -> None:
         self.host = host
-        body = RunBody(host, LandHistory(host.git), self.beat)
+        body = RunBody(host, host, host, host, host, host, host, LandHistory(host.git), self.beat)
         self.lifecycle = Lifecycle(host, body=body.run, lease=self.lease, reexecs=ReexecBook(host.home))
 
     def lease(self, on_beat: Callable[[], None], on_death: Callable[[BaseException], None]) -> Lease:
