@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from tlkernel import workswitch as switch
 from tlkernel.checkpoint import Defect
 from tlkernel.plancheck import StageData
 from tlkernel.stagefacts import RunFacts
@@ -12,7 +13,6 @@ from taskloop.adapters import looks
 from taskloop.app.look.host import LookHost, LookPorts
 from taskloop.app.look.prompts import LOOK_FEEDBACK, LOOK_WRITE_TABLE
 from taskloop.app.look.state import LookState
-from taskloop.domain.work import switch
 from taskloop.domain.work.matchers import Wording
 from taskloop.domain.work.skip import SkipKind
 

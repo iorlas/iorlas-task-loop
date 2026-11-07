@@ -4,10 +4,10 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Final, assert_never
 
-from taskloop.domain.checks.matchers import glob_re, is_build, is_queued
 from taskloop.domain.checks.planref import adhocs
 from tlkernel import inputsets
 from tlkernel.argv import text_of
+from tlkernel.checkmatchers import glob_re, is_build, is_queued
 from tlkernel.checks import Check, Phase, Tag
 from tlkernel.config import CheckSpec, EngineConfig
 from tlkernel.ids import CheckId

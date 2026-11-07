@@ -9,6 +9,7 @@ from tlkernel.delegateport import Refusal
 from tlkernel.enums import Step
 from tlkernel.kinds import Kind
 from tlkernel.plancheck import PlanData, RoundState
+from tlkernel.reviewkinds import UNCHECKED_KINDS
 
 from taskloop.app.pipeline.adapter_ports import PeekBead, Version
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
@@ -17,7 +18,6 @@ from taskloop.app.pipeline.lifecycle import Ended, LeaseLike
 from taskloop.app.pipeline.ports import HeadHistory
 from taskloop.app.pipeline.run_roles import Delegating, GitMoves, Leasing, RunRecords, RunValues, Stages
 from taskloop.domain.plan.matchers import AcceptanceText
-from taskloop.domain.review.kinds import UNCHECKED_KINDS
 
 
 class RunBody[T]:

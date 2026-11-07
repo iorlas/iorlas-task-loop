@@ -10,6 +10,7 @@ from tlkernel import lifecyclematchers as lifecycle
 from tlkernel import log as rec
 from tlkernel import plancheck, wire
 from tlkernel import runoutcome as oc
+from tlkernel import workswitch as switch
 from tlkernel.ask import Ask
 from tlkernel.checkpoint import CloseIntent, EndRec
 from tlkernel.config import EngineConfig
@@ -34,7 +35,6 @@ from taskloop.app.pipeline.adapter_ports import Version
 from taskloop.app.pipeline.closing_record import RecordHost, RecordRun
 from taskloop.app.pipeline.finish import answer
 from taskloop.app.pipeline.finish import outcome as finished_outcome
-from taskloop.domain.work import switch
 
 
 class JournalCall(Protocol):
