@@ -224,7 +224,7 @@ The requested conceptual sequence “land → cleanup → close/follow-ups → r
 
 ### H10 — push → landed receipt / bd synchronization
 
-**Truth/copies:** After releasing the land lock, `Sync` applies `RecordLand`, then `BdSync` (`src/taskloop/app/land/sync.py:44`). RecordLand writes a bd land event/provenance, `landed/B.json`, and JSONL cleanup retry inputs (`app/run/engine.py:357`). These copies can disagree during a crash.
+**Truth/copies:** After releasing the land lock, `Sync` applies `RecordLand`, then `BdSync` (`src/taskloop/app/land/record.py:44`). RecordLand writes a bd land event/provenance, `landed/B.json`, and JSONL cleanup retry inputs (`app/run/engine.py:357`). These copies can disagree during a crash.
 
 **Kill/idempotency:** A kill after bd provenance but before landed JSON repeats receipt work. A kill after landed JSON but before cleanup inputs leaves no logged cleanup obligation for that attempt. A kill after each effect but before its checkpoint key repeats that effect. Dolt sync is a separate external operation; failure is raised, then the engine's close conversion discards it (F07).
 
@@ -289,7 +289,7 @@ Delegate is resolved again before each call; a refused new installation keeps th
 | Stop → human reason | `src/taskloop/domain/lanes/says.py:71`, `app/run/lane_acts.py:180` | `said` shrinks to 200 chars; `fix` is separately rendered. A generic leading line can crowd out detailed later cause. |
 | Command → tail / CmdEnd | `src/taskloop/app/run/shell.py:47` | Returned tail is last 15 lines; failing CmdEnd keeps last 600 chars. Unsaved full output is not recoverable from that row. |
 | Check → result / prompt | `src/taskloop/app/checks/executor.py:218`, `app/checks/evidence.py:60` | Result tail is 1500 chars; compact failed prompt uses a 600-char diagnostic budget. Full saved logs are a separate artifact. |
-| bd failure → typed error | `src/taskloop/adapters/bd.py:109` | Missing sections are extracted before clipping, from combined stderr/JSON error/stdout; retained error text is first 500 chars, later follow-up warning first 200 (`app/land/followups.py:67`). The historical first-line-only lint parser is not the current implementation. |
+| bd failure → typed error | `src/taskloop/adapters/bd.py:109` | Missing sections are extracted before clipping, from combined stderr/JSON error/stdout; retained error text is first 500 chars, later follow-up warning first 200 (`app/land/record.py:67`). The historical first-line-only lint parser is not the current implementation. |
 | Final close → logs/reports | `src/taskloop/app/run/closer_record.py:76`, `app/run/records.py:113`, `contracts/locator.py:171` | Transition detail often keeps first line/200 chars; Close/trace 500; manifest reason 300; loop reason 300. No terminal record is a complete causal chain. |
 
 ## Exceptional flows
@@ -510,7 +510,7 @@ The error/visibility gaps in these observations are recorded here as data proven
 
 ### F08 — P2: follow-up creation has a create-to-checkpoint duplication window
 
-**Evidence:** `src/taskloop/app/land/followups.py:60` creates in bd before recording its FollowKey at lines 63–64. The pre-create lookup at lines 43–49 is only called for the UNCHECKED category (line 57), and matches any source title prefix rather than the exact item. `src/taskloop/domain/interpret.py:43` records the enclosing FileNotes key only after all this returns.
+**Evidence:** `src/taskloop/app/land/record.py:60` creates in bd before recording its FollowKey at lines 63–64. The pre-create lookup at lines 43–49 is only called for the UNCHECKED category (line 57), and matches any source title prefix rather than the exact item. `src/taskloop/domain/interpret.py:43` records the enclosing FileNotes key only after all this returns.
 
 **Failure:** Kill after a normal follow-up is created but before its key is saved. Recovery repeats FileNotes and creates the same follow-up again; the source-title lookup used for the deliberately single unchecked follow-up does not deduplicate ordinary follow-ups.
 
@@ -520,7 +520,7 @@ The error/visibility gaps in these observations are recorded here as data proven
 
 ### F09 — P2: refused follow-ups become completed FileNotes and lose their retry record
 
-**Evidence:** `src/taskloop/app/land/followups.py:65` collects refused items and saves them to the checkpoint at line 70, then returns normally. `src/taskloop/app/run/closer_notes.py:60` turns that into Notes and returns; `src/taskloop/domain/interpret.py:44` marks FileNotes complete. `src/taskloop/domain/effects.py:153` deletes a finished run's checkpoint after closing the source task.
+**Evidence:** `src/taskloop/app/land/record.py:65` collects refused items and saves them to the checkpoint at line 70, then returns normally. `src/taskloop/app/run/closer_notes.py:60` turns that into Notes and returns; `src/taskloop/domain/interpret.py:44` marks FileNotes complete. `src/taskloop/domain/effects.py:153` deletes a finished run's checkpoint after closing the source task.
 
 **Failure:** A temporary bd/lint refusal leaves only a warning/Reflect count and prose containing the unfiled titles after a landed task closes. No durable pending-create queue remains for an automatic retry, even though the engine knew these follow-ups were required.
 

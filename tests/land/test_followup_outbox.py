@@ -17,8 +17,8 @@ from support.memstores import fake_stores
 
 from taskloop.adapters.bd import BdRun, BdStore
 from taskloop.app.land.closing import LandFollowUps
-from taskloop.app.land.followups import file_follow_ups
 from taskloop.app.land.host import LandState
+from taskloop.app.land.record import file_follow_ups
 from taskloop.app.look.state import LookState
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.state import StateAttrs, carries_state

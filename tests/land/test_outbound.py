@@ -19,7 +19,7 @@ from tltestkit.plans import CLEAN, PLAN, WRITE
 # isort: split
 from taskloop.app.land import push
 from taskloop.app.land.lander import Lander
-from taskloop.app.land.sync import Sync as AfterLand
+from taskloop.app.land.record import Sync as AfterLand
 from tlkernel import lanepauses as pauses
 from tlkernel import runoutcome as oc
 from tlkernel.enums import Result
