@@ -10,11 +10,11 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from any_lease import Leases
-from support.factory_index import ingest
 from support.fakes import FakeBeadStore
 
-from taskloop_dash.app import Dash
-from taskloop_dash.env import Env, Ports
+from tldash.app import Dash
+from tldash.env import Env, Ports
+from tldash.testing import ingest
 from tlkernel.ids import loop_key
 from tlkernel.locator import RunLocator
 from tlkernel.lockenums import LockWhat

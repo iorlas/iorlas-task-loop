@@ -4,10 +4,10 @@ import time
 from unittest.mock import Mock
 
 import pytest
-from support import waits
 
 from tlkernel.lockenums import LockWhat
 from tlkernel.locks import LockRecord
+from tltestkit import waits
 from tltestkit.memdoc import MemLockTable
 
 

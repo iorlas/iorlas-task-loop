@@ -152,3 +152,5 @@ Each member still needs entries in:
   shows the stage's tests no longer reached through `paths.py`.
 
 The rules and mutation tools' Python paths, affected-test scan roots and visibility, production architecture trees, and package selection now discover `packages/*/src` or member manifests automatically. `just test-pkg <stage>` detects a member manifest and runs its isolated environment.
+
+Dash is carved into `packages/dash` (`tldash`), with isolated package tests.

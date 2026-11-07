@@ -48,7 +48,7 @@ def test_a_card_without_main_is_green() -> None:
 
 
 def test_the_strip_paints_main_red_as_a_red_banner() -> None:
-    js = (Path(__file__).resolve().parents[2] / "src" / "taskloop_dash" / "static" / "js" / "app.js").read_text()
+    js = (Path(__file__).resolve().parents[2] / "packages" / "dash" / "src" / "tldash" / "static" / "js" / "app.js").read_text()
     assert "s.lost || s.crashes || s.main_red ? 'ban bad'" in js
 
 

@@ -22,8 +22,8 @@ DEV = str(ROOT / "dev")  # importgraph, vendor and affected: the stdlib-only hel
 if DEV not in sys.path:
     sys.path.append(DEV)
 
-if SRC not in os.environ.get("PYTHONPATH", "").split(os.pathsep):  # a child `python3 -m taskloop_dash` finds the package and the shelf
-    os.environ["PYTHONPATH"] = os.pathsep.join(filter(None, [SRC, VENDOR, os.environ.get("PYTHONPATH")]))
+if SRC not in os.environ.get("PYTHONPATH", "").split(os.pathsep):  # a child `python3 -m tldash` finds the package and the shelf
+    os.environ["PYTHONPATH"] = os.pathsep.join(filter(None, [SRC, str(ROOT / "packages/dash/src"), VENDOR, os.environ.get("PYTHONPATH")]))
 
 
 def _guard_bd() -> None:

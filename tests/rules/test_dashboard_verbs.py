@@ -9,7 +9,7 @@ from tltestkit.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support.tlmain import tl
 
-STATIC = Path(__file__).resolve().parents[2] / "src" / "taskloop_dash" / "static"
+STATIC = Path(__file__).resolve().parents[2] / "packages" / "dash" / "src" / "tldash" / "static"
 
 
 def named_verbs(text):

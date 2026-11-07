@@ -4,11 +4,10 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
-from support.dashlogs import bead
-from support.factory_index import seed_beads
 from support.hostname import hostname
 
 from dashwire import test_dash_api as fixtures
+from tldash.testing import bead, seed_beads
 from tlkernel.ids import loop_key
 from tltestkit.narrow import must
 

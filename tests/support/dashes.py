@@ -6,10 +6,10 @@ import threading
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from taskloop.adapters.bd import BdStore
-from taskloop_dash import serve
-from taskloop_dash.app import Dash
-from taskloop_dash.cli import dash as dash_cli
-from taskloop_dash.env import Env, Ports
+from tldash import serve
+from tldash.app import Dash
+from tldash.cli import dash as dash_cli
+from tldash.env import Env, Ports
 from tlkernel.env import snapshot
 from tlkernel.paths import default_root
 
@@ -26,7 +26,7 @@ def make_dash(ports=None, config=None, **kw):
 
 @contextlib.contextmanager
 def serving(ports=None, *argv):
-    """The dash server (the code `python3 -m taskloop_dash` starts, minus the process): a real socket served from a thread. Yields its
+    """The dash server (the code `python3 -m tldash` starts, minus the process): a real socket served from a thread. Yields its
     base URL. The environment (HOME, XDG_CONFIG_HOME, TASK_LOOP_DASH_BIND) is read now, so patch it first."""
     env = Env(config=default_root(snapshot()), ports=ports or Ports(), version=dash_cli.code_version())
     servers, _addrs, port, _dash = serve.start(env, dash_cli.PACKAGE, snapshot(), list(argv) or ["--port", "0"])

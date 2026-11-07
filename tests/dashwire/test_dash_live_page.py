@@ -8,9 +8,9 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support.dashes import make_dash
-from support.factory_index import ingest
 
-from taskloop_dash.api import live
+from tldash.api import live
+from tldash.testing import ingest
 from tlkernel import wire
 from tlkernel.dash import LivePage
 from tlkernel.ids import loop_key

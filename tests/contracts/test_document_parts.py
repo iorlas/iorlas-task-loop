@@ -3,7 +3,7 @@ import pytest
 
 from taskloop.stores.real import real_stores
 from taskloop.stores.ticketrows import TicketRows
-from taskloop_dash.index import Indexer
+from tldash.index import Indexer
 from tlkernel import beadrows, factorydb, receipts, rundocs
 from tlkernel.checks import Durations
 from tlkernel.flakes import FlakeLog, FlakeRow

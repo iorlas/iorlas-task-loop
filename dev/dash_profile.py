@@ -23,10 +23,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import dash_profile_fixture
 
 from taskloop.app.launch import dash_ports
-from taskloop_dash.app import Dash
-from taskloop_dash.env import Env
-from taskloop_dash.index import Indexer, reindex
-from taskloop_dash.views import snapshot as snapshots
+from tldash.app import Dash
+from tldash.env import Env
+from tldash.index import Indexer, reindex
+from tldash.views import snapshot as snapshots
 from tlkernel.env import snapshot
 from tlkernel.paths import ConfigDir, default_root
 
@@ -99,7 +99,7 @@ def measure(endpoint, state, call):
         profiler.disable()
         elapsed = (time.perf_counter() - start) * 1000
     views = sum(entry.inlinetime for entry in profiler.getstats() if not isinstance(entry.code, str)
-                and "taskloop_dash/views" in entry.code.co_filename) * 1000
+                and "tldash/views" in entry.code.co_filename) * 1000
     print(f"| {endpoint} | {state} | {elapsed:.2f} | {counts['processes']} | {counts['opens']} | "
           f"{counts['bytes']} | {counts['stats']} | {counts['dirlists']} | {views:.2f} |", flush=True)
     return result

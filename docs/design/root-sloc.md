@@ -24,7 +24,7 @@ Packages that exist: `kernel`, `gate`, `artifacts`, `pipeline`, `testkit`. Not c
 |---|---|---|---|---|---|
 | `skills/task-loop/tl.py` | 341 | 6 | 10 | v_ask's sweep into app/asks; the rest stays | 172 sloc are argparse parser builders, 50 the VERBS table, 84 about 25 two-line bindings. cli/* is root too, so moving parsers or handlers into cli modules leaves the total unchanged. Option (c): verbs as data (~150 sloc) waits for Denis on whether cli wiring counts as root (bead tl-e5t0.40.6 follow-up) |
 | `app/run/entry.py` | 261 | 45 | 150 | slots package (_slot_taken, run_any_slot decision logic, net ~35; take_area is area policy and stays until an areas carve); pipeline (admission, blocked reopen ~50) | run_in/run_bead/_worktree_of stay. Needs the slots carve (tl-e5t0.17) and a slots port; the pipeline half is free now (packages/pipeline exists) |
-| `app/launch/dash.py` | 191 | 41 | 170 | taskloop_dash (its launch module); stays a ~20 sloc binding | dashboard lane work, wait until pix-dash is quiet |
+| `app/launch/dash.py` | 191 | 41 | 170 | tldash (its launch module); stays a ~20 sloc binding | dashboard lane work, wait until pix-dash is quiet |
 | `app/wire/slots.py` | 155 | 19 | 130 | slots package (machine-bound half: slot_table, slot_env, worktrees, take/release) | slots carve (tl-e5t0.17) with a slots port that wire binds; callers: entry, doctor, loop |
 | `app/run/fields.py` | 131 | 0 | 0 | stays | construction: the plain fields of a run; shrinks only when the Engine's 150 attributes fall |
 | `app/launch/loop.py` | 122 | 0 | 0 | stays | builds the LoopEnv: pure binding |

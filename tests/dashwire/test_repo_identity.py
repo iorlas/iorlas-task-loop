@@ -2,13 +2,12 @@
 
 from pathlib import Path
 
-from support.dashlogs import RunScript, T, bead
-from support.factory_index import ingest, seed_beads
 from support.fakes import FakeBeadStore
 
 from taskloop.app.launch.dash_ports import owner_intake, owner_writes
-from taskloop_dash.app import Dash
-from taskloop_dash.env import Env, Ports
+from tldash.app import Dash
+from tldash.env import Env, Ports
+from tldash.testing import RunScript, T, bead, ingest, seed_beads
 from tlkernel.askstore import AskStore
 from tlkernel.ids import loop_key
 from tlkernel.lookrows import LookRows

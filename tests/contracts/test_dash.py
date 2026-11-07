@@ -8,8 +8,8 @@ import typing
 import pytest
 from support import dash_fixtures as fx
 
-from taskloop_dash.api.writes import Writes
-from taskloop_dash.views.snapshot import version_of
+from tldash.api.writes import Writes
+from tldash.views.snapshot import version_of
 from tlkernel import dash as D
 from tlkernel import dashcost as DC
 from tlkernel import dashhealth as DH

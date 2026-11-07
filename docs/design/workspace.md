@@ -18,7 +18,7 @@ Package `packages/artifacts`: `pyproject.toml` (name `tlartifacts`, dependency `
 
 | # | question | result |
 |---|---|---|
-| a | kernel its own member, no cycle | yes. `tlartifacts -> tlkernel` only; new import-linter contract `package-artifacts-imports-only-the-kernel` (forbids taskloop, taskloop_dash, delegate); `tlartifacts` is also in the converted-stages (no host) contract. 21 contracts kept, 0 broken. |
+| a | kernel its own member, no cycle | yes. `tlartifacts -> tlkernel` only; new import-linter contract `package-artifacts-imports-only-the-kernel` (forbids taskloop, tldash, delegate); `tlartifacts` is also in the converted-stages (no host) contract. 21 contracts kept, 0 broken. |
 | b | naming | **folder `packages/<stage>`, project `tl<stage>`, import root `tl<stage>`** (`tlkernel`, `tltestkit`, `tlartifacts`). One rule, no clash with `taskloop.app.<stage>` words, greppable. The folder is the short name: `uv run --package tl<stage>`, `just test-pkg <stage>`. |
 | c | tl.py puts member src on sys.path | yes, `src/tlpaths.py` globs `packages/*/src`; nothing to add per package. `tl.py --help` and `import taskloop.cli.factory` resolve `tlartifacts` from the checkout. |
 | d | tools cover `packages/*/{src,tests}` | **not for free**: each of these hard-coded `packages/kernel/src` and had to become a glob: `justfile` rules PYTHONPATH, `dev/affected.py` ROOTS/VISIBLE, `tests/rules/arch_rules.py` production trees, `dev/hostban_mutation.py`, plus root `ruff.toml` `src`, `pyrefly.toml` `search-path`, `.importlinter` `root_packages` (those three are one line per member; list them or derive them). pyrefly needed `project-includes = packages` (already there). |
@@ -53,7 +53,7 @@ Honest reading: the **selection gain is nil for a leaf that the shell still impo
 |---|---|---|---|---|
 | 0 | S1a (.11) + T1 (.22) + K1 (.10) as **WS-MECH** | take from the spike: globs in justfile, affected.py, arch_rules, hostban_mutation; `dev/packages.py` fixes (bugs 1, 2) and its tests; `tltestkit.plugin` (3); `host_ban` resolver (6); kernel named as a lint layer; derive ruff `src`, pyrefly `search-path`, `root_packages` from the member list or one line each. No stage moves. | nothing (merge first, small) | touches `.importlinter`, `justfile`, `dev/`: any open PR editing those rebases (C-PIPELINE will edit `.importlinter` and `arch_invariants`) |
 | 1 | **artifacts** (E1 part, from the spike branch) | rebase the spike commit onto WS-MECH | 2, 3, 4 | C-PIPELINE touches `run/ask_flow.py` (one import line). The spike has no other overlap |
-| 2 | S1b (.12) `taskloop_dash` into packages/ | a move of an existing top-level package | 1, 3 | none known (dash is read-only on state) |
+| 2 | S1b (.12) `tldash` into packages/ | a move of an existing top-level package | 1, 3 | none known (dash is read-only on state) |
 | 3 | PATHS (.25) | split `paths.py`; **blocked** until #219/#232 land; the stage-owned path helpers (`artifacts/paths.py` etc.) already moved with their stage | after the first 2 carves | every carve (bug 6 list), so do it before the big carves, not after |
 | 4 | TESTISO (.66) | test-to-package map and the sibling-import check across all of `tests/`; makes bug 4 a gate rule | 1, 2 | none |
 | 5 | S3 carves, **after their outward imports are settled**: slots (.17), asks (.18), then gate (.16), release (.19), track, doctor, report | each imports `taskloop.adapters/stores/domain` today (section 2): first move the shared pieces (`adapters.ident`, `bd`, `stores.real`, `domain.checks.*`) into kernel or into the owning stage, or behind a port. One PR per stage move, one per port. | 2 at a time (shared files: `.importlinter`, `uv.lock`; conflicts are mechanical) | **C-PIPELINE (.39)**: it moves `run/{stages,closer,steps,budget,blocked,waits,reload,reflect}`; gate/slots/asks/release are imported from there, so carve them **after** .39 lands, or the import rewrite conflicts in every moved file |
@@ -99,3 +99,5 @@ keeps both the imports and requested config.
 S1 slots code carve: `packages/slots` (`tlslots`) owns slot orchestration, liveness and slot environment rules. Tests remain in `tests/slots`; machine effects are supplied through `Effects`, bound by `app/wire/slotfx.py`.
 
 E1 slice 1: `packages/work` (`tlwork`) owns review application code and review, work and prompts domain rules. Tests remain in their original slice directories. Link checking receives the network adapter through the `Links` Protocol from run/host.py. The carve is rerunnable with `dev/carve_work.py --root DIR`.
+
+Dash is carved into `packages/dash` (`tldash`), with isolated package tests.

@@ -12,18 +12,18 @@ from tltestkit.tmpdir import TemporaryDirectory
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support.dashes import make_dash  # noqa: E402
-from support.dashlogs import RunScript  # noqa: E402
 
-from taskloop_dash import http  # noqa: E402
-from taskloop_dash.views import bead_detail, passes  # noqa: E402
-from taskloop_dash.views.artifact_files import split_stage  # noqa: E402
 from tlartifacts import store  # noqa: E402
+from tldash import http  # noqa: E402
+from tldash.testing import RunScript  # noqa: E402
+from tldash.views import bead_detail, passes  # noqa: E402
+from tldash.views.artifact_files import split_stage  # noqa: E402
 from tlkernel.artifact import ArtifactSlot  # noqa: E402
 from tltestkit.narrow import must  # noqa: E402
 
 REPO, BEAD = "lifesim", "tl-9"
 RUN = BEAD + "-20261028-100000"
-STATIC = ROOT / "src" / "taskloop_dash" / "static"
+STATIC = ROOT / "packages" / "dash" / "src" / "tldash" / "static"
 Q = {"repo": REPO, "bead": BEAD, "run": RUN}
 
 

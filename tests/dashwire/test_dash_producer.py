@@ -5,15 +5,15 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from support.dashlogs import RunScript, T, bead
 
 from delegate import api
 from taskloop.app.asks import owner_verbs
-from taskloop_dash.api import live
-from taskloop_dash.readers.logs import live_event
-from taskloop_dash.views.floor import slot_of
-from taskloop_dash.views.live_lines import retype
-from taskloop_dash.views.world import ProjectIn
+from tldash.api import live
+from tldash.readers.logs import live_event
+from tldash.testing import RunScript, T, bead
+from tldash.views.floor import slot_of
+from tldash.views.live_lines import retype
+from tldash.views.world import ProjectIn
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
 from tlkernel.runlife import Liveness, command_scope, host_name, shown

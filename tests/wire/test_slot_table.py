@@ -7,7 +7,6 @@ from unittest import mock
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from support.dashlogs import T, bead
 from support.fakes import FakeBeadStore
 from support.who import who
 
@@ -15,8 +14,9 @@ from taskloop.adapters.ident import hostname
 from taskloop.app.wire import brief
 from taskloop.app.wire.slotfx import FX
 from taskloop.app.wire.slots import slot_table
-from taskloop_dash.views import floor
-from taskloop_dash.views.world import ProjectIn
+from tldash.testing import T, bead
+from tldash.views import floor
+from tldash.views.world import ProjectIn
 from tlkernel.gitport import Git
 from tlkernel.slottable import WORKTREE, LiveSlot, SlotSource, build_slot_table
 from tlslots.config import slot_source

@@ -16,7 +16,7 @@ from tltestkit.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 ROOT = Path(__file__).resolve().parents[2]
-EDGE = frozenset({"packages/kernel/src/tlkernel/env.py", "src/taskloop_dash/cli/dash.py",  # os.environ's owner, the dashboard's edge
+EDGE = frozenset({"packages/kernel/src/tlkernel/env.py", "packages/dash/src/tldash/cli/dash.py",  # os.environ's owner, the dashboard's edge
                   "src/taskloop/hook/session.py"})  # the hooks' edge
 CALL = re.compile(r"\b(?:penv\.)?(?:ambient|ambient_bead|ambient_set|snapshot)\(")
 NOT_ENV = re.compile(r"\b(?:looks|bf|cfg|self|snap|wt)\.snapshot\(|def snapshot|def ambient")

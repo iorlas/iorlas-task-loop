@@ -19,7 +19,6 @@ import threading
 from pathlib import Path
 
 from support.spawn import port_git, real_spawner
-from support.waits import until
 from support.who import who
 
 from taskloop.adapters import halt as halting
@@ -29,6 +28,7 @@ from taskloop.app.run import (
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlslots import config as wslots_config
+from tltestkit.waits import until
 
 
 class EngineChecksTest(EngineTest):
