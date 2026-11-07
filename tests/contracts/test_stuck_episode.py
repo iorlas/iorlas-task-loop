@@ -1,7 +1,7 @@
 """One rule for when a stuck episode ends: tlkernel.stuck, read by the engine's StuckWatch and by the dashboard's run fold."""
 import pytest
 
-from taskloop.domain.stuck import StuckWatch
+from taskloop.app.pipeline.stuck_rule import StuckWatch
 from taskloop_dash.views import runfacts
 from tlkernel import log as rec
 from tlkernel.checks import CheckResult, CheckRun
