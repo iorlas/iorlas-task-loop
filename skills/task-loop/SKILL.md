@@ -440,7 +440,7 @@ It keeps polling an empty queue; repeating start prints `already running`. Start
 print PID, version, repo, log path and dashboard addresses; status includes current beads when known and exits 1 when not running.
 `tl factory stop [--repo DIR] [--now]` uses the same graceful stop as `tl stop`, targeting each live loop's recorded PID and start time.
 `tl factory logs [--repo DIR] [-n N] [-f]` prints the last 50 lines by default and optionally follows the console log.
-The first lane's PID is `loop.pid` under `<config>/loop/<repo-key>/`; each `factory-lane-K.log` links to its `factory-<pid>.log`.
+The first loop's PID is `loop.pid` under `<config>/loop/<repo-key>/`; each `factory-loop-K.log` links to its `factory-<pid>.log`.
 On macOS an available `caffeinate -i -w <pid>` prevents idle sleep while the first newly launched loop lives. No OS service
 is installed; manually run `tl factory start` again after a reboot. Start/stop also work from a phone's SSH terminal on the host.
 Stopping a repo's factory leaves the shared dashboard available.
