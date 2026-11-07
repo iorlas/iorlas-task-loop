@@ -684,10 +684,10 @@ class EngineRunTest(EngineTest):
         assert any(c[:1] == ("update",) and "open" in c for c in self.bd_calls)
 
     def test_the_trace_records_reason_context_and_the_lanes(self):
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [stop("rate_limited", at=time.time() + 30), WRITE],
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [stop("worker_failed"), WRITE],
                                  "review": [CLEAN]})
         assert rc == 0
-        assert self.eng.sessions[1]["reason"] == "rate_limited"
+        assert self.eng.sessions[1]["reason"] == "worker_failed"
         assert self.eng.sessions[-1]["context"]["instructions"] == ["/repo/AGENTS.md"]
         trace = [json.loads(ln) for ln in (homes.config_dir() / "traces.jsonl").read_text().splitlines()][-1]
         assert trace["lanes"] == {}
