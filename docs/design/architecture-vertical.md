@@ -220,7 +220,7 @@ pix and the Mac ran a release with #184; delete RowDocs adoption, importers, loo
 | C1 | `config.py` split: per-stage `*Policy` records move beside their readers; loader keeps names | M | none (profile keys unchanged) | alias re-exports for one release |
 | C2 | `ports.py`: each Protocol to its consumer/provider | M | after #191 (Agent Protocol lands in `contracts/`) | |
 | C3 | 7 dead contracts removed; 22 single-consumer contracts move to their slice | M | after STORE 8 for store-owned ones | |
-| K1 | kernel named: `contracts/{wire,ids,enums,paths,env,envvars,identity,bead}` get an import-linter layer; nothing imports upward | S | paths after #189 | contract is a lint |
+| K1 | kernel named: `contracts/{wire,ids,enums,paths,env,envvars,identity,bead}` get an import-linter layer; nothing imports upward | S | paths after #189 | contract is a lint ✅ done (tl-e5t0.10: `kernel-core-is-a-leaf` in .importlinter) |
 | X1 | the four cuts of the corrected table: 2 domain files → land; `NetText` out of slots; report matchers to a shared home; `reconcile/leases` to slots/store | 4 × S | C2 | pure moves, one pair each |
 | S1a | mechanics checklist above: one empty package, conftest/rules/SCAN/caps/CLAUDE.md learn `packages/`, lazy filter extended | M (~35 files) | #189 #190 #186 #187 | revert |
 | S1b | `taskloop_dash` moves in (path only; ~20 tests rebuild `ROOT/src/…`) | M | S1a | rename |
