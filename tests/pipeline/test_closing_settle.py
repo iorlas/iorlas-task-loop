@@ -1,14 +1,14 @@
 """Settling uses closing capabilities and leaves machine faults open."""
 import pytest
 from support.narrow_hosts import FakeSettleHost
-from support.pipeline_ports import FakeBeadClosing, FakeParkBook
 
 from taskloop.adapters import beadtools
-from taskloop.app.pipeline.closing_settle import Settle
 from tlkernel import askspecs as specs
 from tlkernel import runoutcome as oc
 from tlkernel.bead import Bead
 from tlkernel.kinds import Kind
+from tlpipeline.closing_settle import Settle
+from tlpipeline.testing import FakeBeadClosing, FakeParkBook
 
 
 @pytest.mark.parametrize(('kind', 'reason'), [
@@ -21,7 +21,7 @@ def test_finished_closes_with_reason_and_ends_park(kind, reason, monkeypatch):
     bead = Bead(id=host.bead, title='work', status='in_progress')
     host.store.beads[host.bead] = bead
     beads, parks = FakeBeadClosing(), FakeParkBook()
-    monkeypatch.setattr('taskloop.app.pipeline.closing_settle.time.time', lambda: 1000.0)
+    monkeypatch.setattr('tlpipeline.closing_settle.time.time', lambda: 1000.0)
     Settle(host, beads, parks, beadtools.peek, beadtools.attempt).run(oc.make(kind, sha='abcdef1234567890'), 'stats')
     assert beads.close_calls == [(host.claim, reason)]
     assert beads.block_calls == []

@@ -15,12 +15,12 @@ import support.paths  # noqa: F401
 from support.narrow_hosts import FakeWaitsHost
 
 # isort: split
-from taskloop.app.pipeline import trace as runtrace
-from taskloop.app.pipeline.blocked import Blocked
-from taskloop.app.pipeline.waits import Waits
 from tlkernel.ids import RunId
 from tlkernel.kinds import Kind
 from tlkernel.waitenums import WaitWhat
+from tlpipeline import trace as runtrace
+from tlpipeline.blocked import Blocked
+from tlpipeline.waits import Waits
 
 
 class TokenCap(Case):

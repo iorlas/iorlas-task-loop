@@ -15,9 +15,9 @@ from tltestkit.logs import records
 # isort: split
 
 from taskloop.app.checks import resources
-from taskloop.app.pipeline.waits import Waits
 from taskloop.app.plan.planner import Planner
 from tlkernel.config import HostResources
+from tlpipeline.waits import Waits
 
 ANSWERS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 UNITY = {"unity": {"limit": 1}}

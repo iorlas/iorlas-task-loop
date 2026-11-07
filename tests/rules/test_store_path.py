@@ -28,9 +28,9 @@ LEFT = {  # (file, class): constructions; delete a line when the site takes its 
     ("src/taskloop/app/prune/traces.py", "TraceStore"): 1,
     ("src/taskloop/app/run/context.py", "RunLog"): 1,
     ("src/taskloop/app/workers/done_memo.py", "RunRows"): 1,
-    ("src/taskloop/app/pipeline/outcomes.py", "JsonlStore"): 1,
-    ("src/taskloop/app/pipeline/reflect.py", "JsonlStore"): 1,
-    ("src/taskloop/app/pipeline/reload.py", "RunRows"): 1,
+    ("packages/pipeline/src/tlpipeline/outcomes.py", "JsonlStore"): 1,
+    ("packages/pipeline/src/tlpipeline/reflect.py", "JsonlStore"): 1,
+    ("packages/pipeline/src/tlpipeline/reload.py", "RunRows"): 1,
     ("src/taskloop/cli/land.py", "RunLog"): 1,
     ("src/taskloop/cli/land_stack.py", "RunLog"): 1,
     ("src/taskloop_dash/api/writes.py", "AskStore"): 1,
@@ -41,7 +41,7 @@ LEFT = {  # (file, class): constructions; delete a line when the site takes its 
 
 def constructions() -> Counter[tuple[str, str]]:
     found: Counter[tuple[str, str]] = Counter()
-    for root in ("src/taskloop", "src/taskloop_dash"):
+    for root in ("src/taskloop", "src/taskloop_dash", "packages/pipeline/src/tlpipeline"):
         for path in sorted((ROOT / root).rglob("*.py")):
             rel = path.relative_to(ROOT).as_posix()
             if rel.startswith(STORE_LAYER):

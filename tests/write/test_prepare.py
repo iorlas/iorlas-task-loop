@@ -9,12 +9,12 @@ from support.cfgs import plan_of
 from support.engine_case import EngineTest
 from support.plans import CLEAN, PLAN, RED_ONCE, WRITE
 
-from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.write.prepare import Prepare
 from taskloop.app.write.state import StageState
 from tlkernel import rundocs
 from tlkernel.kinds import Kind
 from tlkernel.procport import Ran
+from tlpipeline.blocked import Blocked
 from tltestkit.logs import records
 from tltestkit.narrow import must
 

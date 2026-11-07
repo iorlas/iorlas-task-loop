@@ -3,13 +3,13 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from taskloop.app.pipeline.blocked import Blocked
-from taskloop.app.pipeline.requests import NOTE_HEAD, OwnerRequests, peek
 from tlkernel import log as rec
 from tlkernel.kinds import Kind
 from tlkernel.paths import ConfigDir
 from tlkernel.requests import OwnerNote, OwnerRequest
 from tlkernel.signalrows import SignalRows
+from tlpipeline.blocked import Blocked
+from tlpipeline.requests import NOTE_HEAD, OwnerRequests, peek
 
 
 @dataclass

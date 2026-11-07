@@ -14,8 +14,8 @@ from support.engine_case import EngineTest
 from tltestkit.logs import records
 
 # isort: split
-from taskloop.app.pipeline.blocked import Blocked
 from taskloop.domain.checks.specs import gate_items
+from tlpipeline.blocked import Blocked
 
 UNITY = {"unity": {"limit": 1}}
 from checks.test_lanes import spec  # noqa: E402
