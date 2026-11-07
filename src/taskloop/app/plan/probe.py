@@ -31,7 +31,7 @@ class ProbeHost(Protocol):
 
 class AcProbe:
     def __init__(self, host: ProbeHost) -> None:
-        self.e = host
+        self.host = host
         self.facts: list[str] | None = None
 
     def text(self) -> str:
@@ -44,7 +44,7 @@ class AcProbe:
                 "ran once on the base):\n" + "".join(f"- {f}\n" for f in self.facts))
 
     def probe(self) -> list[str]:
-        e = self.e
+        e = self.host
         started = e.now()
         registry = [(str(k.id), list(k.argv)) for k in e.cfg.checks]
         named = acnames.commands(e.scope or "", {cid for cid, _ in registry})
@@ -69,7 +69,7 @@ class AcProbe:
 
     def missing(self, c: acnames.Named) -> str:
         """A command not in the profile: its program is looked up, never run."""
-        e = self.e
+        e = self.host
         argv = [w for w in c.argv if not ("=" in w and w.split("=", 1)[0].isidentifier())]
         argv = argv[1:] if argv[:1] == ["env"] else argv
         if not argv:
@@ -81,7 +81,7 @@ class AcProbe:
         return "" if found else f"AC names `{c.text}`, which does not exist here (`{head}` is not on the PATH of the checks)"
 
     def run_one(self, spec: CheckSpec) -> str:
-        e = self.e
+        e = self.host
         n = e.checker.round
         try:
             run = e.checker.run_items([repo_check(spec, e.cfg)], everything=True, learn=False)
