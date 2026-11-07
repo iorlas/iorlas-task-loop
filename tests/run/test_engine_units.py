@@ -59,7 +59,6 @@ from taskloop.domain.checks import (  # noqa: E402
     lint,  # noqa: F401
 )
 from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
-from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT  # noqa: E402
 from tlkernel.checks import Duration, Durations  # noqa: E402
 from tltestkit.checks import res  # noqa: E402
 from tltestkit.narrow import must  # noqa: E402
@@ -245,18 +244,13 @@ class DelegateLauncher(T.EngineTest):
     # delegate says the writer fell back off its first lane (to xai, so the reviewer, claude, is another family)
     FRESH = full(WRITE, "w2", fallback=True, first_lane="OPENAI_SUBSCRIPTION", family="xai")
 
-    def test_a_resumed_write_whose_lane_is_out_goes_on_at_once_as_a_new_thread(self):
-        with self.lanes(OPENAI_SUBSCRIPTION=True):
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L, self.FRESH, self.FRESH],
-                                     "review": [review(unmet=["more"]), review(unmet=["more"]), CLEAN]})
-        assert rc == 0, self.blocked  # the resumed writer moves to a fresh thread
-        workers = [(c, p) for c, p in zip(s.calls, s.prompts, strict=False) if c[0] == "worker"]
-        assert [c[1] for c, _ in workers] == [None, "ref-write", None, "w2"]  # Codex still out: resumed
-        assert [c[2] for c in s.calls if c[0] == "reviewer"] == ["openai", "xai", "xai"]
-        assert FRESH_WRITER_TEXT not in workers[1][1]
-        assert FRESH_WRITER_TEXT in workers[2][1]
-        assert FRESH_WRITER_TEXT not in workers[3][1]
-        assert "lane_out" in self.eng.log_path.read_text()
+    def test_a_resumed_write_whose_lane_is_out_pauses(self):
+        rc, script = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L],
+                                      "review": [review(unmet=["more"])]})
+        assert rc == 2
+        assert [r.thread for r in script.requests if r.role == "worker"] == ["writer", "writer"]
+        assert [bool(r.delta_file) for r in script.requests if r.role == "worker"] == [False, True]
+        assert self.eng.retry_after > 0
 
     # tl-bxk.10.5 2026-10-21: after a real outage the Sonnet thread stayed the writer for every later round of
     # lifesim-fld.27.7, d5f.33, 1eg2 and d5f.54 while Codex was usable again
@@ -272,31 +266,31 @@ class DelegateLauncher(T.EngineTest):
 
     def test_a_fallback_writer_is_asked_fresh_once_its_lane_is_back_and_codex_takes_over(self):
         with self.lanes(OPENAI_SUBSCRIPTION=False, CLAUDE_SUBSCRIPTION=False):
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L, self.FRESH, self.BACK, WRITE],
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.FRESH, self.BACK, WRITE],
                                      "review": [review(unmet=["more"])] * 3 + [CLEAN]}, max_rounds=5)
         assert rc == 0, self.blocked
         workers = [(c, p) for c, p in zip(s.calls, s.prompts, strict=False) if c[0] == "worker"]
         # round 3: Codex's lane is back, so delegate routes afresh; round 4 resumes Codex's new thread
-        assert [c[1] for c, _ in workers] == [None, "ref-write", None, None, "w3"]
-        assert FRESH_WRITER_TEXT in workers[3][1]
-        assert FRESH_WRITER_TEXT not in workers[4][1]
+        assert [c[1] for c, _ in workers] == [None, "ref-write", None, "w3"]
+        requests = [r for r in s.requests if r.role == "worker"]
+        assert [bool(r.delta_file) for r in requests] == [False, True, False, True]
         assert [c[2] for c in s.calls if c[0] == "reviewer"] == ["openai", "xai", "openai", "openai"]
         assert any(t["cause"] == "fallback_retake" and t["to"] == "write" for t in self.transitions())
 
     def test_a_fallback_writer_is_resumed_while_its_lane_is_still_out(self):
         with self.lanes(OPENAI_SUBSCRIPTION=True, CLAUDE_SUBSCRIPTION=False):
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L, self.FRESH, self.FRESH],
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.FRESH, self.FRESH],
                                      "review": [review(unmet=["more"])] * 2 + [CLEAN]})
         assert rc == 0, self.blocked
-        assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write", None, "w2"]
+        assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write", "w2"]
         assert not any(t["cause"] == "fallback_retake" for t in self.transitions())
 
     def test_a_lane_the_status_does_not_know_never_makes_a_fallback(self):
         with self.lanes(CLAUDE_SUBSCRIPTION=False):  # Codex is not configured on this machine at all
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L, self.FRESH, self.FRESH],
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.FRESH, self.FRESH],
                                      "review": [review(unmet=["more"])] * 2 + [CLEAN]})
         assert rc == 0, self.blocked
-        assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write", None, "w2"]
+        assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write", None]
 
     def test_the_first_choice_writer_still_resumes_and_no_status_is_read(self):
         with mock.patch.object(lroute, "status_json") as st:
@@ -309,7 +303,7 @@ class DelegateLauncher(T.EngineTest):
     def test_a_fallback_writer_is_retaken_in_the_next_run_once_its_lane_is_back(self):
         with self.lanes(OPENAI_SUBSCRIPTION=True):
             busy = stop("no_lane", family="claude")
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L, self.FRESH, busy],
+            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.FRESH, busy],
                                      "review": [review(unmet=["more"]), review(unmet=["more"])]})
         assert rc == 2  # round 3 resumed the fallback (Codex still out) and paused
         ck = read_ck(self.eng).state
@@ -318,7 +312,7 @@ class DelegateLauncher(T.EngineTest):
             rc, s = self.run_engine({"write": [self.BACK], "review": [CLEAN]})
         assert rc == 0, self.blocked
         assert s.calls[0][:2] == ("worker", None)
-        assert FRESH_WRITER_TEXT in s.prompts[0]
+        assert not s.requests[0].delta_file
         assert s.calls[1] == ("reviewer", None, "openai")
 
     # contract 4: an answer that picked a lane says whether it is a fallback (and from which first lane, when it can)
@@ -373,24 +367,19 @@ class DelegateLauncher(T.EngineTest):
     # blocked "needs a human" after 114 min of work
     OUT_OWNER = stop("rate_limited", say="cannot say when OPENAI_SUBSCRIPTION frees")
 
-    def test_a_resumed_write_whose_lane_is_out_with_no_time_goes_on_at_once_as_a_new_thread(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, self.FRESH],
-                                 "review": [review(unmet=["more"]), CLEAN]})
-        assert rc == 0, self.blocked
-        workers = [(c, p) for c, p in zip(s.calls, s.prompts, strict=False) if c[0] == "worker"]
-        assert [c[1] for c, _ in workers] == [None, "ref-write", None]
-        assert FRESH_WRITER_TEXT in workers[2][1]
-
-    def test_a_new_thread_whose_lane_is_out_with_no_time_pauses_without_an_ask(self):
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, self.OUT_OWNER],
-                                 "review": [review(unmet=["more"])]})
+    def test_a_resumed_write_whose_lane_has_no_time_pauses(self):
+        rc, script = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER],
+                                      "review": [review(unmet=["more"])]})
         assert rc == 2
-        # the resumed thread's lane is out: a new thread; that lane out too, with no time: the pause
-        assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write", None]
+        assert [r.thread for r in script.requests if r.role == "worker"] == ["writer", "writer"]
         assert self.blocked == []
-        assert any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for write" in x for x in c)
-                            for c in self.bd_calls)
         assert "needs a human" not in self.eng.log_path.read_text()
+
+    def test_a_fresh_write_whose_lane_has_no_time_pauses(self):
+        rc, script = self.run_engine({"plan": [PLAN], "write": [self.OUT_OWNER]})
+        assert rc == 2
+        assert [r.thread for r in script.requests if r.role == "worker"] == ["writer"]
+        assert self.blocked == []
 
     def test_the_writer_brief_has_no_sandbox_or_git_text(self):
         # delegate 0.29 owns what the worker is told about its sandbox, escalation and git (worker-run v2)
@@ -440,10 +429,10 @@ class DelegateLauncher(T.EngineTest):
 
     def test_every_lane_out_with_no_time_pauses_a_resumed_write_without_an_ask(self):
         none = stop("no_lane", say="every lane is out")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, none],
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, none],
                                  "review": [review(unmet=["more"])]})
         assert rc == 2
-        assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write", None]
+        assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write"]
         assert self.blocked == []
         assert any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for write" in x for x in c)
                             for c in self.bd_calls)
@@ -452,7 +441,7 @@ class DelegateLauncher(T.EngineTest):
     def test_no_lane_needs_owner_even_with_a_predicted_time(self):
         due = time.time() + 3 * 3600
         none = stop("no_lane", at=due, say="every lane is out")
-        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER, none],
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE, none],
                                  "review": [review(unmet=["more"])]})
         assert rc == 2
         assert self.blocked == []

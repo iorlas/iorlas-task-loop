@@ -74,7 +74,10 @@ def run(request: RunRequest, started: Callable[[Handle], None] | None = None) ->
         if planned and planned.resume and threads.needs_fresh(res):
             env.update_state(lambda state: state.threads.pop(planned.key, None))
             fresh = threads.plan(replace(request, thread="", resume=None), env.load_state())
-            fresh = replace(fresh, key=planned.key, brief_text=fresh.brief_text + threads.TAKEOVER_NOTE, takeover=True)
+            takeover = request.role == "worker"
+            fresh = replace(
+                fresh, key=planned.key, brief_text=fresh.brief_text + (threads.TAKEOVER_NOTE if takeover else ""), takeover=takeover
+            )
             res = threads.merge(res, _run(request, started, contract, fresh))
         if planned:
             env.update_state(lambda state: threads.settle(state, planned.key, res))

@@ -653,14 +653,12 @@ class EngineRunTest(EngineTest):
         assert "cat .env" in self.said()
         assert self.ask() is None  # tl-7y6.2.2: the tripwire is a machine fault, not an owner ask
 
-    def test_fail_on_a_resumed_write_retries_once_as_a_new_thread(self):
-        refused = stop("worker_failed", "ref-write", say="the resumed thread failed")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, refused, WRITE], "review": [review(unmet=["more"]), CLEAN]})
-        assert rc == 0, self.blocked
-        workers = [c for c in s.calls if c[0] == "worker"]
-        assert len(workers) == 3
-        assert workers[1][1] is not None  # the second write resumed the writer's thread
-        assert workers[2][1] is None     # the fail made it start a new one
+    def test_fail_on_a_resumed_write_is_delegates_to_retry_so_an_exhausted_one_faults(self):
+        failed = stop("worker_failed", "ref-write", say="the resumed thread failed")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, failed], "review": [review(unmet=["more"])]})
+        assert rc == 2
+        assert self.eng.kind.value == "fault_infra"
+        assert len([c for c in s.calls if c[0] == "worker"]) == 2  # the engine starts no thread of its own
 
     def test_no_answer_object_counts_as_fail(self):
         real = fake_route.Script.__call__

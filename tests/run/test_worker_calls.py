@@ -40,7 +40,6 @@ class RetryRows(Case):
                 "invalid_output": (1, "fault"),
                 "denied_read": (1, "fault"),
                 "denied_secret": (1, "fault"),
-                "resume_refused": (1, "fault"),
                 "worker_failed": (1, "ask"),
             }
 
