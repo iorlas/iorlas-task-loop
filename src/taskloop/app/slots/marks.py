@@ -1,10 +1,10 @@
 """Who holds a slot, since when and why: the marks on the slot's bead, read as typed values and written in one place."""
-from tlkernel.bdsafe import attempt
+from tlkernel.bdsafe import attempt, peek
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BeadPatch
 from tlkernel.fence import SLOT_GEN, gen_of
 from tlkernel.ids import BeadId
-from tlkernel.slots import HELD_KEYS, Hold
+from tlkernel.slots import HELD_KEYS, Hold, SlotFail
 
 from taskloop.app.slots.env import SlotEnv, stamp
 
@@ -44,11 +44,21 @@ def mark_held(env: SlotEnv, bead_id: str, why: str, until: float = 0, bead: str 
         else:
             unset.append(key)
     attempt(env.store.update, BeadId(bead_id), BeadPatch(set_metadata=sets, unset_metadata=unset))
+    if gen and gen_of(peek(env.store, BeadId(bead_id)), SLOT_GEN) != gen:
+        raise SlotFail("busy", f"slot {bead_id}: held generation changed while marking it")
 
 
 def next_gen(b: Bead | None) -> int:
     """The generation a take of this slot bead makes: one past the last (fence.py reads it back as the run's lease)."""
     return gen_of(b, SLOT_GEN) + 1
+
+
+def fresh_gen(env: SlotEnv, bead_id: str) -> int:
+    """Read the generation after winning the claim, so an earlier holder cannot leave our snapshot stale."""
+    b = peek(env.store, BeadId(bead_id))
+    if b is None:
+        raise SlotFail("busy", f"slot {bead_id}: cannot read held generation")
+    return next_gen(b)
 
 
 def clear_marks(env: SlotEnv, bead_id: str) -> None:
