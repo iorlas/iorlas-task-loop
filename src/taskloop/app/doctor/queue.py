@@ -2,12 +2,12 @@
 
 Actions are described to the owner, never executed; stores are never written.
 """
+from tlkernel.check_files import repo_key
 from tlkernel.gitport import Git
 from tlkernel.queue_doc import QueueDoc
 from tlkernel.queue_state import QueueState
 from tlkernel.wire import Refused
 
-from taskloop.adapters.check_files import repo_key
 from taskloop.domain.land.queue_persist import from_doc
 from taskloop.domain.land.queue_reconcile import DropRef, NotifyEjected, RemoveWorktree, ResetPending, reconcile
 from taskloop.domain.land.queue_world import world

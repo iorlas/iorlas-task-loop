@@ -2,6 +2,7 @@
 Reads only, through the Git port, the landed records, bd (status_of) and the engine's traces."""
 from collections.abc import Callable, Sequence
 
+from tlkernel.branches import TASK
 from tlkernel.enums import Outcome
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId, is_bead_id
@@ -70,8 +71,8 @@ def observe_commits(git: Git, repo: str, base: str, since: float | None, status_
     lands = lands_of(git, repo, bases, landed_of, legacy_lands(git, repo, bases, traces))
     statuses: dict[str, str | None] = {}
     found: list[BranchCommit] = []
-    for ref in (r.name.removeprefix("refs/heads/") for r in git.for_each_ref(repo, "refs/heads/task/", "refs/heads/wip/")):
-        bead, aside = matchers.unstale(ref[len("task/"):]) if ref.startswith("task/") else (None, False)
+    for ref in (r.name.removeprefix("refs/heads/") for r in git.for_each_ref(repo, f"refs/heads/{TASK}", "refs/heads/wip/")):
+        bead, aside = matchers.unstale(ref[len(TASK):]) if ref.startswith(TASK) else (None, False)
         rows = git.log(repo, [ref], bases)
         if not rows:
             continue

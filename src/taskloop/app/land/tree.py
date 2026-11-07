@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Protocol
 
 from tlkernel.bead import Bead
+from tlkernel.branches import task_branch
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.paths import TASK_EXCLUDE, ConfigDir
@@ -72,7 +73,7 @@ class Tree:
         """The first node: fetch, make the slot's tree the task branch (resumed, or started again on the base) and clear the task folder."""
         e = self.e
         e.steps.begin("reset", "reset")
-        branch = bead.metadata.get("branch") or "task/" + e.bead
+        branch = bead.metadata.get("branch") or task_branch(e.bead)
         e.checkout.fetch(check=True)
         self.exclude_task_folder()
         exists = e.git.has_branch(e.wt, branch)

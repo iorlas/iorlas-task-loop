@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from tlkernel import check_files
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env
 from tlkernel.gitport import Git
@@ -13,7 +14,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.procport import Spawner
 from tlkernel.waitenums import WaitWhat
 
-from taskloop.adapters import check_files, ident, treehash
+from taskloop.adapters import ident, treehash
 from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.execution import check_env
@@ -76,8 +77,8 @@ class CliHost:
 
     def sh(self, cmd: Sequence[str], timeout: float = 3600, check: bool = False, save: Path | None = None,
            env: Mapping[str, str] | None = None, pin: bool = False, what: str = "command", cwd: Path | None = None,
-           stop: threading.Event | None = None) -> tuple[int, str]:
-        return self.shell.run(cmd, timeout, check, save, env, pin, what, cwd, stop)
+           stop: threading.Event | None = None, *, network: bool = False) -> tuple[int, str]:
+        return self.shell.run(cmd, timeout, check, save, env, pin, what, cwd, stop, network=network)
 
     def blocked_for(self, why: str, kind: str) -> Exception:
         return RuntimeError(why)

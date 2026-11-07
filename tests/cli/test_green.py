@@ -15,10 +15,10 @@ from support.fakegit import ScriptedGit
 # isort: split
 from support.memstores import fake_stores
 
-from taskloop.adapters import check_files
 from taskloop.app.checks.cache import InputKeys, RunMemo, key_digest, plan_digest
 from taskloop.cli import green
 from taskloop.stores.real import real_stores
+from tlkernel import check_files
 from tlkernel.checks import Check, CheckResult, PassRecord, Verdict
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.paths import ConfigDir

@@ -14,8 +14,8 @@ from taskloop.app.pipeline import outcomes
 from taskloop.app.pipeline.adapter_ports import Attempt
 from taskloop.app.pipeline.outcomes import DONE
 from taskloop.app.pipeline.ports import FollowUps
+from taskloop.app.pipeline.store_ports import NotesStores
 from taskloop.domain import followups as fu
-from taskloop.stores.bundle import Stores
 
 
 class NotesCheckpoints(Protocol):
@@ -63,7 +63,7 @@ class FileNotesHost(Protocol):
     def warn(self, text: str) -> None: ...
 
     @property
-    def stores(self) -> Stores: ...
+    def stores(self) -> NotesStores: ...
     @property
     def review(self) -> NotesReview: ...
     @property
