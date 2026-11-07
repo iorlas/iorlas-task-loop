@@ -29,4 +29,3 @@ class RunOnce:
 
     def beat_died(self, err: BaseException) -> None:
         self.lifecycle.beat_died(err)
-
