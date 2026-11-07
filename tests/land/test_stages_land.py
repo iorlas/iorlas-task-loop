@@ -33,13 +33,13 @@ from taskloop.app.run import running as wrunning
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.wire import asks as wasks
 from taskloop.domain.checks.cmd import matchers as sh_matchers
-from taskloop.domain.land.matchers import _TRANSIENT as TRANSIENT_PUSH
 from tlkernel import checkmatchers as matchers
 from tlkernel import wire
 from tlkernel.ask import Ask
 from tlkernel.env import snapshot
 from tlkernel.gitfacts import GitOutcome
 from tlkernel.ids import BeadId
+from tlkernel.landmatchers import _TRANSIENT as TRANSIENT_PUSH
 from tltestkit import fake_route
 from tltestkit.checks import typed
 

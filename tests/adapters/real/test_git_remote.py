@@ -9,8 +9,8 @@ from git_porcelain.real import Done, RealRepo
 
 from taskloop.adapters import git_ops
 from taskloop.adapters.git import RealGit
-from taskloop.domain.land.matchers import Push
 from tlkernel.env import Env, snapshot
+from tlkernel.landmatchers import Push
 from tlkernel.slots import GitReadFailure, RefRace, SlotGitError
 from tltestkit.case import Case
 from tltestkit.checked import run_checked
