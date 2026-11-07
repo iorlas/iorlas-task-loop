@@ -6,10 +6,10 @@ import support.paths  # noqa: F401
 from support.memstores import fake_stores
 
 # isort: split
-from taskloop.app.checks.cache import InputKeys, RunMemo
-from taskloop.app.checks.execution import check_env
 from taskloop.app.launch.check import with_base
-from taskloop.domain.checks.specs import repo_check
+from tlgate.cache import InputKeys, RunMemo
+from tlgate.domain.specs import repo_check
+from tlgate.execution import check_env
 from tlkernel import check_files, childenv
 from tlkernel.checks import CheckResult
 from tlkernel.config import load

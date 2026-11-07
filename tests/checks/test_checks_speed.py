@@ -12,12 +12,12 @@ from support.check_host import CheckHostCase
 from support.spawn import port_git
 
 from taskloop.adapters import procs
-from taskloop.app.checks.cache import InputKeys
 from taskloop.app.doctor import setup_checks
 from taskloop.app.slots.config import cfg_source
-from taskloop.domain.checks import durations, inputs, lint, planref
-from taskloop.domain.checks.names import norm
-from taskloop.domain.checks.order import CheckOrder
+from tlgate.cache import InputKeys
+from tlgate.domain import durations, inputs, lint, planref
+from tlgate.domain.names import norm
+from tlgate.domain.order import CheckOrder
 from tlkernel import check_files
 from tlkernel.argv import text_of
 from tlkernel.checks import Check, Duration, Durations

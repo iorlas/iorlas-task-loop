@@ -1,9 +1,8 @@
 """Bead affinity at the pick (tl-7k8.8): a bead labelled `needs:<resource>` is taken only on a host that has the resource."""
+from tlgate.domain import affinity
 from tlkernel.bead import Bead
 from tlkernel.config import EngineConfig, HostResources
 from tlkernel.loop import Skip
-
-from taskloop.domain.checks import affinity
 
 
 def skip_of(cfg: EngineConfig, rec: HostResources | None, b: Bead) -> Skip | None:

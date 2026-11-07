@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from enum import IntEnum
 
+from tlgate import authorization
 from tlkernel import profile_at
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env
@@ -16,7 +17,6 @@ from tlkernel.slots import MissingRemote
 
 from taskloop.adapters import landlock, locks
 from taskloop.adapters.clock import SystemClock
-from taskloop.app.checks import authorization
 from taskloop.app.land.profile_change import diff_sha
 from taskloop.stores.bundle import Stores
 

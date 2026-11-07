@@ -1,6 +1,8 @@
 """Read-only admission and plans, before an engine opens files or takes a bead."""
 from pathlib import Path
 
+from tlgate import gateplan
+from tlgate.runner import cached_gate
 from tlkernel.branches import task_branch
 from tlkernel.config import EngineConfig
 from tlkernel.enums import Step
@@ -13,8 +15,6 @@ from tlkernel.slots import NotARepo
 from tlpipeline.checkpoints import read_checkpoint
 from tlpipeline.cursor import select_step
 
-from taskloop.app.checks import gateplan
-from taskloop.app.checks.runner import cached_gate
 from taskloop.app.run.layout import repo_of
 from taskloop.app.track.console import say
 from taskloop.app.wire.closeguard import has_land

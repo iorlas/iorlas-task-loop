@@ -7,8 +7,8 @@ from pathlib import Path
 
 from support.check_host import CheckHostCase
 
-from taskloop.app.checks.cache import is_green, plan_digest
-from taskloop.domain.checks.specs import gate_items
+from tlgate.cache import is_green, plan_digest
+from tlgate.domain.specs import gate_items
 from tlkernel.ids import CheckId
 from tlkernel.runkey import BaseSha
 from tltestkit.narrow import must

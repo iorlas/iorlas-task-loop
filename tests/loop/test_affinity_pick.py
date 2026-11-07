@@ -12,7 +12,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 # isort: split
 from taskloop.app.loop import hosts
 from taskloop.app.loop.queue import QueueRule
-from taskloop.domain.checks import affinity
+from tlgate.domain import affinity
 from tlkernel.bead import Bead
 from tlkernel.checks import Check
 from tlkernel.config import EngineConfig, HostResources, ResourceSpec

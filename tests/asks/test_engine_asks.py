@@ -17,7 +17,7 @@ from taskloop.adapters import (
     links,
 )
 from taskloop.app.land.checkout import Checkout
-from taskloop.domain.checks import retry
+from tlgate.domain import retry
 from tlkernel.ids import BeadId
 from tltestkit.plans import BEAD, CAT_ENV, CLEAN, PLAN, WRITE, review, verdict
 from tltestkit.runs import manifest

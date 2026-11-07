@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.engine_case import EngineTest
 
-from taskloop.domain.checks import lint
+from tlgate.domain import lint
 from tlkernel.checksport import TreeProbe
 from tlkernel.ids import CheckId
 from tlkernel.plancheck import PlanCheck, PlanData, Ref, StageData, adhoc

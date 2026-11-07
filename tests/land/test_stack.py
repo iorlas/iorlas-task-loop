@@ -26,7 +26,6 @@ from tltestkit.logs import records
 from support.memstores import fake_stores
 
 from taskloop.adapters import landlock, locks
-from taskloop.app.checks.cache import InputKeys, RunMemo, plan_digest
 from taskloop.app.land.carry import Carry
 from taskloop.app.land.cmds import Cmds
 from taskloop.app.land.forge import Forge
@@ -38,6 +37,7 @@ from taskloop.app.wire import closeguard
 from taskloop.cli.land_stack import cmd_land_stack
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
+from tlgate.cache import InputKeys, RunMemo, plan_digest
 from tlkernel import check_files, log
 from tlkernel import runoutcome as oc
 from tlkernel.bead import Bead
