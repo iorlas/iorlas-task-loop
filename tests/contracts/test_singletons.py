@@ -8,8 +8,8 @@ from support import homes
 from support.narrow import must
 
 from taskloop.contracts import wire
-from taskloop.contracts.rowstores import PinStore, SharedNotesStore
-from taskloop.contracts.snapshots import Pin
+from taskloop.contracts.rowstores import PinStore, ReflectStateStore, SharedNotesStore
+from taskloop.contracts.snapshots import Pin, ReflectState
 
 
 def test_a_pin_is_a_release_doc_row_written_read_and_cleared():
@@ -33,3 +33,10 @@ def test_an_unknown_key_is_refused_and_a_repo_key_keeps_its_own_row():
     with notes.docs.rows.transaction() as con:
         con.execute("UPDATE release_doc SET v=? WHERE k='pin'", (json.dumps(dict(wire.dump(Pin(task_loop="0.2.0")), future=1)),))
     assert PinStore(cfg).get() is None  # an unknown key is refused, never read past
+
+
+def test_the_reflect_state_is_a_report_doc_row():
+    store = ReflectStateStore(homes.cfg())
+    store.write(ReflectState())
+    assert store.docs.table == "report_doc"
+    assert store.docs.rows.select("SELECT k FROM report_doc WHERE k='reflect:digest'") == [("reflect:digest",)]

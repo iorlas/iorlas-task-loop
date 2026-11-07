@@ -4,7 +4,7 @@ from unittest import mock
 import pytest
 from support.argv_of import argv_of
 
-from taskloop.app.run import worker_identity, worker_request
+from taskloop.app.workers import worker_identity, worker_request
 from taskloop.contracts import config
 from taskloop.contracts.delegate import RunRequest
 

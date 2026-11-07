@@ -5,7 +5,7 @@ timeout and the exit it was made on. The network gate (probe, backoff, the pause
 import time
 from typing import Any, Final
 
-from taskloop.app.run import writer_pin
+from taskloop.app.workers import writer_pin
 from taskloop.contracts import log as rec
 from taskloop.contracts.delegate import DelegateResult
 from taskloop.contracts.enums import WaitWhat

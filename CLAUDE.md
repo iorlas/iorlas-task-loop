@@ -80,9 +80,9 @@ just test-delegate            # tests/delegate (real processes, minutes): collec
 Never run pytest over the whole suite; for broad coverage run `just test` (affected-only).
 Whole-suite runs (`just test-full`) and `just test-live` (tests/live: scenarios that run the real pieces) are started by a person, never by an agent, the gate, a release, a cron or a background job.
 
-Tests live in `tests/<slice>/`, mirroring `src/taskloop/app/<slice>` (a test's home is the slice whose code changes if its assertion breaks);
+Tests live in `tests/<slice>/`, mirroring `src/taskloop/app/<slice>` (a test's home is the slice whose code changes if its assertion breaks), or, for a stage that has become a package, in `packages/<stage>/tests/` (same layers, same folder names below it);
 the other layers have their own folders (`contracts`, `stores`, `adapters`, `ports`, `domain`, `cli`, `hook`, `dash`, `rules` for the gate).
-**Test layers. A test's layer comes from its path (tests/conftest.py), never from a hand marker; a guard fails a test that touches more than its layer allows.**
+**Test layers. A test's layer comes from its path (tests/conftest.py, the rule itself is `packages/testkit`: `tltestkit.limits.kind_of_parts`, which reads the parts below `tests/` or `packages/<stage>/tests/`), never from a hand marker; a guard fails a test that touches more than its layer allows.**
 
 | layer | path | may touch | per test (CPU) | layer total (affected-only, 1 worker) |
 |---|---|---|---|---|
@@ -106,6 +106,16 @@ Architecture (layers, app slices, dashboard, `import re` placement): the `.impor
 
 See README.md (Layout) and docs/design/dashboard/README.md. The skill (SKILL.md) is the method; `tl.py` is the only code the
 orchestrating session runs; the dashboard server reads state and takes only the owner's typed writes (`POST /api/<verb>`, `contracts.dash.WRITES`), each an in-process Port call.
+
+## Stage packages (target layout, docs/design/stage-packages.md; only `packages/testkit` exists so far)
+
+A stage becomes a package `packages/<stage>/{src/taskloop_<stage>/, tests/}` (a uv workspace member; the code stays importable as before until its carve). The charter of every carve:
+
+- It owns its contracts (a `contracts/` folder with its own ruff.toml: records only, no subprocess, socket or threading), its domain and app code, its prompts and its tables; its fakes are `testing.py`, run against the same contract suite as the real adapter.
+- **Its public surface is three names: `api.py` (the functions and Protocols it offers), `contracts/` and `testing.py`.** No other package imports anything else of it (one import-linter forbidden contract per package).
+- It imports only the kernel (wire, ids, enums, paths, env, envvars, identity, bead) and other packages' api, contracts and testing, never their internals and never upward (no cycle).
+- Its tests run alone (`just test-pkg <stage>`) on its own `testing.py` fakes plus the test kit (`packages/testkit`: case, procsim, tmpdir, paths, the layer guards); a test that needs another package's real code belongs to the shell or to `tests/e2e`.
+- A carve is a history-preserving `git mv`, the caps (400/80/800) hold, `dev/reach.py` shows the package's change reach did not grow, and the PR is a pure move or a pure cut.
 
 ## Before changing the dashboard, tl.py, or the skill's Workers section
 
