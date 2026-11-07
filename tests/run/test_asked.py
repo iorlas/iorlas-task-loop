@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 import support.paths  # noqa: F401
-from support.narrow import must
 
 from taskloop.app.workers import asked, done_memo
 from taskloop.app.workers.call import Call
@@ -19,6 +18,7 @@ from tlkernel.docrows import RowDocs
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunManifest
 from tlkernel.runrows import RunRows
+from tltestkit.narrow import must
 
 
 def call(node="write", resume_key=True, writer_family=None):

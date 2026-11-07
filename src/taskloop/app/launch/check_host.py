@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from tlkernel import check_files
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env
 from tlkernel.gitport import Git
@@ -13,7 +14,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.procport import Spawner
 from tlkernel.waitenums import WaitWhat
 
-from taskloop.adapters import check_files, ident, treehash
+from taskloop.adapters import ident, treehash
 from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.execution import check_env

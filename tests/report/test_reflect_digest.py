@@ -15,11 +15,11 @@ from support.who import who
 
 # isort: split
 from support import tlbd
-from support.repos import write_repos
 
 from taskloop.app.report import reflect as rd
 from taskloop.domain.report import reflect as rules
 from tlkernel.env import snapshot
+from tltestkit.repos import write_repos
 
 NOW = 1_800_000_000.0
 

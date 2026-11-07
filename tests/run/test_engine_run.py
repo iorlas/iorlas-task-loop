@@ -12,9 +12,10 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes, procsim
 from support.aging import age
 from support.cfgs import PROFILE_PATTERNS
-from support.checks import ck
 from support.engine_case import CAP_PARKS, EngineTest, full, no_repo, sh, stop
 from support.plans import BEAD, CAT_ENV, CLEAN, FALSE, PLAN, WRITE, review, verdict
+
+from tltestkit.checks import ck
 
 # isort: split
 import hashlib
@@ -25,12 +26,10 @@ import time
 from pathlib import Path
 from unittest import mock
 
-from support import fake_route
 from support.briefs import bead_diff, bead_snapshot, brief_digest, linked_text
 from support.cfgs import cfg_with
 from support.checkpoints import drop_ck, stored_ck
 from support.fakes import as_bead, as_comment, must_bead
-from support.logs import records
 from support.spawn import port_git, real_spawner
 from support.who import who
 
@@ -55,6 +54,8 @@ from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.run import RunReport
 from tlkernel.waitenums import WaitWhat
+from tltestkit import fake_route
+from tltestkit.logs import records
 from tltestkit.tmpdir import mkdtemp
 
 

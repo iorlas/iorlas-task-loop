@@ -15,7 +15,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import homes
-from support.runs import manifest
 from support.shells import quiet_shell
 
 from taskloop.adapters.git import RealGit
@@ -33,6 +32,7 @@ from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir, RunFiles
 from tlkernel.run import RunState
+from tltestkit.runs import manifest
 
 DAY = 86400
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"}

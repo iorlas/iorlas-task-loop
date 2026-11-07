@@ -5,13 +5,13 @@ from pathlib import Path
 
 import pytest
 import support.paths  # noqa: F401
-from support.narrow import must
 
 from tlkernel import factorydb
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunManifest
 from tlkernel.runrows import RunRows
 from tltestkit.case import Case
+from tltestkit.narrow import must
 from tltestkit.tmpdir import TemporaryDirectory
 
 

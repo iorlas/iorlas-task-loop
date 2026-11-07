@@ -9,7 +9,7 @@ from unittest import mock
 import pytest
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
-from support import fake_route, homes, procsim
+from support import homes, procsim
 from support.engine_case import stop
 from support.plans import CLEAN, PLAN, WRITE
 
@@ -21,6 +21,7 @@ from taskloop.domain.lifecycle import matchers as lifecycle
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
+from tltestkit import fake_route
 from tltestkit.case import Case
 
 ROOT = te.ROOT

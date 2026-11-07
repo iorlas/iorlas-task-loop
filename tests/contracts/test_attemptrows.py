@@ -8,7 +8,6 @@ from unittest.mock import patch
 
 import pytest
 import support.paths  # noqa: F401
-from support.narrow import must
 
 from tlkernel import attemptrows, factorydb
 from tlkernel.enums import Outcome, Result
@@ -17,6 +16,7 @@ from tlkernel.locator import RunLocator, host_name
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunFinish, RunState
 from tltestkit.case import Case
+from tltestkit.narrow import must
 from tltestkit.tmpdir import TemporaryDirectory
 
 

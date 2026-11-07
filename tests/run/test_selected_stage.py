@@ -11,7 +11,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.checks import typed
 from support.memstores import fake_stores
 from support.plans import PLAN
 from support.tlmain import tl_main
@@ -42,6 +41,7 @@ from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
 from tlkernel.parks import Park, ParkStore
 from tlkernel.run import RunManifest, RunState
+from tltestkit.checks import typed
 
 
 class SelectedStage(Case):

@@ -13,7 +13,6 @@ from support import gitq, homes
 from support.askjson import unreadable_ask
 from support.engine_case import EngineTest, ask_rec, stop
 from support.plans import BEAD, CAT_ENV, CLEAN, PLAN, WRITE, review, verdict
-from support.runs import manifest
 
 from taskloop.adapters import (
     links,
@@ -21,6 +20,7 @@ from taskloop.adapters import (
 from taskloop.app.land.checkout import Checkout
 from taskloop.domain.checks import retry
 from tlkernel.ids import BeadId
+from tltestkit.runs import manifest
 
 
 class EngineAsksTest(EngineTest):
