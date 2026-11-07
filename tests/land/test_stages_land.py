@@ -411,7 +411,7 @@ class Contracts(StagesTest):
         crash = fake_route.NO_ANSWER
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [crash]})
         assert rc != 0
-        assert self.eng.why.startswith("failed: delegate crashed 1 times on the review step"), self.eng.why
+        assert self.eng.why.startswith("failed: delegate crashed on the review step"), self.eng.why
         assert not self.eng.asked  # a machine fault: the bead stays open, labelled engine-fault, nobody is asked
         assert self.blocked == []
         assert any(c[:3] == ("label", "add", "t-1") and c[3] == "engine-fault" for c in self.bd_calls), self.bd_calls

@@ -8,6 +8,7 @@ from support.fake_clock import FakeClock
 
 from delegate.app import run
 from delegate.app.run_legs import CONTINUE_NOTE, retry
+from delegate.contracts.json_types import Json, as_str
 
 
 @pytest.mark.parametrize("resumable,ref", [(True, "session"), (False, "session"), (True, None)])
@@ -62,7 +63,7 @@ def test_launch_retries_only_the_real_leg_once(monkeypatch, canary):
 def test_hurt_write_reroutes_excluding_failed_pair(monkeypatch, resumed, reason, exit_code):
     args = argparse.Namespace(resume="session" if resumed else None, role="worker", brief=None, writer_exec_allow=[])
     worker = run.Run(args, {"lanes": {"lane": {"family": "openai"}}}, unattended=True, brief="original")
-    decision = {"action": "run", "lane": "lane", "model": "model"}
+    decision: dict[str, Json] = {"action": "run", "lane": "lane", "model": "model"}
     exclusions = []
 
     def decide(*args, **kw):
@@ -81,7 +82,7 @@ def test_hurt_write_reroutes_excluding_failed_pair(monkeypatch, resumed, reason,
     })
     worker._go()
     assert exclusions == ([] if resumed else [frozenset({("lane", "model")})])
-    assert ("no reroute: none ready" in worker.out["say"]) is not resumed
+    assert ("no reroute: none ready" in as_str(worker.out["say"])) is not resumed
 
 
 @pytest.mark.parametrize("first", [
