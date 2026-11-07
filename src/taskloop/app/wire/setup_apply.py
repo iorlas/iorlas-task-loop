@@ -12,7 +12,8 @@ from tlkernel.paths import ConfigDir
 from tlkernel.procport import Ran
 
 from taskloop.adapters.ident import config_dir
-from taskloop.app.wire import hook, setup
+from taskloop.app.doctor import install
+from taskloop.app.wire import setup
 from taskloop.stores.real import real_stores
 
 BRANCH = "tl-setup-profile"
@@ -26,7 +27,7 @@ class Runs(Protocol):
 def machine_fixes(plugin_root: Path, env: Env) -> list[str]:
     """The idempotent per-user fixes (what SessionStart makes too); -> the ids of those that were to do."""
     todo = [f.id for f in setup.machine(plugin_root, env).fixes]
-    hook.ensure_machine(plugin_root, env)
+    install.ensure_machine(plugin_root, env)
     return todo
 
 

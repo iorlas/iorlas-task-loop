@@ -9,7 +9,8 @@ from pathlib import Path
 from tlkernel.env import Env
 from tlkernel.paths import ConfigDir, default_root
 
-from taskloop.app.wire import doctor, hook, slots
+from taskloop.app.doctor import install
+from taskloop.app.wire import doctor, slots
 from taskloop.stores.delegate import real_route
 
 
@@ -49,18 +50,18 @@ def machine(plugin_root: Path, env: Env) -> Plan:
     fixes: list[Fix] = []
     shim = root / "bin" / "tl"
     text = shim.read_text(encoding="utf-8") if shim.is_file() else ""
-    if hook.RESOLVING_MARK in text:
+    if install.RESOLVING_MARK in text:
         checks.append(Check("shim", True, f"{shim} picks the newest install at run time"))
     else:
         checks.append(Check("shim", False, f"{shim} is " + ("an old fixed-path shim" if text else "missing")))
         fixes.append(Fix("shim", "write the shim that resolves the newest installed version"))
-    state, link = hook.link_state(env), hook.path_link(env)
+    state, link = install.link_state(env), install.path_link(env)
     checks.append(Check("path-link", state in ("ours", "windows"), f"{link}: {state}"))
     if state == "missing" and link.parent.parent.is_dir():
         fixes.append(Fix("path-link", f"link {link} to the shim"))
-    names = [n for n in hook.HOOK_NAMES if not (ConfigDir(root).hooks_dir() / n).is_file()]
+    names = [n for n in install.HOOK_NAMES if not (ConfigDir(root).hooks_dir() / n).is_file()]
     problems = doctor.launcher_problems(plugin_root, env)
-    checks.append(Check("githooks", not names and not problems, f"{len(hook.HOOK_NAMES) - len(names)}/{len(hook.HOOK_NAMES)} present"
+    checks.append(Check("githooks", not names and not problems, f"{len(install.HOOK_NAMES) - len(names)}/{len(install.HOOK_NAMES)} present"
                         + "".join(f"; {p}" for p in problems)))
     if names or problems:
         fixes.append(Fix("githooks", "write the git hooks (pre-push asks the delivery judge) into " + str(ConfigDir(root).hooks_dir())))

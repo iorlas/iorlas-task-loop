@@ -24,11 +24,10 @@ from tlkernel.slots import SlotGitError
 from taskloop.adapters import layout_migrate
 from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.ident import claude_dir, config_dir
-from taskloop.app.doctor import disk, env_checks, ops, profiles, queue, rails
+from taskloop.app.doctor import disk, env_checks, install, ops, profiles, queue, rails
 from taskloop.app.release import catalog, manifest
 from taskloop.app.report.inputs import repo_traces
 from taskloop.app.slots import watchdog
-from taskloop.app.wire import hook
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire.slots import cfg_source
 from taskloop.domain.beads import matchers as beadlint
@@ -127,18 +126,18 @@ def slot_warnings(repo: str, who: Identity, git: Git, now: float, spawner: Spawn
 def launcher_problems(plugin_root: Path, env: Env) -> list[str]:
     """One finding for launchers still pointing at an older sibling cache version."""
     try:
-        newest = hook.newest_install(plugin_root)
+        newest = install.newest_install(plugin_root)
     except OSError:
         return []
-    version = hook.version_key(newest.name)
+    version = install.version_key(newest.name)
     if not version:
         return []
     root = config_dir(env)
     stale = []
-    for name, path in [("shim", root / "bin/tl"), *((n, ConfigDir(root).hooks_dir() / n) for n in hook.HOOK_NAMES)]:
+    for name, path in [("shim", root / "bin/tl"), *((n, ConfigDir(root).hooks_dir() / n) for n in install.HOOK_NAMES)]:
         try:
             text = path.read_text(encoding="utf-8")
-            words = [] if hook.RESOLVING_MARK in text else shlex.split(text, comments=True)  # a resolving shim is never stale
+            words = [] if install.RESOLVING_MARK in text else shlex.split(text, comments=True)  # a resolving shim is never stale
         except (OSError, ValueError):
             continue
         for word in words:
@@ -146,7 +145,7 @@ def launcher_problems(plugin_root: Path, env: Env) -> list[str]:
                 relative = Path(word).relative_to(newest.parent)
             except ValueError:
                 continue
-            target = hook.version_key(relative.parts[0]) if relative.parts else ()
+            target = install.version_key(relative.parts[0]) if relative.parts else ()
             if target and target < version:
                 stale.append(name)
                 break
@@ -155,7 +154,7 @@ def launcher_problems(plugin_root: Path, env: Env) -> list[str]:
 
 def path_link_line(env: Env) -> tuple[str, bool]:
     """(the doctor's line about the `tl` on PATH, True when a different `tl` is in the way)."""
-    state, link = hook.link_state(env), hook.path_link(env)
+    state, link = install.link_state(env), install.path_link(env)
     if state == "windows":
         return f"PATH tl: no link on Windows; run {config_dir(env) / 'bin' / 'tl'}", False
     on_path = str(link.parent) in (env.get("PATH") or "").split(os.pathsep)
@@ -240,7 +239,7 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
         lambda: bd_store(who.actor, repo).find(BeadQuery(status="open")), repo)
     sys.stdout.write("".join(f.line() + "\n" for f in found))
     fails += [f.text for f in found if f.level == "FAIL"]
-    fails += rails.report(ConfigDir(config_dir(env)), hook.GIT_HOOK, hook.readable_install(plugin_root), git, repo, spawner,
+    fails += rails.report(ConfigDir(config_dir(env)), install.GIT_HOOK, install.readable_install(plugin_root), git, repo, spawner,
                           [c.id for c in source[0].engine.gate_checks])
     fails += queue.report(real_stores(who.config), git, repo, f"origin/{base or 'main'}", time.time())
     if not warns and not found and not fails:
