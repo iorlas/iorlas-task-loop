@@ -30,6 +30,7 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.adapters import pidcheck
+from taskloop.app.asks import admission
 from taskloop.app.launch import loop as wloop
 from taskloop.app.loop.stages import EngineSlots
 from taskloop.app.loop.take import Taker
@@ -109,7 +110,7 @@ class Slots(LoopBase):
         made.return_value.result.return_value = RunReport(outcome=Result.LANDED, bead=bead_id)
         made.return_value.log_path = Path(self.home, "e.jsonl")
         out = io.StringIO()
-        with mock.patch.dict(os.environ, env), mock.patch.object(entry, "admit", return_value=(True, "")), \
+        with mock.patch.dict(os.environ, env), mock.patch.object(admission, "admit", return_value=(True, "")), \
                 mock.patch.object(entry, "Engine", made), \
                 mock.patch.object(signal, "signal"), redirect_stdout(out):
             rc = entry.main(a, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
@@ -173,7 +174,7 @@ class RunTaskTakesItsSlot(Slots):
 
         def stopped(*a, **kw):
             raise engine.Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED)
-        with mock.patch.object(entry, "admit", side_effect=stopped):
+        with mock.patch.object(admission, "admit", side_effect=stopped):
             f = Path(self.home, "o.json")
             a = Args(id="x-1", worktree=None, slot="s1", dry_run=False, fresh=False, quiet=True,
                             outcome_file=str(f))

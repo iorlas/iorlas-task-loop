@@ -31,10 +31,10 @@ from support.who import who
 
 from run.test_stages import StagesTest
 from taskloop.app.artifacts import store
+from taskloop.app.asks import admission
 from taskloop.app.land.rebase import MAX_REBASE_RESETS
 from taskloop.app.pipeline import outcomes
 from taskloop.app.plan.prompts import REPLAN_CAP
-from taskloop.app.run import entry
 from taskloop.app.run import running as wrunning
 from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
@@ -594,7 +594,7 @@ class Claims(StagesTest):
         comments = [{"text": "Blocked: stuck: re-planned 3 times", "created_at": "1", "author": "tl-engine"}]
         with self.store.stub(show=parked), \
                 self.store.stub(comments=comments), mock.patch.object(wrunning, "running", return_value={}):
-            ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=self.store)
+            ok, why = admission.admit(BeadId("t-1"), str(self.wt), port_git(), who(), store=self.store, running_now=wrunning.running)
         assert ok, why
         assert why == "reopened"
         assert self.store.calls[0] == ("update", "t-1", "--status", "open", "--if-assignee", "tl-2be89f88", "--assignee", "")
@@ -603,14 +603,14 @@ class Claims(StagesTest):
         parked = {"id": "t-1", "status": "blocked", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
         with self.store.stub(show=parked), \
                 mock.patch.object(wrunning, "running", return_value={"t-1": "s2"}):
-            ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=self.store)
+            ok, why = admission.admit(BeadId("t-1"), str(self.wt), port_git(), who(), store=self.store, running_now=wrunning.running)
         assert not ok
         assert "a live claim" in why
 
     def test_a_working_bead_that_is_still_claimed_after_the_sweep_is_a_live_claim(self):
         busy = {"id": "t-1", "status": "in_progress", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
         with self.store.stub(show=busy):
-            ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=self.store)
+            ok, why = admission.admit(BeadId("t-1"), str(self.wt), port_git(), who(), store=self.store, running_now=wrunning.running)
         assert not ok
         assert "a live claim" in why
 

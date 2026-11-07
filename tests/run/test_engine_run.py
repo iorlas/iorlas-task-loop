@@ -36,11 +36,13 @@ from support.tmpdir import mkdtemp
 from support.who import who
 
 from taskloop.adapters import delegate as dl
+from taskloop.app.asks import admission
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.pipeline import outcomes
 from taskloop.app.plan.planner import Planner
-from taskloop.app.run import engine, entry
+from taskloop.app.run import engine, entry, running
 from taskloop.app.slots.lease import Lease
+from taskloop.app.track import outcome_line
 from taskloop.app.wire import slots as wslots
 from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks import retry
@@ -236,8 +238,9 @@ class EngineRunTest(EngineTest):
         made.return_value.result.return_value = RunReport(outcome=Result.FAILED, bead=BeadId("t-1"), why="failed: stopped (SIGTERM)")
         made.return_value.stop_pending = False
         with self.stoppable(), mock.patch.object(entry, "Engine", made), \
-                mock.patch.object(entry, "admit", return_value=(True, "")), \
-                self.store.stub(bd_fn=claim), mock.patch.object(entry, "say", side_effect=say):
+                mock.patch.object(admission, "admit", return_value=(True, "")), \
+                self.store.stub(bd_fn=claim), mock.patch.object(entry, "say", side_effect=say), \
+                mock.patch.object(outcome_line, "say", side_effect=say):
             rc = entry.run_bead(a, str(self.wt), cfg_with(), str(self.wt), self.store, env=snapshot(), spawner=real_spawner(),
                 git=port_git(), who=who())
         return rc, made, said
@@ -306,7 +309,7 @@ class EngineRunTest(EngineTest):
         with open(log, "w") as f:
             f.write("CLAIMED t-1\n" * 50)
             f.flush()
-            entry.append_output(f)
+            outcome_line.append_output(f)
             with open(log, "w") as other:
                 other.write("TAKEN\n")
             f.write("[07:00] review\n")
@@ -726,7 +729,7 @@ class EngineRunTest(EngineTest):
         calls = []
         with self.store.stub(show=blocked), self.store.stub(comments=cs), \
                 self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
-            ok, why = entry.admit("t-1", str(self.wt), port_git(), who(), store=self.store)
+            ok, why = admission.admit(BeadId("t-1"), str(self.wt), port_git(), who(), store=self.store, running_now=running.running)
         assert ok, why
 
     def test_a_pause_is_a_comment_never_a_line_of_notes(self):
