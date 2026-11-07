@@ -4,7 +4,8 @@
 
 A changed file always reaches its own package; only public changes reach dependents transitively. With src/*/api.py, public surface is that
 api.py, contracts/ contents and top-level src package testing.py; without api.py every file is public. A changed file outside every
-package (the root pyproject, uv.lock, the justfile, dev/) reaches all ordinary members; SCOPED members require their own inputs. The graph is the manifests' (what a package declares is what
+package (the root pyproject, uv.lock, the justfile, dev/) reaches all ordinary members; SCOPED members require their own inputs. The graph
+is the manifests' (what a package declares is what
 its isolated environment contains), never an import scan. Standard library only (docs/design/stage-packages.md section 5)."""
 import argparse
 import re

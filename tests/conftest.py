@@ -51,10 +51,7 @@ from support.scope import delegate_wanted  # noqa: E402
 from taskloop.adapters import procs  # noqa: E402
 from taskloop.app.parts import STAGE_PARTS  # noqa: E402
 from tlkernel import factorydb, scratch  # noqa: E402
-from tltestkit import (
-    procsim,
-    work,
-)
+from tltestkit import procsim, work  # noqa: E402
 from tltestkit.limits import hang_s, kind_of_parts, limit_for  # noqa: E402
 
 procsim.SHELL_PROCESS_ADAPTERS.append(procs)

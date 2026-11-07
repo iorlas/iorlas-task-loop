@@ -268,7 +268,7 @@ class ConfigLocation(Case):
 
 
 class WatchdogProc(Case):
-    """delegate-go0 on a worker that is a script (packages/testkit/src/tltestkit/fake_worker.py) with the fake clock: a dead stream is stopped through the
+    """delegate-go0 on a worker that is a script (tltestkit.fake_worker) with the fake clock: a dead stream is stopped through the
     tree stop, a chatty one is not."""
 
     def setup_method(self):

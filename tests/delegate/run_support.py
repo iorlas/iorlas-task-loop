@@ -137,7 +137,7 @@ class RunBase(Case):
         )
 
     def play(self, *script):
-        """The worker of the next run is a script (packages/testkit/src/tltestkit/fake_worker.py): nothing is spawned. -> the workers started."""
+        """The worker of the next run is a script (tltestkit.fake_worker): nothing is spawned. -> the workers started."""
         return self.enterContext(fake_worker.install(list(script), clock=self.clock))
 
     def real_clock(self):
