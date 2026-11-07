@@ -137,3 +137,25 @@ def test_stale_document_is_recovered_once_before_new_run():
     with mock.patch.object(queue_land, "recover") as recovery:
         world.run()
     recovery.assert_called_once_with(world.stack, stale, mock.ANY)
+
+
+@pytest.mark.parametrize("stored,expected", [(None, 1), (-3, 1), (2, 2), (9, 4)])
+def test_stored_in_flight_is_restored_and_clamped(stored, expected):
+    world = World()
+    world.stack.jobs = 4
+    if stored is not None:
+        world.stack.queue_doc.value = QueueDoc(entries=[], in_flight=stored, last_base="old")
+    with mock.patch.object(queue_land, "recover"), mock.patch.object(queue_land, "enqueue", return_value=4):
+        world.run()
+    writes = world.stack.queue_doc.writes
+    assert writes[0].in_flight == expected
+    assert writes[-1].in_flight == min(4, expected + 3)
+
+
+def test_overlap_enqueue_result_caps_the_controller_at_one():
+    world = World()
+    world.stack.jobs = 4
+    world.stack.queue_doc.value = QueueDoc(entries=[], in_flight=4, last_base="old")
+    with mock.patch.object(queue_land, "recover"), mock.patch.object(queue_land, "enqueue", return_value=1):
+        world.run()
+    assert all(doc.in_flight == 1 for doc in world.stack.queue_doc.writes)
