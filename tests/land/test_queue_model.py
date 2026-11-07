@@ -9,7 +9,7 @@ MAIN = "main0"
 
 def entries(*phases: Phase) -> list[Entry]:
     built = [p is not Phase.WAITING for p in phases]
-    return [Entry(branch=f"b{i}", head=f"h{i}", phase=p, q=f"q{i}" * b, tree=f"t{i}" * b)
+    return [Entry(branch=f"b{i}", head=f"h{i}", phase=p, q=f"q{i}" * b, tree=f"t{i}" * b, ref=f"r{i}" * b)
             for i, (p, b) in enumerate(zip(phases, built, strict=True))]
 
 
@@ -39,7 +39,7 @@ def test_only_the_head_merges_and_a_green_behind_a_gating_head_waits():
 
 def test_an_entry_that_left_has_its_refs_dropped_and_is_skipped_for_the_chain():
     es = entries(Phase.MERGED, Phase.EJECTED, Phase.WAITING)
-    assert plan(es, MAIN, 2) == [Drop("b0", "q0"), Drop("b1", "q1"), Build("b2", "h2", MAIN)]
+    assert plan(es, MAIN, 2) == [Drop("b0", "r0"), Drop("b1", "r1"), Build("b2", "h2", MAIN)]
 
 
 def test_a_conflict_is_a_result_the_entry_is_ejected_and_the_queue_goes_on():
