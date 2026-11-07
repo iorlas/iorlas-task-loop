@@ -54,8 +54,6 @@ SAMPLE: dict[str, Any] = {
     "denials": ["rm"],
     "writer": WriterSession(seen=["a"], last_stage=True),
     "writer_family": "codex",
-    "writer_fallback": True,
-    "fallback_lane": "L",
     "look_notes": ["n"],
     "look_unjudged": {"i": "why"},
     "look_done": 1,

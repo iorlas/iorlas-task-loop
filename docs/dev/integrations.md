@@ -104,13 +104,14 @@ delegate is a library of this repo (`src/delegate`, decided 2026-11-05; the iorl
    are excluded. Legacy prompt-only records require execution again; their raw output is retained for inspection.
    The write step passes `--engine-only RECIPE` once per bare `just` recipe of
    a configured check (or the gate) its writer must not run (`RunRequest.engine_only`, `api_request`); read-only
-   steps pass none. A worker call also passes `--only-family F` once per family of `engine.writer_family` (or the bead's `writer-family:<f>`
-   labels; delegate PINFAMILY; `RunRequest.only_family`, `domain/lanes/pin.py`); the planner, reviewer and reflect calls pass none. A `stop`
-   with reason `only_family_unready` (or `no_lane` while pinned) pauses the run with the pin in words (`lane_acts.end`). Delegate keeps its state in `~/.config/task-loop/delegate` (`DELEGATE_CONFIG_DIR` overrides): the same place for an install and a checkout.
+   steps pass none. Worker calls carry the bead's `writer-family:<f>` label as opaque `prefer`.
+   The product flags `writer_exec` and `reviewer_other_family` ask delegate for execution and reviewer diversity. Delegate owns the
+   writer pin, exec grant and read roots in its routing Settings, and derives reviewer identity from its `task/writer` thread record.
+   A refused preference pauses the run with the reason in words. Delegate keeps its state in `~/.config/task-loop/delegate`
+   (`DELEGATE_CONFIG_DIR` overrides): the same place for an install and a checkout.
 
-The profile's `engine.writer_exec_allow` optionally grants argv prefixes to the Codex writer. A nonempty grant requires
-contract 4 and capability `writer_exec_allow`, plus `engine.writer_family` exactly `["openai"]` and no conflicting bead pin.
-Only writer calls carry `writer_exec_allow`; an empty grant sends nothing. Delegate checks binaries
-against its host policy. See `docs/contracts/delegate-api.md` for the host execution boundary and NETISO limitation.
+The profile's `engine.writer_exec` defaults false; `engine.reviewer_other_family` defaults true. Host execution requires delegate's
+writer pin exactly `["openai"]` and a nonempty grant in its routing settings. Delegate validates binaries against its host policy.
+See `docs/contracts/delegate-api.md` for the host execution boundary and NETISO limitation.
 
 Never read delegate's private state, and import only `delegate.api`. Delegate and task-loop release together; there is no compatibility shim.

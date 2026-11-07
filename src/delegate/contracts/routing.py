@@ -89,6 +89,9 @@ class Settings:
     fresh_stage_k: float = 100.0
     claude_weekly_reset: str = ""
     breaker: BreakerPolicy = field(default_factory=BreakerPolicy)
+    writer_family: list[str] = field(default_factory=list)
+    writer_exec_allow: list[list[str]] = field(default_factory=list)
+    writer_read_roots: list[str] = field(default_factory=list)
 
 
 @record

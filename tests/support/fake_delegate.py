@@ -38,6 +38,8 @@ class FakeDelegate:
         self.steps: list[Step] = list(steps) or [done()]
         self.contract = contract
         self.calls: list[Call] = []
+        self.results: list[DelegateResult] = []
+        self.worker_families: dict[str, str | None] = {}
 
     def script(self, *steps: Step) -> None:
         self.steps = list(steps)
@@ -53,4 +55,11 @@ class FakeDelegate:
             for e in step.events:
                 on_event(e)
         res = step.result
-        return res if res.ref else res.replace(ref=f"fake-{int(n + 1)}")
+        writer = self.worker_families.get(req.task) if req.reviewer_other_family else None
+        if writer and res.family == writer:
+            res = res.replace(flag="same_family")
+        if req.role == "worker":
+            self.worker_families[req.task] = res.family
+        res = res if res.ref else res.replace(ref=f"fake-{int(n + 1)}")
+        self.results.append(res)
+        return res

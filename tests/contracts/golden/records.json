@@ -451,7 +451,7 @@
   ]
  },
  "Checkpoint": {
-  "v": 6,
+  "v": 7,
   "bead": "tl-1",
   "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "t": 1793050200.5,
@@ -548,8 +548,6 @@
     "last_stage": false
    },
    "writer_family": null,
-   "writer_fallback": false,
-   "fallback_lane": "",
    "look_notes": [],
    "look_unjudged": {},
    "look_done": 0,
@@ -1604,10 +1602,8 @@
    "epic_only": false,
    "reflect": true,
    "intake_per_day": 0,
-   "writer_family": [],
-   "second_writer_family": "",
-   "writer_exec_allow": [],
-   "writer_read_roots": [],
+   "writer_exec": false,
+   "reviewer_other_family": true,
    "planner_notes": "",
    "shot_table": "",
    "delegate": "",
@@ -1803,7 +1799,7 @@
   }
  },
  "RunRequest": {
-  "v": 2,
+  "v": 3,
   "role": "worker",
   "brief_path": "/b.md",
   "cwd": "/w",
@@ -1815,7 +1811,6 @@
   "thread": "writer",
   "delta_path": "/delta.md",
   "boundary": false,
-  "authored_by": "openai",
   "call_id": "c1",
   "timeout_s": 2820,
   "idle_s": 900,
@@ -1824,11 +1819,9 @@
    "check"
   ],
   "engine_only_advisory": true,
-  "only_family": [
-   "openai"
-  ],
-  "writer_exec_allow": [],
-  "read_roots": [],
+  "prefer": "openai",
+  "writer_exec": false,
+  "reviewer_other_family": true,
   "instructions_ref": "",
   "tools": [
    {
@@ -2023,7 +2016,7 @@
   "t": 1793050200.5
  },
  "CursorBody": {
-  "v": 6,
+  "v": 7,
   "bead": "tl-1",
   "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "t": 1793050200.5,
@@ -2127,7 +2120,7 @@
   ]
  },
  "WriteSection": {
-  "v": 2,
+  "v": 3,
   "writer": {
    "seen": [
     "abc"
@@ -2135,8 +2128,6 @@
    "last_stage": false
   },
   "writer_family": null,
-  "writer_fallback": false,
-  "fallback_lane": "",
   "handoff": {
    "rounds": [
     {

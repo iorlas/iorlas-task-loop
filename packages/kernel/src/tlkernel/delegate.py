@@ -41,7 +41,7 @@ class ToolBinding(Rec):
 class RunRequest(Rec):
     """One delegate call. The engine's limits travel as flags (`timeout_s`, `idle_s`): delegate stops the worker's tree at them."""
 
-    V: ClassVar[int] = 2
+    V: ClassVar[int] = 3
 
     role: str
     brief_path: str
@@ -54,7 +54,6 @@ class RunRequest(Rec):
     thread: str = ""
     delta_path: str = ""
     boundary: bool = False
-    authored_by: str = ""
     call_id: str = ""
     timeout_s: int = 0
     idle_s: int = 0
@@ -62,10 +61,9 @@ class RunRequest(Rec):
     # bare `just` recipe names a write step must not run: --engine-only once each
     engine_only: list[str] = msgspec.field(default_factory=list)
     engine_only_advisory: bool = False
-    # families the call may use (--only-family once each): set on a worker call only (domain/lanes/pin.py)
-    only_family: list[str] = msgspec.field(default_factory=list)
-    writer_exec_allow: list[list[str]] = msgspec.field(default_factory=list)
-    read_roots: list[str] = msgspec.field(default_factory=list)  # --read-root once each: folders an OpenCode write step may read
+    prefer: str = ""
+    writer_exec: bool = False
+    reviewer_other_family: bool = False
     instructions_ref: str = ""  # --instructions-ref: a commit whose instruction files the worker reads instead of the work tree's
     tools: list[ToolBinding] = msgspec.field(default_factory=list)  # delegate.api takes them typed, not as flags
 
