@@ -310,11 +310,11 @@ class EnginePlanTest(EngineTest):
         assert a["kind"] == "ticket"
         assert "part 3" in self.card()
 
-    def test_fail_on_a_plan_tries_once_more_then_fails_the_task(self):
+    def test_fail_on_a_plan_fails_the_task_without_retry(self):
         bad = stop("worker_failed", say="the worker exited 1")
-        rc, s = self.run_engine({"plan": [bad, bad]})
+        rc, s = self.run_engine({"plan": [bad]})
         assert rc == 2
-        assert len(s.calls) == 2
+        assert len(s.calls) == 1
         assert self.blocked == []
         assert "the worker exited 1" in self.said()
 

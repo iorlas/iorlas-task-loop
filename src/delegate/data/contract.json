@@ -931,6 +931,7 @@
         "network_rerun",
         "lane_poll",
         "lane_wait",
+        "worker_retry",
         "schema_reask",
         "reroute"
        ]
