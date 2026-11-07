@@ -3,7 +3,7 @@
 import json
 from typing import Final, Protocol
 
-from tlkernel import askspecs
+from tlkernel import askspecs, childenv
 from tlkernel import log as rec
 from tlkernel.askspec import AskSpec
 from tlkernel.beadsport import Beads
@@ -17,7 +17,7 @@ from tlkernel.ids import BeadId
 from tlkernel.plancheck import PlanData
 from tlkernel.stop import Stop
 
-from taskloop.adapters import childenv, ident
+from taskloop.adapters import ident
 from taskloop.app.asks import trustroots
 from taskloop.app.checks.runner import Checker
 from taskloop.app.workers import writer_pin

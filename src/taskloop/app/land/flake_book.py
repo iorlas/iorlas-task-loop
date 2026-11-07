@@ -4,9 +4,9 @@ from collections.abc import Callable
 from tlkernel.beadsport import Beads, NewBead
 from tlkernel.flakes import FlakeLog, FlakeRow
 from tlkernel.ids import BeadId
+from tlkernel.storeapi import Doc
 
 from taskloop.domain.land.flake_escalate import Escalation, escalate, record
-from taskloop.stores.api import Doc
 
 
 class FlakeBook:
