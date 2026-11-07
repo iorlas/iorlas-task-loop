@@ -1,9 +1,9 @@
 """Decisions in force: the repo's ADRs as the plan stage reads them, and the record of the plans that relied on one. The store is
 `taskloop.contracts.adrs.AdrStore`, a cache of the repo's `docs/adr` files at the base commit."""
 import time
-from typing import Any
 
 from taskloop.app.plan import adrsync
+from taskloop.app.plan.host import PlanHost
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.plancheck import PlanData
 
@@ -12,7 +12,7 @@ TEXT_CAP = 600
 
 
 class Decisions:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: PlanHost) -> None:
         self.e = host
 
     def store(self) -> AdrStore:

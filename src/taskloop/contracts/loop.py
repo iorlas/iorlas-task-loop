@@ -13,7 +13,7 @@ class StopRequest(Rec):
 
 
 SkipKind = Literal["epic", "slot", "label", "epic_only", "lint", "area", "rest", "lane", "taken", "hold", "parked", "capped", "needs",
-                   "queue"]
+                   "queue", "unordered"]
 
 
 class Skip(Rec):

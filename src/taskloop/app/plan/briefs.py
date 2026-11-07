@@ -2,20 +2,21 @@
 pile up on every rerun: 40 of one consumer run's 45 KB brief). Inline, never a path: a worker's file tools reach only its worktree, and the
 engine's files live outside it so the worker cannot change them."""
 import hashlib
-from typing import Any
 
 from taskloop.adapters.bdids import mentioned_ids
 from taskloop.app.asks import intake
+from taskloop.app.plan.host import PlanHost
 from taskloop.contracts.bdsafe import peek
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.ids import BeadId
+from taskloop.domain.asks import text as asktext
 from taskloop.domain.plan import brief as bf
 
 ENGINE_LABELS = ("needs-owner-check",)
 
 
 class Briefs:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: PlanHost) -> None:
         self.e = host
         self.parts: dict[str, int] = {}  # bytes per section of the last brief written: what the accounting code reads
 
@@ -38,8 +39,9 @@ class Briefs:
         comments = e.store.comments(e.bead)
         hint = str(bead.metadata.get(intake.HINT) or "")
         linked = bf.linked(e.bead, bead, comments, e.cfg.owner_author,
-                           lambda i: peek(e.store, BeadId(i)), e.store.comments, mentioned_ids)
-        said = e.planner.cap.answered_words()  # the owner's typed answer is no comment: the brief carries it for the workers
+                           lambda i: peek(e.store, BeadId(i)), lambda i: e.store.comments(BeadId(i)), mentioned_ids)
+        # the owner's typed answer is no comment: the brief carries it for the workers
+        said = asktext.words(e.answered.answer if e.answered else None)
         answer = f"\n## Owner answer (to ask {e.answered.id})\n{said}\n" if said and e.answered else ""
         brief = self.fit(bead, comments, hint, len(linked.encode()) + len(answer.encode())).plus("linked", linked).plus("answer", answer)
         e.snap = bf.snapshot(bead, comments, e.cfg.owner_author)

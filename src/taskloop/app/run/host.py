@@ -3,7 +3,7 @@ The Engine (engine.py) opens a run into this; the steps (stages.py, crash.py) ar
 from functools import cached_property
 from typing import Any
 
-from taskloop.app.run import summaries
+from taskloop.app.run import asked, summaries
 from taskloop.app.run.closer import Closer, closer_over
 from taskloop.app.run.parts_land import LandParts
 from taskloop.app.run.parts_plan import PlanParts
@@ -19,6 +19,7 @@ class RunHost(LandParts, PlanParts, RunParts):
     accepted: list[int]
     stage_tree: str
     replan_first: bool
+    intake_per_day: int  # the Engine's: CloserHost reads it
 
     @cached_property
     def worker(self) -> WorkerCall:
@@ -28,7 +29,7 @@ class RunHost(LandParts, PlanParts, RunParts):
     def closer(self) -> Closer:
         return closer_over(self, self.worker.saved)
 
-    def ai(self, node: str, title: str, prompt: str, *a: Any, **kw: Any) -> Any:
+    def ai(self, node: str, title: str, prompt: str, *a: Any, **kw: Any):
         """One AI node, then the tree check: a worker that wrote core.worktree is caught before review or land. Before it, the
         owner's requests are taken (a safe point), and the notes taken since the last call end its prompt (and its delta)."""
         self.requests.at_step(kw.get("step") or node)
@@ -37,7 +38,8 @@ class RunHost(LandParts, PlanParts, RunParts):
             prompt += notes
             if kw.get("delta") is not None:
                 kw["delta"] += notes
-        out = self.worker.run(node, title, prompt, *a, **kw)
+        got = self.worker.run(node, title, prompt, *a, **kw)
+        asked.apply(self, got.updates)
         self.assert_tree(kw.get("step") or node, "after")
-        plancheck.parse(out[0])
-        return out
+        plancheck.parse(got.data)
+        return got

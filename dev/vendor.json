@@ -1,9 +1,9 @@
 [
   {
     "name": "any_agent",
-    "shelf_tag": "df729c9d9963ebe77d77a53ac42147d14a751911",
-    "shelf_commit": "df729c9d9963ebe77d77a53ac42147d14a751911",
-    "tree_hash": "003e425a27ce5580e001f5983086da577d2d212ab6ab558d8165b98b7935a639"
+    "shelf_tag": "c976a6054bde68887a293eef8c3ca688ffe06e30",
+    "shelf_commit": "c976a6054bde68887a293eef8c3ca688ffe06e30",
+    "tree_hash": "a264cdaf779c6a774d31f99ab6bdd797b1a1b2c6af44f872e0f333e3c1fba900"
   },
   {
     "name": "any_breaker",

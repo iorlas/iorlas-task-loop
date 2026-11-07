@@ -11,9 +11,10 @@ from typing import Any, Protocol
 from taskloop.app.slots.env import SlotEnv
 from taskloop.contracts import paths
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.config import HostResources, RepoProfile
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import Beads, Child, Hold
+from taskloop.contracts.procport import Child, Hold
 
 
 class Probe(Protocol):

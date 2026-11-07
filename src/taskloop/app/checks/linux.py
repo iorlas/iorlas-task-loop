@@ -17,7 +17,7 @@ from typing import NamedTuple, Protocol
 
 from taskloop.contracts.config import ExecutorConfig
 from taskloop.contracts.ids import CheckId
-from taskloop.contracts.ports import Ran, RanBytes, Streamed
+from taskloop.contracts.procport import Ran, RanBytes, Streamed
 from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.checks.matchers import safe_name
 

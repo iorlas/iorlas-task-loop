@@ -404,3 +404,23 @@ class Launchers(Case):
         r = json.loads(out.getvalue())
         assert (r["stop"]["reason"], r["call_id"]) == ("setup", "c#1")
         assert "codexx" in r["say"]
+
+
+@pytest.mark.parametrize(
+    ("fact", "reason"), [("setup_failed", "setup"), ("crashed", "crash"), ("signal", "killed")]
+)
+def test_a_stop_the_caller_measured_is_named_by_the_ladder_and_says_its_own_words(fact, reason):
+    from delegate.app import settle  # noqa: PLC0415 - the test names the one function under test
+
+    assert settle.stop(fact, "codex CLI not found on PATH") == {"outcome": reason, "say": "codex CLI not found on PATH"}
+
+
+def test_a_canary_probe_that_did_not_answer_in_time_is_hung_for_a_minute():
+    from delegate.app import settle  # noqa: PLC0415 - the test names the one function under test
+
+    got = settle.probe_hung("OPENAI_SUBSCRIPTION", "gpt-5", 30, 1000.0)
+    assert got == {
+        "outcome": "hung",
+        "retry_after": 1060.0,
+        "say": "canary: OPENAI_SUBSCRIPTION/gpt-5 did not answer within 30s",
+    }

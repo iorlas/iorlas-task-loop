@@ -542,7 +542,7 @@ rounds per stage, a defect that comes back is a leftover. The plan's cases carry
 look-objective, taste or show; `visual_paths` only checks that: a visual path touched with no such case sends the plan back once.
 `show` (tl-jvpm.25): `shows: [{name, role}]` names the files the writer registers with `artifact_add` (role before / after / progress / result);
 the engine checks by role and name that they exist for the last stage's write, a miss goes back to the writer once (never a park), whether the result is good stays with the owner;
-taste goes to the owner-look bead (metadata `looks` for the gallery) and never blocks the land. Without `shot_table` the
+taste goes to the owner-look bead (a factory.db row for the gallery) and never blocks the land. Without `shot_table` the
 old way below stands.
 
 **Look and feel (tl-bxk.10.23):** `engine.visual_paths` `{"include": [globs], "exclude": [globs]}` (`**` crosses

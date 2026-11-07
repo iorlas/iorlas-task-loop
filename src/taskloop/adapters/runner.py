@@ -6,7 +6,6 @@ Silence is delegate's (`--idle`, its own watchdog, a typed stop in the answer); 
 by itself returns a `CompletedProcess`-like; one the engine ends raises `Stopped`."""
 
 import json
-import re
 import subprocess
 import threading
 import time
@@ -22,19 +21,6 @@ from taskloop.contracts.agent import Agent
 from taskloop.contracts.delegate import DelegateResult, LiveStart, WorkerStarted
 
 POLL_S = 0.5  # seconds between the looks at the live file while a call runs
-
-
-def live_path(live_dir: str | Path, n: int, step: str) -> str:
-    """Where delegate appends the worker's live events for call n of a run: <the run's live folder>/<NN>-<step>.jsonl."""
-    slug = re.sub(r"[^A-Za-z0-9_-]+", "-", step or "call").strip("-") or "call"
-    return f"{live_dir}/{n:02d}-{slug}.jsonl"
-
-
-def mtime(path: str | Path) -> float | None:
-    try:
-        return Path(path).stat().st_mtime
-    except OSError:
-        return None
 
 
 Completed = subprocess.CompletedProcess[str]  # what a seam call answers

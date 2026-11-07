@@ -24,7 +24,7 @@ from support.spawn import port_git  # noqa: E402
 from taskloop.app.release import pins  # noqa: E402
 from taskloop.app.wire import usage as usage_cmd  # noqa: E402
 from taskloop.contracts.env import snapshot  # noqa: E402
-from taskloop.contracts.stores import PinStore, ReposStore  # noqa: E402
+from taskloop.contracts.rowstores import PinStore, ReposStore  # noqa: E402
 
 # isort: split
 import contextlib  # noqa: E402
@@ -45,9 +45,9 @@ from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import asks as wasks  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.ask import Ask  # noqa: E402
+from taskloop.contracts.askstore import AskStore  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
-from taskloop.contracts.stores import AskStore  # noqa: E402
 
 
 def ctx() -> tl.Ctx:
@@ -157,7 +157,8 @@ class UsageCLI(Base):
 
         def status(reading):
             got.append(reading)
-            return {"lanes": {"CLAUDE_SUBSCRIPTION": {"five": 6.0, "week": 4.0, "out": False}}}
+            return {"ts": 1.0, "lanes": {"CLAUDE_SUBSCRIPTION": {"five": 6.0, "week": 4.0, "out": False}},
+                    "cockpit": {"lanes": [{"id": "CLAUDE_SUBSCRIPTION", "state": "ready"}]}}
         with mock.patch.object(usage_cmd.dg, "status_json", side_effect=status):
             out = io.StringIO()
             with mock.patch.object(sys, "stdout", out):

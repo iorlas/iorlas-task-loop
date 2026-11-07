@@ -11,14 +11,15 @@ from typing import Final
 from taskloop.app.track import verbs
 from taskloop.app.track.verbs import Guard
 from taskloop.app.wire import slots as wslots
+from taskloop.contracts.beadsport import BdFailure, Beads
 from taskloop.contracts.enums import Outcome, Result
 from taskloop.contracts.finish import finish_run
 from taskloop.contracts.finish_projection import history
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.ports import BdFailure, Beads, Git
 from taskloop.contracts.run import RunFinish, RunState
 from taskloop.contracts.slots import git_probe
 from taskloop.contracts.stores import TraceStore

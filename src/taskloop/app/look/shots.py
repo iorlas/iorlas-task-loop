@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import looks
-from taskloop.adapters.check_files import repo_key
 from taskloop.app.artifacts import store
 from taskloop.app.artifacts.keep import Keeper
+from taskloop.app.look.host import LookHost
 from taskloop.contracts.artifact import ArtifactMeta, ArtifactSlot
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
+from taskloop.contracts.plancheck import StageData
 from taskloop.contracts.slots import SlotGitError
 from taskloop.contracts.wire import Refused
 from taskloop.domain.checks.matchers import glob_re
@@ -29,10 +30,19 @@ def visual_hit(vp: Any, paths: Any) -> bool:
 
 
 class Pictures:
-    def __init__(self, host: Any, git: Git) -> None:
+    def __init__(self, host: LookHost, git: Git) -> None:
         self.e = host
         self.git = git
         self.kept: Keeper | None = None
+
+    @property
+    def stale(self) -> bool:
+        """Code changed after the last render: the pictures show an older tree."""
+        return self.e.render_stale
+
+    def mark_stale(self) -> None:
+        """Write's one word to the look stage after a write: its pictures are old now (the flag is checkpointed)."""
+        self.e.render_stale = True
 
     def keeper(self) -> Keeper:
         """This run's evidence budget: it writes the worktree's evidence dir and the run dir's; earlier runs are only looked at."""
@@ -62,19 +72,19 @@ class Pictures:
             if not (f.is_file() and f.suffix.lower() in IMAGE_EXT):
                 continue
             rel = str(f.relative_to(e.evidence_dir))
-            if self.shot_methods() and rel not in e.rendered_names:
+            if self.shot_methods() and rel not in e.look.rendered:
                 continue  # with a shot table the pictures are the engine's own, of this run: never a writer's or an older run's
             why = f"over {MAX_SHOT_BYTES >> 20} MB" if f.stat().st_size > MAX_SHOT_BYTES else (
                 f"more than {MAX_SHOTS} screenshots" if len(out) >= MAX_SHOTS else "")
             if why:
-                if rel not in e.shots_skipped:
-                    e.shots_skipped.add(rel)
+                if rel not in e.look.skipped:
+                    e.look.skipped.add(rel)
                     e.log.note(f"screenshot {rel} skipped: {why}")
                 continue
             out.append(rel)
         return out
 
-    def stage_visual(self, st: Any):
+    def stage_visual(self, st: StageData):
         e = self.e
         vp = self.visual_cfg()
         return bool(vp) and visual_hit(vp, list(st.get("files") or []) + e.checkout.changed_paths())
@@ -83,8 +93,8 @@ class Pictures:
         """{method: entry} from engine.shot_table, read from the base branch (a worker can edit the working copy, not that);
         {} when unset or unreadable (then a visual stage works the old way)."""
         e = self.e
-        if e.shot_cache is None:
-            e.shot_cache = dict[str, Any]()
+        if e.look.shot_cache is None:
+            e.look.shot_cache = dict[str, Any]()
             rel = (e.cfg.shot_table or "").strip()
             if rel:
                 try:
@@ -94,23 +104,23 @@ class Pictures:
                 methods, err = looks.parse_table(text) if text else ({}, f"{rel} is not on {e.cfg.base}")
                 if err:
                     e.warn(f"engine.shot_table: {err}; visual stages work the old way")
-                e.shot_cache = methods
-        return e.shot_cache
+                e.look.shot_cache = methods
+        return e.look.shot_cache
 
     def shot_table(self):
         """The shot methods the repo can render, as the planner and the writer are told them."""
         return looks.table_text(self.shot_methods())
 
-    def look_ready(self, st: Any):
+    def look_ready(self, st: StageData):
         return bool(self.shot_methods()) and self.stage_visual(st)
 
     def show_pictures(self) -> list[tuple[str, ArtifactMeta]]:
         """The run's pictures the owner may want to see (role before, after or result), oldest first, each with its address
         `artifact:<repo>/<bead>/<run>/<stage>-<attempt>/<name>`: the store is the one record, so a crash after the land loses none."""
         e = self.e
-        e.artifact_repo = e.artifact_repo or repo_key(self.git, e.wt)
-        slot = ArtifactSlot(repo=e.artifact_repo, bead=e.bead, run=e.run_id, stage="", attempt=0)
-        return [(f"artifact:{e.artifact_repo}/{e.bead}/{e.run_id}/{f.parent.name}/{m.name}", m)
+        repo = e.ports.repo.key()
+        slot = ArtifactSlot(repo=repo, bead=e.bead, run=e.run_id, stage="", attempt=0)
+        return [(f"artifact:{repo}/{e.bead}/{e.run_id}/{f.parent.name}/{m.name}", m)
                 for f, m in store.run_listing(e.home.artifact_store(), slot) if m.kind in IMAGE_KINDS and m.role != "progress"]
 
     def before_pictures(self) -> list[tuple[Path, ArtifactMeta]]:
@@ -130,7 +140,7 @@ class Pictures:
         names: list[str] = []
         errs: list[str] = []
         asked = list(reqs[:looks.MAX_REQUESTS])
-        e.last_reqs = list(asked)
+        e.look.last_reqs = list(asked)
         e.steps.begin("render", f"render shots, round {rnd}", round=rnd)
         for k, req in enumerate(asked):
             files, m, err = self.render_one(req, rnd, k, base)
@@ -140,9 +150,9 @@ class Pictures:
                 names.append(self.keep_picture(f, names, base, rnd))
             if m and files:
                 self.warn_if_untracked(m, files)
-        e.rendered_names = sorted({*e.rendered_names, *names})
+        e.look.rendered = sorted({*e.look.rendered, *names})
         if names:
-            e.render_stale = False
+            e.render_stale = False  # the pictures show the tree again
         plural = "" if len(names) == 1 else "s"
         bad = f", {len(errs)} error{'' if len(errs) == 1 else 's'}" if errs else ""
         e.steps.outcome("rendered" if names else "failed", f"{len(names)} picture{plural}{bad}")
@@ -167,7 +177,7 @@ class Pictures:
     def warn_if_untracked(self, m: Any, files: list[Path]) -> None:
         e = self.e
         inside = [f for f in files if str(f).startswith(str(Path(e.wt)) + os.sep)]
-        if inside and not self.git.check_ignore(str(e.wt), [str(inside[0])]):
+        if inside and not self.git.check_ignore(e.wt, [str(inside[0])]):
             e.warn(f"shot method {m['method']} writes pictures in the worktree ({m['out'] or inside[0].parent}) and that folder is not "
                    "ignored by git: they will show up as unexplained new files; add it to .gitignore")
 
@@ -182,15 +192,14 @@ class Pictures:
         if not self.keeper().keep(f, e.evidence_dir / name):
             self.note_dropped()
         self.register(f, name, rnd)
-        looks.downscale(f, base / name, int(e.cfg.look_max_px))
+        looks.downscale(f, base / name, e.cfg.look_max_px)
         return name
 
     def register(self, f: Path, name: str, rnd: int) -> None:
         """The engine's render joins the artifact store through the one writer; a refusal is a warning (a picture is never worth a run)."""
         e = self.e
         try:
-            e.artifact_repo = e.artifact_repo or repo_key(self.git, e.wt)
-            slot = ArtifactSlot(repo=e.artifact_repo, bead=e.bead, run=e.run_id, stage="look", attempt=rnd)
+            slot = ArtifactSlot(repo=e.ports.repo.key(), bead=e.bead, run=e.run_id, stage="look", attempt=rnd)
             store.add(e.home.artifact_store(), slot, f, name=name, caption=f"engine render, round {rnd}",
                       role="result", now=e.now(), cap=int(e.cfg.evidence_cap_mb) << 20)
         except (Refused, OSError) as err:

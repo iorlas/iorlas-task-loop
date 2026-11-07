@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
-from support.engine_case import EngineTest
+from support.check_host import CheckHostCase
 from support.narrow import must
 
 # isort: split
@@ -16,7 +16,7 @@ ST = {"checks": [], "files": []}
 TESTS = {"id": "unit", "cmd": procsim.default("unit-tests", procsim.exits(0, "unit ran")), "group": "tests"}
 
 
-class DiffCheckTest(EngineTest):
+class DiffCheckTest(CheckHostCase):
     def red(self, text):
         eng = self.checks_engine(checks=[TESTS])
         (self.wt / "f.txt").write_text(text)

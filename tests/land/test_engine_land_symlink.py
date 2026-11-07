@@ -33,7 +33,7 @@ class SymlinkedTemp:
 
 class TestEngineThroughASymlink(EngineTest):
     def setup_method(self):
-        with mock.patch("support.engine_case.TemporaryDirectory", SymlinkedTemp):
+        with mock.patch("support.world.TemporaryDirectory", SymlinkedTemp):
             super().setup_method()
 
     def test_a_rebase_conflict_goes_to_a_fix_round_not_blocked(self):

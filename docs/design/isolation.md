@@ -99,3 +99,24 @@ calls use it; `FakeApi` and `procsim` for AI workers go with A4. Real-process te
 | `stop` = proven dead or `StopFailed` | proposed |
 | Terminal outcomes only; `retry_after` the single extra field | proposed |
 | Library vs stdio, DELEGATEHOME (tl-w7lt.37) | open, owner's; not needed for A1 to A3 |
+
+## B2b: the behaviour change that needs the owner (written 2026-11-06)
+
+B2a (additive, landed with this note) adds `domain/lanes/outcome.py`: `outcome_of(result)` reads a stop as `Done | NeedsOwner(question) |
+Failed(reason, retry_after)` from the answer's own facts (`permanence`, `retry.at`, `fix`). Nothing uses it yet.
+
+B2b makes the engine act on that outcome alone and deletes `policy.TABLE` (19 rows), `retry.PLAN`, `pauses.py`, `pause_reasons.py`, the
+resume counters and the in-process waits. **Old and new, for a stop the engine sees today:**
+
+| Case | Old (engine decides) | New (delegate decides, engine sees the end) |
+|---|---|---|
+| lane busy / blip (`lane transient poll`) | engine polls 3 times, 20 s apart, then reroutes | delegate polls and reroutes inside the call; engine sees Done or Failed |
+| lane out, back at T (`predicted`) | engine waits in-process if T is under 180 s, else pauses the bead with a wake time | delegate waits or fails; engine sees `Failed(retry_after=T)` and re-queues the bead after T (always a pause, never an in-process wait) |
+| network down (`machine transient poll`) | engine waits up to 600 s on its own probe, then pauses | delegate waits on its probe; engine sees Failed(retry_after) |
+| delegate crash | engine retries twice (30 s, 120 s), then faults | delegate's concern; engine sees Failed |
+| worker failed / timed out | engine tries another lane once, then asks the owner | delegate reroutes once; then NeedsOwner |
+| needs_owner stops | engine routes to the right ask or pause kind | one NeedsOwner(question) |
+
+What is lost: the engine can no longer say WHICH lane is out or why (the dashboard gets it from `lanes()`, C1), and a short lane-out
+under 180 s now pauses the bead instead of waiting in the same run. **Decision for the owner:** is `Failed(retry_after)` enough, with no
+lane name in the engine? Recommended: yes. Until answered, B2b is not built.

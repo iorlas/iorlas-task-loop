@@ -37,6 +37,7 @@ from taskloop.app.wire import closeguard
 from taskloop.cli.land_stack import cmd_land_stack
 from taskloop.contracts import log
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import DoltPush
 from taskloop.contracts.checks import Check, CheckResult
 from taskloop.contracts.config import load
 from taskloop.contracts.env import Env
@@ -49,7 +50,6 @@ from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.locks import LockTimeout
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import DoltPush
 from taskloop.contracts.runkey import BaseSha
 from taskloop.contracts.slots import Checkout, NotARepo, SlotGitError
 from taskloop.domain import outcome as oc

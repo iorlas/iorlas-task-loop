@@ -5,7 +5,7 @@ from collections.abc import Callable
 from taskloop.adapters.bd import BdStore
 from taskloop.contracts.bd_errors import BdCommandFailure
 from taskloop.contracts.bdsafe import attempt, listed, peek
-from taskloop.contracts.ports import BdFailure
+from taskloop.contracts.beadsport import BdFailure
 
 __all__ = ["attempt", "bd_store", "listed", "peek"]
 

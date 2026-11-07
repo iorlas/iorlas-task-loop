@@ -2,7 +2,6 @@
 means (a question, an accepted requirement that decides it, shots a visual stage owes) and the cases it adds."""
 from typing import Any
 
-from taskloop.adapters.check_files import repo_key
 from taskloop.app.write import show_check
 from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.state import AGAIN, REPLAN, StageState
@@ -28,9 +27,10 @@ class WriteRound:
         boundary = s.n == 1 and s.i > 0 and not s.state  # the first write of a later stage
         fresh = e.hand.drop_big(boundary)
         prompt, delta = self.prompts(s, boundary, fresh)
-        s.w, s.wfam = e.ai("write", f"{s.name} write {s.n}", prompt, delta=delta, resume_key="writer", write=s.n,
+        got = e.ai("write", f"{s.name} write {s.n}", prompt, delta=delta, resume_key="writer", write=s.n,
                            visual=e.pictures.stage_visual(s.st), round=s.rounds + 1,
                            at=(s.sk, s.rounds, s.n + (10000 if s.prepare_retried else 0)), **s.meta)
+        s.w, s.wfam = got.data, got.family
         self.record(s, fresh)
         if Prepare(e).retry(s, str(s.w.get("bad_checks", [])) + str(s.w.get("problem", ""))):
             return PREPARED
@@ -41,7 +41,7 @@ class WriteRound:
         self.shots_contract(s, prompt)
         e.cases.add_cases(s.w.get("new_cases") or [])
         if e.pictures.shot_methods() and e.pictures.stage_visual(s.st):
-            e.render_stale = True  # a write after the last render: its pictures show an older tree
+            e.pictures.mark_stale()  # a write after the last render: its pictures show an older tree
         back = self.show_contract(s)
         if back:  # a show item lacks its artifacts: the writer registers them before any check runs
             return back
@@ -67,7 +67,7 @@ class WriteRound:
         dtail = ""  # what a resumed writer still needs that its first prompt did not say for this stage
         if s.last and not e.writer.last_stage:  # the acceptance cases run now: it has not been told
             dtail += CASES_NOW
-        if e.unchecked:
+        if e.review.unchecked:
             dtail += UNCHECKED_TEXT
         delta = None if fresh else e.hand.delta(s.i + 1, st["goal"], ", ".join(st["files"]), anchors_text(st), stage_checks,
                                                 where_text, s.feedback, dtail + e.judge.look_write(st))
@@ -88,7 +88,7 @@ class WriteRound:
                                "turns": wr.get("turns"), "prompt_chars": wr.get("prompt_chars"), "context_k": wr.get("context_k"),
                                "fresh": fresh})
         e.shared.add_flakes(w.get("flakes") or [])
-        e.last_summary = w["summary"]
+        s.out.summary = w["summary"]
 
     def question(self, s: StageState) -> str:
         """A question an accepted requirement decides is a fix round, not an ask; any other is the owner's."""
@@ -100,12 +100,12 @@ class WriteRound:
             spec = askspecs.open_question(w["question"], w.get("options"), w.get("owner_cause"))
             raise e.blocked_for("owner decision needed", "ASK_DECISION", spec=spec)
         s.rounds += 1
-        e.stats["rounds"] += 1
-        e.stuck_why = f"the writer asked what an accepted requirement decides: {w['decided']}"
-        e.warn(f"{s.name}: {e.stuck_why[:300]}")
+        s.out.rounds += 1
+        stuck = s.out.stuck_why = f"the writer asked what an accepted requirement decides: {w['decided']}"
+        e.warn(f"{s.name}: {stuck[:300]}")
         if s.rounds >= int(e.cfg.max_rounds):
-            (e.run_dir / "replan.md").write_text(e.stuck_why + "\n\nThe question: " + w["question"])
-            e.steps.move("replan", "rounds_used", f"{s.rounds} rounds used: {e.stuck_why}")
+            (e.run_dir / "replan.md").write_text(stuck + "\n\nThe question: " + w["question"])
+            e.steps.move("replan", "rounds_used", f"{s.rounds} rounds used: {stuck}")
             return REPLAN
         e.steps.move("write", "writer_decided", f"an accepted requirement decides it: {w['decided']}")
         s.feedback = DECIDED_TEXT % (w["question"], w["decided"])
@@ -117,9 +117,8 @@ class WriteRound:
         e = self.e
         if not s.last or s.fix:
             return ""
-        e.artifact_repo = e.artifact_repo or repo_key(e.git, e.wt)
         miss = show_check.missing((e.plan_data or {}).get("cases") or [], e.home.artifact_store(),
-                                  show_check.slot_of(e.artifact_repo, e.bead, e.run_id, s.n))
+                                  show_check.slot_of(e.ports.repo.key(), e.bead, e.run_id, s.n))
         if not miss:
             return ""
         if s.show_fixed:
@@ -140,12 +139,13 @@ class WriteRound:
         s.shots_fixed = True
         tip = SHOTS_FIX % e.pictures.shot_table()
         e.steps.move("write", "shots_contract", "a visual write named no shots and gave no reason: asked once more")
-        w2, wfam = e.ai("write", f"{s.name} shots contract", prompt + tip, delta=tip, resume_key="writer", write=s.n, visual=True,
+        got = e.ai("write", f"{s.name} shots contract", prompt + tip, delta=tip, resume_key="writer", write=s.n, visual=True,
                         round=s.rounds + 1, at=(s.sk, s.rounds, s.n + 500), **s.meta)
-        e.stats["writes"] += 1
-        s.wfam = e.writer_family = wfam
+        w2 = got.data
+        s.out.writes += 1
+        s.wfam = e.writer_family = got.family
         e.writer.last_stage = s.last
-        e.last_summary = w2["summary"]
+        s.out.summary = w2["summary"]
         if w2["question"].strip():
             e.steps.outcome("asks", w2["question"][:200])
             spec = askspecs.open_question(w2["question"], w2.get("options"), w2.get("owner_cause"))

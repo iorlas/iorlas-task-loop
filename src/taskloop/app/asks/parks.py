@@ -6,13 +6,13 @@ from random import random
 
 from taskloop.app.asks import intake
 from taskloop.contracts.ask import Ask
+from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.delegate import Permanence
 from taskloop.contracts.kinds import ASKS, FINISH, PAUSES, Kind
 from taskloop.contracts.loop import Skip
 from taskloop.contracts.parks import Park, ParkStore
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import AskStore
 from taskloop.domain.beads import park
 from taskloop.domain.lanes import pauses
 from taskloop.domain.lanes.pause_reasons import Producer

@@ -8,10 +8,10 @@ from taskloop.adapters.ident import PLUGIN_ROOT, claude_dir, config_dir
 from taskloop.app.release.canary import mac_pin_refusal
 from taskloop.app.release.catalog import PLUGINS, cache_dirs, installed_version, previous_version, version_tuple
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Git
+from taskloop.contracts.rowstores import PinStore
 from taskloop.contracts.snapshots import Pin
-from taskloop.contracts.stores import PinStore
 
 
 def pin_store(env: Env) -> PinStore:

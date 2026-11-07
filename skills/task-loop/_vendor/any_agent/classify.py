@@ -33,6 +33,10 @@ def _ladder_words(vendor_names: tuple[str, ...]) -> vendors.Words:
 NET_AMBIGUOUS = ("worker_failed", "vendor_blip", "hung")  # failures that name no cause of their own: the network may be it
 
 
+# facts the caller measured that name a reason by themselves (a missing CLI, its own crash or signal, a free model gone): fact -> reason
+CALLER_FACTS = (("setup_failed", "setup"), ("crashed", "crash"), ("signal", "killed"), ("free_model_gone", "rate_limited"))
+
+
 class Outcome(NamedTuple):
     reason: str
     detail: str
@@ -43,13 +47,15 @@ def _ours(s: Mapping[str, Json], timed_out: bool, w: vendors.Words) -> Outcome |
     """The reasons only facts we measured ourselves give: a secret, the watchdog, our own timeout."""
     if s.get("secret"):
         return Outcome("secrets", str(s["secret"]), "ours")
+    for fact, reason in CALLER_FACTS:  # the caller's own measurement, its words as the detail
+        if s.get(fact):
+            return Outcome(reason, str(s[fact]), "ours")
     if s.get("watchdog") == "limit":
         msg = str(s.get("msg") or "")
         return Outcome("credit_exhausted" if w.credit.search(msg) else "rate_limited", msg, "ours")
-    if s.get("watchdog") == "credit":  # another process marked the lane out: its own words, not a guess from text
-        return Outcome("credit_exhausted", str(s.get("msg") or ""), "ours")
-    if s.get("watchdog") == "logged_out":
-        return Outcome("logged_out", str(s.get("msg") or ""), "ours")
+    marked = {"credit": "credit_exhausted", "logged_out": "logged_out"}.get(str(s.get("watchdog")))
+    if marked:  # another process marked the lane out: its own words, not a guess from text
+        return Outcome(marked, str(s.get("msg") or ""), "ours")
     if s.get("watchdog") == "hung":
         return Outcome("network" if s.get("net_up") is False else "hung", "", "ours")
     return Outcome("timeout", "", "ours") if timed_out else None
@@ -106,7 +112,8 @@ def classify(
 
     rc: exit code (negative = a signal); vendor_err: the vendor's error text from its event stream; stderr: the CLI's stderr; timed_out: our
     --timeout fired; work_seen: the worker did something before it failed; structured: facts we measured ourselves:
-    {"secret": cmd, "watchdog": "limit"|"credit"|"logged_out"|"hung", "msg": log line, "http_status": int, "net_up": False};
+    {"secret": cmd, "watchdog": "limit"|"credit"|"logged_out"|"hung", "msg": log line, "http_status": int, "net_up": False,
+    "setup_failed"|"crashed"|"signal"|"free_model_gone": the caller's words};
     only: vendor names whose words count
     beside `common` and the CLIs' own (none = every registered vendor)."""
     s = structured or {}

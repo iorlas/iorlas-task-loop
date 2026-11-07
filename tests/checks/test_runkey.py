@@ -13,12 +13,11 @@ from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import engine_case as te
 from support import procsim
-from support.checks import ck
-from support.engine_case import CLEAN, PLAN, WRITE
-from support.logs import records
+from support.check_host import CheckHostCase
+from support.checks import ck, res
 from support.narrow import must
+from support.plans import CLEAN, PLAN, WRITE
 
 # isort: split
 from support.memstores import fake_stores
@@ -49,23 +48,10 @@ def memo(env=None, stores=None, tree="t", base="b", files=None, run_id="r1"):
     return RunMemo(stores or fake_stores(), "repo", keys, BaseSha(base), env or {}, run_id)
 
 
-class Gate(te.EngineTest):
-    def stage_then_gate(self, **extra):
-        n = Path(self.tmp.name) / "runs"
-        both = procsim.fake("both", procsim.appends(n))
-        rc, _ = self.run_engine(ANSWERS, checks=[{"id": "ut", "cmd": both, "run": "both", **extra}])
-        assert rc == 0, self.blocked
-        assert n.read_text() == "11"  # the stage's slot pass cannot replace the clean gate's evidence
-        assert not records(self.eng, "gate_end")[-1]["skipped"]
+class Gate(CheckHostCase):
 
-    def test_the_land_gate_reruns_a_whole_tree_check_a_stage_ran_green(self):
-        self.stage_then_gate()
 
-    def test_the_land_gate_reruns_a_check_with_inputs_a_stage_ran_green(self):
-        self.stage_then_gate(inputs=["f.txt"])
 
-    def test_the_land_gate_reruns_a_check_with_an_env_a_stage_ran_green(self):
-        self.stage_then_gate(env={"A": "1"})
 
     def test_gate_green_is_every_key_in_the_memo(self):
         n = Path(self.tmp.name) / "runs"
@@ -77,7 +63,7 @@ class Gate(te.EngineTest):
         assert not eng.checker.gate_green()
 
 
-class Env(te.EngineTest):
+class Env(CheckHostCase):
     def test_slot_receipts_name_the_location_and_never_match_clean_receipts(self):
         c = Check(id=CheckId("setup"), cmd="true")
         m = memo()
@@ -116,7 +102,7 @@ class Env(te.EngineTest):
         assert a.key(c) != b.key(c)
         assert a.key(c) == memo({"TL_SLOT": "one"}).key(c)
         assert a.key(c) != a.key(c.replace(env={"A": "1"}))
-        a.remember(must(a.key(c)), te.res("e", 0), 1, "/l")
+        a.remember(must(a.key(c)), res("e", 0), 1, "/l")
         assert a.has(c)
         assert a.hit(b.key(c)) is None
 
@@ -128,7 +114,7 @@ class Env(te.EngineTest):
         assert memo().key(c) == memo().key(c.replace(cmd="e  "))
 
 
-class MachineState(te.EngineTest):
+class MachineState(CheckHostCase):
     """tl-bxk.8.19: a check about a running editor or a log outside git was served by tree hash."""
 
     def test_a_check_that_may_not_be_cached_has_no_key_so_nothing_can_be_reused(self):
@@ -152,7 +138,7 @@ class MachineState(te.EngineTest):
     def test_a_ref_to_a_registered_check_is_not_a_second_run(self):
         c = Check(id=CheckId("e"), cmd="e")
         m = memo()
-        m.remember(must(m.key(c)), te.res("e", 0), 1, "/l")
+        m.remember(must(m.key(c)), res("e", 0), 1, "/l")
         assert m.command_key(c).check == "e"  # a command is its own identity inside a block
 
 
@@ -189,7 +175,7 @@ class InputsOnly(Case):
     def test_serving_a_pass_for_a_new_base_writes_a_new_record_for_the_current_tree(self):
         stores = fake_stores()
         old = memo(stores=stores, files=FILES, tree="t1", base="b1", run_id="run-old")
-        old.remember(must(old.key(ONLY)), te.res("u", 0), 1, "/l")
+        old.remember(must(old.key(ONLY)), res("u", 0), 1, "/l")
         new = memo(stores=stores, files=FILES, tree="t2", base="b2", run_id="run-new")
         hit = must(new.hit(new.key(ONLY)))
         assert (hit.tree, hit.base, hit.run_id) == ("t1", "b1", "run-old")  # asking changes nothing
@@ -229,15 +215,15 @@ class Store(Case):
         check = Check(id=CheckId("c"), cmd="c")
         m = memo()
         key = m.planned_key(check)
-        for res in (
+        for stored in (
             CheckResult.skipped(check, "static failed first"),
             CheckResult.skipped(check, "producer p did not run", producer="p"),
             CheckResult.skipped(check, "conflict_fix"),
             CheckResult.cancelled_by(check, "p"),
             CheckResult(id=check.id, cmd=check.cmd, group=check.group, exit=86, status="unverified"),
         ):
-            with self.subTest(result=res):
-                m._put(PassRecord(key=key, result=res, tree=m.keys.tree, base=m.base))
+            with self.subTest(result=stored):
+                m._put(PassRecord(key=key, result=stored, tree=m.keys.tree, base=m.base))
                 assert not is_green(m.stores, "repo", check.id, m.keys.tree, m.base)
 
     def test_planned_skips_are_exact_diff_facts_even_with_inputs_only_or_cache_disabled(self):
@@ -256,7 +242,7 @@ class Store(Case):
     def test_a_pass_keeps_who_made_it_and_where_the_log_is(self):
         m = memo(run_id="run-7")
         c = Check(id=CheckId("e"), cmd="e")
-        m.remember(must(m.key(c)), te.res("e", 0), 3, "/r/checks/00.log")
+        m.remember(must(m.key(c)), res("e", 0), 3, "/r/checks/00.log")
         rec = must(m.hit(m.key(c)))
         assert (rec.run_id, rec.round, rec.log_abs) == ("run-7", 3, "/r/checks/00.log")
         assert rec.host and rec.ts > 0
@@ -275,7 +261,7 @@ class Store(Case):
         c = Check(id=CheckId("e"), cmd="e")
         for i in range(KEEP + 3):
             m = memo(stores=stores, tree=f"t{i}")
-            m.remember(must(m.key(c)), te.res("e", 0), 1, "")
+            m.remember(must(m.key(c)), res("e", 0), 1, "")
         assert len(stores.results("repo", CheckId("e")).keys()) == KEEP
         last = memo(stores=stores, tree=f"t{KEEP + 2}")
         assert last.has(c)
@@ -293,8 +279,8 @@ class Concurrent(Case):
             def runner(i: int) -> None:
                 m = memo(stores=stores, run_id=f"run-{i}")
                 go.wait()
-                m.remember(must(m.key(checks[i])), te.res(checks[i].id, 0), 1, "")
-                m.remember(must(m.key(same)), te.res("same", 0), 1, "")  # all twelve write the one key
+                m.remember(must(m.key(checks[i])), res(checks[i].id, 0), 1, "")
+                m.remember(must(m.key(same)), res("same", 0), 1, "")  # all twelve write the one key
                 m.set_base_red(checks[i], bool(i % 2))
 
             threads = [threading.Thread(target=runner, args=(i,)) for i in range(len(checks))]

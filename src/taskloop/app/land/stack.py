@@ -20,10 +20,11 @@ from taskloop.app.land.phases import phase
 from taskloop.app.land.profile_change import diff_sha
 from taskloop.app.land.stackgate import StackGate
 from taskloop.contracts import log as rec
+from taskloop.contracts.beadsport import Beads, DoltPush
 from taskloop.contracts.forge import CLOSED, MERGED, OPEN, Pr, StackItem
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Beads, DoltPush, Git
 from taskloop.contracts.profile_changes import ProfileChange
 from taskloop.contracts.slots import MissingRemote
 from taskloop.domain.land.matchers import no_dolt_remote

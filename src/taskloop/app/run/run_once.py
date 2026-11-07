@@ -101,11 +101,11 @@ class RunOnce:
         bead = self.begin(hb)
         plan, i, state = self.prepare(bead)
         self.stages(plan, i, state)
-        if e.render_stale and e.last_reqs and e.pictures.shot_methods() and not e.dry:
+        if e.pictures.stale and e.look.last_reqs and e.pictures.shot_methods() and not e.dry:
             # code changed after the last render (a fix round past the render rounds): the pictures that land show the tree
             e.log.note("rendering the last shots again: code changed since the pictures were made")
-            e.pictures.render_shots(e.last_reqs, e.look_done + 1)
-        gaps = e.verifier.run([u for u in e.unchecked if u["kind"] in UNCHECKED_KINDS or e.judge.is_look(u)])
+            e.pictures.render_shots(e.look.last_reqs, e.look.done + 1)
+        gaps = e.verifier.run([u for u in e.review.unchecked if u["kind"] in UNCHECKED_KINDS or e.judge.is_look(u)])
         if gaps:
             what = "; ".join("{} ({}{})".format(u["what"], u["kind"], ("; " + u["why"]) if u.get("why") else "") for u in gaps)
             raise e.Blocked("verify: before land, the workers could not check: " + what,

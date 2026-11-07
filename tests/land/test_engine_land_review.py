@@ -10,9 +10,11 @@ from typing import cast
 from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
+from support.asked import ans
 from support.checks import ck, res
-from support.engine_case import CLEAN, PLAN, WRITE, LandReviewBase, StrayWriteScript, verdict
+from support.engine_case import LandReviewBase, StrayWriteScript
 from support.narrow import must
+from support.plans import CLEAN, PLAN, WRITE, verdict
 
 from taskloop.app.run import engine
 from taskloop.contracts.checks import CheckRun
@@ -109,13 +111,13 @@ class LandReview(LandReviewBase):
         with mock.patch.object(e, "ai") as ai:
             assert e.verifier.run(items) == []
         ai.assert_not_called()  # no verifier call: the engine proves them
-        assert [v["verdict"] for v in e.verified] == ["settled"] * 3
-        assert "gate" in e.verified[0]["evidence"]
+        assert [v["verdict"] for v in e.review.verified] == ["settled"] * 3
+        assert "gate" in e.review.verified[0]["evidence"]
 
     def test_scenario_items_are_settled_only_when_a_scenario_check_is_configured(self):
         item = [{"what": "just scenarios passes", "kind": "tooling"}]
         e = self.verifier(checks=self.CFG_CHECKS)
-        with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="a person")]}, None)):
+        with mock.patch.object(e, "ai", return_value=ans({"items": [verdict(1, "open", why="a person")]})):
             assert len(e.verifier.run(item)) == 1
         e = self.verifier(checks=[{"id": "scenarios", "cmd": "just scenarios", "group": "tests"}])
         with mock.patch.object(e, "ai") as ai:
@@ -132,7 +134,7 @@ class LandReview(LandReviewBase):
             {"id": "unity-check", "cmd": "just unity-check", "group": "tests"},
         ]
         e = self.verifier(checks=cfg, gate="just check")
-        with mock.patch.object(e, "ai", return_value=({"items": [verdict(i + 1, "open", why="x") for i in range(3)]}, None)):
+        with mock.patch.object(e, "ai", return_value=ans({"items": [verdict(i + 1, "open", why="x") for i in range(3)]})):
             left = e.verifier.run([{"what": a, "kind": "tooling"} for a in asks])
         assert len(left) == 3
         e = self.verifier(checks=cfg, gate="just check")
@@ -145,7 +147,7 @@ class LandReview(LandReviewBase):
         must(e.plan_data)["stages"][0]["checks"] = ck(["python3 tools/check_design.py"])
         items = [{"what": "python3 tools/check_design.py passes", "kind": "tooling"},
                  {"what": "the menu reads well", "kind": "requirement"}]
-        with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="taste")]}, None)) as ai:
+        with mock.patch.object(e, "ai", return_value=ans({"items": [verdict(1, "open", why="taste")]})) as ai:
             left = e.verifier.run(items)
         assert [u["what"] for u in left] == ["the menu reads well"]
         assert ai.call_count == 1
@@ -160,8 +162,8 @@ class LandReview(LandReviewBase):
             assert e.verifier.run([item]) == []
         assert sh_.call_args[0][0] == ["ruff", "check", "--no-fix", "."]
         ai.assert_not_called()
-        assert e.verified[0]["verdict"] == "settled"
-        assert "exit 0" in e.verified[0]["evidence"]
+        assert e.review.verified[0]["verdict"] == "settled"
+        assert "exit 0" in e.review.verified[0]["evidence"]
 
     def test_a_linter_that_fails_is_wrong_and_one_that_cannot_start_stays_with_the_verifier(self):
         (self.wt / "justfile").write_text("lint:\n    ruff check tools\n")
@@ -170,13 +172,13 @@ class LandReview(LandReviewBase):
             e = self.verifier(max_fix_rounds=0)
             with mock.patch.object(engine, "tool_on_path", return_value="/bin/ruff"), \
                     mock.patch.object(e, "sh", return_value=(rc, "E501 line too long")) as sh_, \
-                    mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
+                    mock.patch.object(e, "ai", return_value=ans({"items": [verdict(1, "open", why="x")]})) as ai:
                 left = e.verifier.run([item])
             assert sh_.call_args[0][0] == ["ruff", "check", "--no-fix", "."]
             assert len(left) == 1
             if rc == 1:
                 ai.assert_not_called()
-                assert e.verified[0]["verdict"] == "wrong"
+                assert e.review.verified[0]["verdict"] == "wrong"
                 assert "E501" in left[0]["why"]
             else:
                 assert ai.call_count == 1
@@ -202,7 +204,7 @@ class LandReview(LandReviewBase):
 
     def test_the_yxbb6_item_is_not_settled_by_a_suite_name_but_the_brief_carries_the_evidence_and_the_skip_rule(self):
         e = self.evidenced(attrs={"run_dir": Path("/runs/x")})
-        with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
+        with mock.patch.object(e, "ai", return_value=ans({"items": [verdict(1, "open", why="x")]})) as ai:
             assert len(e.verifier.run([{"what": self.YXBB6, "kind": "tooling"}])) == 1
         brief = ai.call_args[0][2]
         assert "`unity-tests` [tests] skipped (no change under client/**, content/**)" in brief
@@ -217,7 +219,7 @@ class LandReview(LandReviewBase):
             with mock.patch.object(e, "ai") as ai:
                 assert e.verifier.run([{"what": what, "kind": "tooling"}]) == [], what
             ai.assert_not_called()
-            v = e.verified[0]
+            v = e.review.verified[0]
             assert v["verdict"] == "settled"
             assert "does not apply" in v["evidence"]
             assert v["why"] == "the engine's own check results settle it"
@@ -233,7 +235,7 @@ class LandReview(LandReviewBase):
                 "unity-tests and unity-*: no saved log" + cannot, "the Sim.Properties suite passed" + cannot]
         for what in asks:
             e = self.evidenced([*self.engine_checks(), res("pytest tests/unit", 0, id="test", secs=1, log="checks/x.log")])
-            with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
+            with mock.patch.object(e, "ai", return_value=ans({"items": [verdict(1, "open", why="x")]})) as ai:
                 assert len(e.verifier.run([{"what": what, "kind": "tooling"}])) == 1, what
             assert ai.call_count == 1, what
 
@@ -246,7 +248,7 @@ class LandReview(LandReviewBase):
             if how == "unknown":
                 e.last_run = None
                 e.run_dir = Path(self.tmp.name, "nope")
-            with mock.patch.object(e, "ai", return_value=({"items": [verdict(1, "open", why="x")]}, None)) as ai:
+            with mock.patch.object(e, "ai", return_value=ans({"items": [verdict(1, "open", why="x")]})) as ai:
                 assert len(e.verifier.run([{"what": what, "kind": "tooling"}])) == 1, how
             assert ai.call_count == 1, how
 

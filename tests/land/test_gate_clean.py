@@ -15,7 +15,7 @@ from support.engine_case import EngineTest
 from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
 from taskloop.app.run.blocked import Blocked
 from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.ports import Ran
+from taskloop.contracts.procport import Ran
 from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.checks.specs import gate_items
 

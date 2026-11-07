@@ -6,9 +6,9 @@ import time
 from collections.abc import Callable
 
 from taskloop.contracts import factorydb, log, runfacts
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Beads
 from taskloop_dash import jsonl
 from taskloop_dash.index.beadpass import BeadPass
 from taskloop_dash.index.facts import Facts, append, decode, encode

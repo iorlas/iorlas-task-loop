@@ -5,8 +5,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.check_host import CheckHostCase
 from support.checks import ck
-from support.engine_case import EngineTest
 
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.cache import RunMemo
@@ -14,7 +14,7 @@ from taskloop.contracts.checks import Check
 from taskloop.contracts.ids import CheckId
 
 
-class SpawnFailure(EngineTest):
+class SpawnFailure(CheckHostCase):
     def test_spawn_os_errors_become_failed_check_results_with_diagnostics(self):
         eng = self.checks_engine(base_red=False)
         for error, code in ((FileNotFoundError("executable vanished"), 127),

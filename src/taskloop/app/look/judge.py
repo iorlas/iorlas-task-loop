@@ -5,7 +5,9 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import looks
+from taskloop.app.look.host import LookHost
 from taskloop.contracts.checkpoint import Defect
+from taskloop.contracts.plancheck import StageData
 from taskloop.domain.prompts.write import LOOK_FEEDBACK, LOOK_WRITE_TABLE
 from taskloop.domain.review import switch
 from taskloop.domain.review.matchers import Wording
@@ -19,7 +21,7 @@ def plural(n: int, word: str) -> str:
 
 
 class Judge:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: LookHost) -> None:
         self.e = host
 
     def judge_shots(self, names: list[str], rnd: int, summary: str, last: bool = True) -> tuple[list[Defect], str]:
@@ -39,8 +41,8 @@ class Judge:
         # the plan's look items are for the last stage (like the cases); an earlier stage is judged on the general checks only
         prompt = looks.judge_prompt(e.cases.cases_of("look-objective") if last else [], names, befores, summary)
         try:
-            d, _ = e.ai("look", f"round {rnd}: {plural(len(names), 'picture')}", prompt,
-                        writer_family=e.writer_family, cwd=str(base), round=rnd, at=(e.at_stage, rnd, 0))
+            d = e.ai("look", f"round {rnd}: {plural(len(names), 'picture')}", prompt,
+                        writer_family=e.writer_family, cwd=str(base), round=rnd, at=(e.at_stage, rnd, 0)).data
         except e.Blocked as b:
             return self.unjudged(b, rnd)
         note = "[same family as the writer: no other lane was free] " if e.last_flag == "same_family" else ""
@@ -57,23 +59,23 @@ class Judge:
         e.retry_after, e.pause_role, e.pause_lane = 0.0, "", ""  # the run goes on: _ai had noted a pause for the loop
         e.steps.outcome("skipped", "no lane")
         e.warn(f"the look judge had no lane, the pictures are not judged: {b.why[:200]}")
-        e.look_unjudged[f"look judge, round {rnd}"] = "no lane: " + b.why[:160]
+        e.look.unjudged[f"look judge, round {rnd}"] = "no lane: " + b.why[:160]
         return [], "(not judged: no lane for the look judge)"
 
-    def look_step(self, st: Any, w: Any, name: str, last: bool = True, *, checks: bool = True) -> str:
+    def look_step(self, st: StageData, w: Any, name: str, last: bool = True, *, checks: bool = True) -> str:
         """After a visual write: the cheap checks, the shots the writer asked for, the look judge. -> the feedback that sends the
         writer back with the defects (text and picture paths), or "" to go on to the full checks. At most engine.look_rounds
         render rounds per stage; a defect that comes back is a leftover with the pictures, not another write."""
         e = self.e
-        if not e.pictures.look_ready(st) or e.look_done >= int(e.cfg.look_rounds) or e.dry:
+        if not e.pictures.look_ready(st) or e.look.done >= e.cfg.look_rounds or e.dry:
             return ""
         reqs = [r for r in w.get("shots") or [] if isinstance(r, dict)]
         if not reqs:
             return ""
-        if checks and e.stage_checks.stoppable(dict(st, checks=[]), name, groups=("static",)).failed:
+        if checks and e.stage_checks.stoppable(StageData(files=st["files"], checks=[]), name, groups=("static",)).failed:
             return ""  # the full checks show it to the writer; no render over a red static check
-        e.look_done += 1
-        rnd = e.look_done
+        e.look.done += 1
+        rnd = e.look.done
         names, errs = e.pictures.render_shots(reqs, rnd)
         defects = [Defect(item="render", why=msg) for msg in errs]
         summary = ""
@@ -81,10 +83,10 @@ class Judge:
             found, summary = self.judge_shots(names, rnd, w.get("summary", ""), last)
             defects += found
         if summary:
-            e.look_notes = [summary.strip()]
+            e.look.notes = [summary.strip()]
         e.pictures.persist_look()
         fresh = defects
-        out_of_rounds = e.look_done >= int(e.cfg.look_rounds)
+        out_of_rounds = e.look.done >= e.cfg.look_rounds
         if out_of_rounds:  # the rounds are capped: what is left is a follow-up, not another write
             for d in defects:
                 self.look_leftover(d, names)
@@ -104,7 +106,7 @@ class Judge:
             e.checkpoints.keep_pending("look")
             e.log.note(f"look defect filed as a follow-up: {d.why[:200]}")
 
-    def look_write(self, st: Any) -> str:
+    def look_write(self, st: StageData) -> str:
         e = self.e
         if not e.pictures.stage_visual(st):
             return ""
@@ -115,7 +117,7 @@ class Judge:
                 "change is clearly logic-only and nothing on screen differs, put a one-line reason in logic_only; "
                 "otherwise leave logic_only empty.")
 
-    def look_review(self, st: Any, w: Any, fix: bool = False) -> str:
+    def look_review(self, st: StageData, w: Any, fix: bool = False) -> str:
         e = self.e
         if fix or not e.pictures.stage_visual(st):
             return ""
@@ -123,7 +125,7 @@ class Judge:
         text = "\nThis stage changes how something looks. "
         if e.pictures.shot_methods():  # tl-bxk.13.15: the engine rendered the pictures and a look judge read them
             seen = ", ".join(f"{e.evidence_dir}/{x}" for x in shots) or "none were made"
-            notes = (": " + " ".join(e.look_notes)[:900]) if e.look_notes else ""
+            notes = (": " + " ".join(e.look.notes)[:900]) if e.look.notes else ""
             text += (f"The engine rendered the pictures ({seen}) and a look judge, a fresh call from another family, read them{notes}. "
                      "Judge from its words against the task's done-when; open a picture only if you doubt them. A mismatch "
                      "is a finding; put your judgement in one paragraph in look.")
@@ -138,13 +140,13 @@ class Judge:
                      "can differ; if not, give a medium finding.")
         return text + NOT_VISUAL
 
-    def look_judged(self, review: Any, st: Any, w: Any, fix: bool) -> None:
+    def look_judged(self, review: Any, st: StageData, w: Any, fix: bool) -> None:
         """No screenshot and no logic-only reason on a visual stage is a warning; the reviewer's look is kept."""
         e = self.e
         if fix or not e.pictures.stage_visual(st):
             return
         if (review.get("look") or "").strip() and e.pictures.shots():
-            e.look_notes = [review["look"].strip()]  # the last round's judgement only
+            e.look.notes = [review["look"].strip()]  # the last round's judgement only
         if not e.pictures.shots() and not (w.get("logic_only") or "").strip():  # a warning, never a send-back (tl-7y6.7.24)
             what = ("asked for no shots (name the shot methods to render in `shots`, or say in logic_only why nothing on screen differs)"
                     if e.pictures.shot_methods() else f"saved no screenshot of any changed screen or state in {e.evidence_dir}/")
@@ -167,16 +169,16 @@ class Judge:
         e = self.e
         shots, ev = e.pictures.shots(), a.get("evidence") or ""
         if v == "settled" and any(sh in ev or Path(sh).name in ev for sh in shots):
-            e.look_unjudged.pop(u["what"], None)
+            e.look.unjudged.pop(u["what"], None)
             return v, a, why
         if v == "wrong":
             return v, a, why
         if v == "settled":
             why = "settled, but its evidence names no screenshot file"
         reason = why or ("no screenshot saved" if not shots else "no verdict")
-        e.look_unjudged[u["what"]] = f"agent could not judge: {reason}"
-        if u["what"] not in e.look_retried:
-            e.look_retried.add(u["what"])
+        e.look.unjudged[u["what"]] = f"agent could not judge: {reason}"
+        if u["what"] not in e.look.retried:
+            e.look.retried.add(u["what"])
             if shots:
                 named = ", ".join(shots)
                 say = f"judge it from the screenshots ({named}): open each one and name the file you judged. "
