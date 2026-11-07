@@ -3,6 +3,7 @@ from collections.abc import Callable, Sequence
 from typing import Protocol
 
 from tlkernel import fence
+from tlkernel.askspec import AskSpec
 from tlkernel.bead import Bead
 from tlkernel.checkpoint import Checkpoint
 from tlkernel.delegate import Permanence
@@ -15,7 +16,6 @@ from tlkernel.parks import Park
 from tlkernel.review import ReviewState
 from tlkernel.run import NetPause, ReexecNote
 
-from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes.pause_reasons import Producer
 
 

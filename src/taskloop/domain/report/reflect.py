@@ -6,7 +6,7 @@ from collections import Counter
 from collections.abc import Iterable
 from typing import Any, Final
 
-from taskloop.domain.lifecycle import matchers
+from tlkernel import lifecyclematchers as matchers
 
 MIN_RUNS: Final = 2
 SIMILAR: Final = 0.35  # token overlap (Jaccard) that makes two went_badly items one cause
@@ -169,4 +169,3 @@ def description(c: dict[str, Any], old: str = "") -> str:
 def acceptance(c: dict[str, Any]) -> str:
     return ("The cause no longer shows in new reflections: after the fix, the next 3 runs of comparable beads (e.g. {}) end with no "
             "went_badly item of cause '{}' saying: {}".format(c["beads"][0] if c["beads"] else "the beads above", c["cause"], c["title"]))
-

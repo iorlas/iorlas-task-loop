@@ -148,7 +148,7 @@ delegate says a subscription lane is out.
 An ask is one record, `~/.config/task-loop/asks/<bead>.json` (`tlkernel.ask.Ask`, `v` 2; an older or unknown `v` reads as
 no ask), written only through `AskStore`. It has a class, one decision sentence (at most 120 characters, ends in `?`), at most 3
 `tried` bullets and 2-5 options, recommended first, each with its consequence and a typed action; the card text is rendered from those
-fields (`domain/asks/text.py`), never copied from a worker. The engine lints every ask before it files one; a failed lint files nothing
+fields (`tlkernel/asktext.py`), never copied from a worker. The engine lints every ask before it files one; a failed lint files nothing
 and the stop is an engine fault. Owner classes: open_question, external_fact, unproven, no_progress, cap_reached, over_budget,
 missing_criteria, too_big. Infra trouble (lane failure, schema or bad request, sandbox denial, stale base, missing tool or recipe, a
 wrong tree) is never an ask: the bead stays open with an engine fault.

@@ -5,9 +5,9 @@ from unittest.mock import Mock, patch
 import pytest
 from support.pipeline_ports import FakeReexecs, FakeTrail
 
-from taskloop.adapters import childenv, ident
+from taskloop.adapters import ident
 from taskloop.app.pipeline.reload import Exec, Reload
-from tlkernel import rundocs
+from tlkernel import childenv, rundocs
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
@@ -21,7 +21,7 @@ def setup_reload(workdir):
     host.write.write_rounds = []
     host.steps.n = 5
     reexecs, trail = FakeReexecs(), FakeTrail()
-    reload = Reload(host, reexecs, trail, lambda: ("2.0", workdir / "install"), lambda: "slot", childenv, ident)
+    reload = Reload(host, host, host, reexecs, trail, lambda: ("2.0", workdir / "install"), lambda: "slot", childenv, ident)
     return host, reexecs, trail, reload
 
 

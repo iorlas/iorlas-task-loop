@@ -2,7 +2,7 @@
 
 import pytest
 
-from taskloop.domain.lifecycle import matchers
+from tlkernel import lifecyclematchers as matchers
 
 
 @pytest.mark.parametrize(("a", "b", "same"), [

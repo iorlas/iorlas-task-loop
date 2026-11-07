@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, override
 
 from tlkernel import fence, rundocs
+from tlkernel import runoutcome as oc
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env
 from tlkernel.gitport import Git
@@ -30,7 +31,6 @@ from taskloop.app.run.stages import run_stages
 from taskloop.app.run.state import carries_state
 from taskloop.app.slots.engine_lock import HeldLock
 from taskloop.app.track.console import say
-from taskloop.domain import outcome as oc
 from taskloop.stores.bundle import Stores
 from taskloop.stores.delegate import real_route
 from taskloop.stores.real import real_stores

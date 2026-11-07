@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
@@ -18,6 +19,7 @@ from support.factory_index import ingest
 from support.waits import until
 
 from taskloop.app.asks import owner_verbs as requests
+from taskloop.app.loop.loop import Loop
 from taskloop.app.report import card
 from taskloop.cli import wait
 from tlkernel import runlife
@@ -55,7 +57,15 @@ class KilledEngine(te.EngineTest):
         shown = make_dash(config=cfg.root, clock=lambda: later).live.page(loop_key(m.repo), "t-1")[1]["state"]
         assert shown == "lost", "the dashboard displays lost before anything wrote it"
         assert must(where.get(run)).manifest.state == RunState.RUNNING
-        assert runlife.reconcile(cfg, later) == [run]
+        assert must(wait.verdict(cfg, run, later))[0] == wait.CRASHED
+        assert [c["run"] for c in card.crashes(str(m.repo), m.started - 1, later, [], cfg, now=later)] == [run]
+        assert requests.live(cfg, run, later), "live() reads only the recorded state"
+        assert must(where.get(run)).manifest == m, "readers leave the live manifest unchanged"
+        loop = Mock(spec=Loop)
+        loop.env = Mock(cfgdir=cfg, now=lambda: later)
+        loop.step.return_value = 0
+        assert Loop.run(loop) == 0
+        loop.say.assert_called_once()
         got = must(where.get(run)).manifest
         assert got.state == RunState.LOST
         assert f"pid {child.pid}" in got.reason

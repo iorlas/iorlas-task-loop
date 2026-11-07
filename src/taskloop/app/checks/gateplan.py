@@ -6,12 +6,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from tlkernel import rundocs, wire
+from tlkernel.childenv import check_environment
 from tlkernel.config import ConfigError
 from tlkernel.gateplan import GatePlan
 from tlkernel.runkey import Digest
 from tlkernel.slots import SlotGitError
 
-from taskloop.adapters.childenv import check_environment
 from taskloop.app.checks.cache import NO_DIGEST, plan_digest
 from taskloop.app.checks.host import CheckHost
 

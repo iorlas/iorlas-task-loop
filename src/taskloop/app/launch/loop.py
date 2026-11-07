@@ -8,7 +8,7 @@ import shutil
 from collections.abc import Callable
 from pathlib import Path
 
-from tlkernel import paths
+from tlkernel import childenv, paths
 from tlkernel.beadsport import Beads
 from tlkernel.config import RepoProfile
 from tlkernel.env import Env
@@ -21,7 +21,7 @@ from tlkernel.loop import LoopState
 from tlkernel.procport import Spawner
 from tlkernel.rowstores import ReposStore
 
-from taskloop.adapters import beadtools, childenv, ident, pidcheck
+from taskloop.adapters import beadtools, ident, pidcheck
 from taskloop.adapters.bd import BdStore
 from taskloop.adapters.locks import hold_path
 from taskloop.app.asks import sweeps as ask_sweeps

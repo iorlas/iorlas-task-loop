@@ -164,7 +164,7 @@ class Park(Case):
         snap = BriefSnap(fields={"now": "1"}, issue_type="", deps=[], comments=[])
         b.state.snap, b.state.brief_hash, b.state.plan_data = snap, "now", None
         ck = stored(b)
-        Resume(b, FakeHeadHistory(), ReviewGlue(b), state_names()).restore(ck, late=True)
+        Resume(b, b, b, FakeHeadHistory(), ReviewGlue(b), state_names()).restore(ck, late=True)
         kept = set(KEEP_FOR_ACTIVE)
         for name in state_names():
             if name in kept:
@@ -176,7 +176,7 @@ class Park(Case):
 
     def test_an_edit_from_outside_hands_back_only_what_every_resume_keeps(self):
         _a, b = self.parked()
-        Resume(b, FakeHeadHistory(), ReviewGlue(b), state_names()).restore(stored(b), late=False)
+        Resume(b, b, b, FakeHeadHistory(), ReviewGlue(b), state_names()).restore(stored(b), late=False)
         for name in LATE:
             assert getattr(b.state, name) == getattr(RunState(), name), name
         assert (b.filed, b.unfiled) == ([], [])  # filed titles are the late ones too
@@ -220,7 +220,7 @@ class Park(Case):
         assert (ck.step, ck.stage) == ("write", 2)
         b = Host()
         b.stores = a.stores
-        Resume(b, FakeHeadHistory(), ReviewGlue(b), state_names()).restore(ck, late=False)
+        Resume(b, b, b, FakeHeadHistory(), ReviewGlue(b), state_names()).restore(ck, late=False)
         assert b.leftovers == a.leftovers
         assert b.leftovers[0]["origin"] == "review"
         assert restarted(b.state).leftovers == a.leftovers
@@ -253,7 +253,7 @@ class OldCheckpoint(Case):
         old["state"]["writer"].pop("ctx", None)
         ck = wire.load(Checkpoint, old)
         h = Host()
-        Resume(h, FakeHeadHistory(), ReviewGlue(h), state_names()).restore(ck, late=True)
+        Resume(h, h, h, FakeHeadHistory(), ReviewGlue(h), state_names()).restore(ck, late=True)
         assert (h.look.notes, h.look.unjudged, h.look.done) == (
             ["the main screen shows the list"], {"look judge, round 2": "no lane: busy"}, 2)
         reqs = [{"method": "Shots", "names": ["home.png"]}]

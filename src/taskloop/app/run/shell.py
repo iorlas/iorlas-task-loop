@@ -5,11 +5,12 @@ import time
 from pathlib import Path
 from typing import Any
 
+from tlkernel import childenv
 from tlkernel import log as rec
 from tlkernel.argv import text_of
 from tlkernel.kinds import Kind
 
-from taskloop.adapters import check_net, childenv
+from taskloop.adapters import check_net
 from taskloop.adapters.gitrepo import pinned_env
 from taskloop.app.pipeline.blocked import Blocked
 
