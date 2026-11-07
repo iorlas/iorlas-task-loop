@@ -76,7 +76,7 @@ class StepBook(Protocol):
 
 
 class RepoKey(Protocol):
-    """The repo's store key (adapters.check_files.repo_key): taken at the first call, the same string after."""
+    """The repo's store key (tlkernel.check_files.repo_key): taken at the first call, the same string after."""
 
     def key(self) -> str: ...
 
