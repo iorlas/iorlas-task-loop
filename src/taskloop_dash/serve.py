@@ -12,11 +12,13 @@ from pathlib import Path
 
 from taskloop.contracts.env import Env as ProcessEnv
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.factorydb import declare_parts
 from taskloop_dash import bind
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env
 from taskloop_dash.http import make_handler
 from taskloop_dash.index.worker import Worker
+from taskloop_dash.parts import DASH_PARTS
 
 IDLE_CHECK = 300  # seconds between idle checks
 STATIC = Path(__file__).resolve().parent / "static"
@@ -69,6 +71,7 @@ def start(env: Env, here: Path, process: ProcessEnv,
 
 
 def main(env: Env, here: Path, process: ProcessEnv, argv: Sequence[str] | None = None) -> None:
+    declare_parts(DASH_PARTS)
     servers, addrs, port, dash = start(env, here, process, argv)
     worker = Worker(env.config, dash.records.repos, env.ports.store)
     worker.start()

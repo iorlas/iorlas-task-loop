@@ -100,7 +100,7 @@ from taskloop.cli import setup as cli_setup
 from taskloop.cli import slots as slots_cli
 from taskloop.cli import status
 from taskloop.cli import wait as cli_wait
-from taskloop.cli.ctx import Ctx
+from taskloop.cli.ctx import Ctx, declare_stage_parts
 from taskloop.contracts.enums import Step
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.slots import MissingRemote
@@ -488,6 +488,7 @@ VERBS: Final[dict[str, Handler]] = {
 
 def main(argv: list[str] | None = None, here: Path = HERE, now: Callable[[], float] = trail.now) -> int:
     """`here`: the install this run executes from, `now`: the clock (a test runs the loop as another version, at another time)."""
+    declare_stage_parts()
     a = build_parser().parse_args(argv)
     os.umask(0o077)  # the config dir, hooks and logs are the owner's alone (a worker's files too: it runs as the owner)
     env = snapshot()
