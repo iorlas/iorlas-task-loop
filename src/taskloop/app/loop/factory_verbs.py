@@ -1,4 +1,4 @@
-"""Factory lane targets, stop results, log selection and status facts for the loop node."""
+"""Factory loop targets, stop results, log selection and status facts for the loop node."""
 import contextlib
 import time
 from collections import deque
@@ -34,10 +34,10 @@ def stop(files: LoopFiles, now: bool, actor: str) -> list[LoopState] | None:
     return files.request_stop(now, actor) or None
 
 
-def logs(files: LoopFiles, states: list[LoopState], lane: int) -> tuple[LoopState, Path]:
-    state = lane_states(files, states).get(lane)
+def logs(files: LoopFiles, states: list[LoopState], loop_no: int) -> tuple[LoopState, Path]:
+    state = loop_states(files, states).get(loop_no)
     if state is None:
-        raise RuntimeError(f"no live lane {lane}")
+        raise RuntimeError(f"no live loop {loop_no}")
     return state, log_path(files, state)
 
 
@@ -52,7 +52,7 @@ def facts(files: LoopFiles, states: list[LoopState], repo: str, version: str) ->
 
 
 def status_facts(files: LoopFiles, states: list[LoopState], repo: str, version: str) -> list[str]:
-    return facts(files, list(lane_states(files, states).values()), repo, version)
+    return facts(files, list(loop_states(files, states).values()), repo, version)
 
 
 def no_keep_awake(pid: int) -> list[str]:
@@ -75,32 +75,32 @@ def log_path(files: LoopFiles, state: LoopState | None = None) -> Path:
     return files.runs() / "factory.log"
 
 
-def lane_states(files: LoopFiles, states: list[LoopState]) -> dict[int, LoopState]:
+def loop_states(files: LoopFiles, states: list[LoopState]) -> dict[int, LoopState]:
     """The launcher keeps numbered links even when the child publishes its own log."""
     numbered: dict[int, LoopState] = {}
     by_pid = {st.pid: st for st in states}
     for state in states:
         stem = Path(state.log).stem
-        if stem.startswith("factory-lane-") and (suffix := stem.removeprefix("factory-lane-")).isdigit():
-            lane = int(suffix)
-            if lane > 0:
-                numbered[lane] = by_pid.pop(state.pid)
-    for path in sorted(files.runs().glob("factory-lane-*.log")):
+        if stem.startswith("factory-loop-") and (suffix := stem.removeprefix("factory-loop-")).isdigit():
+            loop_no = int(suffix)
+            if loop_no > 0:
+                numbered[loop_no] = by_pid.pop(state.pid)
+    for path in sorted(files.runs().glob("factory-loop-*.log")):
         try:
-            lane = int(path.stem.removeprefix("factory-lane-"))
+            loop_no = int(path.stem.removeprefix("factory-loop-"))
             pid = int(path.readlink().stem.removeprefix("factory-"))
         except (OSError, ValueError):
             continue
-        if lane > 0 and pid in by_pid:
-            numbered[lane] = by_pid.pop(pid)
+        if loop_no > 0 and pid in by_pid:
+            numbered[loop_no] = by_pid.pop(pid)
     for state in by_pid.values():
-        lane = next(k for k in range(1, len(states) + 1) if k not in numbered)
-        numbered[lane] = state
+        loop_no = next(k for k in range(1, len(states) + 1) if k not in numbered)
+        numbered[loop_no] = state
     return dict(sorted(numbered.items()))
 
 
-def _spawn(files: LoopFiles, repo: str, version: str, argv: list[str], spawner: Spawner, lane: int) -> tuple[Child, Path]:
-    path = files.runs() / f"factory-lane-{lane}.log"
+def _spawn(files: LoopFiles, repo: str, version: str, argv: list[str], spawner: Spawner, loop_no: int) -> tuple[Child, Path]:
+    path = files.runs() / f"factory-loop-{loop_no}.log"
     path.unlink(missing_ok=True)
     with path.open("ab") as out:
         # Spawner.start detaches the session and disconnects its terminal input.
@@ -143,20 +143,20 @@ def _wait(files: LoopFiles, children: list[tuple[Child, Path]], sleep: Callable[
 
 
 def start(files: LoopFiles, repo: str, version: str, argv: list[str], spawner: Spawner,
-          sleep: Callable[[float], None] = time.sleep, *, lanes: int = 1,
+          sleep: Callable[[float], None] = time.sleep, *, loops: int = 1,
           caffeinate_argv: Callable[[int], list[str]] = no_keep_awake) -> tuple[list[LoopState], int]:
-    """Top up under the loop lock; return all lanes and the number newly launched."""
-    if lanes < 1:
-        raise ValueError("lanes must be at least 1")
+    """Top up under the loop lock; return all loops and the number newly launched."""
+    if loops < 1:
+        raise ValueError("loops must be at least 1")
     children: list[tuple[Child, Path]] = []
     with files.lock():
         states = files.live()
-        numbered = lane_states(files, states)
-        for _ in range(max(0, lanes - len(states))):
-            lane = next(k for k in range(1, lanes + 1) if k not in numbered)
-            child, path = _spawn(files, repo, version, argv, spawner, lane)
+        numbered = loop_states(files, states)
+        for _ in range(max(0, loops - len(states))):
+            loop_no = next(k for k in range(1, loops + 1) if k not in numbered)
+            child, path = _spawn(files, repo, version, argv, spawner, loop_no)
             children.append((child, path))
-            numbered[lane] = LoopState(pid=child.pid, started=0, t=0, repo=repo, version=version, code_dir="", actor="")
+            numbered[loop_no] = LoopState(pid=child.pid, started=0, t=0, repo=repo, version=version, code_dir="", actor="")
         if numbered:
             (files.runs() / "loop.pid").write_text(str(numbered[min(numbered)].pid) + "\n")
     # The child uses the same lock to publish; wait outside the launch lock.
@@ -167,7 +167,7 @@ def start(files: LoopFiles, repo: str, version: str, argv: list[str], spawner: S
             if keep_awake:
                 with contextlib.suppress(FileNotFoundError):
                     spawner.start(keep_awake, stdin="null", out="null")
-    return list(lane_states(files, states).values()), len(children)
+    return list(loop_states(files, states).values()), len(children)
 
 
 def lines(path: Path, n: int, follow: bool = False, sleep: Callable[[float], None] = time.sleep) -> Generator[str]:

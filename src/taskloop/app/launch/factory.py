@@ -1,4 +1,4 @@
-"""The factory launcher's binding: the machine facts (plugin version, the platform keep-awake) the loop node's lanes are given."""
+"""The factory launcher's binding: the machine facts (plugin version, the platform keep-awake) the loop node's loops are given."""
 from taskloop.adapters import factory as platform_factory
 from taskloop.adapters.ident import plugin_version
 
