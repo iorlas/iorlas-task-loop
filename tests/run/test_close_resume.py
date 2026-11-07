@@ -15,8 +15,9 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.app.pipeline import ended
+from taskloop.app.pipeline.closing import Closer
 from taskloop.app.run import engine
-from taskloop.app.run.closer import Closer, closer_over
+from taskloop.app.run.closer_ports import closer_over
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import wire
 from taskloop.contracts.checkpoint import EndRec

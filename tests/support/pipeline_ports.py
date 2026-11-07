@@ -76,3 +76,17 @@ class FakeSlotting:
 
     def leave_slot(self, outcome: Outcome, branch: str) -> None:
         self.calls.append((outcome, branch))
+
+
+class FakeNarrate:
+    def __init__(self) -> None:
+        self.notes: list[str] = []
+        self.warnings: list[str] = []
+
+    def note(self, text: str) -> int:
+        self.notes.append(text)
+        return len(self.notes)
+
+    def warn(self, text: str) -> int:
+        self.warnings.append(text)
+        return len(self.warnings)

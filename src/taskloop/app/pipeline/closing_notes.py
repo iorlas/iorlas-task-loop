@@ -5,10 +5,11 @@ from pathlib import Path
 from typing import Protocol
 
 from taskloop.adapters import beadtools
-from taskloop.app.land.followups import FollowUpCheckpoints, FollowUpHost, file_follow_ups
 from taskloop.app.pipeline import outcomes
-from taskloop.app.run.closer_branch import DONE
+from taskloop.app.pipeline.outcomes import DONE
+from taskloop.app.pipeline.ports import FollowUps
 from taskloop.contracts.answers import VERDICTS
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.checkpoint import Notes
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId
@@ -16,7 +17,8 @@ from taskloop.domain import followups as fu
 from taskloop.stores.bundle import Stores
 
 
-class NotesCheckpoints(FollowUpCheckpoints, Protocol):
+class NotesCheckpoints(Protocol):
+    def keep_pending(self, origin: str = ...) -> None: ...
     def keep_notes(self, notes: Notes) -> None: ...
 
 
@@ -44,9 +46,20 @@ class NotesReview(Protocol):
     def verified(self) -> Sequence[Mapping[str, str]]: ...
 
 
-class FileNotesHost(FollowUpHost, Protocol):
-    """What filing the notes reads of the engine: what filing follow-ups reads (FollowUpHost), the asks, the unverified and unchecked
+class FileNotesHost(Protocol):
+    """What filing the notes reads of the engine: the follow-up batch, the asks, the unverified and unchecked
     items, the owner look, the judge and the pictures."""
+
+    @property
+    def bead(self) -> BeadId: ...
+    @property
+    def leftovers(self) -> Sequence[Mapping[str, str]]: ...
+    @property
+    def filed(self) -> list[str]: ...
+    @property
+    def store(self) -> Beads: ...
+    def comment(self, text: str) -> None: ...
+    def warn(self, text: str) -> None: ...
 
     @property
     def stores(self) -> Stores: ...
@@ -63,41 +76,42 @@ class FileNotesHost(FollowUpHost, Protocol):
 
 
 class FileNotes:
-    def __init__(self, host: FileNotesHost) -> None:
-        self.e = host
+    def __init__(self, host: FileNotesHost, follow_ups: FollowUps) -> None:
+        self.host = host
+        self.follow_ups_port = follow_ups
 
     def run(self, outcome: Outcome) -> Notes:
         """File from the durable queue; Reflect reads the counts from the checkpoint and refused work stays in the outbox."""
-        e = self.e
-        e.checkpoints.keep_pending()
-        todo = len(fu.batch(e.bead, e.leftovers, e.filed).file)  # one per typed key, at most the cap
+        host = self.host
+        host.checkpoints.keep_pending()
+        todo = len(fu.batch(host.bead, host.leftovers, host.filed).file)  # one per typed key, at most the cap
         lost = self.follow_ups(outcome)
         if lost:
-            e.warn(f"required follow-up filing incomplete: {len(lost)} item(s) remain in the durable outbox for retry")
+            host.warn(f"required follow-up filing incomplete: {len(lost)} item(s) remain in the durable outbox for retry")
         noted = Notes(filed=todo - len(lost), unfiled=len(lost))
-        e.checkpoints.keep_notes(noted)
+        host.checkpoints.keep_notes(noted)
         return noted
 
     def follow_ups(self, outcome: Outcome) -> list[dict[str, str]]:
         """Landed work leaves its notes: the ask closed, the unverified items and the unchecked look items said, evidence kept, and each
         follow-up filed as a bead (what bd refuses stays in the bead's durable outbox)."""
-        e = self.e
+        host = self.host
         if outcome in DONE:
-            old = e.stores.asks.get(e.bead)
+            old = host.stores.asks.get(host.bead)
             if old:
-                e.stores.asks.close(e.bead, old.id, "the run landed", time.time())
-            if e.review.unverified:
-                e.comment("Land (engine): " + e.owner_look.unverified_text())
-            look = [u for u in e.review.unchecked if u["kind"] == "other" and not e.judge.is_look(u)]
+                host.stores.asks.close(host.bead, old.id, "the run landed", time.time())
+            if host.review.unverified:
+                host.comment("Land (engine): " + host.owner_look.unverified_text())
+            look = [u for u in host.review.unchecked if u["kind"] == "other" and not host.judge.is_look(u)]
             if look:
-                beadtools.attempt(e.store.add_label, e.bead, "needs-owner-check")
-                e.comment("Look (engine): landed, but nobody checked: " + "; ".join(u["what"] for u in look))
-        shots = e.pictures.keep_evidence()
+                beadtools.attempt(host.store.add_label, host.bead, "needs-owner-check")
+                host.comment("Look (engine): landed, but nobody checked: " + "; ".join(u["what"] for u in look))
+        shots = host.pictures.keep_evidence()
         if shots:
-            e.comment("Evidence (engine): " + ", ".join(str(p) for p in shots))
-        lost = file_follow_ups(e)
+            host.comment("Evidence (engine): " + ", ".join(str(p) for p in shots))
+        lost = self.follow_ups_port.file()
         if outcome is Outcome.LANDED:
-            e.owner_look.file_owner_look()
+            host.owner_look.file_owner_look()
         return lost
 
 
@@ -124,16 +138,16 @@ class ReflectHost(Protocol):
 
 class Reflect:
     def __init__(self, host: ReflectHost) -> None:
-        self.e = host
+        self.host = host
 
     def comment(self, outcome: Outcome, why: str, stats: str, noted: Notes | None) -> None:
-        e = self.e
-        notes = e.checkpoints.notes() or noted or Notes(filed=0, unfiled=0)  # the checkpoint's: a restart has no memory of FileNotes
+        host = self.host
+        notes = host.checkpoints.notes() or noted or Notes(filed=0, unfiled=0)  # the checkpoint's: a restart has no memory of FileNotes
         verified = ""
-        if e.review.verified:
+        if host.review.verified:
             verified = "; self-verified=" + ", ".join(
-                "{} {}".format(sum(x["verdict"] == k for x in e.review.verified), k) for k in VERDICTS)
+                "{} {}".format(sum(x["verdict"] == k for x in host.review.verified), k) for k in VERDICTS)
         unfiled = f" unfiled={notes.unfiled};" if notes.unfiled else ""
-        text = outcomes.reflection_text(e.reflection)
-        e.comment(f"Reflect (engine): outcome={outcome};{text} filed={notes.filed};{unfiled} {stats}"
-                  f"{verified}{('; why=' + why) if why else ''}; trace={e.run_id} (tl trace {e.bead})")
+        text = outcomes.reflection_text(host.reflection)
+        host.comment(f"Reflect (engine): outcome={outcome};{text} filed={notes.filed};{unfiled} {stats}"
+                  f"{verified}{('; why=' + why) if why else ''}; trace={host.run_id} (tl trace {host.bead})")

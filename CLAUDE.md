@@ -74,6 +74,7 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 just test                      # THE test command: runs only the tests this change can break (dev/affected.py: the diff against origin/main followed up the import graph; tests/rules always), all kinds, once per tree, in at most 4 workers; the gate and the release run this and nothing else
 uv run pytest tests/land -q    # one slice folder, module or test (tests/land/test_x.py::Class::test) while you edit; the tests are plain pytest classes: `assert`, `setup_method`, fixtures; `support.case.Case` still gives `addCleanup` and `subTest`; write new tests as pytest functions or classes, never `unittest`
 just check                     # ruff + pyrefly on the changed .py files only (`just lint-all` / `types-all`: whole tree), then import-linter (tools pinned in mise.toml; `mise install`)
+just test-pkg <stage>          # stage tests + its dependencies' contract tests; inner loop only, `just test` stays the gate
 just test-delegate            # tests/delegate (real processes, minutes): collected by no other run unless the change touches src/delegate, tests/delegate or skills/task-loop/_vendor (tests/support/scope.py); a task-loop or dashboard change never runs them
 ```
 
@@ -99,7 +100,7 @@ the other layers have their own folders (`contracts`, `stores`, `adapters`, `por
 
 Dev and test tools (pytest, pytest-xdist) are the `dev` group of pyproject.toml, locked in uv.lock; `uv run` syncs them.
 There is no hosted CI: the factory is the CI. `just check` and `just test` run on the release path (`dev/release.py`) before any push to main; each test runs once per tree.
-Caps (tests/rules/gate_rules.py): 400 SLOC per file, 80 per function, 800 per test file; no exceptions table: an oversize file or function is split. No SLOC total and no `Any` count is stored (parallel releases would conflict on it): the caps are per file, and tests/rules/real/test_changed_files.py compares the files a change touches with the merge base on origin/main (no new `Any`, `cast` or ignore on net).
+Caps (tests/rules/gate_rules.py): 400 SLOC per file, 80 per function, 800 per test file; no exceptions table: an oversize file or function is split. No SLOC total and no `Any` count is stored (parallel releases would conflict on it): the caps are per file, and tests/rules/real/test_changed_files.py compares the files a change touches with the merge base on origin/main (no new `Any`, `cast` or ignore on net). The per-stage forward closure is a change ratchet (`tests/rules/closure_ratchet.py`); a deliberate rise is `Ratchet-allow: closure +N <reason in words>`.
 Architecture (layers, app slices, dashboard, `import re` placement): the `.importlinter` contracts; lazy imports, banned modules, module docstrings: ruff (PLC0415, TID251, D100). Both run in `just rules`.
 
 ## Architecture Overview
