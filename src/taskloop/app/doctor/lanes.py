@@ -1,5 +1,6 @@
 """`tl lanes`: ask delegate for its status once (`delegate.api.status`, spends no quota) and file it as the StatusSnapshot the
 dashboard reads, and each window's use into the usage history. `tl usage` files it too, on its way. The dashboard never runs delegate."""
+import json
 import time
 from collections.abc import Callable
 
@@ -76,4 +77,25 @@ def accounts(op: str, lane: str, route: Route, cfg: paths.ConfigDir) -> int:
     print(f"{'lane':<{width}}  enabled  ready  fix")
     for r in rows:
         print(f"{r.lane:<{width}}  {'yes' if r.enabled else 'no':<7}  {'yes' if r.ready else 'no':<5}  {r.fix}".rstrip())
+    return 0
+
+
+def feed(windows: str, route: Route, cfg: Callable[[], paths.ConfigDir]) -> int:
+    """Validate and file a usage reading, then report its Claude lane."""
+    try:
+        reading = json.loads(windows)
+    except ValueError as e:
+        print(f"the usage windows are no JSON: {e}")
+        return 1
+    try:
+        snap = route.status_snapshot(reading)
+    except ValueError:
+        print("delegate did not take the reading")
+        return 1
+    file_snapshot(snap, cfg())  # the dashboard's lane cards read this
+    lane = next((x for x in snap.lanes if x.id == "CLAUDE_SUBSCRIPTION"), None)
+    if lane is None:
+        print("delegate did not take the reading")
+        return 1
+    print("fed {}: Claude subscription 5h {}%, week {}%{}".format(route.library, lane.five, lane.week, ", OUT" if lane.out else ""))
     return 0
