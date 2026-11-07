@@ -5,6 +5,7 @@ receipts were made for: the base, the heads ahead in order, the head, and the ch
 from the queue parent to main only through Carry's `queue_parent` mode (app/land/carry.py)."""
 import hashlib
 from collections.abc import Iterable
+from types import MappingProxyType
 from typing import final
 
 from taskloop.contracts.runkey import BaseSha, Digest, RunKey
@@ -13,7 +14,7 @@ from taskloop.contracts.wire import Rec
 # The RunKey fields the profile at the base fixes: they make the check set. A field added to RunKey must be in one of these two tables
 # (tests/land/test_queue_key.py), so a new input to a receipt cannot slip past the queue's key.
 CHECK_SET_FIELDS = ("check", "cmd", "config", "toolchain", "env", "execution")
-OTHER_FIELDS = {
+OTHER_FIELDS = MappingProxyType({
     "tree": "the tree T(N) of the build: reuse is by tree",
     "base": "QueueKey.base",
     "inputs": "what the check reads in the tree: follows from the tree",
@@ -21,7 +22,7 @@ OTHER_FIELDS = {
     "dependencies": "producer receipts consumed by one execution: a result of the build, not an input of it",
     "plan": "a planned skip of one execution: a result of the build",
     "plan_output": "a planned skip of one execution: a result of the build",
-}
+})
 
 
 @final

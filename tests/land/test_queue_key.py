@@ -13,8 +13,8 @@ def run_key(**kw: str) -> RunKey:
     return key.replace(**kw)
 
 
-def key(**kw) -> QueueKey:
-    return QueueKey(**{"base": BaseSha("m0"), "ahead": ("a", "b"), "head": "c", "check_set": check_set_hash([run_key()]), **kw})
+def key(base: str = "m0", ahead: tuple[str, ...] = ("a", "b"), head: str = "c", check_set: Digest | None = None) -> QueueKey:
+    return QueueKey(base=BaseSha(base), ahead=ahead, head=head, check_set=check_set or check_set_hash([run_key()]))
 
 
 def test_every_runkey_field_is_in_the_check_set_or_accounted_for_elsewhere():
@@ -23,7 +23,7 @@ def test_every_runkey_field_is_in_the_check_set_or_accounted_for_elsewhere():
 
 
 @pytest.mark.parametrize("event, other", [
-    ("main moved", key(base=BaseSha("m1"))),
+    ("main moved", key(base="m1")),
     ("head of a PR ahead changed", key(ahead=("a2", "b"))),
     ("own head changed", key(head="c2")),
     ("PR ahead ejected", key(ahead=("b",))),
