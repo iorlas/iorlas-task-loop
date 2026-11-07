@@ -11,7 +11,7 @@ from tltestkit import procsim
 from tltestkit.plans import CLEAN, PLAN, WRITE
 
 # isort: split
-from taskloop.domain.checks.specs import due, engine_digest, gate_items, items_of
+from tlgate.domain.specs import due, engine_digest, gate_items, items_of
 from tlkernel.checks import Check
 from tlkernel.ids import CheckId
 from tltestkit.logs import records

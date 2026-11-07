@@ -1,10 +1,10 @@
 """What a worker is told of its checks: which it may run, which are the engine's, which were red on the untouched base too."""
 from typing import Any
 
+from tlgate.domain.names import norm as norm_cmd
 from tlkernel.checks import CheckRun
 
 from taskloop.app.write.host import BriefingHost
-from taskloop.domain.checks.names import norm as norm_cmd
 
 
 class Briefing:

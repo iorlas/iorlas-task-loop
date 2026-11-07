@@ -1,4 +1,4 @@
-"""Only the check Fixer may write the worktree: under app/checks no module but fixer.py names `stage_all` or `tree_writer`, and the
+"""Only the check Fixer may write the worktree: under tlgate no module but fixer.py names `stage_all` or `tree_writer`, and the
 CheckoutView every other check reads through has no way to stage."""
 import ast
 import sys
@@ -10,9 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 # isort: split
-from taskloop.app.checks.host import CheckoutView, TreeWriter
+from tlgate.host import CheckoutView, TreeWriter
 
-CHECKS = Path(__file__).resolve().parents[2] / "src" / "taskloop" / "app" / "checks"
+CHECKS = Path(__file__).resolve().parents[2] / "packages" / "gate" / "src" / "tlgate"
 WRITE_NAMES = {"stage_all", "tree_writer"}
 
 

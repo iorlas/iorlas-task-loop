@@ -229,6 +229,8 @@ Each PR is one bead (child of tl-e5t0.39, label `auto`), lands green, behaviour 
 | host replacement | a frozen dataclass of ports per entry (`RunPorts`, `StandalonePorts`), built in the existing binder files; no new root file (a new root needs `Layout-allow: node`) |
 | the 16-member ceiling | a ratchet in `tests/rules` (R5), list only shrinks |
 
+R4g: LifecycleHost split into role Protocols
+
 Beads (children of tl-e5t0.39): R1 tl-e5t0.39.1, R2 .2, R3 .3, R4a .4, R4b .5, R4c .6, R4d .7, R4e .8, R4f .9, R5 .10, R6 .11.
 
 R6 done: the pipeline is packages/pipeline (tlpipeline)

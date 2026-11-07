@@ -3,11 +3,11 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol
 
+from tlgate import evidence as check_evidence
 from tlkernel import plancheck
 from tlkernel.checks import CheckRun
 from tlkernel.plancheck import PlanData, StageData
 
-from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.land import verified
 from taskloop.app.land.gate import Problem, ProblemKind
 from taskloop.app.land.host import BeginSteps, CaseChecks

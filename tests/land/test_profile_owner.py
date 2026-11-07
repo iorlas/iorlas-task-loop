@@ -202,11 +202,11 @@ class OwnerJudge(Case):
 
     def test_fresh_matching_row_allows_but_only_with_base_evidence(self):
         self.audit()
-        with mock.patch("taskloop.app.checks.authorization.results", return_value={"base-check": mock.Mock()}) as results:
+        with mock.patch("tlgate.authorization.results", return_value={"base-check": mock.Mock()}) as results:
             assert self.judge().status == PushStatus.ALLOWED
         assert [step.id for step in results.call_args.args[3].gate_checks] == ["base-check"]
-        with (mock.patch("taskloop.app.checks.authorization.results", return_value={"base-check": None}),
-              mock.patch("taskloop.app.checks.authorization.explain", return_value={"base-check": "env differs (expected a1 found b2)"})):
+        with (mock.patch("tlgate.authorization.results", return_value={"base-check": None}),
+              mock.patch("tlgate.authorization.explain", return_value={"base-check": "env differs (expected a1 found b2)"})):
             decision = self.judge()
         assert decision.status == PushStatus.REFUSED
         assert "base-check (env differs (expected a1 found b2))" in decision.reasons[0]
@@ -249,7 +249,7 @@ class PolicyCheck(Case):
         args = argparse.Namespace(policy_commit="base", ids=[], all=False, staged=False, list=False)
         stage = mock.Mock()
         stage.bundle.repo = "/repo"
-        with (mock.patch("taskloop.app.checks.authorization.profile", return_value=cfg) as profile,
+        with (mock.patch("tlgate.authorization.profile", return_value=cfg) as profile,
               mock.patch("taskloop.app.launch.check.profile_of", side_effect=AssertionError("tip profile used")),
               mock.patch("taskloop.app.launch.check.CliHost") as host,
               mock.patch("taskloop.app.launch.check.Checker") as checker, redirect_stdout(io.StringIO())):

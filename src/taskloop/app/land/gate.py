@@ -11,6 +11,9 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Protocol, final
 
+from tlgate import evidence
+from tlgate.domain.specs import engine_digest, gate_items
+from tlgate.host import CheckFault
 from tlkernel import log as rec
 from tlkernel.checks import Check, CheckFaultKind, CheckRun
 from tlkernel.config import EngineConfig
@@ -19,11 +22,8 @@ from tlkernel.ids import TreeSha
 from tlkernel.runkey import BaseSha, Digest
 from tlkernel.stagefacts import RunLogPort
 
-from taskloop.app.checks import evidence
-from taskloop.app.checks.host import CheckFault
 from taskloop.app.land import verified
 from taskloop.app.land.host import LandState
-from taskloop.domain.checks.specs import engine_digest, gate_items
 
 FAULTS = MappingProxyType({CheckFaultKind.STALE_BASE: "FAULT_STALE_BASE", CheckFaultKind.KILLED: "PAUSE_KILLED",
                          CheckFaultKind.DIRTY_SLOT: "FAULT_SLOT",})

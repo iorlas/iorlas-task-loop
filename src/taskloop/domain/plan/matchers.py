@@ -3,7 +3,7 @@
 import re
 from typing import Final
 
-from taskloop.domain.checks import lint
+from tlgate.domain import lint
 from tlkernel.config import EngineConfig
 from tlkernel.paths import TASK_EXCLUDE
 from tlkernel.plancheck import PlanData

@@ -3,6 +3,8 @@ found), under the stage loop's checks and review, without undoing what the accep
 from collections.abc import Sequence
 from typing import ClassVar, Protocol
 
+from tlgate import evidence as check_evidence
+from tlgate.domain import planref
 from tlkernel import askspecs, plancheck
 from tlkernel import checktrim as trim
 from tlkernel.askspec import AskSpec
@@ -12,10 +14,8 @@ from tlkernel.gitport import Git
 from tlkernel.plancheck import PlanCheck, PlanData, RoundState, StageData
 from tlkernel.ports import Sh
 
-from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.land.gitcall import must
 from taskloop.app.land.host import CaseChecks, LandState, StageCheckout
-from taskloop.domain.checks import planref
 from taskloop.domain.land.fix_text import FIX_GOAL as GOAL
 from taskloop.domain.land.fix_text import FIX_TEXT as TEXT
 from taskloop.domain.land.fix_text import FIX_WHAT as WHAT

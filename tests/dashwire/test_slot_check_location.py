@@ -2,9 +2,9 @@
 
 from support.memstores import fake_stores
 
-from taskloop.app.checks.checklog import CheckLog
 from taskloop.stores.runlog import RunLog
 from taskloop_dash.views import live_events, live_lines
+from tlgate.checklog import CheckLog
 from tlkernel import log
 from tlkernel.checks import Check
 from tlkernel.ids import CheckId
