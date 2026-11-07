@@ -3,6 +3,7 @@ other lanes (their own process groups only, through the Spawner) and the round i
 tests/checks/real/test_lanes_real.py."""
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -16,8 +17,13 @@ from support import procsim
 from support.check_host import CheckHostCase
 
 # isort: split
+from taskloop.app.checks import lanes
+from taskloop.app.checks.round import Round
+from taskloop.domain.checks.plan import CheckPlan, Step
 from taskloop.domain.checks.specs import gate_items
+from tlkernel.checks import Check
 from tlkernel.config import ConfigError, load
+from tlkernel.ids import CheckId
 
 UNITY = {"unity": {"limit": 1}}
 
@@ -123,3 +129,70 @@ class Config(Case):
         assert "lane" in str(cm.value)
         checks[1]["lane"] = "x"
         load({"engine": {"checks": checks}})
+
+
+class RunStopped(RuntimeError):
+    pass
+
+
+class StopHost:
+    def __init__(self, started: threading.Event) -> None:
+        self.started = started
+        self.calls = 0
+        self.error = RunStopped("stopped")
+
+    def halt_point(self, when: bool = True, wait: float = 0) -> None:
+        assert self.started.wait(2)
+        self.calls += 1
+        if self.calls == 2:
+            raise self.error
+
+
+def test_stop_reports_a_stuck_lane(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> None:
+    # Start FD capture in the call phase: the setup stream bridge otherwise restores its closed setup stream.
+    capfd = request.getfixturevalue("capfd")
+    monkeypatch.setattr(lanes, "STOP_JOIN_S", 0.2)
+    started, release = threading.Event(), threading.Event()
+    workers: list[threading.Thread] = []
+    host = StopHost(started)
+
+    def step(item: Step, n: int, st: Round) -> None:
+        workers.append(threading.current_thread())
+        started.set()
+        release.wait()
+
+    plan = CheckPlan((Step(Check(id=CheckId("blocked"), cmd="true"), (), ()),))
+    before = time.monotonic()
+    try:
+        with pytest.raises(lanes.LaneStuck) as caught:
+            lanes.Lanes(host, step, lambda *args: None).run(plan, {"blocked": [0]}, Round(1))
+        assert time.monotonic() - before < 5
+        assert "lane-blocked" in str(caught.value)
+        assert "0.2" in str(caught.value)
+        assert caught.value.__cause__ is host.error
+        stderr = capfd.readouterr().err
+        assert "Thread lane-blocked (" in stderr
+        assert "in step" in stderr
+    finally:
+        release.set()
+        for worker in workers:
+            worker.join(2)
+            assert not worker.is_alive()
+
+
+def test_stop_reraises_original_when_lane_ends(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> None:
+    capfd = request.getfixturevalue("capfd")
+    monkeypatch.setattr(lanes, "STOP_JOIN_S", 0.2)
+    started = threading.Event()
+    host = StopHost(started)
+
+    def step(item: Step, n: int, st: Round) -> None:
+        assert st.cancel is not None
+        started.set()
+        assert st.cancel.wait(2)
+
+    plan = CheckPlan((Step(Check(id=CheckId("prompt"), cmd="true"), (), ()),))
+    with pytest.raises(RunStopped) as caught:
+        lanes.Lanes(host, step, lambda *args: None).run(plan, {"prompt": [0]}, Round(1))
+    assert caught.value is host.error
+    assert capfd.readouterr().err == ""
