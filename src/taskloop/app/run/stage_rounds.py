@@ -1,10 +1,9 @@
 """One round of a standalone write, checks, look or review step: its state from the checkpoint, the step, what it remembers."""
 from taskloop.app.run.host import RunHost
 from taskloop.app.write.prepare import PREPARED, Prepare
+from taskloop.app.write.progress import progress_of, restore_progress
 from taskloop.app.write.state import ACCEPT, REPLAN, StageState
-from taskloop.contracts import wire
-from taskloop.contracts.answers import WriteAnswerLook
-from taskloop.contracts.checkpoint import Checkpoint, StageProgress
+from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.enums import Step
 from taskloop.contracts.plancheck import RoundState
 
@@ -33,13 +32,7 @@ def round_state(e: RunHost, step: Step, ck: Checkpoint | None) -> StageState:
         counters = {"rounds": ck.rounds, "n": ck.n, "feedback": ck.feedback}
     s = e.stage_loop.begin(plan, i, counters)
     if ck and ck.progress:
-        p = ck.progress
-        s.red, s.red_now, s.failed_cmds = p.red, set(p.red_now), p.failed
-        s.acc_only, s.acc_first, s.shots_fixed = p.acceptance_only, p.acceptance_first, p.shots_fixed
-        s.show_fixed = p.show_fixed
-        s.w = wire.dump(p.write) if p.write else {}
-        s.wfam = e.writer_family or ""
-        s.wrote_unchecked = s.w.get("unchecked") or []
+        restore_progress(s, ck.progress, e.writer_family or "")
     if step is not Step.WRITE and not s.w:
         raise ValueError(f"{step} refused: no recorded writer answer; run --stage write")
     s.run = e.last_run
@@ -81,12 +74,7 @@ def prepared_write(e: RunHost, s: StageState) -> str:
 
 
 def remember_round(e: RunHost, s: StageState, following: Step, i: int) -> None:
-    answer = wire.load(WriteAnswerLook, dict(s.w, logic_only=s.w.get("logic_only", ""))) if s.w else None
-    progress = None
-    if i == s.i:
-        progress = StageProgress(write=answer, red=s.red, red_now=sorted(s.red_now), failed=s.failed_cmds,
-                                 acceptance_only=s.acc_only, acceptance_first=s.acc_first, shots_fixed=s.shots_fixed,
-                                 show_fixed=s.show_fixed)
+    progress = progress_of(s) if i == s.i else None
     e.checkpoints.save(step=following, stage=i, rounds=s.rounds, n=s.n, feedback=s.feedback, progress=progress)
     if s.run is not None:  # carry the check evidence forward across a separate look or review invocation
         e.stores.check_run(e.run_id, None).write(s.run)
