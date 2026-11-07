@@ -4,7 +4,7 @@ bead, slot, slot_bead, by); the loop writes one (by "loop") from its slot take u
 `tl slot reset|release` and another run-task keep off a worktree whose lock names a live process, whatever the slot bead says. A process is
 the one in the lock only while its start time matches (pid reuse) and it is no zombie. The record is a `lease` row (contracts/lockrows.py);
 the check and the write of a take happen under `hold_path` on
-ConfigDir.engine_take, so two runs starting at once cannot both win."""
+slots.paths.engine_take, so two runs starting at once cannot both win."""
 import contextlib
 import os
 import time
@@ -24,6 +24,7 @@ from taskloop.adapters.agent import running_for
 from taskloop.adapters.locks import hold_path
 from taskloop.adapters.pidcheck import proc_alive, proc_start
 from taskloop.app.slots.env import stamp
+from taskloop.app.slots.paths import engine_take
 
 
 def _store(cfg: ConfigDir, wt: str | Path) -> EngineLockRows:
@@ -63,7 +64,7 @@ def lock_pid(cfg: ConfigDir, wt: str | Path) -> int | None:
 def loop_lock(cfg: ConfigDir, wt: str | Path, slot: str, slot_bead: str, bead: str = "") -> None:
     """The loop's lock from its slot take to its run-task's own: no hand run gets in during the slot reset. `bead`, once claimed: the
     area check sees it there."""
-    with hold_path(cfg.engine_take(wt), "loop", what=LockWhat.WORKTREE):
+    with hold_path(engine_take(cfg, wt), "loop", what=LockWhat.WORKTREE):
         write_engine_lock(cfg, wt, Lock(pid=os.getpid(), start=proc_start(os.getpid()), bead=bead, slot=slot or "",
                                         slot_bead=slot_bead or "", by="loop", started=time.time()))
 
@@ -113,7 +114,7 @@ class EngineLock:
 
     def take(self) -> str:
         """"" when this run holds the worktree now, else what holds it. Loop and reexec handoffs take over their predecessor's lock."""
-        with hold_path(self.cfg.engine_take(self.wt), f"pid {os.getpid()}", what=LockWhat.WORKTREE):
+        with hold_path(engine_take(self.cfg, self.wt), f"pid {os.getpid()}", what=LockWhat.WORKTREE):
             busy = engine_busy(self.cfg, self.wt, handoff=self.env)
             if busy:
                 return busy

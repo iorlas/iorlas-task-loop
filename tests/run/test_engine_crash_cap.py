@@ -11,7 +11,7 @@ from support.engine_case import EngineTest
 from support.narrow import must
 from support.plans import CLEAN, PLAN, WRITE
 
-from taskloop.app.run.crash import parked_crash
+from taskloop.app.pipeline.crash import parked_crash
 from taskloop.app.run.stages import one_stage
 from tlkernel.fence import Fenced
 from tlkernel.kinds import Kind
