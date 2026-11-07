@@ -377,6 +377,7 @@ name = "tlwork"
 version = "0"
 source = { editable = "packages/work" }
 dependencies = [
+    { name = "tlartifacts" },
     { name = "tlgate" },
     { name = "tlkernel" },
 ]
@@ -389,6 +390,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "tlartifacts", editable = "packages/artifacts" },
     { name = "tlgate", editable = "packages/gate" },
     { name = "tlkernel", editable = "packages/kernel" },
 ]

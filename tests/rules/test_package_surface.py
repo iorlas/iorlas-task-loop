@@ -6,7 +6,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SURFACE = {"tlpipeline": ("api", "testing", "contracts")}
-PACKAGE_ONLY = {"tlslots": ("api", "testing")}
+PACKAGE_ONLY = {"tlslots": ("api", "testing"), "tlartifacts": ("api",)}
 
 
 def imported_names(node: ast.Import | ast.ImportFrom, package: str) -> list[str]:
