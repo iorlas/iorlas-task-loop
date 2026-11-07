@@ -16,7 +16,8 @@ class RunOnce:
     def __init__(self, host: Any) -> None:
         self.host = host
         body = RunBody(host, host, host, host, host, host, host, LandHistory(host.git), self.beat, beadtools.peek, ident.plugin_version)
-        self.lifecycle = Lifecycle(host, body=body.run, lease=self.lease, reexecs=ReexecBook(host.home), deadline=deadline.deadline)
+        self.lifecycle = Lifecycle(host, host, host, host, body=body.run, lease=self.lease, reexecs=ReexecBook(host.home),
+                                   deadline=deadline.deadline)
 
     def lease(self, on_beat: Callable[[], None], on_death: Callable[[BaseException], None]) -> Lease:
         host = self.host
