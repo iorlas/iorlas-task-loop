@@ -46,6 +46,16 @@
   "records": {},
   "version": 1
  },
+ "land": {
+  "ddl": "29c5b5b9f0f5e736a96703fe8db820ff91124c64ac00c5cc315484ae3d70a36d",
+  "records": {
+   "FollowupOutbox": {
+    "schema": "3a21adb0412f4448cfeda91d82cc8c97b9fd9f39f5e608cea83bbf346be28791",
+    "v": 1
+   }
+  },
+  "version": 1
+ },
  "pipeline": {
   "ddl": "1d77451b0e5719cc5b77970482b15ee6770f5f4007f482f4789911fe17a5cb08",
   "records": {

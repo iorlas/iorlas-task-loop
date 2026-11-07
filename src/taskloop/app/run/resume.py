@@ -163,16 +163,17 @@ class Resume:
             asked = e.answered.id if e.answered else ""
             e.log.note(f"the owner answered verify ask {asked} with more than a yes: planning what it asks, keeping {len(e.done)} stage(s)")
             return None, 0, None
-        e.old_plan, e.amend_why = ck.state.plan_data, d.amend_why
+        e.amend.resume_into(ck.state.plan_data, d.amend_why)
         if d.kind == "replan":
             self.replan_note(ck)
             return None, 0, None
         if d.why == OUTSIDE:
             e.log.note(f"the branch changed since the checkpoint of {ck.run}: amending its plan")
-            e.amend_text = self.outside_text(ck)
+            e.amend.resume_into(ck.state.plan_data, d.amend_why, self.outside_text(ck))
             return None, 0, None
         e.log.note(f"the bead changed since the checkpoint of {ck.run}: amending its plan, keeping {len(e.done)} accepted stage(s)")
-        e.amend_text = d.amend_text + "\nAccepted stages (their work is in the tree): " + ("; ".join(e.done) or "none")
+        text = d.amend_text + "\nAccepted stages (their work is in the tree): " + ("; ".join(e.done) or "none")
+        e.amend.resume_into(ck.state.plan_data, d.amend_why, text)
         return None, 0, None
 
     def replan_note(self, ck: Checkpoint) -> None:

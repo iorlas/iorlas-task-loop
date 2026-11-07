@@ -39,6 +39,7 @@ OWNERS: dict[str, str] = {
     "ask_ledger": "engine",
     "park": "engine",
     "kv": "index",
+    "followup": "engine",  # the land's outbox (app/land/store.py)
     "effect": "engine",
     "wait": "loop",
     "signal": "owner",
