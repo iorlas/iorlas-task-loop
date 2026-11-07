@@ -59,10 +59,7 @@ class Routing:
 
     def add_leftover(self, lo: Item) -> bool:
         """File a follow-up bead at the close, once per title; True when it was new."""
-        if lo["title"] in {x["title"] for x in self.hand.leftovers}:
-            return False
-        self.hand.leftovers.append(lo)
-        return True
+        return self.ports.leftover_sink.add_titled(lo)
 
     def backed_by_leftover(self, what: str) -> bool:
         """True when an owner-review follow-up bead for this item is already in the leftovers (tl-bxk.13.1): the owner sees it there, so

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from taskloop.adapters import key_migrate, locks
+from taskloop.adapters.layout_paths import layout_journal
 from tlkernel import factorydb
 from tlkernel.gitport import Git
 from tlkernel.paths import ConfigDir, RunFiles
@@ -118,7 +119,7 @@ def migrate(cfg: ConfigDir, say: Callable[[str], None], now: float, git: Git) ->
     if clash:
         say("the target already exists, nothing moved:\n  " + "\n  ".join(f"{m.src} -> {m.dst}" for m in clash))
         return 3
-    journal = cfg.layout_journal()
+    journal = layout_journal(cfg)
     for m in moves:
         before = manifest(m.src)
         if m.dst is None:

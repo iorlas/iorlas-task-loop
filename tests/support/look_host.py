@@ -15,6 +15,7 @@ from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.look.shots import Pictures
 from taskloop.app.look.state import LookState
 from taskloop.app.pipeline.blocked import Blocked
+from taskloop.app.pipeline.leftover_queue import LeftoverQueue
 from tlkernel.asked import Asked, Updates
 from tlkernel.checkpoint import RunState
 from tlkernel.config import EngineConfig
@@ -22,6 +23,8 @@ from tlkernel.config import EngineConfig
 
 class FakeLookPorts:
     """LookPorts over the fake run ports: what a call records, a worker answer queue, a stage that has no checks and no checkout."""
+
+    leftover_sink: LeftoverQueue
 
     def __init__(self, workdir: Path, cfg: EngineConfig | None = None, bead: str = "t-1", wt: Path | None = None) -> None:
         self.facts, self.ports = fake_facts(workdir, bead, cfg, wt=wt)
@@ -82,6 +85,7 @@ class FakeLook:
     def __init__(self, workdir: Path, cfg: EngineConfig | None = None, wt: Path | None = None) -> None:
         self.ports = FakeLookPorts(workdir, cfg, wt=wt)
         self.facts, self.hand, self.run = self.ports.facts, FakeLookHand(), RunState()
+        self.ports.leftover_sink = LeftoverQueue(self.hand)
         self.state = LookState(lambda: self.run)
         git = self.ports.ports.git
         self.pictures = self.ports.pictures = Pictures(self.facts, self.ports, self.state, self.hand, git)

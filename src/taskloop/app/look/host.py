@@ -11,7 +11,7 @@ from tlkernel.beadsport import Beads
 from tlkernel.checks import CheckRun
 from tlkernel.config import VisualConfig
 from tlkernel.plancheck import StageData
-from tlkernel.stagefacts import Narrate, RepoKey
+from tlkernel.stagefacts import LeftoverSink, Narrate, RepoKey
 from tlkernel.wire import Open
 
 from taskloop.adapters.looks import Methods
@@ -76,6 +76,9 @@ class RepoHolder(Protocol):
 
 class LookPorts(Protocol):
     """What the look stage calls, as the engine's own handles (the run facts are `RunFacts`, the stage's own state `LookState`)."""
+
+    @property
+    def leftover_sink(self) -> LeftoverSink: ...
 
     @property
     def steps(self) -> LookSteps: ...

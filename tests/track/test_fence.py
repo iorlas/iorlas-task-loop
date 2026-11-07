@@ -18,9 +18,10 @@ from support.who import who
 
 # isort: split
 from support.fake_beads import FakeBeads
+from support.lifecycle import lifecycle
 from support.memstores import fake_stores
 
-from taskloop.app.run.run_once import Ended, RunOnce
+from taskloop.app.pipeline.lifecycle import Ended
 from taskloop.app.run.state import Checkpoints
 from taskloop.app.track import verbs
 from taskloop.app.wire import closeguard
@@ -158,7 +159,7 @@ class Refused(Case):
                                warn=warned.append, closer=SimpleNamespace(close=lambda *a: closed.append(a)),
                                records=SimpleNamespace(settle=lambda *a: None))
         hb = mock.Mock()
-        RunOnce(host).close_out(hb, Ended())
+        lifecycle(host).close_out(hb, Ended())
         assert closed == []
         assert "fenced out" in warned[0]
         assert "taken again by another run" in host.fenced

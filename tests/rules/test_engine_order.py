@@ -13,10 +13,10 @@ PARTS_FILES = ("parts_run.py", "parts_land.py", "parts_plan.py", "host.py", "eng
 HOST_NAMES = {"e", "host", "h", "hand", "ports"}
 
 LAYERS = {
-    "bead_env": 0, "briefing": 0, "briefs": 0, "cases": 0, "checkout": 0, "delegation": 0, "records": 0, "reload": 0,
+    "bead_env": 0, "briefing": 0, "briefs": 0, "checkout": 0, "delegation": 0, "leftover_sink": 0, "records": 0, "reload": 0,
     "requests": 0, "restart": 0, "stage_checks": 0, "stuck": 0, "waits": 0,
-    "ask_flow": 1, "newfiles": 1, "pictures": 1, "rebase": 1, "reflector": 1, "routing": 1, "shared": 1, "shell": 1, "stage_loop": 1,
-    "tree": 1,
+    "ask_flow": 1, "cases": 1, "newfiles": 1, "pictures": 1, "rebase": 1, "reflector": 1, "routing": 1, "shared": 1, "shell": 1,
+    "stage_loop": 1, "tree": 1,
     "fixer": 2, "hand": 2, "judge": 2, "link_check": 2, "owner_look": 2, "planner": 2,
     "resume": 3, "salvage": 3, "settles": 3, "worker": 3,
     "closer": 4, "lander": 4, "verifier": 4,

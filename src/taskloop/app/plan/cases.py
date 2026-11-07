@@ -80,10 +80,9 @@ class Cases:
                 continue
             self.ports.log.note("unchecked item outside the done-when, filed as a follow-up: {}".format(u["what"][:200]))
             title = ("Check: " + u["what"])[:120]
-            if title in {lo["title"] for lo in self.hand.leftovers}:
+            if not self.ports.leftover_sink.add_titled({"title": title, "why": "A review noted this outside the task's "
+                                   "done-when, so it was not verified before the land: " + u["what"][:600]}):
                 continue
-            self.hand.leftovers.append({"title": title, "why": "A review noted this outside the task's "
-                                   "done-when, so it was not verified before the land: " + u["what"][:600]})
             self.ports.checkpoints.keep_pending("scope")
         return keep
 

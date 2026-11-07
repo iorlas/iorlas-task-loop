@@ -8,6 +8,7 @@ import re
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
+from taskloop.adapters.layout_paths import retired_dir
 from tlkernel.gitport import Git
 from tlkernel.ids import loop_key
 from tlkernel.paths import ConfigDir
@@ -57,7 +58,7 @@ def home(cfg: ConfigDir, key: str, keys: dict[str, str]) -> Path:
     """The repo folder a state of old key `key` belongs in: the repo's one key, retired/ when the repo is unknown."""
     if key in keys:
         return cfg.repo_dir(keys[key])
-    return cfg.retired_dir() / "repos" / key if stale(key) else cfg.repo_dir(key)
+    return retired_dir(cfg) / "repos" / key if stale(key) else cfg.repo_dir(key)
 
 
 def left_over(cfg: ConfigDir) -> list[Path]:
@@ -73,11 +74,11 @@ def moves(cfg: ConfigDir, keys: dict[str, str]) -> list[Pair]:
     out: list[Pair] = []
     for d in left_over(cfg):
         if d.is_file():
-            out.append((d, cfg.shared(keys[d.stem]) if d.stem in keys else cfg.retired_dir() / "shared" / d.name))
+            out.append((d, cfg.shared(keys[d.stem]) if d.stem in keys else retired_dir(cfg) / "shared" / d.name))
         elif d.parent == cfg.artifact_store():
-            out.append((d, cfg.artifact_store() / keys[d.name] if d.name in keys else cfg.retired_dir() / "artifacts" / d.name))
+            out.append((d, cfg.artifact_store() / keys[d.name] if d.name in keys else retired_dir(cfg) / "artifacts" / d.name))
         elif d.name not in keys:
-            out.append((d, cfg.retired_dir() / "repos" / d.name))
+            out.append((d, retired_dir(cfg) / "repos" / d.name))
         else:
             dst = cfg.repo_dir(keys[d.name])
             for child in sorted(d.iterdir()):

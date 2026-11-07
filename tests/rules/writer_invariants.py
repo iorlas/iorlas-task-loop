@@ -25,11 +25,9 @@ WRITERS: Final = {
 }
 PATH_STORES: Final = {
     'pin': 'PinStore', 'status': 'StatusStore', 'status_tried': 'StatusTriedStore', 'repos': 'ReposStore',
-    'release_result': 'ReleaseResultStore', 'reflect_state': 'ReflectStateStore',
     'park': 'ParkStore', 'traces': 'TraceStore',
-    'bad_versions': 'BadVersionStore',
     'handoff': 'HandoffMirrorStore', 'reexec_note': 'ReexecNoteStore',
-    'net_pause': 'NetPauseStore', 'pause': 'RunCountersStore', 'reexec': 'RunCountersStore',
+    'net_pause': 'NetPauseStore',
 }
 MUTATIONS: Final = {'write', 'put', 'append', 'delete', 'add', 'update', 'replace', 'clear', 'drop'}
 

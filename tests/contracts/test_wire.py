@@ -241,3 +241,11 @@ class Ids(Case):
         for e in vars(enums).values():
             if isinstance(e, type) and issubclass(e, enum.StrEnum) and e is not enum.StrEnum:
                 assert all(str(m) == m.value for m in e), e
+
+
+def test_pin_refuses_the_retired_version_and_delegate_field():
+    sample = S.OTHERS["Pin"]
+    with pytest.raises(StaleRecord):
+        wire.load(type(sample), {**wire.dump(sample), "v": 1, "delegate": "0.6.0"})
+    with pytest.raises(msgspec.ValidationError, match="delegate"):
+        wire.load(type(sample), {**wire.dump(sample), "delegate": "0.6.0"})
