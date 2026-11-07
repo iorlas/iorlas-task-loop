@@ -1,7 +1,7 @@
 """Which untracked files a stage meant: a pure function of the ignore globs, the files accepted so far and the plan (tl-bxk.10.24)."""
 import pytest
 
-from taskloop.domain.write.newfiles import new_file_kind
+from tlkernel.newfiles import new_file_kind
 
 PLAN = {"stages": [{"files": ["src/a.py", "./docs/", "pkg/*.cfg", ".", "  lib/x.txt  "]}]}
 
