@@ -24,7 +24,7 @@ def answering(store: Callable[[str], Beads], config: Path | str, by: str = "dash
 
     intake = owner_intake(AskStore.at(ConfigDir(config)), store_now, clock, by, adrs, factory, LookRows(ConfigDir(config)))
 
-    def answer(repo: str, bead: str, action: AskAction, text: str, amend: bool) -> tuple[Ask | None, str]:
-        return intake(repo).answer(BeadId(bead), action, text, amend)
+    def answer(repo: str, bead: str, action: AskAction, text: str, amend: bool, expect: str = "") -> tuple[Ask | None, str]:
+        return intake(repo).answer(BeadId(bead), action, text, amend, expect)
     ports = Ports(store=store, answer=answer, **owner_writes(intake, ConfigDir(config)))
     return ports
