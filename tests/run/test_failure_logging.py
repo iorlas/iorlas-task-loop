@@ -4,7 +4,8 @@ import sys
 from pathlib import Path
 from unittest import mock
 
-from taskloop.adapters import childenv, ident
+from taskloop.adapters import ident
+from tlkernel import childenv
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))

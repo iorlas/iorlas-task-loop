@@ -135,7 +135,7 @@ GIT_HOOK = (
 def write_hooks(plugin_root: Path, env: Env) -> list[Path]:
     """<config>/githooks/: one dispatcher per client hook name. It runs tl's logic (pre-push), then the repo's own hook of that name,
     found at run time, so a repo's changed hooks are followed without a rewrite. Every subprocess tl starts gets this folder as
-    core.hooksPath (adapters/childenv.hooks_vars). Idempotent; a failure to write is silent (a session must start)."""
+    core.hooksPath (tlkernel/childenv.hooks_vars). Idempotent; a failure to write is silent (a session must start)."""
     install = readable_install(plugin_root)
     if install is None:
         return []

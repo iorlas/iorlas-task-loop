@@ -26,7 +26,7 @@ class ConfigDir:
         return self.root / "runs"
 
     def hooks_dir(self) -> Path:
-        """githooks/: the git hooks the engine writes at start; every subprocess tl starts gets it as core.hooksPath (adapters/childenv)."""
+        """githooks/: the git hooks the engine writes at start; every subprocess tl starts gets it as core.hooksPath (tlkernel/childenv)."""
         return self.root / "githooks"
 
     def repos_dir(self) -> Path:
