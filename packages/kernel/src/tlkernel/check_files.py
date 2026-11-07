@@ -4,14 +4,14 @@ import os
 from collections.abc import Sequence
 from pathlib import Path
 
-from tlkernel.gitport import Git
+from tlkernel.gitport import GateGit
 from tlkernel.ids import loop_key
 from tlkernel.slots import SlotGitError
 
 BIG = 16 * 1024 * 1024  # an ignored input bigger than this counts by size, not content
 
 
-def tree_files(git: Git, wt: str, tree: str) -> dict[str, str]:
+def tree_files(git: GateGit, wt: str, tree: str) -> dict[str, str]:
     """{path: "mode type sha"} for a git tree (every file under it); {} when git cannot list it."""
     try:
         return {t.path: f"{t.mode} {t.kind} {t.oid}" for t in git.ls_tree(wt, tree, recursive=True)}
@@ -19,7 +19,7 @@ def tree_files(git: Git, wt: str, tree: str) -> dict[str, str]:
         return {}
 
 
-def ignored_files(git: Git, wt: str, spec: Sequence[str]) -> list[str]:
+def ignored_files(git: GateGit, wt: str, spec: Sequence[str]) -> list[str]:
     """Ignored (untracked, gitignored) files in the worktree under the git pathspecs `spec` (all of them when empty)."""
     try:
         return git.ls_files(wt, "ignored", *spec)
@@ -41,7 +41,7 @@ def file_digest(path: str) -> str:
     return h.hexdigest()
 
 
-def repo_key(git: Git, wt: str) -> str:
+def repo_key(git: GateGit, wt: str) -> str:
     """The repo's one key, shared by its slots, loop, checks and artifacts: ids.loop_key of the repo folder (the parent of the git
     common dir, the worktree when git cannot say), so a slot's worktree and the checkout name the same repo."""
     common = git.common_dir(wt)
