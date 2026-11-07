@@ -9,7 +9,7 @@ from taskloop.stores.ticketrows import TicketRows
 from tlkernel import paths, rundocs, stores
 from tlkernel.adrs import AdrStore
 from tlkernel.askstore import AskStore
-from tlkernel.checkpoint import Checkpoint
+from tlkernel.checkpointrows import CheckpointRows
 from tlkernel.checks import BaseRedRecord, CheckRun, PassRecord
 from tlkernel.config import HostResources
 from tlkernel.docrows import FLAKE_DOCS, QUEUE_DOCS, RowDocs
@@ -26,8 +26,7 @@ def real_stores(cfg: paths.ConfigDir) -> Stores:
         run_log=lambda run: stores.RunLog(cfg, run), events=stores.EventLog(cfg), traces=stores.TraceStore(cfg),
         profile_changes=profile_changes(cfg),
         asks=AskStore.at(cfg), adrs=lambda repo: AdrStore.at(cfg, repo),
-        checkpoints=CheckpointBook(RowDocs(cfg, Checkpoint, table="checkpoint", key_col="bead", body_col="body",
-                                           revisioned=True)),
+        checkpoints=CheckpointBook(CheckpointRows(cfg)),
         followups=RowDocs(cfg, FollowupOutbox, table="followup", key_col="bead", body_col="body"),
         flakes=RowDocs(cfg, FlakeLog, table=FLAKE_DOCS, key_col="k", body_col="v", prefix="flakes:"),
         queue=RowDocs(cfg, QueueDoc, table=QUEUE_DOCS, key_col="k", body_col="v", prefix="queue:"),
