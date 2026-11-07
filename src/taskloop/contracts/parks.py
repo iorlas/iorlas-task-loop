@@ -1,4 +1,4 @@
-"""Parks (`wait` rows of kind park; parks/<bead>.json before): question counts and durable pause wakes. `runs` counts questions on
+"""Parks (rows of the `park` table): question counts and durable pause wakes. `runs` counts questions on
 the same bead text; `attempts` counts pauses by producer:reason across runs. Transient
 pauses carry an epoch retry_at; needs_owner pauses wake on owner input."""
 from collections.abc import Callable
@@ -9,8 +9,9 @@ import msgspec
 
 from taskloop.contracts import paths
 from taskloop.contracts.delegate import Permanence
+from taskloop.contracts.docrows import RowDocs
+from taskloop.contracts.docstore import Present
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.waitrows import PARK, WaitDoc
 from taskloop.contracts.wire import Rec
 
 
@@ -33,12 +34,10 @@ class ParkStore:
 
     def __init__(self, cfg: paths.ConfigDir | Path | str) -> None:
         self.cfg = cfg if isinstance(cfg, paths.ConfigDir) else paths.ConfigDir(cfg)
-
-    def doc(self, bead: BeadId) -> WaitDoc[Park]:
-        return WaitDoc(self.cfg, PARK, bead, Park)
+        self.docs = RowDocs(self.cfg, Park, table="park", key_col="bead", body_col="body")
 
     def get(self, bead: BeadId) -> Park | None:
-        return self.doc(bead).get()
+        return self.docs.of(bead).get()
 
     def retry_at(self, bead: BeadId, run: str) -> float:
         """The durable wake for this run; an absent or older park has no timer."""
@@ -47,10 +46,27 @@ class ParkStore:
 
     def change(self, bead: BeadId, fn: Callable[[Park | None], Park]) -> Park:
         """The park after `fn` saw the stored one (None: no park), read and written in one transaction."""
-        return self.doc(bead).change(fn)
+        doc = self.docs.of(bead)
+        with self.docs.rows.transaction() as con:
+            found = con.execute("SELECT body FROM park WHERE bead=?", (bead,)).fetchone()
+            read = doc.codec().decode(found[0]) if found else None
+            rec = fn(read.rec if isinstance(read, Present) else None)
+            doc.write_in(con, rec)
+        return rec
 
     def put(self, rec: Park) -> None:
-        self.doc(rec.bead).write(rec)
+        self.docs.of(rec.bead).write(rec)
 
     def drop(self, bead: BeadId) -> None:
-        self.doc(bead).delete()
+        self.docs.of(bead).delete()
+
+    @staticmethod
+    def open_parks(cfg: paths.ConfigDir) -> dict[str, Park]:
+        """All decodable parks; an unavailable database reads quietly as empty for the dashboard."""
+        docs = RowDocs(cfg, Park, table="park", key_col="bead", body_col="body", quiet=True)
+        out: dict[str, Park] = {}
+        for bead in docs.keys():
+            rec = docs.of(bead).get()
+            if rec is not None:
+                out[bead] = rec
+        return out

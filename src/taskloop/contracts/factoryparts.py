@@ -11,6 +11,7 @@ from taskloop.contracts.checks import BaseRedRecord, PassRecord
 from taskloop.contracts.dbparts import Part, Prune, doc_table
 from taskloop.contracts.ledger import LedgerEntry
 from taskloop.contracts.locks import EngineLock
+from taskloop.contracts.parks import Park
 from taskloop.contracts.requests import OwnerRequest
 from taskloop.contracts.run import RunManifest
 from taskloop.contracts.snapshots import Pin, ReflectState, ReleaseResult
@@ -118,13 +119,17 @@ CREATE TABLE check_round (run TEXT NOT NULL, round INTEGER NOT NULL, ts REAL, bo
     prune=(Prune("check_round", f"""ts < ? AND NOT EXISTS (
         SELECT 1 FROM run AS parent WHERE parent.run=check_round.run AND parent.run NOT IN ({ELIGIBLE}))""", cutoffs=2),))
 
+PARK_DDL = "CREATE TABLE park (bead TEXT PRIMARY KEY, t REAL NOT NULL, body TEXT NOT NULL)"
+
 ASKS = Part(
-    name="asks", version=1, tables=("ask", "ask_ledger"),
-    records=(Ask, LedgerEntry),
-    ddl="""
+    name="asks", version=2, tables=("ask", "ask_ledger", "park"),
+    records=(Ask, LedgerEntry, Park),
+    steps={1: lambda con: con.execute(PARK_DDL)},  # v2: parks leave the pipeline's `wait` table (no rows carried over)
+    ddl=f"""
 CREATE TABLE ask (bead TEXT PRIMARY KEY, id TEXT NOT NULL, repo TEXT, status TEXT NOT NULL, t REAL NOT NULL, consumed REAL,
   body TEXT NOT NULL, rev INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX ask_live ON ask(status, t);
+{PARK_DDL};
 CREATE TABLE ask_ledger (id INTEGER PRIMARY KEY, t REAL NOT NULL, event TEXT NOT NULL, ask TEXT, bead TEXT, repo TEXT,
   body TEXT NOT NULL, origin TEXT NOT NULL UNIQUE);
 """,

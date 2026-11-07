@@ -19,9 +19,28 @@ from taskloop.contracts.looprows import LoopRows
 from taskloop.contracts.paths import ConfigDir
 
 TABLES = {
-    "source", "bead", "run", "attempt", "step", "lease", "check_pass",
-    "check_round", "ask", "ask_ledger", "kv", "effect", "wait", "signal", "checkpoint", "timed", "schema_part", "release_doc", "report_doc",
+    "source",
+    "bead",
+    "run",
+    "attempt",
+    "step",
+    "lease",
+    "check_pass",
+    "check_round",
+    "ask",
+    "ask_ledger",
+    "park",
+    "kv",
+    "effect",
+    "wait",
+    "signal",
+    "checkpoint",
+    "timed",
+    "schema_part",
+    "release_doc",
+    "report_doc",
 }
+
 INDEXES = {
     "run_bead", "run_recent", "run_live", "bead_status", "check_tree", "ask_live",
 }
