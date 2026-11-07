@@ -232,7 +232,7 @@ proposal, verdict, effort, order.
 ### Z18. Four repo keys
 
 - **Evidence:** `ids.loop_key` (folder + sha1(path)[:8], `tl/contracts/ids.py:117-119`), `ids.repo_key` (sha1(common dir)[:12], `:112-114`),
-  `check_files.repo_key` (origin name + sha1[:10], `tl/adapters/check_files.py:44-50`), `shared.py` by hand (`tl/app/run/shared.py:29`); the
+  `check_files.repo_key` (origin name + sha1[:10], `tl/adapters/check_files.py:44-50`), `shared.py` by hand (`packages/slots/src/tlslots/shared.py:29`); the
   dashboard copies `loop_key` (`dash/readers/loops.py:7-9`). c4-task-loop item 6, M09, D.
 - **Kind:** duplicated responsibility. **Severity: P2.**
 - **Proposal:** one `RepoId(origin_url, common_dir)` in contracts with named projections; every file family keys by one of them, chosen in
