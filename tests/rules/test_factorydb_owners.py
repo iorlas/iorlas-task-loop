@@ -7,7 +7,9 @@ from pathlib import Path
 from support.case import Case
 
 from rules.gate_rules import parsed
-from taskloop.contracts.factorydb import DDL, OWNERS
+from taskloop.app.parts import STAGE_PARTS
+from taskloop.contracts.dbparts import ddl
+from taskloop.contracts.factorydb import OWNERS
 
 RUN_FILE_READERS = {"taskloop.contracts.runrows"}
 
@@ -20,7 +22,7 @@ def legacy_readers(tree):
 class FactoryOwnersTest(Case):
     def test_each_schema_table_has_one_owner_role(self):
         with sqlite3.connect(":memory:") as con:
-            con.executescript(DDL)
+            con.executescript(ddl(STAGE_PARTS))
             tables = {row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert set(OWNERS) == tables
         for table, role in OWNERS.items():
