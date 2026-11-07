@@ -6,9 +6,6 @@ import support.paths  # noqa: F401
 from support.dashlogs import RunScript, T, bead
 from support.factory_index import ingest, seed_beads
 from support.fakes import FakeBeadStore
-from support.narrow import must
-from support.repos import write_repos
-from support.runs import manifest
 
 from taskloop.app.launch.dash_ports import owner_intake, owner_writes
 from taskloop.app.pipeline import requests
@@ -20,6 +17,9 @@ from tlkernel.lookrows import LookRows
 from tlkernel.run import RunState
 from tlkernel.runrows import RunRows
 from tltestkit.case import Case
+from tltestkit.narrow import must
+from tltestkit.repos import write_repos
+from tltestkit.runs import manifest
 from tltestkit.tmpdir import TemporaryDirectory
 
 

@@ -22,7 +22,6 @@ from support import (
     eventlog,
     looptest,
 )
-from support.narrow import must
 
 import loop.test_loop_more as more
 from taskloop.app.launch import loop_start as wstart
@@ -33,6 +32,7 @@ from tlkernel.env import snapshot
 from tlkernel.loop import Carry, LoopState
 from tlkernel.rowstores import BadVersionStore, PinStore
 from tlkernel.snapshots import Pin
+from tltestkit.narrow import must
 
 
 class Moving(LoopBase):

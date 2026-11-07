@@ -10,6 +10,8 @@ import time
 from pathlib import Path
 from unittest import mock
 
+from tltestkit import fake_route
+
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "skills" / "task-loop"
 sys.path.insert(0, str(SRC))
@@ -20,14 +22,10 @@ from support.checkpoints import read_ck  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "tests"))
 from support import engine_case as te  # noqa: E402
-from support import (  # noqa: E402
-    fake_route,
-    looptest,
-)
+from support import looptest  # noqa: E402
 from support.cfgs import cfg_with  # noqa: E402
 from support.fake_beads import FakeBeads  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
-from support.narrow import must  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
 from support.who import who  # noqa: E402
 
@@ -51,6 +49,7 @@ from tlkernel.env import Env, snapshot  # noqa: E402
 from tlkernel.ids import BeadId  # noqa: E402
 from tlkernel.rowstores import BadVersionStore  # noqa: E402
 from tlkernel.run import Reexec, ReexecNote  # noqa: E402
+from tltestkit.narrow import must  # noqa: E402
 
 PLAN_DEF = "    def plan(self, again: bool = False) -> Planned:\n"
 BREAK_PLAN = (PLAN_DEF, PLAN_DEF + "        raise RuntimeError('planted: cannot plan')\n", "src/taskloop/app/plan/planner.py")

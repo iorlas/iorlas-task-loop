@@ -22,7 +22,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 import contextlib
 
 import pytest
-from support.narrow import must
 from support.procsim import real_proc
 from support.release_world import IDENTITY, MARKET, PLUGIN, World, git
 
@@ -34,6 +33,7 @@ from tlkernel.envvars import EnvVar
 from tlkernel.paths import ConfigDir
 from tlkernel.rowstores import ReleaseResultStore
 from tltestkit.case import Case
+from tltestkit.narrow import must
 
 ROOT = Path(__file__).resolve().parents[2]
 RELEASE = ROOT / "dev" / "release.py"

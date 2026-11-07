@@ -2,11 +2,11 @@
 from types import SimpleNamespace
 
 import pytest
-from support.checks import typed
 from support.plan_host import FakePlan
 from support.plans import PLAN
 
 from taskloop.app.plan.prompt import REPLAN_CALLS
+from tltestkit.checks import typed
 
 
 @pytest.fixture

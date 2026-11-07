@@ -27,7 +27,7 @@ def pairs(recs):
 
 def typed(kind, t, **fields):
     """One EngineLog v2 line as a dict."""
-    return dict(v=3, kind=kind, t=t, **fields)
+    return dict(v=4, kind=kind, t=t, **fields)
 
 
 def write_log(path, recs):

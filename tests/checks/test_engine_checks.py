@@ -17,7 +17,6 @@ from unittest import mock
 
 from support.briefs import brief_digest, linked_text
 from support.cfgs import cfg_with
-from support.checks import ck, res, typed
 from support.fakes import as_bead, must_bead
 
 from taskloop.adapters.check_probe import PathProbe
@@ -29,6 +28,7 @@ from taskloop.domain.write.matchers import count_tests
 from tlkernel import answers, childenv, plancheck
 from tlkernel.config import EngineConfig
 from tlkernel.env import snapshot
+from tltestkit.checks import ck, res, typed
 
 
 class EngineChecksTest(CheckHostCase):

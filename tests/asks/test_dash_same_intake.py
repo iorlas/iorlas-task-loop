@@ -9,7 +9,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.dashes import make_dash
 from support.fake_beads import FakeBeads
-from support.narrow import must
 
 from asks.dash_ports import answering
 from asks.samples import MOCKS
@@ -19,6 +18,7 @@ from tlkernel.askstore import AskStore
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
+from tltestkit.narrow import must
 
 ASK = MOCKS["lifesim-22b3"].replace(bead="b-1", id="b-1-1")
 

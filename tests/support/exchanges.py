@@ -9,7 +9,7 @@ A case is a folder tests/fixtures/exchanges/<role>/<case>/ (role: planner, write
   input.txt    the prompt the engine sent for that call, the worktree as <WT>; UPDATE_GOLDEN=1 rewrites it (so does dev/record_exchange.py
                --prompt, which keeps the text a real run sent)
 
-`replay` runs the engine with the fake route (support/fake_route.Script) answering the recorded role's call with answer.json, then checks
+`replay` runs the engine with the fake route (tltestkit.fake_route.Script) answering the recorded role's call with answer.json, then checks
 that the parser takes the answer, the engine called the roles meta.json lists, the call's input is input.txt, and its size is under
 the role's cap (domain/lanes/caps). A prompt, schema or parser change that breaks a recorded exchange fails here."""
 import json

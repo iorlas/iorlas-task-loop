@@ -15,8 +15,6 @@ from support.dashes import make_dash
 from support.dashlogs import T, bead
 from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
-from support.narrow import must
-from support.repos import write_repos
 
 from taskloop.app.asks import intake, raiser
 from taskloop.domain.asks import specs
@@ -31,6 +29,8 @@ from tlkernel.bead import Bead
 from tlkernel.dash import Column, Marker, OwnerCause, Result, Stick
 from tlkernel.ids import BeadId, loop_key
 from tlkernel.ledger import Adr
+from tltestkit.narrow import must
+from tltestkit.repos import write_repos
 
 DAY = 86400.0
 NOW = T + 20 * DAY

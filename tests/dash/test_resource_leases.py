@@ -13,7 +13,6 @@ import support.paths  # noqa: F401
 from any_lease import Leases
 from support.factory_index import ingest
 from support.fakes import FakeBeadStore
-from support.repos import write_repos
 
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
@@ -22,6 +21,7 @@ from tlkernel.locator import RunLocator
 from tlkernel.lockenums import LockWhat
 from tlkernel.locks import LockRecord
 from tlkernel.paths import ConfigDir
+from tltestkit.repos import write_repos
 
 
 class ResourceLeases(Case):

@@ -23,20 +23,12 @@ from support import homes
 # isort: split
 from contracts import samples as S
 
-from support import (
-    fake_route,
-    gitq,
-    netgate,  # noqa: F401
-    procsim,
-)
+from support import gitq, procsim
 from support.builders import make_engine
 from support.cfgs import argv_cfg, cfg_with
 from support.checked import run_checked  # noqa: F401
 from support.checkpoints import flat_ck, stored_ck
-from support.checks import res
 from support.fakes import FakeBeadStore
-from support.logs import records
-from support.narrow import must
 from support.plans import (  # noqa: F401  (the tests' old import point)
     BEAD,
     CAT_ENV,
@@ -79,6 +71,10 @@ from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.plancheck import adhoc
+from tltestkit import fake_route
+from tltestkit.checks import res
+from tltestkit.logs import records
+from tltestkit.narrow import must
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -301,14 +297,7 @@ class EngineTest(SlotWorld):
 
     def two_writes(self, family="claude", ctx_k=None, **cfg):
         """A red check sends the stage back to the same writer once. ctx_k: how big the first session ended, in k."""
-        path = Path(self.tmp.name, "session.jsonl")
-        if ctx_k is not None:
-            n = int(ctx_k * 1000) - 100
-            line = ({"type": "assistant", "message": {"usage": {"input_tokens": 3, "cache_read_input_tokens": n,
-                                                                "cache_creation_input_tokens": 97}}} if family == "claude" else
-                    {"type": "event_msg", "payload": {"type": "token_count", "info": {"last_token_usage": {"input_tokens": n + 100}}}})
-            path.write_text(json.dumps({"type": "user"}) + "\n" + json.dumps(line) + "\n" + json.dumps({"type": "system"}) + "\n")
-        extra = {"family": family, "transcript": str(path) if ctx_k is not None else ""}
+        extra = {"family": family, "usage": {"context_k": ctx_k}}
         with self.store.stub(show=dict(BEAD, description="Add the file f. " + self.MARK)):
             return self.run_engine({"plan": [self.plan_with(self.RED_ONCE)], "write": [WRITE, WRITE], "review": [CLEAN]},
                                    j_extra={"write": [extra, extra]}, **cfg)

@@ -23,9 +23,7 @@ from unittest import mock
 
 from support.briefs import brief_digest, linked_text
 from support.cfgs import cfg_with
-from support.checks import ck, res, typed
 from support.fakes import as_bead, must_bead
-from support.narrow import must
 from support.spawn import port_git, real_spawner
 from support.who import who
 
@@ -47,6 +45,8 @@ from tlkernel.env import snapshot
 from tlkernel.ids import BeadId, CheckId
 from tlkernel.plancheck import Adhoc, adhoc
 from tlkernel.waitenums import WaitWhat
+from tltestkit.checks import ck, res, typed
+from tltestkit.narrow import must
 
 
 class EngineChecksTest(EngineTest):
