@@ -152,7 +152,8 @@ LOG = {
     "step_start": _log(log.StepStart, id="n4", step="write", text="write: stage 2/2", stage=2, stages=2, round=1, write=1, fix=0),
     "step_end": _log(log.StepEnd, id="n4", step="write", outcome="done", detail="", exec_seconds=231.0),
     "artifacts": _log(log.Artifacts, id="n4", step="write", names=["menu.png", "report.pdf"]),
-    "evidence": _log(log.Evidence, call_id="unity-tests", attempt=2, bytes=48213, artifact="artifacts/unity-tests/attempt-2/check.log",
+    "evidence": _log(log.Evidence, call_id="unity-tests", attempt=2, bytes=48213,
+                     artifact="attempts/01KBN6Z0M4R5E8YQ2T7C9W3XHD-attempt-1/artifacts/unity-tests/attempt-2/check.log",
                      artifact_hash="9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"),
     "call_start": _log(log.CallStart, id="c3", n=3, step="write", node="n4", role="worker", resume=True),
     "call_end": _log(
@@ -490,8 +491,8 @@ OTHERS = {
                                     mode="stage:land-stack", owner="tl-me", session="s1", beads=("tl-7y7",),
                                     state=run.RunState.DONE, heartbeat=T + 59, pid=4242, host="box", reason="landed",
                                     worktree="/r/slots/s1", branch="feature/check", sha="1234567890abcdef"),
-    "DoneMemo": run.DoneMemo(done={"[1]": run.DoneEntry(sha="s", file="/f", identity=run.CallIdentity(
-        semantics="sem", worktree="/wt", cwd="/wt", tree="tree", cwd_tree="tree", head="head", cwd_head="head"))}),
+    "DoneEntry": run.DoneEntry(sha="s", file="/f", identity=run.CallIdentity(
+        semantics="sem", worktree="/wt", cwd="/wt", tree="tree", cwd_tree="tree", head="head", cwd_head="head")),
     "HandoffMirror": run.HandoffMirror(
         rounds=[run.Round(stage="s", round=1, kind="k")], seen_lows=["x"], deferred=[{"what": "w", "why": "y"}], filed=["f"]),
     "DashState": snapshots.DashState(

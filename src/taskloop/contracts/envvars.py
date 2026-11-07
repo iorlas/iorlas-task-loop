@@ -7,7 +7,7 @@ from typing import Final
 class EnvVar(StrEnum):
     # exported into every command of a bead / check
     TL_SLOT = "TL_SLOT"                          # the slot's name (domain/slot_env)
-    TL_ARTIFACT_DIR = "TL_ARTIFACT_DIR"          # <run dir>/artifacts/<step>/attempt-N: where this attempt writes its logs and results
+    TL_ARTIFACT_DIR = "TL_ARTIFACT_DIR"          # <run dir>/attempts/<run>-attempt-R/artifacts/<step>/attempt-N: where an attempt writes
     TL_ARTIFACT_STEP = "TL_ARTIFACT_STEP"        # the id of the check that is running
     TL_RUN_ID = "TL_RUN_ID"                      # the id of the run a command belongs to (the run_id of its rows)
     TL_RUN_DIR = "TL_RUN_DIR"                    # the run's folder

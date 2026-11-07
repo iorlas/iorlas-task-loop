@@ -156,7 +156,7 @@ class LoopConfig(Rec):
     logs_kept: int = 5
     slot_fails_to_set_aside: int = 2  # same bead's quick failures in one slot before requiring recovery or different work
     quick_fail_min: float = 1.5  # a failed run shorter than this, in minutes, is an instant failure
-    fails_to_stop: int = 2  # legacy key: runs with no verdict before a storm cooldown wait
+    fails_to_stop: int = 2  # runs with no verdict before a storm cooldown wait
     pauses_to_rest: int = 3  # a bead paused this often in one loop run rests for `rest`
     rest: float = 3600
     area_poll: float = 60
