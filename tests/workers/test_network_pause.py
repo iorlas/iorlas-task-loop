@@ -21,7 +21,7 @@ def test_network_stop_pauses_immediately(monkeypatch):
         delegation=Mock(), halt_point=Mock(), waits=Mock(),
     )
     call = SimpleNamespace(
-        counts={"attempt": 0, "polls": 0, "crashes": 0, "waited_lane_s": 0, "resume_refused": 0},
+        counts={"attempt": 0, "crashes": 0, "resume_refused": 0},
         resume="session", denied_retried=False, secret_fp=False, node="write", step="write",
         limit_s=100, role="worker",
     )

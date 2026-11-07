@@ -383,8 +383,6 @@ class WorkerCall:
     def charge(self, c: Call, name: str, secs: float = 0.0) -> None:
         if name == "denied_retried":
             c.denied_retried = True
-        elif name == "waited_lane_s":
-            c.counts[name] += secs
         elif name:
             c.counts[name] += 1
 

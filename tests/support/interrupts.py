@@ -70,7 +70,7 @@ class RecoveryRig:
         stack.enter_context(mock.patch.object(halt, "nap", self.nap))
         stack.enter_context(mock.patch.object(landlock, "os_lock", self.locked))
         stack.enter_context(mock.patch("taskloop.app.run.run_once.Lease"))
-        stack.enter_context(mock.patch("taskloop.app.run.stage_run.threading",
+        stack.enter_context(mock.patch("taskloop.app.pipeline.stage_run.threading",
                                        SimpleNamespace(Event=threading.Event, Thread=IdleHeartbeat)))
         return stack
 

@@ -9,10 +9,9 @@ from typing import Self
 
 from tlkernel.beadsport import BdFailure, Beads
 from tlkernel.ids import BeadId
-from tlkernel.runlife import BEAT_EVERY
+from tlkernel.runlife import BEAT_EVERY, JOIN_WAIT
 
 EVERY = BEAT_EVERY  # seconds between beats; bd leases last 5 minutes
-JOIN_WAIT = 30.0  # seconds stop() waits for a beat in flight (a bd call that hangs must not hang the close)
 
 
 class Lease:
