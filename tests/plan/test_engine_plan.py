@@ -15,8 +15,6 @@ from pathlib import Path
 from unittest import mock
 
 from taskloop.app.run import engine
-from taskloop.app.write import prompts as wp
-from taskloop.app.write import review_prompt as rp
 from tlgate.domain import planref
 from tlgate.domain.names import log_var
 from tlkernel import answers, plancheck
@@ -31,6 +29,8 @@ from tlwork.plan.planner import Planner
 from tlwork.plan.prompts import REPLAN_CAP
 from tlwork.plan.sendback import SendBack
 from tlwork.prompts.common import RULES_MAX
+from tlwork.write import prompts as wp
+from tlwork.write import review_prompt as rp
 
 
 class EnginePlanTest(EngineTest):

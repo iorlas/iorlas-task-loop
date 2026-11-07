@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from taskloop.app.asks import trustroots
+from tlkernel import trustroots
 from tlkernel.bead import Bead
 from tlkernel.gitfacts import DiffEntry
 from tlkernel.ids import BeadId

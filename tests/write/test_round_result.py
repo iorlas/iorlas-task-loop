@@ -5,13 +5,13 @@ from unittest import mock
 
 import pytest
 
-from taskloop.app.write.rounds import run_round_step
-from taskloop.app.write.stage_loop import StageLoop
-from taskloop.app.write.state import REPLAN, RoundResult, RoundStop, StageState, WriteState, carrying
 from tlkernel.checks import CheckRun
 from tlkernel.enums import Step
 from tltestkit.cfgs import plan_of
 from tltestkit.plans import PLAN
+from tlwork.write.rounds import run_round_step
+from tlwork.write.stage_loop import StageLoop
+from tlwork.write.state import REPLAN, RoundResult, RoundStop, StageState, WriteState, carrying
 
 OLD = {"tests_added": 1, "tests_removed": 2, "rounds": 5, "writes": 7, "reviews": 3}
 

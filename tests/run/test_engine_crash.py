@@ -20,7 +20,7 @@ class EngineCrash(EngineTest):
     def crash_land(self, err):
         def prep(e):
             e.lander.finish = mock.Mock(side_effect=err)
-        with mock.patch("taskloop.app.write.check_round.count_tests", return_value=(14, 0)):
+        with mock.patch("tlwork.write.check_round.count_tests", return_value=(14, 0)):
             return self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, prep=prep)
 
     def test_land_crash_keeps_checkpoint_evidence_stats_and_traceback_then_resumes(self):

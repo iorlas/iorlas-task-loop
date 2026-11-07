@@ -15,8 +15,6 @@ from support.tlmain import tl_main
 
 from taskloop.app.land.gate import Gate, Problem, ProblemKind
 from taskloop.app.run.stages import run_stages
-from taskloop.app.write.rounds import round_step
-from taskloop.app.write.state import ACCEPT, StageState
 from taskloop.stores.runlog import RunLog
 from tlkernel import closeeffects as effects
 from tlkernel import log as rec
@@ -37,6 +35,8 @@ from tltestkit.checks import typed
 from tltestkit.plans import PLAN
 from tlwork.plan.keep import PlanKeeper
 from tlwork.plan.planned import Planned
+from tlwork.write.rounds import round_step
+from tlwork.write.state import ACCEPT, StageState
 
 
 class SelectedStage(Case):

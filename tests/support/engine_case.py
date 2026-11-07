@@ -37,7 +37,6 @@ from taskloop.app.run import (
     engine,
     running,
 )
-from taskloop.app.write.newfiles import NewFiles
 from taskloop.domain.lanes import policy as lp  # noqa: F401
 from tlgate.domain import (
     lint,  # noqa: F401
@@ -75,6 +74,7 @@ from tltestkit.plans import (  # noqa: F401  (the tests' old import point)
 from tltestkit.procsim import real_proc  # noqa: F401
 from tltestkit.shellkit import sh
 from tltestkit.waits import until  # noqa: F401
+from tlwork.write.newfiles import NewFiles
 
 ROOT = Path(__file__).resolve().parents[2]
 

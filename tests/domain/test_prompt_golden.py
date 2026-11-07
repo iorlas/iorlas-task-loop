@@ -13,9 +13,6 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from taskloop.app.run import engine  # noqa: E402
-from taskloop.app.write import prompts as wp  # noqa: E402
-from taskloop.app.write import review_prompt as rp  # noqa: E402
-from taskloop.app.write.review_prompt import acceptance_text  # noqa: E402
 from taskloop.domain.land.fix_text import FIX_GOAL as _FIX_GOALS  # noqa: E402
 from tlgate.domain.writer_split import WriterSplit  # noqa: E402
 from tlpipeline.api import reflect_prompt as fp  # noqa: E402
@@ -23,6 +20,9 @@ from tltestkit.cfgs import cfg_with  # noqa: E402
 from tlwork.plan import prompts as pp  # noqa: E402
 from tlwork.prompts import common as cp  # noqa: E402
 from tlwork.review import verify_prompt as vp  # noqa: E402
+from tlwork.write import prompts as wp  # noqa: E402
+from tlwork.write import review_prompt as rp  # noqa: E402
+from tlwork.write.review_prompt import acceptance_text  # noqa: E402
 
 TEMPLATES = {"PLAN_PROMPT": pp, "WRITE_PROMPT": wp, "WRITE_RESUME_PROMPT": wp, "REVIEW_PROMPT": rp, "VERIFY_PROMPT": vp,
              "REFLECT_PROMPT": fp}

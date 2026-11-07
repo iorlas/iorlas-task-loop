@@ -5,7 +5,7 @@ from typing import Final, Protocol
 
 from tlgate.domain import planref
 from tlgate.runner import Checker
-from tlkernel import askspecs, childenv
+from tlkernel import askspecs, childenv, trustroots
 from tlkernel import lanecaps as caps
 from tlkernel import log as rec
 from tlkernel.askspec import AskSpec
@@ -21,7 +21,6 @@ from tlkernel.plancheck import PlanData
 from tlkernel.stop import Stop
 
 from taskloop.adapters import ident
-from taskloop.app.asks import trustroots
 from taskloop.app.workers import writer_pin
 from taskloop.app.workers.call import Call
 from taskloop.domain.lanes import pin

@@ -20,7 +20,6 @@ from support.briefs import brief_digest, linked_text
 from support.fakes import as_bead, must_bead
 
 from taskloop.adapters.check_probe import PathProbe
-from taskloop.domain.write.matchers import count_tests
 from tlgate import evidence as check_evidence
 from tlgate.domain import lint
 from tlgate.domain.writer_split import WriterSplit
@@ -30,6 +29,7 @@ from tlkernel.env import snapshot
 from tlkernel.reviewmatchers import Tools
 from tltestkit.cfgs import cfg_with
 from tltestkit.checks import ck, res, typed
+from tlwork.write.matchers import count_tests
 
 
 class EngineChecksTest(CheckHostCase):

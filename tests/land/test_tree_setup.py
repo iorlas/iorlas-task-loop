@@ -6,7 +6,7 @@ import pytest
 
 from taskloop.app.land.tree import Tree
 from taskloop.app.wire.slotfx import FX
-from taskloop.app.write.briefing import Briefing
+from tlwork.write.briefing import Briefing
 
 
 class FakeGit:

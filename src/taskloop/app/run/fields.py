@@ -28,6 +28,7 @@ from tlwork.look.state import LookState
 from tlwork.plan.amend import AmendState
 from tlwork.plan.state import PlanState
 from tlwork.review.state import ReviewLive
+from tlwork.write.state import WriteState
 
 from taskloop.adapters import beadtools, ident
 from taskloop.adapters.check_probe import PathProbe
@@ -38,7 +39,6 @@ from taskloop.app.run.context import RunContext
 from taskloop.app.run.field_ports import FieldParts
 from taskloop.app.run.sections import checkpoint_hooks, restarted
 from taskloop.app.run.state import StateAttrs
-from taskloop.app.write.state import WriteState
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 

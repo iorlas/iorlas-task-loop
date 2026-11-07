@@ -14,14 +14,14 @@ def converted(text: str | None = None) -> list[str]:
     cp.read_string(text if text is not None else (ROOT / ".importlinter").read_text(encoding="utf-8"))
     names = [m.strip() for m in cp[CONTRACT]["source_modules"].splitlines() if m.strip()]
     stages = {"tlgate": "checks", "tlwork": "review"}
-    stages.update({f"tlwork.{stage}": stage for stage in ("review", "plan", "look")})
+    stages.update({f"tlwork.{stage}": stage for stage in ("review", "plan", "look", "write")})
     return sorted({stages.get(m, m.removeprefix("taskloop.app.") if m.startswith("taskloop.")
                               else m.removeprefix("tl")) for m in names})
 
 
 def code_dir(stage: str) -> Path:
     """Where a converted stage's code is: its app slice, or its workspace package once it moved."""
-    if stage in {"review", "plan", "look"}:
+    if stage in {"review", "plan", "look", "write"}:
         return ROOT / "packages/work/src/tlwork" / stage
     if stage == "checks":
         return ROOT / "packages/gate/src/tlgate"
@@ -29,7 +29,7 @@ def code_dir(stage: str) -> Path:
 
 
 def ruff_file(stage: str) -> Path:
-    if stage in {"review", "plan", "look"}:
+    if stage in {"review", "plan", "look", "write"}:
         return ROOT / "packages/work/ruff.toml"
     if stage == "checks":
         return ROOT / "packages/gate/ruff.toml"
