@@ -50,7 +50,7 @@ def test_member_process_guard_installs_and_checks(monkeypatch, kind, skipped, mu
     world = Mock()
     constructor = Mock(return_value=world)
     monkeypatch.setattr(guards.procsim, "Procs", constructor)
-    fixture = guards.member_procs.__wrapped__(SimpleNamespace(node=item), None)
+    fixture = guards.procs_guard(SimpleNamespace(node=item))
     assert next(fixture) is world
     world.install.assert_called_once()
     with pytest.raises(StopIteration):

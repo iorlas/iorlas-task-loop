@@ -112,8 +112,7 @@ def pytest_runtest_makereport(item, call):
             report.longrepr = f"{item.nodeid}: a {item.stash[KIND]} test took {used:.2f} s of work, over its {maximum:.2f} s limit or hung"
 
 
-@pytest.fixture(autouse=True)
-def member_procs(request, member_filesystem):
+def procs_guard(request):
     if KIND not in request.node.stash:
         yield
         return
@@ -123,6 +122,11 @@ def member_procs(request, member_filesystem):
         world.install(stack)
         yield world
     world.check(must_spawn=kind == "real" and not request.node.stash.get(SKIPPED, False))
+
+
+@pytest.fixture(autouse=True)
+def member_procs(request, member_filesystem):
+    yield from procs_guard(request)
 
 
 @pytest.fixture(autouse=True)
