@@ -8,6 +8,7 @@ import socket
 import sys
 import time
 import urllib.request
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Final
 
@@ -17,7 +18,6 @@ from tlkernel.envvars import EnvVar
 from tlkernel.procport import Spawner
 
 from taskloop.adapters.ident import PLUGIN_ROOT, config_dir
-from taskloop.app.parts import STAGE_PARTS
 from taskloop_dash import bind as dash_bind
 from taskloop_dash.cli import dash as dash_cli
 
@@ -99,14 +99,13 @@ def is_dash_server(v: object) -> bool:
     return isinstance(v, dict) and all(k in v for k in ("version", "pid", "urls", "started"))
 
 
-def _wire_reason(v: dict[str, object]) -> str | None:
+def _wire_reason(v: dict[str, object], installed: Mapping[str, int]) -> str | None:
     """Why the server's read protocol or factory.db parts do not fit the installed code, else None."""
     if v.get("protocol") != READ_PROTOCOL:
         return f"it speaks read protocol {v.get('protocol')}, installed is {READ_PROTOCOL}"
     needs, parts = v.get("needs"), v.get("parts")
     if not isinstance(needs, dict) or not isinstance(parts, dict):
         return "it reports no part needs or versions"
-    installed = {part.name: part.version for part in STAGE_PARTS}
     for name, want in needs.items():
         found = installed.get(name, 0)
         if reason := _part_reason(name, want, parts.get(name), found):
@@ -126,7 +125,7 @@ def _part_reason(name: str, want: object, upper: object, found: int) -> str | No
     return None
 
 
-def stale_reason(v: dict[str, Any], version: str, want: list[str]) -> str | None:
+def stale_reason(v: dict[str, Any], version: str, want: list[str], installed: Mapping[str, int]) -> str | None:
     """Why a running dashboard must be replaced, else None."""
     script = v.get("script")
     if not script:
@@ -135,7 +134,7 @@ def stale_reason(v: dict[str, Any], version: str, want: list[str]) -> str | None
         return "its script is gone: " + script
     if v.get("version") != version:
         return f"version {v.get('version')} differs from installed {version}"
-    wire = _wire_reason(v)
+    wire = _wire_reason(v, installed)
     if wire:
         return wire
     missing = [a for a in want if a not in (v.get("binds") or [])]
@@ -205,7 +204,7 @@ def ensure_dev(env: Env, spawner: Spawner) -> int:
     return 0
 
 
-def ensure(env: Env, spawner: Spawner) -> int:
+def ensure(env: Env, spawner: Spawner, installed: Mapping[str, int]) -> int:
     """Running and current, else replace it (a stale one: files deleted, old version, or missing an address)."""
     (config_dir(env) / "dash.token").unlink(missing_ok=True)  # the dash had a token once; it has no auth now
     port = port_of(env)
@@ -214,7 +213,7 @@ def ensure(env: Env, spawner: Spawner) -> int:
         print(f"tl: port {port} is held by something that is not a task-loop dashboard; not touching it")
         return 1
     if v:
-        why = stale_reason(v, code_version(), expected_binds(env, spawner))
+        why = stale_reason(v, code_version(), expected_binds(env, spawner), installed)
         if not why:
             print_urls(v, port)
             return 0
@@ -238,7 +237,7 @@ def url(env: Env) -> int:
     return 0
 
 
-def run(op: str, env: Env, spawner: Spawner) -> int:
+def run(op: str, env: Env, spawner: Spawner, installed: Mapping[str, int]) -> int:
     port = port_of(env)
     dev = is_dev_checkout() and EnvVar.TASK_LOOP_DASH_PORT not in env
     if dev and op == "ensure":
@@ -252,4 +251,4 @@ def run(op: str, env: Env, spawner: Spawner) -> int:
         v = ping(port)
         print(json.dumps(v) if v else "DOWN")
         return 0 if v else 1
-    return url(env) if op == "url" else ensure(env, spawner)
+    return url(env) if op == "url" else ensure(env, spawner, installed)
