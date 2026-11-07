@@ -3,7 +3,7 @@ import json
 import os
 import time
 
-from support import homes, procsim
+from support import homes
 from support.spawn import port_git, real_spawner
 from support.who import who
 from taskloop.app.slots.pool import SlotPool
@@ -11,6 +11,7 @@ from taskloop.app.wire import slots as wslots
 from taskloop.stores import ticketrows
 from taskloop.stores.ticketrows import TicketRows
 from tlkernel.looprows import LoopRows
+from tltestkit import procsim
 
 
 def pool(repo, store=None, cfg=None):

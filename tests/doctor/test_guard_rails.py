@@ -8,13 +8,12 @@ import pytest
 import support.paths  # noqa: F401
 
 # isort: split
-from support import procsim
-
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.doctor import guard_rails as gr
 from taskloop.app.doctor.rails import github_slug
 from tlkernel.env import snapshot
 from tlkernel.procport import Ran
+from tltestkit import procsim
 
 SLUG = "o/r"
 GOOD = {"id": 1, "target": "branch", "enforcement": "active", "bypass_actors": [],

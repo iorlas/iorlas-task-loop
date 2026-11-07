@@ -3,7 +3,7 @@ connection, and otherwise runs the real `git push` (git is the one real process 
 import subprocess
 from pathlib import Path
 
-from support import procsim
+from tltestkit import procsim
 
 CUT = "error: RPC failed; curl 56 Send failure: Broken pipe\nfatal: the remote end hung up unexpectedly\n"
 

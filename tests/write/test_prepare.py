@@ -4,7 +4,6 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from support import procsim
 from support.cfgs import plan_of
 from support.engine_case import EngineTest
 from support.plans import CLEAN, PLAN, RED_ONCE, WRITE
@@ -15,6 +14,7 @@ from taskloop.app.write.state import StageState
 from tlkernel import rundocs
 from tlkernel.kinds import Kind
 from tlkernel.procport import Ran
+from tltestkit import procsim
 from tltestkit.logs import records
 from tltestkit.narrow import must
 

@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from run.test_stages import StagesTest
 from support import engine_case as te
-from support import gitq, homes, procsim, tlbd
+from support import gitq, homes, tlbd
 from support.checkpoints import put_ck, read_ck
 from support.engine_case import engine, lint
 from support.plans import CLEAN, FALSE, HAS_F, PLAN, WRITE
@@ -40,7 +40,7 @@ from tlkernel.env import snapshot
 from tlkernel.gitfacts import GitOutcome
 from tlkernel.ids import BeadId
 from tlkernel.landmatchers import _TRANSIENT as TRANSIENT_PUSH
-from tltestkit import fake_route
+from tltestkit import fake_route, procsim
 from tltestkit.checks import typed
 
 

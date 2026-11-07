@@ -4,10 +4,10 @@ from unittest import mock
 
 import routing_support as support
 from run_support import RunBase
-from support.procsim import real_proc
 from test_route import lanes
 
 from delegate.app import launch, net
+from tltestkit.procsim import real_proc
 
 GOOD = {"data": {"a": 1}, "text": '{"a":1}', "outcome": None}
 BAD = {"data": None, "text": "prose", "outcome": None}
