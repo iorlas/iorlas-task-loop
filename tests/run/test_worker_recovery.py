@@ -11,7 +11,7 @@ from support.narrow import must
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.workers import call, done_memo, worker_call
-from taskloop.stores import call_state
+from taskloop.app.workers import call_state
 from tlkernel import factorydb, wire
 from tlkernel.delegate import RunRequest
 from tlkernel.delegateport import Answer

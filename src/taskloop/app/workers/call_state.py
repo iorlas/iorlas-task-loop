@@ -1,7 +1,9 @@
 """One vendor call in flight, on disk: the checkpoint that lets a killed loop, a sleeping laptop or a dropped network resume
 the step instead of the run (tl-7y6.2.13; 60-design-A1 sec 2.3, `CallState` was `StepState`).
 
-Row: `effect` `call:<bead>` in <dir>/../factory.db (contracts/effectrows.py), one writer (the engine that owns the bead). Phases:
+the row is the pipeline's `effect` table, read and written here through tlkernel.effectrows.
+
+Row: `effect` `call:<bead>` in <dir>/../factory.db (tlkernel.effectrows), one writer (the engine that owns the bead). Phases:
 calling (written BEFORE the call) -> returned (the raw answer is on disk BEFORE it is validated) -> consumed (the node file
 exists). `reattach` says what a restart does with it: use the finished answer (never discard output), resume the vendor
 thread with a short note (never restart a thread that has a ref), or start the call.

@@ -28,7 +28,7 @@ from taskloop.domain.lanes.denials import command_of, secret_false_positive
 from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT, RESUME_AFTER_STOP
 from taskloop.domain.lanes.retry import PLAN
 from taskloop.domain.lanes.roles import READ_ONLY_NODES, ROLES
-from taskloop.stores import call_state as callstate
+from taskloop.app.workers import call_state as callstate
 
 READ_TOOLS = ("Bash", "shell", "bash")
 
