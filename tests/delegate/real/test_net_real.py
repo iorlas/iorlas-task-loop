@@ -13,13 +13,13 @@ from unittest import mock
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 from any_agent import procs
-from support.case import Case
 from support.procsim import real_proc
-from support.tmpdir import TemporaryDirectory
 from test_route import CFG, route
 
 from delegate.adapters import netprobe
 from delegate.app import env, harnesses
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 LANES = Path(__file__).resolve().parents[3] / "src" / "delegate" / "adapters"
 

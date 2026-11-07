@@ -8,9 +8,9 @@ from pathlib import Path
 import hermetic  # noqa: F401  (a home of its own for every test)
 import pytest
 from support.procsim import real_proc
-from support.tmpdir import TemporaryDirectory
 
 from delegate.app import decide
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class CodexUvEnv:

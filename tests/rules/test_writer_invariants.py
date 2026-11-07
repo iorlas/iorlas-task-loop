@@ -1,9 +1,8 @@
 """Store ownership depends on AST write operations, not the number or spelling of text mentions."""
 import ast
 
-from support.case import Case
-
 from rules.writer_invariants import writer_problems, writer_tree_problems
+from tltestkit.case import Case
 
 
 class WriterInvariants(Case):

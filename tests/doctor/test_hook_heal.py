@@ -1,13 +1,13 @@
 """The engine verbs recreate the git hooks dir at start; no other verb touches it."""
 from pathlib import Path
 
-from support.case import Case
 from support.tlmain import tl
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.doctor import install
 from tlkernel.env import Env
 from tlkernel.paths import ConfigDir
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 

@@ -3,7 +3,8 @@ import os
 import sys
 
 import pytest
-from support.case import Case
+
+from tltestkit.case import Case
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 

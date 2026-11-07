@@ -7,8 +7,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.loop import exits
 from taskloop.app.loop.files import EXIT_REASONS, LoopFiles
@@ -16,6 +14,8 @@ from taskloop.app.loop.loop import Loop, LoopArgs
 from tlkernel.config import RepoProfile
 from tlkernel.loop import LoopState
 from tlkernel.paths import ConfigDir
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class LaneExits(Case):

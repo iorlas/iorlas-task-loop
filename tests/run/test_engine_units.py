@@ -15,10 +15,10 @@ from typing import Any, ClassVar
 from unittest import mock
 
 import pytest
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.asks import admission
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 import support.paths  # noqa: E402, F401

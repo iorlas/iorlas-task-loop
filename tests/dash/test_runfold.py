@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import get_args
 
 import msgspec
-from support.case import Case
 from support.dashlogs import RunScript, T
 
 from taskloop_dash import jsonl
@@ -15,6 +14,7 @@ from taskloop_dash.views import runfacts as facts
 from tlkernel import log as rec
 from tlkernel import wire
 from tlkernel.runlife import Liveness
+from tltestkit.case import Case
 
 
 def fixture_records(path):

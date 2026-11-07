@@ -10,11 +10,11 @@ from unittest import mock
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import childenv, procs
 from tlkernel.env import snapshot
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 POSIX = os.name != "nt"
 

@@ -8,7 +8,8 @@ from unittest import mock
 
 from any_agent.harnesses.claude import ClaudeHarness
 from support.procsim import real_proc
-from support.tmpdir import TemporaryDirectory
+
+from tltestkit.tmpdir import TemporaryDirectory
 
 HERE = Path(__file__).resolve().parent.parent
 

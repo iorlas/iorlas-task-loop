@@ -7,11 +7,11 @@ from pathlib import Path
 from unittest import mock
 
 import hermetic  # noqa: F401
-from support.tmpdir import TemporaryDirectory
 
 from delegate.app import doctor, env
 from delegate.contracts import history as hist
 from delegate.contracts import stores
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 def row(run_id: str) -> hist.CanaryRow:

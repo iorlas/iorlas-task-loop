@@ -5,9 +5,9 @@ from pathlib import Path
 
 import hermetic  # noqa: F401
 from support.procsim import real_proc
-from support.tmpdir import TemporaryDirectory
 
 from delegate.app import launch
+from tltestkit.tmpdir import TemporaryDirectory
 
 ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"}
 
