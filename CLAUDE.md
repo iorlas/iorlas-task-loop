@@ -99,7 +99,7 @@ the other layers have their own folders (`contracts`, `stores`, `adapters`, `por
 
 Dev and test tools (pytest, pytest-xdist) are the `dev` group of pyproject.toml, locked in uv.lock; `uv run` syncs them.
 There is no hosted CI: the factory is the CI. `just check` and `just test` run on the release path (`dev/release.py`) before any push to main; each test runs once per tree.
-Caps (tests/rules/gate_rules.py): 400 SLOC per file, 80 per function, 800 per test file; no exceptions table: an oversize file or function is split. No SLOC total and no `Any` count is stored (parallel releases would conflict on it): the caps are per file, and tests/rules/real/test_changed_files.py compares the files a change touches with the merge base on origin/main (no new `Any`, `cast` or ignore on net).
+Caps (tests/rules/gate_rules.py): 400 SLOC per file, 80 per function, 800 per test file; no exceptions table: an oversize file or function is split. No SLOC total and no `Any` count is stored (parallel releases would conflict on it): the caps are per file, and tests/rules/real/test_changed_files.py compares the files a change touches with the merge base on origin/main (no new `Any`, `cast` or ignore on net). The per-stage forward closure is a change ratchet (`tests/rules/closure_ratchet.py`); a deliberate rise is `Ratchet-allow: closure +N <reason in words>`.
 Architecture (layers, app slices, dashboard, `import re` placement): the `.importlinter` contracts; lazy imports, banned modules, module docstrings: ruff (PLC0415, TID251, D100). Both run in `just rules`.
 
 ## Architecture Overview
