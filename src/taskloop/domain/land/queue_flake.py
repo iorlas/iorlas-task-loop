@@ -4,6 +4,7 @@ from enum import StrEnum
 from typing import Final, final
 
 from taskloop.domain.checks.retry import retry_allowed
+from tlkernel.flakes import FlakeRow
 from tlkernel.wire import Rec
 
 WEEK_S: Final = 7 * 86400
@@ -32,15 +33,6 @@ def decide(red: Attempt, retry: Attempt | None, main: Attempt | None, *, retried
     if retry is None and not retried and red.rc != 124 and retry_allowed(1, 1, red.out):
         return Verdict.RETRY
     return Verdict.MAIN
-
-
-@final
-class FlakeRow(Rec):
-    test: str
-    t: float
-    how: str
-    run: str = ""
-    bead: str = ""
 
 
 def row(test: str, t: float, verdict: Verdict, retry: Attempt | None) -> FlakeRow | None:

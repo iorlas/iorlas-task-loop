@@ -2,6 +2,7 @@
 from pathlib import Path
 
 from taskloop.stores.real import real_stores
+from tlkernel.flakes import FlakeLog, FlakeRow
 from tlkernel.paths import ConfigDir
 from tlkernel.queue_doc import BuildRow, EntryRow, QueueDoc
 
@@ -16,3 +17,12 @@ def test_queue_document_round_trip(workdir: Path):
     real_stores(cfg).queue.of("repo-key").write(doc)
     assert real_stores(cfg).queue.of("repo-key").get() == doc
     assert real_stores(cfg).queue_state.of("repo-key").get() is None
+
+
+def test_flake_log_round_trip(workdir: Path):
+    cfg = ConfigDir(workdir)
+    log = FlakeLog(rows=[FlakeRow(test="test_a", t=123.5, how="retry", run="run-1", bead="tl-1")])
+    real_stores(cfg).flakes.of("repo-key").write(log)
+    assert real_stores(cfg).flakes.of("repo-key").get() == log
+    assert real_stores(cfg).flakes.of("other-repo").get() is None
+    assert real_stores(cfg).queue.of("repo-key").get() is None
