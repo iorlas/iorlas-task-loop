@@ -29,10 +29,17 @@
     },
     "max_parallel": 4,
     "min_dwell_minutes": 30,
-    "fresh_above_k": {"claude": 150.0, "openai": 100.0, "xai": 100.0},
+    "fresh_above_k": {
+      "claude": 150.0,
+      "openai": 100.0,
+      "xai": 100.0
+    },
     "fresh_stage_k": 100.0,
     "usage_stale_minutes": 30,
-    "claude_weekly_reset": ""
+    "claude_weekly_reset": "",
+    "writer_family": [],
+    "writer_exec_allow": [],
+    "writer_read_roots": []
   },
   "models": {
     "opus-5.5": {

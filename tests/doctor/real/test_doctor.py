@@ -71,7 +71,7 @@ class DoctorSource(Case):
     @staticmethod
     def config(name, inputs="missing/**", **extra):
         return {"engine": dict(checks=[{"id": name, "argv": ["unused", "$TL_ARTIFACT_DIR"], "inputs": [inputs]}],
-                               **{"writer_exec_allow": [["unused"]], **extra})}  # a repo that lists what may run has no WARN about it
+                               **extra)}
 
     @staticmethod
     def write_cfg(repo, data):
@@ -149,11 +149,11 @@ class DoctorSource(Case):
         assert "WARN extensions.worktreeConfig" in out
         assert "ok:" not in out
 
-    def test_prints_the_effective_writer_family(self):
-        self.advance_base(self.config("good", "old.txt", writer_family=["openai"]))
-        assert "engine: writer_family: openai (every worker call carries --only-family" in self.doctor()
+    def test_prints_the_product_flags(self):
+        self.advance_base(self.config("good", "old.txt", writer_exec=True))
+        assert "engine: writer_exec: on (delegate routing settings own" in self.doctor()
         self.advance_base(self.config("good", "old.txt"))
-        assert "engine: writer_family: none" in self.doctor()
+        assert "engine: writer_exec: off" in self.doctor()
 
     def test_reports_exact_commit_when_ok(self):
         commit = self.advance_base(self.config("good", "old.txt"))
@@ -163,11 +163,6 @@ class DoctorSource(Case):
         assert "ok: no setup problems found in " + shown(self.wt) in out
         assert "WARN" not in out
 
-    def test_a_repo_with_no_exec_allow_list_is_warned_that_plan_check_argv_is_unrestricted(self):
-        self.advance_base({"engine": {"checks": []}})
-        out = self.doctor()
-        assert "WARN plan check argv unrestricted" in out
-        assert "ok: no setup problems" not in out
 
     def test_trailing_nul_does_not_match_a_directory_glob(self):
         commit = self.advance_base(self.config("directory-only", "**/"))
@@ -234,7 +229,7 @@ class DoctorSource(Case):
                 if contents is None:
                     out = self.doctor()
                     assert "base origin/main at commit " + commit in out
-                    assert out.count("WARN") == 1 and "WARN plan check argv unrestricted" in out  # defaults list nothing
+                    assert "WARN" not in out
                     assert wslots_config.load_cfg(str(self.wt), port_git()).checks == []
                 else:
                     for refused_call in (self.doctor, lambda: wslots_config.load_cfg(str(self.wt), port_git())):

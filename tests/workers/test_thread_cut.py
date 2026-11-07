@@ -23,7 +23,7 @@ def noop(*args, **kwargs):
 
 def host():
     e = SimpleNamespace(
-        cfg=SimpleNamespace(base="main", writer_exec_allow=[], writer_read_roots=[], stage_checks=[]),
+        cfg=SimpleNamespace(base="main", writer_exec=False, reviewer_other_family=True, stage_checks=[]),
         bead="t-1",
         wt="/repo",
         session="run",
@@ -31,13 +31,12 @@ def host():
         budget=SimpleNamespace(labels=[]),
         checker=SimpleNamespace(split=lambda: SimpleNamespace(engine_recipes=lambda _: [])),
     )
-    e.cfg.only_family = []
     return e
 
 
 def test_request_has_thread_and_never_resume(monkeypatch):
-    monkeypatch.setattr(worker_request.writer_pin, "pinned", lambda *a: [])
-    c = Call("write", "worker", {}, "/repo", "", "", None, None, ("write", 1), "writer", None, None, "write")
+    monkeypatch.setattr(worker_request.writer_pin, "prefer", lambda *a: "")
+    c = Call("write", "worker", {}, "/repo", "", "", None, ("write", 1), "writer", None, "write")
     req = worker_request.request(host(), c, "", 60, 30)
     assert req.thread == "writer"
     assert req.delta_path == ""
@@ -78,7 +77,7 @@ def test_interrupted_call_keeps_thread_and_continuation(monkeypatch):
         root = Path(directory)
         e = host()
         e.run_dir, e.call_dir, e.log = root, lambda: root / "calls", SimpleNamespace(note=noop)
-        monkeypatch.setattr(worker_request.writer_pin, "pinned", lambda *a: [])
+        monkeypatch.setattr(worker_request.writer_pin, "prefer", lambda *a: "")
         w = worker_call.WorkerCall(e, worker_call.Ops(
             summarize=noop, read_only_command=noop, blocked=noop, stop_why=noop, stop_say=noop, after=noop,
         ))
@@ -87,7 +86,7 @@ def test_interrupted_call_keeps_thread_and_continuation(monkeypatch):
         st = call_state.CallState("run", "t-1", ("write", 1), ref="vendor-ref", execution_id="same")
         monkeypatch.setattr(worker_recovery.done_memo, "recall", lambda *a: None)
         monkeypatch.setattr(worker_recovery.call_state, "load_for", lambda *a: st)
-        c = Call("write", "worker", {}, "/repo", "", "", None, None, st.key, "writer", None, None, "write")
+        c = Call("write", "worker", {}, "/repo", "", "", None, st.key, "writer", None, "write")
         w.attach(c)
         assert c.thread == "writer"
         assert c.delta == worker_recovery.RESUME_AFTER_STOP
@@ -101,7 +100,6 @@ def test_interrupted_call_keeps_thread_and_continuation(monkeypatch):
 def test_writer_loop_sends_delta_and_pauses(monkeypatch):
     e = host()
     e.writer = SimpleNamespace(delegate="vendor-ref")
-    e.writer_fallback = False
     e.stats = {"nodes": 0}
     e.halt_point = noop
     e.waits = SimpleNamespace(budget_check=noop)

@@ -85,9 +85,7 @@ class RunState(Rec, frozen=False, forbid_unknown_fields=False):
     accepted_new: list[str] = msgspec.field(default_factory=list)
     denials: list[str] = msgspec.field(default_factory=list)
     writer: WriterSession = msgspec.field(default_factory=WriterSession)
-    writer_family: str | None = None
-    writer_fallback: bool = False
-    fallback_lane: str = ""
+    writer_family: str | None = None  # opaque delegate-reported writer identity for restoring stage progress
     look_notes: list[str] = msgspec.field(default_factory=list)
     look_unjudged: dict[str, str] = msgspec.field(default_factory=dict)
     look_done: int = 0
@@ -177,7 +175,7 @@ class StageProgress(Rec):
 
 @final
 class Checkpoint(Rec):
-    V: ClassVar[int] = 6
+    V: ClassVar[int] = 7
     bead: str
     run: str
     t: float
@@ -217,11 +215,9 @@ class PlanSection(Rec):
 class WriteSection(Rec):
     """Persisted write progress."""
 
-    V: ClassVar[int] = 2
+    V: ClassVar[int] = 3
     writer: WriterSession = msgspec.field(default_factory=WriterSession)
-    writer_family: str | None = None
-    writer_fallback: bool = False
-    fallback_lane: str = ""
+    writer_family: str | None = None  # opaque delegate-reported writer identity for restoring stage progress
     handoff: Handoff = msgspec.field(default_factory=Handoff)
     stage_tree: str = ""
     denials: list[str] = msgspec.field(default_factory=list)
@@ -264,7 +260,7 @@ class Shared(Rec):
 class CursorBody(Rec):
     """Checkpoint envelope without stage-owned state."""
 
-    V: ClassVar[int] = 6
+    V: ClassVar[int] = 7
     bead: str
     run: str
     t: float

@@ -1908,6 +1908,15 @@
           "null"
         ]
       },
+      "prefer": {
+        "type": "string"
+      },
+      "writer_exec": {
+        "type": "boolean"
+      },
+      "reviewer_other_family": {
+        "type": "boolean"
+      },
       "authored_by": {
         "type": [
           "string",
@@ -1959,6 +1968,12 @@
       "engine_only_advisory": {
         "type": "boolean"
       },
+      "only_family": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
       "writer_exec_allow": {
         "type": "array",
         "items": {
@@ -1968,12 +1983,63 @@
           }
         }
       },
+      "read_roots": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
       "instructions_ref": {
-        "type": "string",
-        "description": "a commit sha: the instruction files are read from it, not the work tree (capability instructions_ref)"
+        "type": "string"
       },
       "boundary": {
         "type": "boolean"
+      },
+      "worker_env": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "tools": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "command"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "command": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "bead": {
+              "type": "string"
+            },
+            "run": {
+              "type": "string"
+            },
+            "stage": {
+              "type": "string"
+            },
+            "attempt": {
+              "type": "integer"
+            }
+          }
+        }
       }
     }
   }
