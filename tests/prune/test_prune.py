@@ -86,7 +86,8 @@ class RunData(Case):
     def prune(self, store, dry_run=False, days=14):
         out = []
         loop = LoopConfig(keep_days=days, build_dir=str(self.root / "nowhere"))
-        verb.run(self.cfg, loop, [str(self.root)], lambda r: cast(Beads, store), self.now, dry_run, quiet_shell(), out.append, live=lambda repo: {})
+        verb.run(self.cfg, loop, [str(self.root)], lambda r: cast(Beads, store), self.now, dry_run, quiet_shell(), out.append,
+                 live=lambda repo: {})
         return out
 
     def left(self):
