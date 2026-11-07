@@ -11,14 +11,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
-from support.narrow import must
-
 from taskloop.app.loop import verdict as vd
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from tlkernel.checks import RoundVerdict, round_verdict_of
 from tlkernel.enums import Outcome, Result
 from tlkernel.kinds import ASKS, FAULTS, FINISH, PAUSES, Action, Infra, Kind, Owner, Task, fault_of
+from tltestkit.narrow import must
 
 EXPECT = {Infra: Action.RETRY, Task: Action.ASK, Owner: Action.HOLD}
 

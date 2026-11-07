@@ -31,7 +31,6 @@ from support.fakes import (
     FakeBeadStore,
     as_bead,
 )
-from support.narrow import must
 from support.spawn import port_git, real_spawner
 from support.who import who
 
@@ -45,6 +44,7 @@ from tlkernel.bead import BdError
 from tlkernel.beadsport import BdFailure
 from tlkernel.fence import SLOT_GEN
 from tlkernel.ids import BeadId
+from tltestkit.narrow import must
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 

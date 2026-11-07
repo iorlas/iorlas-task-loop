@@ -1,6 +1,7 @@
 """Cases for the module graph rules: no import cycle, a fan-out cap."""
 import ast
 
+from rules import arch_rules
 from rules.arch_rules import cyclic_components, fanout_problems, graph_of, problems
 from tltestkit.case import Case
 
@@ -43,3 +44,9 @@ class ArchitectureRules(Case):
         sources = {"hub": "import a, b, c", "a": "", "b": "", "c": ""}
         assert fanout_problems(self.graph(sources), cap=3) == []
         assert [line.split()[0] for line in fanout_problems(self.graph(sources), cap=2)] == ["hub"]
+
+
+def test_production_trees_leave_out_the_test_support_member():
+    names = set(arch_rules.production_trees())
+    assert not any(n == "tltestkit" or n.startswith("tltestkit.") for n in names)
+    assert "tlkernel.ids" in names

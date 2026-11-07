@@ -6,7 +6,6 @@ from unittest import mock
 
 import pytest
 import support.paths  # noqa: F401
-from support.narrow import must
 
 from taskloop.app.workers import call, call_state, done_memo, worker_call
 from tlkernel import factorydb, wire
@@ -17,6 +16,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.run import DoneEntry, RunManifest
 from tlkernel.runrows import RunRows
 from tltestkit.case import Case
+from tltestkit.narrow import must
 from tltestkit.tmpdir import TemporaryDirectory
 
 

@@ -29,8 +29,6 @@ from support import (  # noqa: E402
 )
 from support.checked import run_checked  # noqa: E402
 from support.fakes import FakeBeadStore, as_comment  # noqa: E402
-from support.logs import typed  # noqa: E402
-from support.runs import manifest  # noqa: E402
 from support.who import who  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
@@ -47,6 +45,8 @@ from tlkernel.ids import BeadId, RunId  # noqa: E402
 from tlkernel.landed import Landed  # noqa: E402
 from tlkernel.run import RunState  # noqa: E402
 from tlkernel.trace import RunTrace  # noqa: E402
+from tltestkit.logs import typed  # noqa: E402
+from tltestkit.runs import manifest  # noqa: E402
 
 T0 = datetime(2026, 10, 21, 6, 0).timestamp()  # the window's start in the fixtures: local 06:00
 MIN = 60.0
@@ -347,7 +347,7 @@ class Scorecard(Base):
         assert c["minutes"]["p90"] == 45
         assert c["rounds"] == 1
         assert c["replans"] == 1
-        assert c["tokens"]["lane"]["codex"] == {"in": 1010, "cached": 900, "out": 51}
+        assert c["tokens"]["lane"]["openai"] == {"in": 1010, "cached": 900, "out": 51}
         assert c["tokens"]["lane"]["claude"] == {"in": 100, "cached": 80, "out": 10}
         assert c["tokens"]["role"]["worker"]["in"] == 1000
 

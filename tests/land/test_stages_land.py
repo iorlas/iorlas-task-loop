@@ -15,15 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from run.test_stages import StagesTest
 from support import engine_case as te
-from support import (
-    fake_route,
-    gitq,
-    homes,
-    procsim,
-    tlbd,
-)
+from support import gitq, homes, procsim, tlbd
 from support.checkpoints import put_ck, read_ck
-from support.checks import typed
 from support.engine_case import engine, lint
 from support.plans import CLEAN, FALSE, HAS_F, PLAN, WRITE
 from support.pushsim import pusher
@@ -46,6 +39,8 @@ from tlkernel.ask import Ask
 from tlkernel.env import snapshot
 from tlkernel.gitfacts import GitOutcome
 from tlkernel.ids import BeadId
+from tltestkit import fake_route
+from tltestkit.checks import typed
 
 
 class StaleTree(StagesTest):

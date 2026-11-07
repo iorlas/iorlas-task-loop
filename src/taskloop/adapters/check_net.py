@@ -2,7 +2,7 @@
 
 macOS: `sandbox-exec` with a profile that denies the network except loopback. Linux: `unshare -rn` (a user and a network namespace; the
 loopback is brought up, so a check's own local servers work). A host with neither cannot remove the network: the plan says so in words
-and adds nothing (slice 1 warns, it never refuses a check)."""
+and adds nothing. With engine.check_net_isolate on, the shell refuses checks that do not declare network=True with that reason."""
 import functools
 import platform
 import shutil
@@ -13,8 +13,6 @@ from taskloop.adapters import procs
 
 MAC_PROFILE = '(version 1)(allow default)(deny network*)(allow network* (remote ip "localhost:*"))(allow network* (remote unix-socket))'
 LINUX_WRAPPER = 'ip link set lo up >/dev/null 2>&1; exec "$@"'  # $0 is the `sh` that follows; the check's argv is "$@"
-
-said: set[str] = set()  # the warnings already told in this process: one line per reason, not one per check
 
 
 class Plan(NamedTuple):

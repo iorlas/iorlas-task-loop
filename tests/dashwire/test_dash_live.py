@@ -6,6 +6,7 @@ import sys
 import time
 from pathlib import Path
 
+from tltestkit import fake_route
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
@@ -14,11 +15,9 @@ SKILL = ROOT / "skills" / "task-loop"
 for sub in ("dash", "", "tests"):
     sys.path.insert(0, str(SKILL / sub) if sub != "tests" else str(ROOT / "tests"))
 import support.paths  # noqa: E402, F401
-from support import dlcall, fake_route  # noqa: E402
+from support import dlcall  # noqa: E402
 from support.dashlive import BEAD, STAMP, T, make_run, put  # noqa: E402
 from support.factory_index import ingest  # noqa: E402
-from support.logs import typed  # noqa: E402
-from support.narrow import must  # noqa: E402
 
 from taskloop.adapters import agent as live_agent  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
@@ -26,6 +25,8 @@ from taskloop.app.run import engine  # noqa: E402
 from taskloop.app.workers import worker_call  # noqa: E402
 from taskloop_dash.api import live  # noqa: E402
 from tlkernel.paths import ConfigDir  # noqa: E402
+from tltestkit.logs import typed  # noqa: E402
+from tltestkit.narrow import must  # noqa: E402
 
 
 class Feed(Case):
@@ -179,18 +180,18 @@ class CallSite(Case):
         assert p == "/e/r1.live/03-write.jsonl"
         assert live_agent.live_path("/e/x.live", 12, "re view/2").endswith(".live/12-re-view-2.jsonl")
 
-    def test_the_call_sets_the_env(self):
+    def test_the_call_passes_the_live_file_in_the_request(self):
 
         seen = []
 
         def runner(cmd, **kw):
-            seen.append(kw.get("env"))
+            seen.append(kw["request"].live_file)
             return subprocess.CompletedProcess(cmd, 0, "", "")
         res = dl.Resolved(Path("/fake"), "/fake/route.py", fake_route.CONTRACT, "explicit")
         dlcall.call(res, "worker", "p", {}, ".", runner, live_file="/x/y.live/01-write.jsonl")
-        assert must(seen[0])["DELEGATE_LIVE_FILE"] == "/x/y.live/01-write.jsonl"
+        assert seen[0] == "/x/y.live/01-write.jsonl"
         dlcall.call(res, "worker", "p", {}, ".", runner, env={})
-        assert "DELEGATE_LIVE_FILE" not in must(seen[1])
+        assert not seen[1]
 
     def test_engine_numbers_its_calls(self):
         with TemporaryDirectory() as d:

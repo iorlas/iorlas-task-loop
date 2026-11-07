@@ -9,9 +9,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.factory_index import ingest
 from support.fakes import FakeBeadStore
-from support.narrow import must
-from support.repos import write_repos
-from support.runs import manifest
 
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
@@ -22,6 +19,9 @@ from tlkernel.run import RunState
 from tlkernel.runlife import RETAIN
 from tlkernel.runrows import RunRows
 from tlkernel.slottable import SlotSource
+from tltestkit.narrow import must
+from tltestkit.repos import write_repos
+from tltestkit.runs import manifest
 
 
 class RunHeaders(Case):
