@@ -101,7 +101,7 @@ class RunFields(StateAttrs, FieldParts):
         self.refusal: Refusal | None = None
         self.route = ""
         self.contract: Open | None = None
-        self.probe: Any = None  # the network probe (a test's); None: delegate's `route.py net`
+        self.probe: Any = None  # the network probe (a test's); None: delegate's network probe
         self.at_stage = 0  # the stage a call belongs to, for its key
         self.pause_reason = ""  # typed delegate reason; otherwise the close uses the engine outcome kind
         self.pause_producer: Producer = "engine"

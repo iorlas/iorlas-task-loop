@@ -160,7 +160,7 @@ WORKER_MARK = {"TASK_LOOP_WORKER": "1", "DELEGATE_DEPTH": "1"}  # what a child o
 def child_env_of(env: Mapping[str, str], extra: Mapping[str, str] | None = None) -> dict[str, str]:
     """`env` without what an agent session exports (CLAUDE_*, ANTHROPIC_*, DELEGATE_*, MCP_*, OTEL_*, CODEX_COMPANION*) and without
     TASK_LOOP_* and the git pins, but with CLAUDE_CONFIG_DIR. Credentials stay: delegate scrubs its workers itself (its own
-    app-only scrub does the same for route.py); a worker never delegates further (DELEGATE_DEPTH=1)."""
+    app-only scrub does the same); a worker never delegates further (DELEGATE_DEPTH=1)."""
     gone = (*child_env.APP_PREFIXES, "TASK_LOOP_")
     drop = (*child_env.APP_NAMES, *GIT_PIN_VARS)
     out = {k: v for k, v in child_env.without_venv(env).items() if k in KEEP or not (k.startswith(gone) or k in drop or k in HANDOVERS)}

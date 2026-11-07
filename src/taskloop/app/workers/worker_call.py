@@ -211,7 +211,7 @@ class WorkerCall:
         return worker_request.request(self.e, c, live, timeout_s, idle_s)
 
     def call_once(self, c: Call) -> Answer:
-        """One `route.py run`: through the process seam, then the records a call leaves."""
+        """One delegate call: through the process seam, then the records a call leaves."""
         e = self.e
         worker_request.refuse_over_cap(e, c.node, c.role, c.text)
         e.delegation.route()

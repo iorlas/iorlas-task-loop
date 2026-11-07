@@ -35,7 +35,7 @@ class AnswerAsk(Protocol):
 
 class Delegate(Protocol):
     def speaks(self) -> int:
-        """The contract number delegate answers with (`route.py contract --json`); the caller gates on 4."""
+        """The contract number delegate answers with (delegate's contract); the caller gates on 4."""
         ...
 
     def run(self, req: RunRequest, brief: str, schema: dict[str, Any], on_event: EventSink | None = None) -> DelegateResult:
