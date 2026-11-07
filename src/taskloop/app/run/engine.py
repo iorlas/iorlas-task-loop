@@ -133,4 +133,4 @@ class Engine(RunHost):
                          run=self.run_id, log=str(self.log_path),
                          minutes=round(((finish.ended if finish else time.time()) - self.t0) / 60, 1), rounds=self.stats["rounds"],
                          tests_added=self.stats["tests_added"], asked=self.asked,
-                         cost=round(self.cost, 2), kind=kind.value, fingerprint=self.fp, storm=self.storm)
+                         cost=round(self.cost, 2), kind=kind.value, fingerprint=self.fp)

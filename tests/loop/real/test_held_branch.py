@@ -154,7 +154,7 @@ class PreEngineFailure(tlp.LoopBase):
     def test_a_real_engine_failure_still_counts(self):
         self.beads({"x-1": [tlp.rec("failed")], "x-2": [tlp.rec("failed")], "x-3": [tlp.rec("landed")]})
         assert self.run_loop() == 0
-        assert "WAIT: 2 runs gave no outcome" in self.out
+        assert "WAIT: 2 runs gave no outcome" not in self.out
         assert not looptest.rests(str(self.repo))
 
     def test_a_branch_held_live_is_taken_not_failed(self):

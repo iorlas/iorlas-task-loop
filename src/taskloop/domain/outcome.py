@@ -1,7 +1,7 @@
 """How a run ends: `Kind` (closed, no OTHER), `RunOutcome`, the one `POLICY` table and `apply`.
 
 A run exit is a Kind. Everything the engine does at the close (bead status, label, ask or not, the loop's result, the
-trace value, the storm count) is a cell of POLICY[kind]; a new reason is one enum member, one row and the raise site.
+trace value) is a cell of POLICY[kind]; a new reason is one enum member, one row and the raise site.
 Machine faults (FAULT_*) never make an ask; network and killed stops (PAUSE_*) are paused, not failed, and count toward
 no cap. `apply` is pure: the same (outcome, bead, history, now) gives the same Disposition. Stdlib only;
 imports lifecycle (the one fingerprint normaliser), never engine.
@@ -30,10 +30,7 @@ from tlkernel.reconcile import LOOP_ABSENT_S
 
 # The tunables, in one place. Cells are values: a predicate goes to code.
 KNOBS: Final = {
-    "storm_window_s": 1800,      # the same fingerprint on storm_beads distinct beads inside this window trips the storm
-    "storm_beads": 2,
     "fault_retries": 3,          # the same fingerprint on one bead this often escalates to one ASK_STUCK
-    "fault_cooldown_s": 1800,    # a faulted bead is not picked again for this long (read by the loop when it takes over)
     "comment_dedupe_s": 3600,    # one engine comment per (bead, kind, fingerprint) per this long
     "loop_absent_s": LOOP_ABSENT_S,        # ready beads, no live loop and no beat for this long: the loop is absent
 }
@@ -47,7 +44,6 @@ class Rule:
     makes_ask: bool
     resolver: str           # who clears it: none | clock | lane | network | engineer | owner | bead_author
     label: str = ""         # bd label added when the bead is left open
-    storm: bool = False     # feeds the storm detector
     retries: int = 0        # same fingerprint on one bead before escalation (0: never escalates)
     escalate_to: Kind | None = None
     replan: bool = False    # the exit charges the replan cap
@@ -55,8 +51,8 @@ class Rule:
 
 
 def _fault(resolver: str = "engineer") -> Rule:
-    return Rule("open", Result.FAILED, "failed", False, resolver, label="engine-fault", storm=True,
-                retries=KNOBS["fault_retries"], escalate_to=Kind.ASK_STUCK, wake="cooldown")
+    return Rule("open", Result.FAILED, "failed", False, resolver, label="engine-fault",
+                retries=KNOBS["fault_retries"], escalate_to=Kind.ASK_STUCK)
 
 
 def _ask(wake: str = "answer", replan: bool = False) -> Rule:
@@ -76,7 +72,7 @@ POLICY: Final = {
     Kind.WAIT_ASK: Rule("none", Result.PARKED, "parked", False, "owner", wake="answer"),
     Kind.PAUSE_LANE: Rule("open", Result.PAUSED, "paused", False, "lane", wake="lane"),
     Kind.PAUSE_NETWORK: Rule("open", Result.PAUSED, "paused", False, "network", wake="net"),  # counts toward no cap
-    Kind.ENGINE_CRASH: Rule("open", Result.PARKED, "parked", False, "engineer", wake="cooldown"),
+    Kind.ENGINE_CRASH: Rule("open", Result.PARKED, "parked", False, "engineer"),
     Kind.PAUSE_KILLED: Rule("open", Result.PAUSED, "paused", False, "none"),
     Kind.PAUSE_MOVED: Rule("open", Result.PAUSED, "paused", False, "host"),  # its needs label keeps this host off; a capable host takes it
     Kind.OWNER_PARK: Rule("open", Result.PARKED, "parked", False, "owner"),
@@ -84,8 +80,8 @@ POLICY: Final = {
     Kind.FAULT_SLOT: _fault(),
     Kind.FAULT_DENIED: _fault(),
     Kind.FAULT_STALE_BASE: _fault(),
-    Kind.FAULT_PLAN: Rule("open", Result.FAILED, "failed", False, "engineer", label="engine-fault", storm=True,
-                          retries=KNOBS["fault_retries"], escalate_to=Kind.ASK_STUCK, replan=True, wake="cooldown"),
+    Kind.FAULT_PLAN: Rule("open", Result.FAILED, "failed", False, "engineer", label="engine-fault",
+                          retries=KNOBS["fault_retries"], escalate_to=Kind.ASK_STUCK, replan=True),
     Kind.FAULT_LAND: _fault(),
     Kind.FAULT_ENGINE: _fault(),
     Kind.FAULT_BAD_REQUEST: _fault(),

@@ -133,7 +133,7 @@ class RunFields(StateAttrs, FieldParts):
         self.sessions: list[Open] = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)
         self.why, self.asked = "", False  # what result() tells the loop
         self.kind = Kind.FAULT_ENGINE  # the run's outcome.Kind, after the close's escalation
-        self.fp, self.storm = "", ""  # its fingerprint, a storm banner
+        self.fp = ""  # its fingerprint
         self.crash_fingerprint, self.crash_site = "", ""
         self.disp: oc.Disposition | None = None
         self.last_flag = ""  # same_family | degraded | ...: what the last worker call reported (worker_call sets it)

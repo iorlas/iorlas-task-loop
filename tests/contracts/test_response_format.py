@@ -1,5 +1,5 @@
 """The response_format contract: every schema the engine sends a worker is one OpenAI strict structured output accepts
-(tl-7y6.4.2). The trust-night storm of 22 Oct 20:42 (53 bad_request rows, 53 beads blocked, 26 asks, 254 min / 1.5M
+(tl-7y6.4.2). The trust-night incident of 22 Oct 20:42 (53 bad_request rows, 53 beads blocked, 26 asks, 254 min / 1.5M
 tokens) was exactly this unsaid: the contract went out raw, its optional fields not nullable, `source` missing from
 `required`. engine.strict makes the wire form; these tests hold that promise for every schema, both shapes walked."""
 import json
