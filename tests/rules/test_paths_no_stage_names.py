@@ -8,7 +8,7 @@ STAGE_MODULES = {
     "ask": "taskloop.app.asks.paths",
     "release": "taskloop.app.release.paths",
     "suite": "taskloop.app.prune.paths",
-    "dash": "taskloop_dash.paths",
+    "dash": "tldash.paths",
     "layout": "taskloop.adapters.layout_paths",
     "retired": "taskloop.adapters.layout_paths",
     "check_dirs": "tlartifacts.paths",

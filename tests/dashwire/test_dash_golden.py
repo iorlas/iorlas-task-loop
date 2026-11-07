@@ -12,19 +12,18 @@ from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from support.dashlogs import RunScript, T, bead
-from support.factory_index import ingest, seed_beads
 from support.fakes import FakeBeadStore
 
-from taskloop_dash.app import Dash
-from taskloop_dash.env import Env, Ports
-from taskloop_dash.views.snapshot import version_of
+from tldash.app import Dash
+from tldash.env import Env, Ports
+from tldash.testing import RunScript, T, bead, ingest, seed_beads
+from tldash.views.snapshot import version_of
 from tlkernel import wire
 from tlkernel.dash import BeadDetail, Snapshot
 from tlkernel.ids import loop_key
 from tltestkit.repos import write_repos
 
-GOLDEN = Path(__file__).resolve().parents[1] / "dash" / "golden" / "closes.json"
+GOLDEN = Path(__file__).resolve().parents[2] / "packages" / "dash" / "tests" / "golden" / "closes.json"
 NOW = T + 36_000
 # (name, close outcome word, why_code, why): what the closer writes for each Kind (app/run/trace.WHY_CODE, outcome.RunOutcome.word)
 CLOSES = [

@@ -9,10 +9,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from support.check_host import CheckHostCase
-from support.waits import until
 
 from tltestkit.procsim import real_proc
 from tltestkit.shellkit import POSIX_CHECK, PY, shq
+from tltestkit.waits import until
 
 # isort: split
 from tlgate.domain.specs import gate_items

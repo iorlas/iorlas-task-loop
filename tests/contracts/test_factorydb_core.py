@@ -14,8 +14,8 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from taskloop_dash.needs import NEEDS
-from taskloop_dash.parts import DASH_PARTS
+from tldash.needs import NEEDS
+from tldash.parts import DASH_PARTS
 from tlkernel import factorydb, tableowners
 from tlkernel.factoryparts import LOOK
 from tlkernel.looprows import LoopRows

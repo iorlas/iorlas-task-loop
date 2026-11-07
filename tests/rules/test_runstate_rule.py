@@ -22,8 +22,9 @@ ALLOWS_BEAT = {
     "packages/kernel/src/tlkernel/log.py",  # the record's definition
     "packages/pipeline/src/tlpipeline/stuck_rule.py",  # the stuck rule: a Beat is the tick, not activity
     "packages/pipeline/src/tlpipeline/lifecycle.py",  # the engine writes it
-    "src/taskloop_dash/jsonl.py", "src/taskloop_dash/readers/logs.py", "src/taskloop_dash/views/runfacts.py",  # a Beat is no event
-    "src/taskloop_dash/index/facts.py",  # only the indexer compacts engine Beats
+    "packages/dash/src/tldash/jsonl.py", "packages/dash/src/tldash/readers/logs.py",
+    "packages/dash/src/tldash/views/runfacts.py",  # a Beat is no event
+    "packages/dash/src/tldash/index/facts.py",  # only the indexer compacts engine Beats
 }
 ALLOWS_STALE = {"packages/kernel/src/tlkernel/runlife.py"}
 ALLOWS_PID_ALIVE = {  # the lock table's and the loop's own pid probes, and the reconciler
@@ -78,7 +79,7 @@ def scan() -> list[str]:
     return bad
 
 
-DASH = SRC / "taskloop_dash"
+DASH = SRC / "tldash"
 WRITERS = {"reconcile", "mark_lost", "take_up"}  # names the dashboard must not import or call
 WRITER_CALLS = {"create", "end", "beat"}  # on a locator
 

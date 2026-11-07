@@ -14,14 +14,13 @@ from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from support.dashlogs import RunScript, T, bead
-from support.factory_index import ingest, seed_beads
 from support.fakes import FakeBeadStore
 from support.hostname import hostname
 
-from taskloop_dash.app import Dash
-from taskloop_dash.env import Env, Ports
-from taskloop_dash.http import make_handler
+from tldash.app import Dash
+from tldash.env import Env, Ports
+from tldash.http import make_handler
+from tldash.testing import RunScript, T, bead, ingest, seed_beads
 from tlkernel import wire
 from tlkernel.ask import Ask, AskOption
 from tlkernel.askenums import AskClass, AskKind, AskStatus

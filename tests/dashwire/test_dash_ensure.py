@@ -18,7 +18,7 @@ from support.spawn import real_spawner  # noqa: E402
 from taskloop.adapters import procs  # noqa: E402
 from taskloop.app.launch import dash as dash_server  # noqa: E402
 from taskloop.app.parts import STAGE_PARTS  # noqa: E402
-from taskloop_dash import bind  # noqa: E402
+from tldash import bind  # noqa: E402
 from tlkernel.dash import READ_PROTOCOL  # noqa: E402
 from tlkernel.env import Env as ProcessEnv  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402

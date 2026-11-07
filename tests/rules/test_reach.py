@@ -23,7 +23,7 @@ FILES = {
 def test_stage_of_maps_app_and_domain_slices_top_packages_and_the_rest_to_kernel():
     assert stage_of("src/taskloop/app/checks/x.py") == "gate"
     assert stage_of("src/taskloop/domain/review/x.py") == "work"
-    assert stage_of("src/taskloop_dash/a.py") == "dash"
+    assert stage_of("packages/dash/src/tldash/a.py") == "dash"
     assert stage_of("packages/kernel/src/tlkernel/wire.py") == "kernel"
     assert stage_of("tests/x.py") is None
 

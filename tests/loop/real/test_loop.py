@@ -29,7 +29,6 @@ from support import (  # noqa: E402
     tlbd,
 )
 from support.spawn import port_git  # noqa: E402
-from support.waits import until  # noqa: E402
 from support.who import who  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
@@ -48,6 +47,7 @@ from tlslots import verbs  # noqa: E402
 from tlslots.pool import Slot  # noqa: E402
 from tltestkit.checked import run_checked  # noqa: E402
 from tltestkit.narrow import must  # noqa: E402
+from tltestkit.waits import until  # noqa: E402
 
 
 def bead(id, priority=2, parent=None, labels=(), type="task"):

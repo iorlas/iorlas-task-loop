@@ -2,15 +2,14 @@
 the dashboard strip reads the same rows; with nothing chosen today's rules apply."""
 from unittest import mock
 
-from support.dashlogs import T
-
+from tldash.testing import T
 from tltestkit.case import Case
 
 # isort: split
 from taskloop.app.loop.queue import QueueRule
 from taskloop.cli import queue as cli_queue
-from taskloop_dash.views import snapshot
-from taskloop_dash.views.world import ProjectIn, World
+from tldash.views import snapshot
+from tldash.views.world import ProjectIn, World
 from tlkernel import pickset
 from tlkernel.bead import Bead
 from tlkernel.config import EngineConfig

@@ -25,12 +25,12 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from taskloop_dash.views.snapshot import version_of  # noqa: E402
+from tldash.views.snapshot import version_of  # noqa: E402
 from tlkernel import dash as D  # noqa: E402
 from tlkernel import wire  # noqa: E402
 from tlkernel.dashcost import CostPage  # noqa: E402
 
-STATIC = ROOT / "src" / "taskloop_dash" / "static"
+STATIC = ROOT / "packages" / "dash" / "src" / "tldash" / "static"
 FIX = ROOT / "tests" / "fixtures" / "dash"
 TYPES = {".js": "text/javascript", ".css": "text/css", ".html": "text/html; charset=utf-8", ".svg": "image/svg+xml"}
 PAGES = {"/": STATIC / "index.html", "/index.html": STATIC / "index.html", "/components.html": STATIC / "components.html",

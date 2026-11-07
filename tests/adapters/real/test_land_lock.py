@@ -15,12 +15,12 @@ from unittest import mock
 import pytest
 from support import homes
 from support.tlmain import tl_main
-from support.waits import until
 
 from taskloop.adapters import landlock, procs
 from tltestkit.case import Case
 from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory
+from tltestkit.waits import until
 
 NO_FCNTL = pytest.mark.skipif(os.name == "nt", reason="the lock is fcntl; tl has none on Windows (documented no-op)")
 

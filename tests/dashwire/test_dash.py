@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support.dashes import make_dash  # noqa: E402
 
-from taskloop_dash import bind as bind_mod  # noqa: E402
+from tldash import bind as bind_mod  # noqa: E402
 from tlkernel.env import Env as ProcessEnv  # noqa: E402
 from tlkernel.ids import loop_key  # noqa: E402
 
@@ -76,7 +76,7 @@ class NoAuth(Case):
 
     def test_there_is_no_token(self):
         for name in ("http.py", "bind.py", "serve.py"):
-            src = (ROOT / "src" / "taskloop_dash" / name).read_text(encoding="utf-8")
+            src = (ROOT / "packages" / "dash" / "src" / "tldash" / name).read_text(encoding="utf-8")
             assert "Authorization" not in src, name
             assert "dash.token" not in src, name
 

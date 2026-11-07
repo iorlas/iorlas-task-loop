@@ -6,10 +6,11 @@ requires-python = ">=3.15"
 members = [
     "iorlas-task-loop",
     "tlartifacts",
+    "tldash",
     "tlgate",
-    "tlslots",
-    "tlpipeline",
     "tlkernel",
+    "tlpipeline",
+    "tlslots",
     "tltestkit",
 ]
 
@@ -173,6 +174,31 @@ dev = [
 ]
 
 [[package]]
+name = "tldash"
+version = "0"
+source = { editable = "packages/dash" }
+dependencies = [
+    { name = "tlkernel" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "msgspec" },
+    { name = "pytest" },
+    { name = "tltestkit" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "tlkernel", editable = "packages/kernel" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "msgspec" },
+    { name = "pytest" },
+    { name = "tltestkit", editable = "packages/testkit" },
+]
+
+[[package]]
 name = "tlgate"
 version = "0"
 source = { editable = "packages/gate" }
@@ -197,33 +223,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "msgspec" },
-    { name = "pytest" },
-    { name = "tltestkit", editable = "packages/testkit" },
-]
-
-[[package]]
-name = "tlslots"
-version = "0"
-source = { editable = "packages/slots" }
-dependencies = [
-    { name = "tlkernel" },
-    { name = "tltestkit" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "tltestkit" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "tlkernel", editable = "packages/kernel" },
-    { name = "tltestkit", editable = "packages/testkit" },
-]
-
-[package.metadata.requires-dev]
-dev = [
     { name = "pytest" },
     { name = "tltestkit", editable = "packages/testkit" },
 ]
@@ -255,6 +254,33 @@ dev = [
 
 [package.metadata]
 requires-dist = [{ name = "tlkernel", editable = "packages/kernel" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest" },
+    { name = "tltestkit", editable = "packages/testkit" },
+]
+
+[[package]]
+name = "tlslots"
+version = "0"
+source = { editable = "packages/slots" }
+dependencies = [
+    { name = "tlkernel" },
+    { name = "tltestkit" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "tltestkit" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "tlkernel", editable = "packages/kernel" },
+    { name = "tltestkit", editable = "packages/testkit" },
+]
 
 [package.metadata.requires-dev]
 dev = [

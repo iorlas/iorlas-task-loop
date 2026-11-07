@@ -13,7 +13,6 @@ from unittest import mock
 
 from support import gitq, homes
 from support.engine_case import EngineTest
-from support.waits import until
 
 from taskloop.adapters import (
     landlock,
@@ -24,6 +23,7 @@ from tltestkit import procsim
 from tltestkit.logs import records
 from tltestkit.plans import CLEAN, HAS_F, PLAN, STILL_OPEN, WRITE, verdict
 from tltestkit.shellkit import POSIX_CHECK
+from tltestkit.waits import until
 
 
 class EngineLand2Test(EngineTest):

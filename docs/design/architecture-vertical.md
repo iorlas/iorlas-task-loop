@@ -20,11 +20,11 @@ parsing the tree with `dev/affected.py`'s own graph (`Repo`, `select`, `closure`
    `tests/conftest.py`, `tests/live/conftest.py`, `tests/delegate/conftest.py` and `tl.py` edits selecting half the suite, not by package
    selection; the public-surface rule changes nothing until a package has an `api.py`.
 
-4. The stages are already nameable and mostly separable: `delegate` and `taskloop_dash` already are packages. Cutting two import edges
+4. The stages are already nameable and mostly separable: `delegate` and `tldash` already are packages. Cutting two import edges
    (`adapters/delegate.py`, `adapters/runner.py` → `delegate.api`) drops `delegate.api`'s reach from 199 tests to 2. That is the proof of
    what a real package boundary does; it is also the proof that **one boundary alone does not move the median** (271 → 269): the hub is
    `contracts/`, so the contracts move first.
-5. Do it as **vertical packages inside this repo, top-level import names, same sys.path model** (like `delegate` and `taskloop_dash`
+5. Do it as **vertical packages inside this repo, top-level import names, same sys.path model** (like `delegate` and `tldash`
    today), NOT separate repos, NOT a uv workspace with installs, NOT a shelf move of the stages. Shelf gets a few small leftovers only.
 6. Order: kill hubs first (measure tool, config split, stores/ports split), then carve packages from the leaves inward
    (dash, delegate, gate, land, release, slots/asks, loop/engine last). Never in the middle of #189/#190/#186/#187.
@@ -35,7 +35,7 @@ Measured sloc (non-blank, non-comment). "Today" gathers the stage across layers 
 
 | stage | today (src) | sloc | tests | cross-stage imports out (direct, src) | verdict |
 |---|---|---|---|---|---|
-| dash | `taskloop_dash/` | 3869 | 49 | contracts only | ✅ already a package; its input is row contracts (see §2) |
+| dash | `tldash/` | 3869 | 49 | contracts only | ✅ already a package; its input is row contracts (see §2) |
 | delegate | `src/delegate/` | 6746 | 74 | none of taskloop | ✅ already; only `adapters/delegate.py`, `runner.py` + `contracts/delegate*.py` bind it |
 | store | `stores/` + `contracts/{*rows,stores,factorydb,docstore,factorymigrate,factoryprune,...}` + vendored `sqlite_store` | 457 + ~2500 | 7 | adapters, contracts | ✅ package `taskloop_store`; owns every row shape |
 | gate (checks) | `app/checks` + `domain/checks` + `contracts/{checks,gateplan,plancheck?}` | 1816 + 1130 + ~250 | 43 | store | ✅ leaf-ish, carve early |
@@ -56,9 +56,9 @@ Option judgments:
   PR; N repos multiply the drift the delegate move just ended (topology.md §5).
 - ❌ **uv-workspace members with `pyproject.toml` and installs** (the shelf model). The plugin ships a tree and `tl.py` puts `src/` on
   sys.path (tl.py:77); PEP 723 pins must equal pyproject (tests/rules/test_pep723.py). Installing members means a build step in the plugin
-  path and a second pin table. The **import-name** boundary gives the same isolation: `delegate`, `taskloop_dash`, `stream_proc` already work this way.
+  path and a second pin table. The **import-name** boundary gives the same isolation: `delegate`, `tldash`, `stream_proc` already work this way.
 - ✅ **Top-level packages under `packages/<stage>/{src/taskloop_<stage>/, tests/}`** (the multiple src folders Denis asked for), put on
-  sys.path by `tl.py`, `hooks/hook.py` and `dev/*` (review: there is **no** path hook to reuse, `src/taskloop/__init__.py:11-13` only appends `_vendor`, and its lazy filter at `:16` names only `taskloop`, `taskloop_dash`, `tl`, so a new package must be added there or it imports eagerly and may surface cycles lazy-all hides); `src/taskloop` shrinks to the shell. `delegate` and `taskloop_dash` move
+  sys.path by `tl.py`, `hooks/hook.py` and `dev/*` (review: there is **no** path hook to reuse, `src/taskloop/__init__.py:11-13` only appends `_vendor`, and its lazy filter at `:16` names only `taskloop`, `tldash`, `tl`, so a new package must be added there or it imports eagerly and may surface cycles lazy-all hides); `src/taskloop` shrinks to the shell. `delegate` and `tldash` move
   there last (path change only).
   - Namespace packages (`taskloop.gate` split across dirs) are ❌: `taskloop/__init__.py` installs the lazy-import hook and the vendor path;
     a namespace package has no `__init__`.
@@ -67,7 +67,7 @@ Option judgments:
   a change under `packages/` would go unnoticed), `app/release/selfupdate.py:14`; tests `tests/conftest.py:44-90,140-143` (preload walks `taskloop` only; the test kind is
   decided from the path under TESTS_DIR), `pyproject testpaths=["tests"]` (so `packages/*/tests` are not collected and get no guards); selection `dev/affected.py:48-50,171-195`,
   `dev/runtests.py:155`, `tests/support/scope.py:13`; `pyrefly.toml:3,7,20`, `ruff.toml:5` + nested ruff.toml, `justfile:70`, `.importlinter` (root_packages, `msgspec-in-contracts-only`, `hot-hook`); `tests/rules/gate_rules.py:45,132,155,278,301,310`
-  (SCAN has no `packages`: **the 400/80/800 caps silently stop applying there**), `arch_rules.py:16`, `temp_ratchet.py:12`, `layer_ratchet.py:28`; ~20 tests build `ROOT/"src"/"delegate"` or `"taskloop_dash"`.
+  (SCAN has no `packages`: **the 400/80/800 caps silently stop applying there**), `arch_rules.py:16`, `temp_ratchet.py:12`, `layer_ratchet.py:28`; ~20 tests build `ROOT/"src"/"delegate"` or `"tldash"`.
   MANIFEST needs nothing (hashes every tracked file); PEP 723 pin equality is unaffected.
 - **Rule conflicts to amend in S1a:** CLAUDE.md says "Tests live in `tests/<slice>/`" and the layer-by-path guard keys on it → amend both; per-package `contracts.py` must be a **`contracts/` directory**
   with its own `ruff.toml` (the TID251 bans on subprocess/socket/threading are directory-scoped, per-file ignores are forbidden); `hot-hook` must also forbid the kernel and every package `contracts` (it names `tlkernel` only).
@@ -104,7 +104,7 @@ Measured on `packages/kernel/src/tlkernel` (90 files, 7905 sloc): consumers per 
 | bucket | files | sloc | rule | verdict |
 |---|---|---|---|---|
 | no direct src slice importer | 7 (`attemptrows, dashenums, docstore, factorymigrate, factoryprune, row, usage`) | 285 | **not dead** (review): internal pieces of other contracts (`factorydb.py:18,111,121`, `runrows.py:87,140`, `stores.py:36`, `dash.py:13`) | ⚠️ inline candidates into their one parent, no deletion |
-| exactly 1 consumer slice | 22 | 1149 | moves **into that slice**'s `contracts.py` (or the package) | ✅ mechanical. 9 of them have `taskloop_dash` as the only consumer: they are the **read model the store publishes** → owned by `taskloop_store` (writer owns the shape), dash imports `taskloop_store.contracts` |
+| exactly 1 consumer slice | 22 | 1149 | moves **into that slice**'s `contracts.py` (or the package) | ✅ mechanical. 9 of them have `tldash` as the only consumer: they are the **read model the store publishes** → owned by `taskloop_store` (writer owns the shape), dash imports `taskloop_store.contracts` |
 | 2–3 consumers | 21 | 1232 | the **producer** owns, consumers import its `contracts` | ✅ by hand, one PR per stage |
 | 4–8 consumers | 24 | 2734 | owner is the stage that creates the value; consumers via `api` | ✅ per stage |
 | 9+ consumers | 15 | 2420 | kernel candidates; most are NOT kernel | see below |
@@ -187,7 +187,7 @@ number is a function of the 164, not of the carve):
   plus those of packages that import the owner's `contracts` (a kernel edit stays wide: wire/ids/paths/env are few files).
   A crude model (own package + tests of packages whose `api` imports the changed one, kernel as sink) gives lower bound median ~192, upper bound
   ~all. The upper bound is what the cycle table says: **until the cycles are cut, a package's dependents are everyone**. This number is NOT a promise.
-- What *is* a promise: no change to `taskloop_dash` or `delegate` selects another stage's tests; a `contracts.py` change selects its owner + importers.
+- What *is* a promise: no change to `tldash` or `delegate` selects another stage's tests; a `contracts.py` change selects its owner + importers.
 
 Should affected selection disappear? ❌ not entirely. Per-package independence still needs "which packages does this change touch?": a path-prefix
 rule over `packages/*/`, plus a dependents rule over each package's declared deps. That is what shelf's `tools/affected.py` does in 238 lines. Keep
@@ -228,7 +228,7 @@ pix and the Mac ran a release with #184; delete RowDocs adoption, importers, loo
 | K1 | kernel named: `contracts/{wire,ids,enums,paths,env,envvars,identity,bead}` get an import-linter layer; nothing imports upward | S | paths after #189 | contract is a lint ✅ done (tl-e5t0.10: `kernel-core-is-a-leaf` in .importlinter) |
 | X1 | the four cuts of the corrected table: 2 domain files → land; `NetText` out of slots; report matchers to a shared home; `reconcile/leases` to slots (Part in `tlkernel.factoryparts`) | 4 × S | C2 | pure moves, one pair each |
 | S1a | mechanics checklist above: one empty package, conftest/rules/SCAN/caps/CLAUDE.md learn `packages/`, lazy filter extended | M (~35 files) | #189 #190 #186 #187 | revert |
-| S1b | `taskloop_dash` moves in (path only; ~20 tests rebuild `ROOT/src/…`) | M | S1a | rename |
+| S1b | `tldash` moves in (path only; ~20 tests rebuild `ROOT/src/…`) | M | S1a | rename |
 | S1c | `delegate` moves in (123 test files) | L | S1a | rename |
 | S2 | carve `taskloop_store` | L | S1a | |
 | S3 | carve gate, then release, slots, asks, land (one PR each) | 5 × M–L | S1a, X1, C2 | |
@@ -265,7 +265,7 @@ Method: `dev/reach.py` and the same `Repo` graph. "Stages" = distinct stage pack
 
 | stage | src files | inbound src files | tests importing it | selection of one edit now |
 |---|---|---|---|---|
-| dash (`taskloop_dash`) | 57 | 3 | 59 | median 92 (46 `tests/rules`, always, + 49 dash tests): already independent |
+| dash (`tldash`) | 57 | 3 | 59 | median 92 (46 `tests/rules`, always, + 49 dash tests): already independent |
 | delegate | 66 | 3 | 71 | 413 per delegate-only commit; wide only because 14 app files import `adapters.delegate`/`runner` (the Agent-port work of ISOLATION, #191), not because of its directory |
 | hook | 6 | 0 | 6 | tiny |
 

@@ -11,7 +11,7 @@ from tlkernel.envvars import EnvVar
 
 from taskloop.app.release.shell import Shell, say
 
-CODE = ("src", "dev/release.py")  # what a release runs: the engine package and the entry script
+CODE = ("src", "packages/dash/src", "dev/release.py")  # what a release runs: the engine package and the entry script
 
 
 def code_ids(root: Path, sh: Shell) -> list[str]:

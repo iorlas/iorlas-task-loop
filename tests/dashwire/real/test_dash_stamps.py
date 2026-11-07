@@ -6,15 +6,13 @@ import sys
 from dataclasses import replace
 from unittest.mock import patch
 
-from support.dashlogs import bead
-from support.factory_index import ingest
-
 from dashwire import test_dash_api as fixtures
 from taskloop.adapters.ident import hostname
 from taskloop.app.doctor import profiles
 from taskloop.app.launch import dash_ports
-from taskloop_dash.index import Indexer
-from taskloop_dash.views import snapshot
+from tldash.index import Indexer
+from tldash.testing import bead, ingest
+from tldash.views import snapshot
 from tlkernel.env import Env as ProcessEnv
 
 

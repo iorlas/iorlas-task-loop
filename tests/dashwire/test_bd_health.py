@@ -1,13 +1,12 @@
 """Indexer outages retain bead observations; live drawer comments retain their own health."""
 
 import pytest
-from support.dashlogs import bead
-from support.factory_index import ingest, seed_beads
 from support.fakes import FakeBeadStore
 
-from taskloop_dash.app import Dash
-from taskloop_dash.env import Env, Ports
-from taskloop_dash.index import Indexer
+from tldash.app import Dash
+from tldash.env import Env, Ports
+from tldash.index import Indexer
+from tldash.testing import bead, ingest, seed_beads
 from tlkernel import beadrows, factorydb
 from tlkernel.bead import BdError
 from tlkernel.beadsport import BdFailure

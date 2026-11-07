@@ -11,14 +11,14 @@ from tltestkit.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from asks.dash_ports import answering
 from support.dashes import make_dash
-from support.dashlogs import T, bead
 from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
 
 from taskloop.app.asks import intake, raiser
-from taskloop_dash.views import bead_detail, snapshot
-from taskloop_dash.views.board import Board
-from taskloop_dash.views.world import AdrIn, Landing, ProjectIn, World
+from tldash.testing import T, bead
+from tldash.views import bead_detail, snapshot
+from tldash.views.board import Board
+from tldash.views.world import AdrIn, Landing, ProjectIn, World
 from tlkernel import askspecs as specs
 from tlkernel import wire
 from tlkernel.adrs import AdrStore

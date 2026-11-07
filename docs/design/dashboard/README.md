@@ -1,6 +1,6 @@
 # task-loop dashboard
 
-One server per machine, reading state and taking the owner's commands through its write verbs (`contracts.dash.WRITES`) (`python3 -m taskloop_dash` on the interpreter `tl dash ensure` runs on, so it has msgspec), one page, one API.
+One server per machine, reading state and taking the owner's commands through its write verbs (`contracts.dash.WRITES`) (`python3 -m tldash` on the interpreter `tl dash ensure` runs on, so it has msgspec), one page, one API.
 
 - **The rule:** [dash-spec.md](dash-spec.md). Owner decisions: [dash-decisions.md](dash-decisions.md). The mocks it names
   (`dash-round-*.html`) show the result; older mocks are history.
@@ -20,12 +20,12 @@ heartbeats and terminal states. Check evidence is retained under the run directo
 
 | where | what |
 |---|---|
-| `src/taskloop_dash/static/` | the page: `index.html`, ES modules under `js/`, CSS under `css/`, Preact + HTM vendored in `vendor/` (pinned by hash). No build, no CDN, 100 KB gzip budget (`tests/dash/test_dash_static.py`) |
-| `src/taskloop_dash/http.py` | the routes: the page and its modules, GET `/api/snapshot`, `/api/bead`, `/api/live`, `/api/artifact`, `/api/look-shot`, `/api/version`, POST `/api/<verb>` |
-| `src/taskloop_dash/api/` | `reads.py` (snapshot with ETag, bead), `liveview.py` + `live.py` (the live tail), `writes.py` (the verbs), `looks.py`, `artifacts.py` |
-| `src/taskloop_dash/readers/` | `world.py` gathers one `World` per snapshot from records, bd, runs and looks |
-| `src/taskloop_dash/index/` | one thread folds appended engine-log bytes and persists state and source cursors atomically in factory.db |
-| `src/taskloop_dash/views/` | pure builders from the world to the contract records (`snapshot.py`, `bead_detail.py`, `board.py`, `passes.py`, ...) |
+| `packages/dash/src/tldash/static/` | the page: `index.html`, ES modules under `js/`, CSS under `css/`, Preact + HTM vendored in `vendor/` (pinned by hash). No build, no CDN, 100 KB gzip budget (`tests/dash/test_dash_static.py`) |
+| `packages/dash/src/tldash/http.py` | the routes: the page and its modules, GET `/api/snapshot`, `/api/bead`, `/api/live`, `/api/artifact`, `/api/look-shot`, `/api/version`, POST `/api/<verb>` |
+| `packages/dash/src/tldash/api/` | `reads.py` (snapshot with ETag, bead), `liveview.py` + `live.py` (the live tail), `writes.py` (the verbs), `looks.py`, `artifacts.py` |
+| `packages/dash/src/tldash/readers/` | `world.py` gathers one `World` per snapshot from records, bd, runs and looks |
+| `packages/dash/src/tldash/index/` | one thread folds appended engine-log bytes and persists state and source cursors atomically in factory.db |
+| `packages/dash/src/tldash/views/` | pure builders from the world to the contract records (`snapshot.py`, `bead_detail.py`, `board.py`, `passes.py`, ...) |
 | `dev/dash_fixtures.py` | the page against `tests/fixtures/dash/`, no engine |
 | `dev/dash_check.py` | headless-Chrome checks of the page against the fixtures, or read-only against a running dash (`--base`) |
 

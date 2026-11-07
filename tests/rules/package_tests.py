@@ -25,6 +25,9 @@ def member_imports(manifest: Path) -> tuple[str, set[str], set[str]]:
     deps = {dependency_name(dep) for dep in declared if isinstance(dep, str)}
     return normalized(project["name"]), roots, deps
 
+# Shelf copies have no manifest: the one undeclared path (docs/design/workspace.md section 4).
+VENDORED = {p.name for p in (ROOT / "skills/task-loop/_vendor").iterdir() if p.is_dir()}
+
 
 def imports(path: Path) -> list[tuple[int, str]]:
     found = []
@@ -42,7 +45,7 @@ def problems(root: Path = ROOT) -> list[str]:
     found = []
     for manifest, (_, own, deps) in manifests.items():
         tests = manifest.parent / "tests"
-        allowed = own | {"pytest"} | sys.stdlib_module_names
+        allowed = own | {"pytest"} | sys.stdlib_module_names | VENDORED
         for dep in deps & members.keys():
             allowed |= members[dep]
         third_party = deps - members.keys()
