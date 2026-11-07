@@ -7,7 +7,6 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 from support import homes
@@ -19,7 +18,6 @@ from support import gitq
 from support.engine_case import real_git, stop
 from support.plans import CLEAN, PLAN, WRITE
 from support.pushsim import CUT, pusher
-
 
 SAY = "codex: Reconnecting... waiting for network (Connection failed: error sending request)"
 REPLAY = te.ROOT / "tests" / "fixtures" / "replay" / "5ban16_plan_network_drop.jsonl"

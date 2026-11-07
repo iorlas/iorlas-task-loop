@@ -7,7 +7,6 @@ from support.fake_loop_env import slot_loop_env
 
 from taskloop.app.loop.env import Storm
 from taskloop.app.loop.loop import Loop, LoopArgs
-from taskloop.app.loop.queue import Queue, Ranked
 from taskloop.app.loop.settle import Settle
 from taskloop.app.loop.verdict import Verdict
 from taskloop.app.loop.waits import blocked
