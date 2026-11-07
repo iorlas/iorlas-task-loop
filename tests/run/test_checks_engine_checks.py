@@ -36,15 +36,15 @@ from taskloop.app.run import (
 )
 from taskloop.app.slots import config as wslots_config
 from taskloop.domain.checks import lint
-from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks.writer_split import WriterSplit
-from taskloop.domain.review.matchers import Tools
 from taskloop.domain.write.matchers import count_tests
 from tlkernel import answers, childenv, plancheck
+from tlkernel import checkmatchers as check_matchers
 from tlkernel.config import EngineConfig
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId, CheckId
 from tlkernel.plancheck import Adhoc, adhoc
+from tlkernel.reviewmatchers import Tools
 from tlkernel.waitenums import WaitWhat
 from tltestkit.checks import ck, res, typed
 from tltestkit.narrow import must

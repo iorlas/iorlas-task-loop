@@ -144,7 +144,8 @@ class VisualWork(StagesTest):
 
     def test_the_judge_is_from_the_other_family_like_the_review(self):
         _rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
-        assert s.calls[2][2] is not None  # authored-by: the writer's family
+        assert s.requests[2].reviewer_other_family
+        assert s.results[2]["family"] != s.results[1]["family"]
 
     def test_a_defect_goes_back_to_the_writer_as_text_then_a_second_render_passes(self):
         defect = self.judged(("main.png, top right", "The Save button is clipped at the right edge"))

@@ -16,7 +16,7 @@ def progress_of(s: StageState) -> StageProgress:
 
 
 def restore_progress(s: StageState, p: StageProgress, family: str) -> None:
-    """`family`: the writer's family (RunState.writer_family)."""
+    """`family`: delegate's opaque writer identity (RunState.writer_family), restored with the stage's progress."""
     s.red, s.red_now, s.failed_cmds = p.red, set(p.red_now), p.failed
     s.acc_only, s.acc_first, s.shots_fixed = p.acceptance_only, p.acceptance_first, p.shots_fixed
     s.show_fixed = p.show_fixed

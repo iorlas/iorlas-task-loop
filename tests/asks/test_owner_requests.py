@@ -86,10 +86,13 @@ class RequestFile(Case):
 
         t = threading.Thread(target=taker)
         t.start()
-        for i in range(60):
-            owner_verbs.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", note=f"n{i}")
-        stop.set()
-        t.join()
+        try:
+            for i in range(60):
+                owner_verbs.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", note=f"n{i}")
+        finally:
+            stop.set()
+            t.join(30)
+        assert not t.is_alive(), "owner request taker did not settle in 30 s"
         got = requests.take(self.cfg, RUN)
         taken.extend(n.text for n in (got.notes if got else []))
         assert taken == [f"n{i}" for i in range(60)]

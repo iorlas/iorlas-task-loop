@@ -2,9 +2,8 @@
 from collections.abc import Sequence
 from typing import Protocol
 
+from tlkernel.followkeys import FollowKey
 from tlkernel.wire import Open
-
-from taskloop.domain.followups import FollowKey
 
 
 class LeftoverFields(Protocol):

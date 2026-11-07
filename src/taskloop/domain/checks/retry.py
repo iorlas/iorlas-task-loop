@@ -1,7 +1,7 @@
 """When a red check is run again: how long a held lock is waited out, and when a failure says another run would change nothing."""
 from typing import Final
 
-from taskloop.domain.checks.matchers import failure_kind
+from tlkernel.checkmatchers import failure_kind
 
 LOCK_BACKOFF: Final = (15, 30, 60)  # seconds; the last repeats until LOCK_WAIT_MAX
 LOCK_WAIT_MAX: Final = 300

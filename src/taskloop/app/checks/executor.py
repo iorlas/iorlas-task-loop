@@ -5,6 +5,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from tlkernel import check_files
+from tlkernel.checkmatchers import cs_error_lines, diff_check_text, output_signature, safe_name, stale_tree
 from tlkernel.checks import UNVERIFIED_EXIT, Check, CheckFaultKind, CheckResult, Duration, Durations, verdict_of
 from tlkernel.runkey import RunKey
 from tlkernel.stagefacts import CheckLogPort
@@ -19,7 +20,6 @@ from taskloop.app.checks.resources import LeaseCancelled, Resources
 from taskloop.app.checks.round import Round
 from taskloop.domain.checks.durations import CHEAP_S, expected_secs
 from taskloop.domain.checks.inputs import touched
-from taskloop.domain.checks.matchers import cs_error_lines, diff_check_text, output_signature, safe_name, stale_tree
 from taskloop.domain.checks.names import log_var, rc_var
 from taskloop.domain.checks.plan import CheckPlan, Step
 from taskloop.domain.checks.specs import due

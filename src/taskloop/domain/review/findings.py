@@ -4,8 +4,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final
 
-from taskloop.domain.review.matchers import BdDemand
 from taskloop.domain.work.ledger import Ledger
+from tlkernel.reviewmatchers import BdDemand
 
 SEVERITY: Final = ("low", "medium", "high")
 Finding = Mapping[str, Any]
@@ -63,7 +63,7 @@ class Routed:
 
 
 def follow_up(text: str, why: str, category: str = "", file: str = "") -> dict[str, str]:
-    """A follow-up bead to file; `category` and `file` are its key (domain/followups.py)."""
+    """A follow-up bead to file; `category` and `file` are its key (tlkernel/followkeys.py)."""
     title = "Follow-up: " + " ".join(text.split())[:100]
     lo = {"title": title, "why": f"{why}: {' '.join(text.split())[:500]}"}
     return dict(lo, category=category, file=file) if category else lo

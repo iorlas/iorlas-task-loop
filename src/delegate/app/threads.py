@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from delegate.app import run_legs
+from delegate.app import env, run_legs
 from delegate.contracts import codec
 from delegate.contracts.codec import record
 from delegate.contracts.json_types import Json, arr, as_num, obj
@@ -35,7 +35,9 @@ def plan(request: RunRequest, state: StateDoc, routing: Routing) -> ThreadPlan:
     if request.boundary and limit > 0 and routing.settings.fresh_stage_k > 0:
         limit = min(limit, routing.settings.fresh_stage_k)
     oversized = previous is not None and previous.context_k is not None and limit > 0 and previous.context_k > limit
-    if previous is not None and request.delta_file is not None and not oversized:
+    mark = state.out.get(previous.first_lane or "") if previous else None
+    retake = previous is not None and previous.fallback and (mark is None or mark.until <= env.now())
+    if previous is not None and request.delta_file is not None and not oversized and not retake:
         resume, path = previous.ref, request.delta_file
     text = Path(path).read_text(encoding="utf-8", errors="replace")
     takeover = request.role == "worker" and previous is not None and resume is None
@@ -51,7 +53,10 @@ def settle(state: StateDoc, key: str, res: RunResult) -> None:
     if not key or not res.ref:
         return
     state.threads.pop(key, None)
-    state.threads[key] = ThreadRecord(ref=res.ref, lane=res.lane, model=res.model, context_k=res.usage.context_k)
+    state.threads[key] = ThreadRecord(
+        ref=res.ref, lane=res.lane, model=res.model, context_k=res.usage.context_k,
+        fallback=res.fallback is True, first_lane=res.first_lane if isinstance(res.first_lane, str) else None,
+    )
     for old in list(state.threads)[:-200]:
         del state.threads[old]
 

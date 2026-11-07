@@ -78,6 +78,11 @@ def no_repo(fn):
 
 def pid_gone(pid):
     try:
+        if Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[1][0] in ("Z", "X"):
+            return True
+    except FileNotFoundError:
+        pass
+    try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return True
