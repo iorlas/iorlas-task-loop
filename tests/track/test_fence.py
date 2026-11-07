@@ -21,8 +21,8 @@ from support.fake_beads import FakeBeads
 from support.lifecycle import lifecycle
 from support.memstores import fake_stores
 
+from taskloop.app.pipeline.checkpoints import Checkpoints
 from taskloop.app.pipeline.lifecycle import Ended
-from taskloop.app.run.state import Checkpoints
 from taskloop.app.track import verbs
 from taskloop.app.wire import closeguard
 from tlkernel import fence

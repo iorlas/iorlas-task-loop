@@ -13,6 +13,7 @@ import support.paths  # noqa: E402, F401
 from support import tlbd  # noqa: E402
 from support.who import who  # noqa: E402
 
+from taskloop.adapters.beadtools import bd_store  # noqa: E402
 from taskloop.app.doctor import setup_checks  # noqa: E402
 
 
@@ -31,6 +32,6 @@ class DoctorBeads(Case):
                  {"id": "x-4", "acceptance_criteria": "matches 79-test-impact-and-land-gate.md"},
                  {"id": "x-5", "issue_type": "epic", "description": "study 49"}]
         with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-test"}), tlbd.bd_boundary(result=tlbd.done(json.dumps(beads))):
-            out = setup_checks.bead_lint_warnings("/work/repo", who())
+            out = setup_checks.bead_lint_warnings("/work/repo", lambda: bd_store(who().actor, "/work/repo"))
         assert [w.split(":")[0] for w in out] == ["bead x-1", "bead x-4"]
         assert all("needs inlined facts" in w for w in out)
