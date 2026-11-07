@@ -15,6 +15,7 @@ from support.fake_beads import FakeBeads
 from support.tiers import domain
 
 from taskloop.app.asks import sweeps
+from taskloop.app.asks.paths import ask_marker
 from taskloop.cli import asks as cli
 from tlkernel.askstore import HAD_PICK, ORPHAN, AskStore
 from tlkernel.bead import Bead
@@ -47,7 +48,7 @@ class OrphanTest(Case):
 
     def test_the_loop_reopens_it_into_the_pick_queue_once(self) -> None:
         self.store.beads[BeadId("tl-7")].metadata[HAD_PICK] = "auto"  # the park took the label off
-        marker = self.cfg.ask_marker("orphans")
+        marker = ask_marker(self.cfg, "orphans")
         assert sweeps.reask_orphans(self.asks, self.store, marker, T, "auto", "needs-info") == ["tl-7"]
         b = self.store.beads[BeadId("tl-7")]
         assert (b.status, "auto" in b.labels, "needs-info" in b.labels) == ("open", True, False)
@@ -55,7 +56,7 @@ class OrphanTest(Case):
         assert sweeps.reask_orphans(self.asks, self.store, marker, T + 1e4, "auto", "needs-info") == []  # no longer blocked
 
     def test_the_sweep_never_adds_a_pick_label_the_bead_did_not_have(self) -> None:
-        marker = self.cfg.ask_marker("orphans")
+        marker = ask_marker(self.cfg, "orphans")
         assert sweeps.reask_orphans(self.asks, self.store, marker, T, "auto", "needs-info") == ["tl-7"]
         b = self.store.beads[BeadId("tl-7")]
         assert (b.status, b.labels) == ("open", [])

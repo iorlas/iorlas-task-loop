@@ -230,7 +230,7 @@ source_modules =
     taskloop.app.pipeline.finish
     taskloop.app.pipeline.outcomes
     taskloop.app.run.preflight
-    taskloop.app.run.records
+    taskloop.app.pipeline.journal
     taskloop.app.pipeline.reflect
     taskloop.app.pipeline.reflect_prompt
     taskloop.app.run.reload_ports
@@ -269,6 +269,7 @@ forbidden_modules =
     taskloop.app.run.parts_plan
     taskloop.app.run.parts_run
     taskloop.app.run.plumbing
+    taskloop.app.run.reload_ports
     taskloop.app.run.run_once
 allow_indirect_imports = True
 ignore_imports =
@@ -278,7 +279,6 @@ ignore_imports =
     taskloop.app.prune.runs -> taskloop.app.run.layout
     taskloop.app.run.ask_flow -> taskloop.app.run.layout
     taskloop.app.run.preflight -> taskloop.app.run.layout
-    taskloop.app.run.records -> taskloop.app.run.layout
     taskloop.app.run.stages -> taskloop.app.run.layout
     taskloop.app.run.stages -> taskloop.app.run.run_once
     taskloop.app.run.closer_ports -> taskloop.app.wire.slots

@@ -5,10 +5,10 @@ from pathlib import Path
 from typing import Final
 
 from tlkernel.artifact import ArtifactSlot
-from tlkernel.paths import RunFiles
 from tlkernel.wire import Refused
 
 from taskloop.app.artifacts import rules, store
+from taskloop.app.artifacts.paths import check_dirs
 
 MAX_PICTURES: Final = 4
 IMAGES: Final = ("png", "jpg", "gif", "webp")
@@ -24,7 +24,7 @@ def attach(root: Path, slot: ArtifactSlot, run_dir: Path, *, now: float, cap: in
     """The ids (`<repo>/<bead>/<run>/<stage>-<attempt>/<name>`) of the pictures registered for the slot's ask; [] when the run kept none."""
     ids: list[str] = []
     newest: dict[str, Path] = {}
-    for _, check_dir in RunFiles(run_dir).check_dirs():  # oldest run attempt first: a later one replaces the step's folder
+    for _, check_dir in check_dirs(run_dir):  # oldest run attempt first: a later one replaces the step's folder
         newest[check_dir.name] = check_dir
     for check_dir in sorted(newest.values()):
         try:

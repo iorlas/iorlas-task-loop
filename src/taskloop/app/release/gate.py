@@ -20,6 +20,7 @@ from taskloop.adapters.ident import config_dir
 from taskloop.adapters.suiteout import failing_tests, failure_report
 from taskloop.app.checks import authorization
 from taskloop.app.checks.cache import RunMemo
+from taskloop.app.release.paths import releases_dir
 from taskloop.app.release.shell import Abort, Shell, say
 from taskloop.domain.checks.specs import gate_items
 from taskloop.stores.real import real_stores
@@ -29,7 +30,7 @@ LONG = 3 * 3600.0  # a hang guard for a whole gate run
 
 def save_output(out: str, env_dir: Path) -> Path:
     """The full gate output, in the config dir: a file inside the checkout would make the tree dirty and block the release."""
-    d = ConfigDir(env_dir).releases_dir()
+    d = releases_dir(ConfigDir(env_dir))
     d.mkdir(parents=True, exist_ok=True)
     f = d / f"suite-{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}.log"
     f.write_text(out, encoding="utf-8")

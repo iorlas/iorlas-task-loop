@@ -2,9 +2,10 @@
 from pathlib import Path
 from time import time_ns
 
-from tlkernel.paths import ConfigDir, RunFiles
+from tlkernel.paths import ConfigDir
 
 from taskloop.adapters.git_base import push_error_line
+from taskloop.app.land.paths import land_push, push_log
 
 
 def failure(output: str, run_dir: Path | None, branch: str, config: ConfigDir | None = None) -> str:
@@ -12,9 +13,9 @@ def failure(output: str, run_dir: Path | None, branch: str, config: ConfigDir | 
     stamp = time_ns()
     name = branch.replace("/", "_").replace("\\", "_") or "detached"
     if run_dir is not None:
-        path = RunFiles(run_dir).push_log(stamp)
+        path = push_log(run_dir, stamp)
     elif config is not None:
-        path = config.land_push(stamp, name)
+        path = land_push(config, stamp, name)
     else:
         raise ValueError("push evidence needs a run directory or config directory")
     path.parent.mkdir(parents=True, exist_ok=True)

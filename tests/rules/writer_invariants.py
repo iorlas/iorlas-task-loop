@@ -14,7 +14,7 @@ WRITERS: Final = {
     'ReleaseResultStore': {'taskloop.app.release.flow'},
     'ReflectStateStore': {'taskloop.app.report.reflect'},
     'ParkStore': {'taskloop.app.asks.parks', 'tlkernel.parks'},
-    'TraceStore': {'taskloop.app.run.records', 'tlkernel.finish_projection'},
+    'TraceStore': {'taskloop.app.pipeline.journal', 'tlkernel.finish_projection'},
     'BadVersionStore': {'taskloop.app.loop.versions'},
     'HandoffMirrorStore': {'taskloop.app.write.handoff'},
     'ReexecNoteStore': {'taskloop.app.release.reexec', 'taskloop.app.release.closing'},
@@ -25,11 +25,9 @@ WRITERS: Final = {
 }
 PATH_STORES: Final = {
     'pin': 'PinStore', 'status': 'StatusStore', 'status_tried': 'StatusTriedStore', 'repos': 'ReposStore',
-    'release_result': 'ReleaseResultStore', 'reflect_state': 'ReflectStateStore',
     'park': 'ParkStore', 'traces': 'TraceStore',
-    'bad_versions': 'BadVersionStore',
     'handoff': 'HandoffMirrorStore', 'reexec_note': 'ReexecNoteStore',
-    'net_pause': 'NetPauseStore', 'pause': 'RunCountersStore', 'reexec': 'RunCountersStore',
+    'net_pause': 'NetPauseStore',
 }
 MUTATIONS: Final = {'write', 'put', 'append', 'delete', 'add', 'update', 'replace', 'clear', 'drop'}
 
