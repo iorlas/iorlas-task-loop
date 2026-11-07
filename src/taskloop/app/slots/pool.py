@@ -11,7 +11,7 @@ from tlkernel.slots import Hold, SlotFail, slots_of
 
 from taskloop.app.slots import aside, owned
 from taskloop.app.slots.env import SlotEnv, stamp
-from taskloop.app.slots.marks import clear_marks, held_by, hold_of, hold_until, mark_held, next_gen
+from taskloop.app.slots.marks import clear_marks, fresh_gen, held_by, hold_of, hold_until, mark_held
 from taskloop.app.slots.reset import check_ready, ready_for
 
 
@@ -54,7 +54,7 @@ class Slot:
             raise SlotFail("busy", f"slot {self.name} {why_not}")
         if not self.claimed():
             raise SlotFail("busy", f"slot {self.name} held by {held_by(peek(self.env.store, sb.id) or sb)}")
-        mark_held(self.env, sb.id, why, bead=bead, gen=next_gen(sb))
+        mark_held(self.env, sb.id, why, bead=bead, gen=fresh_gen(self.env, sb.id))
         self.env.event("slot_take", "", slot=self.name, slot_bead=sb.id, worktree=self.dir, repo=self.env.repo,
                        **({"ticket": ticket} if ticket is not None else {}))
         return sb.id

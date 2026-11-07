@@ -22,7 +22,7 @@ class RoundStages:
 
 def run_stages(e: RunHost, requested: str | None, *, continuous: bool) -> int:
     once = RunOnce(e)
-    standalone = Standalone(e, rounds=RoundStages(e), once=lambda: once, lease=once.lease,
+    standalone = Standalone(e, e, e, e, e, rounds=RoundStages(e), once=lambda: once, lease=once.lease,
                             closing=ClosingBeads(e.who, e.store, guard_for(e.who, e.store, e.git, e.wt)),
                             has_land=lambda: has_land(e.who, e.bead), repo_of=repo_of, stage_run=stage_run)
     return standalone.run_stages(requested, continuous=continuous)
