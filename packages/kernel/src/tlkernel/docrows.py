@@ -13,6 +13,8 @@ from tlkernel.looprows import LoopRows
 from tlkernel.paths import ConfigDir
 from tlkernel.wire import Rec
 
+LOOP_DOCS = "loop_doc"  # the loop stage's repo stop commands and rests
+LOOK_DOCS = "look_doc"  # the look stage's owner-look galleries
 LANES_DOCS = "lanes_doc"  # the lanes part's status snapshot and last attempt
 REPORT_DOCS = "report_doc"  # the report stage's document: the reflect digest state
 WORK_DOCS = "work_doc"  # the work stage's documents: the cache of a repo's decision records

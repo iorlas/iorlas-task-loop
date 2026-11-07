@@ -127,7 +127,7 @@ class OwnerLook:
                 ports.warn("owner-look bead filed, but its id was not in bd's answer: no looks metadata")
 
     def write_looks(self, bead_id: BeadId) -> None:
-        """tl-bxk.13.15: the gallery's data of the owner-look bead, as its kv row (contracts/lookrows.py; one entry per taste item: id,
+        """tl-bxk.13.15: the gallery's data of the owner-look bead, as its look_doc row (tlkernel/lookrows.py; one entry per taste item: id,
         bead, title, note, shots[{path, role before|after, label}], status). A re-land of this bead replaces its own entries and
         keeps one the owner already answered (good or redo). The row is written by compare-and-set, so an answer the owner gives
         meanwhile is not lost, and the bead's metadata (a hold) is not touched."""
