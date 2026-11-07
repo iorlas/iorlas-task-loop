@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from enum import IntEnum
 
-from taskloop.adapters import profile_at
+from taskloop.adapters import landlock, locks, profile_at
 from taskloop.adapters.clock import SystemClock
 from taskloop.app.checks import authorization
 from taskloop.app.land.profile_change import diff_sha
@@ -10,8 +10,11 @@ from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import CheckId, TreeSha
+from taskloop.contracts.locks import LockTimeout
+from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Clock
 from taskloop.contracts.runkey import BaseSha
+from taskloop.contracts.slots import MissingRemote
 from taskloop.domain.matchers import secrets_added
 from taskloop.stores.bundle import Stores
 
@@ -211,6 +214,19 @@ class PushJudge:
             for tip, _cfg in deliveries if tip.sha not in stamped
             and not any(self.git.is_ancestor(self.repo, tip.sha, top) for top in stamped))
         return PushDecision(PushStatus.REFUSED if refused else PushStatus.ALLOWED, refused)
+
+
+def land_lock_held(home: ConfigDir, git: Git, repo: str) -> bool:
+    """Whether someone holds the repo's land lock now: a land push and a release take it around their push to the base branch."""
+    try:
+        url = git.remote_url(repo, "origin")
+    except MissingRemote:
+        url = ""
+    try:
+        with locks.hold_path(landlock.land_lock_path(home, url or repo), "judge-probe", timeout=0):
+            return False
+    except LockTimeout:
+        return True
 
 
 def judge_push(repo: str, stdin: str, stores: Stores, git: Git, *, env: Env, clock: Clock | None = None, guard_main: bool = False,

@@ -23,10 +23,8 @@ def github_slug(git: Git, repo: str) -> str:
     return path if host == "github.com" and path.count("/") == 1 else ""
 
 
-def expected_pre_push(template: str, install: Path | None, config: ConfigDir) -> str:
-    """The text tl's setup writes for the pre-push dispatcher ('' when no install can be read)."""
-    if install is None:
-        return ""
+def expected_pre_push(template: str, install: Path, config: ConfigDir) -> str:
+    """The text tl's setup writes for the pre-push dispatcher."""
     text = template.replace("{name}", "pre-push")
     for key, path in (("{hook}", install / "hooks" / "hook.py"), ("{tl}", config.root / "bin" / "tl")):
         text = text.replace(key, shlex.quote(str(path)))
@@ -39,8 +37,9 @@ def report(config: ConfigDir, template: str, install: Path | None, git: Git, rep
     that runs no process): nothing is read."""
     if spawner is None:
         return []
-    found = guard_rails.hook_findings(config.hooks_dir(), expected_pre_push(template, install, config),
-                                      [(c.path, git.config_get(c.path, "core.hooksPath")) for c in git.checkouts(repo)])
+    found = [] if install is None else guard_rails.hook_findings(  # no readable install: the launcher check says so
+        config.hooks_dir(), expected_pre_push(template, install, config),
+        [(c.path, git.config_get(c.path, "core.hooksPath")) for c in git.checkouts(repo)])
     if slug := github_slug(git, repo):
         found += guard_rails.ruleset_findings(lambda path: spawner.run(["gh", "api", path], cwd=repo, timeout_s=60), slug, checks)
     for line in found:
