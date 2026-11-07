@@ -19,11 +19,11 @@ OUT_LINES = 12  # lines of a command's output shown after its exit
 
 def retype(event: dict[str, Any]) -> Any | None:
     """The record an event dict came from (engine_event / worker_event); None when it no longer decodes."""
-    body = {k: v for k, v in event.items() if k not in ("k", "src", "seq")}
+    body = {k: v for k, v in event.items() if k not in ("src", "seq")}
     try:
         if event["src"] == ENGINE:
-            return log.decode(dict(body, kind=event["k"], v=log.LogRec.V))
-        return wire.load(delegate.LiveEvent, dict(body, kind=event["k"], v=delegate.LiveRec.V))
+            return log.decode(dict(body, v=log.LogRec.V))
+        return wire.load(delegate.LiveEvent, dict(body, v=delegate.LiveRec.V))
     except ValueError:
         return None
 

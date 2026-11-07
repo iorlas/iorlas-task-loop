@@ -123,7 +123,7 @@ class Generated:
 
 
 class LiveRecords(Case):
-    def test_every_kind_round_trips_with_its_k(self):
+    def test_every_kind_round_trips_with_its_kind(self):
         recs = [
             live.LiveStart(t=1.0, harness="codex", pid=3, lane="L"),
             live.LiveCmdStart(t=1.0, id="a", text="ls", cwd="/w"),
@@ -142,8 +142,9 @@ class LiveRecords(Case):
         for r in recs:
             with self.subTest(r.KIND):
                 wire_form = codec.to_json(r)
-                assert wire_form["k"] == r.KIND
-                assert codec.from_tagged(live.LIVE_EVENTS, wire_form, "k") == r
+                assert wire_form["kind"] == r.KIND
+                assert "k" not in wire_form
+                assert codec.from_tagged(live.LIVE_EVENTS, wire_form) == r
         assert codec.to_json(live.LiveTokens(t=1.0, in_=5))["in"] == 5
 
     def test_start_end_kinds_come_in_pairs(self):
@@ -151,3 +152,8 @@ class LiveRecords(Case):
         for k in kinds:
             if k.endswith("_start"):
                 assert (k[:-6] + "_end") in kinds
+
+
+def test_live_record_with_only_the_old_tag_is_refused():
+    with pytest.raises(codec.CodecError):
+        codec.from_tagged(live.LIVE_EVENTS, {"k": "msg", "t": 1.0, "text": "old"})
