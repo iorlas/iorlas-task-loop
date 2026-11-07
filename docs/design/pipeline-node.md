@@ -209,7 +209,7 @@ Each PR is one bead (child of tl-e5t0.39, label `auto`), lands green, behaviour 
 | **R4c** `Standalone` ports | `StandaloneHost` becomes separate role Protocols (at most 16 own members each), with the Engine passed for every role by `run/stages.py`; inherited journalling members remain exempt until R4d; `once`, `lease`, `rounds` stay as constructor arguments | pipeline/standalone, run/stages, tests/pipeline/test_standalone | 0 | none | R4b |
 | **R4d** journal ports | `JournalHost` becomes separate role Protocols (at most 16 own members each), with the Engine passed for every role by `run/parts_run.py`; `RecordHost` and `ended.HostFacts` stay separate role arguments; the rows modules stay | pipeline/journal, summaries, trace, tests/pipeline/test_journal | 0 | none | B3-4 (transcript kinds leave trace/journal); after it lands |
 | **R4e** resume, reflect, reload | `ResumeHost`, `ReflectHost`, `ReloadHost` become separate role Protocols (at most 16 own members each), with the Engine passed for every role by `run/parts_run.py` | pipeline/resume, reflect, reload, run/reload_ports | 0 | none | B3-1 and B3-2 (they delete `resume` machinery: land first, then narrow what is left) |
-| **R4f** closer host | `closing_host.py` (89 sloc, 31 members) is replaced by the ports of section 9 given to `Closer` directly; `run/closer_ports.py` stays the one binder | pipeline/closing*, run/closer_ports | 0 | none | B3 parks / pauses / pause_reasons / policy rows (touches `closing.py`, `closing_settle.py`); after B3-5 |
+| **R4f** closer host | `closing_host.py` deleted; `CloseState`, `CloseRuntime`, and `CloseStats` role Protocols are given to `Closer` directly; `run/closer_ports.py` stays the one binder | pipeline/closing*, run/closer_ports | 0 | none | B3 parks / pauses / pause_reasons / policy rows (touches `closing.py`, `closing_settle.py`); after B3-5 |
 | **R5** run is construction | a rules test: no `app/run` module outside the composition list defines a class with logic (names from `.importlinter`), no host Protocol in `app/pipeline` over 16 members (ratchet: the list only shrinks), the `run.*` source entries of `nobody-imports-a-root` are gone; docs: `stage-isolation.md` section 2 marks the node done; `dev/root_report.py` numbers recorded | tests/rules, .importlinter, docs | -N | none (a contract entry is removed, not added) | R1 to R4f |
 | **R6** pipeline package | carve to `packages/pipeline/{src/taskloop_pipeline, tests}` per the charter: public surface `api.py`, `contracts/`, `testing.py` (the fakes of `support/pipeline_ports.py`); `git mv`, no code change | packages/pipeline, pyproject, .importlinter | measured by `dev/reach.py`; must not grow | `node pipeline becomes a workspace package` | pix-wspike's layout decision (tl-e5t0.65), R5 |
 
@@ -228,6 +228,8 @@ Each PR is one bead (child of tl-e5t0.39, label `auto`), lands green, behaviour 
 | the run's values | one `RunState` value passed to the pipeline; the Engine's `StateField` forwarders are removed as callers stop using them |
 | host replacement | a frozen dataclass of ports per entry (`RunPorts`, `StandalonePorts`), built in the existing binder files; no new root file (a new root needs `Layout-allow: node`) |
 | the 16-member ceiling | a ratchet in `tests/rules` (R5), list only shrinks |
+
+R4g: LifecycleHost split into role Protocols
 
 Beads (children of tl-e5t0.39): R1 tl-e5t0.39.1, R2 .2, R3 .3, R4a .4, R4b .5, R4c .6, R4d .7, R4e .8, R4f .9, R5 .10, R6 .11.
 

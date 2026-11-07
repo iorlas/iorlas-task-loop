@@ -46,3 +46,12 @@ def test_gate_member_is_the_checks_stage_and_the_shell_glue_keeps_no_budget():
         "packages/gate/src/tlgate/domain/plan.py": "import json",
     })
     assert counts == {"checks": 4, "checks (external modules)": 1}
+
+
+def test_a_package_testing_module_is_outside_the_stage_closure():
+    counts = closures({
+        "packages/gate/src/tlgate/__init__.py": "",
+        "packages/gate/src/tlgate/runner.py": "",
+        "packages/gate/src/tlgate/testing.py": "import json\nfrom tlgate import runner",
+    })
+    assert counts == {"checks": 2, "checks (external modules)": 0}

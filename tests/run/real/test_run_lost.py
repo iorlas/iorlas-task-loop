@@ -16,7 +16,7 @@ from support import engine_case as te
 from support import homes
 from support.dashes import make_dash
 from support.factory_index import ingest
-from support.waits import until
+from support.waits import until_marker
 
 from taskloop.app.asks import owner_verbs as requests
 from taskloop.app.loop.loop import Loop
@@ -41,7 +41,7 @@ class KilledEngine(te.EngineTest):
         child = subprocess.Popen([sys.executable, str(CHILD), str(marker)], env=env, cwd=str(te.ROOT), stdout=subprocess.DEVNULL,
                                  stderr=subprocess.PIPE)
         try:
-            until(marker.exists, WAIT)
+            until_marker(marker, child, WAIT)
             pid, run = marker.read_text().split()
             assert int(pid) == child.pid
             cfg, where = homes.cfg(), RunLocator(homes.cfg())
