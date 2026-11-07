@@ -10,6 +10,7 @@ PACKAGE_ONLY = {
     "tlslots": ("api", "testing"),
     "tlasks": ("api", "testing", "contracts"),
     "tlartifacts": ("api",),
+    "tlwork": ("api", "testing"),
 }
 
 

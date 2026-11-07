@@ -19,7 +19,7 @@ build-backend = "hatchling.build"
 packages = ["src/tlwork"]
 
 [dependency-groups]
-dev = ["pytest", "tltestkit"]
+dev = ["pytest", "tltestkit", "msgspec"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

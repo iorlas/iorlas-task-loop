@@ -1,5 +1,6 @@
 """Shared prose matchers retain their wording rules."""
 from tltestkit.case import Case
+
 from tlwork.work.matchers import Wording, without_runner, word_set
 
 

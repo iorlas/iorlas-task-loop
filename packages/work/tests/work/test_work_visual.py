@@ -2,6 +2,7 @@
 checked against the artifacts the stage attempt registered."""
 
 from tltestkit.case import Case
+
 from tlwork.work import visual as v
 
 
