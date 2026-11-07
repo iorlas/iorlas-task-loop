@@ -125,7 +125,7 @@ class Resume:
             return self.amend(ck, d)
         if ck.step == "plan" and plan is not None:
             e.log.note(f"resuming {ck.run}: validating the saved draft plan before any write")
-            return e.planner.resume_draft(plan), 0, None
+            return e.take_planned(e.planner.resume_draft(plan)), 0, None
         e.plan_data, e.plan_summary, e.accepted = plan, (plan or {})["summary"], list(ck.state.accepted)
         e.publish_plan()
         if d.redo_from is not None:
