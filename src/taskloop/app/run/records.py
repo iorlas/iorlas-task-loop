@@ -164,10 +164,10 @@ class Records:
                         stderr=str(e.err_path),
                         sessions=e.sessions,
                         verified=e.review.verified,
-                        write_rounds=e.write_rounds,
-                        strays=e.strays,
+                        write_rounds=e.write.write_rounds,
+                        strays=e.write.strays,
                         reflection=e.reflection,
-                        lane_notes=e.lane_notes,
+                        lane_notes=e.write.lane_notes,
                         salvaged=e.land_state.salvaged,
                     ),
                 )

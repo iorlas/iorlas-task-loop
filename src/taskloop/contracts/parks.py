@@ -1,6 +1,7 @@
 """Parks (`wait` rows of kind park; parks/<bead>.json before): question counts and durable pause wakes. `runs` counts questions on
 the same bead text; `attempts` counts pauses by producer:reason across runs. Transient
 pauses carry an epoch retry_at; needs_owner pauses wake on owner input."""
+from collections.abc import Callable
 from pathlib import Path
 from typing import ClassVar
 
@@ -43,6 +44,10 @@ class ParkStore:
         """The durable wake for this run; an absent or older park has no timer."""
         rec = self.get(bead)
         return rec.retry_at if rec is not None and rec.run == run else 0.0
+
+    def change(self, bead: BeadId, fn: Callable[[Park | None], Park]) -> Park:
+        """The park after `fn` saw the stored one (None: no park), read and written in one transaction."""
+        return self.doc(bead).change(fn)
 
     def put(self, rec: Park) -> None:
         self.doc(rec.bead).write(rec)

@@ -52,7 +52,7 @@ class Handoff:
         """What a fresh writer is told its predecessor did: the diff --stat of the stage so far, and its last summary."""
         tree = self.e.checkout.tree_hash()
         stat = self.git.diff(self.e.wt, self.e.stage_tree or self.e.checkout.base_sha(), tree, stat=True) if tree else ""
-        return DONE_SO_FAR % ((stat or "(no file changed yet)").strip(), (self.e.last_summary or "(none)").strip(),
+        return DONE_SO_FAR % ((stat or "(no file changed yet)").strip(), (self.e.write.last_summary or "(none)").strip(),
                               self.rounds_text(last=4) or "(none)\n")
 
     def accepted_text(self) -> str:
