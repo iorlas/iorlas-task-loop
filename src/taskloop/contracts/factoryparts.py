@@ -1,6 +1,6 @@
-"""factory.db as the parts that own its tables (stage-isolation 3.1): today's schema registered at version 1, each part by its future owner.
+"""factory.db as the parts that own its tables (stage-isolation 3.1): today's schema declared at version 1, each part by its future owner.
 
-The tables stay here until their stage's own store module registers them (the D-* beads of ARCHVERT); every table is in exactly one part.
+The tables stay here until their stage's own store module defines them (the D-* beads of ARCHVERT); every table is in exactly one part.
 `kv` is the prefix grab-bag the D-KV bead takes apart. The frozen `user_version` (factorydb.SCHEMA_VERSION) stays what the vendored
 sqlite_store checks; a change to a part is a version bump of the part and a step (dbparts), not of that number.
 """
@@ -8,7 +8,7 @@ from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.checks import BaseRedRecord, PassRecord
-from taskloop.contracts.dbparts import Part, Prune, ddl, doc_table, register
+from taskloop.contracts.dbparts import Part, Prune, doc_table
 from taskloop.contracts.ledger import LedgerEntry
 from taskloop.contracts.locks import EngineLock
 from taskloop.contracts.requests import OwnerRequest
@@ -27,7 +27,7 @@ ELIGIBLE = """SELECT r.run FROM run AS r
     AND NOT EXISTS (SELECT 1 FROM signal AS s WHERE s.run=r.run AND s.taken IS NULL)
     AND NOT EXISTS (SELECT 1 FROM ask AS a WHERE a.bead=r.bead AND a.status IN ('open','open_soft'))"""
 
-DASH = register(Part(
+DASH = Part(
     name="dash", version=1, tables=("source", "bead"),
     records=(Bead,),
     ddl="""
@@ -39,9 +39,9 @@ CREATE TABLE bead (id TEXT PRIMARY KEY, repo_key TEXT NOT NULL, title TEXT NOT N
   labels TEXT NOT NULL DEFAULT '[]', updated REAL NOT NULL, fetched REAL NOT NULL, rev INTEGER NOT NULL DEFAULT 0,
   body TEXT NOT NULL DEFAULT '{}');
 CREATE INDEX bead_status ON bead(repo_key, status);
-"""))
+""")
 
-PIPELINE = register(Part(
+PIPELINE = Part(
     name="pipeline", version=1, tables=("run", "attempt", "step", "effect", "wait", "checkpoint", "timed", "signal"),
     records=(RunManifest, Checkpoint, OwnerRequest),
     ddl="""
@@ -92,18 +92,18 @@ CREATE TABLE signal (
         AND NOT EXISTS (SELECT 1 FROM timed WHERE timed.run=run.run)
         AND NOT EXISTS (SELECT 1 FROM check_round WHERE check_round.run=run.run)""",
               after=("step", "attempt", "effect", "timed", "check_round")),
-    )))
+    ))
 
-SLOTS = register(Part(
+SLOTS = Part(
     name="slots", version=1, tables=("lease",),
     records=(EngineLock,),
     ddl="""
 CREATE TABLE lease (kind TEXT NOT NULL CHECK (kind IN ('run','loop','resource','slot')), name TEXT NOT NULL,
   holder TEXT NOT NULL, run TEXT, host TEXT, pid INTEGER, start_id TEXT, since REAL NOT NULL, beat REAL, until REAL,
   body TEXT, PRIMARY KEY (kind, name));
-"""))
+""")
 
-GATE = register(Part(
+GATE = Part(
     name="gate", version=1, tables=("check_pass", "check_round"),
     records=(PassRecord, BaseRedRecord),
     ddl="""
@@ -115,9 +115,9 @@ CREATE INDEX check_tree ON check_pass(repo_key, tree, base);
 CREATE TABLE check_round (run TEXT NOT NULL, round INTEGER NOT NULL, ts REAL, body TEXT NOT NULL, PRIMARY KEY (run, round));
 """,
     prune=(Prune("check_round", f"""ts < ? AND NOT EXISTS (
-        SELECT 1 FROM run AS parent WHERE parent.run=check_round.run AND parent.run NOT IN ({ELIGIBLE}))""", cutoffs=2),)))
+        SELECT 1 FROM run AS parent WHERE parent.run=check_round.run AND parent.run NOT IN ({ELIGIBLE}))""", cutoffs=2),))
 
-ASKS = register(Part(
+ASKS = Part(
     name="asks", version=1, tables=("ask", "ask_ledger"),
     records=(Ask, LedgerEntry),
     ddl="""
@@ -134,15 +134,13 @@ CREATE TABLE ask_ledger (id INTEGER PRIMARY KEY, t REAL NOT NULL, event TEXT NOT
         AND NOT EXISTS (SELECT 1 FROM ask AS a
             WHERE (a.id=ask_ledger.ask OR a.bead=ask_ledger.bead) AND a.status IN ('open','open_soft'))
         AND NOT EXISTS (SELECT 1 FROM run AS r
-            WHERE r.bead=ask_ledger.bead AND r.state IN ('created','running'))"""),)))
+            WHERE r.bead=ask_ledger.bead AND r.state IN ('created','running'))"""),))
 
-KV = register(Part(
+KV = Part(
     name="kv", version=1, tables=("kv",),
     records=(),
     ddl="""
 CREATE TABLE kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL, stamp TEXT);
-"""))
+""")
 
-RELEASE = register(Part(name="release", version=1, tables=(RELEASE_DOCS,), records=(Pin, ReleaseResult), ddl=doc_table(RELEASE_DOCS)))
-
-DDL = ddl()
+RELEASE = Part(name="release", version=1, tables=(RELEASE_DOCS,), records=(Pin, ReleaseResult), ddl=doc_table(RELEASE_DOCS))

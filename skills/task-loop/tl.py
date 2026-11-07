@@ -80,6 +80,7 @@ from taskloop.adapters import beadtools, gitrepo, ident, landlock
 from taskloop.app.doctor import rails
 from taskloop.app.launch import dash as wire_dash
 from taskloop.app.launch import reindex
+from taskloop.app.parts import STAGE_PARTS
 from taskloop.app.release import pins
 from taskloop.app.track import trail, verbs
 from taskloop.app.wire import asks as wire_asks
@@ -103,6 +104,7 @@ from taskloop.cli import wait as cli_wait
 from taskloop.cli.ctx import Ctx
 from taskloop.contracts.enums import Step
 from taskloop.contracts.env import snapshot
+from taskloop.contracts.factorydb import declare_parts
 from taskloop.contracts.slots import MissingRemote
 
 HERE = Path(__file__).resolve().parent
@@ -488,6 +490,7 @@ VERBS: Final[dict[str, Handler]] = {
 
 def main(argv: list[str] | None = None, here: Path = HERE, now: Callable[[], float] = trail.now) -> int:
     """`here`: the install this run executes from, `now`: the clock (a test runs the loop as another version, at another time)."""
+    declare_parts(STAGE_PARTS)
     a = build_parser().parse_args(argv)
     os.umask(0o077)  # the config dir, hooks and logs are the owner's alone (a worker's files too: it runs as the owner)
     env = snapshot()
