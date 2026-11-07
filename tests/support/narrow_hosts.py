@@ -1,6 +1,5 @@
 """Small typed fakes of what a slice reads of the engine (app/pipeline/waits.py WaitsHost, app/land/outbound.py OutboundHost): a class that
 has just those members, so the type checker proves the fake is enough and a slice that reads one more member breaks the test's types."""
-
 import contextlib
 import tempfile
 import threading
@@ -18,6 +17,7 @@ from support.fakegit import FakeGit, ScriptedGit
 from support.memstores import fake_stores
 from support.pipeline_ports import FakeAskRules, FakeParkBook
 from support.who import who
+from taskloop.adapters import beadtools
 from taskloop.app.land.commit import Commit
 from taskloop.app.land.fix_outside import FixOutside
 from taskloop.app.land.gate import Gate, GateChecker, GateCheckout
@@ -812,4 +812,4 @@ class CloseKit:
                 reflect=SpyReflect(),
                 settle=SpySettle(),
             ), FakeAskRules(), FakeParkBook(),
-        )
+            beadtools.peek)

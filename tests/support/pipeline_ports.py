@@ -177,3 +177,11 @@ class FakeRoundSteps:
     def round_step(self, step: Step, ck: Checkpoint | None) -> Step:
         self.calls.append((step, ck))
         return self.following
+
+
+class FakeVersion:
+    def __init__(self, value: str = "test") -> None:
+        self.value = value
+
+    def __call__(self) -> str:
+        return self.value

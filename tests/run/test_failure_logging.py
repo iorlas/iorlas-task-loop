@@ -1,10 +1,9 @@
 """Best-effort run operations leave tracebacks when they fail instead of hiding missing evidence."""
-
 import sys
 from pathlib import Path
 from unittest import mock
 
-from taskloop.adapters import ident
+from taskloop.adapters import closes, ident
 from tlkernel import childenv
 from tltestkit.case import Case
 
@@ -35,7 +34,7 @@ class FailureLogging(Case):
         host.clock.now.return_value = 100
         with mock.patch("taskloop.adapters.closes.recent_closes", side_effect=OSError("unreadable")), \
                 mock.patch.object(Decide, "repo_id", return_value="repo"):
-            assert Decide(host).run(oc.make(Kind.PAUSE_LANE, "paused")) == Kind.PAUSE_LANE
+            assert Decide(host, closes.recent_closes).run(oc.make(Kind.PAUSE_LANE, "paused")) == Kind.PAUSE_LANE
         self.assert_traceback(host.warn.call_args.args[0], "could not read retry history: unreadable")
 
     def test_settle_failure_is_logged_and_does_not_replace_the_run_outcome(self):
@@ -44,7 +43,7 @@ class FailureLogging(Case):
                 host = mock.Mock(run_id="r1")
                 with mock.patch("taskloop.app.pipeline.journal.RunLocator"), \
                         mock.patch("taskloop.app.pipeline.journal.finish_run", side_effect=error):
-                    Journal(host, lambda: "", lambda _git, _wt: "repo").settle(RunState.PARKED, "paused")
+                    Journal(host, lambda: "", lambda _git, _wt: "repo", ident.plugin_version).settle(RunState.PARKED, "paused")
                 self.assert_traceback(host.warn.call_args.args[0], "could not settle run r1")
 
     def test_reflection_catch_all_logs_traceback(self):

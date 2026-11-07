@@ -9,6 +9,7 @@ import pytest
 from support.narrow_hosts import FakeSettleHost
 from support.pipeline_ports import FakeParkBook
 
+from taskloop.adapters import beadtools
 from taskloop.app.pipeline.closing_settle import Settle
 from taskloop.app.track.closing import ClosingBeads
 from taskloop.app.wire import closeguard
@@ -60,10 +61,10 @@ def test_settling_the_bead_twice_leaves_it_as_the_first_time_did(case, monkeypat
     cls, done = SETTLING[case]
     host = held_host(done)
     before = bead_state(host)
-    Settle(host, ClosingBeads(host.who, host.store, closeguard.ENGINE), FakeParkBook()).run(done, "")
+    Settle(host, ClosingBeads(host.who, host.store, closeguard.ENGINE), FakeParkBook(), beadtools.peek, beadtools.attempt).run(done, "")
     first = bead_state(host)
     assert first != before  # the first application did something, or the repeat proves nothing
-    Settle(host, ClosingBeads(host.who, host.store, closeguard.ENGINE), FakeParkBook()).run(done, "")
+    Settle(host, ClosingBeads(host.who, host.store, closeguard.ENGINE), FakeParkBook(), beadtools.peek, beadtools.attempt).run(done, "")
     assert bead_state(host) == first
     assert fx.settling(done).__class__ is cls
 

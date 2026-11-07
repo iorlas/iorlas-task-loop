@@ -67,7 +67,7 @@ class RunParts(Plumbing):
 
     @cached_property
     def records(self: JournalBinding) -> Journal:
-        return Journal(self, lambda: locked_slot(self.held_lock), repo_of)
+        return Journal(self, lambda: locked_slot(self.held_lock), repo_of, ident.plugin_version)
     shared = cached_property(Shared)
     @cached_property
     def stuck(self: StuckHost) -> StuckTick: return StuckTick(self, last_event_t)

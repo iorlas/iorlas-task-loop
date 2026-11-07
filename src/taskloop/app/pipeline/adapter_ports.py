@@ -1,5 +1,6 @@
 """Pipeline capabilities implemented by adapters and bound at the application root."""
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol
 
@@ -40,3 +41,15 @@ class Install(Protocol):
 class Deadline(Protocol):
     def remaining(self, seconds: float) -> float: ...
     def check(self) -> None: ...
+
+
+class RecentCloses(Protocol):
+    def __call__(self, traces: str | Path, repo: str, now: float) -> Sequence[Mapping[str, object]]: ...
+
+
+class Attempt(Protocol):
+    def __call__[**P](self, call: Callable[P, object], *args: P.args, **kw: P.kwargs) -> bool: ...
+
+
+class DeadlineScope(Protocol):
+    def __call__(self, seconds: float, scope: str) -> AbstractContextManager[None]: ...

@@ -5,6 +5,7 @@ from unittest.mock import Mock
 import pytest
 from support.pipeline_ports import FakeFollowUps
 
+from taskloop.adapters import beadtools
 from taskloop.app.pipeline.closing_notes import FileNotes
 from tlkernel.enums import Outcome
 
@@ -16,7 +17,7 @@ def test_file_notes_calls_followups_once_and_keeps_counts(refused):
                            pictures=Mock(), warn=Mock())
     host.pictures.keep_evidence.return_value = []
     followups = FakeFollowUps([leftover] if refused else [])
-    noted = FileNotes(host, followups).run(Outcome.FAILED)
+    noted = FileNotes(host, followups, beadtools.attempt).run(Outcome.FAILED)
     assert followups.calls == [()]
     assert (noted.filed, noted.unfiled) == (0 if refused else 1, int(refused))
     host.checkpoints.keep_pending.assert_called_once_with()
