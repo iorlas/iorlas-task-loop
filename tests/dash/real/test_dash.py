@@ -20,10 +20,11 @@ from support import tlbd  # noqa: E402
 from support.dashes import serving  # noqa: E402
 
 from taskloop.app.launch import dash_ports  # noqa: E402
+from taskloop_dash.needs import NEEDS  # noqa: E402
 from tlkernel.askstore import AskStore  # noqa: E402
 from tlkernel.dash import READ_PROTOCOL  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
-from tlkernel.factorydb import SCHEMA_READ_FROM, SCHEMA_VERSION  # noqa: E402
+from tlkernel.factorydb import SCHEMA_VERSION, versions  # noqa: E402
 from tlkernel.ids import BeadId  # noqa: E402
 from tlkernel.paths import ConfigDir  # noqa: E402
 
@@ -48,7 +49,7 @@ class Live(Case):
                 "XDG_CONFIG_HOME": d, "APPDATA": d, "TASK_LOOP_DASH_BIND": "127.0.0.1", "HOME": d, "USERPROFILE": d}), serving() as base:
             v = json.loads(urllib.request.urlopen(base + "/api/version", timeout=10).read())
             assert v["version"]
-            assert (v["protocol"], v["schema"], v["schema_read"]) == (READ_PROTOCOL, SCHEMA_VERSION, [SCHEMA_READ_FROM, SCHEMA_VERSION])
+            assert (v["protocol"], v["schema"], v["needs"], v["parts"]) == (READ_PROTOCOL, SCHEMA_VERSION, NEEDS, versions())
             assert v["database_error"].startswith("database unavailable:")
             assert b"task-loop" in urllib.request.urlopen(base + "/").read()
 
