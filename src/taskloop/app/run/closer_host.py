@@ -9,9 +9,9 @@ from typing import Protocol
 from taskloop.app.land.followups import FollowUpCheckpoints, FollowUpHost
 from taskloop.app.pipeline.closing_decide import DecideHost
 from taskloop.app.pipeline.closing_notes import FileNotesHost, NotesCheckpoints, ReflectCheckpoints, ReflectHost
+from taskloop.app.pipeline.closing_record import RecordHost, RecordRecords
 from taskloop.app.pipeline.closing_settle import SettleHost
 from taskloop.app.run.closer_branch import BranchCheckpoints, BranchTree, LeaveTree, ReleaseSlotHost, SaveBranchHost
-from taskloop.app.run.closer_record import RecordHost, RecordRecords
 from taskloop.contracts import fence
 from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.checkpoint import Checkpoint, EndRec

@@ -217,7 +217,7 @@ source_modules =
     taskloop.app.run.closer_host
     taskloop.app.run.closer_ports
     taskloop.app.pipeline.closing_notes
-    taskloop.app.run.closer_record
+    taskloop.app.pipeline.closing_record
     taskloop.app.pipeline.closing_settle
     taskloop.app.run.console
     taskloop.app.run.crash

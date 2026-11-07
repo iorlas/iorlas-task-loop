@@ -13,12 +13,12 @@ from taskloop.app.asks import parks, raiser
 from taskloop.app.pipeline import ended as stored_end
 from taskloop.app.pipeline.closing_decide import Decide
 from taskloop.app.pipeline.closing_notes import FileNotes, Reflect
+from taskloop.app.pipeline.closing_record import RecordRun
 from taskloop.app.pipeline.closing_settle import Settle
 from taskloop.app.pipeline.outcomes import DONE
 from taskloop.app.run.closer_branch import ReleaseSlot, SaveBranch
 from taskloop.app.run.closer_host import CloseHost, CloserHost
 from taskloop.app.run.closer_ports import closing_ports
-from taskloop.app.run.closer_record import RecordRun
 from taskloop.contracts.checkpoint import Checkpoint, Notes
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.kinds import ASKS, Kind
