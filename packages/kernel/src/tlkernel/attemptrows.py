@@ -5,6 +5,7 @@ import os
 from stream_proc import proc_start
 
 from tlkernel import factorydb
+from tlkernel.kinds import PAUSES, Kind
 from tlkernel.run import RunFinish, RunManifest, RunState
 
 
@@ -29,9 +30,9 @@ def close(con: factorydb.sqlite3.Connection, run: str, record: RunFinish, now: f
     kind = "finished"
     if record.state == RunState.LOST:
         kind = "lost"
-    elif record.kind == "pause_killed":
+    elif record.kind == Kind.PAUSE_KILLED.value:
         kind = "killed"
-    elif record.state == RunState.STOPPED or record.kind.startswith("pause_") or record.kind == "engine_crash":
+    elif record.state == RunState.STOPPED or record.kind in tuple(k.value for k in PAUSES):
         kind = "yielded"
     elif record.state == RunState.PARKED or record.kind.startswith("ask_"):
         kind = "asked"

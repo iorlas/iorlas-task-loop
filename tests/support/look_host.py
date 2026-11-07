@@ -61,7 +61,8 @@ class FakeLookPorts:
 
     def sh(self, cmd: Sequence[str], timeout: float = 0, check: bool = False, save: Path | None = None,
            env: Mapping[str, str] | None = None,
-           pin: bool = False, what: str = "", cwd: Path | None = None, stop: threading.Event | None = None) -> tuple[int, str]:
+           pin: bool = False, what: str = "", cwd: Path | None = None, stop: threading.Event | None = None,
+           *, network: bool = False) -> tuple[int, str]:
         return 0, ""
 
 
