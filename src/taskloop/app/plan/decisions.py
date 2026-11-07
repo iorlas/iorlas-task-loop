@@ -13,13 +13,13 @@ TEXT_CAP = 600
 
 class Decisions:
     def __init__(self, host: PlanHost) -> None:
-        self.e = host
+        self.host = host
 
     def store(self) -> AdrStore:
         """The repo's decisions, brought up to its `docs/adr` files at the base ref (cfg.base, what the run lands on) first."""
-        repo = self.e.ask_flow.repo()
-        store = self.e.stores.adrs(repo)
-        adrsync.refresh(self.e.git, self.e.wt, self.e.cfg.base, repo, store)
+        repo = self.host.ask_flow.repo()
+        store = self.host.stores.adrs(repo)
+        adrsync.refresh(self.host.git, self.host.wt, self.host.cfg.base, repo, store)
         return store
 
     def text(self) -> str:
@@ -34,7 +34,7 @@ class Decisions:
     def cited(self, data: PlanData) -> list[str]:
         """Count the plan's citations: one use per ADR it names that exists (an id the store does not know is dropped and said).
         -> the ids counted. Nothing is written on a dry run."""
-        e = self.e
+        e = self.host
         ids = list(dict.fromkeys(i.strip() for i in data.get("cited") or []))
         if not ids or e.dry:
             return []

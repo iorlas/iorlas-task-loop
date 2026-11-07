@@ -11,7 +11,7 @@ from support.plans import BEAD, CLEAN, PLAN, WRITE
 from taskloop.app.run.blocked import Blocked, blocked_for
 from taskloop.app.run.entry import _blocked_by_engine
 from taskloop.app.run.reflect import Reflector
-from taskloop.app.run.worker_request import request
+from taskloop.app.workers.worker_request import request
 from taskloop.contracts.bead import Bead, Comment
 from taskloop.contracts.gitfacts import DiffEntry
 from taskloop.contracts.ids import BeadId

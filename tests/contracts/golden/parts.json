@@ -60,6 +60,30 @@
   },
   "version": 1
  },
+ "release": {
+  "ddl": "1e381a678b118b3184ab8d12259ac1196e3aa5bd12969b4addc7df488323b9bc",
+  "records": {
+   "Pin": {
+    "schema": "e4941b638a23c9d56395961d6b203b79672597988d1ad0b0ef81f32b1e546cc0",
+    "v": 1
+   },
+   "ReleaseResult": {
+    "schema": "35580149b1dcba4bf57a7e95d35534df4573430c090d85b88e8a8ad5e3355299",
+    "v": 1
+   }
+  },
+  "version": 1
+ },
+ "report": {
+  "ddl": "bdd68231bd87ff760a333280cff6f8afdd9eb293c34b870e1b57e5239ec3d2bb",
+  "records": {
+   "ReflectState": {
+    "schema": "47ad592a5ce6886150a1c5cef8eed27df450428b33f606d743530ec7480802d4",
+    "v": 1
+   }
+  },
+  "version": 1
+ },
  "slots": {
   "ddl": "1b8c6bdb1ac8d6d0ffa3e96f93ce71dc020a159d02051aa30fc4b8e3b661be89",
   "records": {

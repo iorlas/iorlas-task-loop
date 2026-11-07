@@ -8,11 +8,15 @@ from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.checks import BaseRedRecord, PassRecord
-from taskloop.contracts.dbparts import Part, Prune, ddl, register
+from taskloop.contracts.dbparts import Part, Prune, ddl, doc_table, register
 from taskloop.contracts.ledger import LedgerEntry
 from taskloop.contracts.locks import EngineLock
 from taskloop.contracts.requests import OwnerRequest
 from taskloop.contracts.run import RunManifest
+from taskloop.contracts.snapshots import Pin, ReflectState, ReleaseResult
+
+REPORT_DOCS = "report_doc"  # the report stage's document: the reflect digest state
+RELEASE_DOCS = "release_doc"  # the release stage's documents: the pin and the last release result
 
 # The runs that may age out (the pipeline's rule; the history of other parts is pruned by it too). `?` is the cutoff; the temp table
 # prune_keep_bead holds the beads the caller exempts.
@@ -139,5 +143,9 @@ KV = register(Part(
     ddl="""
 CREATE TABLE kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL, stamp TEXT);
 """))
+
+RELEASE = register(Part(name="release", version=1, tables=(RELEASE_DOCS,), records=(Pin, ReleaseResult), ddl=doc_table(RELEASE_DOCS)))
+
+REPORT = register(Part(name="report", version=1, tables=(REPORT_DOCS,), records=(ReflectState,), ddl=doc_table(REPORT_DOCS)))
 
 DDL = ddl()

@@ -205,29 +205,24 @@ source_modules =
     taskloop.app.review
     taskloop.app.slots
     taskloop.app.track
+    taskloop.app.workers
     taskloop.app.write
     taskloop.app.run.ask_flow
-    taskloop.app.run.asked
     taskloop.app.run.bead_env
     taskloop.app.run.blocked
     taskloop.app.pipeline.budget
-    taskloop.app.run.call
-    taskloop.app.run.calls
     taskloop.app.run.closer
     taskloop.app.run.closer_branch
     taskloop.app.run.closer_decide
     taskloop.app.run.closer_host
     taskloop.app.run.closer_notes
-    taskloop.app.run.closer_record
+    taskloop.app.pipeline.closing_record
     taskloop.app.run.closer_settle
     taskloop.app.run.console
     taskloop.app.run.crash
     taskloop.app.pipeline.decide
-    taskloop.app.run.delegation
-    taskloop.app.run.done_memo
     taskloop.app.pipeline.ended
     taskloop.app.pipeline.finish
-    taskloop.app.run.lane_acts
     taskloop.app.pipeline.outcomes
     taskloop.app.run.preflight
     taskloop.app.run.records
@@ -246,17 +241,11 @@ source_modules =
     taskloop.app.run.stages
     taskloop.app.run.state
     taskloop.app.pipeline.steps
-    taskloop.app.run.strays
     taskloop.app.run.stuck
     taskloop.app.pipeline.summaries
     taskloop.app.run.target
     taskloop.app.pipeline.trace
     taskloop.app.run.waits
-    taskloop.app.run.worker_call
-    taskloop.app.run.worker_identity
-    taskloop.app.run.worker_recovery
-    taskloop.app.run.worker_request
-    taskloop.app.run.writer_pin
     taskloop.stores
     taskloop.domain
     taskloop.adapters
@@ -303,6 +292,7 @@ source_modules =
     taskloop.app.doctor
     taskloop.app.loop
     taskloop.app.pipeline
+    taskloop.app.plan
     taskloop.app.reconcile
     taskloop.app.release
     taskloop.app.review

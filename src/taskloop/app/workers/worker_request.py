@@ -1,17 +1,14 @@
 """Delegate request, engine-only advisory brief, and write-stop diagnostics."""
 
 import json
-from typing import Protocol
+from typing import Final, Protocol
 
 from taskloop.adapters import childenv, ident
 from taskloop.adapters.check_files import repo_key
 from taskloop.app.asks import trustroots
 from taskloop.app.checks.runner import Checker
-from taskloop.app.pipeline.budget import Budget
-from taskloop.app.run import writer_pin
-from taskloop.app.run.blocked import Blocked, refuse_over_cap
-from taskloop.app.run.call import Call
-from taskloop.app.write.prompts import ENGINE_ONLY_ADVISORY
+from taskloop.app.workers import writer_pin
+from taskloop.app.workers.call import Call
 from taskloop.contracts import log as rec
 from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.config import EngineConfig
@@ -21,11 +18,19 @@ from taskloop.contracts.env import Env
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.plancheck import PlanData
+from taskloop.contracts.stop import Stop
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks import planref
-from taskloop.domain.lanes import pin
+from taskloop.domain.lanes import caps, pin
 from taskloop.stores.runlog import RunLog
+
+ENGINE_ONLY_ADVISORY: Final = ("\nDo not run the engine-only recipes ({recipes}); the writer's harness may not deny them, "
+                               "and the engine runs them after you.\n")
+
+
+class Labelled(Protocol):
+    labels: list[str]
 
 
 class RequestHost(Protocol):
@@ -40,9 +45,9 @@ class RequestHost(Protocol):
     log: RunLog
     git: Git
     checker: Checker
-    budget: Budget
+    budget: Labelled
 
-    def blocked_for(self, why: str, kind: str, stop: object = None, spec: AskSpec | None = None, fix: bool = False) -> Blocked: ...
+    def blocked_for(self, why: str, kind: str, stop: object = None, spec: AskSpec | None = None, fix: bool = False) -> Stop: ...
 
 
 def request(e: RequestHost, c: Call, live: str, timeout_s: int, idle_s: int) -> RunRequest:
@@ -102,12 +107,19 @@ def artifact_tool(e: ToolHost, c: Call) -> ToolBinding:
     return ToolBinding(name="factory", command=argv, bead=str(e.bead), run=e.run_id, stage=stage, attempt=attempt)
 
 
-def brief(c: Call, req: RunRequest) -> str:
+def refuse_over_cap(e: RequestHost, node: str, role: str, text: str) -> None:
+    """Raise the Task fault (ASK_TICKET) when `text` is over its role's input cap; call it before a delegate call spawns."""
+    over = caps.check(role, text)
+    if over is not None:
+        raise e.blocked_for(over.why(node), "ASK_TICKET", spec=askspecs.input_too_big(node, over.size, over.cap))
+
+
+def brief(e: RequestHost, c: Call, req: RunRequest) -> str:
     """Include the advisory sentence in the prompt cap before anything spawns."""
     text = c.text
     if req.engine_only_advisory:
         text += ENGINE_ONLY_ADVISORY.format(recipes=", ".join(f"just {r}" for r in req.engine_only))
-        refuse_over_cap(c.node, c.role, text)
+        refuse_over_cap(e, c.node, c.role, text)
     return text
 
 
