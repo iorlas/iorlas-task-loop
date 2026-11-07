@@ -21,7 +21,7 @@ from taskloop.app.checks import authorization
 from taskloop.app.checks.runner import Checker
 from taskloop.app.launch.check_host import CliHost
 from taskloop.app.launch.staged import staged_tree
-from taskloop.app.run.stage_run import StageRun, stage_run
+from taskloop.app.pipeline.stage_run import StageRun, stage_run
 from taskloop.app.wire import slots as wslots
 from taskloop.domain.checks.specs import gate_items, repo_check
 

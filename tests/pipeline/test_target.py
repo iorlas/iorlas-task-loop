@@ -3,7 +3,7 @@ from argparse import Namespace
 
 import pytest
 
-from taskloop.app.run.target import resolve
+from taskloop.app.pipeline.target import resolve
 from tlkernel.procport import Ran
 
 
