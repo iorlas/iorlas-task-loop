@@ -58,6 +58,19 @@ def version_key(version: str) -> tuple[int, ...]:
     return tuple(int(p) for p in version.split(".") if p.isdigit())
 
 
+def why_it_failed(text: str) -> str:
+    """': <the tool's first line>' (cut at 120 characters), or '' when it said nothing."""
+    first = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
+    return f": {first[:120]}" if first else ""
+
+
+def bd_fix(build: Path, said: str) -> str:
+    """A mise shim that refuses because the folder's mise.toml is not trusted is cured by `mise trust`; any other bd is reinstalled."""
+    if "mise" in said and "not trusted" in said:
+        return "run `mise trust` in this folder (mise will not run a shim under a mise.toml it has not been told to trust)"
+    return f"remove {build} from PATH or reinstall it"
+
+
 def bd_findings(path: str, run: Runner, opens: Callable[[], object], repo: str) -> list[Finding]:
     """bd on PATH is one build, it runs, and it opens the repo's database (`opens` is a read-only list)."""
     builds = bd_builds(path)
@@ -72,7 +85,8 @@ def bd_findings(path: str, run: Runner, opens: Callable[[], object], repo: str) 
             out.append(Finding("FAIL", f"bd at {build} cannot start ({err})", f"remove {build} from PATH or reinstall it"))
             continue
         if ran.exit != 0:
-            out.append(Finding("FAIL", f"bd at {build} does not run (exit {ran.exit})", f"remove {build} from PATH or reinstall it"))
+            out.append(Finding("FAIL", f"bd at {build} does not run (exit {ran.exit}){why_it_failed(ran.err or ran.out)}",
+                               bd_fix(build, ran.err + ran.out)))
             continue
         versions[build] = version_of(ran.out + ran.err)
     newest = max(versions, key=lambda b: version_key(versions[b]), default=None)

@@ -17,6 +17,7 @@ from taskloop.app.run.calls import Calls
 from taskloop.app.run.context import RunContext
 from taskloop.app.run.state import Checkpoints, StateAttrs
 from taskloop.app.run.steps import Steps
+from taskloop.app.write.state import WriteState
 from taskloop.contracts import fence
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.checkpoint import Checkpoint, RunState
@@ -97,7 +98,6 @@ class RunFields(StateAttrs):
         self.filed: list[str] = []
         self.unfiled: list[Unfiled] = []  # follow-ups bd refused (the ReviewState keeps both)
         self.amended = False  # a plan was amended or replanned: its first stage does not start at the task's base
-        self.strays: list[str] = []  # unaccepted untracked files moved to evidence/strays before the land gate (tl-bxk.10.24)
         self.old_plan, self.amend_text, self.amend_why = None, "", ""  # set where a checkpoint's plan is kept to be amended
         self.answered: Any = None  # the owner ask this run starts from, once answered
         self.verify_answer = ""  # the owner's answer to a verify ask, when it asks for more than a yes
@@ -118,16 +118,14 @@ class RunFields(StateAttrs):
         self.land_fields()
 
     def land_fields(self) -> None:
-        self.write_rounds: list[Open] = []  # per write round: resumed, input tokens, turns, prompt chars, context k, why fresh
-        self.last_summary = ""  # the last write's summary: a fresh writer is told it
         self.state, self.checkpoints = RunState(), Checkpoints(self)  # what survives a park (contracts/checkpoint.py), and its one writer
         self.look = LookState(lambda: self.state)  # the look stage's state (its checkpointed part views `self.state`)
+        self.write = WriteState()  # the write stage's own state (write_rounds, last_summary, lane_notes, strays): not checkpointed
         self.plan_summary, self.bead_title = "", ""
         self.reflection: Mapping[str, object] | None = None
         self.left_dirty, self.branch, self.task_branch = False, "", ""
         self.land_state = LandState()  # the land's and the resume rebase's unsaved state
         self.artifact_repo = ""  # the repo's store key (adapters.check_files.repo_key), taken at the first registered render
-        self.lane_notes: list[str] = []  # steps that ran on the writer's own family, with delegate's warning
         self.taste: list[Open] = []  # [{id, title}] taste items for the owner-look bead
         self.scope = ""  # the bead's acceptance text: an unchecked item outside it is a follow-up, not a gap (tl-bxk.13.5)
         self.sessions: list[Open] = []  # every AI call of this run: the trace a later reflection reads (traces.jsonl)

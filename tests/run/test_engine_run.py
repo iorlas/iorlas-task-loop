@@ -350,7 +350,7 @@ class EngineRunTest(EngineTest):
                                         j_extra={"write": [extra, extra]})
             assert s.calls[2][1] == "ref-write", path
             assert self.MARK not in s.prompts[2]
-            assert self.eng.write_rounds[0]["context_k"] is None
+            assert self.eng.write.write_rounds[0]["context_k"] is None
 
     def test_round_three_after_a_fresh_start_resumes_the_fresh_session(self):
         big, small = Path(self.tmp.name, "big.jsonl"), Path(self.tmp.name, "small.jsonl")

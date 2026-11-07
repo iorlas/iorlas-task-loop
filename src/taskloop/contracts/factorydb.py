@@ -11,74 +11,17 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import override
 
 import sqlite_store
 from sqlite_store import SqlValue
 
-from taskloop.contracts import factorymigrate, factoryprune, wire
+from taskloop.contracts import dbparts, factorymigrate, factoryparts, factoryprune, wire
 from taskloop.contracts.run import RunManifest
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 5  # frozen: the parts (factoryparts, dbparts) carry the versions from here on
 SCHEMA_READ_FROM = 4  # the oldest schema a read-only opener (the dashboard) reads as it is; lower this when a step stays readable
-DDL = """
-CREATE TABLE source (path TEXT PRIMARY KEY, family TEXT NOT NULL,
-  dev INTEGER, ino INTEGER, size INTEGER, mtime_ns INTEGER, head TEXT,
-  offset INTEGER NOT NULL DEFAULT 0, seen REAL NOT NULL, error TEXT);
-CREATE TABLE bead (id TEXT PRIMARY KEY, repo_key TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', status TEXT NOT NULL,
-  priority INTEGER, type TEXT NOT NULL DEFAULT '', parent TEXT NOT NULL DEFAULT '', assignee TEXT NOT NULL DEFAULT '',
-  labels TEXT NOT NULL DEFAULT '[]', updated REAL NOT NULL, fetched REAL NOT NULL, rev INTEGER NOT NULL DEFAULT 0,
-  body TEXT NOT NULL DEFAULT '{}');
-CREATE INDEX bead_status ON bead(repo_key, status);
-CREATE TABLE run (run TEXT PRIMARY KEY, repo TEXT NOT NULL, repo_key TEXT NOT NULL, bead TEXT NOT NULL DEFAULT '',
-  mode TEXT NOT NULL DEFAULT '', owner TEXT, session TEXT, loop TEXT, worktree TEXT, branch TEXT, sha TEXT,
-  state TEXT NOT NULL, reason TEXT, started REAL NOT NULL, ended REAL, next_step TEXT,
-  outcome TEXT, why TEXT, version TEXT, stats TEXT,
-  bundle TEXT,
-  facts TEXT, facts_upto INTEGER,
-  manifest TEXT NOT NULL,
-  rev INTEGER NOT NULL DEFAULT 0);
-CREATE INDEX run_bead ON run(bead, started);
-CREATE INDEX run_recent ON run(repo_key, started);
-CREATE INDEX run_live ON run(state) WHERE state IN ('created','running');
-CREATE TABLE attempt (run TEXT NOT NULL REFERENCES run, n INTEGER NOT NULL, host TEXT, pid INTEGER, start_id TEXT,
-  started REAL NOT NULL, beat REAL, ended REAL, end_kind TEXT, fault_class TEXT, fingerprint TEXT, reason TEXT,
-  PRIMARY KEY (run, n));
-CREATE TABLE step (run TEXT NOT NULL REFERENCES run, key TEXT NOT NULL, try INTEGER NOT NULL, attempt INTEGER NOT NULL,
-  status TEXT NOT NULL, started REAL NOT NULL, ended REAL, input_digest TEXT, result TEXT, fingerprint TEXT, calls INTEGER DEFAULT 0,
-  PRIMARY KEY (run, key, try));
-CREATE TABLE lease (kind TEXT NOT NULL CHECK (kind IN ('run','loop','resource','slot')), name TEXT NOT NULL,
-  holder TEXT NOT NULL, run TEXT, host TEXT, pid INTEGER, start_id TEXT, since REAL NOT NULL, beat REAL, until REAL,
-  body TEXT, PRIMARY KEY (kind, name));
-CREATE TABLE check_pass (repo_key TEXT NOT NULL, check_id TEXT NOT NULL, digest TEXT NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('pass','base_red')), tree TEXT, base TEXT, run TEXT, host TEXT, ts REAL NOT NULL,
-  body TEXT NOT NULL,
-  PRIMARY KEY (repo_key, check_id, digest, kind));
-CREATE INDEX check_tree ON check_pass(repo_key, tree, base);
-CREATE TABLE check_round (run TEXT NOT NULL, round INTEGER NOT NULL, ts REAL, body TEXT NOT NULL, PRIMARY KEY (run, round));
-CREATE TABLE ask (bead TEXT PRIMARY KEY, id TEXT NOT NULL, repo TEXT, status TEXT NOT NULL, t REAL NOT NULL, consumed REAL,
-  body TEXT NOT NULL, rev INTEGER NOT NULL DEFAULT 0);
-CREATE INDEX ask_live ON ask(status, t);
-CREATE TABLE ask_ledger (id INTEGER PRIMARY KEY, t REAL NOT NULL, event TEXT NOT NULL, ask TEXT, bead TEXT, repo TEXT,
-  body TEXT NOT NULL, origin TEXT NOT NULL UNIQUE);
-CREATE TABLE kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL, stamp TEXT);
-CREATE TABLE effect (
-  key TEXT PRIMARY KEY,
-  run TEXT NOT NULL, name TEXT NOT NULL, state TEXT NOT NULL,
-  intent_at REAL NOT NULL, done_at REAL, receipt TEXT
-);
-CREATE TABLE wait (
-  id INTEGER PRIMARY KEY, repo TEXT NOT NULL, run TEXT, kind TEXT NOT NULL,
-  wake_at REAL, wake_on TEXT, facts TEXT, since REAL NOT NULL, cleared REAL
-);
-CREATE TABLE checkpoint (bead TEXT PRIMARY KEY, t REAL NOT NULL, rev INTEGER NOT NULL DEFAULT 0, body TEXT NOT NULL);
-CREATE TABLE timed (id INTEGER PRIMARY KEY, run TEXT NOT NULL, bead TEXT, kind TEXT NOT NULL, name TEXT NOT NULL,
-  exec_s REAL NOT NULL, wait_s REAL NOT NULL, t REAL NOT NULL);
-CREATE INDEX timed_run ON timed(run, id);
-CREATE TABLE signal (
-  id INTEGER PRIMARY KEY, run TEXT, kind TEXT NOT NULL,
-  payload TEXT, at REAL NOT NULL, taken REAL
-);
-"""
+DDL = factoryparts.DDL  # a fresh database is created from the parts; dbparts.launch checks them on every open
 
 # One owner role per table: other actors submit writes through that role's store.
 # The loop owns leases; the engine records AskStore writes, including
@@ -114,7 +57,36 @@ SCHEMA = sqlite_store.Schema(
     quarantine_versions=frozenset({1}),
     read_from=SCHEMA_READ_FROM,
 )
-_STORE = sqlite_store.Store(SCHEMA)
+
+
+class _PartStore(sqlite_store.Store):
+    """The vendored store, plus the launch check of every registered part on each open (once per writer connection's file)."""
+
+    def __init__(self, schema: sqlite_store.Schema) -> None:
+        super().__init__(schema)
+        self._launched: set[tuple[int, Path, int, int]] = set()
+
+    @override
+    def _open(self, path: str | os.PathLike[str], *, readonly: bool, shared: bool = False) -> sqlite3.Connection | None:
+        con = super()._open(path, readonly=readonly, shared=shared)
+        if con is None:
+            return None
+        try:
+            if readonly:
+                dbparts.launch(con, readonly=True)
+            else:
+                stat = Path(path).resolve().stat()
+                identity = (os.getpid(), Path(path).resolve(), stat.st_dev, stat.st_ino)
+                if identity not in self._launched:
+                    dbparts.launch(con, readonly=False)
+                    self._launched.add(identity)
+        except BaseException:
+            con.close()
+            raise
+        return con
+
+
+_STORE = _PartStore(SCHEMA)
 SchemaError = sqlite_store.SchemaError
 
 

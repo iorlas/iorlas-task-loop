@@ -82,7 +82,7 @@ class Taker:
             env = self.env
             store = ParkStore(env.cfgdir)
             run = v.run or f"profile-ahead-{env.pid}-{env.now()}"
-            store.put(pauses.after_pause(store.get(b.id), b, run, env.now(), v.kind, lambda: 0.5))
+            store.change(b.id, lambda old: pauses.after_pause(old, b, run, env.now(), v.kind, lambda: 0.5))
 
     def _held(self, bid: str, at: Where, held: vd.Verdict) -> Taken | None:
         """A bead that is not to be run now: recorded and cooled (a network pause is neither), and a pre-engine failure ends the pass."""
