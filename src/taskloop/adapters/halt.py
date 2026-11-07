@@ -52,5 +52,3 @@ def nap(halt: threading.Event, secs: float) -> bool:
         deadline.wait(min(1.0, left), time.sleep)
         left -= 1.0
     return halt.is_set()
-
-RUN_SLOT: dict[str, str] = {"owned": ""}  # the slot this process took itself (run_in, run_any_slot) and gives back at the end

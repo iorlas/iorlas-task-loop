@@ -1,4 +1,5 @@
 """Pipeline waits book shared-resource time and stop with typed outcomes, using only fakes."""
+
 import contextlib
 from collections.abc import Callable, Generator
 from pathlib import Path
@@ -6,6 +7,7 @@ from pathlib import Path
 import pytest
 from support.narrow_hosts import FakeWaitsHost
 
+from taskloop.adapters import deadline
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.waits import Waits
 from taskloop.domain.lanes.liveness import LIVENESS
@@ -17,7 +19,7 @@ from tlkernel.waitenums import WaitWhat
 def test_wait_books_seconds_outside_the_budget():
     host = FakeWaitsHost()
     host.fake_clock.advance(180)
-    waits = Waits(host)
+    waits = Waits(host, deadline)
     wid = waits.start(WaitWhat.CHECK_SLOT)
     waits.add(120, WaitWhat.CHECK_SLOT, wid)
     assert host.budget.waited == 120
@@ -33,7 +35,7 @@ def test_wait_books_seconds_outside_the_budget():
 def test_wait_cannot_book_more_than_elapsed_time():
     host = FakeWaitsHost()
     host.fake_clock.advance(30)
-    Waits(host).add(120, WaitWhat.CHECK_SLOT)
+    Waits(host, deadline).add(120, WaitWhat.CHECK_SLOT)
     assert host.budget.waited == 30
     assert host.budget.spent_min() == 0
 
@@ -57,7 +59,7 @@ def test_lock_deadline_pauses_lane_and_books_wait(monkeypatch):
         yield
 
     monkeypatch.setattr(host, "os_lock", busy)
-    with pytest.raises(Blocked, match="wait deadline exceeded") as stopped, Waits(host).locked("land_lock", host.log_path):
+    with pytest.raises(Blocked, match="wait deadline exceeded") as stopped, Waits(host, deadline).locked("land_lock", host.log_path):
         pytest.fail("acquired a busy lock")
     assert stopped.value.kind is Kind.PAUSE_LANE
     assert host.waited == LIVENESS.lock_wait_s
@@ -71,6 +73,6 @@ def test_over_budget_raises_budget_ask(monkeypatch):
     host.budget.charge(float(host.cfg.budget_usd) + 1)
     monkeypatch.setattr("taskloop.app.pipeline.waits.outcomes.run_breakdown", lambda *_: [])
     with pytest.raises(Blocked, match="over budget") as stopped:
-        Waits(host).budget_check()
+        Waits(host, deadline).budget_check()
     assert stopped.value.kind is Kind.ASK_BUDGET
     assert stopped.value.spec is not None

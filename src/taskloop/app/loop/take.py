@@ -120,6 +120,8 @@ class Taker:
             except (BdFailure, SlotGitError, OSError) as e:
                 attempt(env.store.unclaim, b.id)
                 v = vd.pre_engine(str(e))
+            if v.outcome is Result.TAKEN and not v.run:
+                attempt(env.store.unclaim, b.id)
             self._park_profile_ahead(b, v)
             self.record(b.id, at.slot, v)
             if v.outcome is not Result.TAKEN:

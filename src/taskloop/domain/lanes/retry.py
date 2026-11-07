@@ -6,8 +6,7 @@ and denial limits. Delegate owns retries within a worker call.
     invalid_output   the answer broke its schema: again, on a new thread
     denied_read      the guard refused only read-only commands: once more on a fresh thread told what was refused
     denied_secret    a write was denied for `secrets` on a heredoc whose body names `.env`: once more with the apply_patch note
-    resume_refused   the vendor refused the ref a call resumed: one new thread with the whole prompt, then the fault
-    worker_failed    a resumed worker failed: one fresh engine prompt, rerouting hurt writes
+    worker_failed    exhausted worker failure: ask for hurt writes, otherwise fault
 """
 
 from dataclasses import dataclass
@@ -28,7 +27,6 @@ ROWS: Final = (
     RetryRow("invalid_output", 1, then="fault", note="answer broke its schema"),
     RetryRow("denied_read", 1, then="fault", note="read-only commands refused"),
     RetryRow("denied_secret", 1, then="fault", note="a heredoc body named .env"),
-    RetryRow("resume_refused", 1, then="fault", note="the vendor refused the ref to resume"),
     RetryRow("worker_failed", 1, then="ask", note="worker failed, timed out or was killed"),
 )
 KINDS: Final = tuple(r.kind for r in ROWS)

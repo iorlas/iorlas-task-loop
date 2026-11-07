@@ -30,7 +30,7 @@ class RunLog(te.EngineTest):
         recs = records(self.eng)
         assert pairs(recs) == ([], [])
         for r in recs:
-            assert (r["v"], r["run_id"], r["bead"]) == (3, self.eng.log_path.parent.name, self.eng.bead)
+            assert (r["v"], r["run_id"], r["bead"]) == (4, self.eng.log_path.parent.name, self.eng.bead)
             rec.decode(r)
         assert "run_start" in [r["kind"] for r in recs]
         after = ("said", "land_cleanup", "note")  # the close-out may follow the Close with comments and cleanup rows

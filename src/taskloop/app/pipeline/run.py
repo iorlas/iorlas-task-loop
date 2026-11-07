@@ -9,7 +9,7 @@ from tlkernel.enums import Step
 from tlkernel.kinds import Kind
 from tlkernel.plancheck import PlanData, RoundState
 
-from taskloop.adapters import beadtools, ident
+from taskloop.app.pipeline.adapter_ports import PeekBead, Version
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from taskloop.app.pipeline.crash import CrashHost, parked_crash
 from taskloop.app.pipeline.lifecycle import Ended, LeaseLike
@@ -25,10 +25,11 @@ from taskloop.domain.review.kinds import UNCHECKED_KINDS
 class RunBody[T]:
     def __init__(self, leasing: Leasing, delegating: Delegating, stages: Stages[T], records: RunRecords,
                  moves: GitMoves, values: RunValues, crashes: CrashHost, history: HeadHistory,
-                 beat: Callable[[], None]) -> None:
+                 beat: Callable[[], None], peek_bead: PeekBead, version: Version) -> None:
         self.leasing, self.delegating, self.stages_ports = leasing, delegating, stages
         self.records, self.moves, self.values, self.crashes = records, moves, values, crashes
         self.history, self.beat = history, beat
+        self.peek_bead, self.version = peek_bead, version
 
     def run(self, hb: LeaseLike, end: Ended) -> None:
         bead = self.begin(hb)
@@ -61,7 +62,7 @@ class RunBody[T]:
         """The bead, claimed and checked: the delegate there, the tree reset, the ask read, the acceptance known."""
         if self.leasing.stop_pending or self.leasing.halt.is_set():  # stopped during the claim (run_bead) or before the engine ran
             raise Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED)
-        bead = beadtools.peek(self.leasing.store, self.leasing.bead)
+        bead = self.peek_bead(self.leasing.store, self.leasing.bead)
         if not bead:
             raise Blocked(f"failed: bead {self.leasing.bead} not found", kind=Kind.FAULT_INFRA)
         self.values.bead_title, self.values.bead_parent = bead.title, bead.parent
@@ -76,7 +77,7 @@ class RunBody[T]:
         if problem:
             raise Blocked(problem, kind=Kind.FAULT_CONTRACT_SKEW)
         self.records.log.note(f"workers: delegate {self.delegating.route} (contract {self.delegating.router.contract_no})")
-        self.records.log.note("task-loop {}".format(ident.plugin_version() or "(unknown version)"))
+        self.records.log.note("task-loop {}".format(self.version() or "(unknown version)"))
         self.records.tree.reset(bead)
         self.records.budget.labels = list(bead.labels)
         self.records.ask_flow.check()

@@ -17,8 +17,6 @@ from tlkernel.delegate import (
     Scope,
     StopFacts,
     Survivor,
-    TranscriptInfo,
-    TranscriptKind,
     TtlSource,
     Usage,
     UsageTokens,
@@ -34,7 +32,6 @@ RETRY: tuple[RetryKind, ...] = get_args(RetryKind)
 TTL_SOURCES: tuple[TtlSource, ...] = get_args(TtlSource)
 COST_SOURCES: tuple[CostSource, ...] = get_args(CostSource)
 ACCOUNTING: tuple[Accounting, ...] = get_args(Accounting)
-TRANSCRIPTS: tuple[TranscriptKind, ...] = get_args(TranscriptKind)
 ENDS: tuple[WorkerEndKind, ...] = get_args(WorkerEndKind)
 _FAILED = ("worker_failed", "schema_invalid", "secrets")
 _ERROR = ("bad_request", "caller", "setup", "crash", "contract_violation")
@@ -151,14 +148,6 @@ def denied_of(raw: Any) -> list[Denial]:
             for d in rows if isinstance(d, dict) and d.get("kind") != "sandbox_limit"]
 
 
-def transcript_info_of(raw: Any) -> TranscriptInfo | None:
-    kind = _choice(raw.get("kind"), TRANSCRIPTS) if isinstance(raw, dict) else None
-    if not (isinstance(raw, dict) and isinstance(raw.get("path"), str) and kind is not None):
-        return None
-    return TranscriptInfo(path=raw["path"], kind=kind, from_=_int(raw.get("from")), to=_int(raw.get("to")),
-                          bytes=_int(raw.get("bytes")))
-
-
 def _opt(j: dict[str, Any], key: str) -> str | None:
     v = j.get(key)
     return v if isinstance(v, str) and v else None
@@ -193,8 +182,7 @@ def result_of(j: Any) -> DelegateResult:
         stop=stop, data=_dict(j.get("data")), text=str(j.get("text") or ""), ref=_opt(j, "ref"),
         lane=_opt(j, "lane"), model=_opt(j, "model"), effort=_opt(j, "effort"), family=_opt(j, "family"), flag=_opt(j, "flag"),
         cost=_num(j.get("cost")), tokens=tokens_of(j.get("tokens")), denied=denied_of(j.get("denied")), secs=_num(j.get("secs")),
-        run_id=_opt(j, "run_id"), call_id=_opt(j, "call_id"), transcript=_opt(j, "transcript"),
-        transcript_info=transcript_info_of(j.get("transcript_info")), transcript_status=_opt(j, "transcript_status"),
+        run_id=_opt(j, "run_id"), call_id=_opt(j, "call_id"),
         say=str(j.get("say") or ""), git_violation=[str(x) for x in j.get("git_violation") or []], usage=usage_of(j.get("usage")),
         context=_dict(j.get("context")), worker=worker_of(j.get("worker")), exit_code=_oint(j.get("exit_code")),
         first_error=str(j.get("first_error") or ""), fallback=j.get("fallback") if isinstance(j.get("fallback"), bool) else None,
