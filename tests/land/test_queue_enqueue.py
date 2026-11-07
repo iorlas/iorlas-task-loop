@@ -82,4 +82,3 @@ def test_walk_is_bounded_and_fetches_each_bead_once():
     host, calls, _notes = host_for(records)
     assert enqueue(host, [("root", "head")], {"root": "0"}) == 4
     assert calls == [str(i) for i in range(64)]
-
