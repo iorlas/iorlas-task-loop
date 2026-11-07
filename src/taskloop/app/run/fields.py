@@ -72,8 +72,8 @@ class RunFields(StateAttrs):
     task_dir: Path
     brief_file: Path
     evidence_dir: Path
-    exec_fn: Callable[..., object] | None  # a test's exec, newer-install lookup and run-task argv
-    newer_fn: Callable[..., object] | None
+    exec_fn: Callable[[list[str], dict[str, str]], object] | None  # a test's exec, newer-install lookup and run-task argv
+    newer_fn: Callable[[], tuple[str, Path] | None] | None
     argv: list[str] | None
     moved: bool
     ctx: RunContext

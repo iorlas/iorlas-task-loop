@@ -15,7 +15,7 @@ from tlkernel.envvars import EnvVar
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
-from tlkernel.run import NetPause, Reexec, ReexecNote, Round, RunCounters
+from tlkernel.run import NetPause, Reexec, ReexecNote, RunCounters
 from tlkernel.runrows import RunRows
 from tlkernel.wire import Open
 
@@ -30,13 +30,13 @@ class Exec(BaseException):
 
 
 class ReloadWrite(Protocol):
-    write_rounds: list[Round]
+    write_rounds: list[Open]
 
 
 class ReloadSteps(Protocol):
     n: int
 
-    def end(self, kind: str) -> None: ...
+    def end(self, outcome: str = "") -> None: ...
 
 
 class ReloadBudget(Protocol):
