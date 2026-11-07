@@ -4,6 +4,7 @@ allows one more run."""
 
 from taskloop.app.asks import intake
 from taskloop.app.plan.host import PlanHost
+from taskloop.app.plan.prompts import REPLAN_CAP
 from taskloop.contracts.bdsafe import attempt, peek
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.beadsport import BeadPatch
@@ -11,7 +12,6 @@ from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.enums import AskClass
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks import text as asktext
-from taskloop.domain.prompts.plan import REPLAN_CAP
 
 
 class ReplanCap:

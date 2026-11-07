@@ -44,7 +44,8 @@ class DoctorSource(Case):
         script = '#!/bin/sh\ncase "$1" in --version) echo "bd version 1.3.1";; *) echo "[]";; esac\n'
         (stubs / "bd").write_text(script)
         (stubs / "bd").chmod(0o755)
-        others = [d for d in os.environ["PATH"].split(os.pathsep) if "tl-nobd-" not in d]  # the suite's failing bd would be a second build
+        # any bd of the host (the suite's failing one, a mise shim) would be a second build next to the stub
+        others = [d for d in os.environ["PATH"].split(os.pathsep) if d and "tl-nobd-" not in d and not (Path(d) / "bd").exists()]
         self.env = dict(os.environ, PATH=os.pathsep.join([str(stubs), *others]),
                         GIT_AUTHOR_NAME="test", GIT_AUTHOR_EMAIL="test@example.invalid",
                         GIT_COMMITTER_NAME="test", GIT_COMMITTER_EMAIL="test@example.invalid",

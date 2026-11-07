@@ -61,7 +61,6 @@ class CliHost:
         self.log = log
         self.checklog = CheckLog(self.log)
         self.run_dir = bundle.dir
-        self.home = ConfigDir.holding(bundle.dir)
         self.bead_env: Mapping[str, str] = check_env()
         self.killed = self.wall_hit = False
         self.halt = threading.Event()

@@ -11,6 +11,7 @@ from taskloop.app.plan.cap import ReplanCap
 from taskloop.app.plan.decisions import Decisions
 from taskloop.app.plan.host import PlanHost
 from taskloop.app.plan.prompt import PlanPrompt
+from taskloop.app.plan.prompts import ASSUME_TEXT, PLAN_BRIEF_KB, PLAN_DECIDED_TEXT, VISUAL_BACK
 from taskloop.app.plan.sendback import SendBack
 from taskloop.contracts import plancheck
 from taskloop.contracts.answers import ASSUMPTION, IRREVERSIBLE
@@ -24,7 +25,6 @@ from taskloop.domain.matchers import clip
 from taskloop.domain.plan.brief import COMMENTS_ONLY
 from taskloop.domain.plan.stored import stored
 from taskloop.domain.prompts.common import DECIDED_TEXT
-from taskloop.domain.prompts.plan import ASSUME_TEXT, PLAN_BRIEF_KB, PLAN_DECIDED_TEXT, VISUAL_BACK
 from taskloop.domain.review import visual
 
 REPLAN_TAIL = 12500  # characters of replan.md the planner reads
