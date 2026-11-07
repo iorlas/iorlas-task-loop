@@ -12,20 +12,18 @@ from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
 from tlkernel.planbrief import owner_written
 
-from taskloop.adapters import beadtools, ident
-from taskloop.app.asks import intake, parks
-from taskloop.domain.asks import hold
-from taskloop.stores.real import real_stores
+from tlasks import hold, intake, parks
+from tlasks.host import AsksHost
 
 
-def release_dead(repo: str, git: Git, who: Identity, store: Beads | None = None, *,
+def release_dead(h: AsksHost, repo: str, git: Git, who: Identity, store: Beads | None = None, *,
                  release: Callable[[str, Beads, dict[BeadId, str], str, float], list[str]],
                  running_now: Callable[[str, Git, Identity, Beads | None], dict[BeadId, str]],
                  say: Callable[[str], None]) -> None:
     """The reconcile sweep's lease rules, before a run takes its bead: a dead run's claim (a crashed or paused one, a restarted session's
     old actor) is given back by the same rule `tl prune` and the loop's step use."""
-    for line in release(repo, store or beadtools.bd_store(who.actor, repo), running_now(repo, git, who, store),
-        ident.hostname(), time.time()):
+    for line in release(repo, store or h.bd(who.actor, repo), running_now(repo, git, who, store),
+        h.hostname(), time.time()):
         say(line)
 
 
@@ -43,7 +41,7 @@ def _foreign_claim(b: Bead, repo: str, git: Git, who: Identity, store: Beads, fr
     return f"another run of {bead_id} is still running as {holder} (a live claim)" + (f"; its engine log: {logs[-1]}" if logs else "")
 
 
-def _blocked_by_engine(b: Bead, store: Beads, home: ConfigDir, owner_author: str) -> str:
+def _blocked_by_engine(h: AsksHost, b: Bead, store: Beads, home: ConfigDir, owner_author: str) -> str:
     """Why a bead the engine blocked stays blocked ("" when a plain retry may reopen it)."""
     bead_id = b.id
     held = [d.id for d in b.dependencies if d.type == "blocks" and d.status != "closed"]
@@ -54,7 +52,7 @@ def _blocked_by_engine(b: Bead, store: Beads, home: ConfigDir, owner_author: str
     if not blocks:
         return "blocked by a person, not by the engine"
     after = [c for c in cs if c.created_at > blocks[-1].created_at and owner_written(c, owner_author)]
-    ask = real_stores(home).asks.get(bead_id)
+    ask = h.asks_store(home).get(bead_id)
     asking = ask is not None and ask.consumed is None and ask.status in (AskStatus.OPEN, AskStatus.PARKED, AskStatus.ANSWERED)
     if ask is not None and asking and ask.answer is not None:  # tl-gy4: an answer filed on the ask (dashboard, tl ask answer) is an answer
         after, asking = after[:0], False  # whether or not a comment followed the block; the run's check_ask consumes it
@@ -65,16 +63,16 @@ def _blocked_by_engine(b: Bead, store: Beads, home: ConfigDir, owner_author: str
     return ""
 
 
-def admit(bead_id: BeadId, repo: str, git: Git, who: Identity, store: Beads | None = None, at: float | None = None, fresh: bool = False,
-          owner_author: str = "", *,
+def admit(h: AsksHost, bead_id: BeadId, repo: str, git: Git, who: Identity, store: Beads | None = None, at: float | None = None,
+          fresh: bool = False, owner_author: str = "", *,
           running_now: Callable[[str, Git, Identity, Beads | None], dict[BeadId, str]]) -> tuple[bool, str]:
     """(ok, why): whether run-task may take the bead, never taking what a person holds. A bead the engine blocked is reopened for a
     plain retry, or when a comment after the block answers the open ask; it stays blocked when a person commented after the block with
     no ask open (they may have parked it), while an ask waits unanswered, or while another bead blocks it. A claim by another actor
     that is still live stops it (dead ones are given back by `release_dead`, the reconcile lease rules, which runs first); `fresh` (the
     owner's rerun) also takes a claim whose lease still runs when no engine is on the bead."""
-    store = store or beadtools.bd_store(who.actor, repo)
-    b = beadtools.peek(store, bead_id) or Bead(id=bead_id, title="", status="")
+    store = store or h.bd(who.actor, repo)
+    b = h.peek(store, bead_id) or Bead(id=bead_id, title="", status="")
     holder, me = b.assignee, who.actor
     if hold.held(b.metadata, at or time.time()):
         return False, f"held by the owner ({b.metadata[intake.HOLD]}): `tl hold {bead_id} --release` lets it go"
@@ -85,7 +83,7 @@ def admit(bead_id: BeadId, repo: str, git: Git, who: Identity, store: Beads | No
     takeover = bool(fresh and holder and holder != me)  # _foreign_claim let it through: no engine runs the bead
     if b.status != "blocked" and not takeover:
         return True, ""
-    why = _blocked_by_engine(b, store, who.config, owner_author) if b.status == "blocked" else ""
+    why = _blocked_by_engine(h, b, store, who.config, owner_author) if b.status == "blocked" else ""
     if why:
         return False, why
     # tl-kwo: only if the claim is still the one just read (bd applies --if-assignee atomically): two loops looking at one freed bead
@@ -99,12 +97,12 @@ def admit(bead_id: BeadId, repo: str, git: Git, who: Identity, store: Beads | No
     return True, "reopened"
 
 
-def parked(bead_id: BeadId, fresh: bool, repo: str, who: Identity, store: Beads | None = None) -> str:
+def parked(h: AsksHost, bead_id: BeadId, fresh: bool, repo: str, who: Identity, store: Beads | None = None) -> str:
     """Why run-task will not take a bead whose run ended on a question ("" when it may): its text is unchanged (--fresh or an answer
     lets it run), or this would be the third run on that text (nothing does). An answered ask starts the count again (tl-7y6.7.3)."""
-    b = beadtools.peek(store or beadtools.bd_store(who.actor, repo), bead_id)
+    b = h.peek(store or h.bd(who.actor, repo), bead_id)
     cfg = who.config
-    verdict = parks.gate(cfg, b, fresh=fresh) if b else None
+    verdict = parks.gate(h, cfg, b, fresh=fresh) if b else None
     if b and verdict is None:
-        parks.entering(cfg, b)
+        parks.entering(h, cfg, b)
     return verdict.why if verdict else ""

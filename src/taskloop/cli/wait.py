@@ -5,10 +5,9 @@ from argparse import Namespace
 from collections.abc import Callable
 from typing import Any
 
+from tlasks import owner_verbs as requests
 from tlkernel.askstore import AskStore
 from tlkernel.paths import ConfigDir
-
-from taskloop.app.asks import owner_verbs as requests
 
 ASK = requests.ASK
 CODES = requests.CODES

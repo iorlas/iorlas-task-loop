@@ -11,6 +11,7 @@ root_packages =
     tlgate
     tlwork
     tlslots
+    tlasks
     tlpipeline
     msgspec
     re
@@ -161,7 +162,6 @@ layers =
     release
     checks
     track | doctor
-    asks
 
 # Direct slice imports are checked by tests/rules/arch_invariants.py's allow-table.
 
@@ -255,6 +255,17 @@ forbidden_modules =
     delegate
 allow_indirect_imports = True
 
+[importlinter:contract:package-asks-imports-only-the-kernel]
+name = tlasks imports the kernel and third parties only
+type = forbidden
+source_modules =
+    tlasks
+forbidden_modules =
+    taskloop
+    tldash
+    delegate
+allow_indirect_imports = True
+
 [importlinter:contract:package-pipeline-imports-only-the-kernel]
 name = The pipeline package (tlpipeline) imports the kernel and third parties, never the tree or another package
 type = forbidden
@@ -270,7 +281,6 @@ allow_indirect_imports = True
 name = Nobody imports a root: nodes, run's logic modules and the layers below never import launch, wire or run's composition files
 type = forbidden
 source_modules =
-    taskloop.app.asks
     taskloop.app.checks
     taskloop.app.doctor
     taskloop.app.land
@@ -283,6 +293,7 @@ source_modules =
     tlwork.review
     taskloop.app.report
     tlslots
+    tlasks
     taskloop.app.track
     taskloop.app.workers
     tlwork.write
@@ -361,7 +372,7 @@ forbidden_modules =
     tlwork.review
     tlwork.write
     tlwork.look
-    taskloop.domain.asks
+    tlasks
     taskloop.domain.land
 allow_indirect_imports = True
 
@@ -376,6 +387,7 @@ forbidden_modules =
     tlgate
     tlpipeline
     tlslots
+    tlasks
 allow_indirect_imports = True
 ignore_imports =
     tldash.readers.logs -> delegate.api

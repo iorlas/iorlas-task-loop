@@ -14,9 +14,9 @@ from support.memstores import fake_stores
 from support.stdout import stdout_in
 from support.tlmain import tl
 
-from taskloop.app.asks import admission
 from taskloop.app.run import entry
 from taskloop.app.run.engine import Engine
+from tlasks import admission
 from tlkernel.config import EngineConfig, SlotsConfig
 from tlkernel.enums import Result, Step
 from tlkernel.env import Env

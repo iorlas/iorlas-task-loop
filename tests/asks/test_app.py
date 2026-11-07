@@ -16,7 +16,7 @@ from support.memstores import fake_stores
 from support.tiers import domain
 
 from taskloop.adapters.bd import BdRun, BdStore
-from taskloop.app.asks import intake, raiser, sweeps
+from tlasks import intake, raiser, sweeps
 from tlkernel import askspecs as specs
 from tlkernel.askenums import AskKind, AskStatus
 from tlkernel.asklint import INFRA

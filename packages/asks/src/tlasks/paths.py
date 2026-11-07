@@ -1,4 +1,4 @@
-"""Paths owned by taskloop.app.asks."""
+"""Paths owned by tlasks."""
 from pathlib import Path
 
 from tlkernel.paths import ConfigDir

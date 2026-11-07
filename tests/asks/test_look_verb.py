@@ -4,7 +4,7 @@ from unittest import mock
 
 from support.look_world import FakeBd, looks, world
 
-from taskloop.app.asks.intake import Intake
+from tlasks.intake import Intake
 from tlkernel import factorydb, gallery
 from tlkernel.askstore import AskStore
 from tlkernel.bead import Bead

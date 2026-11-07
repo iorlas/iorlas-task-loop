@@ -16,33 +16,33 @@ from tlkernel.parks import Park, ParkStore
 from tlkernel.paths import ConfigDir
 from tlkernel.pausereasons import Producer
 
-from taskloop.domain.asks import hold
-from taskloop.stores.real import real_stores
+from tlasks import hold
+from tlasks.host import AsksHost
 
 
 def answered(ask: Ask | None) -> bool:
     return ask is not None and ask.consumed is None and ask.answer is not None
 
 
-def gate(cfg: ConfigDir, b: Bead, *, fresh: bool = False, now: float | None = None) -> park.Verdict | None:
+def gate(h: AsksHost, cfg: ConfigDir, b: Bead, *, fresh: bool = False, now: float | None = None) -> park.Verdict | None:
     """Why the bead is not taken now, None when it may be."""
     stamp = time.time() if now is None else now
     rec = ParkStore(cfg).get(b.id)
     if rec and rec.reason == Kind.OWNER_PARK.value and not hold.held(b.metadata, stamp):
         return None  # releasing the owner's hold is this park's explicit wake rule
-    return park.verdict(rec, b, fresh=fresh, answered=answered(real_stores(cfg).asks.get(b.id)), now=stamp)
+    return park.verdict(rec, b, fresh=fresh, answered=answered(h.asks_store(cfg).get(b.id)), now=stamp)
 
 
-def skip_of(cfg: ConfigDir, b: Bead, *, now: float | None = None) -> Skip | None:
+def skip_of(h: AsksHost, cfg: ConfigDir, b: Bead, *, now: float | None = None) -> Skip | None:
     """The gate as the queue's typed skip."""
-    v = gate(cfg, b, now=now)
+    v = gate(h, cfg, b, now=now)
     rec = ParkStore(cfg).get(b.id)
     return Skip(why=v.why, kind=v.kind, until=rec.retry_at if rec and rec.retry_at else None) if v else None
 
 
-def entering(cfg: ConfigDir, b: Bead) -> None:
+def entering(h: AsksHost, cfg: ConfigDir, b: Bead) -> None:
     """A run goes on from the owner's answer: the count of runs on this text starts again."""
-    if answered(real_stores(cfg).asks.get(b.id)):
+    if answered(h.asks_store(cfg).get(b.id)):
         ParkStore(cfg).drop(b.id)
 
 

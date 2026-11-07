@@ -8,7 +8,7 @@ def test_bindings_and_rerun():
     text = ('"""Example."""\n'
             'from taskloop.adapters import bdids\n'
             'from taskloop.domain.beads import matchers as acnames\n'
-            'from taskloop.app.asks.intake import HINT, Intake\n'
+            'from tlasks.intake import HINT, Intake\n'
             'value = intake.OVERRIDE\n')
     result, errors = move.rewrite(text)
     assert not errors
@@ -16,7 +16,7 @@ def test_bindings_and_rerun():
     assert 'from tlkernel import bdids as bdids' in result
     assert 'from tlkernel import beadmatchers as acnames' in result
     assert 'from tlkernel.ownerkeys import HINT' in result
-    assert 'from taskloop.app.asks.intake import Intake' in result
+    assert 'from tlasks.intake import Intake' in result
     assert 'value = OVERRIDE' in result
     assert move.rewrite(result) == (result, [])
 

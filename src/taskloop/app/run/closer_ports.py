@@ -3,12 +3,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
+from tlasks.closing import ClosingAsks
 from tlkernel.identity import Identity
 from tlpipeline import api
 from tlslots.config import profile_slots
 
 from taskloop.adapters import beadtools, closes
-from taskloop.app.asks.closing import ClosingAsks
 from taskloop.app.land.closing import LandCleanups, LandFollowUps
 from taskloop.app.land.record import FollowUpCheckpoints, FollowUpHost, file_follow_ups
 from taskloop.app.track.closing import ClosingBeads

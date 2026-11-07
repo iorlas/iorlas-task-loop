@@ -10,11 +10,9 @@ from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
 from support.tiers import domain
 
-from taskloop.app.asks import ask_verbs, intake, raiser
 from taskloop.app.loop.queue import QueueRule
 from taskloop.cli import asks as cli
-from taskloop.domain import timespec
-from taskloop.domain.asks import hold
+from tlasks import ask_verbs, hold, intake, raiser, timespec
 from tlkernel import askspecs as specs
 from tlkernel.beadsport import NewBead
 from tlkernel.config import EngineConfig

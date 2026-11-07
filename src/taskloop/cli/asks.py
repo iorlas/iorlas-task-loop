@@ -3,12 +3,11 @@ from argparse import Namespace
 from collections.abc import Callable
 from typing import Any
 
+from tlasks import ask_verbs, intake
 from tlkernel.askstore import AskStore
 from tlkernel.beadsport import Beads
 from tlkernel.ids import parse_bead_id
 from tlkernel.paths import ConfigDir
-
-from taskloop.app.asks import ask_verbs, intake
 
 
 def arguments(a: Namespace) -> ask_verbs.Arguments:
