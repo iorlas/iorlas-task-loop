@@ -27,12 +27,15 @@ class TestThreads(Case):
         self.delta.write_text("delta")
         self.request = RunRequest(role="worker", task="bead", thread="write", brief_file=str(self.whole), cwd=tmp)
 
-    @pytest.mark.parametrize("thread,record,delta,expected", [
-        ("", False, False, ("", "caller-ref", "whole", False)),
-        ("write", False, True, ("bead/write", None, "whole", False)),
-        ("write", True, True, ("bead/write", "session", "delta", False)),
-        ("write", True, False, ("bead/write", None, "whole" + threads.TAKEOVER_NOTE, True)),
-    ])
+    @pytest.mark.parametrize(
+        "thread,record,delta,expected",
+        [
+            ("", False, False, ("", "caller-ref", "whole", False)),
+            ("write", False, True, ("bead/write", None, "whole", False)),
+            ("write", True, True, ("bead/write", "session", "delta", False)),
+            ("write", True, False, ("bead/write", None, "whole" + threads.TAKEOVER_NOTE, True)),
+        ],
+    )
     def test_plan(self, thread, record, delta, expected):
         state = StateDoc()
         if record:
@@ -133,10 +136,14 @@ def test_thread_state_round_trip_refuses_the_old_version_and_filters_retired_lan
     assert codec.from_json(StateDoc, data) == state
     with pytest.raises(codec.StaleRecord):
         codec.from_json(StateDoc, data | {"v": V - 1})
-    kept, gone = split_retired_state({"threads": {
-        "task/old": {"ref": "old", "lane": "CLAUDE_CREDIT", "model": "M"},
-        "task/write": {"ref": "r", "lane": "L", "model": "M"},
-    }})
+    kept, gone = split_retired_state(
+        {
+            "threads": {
+                "task/old": {"ref": "old", "lane": "CLAUDE_CREDIT", "model": "M"},
+                "task/write": {"ref": "r", "lane": "L", "model": "M"},
+            }
+        }
+    )
     assert gone == ["threads.task/old"]
     assert list(obj(kept["threads"])) == ["task/write"]
 
@@ -144,19 +151,39 @@ def test_thread_state_round_trip_refuses_the_old_version_and_filters_retired_lan
 def test_fresh_merge_keeps_usage_accounting_and_existing_attempts():
     first = result("busy", tokens={"in": 10, "cached": 3, "out": 2}, cost=2, secs=3)
     last = result(ref="new", tokens={"in": 20, "cached": 4, "out": 5}, cost=4, secs=6)
-    first = replace(first, usage=replace(
-        first.usage, tokens=UsageTokens(in_=10, cached=3, out=2, in_fresh=7, cache_read=3, cache_write=1),
-        cost=2, secs=3, turns=1, answer_bytes=10,
-        cost_usd=0.2, cost_source="harness", accounting="exact",
-    ), attempts=[
-        Attempt(kind="first", lane="L", model="M", outcome="busy", secs=1, tokens=Tokens(in_=5, cached=1, out=1)),
-        Attempt(kind="lane_poll", lane="L", model="M", outcome="busy", secs=2, tokens=Tokens(in_=5, cached=2, out=1)),
-    ])
-    last = replace(last, usage=replace(
-        last.usage, tokens=UsageTokens(in_=20, cached=4, out=5, in_fresh=16, cache_read=4, cache_write=2),
-        ref="new", cost=4, secs=6, turns=2, answer_bytes=20,
-        cost_usd=0.4, cost_source="harness", accounting="exact",
-    ))
+    first = replace(
+        first,
+        usage=replace(
+            first.usage,
+            tokens=UsageTokens(in_=10, cached=3, out=2, in_fresh=7, cache_read=3, cache_write=1),
+            cost=2,
+            secs=3,
+            turns=1,
+            answer_bytes=10,
+            cost_usd=0.2,
+            cost_source="harness",
+            accounting="exact",
+        ),
+        attempts=[
+            Attempt(kind="first", lane="L", model="M", outcome="busy", secs=1, tokens=Tokens(in_=5, cached=1, out=1)),
+            Attempt(kind="lane_poll", lane="L", model="M", outcome="busy", secs=2, tokens=Tokens(in_=5, cached=2, out=1)),
+        ],
+    )
+    last = replace(
+        last,
+        usage=replace(
+            last.usage,
+            tokens=UsageTokens(in_=20, cached=4, out=5, in_fresh=16, cache_read=4, cache_write=2),
+            ref="new",
+            cost=4,
+            secs=6,
+            turns=2,
+            answer_bytes=20,
+            cost_usd=0.4,
+            cost_source="harness",
+            accounting="exact",
+        ),
+    )
     merged = threads.merge(first, last)
     assert (merged.cost, merged.secs) == (6, 9)
     assert (merged.usage.cost, merged.usage.secs, merged.usage.turns, merged.usage.answer_bytes) == (6, 9, 3, 30)
@@ -174,14 +201,19 @@ def test_fresh_merge_keeps_usage_accounting_and_existing_attempts():
 @pytest.mark.parametrize("permanence", ["transient", "needs_owner"])
 @pytest.mark.parametrize("kind", ["none", "predicted", "poll"])
 def test_fresh_recovery_stop_classes(scope, permanence, kind):
-    res = replace(result(), stop=StopFacts(
-        reason="example", scope=scope, permanence=permanence, retry=Retry(kind=kind, at=None), ref="session",
-    ))
+    res = replace(
+        result(),
+        stop=StopFacts(
+            reason="example",
+            scope=scope,
+            permanence=permanence,
+            retry=Retry(kind=kind, at=None),
+            ref="session",
+        ),
+    )
     expected = (scope == "caller" and permanence == "needs_owner") or (
-        permanence == "transient" and (
-            (scope == "bead" and kind in ("none", "predicted"))
-            or (scope in ("lane", "model") and kind in ("predicted", "poll"))
-        )
+        permanence == "transient"
+        and ((scope == "bead" and kind in ("none", "predicted")) or (scope in ("lane", "model") and kind in ("predicted", "poll")))
     )
     assert threads.needs_fresh(res) is expected
 

@@ -98,8 +98,12 @@ def _run(
     effective = replace(request, resume=planned.resume) if planned else request
     args = parser.build().parse_args(effective.to_argv("route.py", contract=contract)[2:])
     call = run_app.Run(
-        args, env.load_routing(), unattended=request.unattended, idle_s=request.idle_s,
-        brief=planned.brief_text if planned else None, log=lambda line: None,
+        args,
+        env.load_routing(),
+        unattended=request.unattended,
+        idle_s=request.idle_s,
+        brief=planned.brief_text if planned else None,
+        log=lambda line: None,
     )
     if started:
         call.on_started = lambda run_id, w: started(Handle(run_id=run_id, pid=w.pid, pgid=w.pgid, start=w.start))
