@@ -6,6 +6,8 @@ import pytest
 
 from tltestkit.case import install_case_helpers
 
+pytest_plugins = ["tltestkit.member_guards"]
+
 
 def pytest_pycollect_makeitem(collector: pytest.Collector, name: str, obj: object) -> list[object] | None:
     if isinstance(collector, pytest.Module) and inspect.isclass(obj) and obj.__module__ != collector.obj.__name__:
@@ -14,7 +16,7 @@ def pytest_pycollect_makeitem(collector: pytest.Collector, name: str, obj: objec
 
 
 @pytest.fixture(autouse=True)
-def case_helpers(request: pytest.FixtureRequest) -> Iterator[None]:
+def case_helpers(request: pytest.FixtureRequest, member_procs) -> Iterator[None]:
     """Give member tests the same unittest names as the root tests."""
     with install_case_helpers(request):
         yield

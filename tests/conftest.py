@@ -46,13 +46,15 @@ os.environ["TMPDIR"] = tempfile.tempdir = os.path.realpath(tempfile.gettempdir()
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 pytest.register_assert_rewrite("support")  # the helpers of tests/support assert too: show the operands, as in a test file
 import support.paths  # noqa: E402, F401  (ROOT/src on sys.path; after the bytecode setup above)
-from support import work  # noqa: E402
 from support.scope import delegate_wanted  # noqa: E402
 
 from taskloop.adapters import procs  # noqa: E402
 from taskloop.app.parts import STAGE_PARTS  # noqa: E402
 from tlkernel import factorydb, scratch  # noqa: E402
-from tltestkit import procsim  # noqa: E402
+from tltestkit import (
+    procsim,
+    work,
+)
 from tltestkit.limits import hang_s, kind_of_parts, limit_for  # noqa: E402
 
 procsim.SHELL_PROCESS_ADAPTERS.append(procs)
