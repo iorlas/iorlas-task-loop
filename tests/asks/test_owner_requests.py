@@ -1,4 +1,4 @@
-"""Backend item 7: the owner's park, stop and note as a run's request file (app/run/requests.py). The file is merged under its lock and
+"""The owner's park, stop and note: asks/owner_verbs.py posts signal rows, pipeline/requests.py consumes them. Requests are merged and
 taken once; park ends the run at its next step boundary with the branch and checkpoint kept, stop ends it through the stop flag (the
 halt path), a note reaches the next worker's prompt; a request for a run that is not live is refused, one left at the close dropped."""
 
@@ -23,8 +23,8 @@ from support.plans import PLAN, WRITE
 from support.runs import manifest
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.app.asks import intake
-from taskloop.app.run import requests
+from taskloop.app.asks import intake, owner_verbs
+from taskloop.app.pipeline import requests
 from taskloop.app.run.layout import prune_run_logs
 from taskloop.cli import asks as cli
 from taskloop.contracts import log as rec
@@ -47,8 +47,8 @@ class RequestFile(Case):
         log.write_text(json.dumps(typed("run_start", self.now - 5, run_id=RUN, bead="tl-5", worktree="")) + "\n")
 
     def test_requests_merge_and_are_taken_once(self):
-        assert requests.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", note="one") == ""
-        assert requests.post(self.cfg, RUN, "denis", self.now, repo="/repo", bead="tl-5", park=True, note="two") == ""
+        assert owner_verbs.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", note="one") == ""
+        assert owner_verbs.post(self.cfg, RUN, "denis", self.now, repo="/repo", bead="tl-5", park=True, note="two") == ""
         got = must(requests.take(self.cfg, RUN))
         assert (got.park, got.stop, [n.text for n in got.notes], got.by) == (True, False, ["one", "two"], "denis")
         assert requests.take(self.cfg, RUN) is None
@@ -56,7 +56,7 @@ class RequestFile(Case):
     def test_a_run_that_is_not_live_is_refused(self):
         manifest(self.cfg, RUN, "tl-5", self.now - 5, state=RunState.LOST)  # its process is gone, recorded lost
         for run in (RUN, "tl-5-20261026-110000"):
-            why = requests.post(self.cfg, run, "dash", self.now + 3600, repo="/repo", bead="tl-5", stop=True)
+            why = owner_verbs.post(self.cfg, run, "dash", self.now + 3600, repo="/repo", bead="tl-5", stop=True)
             assert why == "no run of this bead is going"
         assert requests.peek(self.cfg, RUN) is None
 
@@ -64,7 +64,7 @@ class RequestFile(Case):
         before = self.files()
         for repo, bead in (("/other", "tl-5"), ("/repo", "tl-6")):
             with self.subTest(repo=repo, bead=bead):
-                why = requests.post(self.cfg, RUN, "dash", self.now, repo=repo, bead=bead, stop=True)
+                why = owner_verbs.post(self.cfg, RUN, "dash", self.now, repo=repo, bead=bead, stop=True)
                 assert "repo and bead" in why
         assert self.files() == before
 
@@ -86,7 +86,7 @@ class RequestFile(Case):
         t = threading.Thread(target=taker)
         t.start()
         for i in range(60):
-            requests.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", note=f"n{i}")
+            owner_verbs.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", note=f"n{i}")
         stop.set()
         t.join()
         got = requests.take(self.cfg, RUN)
@@ -96,8 +96,8 @@ class RequestFile(Case):
     def test_the_newest_run_of_a_bead_and_the_sweep(self):
         for stem, bead, at in (("tl-5-20261026-090000", "tl-5", 100), ("tl-5.1-20261027-090000", "tl-5.1", 50), ("tl-5-x", "tl-5.2", 1)):
             manifest(self.cfg, stem, bead, self.now - at).log.write_text("")
-        assert requests.newest_run(self.cfg, "tl-5") == RUN
-        requests.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", park=True)
+        assert owner_verbs.newest_run(self.cfg, "tl-5") == RUN
+        owner_verbs.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", park=True)
         prune_run_logs(self.cfg, self.now + 30 * 86400, 7 * 86400)
         assert requests.peek(self.cfg, RUN) is None
 
@@ -106,7 +106,7 @@ class RequestFile(Case):
         side = requests.OwnerRequests(host)
         side.at_beat()
         assert not host.halt.is_set()
-        requests.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", stop=True)
+        owner_verbs.post(self.cfg, RUN, "dash", self.now, repo="/repo", bead="tl-5", stop=True)
         side.at_beat()
         assert host.halt.is_set() and side.stopped
         side.drop()  # the close: the request no step took is dropped, and nothing is taken after
@@ -162,7 +162,7 @@ class EngineRequests(te.EngineTest):
 
             def planned(*a, **kw):
                 out = plan(*a, **kw)
-                assert requests.post(homes.cfg(), eng.log_path.parent.name, "denis", time.time(),
+                assert owner_verbs.post(homes.cfg(), eng.log_path.parent.name, "denis", time.time(),
                                                repo=str(self.wt), bead=str(eng.bead), **request) == ""
                 return out
             eng.planner.plan = planned

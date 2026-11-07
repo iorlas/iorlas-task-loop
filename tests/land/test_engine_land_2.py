@@ -141,7 +141,7 @@ class EngineLand2Test(EngineTest):
         assert rc == 0, self.blocked
         assert [c[0] for c in s.calls] == ["planner"]
         assert gitq.git("show", "origin/main:f.txt", cwd=str(self.wt)) == "d2"
-        assert self.eng.plan_summary == "do it"  # the commit is titled after the work, not the empty plan
+        assert self.eng.plan_summary == "nothing left"  # the pipeline stores the returned plan summary
 
     def test_a_verify_answer_on_the_dashboard_lands_it(self):
         r = dict(CLEAN, unchecked=[{"what": "the cited spec link did not open", "kind": "link"}])

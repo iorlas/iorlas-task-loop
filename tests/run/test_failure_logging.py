@@ -9,10 +9,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.pipeline_ports import FakeLandCleanup
 
+from taskloop.app.asks.closing import ClosingTrust
 from taskloop.app.pipeline.closing_branch import ReleaseSlot
 from taskloop.app.pipeline.closing_decide import Decide
+from taskloop.app.pipeline.reflect import Reflector
 from taskloop.app.run.records import Records
-from taskloop.app.run.reflect import Reflector
 from taskloop.app.run.reload import Reload
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.ids import BeadId
@@ -46,7 +47,7 @@ class FailureLogging(Case):
     def test_reflection_catch_all_logs_traceback(self):
         host = mock.Mock()
         host.git.diff_entries.return_value = []
-        reflector = Reflector(host)
+        reflector = Reflector(host, ClosingTrust())
         with mock.patch.object(reflector, "worth_asking", return_value=True), \
                 mock.patch.object(reflector, "reflect_prompt", side_effect=RuntimeError("prompt")):
             assert reflector.reflect_run("done", "finished") is None

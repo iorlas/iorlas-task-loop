@@ -8,7 +8,8 @@ from support.dashlogs import RunScript, T, bead
 from support.runs import manifest
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.app.run import requests
+from taskloop.app.asks import owner_verbs
+from taskloop.app.pipeline import requests
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunState
 from taskloop.contracts.runlife import Liveness, command_scope, host_name, shown
@@ -25,18 +26,18 @@ def test_a_stop_after_the_run_ended_is_refused_and_one_before_it_is_dropped_unac
     cfg = ConfigDir(tmp_path)
     manifest(cfg, RUN, BEAD, NOW, repo=REPO, state=RunState.RUNNING)
     assert command_scope(cfg, REPO, BEAD, RUN, NOW) == ""
-    assert requests.post(cfg, RUN, "dash", NOW, repo=REPO, bead=BEAD, stop=True) == ""  # accepted: the engine has not taken it yet
+    assert owner_verbs.post(cfg, RUN, "dash", NOW, repo=REPO, bead=BEAD, stop=True) == ""  # accepted: the engine has not taken it yet
     manifest(cfg, RUN, BEAD, NOW, repo=REPO, state=RunState.DONE)  # the run ends first
     requests.OwnerRequests(SimpleNamespace(home=cfg, run_id=RUN)).drop()  # ... and its close-out drops what it never took
     assert requests.peek(cfg, RUN) is None
-    assert requests.post(cfg, RUN, "dash", NOW + 1, repo=REPO, bead=BEAD, stop=True) == NO_RUN
+    assert owner_verbs.post(cfg, RUN, "dash", NOW + 1, repo=REPO, bead=BEAD, stop=True) == NO_RUN
     assert requests.peek(cfg, RUN) is None
 
 
 def test_a_command_naming_another_repos_bead_is_refused_before_any_write(tmp_path):
     cfg = ConfigDir(tmp_path)
     manifest(cfg, RUN, BEAD, NOW, repo=REPO, state=RunState.RUNNING)
-    why = requests.post(cfg, RUN, "dash", NOW, repo="/other", bead=BEAD, stop=True)
+    why = owner_verbs.post(cfg, RUN, "dash", NOW, repo="/other", bead=BEAD, stop=True)
     assert "does not belong" in why
     assert requests.peek(cfg, RUN) is None
 

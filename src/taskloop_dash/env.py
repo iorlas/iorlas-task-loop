@@ -102,7 +102,7 @@ class Ports:
     look: Callable[[str, str, str, str, str], Result] = _no_look  # (repo, look item id, good|redo|undo, note, look bead or ""): Intake.look
     cause: Callable[[str, BeadId, str, str], Result] = _no_cause  # (repo, bead, run or ask id, cause): Intake.cause
     ack: Callable[[str, BeadId, str, bool], Result] = _no_ack  # (repo, bead, run id, seen): Intake.ack
-    park: Callable[[str, BeadId, str], Result] = _no_run_verb  # (repo, bead, observed run id): app/run/requests.OwnerVerbs.park
+    park: Callable[[str, BeadId, str], Result] = _no_run_verb  # (repo, bead, observed run id): app/asks/owner_verbs.OwnerVerbs.park
     stop: Callable[[str, BeadId, str], Result] = _no_run_verb  # (repo, bead, observed run id): OwnerVerbs.stop
     note: Callable[[str, BeadId, str, str], Result] = _no_note  # (repo, bead, observed run id, text): OwnerVerbs.note
     stick: Callable[[str, str, str, str], Result] = _no_stick  # (repo, ask id, outcome, text): Intake.stick

@@ -228,10 +228,10 @@ source_modules =
     taskloop.app.pipeline.outcomes
     taskloop.app.run.preflight
     taskloop.app.run.records
-    taskloop.app.run.reflect
-    taskloop.app.run.reflect_prompt
+    taskloop.app.pipeline.reflect
+    taskloop.app.pipeline.reflect_prompt
     taskloop.app.run.reload
-    taskloop.app.run.requests
+    taskloop.app.pipeline.requests
     taskloop.app.run.resume
     taskloop.app.run.review_glue
     taskloop.app.run.running

@@ -4,10 +4,12 @@ whether the engine ran a check is settled by the engine's own results; one that 
 import shlex
 from typing import Any, Final, NewType
 
-from taskloop.app.review.host import ReviewHost
+from taskloop.app.review.host import ReviewHand, ReviewPorts
+from taskloop.app.review.state import ReviewLive
 from taskloop.contracts.checks import CheckResult
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import SlotGitError
+from taskloop.contracts.stagefacts import RunFacts
 from taskloop.domain.checks import planref
 from taskloop.domain.plan.matchers import without_runner
 from taskloop.domain.review.matchers import KNOWN_TOOLS, GateProof, Tools, word_in
@@ -28,8 +30,8 @@ def lint_argv(tool: str) -> LintArgv | None:
 
 
 class Settles:
-    def __init__(self, host: ReviewHost, git: Git) -> None:
-        self.host = host
+    def __init__(self, facts: RunFacts, ports: ReviewPorts, live: ReviewLive, hand: ReviewHand, git: Git) -> None:
+        self.facts, self.ports, self.live, self.hand = facts, ports, live, hand
         self.git = git
 
     # -- tools the repo does not use
@@ -40,14 +42,14 @@ class Settles:
         tools = Tools.named(what)
         if not tools:
             return ""
-        engine_text = " ".join(str(c) for c in self.host.cfg.checks)
+        engine_text = " ".join(str(c) for c in self.facts.cfg.checks)
         said = []
         for t in tools:
             try:
-                used = bool(self.git.grep(self.host.wt, t, fixed=True, word=True))
+                used = bool(self.git.grep(self.facts.wt, t, fixed=True, word=True))
             except SlotGitError:  # no git tree to read: no evidence, the item stays
                 return ""
-            if used or word_in(t, engine_text) or self.host.on_path(t):
+            if used or word_in(t, engine_text) or self.ports.on_path(t):
                 return ""
             said.append(f"git grep -w -I {t}: no match in the tracked tree nor the engine's gate and checks; which {t}: not found")
         return "not a check here: the repo does not use it ({})".format("; ".join(said))
@@ -64,10 +66,10 @@ class Settles:
     def gate_names(self) -> list[str]:
         """Names a verify item can use for a check the engine runs by itself (the gate, a configured check, a plan stage check or case):
         its id, its command, and the command without its runner (`just unity-tests` -> unity-tests)."""
-        e = self.host
-        stages = (e.plan_data or {}).get("stages") or []
-        cmds = [c.cmd for c in e.cfg.checks] + planref.commands([c for st in stages for c in st["checks"]] + e.cases.case_checks(), e.cfg)
-        names = [c.id for c in e.cfg.checks]
+        stages = (self.hand.plan_data or {}).get("stages") or []
+        checks = [c for st in stages for c in st["checks"]] + self.ports.cases.case_checks()
+        cmds = [c.cmd for c in self.facts.cfg.checks] + planref.commands(checks, self.facts.cfg)
+        names = [c.id for c in self.facts.cfg.checks]
         for cmd in cmds:
             c = " ".join(cmd.split())
             rest = without_runner(c)
@@ -77,16 +79,16 @@ class Settles:
     def log_path_of(self, c: CheckResult, full: bool = True) -> str:
         """The saved log of a check: absolute in the trace; in a prompt relative to the engine's run folder, since a path into it is a file
         no step can read (the brief is inline, never a path outside the worktree)."""
-        return str(self.host.run_dir / c.log if full else c.log) if c.log else "none (cached: same tree and base, earlier result)"
+        return str(self.facts.run_dir / c.log if full else c.log) if c.log else "none (cached: same tree and base, earlier result)"
 
     def checks_now(self) -> tuple[list[Any], bool]:
         """(the engine's last check results, whether they ran on the tree as it is now). After a resume the saved engine-checks.json
         stands in for the brief; its tree is unknown, so it settles nothing."""
-        run = self.host.last_run
+        run = self.hand.last_run
         if run is None:
-            saved = self.host.stores.check_run(self.host.run_dir.name, None).get()
+            saved = self.ports.stores.check_run(self.facts.run_dir.name, None).get()
             return (saved.results if saved else []), False
-        return run.results, bool(run.tree) and run.tree == self.host.checkout.tree_hash()
+        return run.results, bool(run.tree) and run.tree == self.ports.checkout.tree_hash()
 
     def evidence_text(self, checks: list[Any] | None = None, current: bool | None = None) -> str:
         """The engine's check results as brief text: per check id, group, command, status, exit code, duration, log path; said plainly to
@@ -120,8 +122,8 @@ class Settles:
 
     def work_summary(self) -> str:
         """The task's changed files with their line counts, untracked files included."""
-        tree = self.host.checkout.tree_hash()
-        return (self.git.diff(self.host.wt, self.host.checkout.base_sha(), tree, stat=True) if tree else "") or "(no files changed)"
+        tree = self.ports.checkout.tree_hash()
+        return (self.git.diff(self.facts.wt, self.ports.checkout.base_sha(), tree, stat=True) if tree else "") or "(no files changed)"
 
     # -- settling
     def settle(self, gaps: list[Item]) -> tuple[list[Item], list[Item]]:
@@ -144,7 +146,7 @@ class Settles:
         return left, failed
 
     def settled(self, u: Item, evidence: str, why: str, verdict: str = "settled") -> None:
-        self.host.review.add_verified(u, verdict, why, evidence)
+        self.live.add_verified(u, verdict, why, evidence)
 
     def by_name(self, u: Item, names: list[str], results: list[Any]) -> bool:
         what = " ".join(u["what"].split()).lower()
@@ -158,7 +160,7 @@ class Settles:
         return True
 
     def by_results(self, u: Item, results: list[Any], current: bool) -> bool:
-        if self.host.judge.is_look(u):
+        if self.ports.judge.is_look(u):
             return False
         proof = self.proof(u["what"], results, current)
         if proof:
@@ -167,7 +169,7 @@ class Settles:
 
     def run_lint(self, u: Item, cmd: LintArgv) -> Item | None:
         """None: the tool cannot start here (the verifier and the owner still judge it); {} settled; else the wrong item."""
-        rc, tail = self.host.sh(list(cmd), timeout=600)
+        rc, tail = self.ports.sh(list(cmd), timeout=600)
         if rc in (126, 127):
             return None
         out = f"ran `{shlex.join(cmd)}`: exit {rc}" + ((" " + tail[-300:]) if rc else "")

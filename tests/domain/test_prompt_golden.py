@@ -14,10 +14,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from support.cfgs import cfg_with  # noqa: E402
 
+from taskloop.app.pipeline import reflect_prompt as fp  # noqa: E402
 from taskloop.app.plan import prompts as pp  # noqa: E402
 from taskloop.app.review import verify_prompt as vp  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
-from taskloop.app.run import reflect_prompt as fp  # noqa: E402
 from taskloop.app.write import prompts as wp  # noqa: E402
 from taskloop.app.write import review_prompt as rp  # noqa: E402
 from taskloop.app.write.review_prompt import acceptance_text  # noqa: E402

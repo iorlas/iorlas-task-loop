@@ -10,10 +10,10 @@ from taskloop.adapters.bd import BdStore
 from taskloop.adapters.ident import config_dir, hostname
 from taskloop.adapters.locks import resource_holders
 from taskloop.app.asks.intake import Intake
+from taskloop.app.asks.owner_verbs import OwnerVerbs
 from taskloop.app.doctor import profiles
 from taskloop.app.report import card as cards
 from taskloop.app.report.card import score_of
-from taskloop.app.run.requests import OwnerVerbs
 from taskloop.app.track.trail import now
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import real
@@ -111,7 +111,7 @@ def owner_writes(intake: Callable[[str], Intake], cfg: ConfigDir) -> dict[str, A
         return guarded(lambda: intake(repo).ack(bead, scope, on))
 
     def run_verb(repo: str, do: Callable[[OwnerVerbs], tuple[str, str]]) -> Result:
-        """A park, stop or note (app/run/requests.OwnerVerbs): its own words on success, the refusal otherwise."""
+        """A park, stop or note (app/asks/owner_verbs.OwnerVerbs): its own words on success, the refusal otherwise."""
         said: list[str] = []
 
         def act() -> str:
