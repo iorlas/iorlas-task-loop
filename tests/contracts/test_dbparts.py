@@ -6,7 +6,7 @@ import support.paths  # noqa: F401
 from sqlite_store import SchemaError
 
 from taskloop.app.parts import STAGE_PARTS
-from tlkernel import dbparts, factorydb
+from tlkernel import dbparts, factorydb, factoryparts
 from tlkernel.checks import PassRecord
 from tlkernel.dbparts import Part, Prune
 
@@ -180,10 +180,13 @@ def test_undeclared_writer_refused_and_reader_allowed(tmp_path, monkeypatch):
 
 def test_parts_cannot_be_redeclared_differently(monkeypatch):
     monkeypatch.setattr(factorydb._STORE, "parts", None)
-    factorydb.declare_parts(STAGE_PARTS)
-    factorydb.declare_parts(STAGE_PARTS)
+    monkeypatch.setattr(factorydb._STORE, "complete", False)
+    factorydb.declare_parts(STAGE_PARTS, complete=True)
+    factorydb.declare_parts(STAGE_PARTS, complete=True)
     with pytest.raises(ValueError, match="different list"):
-        factorydb.declare_parts(STAGE_PARTS[:-1])
+        factorydb.declare_parts(STAGE_PARTS[:-1], complete=True)
+    with pytest.raises(ValueError, match="different list"):
+        factorydb.declare_parts(STAGE_PARTS)
 
 
 @pytest.mark.parametrize("readonly", [False, True])
@@ -198,13 +201,43 @@ def test_launch_validates_part_ownership_before_touching_database(readonly):
 
 
 @pytest.mark.parametrize("readonly", [False, True])
-def test_launch_ignores_a_retired_part_and_leaves_its_table_alone(readonly):
+@pytest.mark.parametrize("complete", [False, True])
+def test_unknown_stored_part_requires_a_partial_declaration(readonly, complete):
+    c = con()
+    dbparts.launch(c, readonly=False, parts=[part()])
+    before = row(c)
+    if complete:
+        with pytest.raises(SchemaError, match=r"factory\.db has part p v1 this code does not know: update it"):
+            dbparts.launch(c, readonly=readonly, parts=[], complete=True)
+    else:
+        dbparts.launch(c, readonly=readonly, parts=[])
+    assert row(c) == before
+
+
+@pytest.mark.parametrize("readonly", [False, True])
+@pytest.mark.parametrize("complete", [False, True])
+def test_launch_removes_a_dropped_part_only_when_writable(readonly, complete):
     c = con()
     retired = Part(name="kv", version=1, tables=("kv",),
                    ddl="CREATE TABLE kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL, stamp TEXT);")
     dbparts.launch(c, readonly=False, parts=[part(), retired])
     c.execute("INSERT INTO kv(k,v,t) VALUES ('orphan','untouched',1)")
     before = c.execute("SELECT * FROM schema_part WHERE name='kv'").fetchone()
-    dbparts.launch(c, readonly=readonly, parts=[part()], needs={"p": 1})
-    assert c.execute("SELECT * FROM schema_part WHERE name='kv'").fetchone() == before
-    assert c.execute("SELECT k,v,t FROM kv").fetchall() == [("orphan", "untouched", 1.0)]
+    dbparts.launch(c, readonly=readonly, parts=[part()], complete=complete, dropped=factoryparts.DROPPED_PARTS)
+    if readonly:
+        assert c.execute("SELECT * FROM schema_part WHERE name='kv'").fetchone() == before
+        assert c.execute("SELECT k,v,t FROM kv").fetchall() == [("orphan", "untouched", 1.0)]
+    else:
+        assert row(c) == [("p", 1)]
+        assert c.execute("SELECT name FROM sqlite_master WHERE name='kv'").fetchall() == []
+
+
+def test_unknown_part_rolls_back_declared_parts_and_dropped_parts():
+    c = con()
+    c.execute(dbparts.PART_DDL)
+    c.execute("CREATE TABLE kv (k TEXT)")
+    c.executemany("INSERT INTO schema_part VALUES (?, 1, '', '')", [("kv",), ("future",)])
+    with pytest.raises(SchemaError, match="has part future v1"):
+        dbparts.launch(c, readonly=False, parts=[part()], complete=True, dropped=factoryparts.DROPPED_PARTS)
+    assert row(c) == [("kv", 1), ("future", 1)]
+    assert c.execute("SELECT name FROM sqlite_master WHERE name IN ('kv', 't')").fetchall() == [("kv",)]

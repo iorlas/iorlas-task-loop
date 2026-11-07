@@ -338,6 +338,7 @@ def test_a_reader_meets_a_database_a_writer_is_still_creating_as_not_there_yet(t
 
 def test_declared_versions_and_reader_needs(tmp_path, monkeypatch):
     monkeypatch.setattr(factorydb._STORE, "parts", None)
+    monkeypatch.setattr(factorydb._STORE, "complete", False)
     monkeypatch.setattr(factorydb._STORE, "needs", None)
     monkeypatch.setattr(factorydb._STORE, "schema", factorydb.SCHEMA)
     factorydb.declare_parts([LOOK])

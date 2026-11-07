@@ -5,7 +5,9 @@ The frozen `user_version` (factorydb.SCHEMA_VERSION) stays what the vendored sql
 of the part and a step (dbparts), not of that number.
 """
 import sqlite3
+from typing import Final
 
+from tlkernel import factoryretired
 from tlkernel.ask import Ask
 from tlkernel.bead import Bead
 from tlkernel.checkpoint import Checkpoint
@@ -41,6 +43,9 @@ from tlkernel.run import HandoffMirror, RunCounters, RunManifest
 from tlkernel.rundocs import PrepareStamp
 from tlkernel.snapshots import Pin, ReflectState, ReleaseResult, ReposIndex, SharedNotes, StatusSnapshot, StatusTried
 from tlkernel.worktrees import Owned
+
+# Parts that existed once; a rw launch deletes their schema_part row and drops their tables; D-KV.
+DROPPED_PARTS: Final = factoryretired.DROPPED_PARTS
 
 # The runs that may age out (the pipeline's rule; the history of other parts is pruned by it too). `?` is the cutoff; the temp table
 # prune_keep_bead holds the beads the caller exempts.
