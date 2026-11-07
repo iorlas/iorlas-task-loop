@@ -29,6 +29,6 @@ def test_records_and_trace_have_no_transcript(monkeypatch):
         output = out.getvalue()
         assert "transcript" not in output
         assert all(value in output for value in ("write", "worker", "test", "done", "session-ref"))
-    for record, stale in ((log.CallEnd, {"v": 3}), (trace.RunTrace, {"v": 2})):
+    for record, stale in ((log.CallEnd, {"v": 3}), (trace.RunTrace, {"v": 3})):
         with pytest.raises(wire.StaleRecord):
             wire.load(record, stale)

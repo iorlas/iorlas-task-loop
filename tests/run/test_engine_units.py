@@ -308,7 +308,8 @@ class DelegateLauncher(T.EngineTest):
                                      "review": [review(unmet=["more"]), review(unmet=["more"])]})
         assert rc == 2  # round 3 resumed the fallback (Codex still out) and paused
         ck = read_ck(self.eng).state
-        assert (ck.writer.delegate, ck.fallback_lane) == ("w2", "OPENAI_SUBSCRIPTION")
+        assert ck.writer.seen
+        assert ck.fallback_lane == "OPENAI_SUBSCRIPTION"
         with self.lanes(OPENAI_SUBSCRIPTION=False):
             rc, s = self.run_engine({"write": [self.BACK], "review": [CLEAN]})
         assert rc == 0, self.blocked

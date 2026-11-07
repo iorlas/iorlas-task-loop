@@ -9,6 +9,7 @@ from delegate import api
 from delegate.app import answer, env, threads
 from delegate.contracts import codec, schema, wire
 from delegate.contracts.json_types import obj
+from delegate.contracts.routing import LaneSpec
 from delegate.contracts.state import StateDoc, ThreadRecord, V, split_retired_state
 from delegate.contracts.wire import Attempt, Retry, RunRequest, RunResult, StopFacts, Tokens, UsageTokens
 from tltestkit.case import Case
@@ -41,16 +42,16 @@ class TestThreads(Case):
         if record:
             threads.settle(state, "bead/write", result())
         request = replace(self.request, thread=thread, resume="caller-ref", delta_file=str(self.delta) if delta else None)
-        plan = threads.plan(request, state)
+        plan = threads.plan(request, state, env.typed_routing(env.load_routing()))
         assert (plan.key, plan.resume, plan.brief_text, plan.takeover) == expected
 
     def test_task_namespaces_the_thread(self):
         state = StateDoc(threads={"other/write": ThreadRecord(ref="other", lane="L", model="M")})
-        assert threads.plan(replace(self.request, delta_file=str(self.delta)), state).resume is None
+        assert threads.plan(replace(self.request, delta_file=str(self.delta)), state, env.typed_routing(env.load_routing())).resume is None
 
     def test_planner_fresh_prompt_has_no_writer_takeover_note(self):
         state = StateDoc(threads={"bead/planner": ThreadRecord(ref="session", lane="L", model="M")})
-        planned = threads.plan(replace(self.request, role="planner", thread="planner"), state)
+        planned = threads.plan(replace(self.request, role="planner", thread="planner"), state, env.typed_routing(env.load_routing()))
         assert (planned.resume, planned.brief_text, planned.takeover) == (None, "whole", False)
 
     def test_planner_fresh_rerun_has_no_writer_takeover_note(self, monkeypatch):
@@ -235,7 +236,75 @@ def test_thread_wire_fields_and_capabilities_match_the_published_contract():
     request = schema.of(RunRequest)
     contract_properties = obj(obj(contract["request_schema"])["properties"])
     request_properties = obj(request["properties"])
-    for field in ("thread", "delta_file"):
+    for field in ("thread", "delta_file", "boundary"):
         assert contract_properties[field] == request_properties[field]
     attempts = obj(obj(contract["answer_schema"])["properties"])["attempts"]
     assert "new_thread" in str(attempts)
+
+
+@pytest.mark.parametrize("context,limit,boundary,stage,family,fresh", [
+    (151, 150, False, 100, "claude", True),
+    (150, 150, False, 100, "claude", False),
+    (120, 150, True, 100, "claude", True),
+    (120, 150, True, 0, "claude", False),
+    (500, 0, True, 100, "claude", False),
+    (None, 150, True, 100, "claude", False),
+    (0, 150, True, 100, "claude", False),
+    (500, 150, True, 100, "unknown", False),
+    (101, 100, False, 100, "openai", True),
+    (101, 100, False, 100, "xai", True),
+])
+def test_context_selects_whole_or_delta(context, limit, boundary, stage, family, fresh):
+    with TemporaryDirectory() as folder:
+        whole, delta = Path(folder) / "whole", Path(folder) / "delta"
+        whole.write_text("whole")
+        delta.write_text("delta")
+        routing = env.typed_routing(env.load_routing())
+        routing = replace(routing, settings=replace(routing.settings,
+            fresh_above_k={"claude": limit, "openai": limit, "xai": limit}, fresh_stage_k=stage),
+            lanes={"L": LaneSpec(family=family, kind="subscription", reader="", runner="")})
+        state = StateDoc(threads={"task/write": ThreadRecord(ref="r", lane="L", model="M", context_k=context)})
+        request = RunRequest(role="worker", task="task", thread="write", brief_file=str(whole),
+                             delta_file=str(delta), cwd=folder, boundary=boundary)
+        planned = threads.plan(request, state, routing)
+        assert planned.resume == (None if fresh else "r")
+        assert planned.brief_text == ("whole" + threads.TAKEOVER_NOTE if fresh else "delta")
+        assert planned.takeover is fresh
+
+
+def test_settle_records_context_and_clears_unknown_context():
+    state = StateDoc()
+    res = result()
+    threads.settle(state, "task/write", replace(res, usage=replace(res.usage, context_k=123)))
+    assert state.threads["task/write"].context_k == 123
+    threads.settle(state, "task/write", res)
+    assert state.threads["task/write"].context_k is None
+
+
+def test_context_limits_load_from_routing_and_owner_overrides():
+    defaults = env.settings_of(env.load_routing())
+    assert defaults.fresh_above_k == {"claude": 150.0, "openai": 100.0, "xai": 100.0}
+    assert defaults.fresh_stage_k == 100.0
+    env.update_config(lambda config: config.update(fresh_above_k={"openai": 42.0}, fresh_stage_k=35.0))
+    settings = env.settings_of(env.load_routing())
+    assert settings.fresh_above_k["openai"] == 42.0
+    assert settings.fresh_stage_k == 35.0
+
+
+def test_api_uses_context_and_boundary_when_selecting_prompt(monkeypatch):
+    routing = env.typed_routing(env.load_routing())
+    routing = replace(routing, lanes={"L": LaneSpec(family="claude", kind="subscription", reader="", runner="")})
+    monkeypatch.setattr(env, "load_routing", lambda: codec.to_json(routing))
+    res = result()
+    env.update_state(lambda state: threads.settle(state, "task/write", replace(res, usage=replace(res.usage, context_k=120))))
+    plans = []
+    monkeypatch.setattr(api, "_run", lambda request, started, contract, planned: (plans.append(planned) or res))
+    with TemporaryDirectory() as folder:
+        whole, delta = Path(folder) / "whole", Path(folder) / "delta"
+        whole.write_text("whole")
+        delta.write_text("delta")
+        request = RunRequest(role="worker", task="task", thread="write", cwd=folder,
+                             brief_file=str(whole), delta_file=str(delta), boundary=True)
+        assert api.run(request).ref == "session"
+        assert plans[0].resume is None
+        assert plans[0].brief_text == "whole" + threads.TAKEOVER_NOTE

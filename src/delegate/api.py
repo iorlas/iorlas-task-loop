@@ -69,11 +69,11 @@ def run(request: RunRequest, started: Callable[[Handle], None] | None = None) ->
     before = {k: os.environ.get(k) for k in wanted}
     try:
         os.environ.update(wanted)
-        planned = threads.plan(request, env.load_state()) if request.thread else None
+        planned = threads.plan(request, env.load_state(), env.typed_routing(env.load_routing())) if request.thread else None
         res = _run(request, started, contract, planned)
         if planned and planned.resume and threads.needs_fresh(res):
             env.update_state(lambda state: state.threads.pop(planned.key, None))
-            fresh = threads.plan(replace(request, thread="", resume=None), env.load_state())
+            fresh = threads.plan(replace(request, thread="", resume=None), env.load_state(), env.typed_routing(env.load_routing()))
             takeover = request.role == "worker"
             fresh = replace(
                 fresh, key=planned.key, brief_text=fresh.brief_text + (threads.TAKEOVER_NOTE if takeover else ""), takeover=takeover
