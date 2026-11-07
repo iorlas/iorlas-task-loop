@@ -38,10 +38,10 @@ from taskloop.adapters import halt as halting
 from taskloop.app.asks import intake, parks, setup_retry
 from taskloop.app.loop.queue import has_areas
 from taskloop.app.reconcile import leases
-from taskloop.app.run import console, preflight, running, target
+from taskloop.app.run import preflight, running, target
 from taskloop.app.run.engine import Blocked, Engine
 from taskloop.app.slots import engine_lock
-from taskloop.app.track import verbs
+from taskloop.app.track import console, verbs
 from taskloop.app.wire import slots as wslots
 from taskloop.domain.asks import hold
 from taskloop.domain.plan.brief import owner_written

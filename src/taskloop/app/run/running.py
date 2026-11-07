@@ -13,8 +13,8 @@ from tlkernel.lockenums import LockWhat
 from taskloop.adapters import beadtools
 from taskloop.adapters.locks import hold_path
 from taskloop.app.loop.queue import QueueRule, area_busy_text
-from taskloop.app.run import console
 from taskloop.app.slots import engine_lock
+from taskloop.app.track import console
 from taskloop.app.wire import slots as wslots
 
 
