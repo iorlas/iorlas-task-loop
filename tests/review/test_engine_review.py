@@ -15,13 +15,13 @@ from support.plans import BEAD, CLEAN, FALSE, PLAN, STILL_OPEN, WRITE, finding, 
 
 # isort: split
 from support.cfgs import cfg_with
-from support.narrow import must
 from support.review_host import FakeReview
 from support.spawn import port_git
 
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.run import engine
 from taskloop.app.slots import config as wslots_config
+from tltestkit.narrow import must
 
 
 class EngineReviewTest(EngineTest):

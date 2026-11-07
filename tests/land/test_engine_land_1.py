@@ -10,10 +10,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes
-from support.checks import typed
 from support.engine_case import ENGINE_BASH, POSIX_CHECK, EngineTest, _cells, no_repo, sh, stop
 from support.gitsim import verbs
 from support.plans import CLEAN, FALSE, HAS_F, PLAN, WRITE, finding, review
+
+from tltestkit.checks import typed
 
 # isort: split
 import contextlib
@@ -24,11 +25,9 @@ import time
 from pathlib import Path
 from unittest import mock
 
-from support import fake_route, procsim
+from support import procsim
 from support.cfgs import cfg_with
 from support.interrupts import Interrupter, Recovery, RecoveryRig
-from support.logs import records
-from support.narrow import must
 
 from taskloop.adapters import (
     ident,
@@ -38,6 +37,9 @@ from taskloop.app.run import engine
 from taskloop.domain.checks import lint
 from taskloop.domain.plan.matchers import gate_only_criteria
 from tlkernel.config import EngineConfig
+from tltestkit import fake_route
+from tltestkit.logs import records
+from tltestkit.narrow import must
 
 
 class EngineLand1Test(EngineTest):

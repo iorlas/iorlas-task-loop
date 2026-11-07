@@ -7,7 +7,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
-from support import fake_route, gitq
+from support import gitq
 from support.spawn import port_git, real_spawner
 from support.who import who
 
@@ -15,6 +15,7 @@ from taskloop.app.run import engine
 from taskloop.app.slots import config as wslots_config
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
+from tltestkit import fake_route
 
 
 class Stray(fake_route.Script):

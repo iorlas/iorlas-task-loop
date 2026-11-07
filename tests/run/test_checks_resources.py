@@ -8,8 +8,9 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.engine_case import EngineTest
-from support.logs import records
 from support.plans import CLEAN, PLAN, WRITE
+
+from tltestkit.logs import records
 
 # isort: split
 

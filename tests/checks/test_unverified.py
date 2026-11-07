@@ -11,10 +11,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import procsim
 from support.check_host import CheckHostCase
-from support.checks import res
 from support.fakegit import FakeGit
-from support.narrow import must
 from support.narrow_hosts import Stopped, table_kit
+
+from tltestkit.checks import res
+from tltestkit.narrow import must
 
 # isort: split
 from support.memstores import fake_stores

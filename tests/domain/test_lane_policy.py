@@ -8,12 +8,11 @@ ROOT = Path(__file__).resolve().parents[2]
 import support.paths  # noqa: E402, F401
 
 # isort: split
-from support.narrow import must, only  # noqa: E402
-
 from taskloop.domain import outcome as oc  # noqa: E402
 from taskloop.domain.lanes import policy as lp  # noqa: E402
 from taskloop.domain.lanes.says import stop_why  # noqa: E402
 from tlkernel.kinds import PAUSES, Kind  # noqa: E402
+from tltestkit.narrow import must, only  # noqa: E402
 
 NOW = 1_000_000.0
 

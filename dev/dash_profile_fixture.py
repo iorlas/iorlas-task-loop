@@ -8,10 +8,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
 from support.dashlogs import RunScript, bead
 from support.fakes import FakeBeadStore
-from support.repos import write_repos
 
 from taskloop_dash.env import Ports
 from tlkernel.paths import ConfigDir
+from tltestkit.repos import write_repos
 
 RUNS = 171
 
