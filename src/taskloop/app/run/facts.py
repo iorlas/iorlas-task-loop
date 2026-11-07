@@ -2,9 +2,9 @@
 that stop taking the engine. Nothing here changes the engine; every handle is the engine's own."""
 from pathlib import Path
 
+from tlkernel.check_files import repo_key
 from tlkernel.stagefacts import RunFacts
 
-from taskloop.adapters.check_files import repo_key
 from taskloop.app.run.host import RunHost
 from taskloop.stores.runports import RunPorts
 

@@ -4,11 +4,11 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
+from tlkernel import check_files
 from tlkernel.checks import UNVERIFIED_EXIT, Check, CheckFaultKind, CheckResult, Duration, Durations, verdict_of
 from tlkernel.runkey import RunKey
 from tlkernel.stagefacts import CheckLogPort
 
-from taskloop.adapters import check_files
 from taskloop.app.checks.attempts import Attempts, Outcome
 from taskloop.app.checks.cache import RunMemo
 from taskloop.app.checks.gateplan import PlanDecision
