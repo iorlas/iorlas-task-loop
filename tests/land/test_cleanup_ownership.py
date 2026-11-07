@@ -1,15 +1,8 @@
 """A live engine or surviving worker keeps its checkout during landing and resume."""
-import sys
-from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 import pytest
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support import homes
 from support.memstores import fake_stores
 
@@ -19,6 +12,7 @@ from taskloop.app.land.tree import Tree
 from taskloop.app.slots.reset import leave_slot
 from taskloop.stores.runlog import RunLog
 from tlkernel.locks import EngineLock
+from tltestkit.case import Case
 
 
 class Ownership(Case):

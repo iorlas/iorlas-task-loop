@@ -1,10 +1,6 @@
 """Check spawn errors are saved as failed results, including when the executable vanished after plan validation."""
-import sys
-from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.check_host import CheckHostCase
 
 from tlgate.base import BaseCheck

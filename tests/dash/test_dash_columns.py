@@ -1,12 +1,5 @@
 """The v2 board's pure rules: column, marker, status line and dots over typed facts, one row per value."""
 
-import sys
-from pathlib import Path
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from taskloop_dash.views import columns, phases
 from taskloop_dash.views.columns import Facts
@@ -15,6 +8,7 @@ from tlkernel.dash import Column, Marker, Phase
 from tlkernel.enums import Outcome, WhyCode
 from tlkernel.runlife import Liveness
 from tlkernel.waitenums import WaitWhat
+from tltestkit.case import Case
 
 LIVE, CRASHED, ENDED = Liveness.LIVE, Liveness.LOST, Liveness.ENDED
 PARKED = log.Close(t=1.0, outcome=Outcome.PARKED, why_code=WhyCode.LANE_OUT, why="codex ran out\nuntil 14:00")

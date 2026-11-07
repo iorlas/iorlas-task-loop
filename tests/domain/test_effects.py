@@ -1,11 +1,6 @@
 """EFFECTS: plan_close is a table by outcome kind; keys name an effect once per (bead, run, kind)."""
-import sys
-from pathlib import Path
 
 from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from tlkernel import askspecs

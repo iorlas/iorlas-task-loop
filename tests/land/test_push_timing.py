@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from unittest import mock
 
 import pytest
-import support.paths  # noqa: F401
 from support.narrow_hosts import FakeOutboundHost
 
 from taskloop.adapters.agent import last_event_t

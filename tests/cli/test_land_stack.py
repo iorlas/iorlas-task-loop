@@ -1,14 +1,9 @@
 """`tl land-stack` arguments: an item is a PR number, a pull url or a branch; --bead and --supersede are keyed by the item text."""
-import sys
-from pathlib import Path
 
 import pytest
+from support.tlmain import tl_main
 
 from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
-from support.tlmain import tl_main
 
 # isort: split
 from taskloop.cli.land_stack import item_of, pairs

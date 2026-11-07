@@ -1,10 +1,5 @@
 """RUNID: a check's process is told the run it belongs to (TL_RUN_ID, through the one child-env builder), and every row the run
 writes about it names that run (LOGCONTRACT): the engine log, the duration history."""
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.check_host import CheckHostCase
 
 # isort: split

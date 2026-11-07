@@ -1,14 +1,9 @@
 """REPLAYGOLDEN: every recorded exchange (tests/fixtures/exchanges, see support/exchanges.py) replays through the fake route: the parser
 takes the recorded answer and the engine still builds the recorded input. UPDATE_GOLDEN=1 rewrites the input.txt files."""
 import os
-import sys
-from pathlib import Path
 from unittest import mock
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import exchanges as ex
 

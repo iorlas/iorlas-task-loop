@@ -7,7 +7,6 @@ from pathlib import Path
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 MAKERS = {"mint", "_Seal"}

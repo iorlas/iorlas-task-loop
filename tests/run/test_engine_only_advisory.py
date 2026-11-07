@@ -1,18 +1,13 @@
 """Pinned writers keep engine-only recipes in their brief even when delegate cannot enforce the guard."""
 
 import json
-import sys
-from pathlib import Path
 from unittest import mock
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support import engine_case as te
 
 from taskloop.app.workers.worker_call import WorkerCall
 from tlkernel.delegate import REASON_ENGINE_ONLY_UNENFORCED
+from tltestkit.case import Case
 from tltestkit.logs import records
 
 

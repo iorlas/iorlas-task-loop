@@ -1,15 +1,10 @@
 """Passes, cells and pieces of one bead, from recorded typed logs; the 3-pass bead is the shape of the mock's 7hv.2."""
 
-import sys
-from pathlib import Path
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.dashlogs import RunScript, T
 
 from taskloop_dash.views import passes
+from tltestkit.case import Case
 from tltestkit.narrow import must
 
 NOW = T + 20_000

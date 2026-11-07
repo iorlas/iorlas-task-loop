@@ -3,16 +3,9 @@ re-encodes byte for byte, every dash record appears in them, and every bead id t
 import inspect
 import json
 import os
-import sys
 import typing
-from pathlib import Path
 
 import pytest
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support import dash_fixtures as fx
 
 from taskloop_dash.api.writes import Writes
@@ -22,6 +15,7 @@ from tlkernel import dashcost as DC
 from tlkernel import dashhealth as DH
 from tlkernel import schema, wire
 from tlkernel.wire import Rec
+from tltestkit.case import Case
 
 CLASS = {"snapshot.json": D.Snapshot, "bead/": D.BeadDetail, "live/": D.LivePage, "result.json": D.Result, "cost.json": DC.CostPage}
 

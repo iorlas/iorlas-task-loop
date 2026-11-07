@@ -7,7 +7,6 @@ from unittest import mock
 
 import pytest
 import runtests
-import support.paths  # noqa: F401
 
 
 def test_isolated_env_drops_the_git_config_variables(tmp_path):

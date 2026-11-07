@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from unittest import mock
 
 import pytest
-import support.paths  # noqa: F401
 
 from taskloop.app.workers import call, call_state, done_memo, worker_call
 from tlkernel import factorydb, wire

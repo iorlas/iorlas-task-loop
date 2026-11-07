@@ -1,5 +1,4 @@
 """Failed pushes preserve rejection details while other git errors keep their existing diagnostics."""
-import support.paths  # noqa: F401
 
 from taskloop.adapters.git_base import classify, error_line, push_error_line
 from tlkernel.slots import BranchPinned, DirtyTree, IndexLocked, RefRace

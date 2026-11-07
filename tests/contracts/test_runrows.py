@@ -6,7 +6,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import support.paths  # noqa: F401
 
 from tlkernel import factorydb, wire
 from tlkernel.docstore import JsonStore

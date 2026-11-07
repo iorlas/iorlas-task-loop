@@ -1,16 +1,11 @@
 """Writer family pins apply only to worker calls; final review remains mandatory with review off. A stop of the pin pauses the run."""
-import sys
-from pathlib import Path
 from typing import Any
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support import engine_case as T
 from support.engine_case import adhoc
 
 from tltestkit import fake_route
+from tltestkit.case import Case
 from tltestkit.plans import BEAD, CLEAN, HAS_F, PLAN, WRITE, verdict
 
 CASE = {"criterion": "the file f.txt exists", "check": adhoc(HAS_F), "class": "test"}

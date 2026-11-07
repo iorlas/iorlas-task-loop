@@ -1,11 +1,7 @@
 """BEADMETA: `verbs.land` writes the landed record into the bead's metadata, once the sha is on the base; readers get it back from the
 bead (landed_by) and nothing is written to a landed/ file."""
-import sys
-from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.who import who
 
 from taskloop.app.track import verbs

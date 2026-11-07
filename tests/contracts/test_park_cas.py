@@ -4,7 +4,6 @@ from pathlib import Path
 from threading import Barrier
 
 import pytest
-import support.paths  # noqa: F401
 
 from tlkernel.ids import BeadId
 from tlkernel.parks import Park, ParkStore

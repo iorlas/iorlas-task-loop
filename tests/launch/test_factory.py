@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
-import support.paths  # noqa: F401
 
 from taskloop.adapters import factory as adapter
 from taskloop.app.loop import factory_verbs

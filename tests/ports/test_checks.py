@@ -6,7 +6,6 @@ from typing import Any, ClassVar
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.argv_checks import ArgvChecks
 from support.fake_checks import FakeChecks, failed, hung, passed
 from support.tags import contract, domain

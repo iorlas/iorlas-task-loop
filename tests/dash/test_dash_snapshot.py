@@ -3,14 +3,8 @@ version that moves exactly when a field does, the trims."""
 
 import dataclasses
 import os
-import sys
 import time
-from pathlib import Path
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.dashlogs import RunScript, T, bead
 
 from taskloop_dash.views import bead_detail, snapshot
@@ -27,6 +21,7 @@ from tlkernel.ids import BeadId
 from tlkernel.log import RunStart
 from tlkernel.loop import LoopState, QueueRow, Skip
 from tlkernel.parks import Park
+from tltestkit.case import Case
 from tltestkit.checks import res
 from tltestkit.narrow import must
 

@@ -7,7 +7,6 @@ from types import SimpleNamespace
 from unittest import mock
 
 import pytest
-import support.paths  # noqa: F401
 from support.fake_deadline import FakeDeadline
 from support.lifecycle import lifecycle
 from support.narrow_hosts import FakeWaitsHost

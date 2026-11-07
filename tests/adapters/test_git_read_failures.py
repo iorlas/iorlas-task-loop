@@ -1,15 +1,10 @@
 """Decision reads distinguish an unavailable answer from an empty successful one."""
 import subprocess
-import sys
-from pathlib import Path
 from unittest import mock
 
 import pytest
 
 from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 # isort: split
 from git_porcelain.api import Relation

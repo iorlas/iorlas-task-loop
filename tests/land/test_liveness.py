@@ -2,7 +2,6 @@
 from unittest import mock
 
 import pytest
-import support.paths  # noqa: F401
 from support.fake_deadline import FakeDeadline
 from support.fakegit import FakeGit
 from support.narrow_hosts import Stopped, table_kit

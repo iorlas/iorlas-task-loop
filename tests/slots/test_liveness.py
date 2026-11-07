@@ -4,8 +4,6 @@ import os
 from datetime import UTC, datetime
 from unittest.mock import patch
 
-import support.paths  # noqa: F401
-
 from slots.test_slot_pool import Rig
 from taskloop.app.slots import aside, watchdog
 from taskloop.app.slots.line import wait_slot

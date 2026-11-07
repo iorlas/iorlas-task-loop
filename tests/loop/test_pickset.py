@@ -1,14 +1,10 @@
 """tl-9un.50 PICKSET: a queue (label `queue`, order `queue_at`) or `--only` limits the loop's pick; `tl next` says why a bead is skipped;
 the dashboard strip reads the same rows; with nothing chosen today's rules apply."""
-import sys
-from pathlib import Path
 from unittest import mock
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.dashlogs import T
+
+from tltestkit.case import Case
 
 # isort: split
 from taskloop.app.loop.queue import QueueRule
