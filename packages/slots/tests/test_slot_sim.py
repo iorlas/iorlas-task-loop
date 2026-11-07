@@ -11,6 +11,7 @@ from tlkernel.bead import Bead
 from tlkernel.beadsport import BeadPatch
 from tlkernel.ids import BeadId
 from tlkernel.slots import SlotFail
+
 from tlslots import aside, watchdog
 from tlslots.env import stamp
 from tlslots.line import order

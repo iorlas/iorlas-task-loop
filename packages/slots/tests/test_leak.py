@@ -3,8 +3,8 @@
 from unittest import mock
 
 import msgspec
-
 from tlkernel.ids import BeadId
+
 from tlslots import verbs
 from tlslots.testing import ME, Rig
 
