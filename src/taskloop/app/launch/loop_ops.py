@@ -27,10 +27,10 @@ from taskloop.app.loop.env import ReloadNote
 from taskloop.app.reconcile import leases
 from taskloop.app.release import reexec
 from taskloop.app.report import reflect
-from taskloop.app.run import console, entry
+from taskloop.app.run import entry
 from taskloop.app.run.running import running
 from taskloop.app.slots import engine_lock
-from taskloop.app.track import trail, verbs
+from taskloop.app.track import console, trail, verbs
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import lanes as wlanes
 from taskloop.app.wire import slots as wslots
