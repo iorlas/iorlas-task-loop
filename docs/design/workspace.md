@@ -117,3 +117,6 @@ PR-2 moves asks' `test_deferral`, `test_lint`, `test_show`, `test_specs`, `test_
 `test_dash_same_intake`, `test_engine_decisions`, `test_look_row`, `test_look_verb`, `test_orphans`, `test_park_writes`, `test_rmw_store`, `test_torn_ask` and `test_wait`: they exercise
 persistent rows, SQL corruption/recovery, storage races or persisted run manifests. TESTISO names these explicitly; other retained
 asks tests import shell wiring and remain integration tests.
+
+Release R1 (tl-e5t0.19): code carve done in `packages/release/src/tlrelease`, flat modules with no api.py.
+`ReleaseHost` supplies shell effects, bound by `app/launch/release_host.py`; tests stay in `tests/release` until R2.

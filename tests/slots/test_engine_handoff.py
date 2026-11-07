@@ -1,21 +1,20 @@
 """A reexec through uv hands the engine lock to a new Python pid for the same bead."""
-import contextlib
-from dataclasses import replace
 from unittest import mock
 
 from support import homes
 
-from taskloop.app.wire.slotfx import FX
 from tlkernel.env import Env
 from tlkernel.locks import EngineLock as Lock
 from tlkernel.run import Reexec
 from tlslots import engine_lock
+from tlslots.testing import FakeEffects
 from tltestkit.case import Case
 
 
 class ReexecHandoff(Case):
     def setup_method(self) -> None:
-        self.fx = replace(FX, proc_alive=mock.Mock(return_value=True))
+        self.effects = FakeEffects(alive=True)
+        self.fx = self.effects.fx
         self.lock = Lock(pid=101, bead="b-1", by="run-task", start="old", started=1.0)
         for patch in (
             mock.patch.object(engine_lock, "read_engine_lock", return_value=self.lock),
@@ -36,8 +35,7 @@ class ReexecHandoff(Case):
                 assert "engine pid 101 runs b-1" in engine_lock.engine_busy(homes.cfg(), "/wt", handoff, fx=self.fx)
 
     def test_take_rewrites_the_lock_with_the_new_python_pid(self) -> None:
-        self.fx = replace(self.fx, hold_path=mock.Mock(return_value=contextlib.nullcontext()),
-                          proc_start=mock.Mock(return_value="new"))
+        self.effects.start = "new"
         with mock.patch.object(engine_lock, "write_engine_lock") as write:
             held = engine_lock.EngineLock(homes.cfg(), "/wt", "b-1", env=self.handoff(), fx=self.fx)
             assert held.take() == ""
@@ -45,6 +43,6 @@ class ReexecHandoff(Case):
         assert (held.rec.pid, held.rec.start, held.rec.bead) == (202, "new", "b-1")
 
     def test_reexec_does_not_take_over_a_surviving_worker(self) -> None:
-        self.fx = replace(self.fx, running_for=mock.Mock(return_value=["r303"]))
+        self.effects.workers["b-1"] = ["r303"]
         with mock.patch.object(engine_lock, "read_engine_lock", return_value=self.lock):
             assert "worker run r303" in engine_lock.engine_busy(homes.cfg(), "/wt", self.handoff(), fx=self.fx)

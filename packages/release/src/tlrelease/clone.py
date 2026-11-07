@@ -5,7 +5,7 @@ from pathlib import Path
 
 from tlkernel.slots import SlotGitError
 
-from taskloop.app.release.shell import Abort, Shell, fetch_or_abort
+from tlrelease.shell import Abort, Shell, fetch_or_abort
 
 
 def clone_dir(config: Path, url: str) -> Path:

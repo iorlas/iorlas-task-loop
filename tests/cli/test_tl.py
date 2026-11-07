@@ -22,10 +22,10 @@ from support import homes  # noqa: E402
 from support.spawn import port_git  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
-from taskloop.app.release import pins  # noqa: E402
 from taskloop.app.wire import usage as usage_cmd  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlkernel.rowstores import PinStore, ReposStore  # noqa: E402
+from tlrelease import pins  # noqa: E402
 
 # isort: split
 import contextlib  # noqa: E402

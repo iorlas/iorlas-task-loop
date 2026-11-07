@@ -4,10 +4,12 @@ from contextlib import nullcontext, redirect_stderr
 from pathlib import Path
 from unittest import mock
 
-from taskloop.app.release import flow, publish
-from taskloop.app.release.shell import Abort
+from support.release_world import beadtools, gitrepo, ident, landlock, release_host
+
 from tlkernel.env import Env
 from tlkernel.slots import SlotGitError
+from tlrelease import flow, publish
+from tlrelease.shell import Abort
 from tltestkit.case import Case
 
 
@@ -29,17 +31,18 @@ class FailureSummary(Case):
         port, spawner, store = mock.Mock(), mock.Mock(), mock.Mock()
         port.remote_url.return_value = "origin"
         output = io.StringIO()
-        with (mock.patch.object(flow.gitrepo, "repo_root", return_value="repo"),
-              mock.patch.object(flow.ident, "identity"),
-              mock.patch.object(flow, "config_dir", return_value=Path("config")),
+        with (mock.patch.object(gitrepo, "repo_root", return_value="repo"),
+              mock.patch.object(ident, "identity"),
+              mock.patch.object(ident, "config_dir", return_value=Path("config")),
               mock.patch.object(flow, "release_lock_path", return_value=Path("release.lock")),
-              mock.patch.object(flow.landlock, "os_lock", return_value=nullcontext()),
+              mock.patch.object(landlock, "os_lock", return_value=nullcontext()),
               mock.patch.object(flow.clone, "ready", return_value=Path("clone")),
               mock.patch.object(flow.selfupdate, "newer_release", return_value=None),
               mock.patch.object(flow, "release", side_effect=error),
               mock.patch.object(flow, "ReleaseResultStore") as results,
-              mock.patch.object(flow.beadtools, "bd_store", return_value=store), redirect_stderr(output)):
-            code = flow.main(["fix", "--bead", "tl-v11i"], Path("tool"), spawner, port, Env(), mock.Mock(), clock=lambda: 1.0)
+              mock.patch.object(beadtools, "bd_store", return_value=store), redirect_stderr(output)):
+            code = flow.main(["fix", "--bead", "tl-v11i"], Path("tool"), spawner, port, Env(), mock.Mock(),
+                             clock=lambda: 1.0, host=release_host())
         assert code == 1
         result = results.return_value.write.call_args.args[0]
         assert result.summary == expected

@@ -57,7 +57,7 @@ def spawner_builders(root: Path = ROOT) -> list[str]:
 AMBIENT_PORT = re.compile(r"^[A-Za-z_]\w*\s*(?::[^=\n]+)?=\s*(?:\w+\.)?(?:Real\w*|real\.(?:git|spawner))\(", re.M)
 IDENTITY_CALL = re.compile(r"\bident\.identity\(|\bidentity\(")
 IDENTITY_SITES = frozenset({"src/taskloop/adapters/ident.py", "src/taskloop/app/run/entry.py", "src/taskloop/app/launch/loop_start.py",
-                            "src/taskloop/app/release/flow.py", "src/taskloop/app/launch/selftest.py"})  # each holds or makes an Env
+                            "packages/release/src/tlrelease/flow.py", "src/taskloop/app/launch/selftest.py"})  # each holds or makes an Env
 HANDOVERS = "TL_REEXEC|TL_LOOP_STATE|TL_RELEASE_REEXEC"
 HANDOVER_NAME = re.compile(rf"EnvVar\.(?:{HANDOVERS})\b|[\"'](?:{HANDOVERS})[\"']")
 HANDOVER_OK = re.compile(r"\.get\(EnvVar\.|exec_env\(|\bEnvVar\.\w+\.value: \w+")  # a read of it, the one writer, a child's `extra`

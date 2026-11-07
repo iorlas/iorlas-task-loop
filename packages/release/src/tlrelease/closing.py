@@ -5,7 +5,7 @@ from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
 from tlkernel.run import NetPause, ReexecNote
 
-from taskloop.app.release import reexec
+from tlrelease import reexec
 
 
 class ReexecBook:

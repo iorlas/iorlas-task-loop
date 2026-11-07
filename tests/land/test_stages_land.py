@@ -17,6 +17,7 @@ from support import engine_case as te
 from support import gitq, homes, tlbd
 from support.checkpoints import put_ck, read_ck
 from support.engine_case import engine, lint
+from support.push_retry import online_push_retries
 from support.pushsim import pusher
 from support.spawn import port_git, real_spawner
 from support.who import who
@@ -337,7 +338,11 @@ class Contracts(StagesTest):
         return pusher("flaky-push", Path(self.tmp.name, "flaky-count"), cut_first=fails)
 
     def test_a_push_that_keeps_failing_pauses_the_bead_and_asks_nobody(self):
-        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(99))
+        with online_push_retries() as (probe, clock):
+            start = clock.now()
+            rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(99), probe=probe)
+        assert clock.now() - start == 10  # two five-second rests before the third failed push
+        assert probe.calls == 5  # each failure, plus each rest
         assert rc != 0
         assert self.eng.why.startswith("paused: the land push failed 3 times"), self.eng.why
         assert not self.eng.asked

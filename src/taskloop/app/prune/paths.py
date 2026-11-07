@@ -2,8 +2,7 @@
 from pathlib import Path
 
 from tlkernel.paths import ConfigDir
-
-from taskloop.app.release.paths import releases_dir
+from tlrelease.paths import releases_dir
 
 
 def suite_logs(cfg: ConfigDir) -> list[Path]:

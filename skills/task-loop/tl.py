@@ -81,8 +81,8 @@ from taskloop.app.doctor import install
 from taskloop.app.land.lock_cmd import cmd_land_lock
 from taskloop.app.launch import dash as wire_dash
 from taskloop.app.launch import lanes as wire_lanes
+from taskloop.app.launch.release_host import release_host
 from taskloop.app.parts import STAGE_PARTS
-from taskloop.app.release import pins
 from taskloop.app.track import trail, verbs
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import real
@@ -104,6 +104,7 @@ from taskloop.cli import wait as cli_wait
 from taskloop.cli.ctx import Ctx, declare_stage_parts
 from tlkernel.enums import Step
 from tlkernel.env import snapshot
+from tlrelease import pins
 
 HERE = Path(__file__).resolve().parent
 
@@ -431,8 +432,8 @@ VERBS: Final[dict[str, Handler]] = {
     "worktrees": lambda a, c: wslots.owned_worktrees(c.git, c.who, a.op),
     "dash": lambda a, c: wire_dash.run(a.op, c.env, c.spawner, {p.name: p.version for p in STAGE_PARTS}),
     "factory": lambda a, c: cli_factory.run(a, c.env, c.spawner, c.who, c.here),
-    "pin": lambda a, c: pins.run_pin(c.env, a.version, a.clear, c.git),
-    "rollback": lambda a, c: pins.run_rollback(c.env, c.git),
+    "pin": lambda a, c: pins.run_pin(c.env, a.version, a.clear, c.git, host=release_host()),
+    "rollback": lambda a, c: pins.run_rollback(c.env, c.git, host=release_host()),
     "doctor": cli_doctor.run,
     "slot": v_slot,
     "ask": v_ask, "answer": v_ask, "hint": v_ask, "hold": v_ask, "override": v_ask, "park": v_ask, "note": v_ask,

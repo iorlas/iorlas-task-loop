@@ -4,11 +4,11 @@ import os
 from pathlib import Path
 from unittest import mock
 
+from support.release_world import release_host
+
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.land.push_judge import PushStatus, judge_push
-from taskloop.app.release import flow, gate, shell
-from taskloop.app.release.push import push_main
 from taskloop.stores.real import real_stores
 from tlgate import authorization
 from tlgate.domain.specs import gate_items
@@ -16,6 +16,8 @@ from tlkernel.env import Env
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.paths import ConfigDir
 from tlkernel.runkey import BaseSha
+from tlrelease import flow, gate, shell
+from tlrelease.push import push_main
 from tltestkit.case import Case
 from tltestkit.checked import run_checked
 from tltestkit.tmpdir import TemporaryDirectory
@@ -53,7 +55,7 @@ class ReleaseReceipt(Case):
         checks = mock.Mock()
         verify = gate.verify
         if cached:
-            verify(repo, sh, checks)
+            verify(repo, sh, checks, host=release_host())
         stores = real_stores(ConfigDir(root / "config/task-loop"))
         actual_push = port.push
         def judged_push(d, remote, refspec):
@@ -69,11 +71,11 @@ class ReleaseReceipt(Case):
             assert rec is not None
             assert (rec.tree, rec.base, rec.result.status) == (tree, base, "passed")
             actual_push(d, remote, refspec)
-        with (mock.patch.object(gate, "verify", side_effect=lambda at, shell: verify(at, shell, checks)),
+        with (mock.patch.object(gate, "verify", side_effect=lambda at, shell, *, host: verify(at, shell, checks, host=host)),
               mock.patch.object(port, "push", side_effect=judged_push)):
             def bump():
-                return flow.bump_and_commit(repo, flow.Request("receipt"), sh)
-            version = push_main(repo, "receipt", bump(), base, bump, sh)
+                return flow.bump_and_commit(repo, flow.Request("receipt"), sh, host=release_host())
+            version = push_main(repo, "receipt", bump(), base, bump, sh, host=release_host())
         assert version == "1.2.4"
         assert git("rev-parse", "HEAD") == git("--git-dir", str(origin), "rev-parse", "main")
         checks.assert_called_once()

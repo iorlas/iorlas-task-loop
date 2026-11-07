@@ -6,19 +6,19 @@ from importgraph import bindings, qualified
 
 # State authority, rather than a budget of write sites. Reads are unrestricted.
 WRITERS: Final = {
-    'PinStore': {'taskloop.app.release.pins'},
+    'PinStore': {'tlrelease.pins'},
     'HostResourcesStore': {'taskloop.app.doctor.setup_apply'},
     'StatusStore': {'taskloop.app.doctor.lanes'},
     'StatusTriedStore': {'taskloop.app.doctor.lanes'},
     'ReposStore': {'taskloop.app.track.trail', 'tlkernel.rowstores'},
-    'ReleaseResultStore': {'taskloop.app.release.flow'},
+    'ReleaseResultStore': {'tlrelease.flow'},
     'ReflectStateStore': {'taskloop.app.report.reflect'},
     'ParkStore': {'tlasks.parks', 'tlpipeline.standalone', 'tlkernel.parks'},
     'TraceStore': {'tlpipeline.journal', 'tlkernel.finish_projection'},
     'BadVersionStore': {'taskloop.app.loop.versions'},
     'HandoffMirrorStore': {'tlwork.write.handoff'},
-    'ReexecNoteStore': {'taskloop.app.release.reexec', 'taskloop.app.release.closing'},
-    'NetPauseStore': {'taskloop.app.release.reexec', 'taskloop.app.release.closing'},
+    'ReexecNoteStore': {'tlrelease.reexec', 'tlrelease.closing'},
+    'NetPauseStore': {'tlrelease.reexec', 'tlrelease.closing'},
     'RunCountersStore': {'tlpipeline.reload'},
     'EngineLockStore': {'tlslots.engine_lock'},
     'RunManifestStore': {'tlkernel.runrows'},
