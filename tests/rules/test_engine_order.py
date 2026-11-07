@@ -38,16 +38,19 @@ def api_homes() -> dict[str, Path]:
 
 
 def imports(tree: ast.Module) -> dict[str, Path]:
-    """{imported name: the file of its module} for the app and pipeline imports of one file."""
+    """{imported name: the file of its module} for the app, pipeline and slots imports of one file."""
     found = {}
     homes = api_homes()
     for n in ast.walk(tree):
         if isinstance(n, ast.ImportFrom) and n.module == "tlpipeline.api":
             found.update({a.asname or a.name: homes[a.name] for a in n.names if a.name in homes})
             continue
-        if isinstance(n, ast.ImportFrom) and n.module and n.module.startswith(("taskloop.app.", "tlpipeline.")):
-            base, module = ((ROOT / "packages/pipeline/src", n.module) if n.module.startswith("tlpipeline.")
-                            else (APP, n.module.removeprefix("taskloop.app.")))
+        if isinstance(n, ast.ImportFrom) and n.module and n.module.startswith(("taskloop.app.", "tlpipeline.", "tlslots.")):
+            if n.module.startswith("tlslots."):
+                base, module = ROOT / "packages/slots/src", n.module
+            else:
+                base, module = ((ROOT / "packages/pipeline/src", n.module) if n.module.startswith("tlpipeline.")
+                                else (APP, n.module.removeprefix("taskloop.app.")))
             path = base / (module.replace(".", "/") + ".py")
             found.update({a.asname or a.name: path for a in n.names if path.is_file()})
     return found

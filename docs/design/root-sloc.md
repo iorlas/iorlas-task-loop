@@ -37,7 +37,7 @@ Packages that exist: `kernel`, `gate`, `artifacts`, `pipeline`, `testkit`. Not c
 | `cli/factory.py` | 86 | 15 | 40 | app/launch factory verbs | argparse + exit mapping stay (~45); start/inspect/stop/tail rules move |
 | `app/run/host.py` | 83 | 2 | 0 | stays | run construction |
 | `app/run/parts_run.py` | 82 | 3 | 0 | stays | run construction |
-| `app/run/shared.py` | 82 | 10 | 70 | slots or release package (notes shared by the tasks of one repo) | needs the slots carve; flaky-test and landed-since notes are rules |
+| `packages/slots/src/tlslots/shared.py` | 82 | 10 | 70 | slots or release package (notes shared by the tasks of one repo) | needs the slots carve; flaky-test and landed-since notes are rules |
 | `app/run/shell.py` | 80 | 10 | 70 | gate package (a command of the run recorded in the engine log) or kernel proc helper | gate package exists; the engine-log recording needs the log port |
 | `app/wire/closeguard.py` | 78 | 10 | 70 | pipeline (closing) | one function `refusal` decides every close; packages/pipeline exists; callers are tl close, tl task close |
 | `app/launch/loop_ops.py` | 77 | 0 | 0 | stays | binding; pix-dataown's PRs in flight |

@@ -1,17 +1,21 @@
 """Notes shared by the tasks of one repo (docs/design/stages.md section 6): the tests known to be flaky, the tasks running beside this
 one, what landed on the base since this branch left it."""
 import json
+import os
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from atomic_io import atomic_write_json
 from tlkernel.check_files import repo_key
+from tlkernel.checkpoint import Checkpoint
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId
+from tlkernel.paths import ConfigDir
 from tlkernel.slots import SlotGitError, git_probe
-from tlslots import engine_lock
 
-from taskloop.adapters.gitrepo import same_dir
-from taskloop.app.wire import slotfx
+from tlslots import engine_lock
+from tlslots.effects import Effects
 
 FLAKE_DAYS = 14  # how long a writer-reported flaky test stays in the shared notes
 
@@ -20,8 +24,66 @@ def one_line(text: object, n: int) -> str:
     return " ".join(str(text or "").split())[:n]
 
 
+class SharedConfig(Protocol):
+    @property
+    def base(self) -> str: ...
+
+
+class SharedCheckpoint(Protocol):
+    def get(self) -> Checkpoint | None: ...
+
+
+class SharedCheckpoints(Protocol):
+    def of(self, bead: str) -> SharedCheckpoint: ...
+
+
+class SharedStores(Protocol):
+    @property
+    def checkpoints(self) -> SharedCheckpoints: ...
+
+
+class SharedCheckout(Protocol):
+    def base_sha(self) -> str: ...
+
+
+class SharedLog(Protocol):
+    def note(self, text: str) -> int: ...
+
+
+class SharedHost(Protocol):
+    """What repo notes read of the engine: its home, git, task, base, sibling checkpoints, checkout and log."""
+
+    @property
+    def home(self) -> ConfigDir: ...
+    @property
+    def git(self) -> Git: ...
+    @property
+    def wt(self) -> str: ...
+    @property
+    def bead(self) -> BeadId: ...
+    @property
+    def dry(self) -> bool: ...
+    @property
+    def cfg(self) -> SharedConfig: ...
+    @property
+    def stores(self) -> SharedStores: ...
+    @property
+    def checkout(self) -> SharedCheckout: ...
+    @property
+    def log(self) -> SharedLog: ...
+
+
+def same_dir(a: object, b: object) -> bool:
+    """The same folder: os.path.samefile, realpath equality when either path is missing."""
+    try:
+        return os.path.samefile(str(a), str(b))
+    except OSError:
+        return os.path.realpath(str(a)) == os.path.realpath(str(b))
+
+
 class Shared:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: SharedHost, *, fx: Effects) -> None:
+        self.fx = fx
         self.e = host
 
     def shared_path(self) -> Path:
@@ -64,7 +126,7 @@ class Shared:
             if same_dir(wt, e.wt):
                 continue
             lock = engine_lock.peek_engine_lock(e.home, wt)
-            if lock is None or not lock.bead or lock.bead == e.bead or not engine_lock.live(lock, fx=slotfx.FX):
+            if lock is None or not lock.bead or lock.bead == e.bead or not engine_lock.live(lock, fx=self.fx):
                 continue
             ck = e.stores.checkpoints.of(lock.bead).get()
             plan = (ck.state.plan_data if ck else None) or {}
