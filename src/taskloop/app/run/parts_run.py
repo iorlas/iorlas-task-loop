@@ -6,7 +6,9 @@ from typing import Any, Protocol
 
 from tlkernel import childenv
 from tlkernel.kinds import Kind
-from tlpipeline.journal import Journal, JournalHost
+from tlpipeline.closing_record import RecordHost
+from tlpipeline.ended import HostFacts
+from tlpipeline.journal import Journal, JournalActivity, JournalOrigin, JournalOutcome, JournalProjection, JournalTrace
 from tlpipeline.reflect import Reflector
 from tlpipeline.reload import Reload, ReloadChoice, ReloadCounters, ReloadTransfer
 from tlpipeline.requests import OwnerRequests
@@ -45,7 +47,8 @@ class ReloadBinding(ReloadCounters, ReloadTransfer, ReloadChoice, Protocol):
     def held_lock(self) -> HeldLock: ...
 
 
-class JournalBinding(JournalHost, Protocol):
+class JournalBinding(JournalOrigin, JournalActivity, JournalOutcome, JournalTrace, JournalProjection,
+                     RecordHost, HostFacts, Protocol):
     @property
     def held_lock(self) -> HeldLock: ...
 
@@ -67,7 +70,7 @@ class RunParts(Plumbing):
 
     @cached_property
     def records(self: JournalBinding) -> Journal:
-        return Journal(self, lambda: locked_slot(self.held_lock), repo_of, ident.plugin_version)
+        return Journal(self, self, self, self, self, self, self, lambda: locked_slot(self.held_lock), repo_of, ident.plugin_version)
     shared = cached_property(Shared)
     @cached_property
     def stuck(self: StuckHost) -> StuckTick: return StuckTick(self, last_event_t)

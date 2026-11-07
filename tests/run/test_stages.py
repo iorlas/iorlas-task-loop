@@ -12,12 +12,10 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import gitq
 from support.builders import make_engine
-from support.cfgs import plan_of
 from support.checkpoints import put_ck, read_ck
 from support.engine_case import engine, lint
 from support.engine_locks import put_lock
 from support.fakes import must_bead
-from support.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE
 from support.spawn import port_git, real_spawner
 from support.who import who
 
@@ -36,8 +34,10 @@ from tlkernel.env import snapshot
 from tlkernel.ids import BeadId, CheckId
 from tlkernel.plancheck import PlanData, adhoc
 from tltestkit import procsim
+from tltestkit.cfgs import plan_of
 from tltestkit.checks import ck, res, typed
 from tltestkit.narrow import must
+from tltestkit.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE
 
 
 class StagesTest(te.EngineTest):
