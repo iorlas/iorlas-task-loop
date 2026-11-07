@@ -121,6 +121,9 @@ def isolated_env(home):
     scratch.write_git_config(home)
     # GIT_CONFIG_*: a release's core.hooksPath would fire tl's pre-push judge in the tests' repos
     env = {k: v for k, v in os.environ.items() if k not in DROP and not k.startswith("GIT_CONFIG_")}
+    cache = Path.home() / ".cache" / "uv"
+    if not env.get("UV_CACHE_DIR") and cache.exists():
+        env["UV_CACHE_DIR"] = str(cache)
     env.update(HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), TMPDIR=str(home / "tmp"),
                TL_SCRATCH=str(home / "tmp"),  # a worker's home beside TMPDIR, not under .config (tests/delegate/hermetic.py)
                TL_WORKER_MB=str(WORKER_MB),
