@@ -15,7 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "dev"))
 from importgraph import targets_of
 
 TREES = ("src/taskloop", "packages/kernel/src/tlkernel", "packages/gate/src/tlgate",
-         "packages/work/src/tlwork", "packages/slots/src/tlslots", "packages/asks/src/tlasks", "packages/release/src/tlrelease")
+         "packages/work/src/tlwork", "packages/slots/src/tlslots", "packages/asks/src/tlasks",
+         "packages/release/src/tlrelease", "packages/dash/src/tldash")
 
 
 def stage_packages(packages):
@@ -37,7 +38,8 @@ def stage_packages(packages):
 def closures(texts: Mapping[str, str]) -> dict[str, int]:
     """Count reachable local files and distinct external module roots for each stage."""
     modules = {path.removeprefix("packages/kernel/").removeprefix("packages/gate/")
-               .removeprefix("packages/work/").removeprefix("packages/slots/").removeprefix("packages/asks/").removeprefix("packages/release/").removeprefix("src/")
+               .removeprefix("packages/work/").removeprefix("packages/slots/").removeprefix("packages/asks/").removeprefix("packages/release/")
+               .removeprefix("packages/dash/").removeprefix("src/")
                .removesuffix(".py").replace("/", ".").removesuffix(".__init__"):
                path for path in texts if path.startswith(tuple(tree + "/" for tree in TREES)) and path.endswith(".py")}
     packages = {name for name, path in modules.items() if path.endswith("/__init__.py")}
