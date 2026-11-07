@@ -89,7 +89,7 @@ Remaining cuts (direct src imports, re-counted by the reviewer):
 | land → work back edges | `land/fixer.py:18-20` → `domain/prompts/land`; `land/followups.py:9` → `domain/review/followups` | move those two domain files into land (2 files) |
 | land ↔ slots | `slots/reset.py:16` imports `NetText`, a git network-error matcher used by land, slots and `loop/verdict.py:12` | `NetText` lives in `tlkernel.matchers` (1 file); not "slots owns matchers" |
 | release ↔ report | `reconcile/commits.py:12`, `observe.py:26` → `domain/report/matchers` vs `report/card.py:12` → `reconcile/lost`; the matchers are also used by `run/records.py:27`, `domain/outcome.py:29` | matchers to a shared home (gate or kernel), not into reconcile |
-| shell → release | 8 loop files import release (`loop_ops`, `loop_start`, `selftest`, `prune/verb`, `report/card`, `wire/brief`, `wire/doctor`, `launch/loop`); `run/engine.py:11`, `reload.py:13`, `entry.py:23` → `reconcile/leases` | allowed (shell is on top); `leases` is the one engine-used piece: leases belong to slots/store |
+| shell → release | 8 loop files import release (`loop_ops`, `loop_start`, `selftest`, `prune/verb`, `report/card`, `wire/brief`, `wire/doctor`, `launch/loop`); `run/engine.py:11`, `reload.py:13`, `entry.py:23` → `reconcile/leases` | allowed (shell is on top); `leases` is the one engine-used piece: leases belong to slots; their Part is declared in `tlkernel.factoryparts` |
 | kernel → stage | `contracts/{stores,runrows,checkpoint,finish*,rundocs,adrs}` import upward through record types | records move to owners (§2) |
 
 ## 2. Contracts: owner of each, minimal shared kernel
@@ -221,7 +221,7 @@ pix and the Mac ran a release with #184; delete RowDocs adoption, importers, loo
 | C2 | `ports.py`: each Protocol to its consumer/provider | M | after #191 (Agent Protocol lands in `contracts/`) | |
 | C3 | 7 dead contracts removed; 22 single-consumer contracts move to their slice | M | after STORE 8 for store-owned ones | |
 | K1 | kernel named: `contracts/{wire,ids,enums,paths,env,envvars,identity,bead}` get an import-linter layer; nothing imports upward | S | paths after #189 | contract is a lint ✅ done (tl-e5t0.10: `kernel-core-is-a-leaf` in .importlinter) |
-| X1 | the four cuts of the corrected table: 2 domain files → land; `NetText` out of slots; report matchers to a shared home; `reconcile/leases` to slots/store | 4 × S | C2 | pure moves, one pair each |
+| X1 | the four cuts of the corrected table: 2 domain files → land; `NetText` out of slots; report matchers to a shared home; `reconcile/leases` to slots (Part in `tlkernel.factoryparts`) | 4 × S | C2 | pure moves, one pair each |
 | S1a | mechanics checklist above: one empty package, conftest/rules/SCAN/caps/CLAUDE.md learn `packages/`, lazy filter extended | M (~35 files) | #189 #190 #186 #187 | revert |
 | S1b | `taskloop_dash` moves in (path only; ~20 tests rebuild `ROOT/src/…`) | M | S1a | rename |
 | S1c | `delegate` moves in (123 test files) | L | S1a | rename |
