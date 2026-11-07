@@ -1,4 +1,4 @@
-"""The SessionStart hook: index the session id -> its transcript path. Must never fail the session."""
+"""Machine installation rules shared by doctor, setup and session hooks."""
 import contextlib
 import os
 import shlex

@@ -4,8 +4,8 @@ import json
 import time
 from pathlib import Path
 
+from taskloop.app.doctor import install
 from taskloop.app.wire import handoff, real
-from taskloop.app.wire import hook as index
 from tlkernel.env import Env, snapshot
 from tlkernel.gitport import Git
 
@@ -17,10 +17,10 @@ def context_out(text: str) -> str:
 def start(stdin_text: str, plugin_root: Path, env: Env, git: Git) -> str:
     """Introduce task-loop in profile repos; after compaction append the handoff. Never fail the session."""
     try:
-        index.ensure_machine(plugin_root, env)
+        install.ensure_machine(plugin_root, env)
         data = json.loads(stdin_text or "{}")
-        repo = index.repo_of(git, data)
-        parts = [index.self_description(repo)]
+        repo = install.repo_of(git, data)
+        parts = [install.self_description(repo)]
         if data.get("source") == "compact":
             parts.append(handoff.read(repo, env) if repo else "")
         return context_out("\n\n".join(part for part in parts if part))
@@ -32,7 +32,7 @@ def start(stdin_text: str, plugin_root: Path, env: Env, git: Git) -> str:
 def precompact(stdin_text: str, plugin_root: Path, env: Env, git: Git) -> str:
     """Write the repo's handoff. Slots are left out of this one (a bd call): the status shows them."""
     try:
-        repo = index.repo_of(git, json.loads(stdin_text or "{}"))
+        repo = install.repo_of(git, json.loads(stdin_text or "{}"))
         if repo:
             handoff.write(repo, plugin_root, time.time(), env, who=None)
     except (ValueError, AttributeError, OSError, SystemExit):

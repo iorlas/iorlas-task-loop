@@ -51,6 +51,7 @@ def test_a_file_that_is_not_a_root_counts_nothing():
 def test_the_launch_wire_and_composition_files_are_roots_through_the_contract():
     assert root_ratchet.is_root("src/taskloop/app/launch/loop.py")
     assert root_ratchet.is_root("src/taskloop/app/wire/doctor.py")
+    assert not root_ratchet.is_root("src/taskloop/app/doctor/install.py")
     assert root_ratchet.is_root("src/taskloop/app/run/entry.py")
     assert root_ratchet.is_root("src/taskloop/app/run/stages.py")
 

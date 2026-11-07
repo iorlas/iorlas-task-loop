@@ -12,6 +12,8 @@ from support.tlmain import tl
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.launch import reindex
+from taskloop.app.wire import doctor
+from taskloop.cli import doctor as cli_doctor
 from tlkernel import factorybackup, factorydb
 from tlkernel.env import Env
 from tlkernel.identity import Identity
@@ -32,8 +34,8 @@ class Reindex(Case):
             ctx = tl.Ctx(tl.HERE, lambda: 0.0, [], Env({}), spawner=real_spawner(), git=port_git(),
                          who=Identity(actor="test", home=str(cfg.root)))
             with patch.object(reindex, "print", create=True) as output, \
-                    patch.object(tl.doctor, "run", side_effect=AssertionError("ordinary diagnostics ran")):
-                assert tl.v_doctor(args, ctx) == 0
+                    patch.object(doctor, "run", side_effect=AssertionError("ordinary diagnostics ran")):
+                assert cli_doctor.run(args, ctx) == 0
             assert "reindexed: 1 runs, 1 sources in" in output.call_args.args[0]
             con = must(factorydb.open_ro(cfg.factory_db()))
             try:

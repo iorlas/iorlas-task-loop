@@ -37,6 +37,11 @@ OWNERS: dict[str, str] = {
     "ask_ledger": "engine",
     "park": "engine",  # asks-owned park rows, written through ParkStore
     "kv": "index",
+    "queue_doc": "engine",  # land queue runner and tree assertions through Stores
+    "flake_doc": "engine",  # land flake scoring through FlakeBook
+
+    "run_doc": "engine",  # run counters, handoff, prepare and once-per-run notes through rundocs
+    "duration_doc": "gate",  # check duration history through the checks store
     "receipt_doc": "owner",  # dashboard command responses through api/writes.py
     "bead_doc": "index",  # tracker projection observations through beadrows
     "repos_doc": "engine",  # repository registration through app/track/trail.py

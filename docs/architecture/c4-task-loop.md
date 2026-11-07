@@ -72,8 +72,8 @@ flowchart LR
 | task-loop -> docker (history: removed in 0.23.403, a check now runs `in: linux` on the ssh executor) | `docker info`, `docker run --init -i --name ...` | subprocess | container-required checks | `tl/app/checks/execution.py:39`, `tl/adapters/container_run.py:31`, `:64` |
 | task-loop -> Claude Code | reads `~/.claude/plugins/installed_plugins.json` and `plugins/cache/<mkt>/<plugin>/<ver>/`; release runs `claude plugin marketplace update`, `claude plugin update` | file read; subprocess (release only) | loop install moves, pins, delegate discovery, release | `tl/app/release/catalog.py:19-48`, `tl/adapters/delegate.py:74-85`, `dev/release.py:20-22` |
 | task-loop -> OpenCode | SQLite `~/.local/share/opencode/opencode.db`, tables `session`, `message`, `part`, read only | sqlite read (unverified: module not opened) | engine trace, context size | `docs/dev/integrations.md:15` |
-| Claude Code -> task-loop | hook event JSON on stdin (`tool_name`, `tool_input`; `session_id`, `transcript_path`, `source`) | `hooks/hook.py` per event | hooks | `hooks/hooks.json:3-27`, `tl/hook/pretool.py:7-18`, `tl/app/wire/hook.py:16-24` |
-| git -> task-loop | pre-push ref lines on stdin (`<local ref> <sha> <remote ref> <sha>`) | `<config>/githooks/pre-push` -> `python3 hooks/hook.py githook pre-push <config>/bin/tl` | push judge | `tl/app/wire/hook.py:51-56`, `tl/hook/prepush.py:9-24`, `tl/app/land/push_judge.py:38-46` |
+| Claude Code -> task-loop | hook event JSON on stdin (`tool_name`, `tool_input`; `session_id`, `transcript_path`, `source`) | `hooks/hook.py` per event | hooks | `hooks/hooks.json:3-27`, `tl/hook/pretool.py:7-18`, `tl/app/doctor/install.py:16-24` |
+| git -> task-loop | pre-push ref lines on stdin (`<local ref> <sha> <remote ref> <sha>`) | `<config>/githooks/pre-push` -> `python3 hooks/hook.py githook pre-push <config>/bin/tl` | push judge | `tl/app/doctor/install.py:51-56`, `tl/hook/prepush.py:9-24`, `tl/app/land/push_judge.py:38-46` |
 | task-loop -> OS | `flock` (vendored `process_lock`), detached sessions and process groups, `caffeinate -i -w PID` on macOS, `tailscale ip` | syscalls / subprocess | every lock; factory; dashboard bind | `skills/task-loop/_vendor/process_lock/__init__.py:187`, `tl/adapters/factory.py:6-8`, `tl/app/launch/dash.py:43-66` |
 
 No launchd, launchctl or systemd code exists: a grep of `src`, `skills/task-loop`, `dev` for `launchd|launchctl` finds nothing; `README.md:73`
@@ -148,12 +148,12 @@ flowchart TB
 
 | Container | Started by, how | Entry | Lifetime | Talks to |
 |---|---|---|---|---|
-| tl.py CLI | person, session, shim `<config>/bin/tl` (`exec uv run --quiet --script tl.py`, `tl/app/wire/hook.py:27-45`) | `skills/task-loop/tl.py:451-456`; verbs table `:405-448` | one call | everything below through `Ctx` (env, Spawner, Git, Identity built once, `tl.py:105-114`) |
+| tl.py CLI | person, session, shim `<config>/bin/tl` (`exec uv run --quiet --script tl.py`, `tl/app/doctor/install.py:27-45`) | `skills/task-loop/tl.py:451-456`; verbs table `:405-448` | one call | everything below through `Ctx` (env, Spawner, Git, Identity built once, `tl.py:105-114`) |
 | Loop lane | `tl loop` (`tl.py:363-365`), or `tl factory start` which spawns `sys.executable tl.py loop --repo R --wait-drained` once per missing lane (`tl/cli/factory.py:68-70`, `tl/app/launch/factory.py:97-120`) | `tl/app/loop/loop.py:85-114` | until drained, `--until`, `--max-beads`, stop command, signal; may `execve` into a newer install between beads (`loop.py:353-369`, `tl/app/launch/loop.py:187-199`) | bd, engine children, delegate status, dashboard (indirectly via files) |
 | Engine run | the loop spawns `uv run --script <install>/tl.py run-task BEAD --loop --worktree WT --outcome-file F [--slot S]` (`tl/app/launch/loop.py:235-238`) in its own process group (`:173-176`); or a person/session runs `tl run-task` | `tl/app/run/entry.py:173`, `run_in` `:313-351`, `run_bead` `:365-420` | one bead; may exec into a newer install at a safe point (`tl/app/run/reload.py:113`) | delegate, bd, git, check tools, docker |
 | PreToolUse hook | Claude Code, before each Bash call (`hooks/hooks.json:20-26`) | `hooks/hook.py` -> `tl/hook/main.py:13-14` -> `tl/hook/pretool.py` | under 3 s | nothing (pure) |
 | Session hooks | Claude Code SessionStart and PreCompact, `uv run --quiet --script` (`hooks/hooks.json:4-19`) | `tl/hook/session.py:100-104` | one event | writes `sessions/`, `bin/tl`, `githooks/`, `handoff/` |
-| Pre-push dispatcher | git, from `<config>/githooks/<name>` (14 client hooks, `tl/app/wire/hook.py:49-56`) | `tl/hook/prepush.py:51-71` | one push | runs `<config>/bin/tl judge-push --repo TOP`, then the repo's own hook or `git lfs pre-push` |
+| Pre-push dispatcher | git, from `<config>/githooks/<name>` (14 client hooks, `tl/app/doctor/install.py:49-56`) | `tl/hook/prepush.py:51-71` | one push | runs `<config>/bin/tl judge-push --repo TOP`, then the repo's own hook or `git lfs pre-push` |
 | Delivery judge | `tl judge-push` (`tl.py:433-434`) | `tl/app/launch/push_judge.py:30-38` -> `tl/app/land/push_judge.py:98-107` | one push; may run `tl check` in process (`push_judge.py:31-33`, `land/push_judge.py:82`) | results store, git, check tools |
 | Dashboard server | `tl dash ensure` (`tl/app/launch/dash.py:175-198`) spawns `sys.executable -m taskloop_dash --ports taskloop.app.launch.dash_ports:ports --port P --bind B` detached (`dash.py:146-148`) | `src/taskloop_dash/cli/dash.py:39`; `Dash` wiring `src/taskloop_dash/app.py:16-27` | until replaced (code hash or bind change, `dash.py:99-112`) or `tl dash stop` | config dir, bd (ports), engine code imported at runtime by name |
 | Release | person or session: `uv run --script dev/release.py "msg" ...` | `dev/release.py`, `tl/app/release/flow.py:95-125`, `:150` | one release | own clone `<config>/release/<hash>/` (`tl/app/release/clone.py:11`), git remote under the land lock (`tl/app/release/push.py:26`), marketplace checkout, `claude plugin` |
@@ -200,7 +200,7 @@ JSON documents go through `JsonStore` (atomic replace, no lock: `tl/contracts/st
 | `locks/*.lock` (+ `.holder`) | flock files: `land-<url>`, `release-<clone>`, `suite-host`, `loop-<key>`, `ask-<bead>`, `slot-take-<key>`, `review-<hash>`, `reflect-digest*`, `resource-*` | every process | lock holders' hints read by dashboard (`resource_holders`, `dash_ports.py:105`) | by design |
 | `snapshots/delegate.status.json`, `snapshots/delegate.tried.json`, `usage-history.jsonl` | `StatusSnapshot`, `StatusTried`, `UsageRow` | `tl lanes`, `tl usage`, loop chores when 20 min old (`wire/lanes.py`, `launch/loop.py:154-156`) | dashboard lane cards (`readers/world.py`) | yes |
 | `events.jsonl`, `traces.jsonl` | `Event`, `RunTrace` | `trail.event` from verbs, loop, engine (`launch/loop.py:248`, `run/reload.py`); traces from engine records | dashboard, `tl trace`, `tl report`, reflect | yes (append) |
-| `sessions/<id>.json` | `SessionIndex` | SessionStart hook (`wire/hook.py:16-24`) | dashboard, trace | no |
+| `sessions/<id>.json` | `SessionIndex` | SessionStart hook (`doctor/install.py:16-24`) | dashboard, trace | no |
 | `repos.json` | `ReposIndex` | `tl register`, loop, any tl verb via `trail` (locked: `stores.py:497-500`) | dashboard (and its 7878 start refusal, `bind.py:91-92`) | yes, locked |
 | `shared/<key>.json` | `SharedNotes` | engine (`run/shared.py:29`) | engine | no; but the key there is `sha1(common dir)[:12]`, not the `repo_key` `paths.shared()` documents |
 | `pinned.json`, `bad-versions.json` | `Pin`, `BadVersions` | `tl pin/rollback` (`release/pins.py`); loop on crash-after-move (`loop/run.py:85`, `loop.py:129`) | loop install choice, engine reload, delegate resolve | pin: no; bad-versions: loop only |
@@ -209,7 +209,7 @@ JSON documents go through `JsonStore` (atomic replace, no lock: `tl/contracts/st
 | `handoff/<key>.md` | handoff-v1 (`docs/contracts/handoff-v1.md`) | `tl handoff write`, PreCompact hook (`hook/session.py:88-96`) | SessionStart after compaction (`session.py:80-82`) | yes |
 | `dash.pid`, `dash.json`, `dash.log` | `DashState`; process log | dashboard server, launcher | launcher (`ping`, `stale_reason`) | launcher and server |
 | `factory.db`: `bead`, `kv` (`beads.<repo_key>`) | cached bd rows, marker, success time, error | dashboard indexer (`index/beadpass.py`, `contracts/beadrows.py`) | dashboard readers | indexer only; bd remains authoritative |
-| `githooks/<14 names>`, `bin/tl` | sh scripts | SessionStart hook and `tl hooks install` (`wire/hook.py:34-77`, `cli/hooks.py:12-19`) | git, every shim user | **yes**, and the last writer's install wins |
+| `githooks/<14 names>`, `bin/tl` | sh scripts | SessionStart hook and `tl hooks install` (`doctor/install.py:34-77`, `cli/hooks.py:12-19`) | git, every shim user | **yes**, and the last writer's install wins |
 | `host.json` | `HostResources` | the person (`paths.py:182-184`) | loop host affinity (`launch/loop.py:257`), checks | no |
 | worktree `.task/engine.lock`, `.task/engine.take`, `.task/<bead>/artifacts`, `.task/checks/` | `Lock` | loop `loop_lock` (`launch/loop.py:202-204`), run-task `EngineLock` (`entry.py:333-346`), both drop it (`launch/loop.py:231`, `entry.py:342-346`) | `engine_busy` from loop, `tl status`, cutover (`launch/loop.py:306-317`) | **yes**, and inside the worker's reach |
 
@@ -218,7 +218,7 @@ loop uses `loop/<key>.<pid>.json` through `LoopFiles` (`tl/app/loop/files.py:32-
 
 DOC/CODE MISMATCH: `tl.py:58` says "State: ~/.config/task-loop : repos.json, events.jsonl, sessions/, dash.*", four of the 40-odd kinds above.
 `tl/contracts/paths.py:1` says "Nothing else in the package names a file or a folder of ours"; these do: `tl/app/run/shared.py:29`,
-`tl/app/release/suite.py:38`, `:119`, `tl/app/wire/hook.py:36`, `tl/app/wire/slots.py:146`, `tl/app/report/reflect.py:202`, `:236`,
+`tl/app/release/suite.py:38`, `:119`, `tl/app/doctor/install.py:36`, `tl/app/wire/slots.py:146`, `tl/app/report/reflect.py:202`, `:236`,
 `tl/app/run/engine.py:351`, `tl/adapters/landlock.py:55`, `tl/app/launch/dash.py:134`, `:142`, `:177`, `tl/app/look/owner_look.py:90`,
 `tl/app/release/clone.py:11`.
 
@@ -261,7 +261,7 @@ flowchart TB
 | `dash-imports-contracts-only` (`:94-106`) | `taskloop_dash` imports only contracts | holds statically. **At runtime the dashboard process imports `taskloop.app.launch.dash_ports` by name** (`src/taskloop_dash/cli/dash.py:31-36`, `tl/app/launch/dash.py:147`), which pulls in `app.asks.intake`, `app.asks.owner_verbs`, `adapters.bd` (`dash_ports.py:9-27`). The import rule constrains source, not the process. |
 | `only-launch-imports-dash` (`:108-115`) | | holds. |
 | `app-slices-acyclic` (`:117-136`) + per-slice forbidden lists (`:141-503`) | order launch > prune > run > wire > loop > land > write/review/plan/look > report > checks > reconcile > release/track/doctor > slots > asks | Static cross-slice imports found by grep match every contract: land -> checks, slots; plan -> asks, checks; write -> checks; loop -> asks, slots; report -> asks, reconcile; reconcile -> release; prune -> reconcile, release, run, track; wire -> asks, doctor, loop, release, slots, track; run -> 13 slices; launch -> 13 slices. No `importlib.import_module` under `src/` outside `hook/main.py`. |
-| `app-cli-spawn-through-the-spawner` (`:505-514`) | app and cli never import `adapters.procs` or `stream_proc` | not checked line by line (unverified). `tl/app/run/entry.py:3`, `:151` uses `fcntl` directly; `tl/hook/prepush.py:14-18` uses `subprocess` (hook is not in that contract). |
+| `app-cli-spawn-through-the-spawner` (`:505-514`) | app and cli never import `adapters.procs` or `stream_proc` | not checked line by line (unverified). `tl/app/track/outcome_line.py:2`, `:30` uses `fcntl` directly; `tl/hook/prepush.py:14-18` uses `subprocess` (hook is not in that contract). |
 | ruff TID251 bans (`src/taskloop/contracts/ruff.toml`, `stores/ruff.toml`) | subprocess, socket, threading out of contracts/stores | not opened (unverified). |
 
 Effects inside "contracts", the lowest layer: `JsonStore` reads and writes files (`tl/contracts/stores.py:90-121`), `fence.take` writes bd
@@ -273,7 +273,9 @@ metadata (`tl/contracts/fence.py:71-78`), `runlife.reconcile` rewrites manifests
 
 ```mermaid
 flowchart TB
-    entry["app/run/entry<br/>admit, claim, slot, locks"]
+    entry["app/run/entry<br/>bind admission, claim, slot, locks"]
+    admission["app/asks/admission<br/>dead claims, holds, retries, parks"]
+    entry --> admission
     engine["app/run/engine.Engine<br/>composition root and host"]
     runonce["app/run/run_once, stages<br/>step cursor"]
     ctx["app/run/context, records,<br/>state.Checkpoints, layout"]
@@ -313,7 +315,8 @@ flowchart TB
 
 | Component | Responsibility | Public interface | Depends on | Owns (data contract) |
 |---|---|---|---|---|
-| `app/run/entry` | front door: worktree or slot, area lock, engine lock, admission (blocked bead reopened, foreign claim refused), bd claim, fence generation, one outcome line | `main`, `run_in`, `run_bead`, `admit`, `parked`, `preview` (`entry.py:98-420`) | wire.slots, slots.engine_lock, track.verbs, contracts.fence | `RunReport` outcome line / `--outcome-file` (`entry.py:165-171`) |
+| `app/run/entry` | front door: worktree or slot, area lock, engine lock, admission (blocked bead reopened, foreign claim refused), bd claim, fence generation, one outcome line | `main`, `run_in`, `run_bead`, `preview` (`entry.py`) | wire.slots, slots.engine_lock, track.verbs, contracts.fence | `RunReport` outcome line / `--outcome-file` (`track/outcome_line.py:44-49`) |
+| `app/asks/admission` | dead claims, foreign claims, holds, blocked retries and parked beads | `release_dead`, `admit`, `parked` | asks.intake, asks.parks, domain.asks.hold; release, running and output callables supplied by composition | admission verdict |
 | `app/run/engine.Engine` | holds every collaborator; each part is a `cached_property` built over the engine itself (`engine.py:190-200`) | `run`, `result`, `ai`, `sh`, `run_checks`, `blocked_for`, `warn`, `record_land` ... (`engine.py:196-404`) | 50 imports from 14 slices and 8 adapters (`engine.py:12-63`) | none of its own; aliases `RunState` fields onto itself (`state.py:98-101`) |
 | `app/run/run_once`, `stages` | step cursor: next step from manifest and checkpoint; claim checks, stages, land, close-out that always runs | `RunOnce.go`, `run_stages`, `select_step`, `one_stage` (`run_once.py:35-241`, `stages.py:44-350`) | ParkStore, RunLocator | step order `Step` enum (`contracts/enums.py`) |
 | `app/run/context`, `records`, `layout`, `state` | run identity and files; engine log, trace line; checkpoint read-modify-write behind the fence | `RunContext.open`, `RunLayout.open`, `Checkpoints.read/save/writer` (`state.py:104-121`) | stores, contracts.fence | `Checkpoint` v3, `RunTrace`, `EngineLog` |
@@ -424,8 +427,8 @@ Each item is something that would not fit in one box or one arrow.
    file the push judge reads.
 
 3. **The shim and git hooks have several writers and point at whichever install wrote last.** Every SessionStart rewrites `<config>/bin/tl`
-   and `<config>/githooks/*` for its own plugin root (`tl/hook/session.py:75-77`, `tl/app/wire/hook.py:34-77`), as does `tl hooks install`.
-   The pre-push hook runs `<config>/bin/tl judge-push` (`wire/hook.py:64`), so an engine running install X is judged by install Y.
+   and `<config>/githooks/*` for its own plugin root (`tl/hook/session.py:75-77`, `tl/app/doctor/install.py:34-77`), as does `tl hooks install`.
+   The pre-push hook runs `<config>/bin/tl judge-push` (`doctor/install.py:64`), so an engine running install X is judged by install Y.
 
 4. **Run manifests have six writers and no lock.** Engine lifecycle plus `mark_lost` from loop start, `tl wait`, `tl doctor`, `tl report`
    and the owner-request gate, the last reachable from the dashboard (list in Stores table). Each method is get-then-put
@@ -450,7 +453,7 @@ Each item is something that would not fit in one box or one arrow.
    (`tl/app/slots/engine_lock.py:79-89`, `tl/app/loop/run.py:67`). The file sits in `.task/` of the worktree the writer edits
    (`tl/contracts/paths.py:276-281`). The current `EngineLock` is also a module global (`engine_lock.py:141`, `entry.py:339`).
 
-8. **Claims are taken twice by two processes under one actor.** The loop claims through `entry.admit` + `verbs.claim`
+8. **Claims are taken twice by two processes under one actor.** The loop claims through `asks.admission.admit` + `verbs.claim`
    (`tl/app/launch/loop.py:164-170`); the child run-task claims again and bumps the fence generation (`tl/app/run/entry.py:387-396`),
    relying on bd letting an actor re-claim its own bead (`launch/loop.py:295-297`). The fence then fails open when bd cannot be read
    (`tl/contracts/fence.py:87-90`) and `take` is a separate read and update (`fence.py:71-78`).
@@ -476,7 +479,7 @@ Each item is something that would not fit in one box or one arrow.
     (`:130`, `:152`, `:334-355`), which `layers-no-skips` forbids for `taskloop.cli`. `cli/land.py:31` writes `LandedStore` with `time.time()`
     (a CLI verb doing the app's transaction).
 
-14. **One module, two jobs.** `tl/app/wire/hook.py` is documented as "index the session id" (`:1`) but also writes the `tl` shim and all 14
+14. **One module, two jobs.** `tl/app/doctor/install.py` is documented as "index the session id" (`:1`) but also writes the `tl` shim and all 14
     git hook dispatchers (`:27-77`). `app/land/push_judge.py` is in the land slice but is driven by the check verb it calls in process
     (`tl/app/launch/push_judge.py:31-33`), so a pre-push can run the full check registry inside git's hook.
 

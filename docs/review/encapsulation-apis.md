@@ -61,7 +61,7 @@ The complete top-level parser and dispatcher are `skills/task-loop/tl.py:151`, `
 | `hooks install`: 0 installed, 1 refusal | hooks CLI | git hook process | argv / script text | no hook protocol revision | install script paths/env | hook can outlive engine installation | Untested |
 | `doctor`, `selftest`: success 0, detected failure 1 | diagnostics | owner/release | text / test flow | no result revision | installed paths | real installed pair not proved by fake lane | Untested |
 
-Exit evidence: `src/taskloop/app/run/entry.py:165`, `:173`, `:362`; `src/taskloop/cli/factory.py:22`; `src/taskloop/app/slots/verbs.py:14`; `src/taskloop/cli/asks.py:98`; `src/taskloop/cli/report.py:79`; `src/taskloop/cli/status.py:10`; `src/taskloop/cli/loop_cmd.py:31`; `src/taskloop/app/land/cmds.py:25`. These are a command-local inventory, not a promise that all uncaught failures are normalized. That absence is itself untested.
+Exit evidence: `src/taskloop/app/track/outcome_line.py:44`; `src/taskloop/app/run/entry.py:137`, `:326`; `src/taskloop/cli/factory.py:22`; `src/taskloop/app/slots/verbs.py:14`; `src/taskloop/cli/asks.py:98`; `src/taskloop/cli/report.py:79`; `src/taskloop/cli/status.py:10`; `src/taskloop/cli/loop_cmd.py:31`; `src/taskloop/app/land/cmds.py:25`. These are a command-local inventory, not a promise that all uncaught failures are normalized. That absence is itself untested.
 
 ### Delegate and other subprocesses
 

@@ -31,6 +31,8 @@ TABLES = {
     "ask",
     "ask_ledger",
     "kv",
+    "run_doc",
+    "duration_doc",
     "effect",
     "wait",
     "signal",
@@ -52,6 +54,8 @@ TABLES = {
     "repos_doc",
     "ticket_doc",
     "index_doc",
+    "queue_doc",
+    "flake_doc",
 }
 
 INDEXES = {
