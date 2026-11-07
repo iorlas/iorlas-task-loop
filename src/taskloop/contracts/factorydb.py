@@ -45,6 +45,7 @@ OWNERS: dict[str, str] = {
     "wait": "loop",
     "signal": "owner",
     "timed": "engine",  # what the engine log's end records timed: tl runs show|slow read these
+    "release_doc": "engine",  # the release part's pin and last result (tl pin, tl release)
     "checkpoint": "engine",  # one row per bead across runs; the engine writes it with the revision it read
 }
 REVISIONED_TABLES = frozenset({"run", "ask", "bead", "checkpoint"})

@@ -60,7 +60,6 @@ from support.waits import until  # noqa: F401
 from support.who import who
 from taskloop.adapters import delegate as dl
 from taskloop.adapters import delegate as lroute  # noqa: F401
-from taskloop.app.release import seams
 from taskloop.app.run import (
     engine,
     entry,
@@ -112,7 +111,7 @@ def delegate_stack(script, route="/fake/route.py"):
     stack = contextlib.ExitStack()
     for p in (
         mock.patch.object(dl, "resolve", return_value=res),
-        mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: script),
+        mock.patch.object(dl.DelegateRoute, "runner", lambda self, *a, **k: script),
         no_sleep_here(),
     ):
         stack.enter_context(p)

@@ -18,8 +18,9 @@ from support.logs import records
 from support.spawn import port_git, real_spawner
 from support.who import who
 
+from taskloop.adapters import delegate as dl
 from taskloop.adapters.delegate import Stopped
-from taskloop.app.run import engine, worker_call
+from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
@@ -138,14 +139,15 @@ class Calls(te.EngineTest):
 
     def test_every_worker_call_is_told_its_run_through_the_six_names(self):
         seen = []
-        real = worker_call.dg.call
+        real = dl.call
 
         def spy(*a, **kw):
-            seen.append(kw["env"])
+            if not a[1].title.endswith("reflect"):  # the close reflection is no worker call
+                seen.append(kw["env"])
             return real(*a, **kw)
 
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
-        with mock.patch.object(worker_call.dg, "call", spy):
+        with mock.patch.object(dl, "call", spy):
             self.go(script)
         e = self.eng
         assert seen

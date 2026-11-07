@@ -303,6 +303,7 @@ source_modules =
     taskloop.app.doctor
     taskloop.app.loop
     taskloop.app.pipeline
+    taskloop.app.plan
     taskloop.app.reconcile
     taskloop.app.release
     taskloop.app.review
@@ -310,6 +311,20 @@ forbidden_modules =
     taskloop.app.run
     taskloop.app.wire
     taskloop.app.launch
+allow_indirect_imports = True
+
+[importlinter:contract:delegate-adapter-behind-stores]
+name = only stores.delegate imports the delegate adapter (adapters.delegate, adapters.runner)
+type = forbidden
+source_modules =
+    taskloop.app
+    taskloop.cli
+    taskloop.hook
+    taskloop.domain
+    taskloop.contracts
+forbidden_modules =
+    taskloop.adapters.delegate
+    taskloop.adapters.runner
 allow_indirect_imports = True
 
 [importlinter:contract:pipeline-imports-no-stage]
