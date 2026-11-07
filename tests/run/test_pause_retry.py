@@ -1,11 +1,7 @@
 """A durable transient retry keeps the existing checkpoint's plan and starts with write, without another planner call."""
 
-import sys
-from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support import engine_case as te
 
 from taskloop.app.asks import parks

@@ -7,7 +7,6 @@ from unittest import mock
 
 import pytest
 import stream_proc
-import support.paths  # noqa: F401
 from support.fake_deadline import FakeDeadline
 
 from taskloop.adapters import procs, runner

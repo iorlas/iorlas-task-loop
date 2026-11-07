@@ -6,7 +6,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-import support.paths  # noqa: F401
 
 from taskloop.app.workers import asked, done_memo
 from taskloop.app.workers.call import Call

@@ -16,7 +16,6 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "skills" / "task-loop"
 sys.path.insert(0, str(SRC))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402, F401
 from support import gitq, homes  # noqa: E402
 from support.checkpoints import read_ck  # noqa: E402
 

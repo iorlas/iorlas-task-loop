@@ -15,7 +15,6 @@ from typing import Any, ClassVar
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
-import support.paths  # noqa: E402, F401
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from support import engine_case as T  # noqa: E402

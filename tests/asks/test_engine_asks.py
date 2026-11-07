@@ -8,7 +8,6 @@ import subprocess
 from pathlib import Path
 from unittest import mock
 
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes
 from support.askjson import unreadable_ask
 from support.engine_case import EngineTest, ask_rec, stop

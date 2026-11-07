@@ -1,24 +1,18 @@
 """A check's tags are set once where the check is made; the plan, the conflict fix and the evidence read the tags, never the id or
 command text again."""
-import sys
-from pathlib import Path
 
 import pytest
-
 from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 import msgspec
-
-from tlgate.domain.plan import CheckPlan
-from tlgate.domain.specs import diff_check, gate_items, repo_check, tags_of, wall_limit
 from tlkernel.checks import Check, CheckResult, Durations, Phase
 from tlkernel.config import CheckSpec, EngineConfig
 from tlkernel.ids import CheckId
 from tlkernel.wire import load
+
+from tlgate.domain.plan import CheckPlan
+from tlgate.domain.specs import diff_check, gate_items, repo_check, tags_of, wall_limit
 
 
 def chk(name: str, cmd: str = "true", **kw) -> Check:

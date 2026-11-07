@@ -13,7 +13,6 @@ import unittest
 import unittest.mock
 from pathlib import Path
 
-import support.paths  # noqa: F401
 from support import homes
 
 from tltestkit.tmpdir import TemporaryDirectory

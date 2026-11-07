@@ -81,7 +81,7 @@ Path evidence: `packages/kernel/src/tlkernel/paths.py:22`, `:93`, `:101`, `:122`
 | Authority | Stored fact versus derived view | Cache / staleness boundary |
 | --- | --- | --- |
 | bd local Dolt database, reached through `Beads` | Task text/status/assignee, dependencies, lease, slot metadata and generations are stored. Ready order, area ownership and lint decisions are derived. JSONL exports are not the task authority. | Queue entries, parent lookups, brief snapshots and dashboard bead lists are copies; a person's edits or another claim can invalidate them. |
-| git object database and refs | Task commits and remote acceptance are facts. “Already landed” is partly derived from HEAD's subject suffix and ancestry (`app/land/landed.py:51`). | `origin/main` is a mutable local observation shared by worktrees. A fetch elsewhere changes it without taking this run's engine lock. |
+| git object database and refs | Task commits and remote acceptance are facts. “Already landed” is partly derived from HEAD's subject suffix and ancestry (`app/land/push.py:51`). | `origin/main` is a mutable local observation shared by worktrees. A fetch elsewhere changes it without taking this run's engine lock. |
 | `runs/R/manifest.json` | Recorded run lifecycle, independently of bd task status. A directory without a readable manifest is omitted (`contracts/locator.py:66`). | Locator caches by mtime/size (`contracts/locator.py:89`); dashboard liveness also consults PID. It cannot make a multi-file snapshot. |
 | `checkpoints/B.json` | Resumable plan/cursor and completed close-effect keys. | It is bead-scoped, not run-scoped; `.get()` treats incompatible/torn records as missing (`app/run/state.py:118`, `contracts/stores.py:104`). |
 | `B.call.json`, `done.json` | In-flight envelope pointer and consumed-answer memo, respectively. | Reattachment matches coordinates and a full-prompt hash, not a committed tree/config identity (`app/run/worker_call.py:197`). |
@@ -218,13 +218,13 @@ The requested conceptual sequence “land → cleanup → close/follow-ups → r
 
 **Truth/copies:** Verification resolves unchecked items; land compares git contents and prior-land evidence, builds the task commit, fetches/rebases, runs gate checks, and serializes push through the repo land lock (`src/taskloop/app/run/run_once.py:95`, `app/land/lander.py:94`, `:125`). The remote's accepted commit is the delivery fact, not a successful command start.
 
-**Kill/idempotency:** A kill during squash/rebase leaves git recovery state; later reset/save logic can abort an unfinished rebase. A kill after remote acceptance but before response/`landed_sha`/receipt is an uncertain push. `Landed.already` fetches, checks HEAD's bead-suffixed subject and ancestry, and may recover that fact (`app/land/landed.py:45`). It is a heuristic over git, not a receipt written atomically with the remote. The gate token currently names values reread after execution (F02).
+**Kill/idempotency:** A kill during squash/rebase leaves git recovery state; later reset/save logic can abort an unfinished rebase. A kill after remote acceptance but before response/`landed_sha`/receipt is an uncertain push. `Landed.already` fetches, checks HEAD's bead-suffixed subject and ancestry, and may recover that fact (`app/land/push.py:45`). It is a heuristic over git, not a receipt written atomically with the remote. The gate token currently names values reread after execution (F02).
 
 **Races/logs/cause:** The land lock serializes cooperating landers and releases; it does not serialize every fetch, `tl check`, person edit, or engine reset. A generation check precedes push but does not atomically authorize the remote update (F05). Push rejection/network errors are classified from text (`app/land/push.py:84`). `gate_start/end`, `land_try`, lock/unlock, command and transition rows are observations; a kill can leave remote delivery without any land receipt.
 
 ### H10 — push → landed receipt / bd synchronization
 
-**Truth/copies:** After releasing the land lock, `Sync` applies `RecordLand`, then `BdSync` (`src/taskloop/app/land/sync.py:44`). RecordLand writes a bd land event/provenance, `landed/B.json`, and JSONL cleanup retry inputs (`app/run/engine.py:357`). These copies can disagree during a crash.
+**Truth/copies:** After releasing the land lock, `Sync` applies `RecordLand`, then `BdSync` (`src/taskloop/app/land/record.py:44`). RecordLand writes a bd land event/provenance, `landed/B.json`, and JSONL cleanup retry inputs (`app/run/engine.py:357`). These copies can disagree during a crash.
 
 **Kill/idempotency:** A kill after bd provenance but before landed JSON repeats receipt work. A kill after landed JSON but before cleanup inputs leaves no logged cleanup obligation for that attempt. A kill after each effect but before its checkpoint key repeats that effect. Dolt sync is a separate external operation; failure is raised, then the engine's close conversion discards it (F07).
 
@@ -289,7 +289,7 @@ Delegate is resolved again before each call; a refused new installation keeps th
 | Stop → human reason | `src/taskloop/domain/lanes/says.py:71`, `app/run/lane_acts.py:180` | `said` shrinks to 200 chars; `fix` is separately rendered. A generic leading line can crowd out detailed later cause. |
 | Command → tail / CmdEnd | `src/taskloop/app/run/shell.py:47` | Returned tail is last 15 lines; failing CmdEnd keeps last 600 chars. Unsaved full output is not recoverable from that row. |
 | Check → result / prompt | `src/taskloop/app/checks/executor.py:218`, `app/checks/evidence.py:60` | Result tail is 1500 chars; compact failed prompt uses a 600-char diagnostic budget. Full saved logs are a separate artifact. |
-| bd failure → typed error | `src/taskloop/adapters/bd.py:109` | Missing sections are extracted before clipping, from combined stderr/JSON error/stdout; retained error text is first 500 chars, later follow-up warning first 200 (`app/land/followups.py:67`). The historical first-line-only lint parser is not the current implementation. |
+| bd failure → typed error | `src/taskloop/adapters/bd.py:109` | Missing sections are extracted before clipping, from combined stderr/JSON error/stdout; retained error text is first 500 chars, later follow-up warning first 200 (`app/land/record.py:67`). The historical first-line-only lint parser is not the current implementation. |
 | Final close → logs/reports | `src/taskloop/app/run/closer_record.py:76`, `app/run/records.py:113`, `contracts/locator.py:171` | Transition detail often keeps first line/200 chars; Close/trace 500; manifest reason 300; loop reason 300. No terminal record is a complete causal chain. |
 
 ## Exceptional flows
@@ -500,7 +500,7 @@ The error/visibility gaps in these observations are recorded here as data proven
 
 ### F07 — P2: post-push synchronization and source-close failures are acknowledged as completion
 
-**Evidence:** `src/taskloop/app/land/outbound.py:156` raises on failed bd sync after land. `src/taskloop/app/run/run_once.py:232` replaces every non-LANDED outcome with LANDED when `e.landed_sha` exists, erasing that detail. Independently, `src/taskloop/app/run/closer_settle.py:72` only warns when bd refuses close; `src/taskloop/domain/interpret.py:43` then marks the effect applied and `src/taskloop/domain/effects.py:153` schedules checkpoint removal for finished outcomes.
+**Evidence:** `src/taskloop/app/land/push.py:156` raises on failed bd sync after land. `src/taskloop/app/run/run_once.py:232` replaces every non-LANDED outcome with LANDED when `e.landed_sha` exists, erasing that detail. Independently, `src/taskloop/app/run/closer_settle.py:72` only warns when bd refuses close; `src/taskloop/domain/interpret.py:43` then marks the effect applied and `src/taskloop/domain/effects.py:153` schedules checkpoint removal for finished outcomes.
 
 **Failure:** A successful push followed by failed Dolt sync or rejected task close can produce a landed Close/trace/outcome and delete its recovery checkpoint. The bead may remain in progress, or its records never reach the remote, while normal selection no longer carries a retryable synchronization/close obligation.
 
@@ -510,7 +510,7 @@ The error/visibility gaps in these observations are recorded here as data proven
 
 ### F08 — P2: follow-up creation has a create-to-checkpoint duplication window
 
-**Evidence:** `src/taskloop/app/land/followups.py:60` creates in bd before recording its FollowKey at lines 63–64. The pre-create lookup at lines 43–49 is only called for the UNCHECKED category (line 57), and matches any source title prefix rather than the exact item. `src/taskloop/domain/interpret.py:43` records the enclosing FileNotes key only after all this returns.
+**Evidence:** `src/taskloop/app/land/record.py:60` creates in bd before recording its FollowKey at lines 63–64. The pre-create lookup at lines 43–49 is only called for the UNCHECKED category (line 57), and matches any source title prefix rather than the exact item. `src/taskloop/domain/interpret.py:43` records the enclosing FileNotes key only after all this returns.
 
 **Failure:** Kill after a normal follow-up is created but before its key is saved. Recovery repeats FileNotes and creates the same follow-up again; the source-title lookup used for the deliberately single unchecked follow-up does not deduplicate ordinary follow-ups.
 
@@ -520,7 +520,7 @@ The error/visibility gaps in these observations are recorded here as data proven
 
 ### F09 — P2: refused follow-ups become completed FileNotes and lose their retry record
 
-**Evidence:** `src/taskloop/app/land/followups.py:65` collects refused items and saves them to the checkpoint at line 70, then returns normally. `src/taskloop/app/run/closer_notes.py:60` turns that into Notes and returns; `src/taskloop/domain/interpret.py:44` marks FileNotes complete. `src/taskloop/domain/effects.py:153` deletes a finished run's checkpoint after closing the source task.
+**Evidence:** `src/taskloop/app/land/record.py:65` collects refused items and saves them to the checkpoint at line 70, then returns normally. `src/taskloop/app/run/closer_notes.py:60` turns that into Notes and returns; `src/taskloop/domain/interpret.py:44` marks FileNotes complete. `src/taskloop/domain/effects.py:153` deletes a finished run's checkpoint after closing the source task.
 
 **Failure:** A temporary bd/lint refusal leaves only a warning/Reflect count and prose containing the unfiled titles after a landed task closes. No durable pending-create queue remains for an automatic retry, even though the engine knew these follow-ups were required.
 

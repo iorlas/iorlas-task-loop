@@ -3,14 +3,9 @@
 tests/conftest.py ignores this folder unless the run selects `-m live` (just test-live); here every test is marked `live` and
 `real_proc` (the process guard is off: the real thing is the point), has an isolated HOME and config dir, and prints its wall time."""
 import os
-import sys
 import time
-from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 
 def pytest_collection_modifyitems(items):

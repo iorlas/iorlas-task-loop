@@ -9,7 +9,6 @@ from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from any_lease import Leases
 from support.factory_index import ingest
 from support.fakes import FakeBeadStore

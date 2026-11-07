@@ -1,11 +1,6 @@
 """INTAKE (tl-7i9k.19): agent-filed follow-ups wait as `deferred` with the label `from-review`; at most K a day are promoted to open."""
-import sys
-from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 
 from taskloop.app.asks import deferral as intake

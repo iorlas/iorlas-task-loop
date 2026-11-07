@@ -6,7 +6,6 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
-import support.paths  # noqa: F401
 
 from taskloop.app.loop import exits
 from taskloop.app.loop.files import EXIT_REASONS, LoopFiles

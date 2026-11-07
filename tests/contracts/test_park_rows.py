@@ -6,7 +6,6 @@ import sqlite3
 
 import msgspec
 import pytest
-import support.paths  # noqa: F401
 
 from tlkernel import dbparts, factorydb, factoryparts, scratch
 from tlkernel.ids import BeadId

@@ -1,21 +1,15 @@
 """GATELANES (tl-7k8.2): checks carry a lane; the steps of a lane run in order, the lanes run in parallel, and the first red cancels the
 other lanes (their own process groups only, through the Spawner) and the round is red. procsim fakes, no real spawn; the tree kill is
 tests/checks/real/test_lanes_real.py."""
-import sys
 import threading
 import time
-from pathlib import Path
 from typing import Any
 
 import pytest
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.check_host import CheckHostCase
 
 from tltestkit import procsim
+from tltestkit.case import Case
 
 # isort: split
 from tlgate import lanes

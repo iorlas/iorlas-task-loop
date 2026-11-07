@@ -8,7 +8,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tests"))
-import support.paths  # noqa: E402, F401
 
 from taskloop_dash.http import route  # noqa: E402
 

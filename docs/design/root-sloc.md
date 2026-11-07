@@ -6,13 +6,23 @@ Measured on main ddfe6729 with `dev/root_report.py` and `tests/rules/root_ratche
 
 Everything in the table that has a destination can leave: **1650 sloc**. That lands at **about 2380**, not 1500. The 880 left over is not a missing move: it is run/* construction (fields, engine, host, parts_*, context, state, plumbing, closer_ports: about 600 sloc, bound to the Engine's 150 attributes), the small cli/hook argparse files (693 sloc in 36 files, roots by definition) and `prepush.py` (documented stdlib exception). 1500 needs either the Engine attributes to fall (R4 landed; the attribute count has not moved: 150) or the goal to count cli argparse wiring as not-root.
 
+## Status (2026-11-07)
+
+| move | PR | root sloc |
+|---|---|---|
+| setup, setup_apply, lanes to app/doctor (route, config dir, host store and slot facts injected; bindings in app/launch) | #603 | -223 net |
+| closeguard rules, preflight admission and entry sequencing to tlpipeline over ports | #606 | -57 (closeguard 78 -> ~35, preflight 62 -> 22, entry admission only -2: those rules already lived in app/asks/admission; entry keeps ~48 slot-take sloc for the slots carve) |
+| run/layout.py to tlkernel.runlayout | #608 | -98 |
+
+Net root 4030 -> about 3650. The slots carve is the largest cut left (docs/design/slots-carve.md); gate moves wait for the land-gate move.
+
 ## Destination map
 
 Packages that exist: `kernel`, `gate`, `artifacts`, `pipeline`, `testkit`. Not carved yet (their rows wait on the carve in `stage-carves.md`): slots (tl-e5t0.17), asks (.18), release (.19), land (.20), work. `app/doctor`, `app/report` and `app/land` are ordinary slices that exist now.
 
 | root file | sloc | br | leaves | disposition | why / blocker |
 |---|---|---|---|---|---|
-| `skills/task-loop/tl.py` | 341 | 6 | 200 | cli/* modules + app nodes | VERBS table and dispatch stay (~140); each v_* handler with a body moves, its adapter calls passed in from app/launch bindings (cli may not import adapters). No blocker; one PR per handler group |
+| `skills/task-loop/tl.py` | 341 | 6 | 10 | v_ask's sweep into app/asks; the rest stays | 172 sloc are argparse parser builders, 50 the VERBS table, 84 about 25 two-line bindings. cli/* is root too, so moving parsers or handlers into cli modules leaves the total unchanged. Option (c): verbs as data (~150 sloc) waits for Denis on whether cli wiring counts as root (bead tl-e5t0.40.6 follow-up) |
 | `app/run/entry.py` | 261 | 45 | 150 | slots package (take_area, _slot_taken, run_any_slot ~100); pipeline (admission, blocked reopen ~50) | run_in/run_bead/_worktree_of stay. Needs the slots carve (tl-e5t0.17) and a slots port; the pipeline half is free now (packages/pipeline exists) |
 | `app/launch/dash.py` | 191 | 41 | 170 | taskloop_dash (its launch module); stays a ~20 sloc binding | dashboard lane work, wait until pix-dash is quiet |
 | `app/wire/slots.py` | 155 | 19 | 130 | slots package (machine-bound half: slot_table, slot_env, worktrees, take/release) | slots carve (tl-e5t0.17) with a slots port that wire binds; callers: entry, doctor, loop |
@@ -23,7 +33,7 @@ Packages that exist: `kernel`, `gate`, `artifacts`, `pipeline`, `testkit`. Not c
 | `app/run/layout.py` | 98 | 13 | 60 | kernel (paths/locator: the run's file names) | pure naming; the manifest stays the authority; no blocker |
 | `app/run/engine.py` | 97 | 3 | 0 | stays | the Engine construction; its 150 attributes are the lever for run/* |
 | `hook/prepush.py` | 91 | 18 | 0 | stays | documented exception: stdlib-only hot path (18 branches) |
-| `app/wire/doctor.py` | 86 | 8 | 70 | app/doctor | `tl doctor` lines are rules over the profile; takes the slots port for its slot checks (blocks the last ~15 sloc) |
+| `app/wire/doctor.py` | 86 | 8 | 0 | stays | multi-stage root: doctor.run imports release, which sits above doctor in the layers contract (corrected after the first move) |
 | `cli/factory.py` | 86 | 15 | 40 | app/launch factory verbs | argparse + exit mapping stay (~45); start/inspect/stop/tail rules move |
 | `app/run/host.py` | 83 | 2 | 0 | stays | run construction |
 | `app/run/parts_run.py` | 82 | 3 | 0 | stays | run construction |
@@ -32,7 +42,7 @@ Packages that exist: `kernel`, `gate`, `artifacts`, `pipeline`, `testkit`. Not c
 | `app/wire/closeguard.py` | 78 | 10 | 70 | pipeline (closing) | one function `refusal` decides every close; packages/pipeline exists; callers are tl close, tl task close |
 | `app/launch/loop_ops.py` | 77 | 0 | 0 | stays | binding; pix-dataown's PRs in flight |
 | `app/launch/loop_start.py` | 75 | 9 | 60 | release package (installs on the machine, loop identity) | release carve (tl-e5t0.19) |
-| `app/wire/brief.py` | 73 | 5 | 60 | app/report | facts of `tl status --brief` read from the stores; no blocker |
+| `app/wire/brief.py` | 73 | 5 | 0 | stays | imports app.loop (above report) and the wire roots, so it cannot sit in app/report (corrected) |
 | `app/wire/setup_apply.py` | 73 | 11 | 70 | app/doctor | same slice as setup.py; do both in one PR |
 | `app/run/plumbing.py` | 64 | 6 | 0 | stays | run construction (stop flag, poster, clock) |
 | `app/launch/check_host.py` | 63 | 0 | 50 | gate package (CliHost) | gate exists; needs its runner/cache/evidence ports |
@@ -48,7 +58,7 @@ Packages that exist: `kernel`, `gate`, `artifacts`, `pipeline`, `testkit`. Not c
 | `app/launch/check.py` | 42 | 0 | 0 | stays | binding |
 | `cli/land_stack.py` | 42 | 1 | 30 | land package / app/land | argparse stays (~12); shell bindings move with the land carve (tl-e5t0.20) |
 | `cli/land.py` | 40 | 1 | 30 | app/land | records a direct-push land and cleans refs: a rule; land carve (tl-e5t0.20) |
-| `app/launch/selftest.py` | 39 | 1 | 30 | app/doctor (selftest) | no blocker |
+| `app/launch/selftest.py` | 39 | 1 | 0 | stays | builds an Engine; a converted stage may not import app.run (corrected) |
 | 36 smaller files (each under 48 sloc: cli verbs, hook entry points, run/running, parts_plan, stages, facts, run_once, sections, ...) | 693 | | 0 | stay | argparse wiring and bindings; the definition of a root |
 
 

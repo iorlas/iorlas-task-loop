@@ -13,7 +13,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-import support.paths  # noqa: E402, F401
 
 from taskloop.adapters.git import RealGit  # noqa: E402
 from taskloop.app.doctor.install import write_hooks  # noqa: E402

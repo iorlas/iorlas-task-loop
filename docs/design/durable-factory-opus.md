@@ -132,7 +132,7 @@ the brief's incidents, with no count available here.
 | stage accept | `p{g}/accept[{i}]` | `{wip_sha}` | task branch on origin == wip_sha (ls-remote) |
 | land | `land.t{k}` (k = land try) | `{land_sha}` | `land_sha` ancestor of `origin/<base>` |
 | close | `close` | effect keys | per effect (section 2.4) |
-| follow-ups | `followups` | `{key → bead id}` | bd label `fu:` lookup (`tl/app/land/followups.py:54`) |
+| follow-ups | `followups` | `{key → bead id}` | bd label `fu:` lookup (`tl/app/land/record.py:54`) |
 
 Replan is a new generation `g`, so ids never collide and old rows stay as history. The cursor is `first id in table(plan) with no ok row`. This is
 what `RunOnce.prepare`/`stages` compute by hand today from checkpoint fields (`tl/app/run/run_once.py:141-186`). The 13 `checkpoints.save(` call
@@ -242,7 +242,7 @@ Protocol, the same for every effect: (1) INSERT `effects(key, status='intent', p
 
 | Effect | Idempotency key | "Did it already happen?" probe | Natural guard when applying |
 |---|---|---|---|
-| git push to base (land) | `push:{repo_key}:{base}:{land_tree_sha}` | `git fetch` then `merge-base --is-ancestor {land_sha} origin/{base}`, or a commit on `origin/{base}` whose subject ends `({bead})` and whose tree equals `land_tree_sha` (extends `Landed.already`, `tl/app/land/landed.py:45-58`, which needs HEAD's subject today) | `git push --force-with-lease`-free fast-forward; the server refuses a non-ff push |
+| git push to base (land) | `push:{repo_key}:{base}:{land_tree_sha}` | `git fetch` then `merge-base --is-ancestor {land_sha} origin/{base}`, or a commit on `origin/{base}` whose subject ends `({bead})` and whose tree equals `land_tree_sha` (extends `Landed.already`, `tl/app/land/push.py:45-58`, which needs HEAD's subject today) | `git push --force-with-lease`-free fast-forward; the server refuses a non-ff push |
 | wip push (task branch) | `wip:{bead}:{stage}:{sha}` | `git ls-remote origin refs/heads/task/{bead}` == sha | `--force-with-lease=task/{bead}:{expected}` |
 | PR merge (`land-stack`) | `merge:{repo}#{pr}:{head_sha}` | `gh pr view {pr} --json state,mergeCommit,headRefOid` → MERGED with that head | `gh pr merge --match-head-commit {head_sha}` |
 | bd create (follow-up) | `fu:{bead}:{hash(title+why)}` as a **bd label** (already: `fu.key_label`, `followups.py:54`) | `bd list --label {key} --all` (closed included); an unavailable lookup never creates (`followups.py:58-59`, kept) | none in bd; the label probe *is* the guard |
@@ -412,7 +412,7 @@ retries, default `max_attempts=3`, `backoff_rate=2.0`) is almost what section 2 
   (`run_once.py:144`). The run's carried state is one typed record (`RunState`, `checkpoint.py:71-120`).
 - **Typed outcome policy.** `Kind` is closed (`tl/contracts/kinds.py:9-35`), `POLICY` is one table (`outcome.py:66-90`), pause rules have permanence + backoff
   (`pauses.py`), and parks carry `retry_at` and attempts (`parks.py:15-26`).
-- **Partial exactly-once.** `Landed.already` (`landed.py:45-58`), follow-up label keys (`followups.py:52-59`), delegate refs kept for every outcome.
+- **Partial exactly-once.** `Landed.already` (`push.py:45-58`), follow-up label keys (`followups.py:52-59`), delegate refs kept for every outcome.
 
 So the slices **move** these into one store and add what is missing: probes, the classifier, the pin and the wait-not-exit rule. No logic is invented
 twice.

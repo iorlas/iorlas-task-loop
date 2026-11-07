@@ -1,13 +1,8 @@
 """tl-7k8.8: a bead labelled needs:<resource> is picked only on a host that has the resource, with a typed skip that says why; the
 engine only adds the label (never removes one), under the claim's fence."""
-import sys
-from pathlib import Path
 from unittest import mock
 
 from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from taskloop.app.loop import hosts

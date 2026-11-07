@@ -1,8 +1,6 @@
 """The park gate on a bead the owner parked: the owner's hold decides, and the gate answers instead of failing."""
 from pathlib import Path
 
-import support.paths  # noqa: F401
-
 from taskloop.app.asks import parks
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId

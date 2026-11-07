@@ -2,24 +2,18 @@
 contract's fields; strict `events.decode` reads back every row."""
 import contextlib
 import os
-import sys
-from pathlib import Path
 from typing import Any, get_args
 from unittest import mock
 
 import pytest
-
-from tltestkit.case import Case
-from tltestkit.tmpdir import TemporaryDirectory
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support import eventlog
 from support.who import who
 
 from taskloop.app.track import trail
 from tlkernel import events, wire
 from tlkernel.events import EventRec
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 # one call per kind, the fields the code passes (a field the writer sets itself is not here)
 CALLS = {

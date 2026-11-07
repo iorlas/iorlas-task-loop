@@ -1,13 +1,6 @@
 """The classification of a bead-branch commit (domain/reconcile/lost.py), one table row per class and per rule that decides it."""
-import sys
 from dataclasses import replace
-from pathlib import Path
 from typing import Any
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from taskloop.domain.reconcile.diff import findings
 from taskloop.domain.reconcile.facts import Observed
@@ -21,6 +14,7 @@ from taskloop.domain.reconcile.lost import (
     UNKNOWN_STATE,
     BranchCommit,
 )
+from tltestkit.case import Case
 
 BASE = BranchCommit(branch="task/t-1", bead="t-1", sha="abc", time=100, subject="work", base="main")
 

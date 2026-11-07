@@ -7,7 +7,6 @@ import time
 from unittest import mock
 
 import pytest
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import slots as sl
 from support import tlbd
 from support.fakes import as_bead

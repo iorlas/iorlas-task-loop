@@ -1,16 +1,9 @@
 """Best-effort run operations leave tracebacks when they fail instead of hiding missing evidence."""
-import sys
-from pathlib import Path
 from unittest import mock
 
 from taskloop.adapters import closes, ident
-from tlkernel import childenv
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
-
 from taskloop.app.asks.closing import ClosingTrust
+from tlkernel import childenv
 from tlkernel import runoutcome as oc
 from tlkernel.enums import Outcome
 from tlkernel.ids import BeadId
@@ -18,6 +11,7 @@ from tlkernel.kinds import Kind
 from tlkernel.run import RunState
 from tlpipeline.api import Decide, Journal, Reflector, ReleaseSlot, Reload
 from tlpipeline.testing import FakeLandCleanup, FakeReexecs, FakeTrail
+from tltestkit.case import Case
 
 
 class FailureLogging(Case):

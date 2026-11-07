@@ -47,3 +47,24 @@ def test_standard_library_own_pytest_and_normalized_third_party_imports_pass(tmp
         "import os.path, own.api, pytest, some_library\nfrom dev_library import helper\n", encoding="utf-8",
     )
     assert problems(tmp_path) == []
+
+
+@pytest.mark.parametrize("source", [
+    "import gate, kernel, pytest, msgspec, os\n",
+    "def lazy():\n    import gate\n",
+    "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    import kernel\n",
+])
+def test_package_pure_integration_tests_must_move_to_the_member(tmp_path, source):
+    member(tmp_path, "kernel", "tlkernel", "kernel")
+    member(tmp_path, "gate", "tlgate", "gate", ["tlkernel"], ["msgspec"])
+    tests = tmp_path / "tests" / "checks"
+    tests.mkdir(parents=True)
+    path = tests / "test_pure.py"
+    path.write_text(source, encoding="utf-8")
+    (tests / "conftest.py").write_text("import gate\n", encoding="utf-8")
+    (tests / "__init__.py").write_text("", encoding="utf-8")
+    assert problems(tmp_path) == [
+        "tests/checks/test_pure.py: imports only the gate package; move it to packages/gate/tests",
+    ]
+    path.write_text(source + "\nimport taskloop\n", encoding="utf-8")
+    assert problems(tmp_path) == []

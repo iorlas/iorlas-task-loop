@@ -1,7 +1,6 @@
 """One durable bead projection: replacement, revisions, health and faithful dashboard rows."""
 
 import pytest
-import support.paths  # noqa: F401
 
 from taskloop_dash.readers.beads import row_of
 from tlkernel import beadrows, factorydb

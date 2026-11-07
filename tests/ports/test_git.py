@@ -1,8 +1,6 @@
 """adapters/git.py: the shared Git contract on the gitsim (logic: no process), plus the classifier of git's words."""
 import contextlib
 
-import support.paths  # noqa: F401
-
 # isort: split
 from support import gitsim
 

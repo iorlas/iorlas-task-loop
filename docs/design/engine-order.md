@@ -43,7 +43,7 @@ Layer = 1 + the highest layer among the parts a part uses (construction or runti
 | 0 | `records` | `Records` (`run/records.py`) | - | - | 43 |
 | 0 | `reload` | `Reload` (`run/reload.py`) | - | - | 21 |
 | 0 | `requests` | `OwnerRequests` (`run/requests.py`) | - | - | 8 |
-| 0 | `restart` | `Restart` (`land/restart.py`) | - | - | 19 |
+| 0 | `restart` | `Restart` (`land/record.py`) | - | - | 19 |
 | 0 | `stage_checks` | `StageChecks` (`run/stage_checks.py`) | - | - | 6 |
 | 0 | `stuck` | `StuckTick` (`run/stuck.py`) | - | - | 3 |
 | 0 | `waits` | `Waits` (`run/waits.py`) | - | - | 12 |
@@ -64,7 +64,7 @@ Layer = 1 + the highest layer among the parts a part uses (construction or runti
 | 2 | `owner_look` | `OwnerLook` (`look/owner_look.py`) | - | cases, pictures, waits | 13 |
 | 2 | `planner` | `Planner` (`plan/planner.py`) | - | ask_flow, briefs, checkout, routing | 32 |
 | 3 | `resume` | `Resume` (`run/resume.py`) | - | cases, planner | 27 |
-| 3 | `salvage` | `Salvage` (`land/salvage.py`) | rebase | fixer | 9 |
+| 3 | `salvage` | `Salvage` (`land/record.py`) | rebase | fixer | 9 |
 | 3 | `settles` | `Settles` (`review/settles.py`) | - | cases, checkout, judge | 10 |
 | 3 | `worker` | `WorkerCall` (`run/worker_call.py`) | records | bead_env, delegation, hand, waits | 34 |
 | 4 | `closer` | `Closer` (`run/closer.py`) | worker | ask_flow, records | 30 |

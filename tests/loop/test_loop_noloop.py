@@ -2,8 +2,6 @@
 import io
 from contextlib import redirect_stdout
 
-import support.paths  # noqa: F401
-
 from loop.test_loop import LoopBase
 
 

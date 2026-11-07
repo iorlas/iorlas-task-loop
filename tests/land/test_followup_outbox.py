@@ -11,15 +11,14 @@ from taskloop.adapters import beadtools
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.fakegit import FakeGit
 from support.memstores import fake_stores
 
 from taskloop.adapters.bd import BdRun, BdStore
 from taskloop.app.land.closing import LandFollowUps
-from taskloop.app.land.followups import file_follow_ups
 from taskloop.app.land.host import LandState
+from taskloop.app.land.record import file_follow_ups
 from taskloop.app.look.state import LookState
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.state import StateAttrs, carries_state

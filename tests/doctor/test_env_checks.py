@@ -3,7 +3,6 @@ import stat
 from pathlib import Path
 
 import pytest
-import support.paths  # noqa: F401
 
 from taskloop.app.doctor import env_checks as ec
 from tlkernel.beadsport import BdError, BdFailure

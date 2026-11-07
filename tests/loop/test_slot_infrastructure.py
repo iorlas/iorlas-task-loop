@@ -1,11 +1,7 @@
 """Infrastructure cannot burn a bead or quarantine a slot before recovery has been attempted."""
 
-import sys
-from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from slots.test_slot_pool import ME, Rig
 from support.fake_loop_env import slot_loop_env
 

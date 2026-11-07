@@ -1,14 +1,9 @@
 """ROUNDRESULT: a write, check or review round returns what it came to (a RoundResult); StageLoop.play puts it on the engine once, also when
 the round raises (the closer still reads the run and why), also in the standalone step runner (run_round_step)."""
-import sys
-from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 from taskloop.app.write.rounds import run_round_step
 from taskloop.app.write.stage_loop import StageLoop

@@ -9,7 +9,6 @@ from typing import Any, ClassVar
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from taskloop.domain.review import findings as fnd
 from taskloop.domain.work.ledger import Ledger

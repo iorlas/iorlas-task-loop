@@ -1,11 +1,6 @@
 """ROOTLINT (tl-e5t0.30): what the root ratchet counts in one file (the change-against-origin/main run is in real/test_ratchets_change.py),
 and the list of offenders it is judged against."""
 import ast
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from rules import root_ratchet
 

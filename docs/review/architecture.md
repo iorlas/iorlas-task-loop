@@ -117,9 +117,9 @@ Paths in this table are under `src/taskloop/` unless explicitly qualified. These
 
 ### F10 — P2: follow-up creation and its receipt are not one recoverable operation
 
-**Evidence:** `src/taskloop/app/land/followups.py:60` creates a bead, then appends its key and saves the checkpoint at lines 62–64. Ordinary follow-ups are deduplicated only against `e.filed` by `src/taskloop/domain/review/followups.py:62`; the external lookup at `app/land/followups.py:43`–49 is limited to unchecked-item follow-ups and matches a title prefix. `NewBead` carries no idempotency key (`packages/kernel/src/tlkernel/ports.py:58`–68). The enclosing FileNotes effect is replayable from the checkpoint (`src/taskloop/app/run/closer.py:116`, `:166`).
+**Evidence:** `src/taskloop/app/land/record.py:60` creates a bead, then appends its key and saves the checkpoint at lines 62–64. Ordinary follow-ups are deduplicated only against `e.filed` by `src/taskloop/domain/review/followups.py:62`; the external lookup at `app/land/record.py:43`–49 is limited to unchecked-item follow-ups and matches a title prefix. `NewBead` carries no idempotency key (`packages/kernel/src/tlkernel/ports.py:58`–68). The enclosing FileNotes effect is replayable from the checkpoint (`src/taskloop/app/run/closer.py:116`, `:166`).
 
-**Failure:** A process killed after successful bd creation but before checkpoint persistence replays creation on restart. It can create duplicate follow-up beads and exceed the intended cap across replays. The docstring's “a kill after a create loses no key” (`app/land/followups.py:53`) is false in precisely that gap. Multiline lint parsing repairs do not establish durable delivery.
+**Failure:** A process killed after successful bd creation but before checkpoint persistence replays creation on restart. It can create duplicate follow-up beads and exceed the intended cap across replays. The docstring's “a kill after a create loses no key” (`app/land/record.py:53`) is false in precisely that gap. Multiline lint parsing repairs do not establish durable delivery.
 
 **Fix:** Persist a stable follow-up intent/key before dispatch and use that key for tracker-side idempotent creation or exact lookup/reconciliation after an ambiguous result. Store the created bead ID with the key; do not infer identity from a title prefix.
 

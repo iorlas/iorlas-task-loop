@@ -1,18 +1,12 @@
 """Ready umbrellas must wait even when their children are absent from bd ready."""
-import sys
-from pathlib import Path
 from unittest import mock
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from taskloop.app.loop.queue import QueueRule, rank_ready
 from tlkernel.bead import BdError, Bead
 from tlkernel.beadsport import BdFailure, BeadQuery
 from tlkernel.config import EngineConfig
 from tlkernel.ids import BeadId
+from tltestkit.case import Case
 
 
 def bead(name, status="open", parent="", issue_type="task"):

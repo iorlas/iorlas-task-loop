@@ -7,8 +7,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
-import support.paths  # noqa: F401
-
 from slots.test_slot_pool import Rig
 from taskloop.app.slots import aside, watchdog
 from taskloop.app.slots.env import stamp

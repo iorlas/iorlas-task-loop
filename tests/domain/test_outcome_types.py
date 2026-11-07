@@ -8,7 +8,6 @@ from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from taskloop.app.loop import verdict as vd

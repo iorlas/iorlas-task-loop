@@ -11,7 +11,7 @@ from taskloop.adapters.git import RealGit
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.fixer import Fixer
 from taskloop.app.land.lander import Lander
-from taskloop.app.land.outbound import pin_head
+from taskloop.app.land.push import pin_head
 from taskloop.app.run import engine
 from tlkernel.checks import CheckRun
 from tlkernel.kinds import Kind
