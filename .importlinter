@@ -291,3 +291,19 @@ ignore_imports =
     taskloop.app.run.preflight -> taskloop.app.wire.closeguard
     taskloop.app.run.running -> taskloop.app.wire.slots
     taskloop.app.run.stages -> taskloop.app.wire.closeguard
+
+[importlinter:contract:converted-stages-take-no-host]
+name = A converted stage imports no host (not the Engine, run, wire or launch)
+type = forbidden
+source_modules =
+    taskloop.app.artifacts
+    taskloop.app.checks
+    taskloop.app.doctor
+    taskloop.app.loop
+    taskloop.app.reconcile
+    taskloop.app.release
+forbidden_modules =
+    taskloop.app.run
+    taskloop.app.wire
+    taskloop.app.launch
+allow_indirect_imports = True

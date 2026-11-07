@@ -24,7 +24,8 @@ class Judge:
     def __init__(self, host: LookHost) -> None:
         self.e = host
 
-    def judge_shots(self, names: list[str], rnd: int, summary: str, last: bool = True) -> tuple[list[Defect], str]:
+    def judge_shots(self, names: list[str], rnd: int, summary: str, last: bool = True,
+                    family: str | None = None) -> tuple[list[Defect], str]:
         """The look judge's findings: a fresh call from another family, in a folder with only the shrunk pictures, the
         references and the 'before' pictures. -> (defects [{item, where, why}], its summary)."""
         e = self.e
@@ -42,7 +43,7 @@ class Judge:
         prompt = looks.judge_prompt(e.cases.cases_of("look-objective") if last else [], names, befores, summary)
         try:
             d = e.ai("look", f"round {rnd}: {plural(len(names), 'picture')}", prompt,
-                        writer_family=e.writer_family, cwd=str(base), round=rnd, at=(e.at_stage, rnd, 0)).data
+                        writer_family=e.writer_family if family is None else family, cwd=str(base), round=rnd, at=(e.at_stage, rnd, 0)).data
         except e.Blocked as b:
             return self.unjudged(b, rnd)
         note = "[same family as the writer: no other lane was free] " if e.last_flag == "same_family" else ""
@@ -62,10 +63,11 @@ class Judge:
         e.look.unjudged[f"look judge, round {rnd}"] = "no lane: " + b.why[:160]
         return [], "(not judged: no lane for the look judge)"
 
-    def look_step(self, st: StageData, w: Any, name: str, last: bool = True, *, checks: bool = True) -> str:
-        """After a visual write: the cheap checks, the shots the writer asked for, the look judge. -> the feedback that sends the
-        writer back with the defects (text and picture paths), or "" to go on to the full checks. At most engine.look_rounds
-        render rounds per stage; a defect that comes back is a leftover with the pictures, not another write."""
+    def look_step(self, st: StageData, w: Any, name: str, last: bool = True, *, checks: bool = True,
+                  family: str | None = None) -> str:
+        """After a visual write: the cheap checks, the shots the writer asked for, the look judge (`family`: the writer's, not yet handed
+        on). -> the feedback that sends the writer back with the defects (text and picture paths), or "" to go on to the full checks.
+        At most engine.look_rounds render rounds per stage; a defect that comes back is a leftover with the pictures, not another write."""
         e = self.e
         if not e.pictures.look_ready(st) or e.look.done >= e.cfg.look_rounds or e.dry:
             return ""
@@ -80,7 +82,7 @@ class Judge:
         defects = [Defect(item="render", why=msg) for msg in errs]
         summary = ""
         if names:
-            found, summary = self.judge_shots(names, rnd, w.get("summary", ""), last)
+            found, summary = self.judge_shots(names, rnd, w.get("summary", ""), last, family)
             defects += found
         if summary:
             e.look.notes = [summary.strip()]
