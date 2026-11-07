@@ -1,8 +1,8 @@
-"""The short notes a worker is sent when its step goes on after a stop, and the gaps between network probes."""
+"""The short notes a worker is sent when its step goes on after a stop, and the gaps between probes of a git push retry."""
 
 from typing import Final
 
-NET_BACKOFF: Final = (5, 10, 20, 40, 60, 120)  # seconds between the probes of a step that waits for the network
+NET_BACKOFF: Final = (5, 10, 20, 40, 60, 120)  # seconds between the lander's git push network probes
 FRESH_WRITER_TEXT: Final = (
     "\nYou take over from an earlier writer of this task, on another model. Its work is in this "
     "tree, committed on this branch or not: read `git status` and the diff from main first, then go on "
