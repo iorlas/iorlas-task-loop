@@ -1,13 +1,8 @@
-"""The lane decision: what to do next after one delegate call stopped. One pure function over the stop's facts.
+"""Engine decisions after delegate has exhausted its worker retries and write reroute.
 
-`decide(stop, ctx, cfg, plan)` has no sleep, no git, no bd and no IO. The key is (scope, permanence, retry_kind), A3's facts;
-`stop.reason` is wording; the one place it is read is `worker_failed` (a timeout or a -15 exit gets another lane first). The output is one
-of five Actions (61-integration sec 5.5): Retry | NewThread | Reroute | Yield | Fail. A Yield or Fail names the
-outcome Kind by its name (the app maps it); every retry count is a row of `retry.PLAN`.
-
-A network stop charges nothing: not `attempt`, not `crashes`, no ask, replan or storm
-counter, and it never marks a lane out (the delegate holds lane truth).
-Design: 60-design-A1 sec 2.2, 60-design-A3 sec 2.2, 61-integration sec 5.5.
+The pure policy maps stop facts to NewThread, Reroute, Yield or Fail. Only resumed
+calls retain the engine's fresh-prompt recovery; delegate crashes fail immediately.
+Network stops pause without charging a retry or marking a lane out.
 """
 
 from collections.abc import Callable, Mapping
@@ -94,19 +89,10 @@ class Ctx:
     now: float
     resumed: bool = False  # this call resumed a vendor thread
     attempt: int = 0
-    crashes: int = 0
     denied_retried: bool = False
     secret_fp: bool = False  # the denial was `secrets` on a heredoc body that names .env (denials.secret_false_positive)
     node: str = ""
     resume_refused: int = 0  # resumed calls the vendor refused, each answered with one new thread
-
-
-@dataclass(frozen=True)
-class Retry:
-    not_before: float  # epoch; the executor sleeps until then
-    resume: str = ""  # vendor ref to resume ("" = a new thread)
-    charges: str = "attempt"  # the Ctx counter this action raises
-    plan: str = ""  # the RetryPlan row this retry belongs to
 
 
 @dataclass(frozen=True)
@@ -143,7 +129,7 @@ class Fail:
     plan: str = ""
 
 
-Action = Retry | NewThread | Reroute | Yield | Fail
+Action = NewThread | Reroute | Yield | Fail
 Knobs = Mapping[str, float]
 
 
@@ -168,12 +154,10 @@ def _machine_predicted(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Act
 
 
 def _machine_none(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
-    """A crash of delegate itself: again as a fresh call after each rest, then a fault. Never an ask."""
+    """A delegate crash fails immediately; a signal still pauses the run."""
     if stop.signal:
         return _yield("PAUSE_KILLED", stop)
-    if plan.left("crash", ctx.crashes):
-        return Retry(ctx.now + plan.rest("crash", ctx.crashes), "", "crashes", "crash")
-    return _fail("FAULT_CRASHED", stop, "crash")
+    return _fail("FAULT_CRASHED", stop)
 
 
 def _machine_owner(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
@@ -204,14 +188,11 @@ def _bead_owner(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
 
 
 def _bead_none(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
-    """worker_failed, schema_invalid, timeout: once more, then a fault. A write that timed out or whose lane exited -15 moves to
-    another lane for that retry and, when it is spent, raises one ask (never an unexplained end)."""
+    """Delegate exhausted recovery. Only resumed calls need a fresh engine prompt first."""
     hurt = stop.timed_out or stop.exit_code == -15
-    if plan.left("worker_failed", ctx.attempt):
+    if ctx.resumed and plan.left("worker_failed", ctx.attempt):
         if hurt and ctx.node == "write":
             return Reroute(_excluded(stop), "attempt", "worker_failed")
-        if stop.resumable and stop.ref:
-            return Retry(ctx.now, stop.ref, "attempt", "worker_failed")
         return NewThread("", "attempt", "worker_failed")
     if hurt and ctx.node == "write" and plan.row("worker_failed").then == "ask":
         return Fail("ASK_STUCK", _say(stop), plan="worker_failed")

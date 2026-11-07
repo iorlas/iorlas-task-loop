@@ -1,4 +1,4 @@
-"""Invalid reviews retry through delegate, then leave an unavailable review while the stage continues."""
+"""A terminal invalid review leaves an unavailable review while the stage continues."""
 from unittest import mock
 
 from support import fake_route
@@ -31,28 +31,27 @@ class ReviewInvalid(EngineTest):
         with self.store.stub(show=BEAD):
             self.eng = make_engine(self.wt, script=script, store=self.store, clock=clock, cfg={"reflect": False})
             rc = self.eng.run()
-        assert clock.now() - started == 120
-        assert script.nodes.count(node) == 2
+        assert clock.now() - started == 60
+        assert script.nodes.count(node) == 1
         return rc, script
 
     def review_ends(self):
         return [r for r in records(self.eng, "step_end") if r["step"] == "review"]
 
-    def test_invalid_then_valid_retries_delegate_and_accepts_the_valid_review(self):
+    def test_invalid_review_is_terminal_even_if_a_valid_review_would_follow(self):
         rc, script = self.go([stop("schema_invalid"), CLEAN])
         assert rc == 0
-        assert script.nodes == ["plan", "write", "review", "review"]
-        assert [r["outcome"] for r in self.review_ends()] == ["clean"]
-        assert not self.eng.write.lane_notes
+        assert script.nodes == ["plan", "write", "review"]
+        assert [r["outcome"] for r in self.review_ends()] == ["unavailable"]
+        assert len(self.eng.write.lane_notes) == 1
         assert self.eng.stats["rounds"] == 0
-        retries = records(self.eng, "retry_decision")
-        assert [(r["action"], r["reason"]) for r in retries] == [("new_thread", "schema_invalid")]
-        assert script.calls[-1][1] is None
+        decisions = records(self.eng, "retry_decision")
+        assert [(r["action"], r["reason"]) for r in decisions] == [("fault", "schema_invalid")]
 
-    def test_invalid_every_time_continues_with_unavailable_in_outcome_and_dashboard_data(self):
-        rc, script = self.go([stop("schema_invalid"), stop("schema_invalid")])
+    def test_invalid_review_continues_with_unavailable_in_outcome_and_dashboard_data(self):
+        rc, script = self.go([stop("schema_invalid")])
         assert rc == 0
-        assert script.nodes == ["plan", "write", "review", "review"]
+        assert script.nodes == ["plan", "write", "review"]
         assert self.eng.stats["rounds"] == 0
         ends = self.review_ends()
         assert [r["outcome"] for r in ends] == ["unavailable"]
@@ -68,14 +67,14 @@ class ReviewInvalid(EngineTest):
         assert any(r["cause"] == "review_unavailable" and r["to"] == "next" for r in transitions)
 
     def test_other_review_failures_still_fail_the_run(self):
-        rc, _ = self.go([stop("worker_failed"), stop("worker_failed")])
+        rc, _ = self.go([stop("worker_failed")])
         assert rc == 2
         assert self.eng.kind == Kind.FAULT_INFRA
         assert not self.eng.write.lane_notes
         assert not any(r["outcome"] == "unavailable" for r in self.review_ends())
 
     def test_invalid_writer_still_fails_the_run(self):
-        rc, _ = self.go([stop("schema_invalid"), stop("schema_invalid")], node="write")
+        rc, _ = self.go([stop("schema_invalid")], node="write")
         assert rc == 2
         assert self.eng.kind == Kind.FAULT_INFRA
         assert not self.eng.write.lane_notes
