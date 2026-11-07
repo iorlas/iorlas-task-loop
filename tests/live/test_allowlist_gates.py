@@ -14,10 +14,10 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from support.checked import run_checked
 from support.tlmain import tl_main
 
 from tltestkit.case import Case
+from tltestkit.checked import run_checked
 from tltestkit.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]

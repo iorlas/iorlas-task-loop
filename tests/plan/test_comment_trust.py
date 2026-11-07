@@ -1,6 +1,6 @@
 """Only bd's configured owner author contributes instructions and requirement snapshots."""
 
-from taskloop.domain.plan import brief
+from tlkernel import planbrief as brief
 from tlkernel.bead import Bead, Comment
 from tlkernel.config import load
 from tlkernel.ids import BeadId

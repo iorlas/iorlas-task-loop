@@ -4,12 +4,12 @@ import subprocess
 from pathlib import Path
 
 from support.argv_checks import ArgvChecks
-from support.checked import run_checked
 
 from taskloop.adapters.git import RealGit
 from tlkernel.checksport import CheckSpec
 from tlkernel.env import Env
 from tltestkit.case import Case
+from tltestkit.checked import run_checked
 from tltestkit.tmpdir import TemporaryDirectory
 
 

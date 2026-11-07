@@ -22,6 +22,8 @@ from delegate.contracts import status as status_wire
 from delegate.contracts.codec import record
 from delegate.contracts.history import RunRow
 from delegate.contracts.json_types import Json, as_str
+from delegate.contracts.routing import Routing
+from delegate.contracts.state import StateDoc
 from delegate.contracts.status import Status
 from delegate.contracts.wire import RunRequest, RunResult, ToolServer, WorkerEnd
 
@@ -69,11 +71,22 @@ def run(request: RunRequest, started: Callable[[Handle], None] | None = None) ->
     before = {k: os.environ.get(k) for k in wanted}
     try:
         os.environ.update(wanted)
-        planned = threads.plan(request, env.load_state()) if request.thread else None
+        state, routing = env.load_state(), env.typed_routing(env.load_routing())
+        if request.prefer or request.writer_exec or request.reviewer_other_family:
+            request = _product_request(request, state, routing)
+            if request.role == "worker" and request.writer_exec and (
+                request.only_family != ["openai"] or not request.writer_exec_allow
+            ):
+                return codec.from_json(RunResult, answer.result(
+                    "bad_request", call_id=request.call_id,
+                    say=("writer_exec needs the writer pinned to the Codex family and a writer_exec_allow grant "
+                         "in delegate's routing settings"),
+                ))
+        planned = threads.plan(request, state, routing) if request.thread else None
         res = _run(request, started, contract, planned)
         if planned and planned.resume and threads.needs_fresh(res):
             env.update_state(lambda state: state.threads.pop(planned.key, None))
-            fresh = threads.plan(replace(request, thread="", resume=None), env.load_state())
+            fresh = threads.plan(replace(request, thread="", resume=None), env.load_state(), env.typed_routing(env.load_routing()))
             takeover = request.role == "worker"
             fresh = replace(
                 fresh, key=planned.key, brief_text=fresh.brief_text + (threads.TAKEOVER_NOTE if takeover else ""), takeover=takeover
@@ -90,6 +103,22 @@ def run(request: RunRequest, started: Callable[[Handle], None] | None = None) ->
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+
+
+def _product_request(request: RunRequest, state: StateDoc, routing: Routing) -> RunRequest:
+    """Translate product choices using delegate-owned routing policy and writer identity."""
+    if request.role == "worker":
+        settings = routing.settings
+        request = replace(
+            request, only_family=[request.prefer] if request.prefer else list(settings.writer_family),
+            read_roots=list(settings.writer_read_roots),
+            writer_exec_allow=[list(argv) for argv in settings.writer_exec_allow] if request.writer_exec else request.writer_exec_allow,
+        )
+    if request.reviewer_other_family and not request.authored_by:
+        writer = state.threads.get(f"{request.task}/writer")
+        lane = routing.lanes.get(writer.lane or "") if writer else None
+        request = replace(request, authored_by=lane.family if lane else None)
+    return request
 
 
 def _run(

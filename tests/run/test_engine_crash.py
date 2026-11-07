@@ -10,9 +10,9 @@ import support.paths  # noqa: F401
 from support.checkpoints import read_ck
 from support.engine_case import EngineTest
 
-from taskloop.domain import effects
-from taskloop.domain import outcome as oc
-from taskloop.domain.lanes import pauses
+from tlkernel import closeeffects as effects
+from tlkernel import lanepauses as pauses
+from tlkernel import runoutcome as oc
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
 from tlkernel.parks import ParkStore

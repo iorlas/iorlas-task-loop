@@ -238,7 +238,7 @@ Beads (children of tl-e5t0.39): R1 tl-e5t0.39.1, R2 .2, R3 .3, R4a .4, R4b .5, R
 | layer | modules and who imports them (pipeline files) | settle by |
 |---|---|---|
 | `taskloop.stores` (11 files) | `stores.runlog.RunLog` (7: closing_branch, closing_host, closing_record, stage_run, standalone_roles, steps, waits), `stores.bundle.Stores` (5), `tlkernel.storeapi` `Log` / `Doc` / `AmendDoc` (3; now in kernel), `stores.real.real_stores` (stage_run) | **R6a**: the pipeline owns the Protocols it needs (`RunLog`, `Stores` slices) in `pipeline/ports.py` or the kernel record modules; `stores` implements them; `stage_run` receives `real_stores` from the binder |
-| `taskloop.adapters` (13 files) | `beadtools` (5), `ident` (3), `childenv` (2), `repourl.repo_url` (2), `closes`, `deadline` (2), `halt.RUN_SLOT`, `agent.last_event_t`, `looks.Methods` (run_roles) | **R6b**: pure helpers (`repourl`, `deadline`, `ident` reads) move to the kernel or become constructor values; the rest are ports bound by the root (`BeadTools`, `Clock/Deadline`, `ChildEnv`, `StuckClock`) |
+| `taskloop.adapters` | R6b done (#542 and this PR): app/pipeline imports no taskloop.adapters |
 | `taskloop.domain` (24 files) | `domain.outcome` (14 files: the run's outcome vocabulary), `domain.asks.spec/specs` (6), `domain.effects` (4), `domain.lanes` (`caps`, `pauses`, `pin`, `liveness`, `pause_reasons.Producer`), `domain.plan.*` (`brief`, `matchers`), `domain.followups`, `domain.checks`, `domain.interpret`, `domain.stuck`, `domain.work`, `domain.review.kinds`, `domain.land.matchers`, `domain.lifecycle`, `domain.matchers.clip` | **R6c**: the run-end vocabulary (`outcome`, `effects`, `asks.spec`, `pause_reasons`) is shared with stages and the dashboard, so it goes to the kernel by the precedent of WORKKERNEL (tl-e5t0.70, `domain/work`); pipeline-only rules (`stuck`, `interpret`, `lifecycle`) move into the package; the plan/review/land matchers become values passed in |
 
 **R6a done (#537 and this PR): app/pipeline imports no taskloop.stores**
@@ -260,11 +260,11 @@ Pipeline files import 22 `taskloop.domain` modules (section 13). Consumers outsi
 
 | cluster | modules (consumers outside pipeline) | destination | PR |
 |---|---|---|---|
-| pipeline-only | `interpret` (2), `stuck` (2) | `app/pipeline` (their only deps are `tlkernel`) | **R6c1** |
+| pipeline-only | stuck only; interpret is also imported by app/land/sync.py, so it is not pipeline-only and goes with effects in R6c5 | `app/pipeline` (their only deps are `tlkernel`) | **R6c1** |
 | small pure helpers | `lanes.caps` (5), `lanes.liveness` (4), `followups` (5), `work.switch` (4), `checks.trim` (3) + `checks.matchers` (18), `review.kinds` (3) | kernel (no `taskloop` deps beyond each other) | **R6c2** |
-| the plan/land matchers | `plan.brief` (7), `plan.matchers` (5, needs `domain.checks`), `land.matchers` (9) | kernel, or the pipeline receives the three values it uses (`COMMENTS_ONLY`, `AcceptanceText`, `without_prefix`) as constructor arguments if a move drags more than two further modules | **R6c3** |
+| the plan/land matchers | `plan.brief` (7), `plan.matchers` (5, needs `domain.checks`), `land.matchers` (9) | kernel, or the pipeline receives the three values it uses (`COMMENTS_ONLY`, `AcceptanceText`, `without_prefix`) as constructor arguments if a move drags more than two further modules | **R6c3** — done: plan.brief (planbrief), land.matchers (landmatchers) and AcceptanceText (acceptancetext) moved to the kernel; plan.matchers stays in the domain (gate_only_criteria needs domain.checks.lint) |
 | the run-end vocabulary | `outcome` (27), `lifecycle.matchers` (11), `asks.spec` (19), `asks.lint`, `asks.text`, `asks.specs` (27) | kernel (the WORKKERNEL precedent, tl-e5t0.70); `outcome` needs `asks.spec`, `lifecycle` and `tlkernel.reconcile`, so they move together | **R6c4** |
-| pause and effect words | `effects` (9), `lanes.pauses` (13), `lanes.pause_reasons` (11), `beads.park` | kernel; B3-5 (#554, merged) edited `pauses` and `pause_reasons`, so this is free to start | **R6c5** |
+| pause and effect words | `effects` (9), `lanes.pauses` (13), `lanes.pause_reasons` (11), `beads.park` | kernel | **R6c5** — done: pause and effect words moved to the kernel (closeeffects, effectinterpret, lanepauses, pausereasons, beadpark) |
 
 Order: R6c1 and R6c2 first (small, independent); R6c3 after R6c2 (`plan.matchers` needs `checks`); R6c4 and R6c5 are the large sweeps (27 and 13 consumers) and run one at a time, each as one PR with `Layout-allow: move` and a closure line. Each PR ends with `grep taskloop.domain` of its modules empty in `app/pipeline`. R6c (`tl-e5t0.39.14`) closes when the last of them lands; R6 (`.11`) follows.
 

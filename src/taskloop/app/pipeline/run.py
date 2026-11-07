@@ -1,13 +1,16 @@
 """The run body over local stage capabilities and shared run state."""
 from collections.abc import Callable
 
-from tlkernel import fence
+from tlkernel import askspecs, fence
+from tlkernel import runoutcome as oc
+from tlkernel.acceptancetext import AcceptanceText
 from tlkernel.askenums import AskClass
 from tlkernel.bead import Bead
 from tlkernel.delegateport import Refusal
 from tlkernel.enums import Step
 from tlkernel.kinds import Kind
 from tlkernel.plancheck import PlanData, RoundState
+from tlkernel.reviewkinds import UNCHECKED_KINDS
 
 from taskloop.app.pipeline.adapter_ports import PeekBead, Version
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
@@ -15,11 +18,6 @@ from taskloop.app.pipeline.crash import CrashHost, parked_crash
 from taskloop.app.pipeline.lifecycle import Ended, LeaseLike
 from taskloop.app.pipeline.ports import HeadHistory
 from taskloop.app.pipeline.run_roles import Delegating, GitMoves, Leasing, RunRecords, RunValues, Stages
-from taskloop.domain import outcome as oc
-from taskloop.domain.asks import specs as askspecs
-from taskloop.domain.lanes import pin
-from taskloop.domain.plan.matchers import AcceptanceText
-from taskloop.domain.review.kinds import UNCHECKED_KINDS
 
 
 class RunBody[T]:
@@ -72,10 +70,6 @@ class RunBody[T]:
         if not self.delegating.route:
             why = self.delegating.refusal or Refusal("not_installed")
             raise Blocked(f"failed: delegate refused the call setup ({why.kind} {why.detail})", kind=Kind.FAULT_CONTRACT_SKEW)
-        problem = pin.exec_allow_problem(self.leasing.cfg.writer_exec_allow, self.leasing.cfg.writer_family, bead.labels,
-                                         self.delegating.contract.get("contract", 0), self.delegating.contract.get("capabilities", []))
-        if problem:
-            raise Blocked(problem, kind=Kind.FAULT_CONTRACT_SKEW)
         self.records.log.note(f"workers: delegate {self.delegating.route} (contract {self.delegating.router.contract_no})")
         self.records.log.note("task-loop {}".format(self.version() or "(unknown version)"))
         self.records.tree.reset(bead)

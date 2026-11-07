@@ -15,7 +15,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 from support import homes
-from support.checked import run_checked
 from support.spawn import port_git
 from support.who import who
 
@@ -26,6 +25,7 @@ from taskloop.app.wire import brief, doctor
 from tlkernel.env import snapshot
 from tlkernel.paths import ConfigDir
 from tlkernel.rowstores import ReposStore
+from tltestkit.checked import run_checked
 from tltestkit.repos import write_repos
 
 ROOT = Path(__file__).resolve().parents[3]

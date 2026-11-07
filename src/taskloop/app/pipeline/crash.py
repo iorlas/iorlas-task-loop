@@ -4,10 +4,9 @@ from hashlib import sha1
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel import runoutcome as oc
 from tlkernel.kinds import Kind
-
-from taskloop.domain import outcome as oc
-from taskloop.domain.lanes.pause_reasons import Producer
+from tlkernel.pausereasons import Producer
 
 
 class CrashLog(Protocol):

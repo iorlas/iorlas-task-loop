@@ -16,6 +16,7 @@ from support.asked import ans
 from support.builders import make_engine
 from support.engine_case import engine
 
+import tltestkit.shellkit
 from taskloop.app.review import verify_prompt as vp
 from taskloop.domain.prompts import common as cp
 from tlkernel import answers
@@ -277,7 +278,7 @@ class NoBlock(T.LandReviewBase):
         assert u2[3].count("## t-2: Second") == 1
         assert u2[3].count("## t-1: First") == 1
 
-    @T.NO_FCNTL
+    @tltestkit.shellkit.NO_FCNTL
     def test_three_beads_of_one_epic_landing_together_file_one_review_bead_with_all_sections(self):
         store, lock = {}, threading.Lock()
         epic = {"id": "t-0", "issue_type": "epic"}

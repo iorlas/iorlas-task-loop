@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import engine_case as T
 
-from taskloop.domain.followups import FOLLOW_UP_CAP, FollowKey
+from tlkernel.followkeys import FOLLOW_UP_CAP, FollowKey
 from tltestkit.plans import CLEAN, PLAN, WRITE, finding, review
 
 

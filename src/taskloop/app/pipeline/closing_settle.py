@@ -3,14 +3,14 @@ import time
 from typing import Protocol, assert_never
 
 from tlkernel import fence
+from tlkernel import runoutcome as oc
 from tlkernel.beadsport import BeadPatch, Beads
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Infra, Kind, Owner, Task
+from tlkernel.landmatchers import without_prefix
 
-from taskloop.adapters import beadtools
+from taskloop.app.pipeline.adapter_ports import Attempt, PeekBead
 from taskloop.app.pipeline.ports import BeadClosing, ParkBook
-from taskloop.domain import outcome as oc
-from taskloop.domain.land.matchers import without_prefix
 
 
 class SettleConfig(Protocol):
@@ -40,8 +40,9 @@ class SettleHost(Protocol):
 
 
 class Settle:
-    def __init__(self, host: SettleHost, beads: BeadClosing, parks: ParkBook) -> None:
-        self.host = host
+    def __init__(self, context: SettleHost, beads: BeadClosing, parks: ParkBook, peek: PeekBead, attempt: Attempt) -> None:
+        self.host = context
+        self.peek, self.attempt = peek, attempt
         self.beads, self.parks = beads, parks
 
     def run(self, done: oc.RunOutcome, stats: str) -> None:
@@ -61,7 +62,7 @@ class Settle:
             case fault:
                 assert_never(fault)
         # The next run is judged against the text this run ended on (tl-7y6.7.3).
-        if bead := beadtools.peek(host.store, host.bead):
+        if bead := self.peek(host.store, host.bead):
             self.parks.ended(bead, done.kind, host.run_id, time.time())
         if rc:  # a repo's bd rules can refuse (e.g. a minimum reason length): say so, never report a clean close
             host.warn(f"bd refused to {'close' if done.finished else 'block'} {host.bead} (exit {rc}): close it by hand")
@@ -75,9 +76,9 @@ class Settle:
             host.warn(f"fenced: {host.bead} left as it is: {why_not}")
             return 1
         patch = BeadPatch(status="open", assignee="", if_assignee=fence.guard(host.claim))  # (tl-kwo: it lets go; only its own claim)
-        rc = 0 if beadtools.attempt(host.store.update, host.bead, patch) else 1
+        rc = 0 if self.attempt(host.store.update, host.bead, patch) else 1
         if oc.POLICY[kind].label:
-            beadtools.attempt(host.store.add_label, host.bead, oc.POLICY[kind].label)
+            self.attempt(host.store.add_label, host.bead, oc.POLICY[kind].label)
         if host.disp and host.disp.comment:  # a comment, never Notes (tl-7y6.6.2); one per (bead, kind, fingerprint) per hour
             host.comment("Engine {}: {}".format("failed" if fault else "paused", without_prefix(why)[:400]))
         return rc

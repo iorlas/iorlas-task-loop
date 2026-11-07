@@ -27,7 +27,6 @@ from support import (  # noqa: E402
     looptest,
     tlbd,
 )
-from support.checked import run_checked  # noqa: E402
 from support.fakes import FakeBeadStore, as_comment  # noqa: E402
 from support.who import who  # noqa: E402
 
@@ -45,6 +44,7 @@ from tlkernel.ids import BeadId, RunId  # noqa: E402
 from tlkernel.landed import Landed  # noqa: E402
 from tlkernel.run import RunState  # noqa: E402
 from tlkernel.trace import RunTrace  # noqa: E402
+from tltestkit.checked import run_checked  # noqa: E402
 from tltestkit.logs import typed  # noqa: E402
 from tltestkit.runs import manifest  # noqa: E402
 
@@ -229,7 +229,7 @@ def trace(bead, outcome, start_min, end_min, why="", sha="", rounds=0, replans=0
           stderr="", kind=""):
     started, ended = T0 + start_min * MIN, T0 + end_min * MIN
     stem = run or str(RunId.new(started, hashlib.sha1(f"{bead}{started}".encode()).digest()[:10]))
-    return {"v": 3, "run": stem, "bead": bead, "repo_url": "https://example.invalid/r.git", "worktree": worktree or "", "branch": "",
+    return {"v": 4, "run": stem, "bead": bead, "repo_url": "https://example.invalid/r.git", "worktree": worktree or "", "branch": "",
             "coordinator_session": "", "started": started, "ended": ended, "outcome": outcome, "why": why, "sha": sha,
             "stats": {"rounds": rounds, "replans": replans}, "log": str(homes.config_dir() / "runs" / stem / "engine.jsonl"),
             "sessions": list(sessions), "stderr": stderr, "kind": kind or outcome if outcome in ("landed", "done") else kind}

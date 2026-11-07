@@ -35,37 +35,33 @@ class WriterFamily(Case):
             return self.run_engine(answers, **cfg)
 
     def test_every_worker_call_carries_the_pin_and_no_other_role_does(self):
-        rc, s = self.go({"plan": [COVERED], "write": [WRITE], "review": [CLEAN]}, writer_family=["openai"])
+        rc, s = self.go({"plan": [COVERED], "write": [WRITE], "review": [CLEAN]}, bead=dict(BEAD, labels=["writer-family:openai"]))
         assert rc == 0
-        by_role = {(a[3], n): flag(a, "--only-family") for a, n in zip(s.argvs, s.nodes, strict=True)}
-        assert by_role[("worker", "write")] == ["openai"]
-        assert {k: v for k, v in by_role.items() if k[0] != "worker"} == {("planner", "plan"): [], ("reviewer", "review"): []}
+        by_role = {(r.role, n): r.prefer for r, n in zip(s.requests, s.nodes, strict=True)}
+        assert by_role[("worker", "write")] == "openai"
+        assert {k: v for k, v in by_role.items() if k[0] != "worker"} == {("planner", "plan"): "", ("reviewer", "review"): ""}
 
     def test_no_pin_no_flag(self):
         rc, s = self.go({"plan": [COVERED], "write": [WRITE], "review": [CLEAN]})
         assert (rc, [flag(a, "--only-family") for a in s.argvs]) == (0, [[], [], []])
 
-    def test_a_bead_label_overrides_the_profile(self):
-        _, s = self.go({"plan": [COVERED], "write": [WRITE], "review": [CLEAN]}, bead=dict(BEAD, labels=["visual", "writer-family:xai"]),
-                       writer_family=["openai"])
-        assert [flag(a, "--only-family") for a, n in zip(s.argvs, s.nodes, strict=True) if n == "write"] == [["xai"]]
+    def test_a_bead_label_is_forwarded_as_prefer(self):
+        _, s = self.go({"plan": [COVERED], "write": [WRITE], "review": [CLEAN]}, bead=dict(BEAD, labels=["visual", "writer-family:xai"]))
+        assert [r.prefer for r, n in zip(s.requests, s.nodes, strict=True) if n == "write"] == ["xai"]
 
     def test_pinned_writer_with_review_off_still_gets_unpinned_final_review(self):
         """The worker is pinned; planner, final reviewer and reflect retain their own routing policy."""
         rc, s = self.go({"plan": [COVERED], "write": [WRITE], "review": [CLEAN], "reflect": [{"worth": False, "notes": []}]}, review="off",
-                        writer_family=["openai"], reflect=True)
-        table = [(a[3], n, flag(a, "--only-family"), flag(a, "--authored-by"), "--premium" in a)
-                 for a, n in zip(s.argvs, s.nodes, strict=True)]
+                        bead=dict(BEAD, labels=["writer-family:openai"]), reflect=True)
+        table = [(r.role, n, r.prefer) for r, n in zip(s.requests, s.nodes, strict=True)]
         assert rc == 0
         assert s.nodes == ["plan", "write", "review", "reflect"]
-        for role, node, fam, authored, premium in table:
-            assert "claude" not in fam + authored
-            assert not premium
+        for role, node, fam in table:
             if role == "worker":
-                assert (node, fam) == ("write", ["openai"])
+                assert (node, fam) == ("write", "openai")
             else:
                 assert (role, node) in {("planner", "plan"), ("reviewer", "review"), ("reviewer", "reflect")}
-                assert fam == []
+                assert fam == ""
         assert "verify" not in s.nodes
         assert not any("opus" in " ".join(a).lower() for a in s.argvs)
 
@@ -74,7 +70,7 @@ class WriterFamily(Case):
         bead = dict(BEAD, labels=["ui"])
         return self.go({"plan": [COVERED], "write": [dict(WRITE, unchecked=[gap])], "review": [dict(CLEAN, unchecked=[gap])],
                         "verify": [{"items": [verdict(1, "settled", evidence="\"x\"")]}]},
-                       bead=bead, writer_family=["openai"], **cfg)
+                       bead=bead, **cfg)
 
     def test_a_visual_bead_with_the_review_off_skips_verify_and_look_and_the_close_names_it(self):
         rc, s = self.visual_run(review="off")
@@ -96,7 +92,7 @@ class WriterFamily(Case):
 
     def test_a_pin_delegate_cannot_place_pauses_the_bead_and_says_the_reason(self):
         none = fake_route.stop_answer("no_lane", say="openai logged out")
-        rc, _ = self.go({"plan": [COVERED], "write": [none]}, writer_family=["openai"])
+        rc, _ = self.go({"plan": [COVERED], "write": [none]}, bead=dict(BEAD, labels=["writer-family:openai"]))
         assert rc == 2
         said = [c[3] for c in self.store.said("comments", "add") if "paused" in c[3]]
         assert said

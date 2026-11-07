@@ -22,6 +22,7 @@ from support.pushsim import pusher
 from support.spawn import port_git, real_spawner
 from support.who import who
 
+import tltestkit.shellkit
 from taskloop.adapters import (
     bd,
     bdcreate,
@@ -30,14 +31,14 @@ from taskloop.app.asks import admission
 from taskloop.app.run import running as wrunning
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.wire import asks as wasks
-from taskloop.domain.checks import matchers
 from taskloop.domain.checks.cmd import matchers as sh_matchers
-from taskloop.domain.land.matchers import _TRANSIENT as TRANSIENT_PUSH
+from tlkernel import checkmatchers as matchers
 from tlkernel import wire
 from tlkernel.ask import Ask
 from tlkernel.env import snapshot
 from tlkernel.gitfacts import GitOutcome
 from tlkernel.ids import BeadId
+from tlkernel.landmatchers import _TRANSIENT as TRANSIENT_PUSH
 from tltestkit import fake_route
 from tltestkit.checks import typed
 from tltestkit.plans import CLEAN, FALSE, HAS_F, PLAN, WRITE
@@ -49,12 +50,12 @@ class StaleTree(StagesTest):
     def main_moves(self, name="moved.txt"):
         base = Path(self.tmp.name, "base-moves")
         if not base.exists():
-            te.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
-        te.sh("git", "pull", "-q", "origin", "main", cwd=base)
+            tltestkit.shellkit.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        tltestkit.shellkit.sh("git", "pull", "-q", "origin", "main", cwd=base)
         (base / name).write_text("main moved on\n")
-        te.sh("git", "add", "-A", cwd=base)
-        te.sh("git", "commit", "-qm", "main moves", cwd=base)
-        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+        tltestkit.shellkit.sh("git", "add", "-A", cwd=base)
+        tltestkit.shellkit.sh("git", "commit", "-qm", "main moves", cwd=base)
+        tltestkit.shellkit.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
 
     def test_a_land_logs_its_try_with_the_bases_and_whether_the_rebase_moved(self):
         self.stopped_run()
@@ -72,20 +73,20 @@ class StaleTree(StagesTest):
     def junk_and_moving_main(self):
         """The slot has Unity's untracked log (the base ignores it) and main has moved on with a new recipe file."""
         base = Path(self.tmp.name, "base-ignore")
-        te.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        tltestkit.shellkit.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
         (base / ".gitignore").write_text("client/log.txt\n")
         (base / "justfile").write_text("fmt-check-changed:\n\techo ok\n")
-        te.sh("git", "add", "-A", cwd=base)
-        te.sh("git", "commit", "-qm", "recipe and ignore", cwd=base)
-        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
-        te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "add", "-A", cwd=base)
+        tltestkit.shellkit.sh("git", "commit", "-qm", "recipe and ignore", cwd=base)
+        tltestkit.shellkit.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+        tltestkit.shellkit.sh("git", "fetch", "-q", "origin", cwd=self.wt)
         (self.wt / "client").mkdir(exist_ok=True)
         (self.wt / "client" / "log.txt").write_text("unity wrote this\n")
 
     def test_a_resume_start_rebases_even_with_a_base_ignored_file_in_the_slot(self):
         # lifesim-fld.27.12-20261024-230954: started_because resume, 75 commits behind, no rebase, the check named a recipe the tree lacked
         self.stopped_run()
-        te.sh("git", "checkout", "-q", "task/t-1", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-q", "task/t-1", cwd=self.wt)
         self.junk_and_moving_main()
         rc, _s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         assert rc == 0, self.blocked
@@ -94,19 +95,19 @@ class StaleTree(StagesTest):
 
     def test_an_answer_start_rebases_even_with_a_base_ignored_file_in_the_slot(self):
         # lifesim-6pld-20261024-224705: started_because answer, the same
-        te.sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
         (self.wt / "g.txt").write_text("earlier work\n")
-        te.sh("git", "add", "-A", cwd=self.wt)
-        te.sh("git", "commit", "-qm", "wip (t-1): blocked", cwd=self.wt)
-        te.sh("git", "checkout", "-q", "-", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "add", "-A", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "commit", "-qm", "wip (t-1): blocked", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-q", "-", cwd=self.wt)
         self.junk_and_moving_main()
-        te.sh("git", "checkout", "-q", "task/t-1", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-q", "task/t-1", cwd=self.wt)
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         assert rc == 0, self.blocked
         assert "rebased the task branch onto the latest origin/main" in self.eng.log_path.read_text()
 
     def test_a_tracked_change_in_the_slot_still_stops_the_rebase(self):
-        te.sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
         e = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
@@ -146,10 +147,10 @@ class StaleTree(StagesTest):
         assert not matchers.stale_tree(noisy)  # ...its last lines, which the engine reads, do not
 
     def test_the_checkpoint_head_follows_a_squash_and_rebase_over_the_wip_commit(self):
-        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
         (self.wt / "g.txt").write_text("work\n")
-        te.sh("git", "add", "-A", cwd=self.wt)
-        te.sh("git", "commit", "-qm", "work", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "add", "-A", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "commit", "-qm", "work", cwd=self.wt)
         e = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
@@ -162,11 +163,11 @@ class StaleTree(StagesTest):
         )
         before = gitq.git("rev-parse", "HEAD", cwd=e.wt)
         (self.wt / "g.txt").write_text("more work\n")
-        te.sh("git", "commit", "-qam", "wip (t-1): blocked", cwd=self.wt)  # what reset() does with a dirty tree
+        tltestkit.shellkit.sh("git", "commit", "-qam", "wip (t-1): blocked", cwd=self.wt)  # what reset() does with a dirty tree
         e.left_dirty = True
         put_ck(e, head=before)
         self.main_moves()
-        te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "fetch", "-q", "origin", cwd=self.wt)
         assert e.rebase.onto_base() == "rebased"
         assert read_ck(e).head == gitq.git("rev-parse", "HEAD", cwd=e.wt)  # tl-7y6.2.19: the wip commit is squashed in
         assert gitq.git("rev-list", "--count", "origin/main..HEAD", cwd=e.wt) == "1"
@@ -191,15 +192,15 @@ class SlotHygiene(StagesTest):
     def put_ignore_on_main(self, text, name=".gitignore", sub=""):
         base = Path(self.tmp.name, "base-ignore")
         if not base.exists():
-            te.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
-        te.sh("git", "pull", "-q", "origin", "main", cwd=base)
+            tltestkit.shellkit.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        tltestkit.shellkit.sh("git", "pull", "-q", "origin", "main", cwd=base)
         d = base / sub
         d.mkdir(parents=True, exist_ok=True)
         (d / name).write_text(text)
-        te.sh("git", "add", "-A", cwd=base)
-        te.sh("git", "commit", "-qm", "gitignore", cwd=base)
-        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
-        te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "add", "-A", cwd=base)
+        tltestkit.shellkit.sh("git", "commit", "-qm", "gitignore", cwd=base)
+        tltestkit.shellkit.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+        tltestkit.shellkit.sh("git", "fetch", "-q", "origin", cwd=self.wt)
 
     def test_files_the_base_ignores_do_not_count_as_dirty_work(self):
         self.put_ignore_on_main("client/log.txt\n")
@@ -235,7 +236,7 @@ class SlotHygiene(StagesTest):
         assert gitq.git("symbolic-ref", "--short", "-q", "HEAD", cwd=e.wt) == "task/t-1"
 
     def test_a_slot_left_on_an_old_branch_with_only_ignored_files_is_not_another_branchs_work(self):
-        te.sh("git", "checkout", "-qb", "task/old-bead", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-qb", "task/old-bead", cwd=self.wt)
         self.put_ignore_on_main("client/log.txt\nclient/log-previous.txt\n")
         (self.wt / "client").mkdir()
         (self.wt / "client" / "log.txt").write_text("unity\n")
@@ -245,7 +246,7 @@ class SlotHygiene(StagesTest):
         assert "another branch" not in self.eng.why
 
     def test_real_work_of_another_branch_still_stops_the_run(self):
-        te.sh("git", "checkout", "-qb", "task/old-bead", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-qb", "task/old-bead", cwd=self.wt)
         (self.wt / "keep.py").write_text("work\n")
         rc, _s = self.run_engine({"plan": [PLAN]})
         assert rc != 0
@@ -300,14 +301,18 @@ class DeadLane(StagesTest):
         assert rc == 0, self.blocked
         reviews = [c for c in s.calls if c[0] == "reviewer"]
         assert len(reviews) == 5  # three polls of the lane, then the route is asked again
-        assert {c[2] for c in reviews} == {"openai"}  # authored-by the writer's family on every try
+        assert all(r.reviewer_other_family for r in s.requests if r.role == "reviewer")
+        assert s.results[1]["family"] == "openai"
+        assert s.results[-1]["family"] != "openai"
 
     def test_a_reviewer_retry_after_a_writer_reroute_avoids_the_family_that_wrote(self):
         fallback = te.full(WRITE, "w2", family="xai")  # the write was routed to xai
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[])])  # the fallback write leaves no f.txt
         rc, s = self.run_engine({"plan": [plan], "write": [fallback], "review": [*self.blips(4, "OTHER"), CLEAN]})
         assert rc == 0, self.blocked
-        assert {c[2] for c in s.calls if c[0] == "reviewer"} == {"xai"}
+        assert all(r.reviewer_other_family for r in s.requests if r.role == "reviewer")
+        assert s.results[1]["family"] == "xai"
+        assert s.results[-1]["family"] != "xai"
 
     def test_a_review_that_only_the_writers_family_could_give_pauses_the_step(self):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [*self.blips(4), te.full(CLEAN, "r", family="openai")]})
@@ -567,12 +572,12 @@ class FreshAside(StagesTest):
     """--fresh (lifesim-6pld): the old branch is kept as task/<id>-stale-<time> and the task starts again on the base."""
 
     def old_branch(self, commits=1):
-        te.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-qb", "task/t-1", cwd=self.wt)
         for k in range(commits):
             (self.wt / (f"old{k}.txt")).write_text("earlier work\n")
-            te.sh("git", "add", "-A", cwd=self.wt)
-            te.sh("git", "commit", "-qm", f"wip {k}", cwd=self.wt)
-        te.sh("git", "checkout", "-q", "-", cwd=self.wt)
+            tltestkit.shellkit.sh("git", "add", "-A", cwd=self.wt)
+            tltestkit.shellkit.sh("git", "commit", "-qm", f"wip {k}", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "checkout", "-q", "-", cwd=self.wt)
 
     def branches(self):
         return gitq.git("branch", "--list", "task/t-1*", "--format=%(refname:short)", cwd=self.eng.wt).split()
@@ -592,7 +597,7 @@ class FreshAside(StagesTest):
         assert any("Fresh (engine)" in str(c) for c in self.bd_calls)
 
     def test_fresh_on_a_branch_with_no_work_of_its_own_just_starts_on_the_base(self):
-        te.sh("git", "branch", "task/t-1", "HEAD", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "branch", "task/t-1", "HEAD", cwd=self.wt)
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, fresh=True)
         assert rc == 0, self.blocked
         assert [b for b in self.branches() if "-stale-" in b] == []

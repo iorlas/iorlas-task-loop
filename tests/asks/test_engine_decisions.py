@@ -7,19 +7,20 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import homes
-from support.checked import run_checked
 from support.engine_case import EngineTest
 
 from taskloop.app.asks import intake
 from taskloop.app.plan import adrsync
-from taskloop.domain.asks import similar, specs
+from taskloop.domain.asks import similar
 from tlkernel import adrfiles
+from tlkernel import askspecs as specs
 from tlkernel.adrs import AdrStore
 from tlkernel.ask import SimilarRef
 from tlkernel.askenums import AskStatus
 from tlkernel.dash import OwnerCause
 from tlkernel.ids import BeadId
 from tlkernel.ledger import Adr
+from tltestkit.checked import run_checked
 from tltestkit.narrow import must
 from tltestkit.plans import CLEAN, PLAN, WRITE
 

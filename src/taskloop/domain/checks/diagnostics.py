@@ -8,8 +8,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from taskloop.domain.checks import trim
 from taskloop.domain.checks.diag import matchers
+from tlkernel import checktrim as trim
 
 ITEM_MAX: Final = 240  # a message longer than this is cut
 TAIL_ROWS: Final = 4  # the command's last words kept under a list: its verdict line ("Build FAILED", "Found 3 errors")

@@ -13,7 +13,8 @@ import support.paths  # noqa: F401
 from taskloop.adapters import delegate, delegate_wire
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from taskloop.app.workers.lane_acts import LaneActs
-from taskloop.domain.lanes import pauses, policy
+from taskloop.domain.lanes import policy
+from tlkernel import lanepauses as pauses
 from tlkernel.delegate import RunRequest
 
 
@@ -39,7 +40,7 @@ class PauseProducers(Case):
                 stop = policy.stop_of(result)
                 assert stop is not None
                 host = mock.Mock()
-                host.cfg.writer_family, host.cfg.second_writer_family, host.plan_data, host.budget.labels = [], "", None, []
+                host.plan_data, host.budget.labels = None, []
                 host.clock.now.return_value = 100
                 call = mock.Mock(role="worker", node="write", counts={"crashes": 0})
                 worker = mock.Mock()

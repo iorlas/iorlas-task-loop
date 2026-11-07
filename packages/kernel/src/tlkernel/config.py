@@ -9,7 +9,6 @@ from tlkernel.argv import FORM, shape_problem, text_of
 from tlkernel.ids import CheckId, mangle
 from tlkernel.wire import Rec
 
-FRESH_ABOVE_K: Final = {"claude": 150.0, "codex": 100.0, "xai": 100.0}
 TEST_PATTERN = r"^\s*(def test_|async def test_|\[(Test|UnityTest|Fact|Theory|TestMethod|TestCase)\b|#\[test\]|(it|test)\(|func Test)"
 
 
@@ -209,14 +208,10 @@ class EngineConfig(Rec):
     epic_only: bool = False
     reflect: bool = True
     intake_per_day: int = 0  # >0: follow-ups the engine files wait as deferred (label from-review); this many a day are promoted to open
-    writer_family: list[str] = msgspec.field(default_factory=list)  # e.g. ["openai"]: --only-family on every worker call
-    second_writer_family: str = ""  # e.g. "claude": one light bead in ten is written by this family alone; "" is off
-    writer_exec_allow: list[list[str]] = msgspec.field(default_factory=list)
-    writer_read_roots: list[str] = msgspec.field(default_factory=list)  # absolute folders an OpenCode write step may read outside its cwd
+    writer_exec: bool = False
+    reviewer_other_family: bool = True
     planner_notes: str = ""
     shot_table: str = ""
-    write_fresh_stage_k: float = 100
-    write_fresh_above_k: float | dict[str, float] = msgspec.field(default_factory=lambda: dict(FRESH_ABOVE_K))
     delegate: str = ""
     untracked_ignore: list[str] = msgspec.field(default_factory=list)
     checks: list[CheckSpec] = msgspec.field(default_factory=list)
@@ -402,15 +397,6 @@ def resource_problem(eng: EngineConfig) -> str:
     return ""
 
 
-def grant_problem(eng: EngineConfig) -> str:
-    """Why engine.writer_exec_allow is malformed ('' when it is not); delegate checks the binaries against its own host.json."""
-    if any(not argv or any(not arg for arg in argv) for argv in eng.writer_exec_allow):
-        return "engine.writer_exec_allow entries must be nonempty lists of nonempty strings"
-    if any(not root.startswith("/") for root in eng.writer_read_roots):
-        return "engine.writer_read_roots entries must be absolute paths"
-    return ""
-
-
 def _prepare_commands(prepare: PrepareConfig | None) -> list[list[str]]:
     if prepare is None:
         return []
@@ -439,7 +425,7 @@ def load(data: Any, say_to: TextIO | None = None) -> RepoProfile:
         profile = wire.load(RepoProfile, data or {})
     except ValueError as e:
         raise ConfigError(f"the repo profile: {e}") from None
-    bad_needs = resource_problem(profile.engine) or inputsets.problem(profile.engine) or grant_problem(profile.engine)
+    bad_needs = resource_problem(profile.engine) or inputsets.problem(profile.engine)
     if bad_needs:
         raise ConfigError(f"the repo profile: {bad_needs}")
     bad_graph = graph_problem(profile.engine.checks)

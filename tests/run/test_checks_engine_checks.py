@@ -9,10 +9,10 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, procsim
 from support.aging import age
 from support.engine_case import EngineTest
-from support.shellkit import sh
 from support.world import no_repo
 
 from tltestkit.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE
+from tltestkit.shellkit import sh
 
 # isort: split
 import contextlib
@@ -35,15 +35,15 @@ from taskloop.app.run import (
 )
 from taskloop.app.slots import config as wslots_config
 from taskloop.domain.checks import lint
-from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks.writer_split import WriterSplit
-from taskloop.domain.review.matchers import Tools
 from taskloop.domain.write.matchers import count_tests
 from tlkernel import answers, childenv, plancheck
+from tlkernel import checkmatchers as check_matchers
 from tlkernel.config import EngineConfig
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId, CheckId
 from tlkernel.plancheck import Adhoc, adhoc
+from tlkernel.reviewmatchers import Tools
 from tlkernel.waitenums import WaitWhat
 from tltestkit.cfgs import cfg_with
 from tltestkit.checks import ck, res, typed

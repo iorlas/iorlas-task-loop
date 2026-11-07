@@ -1,9 +1,7 @@
-"""The delegate the next call goes through: the library, checked against the call's grants."""
+"""The delegate library the next call goes through."""
 from typing import Any
 
-from tlkernel.delegateport import Refusal, Resolved
-
-from taskloop.domain.lanes import pin
+from tlkernel.delegateport import Refusal
 
 
 class Delegation:
@@ -11,15 +9,10 @@ class Delegation:
         self.e = host
 
     def route(self, quiet: bool = False) -> str:
-        """The delegate for the next call (tl-6ax): resolved again each call. A refused one (a grant the contract does not carry) keeps the
+        """The delegate for the next call (tl-6ax): resolved again each call. A refused one keeps the
         one in use (noted); with none in use the run says why."""
         e = self.e
         new = e.router.resolve()
-        if isinstance(new, Resolved) and e.cfg.writer_exec_allow:
-            why = pin.exec_allow_problem(e.cfg.writer_exec_allow, e.cfg.writer_family, e.budget.labels,
-                                         new.contract.get("contract", 0), new.contract.get("capabilities", []))
-            if why:
-                new = Refusal("writer_exec_allow", why)
         if isinstance(new, Refusal):
             if e.resolved is None:
                 e.refusal = new

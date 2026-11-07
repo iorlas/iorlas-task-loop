@@ -7,9 +7,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import engine_case as T
 
-from taskloop.domain.followups import key_label, unchecked
 from tlkernel.beadsport import BeadQuery
 from tlkernel.config import ReviewSkipConfig
+from tlkernel.followkeys import key_label, unchecked
 from tltestkit.plans import BEAD, CLEAN, PLAN, WRITE, verdict
 
 PLAIN = dict(BEAD, labels=[])  # f.txt, "f.txt exists": nothing visual about it

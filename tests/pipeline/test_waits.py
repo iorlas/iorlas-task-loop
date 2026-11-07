@@ -10,9 +10,9 @@ from support.narrow_hosts import FakeWaitsHost
 from taskloop.adapters import deadline
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.waits import Waits
-from taskloop.domain.lanes.liveness import LIVENESS
 from tlkernel import log as rec
 from tlkernel.kinds import Kind
+from tlkernel.lanesliveness import LIVENESS
 from tlkernel.waitenums import WaitWhat
 
 

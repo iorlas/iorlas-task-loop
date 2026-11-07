@@ -10,9 +10,10 @@ from contextlib import contextmanager
 from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.engine_case import EXIT_127, EngineTest, sh, stop, without_shims
+from support.engine_case import EngineTest, stop
 
 from tltestkit.plans import BEAD, CLEAN, FALSE, PLAN, STILL_OPEN, WRITE, finding, review, verdict
+from tltestkit.shellkit import EXIT_127, sh, without_shims
 
 # isort: split
 from support.review_host import FakeReview
@@ -82,7 +83,6 @@ class EngineReviewTest(EngineTest):
         assert rc == 2
         ck = self.checkpoint()
         assert (ck["stage"], ck["rounds"], ck["accepted"]) == (1, 1, [0])
-        assert ck["writer"] == "ref-write"
         rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         assert rc == 0
         assert [c[0] for c in s.calls] == ["reviewer"]  # no plan, no stage 1, no write: its checks were green (tl-q3ma)

@@ -1,7 +1,7 @@
 """The text every node's prompt shares: the engine preamble, the question rules, the unchecked-items table."""
 from typing import Final
 
-from taskloop.domain.lanes.caps import RESULT_LINES
+from tlkernel.lanecaps import RESULT_LINES
 
 COMMON: Final = ("You are one step of an unattended task engine. Nobody is watching; do not ask for confirmation. "
           "Work only in {wt}. Never commit, push, branch, or change git state. Never add suppressions or weaken, skip "

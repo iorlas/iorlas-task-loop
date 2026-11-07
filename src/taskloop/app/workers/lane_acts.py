@@ -90,14 +90,13 @@ class LaneActs:
         if isinstance(a, lp.Reroute):
             self.e.log.note("{}: {} stopped the call ({}); routing it again".format(c.node, a.exclude or "the pick", stop.reason))
             self.e.steps.move(step, "lane_out", "%s: routed again" % (stop.reason or "the lane stopped"))
-            c.out_on = stop.lane or c.out_on
             self.wc.charge(c, a.charges)
             return self.wc.again(c)
         return self.end(c, res, stop, a)
 
     def same_family(self, c: Any, res: DelegateResult) -> bool:
-        """tl-9un.15: a reviewer answer from the writer's own family (delegate's flag, or the family itself) is no review."""
-        return c.node in READ_ONLY_NODES and bool(c.writer_family) and (res.flag == "same_family" or res.family == c.writer_family)
+        """tl-9un.15: delegate's same_family flag says the reviewer answer is no independent review."""
+        return c.node in READ_ONLY_NODES and res.flag == "same_family"
 
     def refuse_same_family(self, c: Any, res: DelegateResult) -> None:
         """Pause the step until the other family has a lane: the answer is dropped (a resume must not take it back)."""
@@ -108,9 +107,9 @@ class LaneActs:
         e.pause_reason = "same_family"
         e.pause_producer = "engine"
         e.pause_permanence = None
-        why = f"paused: no lane of another family than the writer's ({c.writer_family}) for the {c.node} step; it runs when one is free"
+        why = f"paused: no lane of another family than the writer's for the {c.node} step; it runs when one is free"
         e.steps.outcome("paused", "same family")
-        e.steps.move("pause", "paused", f"lane for {c.node}: only the writer's own family ({c.writer_family}) answered")
+        e.steps.move("pause", "paused", f"lane for {c.node}: only the writer's own family answered")
         raise self.wc.ops.blocked(why, "PAUSE_LANE")
 
     def end(self, c: Any, res: DelegateResult, stop: lp.Stop, a: lp.Yield | lp.Fail) -> None:
@@ -135,9 +134,8 @@ class LaneActs:
                     (" until " + time.strftime("%H:%M:%S", time.localtime(retry_after))) if retry_after else "",
                 ),
             )
-        pinned = writer_pin.pinned(e.cfg, str(e.bead), e.plan_data, e.budget.labels, c.role)
+        pinned = writer_pin.prefer(e.budget.labels, c.role)
         if isinstance(a, lp.Yield) and pinned and stop.reason in pin.STOP_REASONS:  # the pin found no ready lane: say it
-            warm = writer_pin.warm(e.cfg, str(e.bead), e.plan_data, e.budget.labels) if c.role == pin.PINNED_ROLE else ""
-            raise ops.blocked(pin.stop_why(c.node, pinned, stop.reason, res.say or stop.fix, stop.fix, warm), a.kind, stop)
+            raise ops.blocked(pin.stop_why(c.node, pinned, stop.reason, res.say or stop.fix, stop.fix), a.kind, stop)
         why = ops.stop_why(c.node, a.kind, stop, res.say, retry_after, 1, res.denied, now=e.clock.now())
         raise ops.blocked(why, a.kind, stop)

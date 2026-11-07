@@ -196,6 +196,7 @@ class Script:
         self.c = contract(delegate)
         self.nodes, self.argvs, self.requests = [], [], []  # requests: the delegate.api request of each call
         self.stop, self.obs, self.secs, self.worker = {}, {}, 0.0, None
+        self.worker_families, self.results = {}, []
         self.started = None  # a test sets the LiveStart the call reports
 
     def live_start(self):
@@ -223,8 +224,17 @@ class Script:
         delta = request.delta_file if request else None
         resume = threads.get(thread) if delta else None
         prompt = Path(delta or opt(cmd, "--brief")).read_text(encoding="utf-8")
+        writer = request.authored_by if request else opt(cmd, "--authored-by")
+        if request and request.reviewer_other_family and not writer:
+            writer = self.worker_families.get(request.task, "")
         j = self.reply(cmd[3], prompt, schema, opt(cmd, "--cwd"), resume,
-                       opt(cmd, "--authored-by"), kw.get("timeout"))
+                       writer, kw.get("timeout"))
+        if isinstance(j, dict):
+            if request and request.role == "worker":
+                self.worker_families[request.task] = j.get("family", "")
+            if writer and j.get("family") == writer:
+                j = dict(j, flag="same_family")
+        self.results.append(j)
         if isinstance(j, dict) and j.get("ref") and thread:
             threads[thread] = j["ref"]
         self.threads = threads
@@ -250,7 +260,7 @@ class Script:
         if node == "write":
             Path(cwd, "f.txt").write_text(f"d{len(self.calls)}\n")
         # like the real route, a reader comes from another family than the last writer's (tl-9un.15); j_extra may say otherwise
-        family = "openai" if node == "write" else ("xai" if getattr(self, "writer_family", "") == "claude" else "claude")
+        family = "openai" if node == "write" else ("xai" if (writer or getattr(self, "writer_family", "")) == "claude" else "claude")
         j = answer(self.c, None, "ref-" + node, bool(resume), a, cost=0.5, secs=1, family=family,
                    lane="L", model="m", tokens={"in": 1000, "cached": 800, "out": 50},
                    context={"instructions": ["/repo/AGENTS.md"], "env_keys": ["PATH"]})

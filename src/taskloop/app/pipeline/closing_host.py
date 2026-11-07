@@ -7,12 +7,15 @@ from collections.abc import Mapping, Sequence
 from typing import Protocol
 
 from tlkernel import fence
+from tlkernel import runoutcome as oc
+from tlkernel.askspec import AskSpec
 from tlkernel.beadsport import Beads
 from tlkernel.checkpoint import Checkpoint, CloseIntent
 from tlkernel.delegate import Permanence
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
+from tlkernel.pausereasons import Producer
 from tlkernel.ports import Clock
 from tlkernel.stagefacts import RunLogPort
 
@@ -22,9 +25,6 @@ from taskloop.app.pipeline.closing_notes import FileNotesHost, NotesCheckpoints,
 from taskloop.app.pipeline.closing_record import RecordHost, RecordRecords
 from taskloop.app.pipeline.closing_settle import SettleHost
 from taskloop.app.pipeline.ports import Slotting
-from taskloop.domain import outcome as oc
-from taskloop.domain.asks.spec import AskSpec
-from taskloop.domain.lanes.pause_reasons import Producer
 
 
 class CloseCheckpoints(Protocol):
