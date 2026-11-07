@@ -3,7 +3,7 @@ they are added once."""
 import re
 from collections.abc import Callable
 
-from taskloop.contracts.ports import BdFailure, Beads, NewBead
+from taskloop.contracts.beadsport import BdFailure, Beads, NewBead
 
 LINT_FILLER = {
     "acceptance criteria": "- The follow-up named in the title is done, and the checks of the code it touches pass.",

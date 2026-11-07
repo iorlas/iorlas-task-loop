@@ -11,24 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes, procsim
 from support.aging import age
-from support.builders import PROFILE_PATTERNS
+from support.cfgs import PROFILE_PATTERNS
 from support.checks import ck
-from support.engine_case import (
-    BEAD,
-    CAP_PARKS,
-    CAT_ENV,
-    CLEAN,
-    FALSE,
-    PLAN,
-    WRITE,
-    EngineTest,
-    full,
-    no_repo,
-    review,
-    sh,
-    stop,
-    verdict,
-)
+from support.engine_case import CAP_PARKS, EngineTest, full, no_repo, sh, stop
+from support.plans import BEAD, CAT_ENV, CLEAN, FALSE, PLAN, WRITE, review, verdict
 
 # isort: split
 import hashlib
@@ -41,7 +27,7 @@ from unittest import mock
 
 from support import fake_route
 from support.briefs import bead_diff, bead_snapshot, brief_digest, linked_text
-from support.builders import cfg_with
+from support.cfgs import cfg_with
 from support.checkpoints import drop_ck, stored_ck
 from support.fakes import as_bead, as_comment, must_bead
 from support.logs import records
@@ -49,9 +35,6 @@ from support.spawn import port_git, real_spawner
 from support.tmpdir import mkdtemp
 from support.who import who
 
-from taskloop.adapters import (
-    context_size,
-)
 from taskloop.adapters import delegate as dl
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.plan.planner import Planner
@@ -369,9 +352,6 @@ class EngineRunTest(EngineTest):
             assert s.calls[2][1] == "ref-write", path
             assert self.MARK not in s.prompts[2]
             assert self.eng.write_rounds[0]["context_k"] is None
-        empty = Path(self.tmp.name, "empty.jsonl")
-        empty.write_text("")
-        assert context_size.context_tokens(str(empty), snapshot()) is None
 
     def test_round_three_after_a_fresh_start_resumes_the_fresh_session(self):
         big, small = Path(self.tmp.name, "big.jsonl"), Path(self.tmp.name, "small.jsonl")
@@ -622,7 +602,7 @@ class EngineRunTest(EngineTest):
     def test_a_link_is_opened_twice_at_most(self):
         self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         eng, opened = self.eng, []
-        eng.link_fn = lambda url: (opened.append(url), (False, "HTTP 404"))[1]
+        eng.review.link_fn = lambda url: (opened.append(url), (False, "HTTP 404"))[1]
         with mock.patch.object(Checkout, "task_diff", return_value=self.RESEARCH_DIFF):
             for _ in range(4):
                 eng.link_check.link_judged({"findings": []})

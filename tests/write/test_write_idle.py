@@ -15,6 +15,8 @@ from unittest import mock
 import pytest
 from support.case import Case
 
+from delegate import api
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
@@ -30,7 +32,7 @@ from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import wire
 from taskloop.contracts.config import ConfigError, EngineConfig, load
-from taskloop.contracts.delegate import DelegateResult, RunRequest
+from taskloop.contracts.delegate import DelegateResult
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 
@@ -117,13 +119,13 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         script = fake_route.Script({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         c = wslots.load_cfg(str(self.wt), port_git())
         argvs = []
-        real = RunRequest.to_argv
+        real = api.RunRequest.to_argv
 
-        def spy(r, py, route):
-            argvs.append(real(r, py, route))
+        def spy(r, route, **kw):
+            argvs.append(real(r, route, **kw))
             return argvs[-1]
 
-        with te.delegate_stack(script), mock.patch.object(RunRequest, "to_argv", spy):
+        with te.delegate_stack(script), mock.patch.object(api.RunRequest, "to_argv", spy):
             engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
                 git=port_git(), who=who()).run()
         by_role = {a[a.index("run") + 1]: a for a in argvs}

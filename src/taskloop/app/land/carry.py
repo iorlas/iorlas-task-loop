@@ -13,8 +13,8 @@ from taskloop.app.land.cmds import Cmds
 from taskloop.contracts import config, scratch
 from taskloop.contracts.checks import PassRecord
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha, RunKey
 from taskloop.domain.checks.specs import repo_check
 from taskloop.stores.bundle import Stores

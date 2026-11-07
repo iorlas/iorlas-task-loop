@@ -9,7 +9,7 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.checks import typed
-from support.engine_case import PLAN
+from support.plans import PLAN
 
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run.blocked import Blocked, blocked_for

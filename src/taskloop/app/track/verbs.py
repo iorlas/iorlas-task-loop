@@ -12,20 +12,20 @@ from taskloop.adapters.bd import BdStore
 from taskloop.adapters.beadtools import attempt, peek
 from taskloop.adapters.gitrepo import repo_root
 from taskloop.adapters.ident import config_dir
-from taskloop.adapters.opencode import transcript_of
 from taskloop.app.track import runs as runq
 from taskloop.app.track.trail import event, provenance, prune_events, register_repo
 from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BdFailure, BeadPatch, Beads
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import Landed, landed_meta
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Git
 from taskloop.contracts.reponame import repo_name
+from taskloop.contracts.rowstores import ReposStore
 from taskloop.contracts.slots import SlotGitError, git_probe
-from taskloop.contracts.stores import ReposStore
 
 Guard = Callable[[BeadId, str], str]  # (bead, close reason) -> "" when the close goes on, else why it is refused (closeguard.py)
 
@@ -207,9 +207,6 @@ def trace(bead: BeadId, last: int, as_json: bool, env: Env) -> int:
                 runs.append(r)
     if last:
         runs = runs[-last:]
-    for r in runs:
-        for s in r.get("sessions", []):
-            s["transcript"] = s.get("transcript") or transcript_of(env, s.get("family"), s.get("ref"))
     if as_json:
         print(json.dumps(runs, indent=1, ensure_ascii=False))
         return 0

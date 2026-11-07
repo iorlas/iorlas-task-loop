@@ -12,8 +12,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as T
-from support.builders import make_engine, plan_of
-from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict
+from support.asked import ans
+from support.builders import make_engine
+from support.cfgs import plan_of
+from support.engine_case import engine
+from support.plans import BEAD, CLEAN, PLAN, WRITE, verdict
 
 from taskloop.contracts import answers
 from taskloop.contracts.plancheck import PlanData
@@ -80,7 +83,7 @@ class NoBlock(T.LandReviewBase):
             assert rc == 0, self.blocked
             assert self.ask() is None
             assert [c[0] for c in s.calls] == ["planner", "worker", "reviewer"]  # no verify call
-            (v,) = self.eng.verified
+            (v,) = self.eng.review.verified
             assert (v["verdict"], v["why"]) == ("settled", "the engine does this at land")
             assert self.creates() == []
 
@@ -90,7 +93,7 @@ class NoBlock(T.LandReviewBase):
         assert self.ask() is None
         assert [c[0] for c in s.calls].count("worker") == 2  # the fix round
         assert any("add a test or check that proves: " + IQAD["what"] in p for p in s.prompts)
-        assert self.eng.unverified == []  # the round proved it (its review lists nothing)
+        assert self.eng.review.unverified == []  # the round proved it (its review lists nothing)
 
     def test_a_checkable_item_the_round_leaves_unproven_goes_again_then_the_bead_is_stuck_not_landed(self):
         again = dict(CLEAN, unchecked=[IQAD])
@@ -100,7 +103,7 @@ class NoBlock(T.LandReviewBase):
         assert self.closed == []
         assert "it needs the owner's hint" in self.blocked[0]
         assert "verify: before land" not in self.blocked[0]  # a stuck bead, not a verify ask
-        assert self.eng.unverified == []
+        assert self.eng.review.unverified == []
 
     def test_a_checkable_item_with_no_fix_round_left_is_stuck_not_landed(self):
         rc, s = self.go([IQAD], verify=[open_as("checkable")], max_fix_rounds=0, bead=IQAD_BEAD)
@@ -117,12 +120,12 @@ class NoBlock(T.LandReviewBase):
             cast(Any, e).fixes += 1
             rounds.append(tail)
             return "stuck"  # the fix round did not pass its checks and review
-        with (mock.patch.object(e, "ai", return_value=(open_as("checkable"), None)), mock.patch.object(e.fixer, "fix", side_effect=fix),
+        with (mock.patch.object(e, "ai", return_value=ans(open_as("checkable"))), mock.patch.object(e.fixer, "fix", side_effect=fix),
               pytest.raises(engine.Blocked) as ctx):
             e.verifier.run([IQAD])
         assert len(rounds) == 2  # one per round of the budget, then stuck
         assert "it needs the owner's hint" in ctx.value.why
-        assert e.unverified == []
+        assert e.review.unverified == []
 
     def lands_unverified(self, items):
         rc, _ = self.go(items, verify=[open_as(*["external_fact"] * len(items))], bead=dict(BEAD, parent="t-0"))
@@ -150,7 +153,7 @@ class NoBlock(T.LandReviewBase):
         rc, _ = self.go([item], verify=[open_as("taste")])
         assert rc == 0, self.blocked
         assert self.ask() is None
-        assert self.eng.unverified[0]["kind"] == "taste"
+        assert self.eng.review.unverified[0]["kind"] == "taste"
 
     def test_an_owner_decision_still_asks(self):
         rc, _ = self.go([IQAD_R2], verify=[open_as("owner_decision")])
@@ -182,7 +185,7 @@ class NoBlock(T.LandReviewBase):
         assert e.routing.engine_does("The gate runs at land")
         assert e.routing.engine_does("the engine closes the bead")
         assert not e.routing.engine_does("screenshots are copied into the repo")  # no visual paths set
-        with mock.patch.object(e, "ai", return_value=(open_as("engine_step"), None)) as ai, \
+        with mock.patch.object(e, "ai", return_value=ans(open_as("engine_step"))) as ai, \
                 mock.patch.object(e.fixer, "fix", return_value="accept") as fix:
             e.plan_data = plan_of(PLAN)
             e.verifier.run([{"what": claim, "kind": "engine_step"}])
@@ -196,11 +199,11 @@ class NoBlock(T.LandReviewBase):
         with mock.patch.object(e, "diff_text", return_value=diff):
             assert e.routing.resolve_kind(item, {"kind": "external_fact", "source": SOURCE})[0] == "checkable"
             assert e.routing.resolve_kind(dict(item, kind="taste"), {})[0] == "checkable"
-            with mock.patch.object(e, "ai", return_value=(open_as("external_fact"), None)), \
+            with mock.patch.object(e, "ai", return_value=ans(open_as("external_fact"))), \
                     mock.patch.object(e.fixer, "fix", return_value="accept") as fix:
                 e.verifier.run([item])
         fix.assert_called_once()  # a proving round, not an unverified landing
-        assert e.unverified == []
+        assert e.review.unverified == []
         for what in ("see src/lots/grid.py for the rule", "the config.yaml key is read", "snake_case_name is unchanged in the diff"):
             with mock.patch.object(e, "diff_text", return_value="+ snake_case_name = 1\n"):
                 assert e.routing.resolve_kind({"what": what, "kind": "taste"}, {})[0] == "checkable", what
@@ -243,8 +246,8 @@ class NoBlock(T.LandReviewBase):
         eng = make_engine(self.wt, bead=bead_id, store=self.store, attrs={
             "bead_title": title,
             "bead_parent": "t-0",
-            "unverified": [{"what": "price of the pack", "kind": "external_fact", "why": ""}],
             })
+        eng.review.unverified = [{"what": "price of the pack", "kind": "external_fact", "why": ""}]
         shows = (
             {"t-0": {"id": "t-0", "issue_type": "epic"}, existing["id"]: existing}
             if existing

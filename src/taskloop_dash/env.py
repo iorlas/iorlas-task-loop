@@ -10,12 +10,13 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.contracts.ask import Ask, AskAction
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.dash import Result
 from taskloop.contracts.dashhealth import Score
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locks import LockRecord
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import AnswerAsk, Beads
+from taskloop.contracts.ports import AnswerAsk
 from taskloop.contracts.slottable import SlotSource
 from taskloop_dash.cache import FileCache, TtlCache
 from taskloop_dash.readers import dbruns

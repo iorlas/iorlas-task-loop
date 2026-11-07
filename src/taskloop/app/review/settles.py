@@ -4,7 +4,8 @@ whether the engine ran a check is settled by the engine's own results; one that 
 import shlex
 from typing import Any, Final, NewType
 
-from taskloop.contracts.ports import Git
+from taskloop.app.review.host import ReviewHost
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.checks import planref
 from taskloop.domain.plan.matchers import without_runner
@@ -26,7 +27,7 @@ def lint_argv(tool: str) -> LintArgv | None:
 
 
 class Settles:
-    def __init__(self, host: Any, git: Git) -> None:
+    def __init__(self, host: ReviewHost, git: Git) -> None:
         self.e = host
         self.git = git
 
@@ -142,7 +143,7 @@ class Settles:
         return left, failed
 
     def settled(self, u: Item, evidence: str, why: str, verdict: str = "settled") -> None:
-        self.e.verified.append({"what": u["what"], "kind": u["kind"], "verdict": verdict, "why": why, "evidence": evidence})
+        self.e.review.add_verified(u, verdict, why, evidence)
 
     def by_name(self, u: Item, names: list[str], results: list[Any]) -> bool:
         what = " ".join(u["what"].split()).lower()

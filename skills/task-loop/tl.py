@@ -67,7 +67,6 @@ import importlib
 import os
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
 
@@ -100,25 +99,12 @@ from taskloop.cli import setup as cli_setup
 from taskloop.cli import slots as slots_cli
 from taskloop.cli import status
 from taskloop.cli import wait as cli_wait
+from taskloop.cli.ctx import Ctx
 from taskloop.contracts.enums import Step
-from taskloop.contracts.env import Env, snapshot
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ports import Git, Spawner
+from taskloop.contracts.env import snapshot
 from taskloop.contracts.slots import MissingRemote
 
 HERE = Path(__file__).resolve().parent
-
-
-@dataclass(frozen=True)
-class Ctx:
-    """What a verb may need besides its arguments: the install this run executes from, the clock, the argv a loop re-execs itself with."""
-    here: Path
-    now: Callable[[], float]
-    argv: list[str]
-    env: Env  # the process environment, taken once here; everything below is handed this copy
-    spawner: Spawner  # the one way a verb starts a process, built on `env`
-    git: Git  # the one way a verb runs git, built on `env`
-    who: Identity  # the session and bd actor this process acts as, built once from `env`
 
 
 Handler = Callable[[Any, Ctx], int]
@@ -498,6 +484,7 @@ VERBS: Final[dict[str, Handler]] = {
 def main(argv: list[str] | None = None, here: Path = HERE, now: Callable[[], float] = trail.now) -> int:
     """`here`: the install this run executes from, `now`: the clock (a test runs the loop as another version, at another time)."""
     a = build_parser().parse_args(argv)
+    os.umask(0o077)  # the config dir, hooks and logs are the owner's alone (a worker's files too: it runs as the owner)
     env = snapshot()
     ctx = Ctx(here, now, list(argv) if argv is not None else sys.argv[1:], env, real.spawner(env), real.git(env), ident.identity(env))
     stop = ident.layout_stop(a.cmd, ctx.who.config.root)

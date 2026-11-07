@@ -5,8 +5,8 @@ from typing import Protocol
 from taskloop.app.land.gitcall import must
 from taskloop.app.land.parts import MoveSteps
 from taskloop.contracts.checkpoint import RunState
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.plancheck import PlanData
-from taskloop.contracts.ports import Git
 from taskloop.contracts.slots import SlotGitError
 from taskloop.stores.runlog import RunLog
 
@@ -18,6 +18,13 @@ class RestartConfig(Protocol):
 
 class RestartCheckpoints(Protocol):
     def drop(self) -> None: ...
+
+
+class RestartReview(Protocol):
+    """The engine's `review` as a restart clears it."""
+
+    unverified: list[dict[str, str]]
+    unchecked: list[dict[str, str]]
 
 
 class RestartHost(Protocol):
@@ -32,8 +39,7 @@ class RestartHost(Protocol):
     last_summary: str
     amended: bool
     state: RunState
-    unverified: list[dict[str, str]]
-    unchecked: list[dict[str, str]]
+    review: RestartReview
 
     @property
     def wt(self) -> str: ...
@@ -91,5 +97,5 @@ class Restart:
         e.old_plan, e.amend_why, e.amend_text, e.replan_first = None, "", "", False
         e.plan_summary, e.last_summary, e.amended = "", "", False
         e.state = e.state.start_again()
-        e.unverified = list[dict[str, str]]()
-        e.unchecked = list[dict[str, str]]()
+        e.review.unverified = list[dict[str, str]]()
+        e.review.unchecked = list[dict[str, str]]()

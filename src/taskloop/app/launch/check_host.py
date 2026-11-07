@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import check_files, treehash
+from taskloop.adapters import check_files, ident, treehash
 from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.execution import check_env
@@ -15,9 +15,11 @@ from taskloop.app.run.shell import Shell
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.locator import RunBundle
-from taskloop.contracts.ports import Git, Spawner
+from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.procport import Spawner
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 
@@ -28,13 +30,6 @@ class _Waits:
         return ""
 
     def add(self, secs: float, what: WaitWhat, wid: str | None = None, lane: str = "", check: str = "") -> None: ...
-
-
-class _NewFiles:
-    """A person's check run stages nothing: no new file is one a stage meant."""
-
-    def new_file_kind(self, path: str) -> str:
-        return "unexplained"
 
 
 class CliHost:
@@ -55,6 +50,7 @@ class CliHost:
         staged: list[str] | None = None,  # tl check --staged: the paths the commit changes, what `when` and pass_files see as changed
     ) -> None:
         self.env = env
+        self.home = ConfigDir(ident.config_dir(env))  # gateplan notes its once-per-run warnings under it
         self.spawner = spawner
         self.git = git
         self.wt = str(wt)
@@ -69,7 +65,8 @@ class CliHost:
         self.killed = self.wall_hit = False
         self.halt = threading.Event()
         self.tree_memo: tuple[treehash.State, TreeSha] | None = None
-        self.newfiles = _NewFiles()
+        self.accepted_new: list[str] = []  # a person's check run stages nothing: no new file is one a stage meant
+        self.plan_data: Mapping[str, object] | None = None
         self.steps: Any = None  # the step book is the engine's; a person's run has none
         self.shell, self.waits = Shell(self), _Waits()
         whole = Checkout(self)

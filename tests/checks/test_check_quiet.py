@@ -25,7 +25,7 @@ class Quiet(SpeedTest):
         return eng, eng.run_checks({"checks": [], "files": []}, "s")[0]
 
     def log(self, eng, kind):
-        rows = [json.loads(line) for line in eng.log_path.read_text().splitlines()]
+        rows = eng.records()
         return [r for r in rows if r["kind"] == kind]
 
     def test_a_silent_sleeping_check_is_not_stopped(self):

@@ -31,6 +31,6 @@ class LegacySessions(Case):
 
     def test_no_source_names_the_folder_any_more(self):
         named = [p.name for p in SRC.rglob("*.py") if '/ "sessions"' in p.read_text(encoding="utf-8")]
-        assert sorted(named) == ["doctor.py", "opencode.py"]  # doctor calls it legacy; opencode's is Codex's own ~/.codex/sessions
+        assert sorted(named) == ["doctor.py"]  # doctor calls it legacy
         named = [p.name for p in SRC.rglob("*.py") if "SessionStore" in p.read_text(encoding="utf-8")]
         assert named == []

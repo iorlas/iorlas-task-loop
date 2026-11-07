@@ -17,9 +17,9 @@ from support.tiers import domain
 from taskloop.adapters.bd import BdRun, BdStore
 from taskloop.app.asks import intake, raiser, sweeps
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import NewBead
 from taskloop.contracts.enums import AskKind, AskStatus
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import NewBead
 from taskloop.domain.asks import specs
 from taskloop.domain.asks.lint import INFRA
 

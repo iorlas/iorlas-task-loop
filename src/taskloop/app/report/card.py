@@ -19,14 +19,15 @@ from taskloop.contracts import paths, runlife, wire
 from taskloop.contracts.bead import Comment
 from taskloop.contracts.dashhealth import Score
 from taskloop.contracts.enums import Outcome, Result
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, is_bead_id, loop_key
 from taskloop.contracts.kinds import ASKS, PAUSES, Kind, kind_named
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.log import EngineLog, decode
-from taskloop.contracts.ports import Git
+from taskloop.contracts.rowstores import ReleaseResultStore
 from taskloop.contracts.runlife import Liveness, liveness
-from taskloop.contracts.stores import LoopLog, ReleaseResultStore
+from taskloop.contracts.stores import LoopLog
 from taskloop.contracts.trace import RunTrace
 from taskloop.domain.lifecycle import matchers
 

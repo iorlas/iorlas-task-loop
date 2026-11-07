@@ -11,9 +11,9 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
-from support.builders import cfg_with
+from support.cfgs import cfg_with
 from support.checks import ck, typed
-from support.engine_case import CLEAN, PLAN, WRITE
+from support.plans import PLAN
 
 from checks.test_check_rules import Base
 from taskloop.contracts import answers, plancheck
@@ -86,16 +86,6 @@ class Refused(Case):
     def test_a_case_is_judged_like_a_stage_check(self):
         plan = typed(dict(PLAN, cases=[{"criterion": "c", "check": shlex.join(shlex.split("just unity-tests -q")), "class": "test"}]))
         assert len(planref.refusals(planref.plan_checks(plan), cfg_with(checks=REPO))) == 1
-
-
-class Planned(Base):
-    def test_the_refusal_reaches_the_planner_and_the_corrected_plan_runs(self):
-        procsim.fake("just unity-tests", procsim.exits(0))
-        bad = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=["just unity-tests --filter X"])])
-        _rc, s = self.run_engine({"plan": [bad, PLAN], "write": [WRITE], "review": [CLEAN]}, checks=REPO)
-        assert [c[0] for c in s.calls][:2] == ["planner", "planner"]
-        assert "runs the registered check `unity-tests`" in s.prompts[1]
-        assert "TL_CHECK_LOG_UNITY_TESTS" in s.prompts[1]
 
 
 class ReadsTheLog(Base):

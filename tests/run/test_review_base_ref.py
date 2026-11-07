@@ -2,6 +2,7 @@
 from unittest import mock
 
 import pytest
+from support.argv_of import argv_of
 
 from taskloop.app.run import worker_identity, worker_request
 from taskloop.contracts import config
@@ -11,7 +12,7 @@ from taskloop.contracts.delegate import RunRequest
 def build(role: str, node: str, resolved: str = "basesha"):
     host = mock.Mock(session="s", bead="t-1")
     host.cfg = config.EngineConfig()
-    host.budget.labels = []
+    host.budget.labels, host.plan_data = [], None
     host.git.rev_parse.return_value = resolved
     host.git.diff_entries.return_value = []
     host.checker.split.return_value.engine_recipes.return_value = []
@@ -26,7 +27,7 @@ def build(role: str, node: str, resolved: str = "basesha"):
 def test_only_a_reviewer_is_given_the_base_commit(role, node, expected):
     req, host = build(role, node)
     assert req.instructions_ref == expected
-    assert ("--instructions-ref" in req.to_argv("py", "route")) == bool(expected)
+    assert ("--instructions-ref" in argv_of(req)) == bool(expected)
     if expected:
         host.git.rev_parse.assert_called_once_with(host.wt, host.cfg.base)
 

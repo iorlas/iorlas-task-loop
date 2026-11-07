@@ -1,4 +1,5 @@
 """Required bd failures retain their historical command exit code and diagnostic."""
+import os
 from pathlib import Path
 from unittest import mock
 
@@ -12,7 +13,7 @@ from taskloop.adapters import beadtools
 from taskloop.cli import bd
 from taskloop.contracts.bd_errors import BdCommandFailure
 from taskloop.contracts.bead import BdError
-from taskloop.contracts.ports import BdFailure
+from taskloop.contracts.beadsport import BdFailure
 
 
 class BdExit(Case):
@@ -40,6 +41,14 @@ class BdExit(Case):
         with mock.patch.object(tl, "Ctx"), mock.patch.dict(tl.VERBS, {"actor": verb}):
             result = tl_main("actor", cwd=Path.cwd())
         assert (result.returncode, result.stdout, result.stderr) == (1, "", "tl: database locked\n")
+
+    def test_tl_runs_with_umask_077_so_its_files_are_the_owners_alone(self):
+        old = os.umask(0o022)
+        self.addCleanup(os.umask, old)
+        with mock.patch.object(tl, "Ctx"), mock.patch.dict(tl.VERBS, {"actor": lambda _a, _c: 0}):
+            tl_main("actor", cwd=Path.cwd())
+        seen = os.umask(0o022)
+        assert seen == 0o077
 
     def test_dispatch_reports_missing_bd_as_before(self):
         with mock.patch.object(tl, "Ctx"), mock.patch.object(beadtools.shutil, "which", return_value=None):

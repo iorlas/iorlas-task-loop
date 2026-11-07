@@ -20,15 +20,18 @@ from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask, AskAction
+from taskloop.contracts.askstore import AskStore
+from taskloop.contracts.beadsport import BdFailure, Beads
 from taskloop.contracts.dash import Result, Stick
 from taskloop.contracts.dashhealth import Score
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
+from taskloop.contracts.lookrows import LookRows
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import AnswerAsk, BdFailure, Beads
+from taskloop.contracts.ports import AnswerAsk
+from taskloop.contracts.rowstores import ReposStore
 from taskloop.contracts.slottable import SlotSource
-from taskloop.contracts.stores import AskStore, ReposStore
 from taskloop_dash.env import Ports
 
 DASH_ACTOR = "tl-dash"  # the dashboard's bd actor
@@ -131,9 +134,9 @@ def owner_writes(intake: Callable[[str], Intake], cfg: ConfigDir) -> dict[str, A
 
 
 def owner_intake(asks: AskStore, store_of: Callable[[str], Any], clock: Callable[[], float], by: str = "dash",
-                 adrs: Callable[[str], AdrStore] | None = None, factory: Callable[[], Beads | None] | None = None
-                 ) -> Callable[[str], Intake]:
-    return lambda repo: Intake(asks, store_of(repo), clock, by, adrs, factory)
+                 adrs: Callable[[str], AdrStore] | None = None, factory: Callable[[], Beads | None] | None = None,
+                 look_rows: LookRows | None = None) -> Callable[[str], Intake]:
+    return lambda repo: Intake(asks, store_of(repo), clock, by, adrs, factory, look_rows)
 
 
 def ports(env: Env) -> Ports:
@@ -159,7 +162,7 @@ def ports(env: Env) -> Ports:
 
     return Ports(store=store, answer=answer_via(home),
                  **owner_writes(owner_intake(wire_asks.store(home), store, now, adrs=lambda repo: AdrStore.at(home, repo),
-                                             factory=lambda: factory_store(home)), home),
+                                             factory=lambda: factory_store(home), look_rows=LookRows(home)), home),
                  slot_source=slot_source, slot_dirs=wslots.slot_dirs,
                  resource_holders=resource_holders, profile_error=quiet(red_row, ""), profile_stamp=quiet(profiles.stamp, None),
                  scorecard=quiet(scorecard, None))

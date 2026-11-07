@@ -145,7 +145,7 @@ class Resume:
         e.accepted = [k for k in e.accepted if k < again]
         redo = {st["goal"] for st in (ck.state.plan_data or {})["stages"][again:]}
         e.done = [g for g in e.done if g not in redo]
-        e.unchecked = list[dict[str, Any]]()
+        e.review.unchecked = list[dict[str, Any]]()
         return ck.state.plan_data, again, None
 
     def amend(self, ck: Checkpoint, d: Decision) -> tuple[PlanData | None, int, RoundState | None]:

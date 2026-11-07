@@ -7,8 +7,8 @@ from pathlib import Path
 from taskloop.adapters import gitrepo
 from taskloop.adapters.ident import config_dir
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.paths import ConfigDir, default_root
-from taskloop.contracts.ports import Git
 from taskloop.domain import selfdescribe
 
 
@@ -20,7 +20,7 @@ def self_description(repo: str) -> str:
 SHIM = (
     "#!/bin/sh\n"
     "command -v uv >/dev/null 2>&1 || { echo 'tl: uv is required (https://docs.astral.sh/uv/)' >&2; exit 127; }\n"
-    "exec uv run --quiet --script {tl} \"$@\"\n"
+    "exec uv run --quiet --no-config --script {tl} \"$@\"\n"
 )
 # The shim of a cache install: the newest installed version is picked on every call (pure sh, a glob and integer arithmetic, no
 # subprocess), so a release or a pruned cache dir needs no rewrite; the path the writer saw is the fallback when none is found.
@@ -43,7 +43,7 @@ RESOLVING_SHIM = (
     "  done\n"
     "}\n"
     "pick\n"
-    "exec uv run --quiet --script \"$tl\" \"$@\"\n"
+    "exec uv run --quiet --no-config --script \"$tl\" \"$@\"\n"
 )
 
 

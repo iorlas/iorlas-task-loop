@@ -8,7 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, procsim
-from support.engine_case import EngineTest
+from support.check_host import CheckHostCase
 
 # isort: split
 from taskloop.contracts.config import ConfigError, load
@@ -23,7 +23,7 @@ FIX = shlex.split(procsim.default("format-a", format_a))  # a formatter: rewrite
 SEES = procsim.default("sees-formatted", lambda cwd, env: (0 if (cwd / "a.txt").read_text() == "formatted\n" else 1, ""))  # green only then
 
 
-class CheckFixTest(EngineTest):
+class CheckFixTest(CheckHostCase):
     def run_round(self, **check):
         eng = self.checks_engine(checks=[{"id": "fmt", "cmd": SEES, "group": "static", **check}])
         return eng, eng.run_checks({"checks": [], "files": []}, "s")

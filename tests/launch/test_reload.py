@@ -24,7 +24,7 @@ from support import (  # noqa: E402
     fake_route,
     looptest,
 )
-from support.builders import cfg_with  # noqa: E402
+from support.cfgs import cfg_with  # noqa: E402
 from support.fake_beads import FakeBeads  # noqa: E402
 from support.fakes import as_bead  # noqa: E402
 from support.narrow import must  # noqa: E402
@@ -52,8 +52,8 @@ from taskloop.app.run import reload as run_reload  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.contracts.env import Env, snapshot  # noqa: E402
 from taskloop.contracts.ids import BeadId  # noqa: E402
+from taskloop.contracts.rowstores import BadVersionStore  # noqa: E402
 from taskloop.contracts.run import Reexec, ReexecNote  # noqa: E402
-from taskloop.contracts.stores import BadVersionStore  # noqa: E402
 
 PLAN_DEF = "    def plan(self, again: bool = False) -> PlanData:\n"
 BREAK_PLAN = (PLAN_DEF, PLAN_DEF + "        raise RuntimeError('planted: cannot plan')\n", "src/taskloop/app/plan/planner.py")
@@ -154,8 +154,8 @@ class Reload(te.EngineTest):
         run = eng.log_path.parent.name
         assert len(self.execs) == 1
         ex = self.execs[0]
-        assert ex["argv"][:5] == childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py", snapshot())
-        assert ex["argv"][5:] == ["run-task", "t-1", "--outcome-file", "/x/out.json", "--worktree", str(self.wt)]  # no --fresh
+        assert ex["argv"][:6] == childenv.script_argv(self.cache / "0.2.0" / "skills" / "task-loop" / "tl.py", snapshot())
+        assert ex["argv"][6:] == ["run-task", "t-1", "--outcome-file", "/x/out.json", "--worktree", str(self.wt)]  # no --fresh
         assert ex["env"]["run"] == run
         assert ex["env"]["pid"] == os.getpid()
         assert (ex["marker"]["from"], ex["marker"]["to"], ex["marker"]["step"]) == ("0.1.0", "0.2.0", "land")
@@ -261,7 +261,7 @@ class Reload(te.EngineTest):
             leaked = os.environ.get("TL_REEXEC")
         assert r.outcome == "landed"
         assert len(spawned) == 2
-        assert spawned[1][:5] == childenv.script_argv(old / "tl.py", snapshot())
+        assert spawned[1][:6] == childenv.script_argv(old / "tl.py", snapshot())
         assert leaked is None  # the loop's own environment keeps no hand-over for its later run-tasks
         assert spawned_env[0]["run"] == "t-1-20261026-120000"  # the fallback child got it
         assert pids == [str(os.getpid())] * 2  # run-task's parent is uv: the loop names itself for the lock handoff

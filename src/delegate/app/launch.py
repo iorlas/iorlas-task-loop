@@ -187,7 +187,7 @@ def prepare_codex(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: floa
         return HoldBook.refusal(hold, "no worker was launched")
     exe = shutil.which("codex")
     if not exe:
-        return {"outcome": "setup", "say": "codex CLI not found on PATH"}
+        return settle.stop("setup_failed", "codex CLI not found on PATH")
     hx = CodexHarness(a.resume)
     ref = getattr(a, "instructions_ref", "") or ""
     spec = hx.launch_spec(
@@ -235,7 +235,7 @@ def prepare_claude(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: flo
     h = how_of(d)
     exe = shutil.which("claude")
     if not exe:
-        return {"outcome": "setup", "say": "claude CLI not found on PATH"}
+        return settle.stop("setup_failed", "claude CLI not found on PATH")
     hx = ClaudeHarness()
     spec = hx.launch_spec(
         LaunchInputs(
@@ -261,19 +261,19 @@ def prepare_opencode(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: f
     h, lane = how_of(d), as_str(d["lane"])
     exe = OpenCodeHarness.find_exe()
     if not exe or not OpenCodeHarness.supported():
-        return {"outcome": "setup", "say": f"{lane} needs macOS and the opencode CLI (route.py doctor)"}
+        return settle.stop("setup_failed", f"{lane} needs macOS and the opencode CLI (route.py doctor)")
     nested = opencode_sandbox.preflight()
     if nested:  # before any model token: the lane is out for a while, so the next call routes to the next lane
         settler().mark_out(lane, t + 3600, f"nested_sandbox: {nested}", t, "limit", "guess")
-        return {
-            "outcome": "setup",
-            "say": f"nested_sandbox: {lane} commands cannot run here ({nested}); this process is already inside a sandbox. "
+        return settle.stop(
+            "setup_failed",
+            f"nested_sandbox: {lane} commands cannot run here ({nested}); this process is already inside a sandbox. "
             "Rerun to use the next lane.",
-        }
+        )
     if (
         lane == "ZAI_CODING_SUBSCRIPTION" and h.model not in harnesses.ZAI_MODELS
     ):  # pin subscription routing; never substitute the pay-as-you-go `zai` provider
-        return {"outcome": "setup", "say": "Z.ai Coding Plan model must use the subscription provider."}
+        return settle.stop("setup_failed", "Z.ai Coding Plan model must use the subscription provider.")
     rules = " ".join((SECRET_RULE, GIT_RULES, EDIT_RULE, NO_SUBAGENTS_RULE, opencode_sandbox.RULE, DENIED_RULE))
     if h.write and getattr(a, "engine_only", None):
         rules += f" Only the engine runs these recipes: {', '.join(a.engine_only)}. {policy.WRITER_RULE}"
@@ -301,13 +301,9 @@ def prepare_opencode(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: f
     )
     if lane == "DEEPSEEK_FREE" and not hx.free_model_ok(h.model, spec.env):  # fail closed if the exact free model or its zero price is gone
         hx.cleanup()
-        until = t + 900
-        settler().mark_out(lane, until, "exact free model unavailable or zero catalog price unverified", t, "limit", "guess")
-        return {
-            "outcome": "rate_limited",
-            "retry_after": until,
-            "say": "Free DeepSeek is unavailable or its zero price could not be verified; rerun to use the next configured lane.",
-        }
+        o = classify(None, structured={"free_model_gone": "exact free model unavailable or zero catalog price unverified"})
+        assert o is not None
+        return settler().apply({}, o, d, t, h.kind, a)
     return Prep(hx, spec, {})
 
 
@@ -359,7 +355,7 @@ def launch_worker(
     result fields."""
     kind = how_of(d).kind
     if why := ref_problem(kind, getattr(a, "instructions_ref", "") or ""):
-        return {"outcome": "setup", "say": why}
+        return settle.stop("setup_failed", why)
     prep = PREPARE[kind](d, brief, a, rid, t, cfg)
     if isinstance(prep, dict):
         return prep

@@ -16,7 +16,7 @@ from taskloop.contracts.dash import READ_PROTOCOL
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.factorydb import SCHEMA_VERSION
-from taskloop.contracts.ports import Spawner
+from taskloop.contracts.procport import Spawner
 from taskloop_dash import bind as dash_bind
 from taskloop_dash.cli import dash as dash_cli
 

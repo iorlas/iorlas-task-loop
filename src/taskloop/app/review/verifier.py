@@ -4,6 +4,7 @@ owner. The 2026-10-21 night: three beads (a hand-written .meta against its sibli
 an evidence file that proved it) each waited hours for an ask a supervisor settled in a minute by reading."""
 from typing import Any
 
+from taskloop.app.review.host import ReviewHost
 from taskloop.contracts.answers import VERDICTS
 from taskloop.domain import followups
 from taskloop.domain.prompts.verify import VERIFY_PROMPT
@@ -20,7 +21,7 @@ def plural(n: int) -> str:
 
 
 class Verifier:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: ReviewHost) -> None:
         self.e = host
 
     def run(self, gaps: list[Item]) -> list[Item]:
@@ -60,8 +61,7 @@ class Verifier:
         rest = [u for u in gaps if u not in asked]
         if rest:
             lo = followups.unchecked(e.bead, rest, followups.REVIEW_OFF if review_off else followups.NOT_VISUAL)
-            if lo["title"] not in {x["title"] for x in e.leftovers}:
-                e.leftovers.append(lo)
+            if e.routing.add_leftover(lo):
                 e.checkpoints.keep_pending("verify")
             if review_off:
                 e.steps.begin("verify", f"{len(rest)} unchecked item(s): verify skipped ({SkipKind.REVIEW_OFF})")
@@ -74,7 +74,7 @@ class Verifier:
         return asked
 
     def counts(self) -> str:
-        return ", ".join(f"{sum(x['verdict'] == k for x in self.e.verified)} {k}" for k in VERDICTS)
+        return ", ".join(f"{sum(x['verdict'] == k for x in self.e.review.verified)} {k}" for k in VERDICTS)
 
     def drop_unused(self, gaps: list[Item]) -> list[Item]:
         """Items that name a tool the repo does not use are settled as 'not a check here'."""
@@ -82,7 +82,7 @@ class Verifier:
         unused = [(u, e.settles.unused_tool(u["what"])) for u in gaps]
         for u, ev in unused:
             if ev:
-                e.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "settled", "evidence": ev, "why": "not a check here"})
+                e.review.add_verified(u, "settled", "not a check here", ev)
         left = [u for u, ev in unused if not ev]
         n_drop = len(gaps) - len(left)
         if n_drop:
@@ -97,7 +97,7 @@ class Verifier:
         e.log.note(f"verify: before land: {counts}")
         if before:
             e.comment("Verify (engine): what the workers could not check, before land: " + "; ".join(
-                "{}: {}, {}".format(x["verdict"], x["what"], '"{}"'.format(x["evidence"])) for x in e.verified))
+                "{}: {}, {}".format(x["verdict"], x["what"], '"{}"'.format(x["evidence"])) for x in e.review.verified))
 
     def ask(self, gaps: list[Item]) -> dict[str, Any] | None:
         """The verifier's answer ({"items": []} when there is nothing to ask); None when no verifier could be had."""
@@ -109,8 +109,8 @@ class Verifier:
                                       checks=e.settles.evidence_text(), where=e.briefing.where("verify"),
                                       items=items) + e.routing.ledger().text()
         try:
-            d, _ = e.ai("verify", f"{len(gaps)} unchecked item(s) before land", prompt, writer_family=e.writer_family,
-                        items=len(gaps), at=(e.at_stage, 0, 0))
+            d = e.ai("verify", f"{len(gaps)} unchecked item(s) before land", prompt, writer_family=e.writer_family,
+                        items=len(gaps), at=(e.at_stage, 0, 0)).data
         except e.Blocked as b:
             if b.kind.name in RAISE_KINDS:
                 raise  # tl-bxk.10.31: the request is malformed for every bead; the network and a kill resume this step, they do not skip it
@@ -141,8 +141,7 @@ class Verifier:
             route = ""
             if v == "open":
                 v, a, why, route = e.routing.route_open(u, a, why)
-            e.verified.append({"what": u["what"], "kind": u["kind"], "verdict": "open" if route == "unverified" else v,
-                               "evidence": a["evidence"], "why": why})
+            e.review.add_verified(u, "open" if route == "unverified" else v, why, a["evidence"])
             if route == "proof":
                 wrong.append(dict(u, why=why, proof_round=True))
             elif v != "settled" and route != "unverified":
@@ -151,15 +150,16 @@ class Verifier:
         e.steps.outcome("wrong" if wrong else "open" if still else "settled", self.counts())
         e.comment("Verify (engine): what the workers could not check, self-verified read-only before land: " + "; ".join(
             "{}: {}, {}".format(x["verdict"], x["what"], ('"{}"'.format(x["evidence"])) if x["verdict"] == "settled" else x["why"])
-            for x in e.verified))
+            for x in e.review.verified))
         return still, wrong
 
     def after_clean(self, still: list[Item], counts: str) -> list[Item]:
         e = self.e
         if still:
             e.steps.move("ask", "verify_open", f"{len(still)} item{plural(len(still))} only the owner can decide")
-        elif e.unverified:
-            e.steps.move("land", "unverified", f"{len(e.unverified)} item{plural(len(e.unverified))} land unverified, for the owner")
+        elif e.review.unverified:
+            n = len(e.review.unverified)
+            e.steps.move("land", "unverified", f"{n} item{plural(n)} land unverified, for the owner")
         else:
             e.steps.move("land", "verified", counts)
         return still
@@ -167,7 +167,7 @@ class Verifier:
     def settle_wrong(self, still: list[Item], wrong: list[Item]) -> list[Item]:
         """Items found wrong go to a fix round; what the fix leaves unproven is routed again, until no fix round is left."""
         e = self.e
-        if e.fixes >= int(e.cfg.max_fix_rounds):
+        if e.fixes >= e.cfg.max_fix_rounds:
             e.steps.move("ask", "verify_wrong", f"{len(wrong)} found wrong, no fix round left")
             return still + [dict(u, why="found wrong: {}; no fix round left".format(u["why"])) for u in wrong]
         e.steps.move("fix", "verify_wrong", f"{len(wrong)} found wrong: " + "; ".join(u["why"] for u in wrong))
@@ -177,7 +177,7 @@ class Verifier:
             pending = [u for u in left if u.get("proof_round")]
             if not pending:
                 return left
-            if e.fixes >= int(e.cfg.max_fix_rounds):  # a bead with an unproven checkable item never lands
+            if e.fixes >= e.cfg.max_fix_rounds:  # a bead with an unproven checkable item never lands
                 raise e.routing.proof_stuck(pending)
             still = [u for u in left if not u.get("proof_round")]
             e.steps.move("fix", "verify_unproven", f"{len(pending)} still unproven after the fix round")
@@ -187,14 +187,14 @@ class Verifier:
         fix's checkpoint: a fix round that pauses resumes at land and verifies them again, never lands them; the fix's review adds
         what it leaves unproven."""
         e = self.e
-        e.unchecked = [u for u in e.unchecked if u["kind"] not in UNCHECKED_KINDS] + still + pending
-        before = len(e.unchecked)
+        e.review.unchecked = [u for u in e.review.unchecked if u["kind"] not in UNCHECKED_KINDS] + still + pending
+        before = len(e.review.unchecked)
         pending = [dict(u, why=u.get("why") or "add a test or check that proves: {}".format(u["what"])) for u in pending]
         done = e.fixer.fix("verify", "".join("- {}: {}\n".format(u["what"], u["why"]) for u in pending))
         fixed = {u["what"] for u in pending}
         # what the fix's review added stays
-        e.unchecked = [u for u in e.unchecked[:before] if u["what"] not in fixed] + e.unchecked[before:]
-        left = [u for u in e.unchecked if u["kind"] in UNCHECKED_KINDS]
+        e.review.unchecked = [u for u in e.review.unchecked[:before] if u["what"] not in fixed] + e.review.unchecked[before:]
+        left = [u for u in e.review.unchecked if u["kind"] in UNCHECKED_KINDS]
         if done != "accept":
             left += [dict(u, why="found wrong: {}; the fix round did not pass".format(u["why"])) for u in pending]
         return e.routing.route_left(left)

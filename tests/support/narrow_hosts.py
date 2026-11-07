@@ -31,15 +31,17 @@ from taskloop.app.run.closer import CloseParts, Closer
 from taskloop.app.run.steps import Steps
 from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import Beads, DoltPush
 from taskloop.contracts.checkpoint import Checkpoint, EndRec, Notes
 from taskloop.contracts.checks import Check, CheckRun
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.delegate import Permanence
 from taskloop.contracts.enums import Outcome
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId, TreeSha
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.plancheck import PlanCheck, PlanData, StageData
-from taskloop.contracts.ports import Beads, Clock, DoltPush, Git
+from taskloop.contracts.ports import Clock
 from taskloop.contracts.run import RunFinish
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec

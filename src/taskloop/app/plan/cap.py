@@ -1,21 +1,21 @@
 """The re-plan cap: when the planner has run too often the bead asks the owner; the owner's answer (or an override on the bead)
 allows one more run."""
 
-from typing import Any
 
 from taskloop.app.asks import intake
+from taskloop.app.plan.host import PlanHost
 from taskloop.contracts.bdsafe import attempt, peek
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BeadPatch
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.enums import AskClass
-from taskloop.contracts.ports import BeadPatch
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks import text as asktext
 from taskloop.domain.prompts.plan import REPLAN_CAP
 
 
 class ReplanCap:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: PlanHost) -> None:
         self.e = host
 
     def blocked(self, detail: str = "") -> Exception:
@@ -23,7 +23,7 @@ class ReplanCap:
         e = self.e
         runs = [(x.mode, x.why) for x in e.plan_log]
         why = "; ".join(f"{k + 1}. {m}: {w}" for k, (m, w) in enumerate(runs))[:1500]
-        limit = int(e.cfg.max_replans) + e.extra
+        limit = e.cfg.max_replans + e.extra
         text = f"{REPLAN_CAP}{e.planned} times (the limit is 1 plan + {limit} amends): {why}{('; ' + detail) if detail else ''}"
         return e.blocked_for(text, "ASK_STUCK", spec=askspecs.cap_reached(e.planned, runs))
 

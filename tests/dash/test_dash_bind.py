@@ -17,7 +17,7 @@ from support.narrow import must  # noqa: E402
 
 from taskloop.contracts.env import Env as ProcessEnv  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
-from taskloop.contracts.stores import ReposStore  # noqa: E402
+from taskloop.contracts.rowstores import ReposStore  # noqa: E402
 from taskloop_dash import bind  # noqa: E402
 from taskloop_dash.cli import dash as dash_cli  # noqa: E402
 
