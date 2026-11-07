@@ -3,7 +3,7 @@ a hint, a hold or an override is a metadata key on the bead. Each verb leaves a 
 neither reads nor counts receipts as input, and parse() only labels them."""
 import contextlib
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Final
@@ -19,10 +19,9 @@ from taskloop.contracts.enums import AskKind
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.lookrows import LookRows
 from taskloop.domain import timespec
+from taskloop.domain.asks.hold import HOLD, HOLD_UNTIL
 
 HINT: Final = "owner_hint"
-HOLD: Final = "owner_hold"
-HOLD_UNTIL: Final = "owner_hold_until"  # epoch seconds; absent = until released
 WAIVERS: Final = "owner_waivers"  # JSON list of Waiver: what the owner waived, deferred or dropped, with the quoted approval
 WAIVER_KINDS: Final = ("waive", "defer", "drop")
 OVERRIDE: Final = "owner_override"
@@ -39,13 +38,6 @@ RECEIPT: Final = "Owner (tl) "
 def parse_until(text: str, now: float) -> float:
     """Epoch seconds of what the owner typed after --until (ValueError when it is not a future time)."""
     return timespec.parse_future(text, datetime.fromtimestamp(now).astimezone())
-
-
-def held(meta: Mapping[str, str], now: float) -> str:
-    """Who holds the bead ("" when nobody): a hold with an `until` ends when that time passes, one without lasts until released."""
-    who = (meta.get(HOLD) or "")
-    until = float(meta.get(HOLD_UNTIL) or 0)
-    return who if who and (not until or until > now) else ""
 
 
 @dataclass(frozen=True)

@@ -1,7 +1,7 @@
 """Keep: after each attempt of a check, its log and the files its `keep` globs name (a Unity log, a result XML) are copied, never
-linked, into <run folder>/artifacts/<check>/attempt-N/, the directory the check already wrote to (TL_ARTIFACT_DIR). The next attempt,
-the next run in the slot and the slot's reset all overwrite the originals; the directory is one per attempt, read-only after, with one
-Evidence row per file (sha256 and bytes).
+linked, into <run folder>/attempts/<run>-attempt-R/artifacts/<check>/attempt-N/, the directory the check already wrote to
+(TL_ARTIFACT_DIR). The next attempt, the next run in the slot and the slot's reset all overwrite the originals; the directory
+is one per attempt, read-only after, with one Evidence row per file (sha256 and bytes).
 A name that looks like a credential (.env*, *.pem, *.key, id_*, *token*, *secret*) is not copied and gets no row.
 Nothing here raises into the engine: evidence is never worth a run."""
 import hashlib

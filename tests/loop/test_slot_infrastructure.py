@@ -8,10 +8,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from slots.test_slot_pool import ME, Rig
 from support.fake_loop_env import slot_loop_env
-from support.taker import real_taker
 
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.settle import Counters, Settle
+from taskloop.app.loop.take import Taker
 from taskloop.app.slots.pool import Slot
 from taskloop.contracts.bead import BdError, Bead
 from taskloop.contracts.beadsport import BdFailure
@@ -25,7 +25,7 @@ from taskloop.domain.lanes import pauses
 class Infrastructure(Rig):
     def taker(self):
         env = slot_loop_env(self.env)
-        return real_taker(env, mock.Mock(), LoopConfig, self.out.append, mock.Mock(), {})
+        return Taker(env, mock.Mock(), LoopConfig, self.out.append, mock.Mock(), {})
 
     def settle(self, counters):
         files = mock.Mock()
@@ -147,10 +147,10 @@ class SetupOwnTree(Rig):
     def test_setup_failing_only_with_the_beads_tree_parks_the_bead_and_leaves_the_slot_clean(self):
         bid = BeadId("x-1")
         self.bd.beads[bid] = Bead(id=bid, title="work", status="in_progress", assignee=ME)
-        taker = real_taker(slot_loop_env(self.env), mock.Mock(), LoopConfig, self.out.append, mock.Mock(), {})
+        taker = Taker(slot_loop_env(self.env), mock.Mock(), LoopConfig, self.out.append, mock.Mock(), {})
         broken = SlotFail("slot_broken", "setup exited 1", setup=True)
         with mock.patch.object(Slot, "ready_for", side_effect=[broken, broken, None]) as reset, \
-                mock.patch("taskloop.app.loop.takeports.setup") as base_setup:
+                mock.patch("taskloop.app.loop.stages.setup") as base_setup:
             verdict = taker.prepare("s1", bid)
         assert verdict is not None
         assert (verdict.outcome, verdict.kind, verdict.pre_engine) == (Result.PAUSED, vd.SETUP_OWN_TREE, False)
@@ -161,10 +161,10 @@ class SetupOwnTree(Rig):
     def test_setup_failing_on_the_base_too_stays_a_slot_failure(self):
         bid = BeadId("x-1")
         self.bd.beads[bid] = Bead(id=bid, title="work", status="in_progress", assignee=ME)
-        taker = real_taker(slot_loop_env(self.env), mock.Mock(), LoopConfig, self.out.append, mock.Mock(), {})
+        taker = Taker(slot_loop_env(self.env), mock.Mock(), LoopConfig, self.out.append, mock.Mock(), {})
         broken = SlotFail("slot_broken", "setup exited 1", setup=True)
         with mock.patch.object(Slot, "ready_for", side_effect=[broken, broken, None]), \
-                mock.patch("taskloop.app.loop.takeports.setup", side_effect=broken):
+                mock.patch("taskloop.app.loop.stages.setup", side_effect=broken):
             verdict = taker.prepare("s1", bid)
         assert verdict is not None
         assert verdict.pre_engine

@@ -9,6 +9,7 @@ from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.runner import Checker
+from taskloop.app.land.state import LandState
 from taskloop.app.look.state import LookState
 from taskloop.app.plan.state import PlanState
 from taskloop.app.review.state import ReviewLive
@@ -124,11 +125,8 @@ class RunFields(StateAttrs):
         self.plan_summary, self.bead_title = "", ""
         self.reflection: Mapping[str, object] | None = None
         self.left_dirty, self.branch, self.task_branch = False, "", ""
-        self.gate_log: Path | None = None
-        self.salvage_tail, self.rebase_orig = "", ""
-        self.rebase_pre: list[str] = []
+        self.land_state = LandState()  # the land's and the resume rebase's unsaved state
         self.artifact_repo = ""  # the repo's store key (adapters.check_files.repo_key), taken at the first registered render
-        self.salvaged = False  # a resume conflict was fixed in place, not by starting again (tl-7y6.2.19)
         self.lane_notes: list[str] = []  # steps that ran on the writer's own family, with delegate's warning
         self.taste: list[Open] = []  # [{id, title}] taste items for the owner-look bead
         self.scope = ""  # the bead's acceptance text: an unchecked item outside it is a follow-up, not a gap (tl-bxk.13.5)
@@ -141,7 +139,6 @@ class RunFields(StateAttrs):
         self.last_flag = ""  # same_family | degraded | ...: what the last worker call reported (worker_call sets it)
         self.retry_after = 0.0  # a pause for a lane: when delegate says it is back (epoch; 0 = unknown)
         self.landed_sha = ""  # set the moment the push goes through: whatever stops the run after it, the bead landed
-        self.land_remote_oid = ""  # task ref checked before land; remote cleanup uses this exact lease
         self.last_run: CheckRun | None = None  # the CheckRun of the last stage round: the engine's evidence for the verifier (tl-bxk.10.25)
         self.prev_ck, self.ck_run, self.resumed, self.run_logged = "", "", False, False
         self.killed = False

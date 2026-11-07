@@ -156,7 +156,7 @@ class LoopConfig(Rec):
     logs_kept: int = 5
     slot_fails_to_set_aside: int = 2  # same bead's quick failures in one slot before requiring recovery or different work
     quick_fail_min: float = 1.5  # a failed run shorter than this, in minutes, is an instant failure
-    fails_to_stop: int = 2  # legacy key: runs with no verdict before a storm cooldown wait
+    fails_to_stop: int = 2  # runs with no verdict before a storm cooldown wait
     pauses_to_rest: int = 3  # a bead paused this often in one loop run rests for `rest`
     rest: float = 3600
     area_poll: float = 60
@@ -196,6 +196,7 @@ class EngineConfig(Rec):
     gate_ignored_allow: list[str] = msgspec.field(default_factory=lambda: [
         ".venv/**", "node_modules/**", "**/__pycache__/**", "Library/**", "Temp/**", "obj/**", "bin/**", "**/.*cache*/**"])
     land_mode: Literal["push", "pr"] = "push"  # pr: the land opens a PR and waits for the owner to merge it; the engine never merges
+    land_queue: Literal["off", "shadow", "on"] = "off"  # the speculative merge queue (merge-queue.md); off: as before
     base: str = "origin/main"
     check_links: bool = True
     owner_author: str = ""  # exact bd comment author; unset means no comment is an owner instruction
