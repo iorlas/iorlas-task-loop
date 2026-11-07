@@ -300,7 +300,8 @@ class Artifacts(LogRec, tag="artifacts"):
 @final
 class Evidence(LogRec, tag="evidence"):
     """One file a check attempt left (its log, the files its `keep` names), copied under the run folder before its slot can be reset:
-    `artifact` is its path relative to the run folder (artifacts/<check>/attempt-N/<name>), `artifact_hash` the sha256 of the copy."""
+    `artifact` is its path relative to the run folder
+    (attempts/<run>-attempt-R/artifacts/<check>/attempt-N/<name>), `artifact_hash` the sha256 of the copy."""
 
     attempt: int
     bytes: int

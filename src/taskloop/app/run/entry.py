@@ -27,7 +27,6 @@ from taskloop.app.slots import engine_lock
 from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import fence, wire
-from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.beadsport import BdFailure, BeadPatch, Beads
 from taskloop.contracts.config import EngineConfig
@@ -43,7 +42,9 @@ from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.procport import Spawner
 from taskloop.contracts.run import Reexec, RunReport
+from taskloop.domain.asks import hold
 from taskloop.domain.plan.brief import owner_written
+from taskloop.stores.real import real_stores
 
 say = console.say
 TL_PY = Path(__file__).resolve().parents[4] / "skills" / "task-loop" / "tl.py"
@@ -81,7 +82,7 @@ def _blocked_by_engine(b: Any, store: Any, home: ConfigDir, owner_author: str) -
     if not blocks:
         return "blocked by a person, not by the engine"
     after = [c for c in cs if c.created_at > blocks[-1].created_at and owner_written(c, owner_author)]
-    ask = AskStore.at(home).get(bead_id)
+    ask = real_stores(home).asks.get(bead_id)
     asking = ask is not None and ask.consumed is None and ask.status in (AskStatus.OPEN, AskStatus.PARKED, AskStatus.ANSWERED)
     if ask is not None and asking and ask.answer is not None:  # tl-gy4: an answer filed on the ask (dashboard, tl ask answer) is an answer
         after, asking = after[:0], False  # whether or not a comment followed the block; the run's check_ask consumes it
@@ -102,7 +103,7 @@ def admit(bead_id: Any, repo: Any, git: Git, who: Identity, store: Any = None, a
     store = store or beadtools.bd_store(who.actor, repo)
     b = beadtools.peek(store, bead_id) or Bead(id=bead_id, title="", status="")
     holder, me = b.assignee, who.actor
-    if intake.held(b.metadata, at or time.time()):
+    if hold.held(b.metadata, at or time.time()):
         return False, f"held by the owner ({b.metadata[intake.HOLD]}): `tl hold {bead_id} --release` lets it go"
     if holder and holder != me:
         why = _foreign_claim(b, repo, git, who, store, fresh)
@@ -198,7 +199,7 @@ def run_main_stoppable(a: Any, store: Any = None, *, env: Env, spawner: Spawner,
     repo = gitrepo.repo_root()
     cfg = wslots.load_cfg(repo, git)
     if not a.dry_run:
-        setup_retry.retry_setup(AskStore.at(who.config), store or beadtools.bd_store(who.actor, repo),
+        setup_retry.retry_setup(real_stores(who.config).asks, store or beadtools.bd_store(who.actor, repo),
                                 a.id, ident.plugin_version(), time.time(), cfg, starting=True)
     if a.slot == "any":
         return run_any_slot(a, repo, cfg, store, env=env, spawner=spawner, git=git, who=who)
@@ -210,6 +211,10 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, sp
     run there as `--slot NAME`, given back at the end."""
     if a.dry_run:
         return preview(a, repo, cfg, "", store=store, env=env, git=git, who=who)
+    cfg_slots = wslots.profile_slots(repo)
+    if why := wslots.uninitialised(repo, cfg_slots, store, spawner=spawner, git=git, who=who):
+        print(f"TAKEN: {why}")
+        return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
     wait = bool(getattr(a, "wait", False))
     told: list[int] = []
 
@@ -218,7 +223,7 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, sp
             say("no free slot{}; waiting in line".format(f" ({ahead} ahead)" if ahead else ""))
             told.append(1)
     halt = halting.RUN_HALT["ev"] or threading.Event()
-    got = wslots.wait_slot(repo, wslots.profile_slots(repo), "run-task " + a.id, stop=lambda: not wait or halt.is_set(), sleep=halt.wait,
+    got = wslots.wait_slot(repo, cfg_slots, "run-task " + a.id, stop=lambda: not wait or halt.is_set(), sleep=halt.wait,
                            on_wait=waiting, prio=wslots.bead_priority(repo, a.id, who,
                                store), store=store, spawner=spawner, git=git, who=who)
     if not got and halt.is_set():

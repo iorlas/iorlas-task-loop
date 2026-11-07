@@ -1,5 +1,4 @@
 """Every file location, once. Nothing else in the package names a file or a folder of ours."""
-import hashlib
 from pathlib import Path
 from typing import Final, final
 
@@ -19,6 +18,11 @@ class ConfigDir:
     def __init__(self, root: Path | str) -> None:
         self.root = Path(root)
 
+    @classmethod
+    def holding(cls, run_dir: Path | str) -> ConfigDir:
+        """The config dir a run folder (runs/<run>/) lives in."""
+        return cls(Path(run_dir).parent.parent)
+
     def factory_db(self) -> Path:
         """The host's shared factory journal and dashboard read model."""
         return self.root / "factory.db"
@@ -36,6 +40,10 @@ class ConfigDir:
     def layout_journal(self) -> Path:
         """What `tl layout migrate` moved, one line per move."""
         return self.root / "layout-migrate.jsonl"
+
+    def retired_dir(self) -> Path:
+        """retired/: what `tl layout migrate` set aside because no registered repo owns it (an old repo key it cannot map)."""
+        return self.root / "retired"
 
     def dash_pid(self) -> Path:
         return self.root / "dash.pid"
@@ -66,28 +74,9 @@ class ConfigDir:
         """The owner's audit of profile changes delivered by land-stack."""
         return self.root / "profile-changes.jsonl"
 
-    def ask(self, bead: BeadId | str) -> Path:
-        """Legacy ask input for the one-time importer only."""
-        return self.root / "asks" / (f"{bead}.json")
-
-    def asks_dir(self) -> Path:
-        """Legacy ask directory for the one-time importer only."""
-        return self.root / "asks"
-
-    def ask_beads(self) -> list[str]:
-        """Legacy beads, sorted; used only by the one-time importer."""
-        try:
-            return sorted(p.stem for p in self.asks_dir().glob("*.json"))
-        except OSError:
-            return []
-
     def ask_marker(self, sweep: str) -> Path:
         """When a throttled sweep of the asks last ran (the file's mtime); not an ask, so the store never lists it."""
         return self.root / "asks" / ("." + sweep)
-
-    def ask_ledger(self) -> Path:
-        """Legacy ledger input for the one-time importer only."""
-        return self.root / "ask-ledger.jsonl"
 
     def adr_dir(self, repo_key: str) -> Path:
         return self.repo_dir(repo_key) / "decisions"
@@ -125,14 +114,6 @@ class ConfigDir:
     def lock_file(self, name: str) -> Path:
         """locks/<name>: a lock of the host that is not keyed to one worktree (release, reflect, slot take)."""
         return self.root / "locks" / name
-
-    def result(self, repo_key: str, check: str, digest: str) -> Path:
-        """Legacy importer only: receipt rollback copy under the hashed check ID; current receipts live in factory.db."""
-        return self.root / "results" / repo_key / hashlib.sha1(check.encode("utf-8", "surrogateescape")).hexdigest()[:12] / f"{digest}.json"
-
-    def base_red(self, repo_key: str, digest: str) -> Path:
-        """Legacy importer only: base-red rollback copy; current receipts live in factory.db."""
-        return self.root / "results" / repo_key / "base-red" / f"{digest}.json"
 
     def check_durations(self, repo_key: str) -> Path:
         return self.repo_dir(repo_key) / "durations.json"
@@ -226,9 +207,25 @@ class RunFiles:
     def reexec(self) -> Path:
         return self.dir / "reexec.json"
 
-    def artifacts(self) -> Path:
-        """The folders of the run's checks, one per step, each holding attempt-N/ (contracts/artifact.py)."""
-        return self.dir / "artifacts"
+    def attempts(self) -> Path:
+        """attempts/: one folder per run attempt (a process that took the run up; the factory.db attempt row's n)."""
+        return self.dir / "attempts"
+
+    def attempt(self, n: int) -> Path:
+        """attempts/<run>-attempt-<n>/: what run attempt n wrote."""
+        return self.attempts() / f"{self.dir.name}-attempt-{n}"
+
+    def artifacts(self, n: int) -> Path:
+        """The folders of the checks run in run attempt n, one per step, each holding attempt-S/ (S: the step's own try)."""
+        return self.attempt(n) / "artifacts"
+
+    def check_dirs(self) -> list[tuple[int, Path]]:
+        """(run attempt, <step> folder) of every step that kept anything, oldest run attempt first."""
+        found: list[tuple[int, Path]] = []
+        for a in sorted(self.attempts().glob("*-attempt-*/artifacts")):
+            n = a.parent.name.rpartition("-attempt-")[2]
+            found += [(int(n), d) for d in sorted(a.iterdir()) if d.is_dir()] if n.isdigit() else []
+        return sorted(found, key=lambda x: x[0])
 
     def handoff(self) -> Path:
         return self.dir / "handoff.json"

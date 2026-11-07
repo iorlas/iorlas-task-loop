@@ -77,6 +77,7 @@ except ModuleNotFoundError:
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # taskloop ships in the plugin dir; importing it adds _vendor
 
 from taskloop.adapters import beadtools, gitrepo, ident, landlock
+from taskloop.app.doctor import rails
 from taskloop.app.launch import dash as wire_dash
 from taskloop.app.launch import reindex
 from taskloop.app.release import pins
@@ -152,6 +153,7 @@ def owner_parsers(sp):
     sp.add_parser("selftest", help="run one bead through the engine with a fake lane in a temp repo; exit 1 when it cannot")
     p = sp.add_parser("doctor", help="warn about git settings that let a slot's git leave the slot")
     p.add_argument("--reindex", action="store_true", help="rebuild the dashboard's run index in factory.db")
+    p.add_argument("--print-guard-rails", action="store_true", help="print the gh api calls that set the guard rails of main")
     p.add_argument("--disk", action="store_true", help="where the config folder's bytes are, and the free space of its volume")
     sp.add_parser("layout", help="`tl layout migrate`: move an old config dir to runs/<run>/ and repos/<repo>/ once (stop the loops first)"
                   ).add_argument("op", choices=["migrate"])
@@ -391,7 +393,7 @@ def v_next(a: Any, c: Ctx) -> int:
 
 
 def v_layout(a: argparse.Namespace, c: Ctx) -> int:
-    return verbs.layout(c.who.config, c.now())
+    return verbs.layout(c.who.config, c.now(), c.git)
 
 
 def v_prune(a: Any, c: Ctx) -> int:
@@ -415,6 +417,8 @@ def v_doctor(a: Any, c: Ctx) -> int:
         return reindex.run(c.who.config)
     if a.disk:
         return doctor.disk_run(c.who.config)
+    if a.print_guard_rails:
+        return rails.print_calls(c.git)
     return doctor.run(c.here.parents[1], c.env, c.git, c.who, c.spawner)
 
 

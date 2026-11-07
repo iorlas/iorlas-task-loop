@@ -26,7 +26,7 @@ from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.domain import timespec
-from taskloop.domain.asks import specs
+from taskloop.domain.asks import hold, specs
 
 T = 1_000_000.0
 
@@ -65,10 +65,10 @@ class VerbSurface(Case):
         assert self.say("hold", "fk-1", "--until", "+2h") == 0
         meta = self.store.beads[BeadId("fk-1")].metadata
         until = float(meta[intake.HOLD_UNTIL])
-        assert intake.held(meta, until - 1) == "denis"
-        assert intake.held(meta, until + 1) == ""
+        assert hold.held(meta, until - 1) == "denis"
+        assert hold.held(meta, until + 1) == ""
         assert self.say("hold", "fk-1", "--release") == 0
-        assert intake.held(self.store.beads[BeadId("fk-1")].metadata, 0) == ""
+        assert hold.held(self.store.beads[BeadId("fk-1")].metadata, 0) == ""
 
     def test_the_loop_claims_nothing_while_held(self) -> None:
         self.say("hold", "fk-1", "--until", "+2h")

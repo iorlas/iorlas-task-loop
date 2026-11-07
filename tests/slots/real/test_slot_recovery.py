@@ -10,9 +10,9 @@ import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.fake_loop_env import slot_loop_env
 from support.memstores import MemTickets
-from support.taker import real_taker
 
 from slots.real.test_worktrees import Rig, git
+from taskloop.app.loop.take import Taker
 from taskloop.app.slots.env import SlotEnv
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts.config import SlotsConfig
@@ -33,7 +33,7 @@ class SlotRecovery(Rig):
         assert Path(slot.dir, "a.txt").exists()
         assert git(slot.dir, "rev-parse", "HEAD") == git(self.repo, "rev-parse", "origin/main")
         shutil.rmtree(slot.dir)
-        taker = real_taker(slot_loop_env(env), mock.Mock(), mock.Mock(),
+        taker = Taker(slot_loop_env(env), mock.Mock(), mock.Mock(),
                       mock.Mock(), mock.Mock(), {})
         assert taker.prepare("s1", "a") is None
         assert Path(slot.dir, "a.txt").exists()

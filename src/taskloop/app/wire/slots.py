@@ -34,7 +34,7 @@ from taskloop.contracts.paths import TASK_EXCLUDE
 from taskloop.contracts.procport import Spawner
 from taskloop.contracts.slots import NotARepo, SlotFail, SlotGitError, SlotTable
 from taskloop.contracts.slottable import WORKTREE, LiveSlot, SlotSource, build_slot_table
-from taskloop.stores.ticketrows import TicketRows
+from taskloop.stores.real import real_stores
 
 
 def profile(repo: str, base: str | None, git: Git) -> dict[str, Any]:
@@ -166,7 +166,7 @@ def slot_env(repo: str, store: Beads | None = None, cfg: SlotsConfig | None = No
         cfg=cfg or profile_slots(repo),
         store=store or bd_store(who.actor, repo),
         git=git,
-        tickets=TicketRows(who.config),
+        tickets=real_stores(who.config).tickets,
         cfgdir=who.config,
         actor=who.actor,
         host=hostname(),
@@ -203,7 +203,7 @@ def slot_of(repo: str, wt: str, who: Identity, store: Beads | None = None, *, st
 
 def waiting_line(repo: str, who: Identity) -> list[Any]:
     """The live tickets (Ticket), first in line first; a dead waiter's ticket is removed."""
-    return list(TicketRows(who.config).line(repo_key(repo)))
+    return list(real_stores(who.config).tickets.line(repo_key(repo)))
 
 
 def wait_slot(repo: str, cfg: SlotsConfig, why: str, bead: str = "", stop: Callable[[], bool] | None = None,
@@ -212,6 +212,13 @@ def wait_slot(repo: str, cfg: SlotsConfig, why: str, bead: str = "", stop: Calla
               store: Beads | None = None, *, spawner: Spawner, git: Git, who: Identity) -> tuple[str, str, BeadId] | None:
     """(name, dir, slot bead) once this waiter is first in line and a slot is free; None when stop() says so (see app/slots/line.py)."""
     return slots_line.wait_slot(slot_env(repo, store, cfg, spawner=spawner, git=git, who=who), why, bead, stop, sleep, poll, on_wait, prio)
+
+
+def uninitialised(repo: str, cfg: SlotsConfig, store: Beads | None = None, *, spawner: Spawner, git: Git, who: Identity) -> str:
+    """Why no slot can ever come free (the profile counts slots, this machine has no slot bead), or "": a waiter would queue for good."""
+    if cfg.count < 1 or SlotPool(slot_env(repo, store, cfg, spawner=spawner, git=git, who=who)).slots():
+        return ""
+    return f"no slots on {hostname()}: run `tl slot init` ({cfg.count} in the profile)"
 
 
 def take_named_slot(repo: str, name: str, cfg: SlotsConfig, why: str, bead: str = "",
