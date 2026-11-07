@@ -1,4 +1,4 @@
-"""Text shaping that needs a regular expression. `import re` is allowed in domain/**/matchers.py only."""
+"""Text shaping that needs a regular expression. Shared regular expressions live in tlkernel.matchers."""
 import re
 from typing import Final
 

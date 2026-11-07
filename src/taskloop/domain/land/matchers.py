@@ -1,4 +1,4 @@
-"""Policy over the text of a push: the regular expressions of the land feature, each a named class (network errors: domain/matchers.py)."""
+"""Policy over the text of a push: the regular expressions of the land feature, each a named class (network errors: tlkernel.matchers)."""
 import re
 from typing import Final
 
