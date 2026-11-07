@@ -13,7 +13,7 @@ from support.engine_case import EngineTest
 from support.logs import records
 
 # isort: split
-from taskloop.app.run.blocked import Blocked
+from taskloop.app.pipeline.blocked import Blocked
 from taskloop.domain.checks.specs import gate_items
 
 UNITY = {"unity": {"limit": 1}}

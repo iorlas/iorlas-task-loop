@@ -39,8 +39,10 @@ sys.path[:0] = [{src!r}, {vendor!r}]
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.launch.push_judge import cmd_judge_push
+from taskloop.cli.ctx import declare_stage_parts
 from taskloop.contracts.env import Env
 from taskloop.contracts.identity import Identity
+declare_stage_parts()
 with Path(os.environ['CALLS']).open('a') as log:
     log.write(' '.join(sys.argv[1:]) + '\\n')
 env = Env(dict(os.environ))

@@ -4,18 +4,17 @@ import sqlite3
 
 import sqlite_store
 
-from taskloop.contracts import dbparts, factoryparts  # noqa: F401  (registers the parts whose rules these are)
-
-ORDER = dbparts.prune_order()  # every part's rules, children before parents (the parts declare it: factoryparts)
-HISTORY = tuple(rule.table for rule in ORDER)
+from taskloop.contracts.dbparts import Prune
 
 
 def prune_older_than(
     con: sqlite3.Connection,
     cutoff_t: float,
-    tables: tuple[str, ...] = HISTORY,
+    tables: tuple[str, ...] | None = None,
     keep_beads: frozenset[str] = frozenset(),
     dry_run: bool = False,
+    *,
+    order: tuple[Prune, ...],
 ) -> dict[str, int]:
     """Atomically prune selected history tables; return deleted row counts.
 
@@ -27,14 +26,15 @@ def prune_older_than(
     Dry runs execute the same DELETEs under the writer lock then roll back.
     Bound single-row inserts make exemptions independent of SQL variable limits.
     """
-    selected = set(tables)
-    if selected - set(HISTORY):
+    history = {rule.table for rule in order}
+    selected = history if tables is None else set(tables)
+    if selected - history:
         raise ValueError("only history tables may be pruned")
     counts: dict[str, int] = {}
     with sqlite_store.begin_immediate(con):
         con.execute("CREATE TEMP TABLE prune_keep_bead (bead TEXT PRIMARY KEY)")
         con.executemany("INSERT INTO temp.prune_keep_bead VALUES (?)", ((b,) for b in keep_beads))
-        for rule in ORDER:
+        for rule in order:
             if rule.table in selected:
                 counts[rule.table] = con.execute(f'DELETE FROM "{rule.table}" WHERE {rule.where}', (cutoff_t,) * rule.cutoffs).rowcount
         con.execute("DROP TABLE temp.prune_keep_bead")

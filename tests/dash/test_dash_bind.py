@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 from support.narrow import must  # noqa: E402
 
+from taskloop.contracts import factorydb  # noqa: E402
 from taskloop.contracts.env import Env as ProcessEnv  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
 from taskloop.contracts.rowstores import ReposStore  # noqa: E402
@@ -50,7 +51,8 @@ class Env(Case):
         if public:
             env["TASK_LOOP_DASH_DEV_PUBLIC"] = "1"
         err = io.StringIO()
-        with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stderr(err), pytest.raises(SystemExit) as stop:
+        with mock.patch.object(factorydb._STORE, "parts", None), \
+                mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stderr(err), pytest.raises(SystemExit) as stop:
             dash_cli.main(list(args), here=where)
         return stop.value.code, err.getvalue()
 

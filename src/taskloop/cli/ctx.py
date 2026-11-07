@@ -3,7 +3,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from taskloop.app.parts import STAGE_PARTS
 from taskloop.contracts.env import Env
+from taskloop.contracts.factorydb import declare_parts
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.procport import Spawner
@@ -19,3 +21,8 @@ class Ctx:
     spawner: Spawner  # the one way a verb starts a process, built on `env`
     git: Git  # the one way a verb runs git, built on `env`
     who: Identity  # the session and bd actor this process acts as, built once from `env`
+
+
+def declare_stage_parts() -> None:
+    """The first thing a task-loop process does: say which factory.db parts it carries (no open is allowed before)."""
+    declare_parts(STAGE_PARTS)

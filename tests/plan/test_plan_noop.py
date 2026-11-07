@@ -11,8 +11,8 @@ import support.paths  # noqa: F401
 from support.checks import typed
 from support.plans import PLAN
 
+from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from taskloop.app.plan.planner import Planner
-from taskloop.app.run.blocked import Blocked, blocked_for
 from taskloop.contracts.kinds import Kind
 
 
