@@ -85,6 +85,17 @@ All `planned`. Running example: five PRs A, B, C, D, E wait to land on main (cal
 | flake score | Per test, how often it failed and then passed on retry or on clean main. Over 3 rows a week files a fix bead; nothing is skipped or hidden. | One test with 4 rows in a week gets a bead. | quarantine (refused) |
 | guard rails | The settings that keep main safe: a GitHub ruleset against force-push and deletion, and the pre-push judge. `tl doctor` fails when either drifts. | Hook missing in a worktree: doctor fails. | branch protection requiring PRs (not used: push mode would break) |
 
+## Tests (design: docs/design/test-tiers.md)
+
+| Term | Means | Example | Not |
+|---|---|---|---|
+| behavioral test `planned` | A test that runs the real thing: the `real` and `e2e` layers (a real git, process or socket, or a whole flow), plus `tests/delegate` and `tests/live`. | `tests/land/real/`, `tests/e2e/`. | unit test (fakes, in memory), integration test |
+| test tier `planned` | When a set of tests runs: T1 unit + contract on every PR, T2 behavioral near the change on every PR, T3 the full behavioral suite on main and on a release candidate. | A hub change runs T1 in full, T2 by distance, and T3 later. | test layer (a layer is what a test may touch, by path) |
+| distance cut `planned` | The T2 rule that runs a behavioral test on a PR only when the PR changed it, it imports a changed file directly, it sits in a changed file's slice, or it is a wiring or e2e test. The rest of the closure waits for T3. | `contracts/paths.py` changes: tests that import it run on the PR; the far closure runs in T3. | closure (the closure is every test that reaches the file) |
+| main sweep `planned` | A T3 run of the full behavioral suite on the newest main tip by an idle slot, skipped for a tree that already has a green receipt. | A landing moves main; the next idle slot runs the main sweep on the new tip. | gate (a gate judges one PR before land), devbox canary (an acknowledgement for the Mac pin) |
+| release candidate `planned` | The tree `dev/release.py` is about to bump: origin/main's tip before the version-bump commit. | The tree hash the release caches its gate by. | release (a candidate is not yet released) |
+| release | A release candidate that passed T3 and `just check` + `just test`, then got the version bump, the tag `v<version>` and the install. | `v0.9.12` tagged and installed. | land, a merge to main |
+
 ## Dashboard
 
 | Term | Means | Example | Not |

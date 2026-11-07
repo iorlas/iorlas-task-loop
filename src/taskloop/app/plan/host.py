@@ -7,6 +7,7 @@ from typing import Protocol
 
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.looks import Methods
+from taskloop.app.plan.state import PlanState
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import AskAnswer
 from taskloop.contracts.asked import Asked
@@ -18,10 +19,9 @@ from taskloop.contracts.enums import AskClass
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId, TreeSha
 from taskloop.contracts.plancheck import PlanData
+from taskloop.contracts.stop import Stop
 from taskloop.contracts.wire import Open
 from taskloop.domain.review.ledger import Ledger
-
-Stop = Exception  # the engine's Blocked; contracts/stop.py (B-REVIEW 3) will type it
 
 
 class Answered(Protocol):
@@ -142,10 +142,7 @@ class PlanHost(Protocol):
     amend_text: str
     amend_why: str
     amended: bool
-    cap_granted: bool
-    plan_assumed: bool
-    plan_decided: bool
-    plan_visual_back: bool
+    plan_state: PlanState
     log: PlanLog
     steps: PlanSteps
     checkpoints: PlanCheckpoints

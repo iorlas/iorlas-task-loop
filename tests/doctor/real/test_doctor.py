@@ -37,9 +37,18 @@ class DoctorSource(Case):
         self.root = Path(self.tmp.name).resolve()
         self.repo = self.root / "main"
         self.wt = self.root / "worker"
-        self.env = dict(os.environ, GIT_AUTHOR_NAME="test", GIT_AUTHOR_EMAIL="test@example.invalid",
+        stubs = self.root / "stubs"  # a bd that runs and opens: this repo has no beads database
+        stubs.mkdir()
+        (self.root / "gitconfig").write_text("[user]\n\tname = test\n\temail = test@example.invalid\n")
+        (self.root / "scratch").mkdir()
+        script = '#!/bin/sh\ncase "$1" in --version) echo "bd version 1.3.1";; *) echo "[]";; esac\n'
+        (stubs / "bd").write_text(script)
+        (stubs / "bd").chmod(0o755)
+        others = [d for d in os.environ["PATH"].split(os.pathsep) if "tl-nobd-" not in d]  # the suite's failing bd would be a second build
+        self.env = dict(os.environ, PATH=os.pathsep.join([str(stubs), *others]),
+                        GIT_AUTHOR_NAME="test", GIT_AUTHOR_EMAIL="test@example.invalid",
                         GIT_COMMITTER_NAME="test", GIT_COMMITTER_EMAIL="test@example.invalid",
-                        GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
+                        GIT_CONFIG_GLOBAL=str(self.root / "gitconfig"), TMPDIR=str(self.root / "scratch"), GIT_CONFIG_NOSYSTEM="1",
                         XDG_CONFIG_HOME=str(self.root / "config"), CLAUDE_CONFIG_DIR=str(self.root / "claude"),
                         HOME=str(self.root / "home"))  # the PATH link the doctor reports is under HOME, not the host's ~/.local/bin
         patch = mock.patch.dict(os.environ, self.env)
