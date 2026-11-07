@@ -6,7 +6,6 @@ from taskloop.contracts.log import StepEnd, StepStart, Transition
 from taskloop.stores.runlog import RunLog
 
 
-
 def _count(v: object) -> int | None:
     return v if isinstance(v, int) else None
 
