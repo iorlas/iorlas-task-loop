@@ -7,8 +7,8 @@ from tlkernel.gitport import Git
 from tlkernel.plancheck import PlanData
 
 from taskloop.app.land.gate import Problem, ProblemKind
-from taskloop.app.land.gitcall import must
 from taskloop.app.land.host import MoveSteps, StageCheckout
+from taskloop.app.land.rebase import must
 
 
 class FixRounds(Protocol):
