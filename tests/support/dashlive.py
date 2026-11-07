@@ -29,9 +29,10 @@ def make_run(root):
     put(
         lf,
         [
-            {"t": T + 6, "k": "start", "harness": "codex", "lane": "CODEX", "model": "gpt-x", "effort": "high", "role": "worker", "pid": 1},
-            {"t": T + 6.5, "k": "msg", "text": "between the start and the command"},
-            {"t": T + 7, "k": "cmd_start", "id": "1", "text": "pytest -q", "cwd": "/w"},
+            {"t": T + 6, "kind": "start", "harness": "codex", "lane": "CODEX", "model": "gpt-x",
+             "effort": "high", "role": "worker", "pid": 1},
+            {"t": T + 6.5, "kind": "msg", "text": "between the start and the command"},
+            {"t": T + 7, "kind": "cmd_start", "id": "1", "text": "pytest -q", "cwd": "/w"},
         ],
     )
     return b, lf

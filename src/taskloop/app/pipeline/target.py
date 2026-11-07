@@ -3,10 +3,9 @@ import json
 from argparse import Namespace
 from typing import Protocol
 
+from tlkernel.branches import TASK
 from tlkernel.ids import BeadId
 from tlkernel.procport import Ran
-
-TASK = "task/"
 
 
 class Runs(Protocol):

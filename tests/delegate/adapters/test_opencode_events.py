@@ -163,8 +163,8 @@ class Stream:
             sink.end("done")
             rows = [json.loads(x) for x in (Path(d) / "l.jsonl").read_text().splitlines()]
         start, end = rows[0], rows[1]
-        assert (start["k"], start["id"], start["text"], start.get("prov")) == ("cmd_start", "oc:1", "sleep 6", True)
-        assert (end["k"], end["id"], end["secs"], end["exit"], end["out"]) == ("cmd_end", "oc:1", 4.5, 0, "done")
+        assert (start["kind"], start["id"], start["text"], start.get("prov")) == ("cmd_start", "oc:1", "sleep 6", True)
+        assert (end["kind"], end["id"], end["secs"], end["exit"], end["out"]) == ("cmd_end", "oc:1", 4.5, 0, "done")
         assert (end["t"] - start["t"]) >= 4
 
     def test_a_line_that_is_not_json_or_an_object_yields_nothing(self):

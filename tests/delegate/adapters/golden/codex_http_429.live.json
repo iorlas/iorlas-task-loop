@@ -6,7 +6,7 @@
   "run_id": "rid"
  },
  {
-  "k": "start",
+  "kind": "start",
   "t": 101.0,
   "harness": "codex",
   "pid": 4242,
@@ -16,12 +16,12 @@
   "role": "worker"
  },
  {
-  "k": "retry",
+  "kind": "retry",
   "t": 102.0,
   "why": "http 429"
  },
  {
-  "k": "end",
+  "kind": "end",
   "t": 103.0,
   "status": "done",
   "secs": 4.0
