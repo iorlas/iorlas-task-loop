@@ -36,6 +36,7 @@ from support.who import who
 
 from slots.test_slots import Slots
 from taskloop.app.loop.queue import QueueRule
+from taskloop.app.slots import config as wslots_config
 from taskloop.app.slots.pool import Slot, SlotPool
 from taskloop.app.wire import slots as wslots
 from tlkernel import fence
@@ -99,7 +100,7 @@ class Areas(AreasBase):
 
 
     def cfg_slots(self):
-        return wslots.profile_slots(str(self.repo))
+        return wslots_config.profile_slots(str(self.repo))
 
 
 class Line(Slots):
@@ -107,7 +108,7 @@ class Line(Slots):
 
     def setup_method(self):
         super().setup_method()
-        self.cfg = wslots.profile_slots(str(self.repo))
+        self.cfg = wslots_config.profile_slots(str(self.repo))
 
     def tickets(self):
         return sl.ticket_names(self.repo)
@@ -222,7 +223,7 @@ class Line(Slots):
         repo = str(self.repo)
         ts = [sl.take_ticket(repo, "a", 1), sl.take_ticket(repo, "b", 1), sl.take_ticket(repo, "c")]
         assert [t.why for t in wslots.waiting_line(repo, who())] == [*["a", "b", "c"][:2], "c"]
-        assert (wslots.prio_of(tbead("x-1", 0)), wslots.prio_of(tbead("x-1", 1)), wslots.prio_of(None)) == (0, 1, 2)
+        assert (wslots_config.prio_of(tbead("x-1", 0)), wslots_config.prio_of(tbead("x-1", 1)), wslots_config.prio_of(None)) == (0, 1, 2)
         for t in ts:
             sl.drop_ticket(repo, t)
 
@@ -239,7 +240,7 @@ class ReviewFixes(AreasBase):
     def test_two_freers_of_one_expired_hold_and_a_taker_never_wipe_the_takers_slot(self):
         bd = self.beads({}, slots=1)
         self.expired(bd)
-        repo, cfg = str(self.repo), wslots.profile_slots(str(self.repo))
+        repo, cfg = str(self.repo), wslots_config.profile_slots(str(self.repo))
         real_bd, paused, go, won = bd, threading.Event(), threading.Event(), {}
 
         def bd_pause(*a, **kw):  # P2 has read the expired hold and stops before it wipes the marks
@@ -274,7 +275,7 @@ class ReviewFixes(AreasBase):
         bd = self.beads({}, slots=1)
         repo = str(self.repo)
         with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-new00000"}):
-            assert sl.take_slot(repo, wslots.profile_slots(repo), "loop", bead="x-2")
+            assert sl.take_slot(repo, wslots_config.profile_slots(repo), "loop", bead="x-2")
         before = json.loads(json.dumps(bd.slots["sl-1"]))
         err = io.StringIO()
         with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-old00000"}), mock.patch.object(sys, "stderr", err):
@@ -291,11 +292,11 @@ class ReviewFixes(AreasBase):
         bd = self.beads({}, slots=1)
         repo = str(self.repo)
         with mock.patch.dict(os.environ, {"TASK_LOOP_ACTOR": "tl-same0000"}):
-            assert sl.take_slot(repo, wslots.profile_slots(repo), "run x-1", bead="x-1")
+            assert sl.take_slot(repo, wslots_config.profile_slots(repo), "run x-1", bead="x-1")
             old = fence.gen_of(wslots.slot_bead(repo, "s1", who()), SLOT_GEN)
             wslots.release_slot(repo, "s1", bead="x-1", mine=True, gen=old,
                 spawner=real_spawner(), git=port_git(), who=who())  # the old run's slot lapsed and was freed
-            assert sl.take_slot(repo, wslots.profile_slots(repo), "run x-1 again", bead="x-1")  # same actor, same bead
+            assert sl.take_slot(repo, wslots_config.profile_slots(repo), "run x-1 again", bead="x-1")  # same actor, same bead
             new = fence.gen_of(wslots.slot_bead(repo, "s1", who()), SLOT_GEN)
             assert new > old
             before = json.loads(json.dumps(bd.slots["sl-1"]))

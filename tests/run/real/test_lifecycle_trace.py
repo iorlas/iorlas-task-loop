@@ -13,7 +13,7 @@ from support import engine_case as te
 from support import homes
 
 from taskloop.app.run import engine
-from taskloop.app.wire import slots as wslots
+from taskloop.app.slots import config as wslots_config
 from taskloop.domain.lifecycle import matchers as lifecycle
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
@@ -58,7 +58,7 @@ class TraceTelemetry(te.EngineTest):
         eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             verbose=False,
             store=self.store,
             env=snapshot(),

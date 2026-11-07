@@ -36,7 +36,7 @@ from taskloop.app.run import (
     engine,
     entry,
 )
-from taskloop.app.wire import slots as wslots
+from taskloop.app.slots import config as wslots_config
 from taskloop.domain.checks import lint
 from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks.writer_split import WriterSplit
@@ -191,7 +191,7 @@ class EngineChecksTest(EngineTest):
         assert "Linked beads" not in a
 
     def test_checks_run_without_the_launchers_claude_session(self):
-        c = wslots.load_cfg(str(self.wt), port_git())
+        c = wslots_config.load_cfg(str(self.wt), port_git())
         eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
             git=port_git(), who=who())
         with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
@@ -261,7 +261,7 @@ class EngineChecksTest(EngineTest):
         eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
@@ -280,7 +280,7 @@ class EngineChecksTest(EngineTest):
         eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
@@ -295,7 +295,7 @@ class EngineChecksTest(EngineTest):
         eng = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),

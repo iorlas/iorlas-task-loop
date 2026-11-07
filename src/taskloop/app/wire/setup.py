@@ -10,7 +10,7 @@ from tlkernel.env import Env
 from tlkernel.paths import ConfigDir, default_root
 
 from taskloop.app.doctor import install, setup_checks
-from taskloop.app.wire import slots
+from taskloop.app.slots import config as slots_config
 from taskloop.stores.delegate import real_route
 
 
@@ -92,7 +92,7 @@ def profile_problem(profile: Path) -> str:
     err = io.StringIO()
     try:
         with contextlib.redirect_stderr(err):
-            slots.load_profile(json.loads(profile.read_text(encoding="utf-8")))
+            slots_config.load_profile(json.loads(profile.read_text(encoding="utf-8")))
     except (SystemExit, ValueError, OSError) as e:
         return (err.getvalue().strip() or str(e) or "unreadable")[:300]
     return ""
@@ -102,12 +102,12 @@ def slots_part(repo: Path) -> Plan:
     """The slot folders the profile counts (`slots.count` under `slots.dir`) must exist: a run takes its worktree from one, so a missing
     folder fails the run after its first stage. Nothing when the profile counts none."""
     try:
-        cfg = slots.load_profile(json.loads((repo / ".task-loop.json").read_text(encoding="utf-8"))).slots
+        cfg = slots_config.load_profile(json.loads((repo / ".task-loop.json").read_text(encoding="utf-8"))).slots
     except (SystemExit, ValueError, OSError):
         return Plan()
     if cfg.count < 1:
         return Plan()
-    root = Path(slots.slot_dir(str(repo), "x", cfg)).parent
+    root = Path(slots_config.slot_dir(str(repo), "x", cfg)).parent
     missing = [n for n in (f"s{i}" for i in range(1, cfg.count + 1)) if not (root / n).is_dir()]
     if not missing:
         return Plan([Check("slots", True, f"{cfg.count} under {root}")])

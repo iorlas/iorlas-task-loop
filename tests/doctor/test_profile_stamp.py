@@ -18,6 +18,7 @@ class ProfileStamp(Case):
         (self.repo / ".task-loop.json").write_text('{"engine":{"base":"main"}}')
         self.common = self.repo / ".git"
         self.common.mkdir()
+        (self.common / "HEAD").write_text("ref: refs/heads/main\n")  # a gitdir without HEAD is not a checkout
 
     def test_loose_packed_worktree_and_profile_changes(self):
         ref = self.common / "refs" / "heads" / "main"
