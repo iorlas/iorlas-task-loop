@@ -63,7 +63,7 @@ class Streamed(Rec):
 
 class Spawner(Protocol):
     """Starting a process, as a capability: the only way app/ and cli/ run a child (RealSpawner in adapters/spawner.py; the logic tests
-    run the same adapter over tests/support/procsim). The child's environment is built by adapters/childenv.py: `env` is the base (the
+    run the same adapter over tests/support/procsim). The child's environment is built by tlkernel/childenv.py: `env` is the base (the
     process's own when None), `extra` goes over it. A program that is not there raises OSError."""
 
     def run(self, argv: list[str], *, cwd: str | None = None, env: Mapping[str, str] | None = None, extra: Mapping[str, str] | None = None,
