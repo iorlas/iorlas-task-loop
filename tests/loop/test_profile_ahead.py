@@ -17,6 +17,7 @@ from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.files import EXIT_REASONS
 from taskloop.app.loop.loop import Loop, LoopArgs
 from taskloop.app.loop.run import Where
+from taskloop.app.loop.stages import EngineSlots
 from taskloop.contracts import wire
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import ConfigError, ProfileReadError, RepoProfile
@@ -130,6 +131,7 @@ class ProfileAhead(Rig):
 
         def spawn(*args):
             self.loop_env.profile = mock.Mock(side_effect=SystemExit(EX_CONFIG))
+            assert isinstance(self.loop_env.slots, EngineSlots)
             self.loop_env.slots.slot_env = mock.Mock(side_effect=SystemExit(EX_CONFIG))
             return child, mock.Mock()
 

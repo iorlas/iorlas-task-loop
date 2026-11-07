@@ -25,11 +25,13 @@ from support import homes
 from loop.test_loop import LoopBase, rec
 from support.args import Args
 from support.engine_locks import put_lock
+from support.fake_loop_env import slot_env_of
 from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.adapters import pidcheck
 from taskloop.app.launch import loop as wloop
+from taskloop.app.loop.stages import EngineSlots
 from taskloop.app.loop.take import Taker
 from taskloop.app.run import (
     engine,
@@ -228,10 +230,10 @@ class LiveEngineBackstop(Slots):
         rc, out = self.cli("slot", "reset", "s1", "--bead", "x-1")
         assert rc == 4
         assert "BUSY" in out
-        senv = dataclasses.replace(wloop.build(str(self.repo), env=snapshot(), spawner=real_spawner(), git=port_git(),
-            who=who()).slot_env(), git=ExplodingGit())  # pyrefly: ignore[bad-argument-type]  # any git in the live slot fails the test
+        senv = dataclasses.replace(slot_env_of(wloop.build(str(self.repo), env=snapshot(), spawner=real_spawner(), git=port_git(),
+            who=who())), git=ExplodingGit())  # pyrefly: ignore[bad-argument-type]  # any git in the live slot fails the test
         env = dataclasses.replace(wloop.build(str(self.repo), env=snapshot(), spawner=real_spawner(),
-            git=port_git(), who=who()), slot_env=lambda: senv)
+            git=port_git(), who=who()), slots=EngineSlots(lambda: senv))
         with redirect_stdout(io.StringIO()):
             assert REAL_PREPARE(Taker(env, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), {}), "s1", "x-1") is not None
     def test_slot_list_shows_the_live_engine(self):

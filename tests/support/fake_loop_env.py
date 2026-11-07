@@ -24,3 +24,9 @@ def slot_loop_env(env: SlotEnv) -> LoopEnv:
         pid_alive=unused, behind=unused, version="test", session_actor=env.actor,
         code_dir="", actor=lambda: env.actor, exec_into=unused, take_handover=unused,
         say=env.say, now=env.now, sleep=env.sleep, pid=env.pid)
+
+
+def slot_env_of(env: LoopEnv) -> SlotEnv:
+    """The SlotEnv a built LoopEnv hands its slots (the real adapter's)."""
+    assert isinstance(env.slots, EngineSlots)
+    return env.slots.slot_env()
