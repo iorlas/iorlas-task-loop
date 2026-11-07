@@ -13,7 +13,7 @@ from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.net import NetState
 from taskloop.app.loop.settle import Counters, Settle
 from taskloop.app.loop.take import Taker
-from taskloop.domain import outcome
+from tlkernel import runoutcome as outcome
 from tlkernel.bead import Bead
 from tlkernel.config import LoopConfig
 from tlkernel.enums import Result

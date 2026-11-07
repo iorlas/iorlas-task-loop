@@ -5,7 +5,7 @@ import contextlib
 import copy
 from pathlib import Path
 
-from tlkernel import plancheck
+from tlkernel import askspecs, plancheck
 from tlkernel.answers import ASSUMPTION, IRREVERSIBLE
 from tlkernel.askenums import AskClass
 from tlkernel.checkpoint import PlanStep
@@ -24,7 +24,6 @@ from taskloop.app.plan.prompt import PlanPrompt
 from taskloop.app.plan.prompts import ASSUME_TEXT, PLAN_BRIEF_KB, PLAN_DECIDED_TEXT, VISUAL_BACK
 from taskloop.app.plan.sendback import SendBack
 from taskloop.app.plan.state import PlanState
-from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.checks import affinity
 from taskloop.domain.checks.specs import repo_check
 from taskloop.domain.plan.brief import COMMENTS_ONLY

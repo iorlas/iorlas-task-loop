@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from tlkernel import fence
+from tlkernel import runoutcome as oc
 from tlkernel.argv import text_of
 from tlkernel.checkpoint import Checkpoint, RunState
 from tlkernel.checks import CheckRun
@@ -37,7 +38,6 @@ from taskloop.app.run.field_ports import FieldParts
 from taskloop.app.run.sections import checkpoint_hooks, restarted
 from taskloop.app.run.state import StateAttrs
 from taskloop.app.write.state import WriteState
-from taskloop.domain import outcome as oc
 from taskloop.domain.lanes.pause_reasons import Producer
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog

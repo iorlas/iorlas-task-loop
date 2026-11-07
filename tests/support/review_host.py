@@ -12,8 +12,8 @@ from taskloop.app.review.routing import Routing
 from taskloop.app.review.settles import Settles
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.review.verifier import Verifier
-from taskloop.domain.asks.spec import AskSpec
 from tlkernel.asked import Asked
+from tlkernel.askspec import AskSpec
 from tlkernel.config import EngineConfig
 from tlkernel.gitfacts import GrepHit
 from tlkernel.kinds import Kind

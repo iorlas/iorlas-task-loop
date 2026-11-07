@@ -1,4 +1,4 @@
-"""The store interfaces. Logic depends on these; `real.py` backs them with files, `memory.py` with dicts and lists.
+"""The store interfaces. Logic depends on these; store implementations back them with persistent state or in-memory records.
 
 A store is a typed document, a typed append-only log, a keyed set of documents, a lock table or a ticket line. Nothing here
 names a file or a folder: where a thing lives is the real implementation's business (`tlkernel.paths`).

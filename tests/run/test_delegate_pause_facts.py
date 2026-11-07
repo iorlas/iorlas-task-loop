@@ -17,8 +17,8 @@ from taskloop.app.asks.closing import ClosingAsks
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from taskloop.app.pipeline.closing import Closer
 from taskloop.app.workers.lane_acts import LaneActs
-from taskloop.domain import outcome as oc
 from taskloop.domain.lanes import policy
+from tlkernel import runoutcome as oc
 from tlkernel.bead import Bead
 from tlkernel.delegate import DelegateResult, Retry, StopFacts
 from tlkernel.ids import BeadId

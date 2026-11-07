@@ -10,11 +10,11 @@ from support.argv_checks import ArgvChecks
 from support.checked import run_checked
 from support.tlmain import tl_main
 
-from taskloop.adapters import childenv
-from taskloop.adapters.childenv import CHECK_SECRETS
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.run.shell import Shell
+from tlkernel import childenv
 from tlkernel.checksport import CheckSpec
+from tlkernel.childenv import CHECK_SECRETS
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env
 from tltestkit.case import Case

@@ -3,8 +3,8 @@
 import subprocess
 from pathlib import Path
 
-from taskloop.adapters.childenv import tool_env
 from taskloop.adapters.gitrepo import pinned_env
+from tlkernel.childenv import tool_env
 from tlkernel.env import snapshot
 
 

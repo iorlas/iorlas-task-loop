@@ -5,7 +5,8 @@ import time
 from functools import cached_property
 from pathlib import Path
 
-from tlkernel import fence
+from tlkernel import askspecs, fence
+from tlkernel.askspec import AskSpec
 from tlkernel.kinds import Kind
 from tlkernel.log import Assumed, Said
 from tlkernel.matchers import redact
@@ -16,7 +17,6 @@ from taskloop.app.pipeline.blocked import Blocked, FixFailed, blocked_for
 from taskloop.app.run.fields import RunFields
 from taskloop.app.track import trail
 from taskloop.app.track.console import say
-from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks import affinity
 
 
@@ -49,6 +49,9 @@ class Plumbing(RunFields):
 
     def blocked_for(self, why: str, kind: str, stop: object = None, spec: AskSpec | None = None, fix: bool = False) -> Blocked:
         return blocked_for(why, kind, stop, spec, fix)
+
+    def blocked_stuck(self, why: str, what: str, rounds: int, signature: str) -> Blocked:
+        return blocked_for(why, Kind.ASK_STUCK.name, None, askspecs.no_progress(what, rounds, signature), False)
 
     def move_host(self, needs: list[str], why: str) -> Blocked:
         """The stop of a bead that needs a resource this host lacks: the needs labels are written under the claim's fence (only add,
