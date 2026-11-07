@@ -17,16 +17,16 @@ ENGINE_LABELS = ("needs-owner-check",)
 
 class Briefs:
     def __init__(self, host: PlanHost) -> None:
-        self.e = host
+        self.host = host
         self.parts: dict[str, int] = {}  # bytes per section of the last brief written: what the accounting code reads
 
     def text(self) -> str:
-        return (self.e.run_dir / "brief.md").read_text(encoding="utf-8")
+        return (self.host.run_dir / "brief.md").read_text(encoding="utf-8")
 
     def fit(self, bead: Bead, comments: list, hint: str, other: int) -> bf.Brief:
         """The brief with the oldest comments left out until it fits cfg.brief_kb: the bead's text, the hint, the linked beads and the
         owner's answer (`other` bytes) are never cut. The limit stays; it is not raised."""
-        e = self.e
+        e = self.host
         base = bf.render(bead, [], e.cfg.owner_author, hint)
         room = int(float(e.cfg.brief_kb) * 1024) - len(base.text.encode()) - other
         return bf.render(bead, comments, e.cfg.owner_author, hint, room=max(room, 0))
@@ -34,7 +34,7 @@ class Briefs:
     def export(self) -> None:
         """Write the brief to the run dir and to the copy a resumed writer re-reads; refresh the hash that tells a rerun the owner changed
         something, and the snapshot a later amend diffs against."""
-        e = self.e
+        e = self.host
         bead = peek(e.store, e.bead) or Bead(id=e.bead, title="", status="")
         comments = e.store.comments(e.bead)
         hint = str(bead.metadata.get(intake.HINT) or "")

@@ -303,6 +303,7 @@ source_modules =
     taskloop.app.doctor
     taskloop.app.loop
     taskloop.app.pipeline
+    taskloop.app.plan
     taskloop.app.reconcile
     taskloop.app.release
     taskloop.app.review

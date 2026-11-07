@@ -45,11 +45,11 @@ class Problems:
 
 class SendBack:
     def __init__(self, host: PlanHost) -> None:
-        self.e = host
+        self.host = host
 
     def find(self, data: PlanData) -> Problems:
         """The problems of a first answer."""
-        e = self.e
+        e = self.host
         dry = lint.dry_check(data, e.shell_probe(), e.cfg)
         dry += (lint.ledger_problems(data) + lint.own_timeout_problems(data, e.cfg.check_wall_min)
                 + lint.evidence_problems(data, str(e.evidence_dir)))
@@ -62,7 +62,7 @@ class SendBack:
 
     def loose(self, data: PlanData) -> list[str]:
         """Stages that change an existing file no anchor names; a stage with more than 8 anchors keeps the first 8."""
-        e, out = self.e, list[str]()
+        e, out = self.host, list[str]()
         for n, st in enumerate(data["stages"], 1):
             st["anchors"] = (st.get("anchors") or [])[:MAX_ANCHORS]
             there = {f: Path(e.wt, f).exists() for f in st["files"]}
@@ -71,7 +71,7 @@ class SendBack:
 
     def text(self, p: Problems) -> str:
         """The warnings logged and the reasons the plan goes back with."""
-        e, why = self.e, ""
+        e, why = self.host, ""
         if p.empty:
             e.warn("the plan has no stages, no question and nothing to file, sent back")
             why += EMPTY_PLAN_TEXT
@@ -97,7 +97,7 @@ class SendBack:
 
     def rewrite(self, data: PlanData, prompt: str, step: str, why: str) -> PlanData:
         """Ask once more, on the same planner thread when there is one."""
-        e = self.e
+        e = self.host
         ref = e.planner_ref
         wire = json.dumps(plancheck.to_wire(data), indent=1)
         back = (why.lstrip() + "\n\nYour plan, to correct (same output schema):\n" + wire) if ref else prompt + why
@@ -106,7 +106,7 @@ class SendBack:
 
     def after_rewrite(self, data: PlanData) -> None:
         """What the rewrite still gets wrong: a stop, or (the heuristics) a warning; there is no second send-back."""
-        e = self.e
+        e = self.host
         only, bad = gate_only_criteria(data, e.cfg), lint.tracker_checks(data)
         if only:
             raise e.blocked_for(f"failed: the plan's acceptance is still only the gate after one rewrite ({GATE_ONLY_ACCEPTANCE}): "
@@ -129,7 +129,7 @@ class SendBack:
 
     def leave_to_gate(self, data: PlanData) -> None:
         """Drop commands the rewrite left for stage checks but only the land gate may run; keep their stages and a visible note."""
-        gated = dict(lint.gate_only_checks(data, self.e.cfg))
+        gated = dict(lint.gate_only_checks(data, self.host.cfg))
         dropped = {c for c in lint.own_checks(data) if c.text in gated}
         for stage in data["stages"]:
             stage["checks"] = [c for c in stage["checks"] if c not in dropped]
@@ -140,4 +140,4 @@ class SendBack:
             if case.get("check") in dropped:
                 case.update(check=None, proved_by="engine_step", via="land gate")
         for cmd, why in gated.items():
-            assume(data, f"Plan check `{cmd}` left to the gate: {why}", self.e.log.note)
+            assume(data, f"Plan check `{cmd}` left to the gate: {why}", self.host.log.note)
