@@ -6,13 +6,13 @@ import sys
 from pathlib import Path
 
 from support.check_host import CheckHostCase
-from support.shellkit import sh
 
 from taskloop.app.checks.cache import is_green, plan_digest
 from taskloop.domain.checks.specs import gate_items
 from tlkernel.ids import CheckId
 from tlkernel.runkey import BaseSha
 from tltestkit.narrow import must
+from tltestkit.shellkit import sh
 
 
 class RealGatePlan(CheckHostCase):

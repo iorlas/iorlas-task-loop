@@ -23,7 +23,6 @@ from support import (  # noqa: E402
     tlbd,
 )
 from support.args import Args  # noqa: E402
-from support.checked import run_checked  # noqa: E402
 from support.engine_locks import put_lock  # noqa: E402
 from support.procsim import real_proc  # noqa: E402
 from support.spawn import (  # noqa: E402
@@ -37,6 +36,7 @@ from taskloop.adapters import pidcheck  # noqa: E402
 from taskloop.app.loop import verdict as vd  # noqa: E402
 from taskloop.app.loop.take import Taker  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
+from tltestkit.checked import run_checked  # noqa: E402
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 

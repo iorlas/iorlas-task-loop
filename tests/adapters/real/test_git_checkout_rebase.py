@@ -6,12 +6,12 @@ from unittest import mock
 
 import pytest
 import support.paths  # noqa: F401
-from support.checked import run_checked
 
 from taskloop.adapters.git import RealGit
 from tlkernel.env import Env, snapshot
 from tlkernel.slots import BranchPinned
 from tltestkit.case import Case
+from tltestkit.checked import run_checked
 from tltestkit.tmpdir import TemporaryDirectory
 
 
