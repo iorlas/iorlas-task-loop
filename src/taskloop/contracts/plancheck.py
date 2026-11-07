@@ -87,7 +87,7 @@ class RoundState(TypedDict, total=False):
     scope: str
     rounds: int
     n: int
-    review_from: Open  # (a StageProgress, dumped) a parked round whose write and checks were green: the stage goes on at its review (tl-q3ma)
+    review_from: Open  # (a StageProgress, dumped) a parked round with write and checks green: the stage goes on at its review (tl-q3ma)
 CHECK_DOC = ("a check is {kind: ref, check: <id of a repo check>} (the repo's own check, named) or {kind: adhoc, argv, reads} (your own "
              "command; reads lists the ids of the repo checks whose saved log it reads). " + FORM)
 

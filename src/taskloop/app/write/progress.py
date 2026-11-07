@@ -10,7 +10,8 @@ from taskloop.contracts.checkpoint import StageProgress
 
 def progress_of(s: StageState) -> StageProgress:
     known = {f.name for f in msgspec.structs.fields(WriteAnswerLook)}  # (the answer may carry more: the engine adds to it)
-    answer = wire.load(WriteAnswerLook, {k: v for k, v in dict(s.w, logic_only=s.w.get("logic_only", "")).items() if k in known}) if s.w else None
+    body = {k: v for k, v in dict(s.w, logic_only=s.w.get("logic_only", "")).items() if k in known}
+    answer = wire.load(WriteAnswerLook, body) if s.w else None
     return StageProgress(write=answer, red=s.red, red_now=sorted(s.red_now), failed=s.failed_cmds, acceptance_only=s.acc_only,
                          acceptance_first=s.acc_first, shots_fixed=s.shots_fixed, show_fixed=s.show_fixed)
 
