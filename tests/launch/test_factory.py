@@ -254,6 +254,32 @@ class Lanes(Case):
         assert self.spawn.start.call_count == 3
         assert factory_verbs.recorded_pid(self.files) == 123
 
+    def test_each_new_child_has_its_own_keep_awake(self):
+        self.spawn.start.side_effect = [*self.children, Mock(), Mock(), Mock()]
+        with (patch.object(adapter.platform, "system", return_value="Darwin"),
+              patch.object(adapter.shutil, "which", return_value="/usr/bin/caffeinate")):
+            states, added = factory_verbs.start(
+                self.files, "/repo", "1", [], self.spawn, self.publish, lanes=3,
+                caffeinate_argv=adapter.caffeinate_argv)
+        argvs = [call.args[0] for call in self.spawn.start.call_args_list if call.args[0]]
+        assert added == 3
+        assert len(argvs) == 3
+        assert len({state.pid for state in states}) == 3
+        assert argvs == [["/usr/bin/caffeinate", "-i", "-w", str(child.pid)] for child in self.children]
+
+    def test_top_up_keeps_awake_only_the_new_child(self):
+        self.files.write(self.state(121))
+        self.files.write(self.state(122))
+        self.spawn.start.side_effect = [self.children[0], Mock()]
+        with (patch.object(adapter.platform, "system", return_value="Darwin"),
+              patch.object(adapter.shutil, "which", return_value="/usr/bin/caffeinate")):
+            states, added = factory_verbs.start(
+                self.files, "/repo", "1", [], self.spawn, self.publish, lanes=3,
+                caffeinate_argv=adapter.caffeinate_argv)
+        argvs = [call.args[0] for call in self.spawn.start.call_args_list if call.args[0]]
+        assert (len(states), added) == (3, 1)
+        assert argvs == [["/usr/bin/caffeinate", "-i", "-w", str(self.children[0].pid)]]
+
     def test_two_live_lanes_are_topped_up_by_one(self):
         self.files.write(self.state(121))
         self.files.write(self.state(122))
@@ -321,12 +347,12 @@ class Lanes(Case):
             self.start()
         assert self.files.read(120) == existing
 
-    def test_caffeinate_only_once_for_first_new_lane(self):
-        self.spawn.start.side_effect = [*self.children, Mock()]
-        awake = Mock(return_value=["caffeinate", "-w", "123"])
+    def test_missing_caffeinate_is_suppressed_for_each_new_lane(self):
+        self.spawn.start.side_effect = [*self.children, FileNotFoundError(), FileNotFoundError(), FileNotFoundError()]
+        awake = Mock(side_effect=lambda pid: ["caffeinate", "-w", str(pid)])
         factory_verbs.start(self.files, "/repo", "1", [], self.spawn, self.publish, lanes=3, caffeinate_argv=awake)
-        awake.assert_called_once_with(123)
-        assert self.spawn.start.call_count == 4
+        assert [call.args for call in awake.call_args_list] == [(123,), (124,), (125,)]
+        assert self.spawn.start.call_count == 6
 
     def test_default_lane_count_and_start_messages(self):
         for count, wanted in ((3, 3), (0, 1)):
