@@ -68,16 +68,18 @@ def texts_at(root: Path, base: str, paths: tuple[str, ...]) -> dict[str, str | N
     return out
 
 
-def net(counter: Counter, root: Path, base: str, paths: list[str]) -> tuple[dict[str, int], dict[str, int]]:
+def net(counter: Counter, root: Path, base: str, paths: list[str], *,
+        counter_at: Callable[[str | None], Counter] | None = None) -> tuple[dict[str, int], dict[str, int]]:
     """(before, after): the counter's totals per key over `paths` at `base` and in the working tree."""
     before: dict[str, int] = {}
     after: dict[str, int] = {}
-    olds = texts_at(root, base, tuple(paths))
+    olds = texts_at(root, base, (*paths, ".importlinter") if counter_at else tuple(paths))
+    base_counter = counter_at(olds[".importlinter"]) if counter_at else counter
     for rel in paths:
         mine = root / rel
         now = mine.read_text(encoding="utf-8") if mine.is_file() else None
-        for out, text in ((before, olds[rel]), (after, now)):
-            for key, n in counted(counter, rel, text).items():
+        for out, text, side_counter in ((before, olds[rel], base_counter), (after, now, counter)):
+            for key, n in counted(side_counter, rel, text).items():
                 out[key] = out.get(key, 0) + n
     return before, after
 
@@ -92,12 +94,13 @@ def allowed(root: Path, base: str, ratchet: str) -> int:
     return sum(int(n) for name, n, reason in ALLOW.findall(log) if name == ratchet and len(reason.split()) >= MIN_REASON_WORDS)
 
 
-def problems(ratchet: str, counter: Counter, root: Path) -> list[str] | None:
+def problems(ratchet: str, counter: Counter, root: Path, *,
+             counter_at: Callable[[str | None], Counter] | None = None) -> list[str] | None:
     """The keys that rose beyond what the change allows, or None when there is no origin/main to compare with."""
     base = merge_base(root)
     if base is None:
         return None
-    before, after = net(counter, root, base, changed_py(root, base))
+    before, after = net(counter, root, base, changed_py(root, base), counter_at=counter_at)
     up = rises(before, after)
     if sum(up.values()) <= allowed(root, base, ratchet):
         return []
