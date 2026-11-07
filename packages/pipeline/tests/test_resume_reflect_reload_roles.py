@@ -3,10 +3,10 @@ import inspect
 
 import pytest
 
-from tlpipeline import reflect, reload, resume
+from tlpipeline import journal, reflect, reload, resume
 
 
-@pytest.mark.parametrize("module", [resume, reflect, reload])
+@pytest.mark.parametrize("module", [resume, reflect, reload, journal])
 def test_role_protocols_have_at_most_sixteen_own_members(module):
     protocols = {name: value for name, value in vars(module).items()
                  if isinstance(value, type) and getattr(value, "_is_protocol", False)
@@ -19,7 +19,7 @@ def test_role_protocols_have_at_most_sixteen_own_members(module):
     assert {name: count for name, count in counts.items() if count > 16} == {}
 
 
-@pytest.mark.parametrize("component", [resume.Resume, reflect.Reflector, reload.Reload])
+@pytest.mark.parametrize("component", [resume.Resume, reflect.Reflector, reload.Reload, journal.Journal])
 def test_constructor_does_not_resolve_role_members(component):
     class LazyRole:
         def __getattribute__(self, name):
