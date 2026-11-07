@@ -19,7 +19,7 @@ from tlkernel.slots import SlotGitError
 from taskloop.app.land import gate
 from taskloop.app.land.gate import Problem, ProblemKind
 from taskloop.app.land.host import BeginSteps, CaseChecks, LandState, OutcomeSteps, StageCheckout, Strays
-from taskloop.app.land.landed import LandedConfig
+from taskloop.app.land.push import LandedConfig
 from taskloop.stores.runlog import RunLog
 
 MAX_REBASE_RESETS = 2  # the plan count starts again at most this often per bead: a red gate for a real reason must still reach the limit

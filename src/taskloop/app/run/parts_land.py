@@ -10,7 +10,7 @@ from taskloop.app.land import cleanup
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.fixer import Fixer
 from taskloop.app.land.lander import lander_over
-from taskloop.app.land.outbound import target
+from taskloop.app.land.push import target
 from taskloop.app.land.rebase import Rebase
 from taskloop.app.land.restart import Restart
 from taskloop.app.land.salvage import Salvage

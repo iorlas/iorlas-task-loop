@@ -18,7 +18,7 @@ from tltestkit.logs import records
 from tltestkit.plans import CLEAN, PLAN, WRITE
 
 # isort: split
-from taskloop.app.land import outbound
+from taskloop.app.land import push
 from taskloop.app.land.lander import Lander
 from taskloop.app.land.sync import Sync as AfterLand
 from tlkernel import lanepauses as pauses
@@ -33,12 +33,12 @@ RUN = ({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
 
 class Argv(EngineTest):
     def test_a_custom_land_command_is_no_push(self):
-        assert outbound.target(["just", "land"]) is None
+        assert push.target(["just", "land"]) is None
 
     def test_the_remote_and_the_pushed_ref_come_from_the_push_argv(self):
-        assert outbound.target(["git", "push", "origin", "HEAD:main"]) == ("origin", ["HEAD"])
-        assert outbound.target(["git", "push", "-q", "up", "+bd/x:main"]) == ("up", ["bd/x"])
-        assert outbound.target(["git", "push"]) == ("origin", ["HEAD"])
+        assert push.target(["git", "push", "origin", "HEAD:main"]) == ("origin", ["HEAD"])
+        assert push.target(["git", "push", "-q", "up", "+bd/x:main"]) == ("up", ["bd/x"])
+        assert push.target(["git", "push"]) == ("origin", ["HEAD"])
 
     no_repo = True
 
@@ -59,19 +59,19 @@ class Sync(EngineTest):
     def test_a_failed_sync_blocks_the_bead_with_the_error_and_a_missing_remote_is_quiet(self):
         host = FakeOutboundHost(result=(1, "dolt: could not read Username for 'https://github.com'"))
         with pytest.raises(RuntimeError) as cm:
-            outbound.Outbound(host).bd_sync("abc1234567890")
+            push.Outbound(host).bd_sync("abc1234567890")
         assert str(cm.value).startswith("PAUSE_NETWORK: ")
         assert "failed in" in host.lines[0]
         assert "landed abc123456789" in str(cm.value)
         assert "could not read Username" in str(cm.value)
         quiet = FakeOutboundHost(result=(1, "Error: no remote configured"))
-        outbound.Outbound(quiet).bd_sync("abc")
+        push.Outbound(quiet).bd_sync("abc")
         assert quiet.lines == []
 
     def test_sync_failure_is_a_transient_pause_on_first_sight(self):
         host = FakeOutboundHost(result=(1, "remote unavailable"))
         with mock.patch.object(host, "blocked_for", blocked_for), pytest.raises(Blocked) as stopped:
-            outbound.Outbound(host).bd_sync("abc")
+            push.Outbound(host).bd_sync("abc")
         outcome = stopped.value.outcome
         assert oc.POLICY[outcome.kind].loop == Result.PAUSED
         assert pauses.rule(outcome.kind.value, "engine").permanence == "transient"
@@ -84,7 +84,7 @@ class Land(EngineTest):
         def unavailable(*args):
             raise Blocked("bd sync remote unavailable", kind=Kind.PAUSE_NETWORK)
 
-        with mock.patch.object(outbound.Outbound, "bd_sync", side_effect=unavailable):
+        with mock.patch.object(push.Outbound, "bd_sync", side_effect=unavailable):
             rc, _ = self.run_engine(RUN)
         assert rc == 2
         assert self.eng.landed_sha
@@ -106,7 +106,7 @@ class Land(EngineTest):
     def test_an_lfs_repo_without_git_lfs_is_a_fault_with_the_branch_kept(self):
         self.put_repo_file(".gitattributes", ATTR)
         which = shutil.which
-        with mock.patch("taskloop.app.land.outbound.shutil.which", lambda w, *a, **kw: None if w == "git-lfs" else which(w, *a, **kw)):
+        with mock.patch("taskloop.app.land.push.shutil.which", lambda w, *a, **kw: None if w == "git-lfs" else which(w, *a, **kw)):
             rc, _ = self.run_engine(RUN)
         assert rc != 0
         assert any("git-lfs is not installed" in r["text"] for r in records(self.eng, "warn"))
