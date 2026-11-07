@@ -25,6 +25,7 @@ from taskloop.contracts.checks import CheckResult  # noqa: E402
 from taskloop.contracts.env import Env  # noqa: E402
 from taskloop.contracts.ids import TreeSha  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
+from taskloop.contracts.rowstores import ReposStore  # noqa: E402
 from taskloop.contracts.runkey import BaseSha  # noqa: E402
 from taskloop.domain.checks.specs import gate_items  # noqa: E402
 from taskloop.stores.real import real_stores  # noqa: E402
@@ -78,9 +79,10 @@ class Base(Case):
         self.register(self.repo)
 
     def register(self, *repos):
-        """repos.json beside bin/tl: the hook judges only the repos listed there."""
-        known = {str(Path(r).resolve()): {"added": 1.0} for r in repos}
-        (Path(self.tmp.name) / "task-loop" / "repos.json").write_text(json.dumps({"v": 1, "repos": known}))
+        """The `repos` row of factory.db beside bin/tl, written by the production store: the hook judges only the repos listed there."""
+        store = ReposStore(ConfigDir(Path(self.tmp.name) / "task-loop"))
+        for r in repos:
+            store.add(str(Path(r).resolve()), 1.0)
 
     def git(self, cwd, *args, env=None, check=True):
         r = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, env=env or self.env, check=False)

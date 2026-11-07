@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -64,17 +65,21 @@ def uses_lfs() -> bool:
 
 
 def ours(tl: str) -> bool:
-    """One rule: tl judges a push only in a repo registered with it (repos.json, in the config dir `tl` lives in, keyed by the main
-    checkout; a worktree or slot of it counts). Any other repo (a test's tmp repo, a clone tl never saw) is not tl's to judge.
+    """One rule: tl judges a push only in a repo registered with it (the `repos` row of factory.db, in the config dir `tl` lives in, keyed
+    by the main checkout; a worktree or slot of it counts). Any other repo (a test's tmp repo, a clone tl never saw) is not tl's to judge.
     A registry that cannot be read says yes: the judge decides, never a silent skip."""
+    db = Path(tl).resolve().parent.parent / "factory.db"
     try:
-        text = (Path(tl).resolve().parent.parent / "repos.json").read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return False
-    except OSError:
-        return True
-    try:
-        known = {os.path.realpath(p) for p in json.loads(text)["repos"]}
+        if not db.is_file():
+            return False
+        con = sqlite3.connect(f"{db.as_uri()}?mode=ro", uri=True, timeout=5)
+        try:
+            row = con.execute("SELECT v FROM kv WHERE k = 'repos'").fetchone()
+        finally:
+            con.close()
+        if row is None:
+            return False
+        known = {os.path.realpath(e["path"]) for e in json.loads(row[0])["repos"].values()}
         common = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], capture_output=True, text=True,
                                 check=False, timeout=15).stdout.strip()
         if Path(common).name == ".git":

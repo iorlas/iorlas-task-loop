@@ -10,7 +10,7 @@ test: test-packages
 
 # The workspace packages a change reaches (dev/packages.py), each one's tests alone in a fresh environment of its own declared dependencies (docs/design/stage-packages.md section 5).
 test-packages:
-    for p in $(python3 dev/packages.py); do uv run --isolated --package "tl$p" --group dev pytest -q -c "packages/$p/pyproject.toml" --rootdir "packages/$p" "packages/$p" || exit 1; done
+    for p in $(python3 dev/packages.py); do [ -d "packages/$p/tests" ] || continue; uv run --isolated --package "tl$p" --group dev pytest -q -c "packages/$p/pyproject.toml" --rootdir "packages/$p" "packages/$p" || exit 1; done
 
 # INNER LOOP ONLY, never the gate: pytest-testmon reruns what the code you edited reaches in the paths you name (docs/dev/test-inner-loop.md). It follows Python imports, not
 # config or data files, so a green run here proves nothing about those: `just test` (dev/affected.py) is the gate. First run per path builds .testmondata.
