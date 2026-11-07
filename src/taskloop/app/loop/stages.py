@@ -3,11 +3,13 @@ The composition roots bind real stage calls; these rules consume ports and callb
 import contextlib
 import os
 import sys
+import time
 from collections.abc import Callable, Iterable, Mapping
 
 from jsonl_log import close_held
-from tlasks import deferral, parks
-from tlasks.contracts.records import AsksHost
+from tlkernel import askparks as parks
+from tlkernel import deferrals as deferral
+from tlkernel.askport import AskReader
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, Beads
 from tlkernel.branches import task_branch
@@ -15,6 +17,7 @@ from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.landed import Landed
 from tlkernel.loop import Skip
+from tlkernel.parks import ParkStore
 from tlkernel.paths import ConfigDir
 from tlkernel.procport import Child, Spawner
 from tlkernel.run import ReexecNote
@@ -84,20 +87,20 @@ class EngineSlots:
 
 
 class EngineAsks:
-    def __init__(self, cfgdir: ConfigDir, now: Callable[[], float], asks_host: Callable[[], AsksHost]) -> None:
-        self.cfgdir, self.now, self.asks_host = cfgdir, now, asks_host
+    def __init__(self, cfgdir: ConfigDir, now: Callable[[], float], asks_store: Callable[[ConfigDir], AskReader]) -> None:
+        self.cfgdir, self.now, self.asks_store = cfgdir, now, asks_store
 
     def held(self, b: Bead) -> bool:
-        return parks.gate(self.asks_host(), self.cfgdir, b, now=self.now()) is not None
+        return parks.gate(self.asks_store(self.cfgdir), self.cfgdir, b, now=self.now(), store=ParkStore) is not None
 
     def skip_of(self, b: Bead) -> Skip | None:
-        return parks.skip_of(self.asks_host(), self.cfgdir, b, now=self.now())
+        return parks.skip_of(self.asks_store(self.cfgdir), self.cfgdir, b, now=self.now(), store=ParkStore)
 
     def profile_ahead(self, b: Bead, run: str, why: str) -> None:
-        parks.profile_ahead(self.cfgdir, b, run, self.now(), why)
+        parks.profile_ahead(self.cfgdir, b, run, self.now(), why, store=ParkStore)
 
     def promote_if_due(self, store: Beads, per_day: int, now: float, last: float, say: Callable[[str], object]) -> float:
-        return deferral.promote_if_due(store, per_day, now, last, say)
+        return deferral.promote_if_due(store, per_day, now, last, say, lambda stamp: time.strftime("%Y-%m-%d", time.localtime(stamp)))
 
 
 STOP_GRACE_S = 300.0  # let a stopped run-task finish its close before ending the stream
