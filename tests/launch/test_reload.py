@@ -31,11 +31,8 @@ from support.narrow import must  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
 from support.who import who  # noqa: E402
 
-from taskloop.adapters import (  # noqa: E402
-    childenv,
-    ident,
-)
 from taskloop.adapters import delegate as dl  # noqa: E402
+from taskloop.adapters import ident  # noqa: E402
 from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.launch import loop_start as wstart  # noqa: E402
 from taskloop.app.loop.run import BeadRun, Where  # noqa: E402
@@ -49,6 +46,7 @@ from taskloop.app.run import (  # noqa: E402
 )
 from taskloop.app.run import reload_ports as run_reload  # noqa: E402
 from taskloop.app.slots import config as wslots_config  # noqa: E402
+from tlkernel import childenv  # noqa: E402
 from tlkernel.env import Env, snapshot  # noqa: E402
 from tlkernel.ids import BeadId  # noqa: E402
 from tlkernel.rowstores import BadVersionStore  # noqa: E402

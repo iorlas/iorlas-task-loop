@@ -69,7 +69,7 @@ Rules applied: a design note without code is not "done" (the bead stays valid un
 | tl-7y6.6 | ALREADY DONE | - | container | Epic container with all 16 children closed; the umbrella adds no work. | none |
 | tl-br2.10 | ALREADY DONE | - | - | | f7fc10a3 (#107) publishes the recovery memo before consuming the answer, with a test in tests/run/test_worker_recovery.py. | none |
 | tl-br2.16 | ALREADY DONE | - | - | | #139 LANDTIME: tl runs show/slow time the land's fetch, rebase and push from engine-log start/end records, which was the ask (record dated spans). | none |
-| tl-sqd3.2 | ALREADY DONE | - | - | | #45 'Pre-push is judged by the engine's own install': childenv.hooks_vars sets TL_JUDGE_TL=OWN_TL (adapters/childenv.py:58); hook/prepush.py:15 reads it; shim written via tmp.replace (doctor/install.py:~120). | none |
+| tl-sqd3.2 | ALREADY DONE | - | - | | #45 'Pre-push is judged by the engine's own install': childenv.hooks_vars sets TL_JUDGE_TL=OWN_TL (tlkernel/childenv.py:58); hook/prepush.py:15 reads it; shim written via tmp.replace (doctor/install.py:~120). | none |
 | tl-sqd3.22 | ALREADY DONE | - | - | | #85 tl answer --expect and #381 dashboard answer carries ask id, replaced ask refused; taskloop_dash imports tlkernel only (its docstring, __init__.py:1). | none |
 | tl-sqd3.24 | ALREADY DONE | - | - | | Lock contention counted/shown and history losses said: #225 (history row count), #227 (orphans stopped before claim), #434 (doctor counts lock answers). | none |
 | tl-sqd3.34 | ALREADY DONE | - | - | | exec-allow guard shipped in delegate/domain/policy/exec_allow.py (#29 audit row); tests/delegate/test_exec_allow.py has denial corpus incl sort --compress-program and one audit row. | none |

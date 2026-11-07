@@ -6,8 +6,8 @@ import pytest
 from support import procsim
 from support.check_host import CheckHostCase
 
-from taskloop.adapters.childenv import CHECK_SECRETS, check_env, check_environment, current_env, delegate_call_env, tool_env
 from taskloop.adapters.git import RealGit
+from tlkernel.childenv import CHECK_SECRETS, check_env, check_environment, current_env, delegate_call_env, tool_env
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env
 from tltestkit.case import Case
@@ -46,7 +46,7 @@ class CheckEnvironmentTest(Case):
                 "XDG_STATE_HOME": "/state", "MISE_CONFIG_DIR": "/mise", "XDG_CACHE_HOME": "/cache", "XDG_RUNTIME_DIR": "/runtime",
                 **dict.fromkeys(CHECK_SECRETS, "parent-secret"), "GIT_CREDENTIAL_HELPER": "secret"}
         extra = {"XDG_CONFIG_HOME": "/declared-config", **dict.fromkeys(CHECK_SECRETS, "declared-secret")}
-        with (mock.patch("taskloop.adapters.childenv.tempfile.TemporaryDirectory") as temporary,
+        with (mock.patch("tlkernel.childenv.tempfile.TemporaryDirectory") as temporary,
               check_environment(base, extra, scratch_home=False) as out):
             expected = {k: v for k, v in base.items() if k not in CHECK_SECRETS and not k.startswith("GIT_CREDENTIAL")}
             expected["XDG_CONFIG_HOME"] = "/declared-config"

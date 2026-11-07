@@ -10,7 +10,7 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
-from tlkernel import fence
+from tlkernel import childenv, fence
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BeadPatch, Beads
 from tlkernel.config import EngineConfig
@@ -26,7 +26,7 @@ from tlkernel.procport import Spawner
 from tlkernel.run import Reexec, RunReport
 from tlkernel.run_slot import RUN_SLOT
 
-from taskloop.adapters import beadtools, childenv, gitrepo, ident
+from taskloop.adapters import beadtools, gitrepo, ident
 from taskloop.adapters import halt as halting
 from taskloop.app.asks import admission, setup_retry
 from taskloop.app.loop.queue import has_areas

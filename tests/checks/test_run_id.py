@@ -10,7 +10,8 @@ from support.check_host import CheckHostCase
 # isort: split
 from support import procsim
 
-from taskloop.adapters import check_files, childenv
+from taskloop.adapters import check_files
+from tlkernel import childenv
 from tlkernel.checks import Durations
 from tlkernel.envvars import EnvVar
 

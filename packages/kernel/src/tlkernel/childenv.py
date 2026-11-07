@@ -44,7 +44,7 @@ HANDOVERS = frozenset({EnvVar.TL_REEXEC.value, EnvVar.TL_LOOP_STATE.value, EnvVa
 
 
 # the tl.py of the install this code runs from
-OWN_TL = Path(__file__).resolve().parents[3] / "skills" / "task-loop" / "tl.py"
+OWN_TL = Path(__file__).resolve().parents[4] / "skills" / "task-loop" / "tl.py"
 
 
 def hooks_vars(env: Mapping[str, str], source: Mapping[str, str]) -> dict[str, str]:

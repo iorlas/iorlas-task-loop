@@ -15,8 +15,8 @@ from support.builders import make_engine
 from support.engine_case import lint
 from support.plans import CLEAN, HAS_F, PLAN, WRITE
 
-from taskloop.adapters import childenv
 from taskloop.adapters.check_probe import PathProbe
+from tlkernel import childenv
 from tlkernel.argv import argv_of
 from tlkernel.env import snapshot
 

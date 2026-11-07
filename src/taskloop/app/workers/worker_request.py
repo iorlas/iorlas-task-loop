@@ -3,6 +3,7 @@
 import json
 from typing import Final, Protocol
 
+from tlkernel import childenv
 from tlkernel import log as rec
 from tlkernel.beadsport import Beads
 from tlkernel.config import EngineConfig
@@ -14,7 +15,7 @@ from tlkernel.ids import BeadId
 from tlkernel.plancheck import PlanData
 from tlkernel.stop import Stop
 
-from taskloop.adapters import childenv, ident
+from taskloop.adapters import ident
 from taskloop.adapters.check_files import repo_key
 from taskloop.app.asks import trustroots
 from taskloop.app.checks.runner import Checker
