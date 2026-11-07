@@ -2,7 +2,9 @@
 `wake_at` is the epoch a transient park wakes (0/NULL: waits for the owner). A deleted row keeps its place as evidence with `cleared`
 set."""
 import json
+import sqlite3
 import time
+from collections.abc import Callable
 
 from taskloop.contracts import wire
 from taskloop.contracts.looprows import LoopRows
@@ -26,16 +28,27 @@ class WaitDoc[T: Rec]:
         return None
 
     def write(self, rec: T) -> None:
+        with self.rows.transaction() as con:
+            self._write(con, rec)
+
+    def change(self, fn: Callable[[T | None], T]) -> T:
+        """Read, `fn`, write: all in one write transaction, so two writers of the record never lose each other's change."""
+        with self.rows.transaction() as con:
+            found = con.execute("SELECT facts FROM wait WHERE kind=? AND wake_on=? AND cleared IS NULL ORDER BY id DESC LIMIT 1",
+                                (self.kind, self.bead)).fetchone()
+            rec = fn(self.decode(found[0]) if found else None)
+            self._write(con, rec)
+        return rec
+
+    def _write(self, con: sqlite3.Connection, rec: T) -> None:
         facts = json.dumps(wire.dump(rec), ensure_ascii=False)
         wake = float(getattr(rec, "retry_at", 0.0) or 0.0) or None
         run = str(getattr(rec, "run", "")) or None
-        now = time.time()
-        with self.rows.transaction() as con:
-            done = con.execute("UPDATE wait SET facts=?, wake_at=?, run=? WHERE kind=? AND wake_on=? AND cleared IS NULL",
-                               (facts, wake, run, self.kind, self.bead)).rowcount
-            if not done:
-                con.execute("INSERT INTO wait (repo, run, kind, wake_at, wake_on, facts, since) VALUES ('', ?, ?, ?, ?, ?, ?)",
-                            (run, self.kind, wake, self.bead, facts, now))
+        done = con.execute("UPDATE wait SET facts=?, wake_at=?, run=? WHERE kind=? AND wake_on=? AND cleared IS NULL",
+                           (facts, wake, run, self.kind, self.bead)).rowcount
+        if not done:
+            con.execute("INSERT INTO wait (repo, run, kind, wake_at, wake_on, facts, since) VALUES ('', ?, ?, ?, ?, ?, ?)",
+                        (run, self.kind, wake, self.bead, facts, time.time()))
 
     def delete(self) -> None:
         with self.rows.transaction() as con:

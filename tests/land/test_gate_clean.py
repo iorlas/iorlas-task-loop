@@ -10,7 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import procsim
-from support.engine_case import EngineTest
+from support.gate_rig import GateCase
 
 from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
 from taskloop.app.run.blocked import Blocked
@@ -20,7 +20,7 @@ from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.checks.specs import gate_items
 
 
-class CleanGate(EngineTest):
+class CleanGate(GateCase):
     def engine(self, command):
         eng = self.checks_engine(checks=[{"id": "evidence", "cmd": command, "run": "both"}])
         (self.wt / ".gitignore").write_text(".task/\nignored.txt\n")

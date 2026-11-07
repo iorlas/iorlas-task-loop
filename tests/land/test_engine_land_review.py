@@ -86,7 +86,7 @@ class LandReview(LandReviewBase):
             assert not (self.wt / p).exists()
             assert (e.evidence_dir / "strays" / p).is_file()
         assert (self.wt / "f.txt").exists()
-        assert e.strays == moved
+        assert e.write.strays == moved
         assert "kept" in e.comment.call_args[0][0]
 
     def test_untracked_ignore_files_are_never_moved(self):

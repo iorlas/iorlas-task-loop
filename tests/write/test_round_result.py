@@ -14,7 +14,7 @@ from support.plans import PLAN
 
 from taskloop.app.run.stage_rounds import run_round_step
 from taskloop.app.write.stage_loop import StageLoop
-from taskloop.app.write.state import REPLAN, RoundResult, RoundStop, StageState, carrying
+from taskloop.app.write.state import REPLAN, RoundResult, RoundStop, StageState, WriteState, carrying
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.enums import Step
 
@@ -22,8 +22,8 @@ OLD = {"tests_added": 1, "tests_removed": 2, "rounds": 5, "writes": 7, "reviews"
 
 
 def host():
-    return SimpleNamespace(last_run="old", stuck_why="old why", last_summary="old summary", stats=dict(OLD), writer_family="old",
-                           writer=SimpleNamespace(last_stage=False), write_rounds=[])
+    return SimpleNamespace(last_run="old", stuck_why="old why", stats=dict(OLD), writer_family="old",
+                           writer=SimpleNamespace(last_stage=False), write=WriteState())
 
 
 def state():
@@ -36,15 +36,16 @@ def test_play_applies_the_result_and_answers_its_flow():
     got = RoundResult(flow="again", run=run, stuck_why="why", tests=(3, 4), rounds=1, writes=2, reviews=1, summary="done",
                       family="openai", last_stage=True, write_rows=({"write": 1},))
     assert StageLoop(e).play(lambda st: got, s) == "again"
-    assert (e.last_run, e.stuck_why, e.last_summary, e.writer_family, e.writer.last_stage) == (run, "why", "done", "openai", True)
+    assert (e.last_run, e.stuck_why, e.write.last_summary, e.writer_family, e.writer.last_stage) == (run, "why", "done", "openai", True)
     assert e.stats == {"tests_added": 3, "tests_removed": 4, "rounds": 6, "writes": 9, "reviews": 4}
-    assert e.write_rounds == [{"write": 1}]
+    assert e.write.write_rounds == [{"write": 1}]
 
 
 def test_an_empty_result_keeps_the_engine_as_it_was():
     e = host()
     assert StageLoop(e).play(lambda st: RoundResult(), state()) == ""
-    assert (e.last_run, e.stuck_why, e.last_summary, e.stats, e.writer_family) == ("old", "old why", "old summary", OLD, "old")
+    assert (e.last_run, e.stuck_why, e.stats, e.writer_family) == ("old", "old why", OLD, "old")
+    assert e.write.last_summary == ""
 
 
 def test_a_round_that_raises_still_hands_on_and_raises_the_cause():

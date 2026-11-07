@@ -7,7 +7,7 @@ from pathlib import Path
 from stream_proc import proc_start
 
 from taskloop.contracts.enums import Step
-from taskloop.contracts.finish import FinishResult, finish_run, previous_finish
+from taskloop.contracts.finish import BeatMoved, FinishResult, finish_run, previous_finish
 from taskloop.contracts.ids import RunId
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunManifest, RunState
@@ -146,11 +146,15 @@ class RunLocator:
         candidate = previous_finish(old.manifest.replace(state=state, ended=now, reason=reason, finish=None))
         return finish_run(self.cfg, run, candidate)
 
-    def mark_lost(self, run: str, reason: str) -> FinishResult | None:
-        """The reconciler's one write: a run still in a live state becomes `lost`, once, with its reason (`runlife.reconcile` decides)."""
+    def mark_lost(self, run: str, reason: str, seen_beat: float | None = None) -> FinishResult | None:
+        """The reconciler's one write: a run still in a live state becomes `lost`, once, with its reason (`runlife.reconcile` decides).
+        `seen_beat` is the heartbeat that decision read; a run that beat since (None: since this call read it) is alive and stays."""
         old = self.get(run)
         if old is None:
             return None
-        candidate = previous_finish(old.manifest.replace(state=RunState.LOST, ended=old.manifest.heartbeat,
-                                                        reason=reason[:300], finish=None))
-        return finish_run(self.cfg, run, candidate)
+        seen = old.manifest.heartbeat if seen_beat is None else seen_beat
+        candidate = previous_finish(old.manifest.replace(state=RunState.LOST, ended=seen, reason=reason[:300], finish=None))
+        try:
+            return finish_run(self.cfg, run, candidate, seen_beat=seen)
+        except BeatMoved:
+            return None
