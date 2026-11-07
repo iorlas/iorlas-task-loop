@@ -39,7 +39,7 @@ class Planner:
     def __init__(self, facts: RunFacts, ports: PlanPorts, plan_state: PlanState, amend: AmendState,
                  hand: PlanHand) -> None:
         self.facts, self.ports, self.plan_state, self.amend, self.hand = facts, ports, plan_state, amend, hand
-        self.keep = PlanKeeper(hand)
+        self.keep = PlanKeeper(hand, ports.leftover_sink)
         self.cap = ReplanCap(facts, ports, plan_state, amend, hand)
         self.prompts = PlanPrompt(facts, ports, plan_state, amend, hand, ports.git)
         self.decisions = Decisions(facts, ports, plan_state, amend, hand)

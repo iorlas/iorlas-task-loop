@@ -13,6 +13,7 @@ from tlkernel.enums import AskClass
 from tlkernel.gitport import Git
 from tlkernel.ids import TreeSha
 from tlkernel.plancheck import PlanData
+from tlkernel.stagefacts import LeftoverSink
 from tlkernel.stop import Stop
 from tlkernel.wire import Open
 
@@ -130,6 +131,9 @@ class PlanHand(Protocol):
 
 class PlanPorts(Protocol):
     """Capabilities the plan stage calls on the rest of the run."""
+
+    @property
+    def leftover_sink(self) -> LeftoverSink: ...
 
     @property
     def git(self) -> Git: ...

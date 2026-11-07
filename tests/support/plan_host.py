@@ -6,6 +6,7 @@ from support.facts import FakeChecker, MemCheckpoints, fake_facts
 from support.fake_beads import FakeBeads
 from support.fakegit import FakeGit
 from taskloop.adapters.check_probe import PathProbe
+from taskloop.app.pipeline.leftover_queue import LeftoverQueue
 from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.briefs import Briefs
 from taskloop.app.plan.cases import Cases
@@ -48,6 +49,7 @@ class FakePlanPorts:
     routing: SimpleNamespace
     cases: Cases
     briefs: Briefs
+    leftover_sink: LeftoverQueue
 
     def __init__(self, workdir: Path, cfg: EngineConfig | None = None) -> None:
         self.facts, run = fake_facts(workdir, cfg=cfg)
@@ -107,6 +109,7 @@ class FakePlan:
         self.hand = SimpleNamespace(scope="", answered=None, verify_answer="", landed_sha="", planner_ref="", kind="",
                                     plan_data=None, plan_summary="", plan_log=[], planned=0, extra=0, done=[], leftovers=[],
                                     brief_hash="", snap=None)
+        self.ports.leftover_sink = LeftoverQueue(self.hand)
         self.ports.routing = SimpleNamespace(ledger=self.ledger, ledger_of=Ledger)
         self.cases = self.ports.cases = Cases(self.facts, self.ports, self.plan_state, self.amend, self.hand)
         self.briefs = self.ports.briefs = Briefs(self.facts, self.ports, self.plan_state, self.amend, self.hand)

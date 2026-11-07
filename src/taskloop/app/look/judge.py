@@ -105,10 +105,9 @@ class Judge:
     def look_leftover(self, d: Defect, names: list[str]) -> None:
         hand, facts, ports = self.hand, self.facts, self.ports
         title = f"Look: {d.why}"[:120]
-        if title not in {lo["title"] for lo in hand.leftovers}:
-            hand.leftovers.append({"title": title, "why": (
+        if ports.leftover_sink.add_titled({"title": title, "why": (
                 f"The look judge found this on {hand.bead_title or facts.bead} ({d.item}); it came back after a fix or the render rounds "
-                f"were used up. Pictures: {', '.join(names) or 'none'}. Defect: {d.where} {d.why}")})
+                f"were used up. Pictures: {', '.join(names) or 'none'}. Defect: {d.where} {d.why}")}):
             ports.checkpoints.keep_pending("look")
             ports.log.note(f"look defect filed as a follow-up: {d.why[:200]}")
 
