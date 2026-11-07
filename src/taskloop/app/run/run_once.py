@@ -4,11 +4,11 @@ from typing import Any
 
 from tlkernel.envvars import EnvVar
 from tlpipeline.api import Lifecycle, RunBody
+from tlrelease.closing import ReexecBook
 from tlslots.lease import Lease
 
 from taskloop.adapters import beadtools, deadline, ident
 from taskloop.app.land.closing import LandHistory
-from taskloop.app.release.closing import ReexecBook
 
 
 class RunOnce:

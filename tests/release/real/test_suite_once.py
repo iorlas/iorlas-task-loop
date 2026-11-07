@@ -12,16 +12,19 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from support.release_world import release_host
+
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
-from taskloop.app.release import gate, shell
-from taskloop.app.release.shell import Abort, Shell
 from taskloop.stores.real import real_stores
 from tlgate import authorization
 from tlkernel.env import Env
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.paths import ConfigDir
 from tlkernel.runkey import BaseSha
+from tlrelease import gate, shell
+from tlrelease.host import ReleaseHost
+from tlrelease.shell import Abort, Shell
 from tltestkit.checked import run_checked
 
 
@@ -54,10 +57,10 @@ class Verify(Case):
         self.git("add", "-A")
         self.git("commit", "-qm", text)
 
-    def checks(self, repo: Path, sh: Shell) -> None:
+    def checks(self, repo: Path, sh: Shell, host: ReleaseHost) -> None:
         self.ran.append("ran")
 
-    def red(self, repo: Path, sh: Shell) -> None:
+    def red(self, repo: Path, sh: Shell, host: ReleaseHost) -> None:
         self.ran.append("red")
         raise Abort("the suite is red")
 
@@ -69,34 +72,34 @@ class Verify(Case):
                                      TreeSha(tree), BaseSha(base), self.env)[CheckId("suite")]
 
     def test_the_same_tree_under_the_same_command_runs_once(self):
-        assert not gate.verify(self.repo, self.sh, self.checks)
-        assert gate.verify(self.repo, self.sh, self.checks)
+        assert not gate.verify(self.repo, self.sh, self.checks, host=release_host())
+        assert gate.verify(self.repo, self.sh, self.checks, host=release_host())
         assert self.ran == ["ran"]
 
     def test_the_receipt_the_gate_wrote_is_the_one_the_judge_reads(self):
         assert self.judge_view() is None
-        gate.verify(self.repo, self.sh, self.checks)
+        gate.verify(self.repo, self.sh, self.checks, host=release_host())
         assert self.judge_view() is not None
 
     def test_a_miss_says_which_tree_and_command_have_no_green_run(self):
         with mock.patch.object(gate, "say") as said:
-            gate.verify(self.repo, self.sh, self.checks)
-            gate.verify(self.repo, self.sh, self.checks)
+            gate.verify(self.repo, self.sh, self.checks, host=release_host())
+            gate.verify(self.repo, self.sh, self.checks, host=release_host())
         assert said.call_args_list[0].args[0].startswith(
             f"gate receipt miss: no green run of tree {self.git('rev-parse', 'HEAD^{tree}')[:12]} under `just test`")
         assert said.call_args_list[1].args[0].startswith("gate receipt hit:")
 
     def test_a_changed_tree_runs_again(self):
-        gate.verify(self.repo, self.sh, self.checks)
+        gate.verify(self.repo, self.sh, self.checks, host=release_host())
         self.commit("a.txt", "two")
-        assert not gate.verify(self.repo, self.sh, self.checks)
+        assert not gate.verify(self.repo, self.sh, self.checks, host=release_host())
         assert self.ran == ["ran", "ran"]
 
     def test_a_red_run_is_never_remembered_so_the_next_run_is_real(self):
         with pytest.raises(Abort):
-            gate.verify(self.repo, self.sh, self.red)
+            gate.verify(self.repo, self.sh, self.red, host=release_host())
         with pytest.raises(Abort):
-            gate.verify(self.repo, self.sh, self.red)
+            gate.verify(self.repo, self.sh, self.red, host=release_host())
         assert self.ran == ["red", "red"]
         assert self.judge_view() is None
 
@@ -112,21 +115,21 @@ class Verify(Case):
     def test_a_check_red_test_green_run_writes_no_receipt(self):
         self.declare_gate("false", "true")
         with pytest.raises(Abort):
-            gate.verify(self.repo, self.sh)
+            gate.verify(self.repo, self.sh, host=release_host())
         assert self.judge_view() is None
 
     def test_a_receipt_exists_only_after_check_and_test_are_both_green(self):
         self.declare_gate("true", "true")
-        assert not gate.verify(self.repo, self.sh)
+        assert not gate.verify(self.repo, self.sh, host=release_host())
         assert self.judge_view() is not None
 
     def test_a_moved_base_is_a_miss(self):
-        gate.verify(self.repo, self.sh, self.checks)
+        gate.verify(self.repo, self.sh, self.checks, host=release_host())
         clone = Path(self.tmp.name) / "other"
         run_checked(["git", "clone", "-q", str(Path(self.tmp.name) / "origin.git"), str(clone)], clone.parent, env=self.env.vars)
         (clone / "b.txt").write_text("b")
         for cmd in (["add", "-A"], ["commit", "-qm", "b"], ["push", "-q", "origin", "main"]):
             run_checked(["git", *cmd], clone, env=self.env.vars)
         self.git("fetch", "-q", "origin")
-        assert not gate.verify(self.repo, self.sh, self.checks)
+        assert not gate.verify(self.repo, self.sh, self.checks, host=release_host())
         assert self.ran == ["ran", "ran"]

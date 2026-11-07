@@ -4,12 +4,13 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+from support.release_world import release_host
 from support.shells import quiet_shell
 
-from taskloop.app.release import flow
-from taskloop.app.release.shell import Abort
 from tlkernel.env import Env
 from tlkernel.gitfacts import StatusRow
+from tlrelease import flow
+from tlrelease.shell import Abort
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
@@ -36,12 +37,12 @@ class SuiteOnce(Case):
         sh = replace(quiet_shell(), port=port, env=self.env)
         seen = []
 
-        def verify(*args):
+        def verify(*args, host):
             seen.append(plugin.read_text())
             assert not port.commit_staged.called
 
         with mock.patch.object(flow.gate, "verify", side_effect=verify):
-            assert flow.bump_and_commit(repo, flow.Request("fix"), sh) == "1.2.4"
+            assert flow.bump_and_commit(repo, flow.Request("fix"), sh, host=release_host()) == "1.2.4"
         assert seen == ['{"version":"1.2.3"}\n']
         assert "1.2.4" in plugin.read_text()
         port.commit_staged.assert_called_once_with(str(repo), "1.2.4: fix" + flow.publish.TRAILER)
@@ -89,5 +90,5 @@ class SuiteOnce(Case):
             return mock.Mock(returncode=0, stdout="", stderr="")
 
         sh = replace(quiet_shell(), port=port, env=Env({"TL_GREEN_LEDGER": "1"}), run=run)
-        flow.gate.gate(repo, sh)
+        flow.gate.gate(repo, sh, host=release_host())
         assert seen["TL_GREEN_LEDGER"] == ""

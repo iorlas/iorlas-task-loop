@@ -1,4 +1,4 @@
-"""Paths owned by taskloop.app.release."""
+"""Paths owned by tlrelease."""
 from pathlib import Path
 
 from tlkernel.paths import ConfigDir

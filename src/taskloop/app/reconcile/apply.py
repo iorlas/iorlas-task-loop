@@ -8,8 +8,8 @@ from tlkernel.beadsport import BdFailure, BeadPatch, Beads
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.slots import HELD_KEYS
+from tlrelease import tidy
 
-from taskloop.app.release import tidy
 from taskloop.domain.reconcile.facts import (
     Action,
     DeleteBranch,

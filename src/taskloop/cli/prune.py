@@ -5,11 +5,11 @@ from typing import Any
 from tlkernel.env import Env
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
+from tlrelease import shell
 
 from taskloop.app.launch import loop as wloop
 from taskloop.app.launch import repos
 from taskloop.app.prune import verb
-from taskloop.app.release import shell
 from taskloop.app.run import running
 from taskloop.app.track import trail
 from taskloop.app.wire import real

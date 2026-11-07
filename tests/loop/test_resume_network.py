@@ -15,9 +15,9 @@ from support import engine_case as te
 from support import netgate
 from support.engine_case import stop
 
-from taskloop.app.release import reexec
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
+from tlrelease import reexec
 from tltestkit import procsim
 from tltestkit.plans import CLEAN, PLAN, WRITE
 

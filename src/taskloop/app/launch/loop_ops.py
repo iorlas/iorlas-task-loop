@@ -15,6 +15,7 @@ from tlkernel.ids import BeadId
 from tlkernel.landed import landed_by
 from tlkernel.procport import Child, Hold, Spawner
 from tlkernel.slots import git_probe
+from tlrelease import reexec
 from tlslots import config as wslots_config
 from tlslots import engine_lock
 
@@ -25,7 +26,6 @@ from taskloop.app.doctor import lanes as wlanes
 from taskloop.app.loop import stages
 from taskloop.app.loop.env import ReloadNote
 from taskloop.app.reconcile import leases
-from taskloop.app.release import reexec
 from taskloop.app.report import reflect
 from taskloop.app.run.running import running
 from taskloop.app.track import console, trail, verbs

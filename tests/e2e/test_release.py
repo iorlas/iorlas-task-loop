@@ -24,12 +24,12 @@ import pytest
 from support.release_world import IDENTITY, MARKET, PLUGIN, World, git
 
 from taskloop.adapters import landlock
-from taskloop.app.release import canary, clone, manifest, publish, selfupdate, shell
 from tlkernel import childenv, wire
 from tlkernel.env import Env, snapshot
 from tlkernel.envvars import EnvVar
 from tlkernel.paths import ConfigDir
 from tlkernel.rowstores import ReleaseResultStore
+from tlrelease import canary, clone, manifest, publish, selfupdate, shell
 from tltestkit.case import Case
 from tltestkit.narrow import must
 from tltestkit.procsim import real_proc

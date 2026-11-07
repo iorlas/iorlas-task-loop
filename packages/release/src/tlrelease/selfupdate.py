@@ -9,7 +9,7 @@ from tlkernel import childenv
 from tlkernel.env import Env
 from tlkernel.envvars import EnvVar
 
-from taskloop.app.release.shell import Shell, say
+from tlrelease.shell import Shell, say
 
 CODE = ("src", "packages", "dev/release.py")  # what a release runs: the engine package, workspace packages, and entry script
 
