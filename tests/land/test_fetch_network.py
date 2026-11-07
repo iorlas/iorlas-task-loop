@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.app.land.checkout import Checkout
-from taskloop.app.land.gitcall import must
+from taskloop.app.land.rebase import must
 from tlkernel.landmatchers import Push
 from tlkernel.matchers import NetText
 from tlkernel.slots import SlotGitError

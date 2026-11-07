@@ -5,7 +5,7 @@ from tlkernel.gitport import Git
 from tlkernel.paths import ConfigDir
 
 from taskloop.app.land import cleanup
-from taskloop.app.land.gitcall import oneline
+from taskloop.app.land.rebase import oneline
 from taskloop.stores.runlog import RunLog
 
 
