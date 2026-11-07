@@ -11,15 +11,16 @@ from typing import Protocol
 from tlkernel import askspecs, trustroots
 from tlkernel import log as rec
 from tlkernel.bead import Bead
+from tlkernel.deadline import DeadlineExpired
 from tlkernel.lanesliveness import LIVENESS
 from tlkernel.netretry import NET_WAIT_CAP_S
 
-from taskloop.adapters.deadline import DeadlineExpired, deadline
 from taskloop.app.land import gate
 from taskloop.app.land.fix import FixOutside
 from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
 from taskloop.app.land.host import Land, Next, Phase, Placing
 from taskloop.app.land.lander_host import LanderHost, LandHost
+from taskloop.app.land.ports import Deadline
 from taskloop.app.land.pr_land import PrLand
 from taskloop.app.land.push import Landed, Outbound, Pusher
 from taskloop.app.land.rebase import Commit, LandRebase, Recheck
@@ -88,8 +89,9 @@ class LandParts:
 
 
 class Lander:
-    def __init__(self, host: LandHost, parts: LandParts) -> None:
+    def __init__(self, host: LandHost, parts: LandParts, *, deadline: Deadline) -> None:
         self.e = host
+        self.deadline = deadline
         self.gate = parts.gate
         self.committing = parts.commit
         self.landed = parts.landed
@@ -286,7 +288,7 @@ class Lander:
         e = self.e
         if where is Placing.INSIDE:
             try:
-                with deadline(LIVENESS.judge_s, "land judge"):
+                with self.deadline(LIVENESS.judge_s, "land judge"):
                     got = self.gate.run()
             except DeadlineExpired as err:
                 if err.scope != "land judge":
@@ -301,10 +303,10 @@ class Lander:
         return gate_pass, None
 
 
-def lander_over(host: LanderHost) -> Lander:
+def lander_over(host: LanderHost, *, deadline: Deadline) -> Lander:
     """The Lander over the engine: each step gets the host typed as that step's own Protocol."""
     out = Outbound(host)
     pr = PrLand(host) if host.cfg.land_mode == "pr" else None
     return Lander(host, LandParts(gate=Gate(host), commit=Commit(host), landed=Landed(host), rebase=LandRebase(host),
                                   recheck=Recheck(host), push=pr or Pusher(host, out), fix=FixOutside(host), sync=Sync(host, out), out=out,
-                                  pr=pr))
+                                  pr=pr), deadline=deadline)
