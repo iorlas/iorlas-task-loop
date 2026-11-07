@@ -13,6 +13,7 @@ from taskloop.app.look.state import LookState
 from taskloop.app.pipeline.budget import Budget
 from taskloop.app.pipeline.steps import Steps
 from taskloop.app.plan.amend import AmendState
+from taskloop.app.plan.planned import Planned
 from taskloop.app.plan.state import PlanState
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.context import RunContext
@@ -32,6 +33,7 @@ from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId, TreeSha
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.plancheck import PlanData
 from taskloop.contracts.ports import Clock
 from taskloop.contracts.procport import Spawner
 from taskloop.contracts.review import Unfiled
@@ -116,6 +118,23 @@ class RunFields(StateAttrs):
         self.amend = AmendState()  # the plan stage's amendment context (old plan, what changed, why)
         self.plan_state = PlanState()  # the plan stage's flags: the send-backs used, the cap raised
         self.land_fields()
+
+    # -- what the planner keeps of the run's plan (PlanKeep, app/plan/host.py)
+    def keep_draft(self, data: PlanData) -> None:
+        self.plan_data = data
+
+    def set_summary(self, text: str) -> None:
+        self.plan_summary = text
+
+    def count_plan(self) -> None:
+        self.planned += 1
+
+    def add_leftovers(self, items: list[Open]) -> None:
+        self.leftovers.extend(items)
+
+    def take_planned(self, p: Planned) -> PlanData:
+        self.plan_data, self.plan_summary, self.planned = p.plan_data, p.summary, p.planned
+        return p.plan_data
 
     def land_fields(self) -> None:
         self.state, self.checkpoints = RunState(), Checkpoints(self)  # what survives a park (contracts/checkpoint.py), and its one writer
