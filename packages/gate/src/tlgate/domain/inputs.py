@@ -107,7 +107,7 @@ def selected_digest(check: Check) -> str:
 
 
 def toolchain_digest(files: Mapping[str, str], host: str, pins: Sequence[str] = ()) -> str:
-    """The toolchain a check ran under: the host (system and machine) and the pin files of the tree (mise, python, node, rust, dotnet),
+    """The toolchain a check ran under: the host (system and machine) and the pin files of the tree (mise, python, node, rust),
     at any depth. A bumped pin reruns even a check whose `inputs_only` leaves the rest of the tree out."""
     return hashlib.sha1(f"{host}\0{inputs_hash(files, anywhere(TOOLCHAIN_FILES, pins))}".encode("utf-8", "surrogateescape")).hexdigest()
 

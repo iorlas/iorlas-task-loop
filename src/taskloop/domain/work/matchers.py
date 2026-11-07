@@ -21,7 +21,7 @@ def word_set(text: object) -> set[str]:
 
 
 def without_runner(cmd: str) -> str:
-    """The command without its task runner (`just unity-tests` -> `unity-tests`)."""
+    """The command without its task runner (`just smoke-tests` -> `smoke-tests`)."""
     return GATE_RUNNER.sub("", cmd)
 
 

@@ -125,7 +125,7 @@ def loop_key(repo: object) -> RepoKey:
 
 def mangle(check_id: CheckId) -> str:
     """The id as an environment name: each run of non-word characters becomes one `_`, upper case. Not injective: the profile load
-    refuses two ids that mangle alike (`unity-test`, `unity_test`)."""
+    refuses two ids that mangle alike (`editor-test`, `editor_test`)."""
     out = []
     for word, run in groupby(check_id, key=lambda ch: ch.isalnum() or ch == "_"):
         out.append("".join(run) if word else "_")

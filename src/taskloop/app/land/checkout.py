@@ -83,7 +83,7 @@ class Checkout:
         return self.e.git.branch(self.e.wt)
 
     def dirty_status(self) -> str:
-        """`git status --porcelain` of the slot, leaving out what the BASE's .gitignore files ignore (tl-g6a): Unity's client/log.txt
+        """`git status --porcelain` of the slot, leaving out what the BASE's .gitignore files ignore (tl-g6a): an editor's client/log.txt
         is untracked on an old branch and ignored on main, and made a slot 'dirty with another branch's work' for 7 beads."""
         rows = self.e.git.status(self.e.wt, all_untracked=True)
         if not rows:
