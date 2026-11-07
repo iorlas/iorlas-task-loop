@@ -3,11 +3,12 @@ from dataclasses import dataclass, replace
 from os import EX_CONFIG
 from pathlib import Path
 
-from taskloop.contracts import wire
-from taskloop.contracts.config import ProfileReadError
-from taskloop.contracts.enums import Result
-from taskloop.contracts.run import RunReport
-from taskloop.contracts.slots import SlotFailCode
+from tlkernel import wire
+from tlkernel.config import ProfileReadError
+from tlkernel.enums import Result
+from tlkernel.run import RunReport
+from tlkernel.slots import SlotFailCode
+
 from taskloop.domain.matchers import NetText
 
 NETWORK = "pause_network"

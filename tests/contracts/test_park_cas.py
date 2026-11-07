@@ -7,9 +7,9 @@ import pytest
 import support.paths  # noqa: F401
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.parks import Park, ParkStore
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.ids import BeadId
+from tlkernel.parks import Park, ParkStore
+from tlkernel.paths import ConfigDir
 
 BEAD = BeadId("tl-1")
 

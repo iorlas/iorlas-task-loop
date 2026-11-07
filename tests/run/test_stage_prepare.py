@@ -8,8 +8,8 @@ from support.plans import PLAN
 from taskloop.app.run.stage_rounds import run_round_step
 from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.state import RoundResult, StageState
-from taskloop.contracts.enums import Step
-from taskloop.contracts.procport import Ran
+from tlkernel.enums import Step
+from tlkernel.procport import Ran
 
 
 class StagePrepare(EngineTest):

@@ -5,7 +5,7 @@ from typing import Any, Literal, get_args
 
 from any_contract import check_contract
 
-from taskloop.contracts.delegate import (
+from tlkernel.delegate import (
     REASON_TIMEOUT,
     Accounting,
     CostSource,
@@ -25,7 +25,7 @@ from taskloop.contracts.delegate import (
     WorkerEnd,
     WorkerEndKind,
 )
-from taskloop.contracts.trace import Tokens
+from tlkernel.trace import Tokens
 
 CONTRACT = 4
 SCOPES: tuple[Scope, ...] = get_args(Scope)

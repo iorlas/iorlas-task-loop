@@ -3,10 +3,10 @@ neither order loses the other's write; the owner's hold on the look bead is not 
 from support.look_world import world
 
 from taskloop.app.asks import looks
-from taskloop.contracts import gallery
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.lookrows import LookRaced, LookRows
-from taskloop.contracts.paths import ConfigDir
+from tlkernel import gallery
+from tlkernel.ids import BeadId
+from tlkernel.lookrows import LookRaced, LookRows
+from tlkernel.paths import ConfigDir
 
 NOW = 1_800_000_000.0
 NEW = {"id": "tl-2#1", "bead": "tl-2", "title": "new", "note": "", "shots": [], "status": "open"}

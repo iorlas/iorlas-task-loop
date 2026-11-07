@@ -2,12 +2,15 @@
 from collections.abc import Callable
 from typing import Protocol
 
-from taskloop.contracts import fence
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.delegate import Permanence
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.parks import Park
+from tlkernel import fence
+from tlkernel.bead import Bead
+from tlkernel.delegate import Permanence
+from tlkernel.enums import Outcome
+from tlkernel.gitport import Git
+from tlkernel.kinds import Kind
+from tlkernel.parks import Park
+from tlkernel.review import ReviewState
+
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes.pause_reasons import Producer
 
@@ -40,3 +43,15 @@ class BeadClosing(Protocol):
 
 class Slotting(Protocol):
     def leave_slot(self, outcome: Outcome, branch: str) -> None: ...
+
+
+class TrustRefusal(Protocol):
+    def refusal(self, git: Git, wt: str, base: str, bead: Bead | None) -> str: ...
+
+
+class HeadHistory(Protocol):
+    def since(self, wt: str, head: str, n: int) -> str: ...
+
+
+class ReviewRestore(Protocol):
+    def apply(self, review: ReviewState, *, unchecked: bool, late: bool = False) -> None: ...

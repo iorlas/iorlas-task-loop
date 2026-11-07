@@ -7,14 +7,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+import hermetic  # noqa: F401  (a home of its own for every test)
+from support.procsim import real_proc
+from support.tmpdir import TemporaryDirectory, mkdtemp
+from test_route import ROOT, route
+
 from delegate.adapters import git
 from delegate.domain.policy.matchers import heredoc_only_hit, secret_hit
 from delegate.domain.policy.shell import git_write
-from support.procsim import real_proc
-from support.tmpdir import TemporaryDirectory, mkdtemp
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-from test_route import ROOT, route
 
 
 class SecretGuard:

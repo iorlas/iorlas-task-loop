@@ -8,25 +8,6 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from taskloop.contracts import factorydb, wire
-from taskloop.contracts.adrs import AdrStore
-from taskloop.contracts.ask import Ask
-from taskloop.contracts.askrows import read_snapshot
-from taskloop.contracts.askstore import LIVE
-from taskloop.contracts.bead import Bead, Comment
-from taskloop.contracts.dashhealth import Score
-from taskloop.contracts.dashruns import ResourceLease, RunHeader
-from taskloop.contracts.delegate import LiveEvent
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.ids import BeadId, loop_key
-from taskloop.contracts.ledger import LedgerEntry
-from taskloop.contracts.loop import LoopState
-from taskloop.contracts.looprows import LoopRows
-from taskloop.contracts.rowstores import StatusStore
-from taskloop.contracts.run import RunState
-from taskloop.contracts.runlife import GONE, RETAIN, Liveness, shown
-from taskloop.contracts.slots import slots_of
-from taskloop.contracts.slottable import SlotSource
 from taskloop_dash.api.looks import Looks
 from taskloop_dash.env import Env
 from taskloop_dash.readers import dbruns, runprojection
@@ -37,6 +18,25 @@ from taskloop_dash.readers.observed import strays_of
 from taskloop_dash.readers.records import Records
 from taskloop_dash.views.runfacts import Run
 from taskloop_dash.views.world import AdrIn, Landing, LookItem, ProjectIn, World
+from tlkernel import factorydb, wire
+from tlkernel.adrs import AdrStore
+from tlkernel.ask import Ask
+from tlkernel.askrows import read_snapshot
+from tlkernel.askstore import LIVE
+from tlkernel.bead import Bead, Comment
+from tlkernel.dashhealth import Score
+from tlkernel.dashruns import ResourceLease, RunHeader
+from tlkernel.delegate import LiveEvent
+from tlkernel.enums import Outcome
+from tlkernel.ids import BeadId, loop_key
+from tlkernel.ledger import LedgerEntry
+from tlkernel.loop import LoopState
+from tlkernel.looprows import LoopRows
+from tlkernel.rowstores import StatusStore
+from tlkernel.run import RunState
+from tlkernel.runlife import GONE, RETAIN, Liveness, shown
+from tlkernel.slots import slots_of
+from tlkernel.slottable import SlotSource
 
 SCORE_TTL = 60  # seconds the scorecard strip is kept
 LEDGER_TTL = 5  # seconds the ask ledger, the decisions and the landed runs are kept

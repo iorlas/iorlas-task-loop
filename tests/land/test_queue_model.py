@@ -1,8 +1,8 @@
 """The queue planner (merge-queue.md section 3): pure, so the merge order, the gates in flight and the cleanup are tables."""
 import pytest
 
-from taskloop.contracts.config import load
 from taskloop.domain.land.queue_model import Build, Built, Drop, Ejected, Entry, Gate, Gated, Landed, Merge, Phase, apply, plan
+from tlkernel.config import load
 
 MAIN = "main0"
 

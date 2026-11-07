@@ -2,21 +2,21 @@
 from any_lease import Leases
 
 from taskloop.adapters.locks import ProcessLockTable
-from taskloop.contracts import paths, rundocs, stores
-from taskloop.contracts.adrs import AdrStore
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.checkpoint import Checkpoint
-from taskloop.contracts.checks import BaseRedRecord, CheckRun, PassRecord
-from taskloop.contracts.config import HostResources
-from taskloop.contracts.docrows import RowDocs
-from taskloop.contracts.docstore import JsonStore
-from taskloop.contracts.followups import FollowupOutbox
-from taskloop.contracts.queue_state import QueueState
-from taskloop.contracts.receiptrows import DbDocSet
 from taskloop.stores.books import CheckpointBook
 from taskloop.stores.bundle import Stores
 from taskloop.stores.profile_changes import profile_changes
 from taskloop.stores.ticketrows import TicketRows
+from tlkernel import paths, rundocs, stores
+from tlkernel.adrs import AdrStore
+from tlkernel.askstore import AskStore
+from tlkernel.checkpoint import Checkpoint
+from tlkernel.checks import BaseRedRecord, CheckRun, PassRecord
+from tlkernel.config import HostResources
+from tlkernel.docrows import RowDocs
+from tlkernel.docstore import JsonStore
+from tlkernel.followups import FollowupOutbox
+from tlkernel.queue_state import QueueState
+from tlkernel.receiptrows import DbDocSet
 
 
 def real_stores(cfg: paths.ConfigDir) -> Stores:
@@ -26,7 +26,7 @@ def real_stores(cfg: paths.ConfigDir) -> Stores:
         asks=AskStore.at(cfg), adrs=lambda repo: AdrStore.at(cfg, repo),
         checkpoints=CheckpointBook(RowDocs(cfg, Checkpoint, table="checkpoint", key_col="bead", body_col="body",
                                            revisioned=True)),
-        followups=RowDocs(cfg, FollowupOutbox, table="kv", key_col="k", body_col="v", prefix="followup:"),
+        followups=RowDocs(cfg, FollowupOutbox, table="followup", key_col="bead", body_col="body"),
         queue_state=RowDocs(cfg, QueueState, table="kv", key_col="k", body_col="v", prefix="queue-state:"),
         results=lambda repo, check: DbDocSet(cfg, repo, check, "pass", PassRecord),
         base_red=lambda repo: DbDocSet(cfg, repo, None, "base_red", BaseRedRecord),

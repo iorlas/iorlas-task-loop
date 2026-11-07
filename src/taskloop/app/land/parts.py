@@ -5,7 +5,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol
 
-from taskloop.contracts.plancheck import PlanCheck
+from tlkernel.plancheck import PlanCheck
 
 
 class BeginSteps(Protocol):

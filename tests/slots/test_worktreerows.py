@@ -7,9 +7,9 @@ import support.paths  # noqa: F401
 from support import homes
 from support.narrow import must
 
-from taskloop.contracts import wire
-from taskloop.contracts.worktreerows import WorktreeDocs
-from taskloop.contracts.worktrees import Owned
+from tlkernel import wire
+from tlkernel.worktreerows import WorktreeDocs
+from tlkernel.worktrees import Owned
 
 
 @pytest.fixture

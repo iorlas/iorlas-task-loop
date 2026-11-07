@@ -47,7 +47,7 @@ if hasattr(sys, "set_lazy_imports"):
     sys.set_lazy_imports("normal")  # only explicit `lazy import` statements stay lazy; we write none
 from taskloop.app.release import flow  # noqa: E402
 from taskloop.app.wire import closeguard, real  # noqa: E402
-from taskloop.contracts.env import snapshot  # noqa: E402
+from tlkernel.env import snapshot  # noqa: E402
 
 if __name__ == "__main__":
     process = snapshot()  # the one place this script takes the process environment

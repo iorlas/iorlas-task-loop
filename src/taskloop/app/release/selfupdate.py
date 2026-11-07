@@ -5,11 +5,11 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from jsonl_log import close_held
+from tlkernel.env import Env
+from tlkernel.envvars import EnvVar
 
 from taskloop.adapters import childenv
 from taskloop.app.release.shell import Shell, say
-from taskloop.contracts.env import Env
-from taskloop.contracts.envvars import EnvVar
 
 CODE = ("src", "dev/release.py")  # what a release runs: the engine package and the entry script
 

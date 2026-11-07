@@ -1,5 +1,6 @@
 """tltestkit.limits: the kind of a test by path, the limit of each kind."""
 import pytest
+
 from tltestkit.limits import LIMITS_S, hang_s, kind_of_parts, limit_for
 
 

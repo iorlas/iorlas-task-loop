@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 from support.dashlogs import RunScript, T
 
-from taskloop.contracts import factorydb
-from taskloop.contracts.paths import ConfigDir
 from taskloop_dash.index import Indexer
 from taskloop_dash.readers import dbruns
+from tlkernel import factorydb
+from tlkernel.paths import ConfigDir
 
 NOW = T + 3600
 

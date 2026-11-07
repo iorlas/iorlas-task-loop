@@ -2,7 +2,7 @@
 import sys
 from collections.abc import Callable
 
-from taskloop.contracts.bd_errors import BdCommandFailure
+from tlkernel.bd_errors import BdCommandFailure
 
 
 def required[**P, T](call: Callable[P, T], *args: P.args, **kw: P.kwargs) -> T:

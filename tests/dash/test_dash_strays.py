@@ -7,11 +7,11 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.ids import BeadId
 from taskloop_dash.readers.observed import strays_of
 from taskloop_dash.views.floor import stray_rows
 from taskloop_dash.views.world import ProjectIn
+from tlkernel.bead import Bead
+from tlkernel.ids import BeadId
 
 NOW = 1793318400.0  # 2026-10-30T00:00:00Z
 ENDED, RUNNING = "2026-10-29T23:00:00Z", "2026-10-30T01:00:00Z"

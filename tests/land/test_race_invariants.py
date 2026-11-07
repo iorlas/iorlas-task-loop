@@ -73,12 +73,12 @@ from taskloop.app.track import (
     verbs,
 )
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.gitfacts import GitOutcome, LogRow
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.lockrows import EngineLockRows
-from taskloop.contracts.slots import Checkout, SlotGitError
+from tlkernel.env import snapshot
+from tlkernel.gitfacts import GitOutcome, LogRow
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId
+from tlkernel.lockrows import EngineLockRows
+from tlkernel.slots import Checkout, SlotGitError
 
 try:
     import fcntl

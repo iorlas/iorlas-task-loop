@@ -17,14 +17,14 @@ from support.runs import manifest
 from support.tmpdir import TemporaryDirectory
 
 from dash import test_dash_api as fixtures
-from taskloop.contracts import factorydb
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.runrows import RunRows
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env
 from taskloop_dash.index import Indexer, reindex
 from taskloop_dash.readers import dbruns, runprojection
+from tlkernel import factorydb
+from tlkernel.ids import loop_key
+from tlkernel.paths import ConfigDir
+from tlkernel.runrows import RunRows
 
 NOW = T + 3600
 
@@ -266,7 +266,7 @@ class FactoryIndex(Case):
                     con.execute("PRAGMA user_version=99" if kind == "wrong" else "UPDATE kv SET t=0 WHERE k='index.run.pass'")
                     con.close()
                 dash = Dash(Env(cfg.root, clock=lambda: NOW))
-                with patch("taskloop.contracts.locator.RunLocator.runs", side_effect=AssertionError("unexpected run-file read")):
+                with patch("tlkernel.locator.RunLocator.runs", side_effect=AssertionError("unexpected run-file read")):
                     world = dash.reads.worlds.world()
                     assert not world.runs
                     assert world.database_error
@@ -287,7 +287,7 @@ def test_truncated_database_shows_unavailable_without_reading_retained_files(tmp
     dash = Dash(Env(cfg.root, clock=lambda: NOW))
     assert dash.reads.worlds.world().runs
     cfg.factory_db().write_bytes(b"")
-    with patch("taskloop.contracts.locator.RunLocator.runs", side_effect=AssertionError("unexpected run-file read")):
+    with patch("tlkernel.locator.RunLocator.runs", side_effect=AssertionError("unexpected run-file read")):
         world = dash.reads.worlds.world()
         assert not world.runs
         assert world.database_error.startswith("database unavailable:")

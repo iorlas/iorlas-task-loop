@@ -3,7 +3,7 @@
 nothing here decides what to do next (that is `policy.decide` until B2b removes it)."""
 from dataclasses import dataclass
 
-from taskloop.contracts.delegate import DelegateResult
+from tlkernel.delegate import DelegateResult
 
 
 @dataclass(frozen=True)

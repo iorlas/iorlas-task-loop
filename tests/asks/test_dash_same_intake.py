@@ -16,10 +16,10 @@ from asks.dash_ports import answering
 from asks.samples import MOCKS
 from taskloop.app.asks import ledgercomments
 from taskloop.cli import asks as cli_asks
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.askstore import AskStore
+from tlkernel.bead import Bead
+from tlkernel.ids import BeadId
+from tlkernel.paths import ConfigDir
 
 ASK = MOCKS["lifesim-22b3"].replace(bead="b-1", id="b-1-1")
 

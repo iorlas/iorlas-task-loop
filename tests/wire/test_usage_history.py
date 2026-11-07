@@ -13,16 +13,16 @@ import support.paths  # noqa: F401
 from support.narrow import must
 
 from taskloop.app.wire import lanes
-from taskloop.contracts import wire
-from taskloop.contracts.dash import Snapshot
-from taskloop.contracts.delegate_status import snapshot_of
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.snapshots import LaneStatus, StatusSnapshot, WindowStatus
-from taskloop.contracts.stores import UsageHistory
-from taskloop.contracts.usage import USAGE_KEEP_S, UsageRow, forecast, rows_of
 from taskloop_dash.views import snapshot
 from taskloop_dash.views.lanecards import STATUS_MAX_AGE, lane_cards
 from taskloop_dash.views.world import World
+from tlkernel import wire
+from tlkernel.dash import Snapshot
+from tlkernel.delegate_status import snapshot_of
+from tlkernel.paths import ConfigDir
+from tlkernel.snapshots import LaneStatus, StatusSnapshot, WindowStatus
+from tlkernel.stores import UsageHistory
+from tlkernel.usage import USAGE_KEEP_S, UsageRow, forecast, rows_of
 
 T = 1_800_000_000.0
 H = 3600.0

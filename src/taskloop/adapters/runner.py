@@ -15,9 +15,9 @@ from typing import Any, override
 from delegate import api
 from taskloop.adapters import deadline, procs
 from taskloop.adapters.agent import ApiAgent
-from taskloop.contracts.agent import Agent
-from taskloop.contracts.delegate import LiveStart, WorkerStarted
-from taskloop.contracts.delegateport import Seam, Stopped
+from tlkernel.agent import Agent
+from tlkernel.delegate import LiveStart, WorkerStarted
+from tlkernel.delegateport import Seam, Stopped
 
 POLL_S = 0.5  # seconds between the looks at the live file while a call runs
 

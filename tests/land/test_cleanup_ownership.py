@@ -16,8 +16,8 @@ from land.test_cleanup import CleanupGit
 from taskloop.app.land import cleanup
 from taskloop.app.land.tree import Tree
 from taskloop.app.slots.reset import leave_slot
-from taskloop.contracts.locks import EngineLock
 from taskloop.stores.runlog import RunLog
+from tlkernel.locks import EngineLock
 
 
 class Ownership(Case):

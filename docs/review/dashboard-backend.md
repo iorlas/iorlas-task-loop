@@ -71,7 +71,7 @@ Layered input caches are material to every ETag: typed beads five seconds; comme
 
 ### F06 — P2: the version check misses backend-only upgrades and schema incompatibility
 
-**Evidence:** `src/taskloop_dash/cli/dash.py:17–28` hashes only the dashboard package; `src/taskloop/app/launch/dash.py:99–110` compares that hash/script/binds. `src/taskloop/contracts/wire.py:35–39` forbids unknown fields and `:88` begins strict version decoding. `contracts/stores.py:90–106` maps both torn and foreign-version documents to absence through `get()`, used by manifest discovery (`contracts/locator.py:99`) and dashboard loop reads (`readers/world.py:69`).
+**Evidence:** `src/taskloop_dash/cli/dash.py:17–28` hashes only the dashboard package; `src/taskloop/app/launch/dash.py:99–110` compares that hash/script/binds. `packages/kernel/src/tlkernel/wire.py:35–39` forbids unknown fields and `:88` begins strict version decoding. `contracts/stores.py:90–106` maps both torn and foreign-version documents to absence through `get()`, used by manifest discovery (`contracts/locator.py:99`) and dashboard loop reads (`readers/world.py:69`).
 
 **Failure:** A contracts/backend-only upgrade need not change `/api/version`, even after ensure. The long-running server retains old code and injected write implementations. New fields or schema versions can silently remove runs, loops or asks from old readers instead of showing incompatibility. The browser's reload on a changed dashboard version (`static/js/api.js:29`) cannot detect this producer skew.
 
@@ -87,7 +87,7 @@ Layered input caches are material to every ETag: typed beads five seconds; comme
 
 ### F08 — P2: killed engines and terminal changes can leave the live UI running
 
-**Evidence:** `src/taskloop/contracts/runlife.py:49–61` waits 300 seconds and tests only host/PID existence before deriving LOST. `src/taskloop_dash/static/js/api.js:113–118` calls `onPage` only when the byte cursor changes, even though `api/liveview.py:48` includes independently changing manifest liveness. `views/columns.py:92` describes LOST as a process that is gone, although the manifest can remain recorded RUNNING.
+**Evidence:** `packages/kernel/src/tlkernel/runlife.py:49–61` waits 300 seconds and tests only host/PID existence before deriving LOST. `src/taskloop_dash/static/js/api.js:113–118` calls `onPage` only when the byte cursor changes, even though `api/liveview.py:48` includes independently changing manifest liveness. `views/columns.py:92` describes LOST as a process that is gone, although the manifest can remain recorded RUNNING.
 
 **Failure:** A killed engine remains shown live for up to five minutes; PID reuse can preserve that fiction longer. A manifest-only terminal/lost change with no new log bytes stops the live polling loop without delivering its terminal page to the component. The board may update later while the drawer retains its old live content.
 
@@ -103,7 +103,7 @@ Layered input caches are material to every ETag: typed beads five seconds; comme
 
 ### F10 — P3: path naming and policy remain distributed despite contracts-only imports
 
-**Evidence:** `.importlinter:94–105` forbids static dashboard imports from engine implementation layers; the import search found dashboard imports from `taskloop.contracts`, not direct private-layer imports. Runtime wiring nevertheless dynamically loads the launcher-selected module (`src/taskloop_dash/cli/dash.py:31–36`; `src/taskloop/app/launch/dash_ports.py:135–136`). `contracts/paths.py:1` claims every location is named once, but `readers/world.py:69–70` reconstructs the loop glob, `readers/records.py:58–65` discovers directories via dummy bead IDs, and `contracts/locator.py:59` constructs the stderr suffix itself.
+**Evidence:** `.importlinter:94–105` forbids static dashboard imports from engine implementation layers; the import search found dashboard imports from `tlkernel`, not direct private-layer imports. Runtime wiring nevertheless dynamically loads the launcher-selected module (`src/taskloop_dash/cli/dash.py:31–36`; `src/taskloop/app/launch/dash_ports.py:135–136`). `contracts/paths.py:1` claims every location is named once, but `readers/world.py:69–70` reconstructs the loop glob, `readers/records.py:58–65` discovers directories via dummy bead IDs, and `contracts/locator.py:59` constructs the stderr suffix itself.
 
 **Failure:** Moving storage or changing the injected port implementation can break the dashboard despite passing static dependency rules. Semantic coupling is broader: dashboard code replays step/call/wait logs (`views/runfacts.py:92–156`), closes stuck episodes (`:129–140`), decides kanban precedence (`views/columns.py:50`), and invents startup progression (`views/floor.py:79`). These rules can diverge from engine scheduling without an import violation.
 
@@ -131,7 +131,7 @@ The read surface includes run text and worker output, artifacts, registered-repo
 
 ## Proposed engine-owned read contract
 
-Publish a typed `DashboardStatus` in `taskloop.contracts`, with a dedicated engine-side projector as the sole writer of the aggregate. Engines and loop/owner verbs must durably publish lifecycle events or owned fragments to it; HTTP GET must never query bd or reconstruct scheduler state. The projector runs independently of an individual engine so it can publish engine death and backend outages. If it dies, its publication expires visibly rather than becoming an empty board.
+Publish a typed `DashboardStatus` in `tlkernel`, with a dedicated engine-side projector as the sole writer of the aggregate. Engines and loop/owner verbs must durably publish lifecycle events or owned fragments to it; HTTP GET must never query bd or reconstruct scheduler state. The projector runs independently of an individual engine so it can publish engine death and backend outages. If it dies, its publication expires visibly rather than becoming an empty board.
 
 The envelope needs `schema_major/minor`, producer build, publication ID/epoch and monotonic revision, generated time, valid-until, capabilities, and source observations containing last attempted/successful time, source revision, health and error. Include coverage/watermark information so a coherent engine generation and an independently observed bd revision are not falsely presented as one database transaction.
 

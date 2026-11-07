@@ -8,9 +8,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.argv_of import argv_of
 
-from taskloop.contracts import delegate
 from taskloop.domain.lanes import pin, says
 from taskloop.domain.lanes import policy as lp
+from tlkernel import delegate
 
 
 class Pin(Case):

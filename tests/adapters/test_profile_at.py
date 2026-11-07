@@ -5,10 +5,10 @@ from unittest import mock
 import pytest
 
 from taskloop.adapters import profile_at as pa
-from taskloop.contracts.config import ConfigError
-from taskloop.contracts.gitfacts import TreeEntry
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.slots import SlotGitError
+from tlkernel.config import ConfigError
+from tlkernel.gitfacts import TreeEntry
+from tlkernel.gitport import Git
+from tlkernel.slots import SlotGitError
 
 
 def git_with(text: str | None) -> mock.Mock:

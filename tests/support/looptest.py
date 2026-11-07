@@ -10,8 +10,8 @@ from support.who import who
 from taskloop.app.launch import loop as wloop
 from taskloop.app.loop.queue import rank_ready
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.loop import LoopState
+from tlkernel.env import snapshot
+from tlkernel.loop import LoopState
 
 
 def fake_install(cache, ver, tl_py="import sys\n"):

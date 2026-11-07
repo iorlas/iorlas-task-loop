@@ -12,12 +12,12 @@ from support.pipeline_ports import FakeParkBook
 from taskloop.app.pipeline.closing_settle import Settle
 from taskloop.app.track.closing import ClosingBeads
 from taskloop.app.wire import closeguard
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
 from taskloop.domain import effects as fx
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
+from tlkernel.bead import Bead
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
 
 # effect class -> the outcome whose settling it is. One case per kind of settling the plan can end in.
 SETTLING = {

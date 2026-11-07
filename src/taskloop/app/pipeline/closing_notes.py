@@ -4,15 +4,16 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel.answers import VERDICTS
+from tlkernel.beadsport import Beads
+from tlkernel.checkpoint import Notes
+from tlkernel.enums import Outcome
+from tlkernel.ids import BeadId
+
 from taskloop.adapters import beadtools
 from taskloop.app.pipeline import outcomes
 from taskloop.app.pipeline.outcomes import DONE
 from taskloop.app.pipeline.ports import FollowUps
-from taskloop.contracts.answers import VERDICTS
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.checkpoint import Notes
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.ids import BeadId
 from taskloop.domain import followups as fu
 from taskloop.stores.bundle import Stores
 

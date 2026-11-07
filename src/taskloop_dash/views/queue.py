@@ -2,10 +2,10 @@
 state and reason are the loop's own queue rows, the ones `tl next` prints (both come from app/loop/queue.py rank_ready); with no loop
 the strip says what the bead's own record shows."""
 
-from taskloop.contracts import pickset
-from taskloop.contracts.pickset import QueueItem
 from taskloop_dash.views.needs import live_loops
 from taskloop_dash.views.world import ProjectIn, World
+from tlkernel import pickset
+from tlkernel.pickset import QueueItem
 
 
 def items_of(w: World, p: ProjectIn) -> list[QueueItem]:

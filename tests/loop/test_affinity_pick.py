@@ -12,11 +12,11 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 # isort: split
 from taskloop.app.loop import hosts
 from taskloop.app.loop.queue import QueueRule
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.checks import Check
-from taskloop.contracts.config import EngineConfig, HostResources, ResourceSpec
-from taskloop.contracts.ids import BeadId, CheckId
 from taskloop.domain.checks import affinity
+from tlkernel.bead import Bead
+from tlkernel.checks import Check
+from tlkernel.config import EngineConfig, HostResources, ResourceSpec
+from tlkernel.ids import BeadId, CheckId
 
 CFG = EngineConfig(resources={"unity": ResourceSpec(limit=1)})
 NONE = HostResources(resources=[])

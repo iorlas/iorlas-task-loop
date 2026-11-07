@@ -5,18 +5,21 @@ import contextlib
 import copy
 from pathlib import Path
 
+from tlkernel import plancheck
+from tlkernel.answers import ASSUMPTION, IRREVERSIBLE
+from tlkernel.checkpoint import PlanStep
+from tlkernel.enums import AskClass
+from tlkernel.plancheck import PlanData
+
 from taskloop.app.plan import assume
 from taskloop.app.plan.cap import ReplanCap
 from taskloop.app.plan.decisions import Decisions
 from taskloop.app.plan.host import PlanHost
+from taskloop.app.plan.keep import PlanKeeper
+from taskloop.app.plan.planned import Planned
 from taskloop.app.plan.prompt import PlanPrompt
 from taskloop.app.plan.prompts import ASSUME_TEXT, PLAN_BRIEF_KB, PLAN_DECIDED_TEXT, VISUAL_BACK
 from taskloop.app.plan.sendback import SendBack
-from taskloop.contracts import plancheck
-from taskloop.contracts.answers import ASSUMPTION, IRREVERSIBLE
-from taskloop.contracts.checkpoint import PlanStep
-from taskloop.contracts.enums import AskClass
-from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.checks import affinity
 from taskloop.domain.checks.specs import repo_check
@@ -32,6 +35,7 @@ REPLAN_TAIL = 12500  # characters of replan.md the planner reads
 class Planner:
     def __init__(self, host: PlanHost) -> None:
         self.host = host
+        self.keep = PlanKeeper(host)
         self.cap = ReplanCap(host)
         self.prompts = PlanPrompt(host, host.git)
         self.decisions = Decisions(host)
@@ -43,7 +47,7 @@ class Planner:
         e = self.host
         data = plancheck.plan_of(e.ai("plan", title, prompt, step=step, mode=mode, at=(e.planned, 0, 0)).data)
         if self.fits(data):  # keep the answer through a stop, but revalidate it before any write
-            e.plan_data = copy.deepcopy(data)
+            self.keep.draft(copy.deepcopy(data))
             e.checkpoints.save(stage=0, rounds=0, n=0, feedback="", step="plan")
         return self.validate(data, prompt, step)
 
@@ -60,11 +64,16 @@ class Planner:
             self.sendback.after_rewrite(data)
         return data
 
-    def resume_draft(self, data: PlanData) -> PlanData:
+    def resume_draft(self, data: PlanData) -> Planned:
         """Reuse the saved planner answer without counting or calling the planner again unless it needs a rewrite."""
         prompt = self.prompts.build(data, False, "")
         data = self.validate(data, prompt, "plan")
-        return self.accept(self.settle_question(data, prompt, "plan"), False)
+        data = self.accept(self.settle_question(data, prompt, "plan"), False)
+        return Planned(plan_data=data, summary=data["summary"], planned=self.host.planned)
+
+    def take(self, p: Planned) -> PlanData:
+        """The pipeline stores what `plan` returned (idempotent: the keeper already holds all of it)."""
+        return self.keep.take(p)
 
     def fits(self, data: PlanData) -> bool:
         """A plan worth keeping through a stop: it has stages, asks nothing, and is not a split ask."""
@@ -75,30 +84,30 @@ class Planner:
         """The follow-up work the plan wants filed: filed at the close with the reviews' leftovers. Only a plan the run goes on with
         adds them, so a plan that asks the owner is not filed twice by the plan after the answer."""
         have = {lo["title"] for lo in self.host.leftovers}
-        self.host.leftovers += [lo for lo in data["leftovers"] if lo["title"] not in have]
+        self.keep.leftovers([lo for lo in data["leftovers"] if lo["title"] not in have])
         self.host.checkpoints.keep_pending("plan")
 
     # -- the run's plan
     def count(self, old: PlanData | None, again: bool, why: str) -> None:
         """The planner is about to run: against the cap, unless the owner's answer or edit of the bead caused it (tl-19i)."""
         e = self.host
-        why_amend = e.amend_why or ""
+        why_amend = e.amend.why or ""
         owner = (bool(old) and not again and why_amend.startswith("bead changed: the owner answered")
                  and not (e.answered and e.answered.ask_class == AskClass.CAP_REACHED))  # a cap ask answered 'split' stays blocked
         owner = owner or (bool(old) and not again and why_amend.startswith(f"bead changed ({COMMENTS_ONLY})"))  # tl-9un.12
         if not owner and e.planned >= 1 + e.cfg.max_replans + e.extra:
             raise self.cap.blocked()
         if not owner:
-            e.planned += 1
+            self.keep.count()
         e.plan_log.append(PlanStep(mode="amend" if old else "plan", counted=not owner,
-                                   why=clip(e.amend_why or ("a re-plan: " + clip(why, 160) if again else "first plan"), 240)))
-        if old and not again and not e.amend_text:
-            e.amend_text = "The bead is the same as when the old plan was made."
+                                   why=clip(e.amend.why or ("a re-plan: " + clip(why, 160) if again else "first plan"), 240)))
+        if old and not again and not e.amend.text:
+            e.amend.text = "The bead is the same as when the old plan was made."
 
-    def plan(self, again: bool = False) -> PlanData:
+    def plan(self, again: bool = False) -> Planned:
         e = self.host
-        old = e.old_plan or (e.plan_data if again and e.plan_data else None)
-        e.amended = e.amended or bool(old)  # tl-bxk.10.24: work exists before this plan's first stage
+        old = e.amend.old_plan or (e.plan_data if again and e.plan_data else None)
+        e.amend.amended = e.amend.amended or bool(old)  # tl-bxk.10.24: work exists before this plan's first stage
         why = ""
         if again:
             with contextlib.suppress(OSError):
@@ -109,7 +118,8 @@ class Planner:
             e.warn(f"the planner's brief is {len(prompt.encode('utf-8')) / 1024:.0f} KB (over {PLAN_BRIEF_KB} KB)")
         step = "replan" if again else "plan"
         data = self.settle_question(self.ask(prompt, step, "amend" if old else "plan", "amend" if old else "plan"), prompt, step)
-        return self.accept(self.cover_visual(data, prompt, step), again)
+        data = self.accept(self.cover_visual(data, prompt, step), again)
+        return Planned(plan_data=data, summary=data["summary"], planned=e.planned)
 
     def cover_visual(self, data: PlanData, prompt: str, step: str) -> PlanData:
         """tl-jvpm.15: `visual_paths` only checks the planner's judgement. A plan that has stages in a visual path and no look-objective,
@@ -137,7 +147,7 @@ class Planner:
             e.warn(f"the planner asked what an accepted requirement decides: {decided[:300]}")
             e.steps.outcome("sent back", "an accepted requirement decides its question")
             e.steps.move(step, "planner_decided", f"an accepted requirement decides it: {decided}")
-            e.planned += 1  # a planner run like the others: the cap counts it
+            self.keep.count()  # a planner run like the others: the cap counts it
             e.plan_log.append(PlanStep(mode="plan", why="an accepted requirement decides its question"))
             data = self.ask(prompt + DECIDED_TEXT % (q, decided) + PLAN_DECIDED_TEXT, step, "plan to meet it", "checks_back")
         data = copy.deepcopy(data)  # the engine's own copy: cases are added to it as the task runs
@@ -155,7 +165,7 @@ class Planner:
             e.warn(f"the planner asked a question about a step that can be undone, sent back: {asked[:300]}")
             e.steps.outcome("sent back", "its question is about a step that can be undone")
             e.steps.move(step, "planner_assumed", f"a question about a reversible step is an assumption: {asked[:200]}")
-            e.planned += 1
+            self.keep.count()
             e.plan_log.append(PlanStep(mode="plan", why="its question is about a step that can be undone"))
             prior = data["assumptions"]
             data = copy.deepcopy(self.ask(prompt + ASSUME_TEXT % asked, step, "plan on assumptions", "checks_back"))
@@ -168,17 +178,17 @@ class Planner:
         """The answer is the run's plan, or a stop: a question for the owner, a finished-work plan, a plan with no stages or too many."""
         e = self.host
         if self.fits(data):
-            e.plan_data = data  # a SIGTERM from here on resumes with this plan (d5f.38 lost a finished 1.1M plan before its checkpoint)
+            self.keep.draft(data)  # a SIGTERM from here on resumes with this plan (d5f.38 lost a finished 1.1M plan before its checkpoint)
             e.checkpoints.save(stage=0, rounds=0, n=0, feedback="", step="write")
         if (e.verify_answer and not data["stages"] and not data["question"].strip()
                 and (e.done or e.landed_sha or e.checkout.task_diff().strip())):
             e.log.note("the planner finds the owner's answer asks for nothing more: landing")
             self.add_leftovers(data)
             return data
-        e.plan_summary = data["summary"]
+        self.keep.summary(data["summary"])
         for c in data.get("cases") or []:
             c.setdefault("by", "plan")
-        e.plan_data = data
+        self.keep.draft(data)
         if data["question"].strip():
             e.steps.outcome("asks", data["question"][:200])
             spec = askspecs.open_question(data["question"], data.get("options"), data.get("owner_cause"))
@@ -202,7 +212,7 @@ class Planner:
         if (data["leftovers"] or e.leftovers) and not again and (e.done or not e.checkout.task_diff().strip()):
             e.log.note("the planner finds the work done and leaves only follow-up beads to file: closing")
             self.add_leftovers(data)
-            e.plan_summary = data["summary"]
+            self.keep.summary(data["summary"])
             stored(data)
             e.publish_plan()
             return data

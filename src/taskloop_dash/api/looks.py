@@ -6,14 +6,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode
 
-from taskloop.contracts import gallery
-from taskloop.contracts.dash import Result
-from taskloop.contracts.gallery import LABEL, PICTURES
-from taskloop.contracts.lookrows import LookRows
 from taskloop_dash.env import Bead, Env
 from taskloop_dash.readers.beads import Beads
 from taskloop_dash.readers.records import Records
 from taskloop_dash.views.artifact_files import split_stage
+from tlkernel import gallery
+from tlkernel.dash import Result
+from tlkernel.gallery import LABEL, PICTURES
+from tlkernel.lookrows import LookRows
 
 
 class Looks:

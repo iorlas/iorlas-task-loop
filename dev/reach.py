@@ -28,6 +28,8 @@ TOP = {"taskloop_dash": "dash", "delegate": "delegate", "hook": "hook", "cli": "
 def stage_of(path):
     """The stage a src file belongs to by its folder (app/<slice>, domain/<slice>, a top-level package), else 'kernel'."""
     parts = path.split("/")
+    if parts[:3] == ["packages", "kernel", "src"]:
+        return "kernel"
     if parts[0] != "src":
         return None
     if parts[1] != "taskloop":

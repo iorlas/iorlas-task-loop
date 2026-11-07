@@ -13,8 +13,8 @@ from support import procsim
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.doctor import guard_rails as gr
 from taskloop.app.doctor.rails import github_slug
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.procport import Ran
+from tlkernel.env import snapshot
+from tlkernel.procport import Ran
 
 SLUG = "o/r"
 GOOD = {"id": 1, "target": "branch", "enforcement": "active", "bypass_actors": [],

@@ -18,14 +18,14 @@ from taskloop.app.loop.files import EXIT_REASONS
 from taskloop.app.loop.loop import Loop, LoopArgs
 from taskloop.app.loop.run import Where
 from taskloop.app.loop.stages import EngineSlots
-from taskloop.contracts import wire
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.config import ConfigError, ProfileReadError, RepoProfile
-from taskloop.contracts.enums import Result
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.parks import ParkStore
-from taskloop.contracts.run import RunReport
 from taskloop.domain.lanes import pauses
+from tlkernel import wire
+from tlkernel.bead import Bead
+from tlkernel.config import ConfigError, ProfileReadError, RepoProfile
+from tlkernel.enums import Result
+from tlkernel.ids import BeadId
+from tlkernel.parks import ParkStore
+from tlkernel.run import RunReport
 
 
 class ProfileAhead(Rig):

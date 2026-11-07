@@ -3,16 +3,17 @@ found), under the stage loop's checks and review, without undoing what the accep
 from collections.abc import Sequence
 from typing import ClassVar, Protocol
 
+from tlkernel import plancheck
+from tlkernel.checks import CheckResult
+from tlkernel.config import EngineConfig
+from tlkernel.gitport import Git
+from tlkernel.plancheck import PlanCheck, PlanData, RoundState, StageData
+from tlkernel.ports import Sh
+
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.land.gitcall import must
 from taskloop.app.land.parts import CaseChecks, StageCheckout
 from taskloop.app.land.state import LandState
-from taskloop.contracts import plancheck
-from taskloop.contracts.checks import CheckResult
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.plancheck import PlanCheck, PlanData, RoundState, StageData
-from taskloop.contracts.ports import Sh
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks import planref, trim

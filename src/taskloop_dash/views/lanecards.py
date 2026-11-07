@@ -10,8 +10,8 @@ contract's typed `five` / `week`; delegate's `windows[].name` is a free string a
 
 from typing import Final, Literal
 
-from taskloop.contracts.dash import LaneCard
-from taskloop.contracts.snapshots import LaneStatus, StatusSnapshot
+from tlkernel.dash import LaneCard
+from tlkernel.snapshots import LaneStatus, StatusSnapshot
 
 STATUS_MAX_AGE: Final = 3600  # a snapshot older than this greys every card
 State = Literal["ok", "watch", "locked", "stale"]

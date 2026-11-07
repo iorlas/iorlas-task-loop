@@ -1,7 +1,7 @@
 """STOREPATH: a store is built in stores/ (real_stores) and handed down; app, cli and the dashboard take it from the bundle.
 
 Counted per (file, class) from the imports: a call of a store class imported from where it lives, or `Class.at(...)`, outside
-taskloop/stores and taskloop/contracts (the store layer itself). The table is what is left: it may only shrink. A site that
+taskloop/stores and tlkernel (the store layer itself). The table is what is left: it may only shrink. A site that
 goes away must leave the table (the test says so), a new one fails."""
 import ast
 from collections import Counter
@@ -9,19 +9,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 HOMES = {
-    "taskloop.contracts.docstore": {"JsonStore"},
-    "taskloop.contracts.runrows": {"RunRows"},
-    "taskloop.contracts.receiptrows": {"DbDocSet"},
-    "taskloop.contracts.looprows": {"LoopRows"},
-    "taskloop.contracts.adrs": {"AdrStore"},
-    "taskloop.contracts.askstore": {"AskStore"},
-    "taskloop.contracts.stores": {"JsonlStore", "RunLog", "EventLog", "TraceStore"},
-    "taskloop.contracts.docrows": {"RowDocs"},
+    "tlkernel.docstore": {"JsonStore"},
+    "tlkernel.runrows": {"RunRows"},
+    "tlkernel.receiptrows": {"DbDocSet"},
+    "tlkernel.looprows": {"LoopRows"},
+    "tlkernel.adrs": {"AdrStore"},
+    "tlkernel.askstore": {"AskStore"},
+    "tlkernel.stores": {"JsonlStore", "RunLog", "EventLog", "TraceStore"},
+    "tlkernel.docrows": {"RowDocs"},
     "taskloop.stores.ticketrows": {"TicketRows"},
     "taskloop.stores.runlog": {"RunLog"},
     "taskloop.adapters.locks": {"ProcessLockTable"},
 }
-STORE_LAYER = ("src/taskloop/stores/", "src/taskloop/contracts/")
+STORE_LAYER = ("src/taskloop/stores/", "packages/kernel/src/tlkernel/")
 LEFT = {  # (file, class): constructions; delete a line when the site takes its store from the bundle
     ("src/taskloop/app/launch/dash_ports.py", "AdrStore"): 1,
     ("src/taskloop/app/loop/files.py", "LoopRows"): 1,
@@ -29,7 +29,7 @@ LEFT = {  # (file, class): constructions; delete a line when the site takes its 
     ("src/taskloop/app/run/context.py", "RunLog"): 1,
     ("src/taskloop/app/workers/done_memo.py", "RunRows"): 1,
     ("src/taskloop/app/pipeline/outcomes.py", "JsonlStore"): 1,
-    ("src/taskloop/app/run/reflect.py", "JsonlStore"): 1,
+    ("src/taskloop/app/pipeline/reflect.py", "JsonlStore"): 1,
     ("src/taskloop/app/run/reload.py", "RunRows"): 1,
     ("src/taskloop/app/run/stage_run.py", "RunLog"): 1,
     ("src/taskloop/cli/land.py", "RunLog"): 1,

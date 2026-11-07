@@ -2,12 +2,13 @@
 from types import MappingProxyType
 from typing import Final, Protocol
 
+from tlkernel import plancheck
+from tlkernel.gitport import Git
+from tlkernel.plancheck import PlanData
+
 from taskloop.app.land.gate import Problem, ProblemKind
 from taskloop.app.land.gitcall import must
 from taskloop.app.land.parts import MoveSteps, StageCheckout
-from taskloop.contracts import plancheck
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.plancheck import PlanData
 
 
 class FixRounds(Protocol):

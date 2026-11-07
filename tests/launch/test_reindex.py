@@ -12,11 +12,11 @@ from support.tlmain import tl
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.launch import reindex
-from taskloop.contracts import factorybackup, factorydb
-from taskloop.contracts.env import Env
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.runrows import RunRows
+from tlkernel import factorybackup, factorydb
+from tlkernel.env import Env
+from tlkernel.identity import Identity
+from tlkernel.paths import ConfigDir
+from tlkernel.runrows import RunRows
 
 
 class Reindex(Case):

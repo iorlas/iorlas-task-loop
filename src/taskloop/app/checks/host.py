@@ -4,15 +4,16 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
-from taskloop.contracts.checks import CheckFaultKind
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.enums import WaitWhat
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.procport import Spawner
-from taskloop.contracts.stagefacts import CheckLogPort, RunLogPort
+from tlkernel.checks import CheckFaultKind
+from tlkernel.config import EngineConfig
+from tlkernel.enums import WaitWhat
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.ids import TreeSha
+from tlkernel.paths import ConfigDir
+from tlkernel.procport import Spawner
+from tlkernel.stagefacts import CheckLogPort, RunLogPort
+
 from taskloop.stores.bundle import Stores
 
 

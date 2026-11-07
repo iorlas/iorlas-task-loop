@@ -5,14 +5,15 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from tlkernel import rundocs, wire
+from tlkernel.config import ConfigError
+from tlkernel.gateplan import GatePlan
+from tlkernel.runkey import Digest
+from tlkernel.slots import SlotGitError
+
 from taskloop.adapters.childenv import check_environment
 from taskloop.app.checks.cache import NO_DIGEST, plan_digest
 from taskloop.app.checks.host import CheckHost
-from taskloop.contracts import rundocs, wire
-from taskloop.contracts.config import ConfigError
-from taskloop.contracts.gateplan import GatePlan
-from taskloop.contracts.runkey import Digest
-from taskloop.contracts.slots import SlotGitError
 
 PLAN_TIMEOUT_S = 30.0
 

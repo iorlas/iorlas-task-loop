@@ -9,8 +9,8 @@ import support.paths  # noqa: F401
 from support import engine_case as te
 
 from taskloop.app.asks import parks
-from taskloop.contracts.log import Close
-from taskloop.contracts.parks import ParkStore
+from tlkernel.log import Close
+from tlkernel.parks import ParkStore
 
 
 class Retry(te.EngineTest):

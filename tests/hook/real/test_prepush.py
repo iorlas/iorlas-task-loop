@@ -21,14 +21,14 @@ from taskloop.app.checks import authorization  # noqa: E402
 from taskloop.app.checks.cache import InputKeys, RunMemo  # noqa: E402
 from taskloop.app.checks.execution import check_env  # noqa: E402
 from taskloop.app.wire.hook import write_hooks  # noqa: E402
-from taskloop.contracts.checks import CheckResult  # noqa: E402
-from taskloop.contracts.env import Env  # noqa: E402
-from taskloop.contracts.ids import TreeSha  # noqa: E402
-from taskloop.contracts.paths import ConfigDir  # noqa: E402
-from taskloop.contracts.rowstores import ReposStore  # noqa: E402
-from taskloop.contracts.runkey import BaseSha  # noqa: E402
 from taskloop.domain.checks.specs import gate_items  # noqa: E402
 from taskloop.stores.real import real_stores  # noqa: E402
+from tlkernel.checks import CheckResult  # noqa: E402
+from tlkernel.env import Env  # noqa: E402
+from tlkernel.ids import TreeSha  # noqa: E402
+from tlkernel.paths import ConfigDir  # noqa: E402
+from tlkernel.rowstores import ReposStore  # noqa: E402
+from tlkernel.runkey import BaseSha  # noqa: E402
 
 JUDGE_TL = """#!{python}
 import argparse
@@ -40,8 +40,8 @@ from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.launch.push_judge import cmd_judge_push
 from taskloop.cli.ctx import declare_stage_parts
-from taskloop.contracts.env import Env
-from taskloop.contracts.identity import Identity
+from tlkernel.env import Env
+from tlkernel.identity import Identity
 declare_stage_parts()
 with Path(os.environ['CALLS']).open('a') as log:
     log.write(' '.join(sys.argv[1:]) + '\\n')

@@ -13,15 +13,15 @@ from typing import Any, Literal
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.dash_stage_fixtures import stage_passes
-from taskloop.contracts import dash as D
-from taskloop.contracts import dashcost as DC
-from taskloop.contracts import wire
-from taskloop.contracts.dashhealth import Score
-from taskloop.contracts.dashruns import ResourceLease, RunHeader
-from taskloop.contracts.ids import BeadId, loop_key
-from taskloop.contracts.needs import NeedRow
-from taskloop.contracts.run import RunState
 from taskloop_dash.views.snapshot import version_of
+from tlkernel import dash as D
+from tlkernel import dashcost as DC
+from tlkernel import wire
+from tlkernel.dashhealth import Score
+from tlkernel.dashruns import ResourceLease, RunHeader
+from tlkernel.ids import BeadId, loop_key
+from tlkernel.needs import NeedRow
+from tlkernel.run import RunState
 
 ROOT = Path(__file__).resolve().parents[2]
 DIR = ROOT / "tests" / "fixtures" / "dash"

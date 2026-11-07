@@ -6,9 +6,10 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Final, TextIO
 
+from tlkernel.artifact import CAPTION_MAX, ROLES, ArtifactSlot
+from tlkernel.wire import Refused
+
 from taskloop.app.artifacts import rules, store
-from taskloop.contracts.artifact import CAPTION_MAX, ROLES, ArtifactSlot
-from taskloop.contracts.wire import Refused
 
 PROTOCOL: Final = "2025-06-18"
 type Obj = dict[str, object]

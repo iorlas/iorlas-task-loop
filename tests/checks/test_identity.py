@@ -17,18 +17,18 @@ from taskloop.app.checks.runner import cached_gate
 from taskloop.app.land.cmds import Cmds
 from taskloop.app.land.stackgate import StackGate
 from taskloop.cli.green import cmd_green
-from taskloop.contracts import factorydb, wire
-from taskloop.contracts.checks import Check, CheckResult, PassRecord
-from taskloop.contracts.config import load
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitfacts import TreeEntry
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.runkey import BaseSha, Digest
 from taskloop.domain.checks.specs import diff_check, gate_items
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
+from tlkernel import factorydb, wire
+from tlkernel.checks import Check, CheckResult, PassRecord
+from tlkernel.config import load
+from tlkernel.env import Env
+from tlkernel.gitfacts import TreeEntry
+from tlkernel.gitport import Git
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.paths import ConfigDir
+from tlkernel.runkey import BaseSha, Digest
 
 
 class Identity(Case):

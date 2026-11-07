@@ -5,8 +5,9 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from taskloop.contracts.delegate import DelegateResult, LiveStart, WorkerStarted
-from taskloop.contracts.log import CallEnd, CallStart, CallTokens
+from tlkernel.delegate import DelegateResult, LiveStart, WorkerStarted
+from tlkernel.log import CallEnd, CallStart, CallTokens
+
 from taskloop.stores.runlog import RunLog
 
 KEYS = ("in", "cached", "out")

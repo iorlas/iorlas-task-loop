@@ -4,18 +4,18 @@ from collections.abc import Callable
 
 from any_lease import Leases
 
-from taskloop.contracts.adrs import AdrStore
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.checks import BaseRedRecord, CheckRun, Durations
-from taskloop.contracts.config import HostResources
-from taskloop.contracts.events import Event
-from taskloop.contracts.followups import FollowupOutbox
-from taskloop.contracts.log import EngineLog
-from taskloop.contracts.profile_changes import ProfileChange
-from taskloop.contracts.queue_state import QueueState
-from taskloop.contracts.trace import RunTrace
 from taskloop.stores.api import Doc, DocSet, LockTable, Log, Passes, Tickets
 from taskloop.stores.books import CheckpointBook
+from tlkernel.adrs import AdrStore
+from tlkernel.askstore import AskStore
+from tlkernel.checks import BaseRedRecord, CheckRun, Durations
+from tlkernel.config import HostResources
+from tlkernel.events import Event
+from tlkernel.followups import FollowupOutbox
+from tlkernel.log import EngineLog
+from tlkernel.profile_changes import ProfileChange
+from tlkernel.queue_state import QueueState
+from tlkernel.trace import RunTrace
 
 
 @dataclasses.dataclass(frozen=True)

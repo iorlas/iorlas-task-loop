@@ -5,10 +5,10 @@ import threading
 import time
 from collections.abc import Callable
 
-from taskloop.contracts import factorydb
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.paths import ConfigDir
 from taskloop_dash.index import Indexer
+from tlkernel import factorydb
+from tlkernel.beadsport import Beads
+from tlkernel.paths import ConfigDir
 
 
 class Worker:

@@ -37,8 +37,8 @@ from taskloop.adapters.gitrepo import pinned_env  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
-from taskloop.contracts.env import snapshot  # noqa: E402
-from taskloop.contracts.ids import BeadId  # noqa: E402
+from tlkernel.env import snapshot  # noqa: E402
+from tlkernel.ids import BeadId  # noqa: E402
 
 GIT_KEYS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")
 

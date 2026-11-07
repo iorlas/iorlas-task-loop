@@ -7,13 +7,13 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+import hermetic  # noqa: F401
+from support.case import Case
+from test_route import route
+
 from delegate.app import env
 from delegate.app.codex_policy import worktree_head
 from delegate.domain.policy.shell import read_only_problem
-from support.case import Case
-
-import hermetic  # noqa: F401
-from test_route import route
 
 ESCAPES = (
     "sed 'e id' f",

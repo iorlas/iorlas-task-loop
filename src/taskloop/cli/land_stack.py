@@ -4,6 +4,16 @@ import socket
 import time
 from pathlib import Path
 
+from tlkernel.beadsport import Beads
+from tlkernel.env import Env
+from tlkernel.finish import finish_run
+from tlkernel.finish_projection import history
+from tlkernel.forge import StackItem
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId
+from tlkernel.locator import RunLocator
+
 from taskloop.app.land.cmds import Cmds, Runs
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.profile_change import owner_refusal
@@ -12,15 +22,6 @@ from taskloop.app.land.stackgate import StackGate
 from taskloop.app.pipeline.finish import land_answer
 from taskloop.app.wire import closeguard
 from taskloop.app.wire.slots import profile_slots, slot_of
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.env import Env
-from taskloop.contracts.finish import finish_run
-from taskloop.contracts.finish_projection import history
-from taskloop.contracts.forge import StackItem
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.locator import RunLocator
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 

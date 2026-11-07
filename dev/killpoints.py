@@ -29,15 +29,16 @@ BEAD, RUN = "t-1", "r1"
 def child(config: str, kill: str, seed: bool) -> int:
     """The process that dies: the real interpreter and checkpoint ledger, a world file for the effects."""
     sys.path[:0] = [str(ROOT / "src"), str(ROOT / "skills" / "task-loop" / "_vendor")]
+    import tlpaths  # noqa: F401, PLC0415
     from taskloop.app.parts import STAGE_PARTS  # noqa: PLC0415
-    from taskloop.contracts.checkpoint import Checkpoint  # noqa: PLC0415
-    from taskloop.contracts.factorydb import declare_parts  # noqa: PLC0415
-    from taskloop.contracts.kinds import Kind  # noqa: PLC0415
-    from taskloop.contracts.paths import ConfigDir  # noqa: PLC0415
     from taskloop.domain import effects as fx  # noqa: PLC0415
     from taskloop.domain import outcome as oc  # noqa: PLC0415
     from taskloop.domain.interpret import CheckpointLedger, interpret  # noqa: PLC0415
     from taskloop.stores.real import real_stores  # noqa: PLC0415
+    from tlkernel.checkpoint import Checkpoint  # noqa: PLC0415
+    from tlkernel.factorydb import declare_parts  # noqa: PLC0415
+    from tlkernel.kinds import Kind  # noqa: PLC0415
+    from tlkernel.paths import ConfigDir  # noqa: PLC0415
 
     declare_parts(STAGE_PARTS)
     signal.signal(signal.SIGTERM, signal.SIG_IGN)  # only SIGKILL ends it: no handler, no cleanup, no finally
@@ -83,9 +84,10 @@ def child(config: str, kill: str, seed: bool) -> int:
 
 def plan_names() -> list[str]:
     sys.path[:0] = [str(ROOT / "src"), str(ROOT / "skills" / "task-loop" / "_vendor")]
-    from taskloop.contracts.kinds import Kind  # noqa: PLC0415
+    import tlpaths  # noqa: F401, PLC0415
     from taskloop.domain import effects as fx  # noqa: PLC0415
     from taskloop.domain import outcome as oc  # noqa: PLC0415
+    from tlkernel.kinds import Kind  # noqa: PLC0415
 
     plan = [*fx.plan_land("abc"), *fx.plan_close(oc.make(Kind.LANDED, "landed", sha="abc"), dry=False, branch="task/t-1", slot_gen=2)]
     return [fx.name_of(e) for e in plan]

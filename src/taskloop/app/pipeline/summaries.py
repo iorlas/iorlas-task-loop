@@ -2,8 +2,8 @@
 from collections.abc import Mapping
 from typing import Any
 
-from taskloop.contracts import plancheck
-from taskloop.contracts.answers import VERDICTS
+from tlkernel import plancheck
+from tlkernel.answers import VERDICTS
 
 
 def asked(d: Mapping[str, Any]) -> list[str]:

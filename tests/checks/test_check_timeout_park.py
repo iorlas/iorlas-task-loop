@@ -9,7 +9,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.checks import res
 
 from taskloop.app.checks import evidence
-from taskloop.contracts.checks import CheckResult
+from tlkernel.checks import CheckResult
 
 
 def result(**kw) -> CheckResult:

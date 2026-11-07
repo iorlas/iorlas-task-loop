@@ -3,8 +3,8 @@ from collections.abc import Sequence
 from enum import StrEnum
 from typing import Final, final
 
-from taskloop.contracts.wire import Rec
 from taskloop.domain.checks.retry import retry_allowed
+from tlkernel.wire import Rec
 
 WEEK_S: Final = 7 * 86400
 

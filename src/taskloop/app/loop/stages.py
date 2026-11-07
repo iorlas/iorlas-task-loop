@@ -2,6 +2,13 @@
 (launch/loop.py) builds these into the LoopEnv."""
 from collections.abc import Callable
 
+from tlkernel.bead import Bead
+from tlkernel.beadsport import BdFailure, Beads
+from tlkernel.ids import BeadId
+from tlkernel.loop import Skip
+from tlkernel.paths import ConfigDir
+from tlkernel.slots import SlotFail, SlotGitError
+
 from taskloop.app.asks import deferral, parks
 from taskloop.app.loop.ports import LeaseHandle
 from taskloop.app.slots import aside, owned, watchdog
@@ -10,12 +17,6 @@ from taskloop.app.slots.env import SlotEnv
 from taskloop.app.slots.lease import Lease
 from taskloop.app.slots.pool import SlotPool
 from taskloop.app.slots.reset import setup
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import BdFailure, Beads
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.loop import Skip
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.slots import SlotFail, SlotGitError
 
 
 class EngineSlots:

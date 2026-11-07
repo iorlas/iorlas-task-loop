@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from taskloop.adapters import delegate_wire
-from taskloop.contracts.delegate import DelegateResult, LiveEvent, Retry, RunRequest, StopFacts
-from taskloop.contracts.ports import EventSink
+from tlkernel.delegate import DelegateResult, LiveEvent, Retry, RunRequest, StopFacts
+from tlkernel.ports import EventSink
 
 
 @dataclass(frozen=True)

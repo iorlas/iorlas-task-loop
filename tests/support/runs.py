@@ -1,10 +1,10 @@
 """A run as the locator finds it: the manifest a test would otherwise leave out. The run id may be any name; the bead is a field."""
 from pathlib import Path
 
-from taskloop.contracts.locator import RunBundle, RunLocator
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import RunManifest
-from taskloop.contracts.runrows import RunRows
+from tlkernel.locator import RunBundle, RunLocator
+from tlkernel.paths import ConfigDir
+from tlkernel.run import RunManifest
+from tlkernel.runrows import RunRows
 
 
 def manifest(cfg: ConfigDir | Path | str, run: str, bead: str, started: float = 0.0, repo: str = "/repo", **fields: object) -> RunBundle:

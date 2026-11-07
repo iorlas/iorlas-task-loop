@@ -2,9 +2,9 @@
 
 from typing import Any
 
-from taskloop.contracts import wire
-from taskloop.contracts.review import ReviewState, Unchecked, Unverified
-from taskloop.contracts.wire import Rec
+from tlkernel import wire
+from tlkernel.review import ReviewState, Unchecked, Unverified
+from tlkernel.wire import Rec
 
 
 def known[T: Rec](cls: type[T], items: list[dict[str, Any]]) -> list[T]:
@@ -25,3 +25,11 @@ def apply_review(e: Any, review: ReviewState, *, unchecked: bool, late: bool = F
     e.review.unverified = [u.to_dict() for u in review.unverified]
     if unchecked:
         e.review.unchecked = [u.to_dict() for u in review.unchecked]
+
+
+class ReviewGlue:
+    def __init__(self, host: object) -> None:
+        self.host = host
+
+    def apply(self, review: ReviewState, *, unchecked: bool, late: bool = False) -> None:
+        apply_review(self.host, review, unchecked=unchecked, late=late)

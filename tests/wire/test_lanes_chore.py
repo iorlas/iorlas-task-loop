@@ -12,10 +12,10 @@ import support.paths  # noqa: F401
 from support.spawn import real_spawner
 
 from taskloop.app.wire import lanes
-from taskloop.contracts.delegate_status import snapshot_of
-from taskloop.contracts.env import Env
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.rowstores import StatusStore
+from tlkernel.delegate_status import snapshot_of
+from tlkernel.env import Env
+from tlkernel.paths import ConfigDir
+from tlkernel.rowstores import StatusStore
 
 REAL = json.loads((Path(__file__).resolve().parents[1] / "fixtures" / "delegate_status_0.51.0_real.json").read_text())
 

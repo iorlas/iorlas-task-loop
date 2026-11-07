@@ -1,12 +1,12 @@
 """An orphaned worker is stopped with the state lock free, so a stop of seconds blocks no other route.py's claim (tl-sqd3.24, M10)."""
 from unittest import mock
 
+import hermetic  # noqa: F401
+
 from delegate.app import env, lease
 from delegate.app.lease import RunLease
 from delegate.contracts import stores
 from delegate.contracts.state import Lease
-
-import hermetic  # noqa: F401
 
 
 def seed(rid: str, task: str) -> None:

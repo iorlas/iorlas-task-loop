@@ -1,9 +1,10 @@
 """The real ports, built at the edge (a verb's entry point, a script's main) and handed down: nothing below it builds its own."""
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.procport import Spawner
+
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.procport import Spawner
 
 
 def spawner(env: Env) -> Spawner:

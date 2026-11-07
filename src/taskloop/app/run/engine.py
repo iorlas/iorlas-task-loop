@@ -2,18 +2,27 @@
 root of a run: it opens the run's identity, layout and context from the edge, and hands the rest to host.py's parts."""
 import shutil
 import time
-from functools import cached_property
 from pathlib import Path
 from typing import Any, override
+
+from tlkernel import fence, rundocs
+from tlkernel.config import EngineConfig
+from tlkernel.enums import Result
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.ports import Clock
+from tlkernel.procport import Spawner
+from tlkernel.run import RunReport
 
 from taskloop.adapters import landlock
 from taskloop.adapters.clock import SystemClock
 from taskloop.app.checks.runner import Checker
 from taskloop.app.pipeline import ended
+from taskloop.app.pipeline.blocked import Blocked, FixFailed
 from taskloop.app.release import reexec
-from taskloop.app.review.routing import Routing
-from taskloop.app.review.settles import Settles
-from taskloop.app.run.blocked import Blocked, FixFailed
 from taskloop.app.run.console import say
 from taskloop.app.run.context import RunContext
 from taskloop.app.run.facts import open_facts
@@ -21,17 +30,6 @@ from taskloop.app.run.host import RunHost
 from taskloop.app.run.layout import RunLayout, finish_of, live_run, loop_id_of, loop_of, repo_of
 from taskloop.app.run.stages import run_stages
 from taskloop.app.run.state import carries_state
-from taskloop.contracts import fence, rundocs
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.enums import Result
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.ports import Clock
-from taskloop.contracts.procport import Spawner
-from taskloop.contracts.run import RunReport
 from taskloop.domain import outcome as oc
 from taskloop.stores.bundle import Stores
 from taskloop.stores.delegate import real_route
@@ -46,14 +44,6 @@ def tool_on_path(name: str) -> str | None:
 
 @carries_state
 class Engine(RunHost):
-    @cached_property
-    def routing(self) -> Routing:
-        return Routing(self, self.git)
-
-    @cached_property
-    def settles(self) -> Settles:
-        return Settles(self, self.git)
-
     def __init__(
         self,
         bead: BeadId,
@@ -127,6 +117,7 @@ class Engine(RunHost):
     def intake_per_day(self) -> int:
         return self.cfg.intake_per_day
 
+    @override
     def on_path(self, name: str) -> str | None:
         return tool_on_path(name)
 

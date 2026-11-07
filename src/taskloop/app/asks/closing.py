@@ -1,10 +1,12 @@
 """Ask validation and park transitions bound to a closing run's config directory."""
-from taskloop.app.asks import parks, raiser
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.delegate import Permanence
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.parks import Park
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.bead import Bead
+from tlkernel.delegate import Permanence
+from tlkernel.gitport import Git
+from tlkernel.kinds import Kind
+from tlkernel.parks import Park
+from tlkernel.paths import ConfigDir
+
+from taskloop.app.asks import parks, raiser, trustroots
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes.pause_reasons import Producer
 
@@ -24,3 +26,8 @@ class ClosingAsks:
 
     def ended(self, bead: Bead, kind: Kind, run: str, now: float) -> None:
         parks.ended(self.cfg, bead, kind, run, now)
+
+
+class ClosingTrust:
+    def refusal(self, git: Git, wt: str, base: str, bead: Bead | None) -> str:
+        return trustroots.refusal(git, wt, base, bead)

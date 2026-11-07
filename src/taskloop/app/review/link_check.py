@@ -1,8 +1,11 @@
 """The links a task adds to a text file, opened from the engine's host (the writer's sandbox has no network)."""
 from typing import Any
 
+from tlkernel.stagefacts import RunFacts
+
 from taskloop.adapters import links
-from taskloop.app.review.host import ReviewHost
+from taskloop.app.review.host import ReviewHand, ReviewPorts
+from taskloop.app.review.state import ReviewLive
 from taskloop.domain.matchers import clip
 from taskloop.domain.review.findings import engine_finding
 from taskloop.domain.review.matchers import Wording
@@ -13,58 +16,55 @@ LINK_CAP = 200  # links opened per review
 
 
 class LinkCheck:
-    def __init__(self, host: ReviewHost) -> None:
-        self.host = host
+    def __init__(self, facts: RunFacts, ports: ReviewPorts, live: ReviewLive, hand: ReviewHand) -> None:
+        self.facts, self.ports, self.live, self.hand = facts, ports, live, hand
 
     def link_judged(self, review: Answer) -> None:
         """tl-bxk.7: every link the task adds to a text file is opened from the engine's host (the writer's sandbox has no network,
         and 'verified' there means nothing). One that does not open is a finding for the writer: replace it, or write `unverified` on
         its line; a link marked unverified lands as an item for the owner with the claim it carries (a bot-blocking site answers
         403 from here and opens for a person). Opened links are not asked again."""
-        e = self.host
-        if not e.cfg.check_links:
+        if not self.facts.cfg.check_links:
             return
         try:
-            found = links.added_urls(e.checkout.task_diff())
+            found = links.added_urls(self.ports.checkout.task_diff())
         except Exception as err:  # no diff to read is no check, never a failed run
-            e.warn(f"link check skipped: {err}")
+            self.ports.warn(f"link check skipped: {err}")
             return
-        todo = [u for _, _, u in found if u not in e.review.link_ok]
+        todo = [u for _, _, u in found if u not in self.live.link_ok]
         if not todo:
             return
-        todo = [u for u in todo if e.review.link_tries.get(u, 0) < 2][:LINK_CAP]  # each link is opened twice at most, 200 per review
+        todo = [u for u in todo if self.live.link_tries.get(u, 0) < 2][:LINK_CAP]  # each link is opened twice at most, 200 per review
         try:
-            got = links.check_all(todo, fn=e.review.link_fn or links.check)
+            got = links.check_all(todo, fn=self.live.link_fn or links.check)
         except Exception as err:  # opening links must never stop a run
-            e.warn(f"link check skipped: {err}")
+            self.ports.warn(f"link check skipped: {err}")
             return
         if len(got) >= 3 and all(not ok and links.network_down(why) for ok, why in got.values()):
             first = next(iter(got.values()))[1]
-            e.warn(f"link check skipped: none of {len(got)} links could be reached at all ({first}): this host looks offline")
+            self.ports.warn(f"link check skipped: none of {len(got)} links could be reached at all ({first}): this host looks offline")
             return
         self.remember(got)
         self.report(found, review)
 
     def remember(self, got: dict[str, tuple[bool, str]]) -> None:
-        e = self.host
         for url, (ok, why) in got.items():
-            e.review.link_tries[url] = e.review.link_tries.get(url, 0) + 1
+            self.live.link_tries[url] = self.live.link_tries.get(url, 0) + 1
             if ok:
-                e.review.link_ok.add(url)
-                e.review.link_bad.pop(url, None)
+                self.live.link_ok.add(url)
+                self.live.link_bad.pop(url, None)
             elif why != links.UNKNOWN:  # out of time is no verdict
-                e.review.link_bad[url] = why
+                self.live.link_bad[url] = why
 
     def report(self, found: list[tuple[str, str, str]], review: Answer) -> None:
-        e = self.host
         seen: set[tuple[str, str]] = set()
         for path, line, url in found:
-            why = e.review.link_bad.get(url)
-            if url in e.review.link_ok or not why or (path, url) in seen:
+            why = self.live.link_bad.get(url)
+            if url in self.live.link_ok or not why or (path, url) in seen:
                 continue
             seen.add((path, url))
             if Wording.marked_unverified(line):
-                e.routing.add_unverified({"what": f"{clip(line, 200)} (link: {url})", "kind": "external_fact", "source": url},
+                self.hand.routing.add_unverified({"what": f"{clip(line, 200)} (link: {url})", "kind": "external_fact", "source": url},
                                  f"the engine could not open {url} ({why}); the owner checks it")
                 continue
             review["findings"].append(engine_finding(path, 0, (

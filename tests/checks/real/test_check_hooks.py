@@ -9,8 +9,8 @@ from support.checked import run_checked
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters.git import RealGit
-from taskloop.contracts.checksport import CheckSpec
-from taskloop.contracts.env import Env
+from tlkernel.checksport import CheckSpec
+from tlkernel.env import Env
 
 
 class CheckHooks(Case):

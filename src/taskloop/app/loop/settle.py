@@ -5,19 +5,20 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from os import EX_CONFIG
 
+from tlkernel.bead import Bead
+from tlkernel.beadsport import BdFailure
+from tlkernel.config import LoopConfig
+from tlkernel.enums import Result
+from tlkernel.ids import BeadId
+from tlkernel.loop import LoopWait
+from tlkernel.parks import ParkStore
+from tlkernel.slots import SlotFail, SlotGitError
+
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.env import LoopEnv, Probe
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.gate import GateRole
 from taskloop.app.loop.net import NetState
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import BdFailure
-from taskloop.contracts.config import LoopConfig
-from taskloop.contracts.enums import Result
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.loop import LoopWait
-from taskloop.contracts.parks import ParkStore
-from taskloop.contracts.slots import SlotFail, SlotGitError
 
 
 @dataclass

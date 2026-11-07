@@ -1,5 +1,4 @@
 """`diff`: the observed state to the actions that tidy it. Pure: no git, no bd, no process, so a table of states tests it."""
-from taskloop.contracts.reconcile import loop_absent, strays
 from taskloop.domain.reconcile.facts import (
     Action,
     BeadFact,
@@ -16,6 +15,7 @@ from taskloop.domain.reconcile.facts import (
     Worktree,
 )
 from taskloop.domain.reconcile.lost import Finding, classify
+from tlkernel.reconcile import loop_absent, strays
 
 DAY = 86400
 

@@ -10,9 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.dashlogs import RunScript, T, bead
 
-from taskloop.contracts.dashcost import CostRow
 from taskloop_dash.views import cost
 from taskloop_dash.views.world import ProjectIn, World
+from tlkernel.dashcost import CostRow
 
 NOW = T + 20_000
 

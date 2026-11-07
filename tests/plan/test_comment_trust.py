@@ -2,10 +2,10 @@
 
 from support.case import Case
 
-from taskloop.contracts.bead import Bead, Comment
-from taskloop.contracts.config import load
-from taskloop.contracts.ids import BeadId
 from taskloop.domain.plan import brief
+from tlkernel.bead import Bead, Comment
+from tlkernel.config import load
+from tlkernel.ids import BeadId
 
 
 class CommentTrust(Case):

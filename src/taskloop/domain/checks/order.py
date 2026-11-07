@@ -3,8 +3,8 @@ from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 from typing import Final
 
-from taskloop.contracts.checks import Check, Durations
 from taskloop.domain.checks.durations import expected_secs
+from tlkernel.checks import Check, Durations
 
 RANK: Final = MappingProxyType({"static": 0, "tests": 1, "acceptance": 2})
 RANK_ACCEPTANCE_FIRST: Final = MappingProxyType({"static": 0, "acceptance": 1, "tests": 2})

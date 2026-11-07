@@ -17,8 +17,8 @@ from support.plans import CLEAN, HAS_F, PLAN, WRITE
 
 from taskloop.adapters import childenv
 from taskloop.adapters.check_probe import PathProbe
-from taskloop.contracts.argv import argv_of
-from taskloop.contracts.env import snapshot
+from tlkernel.argv import argv_of
+from tlkernel.env import snapshot
 
 
 class StagesTest(te.EngineTest):

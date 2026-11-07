@@ -4,10 +4,10 @@ from support.narrow_hosts import FakeSettleHost
 from support.pipeline_ports import FakeBeadClosing, FakeParkBook
 
 from taskloop.app.pipeline.closing_settle import Settle
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.kinds import Kind
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs
+from tlkernel.bead import Bead
+from tlkernel.kinds import Kind
 
 
 @pytest.mark.parametrize(('kind', 'reason'), [

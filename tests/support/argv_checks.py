@@ -2,8 +2,8 @@
 
 from taskloop.adapters.childenv import check_environment
 from taskloop.adapters.procs import capture as run_group
-from taskloop.contracts.checksport import CheckResult, CheckSpec
-from taskloop.contracts.env import Env
+from tlkernel.checksport import CheckResult, CheckSpec
+from tlkernel.env import Env
 
 TIMEOUT_NOTE = "\n(timed out after %g min: everything the check started was stopped)"
 

@@ -6,14 +6,15 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
+from tlkernel import pickset
+from tlkernel.bead import Bead
+from tlkernel.beadsport import BdFailure, BeadQuery, Beads
+from tlkernel.config import EngineConfig
+from tlkernel.ids import BeadId, is_bead_id
+from tlkernel.loop import Skip
+
 from taskloop.app.loop import hosts
 from taskloop.app.loop.env import LoopEnv
-from taskloop.contracts import pickset
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.ids import BeadId, is_bead_id
-from taskloop.contracts.loop import Skip
 from taskloop.domain.asks import hold
 
 Key = tuple[int, int, list[tuple[int, int | str]], Bead]  # (priority, epic rank, natural id, bead)

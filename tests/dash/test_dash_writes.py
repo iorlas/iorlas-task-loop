@@ -18,15 +18,15 @@ from support.narrow import must
 from support.repos import write_repos
 from support.runs import manifest
 
-from taskloop.app.run import requests
-from taskloop.contracts import factorydb, wire
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.dash import Result
-from taskloop.contracts.enums import AskStatus
-from taskloop.contracts.ids import BeadId, loop_key
-from taskloop.contracts.lookrows import LookRows
-from taskloop.contracts.run import RunState
+from taskloop.app.pipeline import requests
+from tlkernel import factorydb, wire
+from tlkernel.askstore import AskStore
+from tlkernel.bead import Bead
+from tlkernel.dash import Result
+from tlkernel.enums import AskStatus
+from tlkernel.ids import BeadId, loop_key
+from tlkernel.lookrows import LookRows
+from tlkernel.run import RunState
 
 NOW = 1_800_000_000.0
 ASK = MOCKS["lifesim-22b3"].replace(bead="b-1", id="b-1-1")

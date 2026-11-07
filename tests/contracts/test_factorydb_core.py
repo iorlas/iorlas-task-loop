@@ -14,15 +14,21 @@ from support.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts import factorydb
-from taskloop.contracts.factoryparts import KV
-from taskloop.contracts.looprows import LoopRows
-from taskloop.contracts.paths import ConfigDir
+from tlkernel import factorydb
+from tlkernel.factoryparts import KV
+from tlkernel.looprows import LoopRows
+from tlkernel.paths import ConfigDir
 
 TABLES = {
     "source", "bead", "run", "attempt", "step", "lease", "check_pass",
-    "check_round", "ask", "ask_ledger", "kv", "effect", "wait", "signal", "checkpoint", "timed", "schema_part", "release_doc", "report_doc",
+    "check_round", "ask", "ask_ledger", "kv", "effect", "wait", "signal", "checkpoint", "timed", "schema_part",
+    "release_doc",  # a stage that moves its table adds its own line here
+    "report_doc",
+    "work_doc",
+    "followup",
+    "park",
 }
+
 INDEXES = {
     "run_bead", "run_recent", "run_live", "bead_status", "check_tree", "ask_live",
 }
@@ -142,7 +148,7 @@ class FactoryDbTest(Case):
     def test_owners_cover_exactly_the_created_tables(self):
         tables = {row[0] for row in self.rw().execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert set(factorydb.OWNERS) == tables - {"schema_part"}  # the kernel's own table: every open writes it
-        assert set(factorydb.OWNERS.values()) <= {"index", "engine", "loop", "owner"}
+        assert set(factorydb.OWNERS.values()) <= {"index", "engine", "loop", "owner", "gate"}
 
     def test_cas_rejects_unrevisioned_tables_and_missing_transaction(self):
         con = self.rw()

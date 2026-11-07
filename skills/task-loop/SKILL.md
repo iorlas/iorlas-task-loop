@@ -146,7 +146,7 @@ The dashboard has no auth: any GET or POST is answered, and the server listens o
 (100.64.0.0/10; it refuses 0.0.0.0 and any LAN address), so the page and the JSON API are open to any local agent's curl. A red banner shows when
 delegate says a subscription lane is out.
 
-An ask is one record, `~/.config/task-loop/asks/<bead>.json` (`taskloop.contracts.ask.Ask`, `v` 2; an older or unknown `v` reads as
+An ask is one record, `~/.config/task-loop/asks/<bead>.json` (`tlkernel.ask.Ask`, `v` 2; an older or unknown `v` reads as
 no ask), written only through `AskStore`. It has a class, one decision sentence (at most 120 characters, ends in `?`), at most 3
 `tried` bullets and 2-5 options, recommended first, each with its consequence and a typed action; the card text is rendered from those
 fields (`domain/asks/text.py`), never copied from a worker. The engine lints every ask before it files one; a failed lint files nothing

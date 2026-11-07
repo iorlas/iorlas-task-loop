@@ -9,8 +9,8 @@ from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters.git import RealGit
-from taskloop.contracts.env import Env, snapshot
-from taskloop.contracts.slots import SlotGitError
+from tlkernel.env import Env, snapshot
+from tlkernel.slots import SlotGitError
 
 
 def sh(*a, cwd, check=True):

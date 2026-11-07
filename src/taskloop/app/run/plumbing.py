@@ -5,15 +5,16 @@ import time
 from functools import cached_property
 from pathlib import Path
 
+from tlkernel import fence
+from tlkernel.kinds import Kind
+from tlkernel.log import Assumed, Said
+
 from taskloop.adapters import beadtools
 from taskloop.adapters import halt as halting
-from taskloop.app.run.blocked import Blocked, FixFailed, blocked_for
+from taskloop.app.pipeline.blocked import Blocked, FixFailed, blocked_for
 from taskloop.app.run.console import say
 from taskloop.app.run.fields import RunFields
 from taskloop.app.track import trail
-from taskloop.contracts import fence
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.log import Assumed, Said
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks import affinity
 from taskloop.domain.matchers import redact

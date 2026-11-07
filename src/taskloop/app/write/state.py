@@ -5,9 +5,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
-from taskloop.contracts.checks import CheckRun
-from taskloop.contracts.plancheck import PlanData, RoundState
-from taskloop.contracts.wire import Open
+from tlkernel.checks import CheckRun
+from tlkernel.plancheck import PlanData, RoundState
+from tlkernel.wire import Open
 
 AGAIN = "again"  # a round's answer: go round once more
 ACCEPT = "accept"  # the stage is done

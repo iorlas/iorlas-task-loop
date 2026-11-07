@@ -3,8 +3,9 @@ import traceback
 from hashlib import sha1
 from pathlib import Path
 
+from tlkernel.kinds import Kind
+
 from taskloop.app.run.host import RunHost
-from taskloop.contracts.kinds import Kind
 from taskloop.domain import outcome as oc
 
 

@@ -6,9 +6,9 @@ import support.paths  # noqa: F401
 from sqlite_store import SchemaError
 
 from taskloop.app.parts import STAGE_PARTS
-from taskloop.contracts import dbparts, factorydb
-from taskloop.contracts.checks import PassRecord
-from taskloop.contracts.dbparts import Part, Prune
+from tlkernel import dbparts, factorydb
+from tlkernel.checks import PassRecord
+from tlkernel.dbparts import Part, Prune
 
 
 def con():

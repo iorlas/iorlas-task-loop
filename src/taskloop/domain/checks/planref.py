@@ -3,12 +3,12 @@ one, a read of one, a wrapper of one's command), and the commands a worker is to
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Final, assert_never
 
-from taskloop.contracts.config import CheckSpec, EngineConfig
-from taskloop.contracts.ids import CheckId
-from taskloop.contracts.plancheck import Adhoc, PlanCheck, PlanData, Ref
 from taskloop.domain.checks.cmd import matchers as sh
 from taskloop.domain.checks.names import log_var, rc_var
 from taskloop.domain.matchers import clip
+from tlkernel.config import CheckSpec, EngineConfig
+from tlkernel.ids import CheckId
+from tlkernel.plancheck import Adhoc, PlanCheck, PlanData, Ref
 
 JUST_PLAIN_FLAGS: Final = frozenset({"--unstable", "-q", "--quiet", "-v", "--verbose", "--dry-run", "-n", "--no-deps", "--highlight",
                                      "--no-highlight"})

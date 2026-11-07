@@ -4,7 +4,7 @@ made a mistake worth one retry (tell the worker to use apply_patch); a guard tha
 from collections.abc import Sequence
 from typing import Final
 
-from taskloop.contracts.delegate import Denial
+from tlkernel.delegate import Denial
 
 READ_TOOLS: Final = ("Bash", "shell", "bash")
 

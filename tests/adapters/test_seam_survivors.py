@@ -1,6 +1,6 @@
 """Seam.survivors: the one place that says which pids outlived a call's stop (the engine reads no pid itself)."""
 from taskloop.adapters.runner import Seam
-from taskloop.contracts.delegate import DelegateResult, Survivor, WorkerEnd
+from tlkernel.delegate import DelegateResult, Survivor, WorkerEnd
 
 
 def test_no_stop_no_survivors():

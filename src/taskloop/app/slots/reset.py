@@ -6,13 +6,14 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TypeVar
 
+from tlkernel.gitport import SlotGit
+from tlkernel.paths import ConfigDir
+from tlkernel.slots import BranchPinned, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
+
 from taskloop.app.slots import owned
 from taskloop.app.slots.engine_lock import engine_busy
 from taskloop.app.slots.env import SlotEnv, stamp
 from taskloop.app.slots.surface import SlotView
-from taskloop.contracts.gitport import SlotGit
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.slots import BranchPinned, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
 from taskloop.domain.matchers import NetText
 
 T = TypeVar("T")

@@ -3,8 +3,8 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
-from taskloop.contracts import factorydb, wire
-from taskloop.contracts.run import RunManifest
+from tlkernel import factorydb, wire
+from tlkernel.run import RunManifest
 
 
 def _run_health(con: sqlite3.Connection, now: float) -> str:

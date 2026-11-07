@@ -1,7 +1,8 @@
 """The delegate the next call goes through: the library, checked against the call's grants."""
 from typing import Any
 
-from taskloop.contracts.delegateport import Refusal, Resolved
+from tlkernel.delegateport import Refusal, Resolved
+
 from taskloop.domain.lanes import pin
 
 

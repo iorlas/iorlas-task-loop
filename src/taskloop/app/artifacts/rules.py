@@ -4,8 +4,8 @@ import os
 from pathlib import Path
 from typing import Final
 
-from taskloop.contracts.artifact import CAPTION_MAX, ROLES, Kind, Role, secret_name
-from taskloop.contracts.wire import Refused
+from tlkernel.artifact import CAPTION_MAX, ROLES, Kind, Role, secret_name
+from tlkernel.wire import Refused
 
 MAX_BYTES: Final = 25 * 1024 * 1024
 NAME_MAX: Final = 100

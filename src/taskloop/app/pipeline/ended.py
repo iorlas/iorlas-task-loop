@@ -2,12 +2,13 @@
 import json
 from collections.abc import Mapping, Sequence
 
-from taskloop.contracts import wire
-from taskloop.contracts.ask import AskDetail, AskOption
-from taskloop.contracts.checkpoint import Checkpoint, EndRec
-from taskloop.contracts.dash import OwnerCause
-from taskloop.contracts.enums import AskClass
-from taskloop.contracts.kinds import Kind
+from tlkernel import wire
+from tlkernel.ask import AskDetail, AskOption
+from tlkernel.checkpoint import Checkpoint, EndRec
+from tlkernel.dash import OwnerCause
+from tlkernel.enums import AskClass
+from tlkernel.kinds import Kind
+
 from taskloop.domain import effects
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec

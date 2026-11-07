@@ -15,14 +15,14 @@ from support.memstores import fake_stores
 
 from taskloop.app.checks.cache import InputKeys, RunMemo, plan_digest
 from taskloop.app.land.push_judge import PushStatus, judge_push
-from taskloop.contracts.checks import CheckResult
-from taskloop.contracts.config import load
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitfacts import TreeEntry
-from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.runkey import BaseSha
-from taskloop.contracts.slots import GitReadFailure
 from taskloop.domain.checks.specs import gate_items
+from tlkernel.checks import CheckResult
+from tlkernel.config import load
+from tlkernel.env import Env
+from tlkernel.gitfacts import TreeEntry
+from tlkernel.ids import TreeSha
+from tlkernel.runkey import BaseSha
+from tlkernel.slots import GitReadFailure
 
 
 class PushJudge(Case):

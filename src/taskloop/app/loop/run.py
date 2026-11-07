@@ -6,19 +6,20 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from tlkernel.bead import Bead
+from tlkernel.beadsport import BdFailure, BeadPatch
+from tlkernel.config import LoopConfig
+from tlkernel.enums import Result
+from tlkernel.envvars import EnvVar
+from tlkernel.ids import BeadId
+from tlkernel.procport import WaitTimeout
+from tlkernel.run import Reexec
+
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.core import Running
 from taskloop.app.loop.env import Child, Hold, LoopEnv
 from taskloop.app.loop.files import LoopFiles, StopMode
 from taskloop.app.loop.versions import Installs
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import BdFailure, BeadPatch
-from taskloop.contracts.config import LoopConfig
-from taskloop.contracts.enums import Result
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.procport import WaitTimeout
-from taskloop.contracts.run import Reexec
 
 
 @dataclass

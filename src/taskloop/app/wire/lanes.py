@@ -3,13 +3,14 @@ dashboard reads, and each window's use into the usage history. `tl usage` files 
 import time
 from collections.abc import Callable
 
+from tlkernel import paths
+from tlkernel.env import Env
+from tlkernel.procport import Spawner
+from tlkernel.rowstores import StatusStore, StatusTriedStore
+from tlkernel.snapshots import StatusSnapshot, StatusTried
+from tlkernel.stores import UsageHistory
+
 from taskloop.adapters.ident import config_dir
-from taskloop.contracts import paths
-from taskloop.contracts.env import Env
-from taskloop.contracts.procport import Spawner
-from taskloop.contracts.rowstores import StatusStore, StatusTriedStore
-from taskloop.contracts.snapshots import StatusSnapshot, StatusTried
-from taskloop.contracts.stores import UsageHistory
 from taskloop.stores.delegate import real_route
 
 EVERY_S = 20 * 60  # the loop files delegate's status again when the snapshot is this old

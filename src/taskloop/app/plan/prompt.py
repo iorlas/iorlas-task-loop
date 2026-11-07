@@ -3,13 +3,14 @@ rounds so far, the accepted stages, the owner's answer) and the rules the checks
 import json
 from pathlib import Path
 
+from tlkernel import plancheck
+from tlkernel.gitport import Git
+from tlkernel.plancheck import PlanData
+
 from taskloop.app.plan.decisions import Decisions
 from taskloop.app.plan.host import PlanHost
 from taskloop.app.plan.probe import AcProbe
 from taskloop.app.plan.prompts import PLAN_PROMPT, SHOW_PLAN, VISUAL_PLAN, VISUAL_STAGES
-from taskloop.contracts import plancheck
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.checks import lint
 from taskloop.domain.checks.names import norm
 
@@ -42,7 +43,7 @@ class PlanPrompt:
                     "follows; keep accepted stages and their checks unless the change touches them; do not re-explore code "
                     "the old plan already names. Same output schema as a plan.\n<old_plan>\n"
                     f"{json.dumps(plancheck.to_wire(old), indent=1)}\n</old_plan>\n"
-                    f"What changed:\n<change>\n{(e.amend_text or why).strip()}\n</change>")
+                    f"What changed:\n<change>\n{(e.amend.text or why).strip()}\n</change>")
         if again:
             return f"\n\nThe previous plan did not work. What failed:\n<failed>\n{why}\n</failed>\nPlan again."
         return ""
@@ -124,7 +125,7 @@ class PlanPrompt:
     def build(self, old: PlanData | None, again: bool, why: str) -> str:
         e = self.host
         extra = self.change(old, again, why)
-        e.old_plan, e.amend_text, e.amend_why = None, "", ""
+        e.amend.old_plan, e.amend.text, e.amend.why = None, "", ""
         extra += self.history(old, again)
         if not old and not again:
             extra += self.probe.text()  # tl-9un.1: what the acceptance names that cannot work, before the first plan

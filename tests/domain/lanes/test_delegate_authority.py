@@ -10,9 +10,9 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.ids import BeadId
 from taskloop.domain.lanes import pauses, policy, roles
+from tlkernel.bead import Bead
+from tlkernel.ids import BeadId
 
 ROOT = Path(__file__).resolve().parents[3]
 CONTRACT = json.loads((ROOT / "src/delegate/data/contract.json").read_text(encoding="utf-8"))

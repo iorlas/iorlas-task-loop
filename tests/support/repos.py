@@ -2,9 +2,9 @@
 name, or `parent/name` when two share one."""
 from pathlib import Path
 
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.rowstores import ReposStore
-from taskloop.contracts.snapshots import RepoEntry, ReposIndex
+from tlkernel.paths import ConfigDir
+from tlkernel.rowstores import ReposStore
+from tlkernel.snapshots import RepoEntry, ReposIndex
 
 
 def write_repos(file: Path | str, *repos: object) -> None:

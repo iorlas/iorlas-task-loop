@@ -10,18 +10,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.dashlogs import T, bead
 
-from taskloop.contracts.ask import Ask, AskOption
-from taskloop.contracts.enums import AskClass, AskKind, AskStatus
-from taskloop.contracts.events import Block, Claim, SlotAside, SlotHold, SlotSetup
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.loop import LoopState, QueueRow, Skip
-from taskloop.contracts.parks import Park
-from taskloop.contracts.reconcile import LOOP_ABSENT_S, LOOP_STALL_S
-from taskloop.contracts.run import NetPause
-from taskloop.contracts.snapshots import LaneStatus, NeedInput, StatusSnapshot
 from taskloop_dash.readers.observed import strays_of
 from taskloop_dash.views import snapshot
 from taskloop_dash.views.world import ProjectIn, World
+from tlkernel.ask import Ask, AskOption
+from tlkernel.enums import AskClass, AskKind, AskStatus
+from tlkernel.events import Block, Claim, SlotAside, SlotHold, SlotSetup
+from tlkernel.ids import BeadId
+from tlkernel.loop import LoopState, QueueRow, Skip
+from tlkernel.parks import Park
+from tlkernel.reconcile import LOOP_ABSENT_S, LOOP_STALL_S
+from tlkernel.run import NetPause
+from tlkernel.snapshots import LaneStatus, NeedInput, StatusSnapshot
 
 NOW = T + 36000
 

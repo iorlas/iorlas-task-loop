@@ -2,11 +2,12 @@
 from collections.abc import Callable
 from pathlib import Path
 
+from tlkernel.paths import ConfigDir
+from tlkernel.slots import SlotGitError
+
 from taskloop.adapters import ident, landlock
 from taskloop.app.release import clone
 from taskloop.app.release.shell import Abort, Shell, fetch_or_abort
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.slots import SlotGitError
 
 
 def release_lock_path(config: Path, url: str) -> Path:

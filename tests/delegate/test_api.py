@@ -4,11 +4,12 @@
 import os
 
 import pytest
+from stream_proc import proc_start
+
 from delegate import api
 from delegate.app import env
 from delegate.contracts import history as hist
 from delegate.contracts.state import Lease
-from stream_proc import proc_start
 
 LIMIT_S = 60  # each test runs a fake CLI and git
 

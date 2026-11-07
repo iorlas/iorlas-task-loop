@@ -3,6 +3,25 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, ClassVar
 
+from tlkernel import fence
+from tlkernel.argv import text_of
+from tlkernel.checkpoint import Checkpoint, RunState
+from tlkernel.checks import CheckRun
+from tlkernel.config import EngineConfig
+from tlkernel.delegate import Permanence
+from tlkernel.delegateport import Refusal, Resolved
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId, TreeSha
+from tlkernel.kinds import Kind
+from tlkernel.paths import ConfigDir
+from tlkernel.ports import Clock
+from tlkernel.procport import Spawner
+from tlkernel.review import Unfiled
+from tlkernel.run import Reexec
+from tlkernel.wire import Open
+
 from taskloop.adapters import beadtools, ident, treehash
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.threadflag import ThreadFlag
@@ -12,30 +31,13 @@ from taskloop.app.land.state import LandState
 from taskloop.app.look.state import LookState
 from taskloop.app.pipeline.budget import Budget
 from taskloop.app.pipeline.steps import Steps
+from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.state import PlanState
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.context import RunContext
 from taskloop.app.run.state import Checkpoints, StateAttrs
 from taskloop.app.workers.calls import Calls
 from taskloop.app.write.state import WriteState
-from taskloop.contracts import fence
-from taskloop.contracts.argv import text_of
-from taskloop.contracts.checkpoint import Checkpoint, RunState
-from taskloop.contracts.checks import CheckRun
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.delegate import Permanence
-from taskloop.contracts.delegateport import Refusal, Resolved
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId, TreeSha
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Clock
-from taskloop.contracts.procport import Spawner
-from taskloop.contracts.review import Unfiled
-from taskloop.contracts.run import Reexec
-from taskloop.contracts.wire import Open
 from taskloop.domain import outcome as oc
 from taskloop.domain.lanes.pause_reasons import Producer
 from taskloop.stores.bundle import Stores
@@ -97,8 +99,6 @@ class RunFields(StateAttrs):
         self.review = ReviewLive()  # the review stage's state: the unchecked and unverified lists, the verifier's answers, the links tried
         self.filed: list[str] = []
         self.unfiled: list[Unfiled] = []  # follow-ups bd refused (the ReviewState keeps both)
-        self.amended = False  # a plan was amended or replanned: its first stage does not start at the task's base
-        self.old_plan, self.amend_text, self.amend_why = None, "", ""  # set where a checkpoint's plan is kept to be amended
         self.answered: Any = None  # the owner ask this run starts from, once answered
         self.verify_answer = ""  # the owner's answer to a verify ask, when it asks for more than a yes
         self.stuck_why = ""
@@ -114,6 +114,7 @@ class RunFields(StateAttrs):
         self.pause_producer: Producer = "engine"
         self.pause_permanence: Permanence | None = None
         self.budget_warned: set[float] = set()
+        self.amend = AmendState()  # the plan stage's amendment context (old plan, what changed, why)
         self.plan_state = PlanState()  # the plan stage's flags: the send-backs used, the cap raised
         self.land_fields()
 

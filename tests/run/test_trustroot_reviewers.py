@@ -8,15 +8,16 @@ from support.case import Case
 from support.engine_case import EngineTest
 from support.plans import BEAD, CLEAN, PLAN, WRITE
 
-from taskloop.app.run.blocked import Blocked, blocked_for
+from taskloop.app.asks.closing import ClosingTrust
+from taskloop.app.pipeline.blocked import Blocked, blocked_for
+from taskloop.app.pipeline.reflect import Reflector
 from taskloop.app.run.entry import _blocked_by_engine
-from taskloop.app.run.reflect import Reflector
 from taskloop.app.workers.worker_request import request
-from taskloop.contracts.bead import Bead, Comment
-from taskloop.contracts.gitfacts import DiffEntry
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.bead import Bead, Comment
+from tlkernel.gitfacts import DiffEntry
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.paths import ConfigDir
 
 
 class ReviewerTrustRoots(Case):
@@ -41,7 +42,7 @@ class ReviewerTrustRoots(Case):
         host.cfg.reflect = True
         host.dry, host.stop_pending, host.route = False, False, "/fake/route.py"
         host.sessions = [{"node": "write"}]
-        reflector = Reflector(host)
+        reflector = Reflector(host, ClosingTrust())
         reflector.reflect_prompt = Mock(side_effect=AssertionError("must not build a reviewer prompt"))
         assert reflector.reflect_run("parked", "trust roots changed") is None
         reflector.reflect_prompt.assert_not_called()

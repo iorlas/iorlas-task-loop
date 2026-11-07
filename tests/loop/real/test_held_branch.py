@@ -36,7 +36,7 @@ import loop.test_loop as tlp  # noqa: E402
 from taskloop.adapters import pidcheck  # noqa: E402
 from taskloop.app.loop import verdict as vd  # noqa: E402
 from taskloop.app.loop.take import Taker  # noqa: E402
-from taskloop.contracts.env import snapshot  # noqa: E402
+from tlkernel.env import snapshot  # noqa: E402
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 

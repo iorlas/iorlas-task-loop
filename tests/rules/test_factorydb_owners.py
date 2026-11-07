@@ -8,10 +8,10 @@ from support.case import Case
 
 from rules.gate_rules import parsed
 from taskloop.app.parts import STAGE_PARTS
-from taskloop.contracts.dbparts import ddl
-from taskloop.contracts.factorydb import OWNERS
+from tlkernel.dbparts import ddl
+from tlkernel.factorydb import OWNERS
 
-RUN_FILE_READERS = {"taskloop.contracts.runrows"}
+RUN_FILE_READERS = {"tlkernel.runrows"}
 
 
 def legacy_readers(tree):
@@ -27,7 +27,7 @@ class FactoryOwnersTest(Case):
         assert set(OWNERS) == tables
         for table, role in OWNERS.items():
             with self.subTest(table=table):
-                assert role in {"index", "engine", "loop", "owner"}
+                assert role in {"index", "engine", "loop", "owner", "gate"}
         assert OWNERS["lease"] == "loop"
         assert "event" not in OWNERS  # logs stay files: the DB holds state only
         assert OWNERS["bead"] == "index"

@@ -8,16 +8,17 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Final
 
+from tlkernel.adrs import AdrStore
+from tlkernel.ask import Ask, AskAction, AskAnswer, ThreadEntry
+from tlkernel.askstore import AskStore
+from tlkernel.bead import Comment
+from tlkernel.beadsport import BdFailure, BeadPatch, Beads
+from tlkernel.dash import OwnerCause, Stick
+from tlkernel.enums import AskKind
+from tlkernel.ids import BeadId
+from tlkernel.lookrows import LookRows
+
 from taskloop.app.asks import ledgercomments, looks, stick, sweeps
-from taskloop.contracts.adrs import AdrStore
-from taskloop.contracts.ask import Ask, AskAction, AskAnswer, ThreadEntry
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.bead import Comment
-from taskloop.contracts.beadsport import BdFailure, BeadPatch, Beads
-from taskloop.contracts.dash import OwnerCause, Stick
-from taskloop.contracts.enums import AskKind
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.lookrows import LookRows
 from taskloop.domain import timespec
 from taskloop.domain.asks.hold import HOLD, HOLD_UNTIL
 

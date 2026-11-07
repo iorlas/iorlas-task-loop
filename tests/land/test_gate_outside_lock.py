@@ -15,13 +15,13 @@ from support.fakegit import ScriptedGit
 from support.narrow_hosts import Fetches, LandKit, Locks
 
 # isort: split
-from taskloop.contracts import log as rec
-from taskloop.contracts.checks import Check, CheckResult, CheckRun, PassRecord
-from taskloop.contracts.config import CheckSpec, EngineConfig
-from taskloop.contracts.gitfacts import GitOutcome, LogRow
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 from taskloop.domain.checks.specs import engine_digest
+from tlkernel import log as rec
+from tlkernel.checks import Check, CheckResult, CheckRun, PassRecord
+from tlkernel.config import CheckSpec, EngineConfig
+from tlkernel.gitfacts import GitOutcome, LogRow
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.runkey import BaseSha, Digest, RunKey
 
 REJECTED = (1, " ! [rejected]        HEAD -> main (fetch first)")
 PUSHED = (0, "")

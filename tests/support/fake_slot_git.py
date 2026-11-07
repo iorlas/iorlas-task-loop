@@ -2,7 +2,7 @@
 raise `error` before they change anything, so a test walks every typed failure of a slot reset in microseconds."""
 from dataclasses import dataclass, field
 
-from taskloop.contracts.slots import BranchPinned, Checkout, SlotGitError
+from tlkernel.slots import BranchPinned, Checkout, SlotGitError
 
 
 @dataclass

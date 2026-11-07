@@ -14,16 +14,16 @@ from support.narrow import must
 from support.plans import FALSE, PLAN, WRITE
 
 from taskloop.app.run.stuck import StuckTick
-from taskloop.contracts import log as rec
-from taskloop.contracts.checks import CheckResult, CheckRun
-from taskloop.contracts.dash import Marker
-from taskloop.contracts.enums import WaitWhat
-from taskloop.contracts.ids import CheckId
-from taskloop.contracts.runlife import SAME_RED, silent_limit
 from taskloop.domain.stuck import StuckWatch
 from taskloop.stores.runlog import RunLog
 from taskloop_dash.views import columns, passes
 from taskloop_dash.views.runfacts import run_of
+from tlkernel import log as rec
+from tlkernel.checks import CheckResult, CheckRun
+from tlkernel.dash import Marker
+from tlkernel.enums import WaitWhat
+from tlkernel.ids import CheckId
+from tlkernel.runlife import SAME_RED, silent_limit
 
 T = 1_800_000_000.0
 WRITE_LIMIT = silent_limit("write")

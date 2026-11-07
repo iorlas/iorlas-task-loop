@@ -9,8 +9,8 @@ from git_porcelain.real import RealRepo
 
 from taskloop.adapters.git_base import GitBase, classify
 from taskloop.adapters.git_pool import pool_errors, pool_read_error, remote_error
-from taskloop.contracts.gitfacts import DiffEntry, GitOutcome
-from taskloop.contracts.slots import GitReadFailure, MissingRevision, SlotGitError
+from tlkernel.gitfacts import DiffEntry, GitOutcome
+from tlkernel.slots import GitReadFailure, MissingRevision, SlotGitError
 
 PUSH_WALL_S = 3600.0  # a push (or an LFS upload) that has not ended after this long is a failure with these words
 

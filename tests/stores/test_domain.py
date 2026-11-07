@@ -16,10 +16,10 @@ from support.memstores import fake_stores
 from support.narrow import must
 from support.tiers import domain
 
-from taskloop.contracts.ask import AskAnswer
-from taskloop.contracts.enums import AskStatus, LockWhat
-from taskloop.contracts.ids import BeadId
 from taskloop.stores.runlog import RunLog
+from tlkernel.ask import AskAnswer
+from tlkernel.enums import AskStatus, LockWhat
+from tlkernel.ids import BeadId
 
 
 @domain

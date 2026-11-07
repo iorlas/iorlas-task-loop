@@ -10,9 +10,9 @@ import json
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Final
 
-from taskloop.contracts.argv import argv_of
-from taskloop.contracts.checks import Check
 from taskloop.domain.checks.matchers import expand_braces, glob_re, literal_prefix
+from tlkernel.argv import argv_of
+from tlkernel.checks import Check
 
 ROOT_FILES: Final = ("justfile", "Justfile", ".justfile", "*.lock", "package-lock.json", ".task-loop.json")
 

@@ -22,11 +22,11 @@ from support.spawn import port_git
 from taskloop.app.checks import evidence
 from taskloop.app.checks.cache import InputKeys, RunMemo, key_digest
 from taskloop.app.land import verified
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.checks import UNVERIFIED_EXIT, Check, CheckResult, CheckRun, PassRecord, verdict_of
-from taskloop.contracts.enums import CheckStatus
-from taskloop.contracts.ids import BeadId, CheckId, TreeSha
-from taskloop.contracts.runkey import BaseSha
+from tlkernel.bead import Bead
+from tlkernel.checks import UNVERIFIED_EXIT, Check, CheckResult, CheckRun, PassRecord, verdict_of
+from tlkernel.enums import CheckStatus
+from tlkernel.ids import BeadId, CheckId, TreeSha
+from tlkernel.runkey import BaseSha
 
 
 def unverified(id="render") -> CheckResult:

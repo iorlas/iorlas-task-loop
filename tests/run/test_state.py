@@ -13,21 +13,23 @@ import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.fakegit import ScriptedGit
 from support.memstores import fake_stores
+from support.pipeline_ports import FakeHeadHistory
 
 from taskloop.app.land.state import LandState
 from taskloop.app.look.state import LOOK_FIELDS, LookState
+from taskloop.app.pipeline.resume import KEEP_FOR_ACTIVE, LATE, Resume
 from taskloop.app.review.state import ReviewLive
-from taskloop.app.run.resume import KEEP_FOR_ACTIVE, LATE, Resume
+from taskloop.app.run.review_glue import ReviewGlue
 from taskloop.app.run.state import Checkpoints, StateAttrs, attr_names, carries_state, state_names
 from taskloop.app.write.state import WriteState
-from taskloop.contracts import fence, wire
-from taskloop.contracts.checkpoint import BriefSnap, Checkpoint, Handoff, PlanStep, RunState, WriterSession
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.review import (
+from tlkernel import fence, wire
+from tlkernel.checkpoint import BriefSnap, Checkpoint, Handoff, PlanStep, RunState, WriterSession
+from tlkernel.ids import BeadId
+from tlkernel.review import (
     ReviewState,
     Unfiled,
 )
-from taskloop.contracts.run import Round
+from tlkernel.run import Round
 
 ROOT = Path(__file__).resolve().parents[2]
 # a value that is not the default, for each field: the park test fails on a new field until it is listed here
@@ -74,7 +76,7 @@ class HeadGit(ScriptedGit):
 
 
 @carries_state
-class Host(StateAttrs):
+class Host(StateAttrs, SimpleNamespace):
     def __init__(self) -> None:
         self.state = RunState()
         self.dry = False
@@ -157,7 +159,7 @@ class Park(Case):
         snap = BriefSnap(fields={"now": "1"}, issue_type="", deps=[], comments=[])
         b.state.snap, b.state.brief_hash, b.state.plan_data = snap, "now", None
         ck = stored(b)
-        Resume(b).restore(ck, late=True)
+        Resume(b, FakeHeadHistory(), ReviewGlue(b), state_names()).restore(ck, late=True)
         kept = set(KEEP_FOR_ACTIVE)
         for name in state_names():
             if name in kept:
@@ -169,7 +171,7 @@ class Park(Case):
 
     def test_an_edit_from_outside_hands_back_only_what_every_resume_keeps(self):
         _a, b = self.parked()
-        Resume(b).restore(stored(b), late=False)
+        Resume(b, FakeHeadHistory(), ReviewGlue(b), state_names()).restore(stored(b), late=False)
         for name in LATE:
             assert getattr(b, name) == getattr(RunState(), name), name
         assert (b.filed, b.unfiled) == ([], [])  # filed titles are the late ones too
@@ -213,7 +215,7 @@ class Park(Case):
         assert (ck.step, ck.stage) == ("write", 2)
         b = Host()
         b.stores = a.stores
-        Resume(b).restore(ck, late=False)
+        Resume(b, FakeHeadHistory(), ReviewGlue(b), state_names()).restore(ck, late=False)
         assert b.leftovers == a.leftovers
         assert b.leftovers[0]["origin"] == "review"
         assert b.state.start_again().leftovers == a.leftovers
@@ -243,7 +245,7 @@ class OldCheckpoint(Case):
         old = json.loads((ROOT / "tests" / "fixtures" / "checkpoint_v3_look.json").read_text(encoding="utf-8"))
         ck = wire.load(Checkpoint, old)
         h = Host()
-        Resume(h).restore(ck, late=True)
+        Resume(h, FakeHeadHistory(), ReviewGlue(h), state_names()).restore(ck, late=True)
         assert (h.look.notes, h.look.unjudged, h.look.done) == (
             ["the main screen shows the list"], {"look judge, round 2": "no lane: busy"}, 2)
         reqs = [{"method": "Shots", "names": ["home.png"]}]

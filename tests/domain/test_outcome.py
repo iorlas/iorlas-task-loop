@@ -1,6 +1,6 @@
 """outcome_of: a call is done, needs the owner, or failed with delegate's predicted time."""
-from taskloop.contracts.delegate import DelegateResult, Retry, StopFacts
 from taskloop.domain.lanes.outcome import Done, Failed, NeedsOwner, outcome_of
+from tlkernel.delegate import DelegateResult, Retry, StopFacts
 
 NONE = Retry(kind="none")
 

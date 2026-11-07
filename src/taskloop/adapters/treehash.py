@@ -8,9 +8,9 @@ from pathlib import Path
 
 from git_porcelain import real_cache, real_parse
 
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.slots import SlotGitError
+from tlkernel.gitport import Git
+from tlkernel.ids import TreeSha
+from tlkernel.slots import SlotGitError
 
 State = tuple[bytes, tuple[object, ...]]
 

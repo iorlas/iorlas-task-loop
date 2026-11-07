@@ -1,4 +1,4 @@
-"""pytest wiring: per-worker isolation under xdist, the address-space cap, the serial group and the three test kinds.
+"""pytest wiring: per-process isolation, the worker address-space cap, the serial group and the three test kinds.
 
 A test's kind comes from its path, never from a hand marker: a file under tests/e2e/ is `e2e` (a whole flow), a file under a `real/`
 folder (tests/<slice>/real/ or packages/<stage>/tests/real/) is `real` (real git, processes or sockets), anything else is logic (fakes,
@@ -21,6 +21,11 @@ from pathlib import Path
 
 import pytest
 
+REAL_HOME = os.environ.get("HOME", "")
+REAL_CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME", str(Path(REAL_HOME) / ".config"))
+os.environ.setdefault("TL_TEST_REAL_HOME", REAL_HOME)
+os.environ.setdefault("TL_TEST_REAL_CONFIG_HOME", REAL_CONFIG_HOME)
+
 # Bytecode is cached even when the caller says not to (Claude Code exports PYTHONDONTWRITEBYTECODE=1): without it every xdist worker and
 # every Python a test starts compiles every module again (about 2 s of each worker's collection). The cache sits outside the tree, under
 # the temp dir (mirrored absolute paths, so worktrees never share a file); set before any of ours is imported, and for the children too.
@@ -39,10 +44,10 @@ pytest.register_assert_rewrite("support")  # the helpers of tests/support assert
 import support.paths  # noqa: E402, F401  (ROOT/src on sys.path; after the bytecode setup above)
 from support import procsim, work  # noqa: E402
 from support.scope import delegate_wanted  # noqa: E402
-from tltestkit.limits import hang_s, kind_of_parts, limit_for  # noqa: E402
 
 from taskloop.app.parts import STAGE_PARTS  # noqa: E402
-from taskloop.contracts import factorydb, scratch  # noqa: E402
+from tlkernel import factorydb, scratch  # noqa: E402
+from tltestkit.limits import hang_s, kind_of_parts, limit_for  # noqa: E402
 
 factorydb.declare_parts(STAGE_PARTS)
 
@@ -283,18 +288,25 @@ def isolate(home):
 
 def pytest_configure(config):
     work.calibrate()  # this host's speed at its best, to turn a logic test's instructions into seconds
-    if not hasattr(config, "workerinput"):  # the controller (or a plain run) keeps the caller's environment
-        return
-    if sys.platform.startswith("linux"):
-        with contextlib.suppress(OSError, AttributeError):
-            ctypes.CDLL(None, use_errno=True).prctl(1, 9, 0, 0, 0)  # PR_SET_PDEATHSIG, SIGKILL: a worker leaves with its controller
-    cap_memory(WORKER_MB)
-    home = scratch.scratch_dir(os.environ, "tl-worker-")
-    config._worker_home = home
+    if hasattr(config, "workerinput"):
+        if sys.platform.startswith("linux"):
+            with contextlib.suppress(OSError, AttributeError):
+                ctypes.CDLL(None, use_errno=True).prctl(1, 9, 0, 0, 0)  # PR_SET_PDEATHSIG, SIGKILL: a worker leaves with its controller
+        cap_memory(WORKER_MB)
+    home = scratch.scratch_dir(os.environ, "tl-run-")
+    config._home = home
     isolate(home)
 
 
+def pytest_sessionstart(session):
+    """Refuse to collect or execute tests with the caller's home or config directory."""
+    for name, original in (("HOME", REAL_HOME), ("XDG_CONFIG_HOME", REAL_CONFIG_HOME)):
+        current = os.environ.get(name)
+        if not current or Path(current).resolve() == Path(original).resolve():
+            raise pytest.UsageError(f"test isolation failed: {name} still points at the caller's directory")
+
+
 def pytest_unconfigure(config):
-    home = getattr(config, "_worker_home", None)
+    home = getattr(config, "_home", None)
     if home:
         shutil.rmtree(home, ignore_errors=True)

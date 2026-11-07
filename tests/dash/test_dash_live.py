@@ -25,8 +25,8 @@ from taskloop.adapters import agent as live_agent  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
 from taskloop.app.workers import worker_call  # noqa: E402
-from taskloop.contracts.paths import ConfigDir  # noqa: E402
 from taskloop_dash.api import live  # noqa: E402
+from tlkernel.paths import ConfigDir  # noqa: E402
 
 BEAD, STAMP = "tl-live.1", "20261026-100000"
 T = 1793000000.0

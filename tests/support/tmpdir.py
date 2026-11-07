@@ -5,7 +5,7 @@ import shutil
 import weakref
 from types import TracebackType
 
-from taskloop.contracts import scratch
+from tlkernel import scratch
 
 
 def mkdtemp(prefix: str | None = None) -> str:

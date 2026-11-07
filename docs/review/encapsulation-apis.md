@@ -12,13 +12,13 @@ P1: a boundary can erase authoritative information or bypass a decision prerequi
 
 **A.F01 / D.F01 are stale for the main profile reader.** `src/taskloop/app/wire/slots.py:42` now distinguishes an absent committed file from a failed read; lines 55–65 raise `ProfileReadError`. `cfg_source` at line 80 discovers the base without decoding the whole local engine block. Keep those changes. The slot-only reader at line 97 still returns default slots on file/JSON errors, so do not declare all profile consumers repaired. A.F05 / D.F10 still own the multiple-revision problem. F07 below addresses the separate missing schema/evolution contract.
 
-**A.F10 / D.F08 / D.F09 require revalidation against the new outbox.** `src/taskloop/app/land/followups.py:48` saves pending work, line 54 looks up an exact key label including closed beads, and lines 60–69 retain created/refused results. `src/taskloop/contracts/followups.py:10` defines an outbox v1. Keep the direction; crash behavior remains untested here. Do not file the old “no durable outbox” finding again. F04 instead concerns the still ambiguous bd response used by that lookup and by ask reconciliation.
+**A.F10 / D.F08 / D.F09 require revalidation against the new outbox.** `src/taskloop/app/land/followups.py:48` saves pending work, line 54 looks up an exact key label including closed beads, and lines 60–69 retain created/refused results. `packages/kernel/src/tlkernel/followups.py:10` defines an outbox v1. Keep the direction; crash behavior remains untested here. Do not file the old “no durable outbox” finding again. F04 instead concerns the still ambiguous bd response used by that lookup and by ask reconciliation.
 
 The old first-line-only lint parser is also gone: `src/taskloop/adapters/bd.py:113` combines stderr and the JSON error before extracting headings. Keep extraction before clipping. Refuse its continued reliance on English and heading typography, as F05 explains.
 
 ## Process interface inventory
 
-Column shorthand: “typed” means runtime boundary validation, not merely Python annotations. “Versioned” names a checked wire revision where one exists. C denotes the task-loop config directory described by `src/taskloop/contracts/paths.py:10`; these are code-described paths, not files opened on this machine. B is a bead ID, R a run ID, K a repository key.
+Column shorthand: “typed” means runtime boundary validation, not merely Python annotations. “Versioned” names a checked wire revision where one exists. C denotes the task-loop config directory described by `packages/kernel/src/tlkernel/paths.py:10`; these are code-described paths, not files opened on this machine. B is a bead ID, R a run ID, K a repository key.
 
 ### tl verbs and exit codes
 
@@ -89,7 +89,7 @@ The user's “run/status only” description is not the whole current process su
 
 ### HTTP API
 
-`src/taskloop_dash/http.py:29` routes GETs; `src/taskloop_dash/api/reads.py:66` supplies query errors; POST records and verb registry are `src/taskloop/contracts/dash.py` (`AnswerReq` through `WRITES`). This service has writes. Calling its package “read-only” conceals its actual process contract.
+`src/taskloop_dash/http.py:29` routes GETs; `src/taskloop_dash/api/reads.py:66` supplies query errors; POST records and verb registry are `packages/kernel/src/tlkernel/dash.py` (`AnswerReq` through `WRITES`). This service has writes. Calling its package “read-only” conceals its actual process contract.
 
 | Interface | Producer | Consumer(s) | Typed? | Versioned? | Leaks internals? | Behavior under version skew | Verdict |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -110,7 +110,7 @@ GET exceptions become 500 `{error: "Type: text"}` at `src/taskloop_dash/http.py:
 
 ### Disk formats
 
-The disk tree is already mapped in D “Authorities and storage”; this table judges compatibility rather than repeating ownership races. Nested records inherit their container version; they do not independently emit `v`. `wire.load` checks exact version and rejects unknown fields (`src/taskloop/contracts/wire.py:35`, `:83`), whereas `JsonStore.get` collapses Torn/ForeignVersion/Absent (`src/taskloop/contracts/stores.py:104`). These are opposite compatibility policies depending on which helper the caller chooses.
+The disk tree is already mapped in D “Authorities and storage”; this table judges compatibility rather than repeating ownership races. Nested records inherit their container version; they do not independently emit `v`. `wire.load` checks exact version and rejects unknown fields (`packages/kernel/src/tlkernel/wire.py:35`, `:83`), whereas `JsonStore.get` collapses Torn/ForeignVersion/Absent (`packages/kernel/src/tlkernel/stores.py:104`). These are opposite compatibility policies depending on which helper the caller chooses.
 
 | Interface | Producer | Consumer(s) | Typed? | Versioned? | Leaks internals? | Behavior under version skew | Verdict |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -147,11 +147,11 @@ The disk tree is already mapped in D “Authorities and storage”; this table j
 | reflect-digest.json, reflect-view.json, usage-history.jsonl | reflection/status | digest/dashboard | ReflectState / projection / UsageRow | v1 for state/usage | grouped reason/window strings | changed categories silently regroup history | Untested |
 | dash.json, dash.pid, handoff/K.md, githooks scripts | launcher/handoff/hooks | owner/browser/git | DashState typed; prose/scripts mixed | DashState v1; others no common revision | PID, path, executable location | older service/hook can read newer mutable state | Untested; HTTP skew F11; bd projection now lives only in factory.db |
 
-Record evidence: `src/taskloop/contracts/run.py:16`, `:58`, `:87`, `:132`, `:180`; `contracts/checkpoint.py:162`; `contracts/loop.py:40`, `:56`, `:89`; `contracts/snapshots.py:47`, `:90`, `:100`, `:115`, `:130`, `:148`, `:156`; `contracts/checks.py:154`, `:205`, `:224`, `:244`; `contracts/usage.py:15`; `contracts/paths.py:22`, `:122`, `:182`, `:237`. All paths in this sentence are under `src/taskloop/`.
+Record evidence: `packages/kernel/src/tlkernel/run.py:16`, `:58`, `:87`, `:132`, `:180`; `contracts/checkpoint.py:162`; `contracts/loop.py:40`, `:56`, `:89`; `contracts/snapshots.py:47`, `:90`, `:100`, `:115`, `:130`, `:148`, `:156`; `contracts/checks.py:154`, `:205`, `:224`, `:244`; `contracts/usage.py:15`; `contracts/paths.py:22`, `:122`, `:182`, `:237`. All paths in this sentence are under `src/taskloop/`.
 
 ### Every registered environment name
 
-The complete registry is `src/taskloop/contracts/envvars.py:7–41`. All values cross an untyped string boundary. JSON handovers have their own decoding rules; scalar strings have no independent revision. Ambient standard/tool variables are a separate interface at `src/taskloop/adapters/childenv.py:32`: PATH, HOME, USER, LANG, TERM, TMPDIR, SHELL, git author/committer fields, UV, SSH_AUTH_SOCK, GIT_SSH_COMMAND, LC_* and GIT_CONFIG_*. Their **names and handling code only** were inspected; no credential files or values were read.
+The complete registry is `packages/kernel/src/tlkernel/envvars.py:7–41`. All values cross an untyped string boundary. JSON handovers have their own decoding rules; scalar strings have no independent revision. Ambient standard/tool variables are a separate interface at `src/taskloop/adapters/childenv.py:32`: PATH, HOME, USER, LANG, TERM, TMPDIR, SHELL, git author/committer fields, UV, SSH_AUTH_SOCK, GIT_SSH_COMMAND, LC_* and GIT_CONFIG_*. Their **names and handling code only** were inspected; no credential files or values were read.
 
 | Interface | Producer | Consumer(s) | Typed? | Versioned? | Leaks internals? | Behavior under version skew | Verdict |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -179,7 +179,7 @@ The complete registry is `src/taskloop/contracts/envvars.py:7–41`. All values 
 
 ### F01 — P2 — refuse-and-redo: contract 3 admits a demonstrably incompatible delegate parser
 
-**Evidence:** `src/taskloop/contracts/delegate.py:60` adds `--engine-only-advisory`; line 63 adds `--only-family`. `src/taskloop/app/run/worker_request.py:21` chooses pinned families and line 38 enables advisory for pinned writes with engine recipes. `_delegate/src/delegate/cli/parser.py:62–67` supports neither flag. `_delegate/skills/delegate/contract.json:179–197` advertises neither flag but line 2 still says 3. `src/taskloop/adapters/delegate.py:108–113` accepts numeric equality without checking `run_args`. `tests/contracts/test_delegate_wire.py:62` only tests local flag construction.
+**Evidence:** `packages/kernel/src/tlkernel/delegate.py:60` adds `--engine-only-advisory`; line 63 adds `--only-family`. `src/taskloop/app/run/worker_request.py:21` chooses pinned families and line 38 enables advisory for pinned writes with engine recipes. `_delegate/src/delegate/cli/parser.py:62–67` supports neither flag. `_delegate/skills/delegate/contract.json:179–197` advertises neither flag but line 2 still says 3. `src/taskloop/adapters/delegate.py:108–113` accepts numeric equality without checking `run_args`. `tests/contracts/test_delegate_wire.py:62` only tests local flag construction.
 
 **Failure:** this exact pair passes admission, then the sibling parser produces `bad_request` without starting a worker. This is a source-proved incompatibility, not a claim that the sibling copy is currently installed. A.F08 is too soft because the missing feature advertisement already exists. The “bump when flags change” prose at contract.json:3 did not enforce anything.
 
@@ -217,7 +217,7 @@ Migration: retain raw output and strictly validate known execution/denial fields
 
 ### F03 — P2 — refuse-and-redo: status has a version that none of the important readers enforces
 
-**Evidence:** `src/taskloop/contracts/delegate_status.py:27` reads ts/lanes/cockpit without checking top-level or cockpit `v`. `src/taskloop/adapters/delegate.py:139–154` directly extracts roles/lanes, bypassing that reader. `find_route` at line 116 resolves a path without `resolve`'s run-contract equality test. `RouteProbe.up` at line 168 coerces `up` with bool. `tests/adapters/test_delegate_status.py:44` tests dropped keys; its schema helper at line 63 explicitly checks keys only, not scalar types.
+**Evidence:** `packages/kernel/src/tlkernel/delegate_status.py:27` reads ts/lanes/cockpit without checking top-level or cockpit `v`. `src/taskloop/adapters/delegate.py:139–154` directly extracts roles/lanes, bypassing that reader. `find_route` at line 116 resolves a path without `resolve`'s run-contract equality test. `RouteProbe.up` at line 168 coerces `up` with bool. `tests/adapters/test_delegate_status.py:44` tests dropped keys; its schema helper at line 63 explicitly checks keys only, not scalar types.
 
 **Failure:** a v2 status retaining the old key names is silently accepted; a renamed role field becomes unknown availability; `{"up":"false"}` becomes online. Snapshot, role admission and retry probe disagree about what “valid delegate state” means. This is a separate seam from A.F08's run flags.
 
@@ -274,7 +274,7 @@ Migration: preserve full raw diagnostics and mark the current parser as a versio
 
 ### F06 — P2 — refuse-and-redo: the public slot exit code destroys the new failure classification
 
-**Evidence:** `src/taskloop/contracts/slots.py:12` distinguishes `slot_broken`, `bead_pinned`, `busy`, `transient`. `src/taskloop/app/slots/verbs.py:14` maps both broken and transient to exit 3; reset/setup return that mapping at lines 123 and 132. Internally, `src/taskloop/app/loop/verdict.py:54–58` carefully requires slot_broken before counting quick slot failures.
+**Evidence:** `packages/kernel/src/tlkernel/slots.py:12` distinguishes `slot_broken`, `bead_pinned`, `busy`, `transient`. `src/taskloop/app/slots/verbs.py:14` maps both broken and transient to exit 3; reset/setup return that mapping at lines 123 and 132. Internally, `src/taskloop/app/loop/verdict.py:54–58` carefully requires slot_broken before counting quick slot failures.
 
 **Failure:** an external coordinator using the supported CLI cannot preserve the distinction the loop now relies on. Exit 3 can mean “repair this slot” or “retry infrastructure.” That is the public-contract version of incident 8's twelve-hour slot exile. This review does not claim the internal loop still classifies all infrastructure as slot breakage.
 
@@ -293,7 +293,7 @@ Migration: first add a JSON result with original fault code while preserving old
 
 ### F07 — P2 — refuse-and-redo: “human written” policy is used as an excuse for no schema revision
 
-**Evidence:** `src/taskloop/contracts/config.py:247–252` explicitly omits v because a person writes the file. Lines 269–276 define ignored, removed and renamed keys; `load` at line 374 strips retired keys before strict decoding. Defaults such as budget/review/check policy are code values at lines 201–227. `Owned.kind` is a free string and has no V (`src/taskloop/contracts/worktrees.py:8–17`). `Carry` is unversioned (`contracts/loop.py:40`). `CallState.phase` is free text and its reader accepts missing/older versions (`stores/call_state.py:28`, `:106`).
+**Evidence:** `packages/kernel/src/tlkernel/config.py:247–252` explicitly omits v because a person writes the file. Lines 269–276 define ignored, removed and renamed keys; `load` at line 374 strips retired keys before strict decoding. Defaults such as budget/review/check policy are code values at lines 201–227. `Owned.kind` is a free string and has no V (`packages/kernel/src/tlkernel/worktrees.py:8–17`). `Carry` is unversioned (`contracts/loop.py:40`). `CallState.phase` is free text and its reader accepts missing/older versions (`stores/call_state.py:28`, `:106`).
 
 **Failure:** these are machine-consumed contracts regardless of who edits them. A new default or newly ignored policy key changes behavior without a schema change; an added key can break the old reader while the same unversioned profile still looks legitimate to its author. Closed domains such as worktree kind and call phase remain strings where an unknown value must not select a default lifecycle behavior. A.F05 / D.F10 own which profile revision is used; this finding owns which grammar and semantics that revision promises.
 
@@ -313,7 +313,7 @@ Migration: accept current profiles as explicit legacy schema0 with reported effe
 
 ### F08 — P1 — refuse-and-redo: gate-plan output contains an input identity that the consumer ignores
 
-**Evidence:** `src/taskloop/contracts/gateplan.py:21–28` requires `version`, `base`, `empty`, `full`, `full_reasons`, and steps. `src/taskloop/app/checks/gateplan.py:91–101` passes a base and paths to the producer, decodes its reply, then builds skips exclusively from `s.run`. It never compares `plan.base` to the requested base. Its parse checks at lines 32–40 enforce names and duplicates, not that identity.
+**Evidence:** `packages/kernel/src/tlkernel/gateplan.py:21–28` requires `version`, `base`, `empty`, `full`, `full_reasons`, and steps. `src/taskloop/app/checks/gateplan.py:91–101` passes a base and paths to the producer, decodes its reply, then builds skips exclusively from `s.run`. It never compares `plan.base` to the requested base. Its parse checks at lines 32–40 enforce names and duplicates, not that identity.
 
 **Failure:** a cached/stale producer answer naming another base can suppress checks for the current base. Hashing its output proves which wrong answer was used, not that it describes this invocation. This is earlier than D.F02's post-execution gate-token race and needs its own admission fix. The consumer currently demands fields it then ignores; that is schema theater.
 
@@ -350,7 +350,7 @@ Migration: first move decision-critical status/diff/ref reads from `_ask` to che
 
 ### F10 — P2 — refuse-and-redo: the old parent cannot necessarily understand the new child's final report
 
-**Evidence:** `RunReport` is strict v2 (`src/taskloop/contracts/run.py:16–36`); `kind` and role are unrestricted strings despite outcome being an enum. `src/taskloop/app/loop/verdict.py:95–101` maps any decode error to FAILED and interprets `fault_slot` by string equality. The no-file exit78 path at lines 87–91 reparses an exact diagnostic prefix, substring and suffix from the log. `src/taskloop/app/loop/run.py:79` can restart an early-crashed newer engine on the old install.
+**Evidence:** `RunReport` is strict v2 (`packages/kernel/src/tlkernel/run.py:16–36`); `kind` and role are unrestricted strings despite outcome being an enum. `src/taskloop/app/loop/verdict.py:95–101` maps any decode error to FAILED and interprets `fault_slot` by string equality. The no-file exit78 path at lines 87–91 reparses an exact diagnostic prefix, substring and suffix from the log. `src/taskloop/app/loop/run.py:79` can restart an early-crashed newer engine on the old install.
 
 **Failure:** a legitimate new report field or v3 final report can be rejected by the still-running old loop and charged as a failed bead, even when the child completed correctly. The profile-reader improvement introduced a brittle English recovery path for its exact diagnostic. A.F04 is too narrow if repaired only with checkpoint reader negotiation: the surviving parent is also a reader that must understand the replacement child's completion protocol.
 
@@ -369,7 +369,7 @@ Migration: add a stable admission-failure report for profile/read/skew faults in
 
 ### F11 — P2 — refuse-and-redo: typed dashboard requests have no client/server compatibility agreement
 
-**Evidence:** POST uses strict `wire.load` but unversioned request types (`src/taskloop_dash/api/writes.py:62–72`); Result carries only ok/message (`src/taskloop/contracts/dash.py`, Result/WRITES). `src/taskloop_dash/http.py:82–91` catches malformed JSON, not backend exceptions. `src/taskloop_dash/static/js/api.js:29` reloads on a changed server code hash only after successfully decoding a snapshot; lines 84–92 reduce non-2xx replies to HTTP text. Snapshot/bead/live have v1, but the JS reads data without checking v at lines 28–30 and 113–118.
+**Evidence:** POST uses strict `wire.load` but unversioned request types (`src/taskloop_dash/api/writes.py:62–72`); Result carries only ok/message (`packages/kernel/src/tlkernel/dash.py`, Result/WRITES). `src/taskloop_dash/http.py:82–91` catches malformed JSON, not backend exceptions. `src/taskloop_dash/static/js/api.js:29` reloads on a changed server code hash only after successfully decoding a snapshot; lines 84–92 reduce non-2xx replies to HTTP text. Snapshot/bead/live have v1, but the JS reads data without checking v at lines 28–30 and 113–118.
 
 **Failure:** after a server update, an old tab can send a stale strict request before its next successful snapshot reload. It gets an unexplained 400 or a dropped connection on a backend exception. There is no stable refusal code for “client too old,” “target superseded,” or “backend unavailable.” A code hash reload is a convenience, not write admission. A.F09 owns the specific expected-ask race; fixing that field alone does not fix protocol skew.
 

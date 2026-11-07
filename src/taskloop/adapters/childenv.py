@@ -9,10 +9,10 @@ from pathlib import Path
 
 import child_env
 
-from taskloop.contracts.env import Env
-from taskloop.contracts.envvars import PREFIXES, EnvVar, registered
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.paths import ConfigDir, default_root
+from tlkernel.env import Env
+from tlkernel.envvars import PREFIXES, EnvVar, registered
+from tlkernel.identity import Identity
+from tlkernel.paths import ConfigDir, default_root
 
 # The only names (besides the registered engine ones and LC_*) a tool, a check or git inherits. Anything else is declared by the repo's
 # check (its `env`) or by the engine (`extra`), never picked up from whoever started the engine. A name is added below only when a real

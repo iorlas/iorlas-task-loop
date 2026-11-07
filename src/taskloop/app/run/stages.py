@@ -1,6 +1,14 @@
 """The shared run entry: continuous loop runs or one recorded engine step."""
 import time
 
+from tlkernel import fence, wire
+from tlkernel.bead import Bead
+from tlkernel.checkpoint import Checkpoint
+from tlkernel.enums import Step
+from tlkernel.envvars import EnvVar
+from tlkernel.kinds import Kind
+from tlkernel.locator import RunBundle, RunLocator
+
 from taskloop.adapters import beadtools
 from taskloop.app.asks import parks
 from taskloop.app.land.gate import Problem
@@ -16,13 +24,6 @@ from taskloop.app.run.stage_run import stage_run
 from taskloop.app.slots.lease import Lease
 from taskloop.app.track import verbs
 from taskloop.app.wire.closeguard import guard_for, has_land
-from taskloop.contracts import fence, wire
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.checkpoint import Checkpoint
-from taskloop.contracts.enums import Step
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.domain import effects
 from taskloop.domain import outcome as oc
 from taskloop.domain.plan.matchers import AcceptanceText
@@ -186,7 +187,7 @@ def start_step(e: RunHost, step: Step, bead: Bead) -> Step:
         e.tree.reset(bead)
         following = Step.PLAN
     else:
-        e.plan_data = e.planner.plan(again=step is Step.REPLAN)
+        e.planner.take(e.planner.plan(again=step is Step.REPLAN))
         following = Step.WRITE
     e.checkpoints.save(step=following, stage=0)
     return following

@@ -2,14 +2,14 @@
 
 import json
 
+import hermetic  # noqa: F401
 from any_agent.procs import StopReport, Survivor
+from test_route import ROOT
+
 from delegate.adapters import procs
 from delegate.app import env
 from delegate.app.lease import RunLease
 from delegate.contracts import wire
-
-import hermetic  # noqa: F401
-from test_route import ROOT
 
 
 class OsProc:

@@ -3,10 +3,11 @@ import statistics
 from collections.abc import Collection, Iterable
 from typing import Any
 
+from tlkernel.delegateport import RunRecord
+from tlkernel.locator import RunLocator
+from tlkernel.paths import ConfigDir
+
 from taskloop.app.report.inputs import prefix, read_jsonl
-from taskloop.contracts.delegateport import RunRecord
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.paths import ConfigDir
 from taskloop.stores.delegate import real_route
 
 

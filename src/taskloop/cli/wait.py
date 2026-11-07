@@ -7,13 +7,14 @@ from argparse import Namespace
 from collections.abc import Callable
 from typing import Any, Final
 
-from taskloop.app.run import requests
-from taskloop.contracts import runlife
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import RunState
-from taskloop.contracts.runlife import Liveness, liveness
+from tlkernel import runlife
+from tlkernel.askstore import AskStore
+from tlkernel.locator import RunLocator
+from tlkernel.paths import ConfigDir
+from tlkernel.run import RunState
+from tlkernel.runlife import Liveness, liveness
+
+from taskloop.app.asks import owner_verbs as requests
 
 Out = Callable[[str], None]
 POLL: Final = 2.0  # seconds between two looks at the files

@@ -3,7 +3,7 @@
 import pytest
 from support.dashlogs import T, bead
 
-from taskloop.contracts.slottable import STARTUP_LEASE_S, build_slot_table
+from tlkernel.slottable import STARTUP_LEASE_S, build_slot_table
 
 
 def state_at(age: float, since: object, dir_exists: bool = True) -> tuple[str, str]:

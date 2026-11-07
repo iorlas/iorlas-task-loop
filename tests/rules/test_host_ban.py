@@ -38,3 +38,5 @@ def test_the_name_guard_fails_on_a_seeded_violation():
     assert host_problems("from typing import Any\nclass A:\n    def __init__(self, host: Any): ...\n")
     assert not host_problems("class H(Protocol): ...\nclass A:\n    def __init__(self, host: H): ...\n")
     assert not host_problems("class A:\n    def __init__(self, clock, git): ...\n")
+    assert not host_problems("class H[T](Protocol): ...\nclass A[T]:\n    def __init__(self, host: H[T]): ...\n")
+    assert host_problems("class A:\n    def __init__(self, host: list[str]): ...\n")

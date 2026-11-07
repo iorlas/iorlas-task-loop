@@ -21,17 +21,17 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
 
 ALLOWS_BEAT = {
-    "src/taskloop/contracts/log.py",  # the record's definition
+    "packages/kernel/src/tlkernel/log.py",  # the record's definition
     "src/taskloop/domain/stuck.py",  # the stuck rule: a Beat is the tick, not activity
     "src/taskloop/app/run/run_once.py",  # the engine writes it
     "src/taskloop_dash/jsonl.py", "src/taskloop_dash/readers/logs.py", "src/taskloop_dash/views/runfacts.py",  # a Beat is no event
     "src/taskloop_dash/index/facts.py",  # only the indexer compacts engine Beats
 }
-ALLOWS_STALE = {"src/taskloop/contracts/runlife.py"}
+ALLOWS_STALE = {"packages/kernel/src/tlkernel/runlife.py"}
 ALLOWS_PID_ALIVE = {  # the lock table's and the loop's own pid probes, and the reconciler
-    "src/taskloop/contracts/locks.py", "src/taskloop/contracts/runlife.py",
+    "packages/kernel/src/tlkernel/locks.py", "packages/kernel/src/tlkernel/runlife.py",
     "src/taskloop/app/launch/loop.py", "src/taskloop/app/wire/brief.py", "src/taskloop/app/loop/env.py", "src/taskloop/app/loop/files.py"}
-ALLOWS_LOST = {"src/taskloop/contracts/locator.py"}
+ALLOWS_LOST = {"packages/kernel/src/tlkernel/locator.py"}
 GONE = {"CRASHED_AFTER"}
 
 
@@ -102,7 +102,7 @@ class DashWritesNothing(Case):
         assert bad == [], "the dashboard only reads: it displays runlife.shown, only tl processes call reconcile"
 
     def test_the_scan_sees_planted_writers(self):
-        tree = ast.parse("from taskloop.contracts.runlife import reconcile\nself.locator.end(r)\nrunlife.reconcile(c, 1)\nx.shown()\n")
+        tree = ast.parse("from tlkernel.runlife import reconcile\nself.locator.end(r)\nrunlife.reconcile(c, 1)\nx.shown()\n")
         assert [n for _, n in dash_writer_uses(tree)] == ["reconcile", "end", "reconcile"]
 
 
@@ -111,7 +111,7 @@ class LivenessIsRecorded(Case):
         assert scan() == []
 
     def test_the_scan_sees_planted_inference(self):
-        src = ("from taskloop.contracts.log import Beat\nx = now - CRASHED_AFTER\nif life is Liveness.CRASHED: pass\n"
+        src = ("from tlkernel.log import Beat\nx = now - CRASHED_AFTER\nif life is Liveness.CRASHED: pass\n"
                "m.replace(state=RunState.LOST)\nok = RunState.LOST\n")
         tree = ast.parse(src)
         assert (1, "Beat") in names(tree)

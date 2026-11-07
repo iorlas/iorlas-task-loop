@@ -7,7 +7,20 @@ import sys
 import time
 from pathlib import Path
 
-from taskloop import contracts
+import tlkernel as contracts
+from tlkernel import inputsets, runlife
+from tlkernel.bd_errors import BdCommandFailure
+from tlkernel.beadsport import BdFailure, BeadQuery, Beads
+from tlkernel.config import RepoProfile
+from tlkernel.delegateport import Resolved
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+from tlkernel.paths import ConfigDir
+from tlkernel.procport import Spawner
+from tlkernel.rowstores import ReposStore
+from tlkernel.slots import SlotGitError
+
 from taskloop.adapters import layout_migrate
 from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.ident import claude_dir, config_dir
@@ -18,18 +31,6 @@ from taskloop.app.slots import watchdog
 from taskloop.app.wire import hook
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire.slots import cfg_source
-from taskloop.contracts import inputsets, runlife
-from taskloop.contracts.bd_errors import BdCommandFailure
-from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
-from taskloop.contracts.config import RepoProfile
-from taskloop.contracts.delegateport import Resolved
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.procport import Spawner
-from taskloop.contracts.rowstores import ReposStore
-from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.beads import matchers as beadlint
 from taskloop.domain.checks.inputs import dead_globs
 from taskloop.domain.lanes import pin

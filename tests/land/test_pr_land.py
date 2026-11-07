@@ -25,19 +25,19 @@ from taskloop.app.land.forge import peek
 from taskloop.app.land.gate import Problem, ProblemKind, mint
 from taskloop.app.land.pr_land import PrLand
 from taskloop.app.land.state import Land
-from taskloop.app.run.blocked import Blocked, blocked_for
-from taskloop.contracts import fence, scratch
-from taskloop.contracts.ask import Ask
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.config import load
-from taskloop.contracts.enums import AskClass, AskStatus
-from taskloop.contracts.forge import PR_NUMBER, PR_URL
-from taskloop.contracts.gitfacts import GitOutcome, LogRow
-from taskloop.contracts.ids import BeadId, TreeSha
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.runkey import BaseSha
+from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from taskloop.domain.asks import specs
 from taskloop.stores.runlog import RunLog
+from tlkernel import fence, scratch
+from tlkernel.ask import Ask
+from tlkernel.bead import Bead
+from tlkernel.config import load
+from tlkernel.enums import AskClass, AskStatus
+from tlkernel.forge import PR_NUMBER, PR_URL
+from tlkernel.gitfacts import GitOutcome, LogRow
+from tlkernel.ids import BeadId, TreeSha
+from tlkernel.kinds import Kind
+from tlkernel.runkey import BaseSha
 
 BEAD = BeadId("t-1")
 BRANCH = "task/t-1"

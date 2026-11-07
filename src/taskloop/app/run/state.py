@@ -12,10 +12,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from taskloop.app.look.state import LOOK_FIELDS
-from taskloop.app.run.review_glue import review_of
-from taskloop.contracts import fence, wire
-from taskloop.contracts.checkpoint import (
+from tlkernel import fence, wire
+from tlkernel.checkpoint import (
     BriefSnap,
     Checkpoint,
     EndRec,
@@ -26,9 +24,12 @@ from taskloop.contracts.checkpoint import (
     StageProgress,
     WriterSession,
 )
-from taskloop.contracts.followups import FollowupOutbox
-from taskloop.contracts.plancheck import PlanData
-from taskloop.contracts.review import Unfiled
+from tlkernel.followups import FollowupOutbox
+from tlkernel.plancheck import PlanData
+from tlkernel.review import Unfiled
+
+from taskloop.app.look.state import LOOK_FIELDS
+from taskloop.app.run.review_glue import review_of
 from taskloop.domain.checks import trim
 from taskloop.domain.followups import FollowKey
 from taskloop.stores.api import AmendDoc

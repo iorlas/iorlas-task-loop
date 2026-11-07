@@ -1092,7 +1092,8 @@ CREATE TABLE kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL, stamp TEX
 | `attempt`, `lease(kind='run')` | the manifest's `heartbeat/pid/host/attempts` and `runlife.is_lost` (`tl/contracts/runlife.py:49-52`) |
 | `step` | the checkpoint cursor and `done.json` (journal slice S4, Part A section 4) |
 | `bead` | One cached bd listing per repo, gated by `.beads/last-touched`; full dashboard row in `body`, marker and health in `kv`. The indexer alone writes it; bd/Dolt remains authoritative. No file cache |
-| `wait` (Part A) | `parks/`, `pauses/`, `reexec/`, `runs/<run>/pause.json`, `reexec.json` |
+| `park` (asks) | `parks/` |
+| `wait` (Part A) | `pauses/`, `reexec/`, `runs/<run>/pause.json`, `reexec.json` |
 | `signal` (Part A) | `runs/<run>/owner-request.json` + lock |
 | `effect` (Part A) | `checkpoint.applied`, `landed/<bead>.json`, `followups/<bead>.json` |
 | `check_pass`, `check_round` | `results/**`, `base-red/`, `runs/<run>/engine-checks[.rN].json` (the logs stay files) |
@@ -1119,7 +1120,7 @@ CREATE TABLE kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL, stamp TEX
    Separately, the indexer remains the only writer of `bead`: one cached bd listing gated by `.beads/last-touched`,
    with the full typed dashboard row in `body`. Show and comments remain live bd calls; there is no file cache or second read path.
    Recovery through `tl doctor --reindex` restores backups and extracts state facts from retained engine logs; it does not revive deleted family readers.
-5. **Layer rule.** The dashboard may import only `taskloop.contracts` (`.importlinter:94-106`). So the schema, the row codecs and the
+5. **Layer rule.** The dashboard may import only `tlkernel` (`.importlinter:94-106`). So the schema, the row codecs and the
    read queries go in `tl/contracts/factorydb.py` (sqlite3 is not on that layer's ban list, `tl/contracts/ruff.toml`). The engine's writer
    thread and temporary indexer go in `tl/stores/` (contracts may not start threads, `tl/contracts/ruff.toml`).
 6. **Checkpointing.** Automatic (1000 pages). `tl doctor` runs `PRAGMA wal_checkpoint(TRUNCATE)`. A dashboard read transaction lasts one
@@ -1160,7 +1161,7 @@ These files are evidence and recovery input, never a second run-state resolution
   match the expected state facts. Log-reader fixtures cover rotation and retained tails without copying logs into the DB.
 
 **Phase 2: run state is the journal (Part A slices S1-S4, in the order of line 33).** The manifest becomes `run` + `attempt` +
-`lease`; parks, pauses and reexec become `wait`; the checkpoint becomes `step` + `effect`; owner requests become `signal`. These are the
+`lease`; parks become asks-owned `park` rows, pauses and reexec become `wait`; the checkpoint becomes `step` + `effect`; owner requests become `signal`. These are the
 journal's own slices. This section only adds that they write the same `run` row the dashboard reads, so there is no second projection.
 - Each family flips directly to row-only writes with CAS `rev`; delete its file writer, indexer slice and file reader in the same release.
   DB corrupt: the loop starts no new run (a `wait(kind=owner)` cannot be written either, so
@@ -1302,7 +1303,7 @@ Report the retained recovery window: `tl doctor --reindex` cannot reconstruct ev
 - Shelf or internal first: INTERNAL module first (`taskloop/durable/`), interface frozen and documented now. Rule of three, honestly: today there is one real consumer (task-loop pauses/parks/leases); delegate has its own lane holds and usage-limit unlock times (a second consumer in principle, not yet migrated) and the dashboard is a read-only third. Promote to a shelf package when delegate has actually switched one of its holds to it, not before; extracting earlier would freeze an interface from one user.
 
 ### Decision record 2026-11-03 (c): the store port IS the interface to our SQLite
-The durability module owns the logic (schedule / due / record_attempt / lease / reap / waiting). State comes in through ONE injected narrow `StatePort`: `read(key)`, `write(key, value, *, expect_rev=None)` (CAS), `scan(prefix)`, `transaction()` (context manager, short, no process or network call inside). Adapters: in-memory (tests), file (transition; wraps today's JsonStore), SQLite factory.db (in `taskloop/adapters/`). The module never imports `sqlite3` and never opens a path. Caveat: `contracts/factorydb.py` (DB-03) holds the schema and `open_rw/open_ro` because the dashboard may import only `taskloop.contracts`; it is the one place besides adapters allowed to import `sqlite3`.
+The durability module owns the logic (schedule / due / record_attempt / lease / reap / waiting). State comes in through ONE injected narrow `StatePort`: `read(key)`, `write(key, value, *, expect_rev=None)` (CAS), `scan(prefix)`, `transaction()` (context manager, short, no process or network call inside). Adapters: in-memory (tests), file (transition; wraps today's JsonStore), SQLite factory.db (in `taskloop/adapters/`). The module never imports `sqlite3` and never opens a path. Caveat: `contracts/factorydb.py` (DB-03) holds the schema and `open_rw/open_ro` because the dashboard may import only `tlkernel`; it is the one place besides adapters allowed to import `sqlite3`.
 Composability rule (for the agent guides): "Every module with state, time or IO takes it through a narrow port passed in (store, clock, spawner, forge, tasks); adapters implement ports; only adapters (and contracts/factorydb.py) import sqlite3/subprocess or open paths; domain code takes values and returns values."
 
 ### Decision record 2026-11-03 (d): SINGLE PATH

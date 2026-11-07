@@ -13,8 +13,8 @@ from support.narrow import must  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.app.loop.net import NetState  # noqa: E402
-from taskloop.contracts.looprows import LoopRows  # noqa: E402
 from taskloop.stores import call_state as cs  # noqa: E402
+from tlkernel.looprows import LoopRows  # noqa: E402
 
 KEY = ("write", 1, 0, 2)
 

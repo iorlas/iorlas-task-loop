@@ -5,14 +5,15 @@ import threading
 import time
 from typing import Any
 
+from tlkernel.ago import ago
+from tlkernel.loop import LoopState
+
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.loop import Loop, LoopArgs
 from taskloop.app.loop.queue import rank_ready
 from taskloop.app.loop.versions import Installs
 from taskloop.app.reconcile.loopwatch import absent_loop
-from taskloop.contracts.ago import ago
-from taskloop.contracts.loop import LoopState
 
 
 def cmd_next(env: LoopEnv, a: Any) -> int:

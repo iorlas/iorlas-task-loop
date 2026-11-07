@@ -6,10 +6,14 @@ run the owner observed; the engine acts on them at its next step boundary (stop 
 import threading
 from typing import Any, Final, assert_never
 
-from taskloop.contracts import factorydb, receipts, wire
-from taskloop.contracts.ask import Ask, AskAction
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.dash import (
+from taskloop_dash.api.looks import Looks
+from taskloop_dash.env import Env
+from taskloop_dash.readers.beads import Beads
+from taskloop_dash.readers.records import Records
+from tlkernel import factorydb, receipts, wire
+from tlkernel.ask import Ask, AskAction
+from tlkernel.askstore import AskStore
+from tlkernel.dash import (
     WRITES,
     AckReq,
     AnswerReq,
@@ -23,12 +27,8 @@ from taskloop.contracts.dash import (
     StickReq,
     StopReq,
 )
-from taskloop.contracts.ids import is_bead_id
-from taskloop.contracts.runlife import command_scope
-from taskloop_dash.api.looks import Looks
-from taskloop_dash.env import Env
-from taskloop_dash.readers.beads import Beads
-from taskloop_dash.readers.records import Records
+from tlkernel.ids import is_bead_id
+from tlkernel.runlife import command_scope
 
 Reply = tuple[int, dict[str, Any]]
 NO_PROJECT: Final = Result(ok=False, message="That project is not registered.")

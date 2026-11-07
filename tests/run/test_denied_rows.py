@@ -4,7 +4,7 @@ from support.argv_of import argv_of
 
 from taskloop.adapters.delegate_wire import denied_of
 from taskloop.app.pipeline.trace import ai_call
-from taskloop.contracts.delegate import RunRequest
+from tlkernel.delegate import RunRequest
 
 
 def test_a_denied_row_keeps_kind_and_reason_from_the_wire_to_the_trace():

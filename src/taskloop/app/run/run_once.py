@@ -4,26 +4,27 @@ import traceback
 from dataclasses import dataclass, field
 from typing import Any
 
+from tlkernel import fence
+from tlkernel.delegateport import Refusal
+from tlkernel.enums import AskClass, Step
+from tlkernel.envvars import EnvVar
+from tlkernel.kinds import Kind
+from tlkernel.locator import RunLocator
+from tlkernel.log import Beat
+from tlkernel.plancheck import PlanData, RoundState
+from tlkernel.run import RunState
+
 from taskloop.adapters import beadtools, ident
 from taskloop.adapters.deadline import DeadlineExpired, deadline
 from taskloop.app.land.gitcall import oneline
 from taskloop.app.pipeline import ended as stored_end
+from taskloop.app.pipeline import requests
 from taskloop.app.pipeline.finish import outcome as finished_outcome
 from taskloop.app.pipeline.finish import terminal_state
 from taskloop.app.release import reexec
-from taskloop.app.run import requests
 from taskloop.app.run.crash import parked_crash
 from taskloop.app.run.reload import Exec
 from taskloop.app.slots.lease import Lease
-from taskloop.contracts import fence
-from taskloop.contracts.delegateport import Refusal
-from taskloop.contracts.enums import AskClass, Step
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.log import Beat
-from taskloop.contracts.plancheck import PlanData, RoundState
-from taskloop.contracts.run import RunState
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.lanes import pin
@@ -171,7 +172,7 @@ class RunOnce:
             e.stage_tree = ""  # the stage's diff starts at the base now: the rebase moved what it was measured from
         if plan is None:  # a move here loses nothing: the new image reads the same checkpoint (or none) and plans
             e.reload.safe_point("plan")
-            plan, i, state = e.planner.plan(again=e.replan_first), 0, None
+            plan, i, state = e.planner.take(e.planner.plan(again=e.replan_first)), 0, None
         return plan, i, state
 
     def its_work(self) -> str:
@@ -226,7 +227,7 @@ class RunOnce:
         if replans > int(e.cfg.max_replans) + e.extra:
             raise e.planner.cap.blocked(f"stage {i + 1} stuck after {e.cfg.max_rounds} rounds. What failed: {e.stuck_why[:600]}")
         e.accepted = list[int]()
-        return e.planner.plan(again=True)
+        return e.planner.take(e.planner.plan(again=True))
 
     def close_out(self, hb: Lease, end: Ended) -> None:
         """The close, then the run's one terminal state, whatever the close did (a close that raises still leaves a state)."""

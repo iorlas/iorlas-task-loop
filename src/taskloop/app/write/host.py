@@ -3,20 +3,21 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel.asked import Asked
+from tlkernel.beadsport import Beads
+from tlkernel.checkpoint import Handoff as HandoffState
+from tlkernel.checkpoint import StageProgress, WriterSession
+from tlkernel.checks import CheckResult, CheckRun
+from tlkernel.config import EngineConfig
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId, TreeSha
+from tlkernel.paths import ConfigDir
+from tlkernel.plancheck import PlanCheck, PlanData, StageData
+from tlkernel.procport import Spawner
+from tlkernel.stagefacts import Narrate, RepoKey, StepBook
+from tlkernel.wire import Open
+
 from taskloop.app.write.state import WriteState
-from taskloop.contracts.asked import Asked
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.checkpoint import Handoff as HandoffState
-from taskloop.contracts.checkpoint import StageProgress, WriterSession
-from taskloop.contracts.checks import CheckResult, CheckRun
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId, TreeSha
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.plancheck import PlanCheck, PlanData, StageData
-from taskloop.contracts.procport import Spawner
-from taskloop.contracts.stagefacts import Narrate, RepoKey, StepBook
-from taskloop.contracts.wire import Open
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks.writer_split import WriterSplit
 from taskloop.domain.review.ledger import Ledger
@@ -285,13 +286,19 @@ class WritePorts(PreparePorts, Protocol):
     def comment(self, text: str) -> None: ...
 
 
+class AmendFlag(Protocol):
+    """The engine's `amend` (the plan stage's amendment context) as write reads it: whether work precedes the plan's first stage."""
+
+    amended: bool
+
+
 class WriteHost(WritePorts, Protocol):
     """Shared run position, state and hand-offs; write-owned memory stays in WriteState."""
 
     bead: BeadId
     at_stage: int
     stage_tree: str
-    amended: bool
+    amend: AmendFlag
     stuck_why: str
     last_run: CheckRun | None
     accepted_new: list[str]

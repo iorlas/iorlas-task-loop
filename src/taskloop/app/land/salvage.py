@@ -2,9 +2,10 @@
 
 from typing import Protocol
 
+from tlkernel.gitport import Git
+
 from taskloop.app.land.rebase import Rebase
 from taskloop.app.land.state import LandState
-from taskloop.contracts.gitport import Git
 from taskloop.stores.runlog import RunLog
 
 

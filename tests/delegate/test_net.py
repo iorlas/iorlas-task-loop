@@ -14,10 +14,16 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+import hermetic  # noqa: F401  (a home of its own for every test)
 import pytest
+import routing_support as support
 from any_agent import procs
 from any_agent.classify import Outcome
 from any_agent.drops import looks_dropped
+from support.case import Case
+from support.tmpdir import TemporaryDirectory
+from test_route import CFG, T, lanes, route
+
 from delegate.adapters import netprobe
 from delegate.app import env, harnesses, launch, net
 from delegate.app import roles as role_view
@@ -27,12 +33,6 @@ from delegate.contracts.history import RunRow
 from delegate.contracts.routing import BreakerPolicy
 from delegate.domain.health.ledger import HealthLedger, failure_fields
 from delegate.domain.lanes import profiles
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
-from test_route import CFG, T, lanes, route
 
 LANES = Path(__file__).resolve().parents[2] / "src" / "delegate" / "adapters"
 

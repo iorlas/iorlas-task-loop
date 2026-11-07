@@ -11,8 +11,8 @@ from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.release import flow
 from taskloop.app.release.shell import Abort
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitfacts import StatusRow
+from tlkernel.env import Env
+from tlkernel.gitfacts import StatusRow
 
 
 class SuiteOnce(Case):

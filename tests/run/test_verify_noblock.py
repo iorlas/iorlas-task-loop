@@ -19,9 +19,9 @@ from support.engine_case import engine
 from support.plans import BEAD, CLEAN, PLAN, WRITE, verdict
 
 from taskloop.app.review import verify_prompt as vp
-from taskloop.contracts import answers
-from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.prompts import common as cp
+from tlkernel import answers
+from tlkernel.plancheck import PlanData
 
 # lifesim-yxbb.7 and lifesim-fld.25.16: the engine files follow-up beads after the land
 YXBB_7 = {"what": "Follow-up beads for table, chairs, sink, plates and second bed: the engine files them from the plan's "

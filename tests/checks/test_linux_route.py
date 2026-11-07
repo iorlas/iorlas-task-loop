@@ -3,9 +3,9 @@ from unittest import mock
 
 from taskloop.app.checks.attempts import Attempts
 from taskloop.app.checks.linux import EXECUTOR_DOWN_RC, Remote
-from taskloop.contracts.checks import Check
-from taskloop.contracts.config import ExecutorConfig
-from taskloop.contracts.ids import CheckId
+from tlkernel.checks import Check
+from tlkernel.config import ExecutorConfig
+from tlkernel.ids import CheckId
 
 
 def test_without_an_executor_the_check_fails_loudly_and_does_not_run_here(workdir):

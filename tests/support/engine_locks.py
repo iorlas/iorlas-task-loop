@@ -4,7 +4,7 @@ from typing import Any
 
 from support import homes
 from taskloop.app.slots import engine_lock
-from taskloop.contracts.locks import EngineLock
+from tlkernel.locks import EngineLock
 
 
 def put_lock(wt: str | Path, f: dict[str, Any]) -> None:

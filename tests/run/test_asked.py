@@ -11,14 +11,14 @@ from support.narrow import must
 
 from taskloop.app.workers import asked, done_memo
 from taskloop.app.workers.call import Call
-from taskloop.contracts import wire
-from taskloop.contracts.asked import Fallback, SessionUpdate, Updates
-from taskloop.contracts.checkpoint import Checkpoint, RunState, WriterSession
-from taskloop.contracts.delegate import DelegateResult
-from taskloop.contracts.docrows import RowDocs
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import RunManifest
-from taskloop.contracts.runrows import RunRows
+from tlkernel import wire
+from tlkernel.asked import Fallback, SessionUpdate, Updates
+from tlkernel.checkpoint import Checkpoint, RunState, WriterSession
+from tlkernel.delegate import DelegateResult
+from tlkernel.docrows import RowDocs
+from tlkernel.paths import ConfigDir
+from tlkernel.run import RunManifest
+from tlkernel.runrows import RunRows
 
 
 def call(node="write", resume_key=True, writer_family=None):

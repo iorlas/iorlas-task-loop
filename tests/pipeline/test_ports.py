@@ -2,13 +2,13 @@
 from support.pipeline_ports import FakeAskRules, FakeBeadClosing, FakeFollowUps, FakeLandCleanup, FakeParkBook, FakeSlotting
 
 from taskloop.app.pipeline.ports import AskRules, BeadClosing, FollowUps, LandCleanup, ParkBook, Slotting
-from taskloop.contracts import fence
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.enums import AskClass, Outcome
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.parks import Park
 from taskloop.domain.asks.spec import AskSpec
+from tlkernel import fence
+from tlkernel.bead import Bead
+from tlkernel.enums import AskClass, Outcome
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.parks import Park
 
 
 def test_ask_rules():

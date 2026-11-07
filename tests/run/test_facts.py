@@ -7,8 +7,8 @@ import pytest
 from support.facts import fake_facts
 from support.host_conformance import missing
 
-from taskloop.contracts import stagefacts as rf
 from taskloop.stores.runports import RunPorts
+from tlkernel import stagefacts as rf
 
 PORT_PROTOCOLS = {
     "steps": rf.StepBook, "log": rf.Narrate, "checklog": rf.CheckLogPort, "checkpoints": rf.CheckpointsPort,

@@ -26,8 +26,8 @@ from taskloop.app.run import (
     engine,
 )
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId
 
 
 class EngineChecksTest(EngineTest):

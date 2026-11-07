@@ -4,15 +4,15 @@ import shlex
 from collections.abc import Sequence
 from typing import Final
 
-from taskloop.contracts.argv import FORM, argv_problems
-from taskloop.contracts.checksport import TreeProbe
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.plancheck import Adhoc, Ref
 from taskloop.domain.checks import produced
 from taskloop.domain.checks.cmd import matchers as sh
 from taskloop.domain.checks.names import norm
 from taskloop.domain.checks.planref import JUST_PLAIN_FLAGS, Plan, adhocs, plan_checks
 from taskloop.domain.matchers import clip
+from tlkernel.argv import FORM, argv_problems
+from tlkernel.checksport import TreeProbe
+from tlkernel.config import EngineConfig
+from tlkernel.plancheck import Adhoc, Ref
 
 GATE_ONLY_TEXT: Final = ("\n\nYour plan was sent back: these checks run a command that runs only in the gate at land (the engine "
                   "runs it once, on the rebased tree), never on a stage's uncommitted tree:\n%s\nRewrite them without "

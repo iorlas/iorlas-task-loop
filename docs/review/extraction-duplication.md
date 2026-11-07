@@ -95,7 +95,7 @@ FakeRepo; FakeRemote; testing.contract_suite(factory)
 
 **Shelf first:** no catalog package supplies strict versioned Python records. `lean-wire` is a TSV codec and `dom-schema` is HTML extraction. Create **any-record**, using existing **msgspec** for its msgspec backend and the existing dataclass codec for compatibility. Stdlib `dataclasses.asdict` alone cannot replace validation.
 
-**Copies:** `src/taskloop/contracts/wire.py:1-101` (**101**) and `_delegate/src/delegate/contracts/codec.py:1-229` (**229**). Both implement typed records, tags, aliases, scalar hooks, root versions and strict decoding. **M 330; D/R 0.** No app record declarations or goldens are credited.
+**Copies:** `packages/kernel/src/tlkernel/wire.py:1-101` (**101**) and `_delegate/src/delegate/contracts/codec.py:1-229` (**229**). Both implement typed records, tags, aliases, scalar hooks, root versions and strict decoding. **M 330; D/R 0.** No app record declarations or goldens are credited.
 
 **Differences / best base:** task-loop's msgspec backend hides more implementation; delegate's dataclass backend supplies frozen and mutable decorators, `ABSENT`, sorted set encoding and integer-preserving float decoding (`codec.py:172-195`). A forced msgspec rewrite is unnecessary for extraction. Package both existing backends first, then tender convergence against differential tests. App `Refused` presentation stays local.
 
@@ -122,7 +122,7 @@ StaleRecord(found, want); CodecError
 
 **Shelf first:** no Python-record schema package exists in the catalog. Create **record-schema**, composing C02; use msgspec's schema support only after its output passes the donor fixtures. Do not confuse `dom-schema` with JSON Schema generation.
 
-**Copies:** `src/taskloop/contracts/schema.py:1-147` (**147**) and `_delegate/src/delegate/contracts/schema.py:1-104` (**104**). They recursively construct record schemas and strict structured-output variants. Move generic tests/helpers from `tests/contracts/test_schema.py:31-39` (**9**) and `:83-117` (**35**), plus `tests/contracts/test_response_format.py:19-64` (**46**). **341 = M 237 + D 104**; **90 test lines** move.
+**Copies:** `packages/kernel/src/tlkernel/schema.py:1-147` (**147**) and `_delegate/src/delegate/contracts/schema.py:1-104` (**104**). They recursively construct record schemas and strict structured-output variants. Move generic tests/helpers from `tests/contracts/test_schema.py:31-39` (**9**) and `:83-117` (**35**), plus `tests/contracts/test_response_format.py:19-64` (**46**). **341 = M 237 + D 104**; **90 test lines** move.
 
 Task-loop is the richer base: TypedDict, aliases, annotations, `unstrict` and `prune`; delegate contributes dataclass field descriptions, omission sentinels and configurable tag names. Inspection must be a backend interface, not an import of either app. Existing walkers do not generally recurse through every `anyOf` shape; extraction must not silently fix that.
 
@@ -149,7 +149,7 @@ testing.strict_errors(schema); testing.nullable_errors(contract, sent)
 
 **Shelf first:** `atomic-io` already exports `atomic_write_bytes/text/json` at `_shelf/packages/atomic-io/src/atomic_io/__init__.py:21-79`; process-lock already provides exclusion. Neither owns typed document outcomes or transactions. Create **json-document** over those packages, not another atomic writer.
 
-**Copies / volume:** `src/taskloop/contracts/stores.py:44-120` (**77**); `_delegate/src/delegate/contracts/stores.py:61-65` (**5**), `:91-101` (**11**), `:183-190` (**8**); `src/taskloop_dash/tails.py:22-33` (**12**); generic tests `tests/contracts/test_sealed_read.py:18-42` (**25**). **138 = M 121 + D 17**, including 25 test lines.
+**Copies / volume:** `packages/kernel/src/tlkernel/stores.py:44-120` (**77**); `_delegate/src/delegate/contracts/stores.py:61-65` (**5**), `:91-101` (**11**), `:183-190` (**8**); `src/taskloop_dash/tails.py:22-33` (**12**); generic tests `tests/contracts/test_sealed_read.py:18-42` (**25**). **138 = M 121 + D 17**, including 25 test lines.
 
 These read and atomically replace documents, optionally under a read/modify/write lock. Task-loop's four-result reader is the best base. Delegate intentionally defaults damaged state after warnings; dashboard readers default to empty. Keep those caller choices. Delegate compact JSON/private modes differ from task-loop indent-1 writes. Inject encoding and error translation; keep retired-state warnings and profile selection in the app.
 
@@ -179,9 +179,9 @@ Document.transaction(*, lock, missing) -> ContextManager
 
 | Donor | Lines |
 | --- | ---: |
-| `src/taskloop/contracts/stores.py:123-168` | 46 |
+| `packages/kernel/src/tlkernel/stores.py:123-168` | 46 |
 | Same file `:212-224` | 13 |
-| `src/taskloop/contracts/rotating.py:1-21` | 21 |
+| `packages/kernel/src/tlkernel/rotating.py:1-21` | 21 |
 | `src/taskloop_dash/jsonl.py:14-62` | 49 |
 | `src/taskloop_dash/tails.py:36-51` | 16 |
 | `src/taskloop/adapters/applog.py:1-91` | 91 |
@@ -270,7 +270,7 @@ holder(path) -> Holder | None
 
 **Shelf first:** `http-cache` is a persistent conditional-HTTP cache and `llm-cache` stores completions; neither provides these local cache objects. `git-porcelain/real_cache.py` contains related file-signature machinery, but no suitable public general cache. Create **any-cache**, then let git-porcelain reconcile its internal implementation separately.
 
-**Donor:** `src/taskloop_dash/cache.py:1-72`, **M 72**. It owns bounded parsed-file caches and synchronized TTL values. Related reimplementations appear in `src/taskloop/contracts/locator.py:104-119` and `src/taskloop/adapters/gitmemo.py:1-100`; the latter is already counted in C01 and neither earns additional C08 credit.
+**Donor:** `src/taskloop_dash/cache.py:1-72`, **M 72**. It owns bounded parsed-file caches and synchronized TTL values. Related reimplementations appear in `packages/kernel/src/tlkernel/locator.py:104-119` and `src/taskloop/adapters/gitmemo.py:1-100`; the latter is already counted in C01 and neither earns additional C08 credit.
 
 Dashboard is the base for the general API. It uses `(mtime, size)`; locator uses nanoseconds; git caches use inode/device and dependency sets. Signature selection must be explicit. Builds currently happen outside the mutex, so concurrent duplicate builds are possible; extraction must not silently promise single-flight behavior.
 
@@ -344,7 +344,7 @@ human_count(value, *, style) -> str
 
 **Shelf first:** `_shelf/packages/app-dirs/src/app_dirs/__init__.py:36-77` exports config/state/cache roots and `plugin_data_dir(env)`. It does not derive a plugin's own data directory from its installed cache path. `plugin-surface` loads manifests, not installed releases. Evolve **app-dirs** for cache-path facts and create a small **numeric-version** primitive; do not create a factory self-update service.
 
-**Copies / volume:** `src/taskloop/contracts/ids.py:87-106` (**20**), `src/taskloop/app/loop/versions.py:19-22` (**4**), `:31-42` (**12**), `_delegate/src/delegate/app/env.py:33-41` (**9**), and `src/taskloop/contracts/paths.py:10-12` (**3**). **48 = M 41 + D 7**. These parse dotted numeric versions, fingerprint a specified file set and derive installation/config roots.
+**Copies / volume:** `packages/kernel/src/tlkernel/ids.py:87-106` (**20**), `src/taskloop/app/loop/versions.py:19-22` (**4**), `:31-42` (**12**), `_delegate/src/delegate/app/env.py:33-41` (**9**), and `packages/kernel/src/tlkernel/paths.py:10-12` (**3**). **48 = M 41 + D 7**. These parse dotted numeric versions, fingerprint a specified file set and derive installation/config roots.
 
 Use `Version` as the numeric base, preserving its ASCII-only validation; `version_key` currently accepts a broader `isdigit` grammar. Delegate must derive its own plugin data path and intentionally ignores ambient `CLAUDE_PLUGIN_DATA`. Task-loop accepts relative XDG roots; shelf ignores them. Those are adapter compatibility requirements, not permission to choose a new state directory. File lists/patterns are app parameters to the fingerprint operation.
 
@@ -370,7 +370,7 @@ config_dir(app, *, env, home, compatibility=None) -> Path
 
 **Shelf first:** no catalog ULID package exists. `any-file` slugging is not an opaque time-sortable identifier. Create **sortable-id** from the actual implementation; tender **python-ulid** only after compatibility tests, not from remembered API claims.
 
-**Donor:** `src/taskloop/contracts/ids.py:31-84` (**54**) and `tests/contracts/test_wire.py:202-208` (**7**): **M 61**. It generates/parses 26-character Crockford IDs from milliseconds and 80 entropy bits. This corrects the first pass's claim that no manual ULID existed. Delegate's UUID uses (`app/run.py:101,184`) name different identities and must not change format just to create a second consumer.
+**Donor:** `packages/kernel/src/tlkernel/ids.py:31-84` (**54**) and `tests/contracts/test_wire.py:202-208` (**7**): **M 61**. It generates/parses 26-character Crockford IDs from milliseconds and 80 entropy bits. This corrects the first pass's claim that no manual ULID existed. Delegate's UUID uses (`app/run.py:101,184`) name different identities and must not change format just to create a second consumer.
 
 ```python
 SortableId.new(now_seconds, entropy=None) -> SortableId
@@ -646,13 +646,13 @@ Required holdouts: quoted text does not become an executed command; coordinator 
 
 ### C24 — ❌ Refuse the factory path catalog
 
-`src/taskloop/contracts/paths.py:15-288`, **274 retained lines**, defines state locations for runs, slots, asks and owner pins. C11 extracts root facts; app-dirs has `config_dir/state_dir/cache_dir` but cannot decide these filenames. The rule is **run/slot/bead records have distinct persistent identities, and the owner's pin has a distinct writer**. Keep `ConfigDir`, `RunFiles`, `RepoDirs` app-owned. Task-loop and its dashboard are one consumer.
+`packages/kernel/src/tlkernel/paths.py:15-288`, **274 retained lines**, defines state locations for runs, slots, asks and owner pins. C11 extracts root facts; app-dirs has `config_dir/state_dir/cache_dir` but cannot decide these filenames. The rule is **run/slot/bead records have distinct persistent identities, and the owner's pin has a distinct writer**. Keep `ConfigDir`, `RunFiles`, `RepoDirs` app-owned. Task-loop and its dashboard are one consumer.
 
 Required holdouts: exact legacy locations; read-only lookup creates nothing; pin/owner-request ownership remains distinct. **M/D/R 0.** Adopt C11 below these classes, without moving the catalog into shelf.
 
 ### C25 — ❌ Refuse engine profile rules and their schema as reusable configuration
 
-`src/taskloop/contracts/config.py:1-411`, **411 retained lines**, defines and validates engine profiles. Msgspec/any-record supply decoding, settings-base supplies plumbing, but cannot decide **checks read only within their lane, resource needs must be declared, IDs must not collide after environment mangling, and container checks require a valid container configuration**. Retain `load(data, say_to)`, `graph_problem(checks)` and `resource_problem(engine)` locally. Consumers are task-loop and its profile tools, not delegate's unrelated lane settings.
+`packages/kernel/src/tlkernel/config.py:1-411`, **411 retained lines**, defines and validates engine profiles. Msgspec/any-record supply decoding, settings-base supplies plumbing, but cannot decide **checks read only within their lane, resource needs must be declared, IDs must not collide after environment mangling, and container checks require a valid container configuration**. Retain `load(data, say_to)`, `graph_problem(checks)` and `resource_problem(engine)` locally. Consumers are task-loop and its profile tools, not delegate's unrelated lane settings.
 
 Required holdouts: retired keys warn without mutation; invalid graph/resource/container settings refuse before execution; committed profile precedence and diagnostic paths remain exact. **M/D/R 0.** C02 changes the codec dependency and C18 supplies a generic overlay where actually needed; neither moves these policy rules. Delegate's enabled/offered lane profile decisions and `app/usage.py` spend/out thresholds are likewise retained, without additional refusal line credit.
 
@@ -682,12 +682,12 @@ For these refusal rows, target is the current app, public interface is the exist
 | 16 | `tests/land/test_race_invariants.py:1-12` | 640 | ❌ A bead is not claimed/run twice; land and claim races retain their fences. |
 | 17 | `tests/contracts/samples.py:1-12` | 600 | ❌ Filled instances of application record families; synthetic codec fixtures move instead. |
 | 18 | `tests/e2e/test_release.py:1-12` | 570 | ❌ Release-clone ownership, suite eligibility and launcher reexec behavior. |
-| 19 | `src/taskloop/contracts/dash.py:1-12` | 562 | ❌ Wire projection of factory facts and owner writes, not HTTP substrate. |
+| 19 | `packages/kernel/src/tlkernel/dash.py:1-12` | 562 | ❌ Wire projection of factory facts and owner writes, not HTTP substrate. |
 | 20 | `tests/land/test_stack.py:1-12` | 549 | ❌ Ordered branch/PR landing and stop-on-first-failure receipt rules. |
 | 21 | `tests/plan/test_engine_plan.py:1-12` | 546 | ❌ Planning/replanning decisions and accepted plans. |
 | 22 | `tests/support/dash_fixtures.py:1-12` | 527 | ❌ Converts the domain board scenarios to its contract records. |
 | 23 | `tests/fixtures/delegate3/skills/delegate/contract.json:1-12` | 525 | ❌ Frozen external worker-contract compatibility; it is not a duplicate to delete with the current contract. |
-| 24 | `src/taskloop/contracts/ports.py:1-12` | 511 | ❌ Factory requests/results and coordinator authority; generic backend protocols replace implementation below it. |
+| 24 | `packages/kernel/src/tlkernel/ports.py:1-12` | 511 | ❌ Factory requests/results and coordinator authority; generic backend protocols replace implementation below it. |
 | 25 | `tests/loop/real/test_loop_more.py:1-12` | 495 | ❌ Loop network/health/stop/self-update outcomes and owner handoff. |
 
 These total **23,016 lines**. Other specifically counted refusals C22–C25 total **1,108**, giving **24,124 refused lines**. `gate_rules.py` falls to 196 after C17 and `dash_check.html` to 491 after C21, so neither belongs in this largest-25 list. The table does not label the rest of the repository as domain: **104,310 lines remain unadjudicated at extraction-span precision**. Inventorying and searching them is not evidence that they can or cannot move. A different architectural lens must account for them independently; do not add this review's ranges to another lens without overlap removal.

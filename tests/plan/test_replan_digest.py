@@ -10,7 +10,7 @@ import support.paths  # noqa: F401
 
 from taskloop.adapters.git import RealGit
 from taskloop.app.plan.prompt import REPLAN_CALLS, PlanPrompt
-from taskloop.contracts.env import snapshot
+from tlkernel.env import snapshot
 
 
 class StatGit(RealGit):

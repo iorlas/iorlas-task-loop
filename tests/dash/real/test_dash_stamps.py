@@ -13,9 +13,9 @@ from dash import test_dash_api as fixtures
 from taskloop.adapters.ident import hostname
 from taskloop.app.doctor import profiles
 from taskloop.app.launch import dash_ports
-from taskloop.contracts.env import Env as ProcessEnv
 from taskloop_dash.index import Indexer
 from taskloop_dash.views import snapshot
+from tlkernel.env import Env as ProcessEnv
 
 
 class SnapshotStamps(fixtures.ApiFixture):

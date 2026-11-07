@@ -10,11 +10,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from tlkernel import factorydb, wire
+from tlkernel.paths import ConfigDir
+from tlkernel.run import CallIdentity, DoneEntry
+from tlkernel.runrows import RunRows
+
 from taskloop.app.workers import worker_identity
-from taskloop.contracts import factorydb, wire
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import CallIdentity, DoneEntry
-from taskloop.contracts.runrows import RunRows
 
 
 def _rows(run_dir: Path) -> RunRows:

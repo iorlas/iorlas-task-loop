@@ -18,5 +18,5 @@ def test_a_change_in_the_contracts_changes_the_version(tmp_path: Path) -> None:
 
 
 def test_the_default_version_covers_the_dash_and_the_contracts() -> None:
-    assert dash.CONTRACTS.name == "contracts"
+    assert dash.CONTRACTS.name == "tlkernel"
     assert dash.code_version() != dash.code_version(dash.PACKAGE)

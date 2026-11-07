@@ -9,9 +9,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from taskloop.contracts import paths
-from taskloop.contracts.loop import BadVersion, BadVersions
-from taskloop.contracts.rowstores import BadVersionStore
+from tlkernel import paths
+from tlkernel.loop import BadVersion, BadVersions
+from tlkernel.rowstores import BadVersionStore
 
 CORE = ("tl.py",)
 

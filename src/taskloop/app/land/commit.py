@@ -1,11 +1,12 @@
 """The land's one commit per task, titled after the bead: earlier runs' wip commits are folded in."""
 from typing import Protocol
 
+from tlkernel.bead import Bead
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId
+
 from taskloop.app.land.gitcall import must
 from taskloop.app.land.parts import StageCheckout, Strays
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId
 
 
 class CommitHost(Protocol):

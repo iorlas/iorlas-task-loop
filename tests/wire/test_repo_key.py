@@ -5,9 +5,9 @@ from support import homes
 
 from taskloop.app.launch import loop as wloop
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.loop import LoopState
+from tlkernel.ids import loop_key
+from tlkernel.locator import RunLocator
+from tlkernel.loop import LoopState
 
 
 class TestRepoKey:

@@ -17,11 +17,11 @@ import support.paths  # noqa: E402, F401
 
 # isort: split
 
-from taskloop.contracts import factorydb  # noqa: E402
-from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop_dash import bind, serve  # noqa: E402
 from taskloop_dash.cli import dash as dash_cli  # noqa: E402
 from taskloop_dash.env import Env, Ports  # noqa: E402
+from tlkernel import factorydb  # noqa: E402
+from tlkernel.env import snapshot  # noqa: E402
 
 
 def free_port():

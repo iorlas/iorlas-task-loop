@@ -8,9 +8,9 @@ from support.cfgs import cfg_with
 from taskloop.app.checks import runner
 from taskloop.app.checks.clean import guard_slot
 from taskloop.app.checks.host import CheckFault
-from taskloop.contracts.checks import CheckFaultKind
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.ids import TreeSha
+from tlkernel.checks import CheckFaultKind
+from tlkernel.config import EngineConfig
+from tlkernel.ids import TreeSha
 
 
 def host(ignored: list[str], cfg: EngineConfig | None = None, tree: str = "t", head_tree: str = "t") -> SimpleNamespace:

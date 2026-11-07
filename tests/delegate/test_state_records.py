@@ -10,11 +10,21 @@ import time
 from pathlib import Path
 from unittest import mock
 
+import hermetic  # noqa: F401  (a home of its own for every test)
 import pytest
+import routing_support as support
 from any_agent import reset_parse
 from any_agent.harnesses.codex import CodexHarness
 from any_agent.protocol import LaunchSpec
 from any_agent.supervisor import RunHooks, Supervisor
+from run_support import short_limits
+from support import fake_worker
+from support.case import Case
+from support.fake_clock import SteppingClock
+from support.fake_worker import Err, Exit, Jump
+from support.tmpdir import TemporaryDirectory
+from test_route import CFG, T, lanes, need, no_reader, route
+
 from delegate.app import env, harnesses, launch, usage
 from delegate.app.fleet import apply_health
 from delegate.app.publish import LiveSink
@@ -22,16 +32,6 @@ from delegate.contracts import codec, stores
 from delegate.contracts import history as hist
 from delegate.domain.health import ledger as health_ledger
 from delegate.domain.lanes.lane import Lane
-from support import fake_worker
-from support.case import Case
-from support.fake_clock import SteppingClock
-from support.fake_worker import Err, Exit, Jump
-from support.tmpdir import TemporaryDirectory
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
-from run_support import short_limits
-from test_route import CFG, T, lanes, need, no_reader, route
 
 
 class Breaker(Case):

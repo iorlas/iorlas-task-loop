@@ -4,24 +4,29 @@ import threading
 from functools import cached_property
 from typing import Any
 
+from tlkernel.kinds import Kind
+
 from taskloop.adapters import childenv, slotcheck
 from taskloop.adapters.agent import new_live
 from taskloop.adapters.check_probe import PathProbe
+from taskloop.app.asks.closing import ClosingTrust
+from taskloop.app.land.closing import LandHistory
+from taskloop.app.pipeline.reflect import Reflector
+from taskloop.app.pipeline.requests import OwnerRequests
+from taskloop.app.pipeline.resume import Resume, ResumeHost
+from taskloop.app.pipeline.waits import Waits
 from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.run.bead_env import bead_env
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.run.records import Records
-from taskloop.app.run.reflect import Reflector
 from taskloop.app.run.reload import Reload
-from taskloop.app.run.requests import OwnerRequests
-from taskloop.app.run.resume import Resume
+from taskloop.app.run.review_glue import ReviewGlue
 from taskloop.app.run.shared import Shared
 from taskloop.app.run.shell import Shell
 from taskloop.app.run.stage_checks import StageChecks
+from taskloop.app.run.state import state_names
 from taskloop.app.run.stuck import StuckTick
-from taskloop.app.run.waits import Waits
 from taskloop.app.workers.delegation import Delegation
-from taskloop.contracts.kinds import Kind
 
 
 class RunParts(Plumbing):
@@ -33,11 +38,16 @@ class RunParts(Plumbing):
     shell = cached_property(Shell)
     reload = cached_property(Reload)
     records = cached_property(Records)
-    reflector = cached_property(Reflector)
     shared = cached_property(Shared)
-    resume = cached_property(Resume)
     stuck = cached_property(StuckTick)
     requests = cached_property(OwnerRequests)
+
+    @cached_property
+    def resume[T](self: ResumeHost[T]) -> Resume[T]: return Resume(self, LandHistory(self.git), ReviewGlue(self), state_names())
+
+    @cached_property
+    def reflector(self) -> Reflector:
+        return Reflector(self, ClosingTrust())
 
     def sh(self, cmd: Any, timeout: float = 3600, check: bool = False, save: Any = None, env: Any = None, pin: bool = False,
            what: str = "command", cwd: Any = None, stop: threading.Event | None = None) -> tuple[int, str]:

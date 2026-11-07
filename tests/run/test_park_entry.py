@@ -19,10 +19,10 @@ from support.who import who
 from taskloop.app.asks import parks
 from taskloop.app.run import entry
 from taskloop.app.run import running as wrunning
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.parks import ParkStore
 from taskloop.domain.beads import park
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.parks import ParkStore
 
 BEAD = {"id": "t-1", "title": "Add f", "status": "open", "description": "Add f.", "acceptance_criteria": "- f.txt exists", "metadata": {}}
 

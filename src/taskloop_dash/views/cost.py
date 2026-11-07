@@ -8,10 +8,10 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Final
 
-from taskloop.contracts.dashcost import CostPage, CostRow
 from taskloop_dash.views import phases
 from taskloop_dash.views.runfacts import Call, Run
 from taskloop_dash.views.world import World
+from tlkernel.dashcost import CostPage, CostRow
 
 WINDOWS: Final = {"24h": 86400.0, "7d": 7 * 86400.0}
 

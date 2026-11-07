@@ -14,16 +14,17 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from tlkernel import wire
+from tlkernel.beadsport import BdFailure, BeadQuery, NewBead
+from tlkernel.env import Env
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId, is_bead_id
+from tlkernel.paths import ConfigDir
+from tlkernel.procport import Spawner
+from tlkernel.rowstores import ReflectStateStore, ReposStore
+from tlkernel.snapshots import ReflectState
+
 from taskloop.adapters import beadtools, childenv, ident, landlock
-from taskloop.contracts import wire
-from taskloop.contracts.beadsport import BdFailure, BeadQuery, NewBead
-from taskloop.contracts.env import Env
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId, is_bead_id
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.procport import Spawner
-from taskloop.contracts.rowstores import ReflectStateStore, ReposStore
-from taskloop.contracts.snapshots import ReflectState
 from taskloop.domain.lifecycle import matchers
 from taskloop.domain.report.reflect import (
     OWNERS,

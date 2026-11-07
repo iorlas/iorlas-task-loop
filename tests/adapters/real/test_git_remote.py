@@ -12,9 +12,9 @@ from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import git_ops
 from taskloop.adapters.git import RealGit
-from taskloop.contracts.env import Env, snapshot
-from taskloop.contracts.slots import GitReadFailure, RefRace, SlotGitError
 from taskloop.domain.land.matchers import Push
+from tlkernel.env import Env, snapshot
+from tlkernel.slots import GitReadFailure, RefRace, SlotGitError
 
 
 class RealGitRemoteTest(Case):

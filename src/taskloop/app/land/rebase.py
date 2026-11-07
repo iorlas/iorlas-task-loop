@@ -3,10 +3,11 @@ else the task starts again on the base (land/restart.py)."""
 from collections.abc import Callable
 from typing import Protocol
 
+from tlkernel.checkpoint import Checkpoint, PlanStep
+from tlkernel.gitport import Git
+from tlkernel.slots import SlotGitError
+
 from taskloop.app.land.state import LandState
-from taskloop.contracts.checkpoint import Checkpoint, PlanStep
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.slots import SlotGitError
 from taskloop.stores.runlog import RunLog
 
 MAX_REBASE_RESETS = 2  # the plan count starts again at most this often per bead: a red gate for a real reason must still reach the limit

@@ -3,13 +3,14 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel import plancheck
+from tlkernel.checks import CheckRun
+from tlkernel.plancheck import PlanData, StageData
+
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.land import verified
 from taskloop.app.land.gate import Problem, ProblemKind
 from taskloop.app.land.parts import BeginSteps, CaseChecks
-from taskloop.contracts import plancheck
-from taskloop.contracts.checks import CheckRun
-from taskloop.contracts.plancheck import PlanData, StageData
 
 
 class RecheckStageChecks(Protocol):

@@ -8,15 +8,16 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final
 
+from tlkernel import wire
+from tlkernel.ask import Ask, AskAction
+from tlkernel.askstore import AskStore
+from tlkernel.beadsport import BdFailure, Beads
+from tlkernel.ids import BeadId, parse_bead_id
+from tlkernel.lookrows import LookRows
+from tlkernel.paths import ConfigDir
+
 from taskloop.app.asks import intake, sweeps
-from taskloop.app.run import requests
-from taskloop.contracts import wire
-from taskloop.contracts.ask import Ask, AskAction
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.beadsport import BdFailure, Beads
-from taskloop.contracts.ids import BeadId, parse_bead_id
-from taskloop.contracts.lookrows import LookRows
-from taskloop.contracts.paths import ConfigDir
+from taskloop.app.asks import owner_verbs as requests
 
 Out = Callable[[str], None]
 FLAG_ACTIONS: Final[tuple[AskAction, ...]] = ("rerun", "confirm", "split")  # `tl answer --rerun|--confirm|--split`

@@ -1,6 +1,6 @@
 """What every dash module shares: where the state lives, the caches, the clock, and the few facts only the launcher can supply.
 
-The dash imports `taskloop.contracts` and nothing else of the main package. A fact that lives in engine code (slot capacity, bd, the
+The dash imports `tlkernel` and nothing else of the main package. A fact that lives in engine code (slot capacity, bd, the
 owner's writes) comes in as a callable on `Ports`, made by the launcher; a test passes fakes."""
 
 import time
@@ -9,18 +9,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from taskloop.contracts.ask import Ask, AskAction
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.dash import Result
-from taskloop.contracts.dashhealth import Score
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.locks import LockRecord
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import AnswerAsk
-from taskloop.contracts.slottable import SlotSource
 from taskloop_dash.cache import FileCache, TtlCache
 from taskloop_dash.readers import dbruns
 from taskloop_dash.tails import Tails
+from tlkernel.ask import Ask, AskAction
+from tlkernel.beadsport import Beads
+from tlkernel.dash import Result
+from tlkernel.dashhealth import Score
+from tlkernel.ids import BeadId
+from tlkernel.locks import LockRecord
+from tlkernel.paths import ConfigDir
+from tlkernel.ports import AnswerAsk
+from tlkernel.slottable import SlotSource
 
 Bead = dict[str, Any]
 def _no_store(repo: str) -> Beads:
@@ -102,7 +102,7 @@ class Ports:
     look: Callable[[str, str, str, str, str], Result] = _no_look  # (repo, look item id, good|redo|undo, note, look bead or ""): Intake.look
     cause: Callable[[str, BeadId, str, str], Result] = _no_cause  # (repo, bead, run or ask id, cause): Intake.cause
     ack: Callable[[str, BeadId, str, bool], Result] = _no_ack  # (repo, bead, run id, seen): Intake.ack
-    park: Callable[[str, BeadId, str], Result] = _no_run_verb  # (repo, bead, observed run id): app/run/requests.OwnerVerbs.park
+    park: Callable[[str, BeadId, str], Result] = _no_run_verb  # (repo, bead, observed run id): app/asks/owner_verbs.OwnerVerbs.park
     stop: Callable[[str, BeadId, str], Result] = _no_run_verb  # (repo, bead, observed run id): OwnerVerbs.stop
     note: Callable[[str, BeadId, str, str], Result] = _no_note  # (repo, bead, observed run id, text): OwnerVerbs.note
     stick: Callable[[str, str, str, str], Result] = _no_stick  # (repo, ask id, outcome, text): Intake.stick

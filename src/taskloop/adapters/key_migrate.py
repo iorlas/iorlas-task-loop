@@ -8,10 +8,10 @@ import re
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.slots import git_probe
+from tlkernel.gitport import Git
+from tlkernel.ids import loop_key
+from tlkernel.paths import ConfigDir
+from tlkernel.slots import git_probe
 
 OLD_KEY = re.compile(r".+-[0-9a-f]{10}|[0-9a-f]{12}")  # <name>-<10 hex of the url>; 12 hex of the common dir
 SPLIT = ("slots", "slot-state", "decisions")  # folders that hold one entry per slot or decision: merged entry by entry

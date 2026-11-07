@@ -5,7 +5,7 @@ from pathlib import Path
 import support.paths  # noqa: F401
 
 from taskloop.app.parts import STAGE_PARTS
-from taskloop.contracts import dbparts
+from tlkernel import dbparts
 
 GOLDEN = Path(__file__).parent / "golden" / "parts.json"
 HINT = "bump the part's version, add its step, then run `uv run python dev/part_golden.py`"

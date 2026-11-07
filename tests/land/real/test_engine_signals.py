@@ -20,7 +20,7 @@ from support.waits import until
 
 # isort: split
 from taskloop.app.run import engine
-from taskloop.contracts.kinds import Kind
+from tlkernel.kinds import Kind
 
 
 class EngineLandSignals(EngineTest):

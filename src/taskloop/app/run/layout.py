@@ -10,17 +10,18 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 
+from tlkernel import factorydb, rundocs
+from tlkernel.env import Env
+from tlkernel.envvars import EnvVar
+from tlkernel.gitport import Git
+from tlkernel.ids import loop_key
+from tlkernel.locator import RunBundle, RunLocator
+from tlkernel.paths import TASK_EXCLUDE, ConfigDir
+from tlkernel.run import RunFinish
+from tlkernel.signalrows import SignalRows
+from tlkernel.slots import git_probe
+
 from taskloop.adapters import locks
-from taskloop.contracts import factorydb, rundocs
-from taskloop.contracts.env import Env
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.locator import RunBundle, RunLocator
-from taskloop.contracts.paths import TASK_EXCLUDE, ConfigDir
-from taskloop.contracts.run import RunFinish
-from taskloop.contracts.signalrows import SignalRows
-from taskloop.contracts.slots import git_probe
 
 
 def newest_write(path: Path) -> float:

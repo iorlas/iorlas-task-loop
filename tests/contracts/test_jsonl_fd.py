@@ -4,7 +4,7 @@ import gc
 import os
 from pathlib import Path
 
-from taskloop.contracts.rotating import RotatingJsonl
+from tlkernel.rotating import RotatingJsonl
 
 SCAN = 1024
 

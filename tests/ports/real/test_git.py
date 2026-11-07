@@ -14,7 +14,7 @@ from ports.git_contract import GitContract, contract
 from ports.git_contract_land import LandContract
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.git_ops import LandGit
-from taskloop.contracts.env import snapshot
+from tlkernel.env import snapshot
 
 
 @contract

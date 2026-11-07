@@ -6,8 +6,8 @@ import pytest
 import support.paths  # noqa: F401
 
 from taskloop.app.doctor import env_checks as ec
-from taskloop.contracts.beadsport import BdError, BdFailure
-from taskloop.contracts.procport import Ran
+from tlkernel.beadsport import BdError, BdFailure
+from tlkernel.procport import Ran
 
 
 class Runs:

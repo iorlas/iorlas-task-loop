@@ -226,12 +226,12 @@ class Script:
         return self.started
 
     def survivors(self, res=None):
-        from taskloop.contracts.delegateport import survivors_of  # noqa: PLC0415  (this file also runs as route.py in a child: src/ is not on its path)
+        from tlkernel.delegateport import survivors_of  # noqa: PLC0415  (this file also runs as route.py in a child: src/ is not on its path)
         return survivors_of(self.stop, res)
 
     def node_of(self, schema):
         # imported here: this file also runs as route.py in a child process, where src/ is not on sys.path (only in-process calls get here)
-        from taskloop.contracts import answers  # noqa: PLC0415
+        from tlkernel import answers  # noqa: PLC0415
         if not Script._sent:  # the sent schemas are constants: built once per process, not once per call
             Script._sent = [(k, [answers.sent_schema(k), answers.sent_schema(k, True)]) for k in answers.NODES]
         return next(k for k, sent in Script._sent if schema in sent)

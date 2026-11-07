@@ -3,9 +3,9 @@ or the last release gate on main failed."""
 
 from typing import Protocol
 
-from taskloop.contracts.gitfacts import LogRow
-from taskloop.contracts.slots import SlotGitError
-from taskloop.contracts.snapshots import ReleaseResult
+from tlkernel.gitfacts import LogRow
+from tlkernel.slots import SlotGitError
+from tlkernel.snapshots import ReleaseResult
 
 
 class Logs(Protocol):

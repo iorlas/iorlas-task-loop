@@ -3,8 +3,9 @@
 from collections.abc import Callable
 from typing import Protocol
 
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.slots import SlotGitError
+from tlkernel.gitport import Git
+from tlkernel.slots import SlotGitError
+
 from taskloop.domain.matchers import NetText
 
 

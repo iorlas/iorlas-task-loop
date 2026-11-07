@@ -6,6 +6,16 @@ import argparse
 from contextlib import ExitStack
 from pathlib import Path
 
+from tlkernel import inputsets
+from tlkernel.argv import text_of
+from tlkernel.checks import CheckResult, Phase
+from tlkernel.config import CheckSpec, EngineConfig
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+from tlkernel.ids import TreeSha
+from tlkernel.procport import Spawner
+
 from taskloop.adapters import profile_at
 from taskloop.app.checks import authorization
 from taskloop.app.checks.runner import Checker
@@ -13,15 +23,6 @@ from taskloop.app.launch.check_host import CliHost
 from taskloop.app.launch.staged import staged_tree
 from taskloop.app.run.stage_run import StageRun, stage_run
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import inputsets
-from taskloop.contracts.argv import text_of
-from taskloop.contracts.checks import CheckResult, Phase
-from taskloop.contracts.config import CheckSpec, EngineConfig
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.procport import Spawner
 from taskloop.domain.checks.specs import gate_items, repo_check
 
 TAIL_LINES = 15

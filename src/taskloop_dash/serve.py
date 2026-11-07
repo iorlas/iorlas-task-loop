@@ -10,10 +10,6 @@ from collections.abc import Sequence
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
-from taskloop.contracts import factorydb
-from taskloop.contracts.env import Env as ProcessEnv
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.factorydb import declare_parts
 from taskloop_dash import bind
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env
@@ -21,6 +17,10 @@ from taskloop_dash.http import make_handler
 from taskloop_dash.index.worker import Worker
 from taskloop_dash.needs import NEEDS
 from taskloop_dash.parts import DASH_PARTS
+from tlkernel import factorydb
+from tlkernel.env import Env as ProcessEnv
+from tlkernel.envvars import EnvVar
+from tlkernel.factorydb import declare_parts
 
 IDLE_CHECK = 300  # seconds between idle checks
 STATIC = Path(__file__).resolve().parent / "static"

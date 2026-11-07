@@ -5,7 +5,7 @@ from collections import Counter
 from collections.abc import Sequence
 from typing import TypedDict
 
-from taskloop.contracts.log import EngineLog, LandTry
+from tlkernel.log import EngineLog, LandTry
 
 
 class LandStats(TypedDict):

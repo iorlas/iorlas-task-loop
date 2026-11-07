@@ -6,7 +6,7 @@ import os
 from collections.abc import Callable
 from typing import Any
 
-from taskloop.contracts import log
+from tlkernel import log
 
 CHUNK = 1 << 20  # bytes read from one file per call; a long backlog arrives over several polls
 

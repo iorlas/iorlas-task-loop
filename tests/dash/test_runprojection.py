@@ -1,6 +1,6 @@
 """Run projection failures belong to the dashboard."""
-from taskloop.contracts import factorydb
 from taskloop_dash.readers import runprojection
+from tlkernel import factorydb
 
 
 def test_reader_names_schema_errors_as_database_unavailable(tmp_path):

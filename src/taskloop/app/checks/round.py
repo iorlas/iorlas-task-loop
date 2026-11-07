@@ -2,7 +2,7 @@
 import threading
 from dataclasses import dataclass, field
 
-from taskloop.contracts.checks import CheckResult, Duration
+from tlkernel.checks import CheckResult, Duration
 
 
 class Cancel(threading.Event):

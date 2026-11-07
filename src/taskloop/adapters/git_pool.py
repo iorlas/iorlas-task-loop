@@ -10,7 +10,7 @@ from git_porcelain import errors
 from git_porcelain.real import Done, RealRepo
 
 from taskloop.adapters.git_base import NOT_A_REPO, classify, error_line
-from taskloop.contracts.slots import (
+from tlkernel.slots import (
     BranchPinned,
     DirtyTree,
     GitReadFailure,

@@ -1,4 +1,4 @@
-"""One filled instance of every record in taskloop.contracts, for the round-trip, golden and completeness tests."""
+"""One filled instance of every record in tlkernel, for the round-trip, golden and completeness tests."""
 import sys
 from pathlib import Path
 from typing import cast
@@ -6,7 +6,7 @@ from typing import cast
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts import (
+from tlkernel import (
     artifact,
     ask,
     bead,
@@ -42,9 +42,9 @@ from taskloop.contracts import (
     usage,
     worktrees,
 )
-from taskloop.contracts.enums import AskClass, AskKind, AskStatus, LockWhat, Outcome, Result, WaitWhat, WhyCode
-from taskloop.contracts.ids import BeadId, CheckId, TreeSha, loop_key
-from taskloop.contracts.runkey import BaseSha, Digest, RunKey
+from tlkernel.enums import AskClass, AskKind, AskStatus, LockWhat, Outcome, Result, WaitWhat, WhyCode
+from tlkernel.ids import BeadId, CheckId, TreeSha, loop_key
+from tlkernel.runkey import BaseSha, Digest, RunKey
 
 T = 1793050200.5
 RUN = ids.RunId.parse("01KBN6Z0M4R5E8YQ2T7C9W3XHD")

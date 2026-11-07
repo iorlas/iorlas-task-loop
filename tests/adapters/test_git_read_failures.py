@@ -16,8 +16,8 @@ from git_porcelain.real import Done, unavailable
 
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.git_base import read_failure
-from taskloop.contracts.env import Env
-from taskloop.contracts.slots import GitReadFailure
+from tlkernel.env import Env
+from tlkernel.slots import GitReadFailure
 
 
 class GitReadFailures(Case):

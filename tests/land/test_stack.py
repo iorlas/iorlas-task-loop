@@ -35,26 +35,26 @@ from taskloop.app.track import runs
 from taskloop.app.track.verbs import trace
 from taskloop.app.wire import closeguard
 from taskloop.cli.land_stack import cmd_land_stack
-from taskloop.contracts import log
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import DoltPush
-from taskloop.contracts.checks import Check, CheckResult
-from taskloop.contracts.config import load
-from taskloop.contracts.env import Env
-from taskloop.contracts.finish import finish_run
-from taskloop.contracts.forge import StackItem
-from taskloop.contracts.gitfacts import LogRow, Ref, TreeEntry
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId, CheckId, TreeSha
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.locks import LockTimeout
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.runkey import BaseSha
-from taskloop.contracts.slots import Checkout, NotARepo, SlotGitError
 from taskloop.domain import outcome as oc
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
+from tlkernel import log
+from tlkernel.bead import Bead
+from tlkernel.beadsport import DoltPush
+from tlkernel.checks import Check, CheckResult
+from tlkernel.config import load
+from tlkernel.env import Env
+from tlkernel.finish import finish_run
+from tlkernel.forge import StackItem
+from tlkernel.gitfacts import LogRow, Ref, TreeEntry
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId, CheckId, TreeSha
+from tlkernel.kinds import Kind
+from tlkernel.locator import RunLocator
+from tlkernel.locks import LockTimeout
+from tlkernel.paths import ConfigDir
+from tlkernel.runkey import BaseSha
+from tlkernel.slots import Checkout, NotARepo, SlotGitError
 
 OID: dict[str, str] = {"task/a": "a" * 40, "task/b": "b" * 40}
 

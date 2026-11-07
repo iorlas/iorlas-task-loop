@@ -13,8 +13,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 
-from taskloop.contracts import log as rec  # noqa: E402
 from taskloop.stores.real import real_stores  # noqa: E402
+from tlkernel import log as rec  # noqa: E402
 
 engine = te.engine
 

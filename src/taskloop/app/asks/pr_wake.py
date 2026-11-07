@@ -2,14 +2,15 @@
 again and the land reads the PR. Nothing here merges anything: it only looks."""
 from collections.abc import Callable
 
+from tlkernel.ask import AskAnswer
+from tlkernel.askstore import AskStore
+from tlkernel.beadsport import BdFailure, Beads
+from tlkernel.config import EngineConfig
+from tlkernel.enums import AskClass
+from tlkernel.forge import OPEN, Pr, pr_waited_on
+from tlkernel.ids import BeadId
+
 from taskloop.app.asks import release
-from taskloop.contracts.ask import AskAnswer
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.beadsport import BdFailure, Beads
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.enums import AskClass
-from taskloop.contracts.forge import OPEN, Pr, pr_waited_on
-from taskloop.contracts.ids import BeadId
 
 
 def wake_decided(asks: AskStore, store: Beads, view: Callable[[int], Pr | None], repo: str, now: float, cfg: EngineConfig) -> list[BeadId]:

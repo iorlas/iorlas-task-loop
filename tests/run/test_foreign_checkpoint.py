@@ -15,11 +15,11 @@ from support.who import who
 
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.docrows import RowDoc
-from taskloop.contracts.docstore import ForeignVersion
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.wire import Refused
+from tlkernel.docrows import RowDoc
+from tlkernel.docstore import ForeignVersion
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId
+from tlkernel.wire import Refused
 
 
 class ForeignCheckpoint(T.EngineTest):

@@ -16,7 +16,7 @@ import affected  # noqa: E402
 # (mutation, changed path, a test that fails because of it and must be selected)
 MUTATIONS = {
     "a function body in a leaf module": ("src/taskloop/domain/beads/rules.py", "tests/loop/test_lint.py"),
-    "a signature in contracts": ("src/taskloop/contracts/ids.py", "tests/contracts/test_wire.py"),
+    "a signature in contracts": ("packages/kernel/src/tlkernel/ids.py", "tests/contracts/test_wire.py"),
     "a test support helper": ("tests/support/procsim.py", "tests/land/test_pr_land.py"),
     "the import-linter contracts": (".importlinter", "tests/rules/gate_rules.py"),
     "a constant in a vendored package": ("skills/task-loop/_vendor/any_clock/clock.py", "tests/land/test_push_timing.py"),
@@ -48,7 +48,8 @@ def test_a_change_that_reaches_no_test_selects_the_rules_only(repo):
 def test_every_record_module_selects_the_wire_test(repo):
     """The discovery rule's premise: the wire test asks every module of contracts for a sample, so a new one (the graph is read fresh
     each run) reaches it as every existing one does."""
-    modules = [p for p in repo.trees if p.startswith("src/taskloop/contracts/") and p.count("/") == 3 and not p.endswith("__init__.py")]
+    modules = [p for p in repo.trees
+               if p.startswith("packages/kernel/src/tlkernel/") and p.count("/") == 4 and not p.endswith("__init__.py")]
     missed = [p for p in modules if "tests/contracts/test_wire.py" not in affected.select(repo, {p})]
     assert modules and missed == []
 

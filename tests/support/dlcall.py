@@ -5,9 +5,9 @@ from typing import Any
 import support.paths  # noqa: F401
 from taskloop.adapters import childenv
 from taskloop.adapters import delegate as dl
-from taskloop.contracts.delegate import RunRequest
-from taskloop.contracts.env import snapshot
 from taskloop.domain.lanes import policy as lp
+from tlkernel.delegate import RunRequest
+from tlkernel.env import snapshot
 
 
 class Got:

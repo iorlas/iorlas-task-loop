@@ -2,8 +2,9 @@
 from pathlib import Path
 from time import time_ns
 
+from tlkernel.paths import ConfigDir, RunFiles
+
 from taskloop.adapters.git_base import push_error_line
-from taskloop.contracts.paths import ConfigDir, RunFiles
 
 
 def failure(output: str, run_dir: Path | None, branch: str, config: ConfigDir | None = None) -> str:

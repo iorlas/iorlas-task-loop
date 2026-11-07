@@ -14,7 +14,7 @@ from support.who import who
 
 from loop.test_loop import LoopBase
 from taskloop.cli import loop_cmd
-from taskloop.contracts.env import snapshot
+from tlkernel.env import snapshot
 
 
 class StopRequestsLogic(LoopBase):
