@@ -57,7 +57,7 @@ class LandParts(Plumbing):
         pr = self.cfg.land_mode == "pr"  # the PR's merge commit is not the branch tip, and the forge owns the remote branch
         want = None if pr else target(self.cfg.land)
         if branch:
-            prior = cleanup.previous(self.home, self.bead, repo, branch, sha)
+            prior = cleanup.previous(self.home, self.bead, repo, branch, sha, self.stores.run_log)
             cleanup.record(self.log, repo, branch, self.git.rev_parse(self.wt, "HEAD") if pr else sha, sha,
                            want[0] if want else "", self.land_state.remote_oid, prior)
 

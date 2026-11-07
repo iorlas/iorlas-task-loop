@@ -11,8 +11,7 @@ from typing import Protocol
 
 from tlkernel import log as rec
 from tlkernel.plancheck import PlanCheck
-
-from taskloop.stores.runlog import RunLog
+from tlkernel.stagefacts import RunLogPort
 
 PUSH_UP_FAILS = 3  # network errors on the push while the probe says the network is up: not the network's to cure (a proxy, DNS)
 PUSH_TRIES = 3  # a push rejected because main moved is tried again this often
@@ -116,7 +115,7 @@ class CaseChecks(Protocol):
 
 
 @contextlib.contextmanager
-def phase(log: RunLog, name: str, *, wait: bool = False) -> Generator[None]:
+def phase(log: RunLogPort, name: str, *, wait: bool = False) -> Generator[None]:
     """Time the body as the step `land:<name>`; its seconds are `wait_seconds` for a wait, else `exec_seconds`."""
     step = f"land:{name}"
     sid = log.next_id("s")
