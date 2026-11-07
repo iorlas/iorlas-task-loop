@@ -33,8 +33,8 @@ OWNERS: dict[str, str] = {
     "attempt": "engine",  # Reconcile may mark lost only after the loop guards the expired lease.
     "step": "engine",
     "lease": "loop",
-    "check_pass": "engine",
-    "check_round": "engine",
+    "check_pass": "gate",
+    "check_round": "gate",
     "ask": "engine",
     "ask_ledger": "engine",
     "park": "engine",

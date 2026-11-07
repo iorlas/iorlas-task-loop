@@ -18,7 +18,7 @@ from support.narrow import must
 from support.repos import write_repos
 from support.runs import manifest
 
-from taskloop.app.run import requests
+from taskloop.app.pipeline import requests
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.bead import Bead
