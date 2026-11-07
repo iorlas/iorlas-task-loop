@@ -70,3 +70,9 @@ Prompts and schema versions are attributes of the package, not of the contract.
 No file moved on the real tree and no workspace was created in it; the numbers above are an import scan, and the isolated-run proof is the toy
 workspace of stage-packages.md section 1. The first real proof is WORKSPACE-3, which can fail on a hidden import (a test reaching `support`
 fixtures that need the engine); that is why review goes first and alone.
+
+## 6. Workspace test isolation
+
+TESTISO: done. Member tests may import only their own package, declared runtime and dev dependencies, pytest and the standard library.
+`tests/rules/package_tests.py` checks every member test import, including lazy and TYPE_CHECKING imports;
+`tests/rules/test_package_tests.py` runs it in the gate and proves an undeclared sibling fails.
