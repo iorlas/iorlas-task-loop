@@ -9,13 +9,13 @@ from taskloop.adapters.agent import new_live
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.asks.closing import ClosingTrust
 from taskloop.app.pipeline.reflect import Reflector
+from taskloop.app.pipeline.requests import OwnerRequests
 from taskloop.app.pipeline.waits import Waits
 from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.run.bead_env import bead_env
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.run.records import Records
 from taskloop.app.run.reload import Reload
-from taskloop.app.run.requests import OwnerRequests
 from taskloop.app.run.resume import Resume
 from taskloop.app.run.shared import Shared
 from taskloop.app.run.shell import Shell

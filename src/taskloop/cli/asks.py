@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from taskloop.app.asks import intake, sweeps
-from taskloop.app.run import requests
+from taskloop.app.asks import owner_verbs as requests
 from taskloop.contracts import wire
 from taskloop.contracts.ask import Ask, AskAction
 from taskloop.contracts.askstore import AskStore
