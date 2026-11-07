@@ -82,18 +82,9 @@ class LifecycleLog(Protocol):
     def emit(self, record: Beat, /) -> object: ...
 
 
-class LifecycleHost(CrashHost, Protocol):
+class LifecycleRuntime(Protocol):
     prev_ck: str
     fenced: str
-    plan_summary: str
-    branch: str
-
-    @property
-    def state(self) -> CheckpointState: ...
-    @property
-    def store(self) -> Beads: ...
-    @property
-    def bead(self) -> BeadId: ...
     @property
     def checkpoints(self) -> LifecycleCheckpoints: ...
     @property
@@ -110,8 +101,22 @@ class LifecycleHost(CrashHost, Protocol):
     def stuck(self) -> LifecycleStuck: ...
     @property
     def moved(self) -> bool: ...
+
+
+class LifecycleRecovery(Protocol):
+    plan_summary: str
+    branch: str
+    @property
+    def state(self) -> CheckpointState: ...
     @property
     def resume(self) -> LifecycleResume: ...
+
+
+class LifecycleClosing(Protocol):
+    @property
+    def store(self) -> Beads: ...
+    @property
+    def bead(self) -> BeadId: ...
     @property
     def landed_sha(self) -> str: ...
     @property
@@ -139,76 +144,78 @@ class Ended:
 
 
 class Lifecycle:
-    def __init__(self, context: LifecycleHost, *, body: Callable[[LeaseLike, Ended], None],
+    def __init__(self, runtime: LifecycleRuntime, recovery: LifecycleRecovery,
+                 closing: LifecycleClosing, crash: CrashHost, *, body: Callable[[LeaseLike, Ended], None],
                  lease: Callable[[Callable[[], None], Callable[[BaseException], None]], LeaseLike],
                  reexecs: Reexecs, deadline: DeadlineScope) -> None:
-        self.host = context
+        self.runtime = runtime
+        self.recovery = recovery
+        self.closing = closing
+        self.crash = crash
         self.deadline = deadline
         self.body = body
         self.lease = lease
         self.reexecs = reexecs
 
     def go(self) -> int:
-        host = self.host
         end = Ended()
         hb = self.lease(self.beat, self.beat_died)
-        ck = host.checkpoints.read()
-        host.prev_ck = ck.run if ck else ""
+        ck = self.runtime.checkpoints.read()
+        self.runtime.prev_ck = ck.run if ck else ""
         try:
-            if host.dead is not None:  # the last run died inside its close: this process only finishes it
+            if self.runtime.dead is not None:  # the last run died inside its close: this process only finishes it
                 self.finish_dead(end)
             else:
-                with self.deadline(host.cfg.run_deadline_min * 60, "run"):
+                with self.deadline(self.runtime.cfg.run_deadline_min * 60, "run"):
                     self.body(hb, end)
         except DeadlineExpired as err:
             end.outcome = oc.make(Kind.OWNER_PARK, f"{err}; branch and checkpoint kept")
         except Blocked as b:
             end.outcome = b.outcome
-            if b.kind is Kind.PAUSE_KILLED and host.requests.stopped:  # the stop flag was the owner's request, not a SIGTERM
+            if b.kind is Kind.PAUSE_KILLED and self.runtime.requests.stopped:  # the stop flag was the owner's request, not a SIGTERM
                 end.outcome = oc.make(b.kind, requests.STOPPED_WHY)
         except fence.Fenced as f:  # the bead or the slot was taken again: this run writes nothing more
-            host.fenced = f.why
+            self.runtime.fenced = f.why
             end.outcome = oc.make(Kind.FAULT_ENGINE, f.why)
         except Exec:
             pass  # the process image is gone; nothing below runs in a real exec
         except Exception as err:  # the close-out must run whatever broke
-            host.log.warn("engine error\n" + "".join(traceback.format_exception(err)))
+            self.runtime.log.warn("engine error\n" + "".join(traceback.format_exception(err)))
             end.outcome = oc.make(Kind.FAULT_ENGINE, f"failed: engine error {type(err).__name__}: {err}")
         finally:
             self.close_out(hb, end)
-        return 0 if host.moved or end.outcome.finished else 2
+        return 0 if self.runtime.moved or end.outcome.finished else 2
 
     def finish_dead(self, end: Ended) -> None:
         """The state the close's effects read comes back from the dead run's checkpoint; the outcome is the one it kept."""
-        host = self.host
-        ck = host.dead
+        ck = self.runtime.dead
         assert ck is not None and ck.ended is not None
         end.outcome, _, _ = stored_end.loaded(ck.ended.outcome)
-        host.resume.restore(ck, late=True)
-        host.state.plan_data = ck.state.plan_data
-        host.plan_summary = (host.state.plan_data or {}).get("summary", "")
-        host.state.accepted = list(ck.state.accepted)
-        host.branch = ck.branch
+        self.recovery.resume.restore(ck, late=True)
+        self.recovery.state.plan_data = ck.state.plan_data
+        self.recovery.plan_summary = (self.recovery.state.plan_data or {}).get("summary", "")
+        self.recovery.state.accepted = list(ck.state.accepted)
+        self.recovery.branch = ck.branch
 
     def beat(self) -> None:
         """The run's heartbeat in its manifest (its state is running, alive as of now) and a Beat in its log (the stuck rule's tick), then
         the stuck tick and the owner's stop; a file that cannot be written must not kill the beat thread."""
-        self.host.records.heartbeat()
+        self.runtime.records.heartbeat()
         with contextlib.suppress(OSError):
-            self.host.log.emit(Beat())
-        self.host.stuck.tick()
-        self.host.requests.at_beat()
+            self.runtime.log.emit(Beat())
+        self.runtime.stuck.tick()
+        self.runtime.requests.at_beat()
 
     def beat_died(self, err: BaseException) -> None:
         """The heartbeat thread ended on an error: the run goes on without a beat, so the log says so before the lease lapses."""
-        self.host.log.warn("the heartbeat thread died, the lease will lapse: " + "".join(traceback.format_exception(err)))
+        self.runtime.log.warn("the heartbeat thread died, the lease will lapse: " + "".join(traceback.format_exception(err)))
 
     def close_out(self, hb: LeaseLike, end: Ended) -> None:
         """The close, then the run's one terminal state, whatever the close did (a close that raises still leaves a state)."""
         try:
             self.close(hb, end)
         except fence.Fenced as err:
-            self.host.fenced = err.why
+            self.runtime.fenced = err.why
             raise
         except Blocked:
             raise
@@ -218,48 +225,46 @@ class Lifecycle:
             self.settle(end)
 
     def failed_close(self, err: Exception, end: Ended) -> None:
-        host = self.host
-        bundle = RunLocator(host.home).get(host.run_id)
+        bundle = RunLocator(self.closing.home).get(self.closing.run_id)
         if bundle is not None and bundle.manifest.finish is not None:
-            host.warn("close failed after the run's answer was recorded; keeping it\n" + "".join(traceback.format_exception(err)))
-            end.outcome = host.records.finish(finished_outcome(bundle.manifest.finish))
+            self.closing.warn("close failed after the run's answer was recorded; keeping it\n" + "".join(traceback.format_exception(err)))
+            end.outcome = self.runtime.records.finish(finished_outcome(bundle.manifest.finish))
         else:
-            end.outcome = parked_crash(host, Step.CLOSE, err)
-            host.closer.pause(end.outcome)
-            host.steps.end()
-            end.outcome = host.records.finish(end.outcome)
+            end.outcome = parked_crash(self.crash, Step.CLOSE, err)
+            self.closing.closer.pause(end.outcome)
+            self.closing.steps.end()
+            end.outcome = self.runtime.records.finish(end.outcome)
 
     def settle(self, end: Ended) -> None:
-        host = self.host
-        if host.moved:  # exec'd into a newer install: the same run goes on, the next process takes it up
+        if self.runtime.moved:  # exec'd into a newer install: the same run goes on, the next process takes it up
             return
-        if host.fenced:
-            host.records.settle(RunState.STOPPED, f"fenced out: {host.fenced}")
+        if self.runtime.fenced:
+            self.runtime.records.settle(RunState.STOPPED, f"fenced out: {self.runtime.fenced}")
         else:
-            host.records.settle(terminal_state(end.outcome), end.outcome.detail or end.outcome.kind.name)
+            self.runtime.records.settle(terminal_state(end.outcome), end.outcome.detail or end.outcome.kind.name)
 
     def close(self, hb: LeaseLike, end: Ended) -> None:
-        host = self.host
-        if host.moved:
+        if self.runtime.moved:
             hb.stop()
             return
-        with host.stop_deferred():  # a stop here would skip the close: no trace, no bead update
-            if host.landed_sha and end.outcome.kind not in (Kind.LANDED, Kind.ENGINE_CRASH, Kind.PAUSE_NETWORK):
+        with self.closing.stop_deferred():  # a stop here would skip the close: no trace, no bead update
+            if self.closing.landed_sha and end.outcome.kind not in (Kind.LANDED, Kind.ENGINE_CRASH, Kind.PAUSE_NETWORK):
                 # Late crashes and bd sync outages keep their retry cursor after the push went through.
-                host.warn(f"{end.outcome.detail or end.outcome.word} after the land went through; closing it landed")
-                end.outcome = oc.make(Kind.LANDED, sha=host.landed_sha)
+                self.closing.warn(f"{end.outcome.detail or end.outcome.word} after the land went through; closing it landed")
+                end.outcome = oc.make(Kind.LANDED, sha=self.closing.landed_sha)
             hb.stop()
-            host.fenced = host.fenced or fence.stale(host.store, host.claim)
-            if host.fenced:  # a run that lost its lease closes nothing: the bead, its checkpoint and its trace are the new holder's
-                host.warn(f"fenced out: {host.fenced}; the bead, its checkpoint and the slot are left to the run that holds them")
+            self.runtime.fenced = self.runtime.fenced or fence.stale(self.closing.store, self.closing.claim)
+            if self.runtime.fenced:  # a run that lost its lease closes nothing: the bead, its checkpoint and its trace are the new holder's
+                self.closing.warn(f"fenced out: {self.runtime.fenced}; "
+                                  "the bead, its checkpoint and the slot are left to the run that holds them")
                 return
-            host.stuck.tick()  # the last tick: a run that stops on its third same red says it before its Close
-            host.requests.drop()  # what the run did not take is for a run that ended
-            self.reexecs.drop(host.bead)  # a run that ended is no crash after an exec
-            if end.outcome.kind is Kind.PAUSE_NETWORK and not host.dry:
-                host.reload.save_net_pause()
-            host.why = end.outcome.detail
-            host.closer.close(end.outcome)
-            bundle = RunLocator(host.home).get(host.run_id)
+            self.runtime.stuck.tick()  # the last tick: a run that stops on its third same red says it before its Close
+            self.runtime.requests.drop()  # what the run did not take is for a run that ended
+            self.reexecs.drop(self.closing.bead)  # a run that ended is no crash after an exec
+            if end.outcome.kind is Kind.PAUSE_NETWORK and not self.closing.dry:
+                self.closing.reload.save_net_pause()
+            self.crash.why = end.outcome.detail
+            self.closing.closer.close(end.outcome)
+            bundle = RunLocator(self.closing.home).get(self.closing.run_id)
             if bundle is not None and bundle.manifest.finish is not None:
                 end.outcome = finished_outcome(bundle.manifest.finish)
