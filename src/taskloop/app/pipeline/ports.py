@@ -6,6 +6,7 @@ from taskloop.contracts import fence
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.delegate import Permanence
 from taskloop.contracts.enums import Outcome
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.parks import Park
 from taskloop.domain.asks.spec import AskSpec
@@ -40,3 +41,7 @@ class BeadClosing(Protocol):
 
 class Slotting(Protocol):
     def leave_slot(self, outcome: Outcome, branch: str) -> None: ...
+
+
+class TrustRefusal(Protocol):
+    def refusal(self, git: Git, wt: str, base: str, bead: Bead | None) -> str: ...
