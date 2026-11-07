@@ -34,7 +34,7 @@ def test_work_reaches_no_stage(workdir, stage_import):
     with config_path.open("w") as stream:
         synthetic.write(stream)
     pins = tomllib.loads((ROOT / "mise.toml").read_text(encoding="utf-8"))["tools"]
-    lint = ["uv", "tool", "run", "--from", f"import-linter@{pins['pipx:import-linter']}", "lint-imports"]  # the pinned tool, as `just rules`
+    lint = ["uv", "tool", "run", "--from", f"import-linter@{pins['pipx:import-linter']}", "lint-imports"]  # the pinned tool
     ran = subprocess.run(
         [*lint, "--config", str(config_path), "--no-cache"],
         cwd=workdir, env={**os.environ, "PYTHONPATH": str(workdir)},
