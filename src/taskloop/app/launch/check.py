@@ -1,82 +1,30 @@
-"""The verb `tl check [--repo DIR] [--all | --staged] [--list] [ID ...]`: the repo's registry of checks (engine.checks of .task-loop.json),
-run by a person in the current worktree through the engine's own runner. No ID: the gate's steps (run gate or both), the steps `when`
-makes due; the IDs: just those checks, whatever their `run`, always. The engine's own `diff-check` (git diff --check from the
-merge-base) runs first in every case. It claims no bead and writes no bd; its manifest and evidence use the engine's run machinery."""
+"""Bind standalone checks to the worktree, runner host and observable stage lifecycle."""
 import argparse
-from contextlib import ExitStack
+from collections.abc import Generator
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
-from tlkernel import inputsets
-from tlkernel.argv import text_of
-from tlkernel.checks import CheckResult, Phase
-from tlkernel.config import CheckSpec, EngineConfig
+from tlkernel.checks import CheckRun
+from tlkernel.config import EngineConfig
 from tlkernel.env import Env
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
-from tlkernel.ids import TreeSha
 from tlkernel.procport import Spawner
 
-from taskloop.adapters import profile_at
-from taskloop.app.checks import authorization
-from taskloop.app.checks.runner import Checker
+from taskloop.app.checks import authorization, checklog, runner
+from taskloop.app.checks.host import CheckHost
 from taskloop.app.launch.check_host import CliHost
 from taskloop.app.launch.staged import staged_tree
 from taskloop.app.pipeline.stage_run import StageRun, stage_run
 from taskloop.app.slots import config as wslots_config
-from taskloop.domain.checks.specs import gate_items, repo_check
 
-TAIL_LINES = 15
-
-
-def listing(cfg: EngineConfig) -> list[str]:
-    """The registry, one line per check: id, run, group, when, argv."""
-    return [f"{k.id}  run={k.run}  group={k.group}  when={','.join(inputsets.expand(cfg, k.when)) or '-'}  {text_of(k.argv)}"
-            for k in cfg.checks]
-
-
-def step_line(c: CheckResult) -> str:
-    """One step: its id, what happened (ok, FAILED, cached, skipped and why), the seconds."""
-    if c.status == "skipped":
-        state = f"skipped ({c.why})"
-    elif c.status == "unverified":
-        state = "UNVERIFIED"
-    elif c.cached:
-        state = "cached"
-    else:
-        state = "ok" if c.exit == 0 else "FAILED"
-    return f"{c.id:<24} {state:<30} {round(c.secs):>5}s"
-
-
-def chosen(cfg: EngineConfig, ids: list[str]) -> list[CheckSpec]:
-    """The named checks of the registry, in the order named."""
-    known = {str(k.id): k for k in cfg.checks}
-    missing = [i for i in ids if i not in known]
-    if missing:
-        raise SystemExit(f"tl check: not in the registry: {', '.join(missing)} (tl check --list: {', '.join(known) or 'none'})")
-    return [known[i] for i in dict.fromkeys(ids)]
+Checker = runner.Checker
+with_base = authorization.with_base
+policy_of = authorization.policy_of
 
 
 def profile_of(repo: str) -> EngineConfig:
-    """The engine block of the worktree's own .task-loop.json (what a person edited, committed or not)."""
-    path = Path(repo) / profile_at.FILE
-    try:
-        data = profile_at.raw_in(repo)
-    except (OSError, ValueError) as e:
-        raise SystemExit(f"tl check: cannot read {path}: {e}") from None
-    if data is None:
-        raise SystemExit(f"tl check: cannot read {path}: no such file")
-    return wslots_config.load_profile(data).engine
-
-
-def policy_of(repo: str, git: Git, commit: str) -> EngineConfig:
-    """Delivery checks use the committed base registry; ordinary tl check uses the worktree."""
-    return authorization.profile(git, repo, TreeSha(commit))
-
-
-def with_base(cfg: EngineConfig, commit: str | None) -> EngineConfig:
-    """`tl check --base-commit SHA`: the run's base (what receipts are keyed at, and what the changed files are measured against) is that
-    commit, not the base branch. The merge queue gates Q(N) at Q(N-1) (docs/design/merge-queue.md 3.5). No commit: `cfg` as it is."""
-    return cfg.replace(base=commit) if commit else cfg
+    return authorization.profile_of(repo, wslots_config.load_profile)
 
 
 def cmd_check(a: argparse.Namespace, *, who: Identity, env: Env, spawner: Spawner, git: Git,
@@ -90,33 +38,18 @@ def cmd_check(a: argparse.Namespace, *, who: Identity, env: Env, spawner: Spawne
 def run_check(a: argparse.Namespace, stage: StageRun, *, env: Env, spawner: Spawner, git: Git,
               policy: EngineConfig | None = None) -> int:
     repo = stage.bundle.repo
-    commit = a.policy_commit
-    cfg = policy if policy is not None else policy_of(repo, git, commit) if commit else profile_of(repo)
-    cfg = with_base(cfg, getattr(a, "base_commit", None))
-    if a.list:
-        print("\n".join(listing(cfg)) or "(no checks in engine.checks)")
-        return 0
-    items = [repo_check(k, cfg, Phase.STAGE if k.run == "stage" else Phase.GATE) for k in chosen(cfg, a.ids)] if a.ids else gate_items(cfg)
-    if not items:
-        print("no gate steps: no engine.checks entry says run gate or both")  # the built-in diff-check still runs
-    if a.staged and a.all:
-        raise SystemExit("tl check: --staged and --all name two different sets of files; pick one")
-    with ExitStack() as stack:
-        wt, names = (stack.enter_context(staged_tree(git, repo))) if a.staged else (repo, None)
-        box = CliHost(wt, cfg, stores=stage.stores, bundle=stage.bundle, log=stage.log, env=env, spawner=spawner, git=git,
-                      staged=names)
-        try:
-            run = Checker(box).run_items(items, everything=a.all or bool(a.ids), learn=False, show_clean=True, all_files=a.all)
-        except BaseException:
-            print(f"tl check: evidence kept in {box.run_dir}")
-            raise
-    stage.stores.check_run(stage.bundle.run, run.round).write(run)
-    box.checklog.round("", run)
-    print("\n".join(step_line(c) for c in run.results))
-    reds = [c for c in run.results if c.red]
-    if reds:
-        print(f"evidence kept in {box.run_dir}")
-    for c in reds:
-        print(f"\n{c.id} (exit {c.exit}) `{c.cmd}`:")
-        print("\n".join(c.tail.strip().splitlines()[-TAIL_LINES:]))
-    return 1 if reds else 0
+
+    def profile() -> EngineConfig:
+        return authorization.selected_profile(policy, a.policy_commit, lambda: profile_of(repo),
+                                              lambda commit: policy_of(repo, git, commit))
+
+    @contextmanager
+    def workspace(cfg: EngineConfig, staged: bool) -> Generator[CheckHost]:
+        with authorization.checkout(staged, lambda: staged_tree(git, repo), nullcontext((repo, None))) as (wt, names):
+            yield CliHost(wt, cfg, stores=stage.stores, bundle=stage.bundle, log=stage.log, env=env,
+                          spawner=spawner, git=git, staged=names)
+
+    def save(run: CheckRun) -> None:
+        stage.stores.check_run(stage.bundle.run, run.round).write(run)
+
+    return checklog.standalone(a, profile=profile, workspace=workspace, save=save, checker=Checker)
