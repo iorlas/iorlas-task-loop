@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from slots.test_slot_pool import Rig
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BeadPatch
 from tlkernel.ids import BeadId
@@ -17,6 +16,7 @@ from tlslots.env import stamp
 from tlslots.line import order
 from tlslots.liveness import LIMITS, Kind
 from tlslots.pool import Slot
+from tlslots.testing import Rig
 
 STEP = 45.0
 SLACK = watchdog.EVERY + 2 * STEP  # a look every EVERY s, a step of up to STEP s before it, one more before the check
