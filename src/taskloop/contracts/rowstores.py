@@ -4,6 +4,7 @@ from collections.abc import Callable
 from taskloop.contracts import paths
 from taskloop.contracts.docrows import RowDoc, singleton
 from taskloop.contracts.docstore import Absent, Present
+from taskloop.contracts.factoryparts import RELEASE_DOCS
 from taskloop.contracts.guard import guard
 from taskloop.contracts.loop import BadVersions
 from taskloop.contracts.reponame import repo_name
@@ -105,12 +106,12 @@ class ReposStore:
 
 class PinStore(RowDoc[Pin]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(singleton(cfg, Pin, "pin").docs, "")
+        super().__init__(singleton(cfg, Pin, "pin", table=RELEASE_DOCS).docs, "")
 
 
 class ReleaseResultStore(RowDoc[ReleaseResult]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(singleton(cfg, ReleaseResult, "release:last").docs, "")
+        super().__init__(singleton(cfg, ReleaseResult, "release:last", table=RELEASE_DOCS).docs, "")
 
 
 class BadVersionStore(RowDoc[BadVersions]):
