@@ -29,7 +29,7 @@ class Infrastructure(Rig):
 
     def settle(self, counters):
         files = mock.Mock()
-        result = Settle(self.taker().env, files, LoopConfig, self.out.append, counters, mock.Mock(), mock.Mock(), mock.Mock())
+        result = Settle(self.taker().env, files, LoopConfig, self.out.append, counters, mock.Mock(), mock.Mock())
         return result, files
 
     def test_infrastructure_before_engine_requeues_without_failure_rest_or_slot_hold(self):

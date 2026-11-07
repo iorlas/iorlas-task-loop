@@ -33,3 +33,10 @@ def exists(module: str) -> bool:
 def test_the_contract_names_no_module_that_is_gone():
     gone = [m for m in named("source_modules") | named("forbidden_modules") if m.startswith("taskloop.app.") and not exists(m)]
     assert not gone, f"the contract names modules that do not exist: {gone}"
+
+
+def test_run_wiring_modules_are_composition_roots():
+    roots = {"ask_flow", "bead_env", "closer_ports", "preflight", "reload_ports", "shared", "shell", "stage_checks"}
+    modules = {f"taskloop.app.run.{name}" for name in roots}
+    assert modules <= named("forbidden_modules")
+    assert not modules & named("source_modules")

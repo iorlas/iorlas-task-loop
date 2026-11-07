@@ -138,7 +138,7 @@ class Refusals(Case):
     def test_a_foreign_version_is_stale(self):
         with pytest.raises(StaleRecord) as cm:
             wire.load(type(S.OUTCOME), self.wire(v=1))
-        assert (cm.value.found, cm.value.want) == (1, 2)
+        assert (cm.value.found, cm.value.want) == (1, S.OUTCOME.V)
         with pytest.raises(StaleRecord):
             wire.load(type(S.OUTCOME), {k: v for k, v in self.wire().items() if k != "v"})
 

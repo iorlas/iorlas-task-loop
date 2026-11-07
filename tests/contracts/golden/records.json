@@ -955,7 +955,7 @@
   ]
  },
  "RunReport": {
-  "v": 2,
+  "v": 3,
   "outcome": "parked",
   "bead": "tl-1",
   "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
@@ -966,13 +966,10 @@
   "rounds": 2,
   "tests_added": 4,
   "asked": true,
-  "retry_after": null,
   "cost": 0.25,
   "kind": "",
   "fingerprint": "",
-  "storm": "",
-  "role": "",
-  "lane": ""
+  "storm": ""
  },
  "LoopLogLine": {
   "v": 4,
@@ -1032,7 +1029,7 @@
   "fingerprint": ""
  },
  "LoopState": {
-  "v": 2,
+  "v": 3,
   "pid": 1789,
   "started": 1793050200.5,
   "t": 1793050200.5,
@@ -1078,8 +1075,6 @@
    "fails": [],
    "ran": 0,
    "later": {},
-   "pauses": {},
-   "gated": {},
    "warned": [],
    "until": 0.0,
    "wt": "",
@@ -1798,15 +1793,12 @@
    "heartbeat": 60,
    "drained_poll": 300,
    "pause_retry": 900,
-   "gate_cache": 30,
-   "gate_unknown": 900,
    "net_probe": 60,
    "beat_every": 60,
    "logs_kept": 5,
    "slot_fails_to_set_aside": 2,
    "quick_fail_min": 1.5,
    "fails_to_stop": 2,
-   "pauses_to_rest": 3,
    "rest": 3600,
    "area_poll": 60,
    "area_say": 600,
