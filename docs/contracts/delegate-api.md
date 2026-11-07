@@ -49,3 +49,11 @@ The state is shared by every process that calls the API: a two-process test (lea
 `src/taskloop/adapters/delegate.py` (`call`, `status_json`, `run_history`, `accounts`, `RouteProbe`), `adapters/runner.py` (`ApiRunner`: the thread, the
 live file, `cancel` at the wall limit or a stop of the run), `domain/lanes/policy.py` (`stop_of`, `decide`). Setup and status of accounts:
 `tl accounts`, `tl setup`.
+
+## Live-file format
+
+`DELEGATE_LIVE_FILE` contains one JSON object per line. The first is an
+untagged `WorkerStarted` (`v`, `pid`, `pgid`, `run_id`); subsequent
+events carry `t` (epoch seconds) and the codec's default `kind` tag, plus
+the event's fields. A line tagged only with `k` is refused; old live files
+are discarded under [the compatibility policy](../design/compat.md).
