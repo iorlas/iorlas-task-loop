@@ -4,7 +4,6 @@ import json
 from typing import Protocol
 
 from taskloop.adapters import childenv, ident
-from taskloop.adapters import delegate as dg
 from taskloop.adapters.check_files import repo_key
 from taskloop.app.asks import trustroots
 from taskloop.app.checks.runner import Checker
@@ -17,6 +16,7 @@ from taskloop.contracts import log as rec
 from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.delegate import RunRequest, ToolBinding
+from taskloop.contracts.delegateport import Answer
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId
@@ -111,7 +111,7 @@ def brief(c: Call, req: RunRequest) -> str:
     return text
 
 
-def note_write_stop(e: RequestHost, c: Call, ans: dg.Answer) -> None:
+def note_write_stop(e: RequestHost, c: Call, ans: Answer) -> None:
     """Keep the actual argv and full delegate diagnostics for a pinned writer's stop."""
     res = ans.res
     if c.node == "write" and res.stop is not None and res.stop.reason in pin.STOP_REASONS:

@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Any, ClassVar
 
 from taskloop.adapters import beadtools, ident, treehash
-from taskloop.adapters import delegate as dg
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.checks.checklog import CheckLog
@@ -24,6 +23,7 @@ from taskloop.contracts.checkpoint import Checkpoint, RunState
 from taskloop.contracts.checks import CheckRun
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.delegate import Permanence
+from taskloop.contracts.delegateport import Refusal, Resolved
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
@@ -102,8 +102,8 @@ class RunFields(StateAttrs):
         self.answered: Any = None  # the owner ask this run starts from, once answered
         self.verify_answer = ""  # the owner's answer to a verify ask, when it asks for more than a yes
         self.stuck_why = ""
-        self.resolved: dg.Resolved | None = None  # the delegate install in use (delegate_link.resolve) and its contract.json
-        self.refusal: dg.Refusal | None = None
+        self.resolved: Resolved | None = None  # the delegate install in use (delegate_link.resolve) and its contract.json
+        self.refusal: Refusal | None = None
         self.route = ""
         self.contract: Open | None = None
         self.probe: Any = None  # the network probe (a test's); None: delegate's `route.py net`

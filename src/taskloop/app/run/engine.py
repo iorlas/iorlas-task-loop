@@ -8,7 +8,7 @@ from typing import Any
 from taskloop.adapters import landlock
 from taskloop.adapters.clock import SystemClock
 from taskloop.app.checks.runner import Checker
-from taskloop.app.release import reexec, seams
+from taskloop.app.release import reexec
 from taskloop.app.run import ended
 from taskloop.app.run.blocked import Blocked, FixFailed
 from taskloop.app.run.console import say
@@ -31,6 +31,7 @@ from taskloop.contracts.procport import Spawner
 from taskloop.contracts.run import RunReport
 from taskloop.domain import outcome as oc
 from taskloop.stores.bundle import Stores
+from taskloop.stores.delegate import real_route
 from taskloop.stores.real import real_stores
 
 __all__ = ["Blocked", "Engine", "FixFailed", "tool_on_path"]
@@ -62,7 +63,7 @@ class Engine(RunHost):
         who: Identity,
         mode: str = "task",
     ) -> None:
-        route = route or seams.DelegateRoute(env)
+        route = route or real_route()
         self.env = env  # the process environment, taken once at the edge (tl.py); every child is built from it
         self.spawner = spawner
         self.who = who  # the session and bd actor this run acts as, built at the edge

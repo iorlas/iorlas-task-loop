@@ -37,6 +37,9 @@ from support.waits import until  # noqa: E402
 from support.who import who  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
+    delegate as dl,
+)
+from taskloop.adapters import (  # noqa: E402
     ident,
 )
 from taskloop.adapters.repourl import repo_url  # noqa: E402
@@ -417,7 +420,7 @@ class LoopBase(Base):
         self.script, self.hold, self.started, self.during, self.children = {}, {}, [], [], []
         for p in (mock.patch.object(Core, "nap", self.clock.nap),
                   mock.patch.object(wloop, "delegate_route", return_value="/fake/route.py"),
-                  mock.patch.object(wloop.dg, "status_json", side_effect=lambda *a: {"roles": self.roles()}),
+                  mock.patch.object(dl, "status_json", side_effect=lambda *a: {"roles": self.roles()}),
                   mock.patch.object(real, "spawner", return_value=mock.Mock(
                       start_held=lambda cmd, out=None, extra=None, **kw: (FakeChild(self, cmd, extra), mock.Mock()))),
                   mock.patch.object(Taker, "prepare", return_value=None)):

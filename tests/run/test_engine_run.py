@@ -38,7 +38,6 @@ from support.who import who
 from taskloop.adapters import delegate as dl
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.plan.planner import Planner
-from taskloop.app.release import seams
 from taskloop.app.run import (
     engine,
     entry,
@@ -690,7 +689,7 @@ class EngineRunTest(EngineTest):
         script = fake_route.Script({})
         with (
             mock.patch.object(dl, "resolve", return_value=refusal),
-            mock.patch.object(seams.DelegateRoute, "runner", lambda self, *a, **k: script),
+            mock.patch.object(dl.DelegateRoute, "runner", lambda self, *a, **k: script),
         ):
             rc = engine.Engine(
                 BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()

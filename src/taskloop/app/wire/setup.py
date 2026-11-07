@@ -6,10 +6,10 @@ import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from taskloop.adapters import delegate as dg
 from taskloop.app.wire import doctor, hook, slots
 from taskloop.contracts.env import Env
 from taskloop.contracts.paths import ConfigDir, default_root
+from taskloop.stores.delegate import real_route
 
 
 @dataclass(frozen=True)
@@ -70,7 +70,7 @@ def machine(plugin_root: Path, env: Env) -> Plan:
 def accounts_check() -> Check:
     """Worker accounts: at least one enabled lane that is ready. The login itself is the owner's (`tl accounts` names each fix)."""
     try:
-        rows = dg.accounts()
+        rows = real_route().accounts()
     except (ValueError, SystemExit, OSError) as e:
         return Check("accounts", False, f"delegate has no account state yet: {e}")
     ready = [r.lane for r in rows if r.enabled and r.ready]
