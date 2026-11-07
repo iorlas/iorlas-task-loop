@@ -20,8 +20,6 @@ import routing_support as support
 from any_agent import procs
 from any_agent.classify import Outcome
 from any_agent.drops import looks_dropped
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
 from test_route import CFG, T, lanes, route
 
 from delegate.adapters import netprobe
@@ -33,6 +31,8 @@ from delegate.contracts.history import RunRow
 from delegate.contracts.routing import BreakerPolicy
 from delegate.domain.health.ledger import HealthLedger, failure_fields
 from delegate.domain.lanes import profiles
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 LANES = Path(__file__).resolve().parents[2] / "src" / "delegate" / "adapters"
 

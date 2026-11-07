@@ -4,11 +4,11 @@ from pathlib import Path
 import support.paths  # noqa: F401
 from support.fakegit import ScriptedGit
 from support.forgesim import ForgeSim
-from support.tmpdir import TemporaryDirectory
+
+from tltestkit.tmpdir import TemporaryDirectory
 
 # isort: split
 import pytest
-from support.case import Case
 from support.memstores import fake_stores
 
 from taskloop.app.land.cmds import Cmds, Stop
@@ -16,6 +16,7 @@ from taskloop.app.land.forge import Forge
 from taskloop.stores.runlog import RunLog
 from tlkernel.paths import ConfigDir
 from tlkernel.slots import SlotGitError
+from tltestkit.case import Case
 
 
 class RefusingGit(ScriptedGit):

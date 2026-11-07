@@ -9,11 +9,11 @@ import pytest
 from git_porcelain import errors
 from git_porcelain.api import BranchHeld, NothingToRecord, Recorded, Sha, WorktreeInfo
 from git_porcelain.testing import FakeRepo
-from support.case import Case
 
 from taskloop.adapters.git import RealGit
 from tlkernel.env import Env
 from tlkernel.slots import BranchPinned, DirtyTree, GitReadFailure, IndexLocked, RefRace, SlotGitError
+from tltestkit.case import Case
 
 
 class GitPreserveTest(Case):

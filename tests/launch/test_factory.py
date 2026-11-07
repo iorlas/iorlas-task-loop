@@ -8,8 +8,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import factory as adapter
 from taskloop.app.loop import factory_verbs
@@ -22,6 +20,8 @@ from tlkernel.identity import Identity
 from tlkernel.loop import LoopState
 from tlkernel.paths import ConfigDir
 from tlkernel.procport import Spawner
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class Factory(Case):

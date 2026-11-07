@@ -3,12 +3,11 @@ import json
 from pathlib import Path
 from unittest import mock
 
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
-
 from taskloop.domain import selfdescribe
 from taskloop.hook import session
 from tlkernel.env import Env
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class SessionContext(Case):

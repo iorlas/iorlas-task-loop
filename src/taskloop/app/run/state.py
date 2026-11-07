@@ -7,6 +7,8 @@ from tlkernel.plancheck import PlanData
 
 from taskloop.app.look.state import LOOK_FIELDS
 
+STATE_ONLY = ("replans",)
+
 NOT_ATTRS = ("review",)  # the one field of another lane's type: reached as `engine.state.review` only
 
 
@@ -24,15 +26,14 @@ class StateField:
 
 
 class StateAttrs:
-    """Base of a class decorated with `carries_state`: declares the RunState fields as typed attributes (tests/run/test_state.py holds
-    these equal to RunState's)."""
+    """Base of a class decorated with `carries_state`: declares the forwarded RunState fields as typed attributes
+    (tests/run/test_state.py checks the exact field set and types)."""
 
     plan_data: PlanData | None
     brief_hash: str
     snap: BriefSnap | None
     planner_ref: str
     planned: int
-    replans: int
     fixes: int
     extra: int
     rebase_resets: int
@@ -58,8 +59,8 @@ def state_names() -> tuple[str, ...]:
 
 
 def attr_names() -> tuple[str, ...]:
-    """The RunState fields that are engine attributes: all but the look stage's, which it holds as `engine.look`."""
-    return tuple(name for name in state_names() if name not in LOOK_FIELDS)
+    """The RunState fields that are engine attributes: only fields still used by stages through the Engine."""
+    return tuple(name for name in state_names() if name not in (*LOOK_FIELDS, *STATE_ONLY))
 
 
 def carries_state[T](cls: type[T]) -> type[T]:

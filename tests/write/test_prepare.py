@@ -63,7 +63,7 @@ class PrepareTests(EngineTest):
         assert rc == 0
         assert events == ["prepare", "prepare"]
         assert script.nodes.count("write") == 2
-        assert self.eng.replans == 0
+        assert self.eng.state.replans == 0
         assert self.eng.stats["writes"] == 1
         assert [r["write"] for r in self.eng.write.write_rounds] == [1, 1]
 
@@ -79,7 +79,7 @@ class PrepareTests(EngineTest):
                                 max_check_tries=1, max_rounds=1, checks=[{"id": "assets", "cmd": cmd}])
         assert rc == 0
         assert events == ["prepare", "prepare"]
-        assert (self.eng.replans, self.eng.stats["writes"], self.eng.stats["rounds"]) == (0, 1, 0)
+        assert (self.eng.state.replans, self.eng.stats["writes"], self.eng.stats["rounds"]) == (0, 1, 0)
 
     def test_failed_prepare_keeps_both_output_tails_and_no_stamp(self):
         eng = self.checks_engine(prepare={"cmd": ["restore"], "timeout_min": 12})

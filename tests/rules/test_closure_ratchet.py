@@ -10,7 +10,7 @@ def test_transitive_closure_includes_own_files_and_counts_stages_separately():
         "src/taskloop/app/second/__init__.py": "import taskloop.leaf",
         "src/taskloop/shared.py": "import taskloop.leaf",
         "src/taskloop/leaf.py": "import taskloop.shared",
-    }) == {"first": 5, "second": 3}
+    }) == {"first": 5, "first (external modules)": 0, "second": 3, "second (external modules)": 0}
 
 
 def test_packages_longest_match_lazy_and_type_checking_imports():
@@ -28,9 +28,9 @@ def run():
         "src/taskloop/pkg/child.py": "",
         "src/taskloop/pkg/sibling.py": "",
         "src/taskloop/app/not_a_stage/worker.py": "",
-    }) == {"demo": 4}
+    }) == {"demo": 4, "demo (external modules)": 2}
 
 
 def test_new_stage_and_empty_graph():
     assert closures({}) == {}
-    assert closures({"src/taskloop/app/new/__init__.py": "import os"}) == {"new": 1}
+    assert closures({"src/taskloop/app/new/__init__.py": "import os"}) == {"new": 1, "new (external modules)": 1}

@@ -19,7 +19,7 @@ test-inner +paths:
 
 # INNER LOOP ONLY developer tool, never the gate: stage tests plus dependencies' contract tests. `just test` stays the gate.
 test-pkg stage:
-    uv run pytest -q $(python3 dev/test_pkg.py {{stage}})
+    if [ -f packages/{{stage}}/pyproject.toml ]; then uv run --isolated --package tl{{stage}} --group dev pytest -q -c packages/{{stage}}/pyproject.toml --rootdir packages/{{stage}} packages/{{stage}}; else uv run pytest -q $(python3 dev/test_pkg.py {{stage}}); fi
 
 # Every test of every kind, in 4 workers then the serial group. Started by a person, never by the gate, the release, a cron or a background job.
 test-full:
@@ -45,7 +45,7 @@ tools:
 # Static gate: ruff + pyrefly + import-linter contracts. Seconds. The structural rules (caps, placement, ratchets) are tests/rules, run by `just test`.
 check: lint types rules
 
-# lint and types look only at the .py files this change touches (against origin/main, plus the working tree); lint-all and types-all read the whole tree.
+# lint looks only at the .py files this change touches (against origin/main, plus the working tree); lint-all reads the whole tree; types always does.
 lint:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -57,13 +57,8 @@ lint-all:
     set -euo pipefail
     uv tool run "ruff@$(just pin ruff)" check
 
+# The whole tree, not the changed files: a signature change breaks callers in files the change did not touch (tl-cbj4). About 1 s wall, 8 s CPU.
 types:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    files=$(just changed)
-    [ -z "$files" ] || { unset VIRTUAL_ENV; uv sync --frozen -q; echo "$files" | xargs uv tool run "pyrefly@$(just pin pipx:pyrefly)" check; }
-
-types-all:
     #!/usr/bin/env bash
     set -euo pipefail
     unset VIRTUAL_ENV  # a caller under `uv run --script` (release.py) passes its script env, which has no dev group
@@ -75,7 +70,7 @@ rules:
     set -euo pipefail
     # skills/task-loop/_vendor: .importlinter names stream_proc (the vendored process library) as a root package, so grimp must find it
     # --with msgspec: .importlinter names msgspec as a root package (the hook contract), and grimp must find it
-    PYTHONPATH=src:packages/kernel/src:skills/task-loop/_vendor uv tool run --with msgspec --from "import-linter@$(just pin pipx:import-linter)" lint-imports
+    PYTHONPATH=src:$(ls -d packages/*/src | paste -sd: -):skills/task-loop/_vendor uv tool run --with msgspec --from "import-linter@$(just pin pipx:import-linter)" lint-imports
 
 # The .py files this change touches: committed since origin/main, edited, or new; deleted ones, the vendored copy and fixtures left out.
 [private]

@@ -7,8 +7,9 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
+
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))

@@ -1,9 +1,9 @@
 """Tracker ID syntax is interpreted only by the beads adapter."""
 
 import support.paths  # noqa: F401
-from support.case import Case
 
 from taskloop.adapters.bdids import mentioned_ids, prefix_of
+from tltestkit.case import Case
 
 
 class TrackerIds(Case):

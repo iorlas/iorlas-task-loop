@@ -4,9 +4,10 @@ import os
 import sys
 from pathlib import Path
 
-from support.case import Case
 from support.imagetools import without_image_tools
-from support.tmpdir import TemporaryDirectory
+
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))

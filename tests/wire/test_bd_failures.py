@@ -2,7 +2,6 @@
 from unittest import mock
 
 import support.paths  # noqa: F401
-from support.case import Case
 
 from taskloop.app.doctor import setup_checks
 from taskloop.app.wire import asks, brief, slots
@@ -10,6 +9,7 @@ from tlkernel.bd_errors import BdCommandFailure
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
+from tltestkit.case import Case
 
 
 class BdFallbacks(Case):

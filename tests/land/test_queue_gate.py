@@ -5,14 +5,14 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from support.case import Case
 from support.memstores import fake_stores
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.stackgate import StackGate
 from taskloop.stores.runlog import RunLog
 from tlkernel.procport import Ran
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 from .test_stackgate_keys import OID, Checkouts, write_receipts
 

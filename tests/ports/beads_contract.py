@@ -2,11 +2,11 @@
 A subclass sets `make() -> Beads` (a fresh, empty store) and gets every test below."""
 
 import pytest
-from support.case import Case
 from support.tags import contract  # noqa: F401  (re-exported for the subclasses)
 
 from tlkernel.beadsport import BdFailure, BeadPatch, BeadQuery, Beads, NewBead
 from tlkernel.ids import BeadId
+from tltestkit.case import Case
 
 # A mixin: only a subclass that is also collected runs; the checker sees addCleanup and subTest through this base.
 _Base = Case

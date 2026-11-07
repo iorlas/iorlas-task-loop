@@ -6,9 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from unittest import mock
 
-from support.case import Case
 from support.memstores import fake_stores
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import check_files, childenv
 from taskloop.app.checks.cache import InputKeys, RunMemo
@@ -25,6 +23,8 @@ from tlkernel.gitport import Git
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.procport import Ran
 from tlkernel.runkey import BaseSha
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 OID, TREE, B1, B2 = "1550b77c" + "0" * 32, TreeSha("tree-1"), "base-1", "base-2"
 SUITE = CheckId("suite")
