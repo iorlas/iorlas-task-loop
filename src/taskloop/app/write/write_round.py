@@ -4,12 +4,12 @@ from typing import Any
 
 from taskloop.app.write import show_check
 from taskloop.app.write.prepare import PREPARED, Prepare
+from taskloop.app.write.prompts import SHOTS_FIX, write_prompt
 from taskloop.app.write.state import AGAIN, REPLAN, StageState
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.checks import planref
 from taskloop.domain.prompts.anchors import anchors_text
 from taskloop.domain.prompts.common import DECIDED_TEXT, LATER_CASES, UNCHECKED_TEXT
-from taskloop.domain.prompts.write import SHOTS_FIX, write_prompt
 
 CASES_TAIL = ("\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
               "criterion it proves, the check, why); never remove or weaken one.")

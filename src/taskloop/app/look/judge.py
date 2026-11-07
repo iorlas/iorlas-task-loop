@@ -6,9 +6,9 @@ from typing import Any
 
 from taskloop.adapters import looks
 from taskloop.app.look.host import LookHost
+from taskloop.app.look.prompts import LOOK_FEEDBACK, LOOK_WRITE_TABLE
 from taskloop.contracts.checkpoint import Defect
 from taskloop.contracts.plancheck import StageData
-from taskloop.domain.prompts.write import LOOK_FEEDBACK, LOOK_WRITE_TABLE
 from taskloop.domain.review import switch
 from taskloop.domain.review.matchers import Wording
 from taskloop.domain.review.skip import SkipKind
