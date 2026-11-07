@@ -17,6 +17,7 @@ from tlkernel import (
     dashruns,
     delegate,
     events,
+    flakes,
     followups,
     gateplan,
     gitfacts,
@@ -332,6 +333,7 @@ OTHERS = {
     "ArtifactMeta": artifact.ArtifactMeta(name="home.png", caption="home", role="after", kind="png", size=9, sha256="ab" * 32, created=T),
     "Incident": queue_state.Incident(t=T, kind="corrupt", pr=7, bead="tl-1", main_before="m" * 40, merge_sha="s" * 40, parent="m" * 40,
                                      expected_tree="t1", landed_tree="t2"),
+    "FlakeLog": flakes.FlakeLog(rows=[flakes.FlakeRow(test="test_a", t=T, how="retry", run="run-1", bead="tl-1")]),
     "QueueDoc": queue_doc.QueueDoc(entries=[queue_doc.EntryRow(
         branch="topic", head="head", phase="gating", q="q", tree="tree", ref="refs/tl/queue/topic", reason="",
         base="base", ahead=["first"], check_set="checks",
@@ -481,7 +483,7 @@ OTHERS = {
     "QueueItem": pickset.QueueItem(project="p", bead="t-1", title="queued", pos=1, state="next", why="1st of 2 chosen"),
     "ReposIndex": snapshots.ReposIndex(repos={"o/r": snapshots.RepoEntry(path="/r", added=T)}),
     "SharedNotes": snapshots.SharedNotes(flakes={"test_x": T}, notes=["n"]),
-    "Pin": snapshots.Pin(task_loop="0.23.38", delegate=None, pinned_at=T),
+    "Pin": snapshots.Pin(task_loop="0.23.38", pinned_at=T),
     "ReleaseResult": snapshots.ReleaseResult(
         ok=False, version="0.23.57", summary="s", at=T, branch="b", message="m", tests=["t"], log="/l"),
     "ReflectState": snapshots.ReflectState(until=T, tried=T, filed=[{"cause": "c", "bead": "b-1"}]),

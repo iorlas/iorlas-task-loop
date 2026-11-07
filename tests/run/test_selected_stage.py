@@ -68,7 +68,7 @@ class SelectedStage(Case):
         e.plan_data = None
         data = typed(PLAN)
         e.planner.plan.return_value = Planned(plan_data=data, summary=data["summary"], planned=1)
-        e.planner.take.side_effect = lambda p: PlanKeeper(e).take(p)
+        e.planner.take.side_effect = lambda p: PlanKeeper(e, e.leftover_sink).take(p)
         e.checkpoints.read.return_value = None
         e.store.show.return_value = Bead(id=e.bead, title="stage task", status="open")
         e.lander.gate.green.return_value = False

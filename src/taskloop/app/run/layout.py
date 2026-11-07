@@ -21,8 +21,6 @@ from tlkernel.run import RunFinish
 from tlkernel.signalrows import SignalRows
 from tlkernel.slots import git_probe
 
-from taskloop.adapters import locks
-
 
 def newest_write(path: Path) -> float:
     """When anything in `path` (a file, or a folder and all it holds) was last written."""
@@ -66,8 +64,8 @@ def prune_run_dirs(cfg: ConfigDir, days: float, exempt: Collection[str] = (), dr
 
 
 def prune_run_logs(cfg: ConfigDir, now: float, retain: float, exempt: Collection[str] = (), dry_run: bool = False) -> list[Path]:
-    """An engine log not written for `retain` seconds goes with its live/ folder (the worker's per-call files), its stderr.log and an
-    owner's request left in its run folder; the log of a bead in `exempt` stays. The dashboard only reads: `tl prune` (the loop runs it
+    """An engine log not written for `retain` seconds goes with its live/ folder (the worker's per-call files), its stderr.log and
+    pending signal rows; the log of a bead in `exempt` stays. The dashboard only reads: `tl prune` (the loop runs it
     at its start) is the one place that deletes them. A live run beats every minute and is never old.
     -> the logs that went (would, with `dry_run`)."""
     gone: list[Path] = []
@@ -83,15 +81,12 @@ def prune_run_logs(cfg: ConfigDir, now: float, retain: float, exempt: Collection
 
 
 def drop_run_log(cfg: ConfigDir, b: RunBundle) -> None:
-    """One engine log with its live/ folder, stderr.log and an owner's request no run took (the run's close drops it too)."""
+    """One engine log with its live/ folder, stderr.log, pending signal rows and run documents."""
     shutil.rmtree(b.live, ignore_errors=True)
     b.err.unlink(missing_ok=True)
-    cfg.run_request(b.run).unlink(missing_ok=True)
     with contextlib.suppress(factorydb.DatabaseError):
         SignalRows(cfg, b.run).drop_all()
         rundocs.forget(cfg, b.run)
-    cfg.run_request_lock(b.run).unlink(missing_ok=True)
-    locks.holder_file(cfg.run_request_lock(b.run)).unlink(missing_ok=True)
     b.log.unlink()
 
 

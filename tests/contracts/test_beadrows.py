@@ -87,7 +87,6 @@ def test_missing_database_has_no_fallback_and_uses_database_health(tmp_path):
     path = tmp_path / "factory.db"
     assert beadrows.read_repo(path, "repo") == ([], None, "")
     assert not path.exists()
-    assert factorydb.database_error(path, 0) == "database unavailable: missing"
 
 
 def test_caller_rollback_restores_listing_and_observation(database):

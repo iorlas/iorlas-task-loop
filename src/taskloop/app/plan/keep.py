@@ -4,23 +4,23 @@ write of its own; the pipeline stores what `plan` returns through `take`."""
 from typing import Protocol
 
 from tlkernel.plancheck import PlanData
+from tlkernel.stagefacts import LeftoverSink
 from tlkernel.wire import Open
 
 from taskloop.app.plan.planned import Planned
 
 
 class PlanFields(Protocol):
-    """The run's plan fields the keeper writes (RunState's `plan_data`, `plan_summary`, `planned`, and the follow-ups to file)."""
+    """The run's plan fields the keeper writes (RunState's `plan_data`, `plan_summary`, and `planned`)."""
 
     plan_data: PlanData | None
     plan_summary: str
     planned: int
-    leftovers: list[Open]
 
 
 class PlanKeeper:
-    def __init__(self, fields: PlanFields) -> None:
-        self.fields = fields
+    def __init__(self, fields: PlanFields, sink: LeftoverSink) -> None:
+        self.fields, self.sink = fields, sink
 
     def draft(self, data: PlanData) -> None:
         self.fields.plan_data = data
@@ -32,7 +32,7 @@ class PlanKeeper:
         self.fields.planned += 1
 
     def leftovers(self, items: list[Open]) -> None:
-        self.fields.leftovers.extend(items)
+        self.sink.extend(items)
 
     def take(self, p: Planned) -> PlanData:
         self.fields.plan_data, self.fields.plan_summary, self.fields.planned = p.plan_data, p.summary, p.planned

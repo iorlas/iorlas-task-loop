@@ -1,12 +1,15 @@
 """Cold singleton documents round trip as rows in their owning part's document table."""
 import json
+import sqlite3
 import uuid
+from dataclasses import replace
 
 import support.paths  # noqa: F401
 from support import homes
 from support.narrow import must
 
-from tlkernel import wire
+from tlkernel import dbparts, wire
+from tlkernel.factoryparts import RELEASE
 from tlkernel.rowstores import PinStore, ReflectStateStore, SharedNotesStore, StatusStore, StatusTriedStore
 from tlkernel.snapshots import Pin, ReflectState, StatusSnapshot, StatusTried
 
@@ -53,3 +56,14 @@ def test_the_status_rows_live_in_lanes_doc():
     keys = [("snapshot:delegate.status",), ("snapshot:delegate.tried",)]
     assert status.docs.rows.select("SELECT k FROM lanes_doc ORDER BY k") == keys
     assert status.docs.rows.select("SELECT k FROM kv WHERE k IN (?, ?)", tuple(k for (k,) in keys)) == []
+
+
+def test_release_upgrade_discards_the_old_pin_and_preserves_release_result():
+    con = sqlite3.connect(":memory:", isolation_level=None)
+    dbparts.launch(con, readonly=False, parts=[replace(RELEASE, version=1, records=(), steps={})])
+    old_pin = json.dumps({"v": 1, "task-loop": "0.2.0", "delegate": "0.5.0"})
+    con.execute("INSERT INTO release_doc VALUES ('pin', ?, 0)", (old_pin,))
+    con.execute("INSERT INTO release_doc VALUES ('release', '{}', 0)")
+    dbparts.launch(con, readonly=False, parts=[RELEASE])
+    assert con.execute("SELECT k, v FROM release_doc").fetchall() == [("release", "{}")]
+    assert con.execute("SELECT version FROM schema_part WHERE name='release'").fetchone() == (2,)

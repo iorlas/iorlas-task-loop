@@ -15,7 +15,10 @@ from taskloop_dash.app import Dash
 from taskloop_dash.env import Env
 from taskloop_dash.http import make_handler
 from taskloop_dash.index.worker import Worker
+from taskloop_dash.needs import NEEDS
 from taskloop_dash.parts import DASH_PARTS
+from taskloop_dash.paths import dash_pid
+from tlkernel import factorydb
 from tlkernel.env import Env as ProcessEnv
 from tlkernel.envvars import EnvVar
 from tlkernel.factorydb import declare_parts
@@ -63,7 +66,7 @@ def start(env: Env, here: Path, process: ProcessEnv,
         s.RequestHandlerClass = handler
     if not bind.is_dev_checkout(here):  # a dev server must not claim the shared pid file
         env.config.root.mkdir(parents=True, exist_ok=True)
-        pid = env.config.dash_pid()
+        pid = dash_pid(env.config)
         tmp = pid.with_name(pid.name + ".tmp")
         tmp.write_text(str(os.getpid()))
         os.replace(tmp, pid)  # a reader never sees the file empty
@@ -72,6 +75,14 @@ def start(env: Env, here: Path, process: ProcessEnv,
 
 def main(env: Env, here: Path, process: ProcessEnv, argv: Sequence[str] | None = None) -> None:
     declare_parts(DASH_PARTS)
+    factorydb.declare_needs(NEEDS)
+    try:
+        con = factorydb.open_ro(env.config.factory_db())
+        if con is not None:
+            con.close()
+    except factorydb.SchemaError as error:
+        print(error, file=sys.stderr, flush=True)
+        sys.exit(2)
     servers, addrs, port, dash = start(env, here, process, argv)
     worker = Worker(env.config, dash.records.repos, env.ports.store)
     worker.start()

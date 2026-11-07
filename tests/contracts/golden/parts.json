@@ -92,15 +92,15 @@
   "ddl": "1e381a678b118b3184ab8d12259ac1196e3aa5bd12969b4addc7df488323b9bc",
   "records": {
    "Pin": {
-    "schema": "e4941b638a23c9d56395961d6b203b79672597988d1ad0b0ef81f32b1e546cc0",
-    "v": 1
+    "schema": "1e3bffd1e52b04e4c911574303c32a109f243eb429ae41c18a7b24b613270097",
+    "v": 2
    },
    "ReleaseResult": {
     "schema": "35580149b1dcba4bf57a7e95d35534df4573430c090d85b88e8a8ad5e3355299",
     "v": 1
    }
   },
-  "version": 1
+  "version": 2
  },
  "report": {
   "ddl": "bdd68231bd87ff760a333280cff6f8afdd9eb293c34b870e1b57e5239ec3d2bb",

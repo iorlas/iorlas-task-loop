@@ -37,15 +37,18 @@ class Refs(Protocol):
 
 
 class QueueRun:
-    def __init__(self, refs: Refs, gate: Callable[[Entry], bool], merge: Callable[[Entry, str], str], *, in_flight: int, main: str) -> None:
+    def __init__(self, refs: Refs, gate: Callable[[Entry], bool], merge: Callable[[Entry, str], str], *, in_flight: int, main: str,
+                 on_change: Callable[[Sequence[Entry]], None] = lambda _e: None) -> None:
         self.refs, self.gate, self.merge = refs, gate, merge
         self.in_flight, self.main = max(1, in_flight), main
         self.entries: list[Entry] = []
+        self.on_change = on_change
         self.built = 0
         self.halted = False
 
     def see(self, event: Event) -> None:
         self.entries = apply(self.entries, event)
+        self.on_change(self.entries)
 
     def by(self, branch: str) -> Entry:
         return next(e for e in self.entries if e.branch == branch)
@@ -74,6 +77,7 @@ class QueueRun:
     def run(self, items: Sequence[tuple[str, str]]) -> list[Entry]:
         """Drive (branch, head) items to the end: merged, or ejected with a reason. -> the entries."""
         self.entries = [Entry(branch=b, head=h) for b, h in items]
+        self.on_change(self.entries)
         running: dict[Future[bool], str] = {}
         with ThreadPoolExecutor(max_workers=self.in_flight) as pool:
             while True:

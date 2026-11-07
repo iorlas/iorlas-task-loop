@@ -2,8 +2,9 @@
 
 from dataclasses import dataclass, replace
 
+from taskloop_dash.readers import runprojection
 from taskloop_dash.views.runfacts import FoldState, Run, run_from
-from tlkernel import factorydb, wire
+from tlkernel import wire
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunManifest
 from tlkernel.runlife import shown
@@ -22,7 +23,7 @@ class StoredRun:
 
 
 def read(cfg: ConfigDir, now: float, *, repo: str | None = None, bead: str | None = None) -> tuple[list[StoredRun], str]:
-    rows, error = factorydb.run_rows(cfg.factory_db(), now, repo=repo, bead=bead)
+    rows, error = runprojection.run_rows(cfg.factory_db(), now, repo=repo, bead=bead)
     try:
         return [StoredRun(r.manifest, wire.load(FoldState, r.state), r.has_log, r.log_mtime)
                 for r in rows], error
