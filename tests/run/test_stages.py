@@ -24,13 +24,13 @@ from support.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE
 from support.spawn import port_git, real_spawner
 from support.who import who
 
-from taskloop.adapters import childenv, pidcheck
+from taskloop.adapters import pidcheck
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.write.handoff import HANDOFF_CAP
 from taskloop.domain.checks import planref
-from tlkernel import rundocs
+from tlkernel import childenv, rundocs
 from tlkernel.acceptancetext import AcceptanceText
 from tlkernel.answers import IRREVERSIBLE
 from tlkernel.argv import argv_of

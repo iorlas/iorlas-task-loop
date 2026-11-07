@@ -49,47 +49,52 @@ class ReflectRouter(Protocol):
              runner: Seam | None, env: Mapping[str, str]) -> Answer: ...
 
 
-class ReflectHost(Protocol):
+class ReflectReadiness(Protocol):
     @property
     def cfg(self) -> ReflectConfig: ...
     dry: bool
     route: str
     stop_pending: bool
     sessions: list[Open]
+
+
+class ReflectContext(Protocol):
     git: Git
     wt: str
     store: ReflectStore
     bead: BeadId
     bead_title: str
+    stats: dict[str, int]
+    log_path: Path
+    def warn(self, text: str) -> None: ...
+
+
+class ReflectExecution(Protocol):
     session: str
     live_n: int
     err_path: Path
     resolved: Resolved | None
     env: Env
-    stats: dict[str, int]
-    log_path: Path
-
     @property
     def delegation(self) -> ReflectDelegation: ...
     @property
     def calls(self) -> ReflectCalls: ...
     @property
     def router(self) -> ReflectRouter: ...
-    def warn(self, text: str) -> None: ...
     def live(self, step: str) -> str: ...
 
 
 class Reflector:
-    def __init__(self, host: ReflectHost, refusal: TrustRefusal, delegate_env: DelegateEnv) -> None:
-        self.host = host
+    def __init__(self, readiness: ReflectReadiness, context: ReflectContext, execution: ReflectExecution,
+                 refusal: TrustRefusal, delegate_env: DelegateEnv) -> None:
+        self.readiness, self.context, self.execution = readiness, context, execution
         self.refusal = refusal
         self.delegate_env = delegate_env
 
     def worth_asking(self, why: str) -> bool:
-        host = self.host
-        if not host.cfg.reflect or host.dry or not host.route or host.stop_pending:
+        if not self.readiness.cfg.reflect or self.readiness.dry or not self.readiness.route or self.readiness.stop_pending:
             return False
-        if not any(s.get("node") in ("write", "review", "verify") for s in host.sessions):
+        if not any(s.get("node") in ("write", "review", "verify") for s in self.readiness.sessions):
             return False  # a run that only planned has nothing to reflect on
         return not why.startswith(("paused:", "waiting:", "failed: infrastructure", "failed: stopped"))
 
@@ -97,51 +102,52 @@ class Reflector:
         """tl-05s: one cheap read-only call that reflects on this run: what went well and badly (each bad item with its cause class
         and the session it comes from), what wasted tokens or minutes, what to change. Never blocks or changes the outcome: any
         failure, a missing lane, a paused run, a stop, is no reflection. -> the answer dict or None."""
-        host = self.host
         if not self.worth_asking(why):
             return None
         try:
-            refusal = self.refusal.refusal(host.git, host.wt, host.cfg.base, host.store.show(host.bead))
+            refusal = self.refusal.refusal(self.context.git, self.context.wt, self.readiness.cfg.base,
+                                          self.context.store.show(self.context.bead))
             if refusal:
-                host.warn("no reflection: " + refusal)
+                self.context.warn("no reflection: " + refusal)
                 return None
             prompt = self.reflect_prompt(outcome, why)
             over = caps.check("reviewer", prompt)
             if over is not None:  # never blocks the close: an over-cap reflection is no reflection
-                host.warn(f"no reflection: {over.why('reflect')}")
+                self.context.warn(f"no reflection: {over.why('reflect')}")
                 return None
             # a short wait: the close step ignores a stop while this runs (route.py adds 120 s to the limit)
-            host.delegation.route()
-            req = RunRequest(role="reviewer", brief_path="", cwd=host.wt, schema_path="", task=host.bead, parent=host.session,
-                             title=f"{host.bead} · reflect", timeout_s=45)
-            cid = host.calls.start("reflect", "reflect", "reviewer", False, host.live_n)
-            runner = host.router.runner(host.err_path, None, host.live("reflect"))
-            res = host.router.call(host.resolved, req, prompt, answers.sent_schema("reflect"), runner,
-                                   self.delegate_env(host.env)).res
-            saved = {k: v for k, v in host.stats.items() if k.startswith("tokens_")}
-            host.calls.end(cid, "reflect", "reviewer", 1, res)
-            host.stats.update(saved)  # the run's counts are the run's, as the Reflect comment says them
+            self.execution.delegation.route()
+            req = RunRequest(role="reviewer", brief_path="", cwd=self.context.wt, schema_path="",
+                             task=self.context.bead, parent=self.execution.session,
+                             title=f"{self.context.bead} · reflect", timeout_s=45)
+            cid = self.execution.calls.start("reflect", "reflect", "reviewer", False, self.execution.live_n)
+            runner = self.execution.router.runner(self.execution.err_path, None, self.execution.live("reflect"))
+            res = self.execution.router.call(self.execution.resolved, req, prompt, answers.sent_schema("reflect"), runner,
+                                             self.delegate_env(self.execution.env)).res
+            saved = {k: v for k, v in self.context.stats.items() if k.startswith("tokens_")}
+            self.execution.calls.end(cid, "reflect", "reviewer", 1, res)
+            self.context.stats.update(saved)  # the run's counts are the run's, as the Reflect comment says them
             if res.data is None or res.stop is not None:
                 return None
             data = unstrict(res.data, answers.schema_for("reflect"))
             return None if answers.check("reflect", False, data) else data
         except Exception as err:  # nothing here may touch the run's outcome
-            host.warn(f"no reflection: {type(err).__name__}: {str(err)[:160]}\n" + traceback.format_exc())
+            self.context.warn(f"no reflection: {type(err).__name__}: {str(err)[:160]}\n" + traceback.format_exc())
             return None
 
     def reflect_prompt(self, outcome: str, why: str) -> str:
-        host = self.host
         rows = []
-        for s in host.sessions:
+        for s in self.readiness.sessions:
             t = s.get("tokens") or {}
             rows.append(f"- {s.get('node')} ({s.get('role')}) {s.get('family') or '?'} {s.get('model') or '?'}: in {t.get('in') or 0}, "
                         f"cached {t.get('cached') or 0}, out {t.get('out') or 0}, {s.get('secs')}s, session {s.get('ref') or '(none)'}")
         lines = []
-        for it in JsonlStore(host.log_path, rec.decode).read_from().items:
+        for it in JsonlStore(self.context.log_path, rec.decode).read_from().items:
             if isinstance(it.rec, rec.Transition):
                 lines.append(f"{it.rec.kind}: " + clip(f"{it.rec.cause} -> {it.rec.to}: {it.rec.detail}", 200))
             elif isinstance(it.rec, rec.Warn):
                 lines.append(f"{it.rec.kind}: " + clip(it.rec.text, 200))
-        stats = "; ".join(f"{k}={v}" for k, v in host.stats.items())
-        return REFLECT_PROMPT % (host.bead, clip(host.bead_title, 120), outcome, clip(why or "(none)", 600), stats, "\n".join(rows[:40]),
+        stats = "; ".join(f"{k}={v}" for k, v in self.context.stats.items())
+        return REFLECT_PROMPT % (self.context.bead, clip(self.context.bead_title, 120), outcome, clip(why or "(none)", 600),
+                                 stats, "\n".join(rows[:40]),
                                  "\n".join(lines[-70:]) or "(none)")

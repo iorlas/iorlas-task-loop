@@ -111,7 +111,7 @@ Layered input caches are material to every ETag: typed beads five seconds; comme
 
 ### F11 — P2: golden fixtures cannot establish producer/consumer consistency
 
-**Evidence:** `tests/dash/test_dash_golden.py:56–67` constructs FakeBeadStore and RunScript inputs; `:83–88` fills new optional fields from current contracts before comparing golden data. `tests/dash/test_dash_starting.py:25–69` tests handcrafted startup states, including pre-manifest Working. `tests/dash/test_dash_api.py:1` describes recorded logs and fake bd as its end-to-end boundary.
+**Evidence:** `tests/dashwire/test_dash_golden.py:56–67` constructs FakeBeadStore and RunScript inputs; `:83–88` fills new optional fields from current contracts before comparing golden data. `tests/dash/test_dash_starting.py:25–69` tests handcrafted startup states, including pre-manifest Working. `tests/dashwire/test_dash_api.py:1` describes recorded logs and fake bd as its end-to-end boundary.
 
 **Failure:** Fixtures can agree perfectly with dashboard inference while real producers publish impossible combinations or incompatible records. Golden default filling additionally cannot establish that a producer populates a newly optional field. The inspected tests do not provide evidence that a 90-second delayed startup, bd outage, manifest-only end, cross-repo collision or close/request race behaves correctly.
 
