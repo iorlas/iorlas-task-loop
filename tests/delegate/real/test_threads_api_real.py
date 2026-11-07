@@ -11,6 +11,9 @@ from delegate import api
 from delegate.app import env
 
 
+LIMIT_S = 60  # each test runs a fake CLI and git
+
+
 class TestThreadWorkers(RunBase):
     @real_proc("delegate: fake worker CLI and its temporary git repository")
     def test_full_then_delta_reach_the_worker(self):
