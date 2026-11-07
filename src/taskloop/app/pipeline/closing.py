@@ -207,4 +207,3 @@ class Closer:
                 e.checkpoints.drop_unless_fenced()
             case _:
                 assert_never(eff)
-
