@@ -17,6 +17,7 @@ from tlkernel.kinds import Kind
 from tlkernel.ports import Clock
 from tlkernel.procport import Spawner
 from tlkernel.run import RunReport
+from tlkernel.runlayout import RunLayout, finish_of, live_run, loop_id_of, loop_of, repo_of
 from tlpipeline.api import Blocked, FixFailed, ended
 
 from taskloop.adapters import landlock
@@ -25,7 +26,6 @@ from taskloop.app.release import reexec
 from taskloop.app.run.context import RunContext
 from taskloop.app.run.facts import open_facts
 from taskloop.app.run.host import RunHost
-from taskloop.app.run.layout import RunLayout, finish_of, live_run, loop_id_of, loop_of, repo_of
 from taskloop.app.run.stages import run_stages
 from taskloop.app.run.state import carries_state
 from taskloop.app.slots.engine_lock import HeldLock
