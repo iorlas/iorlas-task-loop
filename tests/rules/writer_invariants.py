@@ -17,9 +17,9 @@ WRITERS: Final = {
     'TraceStore': {'taskloop.app.pipeline.journal', 'tlkernel.finish_projection'},
     'BadVersionStore': {'taskloop.app.loop.versions'},
     'HandoffMirrorStore': {'taskloop.app.write.handoff'},
-    'ReexecNoteStore': {'taskloop.app.release.reexec', 'taskloop.app.run.reload'},
-    'NetPauseStore': {'taskloop.app.release.reexec', 'taskloop.app.run.reload'},
-    'RunCountersStore': {'taskloop.app.run.reload'},
+    'ReexecNoteStore': {'taskloop.app.release.reexec', 'taskloop.app.release.closing'},
+    'NetPauseStore': {'taskloop.app.release.reexec', 'taskloop.app.release.closing'},
+    'RunCountersStore': {'taskloop.app.pipeline.reload'},
     'EngineLockStore': {'taskloop.app.slots.engine_lock'},
     'RunManifestStore': {'tlkernel.runrows'},
 }
