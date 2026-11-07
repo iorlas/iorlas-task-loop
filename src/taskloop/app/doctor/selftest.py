@@ -22,7 +22,8 @@ CHECK: Final = ["test", "-f", "f.txt"]
 PLAN: Final[dict[str, Any]] = {"summary": "do it",
         "stages": [{"goal": "add f", "files": ["f.txt"], "checks": [{"kind": "adhoc", "argv": CHECK, "reads": []}], "hard": False}],
         "risks": [], "question": "", "options": [], "decided": "", "cases": [], "leftovers": []}
-WRITE: Final[dict[str, Any]] = {"summary": "wrote f", "checks_run": [{"cmd": shlex.join(CHECK), "exit": 0}], "question": "", "options": [],
+WRITE: Final[dict[str, Any]] = {"summary": "wrote f", "run_checks": [], "checks_run": [{"cmd": shlex.join(CHECK), "exit": 0}],
+         "question": "", "options": [],
          "decided": "",
          "bad_checks": [], "new_cases": [], "unchecked": [], "logic_only": ""}
 REVIEW: Final[dict[str, Any]] = {

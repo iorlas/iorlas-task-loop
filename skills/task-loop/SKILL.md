@@ -279,6 +279,8 @@ review after all. The drawer header shows `review: on|off|sampled`.
 `engine.reviewer_other_family` (default true) requests another family for reviewer calls. Delegate's routing settings own the writer pin,
 exec grant and read roots. The bead label `writer-family:<f>` is forwarded as an opaque `prefer` string on worker calls. A refused
 preference pauses with its reason; `tl doctor` prints the booleans. Profiles carrying retired harness keys are refused as unknown.
+**Requested engine checks.** `engine.checks[].requestable` (boolean, default false) lets the writer name the check id in its answer’s `run_checks` list (default []). The engine accepts at most `engine.max_run_checks` (integer, default 2) unique ids per write, refuses undeclared or non-requestable ids with feedback, and runs admitted checks after the normal stage checks through the same executor and wall limits. These checks are engine-only. Their output, green or red, returns in the next writer prompt; requested reds do not fail the round or consume red tries.
+
 **Who runs a check.** A repo check is the writer's to run when its longest green run took at most `engine.writer_check_max_s`, or says
 `"writer": true` (`false`: never) or its own `"writer_check_max_s"`; a `run: gate` check always is the engine's. `"tail_log"` names a log of the tree
 whose first 20 `error CS` lines join a red's output when it shows none (the analyzers default to `client/Logs/unity-project-files.log`).

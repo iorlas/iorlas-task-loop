@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from tlkernel.checks import CheckRun
+from tlkernel.ids import CheckId
 from tlkernel.plancheck import PlanData, RoundState
 from tlkernel.wire import Open
 
@@ -73,6 +74,8 @@ class StageState:
         self.feedback: str = self.state.get("feedback", "")
         self.rounds: int = self.state.get("rounds", 0)
         self.n: int = self.state.get("n", 0)
+        self.run_checks: list[CheckId] = []
+        self.request_feedback = ""
         self.red = 0
         self.prepare_retried = False
         self.failed_cmds: list[str] | None = self.state.get("failed")  # the commands the last engine run found red (None: none ran red yet)

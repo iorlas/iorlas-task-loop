@@ -4,9 +4,11 @@ from pathlib import Path
 from typing import Protocol
 
 from tlgate import evidence as check_evidence
+from tlgate.domain.specs import repo_check
 from tlgate.host import CheckFault, CheckStuck
 from tlgate.runner import Checker
 from tlkernel.checks import CheckFaultKind, CheckRun
+from tlkernel.ids import CheckId
 from tlkernel.kinds import Kind
 from tlkernel.plancheck import StageData
 
@@ -41,6 +43,25 @@ class StageChecks:
         """run, then a stop (it ended a check, which reports itself failed) ends the run here."""
         run = self.host.run_checks(st, name, acceptance_first, groups, conflict_fix, **meta)
         self.host.halt_point()
+        return run
+
+    def requested(self, ids: Sequence[CheckId], name: str, **meta: object) -> CheckRun:
+        """Separate informational block: same executor and evidence, no red streak or round verdict."""
+        host = self.host
+        host.checker.host.steps.begin("checks", f"requested checks: {name}", requested=True, **meta)
+        results = []
+        for cid in ids:
+            spec = next(k for k in host.checker.host.cfg.checks if k.id == cid)
+            try:
+                run = host.checker.run_items([repo_check(spec, host.checker.host.cfg)], everything=True)
+            except CheckFault as fault:
+                raise host.blocked_for(fault.text, self.fault_kind(fault.kind).name) from fault
+            results.extend(run.results)
+            host.halt_point()
+        run = CheckRun(round=host.checker.round, results=results)
+        host.checker.host.checklog.round(host.checker.host.steps.id, run)
+        host.checker.host.steps.outcome("requested", f"{len(results)} requested results")
+        host.assert_tree("checks", "after")
         return run
 
     def run(self, st: StageData, name: str, acceptance_first: bool = False, groups: Sequence[str] | None = None,
