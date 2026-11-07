@@ -1402,22 +1402,17 @@
   "finish": null,
   "finish_projected": false
  },
- "DoneMemo": {
-  "v": 1,
-  "done": {
-   "[1]": {
-    "sha": "s",
-    "file": "/f",
-    "identity": {
-     "semantics": "sem",
-     "worktree": "/wt",
-     "cwd": "/wt",
-     "tree": "tree",
-     "cwd_tree": "tree",
-     "head": "head",
-     "cwd_head": "head"
-    }
-   }
+ "DoneEntry": {
+  "sha": "s",
+  "file": "/f",
+  "identity": {
+   "semantics": "sem",
+   "worktree": "/wt",
+   "cwd": "/wt",
+   "tree": "tree",
+   "cwd_tree": "tree",
+   "head": "head",
+   "cwd_head": "head"
   }
  },
  "HandoffMirror": {
