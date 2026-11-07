@@ -119,7 +119,7 @@ class Fake(Case):
             replayed += 1
             assert must(r.stop).reason == exp, fx.name
             assert (must(r.stop).scope, must(r.stop).permanence, must(r.stop).retry_kind) == lp_facts(exp), fx.name
-            a = lp.decide(must(r.stop), lp.Ctx(now=1000.0))
+            a = lp.decide(must(r.stop), lp.Ctx())
             assert not (isinstance(a, (lp.Yield, lp.Fail)) and oc.make(Kind[a.kind]).rule.makes_ask), fx.name
         assert replayed >= 5
 
@@ -140,7 +140,7 @@ class Fake(Case):
         r = self.call(runner=lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, "", "Traceback"), resume="r1")
         assert (r.source, must(r.stop).reason) == ("synthesized", "no_answer")  # not delegate's own `crash` (needs_owner)
         assert (must(r.stop).scope, must(r.stop).permanence, must(r.stop).retry_kind) == ("machine", "transient", "none")
-        assert must(r.stop).ref == "r1"
+        assert must(r.res.stop).ref == "r1"
 
     def test_a_wrong_shape_is_a_contract_violation_and_a_call_the_engine_ended_is_a_timeout(self):
         for bad in ('{"v": 2, "status": "done"}', '{"contract": 2, "stop": null}', '{"contract": 4}', '{"contract": 4, "stop": 7}'):
@@ -151,7 +151,7 @@ class Fake(Case):
         def hang(cmd, **kw):
             raise dl.Stopped("no worker output for 20 min")
         r = self.call(runner=hang, resume="r9")
-        assert (must(r.stop).reason, must(r.stop).scope, must(r.stop).ref) == ("timeout", "bead", "r9")
+        assert (must(r.stop).reason, must(r.stop).scope, must(r.res.stop).ref) == ("timeout", "bead", "r9")
         assert "no worker output" in r.say
 
         def backstop(cmd, **kw):
@@ -165,9 +165,10 @@ class Fake(Case):
     def test_a_killed_stop_is_a_signal_and_sandbox_limit_denials_do_not_count(self):
         k = lp.stop_of(delegate_wire.result_of(fake_route.stop_answer("killed", "r1")))
         assert (must(k).scope, must(k).permanence, must(k).retry_kind, bool(must(k).signal)) == ("machine", "transient", "none", True)
-        assert isinstance(lp.decide(must(k), lp.Ctx(now=1.0)), lp.Yield)
-        n = lp.stop_of(delegate_wire.result_of(fake_route.stop_answer("network", "r1", partial=True)))
-        assert (must(n).reason, must(n).ref, must(n).resumable, must(n).partial, must(n).signal) == ("network", "r1", True, True, 0)
+        assert isinstance(lp.decide(must(k), lp.Ctx()), lp.Yield)
+        result = delegate_wire.result_of(fake_route.stop_answer("network", "r1", partial=True))
+        n, wire = must(lp.stop_of(result)), must(result.stop)
+        assert (n.reason, wire.ref, wire.resumable, wire.partial, n.signal) == ("network", "r1", True, True, 0)
         j = {
             "denied": [
                 {"kind": "sandbox_limit", "tool": "Bash", "input": {}},

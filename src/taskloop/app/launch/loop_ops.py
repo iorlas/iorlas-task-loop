@@ -1,14 +1,9 @@
-"""What the loop does to the world, one verb each: claim a bead, spawn and stop its run-task, exec into a newer install, the chores
-of a quiet moment. Each is a function of ports; app/launch/loop.py closes them over a repo into the LoopEnv."""
-import contextlib
-import os
+"""Bind the loop node's world-facing verbs to real ports and stages; launch/loop.py binds the repo into the LoopEnv."""
 import platform
-import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import IO
 
-from jsonl_log import close_held
 from tlkernel import bdbackup, factorybackup, paths
 from tlkernel.beadsport import Beads
 from tlkernel.env import Env
@@ -18,7 +13,7 @@ from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.landed import landed_by
 from tlkernel.procport import Child, Hold, Spawner
-from tlkernel.slots import SlotGitError, git_probe
+from tlkernel.slots import git_probe
 
 from taskloop.adapters import beadtools, childenv, ident, ram
 from taskloop.adapters import storm as storm_file
@@ -26,6 +21,7 @@ from taskloop.adapters.bd import BdStore
 from taskloop.adapters.repourl import repo_url
 from taskloop.app.asks import admission
 from taskloop.app.doctor import disk
+from taskloop.app.loop import stages
 from taskloop.app.loop.env import ReloadNote, Storm
 from taskloop.app.reconcile import leases
 from taskloop.app.release import reexec
@@ -39,20 +35,15 @@ from taskloop.app.wire import lanes as wlanes
 from taskloop.app.wire import slots as wslots
 from taskloop.domain import outcome as oc
 
-STOP_GRACE_S = 300.0  # a stopped run-task is given this long to run its close step before stream-proc ends it
+STOP_GRACE_S = stages.STOP_GRACE_S
 
 
 def reload_note(cfg: paths.ConfigDir, bead: BeadId) -> ReloadNote | None:
-    rec = reexec.read_reexec(cfg, bead)
-    reexec.drop_reexec(cfg, bead)
-    if not rec:
-        return None
-    return ReloadNote(run=rec.run, to=rec.to, frm=rec.frm, from_dir=rec.from_dir, t=rec.t)
+    return stages.reload_note(lambda: reexec.read_reexec(cfg, bead), lambda: reexec.drop_reexec(cfg, bead))
 
 
 def fetch(repo: str, git: Git) -> None:
-    with contextlib.suppress(SlotGitError):
-        git.fetch(repo)
+    stages.fetch(repo, git)
 
 
 def release_dead(repo: str, store: Beads, now: float, git: Git, who: Identity) -> list[str]:
@@ -60,26 +51,18 @@ def release_dead(repo: str, store: Beads, now: float, git: Git, who: Identity) -
 
 
 def chores(repo: str, spawner: Spawner, env: Env, git: Git, who: Identity, store: BdStore | None = None) -> None:
-    wlanes.chore(console.say, spawner, env)  # delegate's lane status filed again when the snapshot is 20 min old (the dash reads the file)
-    # asks of closed beads closed, unanswered ones parked, answers no run used flagged
-    cfg = wslots_config.load_cfg(repo, git)
-    wasks.sweep_asks(who, who.config, console.say, cfg, repo)
-    wasks.wake_prs(who, who.config, spawner, cfg, repo)  # a PR-mode land's PR the owner merged or closed: its bead runs again
-    try:
-        reflect.maybe_run(spawner, env, who.config)  # the run reflections into beads, once a day (tl-bl5)
-    except Exception as e:
-        console.say(f"loop: reflect digest: {e}")
-    try:
-        factorybackup.backup(who.config, trail.now())
-    except Exception as e:
-        console.say(f"loop: db backup: {e}")
-    disk.sample_volume(who.config, trail.now(), console.say)  # the hourly point of doctor --disk's forecast
-    if store is not None:
-        try:
-            for line in bdbackup.nightly(who.config, wslots.repo_key(repo), lambda argv: _bd(store, argv), trail.now()):
-                console.say(line)
-        except Exception as e:
-            console.say(f"loop: bd backup: {e}")
+    stages.chores(
+        lambda: wlanes.chore(console.say, spawner, env),
+        lambda: wslots_config.load_cfg(repo, git),
+        lambda cfg: wasks.sweep_asks(who, who.config, console.say, cfg, repo),
+        lambda cfg: wasks.wake_prs(who, who.config, spawner, cfg, repo),
+        lambda: reflect.maybe_run(spawner, env, who.config),
+        lambda: factorybackup.backup(who.config, trail.now()),
+        lambda: disk.sample_volume(who.config, trail.now(), console.say),
+        store,
+        lambda store: bdbackup.nightly(who.config, wslots.repo_key(repo), lambda argv: _bd(store, argv), trail.now()),
+        console.say,
+    )
 
 
 def _bd(store: BdStore, argv: list[str]) -> tuple[int, str, str]:
@@ -89,55 +72,38 @@ def _bd(store: BdStore, argv: list[str]) -> tuple[int, str, str]:
 
 def claim(repo: str, store: Beads, bead: BeadId, wt: str, slot: str, git: Git, who: Identity,
           now: Callable[[], float] = trail.now) -> tuple[bool, str]:
-    # a paused run's claim was released by the step's sweep; a live claim stops here
-    ok, why = admission.admit(bead, repo, git, who, store, now(), running_now=running)
-    if not ok:
-        return False, why
-    return verbs.claim(who, bead, store, git, wt, slot) == 0, "claimed by another session"
+    return stages.claim(
+        lambda: admission.admit(bead, repo, git, who, store, now(), running_now=running),
+        lambda: verbs.claim(who, bead, store, git, wt, slot),
+    )
 
 
-def spawn(spawner: Spawner, cmd: list[str], log: Any, extra: Mapping[str, str]) -> tuple[Child, Hold]:
+def spawn(spawner: Spawner, cmd: list[str], log: IO[bytes], extra: Mapping[str, str]) -> tuple[Child, Hold]:
     """run-task as a child in its own process group: Ctrl-C to the loop reaches it only as the loop's SIGTERM.
     -> (the child, the hold of its spawn): the caller replays the hold first inside the try that stops the child."""
     return spawner.start_held(cmd, out=log, extra=extra)
 
 
 def stop_now(child: Child) -> None:
-    child.stop_async(STOP_GRACE_S)
+    stages.stop_now(child)
 
 
 def stop_tree(child: Child) -> None:
-    child.stop(STOP_GRACE_S)
+    stages.stop_tree(child)
 
 
 def exec_into(repo: str, d: Path, argv: list[str], handover: str, env: Env, who: Identity, start_cwd: str = "") -> None:
-    if start_cwd:
-        os.chdir(start_cwd)  # cmd_loop chdir'd into the repo; a relative --repo in argv means the start directory
-    sys.stdout.flush()
-    sys.stderr.flush()
-    close_held()
-    try:
-        cmd = [*childenv.script_argv(d / "skills" / "task-loop" / "tl.py", env), *argv]
-        os.execve(cmd[0], cmd, childenv.exec_env(env, {EnvVar.TL_LOOP_STATE: handover, EnvVar.TASK_LOOP_SESSION: who.session}))
-    except OSError:
-        with contextlib.suppress(OSError):
-            os.chdir(repo)
-        raise
+    stages.exec_into(repo, start_cwd, lambda: [*childenv.script_argv(d / "skills" / "task-loop" / "tl.py", env), *argv],
+                     lambda: childenv.exec_env(env, {EnvVar.TL_LOOP_STATE: handover, EnvVar.TASK_LOOP_SESSION: who.session}))
 
 
 def loop_lock(cfg: paths.ConfigDir, wt: str, slot: str, slot_bead: str | None, bead: str) -> None:
-    if os.path.isdir(wt):
-        engine_lock.loop_lock(cfg, wt, slot, slot_bead or "", bead=bead)
+    stages.loop_lock(wt, slot, slot_bead, bead, lambda wt, slot, slot_bead, bead: engine_lock.loop_lock(
+        cfg, wt, slot, slot_bead, bead=bead))
 
 
 def available_mb(spawner: Spawner) -> int | None:
-    if platform.system() != "Darwin":
-        return None  # macOS only: vm_stat is the one reader
-    try:
-        result = spawner.run(["/usr/bin/vm_stat"], timeout_s=2)
-        return ram.available_mb(result.out) if result.exit == 0 else None
-    except OSError:
-        return None
+    return stages.available_mb(platform.system, spawner, ram.available_mb)
 
 
 def landed_on_base(repo: str, cfg: paths.ConfigDir, store: Beads, wt: str, bead_id: BeadId, git: Git) -> bool:
@@ -147,30 +113,13 @@ def landed_on_base(repo: str, cfg: paths.ConfigDir, store: Beads, wt: str, bead_
 
 
 def _landed_on_base(repo: str, cfg: paths.ConfigDir, store: Beads, wt: str, bead_id: BeadId, git: Git) -> bool:
-    """Only positive evidence lets the loop treat a bead as landed; an unknown probe stays not ready."""
-    if not os.path.isdir(wt):
-        return False
-    base = wslots_config.load_cfg(repo, git).base
-    rec = landed_by(store)(bead_id)
-    if rec is not None:
-        return git.is_ancestor(wt, rec.sha, base)
-    branch = getattr(beadtools.peek(store, bead_id), "metadata", {}).get("branch") or "task/" + bead_id
-    with contextlib.suppress(SlotGitError):
-        git.fetch(wt)
-    tip = git.rev_parse(wt, "refs/heads/" + branch)
-    last = git.log(wt, [tip], limit=1) if tip else []
-    if not last or not last[0].subject.endswith(f"({bead_id})"):
-        return False
-    return git.is_ancestor(wt, tip, base)
+    return stages.landed_on_base(repo, wt, bead_id, git, lambda: wslots_config.load_cfg(repo, git).base,
+                                 lambda: landed_by(store)(bead_id), lambda: beadtools.peek(store, bead_id))
 
 
 def storm(repo: str, cfg: paths.ConfigDir, now: Callable[[], float] = trail.now, *, git: Git) -> Storm | None:
-    path = storm_file.storm_path(cfg.root, repo_url(git, repo))
-    rec = storm_file.read_storm(path, now(), oc.KNOBS["storm_window_s"])
-    if not rec:
-        return None
-    banner = (
-        "WAIT: storm {} on {}; the beads stay open (look at their logs). Record {} expires {:d} min after it was written; "
-        "clear it to wake sooner"
-    ).format(rec.get("fingerprint"), ",".join(rec.get("beads") or []), path, (oc.KNOBS["storm_window_s"] // 60))
-    return Storm(rec.get("fingerprint") or "", banner, float(rec["t"]) + oc.KNOBS["storm_window_s"])
+    return stages.storm(
+        lambda: storm_file.storm_path(cfg.root, repo_url(git, repo)),
+        lambda path: storm_file.read_storm(path, now(), oc.KNOBS["storm_window_s"]),
+        oc.KNOBS["storm_window_s"],
+    )
