@@ -3,7 +3,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from tlkernel import bdbackup
+from taskloop.adapters import bdbackup
 from tlkernel.paths import ConfigDir
 
 DAY = 86400.0
