@@ -1,9 +1,9 @@
 """New explicit enum cases preserve engine refusal and delegate retry authority."""
 
-from taskloop.domain.lanes import pauses
-from taskloop.domain.lanes.pause_reasons import Reason
+from tlkernel import lanepauses as pauses
 from tlkernel.askenums import AskClass
 from tlkernel.asklint import INFRA, KIND_OF
+from tlkernel.pausereasons import Reason
 from tltestkit.case import Case
 
 
