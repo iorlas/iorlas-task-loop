@@ -1,5 +1,5 @@
 """Parks (`wait` rows of kind park; parks/<bead>.json before): question counts and durable pause wakes. `runs` counts questions on
-the same bead text; `attempts` counts pauses by producer:reason across runs (legacy bare reasons are read on upgrade). Transient
+the same bead text; `attempts` counts pauses by producer:reason across runs. Transient
 pauses carry an epoch retry_at; needs_owner pauses wake on owner input."""
 from pathlib import Path
 from typing import ClassVar
