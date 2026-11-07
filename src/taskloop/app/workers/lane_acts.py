@@ -54,9 +54,8 @@ class LaneActs:
         return waited, up is not False
 
     def ctx_of(self, c: Any) -> lp.Ctx:
-        k, now = c.counts, self.e.clock.now()
+        k = c.counts
         return lp.Ctx(
-            now,
             bool(c.resume),
             k["attempt"],
             c.denied_retried,

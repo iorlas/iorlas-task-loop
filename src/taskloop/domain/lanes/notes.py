@@ -2,6 +2,7 @@
 
 from typing import Final
 
+NET_WAIT_CAP_S: Final = 600  # maximum wait for the lander's git push network retry
 NET_BACKOFF: Final = (5, 10, 20, 40, 60, 120)  # seconds between the lander's git push network probes
 FRESH_WRITER_TEXT: Final = (
     "\nYou take over from an earlier writer of this task, on another model. Its work is in this "
