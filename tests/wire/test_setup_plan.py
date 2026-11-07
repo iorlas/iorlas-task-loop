@@ -3,8 +3,10 @@ import argparse
 import json
 from pathlib import Path
 
-from taskloop.app.wire import setup
+from taskloop.app.doctor import setup
+from taskloop.app.slots import profile_facts
 from taskloop.cli import setup as cli_setup
+from taskloop.stores.delegate import real_route
 from tlkernel.env import Env
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
@@ -29,7 +31,7 @@ class SetupPlan(Case):
 
     def test_a_bare_machine_is_planned_and_nothing_is_created(self):
         before = tree(self.home)
-        plan = setup.plan(self.plugin, self.env, self.repo)
+        plan = setup.plan(self.plugin, self.env, self.repo, profile_facts, real_route())
         assert tree(self.home) == before
         checks = self.checks(plan)
         assert not checks["config"].ok
@@ -39,16 +41,16 @@ class SetupPlan(Case):
 
     def test_a_local_folder_adds_the_path_link_fix_and_a_made_link_clears_it(self):
         (self.home / ".local").mkdir()
-        assert "path-link" in {f.id for f in setup.plan(self.plugin, self.env, None).fixes}
+        assert "path-link" in {f.id for f in setup.plan(self.plugin, self.env, None, profile_facts, real_route()).fixes}
         (self.home / ".local" / "bin").mkdir()
         (self.home / ".local" / "bin" / "tl").symlink_to(self.home / ".config" / "task-loop" / "bin" / "tl")
-        assert "path-link" not in {f.id for f in setup.plan(self.plugin, self.env, None).fixes}
+        assert "path-link" not in {f.id for f in setup.plan(self.plugin, self.env, None, profile_facts, real_route()).fixes}
 
     def test_a_repo_without_a_profile_gets_the_questions_tailored_to_its_stack(self):
         (self.repo / "ProjectSettings").mkdir()
         (self.repo / "ProjectSettings" / "ProjectVersion.txt").write_text("m_EditorVersion: 6000.0\n")
         (self.repo / "justfile").write_text("check:\n    true\n")
-        plan = setup.plan(self.plugin, self.env, self.repo)
+        plan = setup.plan(self.plugin, self.env, self.repo, profile_facts, real_route())
         assert [q.id for q in plan.questions] == ["unity-lease", "gate"]
         assert plan.questions[0].default == "yes"
         assert "unity" in self.checks(plan)["stack"].detail
@@ -62,30 +64,30 @@ class SetupPlan(Case):
     def test_a_profile_that_loads_asks_nothing_and_a_stale_key_is_named(self):
         profile = self.repo / ".task-loop.json"
         profile.write_text(json.dumps({"slots": {"count": 2}}))
-        plan = setup.repo_part(self.repo)
+        plan = setup.repo_part(self.repo, profile_facts)
         assert plan.questions == []
         assert self.checks(plan)["profile"].ok
         profile.write_text(json.dumps({"slots": {"cuont": 2}}))
-        stale = self.checks(setup.repo_part(self.repo))["profile"]
+        stale = self.checks(setup.repo_part(self.repo, profile_facts))["profile"]
         assert not stale.ok
         assert "cuont" in stale.detail
 
     def test_slots_the_profile_counts_must_exist_on_disk(self):
         (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": 2}}))
-        plan = setup.repo_part(self.repo)
+        plan = setup.repo_part(self.repo, profile_facts)
         slots = self.checks(plan)["slots"]
         assert not slots.ok
         assert ".slots" in slots.detail
         assert [f.id for f in plan.fixes] == ["slots"]
         (self.repo / ".slots" / "s1").mkdir(parents=True)
         (self.repo / ".slots" / "s2").mkdir()
-        done = setup.repo_part(self.repo)
+        done = setup.repo_part(self.repo, profile_facts)
         assert self.checks(done)["slots"].ok
         assert done.fixes == []
 
     def test_a_profile_with_no_slots_asks_nothing_about_them(self):
         (self.repo / ".task-loop.json").write_text(json.dumps({}))
-        assert "slots" not in self.checks(setup.repo_part(self.repo))
+        assert "slots" not in self.checks(setup.repo_part(self.repo, profile_facts))
 
     def test_the_command_prints_the_plan_as_json_or_text_and_exits_1_while_something_is_missing(self):
         shown = []
