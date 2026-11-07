@@ -3,7 +3,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
-from tlgate.domain.writer_split import WriterSplit
+from tlgate.api import WriterSplit
 from tlkernel.asked import Asked
 from tlkernel.askspec import AskSpec
 from tlkernel.beadsport import Beads

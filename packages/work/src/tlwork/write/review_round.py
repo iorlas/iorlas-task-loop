@@ -4,7 +4,7 @@ the writer, until the rounds are used up."""
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from tlgate.evidence import compact
+from tlgate.api import evidence
 from tlkernel import askspecs, trustroots
 from tlkernel import lanecaps as caps
 from tlkernel import workswitch as switch
@@ -113,7 +113,8 @@ class ReviewRound:
             bool(s.fix), s.last, s.state["scope"] if s.fix else "", round_no=s.rounds + 1, prior=e.hand.rounds_text(last=3),
             acceptance=acceptance_text(self.items(s)), brief=e.briefs.text(), plan=e.cases.plan_text(s.i),
             n=s.i + 1, goal=st["goal"],
-            work=e.newfiles.stage_work(kinds["unexplained"], kinds["ignored"]), checks=compact(s.run.results), summary=s.w["summary"],
+            work=e.newfiles.stage_work(kinds["unexplained"], kinds["ignored"]), checks=evidence.compact(s.run.results),
+            summary=s.w["summary"],
             evidence=e.evidence_dir, gate=gate, added=e.stats["tests_added"], removed=e.stats["tests_removed"])
         where = e.briefing.where("review")
         text += ("\n" + where if where else "") + e.cases.cases_text()

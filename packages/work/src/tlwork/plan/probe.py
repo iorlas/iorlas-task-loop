@@ -4,7 +4,7 @@ the check runner, with its cache and limits; any other command is only looked up
 in the repo). What comes back is a planner fact: a missing program, a check that already passes, a check this host cannot run."""
 from pathlib import Path
 
-from tlgate.domain.specs import repo_check
+from tlgate.api import repo_check
 from tlkernel import beadmatchers as acnames
 from tlkernel.checks import UNVERIFIED_EXIT, CheckResult
 from tlkernel.config import CheckSpec

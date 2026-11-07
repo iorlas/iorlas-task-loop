@@ -3,7 +3,7 @@
 import re
 from typing import Final
 
-from tlgate.domain import lint
+from tlgate.api import lint
 from tlkernel.config import EngineConfig
 from tlkernel.paths import TASK_EXCLUDE
 from tlkernel.plancheck import PlanData

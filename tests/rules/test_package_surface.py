@@ -7,6 +7,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 SURFACE = {"tlpipeline": ("api", "testing", "contracts")}
 PACKAGE_ONLY = {
+    "tlgate": ("api", "testing", "contracts"),
     "tlslots": ("api", "testing"),
     "tlasks": ("api", "testing", "contracts"),
     "tlartifacts": ("api",),

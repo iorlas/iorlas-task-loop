@@ -3,8 +3,7 @@ rounds so far, the accepted stages, the owner's answer) and the rules the checks
 import json
 from pathlib import Path
 
-from tlgate.domain import lint
-from tlgate.domain.names import norm
+from tlgate.api import lint, norm
 from tlkernel import plancheck
 from tlkernel.gitport import Git
 from tlkernel.plancheck import PlanData

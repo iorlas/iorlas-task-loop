@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import Mock
 
-from tlgate import authorization
+from tlgate.api import authorization
 from tlgate.testing import FakeGateStores
 from tlkernel.beadsport import Beads
 from tlkernel.checks import CheckResult

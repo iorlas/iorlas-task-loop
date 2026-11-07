@@ -3,7 +3,7 @@ import threading
 from collections.abc import Mapping
 from typing import IO, Literal
 
-from tlgate.domain.writer_split import WriterSplit
+from tlgate.api import WriterSplit
 from tlkernel.config import EngineConfig
 from tlkernel.procport import Child, Hold, Ran, RanBytes, Streamed
 from tlkernel.wire import Open

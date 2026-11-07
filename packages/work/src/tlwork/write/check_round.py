@@ -3,7 +3,7 @@ the writer calls impossible, red tries used up, or the rounds used up ask for a 
 at once (ASK_STUCK): it is not the code, so the writer is not asked and nothing is retried."""
 from typing import Any
 
-from tlgate import evidence as check_evidence
+from tlgate.api import evidence as check_evidence
 from tlkernel import askspecs
 from tlkernel.checks import CheckRun
 from tlkernel.plancheck import StageData

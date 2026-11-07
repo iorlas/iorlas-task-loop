@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from tlgate.domain import lint, planref
+from tlgate.api import lint, planref
 from tlkernel import plancheck
 from tlkernel.plancheck import PlanData
 from tlkernel.stagefacts import RunFacts
