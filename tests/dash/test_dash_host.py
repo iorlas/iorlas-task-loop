@@ -4,11 +4,11 @@ from unittest.mock import patch
 
 from support.case import Case
 
-from taskloop.contracts import factorydb
-from taskloop.contracts.slottable import SlotSource
 from taskloop_dash.cli import dash
 from taskloop_dash.env import Env, Ports
 from taskloop_dash.readers.world import Worlds
+from tlkernel import factorydb
+from tlkernel.slottable import SlotSource
 
 
 class DashboardHost(Case):

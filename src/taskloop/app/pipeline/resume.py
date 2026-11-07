@@ -5,16 +5,17 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel import plancheck, wire
+from tlkernel.ask import Ask
+from tlkernel.checkpoint import BriefSnap, Checkpoint
+from tlkernel.checks import CheckRun
+from tlkernel.enums import AskClass
+from tlkernel.gitport import Git
+from tlkernel.plancheck import PlanData, RoundState
+from tlkernel.wire import Open
+
 from taskloop.app.pipeline.decide import CONFIRMED, OUTSIDE, Decision, World, resume_decision, stage_count
 from taskloop.app.pipeline.ports import HeadHistory, ReviewRestore
-from taskloop.contracts import plancheck, wire
-from taskloop.contracts.ask import Ask
-from taskloop.contracts.checkpoint import BriefSnap, Checkpoint
-from taskloop.contracts.checks import CheckRun
-from taskloop.contracts.enums import AskClass
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.plancheck import PlanData, RoundState
-from taskloop.contracts.wire import Open
 from taskloop.domain.plan import brief
 
 KEEP_FOR_ACTIVE = ("plan_data", "accepted", "extra", "planner_ref", "brief_hash", "snap", "review")  # restored one by one, not copied over

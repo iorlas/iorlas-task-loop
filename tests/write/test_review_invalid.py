@@ -10,8 +10,8 @@ from support.logs import records
 from support.plans import BEAD, CLEAN, PLAN, WRITE
 
 from taskloop.app.write.state import StageState
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.kinds import Kind
+from tlkernel.enums import Outcome
+from tlkernel.kinds import Kind
 
 
 class ReviewInvalid(EngineTest):

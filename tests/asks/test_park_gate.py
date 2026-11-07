@@ -5,11 +5,11 @@ import support.paths  # noqa: F401
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.asks import parks
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.parks import Park, ParkStore
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.bead import Bead
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.parks import Park, ParkStore
+from tlkernel.paths import ConfigDir
 
 
 def test_an_owner_park_with_no_hold_is_released_by_the_gate():

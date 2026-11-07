@@ -1,7 +1,7 @@
 """`FakeChecks`: scripted pass or fail per command, no shell. A command with no script passes."""
 from dataclasses import dataclass, field
 
-from taskloop.contracts.checksport import CheckResult, CheckSpec
+from tlkernel.checksport import CheckResult, CheckSpec
 
 
 def passed(out: str = "") -> CheckResult:

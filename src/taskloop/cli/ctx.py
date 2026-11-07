@@ -3,12 +3,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from tlkernel.env import Env
+from tlkernel.factorydb import declare_parts
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+from tlkernel.procport import Spawner
+
 from taskloop.app.parts import STAGE_PARTS
-from taskloop.contracts.env import Env
-from taskloop.contracts.factorydb import declare_parts
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.procport import Spawner
 
 
 @dataclass(frozen=True)

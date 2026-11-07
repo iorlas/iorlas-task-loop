@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 
-from taskloop.contracts import answers, schema  # noqa: E402
+from tlkernel import answers, schema  # noqa: E402
 
 PRE_FIX_UNCHECKED = ROOT / "tests" / "fixtures" / "schemas" / "pre_fix_unchecked.json"
 

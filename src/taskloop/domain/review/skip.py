@@ -5,9 +5,9 @@ from collections.abc import Collection, Sequence
 from enum import StrEnum
 from typing import Final
 
-from taskloop.contracts.config import ReviewSkipConfig
-from taskloop.contracts.gitfacts import DiffEntry
 from taskloop.domain.checks.matchers import glob_re
+from tlkernel.config import ReviewSkipConfig
+from tlkernel.gitfacts import DiffEntry
 
 NEVER: Final = ("**/*.md", "**/*.mdx", "**/*.rst", "docs/**", ".task-loop.json")  # always reviewed, whatever the lists say
 INDENTED: Final = (".py", ".pyi", ".yaml", ".yml", ".mk", ".nim", ".haml", ".slim", ".coffee", ".pug", ".jade", ".sass", ".styl")

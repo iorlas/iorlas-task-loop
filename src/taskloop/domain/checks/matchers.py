@@ -4,7 +4,7 @@ import functools
 import re
 from typing import Final
 
-from taskloop.contracts.ids import CheckId
+from tlkernel.ids import CheckId
 
 # -- globs: ** crosses folders, * and ? stay in one, {a,b} is either --------------------------------------------------
 

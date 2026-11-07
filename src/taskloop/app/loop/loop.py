@@ -10,6 +10,17 @@ from dataclasses import dataclass, field
 from os import EX_CONFIG
 from pathlib import Path
 
+from tlkernel import runlife, wire
+from tlkernel.bead import Bead
+from tlkernel.beadsport import BdFailure
+from tlkernel.config import ConfigError
+from tlkernel.ids import BeadId
+from tlkernel.locator import RunLocator
+from tlkernel.loop import LoopState, LoopWait, QueueRow
+from tlkernel.parks import ParkStore
+from tlkernel.run import LoopLogLine
+from tlkernel.slots import SlotFail
+
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop import waits
 from taskloop.app.loop.core import Core, prio_of
@@ -21,16 +32,6 @@ from taskloop.app.loop.run import BeadRun, Where
 from taskloop.app.loop.settle import Settle
 from taskloop.app.loop.take import Taker
 from taskloop.app.loop.versions import Installs
-from taskloop.contracts import runlife, wire
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import BdFailure
-from taskloop.contracts.config import ConfigError
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.loop import LoopState, LoopWait, QueueRow
-from taskloop.contracts.parks import ParkStore
-from taskloop.contracts.run import LoopLogLine
-from taskloop.contracts.slots import SlotFail
 
 SKIPPED_KEPT = 100
 

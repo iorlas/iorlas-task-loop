@@ -9,8 +9,8 @@ from support.case import Case
 
 from taskloop.app.release import flow, publish
 from taskloop.app.release.shell import Abort
-from taskloop.contracts.env import Env
-from taskloop.contracts.slots import SlotGitError
+from tlkernel.env import Env
+from tlkernel.slots import SlotGitError
 
 
 class FailureSummary(Case):

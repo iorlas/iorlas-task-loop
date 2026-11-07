@@ -13,9 +13,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 from support.dashes import make_dash  # noqa: E402
 
-from taskloop.contracts.env import Env as ProcessEnv  # noqa: E402
-from taskloop.contracts.ids import loop_key  # noqa: E402
 from taskloop_dash import bind as bind_mod  # noqa: E402
+from tlkernel.env import Env as ProcessEnv  # noqa: E402
+from tlkernel.ids import loop_key  # noqa: E402
 
 
 def line(**kw):

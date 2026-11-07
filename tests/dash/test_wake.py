@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from taskloop.contracts import factorydb
-from taskloop.contracts.paths import ConfigDir
 from taskloop_dash.readers.wake import Wake, wait_seconds
+from tlkernel import factorydb
+from tlkernel.paths import ConfigDir
 
 
 class Clock:

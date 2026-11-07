@@ -11,10 +11,6 @@ from support.fake_beads import FakeBeads
 from taskloop.adapters.git import RealGit
 from taskloop.app.reconcile.apply import apply
 from taskloop.app.reconcile.observe import lease_of
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import BeadPatch, NewBead
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.reconcile.facts import (
     Action,
     DeleteBranch,
@@ -25,6 +21,10 @@ from taskloop.domain.reconcile.facts import (
     ReleaseClaim,
     RemoveTree,
 )
+from tlkernel.bead import Bead
+from tlkernel.beadsport import BeadPatch, NewBead
+from tlkernel.ids import BeadId
+from tlkernel.slots import SlotGitError
 
 
 class FakeGit(RealGit):

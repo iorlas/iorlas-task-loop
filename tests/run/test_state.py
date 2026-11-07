@@ -22,14 +22,14 @@ from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.review_glue import ReviewGlue
 from taskloop.app.run.state import Checkpoints, StateAttrs, attr_names, carries_state, state_names
 from taskloop.app.write.state import WriteState
-from taskloop.contracts import fence, wire
-from taskloop.contracts.checkpoint import BriefSnap, Checkpoint, Handoff, PlanStep, RunState, WriterSession
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.review import (
+from tlkernel import fence, wire
+from tlkernel.checkpoint import BriefSnap, Checkpoint, Handoff, PlanStep, RunState, WriterSession
+from tlkernel.ids import BeadId
+from tlkernel.review import (
     ReviewState,
     Unfiled,
 )
-from taskloop.contracts.run import Round
+from tlkernel.run import Round
 
 ROOT = Path(__file__).resolve().parents[2]
 # a value that is not the default, for each field: the park test fails on a new field until it is listed here

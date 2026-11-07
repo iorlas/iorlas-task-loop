@@ -7,9 +7,9 @@ import support.paths  # noqa: F401
 from support import homes
 from support.narrow import must
 
-from taskloop.contracts import wire
-from taskloop.contracts.rowstores import PinStore, ReflectStateStore, SharedNotesStore
-from taskloop.contracts.snapshots import Pin, ReflectState
+from tlkernel import wire
+from tlkernel.rowstores import PinStore, ReflectStateStore, SharedNotesStore
+from tlkernel.snapshots import Pin, ReflectState
 
 
 def test_a_pin_is_a_release_doc_row_written_read_and_cleared():

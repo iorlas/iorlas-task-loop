@@ -7,14 +7,15 @@ from dataclasses import dataclass
 from os import EX_CONFIG
 from pathlib import Path
 
+from tlkernel.config import ConfigError, LoopConfig, RepoProfile
+from tlkernel.loop import Carry, LoopState, LoopWait, QueueRow
+
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.files import LoopFiles, StopMode
 from taskloop.app.loop.gate import GateRole
 from taskloop.app.loop.net import NetState
 from taskloop.app.loop.settle import Counters
-from taskloop.contracts.config import ConfigError, LoopConfig, RepoProfile
-from taskloop.contracts.loop import Carry, LoopState, LoopWait, QueueRow
 
 
 @dataclass(frozen=True)

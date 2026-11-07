@@ -2,8 +2,8 @@
 import statistics
 from typing import Final
 
-from taskloop.contracts.checks import Duration, Durations
 from taskloop.domain.checks.names import norm
+from tlkernel.checks import Duration, Durations
 
 CHEAP_S: Final = 5.0  # a median under this counts as free: sub-second noise never reorders a round
 KEEP_RUNS: Final = 9  # durations kept per command

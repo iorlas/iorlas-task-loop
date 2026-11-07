@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from typing import Protocol
 
-from taskloop.contracts.checks import UNVERIFIED_EXIT, CheckResult, CheckRun
+from tlkernel.checks import UNVERIFIED_EXIT, CheckResult, CheckRun
 
 
 def deferred(c: CheckResult) -> bool:

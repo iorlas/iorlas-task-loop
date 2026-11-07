@@ -16,12 +16,12 @@ from taskloop.app.asks.closing import ClosingAsks
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from taskloop.app.pipeline.closing import Closer
 from taskloop.app.workers.lane_acts import LaneActs
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.delegate import DelegateResult, Retry, StopFacts
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
 from taskloop.domain import outcome as oc
 from taskloop.domain.lanes import policy
+from tlkernel.bead import Bead
+from tlkernel.delegate import DelegateResult, Retry, StopFacts
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
 
 
 class DelegatePauseFacts(Case):

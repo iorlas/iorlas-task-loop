@@ -4,11 +4,11 @@ from support.dashes import make_dash
 from support.dashlogs import T, bead
 
 from taskloop.app.report.card import score_of
-from taskloop.contracts.dashhealth import Score
-from taskloop.contracts.loop import LoopState
 from taskloop_dash.env import Ports
 from taskloop_dash.views.snapshot import build
 from taskloop_dash.views.world import ProjectIn, World
+from tlkernel.dashhealth import Score
+from tlkernel.loop import LoopState
 
 CARD = {"since": T, "until": T + 600, "beads": 9, "landed": 8, "landed_no_ask": 6, "asks": {"count": 3, "beads": 2}, "lost": 1,
         "crashes": 2, "m2": {"pass": False}}

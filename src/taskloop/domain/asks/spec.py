@@ -1,10 +1,10 @@
 """What a raise site knows about an ask, before it has an id, a time or a file: the class, the decision, what was tried, the options."""
 from dataclasses import dataclass, field
 
-from taskloop.contracts.ask import AskDetail, AskOption
-from taskloop.contracts.dash import OwnerCause
-from taskloop.contracts.enums import AskClass, AskKind
 from taskloop.domain.asks.lint import KIND_OF
+from tlkernel.ask import AskDetail, AskOption
+from tlkernel.dash import OwnerCause
+from tlkernel.enums import AskClass, AskKind
 
 
 @dataclass(frozen=True)

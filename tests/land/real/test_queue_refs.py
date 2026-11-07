@@ -10,7 +10,7 @@ import support.paths  # noqa: F401
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.land.cmds import Cmds
 from taskloop.app.land.queue_refs import Conflict, Made, QueueRefs
-from taskloop.contracts.env import snapshot
+from tlkernel.env import snapshot
 
 ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
 

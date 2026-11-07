@@ -8,10 +8,10 @@ from support.case import Case
 
 from rules.gate_rules import parsed
 from taskloop.app.parts import STAGE_PARTS
-from taskloop.contracts.dbparts import ddl
-from taskloop.contracts.factorydb import OWNERS
+from tlkernel.dbparts import ddl
+from tlkernel.factorydb import OWNERS
 
-RUN_FILE_READERS = {"taskloop.contracts.runrows"}
+RUN_FILE_READERS = {"tlkernel.runrows"}
 
 
 def legacy_readers(tree):

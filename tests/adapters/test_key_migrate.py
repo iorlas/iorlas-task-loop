@@ -6,12 +6,12 @@ from support.fakegit import ScriptedGit
 from taskloop.adapters import check_files
 from taskloop.adapters import key_migrate as km
 from taskloop.adapters import layout_migrate as lm
-from taskloop.contracts import factorydb
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.rowstores import ReposStore
-from taskloop.contracts.rundocs import Durations, durations
-from taskloop.contracts.snapshots import RepoEntry, ReposIndex
+from tlkernel import factorydb
+from tlkernel.ids import loop_key
+from tlkernel.paths import ConfigDir
+from tlkernel.rowstores import ReposStore
+from tlkernel.rundocs import Durations, durations
+from tlkernel.snapshots import RepoEntry, ReposIndex
 
 ORIGIN = "git@example.com:acme/widget.git"
 

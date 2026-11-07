@@ -1,9 +1,9 @@
 """Bring the ADR cache up to the repo's `docs/adr` files at a commit (the base the run works from). Best effort: a repo without the
 folder has no decisions, and a read git cannot make leaves the cache as it was."""
-from taskloop.contracts import adrfiles
-from taskloop.contracts.adrs import AdrStore
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.slots import SlotGitError
+from tlkernel import adrfiles
+from tlkernel.adrs import AdrStore
+from tlkernel.gitport import Git
+from tlkernel.slots import SlotGitError
 
 
 def files_at(git: Git, wt: str, rev: str) -> dict[str, str] | None:

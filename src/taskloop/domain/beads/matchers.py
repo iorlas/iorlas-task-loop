@@ -11,7 +11,7 @@ import shlex
 from dataclasses import dataclass
 from typing import Final
 
-from taskloop.contracts.bead import Bead
+from tlkernel.bead import Bead
 
 ESCAPE_LABEL: Final = "facts-inline"
 REASON: Final = "needs inlined facts"

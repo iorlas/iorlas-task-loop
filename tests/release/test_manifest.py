@@ -14,7 +14,7 @@ import support.paths  # noqa: E402, F401
 
 from taskloop.app.release import manifest  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402
-from taskloop.contracts.env import snapshot  # noqa: E402
+from tlkernel.env import snapshot  # noqa: E402
 
 NAME, MARKET = "iorlas-task-loop", "iorlas-marketplace"
 

@@ -9,10 +9,10 @@ from support.engine_case import EngineTest
 
 from taskloop.adapters import storm as storm_file
 from taskloop.adapters.repourl import repo_url
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.parks import ParkStore
 from taskloop.domain import outcome, storm
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.parks import ParkStore
 
 DNS = "fatal: unable to access 'https://github.com/org/repo': Could not resolve host: github.com"
 

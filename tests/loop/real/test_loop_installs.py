@@ -30,11 +30,11 @@ from taskloop.app.loop.loop import Loop
 from taskloop.app.run import (
     console,
 )
-from taskloop.contracts import wire
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.loop import Carry, LoopState
-from taskloop.contracts.rowstores import BadVersionStore, PinStore
-from taskloop.contracts.snapshots import Pin
+from tlkernel import wire
+from tlkernel.env import snapshot
+from tlkernel.loop import Carry, LoopState
+from tlkernel.rowstores import BadVersionStore, PinStore
+from tlkernel.snapshots import Pin
 
 
 class Moving(LoopBase):

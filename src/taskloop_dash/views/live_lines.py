@@ -5,10 +5,10 @@ the records type is filled: no text is parsed, and a ToolCall carries delegate's
 from collections.abc import Callable
 from typing import Any, Final, Literal
 
-from taskloop.contracts import delegate, log, wire
-from taskloop.contracts.dash import LivePage, TermLine, ToolCall
-from taskloop.contracts.runlife import Liveness
 from taskloop_dash.views.live_events import ENGINE
+from tlkernel import delegate, log, wire
+from tlkernel.dash import LivePage, TermLine, ToolCall
+from tlkernel.runlife import Liveness
 
 TermTone = Literal["", "err", "ok", "dim", "warn"]
 STATE: Final[dict[Liveness, Literal["live", "ended", "lost"]]] = {

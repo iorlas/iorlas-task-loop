@@ -5,8 +5,8 @@ from typing import Any
 from support.fake_delegate import done, stopped
 
 from taskloop.adapters.delegate_wire import answer_next, answer_status
-from taskloop.contracts.delegate import LiveCmdStart, LiveEnd, LiveMsg, RunRequest
-from taskloop.contracts.ports import Delegate
+from tlkernel.delegate import LiveCmdStart, LiveEnd, LiveMsg, RunRequest
+from tlkernel.ports import Delegate
 
 SCHEMA = {"type": "object", "properties": {"x": {"type": "integer"}}}
 

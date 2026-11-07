@@ -9,13 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from taskloop.contracts.paths import ConfigDir
 from taskloop_dash.api.reads import Reads
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env
 from taskloop_dash.readers.wake import Wake
 from taskloop_dash.views import snapshot
 from taskloop_dash.views.world import World
+from tlkernel.paths import ConfigDir
 
 
 class Clock:

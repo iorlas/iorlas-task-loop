@@ -10,8 +10,8 @@ from support.checks import ck
 
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.cache import RunMemo
-from taskloop.contracts.checks import Check
-from taskloop.contracts.ids import CheckId
+from tlkernel.checks import Check
+from tlkernel.ids import CheckId
 
 
 class SpawnFailure(CheckHostCase):

@@ -1,8 +1,9 @@
 """CheckLog: the records of the checks of a round. Every check leaves a start and an end under one id (one that never ran, a
 cached or reused or skipped result, leaves both at once), and the round leaves one Checks record: the CheckRun."""
-from taskloop.contracts.checks import Check, CheckResult, CheckRun
-from taskloop.contracts.ids import CheckId
-from taskloop.contracts.log import CheckEnd, Checks, CheckStart
+from tlkernel.checks import Check, CheckResult, CheckRun
+from tlkernel.ids import CheckId
+from tlkernel.log import CheckEnd, Checks, CheckStart
+
 from taskloop.stores.runlog import RunLog
 
 

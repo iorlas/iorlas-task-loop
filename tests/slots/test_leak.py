@@ -11,7 +11,7 @@ import support.paths  # noqa: F401
 
 from slots.test_slot_pool import ME, Rig
 from taskloop.app.slots import verbs
-from taskloop.contracts.ids import BeadId
+from tlkernel.ids import BeadId
 
 
 class Leak(Rig):

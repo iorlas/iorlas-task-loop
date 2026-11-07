@@ -37,17 +37,17 @@ from taskloop.app.run import (
     entry,
 )
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import answers, plancheck
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.enums import WaitWhat
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId, CheckId
-from taskloop.contracts.plancheck import Adhoc, adhoc
 from taskloop.domain.checks import lint
 from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks.writer_split import WriterSplit
 from taskloop.domain.review.matchers import Tools
 from taskloop.domain.write.matchers import count_tests
+from tlkernel import answers, plancheck
+from tlkernel.config import EngineConfig
+from tlkernel.enums import WaitWhat
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId, CheckId
+from tlkernel.plancheck import Adhoc, adhoc
 
 
 class EngineChecksTest(EngineTest):

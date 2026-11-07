@@ -19,7 +19,7 @@ from taskloop.app.slots import (
     marks,
 )
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.config import SlotsConfig
+from tlkernel.config import SlotsConfig
 
 
 class SlotListLogic(Slots):

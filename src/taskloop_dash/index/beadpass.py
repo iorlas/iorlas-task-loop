@@ -4,9 +4,9 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
-from taskloop.contracts import beadrows, factorydb
-from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
-from taskloop.contracts.ids import loop_key
+from tlkernel import beadrows, factorydb
+from tlkernel.beadsport import BdFailure, BeadQuery, Beads
+from tlkernel.ids import loop_key
 
 MAX_AGE = 60
 

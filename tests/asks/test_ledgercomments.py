@@ -5,13 +5,13 @@ import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 
 from taskloop.app.asks import intake, ledgercomments, raiser
-from taskloop.contracts.askrows import AskRows
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.bead import BdError, Bead
-from taskloop.contracts.beadsport import BdFailure
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir
 from taskloop.domain.asks import specs
+from tlkernel.askrows import AskRows
+from tlkernel.askstore import AskStore
+from tlkernel.bead import BdError, Bead
+from tlkernel.beadsport import BdFailure
+from tlkernel.ids import BeadId
+from tlkernel.paths import ConfigDir
 
 BEAD = BeadId("t-1")
 OPTS = [{"label": "Keep v1", "cost": "none", "answer": "keep v1", "recommended": True},

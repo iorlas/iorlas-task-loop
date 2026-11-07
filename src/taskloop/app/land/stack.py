@@ -12,6 +12,15 @@ from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from tlkernel import log as rec
+from tlkernel.beadsport import Beads, DoltPush
+from tlkernel.forge import CLOSED, MERGED, OPEN, Pr, StackItem
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId
+from tlkernel.paths import ConfigDir
+from tlkernel.profile_changes import ProfileChange
+from tlkernel.slots import MissingRemote
+
 from taskloop.adapters import landlock
 from taskloop.app.land import cleanup
 from taskloop.app.land.cmds import Cmds, Stop
@@ -21,14 +30,6 @@ from taskloop.app.land.profile_change import diff_sha
 from taskloop.app.land.queue_land import Queued, QueueLand
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.land.treecheck import Tested, TreeGuard
-from taskloop.contracts import log as rec
-from taskloop.contracts.beadsport import Beads, DoltPush
-from taskloop.contracts.forge import CLOSED, MERGED, OPEN, Pr, StackItem
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.profile_changes import ProfileChange
-from taskloop.contracts.slots import MissingRemote
 from taskloop.domain.land.matchers import no_dolt_remote
 from taskloop.stores.runlog import RunLog
 

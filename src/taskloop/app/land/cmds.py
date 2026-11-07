@@ -4,12 +4,13 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Protocol, TypeVar
 
+from tlkernel import log as rec
+from tlkernel.argv import text_of
+from tlkernel.paths import ConfigDir
+from tlkernel.procport import Ran
+from tlkernel.slots import SlotGitError
+
 from taskloop.app.land.push_evidence import failure
-from taskloop.contracts import log as rec
-from taskloop.contracts.argv import text_of
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.procport import Ran
-from taskloop.contracts.slots import SlotGitError
 from taskloop.stores.runlog import RunLog
 
 T = TypeVar("T")

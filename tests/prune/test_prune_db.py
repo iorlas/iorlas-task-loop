@@ -13,12 +13,12 @@ from support.who import who
 
 from taskloop.app.prune import runs, verb
 from taskloop.app.prune.traces import prune_traces
-from taskloop.contracts import factorydb
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.config import LoopConfig
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import RunManifest, RunState
-from taskloop.contracts.runrows import RunRows
+from tlkernel import factorydb
+from tlkernel.beadsport import Beads
+from tlkernel.config import LoopConfig
+from tlkernel.paths import ConfigDir
+from tlkernel.run import RunManifest, RunState
+from tlkernel.runrows import RunRows
 
 DAY = 86400
 

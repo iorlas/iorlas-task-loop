@@ -11,17 +11,18 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Protocol, final
 
+from tlkernel import log as rec
+from tlkernel.checks import Check, CheckFaultKind, CheckRun
+from tlkernel.config import EngineConfig
+from tlkernel.gitport import Git
+from tlkernel.ids import TreeSha
+from tlkernel.runkey import BaseSha, Digest
+from tlkernel.stagefacts import RunLogPort
+
 from taskloop.app.checks import evidence
 from taskloop.app.checks.host import CheckFault
 from taskloop.app.land import verified
 from taskloop.app.land.state import LandState
-from taskloop.contracts import log as rec
-from taskloop.contracts.checks import Check, CheckFaultKind, CheckRun
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.runkey import BaseSha, Digest
-from taskloop.contracts.stagefacts import RunLogPort
 from taskloop.domain.checks.specs import engine_digest, gate_items
 
 FAULTS = MappingProxyType({CheckFaultKind.STALE_BASE: "FAULT_STALE_BASE", CheckFaultKind.KILLED: "PAUSE_KILLED",

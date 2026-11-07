@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from taskloop.app.prune import retention
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.paths import ConfigDir
 
 DAY = 86400.0
 NOW = 100 * DAY

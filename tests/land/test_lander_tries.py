@@ -15,9 +15,9 @@ from support.narrow_hosts import LandKit, Stopped, table_kit
 from taskloop.app.land.gate import Problem, ProblemKind, mint
 from taskloop.app.land.lander import Lander
 from taskloop.app.land.state import Land, Phase
-from taskloop.contracts import log as rec
-from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.runkey import BaseSha
+from tlkernel import log as rec
+from tlkernel.ids import TreeSha
+from tlkernel.runkey import BaseSha
 
 REJECTED = (1, " ! [rejected]        HEAD -> main (fetch first)")
 PUSHED = (0, "")

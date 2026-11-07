@@ -6,8 +6,8 @@ episode: it is said once, and ends with new activity (silent) or with a round th
 
 from dataclasses import dataclass, field
 
-from taskloop.contracts import log as rec
-from taskloop.contracts.runlife import SAME_RED, silent_limit
+from tlkernel import log as rec
+from tlkernel.runlife import SAME_RED, silent_limit
 
 
 @dataclass

@@ -1,9 +1,9 @@
 """Owner-only profile delivery: explicit words, process context and the exact patch hash."""
 import hashlib
 
-from taskloop.contracts.env import Env
-from taskloop.contracts.envvars import registered
-from taskloop.contracts.gitport import Git
+from tlkernel.env import Env
+from tlkernel.envvars import registered
+from tlkernel.gitport import Git
 
 
 def owner_refusal(text: str | None, env: Env) -> str:

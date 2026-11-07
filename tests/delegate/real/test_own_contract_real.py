@@ -10,10 +10,9 @@ import time
 from pathlib import Path
 from unittest import mock
 
-from support.case import Case
-
 import hermetic  # noqa: F401
 from run_support import short_limits
+from support.case import Case
 from test_route import ROOT
 
 sys.path.insert(0, str(ROOT / "skills" / "delegate"))
@@ -22,12 +21,13 @@ from any_agent import procs as shelf
 from any_agent.harnesses.codex import CodexHarness
 from any_agent.protocol import LaunchSpec
 from any_agent.supervisor import RunHooks, Supervisor
+from stream_proc import alive, proc_start
+from support.procsim import real_proc
+
 from delegate.adapters import procs
 from delegate.app import harnesses
 from delegate.app.publish import LiveSink
 from delegate.contracts import codec, wire
-from stream_proc import alive, proc_start
-from support.procsim import real_proc
 
 FAKE = str(Path(__file__).resolve().parent.parent / "delegate_fakes" / "fake_agent.py")
 

@@ -5,7 +5,7 @@ was); write, land and the shell still read and write them, so they stay one shar
 from collections.abc import Callable
 from typing import Any
 
-from taskloop.contracts.wire import Open
+from tlkernel.wire import Open
 
 
 class ReviewLive:

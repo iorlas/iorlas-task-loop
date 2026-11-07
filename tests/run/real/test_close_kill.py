@@ -14,8 +14,8 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support.waits import until
 
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.locator import RunLocator
+from tlkernel.paths import ConfigDir
 
 CHILD = Path(te.ROOT, "tests", "support", "close_child.py")
 WAIT = 120

@@ -8,12 +8,12 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts import log, wire
-from taskloop.contracts.dash import Column, Marker, Phase
-from taskloop.contracts.enums import Outcome, WaitWhat, WhyCode
-from taskloop.contracts.runlife import Liveness
 from taskloop_dash.views import columns, phases
 from taskloop_dash.views.columns import Facts
+from tlkernel import log, wire
+from tlkernel.dash import Column, Marker, Phase
+from tlkernel.enums import Outcome, WaitWhat, WhyCode
+from tlkernel.runlife import Liveness
 
 LIVE, CRASHED, ENDED = Liveness.LIVE, Liveness.LOST, Liveness.ENDED
 PARKED = log.Close(t=1.0, outcome=Outcome.PARKED, why_code=WhyCode.LANE_OUT, why="codex ran out\nuntil 14:00")

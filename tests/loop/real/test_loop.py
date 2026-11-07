@@ -52,10 +52,10 @@ from taskloop.app.slots.pool import Slot  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import real  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
-from taskloop.contracts.config import LoopConfig  # noqa: E402
-from taskloop.contracts.procport import WaitTimeout  # noqa: E402
-from taskloop.contracts.slots import SlotFail  # noqa: E402
 from taskloop.domain import outcome as oc  # noqa: E402
+from tlkernel.config import LoopConfig  # noqa: E402
+from tlkernel.procport import WaitTimeout  # noqa: E402
+from tlkernel.slots import SlotFail  # noqa: E402
 
 
 def bead(id, priority=2, parent=None, labels=(), type="task"):

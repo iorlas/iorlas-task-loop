@@ -3,8 +3,8 @@ delivery's logic runs with no process. `fail` maps the start of a command's text
 import json
 from collections.abc import Mapping
 
-from taskloop.contracts.argv import text_of
-from taskloop.contracts.procport import Ran
+from tlkernel.argv import text_of
+from tlkernel.procport import Ran
 
 
 class ForgeSim:

@@ -2,13 +2,13 @@
 layer because it holds the `Stores` bundle; the Protocols it is typed with, and `RunFacts`, are in contracts/stagefacts.py."""
 from dataclasses import dataclass
 
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ports import Clock
-from taskloop.contracts.procport import Spawner
-from taskloop.contracts.stagefacts import CheckerPort, CheckLogPort, CheckpointsPort, RepoKey, RunLogPort, StepBook
 from taskloop.stores.bundle import Stores
+from tlkernel.beadsport import Beads
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.ports import Clock
+from tlkernel.procport import Spawner
+from tlkernel.stagefacts import CheckerPort, CheckLogPort, CheckpointsPort, RepoKey, RunLogPort, StepBook
 
 
 @dataclass(frozen=True, slots=True)

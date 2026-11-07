@@ -9,6 +9,16 @@ from pathlib import Path
 from typing import Any
 
 from jsonl_log import close_held
+from tlkernel import bdbackup, factorybackup, paths
+from tlkernel.beadsport import Beads
+from tlkernel.env import Env
+from tlkernel.envvars import EnvVar
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId
+from tlkernel.landed import landed_by
+from tlkernel.procport import Child, Hold, Spawner
+from tlkernel.slots import SlotGitError, git_probe
 
 from taskloop.adapters import beadtools, childenv, ident, ram
 from taskloop.adapters.bd import BdStore
@@ -24,16 +34,6 @@ from taskloop.app.track import trail, verbs
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import lanes as wlanes
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import bdbackup, factorybackup, paths
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.env import Env
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.landed import landed_by
-from taskloop.contracts.procport import Child, Hold, Spawner
-from taskloop.contracts.slots import SlotGitError, git_probe
 
 STOP_GRACE_S = 300.0  # a stopped run-task is given this long to run its close step before stream-proc ends it
 

@@ -5,10 +5,10 @@ import support.paths  # noqa: F401
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.asks import parks
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.parks import ParkStore
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.bead import Bead
+from tlkernel.ids import BeadId
+from tlkernel.parks import ParkStore
+from tlkernel.paths import ConfigDir
 
 BEAD = Bead(id=BeadId("t-1"), title="work", status="open")
 

@@ -16,7 +16,7 @@ from support.who import who
 from taskloop.app.land import cleanup
 from taskloop.app.land.push import Pusher
 from taskloop.app.slots import owned
-from taskloop.contracts.ids import loop_key
+from tlkernel.ids import loop_key
 
 RUN = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 

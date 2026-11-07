@@ -6,7 +6,7 @@ from collections.abc import Iterator
 import pytest
 
 from taskloop.app.parts import STAGE_PARTS
-from taskloop.contracts import dbparts, factorydb
+from tlkernel import dbparts, factorydb
 
 HISTORY = tuple(rule.table for rule in dbparts.prune_order(STAGE_PARTS))
 

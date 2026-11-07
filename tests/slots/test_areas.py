@@ -38,11 +38,11 @@ from slots.test_slots import Slots
 from taskloop.app.loop.queue import QueueRule
 from taskloop.app.slots.pool import Slot, SlotPool
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import fence
-from taskloop.contracts.bead import BdError
-from taskloop.contracts.beadsport import BdFailure
-from taskloop.contracts.fence import SLOT_GEN
-from taskloop.contracts.ids import BeadId
+from tlkernel import fence
+from tlkernel.bead import BdError
+from tlkernel.beadsport import BdFailure
+from tlkernel.fence import SLOT_GEN
+from tlkernel.ids import BeadId
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 

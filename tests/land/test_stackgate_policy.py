@@ -13,7 +13,7 @@ from support.memstores import fake_stores
 
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.stackgate import StackGate
-from taskloop.contracts.gitfacts import TreeEntry
+from tlkernel.gitfacts import TreeEntry
 
 
 class StackPolicy(Case):

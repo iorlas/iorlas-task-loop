@@ -13,9 +13,9 @@ from support.tmpdir import TemporaryDirectory
 from taskloop.app.loop import exits
 from taskloop.app.loop.files import EXIT_REASONS, LoopFiles
 from taskloop.app.loop.loop import Loop, LoopArgs
-from taskloop.contracts.config import RepoProfile
-from taskloop.contracts.loop import LoopState
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.config import RepoProfile
+from tlkernel.loop import LoopState
+from tlkernel.paths import ConfigDir
 
 
 class LaneExits(Case):

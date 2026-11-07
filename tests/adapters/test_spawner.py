@@ -13,7 +13,7 @@ from support import procsim
 from support.case import Case
 
 from taskloop.adapters.spawner import RealSpawner
-from taskloop.contracts.env import snapshot
+from tlkernel.env import snapshot
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 

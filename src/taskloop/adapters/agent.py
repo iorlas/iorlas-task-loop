@@ -9,8 +9,8 @@ from typing import Any, Self
 
 from delegate import api
 from taskloop.adapters import procs
-from taskloop.contracts import wire
-from taskloop.contracts.delegate import LiveEvent, LiveStart, WorkerStarted
+from tlkernel import wire
+from tlkernel.delegate import LiveEvent, LiveStart, WorkerStarted
 
 
 def running_for(task: str) -> list[str]:

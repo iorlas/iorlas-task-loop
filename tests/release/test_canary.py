@@ -11,10 +11,10 @@ from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.release import canary, pins
 from taskloop.app.release.shell import Abort
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitfacts import Ref
-from taskloop.contracts.slots import SlotGitError
-from taskloop.contracts.snapshots import Pin
+from tlkernel.env import Env
+from tlkernel.gitfacts import Ref
+from tlkernel.slots import SlotGitError
+from tlkernel.snapshots import Pin
 
 
 class Canary(Case):

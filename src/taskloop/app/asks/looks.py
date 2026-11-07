@@ -6,11 +6,11 @@ import contextlib
 import threading
 from typing import Any
 
-from taskloop.contracts import factorydb, gallery
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import BdFailure, BeadPatch, BeadQuery, Beads, NewBead
-from taskloop.contracts.ids import BeadId, is_bead_id
-from taskloop.contracts.lookrows import LookRaced, LookRows
+from tlkernel import factorydb, gallery
+from tlkernel.bead import Bead
+from tlkernel.beadsport import BdFailure, BeadPatch, BeadQuery, Beads, NewBead
+from tlkernel.ids import BeadId, is_bead_id
+from tlkernel.lookrows import LookRaced, LookRows
 
 NOTE_MAX = 2000
 VERDICTS = ("good", "redo", "undo")

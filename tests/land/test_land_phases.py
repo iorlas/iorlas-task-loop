@@ -11,7 +11,7 @@ from support.narrow_hosts import table_kit
 
 # isort: split
 from taskloop.app.land.state import Land
-from taskloop.contracts import log as rec
+from tlkernel import log as rec
 
 
 def test_a_try_records_the_seconds_of_its_fetch_rebase_and_gate() -> None:

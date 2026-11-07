@@ -1,8 +1,8 @@
 """The profile-change audit, through the shared atomic JSONL appender."""
-from taskloop.contracts import wire
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.profile_changes import ProfileChange
-from taskloop.contracts.stores import JsonlStore
+from tlkernel import wire
+from tlkernel.paths import ConfigDir
+from tlkernel.profile_changes import ProfileChange
+from tlkernel.stores import JsonlStore
 
 
 def decode(data: object) -> ProfileChange:

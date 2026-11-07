@@ -22,18 +22,18 @@ from support.narrow import must
 from support.repos import write_repos
 
 from taskloop.adapters.ident import hostname
-from taskloop.contracts import wire
-from taskloop.contracts.ask import Ask, AskOption
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.beadsport import BeadQuery
-from taskloop.contracts.dash import BeadDetail, Snapshot
-from taskloop.contracts.dashcost import CostPage
-from taskloop.contracts.enums import AskClass, AskKind, AskStatus
-from taskloop.contracts.ids import BeadId, loop_key
-from taskloop.contracts.locator import RunLocator
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
 from taskloop_dash.http import make_handler
+from tlkernel import wire
+from tlkernel.ask import Ask, AskOption
+from tlkernel.askstore import AskStore
+from tlkernel.beadsport import BeadQuery
+from tlkernel.dash import BeadDetail, Snapshot
+from tlkernel.dashcost import CostPage
+from tlkernel.enums import AskClass, AskKind, AskStatus
+from tlkernel.ids import BeadId, loop_key
+from tlkernel.locator import RunLocator
 
 NOW = T + 3600
 
@@ -51,7 +51,7 @@ class ApiFixture(Case):
             "write", 200, 30_000, text="write 1", end=False
         ).beat().write(self.cfg, repo=str(self.repo))
         RunScript("b-2", slot="b", at=100).step("plan", 100, 1).close("parked", "needs_human").write(self.cfg, repo=str(self.repo))
-        AskStore.at(__import__("taskloop.contracts.paths", fromlist=["ConfigDir"]).ConfigDir(self.cfg)).put(
+        AskStore.at(__import__("tlkernel.paths", fromlist=["ConfigDir"]).ConfigDir(self.cfg)).put(
             Ask(
                 id="b-2-1",
                 n=1,

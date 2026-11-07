@@ -1,7 +1,8 @@
 """Resource and storm waits, probed between beads without changing NETPAUSE."""
+from tlkernel.config import LoopConfig
+from tlkernel.loop import LoopWait
+
 from taskloop.app.loop.env import LoopEnv
-from taskloop.contracts.config import LoopConfig
-from taskloop.contracts.loop import LoopWait
 
 
 def blocked(env: LoopEnv, tune: LoopConfig) -> LoopWait | None:

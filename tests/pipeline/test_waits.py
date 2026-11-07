@@ -8,10 +8,10 @@ from support.narrow_hosts import FakeWaitsHost
 
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.waits import Waits
-from taskloop.contracts import log as rec
-from taskloop.contracts.enums import WaitWhat
-from taskloop.contracts.kinds import Kind
 from taskloop.domain.lanes.liveness import LIVENESS
+from tlkernel import log as rec
+from tlkernel.enums import WaitWhat
+from tlkernel.kinds import Kind
 
 
 def test_wait_books_seconds_outside_the_budget():

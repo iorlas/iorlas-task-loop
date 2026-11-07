@@ -11,9 +11,9 @@ from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import beadtools
 from taskloop.cli import bd
-from taskloop.contracts.bd_errors import BdCommandFailure
-from taskloop.contracts.bead import BdError
-from taskloop.contracts.beadsport import BdFailure
+from tlkernel.bd_errors import BdCommandFailure
+from tlkernel.bead import BdError
+from tlkernel.beadsport import BdFailure
 
 
 class BdExit(Case):

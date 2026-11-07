@@ -7,8 +7,8 @@ from support.checked import run_checked
 from support.spawn import port_git, real_spawner
 
 from taskloop.app.checks.linux import LinuxRun
-from taskloop.contracts.config import ExecutorConfig
-from taskloop.contracts.ids import CheckId
+from tlkernel.config import ExecutorConfig
+from tlkernel.ids import CheckId
 
 # `ssh [-o opt]... <host> <command>`: git's own ssh call has the same shape
 SHIM = '#!/bin/sh\nwhile case "$1" in -o) shift 2;; -*) shift;; *) false;; esac; do :; done\nshift\ncd "$HOME" && exec sh -c "$1"\n'

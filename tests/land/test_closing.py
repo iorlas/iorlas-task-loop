@@ -8,9 +8,9 @@ from support.memstores import fake_stores
 
 from taskloop.app.land import cleanup
 from taskloop.app.land.closing import LandCleanups, LandFollowUps
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.paths import ConfigDir
 from taskloop.stores.runlog import RunLog
+from tlkernel.gitport import Git
+from tlkernel.paths import ConfigDir
 
 
 def test_followups_returns_filers_list():

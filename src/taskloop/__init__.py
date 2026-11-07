@@ -8,10 +8,13 @@ python3) skips it. Every entry point (tl.py, hooks/hook.py, dev/*.py) puts `src/
 import sys
 from pathlib import Path
 
+import tlpaths  # noqa: F401  (every workspace package's src/ on sys.path)
+
 _VENDOR = str(Path(__file__).resolve().parents[2] / "skills" / "task-loop" / "_vendor")
 if _VENDOR not in sys.path:
     sys.path.append(_VENDOR)
 
 if hasattr(sys, "set_lazy_imports"):
-    sys.set_lazy_imports_filter(lambda importer, name, fromlist=None: name.partition(".")[0] in ("taskloop", "taskloop_dash", "tl"))
+    ours = ("taskloop", "taskloop_dash", "tlkernel", "tl")
+    sys.set_lazy_imports_filter(lambda importer, name, fromlist=None: name.partition(".")[0] in ours)
     sys.set_lazy_imports("all")

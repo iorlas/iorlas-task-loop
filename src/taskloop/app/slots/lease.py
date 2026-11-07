@@ -7,9 +7,9 @@ from collections.abc import Callable
 from types import TracebackType
 from typing import Self
 
-from taskloop.contracts.beadsport import BdFailure, Beads
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.runlife import BEAT_EVERY
+from tlkernel.beadsport import BdFailure, Beads
+from tlkernel.ids import BeadId
+from tlkernel.runlife import BEAT_EVERY
 
 EVERY = BEAT_EVERY  # seconds between beats; bd leases last 5 minutes
 JOIN_WAIT = 30.0  # seconds stop() waits for a beat in flight (a bd call that hangs must not hang the close)

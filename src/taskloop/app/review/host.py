@@ -4,12 +4,13 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
-from taskloop.contracts.asked import Asked
-from taskloop.contracts.checks import Check, CheckRun
-from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.plancheck import PlanCheck, PlanData
-from taskloop.contracts.stop import Stop
-from taskloop.contracts.wire import Open
+from tlkernel.asked import Asked
+from tlkernel.checks import Check, CheckRun
+from tlkernel.ids import TreeSha
+from tlkernel.plancheck import PlanCheck, PlanData
+from tlkernel.stop import Stop
+from tlkernel.wire import Open
+
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.review.ledger import Ledger
 

@@ -6,13 +6,13 @@ import os
 import sys
 from unittest import mock
 
+import hermetic  # noqa: F401  (a home of its own for every test)
+from test_route import route
+
 from delegate.app import decide, launch
 from delegate.cli import parser
 from delegate.contracts import wire
 from delegate.domain.policy.worker import judge
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-from test_route import route
 
 KILLS = (
     'pkill -f "Unity.*client"',

@@ -18,10 +18,10 @@ from taskloop.adapters import delegate as dl
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
 from taskloop.domain.lifecycle import matchers as lifecycle
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
 
 ROOT = te.ROOT
 from support.dashes import make_dash  # noqa: E402

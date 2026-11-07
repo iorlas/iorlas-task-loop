@@ -1,6 +1,6 @@
 """Amendment context belongs to the plan stage and survives resume until cleared."""
 from taskloop.app.plan.amend import AmendState
-from taskloop.contracts.plancheck import PlanData
+from tlkernel.plancheck import PlanData
 
 
 def test_defaults():

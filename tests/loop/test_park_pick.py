@@ -18,13 +18,13 @@ from taskloop.app.loop.run import Where
 from taskloop.app.loop.stages import EngineAsks
 from taskloop.app.loop.take import Taker
 from taskloop.app.loop.verdict import Verdict
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.enums import Result
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.parks import ParkStore
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.bead import Bead
+from tlkernel.config import EngineConfig
+from tlkernel.enums import Result
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.parks import ParkStore
+from tlkernel.paths import ConfigDir
 
 
 def bead(desc="do it"):

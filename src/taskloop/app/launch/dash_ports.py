@@ -6,6 +6,21 @@ import shutil
 from collections.abc import Callable
 from typing import Any
 
+from tlkernel.adrs import AdrStore
+from tlkernel.ask import Ask, AskAction
+from tlkernel.askstore import AskStore
+from tlkernel.beadsport import BdFailure, Beads
+from tlkernel.dash import Result, Stick
+from tlkernel.dashhealth import Score
+from tlkernel.env import Env
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId
+from tlkernel.lookrows import LookRows
+from tlkernel.paths import ConfigDir
+from tlkernel.ports import AnswerAsk
+from tlkernel.rowstores import ReposStore
+from tlkernel.slottable import SlotSource
+
 from taskloop.adapters.bd import BdStore
 from taskloop.adapters.ident import config_dir, hostname
 from taskloop.adapters.locks import resource_holders
@@ -18,20 +33,6 @@ from taskloop.app.track.trail import now
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.adrs import AdrStore
-from taskloop.contracts.ask import Ask, AskAction
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.beadsport import BdFailure, Beads
-from taskloop.contracts.dash import Result, Stick
-from taskloop.contracts.dashhealth import Score
-from taskloop.contracts.env import Env
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.lookrows import LookRows
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import AnswerAsk
-from taskloop.contracts.rowstores import ReposStore
-from taskloop.contracts.slottable import SlotSource
 from taskloop_dash.env import Ports
 
 DASH_ACTOR = "tl-dash"  # the dashboard's bd actor

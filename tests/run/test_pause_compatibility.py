@@ -13,14 +13,14 @@ import support.paths  # noqa: F401
 from taskloop.app.asks import parks
 from taskloop.app.asks.closing import ClosingAsks
 from taskloop.app.pipeline.closing import Closer
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import ASKS, FAULTS, Kind
-from taskloop.contracts.parks import Park
 from taskloop.domain import outcome as oc
 from taskloop.domain.beads import park
 from taskloop.domain.beads.park import text_hash
 from taskloop.domain.lanes import pauses
+from tlkernel.bead import Bead
+from tlkernel.ids import BeadId
+from tlkernel.kinds import ASKS, FAULTS, Kind
+from tlkernel.parks import Park
 
 
 class PauseCompatibility(Case):

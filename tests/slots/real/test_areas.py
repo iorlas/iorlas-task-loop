@@ -48,12 +48,12 @@ from taskloop.app.slots import (
 from taskloop.app.slots import line as slots_line
 from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.config import LoopConfig
-from taskloop.contracts.enums import Result
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId, loop_key
-from taskloop.contracts.run import RunReport
 from taskloop.stores.ticketrows import TicketRows
+from tlkernel.config import LoopConfig
+from tlkernel.enums import Result
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId, loop_key
+from tlkernel.run import RunReport
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 

@@ -5,6 +5,11 @@ serial path unchanged."""
 import threading
 from typing import Protocol, final
 
+from tlkernel.beadsport import Beads
+from tlkernel.forge import OPEN, Pr, StackItem
+from tlkernel.gitport import Git
+from tlkernel.wire import Rec
+
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.queue_enqueue import enqueue
@@ -12,10 +17,6 @@ from taskloop.app.land.queue_refs import QueueRefs
 from taskloop.app.land.queue_run import QueueRun
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.land.treecheck import TreeGuard
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.forge import OPEN, Pr, StackItem
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.wire import Rec
 from taskloop.domain.land.queue_model import Entry, Phase
 
 

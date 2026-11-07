@@ -12,9 +12,9 @@ from support.checks import ck, typed
 from support.plans import FALSE, PLAN
 
 from taskloop.app.checks import evidence
-from taskloop.contracts.ids import CheckId
-from taskloop.contracts.plancheck import adhoc
 from taskloop.domain.checks import lint, planref
+from tlkernel.ids import CheckId
+from tlkernel.plancheck import adhoc
 
 ST = {"checks": [], "files": []}
 

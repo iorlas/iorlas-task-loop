@@ -17,10 +17,10 @@ from typing import Any, override
 from delegate import api
 from taskloop.adapters import delegate_wire
 from taskloop.adapters.runner import ApiRunner
-from taskloop.contracts.delegate import REASON_TIMEOUT, DelegateResult, Permanence, RunRequest, Scope, WorkerStarted
-from taskloop.contracts.delegate_status import snapshot_of
-from taskloop.contracts.delegateport import Account, Answer, Lane, Refusal, Resolved, RunRecord, Seam, Stopped
-from taskloop.contracts.snapshots import StatusSnapshot
+from tlkernel.delegate import REASON_TIMEOUT, DelegateResult, Permanence, RunRequest, Scope, WorkerStarted
+from tlkernel.delegate_status import snapshot_of
+from tlkernel.delegateport import Account, Answer, Lane, Refusal, Resolved, RunRecord, Seam, Stopped
+from tlkernel.snapshots import StatusSnapshot
 
 CONTRACT = delegate_wire.CONTRACT  # the contract number this engine speaks
 BACKSTOP_S = 120  # the engine stops the child at the node's limit plus this

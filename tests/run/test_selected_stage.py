@@ -25,21 +25,21 @@ from taskloop.app.plan.keep import PlanKeeper
 from taskloop.app.plan.planned import Planned
 from taskloop.app.run.stages import round_step, run_stages
 from taskloop.app.write.state import ACCEPT, StageState
-from taskloop.contracts import log as rec
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.checkpoint import Checkpoint
-from taskloop.contracts.checks import CheckRun
-from taskloop.contracts.enums import Outcome, Result, Step
-from taskloop.contracts.finish import finish_run
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.parks import Park, ParkStore
-from taskloop.contracts.run import RunManifest, RunState
 from taskloop.domain import effects
 from taskloop.domain import outcome as oc
 from taskloop.stores.runlog import RunLog
+from tlkernel import log as rec
+from tlkernel.bead import Bead
+from tlkernel.checkpoint import Checkpoint
+from tlkernel.checks import CheckRun
+from tlkernel.enums import Outcome, Result, Step
+from tlkernel.finish import finish_run
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.locator import RunLocator
+from tlkernel.parks import Park, ParkStore
+from tlkernel.run import RunManifest, RunState
 
 
 class SelectedStage(Case):

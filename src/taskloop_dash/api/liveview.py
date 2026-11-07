@@ -3,14 +3,14 @@
 import threading
 from typing import Any
 
-from taskloop.contracts import wire
-from taskloop.contracts.ids import is_bead_id, loop_key
-from taskloop.contracts.runlife import shown
 from taskloop_dash.api import live as live_api
 from taskloop_dash.env import Env
 from taskloop_dash.readers import dbruns
 from taskloop_dash.readers.records import Records
 from taskloop_dash.views import live_lines
+from tlkernel import wire
+from tlkernel.ids import is_bead_id, loop_key
+from tlkernel.runlife import shown
 
 LIVE_MAX = 24  # runs kept open
 

@@ -7,7 +7,7 @@ from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.wire import hook
-from taskloop.contracts.env import Env
+from tlkernel.env import Env
 
 
 class ShimResolves(Case):

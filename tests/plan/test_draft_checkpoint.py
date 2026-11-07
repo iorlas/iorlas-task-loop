@@ -10,7 +10,7 @@ from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.app.plan.sendback import SendBack
 from taskloop.app.run import engine
-from taskloop.contracts.kinds import Kind
+from tlkernel.kinds import Kind
 
 
 class DraftCheckpoint(EngineTest):

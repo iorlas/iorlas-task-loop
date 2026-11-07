@@ -13,13 +13,14 @@ import time
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from tlkernel import wire
+from tlkernel.checks import BaseRedRecord, Check, CheckResult, PassRecord
+from tlkernel.gitport import Git
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.runkey import BaseSha, Digest, RunKey
+
 from taskloop.adapters import check_files
 from taskloop.app.checks.execution import HOST_IDENTITY, LINUX_IDENTITY
-from taskloop.contracts import wire
-from taskloop.contracts.checks import BaseRedRecord, Check, CheckResult, PassRecord
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 from taskloop.domain.checks import inputs
 from taskloop.stores.bundle import Stores
 

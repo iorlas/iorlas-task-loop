@@ -7,14 +7,14 @@ import os
 import subprocess
 from unittest import mock
 
+import hermetic  # noqa: F401  (a home of its own for every test)
 from any_agent import procs
-from delegate.app import env, harnesses, status, usage
 from support.case import Case
 from support.procsim import real_proc
 from support.tmpdir import TemporaryDirectory
-
-import hermetic  # noqa: F401  (a home of its own for every test)
 from test_route import route
+
+from delegate.app import env, harnesses, status, usage
 
 
 def boom(*a, **k):

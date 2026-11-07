@@ -8,12 +8,12 @@ import subprocess
 import sys
 from unittest import mock
 
-from delegate.app import env
+import hermetic  # noqa: F401
 from support.case import Case
 from support.procsim import real_proc
-
-import hermetic  # noqa: F401
 from test_route import route
+
+from delegate.app import env
 
 ESCAPES = (
     "sed 'e id' f",

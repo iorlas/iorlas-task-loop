@@ -7,7 +7,7 @@ from support.case import Case
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
-from taskloop.contracts.config import ConfigError, RepoProfile, load
+from tlkernel.config import ConfigError, RepoProfile, load
 
 
 class RepoProfileKeys(Case):

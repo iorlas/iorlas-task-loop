@@ -3,9 +3,10 @@ draft (d5f.38), publish_plan, the ledger and the cases all read the plan while `
 write of its own; the pipeline stores what `plan` returns through `take`."""
 from typing import Protocol
 
+from tlkernel.plancheck import PlanData
+from tlkernel.wire import Open
+
 from taskloop.app.plan.planned import Planned
-from taskloop.contracts.plancheck import PlanData
-from taskloop.contracts.wire import Open
 
 
 class PlanFields(Protocol):

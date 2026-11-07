@@ -4,13 +4,14 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from tlkernel.checkpoint import Defect
+from tlkernel.plancheck import StageData
+from tlkernel.stagefacts import RunFacts
+
 from taskloop.adapters import looks
 from taskloop.app.look.host import LookHost, LookPorts
 from taskloop.app.look.prompts import LOOK_FEEDBACK, LOOK_WRITE_TABLE
 from taskloop.app.look.state import LookState
-from taskloop.contracts.checkpoint import Defect
-from taskloop.contracts.plancheck import StageData
-from taskloop.contracts.stagefacts import RunFacts
 from taskloop.domain.review import switch
 from taskloop.domain.review.matchers import Wording
 from taskloop.domain.review.skip import SkipKind

@@ -1,9 +1,10 @@
 """Why a gate step is not green, in words: the first RunKey field where the expected key and the newest stored receipt of that check on
 the judged tree and base part. Display only: it never authorizes anything (RunMemo.result does)."""
+from tlkernel import wire
+from tlkernel.checks import Check
+from tlkernel.runkey import Digest, RunKey
+
 from taskloop.app.checks.cache import RunMemo
-from taskloop.contracts import wire
-from taskloop.contracts.checks import Check
-from taskloop.contracts.runkey import Digest, RunKey
 
 PLURAL = frozenset({"dependencies", "inputs"})
 INPUTS_HINT = "; gitignored files under its inputs count: judge in the worktree that ran it"

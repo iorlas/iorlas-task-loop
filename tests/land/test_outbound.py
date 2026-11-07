@@ -21,10 +21,10 @@ from taskloop.app.land import outbound
 from taskloop.app.land.lander import Lander
 from taskloop.app.land.sync import Sync as AfterLand
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
-from taskloop.contracts.enums import Result
-from taskloop.contracts.kinds import Kind
 from taskloop.domain import outcome as oc
 from taskloop.domain.lanes import pauses
+from tlkernel.enums import Result
+from tlkernel.kinds import Kind
 
 ATTR = "*.bin filter=lfs diff=lfs merge=lfs -text\n"
 RUN = ({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})

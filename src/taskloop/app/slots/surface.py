@@ -1,10 +1,11 @@
 """What the reset and probe steps need of a slot, so they sit below the pool that owns the slots."""
 from typing import Protocol
 
+from tlkernel.bead import Bead
+from tlkernel.ids import BeadId
+from tlkernel.slots import Hold
+
 from taskloop.app.slots.env import SlotEnv
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.slots import Hold
 
 
 class SlotNames(Protocol):

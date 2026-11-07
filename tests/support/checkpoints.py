@@ -1,8 +1,8 @@
 """Checkpoints as a test reads and arranges them: through the engine's own stores, never by JSON shape."""
 from support import homes
-from taskloop.contracts import wire
-from taskloop.contracts.checkpoint import Checkpoint, RunState
 from taskloop.stores.real import real_stores
+from tlkernel import wire
+from tlkernel.checkpoint import Checkpoint, RunState
 
 
 def read_ck(e, bead=None):

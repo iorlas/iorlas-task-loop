@@ -7,15 +7,15 @@ import sys
 import time
 from pathlib import Path
 
+import hermetic  # noqa: F401  (a home of its own for every test)
 import pytest
 from any_agent.harnesses import opencode_sandbox as box
+from run_support import RunBase, short_limits
+from support.procsim import real_proc
+from test_route import why
+
 from delegate.app import env, harnesses
 from delegate.app.env import PUSH_REFUSED
-from support.procsim import real_proc
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-from run_support import RunBase, short_limits
-from test_route import why
 
 
 class RunOpenCode(RunBase):

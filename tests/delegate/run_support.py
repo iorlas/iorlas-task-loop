@@ -11,19 +11,19 @@ import time
 from pathlib import Path
 from unittest import mock
 
+import hermetic  # noqa: F401  (a home of its own for every test)
 import pytest
+import routing_support as support
 from any_agent import watch
-from delegate.app import env, harnesses, usage
-from delegate.contracts import history as hist
-from delegate.domain.health import ledger as health_ledger
 from support import fake_worker
 from support.case import Case
 from support.fake_clock import SteppingClock
 from support.tmpdir import TemporaryDirectory
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
 from test_route import no_reader, route
+
+from delegate.app import env, harnesses, usage
+from delegate.contracts import history as hist
+from delegate.domain.health import ledger as health_ledger
 
 FIX = Path(__file__).resolve().parent / "fixtures"
 

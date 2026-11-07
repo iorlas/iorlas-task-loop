@@ -11,7 +11,7 @@ from support import gitq, procsim
 from support.check_host import CheckHostCase
 
 # isort: split
-from taskloop.contracts.config import ConfigError, load
+from tlkernel.config import ConfigError, load
 
 
 def format_a(cwd, env):

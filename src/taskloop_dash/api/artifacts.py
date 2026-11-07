@@ -9,11 +9,11 @@ import threading
 from collections.abc import Sequence
 from pathlib import Path
 
-from taskloop.contracts import wire
-from taskloop.contracts.artifact import SIDECAR_SUFFIX, ArtifactMeta
-from taskloop.contracts.ids import is_bead_id
 from taskloop_dash.env import Env
 from taskloop_dash.views.artifact_files import Item, plain, served, split_stage
+from tlkernel import wire
+from tlkernel.artifact import SIDECAR_SUFFIX, ArtifactMeta
+from tlkernel.ids import is_bead_id
 
 
 def mtime(path: Path) -> int | None:

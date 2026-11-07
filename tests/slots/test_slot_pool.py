@@ -24,11 +24,11 @@ from taskloop.app.slots.lease import Lease
 from taskloop.app.slots.line import wait_slot, waiting_line
 from taskloop.app.slots.pool import SlotPool
 from taskloop.cli import slots as cli
-from taskloop.contracts import paths
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.config import SlotsConfig
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.slots import BranchPinned, Checkout, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
+from tlkernel import paths
+from tlkernel.bead import Bead
+from tlkernel.config import SlotsConfig
+from tlkernel.ids import BeadId
+from tlkernel.slots import BranchPinned, Checkout, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
 
 ME = "tl-me"
 LIVE_PID = os.getpid()  # a pid the ticket line reads as alive: pid 1 is launchd on macOS, which libproc will not show to a user process

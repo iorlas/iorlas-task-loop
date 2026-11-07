@@ -1,10 +1,10 @@
-"""Temp paths: only src/taskloop/contracts/scratch.py names a temp location (/tmp, /var/tmp, `tempfile`, TMPDIR). A new site in a change
+"""Temp paths: only tlkernel/scratch.py names a temp location (/tmp, /var/tmp, `tempfile`, TMPDIR). A new site in a change
 fails (tests/rules/real/test_ratchets_change.py); use `scratch` / `scratch_dir` (code) or the `workdir` fixture (tests). The scratch
 helper's own behaviour is held here."""
 import os
 from pathlib import Path
 
-from taskloop.contracts import scratch
+from tlkernel import scratch
 
 
 def test_scratch_lives_under_the_cache_root_and_never_in_the_system_temp_or_the_config_dir(tmp_path):

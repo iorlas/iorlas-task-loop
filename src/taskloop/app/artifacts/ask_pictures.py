@@ -4,10 +4,11 @@ ask. What is an image comes from the first bytes, never from a file name. Nothin
 from pathlib import Path
 from typing import Final
 
+from tlkernel.artifact import ArtifactSlot
+from tlkernel.paths import RunFiles
+from tlkernel.wire import Refused
+
 from taskloop.app.artifacts import rules, store
-from taskloop.contracts.artifact import ArtifactSlot
-from taskloop.contracts.paths import RunFiles
-from taskloop.contracts.wire import Refused
 
 MAX_PICTURES: Final = 4
 IMAGES: Final = ("png", "jpg", "gif", "webp")

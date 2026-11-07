@@ -4,9 +4,10 @@ import json
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel import rundocs
+
 from taskloop.app.write.host import PreparePorts
 from taskloop.app.write.state import StageState
-from taskloop.contracts import rundocs
 from taskloop.domain.checks.inputs import matching
 from taskloop.domain.checks.matchers import expand_braces
 

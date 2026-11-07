@@ -1,7 +1,7 @@
 """Names of a check: its normal command text and the environment variables later checks read it by."""
 from typing import Final
 
-from taskloop.contracts.ids import CheckId, mangle
+from tlkernel.ids import CheckId, mangle
 
 LOG_PREFIX: Final = "TL_CHECK_LOG_"
 RC_PREFIX: Final = "TL_CHECK_RC_"

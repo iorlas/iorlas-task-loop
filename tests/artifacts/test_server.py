@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from taskloop.app.artifacts import server, store
-from taskloop.contracts.artifact import ArtifactSlot
+from tlkernel.artifact import ArtifactSlot
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"x" * 64
 SLOT = ArtifactSlot(repo="r-1", bead="r-9", run="r-9-1", stage="write", attempt=1)

@@ -75,7 +75,7 @@ rules:
     set -euo pipefail
     # skills/task-loop/_vendor: .importlinter names stream_proc (the vendored process library) as a root package, so grimp must find it
     # --with msgspec: .importlinter names msgspec as a root package (the hook contract), and grimp must find it
-    PYTHONPATH=src:skills/task-loop/_vendor uv tool run --with msgspec --from "import-linter@$(just pin pipx:import-linter)" lint-imports
+    PYTHONPATH=src:packages/kernel/src:skills/task-loop/_vendor uv tool run --with msgspec --from "import-linter@$(just pin pipx:import-linter)" lint-imports
 
 # The .py files this change touches: committed since origin/main, edited, or new; deleted ones, the vendored copy and fixtures left out.
 [private]

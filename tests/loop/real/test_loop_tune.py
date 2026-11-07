@@ -18,8 +18,8 @@ from support.who import who
 
 from taskloop.app.launch import loop as wloop
 from taskloop.app.slots.pool import SlotPool
-from taskloop.contracts.config import LoopConfig
-from taskloop.contracts.env import snapshot
+from tlkernel.config import LoopConfig
+from tlkernel.env import snapshot
 
 
 class Tune(LoopBase):

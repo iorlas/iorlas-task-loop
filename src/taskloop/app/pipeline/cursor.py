@@ -1,9 +1,9 @@
 """Pure step cursor selection from run manifests and checkpoints."""
-from taskloop.contracts.checkpoint import Checkpoint
-from taskloop.contracts.enums import Step
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.locator import RunBundle
-from taskloop.contracts.run import RunState
+from tlkernel.checkpoint import Checkpoint
+from tlkernel.enums import Step
+from tlkernel.kinds import Kind
+from tlkernel.locator import RunBundle
+from tlkernel.run import RunState
 
 
 def parse_step(name: str) -> Step:

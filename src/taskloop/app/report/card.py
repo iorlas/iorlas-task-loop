@@ -8,6 +8,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, NotRequired, TypedDict
 
+from tlkernel import paths, runlife, wire
+from tlkernel.bead import Comment
+from tlkernel.dashhealth import Score
+from tlkernel.enums import Outcome, Result
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId, is_bead_id, loop_key
+from tlkernel.kinds import ASKS, PAUSES, Kind, kind_named
+from tlkernel.locator import RunLocator
+from tlkernel.log import EngineLog, decode
+from tlkernel.rowstores import ReleaseResultStore
+from tlkernel.runlife import Liveness, liveness
+from tlkernel.stores import LoopLog
+from tlkernel.trace import RunTrace
+
 from taskloop.adapters import beadtools, gitrepo
 from taskloop.app.asks import intake
 from taskloop.app.reconcile.lost import lost_work
@@ -15,20 +30,6 @@ from taskloop.app.report.inputs import bead_status, landed_of, read_jsonl, repo_
 from taskloop.app.report.landphases import land_stats, tries_of
 from taskloop.app.report.mainstate import main_state
 from taskloop.app.report.planner import input_tokens
-from taskloop.contracts import paths, runlife, wire
-from taskloop.contracts.bead import Comment
-from taskloop.contracts.dashhealth import Score
-from taskloop.contracts.enums import Outcome, Result
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId, is_bead_id, loop_key
-from taskloop.contracts.kinds import ASKS, PAUSES, Kind, kind_named
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.log import EngineLog, decode
-from taskloop.contracts.rowstores import ReleaseResultStore
-from taskloop.contracts.runlife import Liveness, liveness
-from taskloop.contracts.stores import LoopLog
-from taskloop.contracts.trace import RunTrace
 from taskloop.domain.lifecycle import matchers
 
 M2: Final = {"beads": 10, "landed_no_ask": 7}  # at least; lost and crashes must be 0 (docs/roadmap.md)

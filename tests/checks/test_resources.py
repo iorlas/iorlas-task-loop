@@ -24,12 +24,12 @@ from taskloop.app.checks import resources
 from taskloop.app.checks.resources import Resources
 from taskloop.app.land import verified
 from taskloop.app.wire.brief import held_resources
-from taskloop.contracts.checks import UNVERIFIED_EXIT, Check, CheckResult, CheckRun
-from taskloop.contracts.config import ConfigError, EngineConfig, HostResources, ResourceSpec, load
-from taskloop.contracts.enums import WaitWhat
-from taskloop.contracts.ids import CheckId
-from taskloop.contracts.paths import ConfigDir
 from taskloop.domain.checks.inputs import touched
+from tlkernel.checks import UNVERIFIED_EXIT, Check, CheckResult, CheckRun
+from tlkernel.config import ConfigError, EngineConfig, HostResources, ResourceSpec, load
+from tlkernel.enums import WaitWhat
+from tlkernel.ids import CheckId
+from tlkernel.paths import ConfigDir
 
 ANSWERS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 UNITY = {"unity": {"limit": 1}}

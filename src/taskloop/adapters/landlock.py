@@ -11,8 +11,8 @@ from subprocess import Popen
 from types import FrameType
 
 from taskloop.adapters import locks, procs
-from taskloop.contracts.locks import LockRecord, LockTimeout
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.locks import LockRecord, LockTimeout
+from tlkernel.paths import ConfigDir
 
 
 @contextlib.contextmanager

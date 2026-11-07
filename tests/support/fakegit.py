@@ -11,9 +11,9 @@ from collections.abc import Sequence
 from typing import Any
 
 from taskloop.adapters.git import RealGit
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitfacts import GitOutcome, LogRow
-from taskloop.contracts.slots import SlotGitError
+from tlkernel.env import Env
+from tlkernel.gitfacts import GitOutcome, LogRow
+from tlkernel.slots import SlotGitError
 
 
 class ScriptedGit(RealGit):

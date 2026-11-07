@@ -1,7 +1,7 @@
 """The plan stage's hand-off to the pipeline."""
 from dataclasses import dataclass
 
-from taskloop.contracts.plancheck import PlanData
+from tlkernel.plancheck import PlanData
 
 
 @dataclass(frozen=True, slots=True)

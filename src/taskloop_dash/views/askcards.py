@@ -1,11 +1,11 @@
 """The open ask or look of a bead as the v2 AskCard: whole, from the typed Ask and the look item. The agent's declared cause, the
 blocking flag and its default, the ask-back thread, the repeat match and the staleness count all come from typed fields or the ledger."""
 
-from taskloop.contracts.ask import Ask
-from taskloop.contracts.dash import AskCard, AskOptionCard, Similar, ThreadMsg
 from taskloop_dash.views.artifact_files import Item, plain, served, split_stage, url_of
 from taskloop_dash.views.board import is_work, when
 from taskloop_dash.views.world import LookItem, ProjectIn
+from tlkernel.ask import Ask
+from tlkernel.dash import AskCard, AskOptionCard, Similar, ThreadMsg
 
 
 def stale_of(a: Ask, p: ProjectIn) -> int:

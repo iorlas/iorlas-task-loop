@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from rules.gate_rules import parsed
-from taskloop.contracts.factorydb import OWNERS
+from tlkernel.factorydb import OWNERS
 
 ENGINE_TABLES = tuple(table for table, role in OWNERS.items() if role != "index")
 ENGINE_SQL = re.compile(

@@ -10,9 +10,9 @@ from taskloop.app.checks.cache import RunMemo
 from taskloop.app.checks.execution import check_env
 from taskloop.app.checks.runner import Checker, cached_gate
 from taskloop.app.launch.check_host import CliHost
-from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.specs import gate_items
 from taskloop.domain.slot_env import slot_env
+from tlkernel.runkey import BaseSha
 
 
 class KeyedEnv(CheckHostCase):

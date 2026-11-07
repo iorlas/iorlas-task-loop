@@ -6,9 +6,9 @@ import stat
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from taskloop.contracts.delegate import RunRequest
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.run import CallIdentity
+from tlkernel.delegate import RunRequest
+from tlkernel.gitport import Git
+from tlkernel.run import CallIdentity
 
 
 def digest(value: object) -> str:

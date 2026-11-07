@@ -10,11 +10,11 @@ from taskloop.app.loop import take
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.run import Where
 from taskloop.app.loop.take import Taker
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.enums import Result
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.slots import SlotFail
+from tlkernel.bead import Bead
+from tlkernel.config import EngineConfig
+from tlkernel.enums import Result
+from tlkernel.ids import BeadId
+from tlkernel.slots import SlotFail
 
 
 class FakeSlots:

@@ -8,11 +8,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import assert_never
 
-from taskloop.contracts import adrfiles
-from taskloop.contracts.adrs import AdrStore, is_adr_id
-from taskloop.contracts.beadsport import BeadPatch, BeadQuery, Beads, NewBead
-from taskloop.contracts.dash import Stick
-from taskloop.contracts.ledger import LedgerEntry
+from tlkernel import adrfiles
+from tlkernel.adrs import AdrStore, is_adr_id
+from tlkernel.beadsport import BeadPatch, BeadQuery, Beads, NewBead
+from tlkernel.dash import Stick
+from tlkernel.ledger import LedgerEntry
 
 FACTORY_LABEL = "factory"
 TITLE_CAP = 200

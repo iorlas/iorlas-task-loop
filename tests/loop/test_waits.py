@@ -13,11 +13,11 @@ from taskloop.app.loop.verdict import Verdict
 from taskloop.app.loop.waits import blocked
 from taskloop.app.slots import aside
 from taskloop.app.slots.pool import Slot
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.config import LoopConfig, RepoProfile
-from taskloop.contracts.enums import Result
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.slots import SlotFail
+from tlkernel.bead import Bead
+from tlkernel.config import LoopConfig, RepoProfile
+from tlkernel.enums import Result
+from tlkernel.ids import BeadId
+from tlkernel.slots import SlotFail
 
 
 class Waits(Rig):

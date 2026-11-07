@@ -27,12 +27,12 @@ from taskloop.app.asks import intake, owner_verbs
 from taskloop.app.pipeline import requests
 from taskloop.app.run.layout import prune_run_logs
 from taskloop.cli import asks as cli
-from taskloop.contracts import log as rec
-from taskloop.contracts.beadsport import NewBead
-from taskloop.contracts.enums import WhyCode
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import RunState
+from tlkernel import log as rec
+from tlkernel.beadsport import NewBead
+from tlkernel.enums import WhyCode
+from tlkernel.ids import BeadId
+from tlkernel.paths import ConfigDir
+from tlkernel.run import RunState
 
 RUN = "tl-5-20261026-100000"
 

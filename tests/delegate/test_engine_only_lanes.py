@@ -7,19 +7,19 @@ import re
 from pathlib import Path
 from typing import Any
 
+import hermetic  # noqa: F401  (a home of its own for every test)
+import routing_support as support
 from any_agent.harnesses import opencode_sandbox as box
 from any_agent.harnesses.opencode import OpenCodeHarness
 from any_agent.protocol import LaunchInputs
+from support.case import Case
+from support.tmpdir import TemporaryDirectory
+from test_review_order import CFG, T, lanes
+
 from delegate.app import harnesses, launch
 from delegate.contracts.routing import CallArgs
 from delegate.contracts.state import RefRecord
 from delegate.contracts.wire import RECIPE_RUNNERS
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
-from test_review_order import CFG, T, lanes
 
 ROOT = Path(__file__).resolve().parents[2]
 DENIED_BY_OPENCODE = (

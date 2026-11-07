@@ -30,8 +30,8 @@ from taskloop.adapters import procs, runner
 from taskloop.adapters.delegate import Stopped
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId
 
 POSIX = os.name != "nt"
 MIN = 60.0

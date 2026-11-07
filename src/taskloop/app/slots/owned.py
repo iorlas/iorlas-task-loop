@@ -7,11 +7,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from taskloop.contracts.gitport import Git, SlotGit
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.slots import SlotGitError
-from taskloop.contracts.worktreerows import WorktreeDocs
-from taskloop.contracts.worktrees import Owned
+from tlkernel.gitport import Git, SlotGit
+from tlkernel.paths import ConfigDir
+from tlkernel.slots import SlotGitError
+from tlkernel.worktreerows import WorktreeDocs
+from tlkernel.worktrees import Owned
 
 SHOWN = 8  # lines of a loss printed per worktree
 

@@ -19,8 +19,8 @@ from support.look_world import looks, world  # noqa: E402
 from support.narrow import must  # noqa: E402
 from support.repos import write_repos  # noqa: E402
 
-from taskloop.contracts import gallery  # noqa: E402
-from taskloop.contracts.ids import loop_key  # noqa: E402
+from tlkernel import gallery  # noqa: E402
+from tlkernel.ids import loop_key  # noqa: E402
 
 LOOKS = make_dash().looks
 

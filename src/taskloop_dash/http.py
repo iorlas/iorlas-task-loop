@@ -13,11 +13,11 @@ from pathlib import Path
 from typing import Any, override
 from urllib.parse import parse_qs, urlparse, urlsplit
 
-from taskloop.contracts import factorydb
-from taskloop.contracts.dash import READ_PROTOCOL
 from taskloop_dash.app import Dash
 from taskloop_dash.assets import static_file
 from taskloop_dash.bind import urls
+from tlkernel import factorydb
+from tlkernel.dash import READ_PROTOCOL
 
 Query = dict[str, str]
 MAX_BODY = 65536

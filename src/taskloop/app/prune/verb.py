@@ -5,17 +5,18 @@ Idempotent: a second run finds nothing. The loop runs it at its start."""
 from collections.abc import Callable
 from pathlib import Path
 
+from tlkernel.beadsport import Beads
+from tlkernel.config import LoopConfig
+from tlkernel.identity import Identity
+from tlkernel.paths import ConfigDir
+from tlkernel.rowstores import ReposStore
+from tlkernel.scratch import scratch_root
+
 from taskloop.adapters.ident import hostname
 from taskloop.app.prune import retention, runs, slotstate
 from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.release.shell import Shell
 from taskloop.app.run import running
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.config import LoopConfig
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.rowstores import ReposStore
-from taskloop.contracts.scratch import scratch_root
 
 
 def mb(n: int) -> str:

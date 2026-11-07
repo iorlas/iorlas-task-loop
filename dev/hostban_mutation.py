@@ -19,7 +19,7 @@ PINS = tomllib.loads((ROOT / "mise.toml").read_text(encoding="utf-8"))["tools"]
 
 
 def run(argv: list[str], cwd: Path) -> tuple[int, str]:
-    env = {**os.environ, "PYTHONPATH": "src:skills/task-loop/_vendor"}
+    env = {**os.environ, "PYTHONPATH": "src:packages/kernel/src:skills/task-loop/_vendor"}
     done = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, check=False, env=env)
     return done.returncode, done.stdout + done.stderr
 

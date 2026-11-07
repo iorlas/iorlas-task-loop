@@ -4,11 +4,12 @@ owner. The 2026-10-21 night: three beads (a hand-written .meta against its sibli
 an evidence file that proved it) each waited hours for an ask a supervisor settled in a minute by reading."""
 from typing import Any
 
+from tlkernel.answers import VERDICTS
+from tlkernel.stagefacts import RunFacts
+
 from taskloop.app.review.host import ReviewHand, ReviewPorts
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.review.verify_prompt import VERIFY_PROMPT
-from taskloop.contracts.answers import VERDICTS
-from taskloop.contracts.stagefacts import RunFacts
 from taskloop.domain import followups
 from taskloop.domain.review import switch, visual
 from taskloop.domain.review.kinds import UNCHECKED_KINDS

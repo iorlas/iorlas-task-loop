@@ -5,6 +5,12 @@ the land is the PR's own merge commit; open -> the ask again (or, when the work 
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel import fence
+from tlkernel.beadsport import BeadPatch, Beads
+from tlkernel.forge import CLOSED, MERGED, PR_NUMBER, PR_URL, Pr, pr_waited_on
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId
+
 from taskloop.app.land.cmds import Cmds, Runs, Stop
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.gate import GatePass, Problem
@@ -13,11 +19,6 @@ from taskloop.app.land.parts import FetchCheckout, OutcomeSteps
 from taskloop.app.land.push import stale
 from taskloop.app.land.push_evidence import failure
 from taskloop.app.land.state import Land, Next
-from taskloop.contracts import fence
-from taskloop.contracts.beadsport import BeadPatch, Beads
-from taskloop.contracts.forge import CLOSED, MERGED, PR_NUMBER, PR_URL, Pr, pr_waited_on
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.land.matchers import Push

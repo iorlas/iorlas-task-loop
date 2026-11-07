@@ -2,12 +2,13 @@
 Reads only, through the Git port, the landed records, bd (status_of) and the engine's traces."""
 from collections.abc import Callable, Sequence
 
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId, is_bead_id
-from taskloop.contracts.landed import Landed
-from taskloop.contracts.slots import MissingRevision, SlotGitError
-from taskloop.contracts.trace import RunTrace
+from tlkernel.enums import Outcome
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId, is_bead_id
+from tlkernel.landed import Landed
+from tlkernel.slots import MissingRevision, SlotGitError
+from tlkernel.trace import RunTrace
+
 from taskloop.domain.lifecycle import matchers
 from taskloop.domain.reconcile.lost import BranchCommit
 

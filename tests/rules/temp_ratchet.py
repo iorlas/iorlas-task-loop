@@ -1,4 +1,4 @@
-"""The temp-path ratchet's counter: where code names a temp location itself instead of asking src/taskloop/contracts/scratch.py.
+"""The temp-path ratchet's counter: where code names a temp location itself instead of asking packages/kernel/src/tlkernel/scratch.py.
 
 A site is a `tempfile` attribute or import, or a string constant holding /tmp, /var/tmp or TMPDIR, anywhere in src/, dev/, skills/ and
 tests/ but scratch.py itself. Judged on the change (ratchet_change.py): a rise over the files the change touches fails unless a commit
@@ -8,7 +8,7 @@ from pathlib import Path
 
 from rules.gate_rules import SKIP_DIRS
 
-HOME_FILE = "src/taskloop/contracts/scratch.py"
+HOME_FILE = "packages/kernel/src/tlkernel/scratch.py"
 SCAN = ("src", "dev", "skills", "tests")
 RATCHET_FILES = ("temp_ratchet.py", "test_temp_ratchet.py", "test_ratchets.py", "test_ratchets_change.py")  # they quote sites
 NEEDLES = ("/tmp", "/var/tmp", "TMPDIR")

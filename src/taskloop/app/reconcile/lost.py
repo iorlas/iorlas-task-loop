@@ -8,11 +8,12 @@ or it is on a wip/* branch of a dead session)."""
 from collections.abc import Callable, Sequence
 from typing import Any
 
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId
+from tlkernel.landed import Landed
+from tlkernel.trace import RunTrace
+
 from taskloop.app.reconcile.commits import observe_commits
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.landed import Landed
-from taskloop.contracts.trace import RunTrace
 from taskloop.domain.reconcile.diff import findings
 from taskloop.domain.reconcile.facts import Observed
 

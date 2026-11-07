@@ -14,12 +14,12 @@ import support.paths  # noqa: F401
 from support.tlmain import tl_main
 
 from taskloop.app.run.stage_run import stage_run
-from taskloop.contracts.checks import CheckResult, CheckRun
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import CheckId
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.run import RunState
 from taskloop.stores.runlog import RunLog
+from tlkernel.checks import CheckResult, CheckRun
+from tlkernel.identity import Identity
+from tlkernel.ids import CheckId
+from tlkernel.locator import RunLocator
+from tlkernel.run import RunState
 
 
 class StageRuns(Case):

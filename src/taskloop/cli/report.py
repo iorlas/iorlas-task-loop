@@ -6,15 +6,16 @@ import time
 from pathlib import Path
 from typing import Any
 
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+
 from taskloop.app.launch import repos
 from taskloop.app.reconcile import lost as lostwork
 from taskloop.app.report import card as cards
 from taskloop.app.report import planner, reflect
 from taskloop.app.report.inputs import bead_status, landed_of, prefix, repo_traces
 from taskloop.app.report.window import digest_time, since_of, window
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
 
 
 def stamp(t: float) -> str:

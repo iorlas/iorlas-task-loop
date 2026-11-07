@@ -3,6 +3,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
+from tlkernel.identity import Identity
+from tlkernel.stagefacts import Narrate
+
 from taskloop.app.asks.closing import ClosingAsks
 from taskloop.app.land.closing import LandCleanups, LandFollowUps
 from taskloop.app.land.followups import FollowUpCheckpoints, FollowUpHost, file_follow_ups
@@ -18,8 +21,6 @@ from taskloop.app.run import console
 from taskloop.app.track.closing import ClosingBeads
 from taskloop.app.wire import closeguard
 from taskloop.app.wire.slots import profile_slots, slot_of
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.stagefacts import Narrate
 
 
 class BindingCheckpoints(CloseAllCheckpoints, FollowUpCheckpoints, Protocol):

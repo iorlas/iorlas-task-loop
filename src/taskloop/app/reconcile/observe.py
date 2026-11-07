@@ -4,17 +4,18 @@ from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
+from tlkernel import fence
+from tlkernel.bead import Bead
+from tlkernel.beadsport import BdFailure, BeadQuery, Beads
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId, is_bead_id
+from tlkernel.landed import Landed, landed_in
+from tlkernel.lockrows import EngineLockRows
+from tlkernel.paths import ConfigDir
+from tlkernel.reconcile import Lease, SlotFact, epoch
+from tlkernel.slots import SlotGitError
+
 from taskloop.app.release import tidy
-from taskloop.contracts import fence
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId, is_bead_id
-from taskloop.contracts.landed import Landed, landed_in
-from taskloop.contracts.lockrows import EngineLockRows
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.reconcile import Lease, SlotFact, epoch
-from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.lifecycle.matchers import land_bead
 from taskloop.domain.reconcile.facts import (
     BeadFact,

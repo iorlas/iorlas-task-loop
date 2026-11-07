@@ -21,11 +21,11 @@ from support.waits import until
 from taskloop.app.asks import owner_verbs as requests
 from taskloop.app.report import card
 from taskloop.cli import wait
-from taskloop.contracts import runlife
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.run import RunState
-from taskloop.contracts.runlife import STALE_AFTER, Liveness
+from tlkernel import runlife
+from tlkernel.ids import loop_key
+from tlkernel.locator import RunLocator
+from tlkernel.run import RunState
+from tlkernel.runlife import STALE_AFTER, Liveness
 
 CHILD = Path(te.ROOT, "tests", "support", "state_child.py")
 WAIT = 120

@@ -14,7 +14,7 @@ from support import procsim
 from support.check_host import CheckHostCase
 
 from taskloop.adapters import delegate as dl
-from taskloop.contracts.paths import RunFiles
+from tlkernel.paths import RunFiles
 
 CMD = "unity-like-check"
 

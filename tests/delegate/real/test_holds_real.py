@@ -8,14 +8,14 @@ import time
 from pathlib import Path
 from unittest import mock
 
-from delegate.app import env
+import hermetic  # noqa: F401  (a home of its own for every test)
+import routing_support as support
 from support.case import Case
 from support.procsim import real_proc
 from support.tmpdir import TemporaryDirectory
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
 from test_route import CFG, T, lanes, route
+
+from delegate.app import env
 
 
 class Holds(Case):

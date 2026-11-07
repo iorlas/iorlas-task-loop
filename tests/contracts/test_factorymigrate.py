@@ -9,7 +9,7 @@ import support.paths  # noqa: F401
 from sqlite_store import Store
 from support.narrow import must
 
-from taskloop.contracts import factorydb, factoryparts
+from tlkernel import factorydb, factoryparts
 
 # Frozen v2 schema, deliberately independent of the current factorydb.DDL.
 V2_DDL = """

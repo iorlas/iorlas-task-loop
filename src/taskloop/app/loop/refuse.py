@@ -2,8 +2,9 @@
 comment naming the failed rules. A bead that already has the label, or that this loop already told about, gets nothing more."""
 from collections.abc import Callable
 
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import BdFailure, Beads
+from tlkernel.bead import Bead
+from tlkernel.beadsport import BdFailure, Beads
+
 from taskloop.domain.beads.rules import NEEDS_AC
 
 

@@ -3,7 +3,7 @@ a lock (a compiler server, a build node, a package scratch: the repo names those
 from collections.abc import Mapping
 from pathlib import Path
 
-from taskloop.contracts.config import fill_slot_env
+from tlkernel.config import fill_slot_env
 
 
 def repo_id(origin: str, fallback: str) -> str:

@@ -2,11 +2,11 @@
 dashboard only reads: it shows a stray, `tl prune`, the loop's step and the run entry are what give it back."""
 from collections.abc import Mapping, Sequence
 
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.fence import BEAD_GEN, SLOT_GEN, gen_of
-from taskloop.contracts.reconcile import Lease, SlotFact, Stray, epoch, strays
-from taskloop.contracts.runlife import Liveness
 from taskloop_dash.views.runfacts import Run
+from tlkernel.bead import Bead
+from tlkernel.fence import BEAD_GEN, SLOT_GEN, gen_of
+from tlkernel.reconcile import Lease, SlotFact, Stray, epoch, strays
+from tlkernel.runlife import Liveness
 
 
 def hold_until(b: Bead) -> float:

@@ -3,9 +3,8 @@
 import os
 from pathlib import Path
 
-import pytest
-
 import hermetic
+import pytest
 
 
 class Hermetic:

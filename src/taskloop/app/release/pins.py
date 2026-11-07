@@ -4,14 +4,15 @@ import json
 import sys
 import time
 
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.paths import ConfigDir
+from tlkernel.rowstores import PinStore
+from tlkernel.snapshots import Pin
+
 from taskloop.adapters.ident import PLUGIN_ROOT, claude_dir, config_dir
 from taskloop.app.release.canary import mac_pin_refusal
 from taskloop.app.release.catalog import PLUGINS, cache_dirs, installed_version, previous_version, version_tuple
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.rowstores import PinStore
-from taskloop.contracts.snapshots import Pin
 
 
 def pin_store(env: Env) -> PinStore:

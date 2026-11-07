@@ -6,10 +6,10 @@ import pytest
 from support.pipeline_ports import FakeLandCleanup, FakeSlotting
 
 from taskloop.app.pipeline.closing_branch import ReleaseSlot, SaveBranch
-from taskloop.contracts import fence
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.slots import Checkout
+from tlkernel import fence
+from tlkernel.enums import Outcome
+from tlkernel.ids import BeadId
+from tlkernel.slots import Checkout
 
 
 @pytest.mark.parametrize('outcome', [Outcome.LANDED, Outcome.DONE, Outcome.FAILED])

@@ -10,10 +10,10 @@ from git_porcelain.errors import GitUnavailable
 from slots.test_slot_pool import Rig
 from taskloop.adapters.git import RealGit
 from taskloop.app.slots import reset
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.env import Env
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.slots import Checkout, GitReadFailure
+from tlkernel.bead import Bead
+from tlkernel.env import Env
+from tlkernel.ids import BeadId
+from tlkernel.slots import Checkout, GitReadFailure
 
 
 class ResetOwnership(Rig):

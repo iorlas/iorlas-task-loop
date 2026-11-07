@@ -14,12 +14,12 @@ from support.narrow import must
 from support.tiers import domain
 
 from taskloop.app.asks import intake, raiser
-from taskloop.contracts.ask import SimilarRef
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.dash import Stick
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ledger import Adr
 from taskloop.domain.asks import similar, specs
+from tlkernel.ask import SimilarRef
+from tlkernel.bead import Bead
+from tlkernel.dash import Stick
+from tlkernel.ids import BeadId
+from tlkernel.ledger import Adr
 
 T = 1000.0
 Q = "Which save format should the engine keep for old files?"

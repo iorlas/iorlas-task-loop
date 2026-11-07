@@ -10,7 +10,7 @@ from support.narrow import must
 
 from dash import test_dash_api as fixtures
 from taskloop.adapters.ident import hostname
-from taskloop.contracts.ids import loop_key
+from tlkernel.ids import loop_key
 
 
 class FastReads(fixtures.ApiFixture):

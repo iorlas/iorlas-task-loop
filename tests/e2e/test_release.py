@@ -28,11 +28,11 @@ from support.release_world import IDENTITY, MARKET, PLUGIN, World, git
 
 from taskloop.adapters import childenv, landlock
 from taskloop.app.release import canary, clone, manifest, publish, selfupdate, shell
-from taskloop.contracts import wire
-from taskloop.contracts.env import Env, snapshot
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.rowstores import ReleaseResultStore
+from tlkernel import wire
+from tlkernel.env import Env, snapshot
+from tlkernel.envvars import EnvVar
+from tlkernel.paths import ConfigDir
+from tlkernel.rowstores import ReleaseResultStore
 
 ROOT = Path(__file__).resolve().parents[2]
 RELEASE = ROOT / "dev" / "release.py"

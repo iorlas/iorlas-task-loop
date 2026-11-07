@@ -14,9 +14,9 @@ from rules.gate_rules import parsed
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts.delegate import Permanence
 from taskloop.domain.lanes.pause_reasons import Reason
 from taskloop.domain.lanes.pauses import OVERRIDES, TABLE, rule
+from tlkernel.delegate import Permanence
 
 ROOT = Path(__file__).resolve().parents[2]
 

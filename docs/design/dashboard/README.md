@@ -4,7 +4,7 @@ One server per machine, reading state and taking the owner's commands through it
 
 - **The rule:** [dash-spec.md](dash-spec.md). Owner decisions: [dash-decisions.md](dash-decisions.md). The mocks it names
   (`dash-round-*.html`) show the result; older mocks are history.
-- **The API:** [docs/contracts/dash-api.md](../../contracts/dash-api.md), records in `src/taskloop/contracts/dash.py`.
+- **The API:** [docs/contracts/dash-api.md](../../contracts/dash-api.md), records in `packages/kernel/src/tlkernel/dash.py`.
 - **What it reads:** run state from `factory.db`; engine and worker logs through `readers/logs.py`; asks, the ask ledger,
   decisions, loop state and lane status under `~/.config/task-loop`, and bd through the typed `Beads` port.
   The index thread writes derived state; owner actions write through `Ports`. Every format

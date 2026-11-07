@@ -11,14 +11,14 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts import answers, schema, wire
+from tlkernel import answers, schema, wire
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tests"))
 import contracts.test_response_format as strict_test  # noqa: E402
 from contracts import samples  # noqa: E402
-from taskloop.contracts import enums  # noqa: E402
-from taskloop.contracts.wire import Rec  # noqa: E402
+from tlkernel import enums  # noqa: E402
+from tlkernel.wire import Rec  # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures" / "schemas"  # the hand-written schemas the engine sent before E6, frozen
 VARIANTS = [(n, v) for n in answers.NODES for v in (False, True) if not v or n in answers.VISUAL]

@@ -14,14 +14,14 @@ from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.app.asks import intake
 from taskloop.app.plan import adrsync
-from taskloop.contracts import adrfiles
-from taskloop.contracts.adrs import AdrStore
-from taskloop.contracts.ask import SimilarRef
-from taskloop.contracts.dash import OwnerCause
-from taskloop.contracts.enums import AskStatus
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ledger import Adr
 from taskloop.domain.asks import similar, specs
+from tlkernel import adrfiles
+from tlkernel.adrs import AdrStore
+from tlkernel.ask import SimilarRef
+from tlkernel.dash import OwnerCause
+from tlkernel.enums import AskStatus
+from tlkernel.ids import BeadId
+from tlkernel.ledger import Adr
 
 OPTS = [{"label": "Push", "cost": "shared", "answer": "push", "recommended": True},
         {"label": "Hold", "cost": "slow", "answer": "hold", "recommended": False}]

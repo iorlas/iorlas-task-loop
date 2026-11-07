@@ -6,14 +6,14 @@ import pytest
 
 from taskloop.app.asks import raiser
 from taskloop.app.asks.closing import ClosingAsks
-from taskloop.contracts.ask import AskOption
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.enums import AskClass
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.parks import ParkStore
-from taskloop.contracts.paths import ConfigDir
 from taskloop.domain.asks.spec import AskSpec
+from tlkernel.ask import AskOption
+from tlkernel.bead import Bead
+from tlkernel.enums import AskClass
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.parks import ParkStore
+from tlkernel.paths import ConfigDir
 
 
 @pytest.mark.parametrize("valid", [True, False])

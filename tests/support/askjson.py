@@ -6,10 +6,10 @@ from typing import Any
 
 from asks.samples import MOCKS
 
-from taskloop.contracts import wire
-from taskloop.contracts.askrows import AskRows
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.paths import ConfigDir
+from tlkernel import wire
+from tlkernel.askrows import AskRows
+from tlkernel.askstore import AskStore
+from tlkernel.paths import ConfigDir
 
 
 def ask_json(bead: str, n: int = 1, **over: Any) -> dict[str, Any]:

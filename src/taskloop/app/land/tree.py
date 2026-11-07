@@ -4,15 +4,16 @@ import time
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel.bead import Bead
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId
+from tlkernel.paths import TASK_EXCLUDE, ConfigDir
+from tlkernel.slots import SlotGitError
+
 from taskloop.app.land.gitcall import must
 from taskloop.app.land.parts import BeginSteps, FetchCheckout, StageCheckout
 from taskloop.app.slots.engine_lock import engine_busy
 from taskloop.app.slots.reset import leave_slot
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import TASK_EXCLUDE, ConfigDir
-from taskloop.contracts.slots import SlotGitError
 from taskloop.stores.runlog import RunLog
 
 

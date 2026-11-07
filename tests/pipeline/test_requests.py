@@ -5,11 +5,11 @@ import pytest
 
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.requests import NOTE_HEAD, OwnerRequests, peek
-from taskloop.contracts import log as rec
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.requests import OwnerNote, OwnerRequest
-from taskloop.contracts.signalrows import SignalRows
+from tlkernel import log as rec
+from tlkernel.kinds import Kind
+from tlkernel.paths import ConfigDir
+from tlkernel.requests import OwnerNote, OwnerRequest
+from tlkernel.signalrows import SignalRows
 
 
 @dataclass

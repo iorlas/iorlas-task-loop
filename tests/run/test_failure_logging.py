@@ -15,11 +15,11 @@ from taskloop.app.pipeline.closing_decide import Decide
 from taskloop.app.pipeline.reflect import Reflector
 from taskloop.app.run.records import Records
 from taskloop.app.run.reload import Reload
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.run import RunState
 from taskloop.domain import outcome as oc
+from tlkernel.enums import Outcome
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.run import RunState
 
 
 class FailureLogging(Case):

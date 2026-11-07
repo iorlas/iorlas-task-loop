@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+from support.case import Case
+
 from delegate.app.fleet import mark_busy
 from delegate.contracts import codec
 from delegate.contracts.routing import CallArgs, Error, LaneOut, Routing, Run, Stop
@@ -17,7 +19,6 @@ from delegate.domain.health.ledger import PairView
 from delegate.domain.holds.book import HoldBook
 from delegate.domain.lanes.lane import Lane
 from delegate.domain.routing.router import Router
-from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[3]
 

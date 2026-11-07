@@ -1,11 +1,12 @@
 """`tl usage '<plan.windows JSON>'`: feed the Claude plan's usage windows to delegate, so headless Claude steps may run."""
 import json
 
+from tlkernel.env import Env
+from tlkernel.paths import ConfigDir
+from tlkernel.procport import Spawner
+
 from taskloop.adapters.ident import config_dir
 from taskloop.app.wire import lanes
-from taskloop.contracts.env import Env
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.procport import Spawner
 from taskloop.stores.delegate import real_route
 
 

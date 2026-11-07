@@ -4,11 +4,11 @@ from collections.abc import Callable
 from pathlib import Path
 
 from any_plugin_cache import NoVersionError, entry_offset, set_json_version
+from tlkernel.ids import MARKETPLACE
+from tlkernel.slots import SlotGitError
 
 from taskloop.adapters.ident import claude_dir
 from taskloop.app.release.shell import Abort, Shell, fetch_or_abort
-from taskloop.contracts.ids import MARKETPLACE
-from taskloop.contracts.slots import SlotGitError
 
 PLUGIN = ".claude-plugin/plugin.json"
 MARKET = ".claude-plugin/marketplace.json"

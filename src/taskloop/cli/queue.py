@@ -2,9 +2,9 @@
 from argparse import ArgumentParser, _SubParsersAction
 from collections.abc import Callable
 
-from taskloop.contracts import pickset
-from taskloop.contracts.beadsport import BdFailure, BeadPatch, BeadQuery, Beads
-from taskloop.contracts.ids import parse_bead_id
+from tlkernel import pickset
+from tlkernel.beadsport import BdFailure, BeadPatch, BeadQuery, Beads
+from tlkernel.ids import parse_bead_id
 
 
 def cmd_queue(op: str, ids: list[str], store: Beads, now: Callable[[], float], out: Callable[[str], None] = print) -> int:

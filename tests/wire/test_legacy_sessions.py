@@ -5,7 +5,7 @@ from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.wire import doctor
-from taskloop.contracts.env import Env
+from tlkernel.env import Env
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 

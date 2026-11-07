@@ -2,9 +2,9 @@
 
 from support.case import Case
 
-from taskloop.contracts.enums import Step
-from taskloop.contracts.kinds import ASK_NAME, ASKS, Kind
-from taskloop.contracts.runlife import silent_limit
+from tlkernel.enums import Step
+from tlkernel.kinds import ASK_NAME, ASKS, Kind
+from tlkernel.runlife import silent_limit
 
 
 class ContractTables(Case):

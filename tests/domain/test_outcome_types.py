@@ -13,11 +13,11 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.narrow import must
 
 from taskloop.app.loop import verdict as vd
-from taskloop.contracts.checks import RoundVerdict, round_verdict_of
-from taskloop.contracts.enums import Outcome, Result
-from taskloop.contracts.kinds import ASKS, FAULTS, FINISH, PAUSES, Action, Infra, Kind, Owner, Task, fault_of
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
+from tlkernel.checks import RoundVerdict, round_verdict_of
+from tlkernel.enums import Outcome, Result
+from tlkernel.kinds import ASKS, FAULTS, FINISH, PAUSES, Action, Infra, Kind, Owner, Task, fault_of
 
 EXPECT = {Infra: Action.RETRY, Task: Action.ASK, Owner: Action.HOLD}
 

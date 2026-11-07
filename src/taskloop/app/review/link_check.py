@@ -1,10 +1,11 @@
 """The links a task adds to a text file, opened from the engine's host (the writer's sandbox has no network)."""
 from typing import Any
 
+from tlkernel.stagefacts import RunFacts
+
 from taskloop.adapters import links
 from taskloop.app.review.host import ReviewHand, ReviewPorts
 from taskloop.app.review.state import ReviewLive
-from taskloop.contracts.stagefacts import RunFacts
 from taskloop.domain.matchers import clip
 from taskloop.domain.review.findings import engine_finding
 from taskloop.domain.review.matchers import Wording
