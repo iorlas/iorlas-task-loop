@@ -211,6 +211,10 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, sp
     run there as `--slot NAME`, given back at the end."""
     if a.dry_run:
         return preview(a, repo, cfg, "", store=store, env=env, git=git, who=who)
+    cfg_slots = wslots.profile_slots(repo)
+    if why := wslots.uninitialised(repo, cfg_slots, store, spawner=spawner, git=git, who=who):
+        print(f"TAKEN: {why}")
+        return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
     wait = bool(getattr(a, "wait", False))
     told: list[int] = []
 
@@ -219,7 +223,7 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, sp
             say("no free slot{}; waiting in line".format(f" ({ahead} ahead)" if ahead else ""))
             told.append(1)
     halt = halting.RUN_HALT["ev"] or threading.Event()
-    got = wslots.wait_slot(repo, wslots.profile_slots(repo), "run-task " + a.id, stop=lambda: not wait or halt.is_set(), sleep=halt.wait,
+    got = wslots.wait_slot(repo, cfg_slots, "run-task " + a.id, stop=lambda: not wait or halt.is_set(), sleep=halt.wait,
                            on_wait=waiting, prio=wslots.bead_priority(repo, a.id, who,
                                store), store=store, spawner=spawner, git=git, who=who)
     if not got and halt.is_set():
