@@ -29,9 +29,7 @@ from tlkernel import runoutcome as oc
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
 from tlkernel.run import RunManifest, RunState
-from tlpipeline.closing import Closer
-from tlpipeline.finish import terminal_state
-from tlpipeline.lifecycle import Ended, Lifecycle
+from tlpipeline.api import Closer, Ended, Lifecycle, terminal_state
 
 LANDS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 

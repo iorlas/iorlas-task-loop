@@ -54,7 +54,7 @@ from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.run import RunReport
 from tlkernel.waitenums import WaitWhat
-from tlpipeline import outcomes
+from tlpipeline.api import outcomes
 from tltestkit import fake_route
 from tltestkit.cfgs import cfg_with
 from tltestkit.logs import records

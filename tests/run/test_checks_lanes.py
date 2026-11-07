@@ -15,7 +15,7 @@ from tltestkit.logs import records
 
 # isort: split
 from tlgate.domain.specs import gate_items
-from tlpipeline.blocked import Blocked
+from tlpipeline.api import Blocked
 
 UNITY = {"unity": {"limit": 1}}
 from checks.test_lanes import spec  # noqa: E402

@@ -31,8 +31,7 @@ from tlkernel.checkpoint import RunState
 from tlkernel.enums import Outcome
 from tlkernel.followkeys import FollowKey
 from tlkernel.ids import BeadId
-from tlpipeline.checkpoints import Checkpoints
-from tlpipeline.closing_notes import FileNotes
+from tlpipeline.api import Checkpoints, FileNotes
 from tltestkit.narrow import must
 
 

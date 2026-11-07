@@ -28,8 +28,7 @@ from tlkernel import fence
 from tlkernel.bead import BdError, Bead
 from tlkernel.beadsport import BdFailure, BeadPatch
 from tlkernel.ids import BeadId
-from tlpipeline.checkpoints import Checkpoints
-from tlpipeline.lifecycle import Ended
+from tlpipeline.api import Checkpoints, Ended
 
 ME = "tl-run00001"
 LOCKED = BdFailure(BdError(kind="other", text="locked"))
