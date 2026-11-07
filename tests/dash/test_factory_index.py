@@ -10,11 +10,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from support.case import Case
 from support.dashlogs import RunScript, T
 from support.narrow import must
 from support.runs import manifest
-from support.tmpdir import TemporaryDirectory
 
 from dash import test_dash_api as fixtures
 from taskloop_dash.app import Dash
@@ -25,6 +23,8 @@ from tlkernel import factorydb
 from tlkernel.ids import loop_key
 from tlkernel.paths import ConfigDir
 from tlkernel.runrows import RunRows
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 NOW = T + 3600
 

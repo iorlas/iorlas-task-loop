@@ -4,7 +4,6 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
-from support.case import Case
 from support.engine_case import EngineTest
 from support.plans import BEAD, CLEAN, PLAN, WRITE
 
@@ -18,6 +17,7 @@ from tlkernel.gitfacts import DiffEntry
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.paths import ConfigDir
+from tltestkit.case import Case
 
 
 class ReviewerTrustRoots(Case):

@@ -1,11 +1,10 @@
 """The slot count's git read is kept while the profile's source files are unchanged, however old; the slot folders are listed again."""
 from typing import Any, cast
 
-from support.case import Case
-
 from taskloop_dash.env import Env, Ports
 from taskloop_dash.readers.world import Worlds
 from tlkernel.slottable import SlotSource
+from tltestkit.case import Case
 
 
 class SlotSourceCache(Case):

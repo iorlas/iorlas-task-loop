@@ -2,7 +2,6 @@
 from pathlib import Path
 
 import support.paths  # noqa: F401
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.asks import parks
 from tlkernel.bead import Bead
@@ -10,6 +9,7 @@ from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.parks import Park, ParkStore
 from tlkernel.paths import ConfigDir
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 def test_an_owner_park_with_no_hold_is_released_by_the_gate():

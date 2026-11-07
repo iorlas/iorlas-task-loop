@@ -15,13 +15,13 @@ from pathlib import Path
 
 import support.paths  # noqa: F401
 from support import homes
-from support.tmpdir import TemporaryDirectory
+
+from tltestkit.tmpdir import TemporaryDirectory
 
 # isort: split
 import contextlib
 
 import pytest
-from support.case import Case
 from support.narrow import must
 from support.procsim import real_proc
 from support.release_world import IDENTITY, MARKET, PLUGIN, World, git
@@ -33,6 +33,7 @@ from tlkernel.env import Env, snapshot
 from tlkernel.envvars import EnvVar
 from tlkernel.paths import ConfigDir
 from tlkernel.rowstores import ReleaseResultStore
+from tltestkit.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 RELEASE = ROOT / "dev" / "release.py"

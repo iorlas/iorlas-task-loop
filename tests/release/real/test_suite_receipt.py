@@ -4,9 +4,7 @@ import os
 from pathlib import Path
 from unittest import mock
 
-from support.case import Case
 from support.checked import run_checked
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
@@ -20,6 +18,8 @@ from tlkernel.env import Env
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.paths import ConfigDir
 from tlkernel.runkey import BaseSha
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class ReleaseReceipt(Case):

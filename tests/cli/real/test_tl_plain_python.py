@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from support.case import Case
+from tltestkit.case import Case
 
 TL = Path(__file__).resolve().parents[3] / "skills" / "task-loop" / "tl.py"
 

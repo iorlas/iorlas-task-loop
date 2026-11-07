@@ -24,7 +24,7 @@ class StagePrepare(EngineTest):
                 mock.patch.object(eng.stage_loop.writing, "run", side_effect=write) as writer:
             assert run_round_step(eng, Step.WRITE, state) == (Step.LOOK, False)
         assert (run.call_count, writer.call_count) == (2, 2)
-        assert (state.n, eng.stats["writes"], eng.replans) == (1, 1, 0)
+        assert (state.n, eng.stats["writes"], eng.state.replans) == (1, 1, 0)
 
     def test_check_step_repairs_and_repeats_write_without_incrementing_attempt(self):
         eng = self.checks_engine(prepare={"cmd": ["restore"], "triggers": ["project.assets.json"]})
@@ -40,4 +40,4 @@ class StagePrepare(EngineTest):
             assert run_round_step(eng, Step.CHECKS, state) == (Step.LOOK, False)
         run.assert_called_once()
         writer.assert_called_once_with(state, look=False)
-        assert (state.n, eng.stats["writes"], eng.replans) == (1, 0, 0)
+        assert (state.n, eng.stats["writes"], eng.state.replans) == (1, 0, 0)

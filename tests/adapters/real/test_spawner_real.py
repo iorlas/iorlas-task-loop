@@ -7,11 +7,11 @@ import support.paths  # noqa: F401
 
 # isort: split
 import pytest
-from support.case import Case
 
 from taskloop.adapters.spawner import RealSpawner
 from tlkernel.env import snapshot
 from tlkernel.procport import WaitTimeout
+from tltestkit.case import Case
 
 
 class RealSpawn(Case):

@@ -4,11 +4,9 @@ from pathlib import Path
 from unittest import mock
 
 from support import procsim
-from support.case import Case
 from support.check_host import CheckHostCase
 from support.memstores import fake_stores
 from support.spawn import port_git
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import check_files
 from taskloop.app.checks.cache import KEEP, InputKeys, RunMemo
@@ -29,6 +27,8 @@ from tlkernel.gitport import Git
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.paths import ConfigDir
 from tlkernel.runkey import BaseSha, Digest
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class Identity(Case):

@@ -21,6 +21,8 @@ from pathlib import Path
 
 import pytest
 
+from tltestkit.case import install_case_helpers
+
 REAL_HOME = os.environ.get("HOME", "")
 REAL_CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME", str(Path(REAL_HOME) / ".config"))
 os.environ.setdefault("TL_TEST_REAL_HOME", REAL_HOME)
@@ -204,29 +206,8 @@ def case_helpers(request, procs, no_leaked_threads):
     """The unittest names the plain test classes still use: self.addCleanup (runs last-in-first-out after the test and its teardown_method),
     self.enterContext, self.subTest (pytest's `subtests`), self._testMethodName and self.id(). It depends on `procs` so that the cleanups,
     which undo patches made in setup_method on top of the process sim, run before the sim is uninstalled."""
-    case = request.instance
-    if case is None:
+    with install_case_helpers(request):
         yield
-        return
-    with contextlib.ExitStack() as stack:
-        case._testMethodName = request.node.originalname
-        case.id = lambda: request.node.nodeid
-        case.addCleanup = stack.callback
-        case.enterContext = stack.enter_context
-
-        @contextlib.contextmanager
-        def sub_test(msg=None, **params):
-            """pytest's subtest swaps sys.stdout and sys.stderr for its own capture and puts its own back at the end: keep the test's."""
-            streams = sys.stdout, sys.stderr
-            try:
-                with request.getfixturevalue("subtests").test(msg, **params):
-                    sys.stdout, sys.stderr = streams
-                    yield
-            finally:
-                sys.stdout, sys.stderr = streams
-        case.subTest = sub_test
-        yield
-    case.__dict__.clear()  # the item keeps its instance for the session: what a test built (stores with an open log) goes with the test
 
 
 @pytest.fixture(autouse=True)

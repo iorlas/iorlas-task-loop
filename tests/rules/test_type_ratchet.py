@@ -3,10 +3,9 @@ every match ends in assert_never. No total is stored: tests/rules/real/test_chan
 merge base, so two parallel releases never write the same file."""
 import ast
 
-from support.case import Case
-
 from rules.gate_rules import ROOT
 from rules.type_counts import KINDS, change_problems, count_source
+from tltestkit.case import Case
 
 
 def open_matches(text: str) -> list[int]:
