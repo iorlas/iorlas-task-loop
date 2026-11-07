@@ -21,9 +21,9 @@ from taskloop.app.pipeline import ended as stored_end
 from taskloop.app.pipeline import requests
 from taskloop.app.pipeline.finish import outcome as finished_outcome
 from taskloop.app.pipeline.finish import terminal_state
+from taskloop.app.pipeline.reload import Exec
 from taskloop.app.release import reexec
 from taskloop.app.run.crash import parked_crash
-from taskloop.app.run.reload import Exec
 from taskloop.app.slots.lease import Lease
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
