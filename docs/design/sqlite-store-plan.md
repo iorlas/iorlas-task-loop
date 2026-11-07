@@ -12,7 +12,8 @@ vendored `sqlite_store` does the open, quarantine and `user_version` upgrades).
 | table | state |
 |---|---|
 | `run` (manifest, state, heartbeat, facts), `attempt`, `step` (done memo), `check_pass`, `ask`, `ask_ledger`, `bead`, `kv`, `source` | in use (runrows, attemptrows, receiptrows, askrows, beadrows, the dashboard indexer) |
-| `lease`, `wait`, `signal`, `effect`, `check_round` | schema only; nothing writes them except prune |
+| `signal` | in use (`SignalRows`, owner requests) |
+| `lease`, `wait`, `effect`, `check_round` | schema only; nothing writes them except prune |
 
 So the target is not a new schema: it is moving the remaining files into these tables (plus three small ones below) and giving every
 writer the same revision rule the `run` table has.
@@ -29,7 +30,6 @@ revision, so the last writer wins (`JsonStore`/`Doc`, vendored `any_json_doc`). 
 | 3 | Loop command / rest | `loop/<repo>.command.json`, `-rest.json` | cli, dashboard -> loop | last writer wins; RMW | C/W |
 | 4 | Parks | `parks/<bead>.json` | engine, loop (`contracts/parks.py`) -> loop pick, dashboard | RMW, unlocked | W |
 | 5 | Net pause, reexec note | `pauses/<bead>.json`, `reexec/<bead>.json` | engine (`app/release/reexec.py`) -> next run | atomic | C |
-| 6 | Owner request | `runs/<run>/owner-request.json` + `.lock` | dashboard/cli POST -> live engine | lock + atomic | W |
 | 7 | Call state | `<bead>.call.json` | engine (`stores/call_state.py`) 3x per vendor call -> restart reattach | one writer, atomic | H |
 | 8 | Follow-up outbox | `followups/<bead>.json` | engine -> engine, dashboard | RMW | C |
 | 9 | Landed | `landed/<bead>.json` | land (once) -> lost, prune, loop | atomic | C |

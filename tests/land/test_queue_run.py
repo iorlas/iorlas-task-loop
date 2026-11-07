@@ -4,11 +4,18 @@ import threading
 
 import pytest
 
+from taskloop.app.land.queue import InFlight
 from taskloop.app.land.queue_refs import Conflict, Made
 from taskloop.app.land.queue_run import QueueRun
 from taskloop.domain.land.queue_model import Entry, Phase
 
 ITEMS = [("a", "ha"), ("b", "hb"), ("c", "hc")]
+
+
+def flight(n: int) -> InFlight:
+    controller = InFlight(cap=n)
+    controller.current = n
+    return controller
 
 
 class Refs:
@@ -35,7 +42,7 @@ class World:
         self.live = self.most = 0
         self.lock = threading.Lock()
         self.together = threading.Barrier(2, timeout=5) if in_flight == 2 else None
-        self.run = QueueRun(self.refs, self.gate, self.merge, in_flight=in_flight, main="m0")
+        self.run = QueueRun(self.refs, self.gate, self.merge, flight=flight(in_flight), main="m0")
 
     def gate(self, entry: Entry) -> bool:
         with self.lock:
@@ -118,3 +125,41 @@ def test_on_change_observes_initial_entries_and_every_transition(red, conflict):
         expected.pop()  # A conflict never acquired a ref.
     assert [rows[0].phase for rows in snapshots] == expected
     assert snapshots[-1] == entries
+
+
+@pytest.mark.parametrize("cap,expected", [(2, [1, 2, 2, 2]), (4, [1, 2, 3, 4])])
+def test_merges_grow_the_controller_to_its_cap(cap, expected):
+    controller = InFlight(cap=cap)
+    currents = []
+
+    def changed(entries):
+        if not currents or len(controller.accounts) == len(currents):
+            currents.append(controller.current)
+
+    runner = QueueRun(Refs(), lambda entry: True, lambda entry, main: entry.q,
+                      flight=controller, main="m0", clock=lambda: 0.0, on_change=changed)
+    runner.run(ITEMS)
+    assert runner.merged() == ["a", "b", "c"]
+    assert currents == expected
+    assert [account.pr for account in controller.accounts] == [1, 2, 3]
+
+
+@pytest.mark.parametrize("red,conflict", [(True, False), (False, True)])
+def test_red_gate_and_conflict_eject_halve_the_controller(red, conflict):
+    controller = flight(4)
+    refs = Refs(frozenset({"ha"}) if conflict else frozenset())
+    runner = QueueRun(refs, lambda entry: not red, lambda entry, main: entry.q,
+                      flight=controller, main="m0", clock=lambda: 0.0)
+    entries = runner.run(ITEMS[:1])
+    assert entries[0].phase is Phase.EJECTED
+    assert controller.current == 2
+    assert not controller.accounts
+
+
+def test_merged_account_records_gate_seconds_at_settle():
+    ticks = iter([10.0, 17.5])
+    controller = InFlight(cap=4)
+    runner = QueueRun(Refs(), lambda entry: True, lambda entry, main: entry.q,
+                      flight=controller, main="m0", clock=lambda: next(ticks))
+    runner.run(ITEMS[:1])
+    assert controller.accounts[0].useful_gate_s == 7.5
