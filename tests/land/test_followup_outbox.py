@@ -18,9 +18,12 @@ from support.narrow import must
 from taskloop.adapters.bd import BdRun, BdStore
 from taskloop.app.land.closing import LandFollowUps
 from taskloop.app.land.followups import file_follow_ups
+from taskloop.app.land.state import LandState
+from taskloop.app.look.state import LookState
+from taskloop.app.pipeline.checkpoints import Checkpoints
 from taskloop.app.pipeline.closing_notes import FileNotes
 from taskloop.app.review.state import ReviewLive
-from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state
+from taskloop.app.run.state import StateAttrs, carries_state
 from taskloop.domain.followups import FollowKey
 from taskloop.stores.runlog import RunLog
 from tlkernel import fence
@@ -65,6 +68,8 @@ class Host(StateAttrs):
         self.claim = fence.offline(self.bead)
         self.checkpoints = Checkpoints(self)
         self.review = ReviewLive()
+        self.land_state = LandState()
+        self.look = LookState(lambda: self.state)
         self.filed, self.unfiled = [], []
         self.stats = {"rounds": 1}
         self.log = RunLog(self.stores.run_log(self.run_id))

@@ -672,7 +672,8 @@ class EngineRunTest(EngineTest):
             return real(this, cmd, **kw)
         with mock.patch.object(fake_route.Script, "__call__", crash):
             rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        assert rc == 0, self.blocked  # delegate died once: again after a rest, then it went on
+        assert rc == 2
+        assert self.eng.kind.value == "fault_crashed"
 
     def test_a_stop_is_a_pause_with_the_bead_open_and_never_a_fault(self):
         with self.stop_at("worker", 1):
@@ -686,9 +687,10 @@ class EngineRunTest(EngineTest):
     def test_the_trace_records_reason_context_and_the_lanes(self):
         rc, _ = self.run_engine({"plan": [PLAN], "write": [stop("worker_failed"), WRITE],
                                  "review": [CLEAN]})
-        assert rc == 0
-        assert self.eng.sessions[1]["reason"] == "worker_failed"
-        assert self.eng.sessions[-1]["context"]["instructions"] == ["/repo/AGENTS.md"]
+        assert rc == 2
+        assert self.eng.kind.value == "fault_infra"
+        assert self.eng.sessions[-1]["reason"] == "worker_failed"
+        assert self.eng.sessions[0]["context"]["instructions"] == ["/repo/AGENTS.md"]
         trace = [json.loads(ln) for ln in (homes.config_dir() / "traces.jsonl").read_text().splitlines()][-1]
         assert trace["lanes"] == {}
 

@@ -26,7 +26,7 @@ from taskloop.app.workers.calls import timing
 from taskloop.app.workers.lane_acts import LaneActs
 from taskloop.domain.lanes import policy as lp
 from taskloop.domain.lanes.denials import command_of, secret_false_positive
-from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT, RESUME_AFTER_STOP
+from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT
 from taskloop.domain.lanes.retry import PLAN
 from taskloop.domain.lanes.roles import READ_ONLY_NODES, ROLES
 
@@ -371,16 +371,12 @@ class WorkerCall:
         e.warn(f"{c.node} was denied {said} and found another way")
         return False
 
-    def again(self, c: Call, resume: str = "", note: str = "") -> None:
-        """The next call of this step: on thread `resume` with a short note of why, else on a new thread with the whole prompt."""
-        if resume:
-            c.resume = resume
-            c.text = RESUME_AFTER_STOP
-        else:
-            c.text = c.full + (FRESH_WRITER_TEXT if c.resume else "") + note
-            c.resume = None
+    def again(self, c: Call, note: str = "") -> None:
+        """The next call starts a new thread with the whole prompt."""
+        c.text = c.full + (FRESH_WRITER_TEXT if c.resume else "") + note
+        c.resume = None
 
-    def charge(self, c: Call, name: str, secs: float = 0.0) -> None:
+    def charge(self, c: Call, name: str) -> None:
         if name == "denied_retried":
             c.denied_retried = True
         elif name:
