@@ -302,7 +302,6 @@ forbidden_modules =
     taskloop.app.run.sections
     taskloop.app.run.shared
     taskloop.app.run.shell
-    taskloop.app.run.stage_checks
     taskloop.app.run.stages
     taskloop.app.run.state
     taskloop.app.wire
