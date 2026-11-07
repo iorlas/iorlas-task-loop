@@ -21,7 +21,7 @@ class ArchitectureInvariants(Case):
             ('taskloop.domain.', 'tlgate.domain.', 'tlslots.liveness', 'tlslots.slot_env',
              'tlasks.hold', 'tlasks.similar', 'tlasks.matchers', 'tlasks.timespec',
              'tlwork.write.matchers', 'tlwork.look.matchers', 'tlwork.plan.matchers', 'tlwork.plan.stored',
-             'tlwork.work.', 'tlwork.prompts.', 'tlwork.review.availability', 'tlwork.review.findings'))
+             'tlwork.work.', 'tlwork.prompts.', 'tlkernel.reviewunavailable', 'tlwork.review.findings'))
                for problem in domain_world_problems(module, tree)]
         assert bad == []
 

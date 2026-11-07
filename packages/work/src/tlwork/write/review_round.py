@@ -9,10 +9,10 @@ from tlkernel import askspecs, trustroots
 from tlkernel import lanecaps as caps
 from tlkernel import workswitch as switch
 from tlkernel.reviewmatchers import AcceptanceItems
+from tlkernel.reviewunavailable import ReviewUnavailable
 
 from tlwork.prompts.common import LATER_CASES, UNCHECKED_TEXT
 from tlwork.review import findings as fnd
-from tlwork.review.availability import ReviewUnavailable
 from tlwork.work.skip import SkipKind
 from tlwork.write import review_skip
 from tlwork.write.host import WriteHost

@@ -7,17 +7,7 @@ from tlkernel import plancheck
 from tlkernel.asked import Asked
 from tlkernel.stagefacts import RunFacts
 from tlpipeline.api import Closer, LeftoverQueue, summaries
-from tlwork.look.judge import Judge
-from tlwork.look.owner_look import OwnerLook
-from tlwork.look.shots import Pictures
-from tlwork.plan.briefs import Briefs
-from tlwork.plan.cases import Cases
-from tlwork.plan.planner import Planner
-from tlwork.review.link_check import LinkCheck
-from tlwork.review.routing import Routing
-from tlwork.review.settles import Settles
-from tlwork.review.verifier import Verifier
-from tlwork.write.handoff import Handoff
+from tlwork.api import Briefs, Cases, Handoff, Judge, LinkCheck, OwnerLook, Pictures, Planner, Routing, Settles, Verifier
 
 from taskloop.adapters import links, looks
 from taskloop.app.run.closer_ports import closer_over

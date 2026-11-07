@@ -26,27 +26,25 @@ LAYERS = {
 }
 
 
-PIPELINE_SRC = ROOT / "packages/pipeline/src"
-
-
-def api_homes() -> dict[str, Path]:
-    """{name: the file of the tlpipeline module api.py re-exports it from}."""
-    tree = ast.parse((PIPELINE_SRC / "tlpipeline/api.py").read_text(encoding="utf-8"))
-    return {a.asname or a.name: PIPELINE_SRC / (n.module.replace(".", "/") + ".py")
-            for n in tree.body if isinstance(n, ast.ImportFrom) and n.module and n.module.startswith("tlpipeline.")
-            for a in n.names if (PIPELINE_SRC / (n.module.replace(".", "/") + ".py")).is_file()}
-
-
 PACKAGE_SRC = {"tlpipeline": "packages/pipeline/src", "tlwork": "packages/work/src",
                "tlslots": "packages/slots/src", "tlasks": "packages/asks/src", "tlrelease": "packages/release/src"}
 
 
+def api_homes(package: str = "tlpipeline") -> dict[str, Path]:
+    """{name: the defining module file a package's api.py re-exports it from}."""
+    source = ROOT / PACKAGE_SRC[package]
+    tree = ast.parse((source / package / "api.py").read_text(encoding="utf-8"))
+    return {a.asname or a.name: source / (n.module.replace(".", "/") + ".py")
+            for n in tree.body if isinstance(n, ast.ImportFrom) and n.module and n.module.startswith(package + ".")
+            for a in n.names if (source / (n.module.replace(".", "/") + ".py")).is_file()}
+
+
 def imports(tree: ast.Module) -> dict[str, Path]:
-    """{imported name: the file of its module} for the app, pipeline and slots imports of one file."""
+    """{imported name: the file of its module} for the app, pipeline, work and slots imports of one file."""
     found = {}
-    homes = api_homes()
     for n in ast.walk(tree):
-        if isinstance(n, ast.ImportFrom) and n.module == "tlpipeline.api":
+        if isinstance(n, ast.ImportFrom) and n.module in {"tlpipeline.api", "tlwork.api"}:
+            homes = api_homes(n.module.split(".")[0])
             found.update({a.asname or a.name: homes[a.name] for a in n.names if a.name in homes})
             continue
         if isinstance(n, ast.ImportFrom) and n.module and n.module.startswith(
@@ -147,3 +145,11 @@ def test_land_fields_has_one_caller():
              if any(isinstance(n, ast.Call) and getattr(n.func, "attr", getattr(n.func, "id", "")) == "land_fields"
                     for n in ast.walk(parsed(p)[1]))]
     assert calls == ["src/taskloop/app/run/fields.py"]
+
+
+def test_api_exports_resolve_to_the_defining_modules():
+    for package, name, module in (("tlpipeline", "Closer", "closing"),
+                                  ("tlwork", "Planner", "plan/planner")):
+        tree = ast.parse(f"from {package}.api import {name} as part")
+        home = imports(tree)["part"]
+        assert home == ROOT / PACKAGE_SRC[package] / package / (module + ".py")

@@ -104,6 +104,8 @@ class Repo:
                 self.edges[path] = self.imports_of(path, key, tree)
         finally:
             if was_on:
+                # The trees are kept for the Repo's life, so the collector need not rescan them.
+                gc.freeze()
                 gc.enable()
         self.link_discovery()
 
