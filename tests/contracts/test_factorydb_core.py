@@ -154,7 +154,7 @@ class FactoryDbTest(Case):
     def test_owners_cover_exactly_the_created_tables(self):
         tables = {row[0] for row in self.rw().execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert set(factorydb.OWNERS) == tables - {"schema_part"}  # the kernel's own table: every open writes it
-        assert set(factorydb.OWNERS.values()) <= {"index", "engine", "loop", "owner"}
+        assert set(factorydb.OWNERS.values()) <= {"index", "engine", "loop", "owner", "gate"}
 
     def test_cas_rejects_unrevisioned_tables_and_missing_transaction(self):
         con = self.rw()
