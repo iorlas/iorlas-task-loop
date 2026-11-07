@@ -19,7 +19,7 @@ from taskloop.adapters import delegate_wire
 from taskloop.adapters.runner import ApiRunner
 from tlkernel.delegate import REASON_TIMEOUT, DelegateResult, Permanence, RunRequest, Scope, WorkerStarted
 from tlkernel.delegate_status import snapshot_of
-from tlkernel.delegateport import Account, Answer, Lane, Refusal, Resolved, RunRecord, Seam, Stopped
+from tlkernel.delegateport import Account, Answer, Lane, Refusal, Resolved, Seam, Stopped
 from tlkernel.snapshots import StatusSnapshot
 
 CONTRACT = delegate_wire.CONTRACT  # the contract number this engine speaks
@@ -71,11 +71,6 @@ def lanes() -> list[Lane]:
 def lane(name: str) -> Lane | None:
     """The lane `name`, or None when delegate has no such lane here."""
     return next((x for x in lanes() if x.name == name), None)
-
-
-def run_history(since: float = 0.0) -> list[RunRecord]:
-    """delegate's finished runs after `since` (`api.history`): the one read of them."""
-    return [dict(r) for r in api.history(since)]
 
 
 def accounts() -> list[Account]:
@@ -201,9 +196,6 @@ class DelegateRoute:
 
     def status_snapshot(self, claude_usage: object = None) -> StatusSnapshot:
         return status_snapshot(claude_usage)
-
-    def history(self, since: float = 0.0) -> list[RunRecord]:
-        return run_history(since)
 
     def accounts(self) -> list[Account]:
         return accounts()
