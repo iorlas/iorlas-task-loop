@@ -20,12 +20,12 @@ def test_work_reaches_no_stage(workdir, stage_import):
     synthetic = configparser.ConfigParser()
     synthetic["importlinter"] = {"root_package": "sample"}
     synthetic["importlinter:contract:work"] = {
-        key: value.replace("taskloop", "sample").replace("tlwork", "sample") if key in {"source_modules", "forbidden_modules"} else value
+        key: value.replace("taskloop", "sample").replace("tlwork", "sample").replace("tlasks", "sample") if key in {"source_modules", "forbidden_modules"} else value
         for key, value in contract.items()
     }
     modules = (contract["source_modules"] + contract["forbidden_modules"]).split()
     for module in modules:
-        folder = workdir.joinpath(*module.replace("taskloop", "sample").replace("tlwork", "sample").split("."))
+        folder = workdir.joinpath(*module.replace("taskloop", "sample").replace("tlwork", "sample").replace("tlasks", "sample").split("."))
         folder.mkdir(parents=True, exist_ok=True)
         for package in (folder, *folder.parents):
             if package == workdir:
