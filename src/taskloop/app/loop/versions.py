@@ -32,6 +32,7 @@ def install_key(d: Path) -> str:
     """Size and mtime of the install's core files and its src tree: a version re-installed under the same number differs."""
     files = [d / "skills" / "task-loop" / f for f in CORE]
     files += sorted((d / "src").rglob("*.py"))
+    files += sorted((d / "packages").glob("*/src/**/*.py"))  # the workspace packages ship in the install too
     out = []
     for f in files:
         try:
