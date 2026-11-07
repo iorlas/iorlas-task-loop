@@ -22,6 +22,7 @@ SLICE_IMPORTS: Final = {
     "review": frozenset({"asks", "checks"}),
     "slots": frozenset(),
     "track": frozenset(),
+    "workers": frozenset({"asks", "checks"}),
     "write": frozenset({"artifacts", "asks", "checks"}),
 }
 COMPOSITION_ROOTS: Final = frozenset({"launch", "run", "wire"})

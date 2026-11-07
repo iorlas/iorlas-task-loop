@@ -9,7 +9,6 @@ from taskloop.adapters.agent import new_live
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.run.bead_env import bead_env
-from taskloop.app.run.delegation import Delegation
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.run.records import Records
 from taskloop.app.run.reflect import Reflector
@@ -21,6 +20,7 @@ from taskloop.app.run.shell import Shell
 from taskloop.app.run.stage_checks import StageChecks
 from taskloop.app.run.stuck import StuckTick
 from taskloop.app.run.waits import Waits
+from taskloop.app.workers.delegation import Delegation
 from taskloop.contracts.kinds import Kind
 
 

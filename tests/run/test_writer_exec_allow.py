@@ -10,7 +10,7 @@ from support.argv_of import argv_of
 from support.case import Case
 
 from taskloop.adapters import delegate_wire
-from taskloop.app.run import worker_identity, worker_request
+from taskloop.app.workers import worker_identity, worker_request
 from taskloop.contracts import config
 from taskloop.contracts.delegate import RunRequest
 from taskloop.domain.lanes import pin

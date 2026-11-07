@@ -69,7 +69,7 @@ def raw_json_allowed(module, receiver):
         return False
     if module == 'taskloop.app.run.parts_plan':
         return isinstance(right, ast.Name) and right.id == 'PLAN_FILE'
-    if module == 'taskloop.app.run.worker_call' and isinstance(right, ast.JoinedStr):
+    if module == 'taskloop.app.workers.worker_call' and isinstance(right, ast.JoinedStr):
         return (len(right.values) == 4 and isinstance(right.values[0], ast.FormattedValue)
                 and isinstance(right.values[1], ast.Constant) and right.values[1].value == '-'
                 and isinstance(right.values[2], ast.FormattedValue)
