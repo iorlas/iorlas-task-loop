@@ -2,7 +2,7 @@
 role) must be in the artifact store for this write's attempt. A miss goes back to the writer once as a retry reason; it never parks."""
 from pathlib import Path
 
-from tlartifacts import store
+from tlartifacts.api import folder, listing
 from tlkernel.artifact import ArtifactSlot
 from tlkernel.plancheck import Open
 
@@ -22,5 +22,5 @@ def missing(cases: list[Open], root: Path, slot: ArtifactSlot) -> list[str]:
     """The show items of the plan whose named artifacts are not registered in the slot's folder, one line each."""
     if not any(c.get("class") == "show" for c in cases):
         return []
-    have = {(m.name, m.role) for m in store.listing(store.folder(root, slot))}
+    have = {(m.name, m.role) for m in listing(folder(root, slot))}
     return visual.unmet_shows(cases, have)
