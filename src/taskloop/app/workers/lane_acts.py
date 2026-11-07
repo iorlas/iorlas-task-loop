@@ -54,14 +54,9 @@ class LaneActs:
         return waited, up is not False
 
     def ctx_of(self, c: Any) -> lp.Ctx:
-        k = c.counts
         return lp.Ctx(
-            bool(c.resume),
-            k["attempt"],
-            c.denied_retried,
-            c.secret_fp,
-            c.node,
-            resume_refused=int(k["resume_refused"]),
+            attempt=c.counts["attempt"], denied_retried=c.denied_retried,
+            secret_fp=c.secret_fp, node=c.node,
         )
 
     # -- the decision
@@ -86,11 +81,10 @@ class LaneActs:
         self.record(c, stop, a)
         step = c.step or c.node
         if isinstance(a, lp.NewThread):
+            assert a.note == "apply_patch"
             self.e.steps.move(
-                step, "denied_retry" if a.note == "apply_patch" else "lane_out", "%s: a new thread" % (stop.reason or "the lane is out")
+                step, "denied_retry", "%s: a new thread" % (stop.reason or "the lane is out")
             )
-            if a.note == "lane_out":
-                c.out_on = stop.lane or c.out_on
             self.wc.charge(c, a.charges)
             return self.wc.again(c, note=NOTES.get(a.note, ""))
         if isinstance(a, lp.Reroute):
