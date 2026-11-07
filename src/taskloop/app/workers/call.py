@@ -1,7 +1,7 @@
 """One AI step in flight: its prompts, thread and counters, which change between its delegate calls."""
 from typing import Any
 
-from taskloop.app.run import worker_identity
+from taskloop.app.workers import worker_identity
 from taskloop.contracts.asked import Updates
 from taskloop.contracts.delegateport import Answer
 from taskloop.stores import call_state as callstate
