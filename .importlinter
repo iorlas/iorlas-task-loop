@@ -234,6 +234,7 @@ source_modules =
     taskloop.app.run.console
     taskloop.app.pipeline.crash
     taskloop.app.pipeline.lifecycle
+    taskloop.app.pipeline.run
     taskloop.app.pipeline.decide
     taskloop.app.pipeline.ended
     taskloop.app.pipeline.finish

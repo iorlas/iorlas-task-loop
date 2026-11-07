@@ -31,5 +31,8 @@ class LandHistory:
     def __init__(self, git: Git) -> None:
         self.git = git
 
+    def ahead_of(self, wt: str, base: str, n: int) -> str:
+        return oneline(self.git, wt, ["HEAD"], [base], n)
+
     def since(self, wt: str, head: str, n: int) -> str:
         return oneline(self.git, wt, ["HEAD"], [head], n)
