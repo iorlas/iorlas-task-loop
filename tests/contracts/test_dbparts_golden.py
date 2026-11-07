@@ -25,3 +25,12 @@ def test_every_part_matches_its_golden_fingerprint():
             assert got["v"] == shape["v"], f"part {name}: record {record} changed its V: {HINT}"
             assert got["schema"] == shape["schema"], f"part {name}: record {record} changed its fields, V stayed {shape['v']}: bump V"
         assert set(have["records"]) == set(want["records"]), f"part {name}: records added: {HINT}"
+
+
+def test_a_version_never_changes_what_it_stored():
+    """The fingerprints a db stores for a part's version are committed: a change to the part at the same version fails here."""
+    golden = json.loads(GOLDEN.read_text())
+    now = json.loads(json.dumps(dbparts.golden(STAGE_PARTS)))
+    for name, part in now.items():
+        seen = golden[name]["history"].get(str(part["version"]))
+        assert seen == part["history"][str(part["version"])], f"part {name} v{part['version']} changed without a version bump: {HINT}"
