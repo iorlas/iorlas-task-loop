@@ -20,6 +20,7 @@ from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
 from tlkernel.run import RunFinish, RunState
 from tlkernel.slots import git_probe
+from tlpipeline.api import closeguard
 
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.track import verbs
@@ -27,20 +28,6 @@ from taskloop.app.track.verbs import Guard
 from taskloop.stores.real import real_stores
 
 ENGINE: Final[Guard] = lambda bead, reason: ""  # noqa: E731  the engine's own close: its run is the record
-GATED: Final = ("task", "feature", "bug")
-FREE: Final = ("duplicate", "wontfix", "superseded", "epic")
-MANUAL: Final = "manual-landed-with-sha:"
-
-
-def reason_head(reason: str) -> str:
-    return reason.strip().split(None, 1)[0].rstrip(":,;.") if reason.strip() else ""
-
-
-def manual_sha(reason: str) -> str:
-    """The sha a `manual-landed-with-sha:<sha> ...` reason names; "" for any other reason."""
-    head = reason.strip().split(None, 1)[0] if reason.strip() else ""
-    return head.removeprefix(MANUAL) if head.startswith(MANUAL) else ""
-
 
 def has_land(who: Identity, bead: BeadId) -> bool:
     return any(i.rec.bead == bead and i.rec.outcome is Outcome.LANDED for i in real_stores(who.config).traces.read_from(0).items)
@@ -70,11 +57,6 @@ def record_land(who: Identity, store: Beads, git: Git, repo: str, base: str, bea
     return rc
 
 
-def fix(bead: str) -> str:
-    return (f"tl land {bead} --sha SHA   (when the work is on the base), or: "
-            f"tl task close {bead} --reason 'manual-landed-with-sha:<sha> <why>', or a typed reason: "
-            f"tl task close {bead} --reason 'duplicate|wontfix|superseded|epic <why>'")
-
 
 def refusal(who: Identity, store: Beads, git: Git, repo: str, bead: BeadId, reason: str) -> str:
     """"" when the close may go on; else the refusal, naming the fix. A manual-landed-with-sha reason is checked and recorded here."""
@@ -82,13 +64,9 @@ def refusal(who: Identity, store: Beads, git: Git, repo: str, bead: BeadId, reas
         found = store.show(bead)
     except BdFailure:
         return ""  # bd itself will say what is wrong with the close
-    if found is None or found.issue_type not in GATED or reason_head(reason) in FREE:
-        return ""
-    if sha := manual_sha(reason):
-        return manual(who, store, git, repo, bead, sha)
-    if has_land(who, bead) or not has_work(who, git, repo, bead):
-        return ""
-    return f"{bead} has an engine run or a task branch and no land on record: not closed. Fix: " + fix(bead)
+    return closeguard.refusal(bead, reason, found.issue_type if found else None,
+                              has_land=lambda: has_land(who, bead), has_work=lambda: has_work(who, git, repo, bead),
+                              manual=lambda sha: manual(who, store, git, repo, bead, sha))
 
 
 def manual(who: Identity, store: Beads, git: Git, repo: str, bead: BeadId, sha: str) -> str:

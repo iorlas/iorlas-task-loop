@@ -80,11 +80,11 @@ from taskloop.adapters import beadtools, gitrepo, ident, landlock
 from taskloop.app.doctor import install
 from taskloop.app.land.lock_cmd import cmd_land_lock
 from taskloop.app.launch import dash as wire_dash
+from taskloop.app.launch import lanes as wire_lanes
 from taskloop.app.parts import STAGE_PARTS
 from taskloop.app.release import pins
 from taskloop.app.track import trail, verbs
 from taskloop.app.wire import asks as wire_asks
-from taskloop.app.wire import lanes as wire_lanes
 from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire import usage as wire_usage
@@ -425,8 +425,8 @@ VERBS: Final[dict[str, Handler]] = {
     "runs": lambda a, c: verbs.runs(a, c.who.config),
     "trace": lambda a, c: verbs.trace(a.id, a.last, a.json, c.env),
     "usage": lambda a, c: wire_usage.feed(a.windows, c.spawner, c.env),
-    "lanes": lambda a, c: wire_lanes.refresh(c.spawner, c.env),
-    "accounts": lambda a, c: wire_lanes.accounts(a.op, a.lane),
+    "lanes": lambda a, c: wire_lanes.refresh(c.env),
+    "accounts": lambda a, c: wire_lanes.accounts(a.op, a.lane, c.env),
     "worktree": lambda a, c: wslots.worktree(c.git, c.who, a.op, a.self_too),
     "worktrees": lambda a, c: wslots.owned_worktrees(c.git, c.who, a.op),
     "dash": lambda a, c: wire_dash.run(a.op, c.env, c.spawner, {p.name: p.version for p in STAGE_PARTS}),

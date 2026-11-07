@@ -25,6 +25,7 @@ from tlkernel.kinds import Kind
 from tlkernel.procport import Spawner
 from tlkernel.run import Reexec, RunReport
 from tlkernel.run_slot import RUN_SLOT
+from tlpipeline.api import admission as pipeline_admission
 from tlpipeline.api import target
 
 from taskloop.adapters import beadtools, gitrepo, ident
@@ -265,20 +266,16 @@ def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: En
             return RunReport(outcome=Result.FAILED, bead=a.id, why=why)
     # a stop during the sweep, admit and claim waits for them, then the engine closes the run as stopped (trace, bead)
     with defer_stop(None) as stop:
-        admission.release_dead(repo, git, who, store, release=leases.release_dead, running_now=running.running, say=say)
-        if why := admission.parked(a.id, bool(getattr(a, "fresh", False)), repo, who, store):
-            print(f"TAKEN: {why}")
+        why = pipeline_admission.enter(a.id,
+            release_dead=lambda: admission.release_dead(repo, git, who, store, release=leases.release_dead,
+                                                        running_now=running.running, say=say),
+            parked=lambda: admission.parked(a.id, bool(getattr(a, "fresh", False)), repo, who, store),
+            admit=lambda: admission.admit(a.id, repo, git, who, store, fresh=bool(getattr(a, "fresh", False)),
+                                         owner_author=cfg.owner_author, running_now=running.running),
+            claim=lambda: verbs.claim(who, a.id, store or beadtools.bd_store(who.actor, repo), git, wt, a.slot),
+            say=say, taken=print)
+        if why is not None:
             return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
-        ok, why = admission.admit(a.id, repo, git, who, store, fresh=bool(getattr(a, "fresh", False)), owner_author=cfg.owner_author,
-                                  running_now=running.running)
-        if not ok:
-            print(f"TAKEN: {why}")
-            return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
-        if why:
-            say(f"{a.id}: {why}")
-        if verbs.claim(who, a.id, store or beadtools.bd_store(who.actor, repo), git, wt, a.slot) != 0:
-            # bd lets this session re-claim its own bead (a reopened one); another session's claim stops here
-            return RunReport(outcome=Result.TAKEN, bead=a.id, why="claimed by another session")
         claim = fence.take(
             store or beadtools.bd_store(who.actor),
             a.id,
