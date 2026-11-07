@@ -5,15 +5,15 @@ from types import SimpleNamespace
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
 from support.pipeline_ports import FakeReexecs, FakeTrail
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.pipeline.reload import Reload
 from taskloop.app.workers import done_memo
 from tlkernel import factorydb
 from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class CarryDoneMemo(Case):

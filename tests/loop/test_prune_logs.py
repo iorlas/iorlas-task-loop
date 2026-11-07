@@ -2,10 +2,9 @@
 import os
 from pathlib import Path
 
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
-
 from taskloop.app.loop.core import prune_logs
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class PruneLogs(Case):

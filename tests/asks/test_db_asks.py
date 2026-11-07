@@ -3,14 +3,14 @@
 from pathlib import Path
 
 import support.paths  # noqa: F401
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
 
 from asks import test_ask_v3
 from taskloop.app.asks.intake import Intake
 from tlkernel import factorydb
 from tlkernel.askstore import AskStore
 from tlkernel.paths import ConfigDir
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class DatabaseAsks(Case):

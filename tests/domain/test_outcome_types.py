@@ -3,8 +3,9 @@ import sys
 from pathlib import Path
 
 import pytest
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
+
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)

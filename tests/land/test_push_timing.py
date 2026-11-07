@@ -6,10 +6,8 @@ from unittest import mock
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
 from support.narrow import must
 from support.narrow_hosts import FakeOutboundHost
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.land.outbound import Outbound
 from taskloop.app.pipeline.budget import Budget
@@ -21,6 +19,8 @@ from tlkernel import log as rec
 from tlkernel.gitfacts import GitOutcome
 from tlkernel.runlife import silent_limit
 from tlkernel.stores import JsonlStore
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class PushTiming(Case):

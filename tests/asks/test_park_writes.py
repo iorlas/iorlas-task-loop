@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pytest
 import support.paths  # noqa: F401
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.asks import parks
 from tlkernel.bead import Bead
@@ -11,6 +10,7 @@ from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.parks import ParkStore
 from tlkernel.paths import ConfigDir
+from tltestkit.tmpdir import TemporaryDirectory
 
 BEAD = Bead(id=BeadId("t-1"), title="work", status="open")
 

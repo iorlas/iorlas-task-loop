@@ -7,12 +7,12 @@ from typing import Any
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
 from support.procsim import real_proc
-from support.tmpdir import TemporaryDirectory
 from test_route import CFG, T, lanes
 
 from delegate.app import env, usage
 from delegate.contracts.state import UsageCache
 from delegate.domain.lanes.lane import Lane
+from tltestkit.tmpdir import TemporaryDirectory
 
 # `account/rateLimits/read` as recorded: Pro Lite, one weekly window sent as `primary`, no `secondary`, no other bucket, no credits.
 RECORDED: dict[str, Any] = {

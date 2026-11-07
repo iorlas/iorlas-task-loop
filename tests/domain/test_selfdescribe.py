@@ -1,8 +1,7 @@
 """The injected introduction stays small, portable and independent of session state."""
 
-from support.case import Case
-
 from taskloop.domain import selfdescribe
+from tltestkit.case import Case
 
 
 class SelfDescription(Case):

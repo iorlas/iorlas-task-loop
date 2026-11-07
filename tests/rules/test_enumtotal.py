@@ -1,10 +1,9 @@
 """Enum dispatch tables must cover the vocabulary, including future members."""
 import ast
 
-from support.case import Case
-
 from rules.enumtotal import enum_problems
 from rules.gate_rules import ROOT, parsed, py_files
+from tltestkit.case import Case
 
 
 class EnumTotal(Case):

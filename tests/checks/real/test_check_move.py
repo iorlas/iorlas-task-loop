@@ -7,8 +7,9 @@ import subprocess
 import sys
 
 import pytest
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
+
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from support.narrow import must

@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / "skills" / "task-loop"

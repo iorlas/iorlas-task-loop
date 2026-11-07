@@ -35,6 +35,7 @@ from tlkernel.docrows import (
 )
 from tlkernel.flakes import FlakeLog
 from tlkernel.ledger import Adr, LedgerEntry
+from tlkernel.locks import EngineLock
 from tlkernel.loop import BadVersions, LoopCommand, Rest
 from tlkernel.parks import Park
 from tlkernel.queue_doc import QueueDoc
@@ -215,3 +216,12 @@ FLAKE = Part(name="flake", version=1, tables=(FLAKE_DOCS,), records=(FlakeLog,),
 RUNDOC = Part(name="rundoc", version=1, tables=(RUN_DOCS,), records=(RunCounters, HandoffMirror, PrepareStamp),
               ddl=doc_table(RUN_DOCS))
 DURATION = Part(name="duration", version=1, tables=(DURATION_DOCS,), records=(Durations,), ddl=doc_table(DURATION_DOCS))
+
+SLOTS = Part(
+    name="slots", version=1, tables=("lease",),
+    records=(EngineLock,),
+    ddl="""
+CREATE TABLE lease (kind TEXT NOT NULL CHECK (kind IN ('run','loop','resource','slot')), name TEXT NOT NULL,
+  holder TEXT NOT NULL, run TEXT, host TEXT, pid INTEGER, start_id TEXT, since REAL NOT NULL, beat REAL, until REAL,
+  body TEXT, PRIMARY KEY (kind, name));
+""")

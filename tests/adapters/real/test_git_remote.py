@@ -6,15 +6,15 @@ from unittest import mock
 import pytest
 import support.paths  # noqa: F401
 from git_porcelain.real import Done, RealRepo
-from support.case import Case
 from support.checked import run_checked
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import git_ops
 from taskloop.adapters.git import RealGit
 from taskloop.domain.land.matchers import Push
 from tlkernel.env import Env, snapshot
 from tlkernel.slots import GitReadFailure, RefRace, SlotGitError
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class RealGitRemoteTest(Case):

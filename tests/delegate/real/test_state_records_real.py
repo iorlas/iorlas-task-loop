@@ -9,12 +9,12 @@ from unittest import mock
 import hermetic  # noqa: F401  (a home of its own for every test)
 from any_agent import reset_parse
 from any_agent.classify import Outcome
-from support.case import Case
 from support.procsim import real_proc
-from support.tmpdir import TemporaryDirectory
 from test_route import argparse_ns, need, route
 
 from delegate.app import env, launch
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class ResetTimes(Case):

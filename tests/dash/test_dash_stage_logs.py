@@ -1,10 +1,10 @@
 """Stage logs preserve roles, attempts, boundaries and recorded budgets."""
 
-from support.case import Case
 from support.dashlogs import RunScript, T
 
 from taskloop_dash.views import passes, stage_logs
 from tlkernel.delegate import LiveMsg
+from tltestkit.case import Case
 
 
 class StageLogs(Case):
