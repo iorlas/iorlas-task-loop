@@ -321,7 +321,7 @@ class SelectedStage(Case):
         e.stats, e.accepted, e.done, e.last_run = {"writes": 0}, [], [], None
         e.stage_loop.begin.side_effect = StageState
         e.judge.look_step.return_value = ""
-        e.stage_loop.reviewing.run.return_value = ACCEPT
+        e.stage_loop.review.return_value = ACCEPT
 
         def write(s, **kwargs):
             assert not kwargs["look"]
@@ -343,8 +343,8 @@ class SelectedStage(Case):
             s.run = e.last_run = CheckRun(round=1)
             return ""
 
-        e.stage_loop.writing.run.side_effect = write
-        e.stage_loop.checking.run.side_effect = checks
+        e.stage_loop.write.side_effect = write
+        e.stage_loop.check.side_effect = checks
         ck = None
         for step, following in ((Step.WRITE, Step.LOOK), (Step.LOOK, Step.CHECKS), (Step.CHECKS, Step.REVIEW), (Step.REVIEW, Step.VERIFY)):
             assert round_step(e, step, ck) == following
@@ -357,6 +357,6 @@ class SelectedStage(Case):
         assert ck is not None
         assert (ck.stage, ck.n, ck.rounds, ck.progress) == (1, 0, 0, None)
         assert e.accepted == [0]
-        e.stage_loop.writing.run.assert_called_once()
-        e.stage_loop.checking.run.assert_called_once()
-        e.stage_loop.reviewing.run.assert_called_once()
+        e.stage_loop.write.assert_called_once()
+        e.stage_loop.check.assert_called_once()
+        e.stage_loop.review.assert_called_once()

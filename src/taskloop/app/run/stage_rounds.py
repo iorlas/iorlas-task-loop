@@ -55,13 +55,10 @@ def run_round_step(e: RunHost, step: Step, s: StageState) -> tuple[Step, bool]:
         following = Step.REPLAN if flow == REPLAN else Step.WRITE if flow else Step.LOOK
     elif step is Step.LOOK:
         e.steps.begin(step, s.name)
-        s.feedback = e.judge.look_step(s.st, s.w, s.name, s.last, checks=False)
+        s.feedback = e.judge.look_step(s.st, s.w, s.name, s.last, checks=False, family=s.wfam)
         following = Step.WRITE if s.feedback else Step.CHECKS
     elif step is Step.CHECKS:
-        try:
-            flow = e.stage_loop.checking.run(s)
-        finally:
-            e.stage_loop.hand_on(s)
+        flow = e.stage_loop.check(s)
         if flow == PREPARED:
             flow = prepared_write(e, s)
             return (Step.REPLAN if flow == REPLAN else Step.WRITE if flow else Step.LOOK), False
@@ -69,7 +66,7 @@ def run_round_step(e: RunHost, step: Step, s: StageState) -> tuple[Step, bool]:
     else:
         if s.run is None:
             raise ValueError("review refused: no recorded checks; run --stage checks")
-        flow = e.stage_loop.reviewing.run(s)
+        flow = e.stage_loop.review(s)
         following = Step.REPLAN if flow == REPLAN else Step.WRITE
         return following, flow == ACCEPT
     return following, False
@@ -78,10 +75,7 @@ def run_round_step(e: RunHost, step: Step, s: StageState) -> tuple[Step, bool]:
 def prepared_write(e: RunHost, s: StageState) -> str:
     """A prerequisite repair repeats the standalone write at the same attempt number."""
     while True:
-        try:
-            flow = e.stage_loop.writing.run(s, look=False)
-        finally:
-            e.stage_loop.hand_on(s)
+        flow = e.stage_loop.write(s, look=False)
         if flow != PREPARED:
             return flow
 
