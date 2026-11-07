@@ -51,7 +51,7 @@ class Env(Case):
         if public:
             env["TASK_LOOP_DASH_DEV_PUBLIC"] = "1"
         err = io.StringIO()
-        with mock.patch.object(factorydb._STORE, "parts", None), \
+        with mock.patch.object(factorydb._STORE, "parts", None), mock.patch.object(factorydb._STORE, "needs", None), \
                 mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stderr(err), pytest.raises(SystemExit) as stop:
             dash_cli.main(list(args), here=where)
         return stop.value.code, err.getvalue()
@@ -119,3 +119,17 @@ class EmptyState(Env):
 
     def test_other_port_needs_no_repos_json(self):
         assert self.guard(["127.0.0.1"], 0, where=self.cache) is None
+
+
+class NeededPartRefused(Env):
+    def test_main_refuses_a_part_below_its_need_before_binding(self):
+        path = ConfigDir(self.state).factory_db()
+        con = factorydb.open_rw(path)
+        assert con is not None
+        con.execute("UPDATE schema_part SET version=0 WHERE name='pipeline'")
+        con.close()
+        with mock.patch.object(factorydb._STORE, "needs", None), mock.patch("taskloop_dash.serve.start") as start:
+            code, err = self.run_server(self.dev, "--port", "0", "--bind", "127.0.0.1")
+        assert code != 0
+        assert "part pipeline is v0, this process needs v1" in err
+        start.assert_not_called()

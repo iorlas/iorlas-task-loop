@@ -11,8 +11,8 @@ part with its row in `schema_part`:
 - same version, the tables differ from the code's DDL, or a record's `V` differs from the stored one: refused, the change needs a
   version bump (and a step). The golden test (tests/contracts/test_dbparts_golden.py) holds the same line before a change reaches main.
 
-A read-only open writes nothing: it refuses a part newer than the code, or older than the part's `read_from`, and skips a part that has
-no row yet (the writer has not launched it).
+A read-only open writes nothing: it refuses a part newer than the code, or below the reader's declared needs.
+Without needs, absent and older parts are accepted.
 """
 import functools
 import hashlib
@@ -44,7 +44,7 @@ class Prune:
 
 @dataclass(frozen=True, eq=False)
 class Part:
-    """One stage's tables and records in factory.db; `read_from` is the oldest version a read-only open accepts (None: only `version`)."""
+    """One stage's tables and records in factory.db."""
 
     name: str
     version: int
@@ -52,7 +52,6 @@ class Part:
     ddl: str
     records: tuple[type[Rec], ...] = ()
     steps: dict[int, Step] = field(default_factory=dict)
-    read_from: int | None = None
     prune: tuple[Prune, ...] = ()
 
 
@@ -228,6 +227,8 @@ def launch(
 ) -> None:
     """The check every open of factory.db makes; raises SchemaError (the open then fails) and leaves the database as it was."""
     todo = _validate(parts)
+    if needs is not None and (unknown := set(needs) - {p.name for p in todo}):
+        raise ValueError(f"unknown factory.db parts: {sorted(unknown)}")
     if readonly:
         _launch_readonly(con, todo, needs)
         return
@@ -246,6 +247,8 @@ def _launch_readonly(con: sqlite3.Connection, parts: Iterable[Part], needs: Mapp
             continue
         if row[0] > part.version:
             raise SchemaError(f"factory.db part {part.name} is v{row[0]}, this code knows v{part.version}: update it")
-        if row[0] < (needs or {}).get(part.name, part.version if part.read_from is None else part.read_from):
+    for name, want in (needs or {}).items():
+        found = stored[name][0] if name in stored else 0
+        if found < want:
             raise SchemaError(
-                f"factory.db part {part.name} is v{row[0]}, this code knows v{part.version}: the writer has not upgraded it yet")
+                f"factory.db part {name} is v{found}, this process needs v{want}: the writer has not upgraded it yet")

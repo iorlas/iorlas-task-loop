@@ -62,7 +62,7 @@ def marker_of(con: sqlite3.Connection, repo_key: str) -> int | None:
 
 
 def read_repo(path: Path, repo_key: str) -> tuple[list[Row], float | None, str]:
-    """Read only the DB; database availability is reported by factorydb.database_error."""
+    """Read only the DB; database availability is reported by the dashboard health projection."""
     con = None
     try:
         con = factorydb.open_ro(path)

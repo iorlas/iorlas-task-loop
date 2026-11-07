@@ -29,7 +29,7 @@ from taskloop.contracts.slots import slots_of
 from taskloop.contracts.slottable import SlotSource
 from taskloop_dash.api.looks import Looks
 from taskloop_dash.env import Env
-from taskloop_dash.readers import dbruns
+from taskloop_dash.readers import dbruns, runprojection
 from taskloop_dash.readers.beads import Beads, basename
 from taskloop_dash.readers.dbruns import StoredRun
 from taskloop_dash.readers.logs import Logs
@@ -62,7 +62,7 @@ class Worlds:
         return {loop_key(p): p for p in self.records.repos()}
 
     def database_error(self) -> str:
-        return factorydb.database_error(self.env.config.factory_db(), self.env.clock())
+        return runprojection.database_error(self.env.config.factory_db(), self.env.clock())
 
     def project(self, id: str, path: str) -> ProjectIn:
         env = self.env

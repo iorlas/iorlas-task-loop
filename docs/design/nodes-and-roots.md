@@ -42,7 +42,10 @@ Rules (import-linter, one contract each): roots may import nodes, nodes never im
 
 ## Persistence (Denis: "does one store package defeat isolation?")
 
-Opus read (this session, verified on the repo): **yes, as long as there is one schema.** `contracts/factorydb.py` is one `DDL` (16 tables), one `SCHEMA_VERSION=5`, `SCHEMA_READ_FROM=4` (the dash's floor) and `factorymigrate.STEPS={2,3,4}` on one `PRAGMA user_version`. A gate column change edits the kernel DDL, bumps the global version and can break the dash's read floor. Moving store classes into stages while keeping that file only moves the problem. Recommendation: **(b) plus a schema split**:
+Opus read (this session, verified on the repo): **yes, as long as there is one schema.** `contracts/factorydb.py` is one `DDL` (16 tables),
+one `SCHEMA_VERSION=5`, a global reader floor (now replaced by declared part needs) and `factorymigrate.STEPS={2,3,4}` on one `PRAGMA
+user_version`. A gate column change edits the kernel DDL, bumps the global version and can break the dash's read floor. Moving store classes
+into stages while keeping that file only moves the problem. Recommendation: **(b) plus a schema split**:
 
 - kernel `taskloop_db`: open/WAL/`begin_immediate`/`cas_update`/quarantine, the doc/log primitives, a **part registry** (each stage registers `Part(name, ddl, steps, version)`; versions go in a `schema_part` table; the global `user_version` freezes), a prune registry.
 - each stage owns its tables and stores: gate (`check_pass`, `check_round`, durations, `check_run`), asks (ask, ask_ledger, park), slots (locks, tickets, worktrees, leases), release (pins, release result), report (reflect state), work (adr), land (followups), engine (run, attempt, effects, signals, waits, checkpoints, run log, traces, bad-versions, repos, `run_rows` read model), dash (source, bead, events). The `Stores` bundle is the composition root.

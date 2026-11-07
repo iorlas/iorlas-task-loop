@@ -12,10 +12,10 @@ from pathlib import Path
 from typing import Any, Final
 
 from taskloop.adapters.ident import PLUGIN_ROOT, config_dir
+from taskloop.app.parts import STAGE_PARTS
 from taskloop.contracts.dash import READ_PROTOCOL
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.factorydb import SCHEMA_VERSION
 from taskloop.contracts.procport import Spawner
 from taskloop_dash import bind as dash_bind
 from taskloop_dash.cli import dash as dash_cli
@@ -99,13 +99,29 @@ def is_dash_server(v: object) -> bool:
 
 
 def _wire_reason(v: dict[str, object]) -> str | None:
-    """Why the server's read protocol or factory.db schema range does not fit the installed code, else None."""
+    """Why the server's read protocol or factory.db parts do not fit the installed code, else None."""
     if v.get("protocol") != READ_PROTOCOL:
         return f"it speaks read protocol {v.get('protocol')}, installed is {READ_PROTOCOL}"
-    rng = v.get("schema_read")  # a server that reports no range is judged by its version alone
-    lo, hi = (rng[0], rng[1]) if isinstance(rng, list) and len(rng) == 2 else (0, SCHEMA_VERSION)
-    if not lo <= SCHEMA_VERSION <= hi:
-        return f"it reads factory.db schema {lo}..{hi}, installed is {SCHEMA_VERSION}"
+    needs, parts = v.get("needs"), v.get("parts")
+    if not isinstance(needs, dict) or not isinstance(parts, dict):
+        return "it reports no part needs or versions"
+    installed = {part.name: part.version for part in STAGE_PARTS}
+    for name, want in needs.items():
+        found = installed.get(name, 0)
+        if reason := _part_reason(name, want, parts.get(name), found):
+            return reason
+    return None
+
+
+def _part_reason(name: str, want: object, upper: object, found: int) -> str | None:
+    if not isinstance(want, int):
+        return f"invalid need for part {name}"
+    if found < want:
+        return f"it needs part {name} v{want}, installed is v{found}"
+    if not isinstance(upper, int):
+        return f"it reports no readable version for part {name}"
+    if found > upper:
+        return f"installed part {name} is v{found}, it reads up to v{upper}"
     return None
 
 
