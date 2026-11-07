@@ -225,7 +225,8 @@ class Lanes(Case):
 
     def start(self, lanes=3):
         with patch.object(adapter, "caffeinate_argv", return_value=[]):
-            return factory.start(self.files, "/repo", "1", [], self.spawn, self.publish, lanes=lanes, caffeinate_argv=adapter.caffeinate_argv)
+            return factory.start(self.files, "/repo", "1", [], self.spawn, self.publish, lanes=lanes,
+                                 caffeinate_argv=adapter.caffeinate_argv)
 
     def invoke(self, op, *, count=3, profile_error=None, **options):
         args = argparse.Namespace(op=op, repo=None, lanes=None, lane=1, n=50, follow=False, now=False)
