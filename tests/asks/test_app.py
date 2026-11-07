@@ -18,9 +18,9 @@ from taskloop.adapters.bd import BdRun, BdStore
 from taskloop.app.asks import intake, raiser, sweeps
 from taskloop.domain.asks import specs
 from taskloop.domain.asks.lint import INFRA
+from tlkernel.askenums import AskKind, AskStatus
 from tlkernel.bead import Bead
 from tlkernel.beadsport import NewBead
-from tlkernel.enums import AskKind, AskStatus
 from tlkernel.ids import BeadId
 
 T = 1000.0

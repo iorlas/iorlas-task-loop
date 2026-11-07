@@ -17,7 +17,6 @@ from tlkernel.slots import SlotFail, SlotGitError
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.env import LoopEnv, Probe
 from taskloop.app.loop.files import LoopFiles
-from taskloop.app.loop.gate import GateRole
 from taskloop.app.loop.net import NetState
 
 
@@ -36,8 +35,8 @@ class Counters:
 
 class Settle:
     def __init__(self, env: LoopEnv, files: LoopFiles, tune: Callable[[], LoopConfig], say: Callable[[str], None], c: Counters,
-                 gate: GateRole, net: NetState, left: Callable[[str, str], None]) -> None:
-        self.env, self.files, self.tune, self.say, self.c, self.gate, self.net, self.left = env, files, tune, say, c, gate, net, left
+                 net: NetState, left: Callable[[str, str], None]) -> None:
+        self.env, self.files, self.tune, self.say, self.c, self.net, self.left = env, files, tune, say, c, net, left
         self.probe: Probe | None = None
 
     def aside(self, name: str, bid: str, v: vd.Verdict) -> bool:
@@ -135,7 +134,6 @@ class Settle:
             return None
         rec = ParkStore(env.cfgdir).get(BeadId(bid)) if bid else None
         if rec and rec.reason and rec.run == v.run:
-            self.gate.held.pop(bid, None)
             c.later.pop(bid, None)
             if rec.permanence == "transient":
                 c.later[bid] = rec.retry_at

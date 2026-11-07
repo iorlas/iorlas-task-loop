@@ -15,9 +15,9 @@ from support.narrow_hosts import FakeWaitsHost
 from taskloop.app.pipeline import trace as runtrace
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.waits import Waits
-from tlkernel.enums import WaitWhat
 from tlkernel.ids import RunId
 from tlkernel.kinds import Kind
+from tlkernel.waitenums import WaitWhat
 
 
 class TokenCap(Case):

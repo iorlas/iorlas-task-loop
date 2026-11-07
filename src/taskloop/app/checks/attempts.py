@@ -7,8 +7,8 @@ from pathlib import Path
 
 from tlkernel.argv import argv_of
 from tlkernel.checks import UNVERIFIED_EXIT, Check
-from tlkernel.enums import WaitWhat
 from tlkernel.envvars import EnvVar
+from tlkernel.waitenums import WaitWhat
 
 from taskloop.adapters import check_files
 from taskloop.app.checks.base import BaseCheck

@@ -11,12 +11,12 @@ from pathlib import Path
 from tlkernel import paths
 from tlkernel.beadsport import Beads
 from tlkernel.config import RepoProfile
-from tlkernel.enums import LockWhat
 from tlkernel.env import Env
 from tlkernel.envvars import EnvVar
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.ids import new_loop_id
+from tlkernel.lockenums import LockWhat
 from tlkernel.loop import LoopState
 from tlkernel.procport import Spawner
 from tlkernel.rowstores import ReposStore
@@ -43,7 +43,7 @@ from taskloop.app.wire import slots as wslots
 from taskloop.domain import outcome as oc
 from taskloop.domain.beads import rules as beadlint
 from taskloop.stores.delegate import make_probe as make_net_probe
-from taskloop.stores.delegate import real_route, route_name
+from taskloop.stores.delegate import route_name
 from taskloop.stores.real import real_stores
 
 HERE = ident.PLUGIN_ROOT / "skills" / "task-loop"  # the install this code runs from; tl.main takes it as a parameter for a test
@@ -78,13 +78,6 @@ def live_loops(repo: str, cfg: paths.ConfigDir) -> list[LoopState]:
 def delegate_route(repo: str | Path, env: Env, git: Git) -> str | None:
     """What the engine's calls go through: the delegate library."""
     return route_name()
-
-
-def roles(repo: str | Path, env: Env, git: Git) -> dict[str, bool | None] | None:
-    route = delegate_route(repo, env, git)
-    if not route:
-        return None
-    return real_route().roles_usable()
 
 
 def make_probe(repo: str | Path, env: Env, git: Git):
@@ -146,8 +139,6 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         ask_lines=lambda: ask_sweeps.orphan_lines(wasks.store(cfg)),
         storm=lambda: storm(repo, cfg, now, git=git),
         probe=lambda: make_probe(repo, env, git),
-        roles=lambda: roles(repo, env, git),
-        has_delegate=lambda: bool(delegate_route(repo, env, git)),
         event=functools.partial(trail.event, who),
         pid_alive=pidcheck.pid_alive,
         behind=lambda v: catalog.releases_behind(v, ident.claude_dir(env)),

@@ -10,10 +10,10 @@ import os
 import time
 from pathlib import Path
 
-from tlkernel.enums import LockWhat
 from tlkernel.env import Env
 from tlkernel.envvars import EnvVar
 from tlkernel.ids import loop_key
+from tlkernel.lockenums import LockWhat
 from tlkernel.lockrows import EngineLockRows
 from tlkernel.locks import EngineLock as Lock
 from tlkernel.paths import ConfigDir

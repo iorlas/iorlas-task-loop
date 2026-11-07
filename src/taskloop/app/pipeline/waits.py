@@ -7,10 +7,10 @@ from typing import Protocol
 
 from tlkernel import log as rec
 from tlkernel.config import EngineConfig
-from tlkernel.enums import WaitWhat
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.ports import Clock
+from tlkernel.waitenums import WaitWhat
 
 from taskloop.adapters import deadline
 from taskloop.app.pipeline import outcomes

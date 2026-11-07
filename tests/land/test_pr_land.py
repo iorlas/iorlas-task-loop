@@ -30,9 +30,9 @@ from taskloop.domain.asks import specs
 from taskloop.stores.runlog import RunLog
 from tlkernel import fence, scratch
 from tlkernel.ask import Ask
+from tlkernel.askenums import AskClass, AskStatus
 from tlkernel.bead import Bead
 from tlkernel.config import load
-from tlkernel.enums import AskClass, AskStatus
 from tlkernel.forge import PR_NUMBER, PR_URL
 from tlkernel.gitfacts import GitOutcome, LogRow
 from tlkernel.ids import BeadId, TreeSha

@@ -18,7 +18,7 @@ from atomic_io import atomic_write_json
 from process_lock import LockHeldError, ProcessLock, held
 
 from tlkernel import paths, wire
-from tlkernel.enums import LockWhat
+from tlkernel.lockenums import LockWhat
 from tlkernel.locks import LockRecord, LockTimeout
 
 POLL = 0.01

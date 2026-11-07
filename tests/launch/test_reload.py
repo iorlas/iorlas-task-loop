@@ -227,7 +227,7 @@ class Reload(te.EngineTest):
 
             def wait(self, timeout=None):
                 if len(spawned) == 2:  # the fallback run gives its outcome
-                    Path(self.cmd[self.cmd.index("--outcome-file") + 1]).write_text(json.dumps({"v": 2, "outcome": "landed", "bead": "t"}))
+                    Path(self.cmd[self.cmd.index("--outcome-file") + 1]).write_text(json.dumps({"v": 3, "outcome": "landed", "bead": "t"}))
                     return 0
                 reexec.reexec_store(homes.cfg(), BeadId("t-1")).write(
                     ReexecNote(run="t-1-20261026-120000", bead="t-1", frm="0.1.0", to="0.2.0", step="write",

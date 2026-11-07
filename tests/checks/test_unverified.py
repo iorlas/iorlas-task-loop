@@ -23,8 +23,8 @@ from taskloop.app.checks import evidence
 from taskloop.app.checks.cache import InputKeys, RunMemo, key_digest
 from taskloop.app.land import verified
 from tlkernel.bead import Bead
+from tlkernel.checkenums import CheckStatus
 from tlkernel.checks import UNVERIFIED_EXIT, Check, CheckResult, CheckRun, PassRecord, verdict_of
-from tlkernel.enums import CheckStatus
 from tlkernel.ids import BeadId, CheckId, TreeSha
 from tlkernel.runkey import BaseSha
 

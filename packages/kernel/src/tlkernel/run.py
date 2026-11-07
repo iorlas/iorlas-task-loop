@@ -17,7 +17,7 @@ class RunReport(Rec):
     """The last line run-task prints and loop/<key>/<bead>-<stamp>.outcome.json. `kind` is the outcome.Kind value ("" for a stop
     before the engine ran); a file of another `v` or with an unknown outcome is a parse error, never a default."""
 
-    V: ClassVar[int] = 2
+    V: ClassVar[int] = 3
     outcome: Result
     bead: BeadId
     run: str = ""
@@ -28,13 +28,10 @@ class RunReport(Rec):
     rounds: int = 0
     tests_added: int = 0
     asked: bool = False
-    retry_after: float | None = None
     cost: float = 0.0
     kind: str = ""
     fingerprint: str = ""
     storm: str = ""
-    role: str = ""
-    lane: str = ""
 
 
 @final

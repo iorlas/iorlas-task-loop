@@ -1,4 +1,4 @@
-"""The closed sets that are free strings today."""
+"""The shared run vocabulary."""
 from enum import StrEnum
 
 
@@ -67,71 +67,3 @@ class Cause(StrEnum):
     VERIFY_WRONG = "verify_wrong"
     PUSH_RACE = "push_race"
     PLAN_SENT_BACK = "plan_sent_back"
-
-
-class AskKind(StrEnum):
-    DECISION = "decision"
-    STUCK = "stuck"
-    TICKET = "ticket"
-    BUDGET = "budget"
-
-
-class AskClass(StrEnum):
-    """Why the engine cannot go on without the owner. The first ten are owner matters; the last five are the engine's own
-    trouble and never become an ask (lint refuses them)."""
-    OPEN_QUESTION = "open_question"
-    EXTERNAL_FACT = "external_fact"
-    UNPROVEN = "unproven"
-    NO_PROGRESS = "no_progress"
-    CAP_REACHED = "cap_reached"
-    OVER_BUDGET = "over_budget"
-    MISSING_CRITERIA = "missing_criteria"
-    TOO_BIG = "too_big"
-    PR_OPEN = "pr_open"
-    PR_CLOSED = "pr_closed"
-    LANE_FAILURE = "lane_failure"
-    BAD_REQUEST = "bad_request"
-    SANDBOX_DENIAL = "sandbox_denial"
-    STALE_BASE = "stale_base"
-    MISSING_TOOL = "missing_tool"
-
-
-class AskStatus(StrEnum):
-    OPEN = "open"
-    PARKED = "parked"
-    ANSWERED = "answered"
-    WITHDRAWN = "withdrawn"
-    CLOSED = "closed"
-
-
-class CheckStatus(StrEnum):
-    PASSED = "passed"
-    FAILED = "failed"
-    SKIPPED = "skipped"
-    TIMEOUT = "timeout"
-    CACHED = "cached"
-    UNVERIFIED = "unverified"
-
-
-class WaitWhat(StrEnum):
-    LANE = "lane"
-    NETWORK = "network"
-    CHECK_SLOT = "check_slot"  # a check queued for a scarce slot (read from its output)
-    RESOURCE = "resource"
-    EDITOR_LOCK = "editor_lock"
-    DELEGATE_CRASH = "delegate_crash"
-    LAND_LOCK = "land_lock"
-    REVIEW_LOCK = "review_lock"
-    AREA_LOCK = "area_lock"
-    SLOT = "slot"
-
-
-class LockWhat(StrEnum):
-    LAND = "land"
-    REVIEW = "review"
-    AREA = "area"
-    SLOT_TAKE = "slot_take"
-    WORKTREE = "worktree"
-    RELEASE = "release"
-    LOOP = "loop_run"
-    RESOURCE = "resource"

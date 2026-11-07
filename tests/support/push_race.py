@@ -17,8 +17,8 @@ from taskloop.app.land.outbound import pin_head
 from taskloop.app.pipeline.waits import Waits
 from taskloop.app.run import engine
 from tlkernel.checks import CheckRun
-from tlkernel.enums import WaitWhat
 from tlkernel.kinds import Kind
+from tlkernel.waitenums import WaitWhat
 
 RETRY_RED = ("checks", "checks_fixed", "checks_exhausted", "review_exhausted")
 

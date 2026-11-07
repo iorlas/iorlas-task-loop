@@ -149,15 +149,12 @@ class LoopConfig(Rec):
     heartbeat: float = 60  # the slot bead's lease is kept alive this often while a bead runs
     drained_poll: float = 300  # --wait-drained: how often an empty queue is looked at again
     pause_retry: float = 900  # a bead another session holds, or a pause with no delegate to ask: try it again after this
-    gate_cache: float = 30  # delegate's role view is looked at no more often than this
-    gate_unknown: float = 900  # a role delegate cannot judge is tried again after this long (unknown fails open)
     net_probe: float = 60  # while the network is down the loop looks every this many seconds
     beat_every: float = 60  # the state file's beat is refreshed at most this often
     logs_kept: int = 5
     slot_fails_to_set_aside: int = 2  # same bead's quick failures in one slot before requiring recovery or different work
     quick_fail_min: float = 1.5  # a failed run shorter than this, in minutes, is an instant failure
     fails_to_stop: int = 2  # runs with no verdict before a storm cooldown wait
-    pauses_to_rest: int = 3  # a bead paused this often in one loop run rests for `rest`
     rest: float = 3600
     area_poll: float = 60
     area_say: float = 600

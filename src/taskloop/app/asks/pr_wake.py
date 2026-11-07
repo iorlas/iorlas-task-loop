@@ -3,10 +3,10 @@ again and the land reads the PR. Nothing here merges anything: it only looks."""
 from collections.abc import Callable
 
 from tlkernel.ask import AskAnswer
+from tlkernel.askenums import AskClass
 from tlkernel.askstore import AskStore
 from tlkernel.beadsport import BdFailure, Beads
 from tlkernel.config import EngineConfig
-from tlkernel.enums import AskClass
 from tlkernel.forge import OPEN, Pr, pr_waited_on
 from tlkernel.ids import BeadId
 

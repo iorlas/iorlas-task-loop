@@ -10,7 +10,7 @@ from typing import Protocol
 
 from tlkernel.checks import PassRecord
 from tlkernel.docstore import Page, Read
-from tlkernel.enums import LockWhat
+from tlkernel.lockenums import LockWhat
 from tlkernel.locks import LockRecord, Ticket
 
 

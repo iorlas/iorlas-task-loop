@@ -10,11 +10,11 @@ from typing import Final
 
 from tlkernel.adrs import AdrStore
 from tlkernel.ask import Ask, AskAction, AskAnswer, ThreadEntry
+from tlkernel.askenums import AskKind
 from tlkernel.askstore import AskStore
 from tlkernel.bead import Comment
 from tlkernel.beadsport import BdFailure, BeadPatch, Beads
 from tlkernel.dash import OwnerCause, Stick
-from tlkernel.enums import AskKind
 from tlkernel.ids import BeadId
 from tlkernel.lookrows import LookRows
 

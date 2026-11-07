@@ -5,10 +5,10 @@ from typing import Any, Final, Protocol
 
 from tlkernel import paths
 from tlkernel.ask import Ask, AskAnswer, ThreadEntry
+from tlkernel.askenums import AskStatus
 from tlkernel.askrows import AskRows, DbDocs, DbLedger
 from tlkernel.dash import OwnerCause, Stick
 from tlkernel.docstore import ForeignVersion, Ledger, Present, Torn, refusal
-from tlkernel.enums import AskStatus
 from tlkernel.ids import BeadId
 from tlkernel.ledger import LedgerEntry, LedgerEvent
 from tlkernel.wire import Refused

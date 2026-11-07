@@ -5,7 +5,7 @@ from typing import Final
 
 from taskloop.domain.asks.matchers import words
 from tlkernel.ask import SimilarRef
-from tlkernel.enums import AskClass
+from tlkernel.askenums import AskClass
 from tlkernel.ledger import Adr, LedgerEntry
 
 STOP: Final = frozenset({

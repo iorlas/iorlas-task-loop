@@ -36,7 +36,7 @@ Replace "the stage gets the engine" with three things, each explicit:
 
 **(c) Owned state**: the 111 single-stage attributes become a `<Stage>State` dataclass in `app/<stage>/state.py`. The root creates it and keeps it in a map keyed by stage; the stage gets only its own. It is saved in the checkpoint as that stage's section (today `run/state.py` and `contracts/checkpoint.py` list `look_notes`, `look_done`, `rendered_names`, ... as engine fields): each stage defines `<Stage>Checkpoint`, the Checkpoint record holds `sections: dict[str, bytes-typed]` decoded by the stage that owns it. Old checkpoints read through a migration owned by the stage.
 
-**(d) Hand-offs** (the ~84): a value one stage produces and another consumes becomes a **return value or an event**, not a field both read. `retry_after`/`pause_role`/`pause_lane` written by look into the engine become a `Pause` value look returns and the pipeline records. `leftovers` becomes `Leftover` records returned by the stage and appended by the pipeline. The consumer's port names what it needs (`FollowupSink.add(leftover)`).
+**(d) Hand-offs** (the ~84): a value one stage produces and another consumes becomes a **return value or an event**, not a field both read. `retry_after` written by look into the engine become a `Pause` value look returns and the pipeline records. `leftovers` becomes `Leftover` records returned by the stage and appended by the pipeline. The consumer's port names what it needs (`FollowupSink.add(leftover)`).
 
 Stage entry becomes constructor injection: `Judge(facts, ports, state)`, not `Judge(engine)`. No `Any` host survives; `except e.Blocked` becomes a typed result or exception owned by the stage.
 
@@ -61,6 +61,8 @@ Today's shell is fat: `run` + `loop` + `launch` + `wire` + `prune` = 113 files /
 - **node `workers`**: `worker_call`, `worker_request`, `delegation` (the AI-call machinery and delegate glue, today about 14 app importers of `adapters.delegate`): the one node that talks to the delegate library; every stage gets it as `AskAi`.
 - **node `loop`**, **node `prune`**: stay, each with its own ports (`Claim`, `Take`, ...). `loop/take.py` imports 3 stages today and is a root-shaped file inside a node: it moves to the root or takes ports.
 - **roots**: `engine` (construct pipeline + stages + states, bind ports), `entry`, `run_once`, `launch/*`, `wire/*`, `cli`, `hook`, `tl.py`.
+
+C-THIN (a), tl-e5t0.40.1: `run/ask_flow`, `bead_env`, `closer_ports`, `preflight`, `reload_ports`, `shared`, `shell` and `stage_checks` are composition files: they bind ports across slices and stay in `run/`. The proposed composition classification of `stage_rounds`, `stage_run`, `review_glue` and `running` is blocked by imports from `run.stages`, `run.state` and `prune.verb`; they remain logic sources in `nobody-imports-a-root`. `stages`, `state` and `target` keep their existing classification. No import exceptions are widened.
 
 Keeping them thin, mechanically:
 
