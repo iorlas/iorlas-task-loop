@@ -5,7 +5,6 @@ run records its branch; the dashboard fills Pass.messages, Cell.last, Resumed.br
 import json
 import types
 
-import support.paths  # noqa: F401
 from support import engine_case as te
 from support.dashlogs import RunScript
 

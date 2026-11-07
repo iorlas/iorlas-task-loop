@@ -1,15 +1,10 @@
 """The land's decisions, with git answered from a table (tests/support/fakegit.py): no repository, no process."""
-import sys
-from pathlib import Path
 
 import pytest
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.fakegit import FakeGit
 from support.narrow_hosts import FakeLandedHost, FakeLandRebaseHost, Stopped
+
+from tltestkit.case import Case
 
 # isort: split
 from taskloop.app.land.landed import Landed

@@ -1,13 +1,7 @@
 """The needs-you list and the loop strip: one snapshot row per kind (bead, why, since), the stalled and absent loops, and the rules that
 keep a row out (an ask, a closed bead, a second kind for the same bead)."""
-import sys
 import time
-from pathlib import Path
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.dashlogs import T, bead
 
 from taskloop_dash.readers.observed import strays_of
@@ -22,6 +16,7 @@ from tlkernel.parks import Park
 from tlkernel.reconcile import LOOP_ABSENT_S, LOOP_STALL_S
 from tlkernel.run import NetPause
 from tlkernel.snapshots import LaneStatus, NeedInput, StatusSnapshot
+from tltestkit.case import Case
 
 NOW = T + 36000
 

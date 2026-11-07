@@ -1,17 +1,10 @@
 """Transient retry scheduling must not change existing owner, ask or infrastructure closes."""
-import sys
-from pathlib import Path
 from unittest import mock
 
 import pytest
 from support.parkmock import through_change
 
 from taskloop.adapters import beadtools
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
-
 from taskloop.app.asks import parks
 from taskloop.app.asks.closing import ClosingAsks
 from tlkernel import beadpark as park
@@ -23,6 +16,7 @@ from tlkernel.ids import BeadId
 from tlkernel.kinds import ASKS, FAULTS, Kind
 from tlkernel.parks import Park
 from tlpipeline.api import Closer
+from tltestkit.case import Case
 
 
 class PauseCompatibility(Case):

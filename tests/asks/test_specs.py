@@ -1,11 +1,5 @@
 """Each stop of the engine builds an ask that passes lint, and the card text reads from the record's fields."""
-import sys
-from pathlib import Path
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.tiers import domain
 
 from taskloop.app.asks.raiser import Asking, build
@@ -15,6 +9,7 @@ from tlkernel.ask import AskAnswer, BudgetLine
 from tlkernel.askenums import AskClass
 from tlkernel.asklint import lint
 from tlkernel.ids import BeadId
+from tltestkit.case import Case
 
 AT = Asking(bead=BeadId("t-1"), run="t-1-20261026-101010", brief_hash="h", repo="/r", title="T", now=10.0)
 LONG = "word " * 200

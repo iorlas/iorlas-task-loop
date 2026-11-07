@@ -1,9 +1,4 @@
 """The beads the brief golden set renders: every section, none, the engine's own lines, owner_only and the linked beads."""
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from taskloop.adapters.bd import bead_of
 from tlkernel.bead import Bead, Comment

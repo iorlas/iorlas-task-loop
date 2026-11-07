@@ -2,17 +2,13 @@
 under the outside gate more often than allowed. The pushed tree is always one the gate passed on the same base. Git is a small world
 (a base tip that moves on fetch; a rebase gives the tree of the base it lands on); the gate's cache is a recorder with the engine's rule: a
 green gate is a fact about a tree and its base (the per-check cache itself is tests/checks/test_gate_steps.py)."""
-import sys
 from collections.abc import Sequence
-from pathlib import Path
 from typing import Any
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.fakegit import ScriptedGit
 from support.narrow_hosts import Fetches, LandKit, Locks
+
+from tltestkit.case import Case
 
 # isort: split
 from tlgate.domain.specs import engine_digest

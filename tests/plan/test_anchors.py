@@ -1,17 +1,11 @@
 """Plan v2: a stage's anchors, how the writer reads them, and what the planner is sent back for."""
-import sys
-from pathlib import Path
 from typing import Any, ClassVar
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from taskloop.domain.plan.stored import role_view, stored
 from taskloop.domain.prompts.anchors import anchors_text, unanchored
 from tlkernel import answers
 from tlkernel.plancheck import PlanData, adhoc
+from tltestkit.case import Case
 
 ANCHOR = {"path": "src/a.py", "lines": "10-40", "symbol": "Thing.run", "why": "the loop to change"}
 STAGE = {"goal": "g", "files": ["src/a.py", "src/new.py"], "anchors": [ANCHOR], "read_first": ["docs/a.md"],

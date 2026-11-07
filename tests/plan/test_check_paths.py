@@ -1,18 +1,13 @@
 """CHECKPATH: missing check executables replan before any writer; only earlier producers exempt an output."""
-import sys
-from pathlib import Path
 from unittest import mock
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.engine_case import EngineTest
 
 from tlgate.domain import lint
 from tlkernel.checksport import TreeProbe
 from tlkernel.ids import CheckId
 from tlkernel.plancheck import PlanCheck, PlanData, Ref, StageData, adhoc
+from tltestkit.case import Case
 from tltestkit.cfgs import cfg_with
 from tltestkit.plans import CLEAN, PLAN, WRITE
 

@@ -7,7 +7,6 @@ from pathlib import Path
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ("skills/task-loop/tl.py", "hooks/hook.py", "dev/release.py", "dev/race.py", "dev/dash_fixtures.py")

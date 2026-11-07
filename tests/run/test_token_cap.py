@@ -1,18 +1,13 @@
 """engine.bead_token_cap: a bead's tokens over all its runs stop the next worker call, as a budget ask with the total.
 Waits runs here over a small typed host (support/narrow_hosts.py FakeWaitsHost), not an Engine."""
 
-import sys
-from pathlib import Path
 from typing import Any, ClassVar
 
 import pytest
+from support.narrow_hosts import FakeWaitsHost
 
 from taskloop.adapters import deadline
 from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
-from support.narrow_hosts import FakeWaitsHost
 
 # isort: split
 from tlkernel.ids import RunId

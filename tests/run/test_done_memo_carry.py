@@ -4,7 +4,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-import support.paths  # noqa: F401
 
 from taskloop.adapters import ident
 from taskloop.app.workers import done_memo

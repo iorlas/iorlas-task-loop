@@ -1,7 +1,6 @@
 """dev/runtests.py with TL_GREEN_LEDGER=1: tests already green on their own files are left out, and a green run records the ones that ran.
 Off by default: the ledger is for the lanes' runs until the land gate trusts it."""
 import runtests
-import support.paths  # noqa: F401
 from affected import Repo
 
 FILES = {"src/pkg/__init__.py": "", "src/pkg/a.py": "X = 1\n", "tests/x/test_a.py": "import pkg.a\n", "tests/x/test_b.py": "import pkg.a\n",

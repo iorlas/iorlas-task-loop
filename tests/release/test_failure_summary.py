@@ -4,8 +4,6 @@ from contextlib import nullcontext, redirect_stderr
 from pathlib import Path
 from unittest import mock
 
-import support.paths  # noqa: F401
-
 from taskloop.app.release import flow, publish
 from taskloop.app.release.shell import Abort
 from tlkernel.env import Env

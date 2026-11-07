@@ -4,7 +4,6 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-import support.paths  # noqa: F401
 from support.tlmain import tl, tl_main
 
 from taskloop.adapters import beadtools

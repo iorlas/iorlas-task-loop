@@ -1,14 +1,6 @@
 """`tl wait` (exit code per outcome, timeout, an ask ending the wait) and `tl ask show`: temp config dir, fake clock and sleep."""
 import argparse
-import sys
-from pathlib import Path
 from typing import ClassVar
-
-from tltestkit.case import Case
-from tltestkit.tmpdir import TemporaryDirectory
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from taskloop.cli import wait
 from tlkernel.ask import Ask
@@ -18,9 +10,11 @@ from tlkernel.ids import BeadId
 from tlkernel.locator import RunLocator, host_name
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
+from tltestkit.case import Case
 from tltestkit.logs import typed, write_log
 from tltestkit.narrow import must
 from tltestkit.runs import manifest
+from tltestkit.tmpdir import TemporaryDirectory
 
 BEAD, RUN, T = "t-1", "t-1-20261026-100000", 5000.0
 

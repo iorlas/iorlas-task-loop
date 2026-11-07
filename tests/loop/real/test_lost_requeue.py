@@ -1,7 +1,6 @@
 """A restarted loop closes the runs found lost with a reason and takes their bead again, with no owner action (tl-9un.63)."""
 from unittest import mock
 
-import support.paths  # noqa: F401
 from support import homes
 
 from loop.test_loop import LoopBase, rec

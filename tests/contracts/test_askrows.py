@@ -6,7 +6,6 @@ from pathlib import Path
 from threading import Barrier
 
 import pytest
-import support.paths  # noqa: F401
 from support.askjson import unreadable_ask
 
 from contracts import samples as S

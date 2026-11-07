@@ -1,10 +1,5 @@
 """The 8 asks of tl-7y6.2.16 as the old engine put them to the owner (the quoted text, cut with `[...]` where the original was long) and
 the 3 rewrites of 68-design-asks section 5. Lint must refuse the first and pass the second."""
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from tlkernel.ask import Ask, AskOption
 from tlkernel.askenums import AskClass, AskKind, AskStatus

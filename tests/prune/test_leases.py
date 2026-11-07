@@ -1,18 +1,13 @@
 """The lease rules the loop's step and the run entry share (app/reconcile/leases.py `release_dead`): every case the retired `loop.reclaim`
 (bd reclaim) and `entry.reclaim` released is a row here, run through the one rule."""
-import sys
 import time
-from pathlib import Path
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 
 from taskloop.app.reconcile.leases import release_dead
 from tlkernel.beadsport import BeadPatch, NewBead
 from tlkernel.ids import BeadId
+from tltestkit.case import Case
 
 ENDED, RUNNING = "2000-01-01T00:00:00Z", "2999-01-01T00:00:00Z"
 

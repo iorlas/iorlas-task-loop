@@ -1,15 +1,9 @@
 """Two loops on one repo never share a worktree: the first takes its session's loop-<session>, every later one its own actor's."""
-import sys
-from pathlib import Path
 from types import SimpleNamespace
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 from taskloop.app.loop.loop import Loop
 from taskloop.app.slots import owned
+from tltestkit.case import Case
 
 REPO = "/w/repo"
 SESSION = "tl-eaa4b1f2"

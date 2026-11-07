@@ -1,15 +1,9 @@
 """Factory loops explicitly probe GitHub through the delegate's network probe."""
-import sys
-from pathlib import Path
 from unittest import mock
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from taskloop.app.launch import loop
 from tlkernel.env import Env
+from tltestkit.case import Case
 
 
 class NetworkProbe(Case):

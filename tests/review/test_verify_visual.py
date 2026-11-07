@@ -1,10 +1,5 @@
 """Verify runs only on a visual bead (tl-7y6.7.5): another bead lands with its unchecked items in one follow-up bead tagged `follow-up`,
 filed once; an item that names an acceptance criterion is still asked; the acceptance-mapping review is not skipped."""
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support import engine_case as T
 
 from tlkernel.beadsport import BeadQuery

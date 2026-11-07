@@ -1,10 +1,6 @@
 """Gate-only commands are named up front and left to land if the planner's rewrite keeps them."""
-import sys
-from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.engine_case import EngineTest
 from support.plan_host import FakePlan
 

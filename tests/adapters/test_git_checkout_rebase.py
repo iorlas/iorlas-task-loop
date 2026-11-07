@@ -4,8 +4,6 @@ import subprocess
 from pathlib import Path
 from unittest import mock
 
-import support.paths  # noqa: F401
-
 # isort: split
 import pytest
 from git_porcelain import errors

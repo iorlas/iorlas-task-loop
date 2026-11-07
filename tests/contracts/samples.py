@@ -1,10 +1,5 @@
 """One filled instance of every record in tlkernel, for the round-trip, golden and completeness tests."""
-import sys
-from pathlib import Path
 from typing import cast
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from tlkernel import (
     artifact,

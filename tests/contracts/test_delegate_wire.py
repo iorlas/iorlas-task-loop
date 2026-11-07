@@ -1,18 +1,12 @@
 """The typed delegate answer (contract 4) agrees with the adapter that reads it and the policy tables (lane policy)."""
-import sys
-from pathlib import Path
 from typing import get_args, get_type_hints
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from contracts import samples as S
 from taskloop.adapters import delegate as dl
 from taskloop.adapters import delegate_wire
 from taskloop.domain.lanes import policy as lp
 from tlkernel import delegate, wire
+from tltestkit.case import Case
 
 
 class Contract4(Case):

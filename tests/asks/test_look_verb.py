@@ -1,14 +1,7 @@
 """The owner's `look` verb (Intake.look): good, redo and undo on a look item, over the typed bd port in memory."""
-import sys
 import threading
-from pathlib import Path
 from unittest import mock
 
-from tltestkit.case import Case
-from tltestkit.tmpdir import TemporaryDirectory
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.look_world import FakeBd, looks, world
 
 from taskloop.app.asks.intake import Intake
@@ -18,6 +11,8 @@ from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
 from tlkernel.lookrows import LookRows
 from tlkernel.paths import ConfigDir
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 NOW = 1_800_000_000.0
 

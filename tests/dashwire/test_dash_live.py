@@ -14,7 +14,6 @@ ROOT = Path(__file__).resolve().parents[2]
 SKILL = ROOT / "skills" / "task-loop"
 for sub in ("dash", "", "tests"):
     sys.path.insert(0, str(SKILL / sub) if sub != "tests" else str(ROOT / "tests"))
-import support.paths  # noqa: E402, F401
 from support import dlcall  # noqa: E402
 from support.dashlive import BEAD, STAMP, T, make_run, put  # noqa: E402
 from support.factory_index import ingest  # noqa: E402

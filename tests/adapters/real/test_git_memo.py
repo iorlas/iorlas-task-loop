@@ -7,8 +7,6 @@ import subprocess
 from pathlib import Path
 from unittest import mock
 
-import support.paths  # noqa: F401
-
 from tltestkit.tmpdir import TemporaryDirectory
 
 # isort: split

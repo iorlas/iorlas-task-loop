@@ -11,7 +11,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
 from asks.dash_ports import answering  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from support.factory_index import seed_beads  # noqa: E402

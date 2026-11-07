@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-import support.paths  # noqa: F401
 from support import engine_case as te
 from support.engine_case import real_git
 

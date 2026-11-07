@@ -3,8 +3,6 @@ change's tests depend on (dev/affected.py --closure), so `land-stack` need not r
 import json
 from pathlib import Path
 
-import support.paths  # noqa: F401
-
 from tlkernel.config import load
 
 ROOT = Path(__file__).resolve().parents[2]

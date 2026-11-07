@@ -1,6 +1,5 @@
 """The loop's state is a `lease` row in factory.db (tl-sqd3.26.1): written whole, read back,
 and renamed `died-` when its pid is gone."""
-import support.paths  # noqa: F401
 from support import looptest
 
 from loop.test_loop import LoopBase

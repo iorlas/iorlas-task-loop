@@ -3,7 +3,6 @@ from unittest import mock
 
 import pytest
 import runtests
-import support.paths  # noqa: F401
 
 CASES = [({}, 0, 10), ({}, 4, 6), ({}, 10, None), ({}, 15, None), ({"TL_TEST_FULL": "1"}, 0, None)]
 

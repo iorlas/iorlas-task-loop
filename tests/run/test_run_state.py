@@ -3,20 +3,14 @@ on EVERY exit path of the process (landed, an ask, an engine fault, a SIGTERM, a
 install is no exit: the run stays live for the process that takes it up. Fakes throughout; the killed-process case is under real/."""
 import contextlib
 import signal as sig
-import sys
-from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 import pytest
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import homes
 from support.engine_case import EngineTest
 
+from tltestkit.case import Case
 from tltestkit.plans import CLEAN, PLAN, WRITE
 
 # isort: split

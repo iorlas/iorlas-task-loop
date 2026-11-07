@@ -4,7 +4,6 @@ import time
 from pathlib import Path
 
 import pytest
-import support.paths  # noqa: F401
 
 from tlkernel import factorydb
 from tlkernel.paths import ConfigDir

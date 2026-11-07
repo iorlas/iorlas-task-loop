@@ -2,20 +2,15 @@
 the checkpoint, and is told why."""
 import contextlib
 import io
-import sys
 from contextlib import redirect_stderr
-from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 import pytest
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.spawn import port_git
 from support.who import who
+
+from tltestkit.case import Case
 
 # isort: split
 from support.fake_beads import FakeBeads

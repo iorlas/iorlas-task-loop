@@ -2,7 +2,6 @@
 from unittest import mock
 
 import pytest
-import support.paths  # noqa: F401
 
 from taskloop.adapters import beadtools
 from tlkernel import bdsafe

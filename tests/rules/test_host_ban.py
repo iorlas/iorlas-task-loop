@@ -7,13 +7,8 @@ Three guards, one list: the sources of the `converted-stages-take-no-host` contr
    Protocol the stage declares (`host: CheckHost`), and no class assigns `self.e`.
 The list only grows: against the merge base with origin/main no stage may leave it (real/test_host_ban_list.py).
 dev/hostban_mutation.py seeds one violation per guard and shows each guard fail."""
-import sys
-from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from rules.host_ban import ROOT, converted, host_problems, ruff_file, stage_files, stage_protocols
 

@@ -32,7 +32,6 @@ from typing import Any, cast
 from unittest import mock
 
 import pytest
-import support.paths  # noqa: F401
 import support.who as support_who
 from support import homes
 from support.shells import quiet_shell

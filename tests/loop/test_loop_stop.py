@@ -5,7 +5,6 @@ import threading
 from contextlib import redirect_stdout
 from unittest import mock
 
-import support.paths  # noqa: F401
 from support import (
     looptest,
 )

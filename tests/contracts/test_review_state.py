@@ -1,19 +1,13 @@
 """ReviewState is the one review/verify field of the run state: its fields are listed here, it round-trips through dump."""
 import json
-import sys
-from pathlib import Path
 
 import pytest
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from contracts import samples as S
 from tlkernel import wire
 from tlkernel.review import ReviewState
 from tlkernel.wire import StaleRecord
+from tltestkit.case import Case
 
 FIELDS = ["reviews", "rounds", "unchecked", "unverified", "verified", "filed", "unfiled"]
 

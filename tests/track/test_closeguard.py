@@ -5,7 +5,6 @@ import io
 import time
 from unittest import mock
 
-import support.paths  # noqa: F401
 from support import homes
 from support.who import who
 

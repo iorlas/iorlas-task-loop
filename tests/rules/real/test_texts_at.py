@@ -1,8 +1,6 @@
 """ratchet_change.texts_at: the texts of many files at a revision from one git process; a file that did not exist is None."""
 import subprocess
 
-import support.paths  # noqa: F401
-
 from rules.ratchet_change import texts_at
 
 

@@ -1,15 +1,11 @@
 """Post-land cleanup keeps its original leases and can fail independently of the landing receipt."""
-import sys
-from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support import homes
 from support.fakegit import ScriptedGit
+
+from tltestkit.case import Case
 
 # isort: split
 from support.memstores import fake_stores

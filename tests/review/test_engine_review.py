@@ -9,7 +9,6 @@ import time
 from contextlib import contextmanager
 from unittest import mock
 
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.engine_case import EngineTest, stop
 
 from tltestkit.plans import BEAD, CLEAN, FALSE, PLAN, STILL_OPEN, WRITE, finding, review, verdict

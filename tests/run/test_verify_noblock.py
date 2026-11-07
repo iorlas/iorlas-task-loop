@@ -1,16 +1,11 @@
 """tl-bxk.10.28: a verify item never parks a bead unless it is a real owner decision. The fixtures are the five asks that
 parked lifesim on 2026-10-22 (~/.config/task-loop/asks/lifesim-*.json), each item with the kind the engine now routes by."""
-import sys
 import threading
 import time
-from pathlib import Path
 from typing import Any, cast
 from unittest import mock
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as T
 from support.asked import ans
 from support.builders import make_engine

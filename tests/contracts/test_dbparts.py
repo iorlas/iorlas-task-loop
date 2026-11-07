@@ -2,7 +2,6 @@
 import sqlite3
 
 import pytest
-import support.paths  # noqa: F401
 from sqlite_store import SchemaError
 
 from taskloop.app.parts import STAGE_PARTS

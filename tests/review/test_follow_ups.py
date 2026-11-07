@@ -1,17 +1,12 @@
 """The follow-up beads the engine files (E7c), through the real close path on the fake bd: no `auto` label, one `from:` label naming the
 source bead and round, one bead per typed key (bead, category, file) and never more than the cap, the rest in one comment."""
 import re
-import sys
-from pathlib import Path
 from typing import Any
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support import engine_case as T
 
 from tlkernel.followkeys import FOLLOW_UP_CAP, FollowKey
+from tltestkit.case import Case
 from tltestkit.plans import CLEAN, PLAN, WRITE, finding, review
 
 

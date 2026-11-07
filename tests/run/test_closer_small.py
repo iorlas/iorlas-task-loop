@@ -1,16 +1,11 @@
 """The close's steps, each over a small host with just the members its Protocol lists (support/narrow_hosts.py), not an Engine."""
-import sys
-from pathlib import Path
 from unittest import mock
 
-from taskloop.adapters import beadtools
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.narrow_hosts import CloseKit, FakeReleaseSlotHost, FakeSettleHost
 
+from taskloop.adapters import beadtools
 from tlpipeline.testing import FakeParkBook
+from tltestkit.case import Case
 
 # isort: split
 from taskloop.app.asks import raiser
