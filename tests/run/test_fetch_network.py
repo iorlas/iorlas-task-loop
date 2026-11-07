@@ -32,4 +32,3 @@ class InitialFetch(EngineTest):
             assert (self.blocked, self.ask()) == ([], None)
         assert not [c for c in self.bd_calls if c[:2] == ("label", "add")]
         assert any(c[:1] == ("update",) and "open" in c for c in self.bd_calls)
-

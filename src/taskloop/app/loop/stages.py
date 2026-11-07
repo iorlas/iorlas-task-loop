@@ -202,5 +202,3 @@ def landed_on_base(repo: str, wt: str, bead_id: BeadId, git: Git, base_of: Calla
     if not last or not last[0].subject.endswith(f"({bead_id})"):
         return False
     return git.is_ancestor(wt, tip, base)
-
-

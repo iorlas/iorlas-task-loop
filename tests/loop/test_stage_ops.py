@@ -89,5 +89,3 @@ def test_exec_failure_restores_repo_after_flushing_and_closing(monkeypatch):
         stages.exec_into("repo", "start", ports.argv, ports.environ)
     assert ports.mock_calls == [call.chdir("start"), call.stdout.flush(), call.stderr.flush(), call.close(), call.argv(),
                                 call.environ(), call.execve("uv", ["uv", "script"], {"handover": "state"}), call.chdir("repo")]
-
-

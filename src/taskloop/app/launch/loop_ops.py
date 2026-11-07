@@ -112,5 +112,3 @@ def landed_on_base(repo: str, cfg: paths.ConfigDir, store: Beads, wt: str, bead_
 def _landed_on_base(repo: str, cfg: paths.ConfigDir, store: Beads, wt: str, bead_id: BeadId, git: Git) -> bool:
     return stages.landed_on_base(repo, wt, bead_id, git, lambda: wslots_config.load_cfg(repo, git).base,
                                  lambda: landed_by(store)(bead_id), lambda: beadtools.peek(store, bead_id))
-
-
