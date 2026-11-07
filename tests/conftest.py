@@ -258,6 +258,15 @@ def procs(request):
     world.check(must_spawn=kind == "real" and not request.node.stash.get(SKIPPED, False) and not no_cli)
 
 
+@pytest.fixture(autouse=True)
+def keep_tempdir_cache():
+    """A test that points TMPDIR into a folder it removes (the doctor tests) must not leave `tempfile.tempdir` cached on it: every later
+    `tempfile` call without `dir=` in this worker would raise FileNotFoundError."""
+    saved = tempfile.tempdir
+    yield
+    tempfile.tempdir = saved
+
+
 @pytest.fixture
 def workdir():
     """A scratch folder (contracts/scratch.py) on the checkout's disk, for the length of the test: the one place a test writes."""
