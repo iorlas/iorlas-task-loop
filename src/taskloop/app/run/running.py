@@ -5,10 +5,10 @@ from pathlib import Path
 from typing import Any
 
 from tlkernel.beadsport import Beads
-from tlkernel.enums import LockWhat
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId, is_bead_id
+from tlkernel.lockenums import LockWhat
 
 from taskloop.adapters import beadtools
 from taskloop.adapters.locks import hold_path

@@ -44,9 +44,12 @@ from tlkernel import (
     usage,
     worktrees,
 )
-from tlkernel.enums import AskClass, AskKind, AskStatus, LockWhat, Outcome, Result, WaitWhat, WhyCode
+from tlkernel.askenums import AskClass, AskKind, AskStatus
+from tlkernel.enums import Outcome, Result, WhyCode
 from tlkernel.ids import BeadId, CheckId, TreeSha, loop_key
+from tlkernel.lockenums import LockWhat
 from tlkernel.runkey import BaseSha, Digest, RunKey
+from tlkernel.waitenums import WaitWhat
 
 T = 1793050200.5
 RUN = ids.RunId.parse("01KBN6Z0M4R5E8YQ2T7C9W3XHD")

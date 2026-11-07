@@ -12,8 +12,9 @@ from taskloop_dash.views import columns, phases
 from taskloop_dash.views.columns import Facts
 from tlkernel import log, wire
 from tlkernel.dash import Column, Marker, Phase
-from tlkernel.enums import Outcome, WaitWhat, WhyCode
+from tlkernel.enums import Outcome, WhyCode
 from tlkernel.runlife import Liveness
+from tlkernel.waitenums import WaitWhat
 
 LIVE, CRASHED, ENDED = Liveness.LIVE, Liveness.LOST, Liveness.ENDED
 PARKED = log.Close(t=1.0, outcome=Outcome.PARKED, why_code=WhyCode.LANE_OUT, why="codex ran out\nuntil 14:00")

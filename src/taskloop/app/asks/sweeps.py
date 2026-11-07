@@ -6,9 +6,9 @@ from pathlib import Path
 
 from tlkernel.ago import ago
 from tlkernel.ask import Ask
+from tlkernel.askenums import AskStatus
 from tlkernel.askstore import HAD_PICK, ORPHAN, AskStore
 from tlkernel.beadsport import BdFailure, BeadPatch, BeadQuery, Beads
-from tlkernel.enums import AskStatus
 from tlkernel.ids import BeadId, is_bead_id
 
 UNUSED_ANSWER_S = 30 * 60

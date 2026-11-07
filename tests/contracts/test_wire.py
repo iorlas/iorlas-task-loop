@@ -17,7 +17,7 @@ import support.paths  # noqa: F401
 
 import tlkernel as pkg
 from contracts import samples as S
-from tlkernel import delegate, enums, events, ids, log, trace, wire
+from tlkernel import askenums, checkenums, delegate, enums, events, ids, lockenums, log, trace, waitenums, wire
 from tlkernel.ask import Ask
 from tlkernel.loop import LoopCommand
 from tlkernel.parks import Park
@@ -238,7 +238,7 @@ class Ids(Case):
                 v(bad)
 
     def test_enum_members_are_their_wire_strings(self):
-        for e in vars(enums).values():
+        for e in (e for module in (enums, askenums, checkenums, lockenums, waitenums) for e in vars(module).values()):
             if isinstance(e, type) and issubclass(e, enum.StrEnum) and e is not enum.StrEnum:
                 assert all(str(m) == m.value for m in e), e
 

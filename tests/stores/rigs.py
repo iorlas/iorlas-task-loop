@@ -21,7 +21,7 @@ from taskloop.stores.bundle import Stores
 from taskloop.stores.real import real_stores
 from tlkernel import paths, wire
 from tlkernel.docstore import JsonStore
-from tlkernel.enums import LockWhat
+from tlkernel.lockenums import LockWhat
 from tlkernel.locks import LockRecord
 
 

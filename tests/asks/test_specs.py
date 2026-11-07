@@ -12,7 +12,7 @@ from taskloop.app.asks.raiser import Asking, build
 from taskloop.domain.asks import specs, text
 from taskloop.domain.asks.lint import lint
 from tlkernel.ask import AskAnswer, BudgetLine
-from tlkernel.enums import AskClass
+from tlkernel.askenums import AskClass
 from tlkernel.ids import BeadId
 
 AT = Asking(bead=BeadId("t-1"), run="t-1-20261026-101010", brief_hash="h", repo="/r", title="T", now=10.0)

@@ -3,11 +3,12 @@ from collections.abc import Callable, Sequence
 from typing import Protocol
 
 from tlkernel import fence
+from tlkernel.askenums import AskClass
 from tlkernel.bead import Bead
 from tlkernel.beadsport import Beads
 from tlkernel.config import EngineConfig
 from tlkernel.delegateport import Refusal
-from tlkernel.enums import AskClass, Step
+from tlkernel.enums import Step
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.plancheck import PlanData, RoundState

@@ -8,8 +8,8 @@ from taskloop.app.asks import raiser
 from taskloop.app.asks.closing import ClosingAsks
 from taskloop.domain.asks.spec import AskSpec
 from tlkernel.ask import AskOption
+from tlkernel.askenums import AskClass
 from tlkernel.bead import Bead
-from tlkernel.enums import AskClass
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.parks import ParkStore

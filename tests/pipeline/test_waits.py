@@ -10,8 +10,8 @@ from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.waits import Waits
 from taskloop.domain.lanes.liveness import LIVENESS
 from tlkernel import log as rec
-from tlkernel.enums import WaitWhat
 from tlkernel.kinds import Kind
+from tlkernel.waitenums import WaitWhat
 
 
 def test_wait_books_seconds_outside_the_budget():

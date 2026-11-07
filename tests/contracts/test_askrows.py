@@ -14,11 +14,11 @@ from support.tmpdir import TemporaryDirectory
 from contracts import samples as S
 from tlkernel import factorydb, wire
 from tlkernel.ask import Ask, AskAnswer
+from tlkernel.askenums import AskStatus
 from tlkernel.askrows import AskRows, DbLedger, read_snapshot
 from tlkernel.askstore import AskStore
 from tlkernel.dash import OwnerCause, Stick
 from tlkernel.docstore import Absent, ForeignVersion, JsonStore, Present, Torn
-from tlkernel.enums import AskStatus
 from tlkernel.ledger import LedgerEntry
 from tlkernel.paths import ConfigDir
 from tlkernel.wire import Refused

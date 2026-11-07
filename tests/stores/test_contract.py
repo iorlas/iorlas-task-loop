@@ -23,7 +23,7 @@ from support.tiers import contract
 
 from taskloop.adapters.locks import ProcessLockTable
 from tlkernel import paths
-from tlkernel.enums import LockWhat
+from tlkernel.lockenums import LockWhat
 
 SUITES = [suites.DocContract, suites.AskContract, suites.CheckpointContract, suites.LogContract, suites.LockContract,
           suites.TicketContract]

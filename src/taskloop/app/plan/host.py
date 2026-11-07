@@ -5,11 +5,11 @@ from typing import Protocol
 from tlkernel.adrs import AdrStore
 from tlkernel.ask import AskAnswer
 from tlkernel.asked import Asked
+from tlkernel.askenums import AskClass
 from tlkernel.beadsport import Beads
 from tlkernel.checkpoint import BriefSnap, Checkpoint, PlanStep, StageProgress
 from tlkernel.checks import Check, CheckRun
 from tlkernel.config import HostResources, VisualConfig
-from tlkernel.enums import AskClass
 from tlkernel.gitport import Git
 from tlkernel.ids import TreeSha
 from tlkernel.plancheck import PlanData

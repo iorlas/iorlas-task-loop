@@ -6,13 +6,13 @@ from typing import Protocol
 
 from tlkernel.checks import CheckFaultKind
 from tlkernel.config import EngineConfig
-from tlkernel.enums import WaitWhat
 from tlkernel.env import Env
 from tlkernel.gitport import Git
 from tlkernel.ids import TreeSha
 from tlkernel.paths import ConfigDir
 from tlkernel.procport import Spawner
 from tlkernel.stagefacts import CheckLogPort, RunLogPort
+from tlkernel.waitenums import WaitWhat
 
 from taskloop.stores.bundle import Stores
 

@@ -20,11 +20,11 @@ from taskloop_dash.views.board import Board, review_of
 from taskloop_dash.views.world import LookItem, ProjectIn, World
 from tlkernel import wire
 from tlkernel.ask import Ask, AskOption
+from tlkernel.askenums import AskClass, AskKind, AskStatus
 from tlkernel.bead import Comment, Dep
 from tlkernel.checks import CheckRun
 from tlkernel.dash import BeadDetail, CheckCount, Column, Marker, Snapshot
 from tlkernel.delegate import LiveCmdEnd, LiveCmdStart, LiveTokens
-from tlkernel.enums import AskClass, AskKind, AskStatus
 from tlkernel.ids import BeadId
 from tlkernel.log import RunStart
 from tlkernel.loop import LoopState, QueueRow, Skip
