@@ -54,6 +54,9 @@ class DoctorSource(Case):
         patch = mock.patch.dict(os.environ, self.env)
         patch.start()
         self.addCleanup(patch.stop)
+        tempdir = mock.patch("tempfile.tempdir", None)  # the folder tempfile caches under the patched TMPDIR goes with it
+        tempdir.start()
+        self.addCleanup(tempdir.stop)
         self.git("init", "-q", "-b", "main", str(self.repo), cwd=self.root)
         self.git("config", "extensions.worktreeConfig", "true")
         self.write_cfg(self.repo, self.config("stale"))
