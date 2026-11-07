@@ -138,4 +138,3 @@ def exclude_local(git: Git, repo: str, *patterns: str) -> None:
 def prio_of(bead: Bead | None) -> int:
     """The priority number of a bead (0 = P0), DEFAULT_PRIO when it has none."""
     return bead.priority if bead and bead.priority is not None else DEFAULT_PRIO
-

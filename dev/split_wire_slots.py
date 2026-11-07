@@ -175,7 +175,7 @@ def migrate(root, names):
         # Only names actually consumed by the composition root are imported there.
         outputs[str(WIRE)] = outputs[str(WIRE)].replace('import contextlib',
             'from taskloop.app.slots.config import ' + ', '.join(sorted(used)) + '\n\nimport contextlib', 1)
-        outputs[str(CONFIG)] = HEADER + '\n\n\n'.join(blocks) + '\n'
+        outputs[str(CONFIG)] = (HEADER + '\n\n\n'.join(blocks)).rstrip('\n') + '\n'
     move_storm(root, outputs)
     changed = []
     for name, text in outputs.items():
