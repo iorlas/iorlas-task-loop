@@ -8,7 +8,7 @@ from tlkernel import plancheck
 from tlkernel.checks import CheckRun
 from tlkernel.plancheck import PlanData, StageData
 
-from taskloop.app.land import verified
+from taskloop.app.land import gate
 from taskloop.app.land.gate import Problem, ProblemKind
 from taskloop.app.land.host import BeginSteps, CaseChecks
 
@@ -56,7 +56,7 @@ class Recheck:
         # A stop during checks or just after they return must resume through acceptance: save that barrier first
         self.park("land retry checks require successful checks and review before landing", "land-verify-red")
         results = e.stage_checks.stoppable({"checks": checks, "files": []}, "land retry")
-        verified.refuse(results, e)
+        gate.refuse(results, e)
         bad = results.failed
         problem = Problem(ProblemKind.VERIFY, check_evidence.failure_brief(bad, e.run_dir)) if bad else None
         self.park(problem.text if problem else "", "land-verify-red" if bad else "land")
