@@ -12,7 +12,6 @@ import support.paths  # noqa: F401
 from support.askjson import unreadable_ask
 from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
-from support.narrow import must
 from support.tiers import domain
 
 from taskloop.app.asks import intake, raiser, sweeps
@@ -27,6 +26,7 @@ from tlkernel.dash import OwnerCause, Stick
 from tlkernel.ids import BeadId
 from tlkernel.ledger import Adr
 from tlkernel.paths import ConfigDir
+from tltestkit.narrow import must
 
 T = 1000.0
 Q = "Which save format should the engine keep for old files?"

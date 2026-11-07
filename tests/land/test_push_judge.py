@@ -40,7 +40,7 @@ class PushJudge(Case):
                                  ("rev_parse", "old-base^{tree}"): "policy-tree"})
         self.git.replies[("diff",)] = ""
         self.stores = fake_stores()
-        self.key = mock.patch("taskloop.adapters.check_files.repo_key", return_value="repo")
+        self.key = mock.patch("tlkernel.check_files.repo_key", return_value="repo")
         self.key.start()
         self.addCleanup(self.key.stop)
         self.entries = mock.patch.object(self.git, "ls_tree", return_value=[

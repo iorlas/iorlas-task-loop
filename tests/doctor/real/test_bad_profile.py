@@ -16,7 +16,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 from support import homes
 from support.checked import run_checked
-from support.repos import write_repos
 from support.spawn import port_git
 from support.who import who
 
@@ -27,6 +26,7 @@ from taskloop.app.wire import brief, doctor
 from tlkernel.env import snapshot
 from tlkernel.paths import ConfigDir
 from tlkernel.rowstores import ReposStore
+from tltestkit.repos import write_repos
 
 ROOT = Path(__file__).resolve().parents[3]
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid", "GIT_COMMITTER_NAME": "t",

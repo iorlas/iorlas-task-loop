@@ -13,6 +13,7 @@ from collections.abc import Callable, Generator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from tlkernel import check_files
 from tlkernel import log as rec
 from tlkernel.beadsport import Beads, DoltPush
 from tlkernel.branches import TASK
@@ -27,7 +28,7 @@ from tlkernel.profile_changes import ProfileChange
 from tlkernel.queue_doc import QueueDoc
 from tlkernel.slots import MissingRemote
 
-from taskloop.adapters import check_files, landlock
+from taskloop.adapters import landlock
 from taskloop.app.land import cleanup
 from taskloop.app.land.cmds import Cmds, Runs, Stop
 from taskloop.app.land.forge import Forge

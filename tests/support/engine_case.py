@@ -23,20 +23,12 @@ from support import homes
 # isort: split
 from contracts import samples as S
 
-from support import (
-    fake_route,
-    gitq,
-    netgate,  # noqa: F401
-    procsim,
-)
+from support import gitq, procsim
 from support.builders import make_engine
 from support.cfgs import argv_cfg, cfg_with
 from support.checked import run_checked  # noqa: F401
 from support.checkpoints import flat_ck, stored_ck
-from support.checks import res
 from support.fakes import FakeBeadStore
-from support.logs import records
-from support.narrow import must
 from support.plans import (  # noqa: F401  (the tests' old import point)
     BEAD,
     CAT_ENV,
@@ -79,6 +71,10 @@ from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.plancheck import adhoc
+from tltestkit import fake_route
+from tltestkit.checks import res
+from tltestkit.logs import records
+from tltestkit.narrow import must
 
 ROOT = Path(__file__).resolve().parents[2]
 

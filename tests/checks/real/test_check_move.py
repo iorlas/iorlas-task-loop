@@ -12,7 +12,7 @@ from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from support.narrow import must
+from tltestkit.narrow import must
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 TOOL = os.path.join(ROOT, "dev", "check_move.py")

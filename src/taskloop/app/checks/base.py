@@ -6,7 +6,7 @@ from pathlib import Path
 from tlkernel.argv import argv_of
 from tlkernel.checks import Check
 
-from taskloop.adapters.base_tree import base_tree
+from taskloop.app.checks.base_tree import base_tree
 from taskloop.app.checks.cache import RunMemo
 from taskloop.app.checks.host import CheckHost
 from taskloop.domain.checks.names import norm

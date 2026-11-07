@@ -10,11 +10,11 @@ from tltestkit.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import homes
-from support.narrow import must
 
 from taskloop.app.slots import engine_lock
 from tlkernel.lockrows import EngineLockRows
 from tlkernel.wire import Refused
+from tltestkit.narrow import must
 
 TORN = '{"v": 1, "pid": 12'
 

@@ -14,7 +14,6 @@ import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.fakegit import FakeGit
 from support.memstores import fake_stores
-from support.narrow import must
 
 from taskloop.adapters.bd import BdRun, BdStore
 from taskloop.app.land.closing import LandFollowUps
@@ -33,6 +32,7 @@ from tlkernel.beadsport import BdFailure
 from tlkernel.checkpoint import RunState
 from tlkernel.enums import Outcome
 from tlkernel.ids import BeadId
+from tltestkit.narrow import must
 
 
 class Killed(BaseException):
