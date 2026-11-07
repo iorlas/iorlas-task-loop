@@ -7,11 +7,7 @@ from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.pipeline_ports import FakeHeadHistory
 
-from taskloop.app.pipeline.decide import Decision
-from taskloop.app.pipeline.resume import Resume
-from taskloop.app.pipeline.review_glue import ReviewGlue
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.state import state_names
 from tlkernel import wire
@@ -19,6 +15,10 @@ from tlkernel.answers import WriteAnswerLook
 from tlkernel.checkpoint import Checkpoint, RunState, StageProgress
 from tlkernel.checks import CheckRun
 from tlkernel.plancheck import PlanData
+from tlpipeline.decide import Decision
+from tlpipeline.resume import Resume
+from tlpipeline.review_glue import ReviewGlue
+from tlpipeline.testing import FakeHeadHistory
 
 PLAN: PlanData = {"summary": "two stages", "stages": [{"goal": "a", "files": [], "checks": []}, {"goal": "b", "files": [], "checks": []}]}
 

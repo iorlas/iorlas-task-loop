@@ -15,11 +15,6 @@ from support.memstores import fake_stores
 from support.tlmain import tl_main
 
 from taskloop.app.land.gate import Gate, Problem, ProblemKind
-from taskloop.app.pipeline.blocked import Blocked
-from taskloop.app.pipeline.closing_record import RecordRun
-from taskloop.app.pipeline.cursor import parse_step
-from taskloop.app.pipeline.finish import answer
-from taskloop.app.pipeline.steps import Steps
 from taskloop.app.plan.keep import PlanKeeper
 from taskloop.app.plan.planned import Planned
 from taskloop.app.run.stages import run_stages
@@ -40,6 +35,11 @@ from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
 from tlkernel.parks import Park, ParkStore
 from tlkernel.run import RunManifest, RunState
+from tlpipeline.blocked import Blocked
+from tlpipeline.closing_record import RecordRun
+from tlpipeline.cursor import parse_step
+from tlpipeline.finish import answer
+from tlpipeline.steps import Steps
 from tltestkit.checks import typed
 from tltestkit.plans import PLAN
 

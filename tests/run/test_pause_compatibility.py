@@ -14,7 +14,6 @@ import support.paths  # noqa: F401
 
 from taskloop.app.asks import parks
 from taskloop.app.asks.closing import ClosingAsks
-from taskloop.app.pipeline.closing import Closer
 from tlkernel import beadpark as park
 from tlkernel import lanepauses as pauses
 from tlkernel import runoutcome as oc
@@ -23,6 +22,7 @@ from tlkernel.beadpark import text_hash
 from tlkernel.ids import BeadId
 from tlkernel.kinds import ASKS, FAULTS, Kind
 from tlkernel.parks import Park
+from tlpipeline.closing import Closer
 
 
 class PauseCompatibility(Case):

@@ -7,10 +7,8 @@ import typing
 
 import pytest
 from support.narrow_hosts import FakeSettleHost
-from support.pipeline_ports import FakeParkBook
 
 from taskloop.adapters import beadtools
-from taskloop.app.pipeline.closing_settle import Settle
 from taskloop.app.track.closing import ClosingBeads
 from taskloop.app.wire import closeguard
 from tlkernel import askspecs
@@ -19,6 +17,8 @@ from tlkernel import runoutcome as oc
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
+from tlpipeline.closing_settle import Settle
+from tlpipeline.testing import FakeParkBook
 
 # effect class -> the outcome whose settling it is. One case per kind of settling the plan can end in.
 SETTLING = {

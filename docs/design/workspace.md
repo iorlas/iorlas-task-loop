@@ -61,6 +61,8 @@ Honest reading: the **selection gain is nil for a leaf that the shell still impo
 | 7 | S1c (.13) delegate into packages/ | `src/delegate` moves | alone | **B3 (pix-deleg-iso)** edits `src/delegate`; run S1c only after B3 lands |
 | 8 | T-BUDGET (.55) | per-package closure and import-time ratchet; `closure_ratchet` reads the member list | last, after 5 | none; its numbers are meaningful only once stages left the tree |
 
+R6 done: the pipeline is `packages/pipeline` (`tlpipeline`), with isolated package tests.
+
 Status: step 0 (WS-MECH) merged; step 1 (artifacts) is the workspace member `packages/artifacts` (`tlartifacts`), with isolated package tests.
 
 Parallel now: step 0 first (this week, one PR); then 1, 2 and 4 together. Hold 5 and 6 until C-PIPELINE lands; hold 7 until B3 lands.

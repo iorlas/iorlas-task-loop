@@ -6,12 +6,12 @@ from unittest import mock
 import pytest
 from support.engine_case import EngineTest
 
-from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.write.prepare import Prepare
 from taskloop.app.write.state import StageState
 from tlkernel import rundocs
 from tlkernel.kinds import Kind
 from tlkernel.procport import Ran
+from tlpipeline.blocked import Blocked
 from tltestkit import procsim
 from tltestkit.cfgs import plan_of
 from tltestkit.logs import records

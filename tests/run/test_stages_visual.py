@@ -26,7 +26,6 @@ import tltestkit.shellkit
 from run.test_stages import StagesTest
 from taskloop.app.asks import admission
 from taskloop.app.land.rebase import MAX_REBASE_RESETS
-from taskloop.app.pipeline import outcomes
 from taskloop.app.plan.prompts import REPLAN_CAP
 from taskloop.app.run import running as wrunning
 from taskloop.app.slots import config as wslots_config
@@ -38,6 +37,7 @@ from tlkernel.ids import BeadId
 from tlkernel.lookrows import LookRows
 from tlkernel.run import Round
 from tlkernel.slots import SlotGitError
+from tlpipeline import outcomes
 from tltestkit import fake_route, procsim
 from tltestkit.cfgs import cfg_with, plan_of
 from tltestkit.plans import BEAD, CLEAN, FALSE, PLAN, WRITE

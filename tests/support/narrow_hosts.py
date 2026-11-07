@@ -1,4 +1,4 @@
-"""Small typed fakes of what a slice reads of the engine (app/pipeline/waits.py WaitsHost, app/land/outbound.py OutboundHost): a class that
+"""Small typed fakes of what a slice reads of the engine (tlpipeline/waits.py WaitsHost, app/land/outbound.py OutboundHost): a class that
 has just those members, so the type checker proves the fake is enough and a slice that reads one more member breaks the test's types."""
 import contextlib
 import tempfile
@@ -14,7 +14,6 @@ from support import homes
 from support.fake_beads import FakeBeads
 from support.fakegit import FakeGit, ScriptedGit
 from support.memstores import fake_stores
-from support.pipeline_ports import FakeAskRules, FakeParkBook
 from support.who import who
 from taskloop.adapters import beadtools
 from taskloop.app.land.commit import Commit
@@ -27,9 +26,6 @@ from taskloop.app.land.push import Pusher
 from taskloop.app.land.recheck import Recheck
 from taskloop.app.land.state import LandState
 from taskloop.app.land.sync import Sync
-from taskloop.app.pipeline.budget import Budget
-from taskloop.app.pipeline.closing import CloseParts, Closer
-from taskloop.app.pipeline.steps import Steps
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 from tlkernel import fence
@@ -49,6 +45,10 @@ from tlkernel.pausereasons import Producer
 from tlkernel.plancheck import PlanCheck, PlanData, StageData
 from tlkernel.ports import Clock
 from tlkernel.run import RunFinish
+from tlpipeline.budget import Budget
+from tlpipeline.closing import CloseParts, Closer
+from tlpipeline.steps import Steps
+from tlpipeline.testing import FakeAskRules, FakeParkBook
 from tltestkit.fake_clock import FakeClock
 
 
@@ -621,7 +621,7 @@ def table_kit(table: FakeGit, **kw: Any) -> LandKit:
     return LandKit(table, table.sh, **kw)
 
 
-# ---- the close: one small fake per step (app/pipeline/closing_*.py) ----
+# ---- the close: one small fake per step (tlpipeline/closing_*.py) ----
 
 
 class Said:

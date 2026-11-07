@@ -6,7 +6,6 @@ from support.facts import FakeChecker, MemCheckpoints, fake_facts
 from support.fake_beads import FakeBeads
 from support.fakegit import FakeGit
 from taskloop.adapters.check_probe import PathProbe
-from taskloop.app.pipeline.leftover_queue import LeftoverQueue
 from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.briefs import Briefs
 from taskloop.app.plan.cases import Cases
@@ -19,6 +18,7 @@ from tlkernel.config import EngineConfig
 from tlkernel.gitfacts import TreeEntry
 from tlkernel.plancheck import PlanData
 from tlkernel.stop import Stop
+from tlpipeline.leftover_queue import LeftoverQueue
 
 
 class PlanGit(FakeGit):

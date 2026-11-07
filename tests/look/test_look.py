@@ -17,12 +17,12 @@ from support.who import who
 
 from taskloop.app.look import shots
 from taskloop.app.look.owner_look import OwnerLook
-from taskloop.app.pipeline.closing import Closer
 from tlkernel import answers, wire
 from tlkernel.artifact import ArtifactMeta
 from tlkernel.config import RepoProfile, VisualConfig
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
+from tlpipeline.closing import Closer
 from tltestkit import fake_route
 from tltestkit.plans import BEAD, CLEAN, PLAN, WRITE, verdict
 

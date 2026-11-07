@@ -5,7 +5,6 @@ from unittest import mock
 import pytest
 
 from taskloop.adapters import check_net
-from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.run.shell import Shell
 from taskloop.domain.checks.inputs import config_digest
 from taskloop.domain.checks.specs import repo_check
@@ -14,6 +13,7 @@ from tlkernel.checks import Check
 from tlkernel.config import CheckSpec, ConfigError, EngineConfig, load
 from tlkernel.ids import CheckId
 from tlkernel.kinds import Kind
+from tlpipeline.blocked import Blocked
 
 
 def found(*names):

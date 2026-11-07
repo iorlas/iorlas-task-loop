@@ -25,12 +25,12 @@ from tlkernel.kinds import Kind
 from tlkernel.procport import Spawner
 from tlkernel.run import Reexec, RunReport
 from tlkernel.run_slot import RUN_SLOT
+from tlpipeline import target
 
 from taskloop.adapters import beadtools, gitrepo, ident
 from taskloop.adapters import halt as halting
 from taskloop.app.asks import admission, setup_retry
 from taskloop.app.loop.queue import has_areas
-from taskloop.app.pipeline import target
 from taskloop.app.reconcile import leases
 from taskloop.app.run import preflight, running
 from taskloop.app.run.engine import Blocked, Engine

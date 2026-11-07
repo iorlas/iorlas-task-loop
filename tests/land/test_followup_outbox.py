@@ -21,8 +21,6 @@ from taskloop.app.land.closing import LandFollowUps
 from taskloop.app.land.followups import file_follow_ups
 from taskloop.app.land.state import LandState
 from taskloop.app.look.state import LookState
-from taskloop.app.pipeline.checkpoints import Checkpoints
-from taskloop.app.pipeline.closing_notes import FileNotes
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.state import StateAttrs, carries_state
 from taskloop.stores.runlog import RunLog
@@ -33,6 +31,8 @@ from tlkernel.checkpoint import RunState
 from tlkernel.enums import Outcome
 from tlkernel.followkeys import FollowKey
 from tlkernel.ids import BeadId
+from tlpipeline.checkpoints import Checkpoints
+from tlpipeline.closing_notes import FileNotes
 from tltestkit.narrow import must
 
 

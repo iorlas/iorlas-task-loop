@@ -9,8 +9,6 @@ from support.engine_case import EngineTest
 
 from taskloop.app.asks.admission import _blocked_by_engine
 from taskloop.app.asks.closing import ClosingTrust
-from taskloop.app.pipeline.blocked import Blocked, blocked_for
-from taskloop.app.pipeline.reflect import Reflector
 from taskloop.app.workers.worker_request import request
 from tlkernel import childenv
 from tlkernel.bead import Bead, Comment
@@ -18,6 +16,8 @@ from tlkernel.gitfacts import DiffEntry
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.paths import ConfigDir
+from tlpipeline.blocked import Blocked, blocked_for
+from tlpipeline.reflect import Reflector
 from tltestkit.case import Case
 from tltestkit.plans import BEAD, CLEAN, PLAN, WRITE
 
