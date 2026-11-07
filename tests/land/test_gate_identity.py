@@ -68,7 +68,7 @@ class GateIdentity(Case):
         assert isinstance(got, Problem)
         assert isinstance(got, Problem)
         assert got.kind == ProblemKind.STALE
-        assert self.host.gate_log is None
+        assert self.host.land_state.gate_log is None
 
     def test_tree_changed_during_checks_issues_no_token(self) -> None:
         def move() -> None:

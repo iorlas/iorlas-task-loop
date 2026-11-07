@@ -491,8 +491,8 @@ OTHERS = {
                                     mode="stage:land-stack", owner="tl-me", session="s1", beads=("tl-7y7",),
                                     state=run.RunState.DONE, heartbeat=T + 59, pid=4242, host="box", reason="landed",
                                     worktree="/r/slots/s1", branch="feature/check", sha="1234567890abcdef"),
-    "DoneMemo": run.DoneMemo(done={"[1]": run.DoneEntry(sha="s", file="/f", identity=run.CallIdentity(
-        semantics="sem", worktree="/wt", cwd="/wt", tree="tree", cwd_tree="tree", head="head", cwd_head="head"))}),
+    "DoneEntry": run.DoneEntry(sha="s", file="/f", identity=run.CallIdentity(
+        semantics="sem", worktree="/wt", cwd="/wt", tree="tree", cwd_tree="tree", head="head", cwd_head="head")),
     "HandoffMirror": run.HandoffMirror(
         rounds=[run.Round(stage="s", round=1, kind="k")], seen_lows=["x"], deferred=[{"what": "w", "why": "y"}], filed=["f"]),
     "DashState": snapshots.DashState(
