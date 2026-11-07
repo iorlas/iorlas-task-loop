@@ -13,8 +13,6 @@ class Fallback:
 
 @dataclass(frozen=True)
 class SessionUpdate:
-    ref: str  # the writer's delegate session
-    ctx: float | None  # k tokens it holds, None = unknown
     seen: tuple[str, ...]  # the brief and plan hashes it now holds
 
 

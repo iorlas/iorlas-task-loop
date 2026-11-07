@@ -115,7 +115,7 @@ def api_request(req: RunRequest, env: Mapping[str, str]) -> api.RunRequest:
     """The delegate.api form of the engine's request. `env`: the worker's per-call variables ."""
     return api.RunRequest(
         role=req.role, brief_file=req.brief_path, cwd=req.cwd, schema_file=req.schema_path,
-        thread=req.thread, delta_file=req.delta_path or None,
+        thread=req.thread, delta_file=req.delta_path or None, boundary=req.boundary,
         authored_by=req.authored_by or None, timeout_s=req.timeout_s or None, idle_s=req.idle_s or None, unattended=req.unattended,
         parent=req.parent, task=req.task, title=req.title[:120], call_id=req.call_id or None, live_file=req.live_file or None,
         engine_only=list(req.engine_only), engine_only_advisory=req.engine_only_advisory, only_family=list(req.only_family),
