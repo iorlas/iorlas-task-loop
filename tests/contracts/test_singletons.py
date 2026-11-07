@@ -1,5 +1,4 @@
-"""Cold singleton documents (pin, bad versions, release result, snapshots) as rows: the release part's in `release_doc`, the others in `kv`;
-round trip, the dashboard's quiet read does not raise."""
+"""Cold singleton documents round trip as rows in their owning part's document table."""
 import json
 import uuid
 
@@ -8,8 +7,8 @@ from support import homes
 from support.narrow import must
 
 from tlkernel import wire
-from tlkernel.rowstores import PinStore, ReflectStateStore, SharedNotesStore
-from tlkernel.snapshots import Pin, ReflectState
+from tlkernel.rowstores import PinStore, ReflectStateStore, SharedNotesStore, StatusStore, StatusTriedStore
+from tlkernel.snapshots import Pin, ReflectState, StatusSnapshot, StatusTried
 
 
 def test_a_pin_is_a_release_doc_row_written_read_and_cleared():
@@ -40,3 +39,17 @@ def test_the_reflect_state_is_a_report_doc_row():
     store.write(ReflectState())
     assert store.docs.table == "report_doc"
     assert store.docs.rows.select("SELECT k FROM report_doc WHERE k='reflect:digest'") == [("reflect:digest",)]
+
+
+def test_the_status_rows_live_in_lanes_doc():
+    cfg = homes.cfg()
+    status, tried = StatusStore(cfg), StatusTriedStore(cfg)
+    snapshot, attempt = StatusSnapshot(at=123.0), StatusTried(t=124.0)
+    status.write(snapshot)
+    tried.write(attempt)
+    assert StatusStore(cfg).get() == snapshot
+    assert StatusTriedStore(cfg).get() == attempt
+    assert status.docs.table == tried.docs.table == "lanes_doc"
+    keys = [("snapshot:delegate.status",), ("snapshot:delegate.tried",)]
+    assert status.docs.rows.select("SELECT k FROM lanes_doc ORDER BY k") == keys
+    assert status.docs.rows.select("SELECT k FROM kv WHERE k IN (?, ?)", tuple(k for (k,) in keys)) == []
