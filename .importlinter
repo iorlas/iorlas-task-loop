@@ -50,6 +50,7 @@ forbidden_modules =
     multiprocessing
 allow_indirect_imports = True
 
+# Workspace tests enforce their declared dependencies in tests/rules/test_package_tests.py (TESTISO).
 [importlinter:contract:kernel-imports-nothing-of-ours]
 name = the kernel (tlkernel) imports nothing of ours: no taskloop, no taskloop_dash, no delegate
 type = forbidden
