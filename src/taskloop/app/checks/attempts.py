@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from tlkernel import check_files
+from tlkernel import checkmatchers as matchers
 from tlkernel.argv import argv_of
 from tlkernel.checks import UNVERIFIED_EXIT, Check
 from tlkernel.envvars import EnvVar
@@ -16,7 +17,7 @@ from taskloop.app.checks.host import CheckHost
 from taskloop.app.checks.keep import keep
 from taskloop.app.checks.linux import LinuxRun
 from taskloop.app.checks.step_env import step_env
-from taskloop.domain.checks import matchers, retry
+from taskloop.domain.checks import retry
 
 # the run's names that mean the same on the executor
 REMOTE_ENV = frozenset({EnvVar.TL_RUN_ID.value, EnvVar.TL_ATTEMPT.value, EnvVar.TL_ARTIFACT_STEP.value})

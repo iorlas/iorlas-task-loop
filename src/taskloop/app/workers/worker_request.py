@@ -3,6 +3,7 @@
 import json
 from typing import Final, Protocol
 
+from tlkernel import lanecaps as caps
 from tlkernel import log as rec
 from tlkernel.beadsport import Beads
 from tlkernel.check_files import repo_key
@@ -23,7 +24,7 @@ from taskloop.app.workers.call import Call
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks import planref
-from taskloop.domain.lanes import caps, pin
+from taskloop.domain.lanes import pin
 from taskloop.stores.runlog import RunLog
 
 ENGINE_ONLY_ADVISORY: Final = ("\nDo not run the engine-only recipes ({recipes}); the writer's harness may not deny them, "

@@ -4,6 +4,7 @@ command starts, so a tool writes its logs and results straight into
 keep.py adds the check's own log and its `keep` globs to the same directory afterwards."""
 
 from tlkernel import factorydb
+from tlkernel.checkmatchers import safe_name
 from tlkernel.ids import CheckId
 from tlkernel.paths import RunFiles
 from tlkernel.slots import git_probe
@@ -11,7 +12,6 @@ from tlkernel.slots import git_probe
 from taskloop.adapters import childenv
 from taskloop.app.checks.host import CheckHost
 from taskloop.app.checks.keep import attempt_dir
-from taskloop.domain.checks.matchers import safe_name
 
 
 def step_env(host: CheckHost, step: str) -> dict[str, str]:

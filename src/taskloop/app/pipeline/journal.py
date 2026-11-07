@@ -8,6 +8,7 @@ from typing import Protocol
 
 from tlkernel import log as rec
 from tlkernel import plancheck, wire
+from tlkernel import workswitch as switch
 from tlkernel.ask import Ask
 from tlkernel.checkpoint import CloseIntent, EndRec
 from tlkernel.config import EngineConfig
@@ -34,7 +35,6 @@ from taskloop.app.pipeline.finish import answer
 from taskloop.app.pipeline.finish import outcome as finished_outcome
 from taskloop.domain import outcome as oc
 from taskloop.domain.lifecycle import matchers as lifecycle
-from taskloop.domain.work import switch
 
 
 class JournalCall(Protocol):

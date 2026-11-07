@@ -31,9 +31,9 @@ from taskloop.app.asks import admission
 from taskloop.app.run import running as wrunning
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.wire import asks as wasks
-from taskloop.domain.checks import matchers
 from taskloop.domain.checks.cmd import matchers as sh_matchers
 from taskloop.domain.land.matchers import _TRANSIENT as TRANSIENT_PUSH
+from tlkernel import checkmatchers as matchers
 from tlkernel import wire
 from tlkernel.ask import Ask
 from tlkernel.env import snapshot

@@ -3,6 +3,7 @@ found), under the stage loop's checks and review, without undoing what the accep
 from collections.abc import Sequence
 from typing import ClassVar, Protocol
 
+from tlkernel import checktrim as trim
 from tlkernel import plancheck
 from tlkernel.checks import CheckResult
 from tlkernel.config import EngineConfig
@@ -16,7 +17,7 @@ from taskloop.app.land.parts import CaseChecks, StageCheckout
 from taskloop.app.land.state import LandState
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks.spec import AskSpec
-from taskloop.domain.checks import planref, trim
+from taskloop.domain.checks import planref
 from taskloop.domain.land.fix_text import FIX_GOAL as GOAL
 from taskloop.domain.land.fix_text import FIX_TEXT as TEXT
 from taskloop.domain.land.fix_text import FIX_WHAT as WHAT
