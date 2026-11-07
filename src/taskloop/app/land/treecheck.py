@@ -14,6 +14,7 @@ from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.queue_state import CORRUPT, RACED, Incident, QueueState
 from taskloop.contracts.wire import Rec
+from taskloop.stores.api import Doc
 from taskloop.stores.bundle import Stores
 
 
@@ -29,7 +30,10 @@ class Tested(Rec):
 class TreeGuard:
     def __init__(self, cmds: Cmds, git: Git, stores: Stores, repo: str, main_ref: str) -> None:
         self.cmds, self.git, self.stores, self.repo, self.main_ref = cmds, git, stores, repo, main_ref
-        self.doc = stores.queue_state.of(check_files.repo_key(git, repo))
+
+    @property
+    def doc(self) -> Doc[QueueState]:
+        return self.stores.queue_state.of(check_files.repo_key(self.git, self.repo))
 
     def tree(self, rev: str) -> str:
         return self.git.rev_parse(self.repo, f"{rev}^{{tree}}")

@@ -24,9 +24,10 @@ def pr(state: str, merge_sha: str = "") -> Pr:
 
 
 class World:
-    """One Stack.merged call over mocks. `trees` and `parents` answer rev-parse; `during_merge` runs when the forge merges."""
-
     """One Stack.merged call over mocks. `trees` and `parents` answer rev-parse; `during_merge` runs as the forge merges."""
+
+    def __init__(self, lock: str, predicted: str = "T1", trees: dict[str, str] | None = None,
+                 parents: dict[str, str] | None = None) -> None:
         self.trees = {"origin/main": "T0", MERGE: "T1", **(trees or {})}
         self.parents = {MERGE: MAIN, **(parents or {})}
         self.mains = [MAIN]
