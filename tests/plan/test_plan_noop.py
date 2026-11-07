@@ -3,8 +3,8 @@ import pytest
 from support.plan_host import FakePlan
 from support.plans import PLAN
 
-from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from tlkernel.kinds import Kind
+from tlpipeline.blocked import Blocked, blocked_for
 from tltestkit.checks import typed
 
 

@@ -19,7 +19,7 @@ class SharedStageEntry(Case):
         engine = "src/taskloop/app/run/engine.py"
         entry = "src/taskloop/app/run/entry.py"
         binder = "src/taskloop/app/run/stages.py"
-        shared = "src/taskloop/app/pipeline/standalone.py"
+        shared = "packages/pipeline/src/tlpipeline/standalone.py"
         assert len(calls(engine, "run_stages")) == 1
         assert not calls(engine, "RunOnce")
         assert len(calls(shared, "stage_run")) == 1

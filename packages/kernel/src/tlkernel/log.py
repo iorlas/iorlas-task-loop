@@ -340,7 +340,7 @@ StuckWhy = Literal["silent", "same_red"]
 
 @final
 class Stuck(LogRec, tag="stuck"):
-    """The run is stuck (app/pipeline/stuck_rule.py decides, at the Beat tick): silent past its step's limit, or the same red checks
+    """The run is stuck (tlpipeline/stuck_rule.py decides, at the Beat tick): silent past its step's limit, or the same red checks
     runlife.SAME_RED rounds in a row. One record per episode; the episode ends with new activity or a different round."""
 
     why: StuckWhy

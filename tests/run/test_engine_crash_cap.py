@@ -11,14 +11,14 @@ from taskloop.adapters import beadtools
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.engine_case import EngineTest
-from support.pipeline_ports import FakeBeadClosing, FakeRoundSteps
 from support.plans import CLEAN, PLAN, WRITE
 
-from taskloop.app.pipeline.crash import parked_crash
-from taskloop.app.pipeline.standalone import Standalone
 from tlkernel.fence import Fenced
 from tlkernel.kinds import Kind
 from tlkernel.parks import ParkStore
+from tlpipeline.crash import parked_crash
+from tlpipeline.standalone import Standalone
+from tlpipeline.testing import FakeBeadClosing, FakeRoundSteps
 from tltestkit.narrow import must
 
 

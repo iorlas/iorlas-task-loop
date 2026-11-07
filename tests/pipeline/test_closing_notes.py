@@ -3,11 +3,11 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from support.pipeline_ports import FakeFollowUps
 
 from taskloop.adapters import beadtools
-from taskloop.app.pipeline.closing_notes import FileNotes
 from tlkernel.enums import Outcome
+from tlpipeline.closing_notes import FileNotes
+from tlpipeline.testing import FakeFollowUps
 
 
 @pytest.mark.parametrize('refused', [False, True])

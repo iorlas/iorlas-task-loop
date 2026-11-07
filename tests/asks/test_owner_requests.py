@@ -20,7 +20,6 @@ from support.plans import PLAN, WRITE
 
 import tltestkit.shellkit
 from taskloop.app.asks import ask_verbs, intake, owner_verbs
-from taskloop.app.pipeline import requests
 from taskloop.app.run.layout import prune_run_logs
 from taskloop.cli import asks as cli
 from tlkernel import log as rec
@@ -29,6 +28,7 @@ from tlkernel.enums import WhyCode
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
+from tlpipeline import requests
 from tltestkit.case import Case
 from tltestkit.logs import typed
 from tltestkit.narrow import must

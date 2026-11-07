@@ -21,9 +21,6 @@ from support.plans import CLEAN, PLAN, WRITE
 # isort: split
 from support.lifecycle import lifecycle
 
-from taskloop.app.pipeline.closing import Closer
-from taskloop.app.pipeline.finish import terminal_state
-from taskloop.app.pipeline.lifecycle import Ended, Lifecycle
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
 from tlkernel import askspecs
@@ -31,6 +28,9 @@ from tlkernel import runoutcome as oc
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
 from tlkernel.run import RunManifest, RunState
+from tlpipeline.closing import Closer
+from tlpipeline.finish import terminal_state
+from tlpipeline.lifecycle import Ended, Lifecycle
 
 LANDS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 

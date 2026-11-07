@@ -9,19 +9,19 @@ from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.pipeline_ports import FakeLandCleanup, FakeReexecs, FakeTrail
 
 from taskloop.app.asks.closing import ClosingTrust
-from taskloop.app.pipeline.closing_branch import ReleaseSlot
-from taskloop.app.pipeline.closing_decide import Decide
-from taskloop.app.pipeline.journal import Journal
-from taskloop.app.pipeline.reflect import Reflector
-from taskloop.app.pipeline.reload import Reload
 from tlkernel import runoutcome as oc
 from tlkernel.enums import Outcome
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.run import RunState
+from tlpipeline.closing_branch import ReleaseSlot
+from tlpipeline.closing_decide import Decide
+from tlpipeline.journal import Journal
+from tlpipeline.reflect import Reflector
+from tlpipeline.reload import Reload
+from tlpipeline.testing import FakeLandCleanup, FakeReexecs, FakeTrail
 
 
 class FailureLogging(Case):
@@ -41,8 +41,8 @@ class FailureLogging(Case):
         for error in (OSError("disk"), ValueError("record")):
             with self.subTest(error=type(error).__name__):
                 host = mock.Mock(run_id="r1")
-                with mock.patch("taskloop.app.pipeline.journal.RunLocator"), \
-                        mock.patch("taskloop.app.pipeline.journal.finish_run", side_effect=error):
+                with mock.patch("tlpipeline.journal.RunLocator"), \
+                        mock.patch("tlpipeline.journal.finish_run", side_effect=error):
                     Journal(host, lambda: "", lambda _git, _wt: "repo", ident.plugin_version).settle(RunState.PARKED, "paused")
                 self.assert_traceback(host.warn.call_args.args[0], "could not settle run r1")
 
