@@ -100,7 +100,9 @@ class Checks(NetBase):
         rc, s = self.run_engine({"review": [CLEAN]}, probe=Cycling(0), **cfg)
         assert rc == 0, self.blocked
         assert s.nodes == ["review"]  # the plan and the write were not asked again
-        assert s.calls[0][1] == "net-review"
+        assert s.requests[0].thread.startswith("review/")
+        assert s.requests[0].delta_file
+        assert s.requests[0].resume is None
         assert count.read_text() == "1"  # the tree did not change: the green result was kept
         assert self.eng.result().outcome == "landed"
 
@@ -139,7 +141,9 @@ class Pause(NetBase):
             assert second.cost >= cost  # its cost goes on
             assert second.budget.spent_min() < 30  # the two hours of pause are not charged to the time budget
         assert s.nodes == ["review"]
-        assert s.calls[0][1] == "net-review"
+        assert s.requests[0].thread.startswith("review/")
+        assert s.requests[0].delta_file
+        assert s.requests[0].resume is None
         assert not (homes.config_dir() / "pauses" / "t-1.json").exists()  # taken once
 
     def test_the_engine_comment_of_a_pause_does_not_make_the_next_run_plan_again(self):

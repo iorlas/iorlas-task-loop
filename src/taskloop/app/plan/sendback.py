@@ -106,7 +106,7 @@ class SendBack:
         ref = self.hand.planner_ref
         wire = json.dumps(plancheck.to_wire(data), indent=1)
         back = (why.lstrip() + "\n\nYour plan, to correct (same output schema):\n" + wire) if ref else prompt + why
-        return plancheck.plan_of(self.ports.ai("plan", "rewrite checks", back, step=step, mode="checks_back", resume_ref=ref or None,
+        return plancheck.plan_of(self.ports.ai("plan", "rewrite checks", back, step=step, mode="checks_back", delta=back if ref else None,
                                       at=(self.hand.planned, 1, 0)).data)
 
     def after_rewrite(self, data: PlanData) -> None:

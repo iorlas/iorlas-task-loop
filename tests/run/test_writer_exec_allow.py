@@ -42,7 +42,7 @@ class WriterGrant(Case):
                     host.budget.labels, host.plan_data = [], None
                     host.git.diff_entries.return_value = []
                     host.checker.split.return_value.engine_recipes.return_value = []
-                    call = mock.Mock(node=node, role=role, cwd="/w", title="T", resume=None, writer=None)
+                    call = mock.Mock(node=node, role=role, cwd="/w", title="T", thread="worker/1", writer=None)
                     with mock.patch.object(worker_request.planref, "stage_commands", return_value=[]):
                         req = worker_request.request(host, call, "live", 60, 30)
                     argv = argv_of(req)
