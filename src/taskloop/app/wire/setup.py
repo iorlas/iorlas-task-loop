@@ -9,8 +9,8 @@ from pathlib import Path
 from tlkernel.env import Env
 from tlkernel.paths import ConfigDir, default_root
 
-from taskloop.app.doctor import install
-from taskloop.app.wire import doctor, slots
+from taskloop.app.doctor import install, setup_checks
+from taskloop.app.wire import slots
 from taskloop.stores.delegate import real_route
 
 
@@ -60,7 +60,7 @@ def machine(plugin_root: Path, env: Env) -> Plan:
     if state == "missing" and link.parent.parent.is_dir():
         fixes.append(Fix("path-link", f"link {link} to the shim"))
     names = [n for n in install.HOOK_NAMES if not (ConfigDir(root).hooks_dir() / n).is_file()]
-    problems = doctor.launcher_problems(plugin_root, env)
+    problems = setup_checks.launcher_problems(plugin_root, env)
     checks.append(Check("githooks", not names and not problems, f"{len(install.HOOK_NAMES) - len(names)}/{len(install.HOOK_NAMES)} present"
                         + "".join(f"; {p}" for p in problems)))
     if names or problems:

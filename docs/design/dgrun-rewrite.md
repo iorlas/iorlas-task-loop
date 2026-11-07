@@ -26,7 +26,7 @@ re-implements `stream_proc.run`), M-397 (this rewrite). Read from the code at or
    Recommendation: do it in shelf, not here; this repo's part is the typed result and typed decide. Until the owner decides DELEGATEHOME, the
    third acceptance item is *blocked on shelf*, say so on the bead.
 2. **Shape of `attempts`.** Recommendation: additive, a list on `RunResult` (`ABSENT` when empty so the golden wire stays unchanged for a
-   single launch): `Attempt(kind: "first"|"canary"|"network_rerun"|"schema_reask"|"reroute", lane, model, outcome, secs, tokens)`.
+   single launch): `Attempt(kind: "first"|"canary"|"network_rerun"|"lane_poll"|"lane_wait"|"schema_reask"|"reroute", lane, model, outcome, secs, tokens)`.
    task-loop reads the list to charge budget per launch and to stop retrying on top of a delegate that already retried. Contract stays 4
    (additive field, `Absent`); add capability `attempts` so the caller can tell "no field" from "older delegate".
 

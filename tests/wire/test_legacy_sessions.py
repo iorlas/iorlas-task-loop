@@ -4,7 +4,7 @@ from pathlib import Path
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.app.wire import doctor
+from taskloop.app.doctor import setup_checks
 from tlkernel.env import Env
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "taskloop"
@@ -19,18 +19,18 @@ class LegacySessions(Case):
         self.folder = self.home / ".config" / "task-loop" / "sessions"
 
     def test_no_folder_no_line(self):
-        assert doctor.legacy_line(self.env) == ""
+        assert setup_checks.legacy_line(self.env) == ""
 
     def test_the_folder_is_named_as_legacy_and_left_alone(self):
         self.folder.mkdir(parents=True)
         (self.folder / "a.json").write_text("{}")
         (self.folder / "b.json").write_text("{}")
-        line = doctor.legacy_line(self.env)
+        line = setup_checks.legacy_line(self.env)
         assert line.startswith("legacy: ") and "(2 files)" in line and "nothing reads it" in line
         assert sorted(p.name for p in self.folder.iterdir()) == ["a.json", "b.json"]
 
     def test_no_source_names_the_folder_any_more(self):
         named = [p.name for p in SRC.rglob("*.py") if '/ "sessions"' in p.read_text(encoding="utf-8")]
-        assert sorted(named) == ["doctor.py"]  # doctor calls it legacy
+        assert sorted(named) == ["setup_checks.py"]  # doctor calls it legacy
         named = [p.name for p in SRC.rglob("*.py") if "SessionStore" in p.read_text(encoding="utf-8")]
         assert named == []

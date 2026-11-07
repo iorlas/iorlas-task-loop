@@ -12,9 +12,8 @@ from tlkernel.finish_projection import history
 from tlkernel.identity import Identity
 from tlkernel.locator import RunBundle, RunLocator, host_name
 from tlkernel.run import RunFinish, RunManifest, RunState
-from tlkernel.runlife import BEAT_EVERY
+from tlkernel.runlife import BEAT_EVERY, JOIN_WAIT
 
-from taskloop.app.slots.lease import JOIN_WAIT
 from taskloop.stores.bundle import Stores
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog

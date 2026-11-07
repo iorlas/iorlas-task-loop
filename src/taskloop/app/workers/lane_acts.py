@@ -1,4 +1,4 @@
-"""What the engine does about a stopped call: `lanes.policy.decide` says what, this does it. Retries and waits set up the next call of
+"""What the engine does about a stopped call: `lanes.policy.decide` says what, this does it. Retries set up the next call of
 the step; a pause or a fault ends the step as a `Blocked` (built by the host's ops). Every decision is a `RetryDecision` record with the
 timeout and the exit it was made on. The lander's git push network wait lives here too."""
 
@@ -19,7 +19,6 @@ from taskloop.domain.review.availability import ReviewUnavailable
 ASK_KINDS: Final = ("ASK_STUCK",)
 VERBS: Final = {
     lp.Retry: "retry",
-    lp.Wait: "wait",
     lp.NewThread: "new_thread",
     lp.Reroute: "reroute",
     lp.Yield: "pause",
@@ -61,9 +60,7 @@ class LaneActs:
             now,
             bool(c.resume),
             k["attempt"],
-            k["polls"],
             k["crashes"],
-            k["waited_lane_s"],
             c.denied_retried,
             c.secret_fp,
             c.node,
@@ -91,7 +88,7 @@ class LaneActs:
         """Do what lane_policy.decide said about a stopped call. A Yield or Fail ends the step (Blocked); the rest set up the next call."""
         self.record(c, stop, a)
         step = c.step or c.node
-        if isinstance(a, (lp.Retry, lp.Wait)):
+        if isinstance(a, lp.Retry):
             return self.rest(c, res, stop, a, step)
         if isinstance(a, lp.NewThread):
             self.e.steps.move(
@@ -127,21 +124,19 @@ class LaneActs:
         e.steps.move("pause", "paused", f"lane for {c.node}: only the writer's own family ({c.writer_family}) answered")
         raise self.wc.ops.blocked(why, "PAUSE_LANE")
 
-    def rest(self, c: Any, res: DelegateResult, stop: lp.Stop, a: lp.Retry | lp.Wait, step: str) -> None:
+    def rest(self, c: Any, res: DelegateResult, stop: lp.Stop, a: lp.Retry, step: str) -> None:
         e = self.e
-        secs = max(0.0, (a.not_before if isinstance(a, lp.Retry) else a.until) - e.clock.now())
-        crash = a.charges == "crashes"
+        secs = max(0.0, a.not_before - e.clock.now())
         if secs:
-            doing = "delegate crashed" if crash else "waiting for the lane"
-            e.warn(f"{c.node}: {doing} ({(res.say or stop.reason)[:160]}), trying again in {int(secs)} s")
+            e.warn(f"{c.node}: delegate crashed ({(res.say or stop.reason)[:160]}), trying again in {int(secs)} s")
             e.steps.move(
                 step,
-                "delegate_crash" if crash else "lane_wait",
-                f"{'delegate crashed' if crash else 'waited for a lane'} ({stop.reason}): {int(secs)} s",
+                "delegate_crash",
+                f"delegate crashed ({stop.reason}): {int(secs)} s",
             )
-            wid = e.waits.start(WaitWhat.DELEGATE_CRASH if crash else WaitWhat.LANE, stop.lane or "", e.clock.now() + secs)
+            wid = e.waits.start(WaitWhat.DELEGATE_CRASH, stop.lane or "", e.clock.now() + secs)
             e.halt_point(wait=secs)
-            e.waits.add(secs, WaitWhat.DELEGATE_CRASH if crash else WaitWhat.LANE, wid)
+            e.waits.add(secs, WaitWhat.DELEGATE_CRASH, wid)
         self.wc.charge(c, a.charges, secs)
         return self.wc.again(c, a.resume, note="")
 

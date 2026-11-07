@@ -2,10 +2,10 @@
 
 `decide(stop, ctx, cfg, plan)` has no sleep, no git, no bd and no IO. The key is (scope, permanence, retry_kind), A3's facts;
 `stop.reason` is wording; the one place it is read is `worker_failed` (a timeout or a -15 exit gets another lane first). The output is one
-of six Actions (61-integration sec 5.5): Retry | Wait | NewThread | Reroute | Yield | Fail. A Yield or Fail names the
+of five Actions (61-integration sec 5.5): Retry | NewThread | Reroute | Yield | Fail. A Yield or Fail names the
 outcome Kind by its name (the app maps it); every retry count is a row of `retry.PLAN`.
 
-A network stop charges nothing: not `attempt`, not `crashes`, not `polls`, not `waited_lane_s`, no ask, replan or storm
+A network stop charges nothing: not `attempt`, not `crashes`, no ask, replan or storm
 counter, and it never marks a lane out (the delegate holds lane truth).
 Design: 60-design-A1 sec 2.2, 60-design-A3 sec 2.2, 61-integration sec 5.5.
 """
@@ -24,9 +24,7 @@ RETRY_KINDS: Final[tuple[RetryKind, ...]] = get_args(RetryKind)
 
 # Engine scheduling policy; these knobs are not fields or defaults in delegate's schema.
 KNOBS: Final = {
-    "wait_cap_s": 180,  # a lane back sooner than this is waited for in-process; later it is a PAUSE_LANE with a wake time
     "net_wait_cap_s": 600,  # the lander waits this long for its git push network retry
-    "poll_s": 20,  # the wait of a poll when the stop names none
 }
 
 
@@ -96,9 +94,7 @@ class Ctx:
     now: float
     resumed: bool = False  # this call resumed a vendor thread
     attempt: int = 0
-    polls: int = 0
     crashes: int = 0
-    waited_lane_s: float = 0.0
     denied_retried: bool = False
     secret_fp: bool = False  # the denial was `secrets` on a heredoc body that names .env (denials.secret_false_positive)
     node: str = ""
@@ -111,14 +107,6 @@ class Retry:
     resume: str = ""  # vendor ref to resume ("" = a new thread)
     charges: str = "attempt"  # the Ctx counter this action raises
     plan: str = ""  # the RetryPlan row this retry belongs to
-
-
-@dataclass(frozen=True)
-class Wait:
-    until: float
-    resume: str = ""
-    charges: str = "waited_lane_s"
-    plan: str = ""
 
 
 @dataclass(frozen=True)
@@ -155,7 +143,7 @@ class Fail:
     plan: str = ""
 
 
-Action = Retry | Wait | NewThread | Reroute | Yield | Fail
+Action = Retry | NewThread | Reroute | Yield | Fail
 Knobs = Mapping[str, float]
 
 
@@ -230,14 +218,7 @@ def _bead_none(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
     return _fail("FAULT_INFRA", stop, "worker_failed")
 
 
-def _poll_wait(stop: Stop, ctx: Ctx, cfg: Knobs) -> float:
-    return ctx.now + (stop.retry_at if 0 < stop.retry_at <= cfg["wait_cap_s"] else cfg["poll_s"])
-
-
 def _bead_poll(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
-    """duplicate_task: a few polls, then the bead pauses."""
-    if plan.left("lane_poll", ctx.polls):
-        return Wait(_poll_wait(stop, ctx, cfg), stop.ref if stop.resumable else "", "polls", "lane_poll")
     return _yield("PAUSE_LANE", stop)
 
 
@@ -247,19 +228,14 @@ def _lane_owner(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
 
 
 def _lane_predicted(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
-    """rate_limited, held, hung: wait for it inside the cap, else pause with the time. A resumed thread moves at once."""
+    """Delegate exhausted its short waits; park fresh calls and move resumed threads."""
     if ctx.resumed:
         return NewThread("lane_out")
-    gap = stop.retry_at - ctx.now
-    if stop.retry_at and gap <= cfg["wait_cap_s"] - ctx.waited_lane_s:
-        return Wait(stop.retry_at, "", "waited_lane_s")
     return _yield("PAUSE_LANE", stop, stop.retry_at)
 
 
 def _lane_poll(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
-    """busy, vendor_blip: a few polls, then another lane (a resumed thread starts fresh there)."""
-    if plan.left("lane_poll", ctx.polls):
-        return Wait(_poll_wait(stop, ctx, cfg), stop.ref if (ctx.resumed and stop.resumable) else "", "polls", "lane_poll")
+    """Delegate exhausted its polls; try another lane."""
     return NewThread("lane_out") if ctx.resumed else Reroute(_excluded(stop))
 
 

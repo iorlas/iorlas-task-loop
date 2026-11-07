@@ -34,9 +34,10 @@ from taskloop.adapters import (  # noqa: E402
     gitrepo,
 )
 from taskloop.adapters.gitrepo import pinned_env  # noqa: E402
+from taskloop.app.doctor import setup_checks  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
-from taskloop.app.wire import doctor  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
+from taskloop.app.wire.slots import cfg_source  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlkernel.ids import BeadId  # noqa: E402
 
@@ -237,6 +238,7 @@ class SlotGitTest(Case):
         assert gitrepo.same_dir(link / "nope", self.wt / "nope")
 
     def test_doctor_warns_when_worktree_config_is_off(self):
-        assert any("extensions.worktreeConfig" in w for w in doctor.git_warnings(str(self.repo), None, port_git()))
+        source = cfg_source(str(self.repo), port_git())
+        assert any("extensions.worktreeConfig" in w for w in setup_checks.git_warnings(str(self.repo), source, port_git()))
         sh("git", "config", "extensions.worktreeConfig", "true", cwd=self.repo)
-        assert doctor.git_warnings(str(self.repo), None, port_git()) == []
+        assert setup_checks.git_warnings(str(self.repo), cfg_source(str(self.repo), port_git()), port_git()) == []
