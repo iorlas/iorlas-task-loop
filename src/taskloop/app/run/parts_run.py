@@ -13,7 +13,7 @@ from tlkernel.check_files import repo_key
 from tlkernel.kinds import Kind
 from tlkernel.runlayout import repo_of
 from tlpipeline import api
-from tlrelease.closing import ReexecBook
+from tlrelease.reexec import ReexecBook
 from tlslots.engine_lock import HeldLock
 from tlslots.shared import Shared, SharedHost
 

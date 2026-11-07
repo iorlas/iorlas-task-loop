@@ -405,3 +405,19 @@ forbidden_modules =
 allow_indirect_imports = True
 ignore_imports =
     tldash.readers.logs -> delegate.api
+
+[importlinter:contract:release-read-side]
+name = Release readers never reach the release host or gate
+type = forbidden
+source_modules =
+    tlrelease.pins
+    tlrelease.catalog
+    tlrelease.manifest
+    tlrelease.reexec
+    tlrelease.shell
+    tlrelease.paths
+    tlrelease.tidy
+    tlrelease.versions
+forbidden_modules =
+    tlrelease.host
+    tlgate

@@ -4,21 +4,16 @@ from pathlib import Path
 
 from tlkernel.env import Env
 from tlkernel.paths import ConfigDir
-from tlrelease import catalog, pins
+from tlrelease import catalog
 from tlslots.engine_lock import HeldLock
 
 from taskloop.adapters import ident
-from taskloop.app.loop.versions import Installs
 from taskloop.app.track import trail
 
 
 def installed_newer(env: Env, root: Path = ident.PLUGIN_ROOT) -> tuple[str, Path] | None:
     """(version, dir) of the install the loop would move to, or None: the engine's step-boundary look."""
-    cfg = ConfigDir(ident.config_dir(env))
-    found = Installs(
-        cfg, root, lambda: catalog.installed_version(ident.claude_dir(env)), lambda: pins.read_pin(cfg).task_loop or "", now=trail.now
-    ).move_to()
-    return (found.version, found.dir) if found else None
+    return catalog.installed_newer(ConfigDir(ident.config_dir(env)), root, lambda: ident.claude_dir(env), trail.now)
 
 
 def locked_slot(held: HeldLock) -> str:
