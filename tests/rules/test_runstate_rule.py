@@ -23,7 +23,7 @@ SRC = ROOT / "src"
 ALLOWS_BEAT = {
     "packages/kernel/src/tlkernel/log.py",  # the record's definition
     "src/taskloop/domain/stuck.py",  # the stuck rule: a Beat is the tick, not activity
-    "src/taskloop/app/run/run_once.py",  # the engine writes it
+    "src/taskloop/app/pipeline/lifecycle.py",  # the engine writes it
     "src/taskloop_dash/jsonl.py", "src/taskloop_dash/readers/logs.py", "src/taskloop_dash/views/runfacts.py",  # a Beat is no event
     "src/taskloop_dash/index/facts.py",  # only the indexer compacts engine Beats
 }

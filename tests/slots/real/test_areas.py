@@ -46,6 +46,7 @@ from taskloop.app.slots import (
     marks,
 )
 from taskloop.app.slots import line as slots_line
+from taskloop.app.slots.paths import engine_lock as engine_lock_path
 from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
 from taskloop.stores.ticketrows import TicketRows
@@ -225,7 +226,7 @@ class Areas(AreasBase):
         assert "area live busy: x-1 in s1" in r["why"]
         self.made.assert_not_called()
         assert (bd.slots["sl-2"]["status"], bd.slots["sl-2"]["assignee"]) == ("open", "")
-        assert not homes.cfg().engine_lock(self.slot("s2")).exists()
+        assert not engine_lock_path(homes.cfg(), self.slot("s2")).exists()
 
     def test_a_hand_run_in_a_free_area_or_with_no_area_says_nothing(self):
         bd = self.lanes({"x-1": [], "x-2": [], "x-3": []}, {"x-1": "live", "x-2": "shell"})

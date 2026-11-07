@@ -397,7 +397,8 @@ class Race:
             sb = beads[f"sl-{i}"]
             assert (sb["status"], sb.get("assignee") or "") == ("open", ""), sb
             assert not (set(sb.get("metadata") or {}) & set(marks.HELD_KEYS)), sb
-            assert not (ConfigDir(self.h / "cfg" / "task-loop").engine_lock(str(self.repo / ".slots" / s)).exists()), s
+            engine = ConfigDir(self.h / "cfg" / "task-loop").lock_record("engine", wslots.repo_key(str(self.repo / ".slots" / s)))
+            assert not engine.exists(), s
         cfg = self.h / "cfg" / "task-loop"
         for lock in (cfg / "locks").glob("*.lock"):
             try:

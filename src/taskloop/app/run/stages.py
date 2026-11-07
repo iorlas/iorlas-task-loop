@@ -13,9 +13,9 @@ from taskloop.adapters import beadtools
 from taskloop.app.asks import parks
 from taskloop.app.land.gate import Problem
 from taskloop.app.pipeline.closing_record import RecordRun
+from taskloop.app.pipeline.crash import parked_crash
 from taskloop.app.pipeline.cursor import select_step, stage_kind
 from taskloop.app.pipeline.finish import stage_answer, terminal_state
-from taskloop.app.run.crash import parked_crash
 from taskloop.app.run.host import RunHost
 from taskloop.app.run.layout import repo_of
 from taskloop.app.run.run_once import RunOnce

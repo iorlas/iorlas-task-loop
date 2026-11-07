@@ -18,11 +18,13 @@ from support.engine_case import EngineTest
 from support.plans import CLEAN, PLAN, WRITE
 
 # isort: split
+from support.lifecycle import lifecycle
+
 from taskloop.app.pipeline.closing import Closer
 from taskloop.app.pipeline.finish import terminal_state
+from taskloop.app.pipeline.lifecycle import Ended, Lifecycle
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
-from taskloop.app.run.run_once import Ended, RunOnce
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from tlkernel.kinds import Kind
@@ -85,14 +87,14 @@ class Settle(Case):
 
     def test_a_fenced_run_ends_stopped_and_says_why(self):
         h, calls = self.host(fenced="taken again by another run")
-        with mock.patch.object(RunOnce, "close"):
-            RunOnce(h).close_out(mock.Mock(), Ended())
+        with mock.patch.object(Lifecycle, "close"):
+            lifecycle(h).close_out(mock.Mock(), Ended())
         assert calls == [(RunState.STOPPED, "fenced out: taken again by another run")]
 
     def test_an_exec_into_a_newer_install_ends_nothing(self):
         h, calls = self.host()
         h.moved = True
-        RunOnce(h).close_out(mock.Mock(), Ended(oc.make(Kind.LANDED, sha="abc")))
+        lifecycle(h).close_out(mock.Mock(), Ended(oc.make(Kind.LANDED, sha="abc")))
         assert calls == []
 
     def test_each_kind_maps_to_one_state(self):
