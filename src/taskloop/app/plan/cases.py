@@ -80,10 +80,9 @@ class Cases:
                 continue
             e.log.note("unchecked item outside the done-when, filed as a follow-up: {}".format(u["what"][:200]))
             title = ("Check: " + u["what"])[:120]
-            if title in {lo["title"] for lo in e.leftovers}:
+            if not e.leftover_sink.add_titled({"title": title, "why": "A review noted this outside the task's "
+                                   "done-when, so it was not verified before the land: " + u["what"][:600]}):
                 continue
-            e.leftovers.append({"title": title, "why": "A review noted this outside the task's "
-                                   "done-when, so it was not verified before the land: " + u["what"][:600]})
             e.checkpoints.keep_pending("scope")
         return keep
 

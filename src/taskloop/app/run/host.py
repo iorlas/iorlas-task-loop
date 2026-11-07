@@ -11,6 +11,7 @@ from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.look.shots import Pictures
 from taskloop.app.pipeline import summaries
 from taskloop.app.pipeline.closing import Closer
+from taskloop.app.pipeline.leftover_queue import LeftoverQueue
 from taskloop.app.review.link_check import LinkCheck
 from taskloop.app.review.routing import Routing
 from taskloop.app.review.settles import Settles
@@ -41,6 +42,10 @@ class RunHost(LandParts, PlanParts, RunParts):
 
     def on_path(self, name: str) -> str | None:
         raise NotImplementedError
+
+    @cached_property
+    def leftover_sink(self) -> LeftoverQueue:
+        return LeftoverQueue(self)
 
     @cached_property
     def hand(self) -> Handoff:

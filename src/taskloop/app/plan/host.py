@@ -16,6 +16,7 @@ from tlkernel.enums import AskClass
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId, TreeSha
 from tlkernel.plancheck import PlanData
+from tlkernel.stagefacts import LeftoverSink
 from tlkernel.stop import Stop
 from tlkernel.wire import Open
 
@@ -114,6 +115,9 @@ class PlanShared(Protocol):
 
 
 class PlanHost(Protocol):
+
+    @property
+    def leftover_sink(self) -> LeftoverSink: ...
     bead: BeadId
     wt: str
     cfg: EngineConfig

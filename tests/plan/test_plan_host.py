@@ -8,7 +8,13 @@ from taskloop.app.plan.host import PlanHost
 
 class PlanHostConformance(EngineTest):
     def test_the_engine_has_every_member_the_plan_stage_reads(self):
-        assert missing(make_engine(self.wt, store=self.store), PlanHost) == []
+        eng = make_engine(self.wt, store=self.store)
+        assert missing(eng, PlanHost) == []
+        sink = eng.leftover_sink
+        assert eng.leftover_sink is sink
+        eng.leftovers = []
+        assert sink.add_titled({"title": "later"})
+        assert eng.leftovers == [{"title": "later"}]
 
     def test_the_check_names_a_member_the_host_lacks(self):
         eng = make_engine(self.wt, store=self.store)

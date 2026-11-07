@@ -12,6 +12,7 @@ from support.checks import typed
 from support.plans import PLAN
 
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
+from taskloop.app.pipeline.leftover_queue import LeftoverQueue
 from taskloop.app.plan.planner import Planner
 from tlkernel.kinds import Kind
 
@@ -19,6 +20,7 @@ from tlkernel.kinds import Kind
 class EmptyPlan(Case):
     def host(self, *, done=False, diff="", landed=""):
         host = mock.Mock(done=done, landed_sha=landed, leftovers=[])
+        host.leftover_sink = LeftoverQueue(host)
         host.checkout.task_diff.return_value = diff
         host.blocked_for = blocked_for
         return host

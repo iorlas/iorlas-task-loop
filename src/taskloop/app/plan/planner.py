@@ -35,7 +35,7 @@ REPLAN_TAIL = 12500  # characters of replan.md the planner reads
 class Planner:
     def __init__(self, host: PlanHost) -> None:
         self.host = host
-        self.keep = PlanKeeper(host)
+        self.keep = PlanKeeper(host, host.leftover_sink)
         self.cap = ReplanCap(host)
         self.prompts = PlanPrompt(host, host.git)
         self.decisions = Decisions(host)

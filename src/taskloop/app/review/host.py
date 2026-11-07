@@ -8,6 +8,7 @@ from tlkernel.asked import Asked
 from tlkernel.checks import Check, CheckRun
 from tlkernel.ids import TreeSha
 from tlkernel.plancheck import PlanCheck, PlanData
+from tlkernel.stagefacts import LeftoverSink
 from tlkernel.stop import Stop
 from tlkernel.wire import Open
 
@@ -118,6 +119,9 @@ class ReviewHand(Protocol):
 
 class ReviewPorts(Protocol):
     """The capabilities review calls on the rest of the run."""
+
+    @property
+    def leftover_sink(self) -> LeftoverSink: ...
 
     @property
     def steps(self) -> ReviewSteps: ...

@@ -16,6 +16,7 @@ from tlkernel.ids import BeadId, CheckId
 from tlkernel.log import EngineLog
 from tlkernel.paths import ConfigDir
 from tlkernel.plancheck import PlanCheck
+from tlkernel.wire import Open
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +42,14 @@ class BeadInfo:
 
     title: str
     parent: str
+
+
+class LeftoverSink(Protocol):
+    """The run's follow-ups: title or subject deduplication, or an unfiltered batch."""
+
+    def add_titled(self, lo: Open) -> bool: ...
+    def add_keyed(self, bead: str, lo: Open) -> bool: ...
+    def extend(self, items: Sequence[Open]) -> None: ...
 
 
 class Narrate(Protocol):
