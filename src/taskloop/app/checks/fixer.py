@@ -44,7 +44,7 @@ class Fixer:
 
     def _once(self, c: Check, name: str) -> tuple[int, str]:
         return self.host.sh(argv_of(c.fix), timeout=c.wall_min * 60, save=self.host.run_dir / "checks" / name, what="check fix",
-                            env=step_env(self.host, c.id + ".fix"))
+                            env=step_env(self.host, c.id + ".fix"), network=c.network)
 
     @staticmethod
     def _red(c: Check, rc: int, tail: str, log: str) -> CheckResult:
