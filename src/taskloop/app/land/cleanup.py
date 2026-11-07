@@ -5,10 +5,9 @@ from tlkernel import log as rec
 from tlkernel.gitport import Git
 from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
+from tlkernel.stagefacts import Narrate, RunLogPort
+from tlkernel.storeapi import Log
 from tlslots.api import Effects, engine_busy, leave_slot
-
-from taskloop.stores.real import real_stores
-from taskloop.stores.runlog import RunLog
 
 
 def remote_oid(git: Git, repo: str, remote: str, branch: str) -> str:
@@ -17,7 +16,7 @@ def remote_oid(git: Git, repo: str, remote: str, branch: str) -> str:
                  if ref.name == f"refs/heads/{branch}"), "")
 
 
-def tidy_local(git: Git, repo: str, log: RunLog, branch: str, head: str,
+def tidy_local(git: Git, repo: str, log: Narrate, branch: str, head: str,
                is_slot: Callable[[str], bool] = lambda _path: False, base: str = "origin/main", *, cfg: ConfigDir, fx: Effects) -> str:
     """The stack and engine share this local cleanup. An empty result means gone; otherwise it says why it stays."""
     local = git.rev_parse(repo, f"refs/heads/{branch}")
@@ -32,7 +31,7 @@ def tidy_local(git: Git, repo: str, log: RunLog, branch: str, head: str,
     return ""
 
 
-def _tidy_checkouts(git: Git, repo: str, log: RunLog, branch: str, head: str,
+def _tidy_checkouts(git: Git, repo: str, log: Narrate, branch: str, head: str,
                     is_slot: Callable[[str], bool], base: str, cfg: ConfigDir, *, fx: Effects) -> str:
     """Release matching checkouts, stopping at the first reason to keep the branch."""
     for co in git.checkouts(repo):
@@ -58,19 +57,19 @@ def _tidy_checkouts(git: Git, repo: str, log: RunLog, branch: str, head: str,
     return ""
 
 
-def previous(home: ConfigDir, bead: str, repo: str, branch: str, sha: str) -> rec.LandCleanup | None:
+def previous(home: ConfigDir, bead: str, repo: str, branch: str, sha: str,
+             run_log: Callable[[str], Log[rec.EngineLog]]) -> rec.LandCleanup | None:
     """A repeated landing receipt retains the first run's leases, even if a branch has since moved."""
     found: rec.LandCleanup | None = None
-    stores = real_stores(home)
     for bundle in RunLocator(home).of_bead(bead):
-        for item in stores.run_log(bundle.run).read_from(0).items:
+        for item in run_log(bundle.run).read_from(0).items:
             row = item.rec
             if isinstance(row, rec.LandCleanup) and (row.repo, row.branch, row.sha) == (repo, branch, sha):
                 found = row
     return found
 
 
-def record(log: RunLog, repo: str, branch: str, head: str, sha: str, remote: str = "", remote_oid: str = "",
+def record(log: RunLogPort, repo: str, branch: str, head: str, sha: str, remote: str = "", remote_oid: str = "",
            prior: rec.LandCleanup | None = None) -> rec.LandCleanup:
     """Persist both the receipt and the retry inputs before attempting cleanup. PR lands pass no remote."""
     log.emit(rec.LandReceipt(repo=repo, branch=branch, head=head, sha=sha))
@@ -81,7 +80,7 @@ def record(log: RunLog, repo: str, branch: str, head: str, sha: str, remote: str
     return row
 
 
-def retry(git: Git, log: RunLog, row: rec.LandCleanup, is_slot: Callable[[str], bool] = lambda _path: False,
+def retry(git: Git, log: RunLogPort, row: rec.LandCleanup, is_slot: Callable[[str], bool] = lambda _path: False,
           base: str = "origin/main", *, cfg: ConfigDir, fx: Effects) -> rec.LandCleanup:
     """Retry a logged cleanup with its original oids, never with freshly observed tips. The land remains successful."""
     local, remote = row.local_outcome, row.remote_outcome
@@ -108,11 +107,11 @@ def retry(git: Git, log: RunLog, row: rec.LandCleanup, is_slot: Callable[[str], 
     return done
 
 
-def retry_logged(git: Git, log: RunLog, is_slot: Callable[[str], bool] = lambda _path: False, base: str = "origin/main", *,
-                 cfg: ConfigDir, fx: Effects) -> None:
+def retry_logged(git: Git, log: RunLogPort, is_slot: Callable[[str], bool] = lambda _path: False, base: str = "origin/main", *,
+                 cfg: ConfigDir, history: Log[rec.EngineLog], fx: Effects) -> None:
     """At the end of an engine run, after the trace's last checkout read, retry its latest cleanup rows."""
     latest: dict[tuple[str, str, str], rec.LandCleanup] = {}
-    for item in log.log.read_from(0).items:
+    for item in history.read_from(0).items:
         row = item.rec
         if isinstance(row, rec.LandCleanup):
             latest[row.repo, row.branch, row.sha] = row

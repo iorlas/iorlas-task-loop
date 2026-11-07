@@ -37,12 +37,12 @@ from taskloop.app.land.cmds import Cmds, Runs, Stop
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.gate import diff_sha, owner_refusal
 from taskloop.app.land.host import phase
+from taskloop.app.land.ports import StackLog
 from taskloop.app.land.queue_land import Queued, QueueLand
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.land.treecheck import Tested, TreeGuard
 from taskloop.stores.bundle import Stores
 from taskloop.stores.real import real_stores
-from taskloop.stores.runlog import RunLog
 
 MODE = "stage:land-stack"
 LOCK_BUSY = 75
@@ -63,7 +63,7 @@ def lock_path(home: ConfigDir, git: Git, repo: str) -> Path:
 
 
 class Stack:
-    def __init__(self, forge: Forge, cmds: Cmds, log: RunLog, git: Git, repo: str, lock: Path, record: Callable[[str, str], int],
+    def __init__(self, forge: Forge, cmds: Cmds, log: StackLog, git: Git, repo: str, lock: Path, record: Callable[[str, str], int],
                  sync: Callable[[], DoltPush], owner: str, session: str, gate: StackGate, beads: Beads, wait_min: float | None = None,
                  named: Callable[[str], None] = lambda _bead: None,
                  is_slot: Callable[[str], bool] = lambda _path: False, slot_base: str = "", *, cfg: ConfigDir,
@@ -371,7 +371,7 @@ def pairs(values: list[str], flag: str) -> dict[str, str]:
 def run_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs, store: Beads,
               tl: list[str], *, record: Callable[[str, str, BeadId, str, str], int],
               slot: Callable[[str, str], str], slot_base: Callable[[str], str],
-              runlog: Callable[[Stores, str], RunLog],
+              runlog: Callable[[Stores, str], StackLog],
               finish: Callable[[str, float, str, str, bool], object], fx: Effects, env: Env | None = None) -> tuple[int, list[str]]:
     """Run the stack and return its exit code and final output lines."""
     env = env or Env()
