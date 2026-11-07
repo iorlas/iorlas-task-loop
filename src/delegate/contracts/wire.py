@@ -110,6 +110,7 @@ class RunRequest:
     writer_exec_allow: list[list[str]] = field(default_factory=list)  # Codex writers only; host.json bounds this per-call grant
     read_roots: list[str] = field(default_factory=list)  # OpenCode write steps only: folders outside cwd it may read
     instructions_ref: str = ""  # a commit sha: the instruction files are read from it, not the work tree (refused on OpenCode)
+    boundary: bool = False
     worker_env: dict[str, str] = field(default_factory=dict)  # variables the worker's environment gains (the caller's per-call values)
     tools: list[ToolServer] = field(default_factory=list)  # tool servers for this call; not wired to any harness yet
 

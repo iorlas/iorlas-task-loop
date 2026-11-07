@@ -14,7 +14,7 @@ import pytest
 from support.dashlogs import RunScript, T
 from support.waits import settle
 
-from dash import test_dash_api as fixtures
+from dashwire import test_dash_api as fixtures
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env
 from taskloop_dash.index import Indexer, reindex

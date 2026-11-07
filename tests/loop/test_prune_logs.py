@@ -1,4 +1,4 @@
-"""A starting loop prunes the loop logs; a sibling lane's log that vanishes or dangles never crashes it (tl-nhys)."""
+"""A starting loop prunes the loop logs; a sibling loop's log that vanishes or dangles never crashes it (tl-nhys)."""
 import os
 from pathlib import Path
 
@@ -29,7 +29,7 @@ class PruneLogs(Case):
         prune_logs(self.runs, own, 5)
         assert self.names() == ["loop-104.log", "loop-105.log", "loop-106.log", "loop-107.log"]  # four old ones and the loop's own to come
 
-    def test_a_dead_link_from_a_lane_that_pruned_a_log_does_not_raise(self):
+    def test_a_dead_link_from_a_loop_that_pruned_a_log_does_not_raise(self):
         self.log(200, 1)
         (self.runs / "loop-201.log").symlink_to(self.runs / "loop-gone.log")
         prune_logs(self.runs, self.runs / "loop-1.log", 5)

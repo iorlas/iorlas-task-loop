@@ -213,7 +213,7 @@ def test_pipeline_v2_upgrade_adds_sections_without_migrating_checkpoints():
         dbparts.launch(con, readonly=False, parts=[pipeline])
         assert con.execute("SELECT rev, body FROM checkpoint").fetchall() == [(7, body)]
         assert con.execute("SELECT * FROM checkpoint_section").fetchall() == []
-        assert con.execute("SELECT version FROM schema_part WHERE name='pipeline'").fetchone() == (3,)
+        assert con.execute("SELECT version FROM schema_part WHERE name='pipeline'").fetchone() == (pipeline.version,)
     finally:
         con.close()
 

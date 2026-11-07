@@ -1,5 +1,5 @@
-"""The window a report verb reads: the owner's T for --since and --until (see domain/lifecycle/matchers.py: parse_time)."""
-from taskloop.domain.lifecycle import matchers
+"""The window a report verb reads: the owner's T for --since and --until (see tlkernel/lifecyclematchers.py: parse_time)."""
+from tlkernel import lifecyclematchers as matchers
 
 DAY_S = 86400
 

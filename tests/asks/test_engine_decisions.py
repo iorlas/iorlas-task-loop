@@ -13,8 +13,9 @@ from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.app.asks import intake
 from taskloop.app.plan import adrsync
-from taskloop.domain.asks import similar, specs
+from taskloop.domain.asks import similar
 from tlkernel import adrfiles
+from tlkernel import askspecs as specs
 from tlkernel.adrs import AdrStore
 from tlkernel.ask import SimilarRef
 from tlkernel.askenums import AskStatus

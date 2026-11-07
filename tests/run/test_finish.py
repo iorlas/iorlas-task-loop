@@ -13,9 +13,9 @@ from support.engine_case import EngineTest
 from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.app.pipeline.finish import answer, outcome
-from taskloop.domain import outcome as oc
-from taskloop.domain.asks import specs
+from tlkernel import askspecs as specs
 from tlkernel import log, runlife, wire
+from tlkernel import runoutcome as oc
 from tlkernel.checkpoint import EndRec
 from tlkernel.events import Stage
 from tlkernel.finish import finish_run

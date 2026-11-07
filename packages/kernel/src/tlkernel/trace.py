@@ -101,7 +101,6 @@ class WriteRound(Rec):
     turns: int | None = None
     prompt_chars: int | None = None
     context_k: int | None = None
-    fresh: str = ""
 
 
 @final
@@ -126,7 +125,7 @@ class Fault(Rec):
 
 @final
 class RunTrace(Rec):
-    V: ClassVar[int] = 3
+    V: ClassVar[int] = 4
     run: RunId
     bead: str
     repo_url: str

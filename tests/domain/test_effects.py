@@ -9,8 +9,8 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from taskloop.domain import effects as fx
-from taskloop.domain import outcome as oc
-from taskloop.domain.asks import specs as askspecs
+from tlkernel import askspecs
+from tlkernel import runoutcome as oc
 from tlkernel.kinds import ASKS, FINISH, PAUSES, Kind
 
 REL = fx.ReleaseSlot("task/t-1", 3)

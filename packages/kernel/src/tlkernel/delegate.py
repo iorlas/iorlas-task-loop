@@ -41,7 +41,7 @@ class ToolBinding(Rec):
 class RunRequest(Rec):
     """One delegate call. The engine's limits travel as flags (`timeout_s`, `idle_s`): delegate stops the worker's tree at them."""
 
-    V: ClassVar[int] = 1
+    V: ClassVar[int] = 2
 
     role: str
     brief_path: str
@@ -53,6 +53,7 @@ class RunRequest(Rec):
     title: str = ""
     thread: str = ""
     delta_path: str = ""
+    boundary: bool = False
     authored_by: str = ""
     call_id: str = ""
     timeout_s: int = 0

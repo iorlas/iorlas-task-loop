@@ -85,6 +85,8 @@ class Settings:
     max_parallel: int | None
     min_dwell_minutes: float
     usage_stale_minutes: float
+    fresh_above_k: dict[str, float] = field(default_factory=lambda: {"claude": 150.0, "openai": 100.0, "xai": 100.0})
+    fresh_stage_k: float = 100.0
     claude_weekly_reset: str = ""
     breaker: BreakerPolicy = field(default_factory=BreakerPolicy)
 
