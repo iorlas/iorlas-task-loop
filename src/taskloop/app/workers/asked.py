@@ -4,8 +4,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
-from taskloop.app.run import done_memo
-from taskloop.app.run.call import Call
+from taskloop.app.workers import done_memo
+from taskloop.app.workers.call import Call
 from taskloop.contracts import fence
 from taskloop.contracts.asked import Fallback, SessionUpdate, Updates
 from taskloop.contracts.checkpoint import Checkpoint, RunState, WriterSession

@@ -24,6 +24,7 @@ from support.runs import manifest  # noqa: E402
 from taskloop.adapters import agent as live_agent  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
+from taskloop.app.workers import worker_call  # noqa: E402
 from taskloop.contracts.paths import ConfigDir  # noqa: E402
 from taskloop_dash.api import live  # noqa: E402
 
@@ -230,5 +231,5 @@ class CallSite(Case):
             p1, p2 = e.live("plan"), e.live("write")
             assert p1.endswith(".live/01-plan.jsonl") and p2.endswith(".live/02-write.jsonl")
             assert os.path.isdir(os.path.dirname(p1))
-            src = Path(engine.__file__).with_name("worker_call.py").read_text(encoding="utf-8")
+            src = Path(worker_call.__file__).read_text(encoding="utf-8")
             assert src.count("e.live(") == 1  # the one delegate call site passes it
