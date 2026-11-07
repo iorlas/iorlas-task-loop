@@ -2,6 +2,8 @@
 from collections.abc import Mapping
 from typing import Final
 
+from tlkernel.bead import Comment
+
 HOLD: Final = "owner_hold"
 HOLD_UNTIL: Final = "owner_hold_until"  # epoch seconds; absent = until released
 
@@ -11,3 +13,8 @@ def held(meta: Mapping[str, str], now: float) -> str:
     who = (meta.get(HOLD) or "")
     until = float(meta.get(HOLD_UNTIL) or 0)
     return who if who and (not until or until > now) else ""
+
+
+def engine_written(comment: Comment) -> bool:
+    """The bd actor convention identifies engine comments, irrespective of their prose."""
+    return comment.author.startswith("tl-")

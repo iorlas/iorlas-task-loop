@@ -10,7 +10,7 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
-from tlasks import admission, setup_retry
+from tlasks import admission, sweeps
 from tlkernel import childenv, fence
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BeadPatch, Beads
@@ -78,7 +78,7 @@ def run_main_stoppable(a: Any, store: Any = None, *, env: Env, spawner: Spawner,
     repo = gitrepo.repo_root()
     cfg = wslots_config.load_cfg(repo, git)
     if not a.dry_run:
-        setup_retry.retry_setup(real_stores(who.config).asks, store or beadtools.bd_store(who.actor, repo),
+        sweeps.retry_setup(real_stores(who.config).asks, store or beadtools.bd_store(who.actor, repo),
                                 a.id, ident.plugin_version(), time.time(), cfg, starting=True)
     if a.slot == "any":
         return run_any_slot(a, repo, cfg, store, env=env, spawner=spawner, git=git, who=who)
