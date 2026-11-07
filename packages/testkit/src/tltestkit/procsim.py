@@ -103,7 +103,7 @@ def hangs(out: str = "") -> Fake:
 
 
 # Always there: the checks every plan and stage list names. `has-f` is exit 0 iff f.txt exists in the check's directory.
-NICE = ("nice", "-n", "10")  # what the engine puts before every check (app/run/shell.py CHECK_NICE; `nice` may be an absolute path)
+NICE = ("nice", "-n", "10")  # what the engine puts before every check (app/checks/shell.py CHECK_NICE; `nice` may be an absolute path)
 
 
 def unniced(words: Any) -> Any:
@@ -139,7 +139,7 @@ class Procs:
         if not isinstance(argv, (list, tuple)) or not argv:
             return None
         words, extra = tuple(str(a) for a in argv), {}
-        words = unniced(words)  # the engine runs every check under nice (app/run/shell.py CHECK_NICE)
+        words = unniced(words)  # the engine runs every check under nice (app/checks/shell.py CHECK_NICE)
         if words and words[0] == "env":
             i = 1
             while i < len(words) and "=" in words[i] and not words[i].startswith("-"):

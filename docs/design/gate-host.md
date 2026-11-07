@@ -38,7 +38,7 @@ Every number below that does not come from that table is marked **(est.)** with 
   runs its gate steps one after another (`app/checks/executor.py:77-88`). The parallelism comes from the 4 factory lanes
   and from inside each .NET process.
 - **Environment of a check.** `Attempts._exec` merges the check's declared `env`, the round's env and the run ids
-  (`app/checks/attempts.py:73-77`). `Shell.stream` adds the worker mark and the slot env (`app/run/shell.py:57`), and
+  (`app/checks/attempts.py:73-77`). `Shell.stream` adds the worker mark and the slot env (`app/checks/shell.py:57`), and
   `RealSpawner._env` builds the child from `tool_env` (`adapters/spawner.py:54-55`). `tool_env` passes on only the
   allowlist: `PATH HOME USER LANG TERM TMPDIR SHELL GIT_* UV SSH_*`, `LC_*`, `GIT_CONFIG_*` and registered
   `TL_*`/`TASK_LOOP_*` names (`tlkernel/childenv.py:32-49`, `:67-73`). **A `DOTNET_*` variable exported in the owner's
@@ -228,7 +228,7 @@ Mac engine (gate round)                                     devbox
 - **Fallback:** if the devbox is unreachable, its identity differs from the pinned one, or the gate host lease is busy for more
   than `lane_wait_min` (`contracts/config.py:223`), the lane runs locally under the `dotnet` lease from part (a). This keeps the
   devbox an overflow, not a dependency. Every fallback is written to the run log with its reason.
-- `ssh` is started through the Spawner like any check command, so a stop or a halt kills it (`app/run/shell.py:54-66`), and the
+- `ssh` is started through the Spawner like any check command, so a stop or a halt kills it (`app/checks/shell.py:54-66`), and the
   devbox side ends its process group when the ssh session drops (`gate-serve` treats a closed stdin as a stop).
 
 ### 3.5 Failure modes

@@ -5,7 +5,7 @@ from unittest import mock
 
 from support.memstores import fake_stores
 
-from taskloop.app.run.shell import Shell
+from taskloop.app.checks.shell import Shell
 from taskloop.stores.runlog import RunLog
 from tlkernel.log import CmdEnd
 from tltestkit.case import Case

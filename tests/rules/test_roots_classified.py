@@ -37,7 +37,7 @@ def test_the_contract_names_no_module_that_is_gone():
 
 
 def test_run_wiring_modules_are_composition_roots():
-    roots = {"bead_env", "closer_ports", "field_ports", "preflight", "reload_ports", "running", "shell"}
+    roots = {"bead_env", "closer_ports", "field_ports", "preflight", "reload_ports", "running"}
     modules = {f"taskloop.app.run.{name}" for name in roots}
     assert modules <= named("forbidden_modules")
     assert not modules & named("source_modules")

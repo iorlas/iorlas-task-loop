@@ -336,7 +336,6 @@ forbidden_modules =
     taskloop.app.run.run_once
     taskloop.app.run.running
     taskloop.app.run.sections
-    taskloop.app.run.shell
     taskloop.app.run.stages
     taskloop.app.run.state
     taskloop.app.wire

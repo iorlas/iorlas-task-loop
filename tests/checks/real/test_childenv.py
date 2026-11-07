@@ -10,7 +10,7 @@ from support.argv_checks import ArgvChecks
 from support.tlmain import tl_main
 
 from taskloop.adapters.spawner import RealSpawner
-from taskloop.app.run.shell import Shell
+from taskloop.app.checks.shell import Shell
 from tlkernel import childenv
 from tlkernel.checksport import CheckSpec
 from tlkernel.childenv import CHECK_SECRETS

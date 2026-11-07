@@ -7,7 +7,7 @@ from unittest import mock
 import pytest
 
 from taskloop.adapters import check_net
-from taskloop.app.run.shell import Shell
+from taskloop.app.checks.shell import Shell
 from tltestkit.procsim import real_proc
 
 CONNECT = "import socket,sys; s=socket.socket(); s.settimeout(3); s.connect(('127.0.0.1', int(sys.argv[1])))"
