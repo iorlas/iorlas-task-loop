@@ -4,6 +4,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from tlartifacts import server
 from tlkernel.artifact import ArtifactSlot
 from tlkernel.env import Env
 from tlkernel.identity import Identity
@@ -11,7 +12,6 @@ from tlkernel.loop import LoopState
 from tlkernel.paths import ConfigDir
 from tlkernel.procport import Spawner
 
-from taskloop.app.artifacts import server
 from taskloop.app.launch import dash, loop, repos
 from taskloop.app.launch import factory as binding
 from taskloop.app.loop import factory_verbs
