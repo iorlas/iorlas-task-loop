@@ -4,7 +4,7 @@ import os
 import sys
 import time
 import traceback
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
@@ -15,7 +15,7 @@ from tlkernel.envvars import EnvVar
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
-from tlkernel.run import NetPause, Reexec, ReexecNote, Round, RunCounters
+from tlkernel.run import NetPause, Reexec, ReexecNote, RunCounters
 from tlkernel.runrows import RunRows
 from tlkernel.wire import Open
 
@@ -30,13 +30,13 @@ class Exec(BaseException):
 
 
 class ReloadWrite(Protocol):
-    write_rounds: list[Round]
+    write_rounds: list[Open]
 
 
 class ReloadSteps(Protocol):
     n: int
 
-    def end(self, kind: str) -> None: ...
+    def end(self, outcome: str = "") -> None: ...
 
 
 class ReloadBudget(Protocol):
@@ -45,13 +45,18 @@ class ReloadBudget(Protocol):
 
 class ReloadLog(Protocol):
     def note(self, text: str) -> int: ...
-    def emit(self, item: rec.Reload) -> None: ...
+    def emit(self, item: rec.Reload, /) -> int: ...
 
 
 class ReloadHost(Protocol):
-    t0: float
-    waited: float
-    cost: float
+    @property
+    def t0(self) -> float: ...
+    @property
+    def waited(self) -> float: ...
+    @property
+    def cost(self) -> float: ...
+    @cost.setter
+    def cost(self, value: float) -> None: ...
     stats: dict[str, int]
     sessions: list[Open]
     home: ConfigDir
@@ -60,7 +65,7 @@ class ReloadHost(Protocol):
     wt: str
     who: Identity
     env: Env
-    argv: Sequence[str] | None
+    argv: list[str] | None
     dry: bool
     moved: bool
     newer_fn: Callable[[], tuple[str, Path] | None] | None

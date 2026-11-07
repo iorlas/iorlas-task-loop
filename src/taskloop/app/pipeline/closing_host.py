@@ -8,7 +8,7 @@ from typing import Protocol
 
 from tlkernel import fence
 from tlkernel.beadsport import Beads
-from tlkernel.checkpoint import Checkpoint, EndRec
+from tlkernel.checkpoint import Checkpoint, CloseIntent
 from tlkernel.delegate import Permanence
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
@@ -30,7 +30,7 @@ from taskloop.stores.runlog import RunLog
 class CloseCheckpoints(Protocol):
     def applied(self) -> frozenset[str]: ...
     def mark_applied(self, key: str) -> None: ...
-    def keep_end(self, end: EndRec) -> None: ...
+    def keep_end(self, intent: CloseIntent) -> None: ...
     def drop_unless_fenced(self) -> None: ...
 
 
@@ -52,10 +52,8 @@ class CloseHost(Protocol):
     pause_permanence: Permanence | None
     why: str
 
-    @property
-    def crash_fingerprint(self) -> str: ...
-    @property
-    def crash_site(self) -> str: ...
+    crash_fingerprint: str
+    crash_site: str
 
     @property
     def store(self) -> Beads: ...
@@ -63,8 +61,7 @@ class CloseHost(Protocol):
     def clock(self) -> Clock: ...
     @property
     def bead(self) -> BeadId: ...
-    @property
-    def plan_summary(self) -> str: ...
+    plan_summary: str
     @property
     def log(self) -> RunLog: ...
     @property

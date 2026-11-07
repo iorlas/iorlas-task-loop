@@ -42,7 +42,7 @@ class Core:
         self.started = inherited.started if inherited else env.now()
         carry = inherited.carry if inherited else Carry()
         self.carry_in = carry
-        self.c = Counters(fails=list(carry.fails), ran=carry.ran, later=dict(carry.later), pauses=dict(carry.pauses),
+        self.c = Counters(fails=list(carry.fails), ran=carry.ran, later=dict(carry.later),
                           warned=list(carry.warned))
         self.sigterm = threading.Event()  # SIGTERM or Ctrl-C to the loop itself: end the running bead as `tl stop --now` does
         self.gate = GateRole(env.roles, env.now, self.tune().gate_cache, self.tune().gate_unknown)
@@ -88,7 +88,7 @@ class Core:
     # ---- the state file ----------------------------------------------------------------------------------------
     def carry(self) -> Carry:
         c = self.c
-        return Carry(fails=list(c.fails), ran=c.ran, later=dict(c.later), pauses=dict(c.pauses),
+        return Carry(fails=list(c.fails), ran=c.ran, later=dict(c.later),
                      gated=dict(self.gate.held), warned=list(c.warned), until=self.until, wt=self.wt, back=self.carry_in.back,
                      moved_at=self.carry_in.moved_at, fallback=self.carry_in.fallback)
 

@@ -16,7 +16,7 @@ from tlkernel import fence, wire
 from tlkernel.checkpoint import (
     BriefSnap,
     Checkpoint,
-    EndRec,
+    CloseIntent,
     Handoff,
     Notes,
     PlanStep,
@@ -168,10 +168,10 @@ class Checkpoints:
         """A close effect ran: its key goes into the record, so a kill after it resumes at the next effect. No record, no key kept."""
         self.amend(lambda ck: ck if key in ck.applied else ck.replace(applied=[*ck.applied, key]))
 
-    def keep_end(self, end: EndRec) -> None:
+    def keep_end(self, intent: CloseIntent) -> None:
         """The close's outcome goes into the record before its first effect: a restart finishes the close from it. No record, none kept."""
         with contextlib.suppress(fence.Fenced):
-            self.amend(lambda ck: ck if ck.ended is not None and ck.ended.run == end.run else ck.replace(ended=end))
+            self.amend(lambda ck: ck if ck.ended is not None and ck.ended.outcome.run == intent.outcome.run else ck.replace(ended=intent))
 
     def keep_notes(self, notes: Notes) -> None:
         """What FileNotes filed and what bd refused, so the Reflect comment says the same after a restart."""

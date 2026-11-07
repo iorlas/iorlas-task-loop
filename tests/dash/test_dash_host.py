@@ -13,7 +13,7 @@ from tlkernel.slottable import SlotSource
 
 class DashboardHost(Case):
     def test_the_launcher_supplies_the_system_host_once(self):
-        with patch.object(factorydb._STORE, "parts", None), \
+        with patch.object(factorydb._STORE, "parts", None), patch.object(factorydb._STORE, "needs", None), \
                 patch("socket.gethostname", return_value="dtomilin-mWG") as hostname, \
                 patch.object(dash, "code_version", return_value="v-test"), \
                 patch.object(dash.serve, "main") as serve:

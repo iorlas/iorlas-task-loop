@@ -10,7 +10,7 @@ from typing import Protocol, assert_never
 
 from tlkernel.checkpoint import Checkpoint, Notes
 from tlkernel.enums import Outcome
-from tlkernel.kinds import ASKS, Kind
+from tlkernel.kinds import ASKS, PAUSES, Kind
 from tlkernel.parks import Park
 from tlkernel.run import RunFinish
 
@@ -118,26 +118,37 @@ class Closer:
         if e.disp and e.disp.escalated and spec is None:
             spec = askspecs.repeated_fault(oc.KNOBS["fault_retries"], why.splitlines()[0][:200])
         done = oc.make(kind, why, sha=ended.sha, spec=spec if kind in ASKS else None)  # the final outcome: its word is the trace's
-        self.finish(done)
+        self.finish(done, self.stats_line())
 
     def resume(self, ck: Checkpoint) -> None:
         """The close of a run that died: its outcome and decision come from the checkpoint (POLICY and the storm check are not asked
         again), and the effects whose keys are not there run, under the dead run's id."""
         e = self.host
         assert ck.ended is not None
-        done, e.disp, e.fp = stored_end.loaded(ck.ended)
+        intent = ck.ended
+        pause = intent.pause
+        e.pause_reason, e.pause_producer, e.pause_permanence = pause.reason, pause.producer, pause.permanence
+        e.retry_after = pause.retry_after
+        e.crash_fingerprint, e.crash_site = pause.crash_fingerprint, pause.crash_site
+        e.plan_summary, e.asked = intent.plan_summary, intent.asked
+        done, e.disp, e.fp = stored_end.loaded(intent.outcome)
         e.kind = done.kind
-        e.warn(f"finishing the close of {ck.ended.run}, which died inside it: {done.word}")
-        self.finish(done)
+        e.warn(f"finishing the close of {intent.outcome.run}, which died inside it: {done.word}")
+        self.finish(done, intent.stats)
 
-    def finish(self, done: oc.RunOutcome) -> None:
+    def stats_line(self) -> str:
+        """The run's stats, built once before the close is kept."""
+        e = self.host
+        counts = "; ".join(f"{k}={v}" for k, v in e.stats.items())
+        stats = f"cost=${e.cost:.2f}; minutes={int((time.time() - e.t0) / 60)}; {counts}"
+        stats += transcript_stats(e.sessions)
+        return stats
+
+    def finish(self, done: oc.RunOutcome, stats: str) -> None:
         e = self.host
         self.pause(done)
         if done.kind is Kind.ENGINE_CRASH:
             done = oc.make(done.kind, e.why)
-        counts = "; ".join(f"{k}={v}" for k, v in e.stats.items())
-        stats = f"cost=${e.cost:.2f}; minutes={int((time.time() - e.t0) / 60)}; {counts}"
-        stats += transcript_stats(e.sessions)
         if not e.dry:
             done = e.records.finish(done, stats, self.recording.run)
         branch = e.git.branch(e.wt)
@@ -147,7 +158,7 @@ class Closer:
     def pause(self, done: oc.RunOutcome) -> None:
         """Persist pause wakes; the close plan files an empty plan's owner ask."""
         e = self.host
-        if e.dry or done.finished:
+        if e.dry or done.finished or (done.kind is not Kind.NOOP and done.kind not in PAUSES):
             return
         bead = beadtools.peek(e.store, e.bead)
         if bead is None:
@@ -155,8 +166,6 @@ class Closer:
         rec = self.parks.paused( bead, done.kind, e.run_id, e.clock.now(), reason=e.pause_reason,
                            not_before=e.retry_after, fingerprint=e.crash_fingerprint if done.kind is Kind.ENGINE_CRASH else "",
                            producer=e.pause_producer, permanence=e.pause_permanence)
-        if rec is None:
-            return
         e.retry_after = rec.retry_at
         e.pause_reason = rec.reason
         self.ask_pause(rec, done)

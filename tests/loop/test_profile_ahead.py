@@ -152,7 +152,7 @@ class ProfileAhead(Rig):
         assert (self.bd.beads[bid].status, self.bd.beads[bid].assignee) == ("open", "")
         assert self.bd.beads[bid].labels == ["keep"]
         assert self.bd.beads[slot_bead].status == "open"
-        assert (loop.c.ran, loop.c.fails, loop.c.pauses, loop.c.later) == (0, [], {}, {})
+        assert (loop.c.ran, loop.c.fails, loop.c.later) == (0, [], {})
         park = ParkStore(self.env.cfgdir).get(bid)
         assert park is not None
         assert (park.reason, park.permanence, park.retry_at) == ("profile_ahead", "needs_owner", 0)

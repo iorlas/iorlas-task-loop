@@ -64,12 +64,18 @@ def main(argv: list[str]) -> None:
             Path(argv[3] + ".tmp").write_text(str(os.getpid()))
             os.replace(argv[3] + ".tmp", argv[3])  # the parent waits for the marker to exist: it must never see it empty
             time.sleep(120)  # the parent kills this process by its pid
-        write(journal, {"effect": type(eff).__name__})
+        write(journal, {"effect": type(eff).__name__, "stats": a[1],
+                        "pause_reason": self.host.pause_reason, "retry_after": self.host.retry_after,
+                        "crash_fingerprint": self.host.crash_fingerprint})
         real(self, eff, *a)
 
     Closer.apply = apply  # type: ignore[method-assign]
     if mode == "die":
         eng.checkpoints.save(step="close")  # the record the run's close keeps its outcome and keys in
+        eng.cost = 7.25
+        eng.pause_reason = "dead pause"
+        eng.retry_after = 1234.0
+        eng.crash_fingerprint = "dead-fp"
         eng.leftovers = [{"title": "Leftover one", "why": "later"}]
         eng.closer.close(oc.make(Kind.DONE))
     else:
