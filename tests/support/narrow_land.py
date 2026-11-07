@@ -2,7 +2,7 @@
 import tempfile
 import weakref
 from collections.abc import Mapping, Sequence
-from contextlib import AbstractContextManager
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -415,7 +415,7 @@ class LandKit:
             sync=Sync(self.syncing, self.bd),
             out=NoWip(),
         )
-        self.lander = Lander(self.land, parts)
+        self.lander = Lander(self.land, parts, deadline=lambda seconds, scope: nullcontext())
 
 
 

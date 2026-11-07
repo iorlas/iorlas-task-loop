@@ -45,7 +45,7 @@ class FakeCheckHost:
         self.tree_memo = None
         self.accepted_new: list[str] = []
         self.plan_data = None
-        self.checkout = Checkout(self)
+        self.checkout = Checkout(self, ignore_rules=lambda rules, paths: set())
         self.tree_writer = self.checkout
         self.shell = Shell(self)
         self.checker = Checker(self, lambda secs: None)

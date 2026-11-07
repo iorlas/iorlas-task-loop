@@ -13,7 +13,7 @@ from tlkernel.newfiles import new_file_kind
 from tlkernel.slots import SlotGitError
 from tlkernel.stagefacts import RunLogPort
 
-from taskloop.adapters.ignored import ignored_by
+from taskloop.app.land.ports import IgnoreRules
 
 
 class CheckoutConfig(Protocol):
@@ -50,8 +50,9 @@ def line(r: StatusRow) -> str:
 
 
 class Checkout:
-    def __init__(self, host: CheckoutHost) -> None:
+    def __init__(self, host: CheckoutHost, *, ignore_rules: IgnoreRules) -> None:
         self.e = host
+        self.ignore_rules = ignore_rules
 
     def slot_status(self) -> tuple[list[str], list[str], str]:
         """(tracked paths changed, untracked paths, git's complaint or "") from the slot's own `git status`."""
@@ -104,7 +105,7 @@ class Checkout:
             if t.path.split("/")[-1] == ".gitignore"
         }
         rules = treehash.ignore_rules(base, files)
-        return ignored_by(e.git, e.wt, rules, paths) if rules else set()
+        return self.ignore_rules(rules, paths) if rules else set()
 
     def read_base(self, base: str, path: str) -> str:
         try:

@@ -34,7 +34,8 @@ def test_result_lines_and_terminal_answer(workdir, rc, reason, lines, why):
         delivery.return_value.run.return_value = rc
         delivery.return_value.failure_reason = reason
         delivery.return_value.last = 'sha'
-        assert stack.run_stack(args, who, git, mock.Mock(), store, ['tl'], record=mock.Mock(), fx=FX, receipts=fake_stores(),
+        assert stack.run_stack(args, who, git, mock.Mock(), store, ['tl'], land_lock_path=mock.Mock(), hold_land=mock.Mock(),
+                               record=mock.Mock(), fx=FX, receipts=fake_stores(),
                                queue_docs=fake_stores().queue, queue_state=fake_stores().queue_state,
                                profile_changes=fake_stores().profile_changes,
                                slot=mock.Mock(), slot_base=mock.Mock(return_value='main'), runlog=mock.Mock(), finish=finish,
@@ -45,7 +46,8 @@ def test_result_lines_and_terminal_answer(workdir, rc, reason, lines, why):
 def test_unmatched_item_is_refused_before_run_creation(workdir):
     args = argparse.Namespace(profile_change=None, repo=str(workdir), bead=['other=tl-1'], supersede=[], items=['topic'])
     with mock.patch.object(stack, 'RunLocator') as locator, pytest.raises(SystemExit) as raised:
-        stack.run_stack(args, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), ['tl'], record=mock.Mock(), fx=FX, receipts=fake_stores(),
+        stack.run_stack(args, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), ['tl'], land_lock_path=mock.Mock(), hold_land=mock.Mock(),
+                               record=mock.Mock(), fx=FX, receipts=fake_stores(),
                                queue_docs=fake_stores().queue, queue_state=fake_stores().queue_state,
                                profile_changes=fake_stores().profile_changes,
                         slot=mock.Mock(), slot_base=mock.Mock(), runlog=mock.Mock(), finish=mock.Mock(), env=Env())

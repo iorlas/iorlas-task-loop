@@ -7,7 +7,8 @@ from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.procport import Spawner
 
-from taskloop.app.land.push_judge import judge_push, land_lock_held
+from taskloop.adapters.land_probe import land_lock_held
+from taskloop.app.land.push_judge import judge_push
 from taskloop.stores.real import real_stores
 
 GUARD_MAIN = False  # dark: the rollout flips it, with the ruleset in place (docs/design/merge-queue.md 8.1)
