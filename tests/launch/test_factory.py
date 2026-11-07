@@ -322,8 +322,8 @@ class Lanes(Case):
 
     def test_caffeinate_only_once_for_first_new_lane(self):
         self.spawn.start.side_effect = [*self.children, Mock()]
-        with patch.object(adapter, "caffeinate_argv", return_value=["caffeinate", "-w", "123"]) as awake:
-            factory.start(self.files, "/repo", "1", [], self.spawn, self.publish, lanes=3)
+        awake = Mock(return_value=["caffeinate", "-w", "123"])
+        factory.start(self.files, "/repo", "1", [], self.spawn, self.publish, lanes=3, caffeinate_argv=awake)
         awake.assert_called_once_with(123)
         assert self.spawn.start.call_count == 4
 
