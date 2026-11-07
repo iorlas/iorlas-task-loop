@@ -16,6 +16,7 @@ from support.narrow import must
 from support.tiers import domain
 
 from taskloop.app.asks import intake, raiser, sweeps
+from taskloop.app.asks.paths import ask_marker
 from taskloop.domain.asks import similar, specs
 from tlkernel import wire
 from tlkernel.ask import Ask, AskAnswer, SimilarRef, ThreadEntry
@@ -120,7 +121,7 @@ class Ledger(Case):
             asks = AskStore.at(cfg)
             raiser.raise_ask(asks, question(), asking())
             assert (cfg.factory_db().is_file(), asks.orphans(), len(asks.rows())) == (True, [], 1)
-            sweeps.close_stale(asks, lambda _r: FakeBeads(), cfg.ask_marker("s"), T + 10 ** 7)
+            sweeps.close_stale(asks, lambda _r: FakeBeads(), ask_marker(cfg, "s"), T + 10 ** 7)
             assert len(asks.rows()) == 1
 
 

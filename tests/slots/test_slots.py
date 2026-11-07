@@ -36,6 +36,7 @@ from taskloop.app.run import (
 from taskloop.app.slots import (
     engine_lock,
 )
+from taskloop.app.slots.paths import engine_lock as engine_lock_path
 from taskloop.app.wire import slots as wslots
 from tlkernel.config import SlotsConfig
 from tlkernel.enums import Result
@@ -73,7 +74,7 @@ class Slots(LoopBase):
     def live_lock(self, n, bead="x-9"):
         k = sleeper()
         self.kids.append(k)
-        f = homes.cfg().engine_lock(self.slot(n))
+        f = engine_lock_path(homes.cfg(), self.slot(n))
         f.parent.mkdir(parents=True, exist_ok=True)
         put_lock(self.slot(n), {"pid": k.pid, "bead": bead, "started": time.time()})
         return k

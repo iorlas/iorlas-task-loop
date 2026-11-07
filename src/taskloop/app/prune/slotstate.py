@@ -9,6 +9,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.slots import Checkout, SlotGitError
 
 from taskloop.app.prune.runs import Gone, size_of
+from taskloop.app.slots.paths import slot_state_roots
 
 MIN_AGE_DAYS: Final = 14
 
@@ -46,7 +47,7 @@ def prune(cfg: ConfigDir, repos: list[str], git: SlotGit, now: float, dry_run: b
 def _old_folders(cfg: ConfigDir, now: float) -> dict[str, list[Path]]:
     """{state key: the slot folders unchanged for MIN_AGE_DAYS}, read from disk only."""
     out: dict[str, list[Path]] = {}
-    for state in cfg.slot_state_roots():
+    for state in slot_state_roots(cfg):
         for path in sorted(state.glob("*")):
             try:
                 if path.is_dir() and path.stat().st_mtime < now - MIN_AGE_DAYS * 86400:
