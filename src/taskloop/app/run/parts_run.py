@@ -8,6 +8,7 @@ from tlartifacts import ask_pictures
 from tlasks.closing import ClosingTrust
 from tlasks.flow import AskFlow, AskFlowHost
 from tlkernel import askspecs, asktext, childenv
+from tlkernel.askspec import AskSpec
 from tlkernel.check_files import repo_key
 from tlkernel.kinds import Kind
 from tlkernel.runlayout import repo_of
@@ -35,8 +36,12 @@ def shared_over(host: SharedHost) -> Shared:
     return Shared(host, fx=slotfx.FX)
 
 
+def ask_blocked(why: str, spec: AskSpec | None = None, *, kind: Kind) -> api.Blocked:
+    return api.Blocked(why, spec, kind=kind)
+
+
 def ask_flow_over(host: AskFlowHost) -> AskFlow:
-    return AskFlow(host, ident.plugin_version, api.Blocked, ask_pictures.attach, repo_of, repo_key, askspecs.open_question, asktext.comment)
+    return AskFlow(host, ident.plugin_version, ask_blocked, ask_pictures.attach, repo_of, repo_key, askspecs.open_question, asktext.comment)
 
 
 class ResumeBinding[T](api.ResumeProgress, api.ResumePlanning[T], api.ResumeRecords, api.ReviewOwner, Protocol):

@@ -36,7 +36,8 @@ class AttachPictures(Protocol):
 class AskStores(Protocol):
     @property
     def asks(self) -> AskStore: ...
-    def adrs(self, repo: str) -> AdrStore: ...
+    @property
+    def adrs(self) -> Callable[[str], AdrStore]: ...
 
 
 class AskState(Protocol):

@@ -5,6 +5,7 @@ from typing import Concatenate
 from tlasks import sweeps
 from tlasks.sweeps import SweepHost
 from tlkernel.askstore import AskStore
+from tlkernel.beadsport import Beads
 from tlkernel.config import EngineConfig
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
@@ -22,8 +23,13 @@ def store(home: ConfigDir) -> AskStore:
     return real_stores(home).asks
 
 
+def bd(actor: str, repo: str) -> Beads:
+    # Look up bd_store at call time so tests can patch it.
+    return bd_store(actor, repo)
+
+
 def host() -> SweepHost:
-    return SweepHost(lambda actor, repo: bd_store(actor, repo), beadtools.peek, ident.hostname, store, now, ident.plugin_version)
+    return SweepHost(bd, beadtools.peek, ident.hostname, store, now, ident.plugin_version)
 
 
 def bound[**P, R](fn: Callable[Concatenate[SweepHost, P], R]) -> Callable[P, R]:
