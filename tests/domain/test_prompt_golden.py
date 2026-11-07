@@ -19,9 +19,9 @@ from taskloop.app.run import engine  # noqa: E402
 from taskloop.app.write import prompts as wp  # noqa: E402
 from taskloop.app.write import review_prompt as rp  # noqa: E402
 from taskloop.app.write.review_prompt import acceptance_text  # noqa: E402
-from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
 from taskloop.domain.land.fix_text import FIX_GOAL as _FIX_GOALS  # noqa: E402
 from taskloop.domain.prompts import common as cp  # noqa: E402
+from tlgate.domain.writer_split import WriterSplit  # noqa: E402
 from tlpipeline import reflect_prompt as fp  # noqa: E402
 from tltestkit.cfgs import cfg_with  # noqa: E402
 

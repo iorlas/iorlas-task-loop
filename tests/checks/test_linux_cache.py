@@ -2,7 +2,7 @@
 from support.memstores import fake_stores
 from support.spawn import port_git
 
-from taskloop.app.checks.cache import InputKeys, RunMemo
+from tlgate.cache import InputKeys, RunMemo
 from tlkernel.checks import Check, CheckResult
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.runkey import BaseSha

@@ -1,5 +1,5 @@
 """Plan argv admission has no profile-owned harness grant."""
-from taskloop.domain.checks import planref
+from tlgate.domain import planref
 from tlkernel.plancheck import adhoc
 from tltestkit.cfgs import cfg_with
 

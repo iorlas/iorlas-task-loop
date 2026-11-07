@@ -1,0 +1,17 @@
+# checks is a converted stage (tests/rules/test_host_ban.py): it takes ports and values, never an engine or a host typed Any.
+# Like the app layer it came from (src/taskloop/app/ruff.toml): the root config plus the bans below. Unlike the kernel it may run threads
+# (the check lanes), so it does not extend the kernel's contracts-only config.
+extend = "../../ruff.toml"
+src = ["src"]
+
+[lint]
+extend-select = ["ANN401"]
+
+[lint.flake8-tidy-imports.banned-api]
+"delegate.app".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.cli".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.adapters".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.domain".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.contracts".msg = "task-loop imports delegate.api and nothing else of delegate"
+"delegate.entry".msg = "task-loop imports delegate.api and nothing else of delegate"
+"subprocess".msg = "a stage starts a process through the Spawner handed down from the edge (tlkernel.procport), never subprocess"

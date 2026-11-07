@@ -9,7 +9,7 @@ from support.engine_case import EngineTest
 from support.plan_host import FakePlan
 
 from taskloop.app.plan.planner import Planner
-from taskloop.domain.checks import lint
+from tlgate.domain import lint
 from tlkernel.plancheck import adhoc
 from tltestkit.cfgs import cfg_with
 from tltestkit.checks import typed

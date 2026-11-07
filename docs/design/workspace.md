@@ -63,7 +63,7 @@ Honest reading: the **selection gain is nil for a leaf that the shell still impo
 
 R6 done: the pipeline is `packages/pipeline` (`tlpipeline`), with isolated package tests.
 
-Status: step 0 (WS-MECH) merged; step 1 (artifacts) is the workspace member `packages/artifacts` (`tlartifacts`), with isolated package tests.
+Status: step 0 (WS-MECH) merged; step 1 (artifacts) is the workspace member `packages/artifacts` (`tlartifacts`), with isolated package tests. P5a moves gate code to `packages/gate` (`tlgate`), with `checks/step.py` left as shell glue and tests retained in `tests/checks`.
 
 Parallel now: step 0 first (this week, one PR); then 1, 2 and 4 together. Hold 5 and 6 until C-PIPELINE lands; hold 7 until B3 lands.
 
@@ -74,3 +74,22 @@ TESTISO (step 4) is done: member tests may import only their own package, declar
 1. Vendored shelf deps (`atomic_io`, others) in a package: accept `pythonpath = ["../../skills/task-loop/_vendor"]` per package (the spike), or give each vendored dir a manifest so it is declared. Recommendation: accept for now, revisit when a second package needs one.
 2. Names: `packages/<stage>` + `tl<stage>` (section 4b). Recommendation: yes.
 3. Confirm step 5 starts with port/adapters moves, since most stages are not leaves; the carve counts in the epic (one M each) understate this.
+
+P5a gate code carve: `packages/gate` (`tlgate`) owns check execution and
+`domain/`; `taskloop.app.checks.step` remains shell glue. Tests stay in
+`tests/checks` for the later test carve. No facade or behavior change.
+
+Gate carve review notes: the HOSTBAN identity remains `checks` for its monotone
+list, with its code and Ruff config resolved to `packages/gate`; both shell glue
+and the member stay in the no-host import contract. The slice import policy maps
+`tlgate` application modules to the existing `checks` policy, while its `domain`
+retains the domain effect guard. Schema-part discovery includes workspace sources.
+The closure ratchet now measures `tlgate` as `gate` as well as the shell glue,
+and includes its sources in every consumer closure. The initial member requires
+`Ratchet-allow: closure +150 gate member: 115 local files and 35 external roots`
+and `Layout-allow: node gate workspace member` on the eventual commit.
+
+Unresolved policy conflict: the specified gate Ruff config extends kernel, whose
+threading ban rejects existing imports in attempts, base, host, lanes, linux,
+resources and round. Resolving this requires a lint-layer decision; the pure move
+keeps both the imports and requested config.

@@ -12,8 +12,8 @@ from support.memstores import fake_stores
 from support.narrow_hosts import FakeGateHost
 
 from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
-from taskloop.domain.checks.specs import engine_digest
 from taskloop.stores.runlog import RunLog
+from tlgate.domain.specs import engine_digest
 from tlkernel.checks import Check, CheckRun
 from tlkernel.config import CheckSpec, EngineConfig
 from tlkernel.ids import CheckId, TreeSha

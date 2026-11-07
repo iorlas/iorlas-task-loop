@@ -22,9 +22,9 @@ from taskloop.app.plan.sendback import SendBack
 from taskloop.app.run import engine
 from taskloop.app.write import prompts as wp
 from taskloop.app.write import review_prompt as rp
-from taskloop.domain.checks import planref
-from taskloop.domain.checks.names import log_var
 from taskloop.domain.prompts.common import RULES_MAX
+from tlgate.domain import planref
+from tlgate.domain.names import log_var
 from tlkernel import answers, plancheck
 from tlkernel.config import EngineConfig
 from tlkernel.ids import CheckId

@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from taskloop.app.checks import authorization, checklog
+from tlgate import authorization, checklog
 from tlkernel.checks import CheckResult
 from tlkernel.config import load
 from tlkernel.ids import CheckId

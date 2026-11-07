@@ -15,7 +15,7 @@ from support.fakegit import ScriptedGit
 from support.narrow_hosts import Fetches, LandKit, Locks
 
 # isort: split
-from taskloop.domain.checks.specs import engine_digest
+from tlgate.domain.specs import engine_digest
 from tlkernel import log as rec
 from tlkernel.checks import Check, CheckResult, CheckRun, PassRecord
 from tlkernel.config import CheckSpec, EngineConfig
