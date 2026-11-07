@@ -3,7 +3,6 @@ import ast
 
 from rules.arch_invariants import domain_world_problems, slice_problems
 from rules.arch_rules import graph_of, production_trees
-
 from tltestkit.case import Case
 
 

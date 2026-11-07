@@ -23,7 +23,6 @@ from support.who import who
 
 import tltestkit.shellkit
 from taskloop.adapters import bd
-from tlasks import admission
 from taskloop.app.run import running as wrunning
 from taskloop.app.wire import asks as admission
 from taskloop.app.wire import asks as wasks

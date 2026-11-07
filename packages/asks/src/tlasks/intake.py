@@ -19,8 +19,7 @@ from tlkernel.dash import OwnerCause, Stick
 from tlkernel.ids import BeadId
 from tlkernel.lookrows import LookRows
 
-from tlasks import ledgercomments, looks, stick, sweeps
-from tlasks import timespec
+from tlasks import ledgercomments, looks, stick, sweeps, timespec
 from tlasks.hold import HOLD, HOLD_UNTIL
 
 WAIVERS: Final = "owner_waivers"  # JSON list of Waiver: what the owner waived, deferred or dropped, with the quoted approval

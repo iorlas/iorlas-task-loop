@@ -8,7 +8,6 @@ from typing import Any, ClassVar
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from run.test_stages import StagesTest
 from support import engine_case as te
 from support import gitq, homes
 from support.builders import make_engine
@@ -23,6 +22,7 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 import tltestkit.shellkit
+from run.test_stages import StagesTest
 from taskloop.app.land.rebase import MAX_REBASE_RESETS
 from taskloop.app.run import running as wrunning
 from taskloop.app.track import verbs

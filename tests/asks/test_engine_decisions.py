@@ -8,8 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import homes
 from support.engine_case import EngineTest
 
-from tlasks import intake
-from tlasks import similar
+from tlasks import intake, similar
 from tlkernel import adrfiles
 from tlkernel import askspecs as specs
 from tlkernel.adrs import AdrStore

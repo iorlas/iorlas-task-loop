@@ -52,7 +52,8 @@ def rewrite(text: str, domains: dict[str, str] = DOMAINS) -> tuple[str, list[str
                 errors.append(f'line {node.lineno}: unsupported inline parent binding')
                 continue
             start = sum(len(line) for line in lines[:node.lineno - 1]) + node.col_offset
-            end = sum(len(line) for line in lines[:node.end_lineno - 1]) + node.end_col_offset
+            end_line, end_col = node.end_lineno or node.lineno, node.end_col_offset or 0
+            end = sum(len(line) for line in lines[:end_line - 1]) + end_col
             edits.append((start, end, parent_binding(node, domains)))
         in_stage = node.module and (node.module == APP or node.module.startswith(APP + '.') or
                                     node.module.startswith('taskloop.domain.asks') or node.module == 'taskloop.domain.timespec')

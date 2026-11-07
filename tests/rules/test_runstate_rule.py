@@ -11,7 +11,6 @@ import sys
 from pathlib import Path
 
 from rules.gate_rules import parsed
-
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))

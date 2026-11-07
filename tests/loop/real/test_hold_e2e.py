@@ -10,7 +10,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from loop.test_loop import LoopBase, rec
-
 from taskloop.app.loop.core import Core
 from tlasks import intake
 

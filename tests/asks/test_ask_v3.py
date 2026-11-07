@@ -13,8 +13,7 @@ from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
 from support.tiers import domain
 
-from tlasks import intake, raiser, sweeps
-from tlasks import similar
+from tlasks import intake, raiser, similar, sweeps
 from tlasks.paths import ask_marker
 from tlkernel import askspecs as specs
 from tlkernel import wire

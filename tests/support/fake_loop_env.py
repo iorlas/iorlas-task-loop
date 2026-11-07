@@ -2,7 +2,6 @@
 from typing import Never
 
 import support.paths  # noqa: F401
-
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.stages import EngineAsks, EngineSlots
 from taskloop.app.wire import asks as asks_wire

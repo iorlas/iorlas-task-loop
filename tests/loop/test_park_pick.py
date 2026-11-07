@@ -73,7 +73,8 @@ class Pick(Case):
         assert (rec.reason, rec.permanence, rec.retry_at) == ("busy", "transient", 130)
         assert ParkStore(self.cfg).get(bead().id) == rec
         for now, ready in ((129.999, False), (130, True), (131, True)):
-            rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _: "", parked=lambda b, now=now: asks_wire.skip_of(self.cfg, b, now=now))
+            rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _: "",
+                             parked=lambda b, now=now: asks_wire.skip_of(self.cfg, b, now=now))
             q = rule.rank([bead()], "")
             assert bool(q.ranked) == ready
             if not ready:
