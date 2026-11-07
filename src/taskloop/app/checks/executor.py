@@ -7,7 +7,6 @@ from pathlib import Path
 from taskloop.adapters import check_files
 from taskloop.app.checks.attempts import Attempts, Outcome
 from taskloop.app.checks.cache import RunMemo
-from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.gateplan import PlanDecision
 from taskloop.app.checks.host import CheckFault, CheckHost
 from taskloop.app.checks.lanes import Lanes
@@ -16,6 +15,7 @@ from taskloop.app.checks.resources import LeaseCancelled, Resources
 from taskloop.app.checks.round import Round
 from taskloop.contracts.checks import UNVERIFIED_EXIT, Check, CheckFaultKind, CheckResult, Duration, Durations, verdict_of
 from taskloop.contracts.runkey import RunKey
+from taskloop.contracts.stagefacts import CheckLogPort
 from taskloop.domain.checks.durations import CHEAP_S, expected_secs
 from taskloop.domain.checks.inputs import touched
 from taskloop.domain.checks.matchers import cs_error_lines, diff_check_text, output_signature, safe_name, stale_tree
@@ -28,7 +28,7 @@ FAILED_FIRST = " failed first"
 
 
 class CheckExecutor:
-    def __init__(self, host: CheckHost, memo: RunMemo, attempts: Attempts, checklog: CheckLog,
+    def __init__(self, host: CheckHost, memo: RunMemo, attempts: Attempts, checklog: CheckLogPort,
                  history: Durations, fix_red: dict[str, CheckResult] | None = None, everything: bool = False,
                  planned: PlanDecision | None = None, all_files: bool = False) -> None:
         self.host, self.memo, self.attempts, self.checklog, self.history = host, memo, attempts, checklog, history
