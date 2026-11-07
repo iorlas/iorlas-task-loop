@@ -67,6 +67,7 @@ SKIPPED = pytest.StashKey[bool]()
 # Tests that must not share a clock, a port, a lock or a process group with another test running at the same moment: they are marked
 # `serial`, and the release gate runs them in ONE process after the parallel workers (`-m "not serial"`, then `-m serial`).
 SERIAL = {
+    "test_work_boundary": "spawns the pinned import-linter through uv; two copies at once on a cold uv cache crashed it with exit -11",
     "test_write_idle": "starts real worker process groups and asserts how long a writer stays idle against the wall clock",
 }
 # The release gate sets TL_WORKER_MB. A healthy worker peaks near 430 MB; a runaway test gets MemoryError, not the host's RAM.
