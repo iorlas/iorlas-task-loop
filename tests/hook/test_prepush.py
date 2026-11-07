@@ -117,3 +117,12 @@ class JudgedByTheEngineInstall(Case):
         with mock.patch.object(prepush.subprocess, "run", side_effect=[top, result]) as run:
             assert prepush.entry(["/shim/tl", "origin", "url"], "refs", {prepush.JUDGE_TL: str(tl)}) == 0
         assert run.call_args_list[1].args[0][-4:-2] == [str(tl), "judge-push"]
+
+
+def test_ours_is_false_without_a_registry_and_true_when_it_cannot_be_read(workdir):
+    tl = workdir / "task-loop" / "bin" / "tl"
+    tl.parent.mkdir(parents=True)
+    tl.write_text("")
+    assert prepush.ours(str(tl)) is False
+    (workdir / "task-loop" / "factory.db").write_bytes(b"not a database")
+    assert prepush.ours(str(tl)) is True
