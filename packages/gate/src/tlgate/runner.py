@@ -6,7 +6,7 @@ from tlkernel import check_files
 from tlkernel.checks import Check, CheckResult, CheckRun, Durations
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env
-from tlkernel.gitport import Git
+from tlkernel.gitport import GateGit
 from tlkernel.ids import TreeSha
 from tlkernel.plancheck import PlanCheck
 from tlkernel.runkey import BaseSha
@@ -29,7 +29,7 @@ from tlgate.ports import GateStores
 from tlgate.round import Round
 
 
-def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: GateStores, env: Env,
+def cached_gate(cfg: EngineConfig, git: GateGit, wt: str, stores: GateStores, env: Env,
                 tree: TreeSha, planned: gateplan.PlanDecision | None, *, clean: bool = False,
                 slot_wt: str | None = None) -> bool:
     """Read gate evidence without running checks or a plan producer."""

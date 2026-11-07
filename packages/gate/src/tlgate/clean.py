@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from tlkernel.checks import CheckFaultKind
-from tlkernel.gitport import Git
+from tlkernel.gitport import GateGit
 from tlkernel.ids import TreeSha
 
 from tlgate.base_tree import clean_tree
@@ -13,7 +13,7 @@ from tlgate.host import CheckFault, CheckHost, CleanHost
 
 
 class CleanCheckout:
-    def __init__(self, git: Git, wt: Path, base: str) -> None:
+    def __init__(self, git: GateGit, wt: Path, base: str) -> None:
         self.git, self.wt, self.base = git, str(wt), base
 
     def tree_hash(self) -> TreeSha:
