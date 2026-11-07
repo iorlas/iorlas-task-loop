@@ -1,12 +1,12 @@
 """One fix round at land: the writer fixes what the land found wrong (a red gate on the rebased tree, a merge conflict, what the verifier
 found), under the stage loop's checks and review, without undoing what the accepted stages built."""
 from collections.abc import Sequence
-from pathlib import Path
 from typing import ClassVar, Protocol
 
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.land.gitcall import must
 from taskloop.app.land.parts import CaseChecks, StageCheckout
+from taskloop.app.land.state import LandState
 from taskloop.contracts import plancheck
 from taskloop.contracts.checks import CheckResult
 from taskloop.contracts.config import EngineConfig
@@ -34,7 +34,7 @@ class FixerHost(Protocol):
     the checkpoint, git, its shell for the conflict-marker check, and the gate's log."""
 
     fixes: int
-    gate_log: Path | None  # the log of the first red step, for the fix round
+    land_state: LandState
     MARKERS: ClassVar[str]
     MARKERS_ARGV: ClassVar[Sequence[str]]
 
@@ -90,7 +90,7 @@ class Fixer:
         e = self.e
         if kind == "conflict":
             e.git.rebase_abort(e.wt)
-        trimmed = trim.trim_log(tail, log=str(e.gate_log or "") if kind == "gate" else "")
+        trimmed = trim.trim_log(tail, log=str(e.land_state.gate_log or "") if kind == "gate" else "")
         raise e.blocked_for(f"{WHAT[kind]} after {limit} fix rounds: it needs the owner's hint\n{trimmed}", "ASK_STUCK",
                             spec=askspecs.no_progress(WHAT[kind], limit, trimmed), fix=kind == "conflict")
 
