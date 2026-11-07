@@ -80,6 +80,8 @@ class ThreadRecord:
     lane: str | None
     model: str | None
     context_k: float | None = None
+    fallback: bool = False
+    first_lane: str | None = None
 
 
 @mutable

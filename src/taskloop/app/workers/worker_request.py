@@ -62,7 +62,7 @@ def request(e: RequestHost, c: Call, live: str, timeout_s: int, idle_s: int) -> 
     base_ref = e.git.rev_parse(e.wt, e.cfg.base) if c.role == "reviewer" else ""
     if c.role == "reviewer" and not base_ref:
         e.log.warn(f"the reviewer reads the work tree's instruction files: {e.cfg.base} does not resolve to a commit")
-    only_family = writer_pin.pinned(e.cfg, str(e.bead), e.plan_data, e.budget.labels, c.role)
+    prefer = writer_pin.prefer(e.budget.labels, c.role)
     recipes = e.checker.split().engine_recipes(planref.stage_commands(e.plan_data, e.cfg)) if c.node == "write" else []
     return RunRequest(
         role=c.role,
@@ -74,16 +74,15 @@ def request(e: RequestHost, c: Call, live: str, timeout_s: int, idle_s: int) -> 
         title=f"{e.bead} · {c.node}: {c.title}",
         thread=c.thread,
         boundary=c.boundary,
-        authored_by=c.writer or "",
         timeout_s=timeout_s,
         idle_s=idle_s,
         live_file=live,
-        only_family=only_family,
-        writer_exec_allow=e.cfg.writer_exec_allow if c.role == pin.PINNED_ROLE else [],
+        prefer=prefer,
+        writer_exec=e.cfg.writer_exec if c.role == pin.PINNED_ROLE else False,
+        reviewer_other_family=e.cfg.reviewer_other_family if c.role == "reviewer" else False,
         engine_only=recipes,
-        read_roots=list(e.cfg.writer_read_roots) if c.node == "write" else [],
         instructions_ref=base_ref,
-        engine_only_advisory=bool(only_family and recipes),
+        engine_only_advisory=bool(prefer and recipes),
     )
 
 

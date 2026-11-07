@@ -81,7 +81,7 @@ def test_flake_simulation(p: float) -> None:
         baseline_ejections += 1  # Policy off: blame the first red.
         retry = main = None
         retried = False
-        while True:
+        for _step in range(3):
             verdict = decide(red, retry, main, retried=retried)
             if verdict is Verdict.RETRY:
                 assert not retried
@@ -94,6 +94,8 @@ def test_flake_simulation(p: float) -> None:
                 flakes += verdict is Verdict.FLAKE
                 blamed += verdict is Verdict.BLAME
                 break
+        else:
+            pytest.fail("flake verdict did not settle in 3 steps")
         assert runner.calls == 2
     assert blamed == 0
     assert flakes == failures
