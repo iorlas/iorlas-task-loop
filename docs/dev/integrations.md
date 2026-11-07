@@ -97,7 +97,7 @@ delegate is a library of this repo (`src/delegate`, decided 2026-11-05; the iorl
    delegate renames roles or changes how it is asked, update that table.
 
 3. **`delegate.api.run`** (`docs/contracts/delegate-api.md`): the engine runs each AI step with `api.run(request)` on a thread (`ApiRunner`) and
-   feeds usage with `api.status(claude_usage)` (`tl usage`). Code: `WorkerCall` in `app/run/worker_call.py`,
+   feeds usage with `api.status(claude_usage)` (`tl usage`). Code: `WorkerCall` in `app/workers/worker_call.py`,
    `worker_request.request`, `adapters/delegate.api_request`, `tl.py` `usage`. Before recovery, WorkerCall prepares the effective request
    and identifies the worktree, cwd, HEAD, tree contents, policy, schema and answer producer contract. Completed writer
    effects are bound to their resulting tree; interrupted threads resume only with a matching identity. Log destinations

@@ -2,7 +2,6 @@
 rounds so far, the accepted stages, the owner's answer) and the rules the checks must follow."""
 import json
 from pathlib import Path
-from typing import Any
 
 from taskloop.app.plan.decisions import Decisions
 from taskloop.app.plan.host import PlanHost
@@ -10,6 +9,7 @@ from taskloop.app.plan.probe import AcProbe
 from taskloop.app.plan.prompts import PLAN_PROMPT, SHOW_PLAN, VISUAL_PLAN, VISUAL_STAGES
 from taskloop.contracts import plancheck
 from taskloop.contracts.gitport import Git
+from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.checks import lint
 from taskloop.domain.checks.names import norm
 
@@ -18,25 +18,25 @@ REPLAN_CALLS = 6  # the calls a replan may spend looking (study 63: the median r
 
 class PlanPrompt:
     def __init__(self, host: PlanHost, git: Git) -> None:
-        self.e = host
+        self.host = host
         self.git = git
         self.decisions = Decisions(host)
         self.probe = AcProbe(host)
 
     def notes(self) -> str:
         """engine.planner_notes: text, or "@path" of a repo file (read from the worktree), at most 2000 characters."""
-        v = (self.e.cfg.planner_notes or "").strip()
+        v = (self.host.cfg.planner_notes or "").strip()
         if v.startswith("@"):
             try:
-                v = (Path(self.e.wt) / v[1:]).read_text(encoding="utf-8").strip()
+                v = (Path(self.host.wt) / v[1:]).read_text(encoding="utf-8").strip()
             except OSError:
-                self.e.warn(f"engine.planner_notes: {v} cannot be read")
+                self.host.warn(f"engine.planner_notes: {v} cannot be read")
                 return ""
         return v[:2000]
 
-    def change(self, old: Any, again: bool, why: str) -> str:
+    def change(self, old: PlanData | None, again: bool, why: str) -> str:
         """What the planner is told of an earlier plan or a failed one."""
-        e = self.e
+        e = self.host
         if old:
             return ("\n\nAn earlier plan exists for this task. Return the plan with the smallest change that covers what "
                     "follows; keep accepted stages and their checks unless the change touches them; do not re-explore code "
@@ -47,9 +47,9 @@ class PlanPrompt:
             return f"\n\nThe previous plan did not work. What failed:\n<failed>\n{why}\n</failed>\nPlan again."
         return ""
 
-    def history(self, old: Any, again: bool) -> str:
+    def history(self, old: PlanData | None, again: bool) -> str:
         """The rounds before the last one (tl-bxk.13.6: replan.md holds the last round only), and what the tasks beside this one defer."""
-        e = self.e
+        e = self.host
         out = ""
         hist = e.hand.rounds_text()
         if hist and (old or again):
@@ -59,7 +59,7 @@ class PlanPrompt:
 
     def digest(self) -> str:
         """What a replan starts from beyond the old plan, the cause and the rounds: what the tree holds now, and a budget for looking."""
-        e = self.e
+        e = self.host
         tree = e.checkout.tree_hash()
         stat = (self.git.diff(e.wt, e.checkout.base_sha(), tree, stat=True) if tree else "").strip()
         return (f"\n\nThe tree now, against the task's base (git diff --stat):\n<tree>\n{stat or '(no file changed yet)'}\n</tree>\n"
@@ -67,7 +67,7 @@ class PlanPrompt:
                 f"{REPLAN_CALLS} commands before you answer.\n")
 
     def rules(self) -> list[str]:
-        e = self.e
+        e = self.host
         rules = []
         wr = e.cases.rules_text()
         if wr:
@@ -102,8 +102,8 @@ class PlanPrompt:
 
     def extra_gates(self) -> list[str]:
         """Name every gate-only command beyond the gate command already named in the preceding rule."""
-        gate = norm(self.e.cfg.gate_text)
-        extra_gated = [(c, w) for c, w in lint.gate_only(self.e.cfg) if c != gate]
+        gate = norm(self.host.cfg.gate_text)
+        extra_gated = [(c, w) for c, w in lint.gate_only(self.host.cfg) if c != gate]
         if extra_gated:
             return ["These run only in the gate at land too, never in a check: "
                     + "; ".join(f"`{c}`" + (f" ({w})" if w != lint.GATE_WHY else "") for c, w in extra_gated) + "."]
@@ -111,7 +111,7 @@ class PlanPrompt:
 
     def tail(self) -> str:
         """The owner's verify answer and the stages already accepted on this branch."""
-        e, out = self.e, ""
+        e, out = self.host, ""
         if e.verify_answer:
             out += (f"\n\nEvery stage was accepted, then the owner checked the work and answered:\n<answer>\n{e.verify_answer}\n</answer>\n"
                     "Plan only the work this answer asks for. If it asks for nothing more (it says the work is right), "
@@ -121,8 +121,8 @@ class PlanPrompt:
                     "do not plan them again; plan only what the task still needs.\n" + "".join(f"- {g}\n" for g in e.done))
         return out
 
-    def build(self, old: Any, again: bool, why: str) -> str:
-        e = self.e
+    def build(self, old: PlanData | None, again: bool, why: str) -> str:
+        e = self.host
         extra = self.change(old, again, why)
         e.old_plan, e.amend_text, e.amend_why = None, "", ""
         extra += self.history(old, again)

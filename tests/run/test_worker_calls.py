@@ -56,7 +56,7 @@ class Calls(te.EngineTest):
     def go(self, script):
         c = wslots.load_cfg(str(self.wt), port_git())
         nap = mock.Mock()
-        with te.delegate_stack(script), mock.patch("taskloop.app.run.lane_acts.time", napper(nap)):
+        with te.delegate_stack(script), mock.patch("taskloop.app.workers.lane_acts.time", napper(nap)):
             self.eng = engine.Engine(
                 BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()
             )
