@@ -47,7 +47,7 @@ REVIEW: Final[dict[str, Any]] = {
 
 
 def lane(cmd: list[str], **kw: Any) -> Completed:
-    """Fake route.py run: one contract 4 answer on stdout."""
+    """Fake delegate run: one contract 4 answer on stdout."""
     schema = json.loads(Path(cmd[cmd.index("--schema") + 1]).read_text(encoding="utf-8"))
     props, cwd = schema.get("properties", {}), cmd[cmd.index("--cwd") + 1]
     if "stages" in props:

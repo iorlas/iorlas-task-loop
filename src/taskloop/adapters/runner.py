@@ -1,4 +1,4 @@
-"""The process seam of an engine delegate call: `route.py run` through stream-proc, stderr to the engine's log, the live file watched.
+"""The process seam of an engine delegate call: one `delegate.api.run` thread, stderr to the engine's log, the live file watched.
 
 `StreamRunner` is one per call. Its `stop` and `obs` say how the call ended (why it was stopped, which pids outlived the stop, the
 process boundaries); `worker` is the live file's first line (`WorkerStarted`), read while the call runs, never from stderr or `ps`.

@@ -1,7 +1,7 @@
-"""Records at the task-loop / delegate boundary (the wire is a subprocess: `route.py run` in, one JSON answer out).
+"""Records at the task-loop / delegate boundary (the wire is `delegate.api.run`: one request in, one JSON answer out).
 
 Mirrors of what delegate emits; delegate's generated contract.json is the authority and a later release checks these fields
-against it. delegate (`delegate.api.RunRequest.to_argv`) is the only place that builds a `route.py run` argv; the engine builds none."""
+against it. delegate (`delegate.api.RunRequest.to_argv`) is the only place that builds the worker command line; the engine builds none."""
 from typing import Any, ClassVar, Final, Literal, final
 
 import msgspec
@@ -40,7 +40,7 @@ class ToolBinding(Rec):
 
 @final
 class RunRequest(Rec):
-    """One `route.py run`. The engine's limits travel as flags (`timeout_s`, `idle_s`): delegate stops the worker's tree at them."""
+    """One delegate call. The engine's limits travel as flags (`timeout_s`, `idle_s`): delegate stops the worker's tree at them."""
 
     role: str
     brief_path: str
@@ -64,7 +64,7 @@ class RunRequest(Rec):
     writer_exec_allow: list[list[str]] = msgspec.field(default_factory=list)
     read_roots: list[str] = msgspec.field(default_factory=list)  # --read-root once each: folders an OpenCode write step may read
     instructions_ref: str = ""  # --instructions-ref: a commit whose instruction files the worker reads instead of the work tree's
-    tools: list[ToolBinding] = msgspec.field(default_factory=list)  # not part of the route.py argv: delegate.api takes them typed
+    tools: list[ToolBinding] = msgspec.field(default_factory=list)  # delegate.api takes them typed, not as flags
 
     def env(self) -> dict[str, str]:
         return {"DELEGATE_LIVE_FILE": self.live_file} if self.live_file else {}
@@ -164,7 +164,7 @@ class WorkerEnd(Rec):
 
 @final
 class DelegateResult(Rec):
-    """The answer of `route.py run` (delegate contract 4): `stop` is None for a done call or the agent-tool handoff
+    """The answer of a delegate call (delegate contract 4): `stop` is None for a done call or the agent-tool handoff
     (`agent_model` set); no status, next, reason or retry_after."""
 
     contract: Literal[4] = 4

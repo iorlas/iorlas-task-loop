@@ -30,7 +30,7 @@ class LaneActs:
 
     # -- the network gate
     def net_up(self) -> bool | None:
-        """True, False, or None (the probe could not run): the host's probe, else delegate's `route.py net`."""
+        """True, False, or None (the probe could not run): the host's probe, else delegate's network probe."""
         return self.e.delegation.net_probe().up()
 
     def await_net(self, up: bool | None, max_s: float) -> tuple[float, bool]:

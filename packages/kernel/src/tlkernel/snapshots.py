@@ -45,7 +45,7 @@ class NeedInput(Rec):
 
 @final
 class StatusSnapshot(Rec):
-    """snapshots/delegate.status.json: delegate's `route.py status --json` read once by `tl lanes` / `tl usage`; the dashboard reads
+    """snapshots/delegate.status.json: delegate's status answer read once by `tl lanes` / `tl usage`; the dashboard reads
     this and never runs delegate. `at` is delegate's own clock."""
 
     V: ClassVar[int] = 1

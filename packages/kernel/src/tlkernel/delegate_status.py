@@ -1,4 +1,4 @@
-"""`route.py status --json` (delegate's status answer, v 1) read into a StatusSnapshot. The one reader of that shape: a key delegate
+"""delegate's status answer (v 1) read into a StatusSnapshot. The one reader of that shape: a key delegate
 renames or drops fails here, and tests/adapters/test_delegate_status.py runs it on a real answer."""
 import math
 from typing import Any

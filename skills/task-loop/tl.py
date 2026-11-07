@@ -214,7 +214,7 @@ def engine_parsers(sp):
     p = sp.add_parser("accounts", help="the worker accounts delegate can use: ready or not, the fix, and enable/decline one")
     p.add_argument("op", nargs="?", choices=["list", "enable", "decline"], default="list")
     p.add_argument("lane", nargs="?", default="")
-    sp.add_parser("lanes", help="file delegate's lane status (route.py status --json) as the snapshot the dashboard reads")
+    sp.add_parser("lanes", help="file delegate's lane status (delegate's status answer) as the snapshot the dashboard reads")
     p = sp.add_parser("usage", help="pass get_usage's plan.windows (JSON) to delegate, so headless Claude steps may run")
     p.add_argument("windows")
     p = sp.add_parser("land-lock", help="run a command under the repo's land lock (the one the engine lands under)")
