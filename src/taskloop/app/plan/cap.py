@@ -16,11 +16,11 @@ from taskloop.domain.asks import text as asktext
 
 class ReplanCap:
     def __init__(self, host: PlanHost) -> None:
-        self.e = host
+        self.host = host
 
     def blocked(self, detail: str = "") -> Exception:
         """The cap's ask: the planner ran `planned` times. An answer that allows one more (action rerun) gives one."""
-        e = self.e
+        e = self.host
         runs = [(x.mode, x.why) for x in e.plan_log]
         why = "; ".join(f"{k + 1}. {m}: {w}" for k, (m, w) in enumerate(runs))[:1500]
         limit = e.cfg.max_replans + e.extra
@@ -31,7 +31,7 @@ class ReplanCap:
         """The owner allows one more planner run: they answered the cap's ask with the rerun option, or put the override on the bead
         (`tl override BEAD replan-cap`). Any other answer is recorded and the bead blocks again at the cap. The grant goes into the
         checkpoint's extra, which the resume adds to."""
-        e = self.e
+        e = self.host
         a = e.answered
         by_ask = a is not None and a.ask_class == AskClass.CAP_REACHED
         bead = peek(e.store, e.bead) or Bead(id=e.bead, title="", status="")
@@ -53,7 +53,7 @@ class ReplanCap:
         self.add_to_checkpoint()
 
     def add_to_checkpoint(self) -> None:
-        e = self.e
+        e = self.host
 
         def one_more(ck: Checkpoint) -> Checkpoint:
             return ck.replace(state=ck.state.replace(extra=ck.state.extra + 1))
@@ -63,9 +63,9 @@ class ReplanCap:
 
     def answered_words(self) -> str:
         """What the owner's answer asks the work to do: their text, or the split instruction; a bare rerun or confirm asks for nothing."""
-        return asktext.words(self.e.answered.answer if self.e.answered else None)
+        return asktext.words(self.host.answered.answer if self.host.answered else None)
 
     def kept_whole(self) -> bool:
         """The owner answered the too-big ask, and not with 'I will split it': the plan goes ahead with all its stages."""
-        a = self.e.answered
+        a = self.host.answered
         return a is not None and a.ask_class == AskClass.TOO_BIG and (a.answer is None or a.answer.action != "split")
