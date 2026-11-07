@@ -10,7 +10,7 @@ from tlkernel.plancheck import PlanData, StageData
 
 from taskloop.app.land import verified
 from taskloop.app.land.gate import Problem, ProblemKind
-from taskloop.app.land.parts import BeginSteps, CaseChecks
+from taskloop.app.land.host import BeginSteps, CaseChecks
 
 
 class RecheckStageChecks(Protocol):

@@ -13,7 +13,7 @@ from tlkernel.ids import BeadId
 from tlkernel.landmatchers import Push, lfs_in, no_dolt_remote
 from tlkernel.ports import Clock
 
-from taskloop.app.land.parts import BeginSteps
+from taskloop.app.land.host import BeginSteps
 from taskloop.app.land.push_evidence import failure
 from taskloop.stores.runlog import RunLog
 

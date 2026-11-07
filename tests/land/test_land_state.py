@@ -1,5 +1,5 @@
 """LandState: the land's unsaved state starts empty and is one object per run (docs/design/b-land.md, slice 2)."""
-from taskloop.app.land.state import LandState
+from taskloop.app.land.host import LandState
 
 
 def test_starts_empty() -> None:
