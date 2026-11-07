@@ -18,8 +18,8 @@ from support.factory_index import ingest
 from support.narrow import must
 from support.waits import until
 
-from taskloop.app.report import card
 from taskloop.app.asks import owner_verbs as requests
+from taskloop.app.report import card
 from taskloop.cli import wait
 from taskloop.contracts import runlife
 from taskloop.contracts.ids import loop_key

@@ -10,10 +10,10 @@ from taskloop.adapters.bd import BdStore
 from taskloop.adapters.ident import config_dir, hostname
 from taskloop.adapters.locks import resource_holders
 from taskloop.app.asks.intake import Intake
+from taskloop.app.asks.owner_verbs import OwnerVerbs
 from taskloop.app.doctor import profiles
 from taskloop.app.report import card as cards
 from taskloop.app.report.card import score_of
-from taskloop.app.asks.owner_verbs import OwnerVerbs
 from taskloop.app.track.trail import now
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import real

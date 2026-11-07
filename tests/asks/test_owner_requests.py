@@ -23,8 +23,7 @@ from support.plans import PLAN, WRITE
 from support.runs import manifest
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.app.asks import intake
-from taskloop.app.asks import owner_verbs
+from taskloop.app.asks import intake, owner_verbs
 from taskloop.app.pipeline import requests
 from taskloop.app.run.layout import prune_run_logs
 from taskloop.cli import asks as cli

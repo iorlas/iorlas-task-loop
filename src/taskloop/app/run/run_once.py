@@ -8,10 +8,10 @@ from taskloop.adapters import beadtools, ident
 from taskloop.adapters.deadline import DeadlineExpired, deadline
 from taskloop.app.land.gitcall import oneline
 from taskloop.app.pipeline import ended as stored_end
+from taskloop.app.pipeline import requests
 from taskloop.app.pipeline.finish import outcome as finished_outcome
 from taskloop.app.pipeline.finish import terminal_state
 from taskloop.app.release import reexec
-from taskloop.app.pipeline import requests
 from taskloop.app.run.crash import parked_crash
 from taskloop.app.run.reload import Exec
 from taskloop.app.slots.lease import Lease
