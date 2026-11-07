@@ -20,13 +20,14 @@ NAME_LIKE = re.compile(r"[\w.\-]+")  # a config key, event or metric name; prose
 def names_in(tree: ast.AST) -> list[str]:
     found: list[str] = []
     for n in ast.walk(tree):
-        match n:
-            case ast.Name(id=name) | ast.Attribute(attr=name) | ast.FunctionDef(name=name) | ast.ClassDef(name=name) | ast.arg(arg=name):
-                found.append(name)
-            case ast.keyword(arg=str() as name) | ast.alias(name=name):
-                found.append(name)
-            case ast.Constant(value=str() as text) if NAME_LIKE.fullmatch(text):
-                found.append(text)
+        if isinstance(n, ast.Name):
+            found.append(n.id)
+        elif isinstance(n, ast.Attribute | ast.keyword | ast.arg):
+            found.append(n.attr if isinstance(n, ast.Attribute) else n.arg or "")
+        elif isinstance(n, ast.FunctionDef | ast.ClassDef | ast.alias):
+            found.append(n.name)
+        elif isinstance(n, ast.Constant) and isinstance(n.value, str) and NAME_LIKE.fullmatch(n.value):
+            found.append(n.value)
     return found
 
 
