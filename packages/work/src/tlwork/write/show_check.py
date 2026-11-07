@@ -5,6 +5,7 @@ from pathlib import Path
 from tlartifacts import store
 from tlkernel.artifact import ArtifactSlot
 from tlkernel.plancheck import Open
+
 from tlwork.work import visual
 
 SHOW_BACK = ("\nThe plan's `show` items name pictures or files that must be registered with the artifact_add tool for this write, with "

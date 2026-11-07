@@ -5,13 +5,14 @@ from typing import Any
 
 from tlgate import evidence as check_evidence
 from tlkernel import askspecs
+from tlkernel.checks import CheckRun
 from tlkernel.plancheck import StageData
 
-from taskloop.app.write.host import WriteHost
-from taskloop.app.write.prepare import PREPARED, Prepare
-from taskloop.app.write.prompts import REPEAT_RED
-from taskloop.app.write.state import AGAIN, REPLAN, RoundResult, StageState, carrying
-from taskloop.domain.write.matchers import count_tests
+from tlwork.write.host import WriteHost
+from tlwork.write.matchers import count_tests
+from tlwork.write.prepare import PREPARED, Prepare
+from tlwork.write.prompts import REPEAT_RED
+from tlwork.write.state import AGAIN, REPLAN, RoundResult, StageState, carrying
 
 
 class CheckRound:
@@ -83,7 +84,7 @@ class CheckRound:
                      f"the writer says {n} check{'' if n == 1 else 's'} cannot pass: " + "; ".join(why for _, why in wrong))
         return REPLAN
 
-    def red(self, s: StageState, run: Any, failed: list[Any], prev_red: set[str], out: RoundResult) -> str:
+    def red(self, s: StageState, run: CheckRun, failed: list[Any], prev_red: set[str], out: RoundResult) -> str:
         e = self.e
         s.red += 1
         s.failed_cmds = [c.cmd for c in failed]

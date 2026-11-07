@@ -1,17 +1,17 @@
 """What a worker is told of its checks: which it may run, which are the engine's, which were red on the untouched base too."""
-from typing import Any
+from collections.abc import Sequence
 
 from tlgate.domain.names import norm as norm_cmd
 from tlkernel.checks import CheckRun
 
-from taskloop.app.write.host import BriefingHost
+from tlwork.write.host import BriefingHost
 
 
 class Briefing:
     def __init__(self, host: BriefingHost) -> None:
         self.e = host
 
-    def where(self, node: str, checks: Any = (), failed: Any = None, listed: Any = ()):
+    def where(self, node: str, checks=(), failed=None, listed: Sequence[str] = ()):
         """What the step is for, never what its sandbox allows: delegate tells each worker that (worker-run v4).
         For the writer: which checks it may run (fast ones) and which are the engine's (slow ones), minus `listed` (the
         commands the stage's own check list already names)."""
@@ -52,7 +52,7 @@ class Briefing:
         rows = "\n".join(f"- `{c.cmd}` (exit {c.exit})" for c in run.base_red)
         return f"\nThese checks are red on the untouched base too, so they are not yours; the round does not count them:\n{rows}\n"
 
-    def stage_checks_text(self, checks: Any, skip: Any = None):
+    def stage_checks_text(self, checks: Sequence[str], skip: Sequence[str] | None = None):
         """The stage's check list split for the writer: the fast ones it may run, the slow ones the engine runs alone (WriterSplit)."""
         e = self.e
         return e.checker.split().text(checks, skip)

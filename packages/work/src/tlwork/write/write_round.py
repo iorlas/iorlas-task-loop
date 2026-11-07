@@ -3,14 +3,14 @@ means (a question, an accepted requirement that decides it, shots a visual stage
 
 from tlgate.domain import planref
 from tlkernel import askspecs
+
 from tlwork.prompts.anchors import anchors_text
 from tlwork.prompts.common import DECIDED_TEXT, LATER_CASES, UNCHECKED_TEXT
-
-from taskloop.app.write import show_check
-from taskloop.app.write.host import WriteHost
-from taskloop.app.write.prepare import PREPARED, Prepare
-from taskloop.app.write.prompts import SHOTS_FIX, write_prompt
-from taskloop.app.write.state import AGAIN, REPLAN, RoundResult, StageState, carrying
+from tlwork.write import show_check
+from tlwork.write.host import WriteHost
+from tlwork.write.prepare import PREPARED, Prepare
+from tlwork.write.prompts import SHOTS_FIX, write_prompt
+from tlwork.write.state import AGAIN, REPLAN, RoundResult, StageState, carrying
 
 CASES_TAIL = ("\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
               "criterion it proves, the check, why); never remove or weaken one.")

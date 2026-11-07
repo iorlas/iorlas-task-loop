@@ -14,8 +14,6 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.app.run import engine
-from taskloop.app.write import prompts as write
-from taskloop.app.write import review_prompt as review
 from taskloop.domain.lanes.roles import ROLES
 from tlkernel import lanecaps as caps
 from tlkernel.env import snapshot
@@ -24,6 +22,8 @@ from tlkernel.kinds import Kind, Task, fault_of
 from tlslots import config as wslots_config
 from tltestkit import fake_route
 from tlwork.prompts import common
+from tlwork.write import prompts as write
+from tlwork.write import review_prompt as review
 
 
 class Table(Case):

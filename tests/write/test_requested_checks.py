@@ -6,17 +6,17 @@ from unittest.mock import Mock
 import pytest
 import support.paths  # noqa: F401
 
-from taskloop.app.write.briefing import Briefing
-from taskloop.app.write.check_round import CheckRound
-from taskloop.app.write.progress import progress_of, restore_progress
-from taskloop.app.write.state import StageState
-from taskloop.app.write.write_round import WriteRound
 from tlgate.domain.writer_split import WriterSplit
 from tlkernel.checks import CheckResult, CheckRun
 from tlkernel.config import CheckSpec, EngineConfig
 from tlkernel.ids import CheckId
 from tltestkit.cfgs import plan_of
 from tltestkit.plans import PLAN, WRITE
+from tlwork.write.briefing import Briefing
+from tlwork.write.check_round import CheckRound
+from tlwork.write.progress import progress_of, restore_progress
+from tlwork.write.state import StageState
+from tlwork.write.write_round import WriteRound
 
 
 def state():

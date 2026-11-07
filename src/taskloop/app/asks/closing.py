@@ -1,4 +1,5 @@
 """Ask validation and park transitions bound to a closing run's config directory."""
+from tlkernel import trustroots
 from tlkernel.askspec import AskSpec
 from tlkernel.bead import Bead
 from tlkernel.delegate import Permanence
@@ -8,7 +9,7 @@ from tlkernel.parks import Park
 from tlkernel.paths import ConfigDir
 from tlkernel.pausereasons import Producer
 
-from taskloop.app.asks import parks, raiser, trustroots
+from taskloop.app.asks import parks, raiser
 
 
 class ClosingAsks:

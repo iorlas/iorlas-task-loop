@@ -32,7 +32,6 @@ from taskloop.app.run import (
     engine,
     entry,
 )
-from taskloop.domain.write.matchers import count_tests
 from tlgate import evidence as check_evidence
 from tlgate.domain import lint
 from tlgate.domain.writer_split import WriterSplit
@@ -48,6 +47,7 @@ from tlslots import config as wslots_config
 from tltestkit.cfgs import cfg_with
 from tltestkit.checks import ck, res, typed
 from tltestkit.narrow import must
+from tlwork.write.matchers import count_tests
 
 
 class EngineChecksTest(EngineTest):

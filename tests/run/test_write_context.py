@@ -5,12 +5,12 @@ from types import SimpleNamespace as NS
 import pytest
 
 from taskloop.app.workers.worker_identity import ExecutionContext, NodeInput, prepare_call
-from taskloop.app.write import write_round
-from taskloop.app.write.state import RoundResult, StageState
-from taskloop.app.write.write_round import WriteRound
 from tlkernel.config import EngineConfig
 from tlkernel.delegate import RunRequest
 from tltestkit.tmpdir import TemporaryDirectory
+from tlwork.write import write_round
+from tlwork.write.state import RoundResult, StageState
+from tlwork.write.write_round import WriteRound
 
 
 @pytest.mark.parametrize("delta,boundary,expected", [(None, False, ""), (None, True, ""),
