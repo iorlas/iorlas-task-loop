@@ -3,11 +3,11 @@ import argparse
 from unittest.mock import Mock, patch
 
 import pytest
-
-from tlgate import authorization, checklog
 from tlkernel.checks import CheckResult
 from tlkernel.config import load
 from tlkernel.ids import CheckId
+
+from tlgate import authorization, checklog
 
 
 def registry():

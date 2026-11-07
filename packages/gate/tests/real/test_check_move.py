@@ -4,17 +4,14 @@ import importlib.util
 import io
 import os
 import subprocess
-import sys
+from pathlib import Path
 
 import pytest
-
 from tltestkit.case import Case
+from tltestkit.narrow import must
 from tltestkit.tmpdir import TemporaryDirectory
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from tltestkit.narrow import must
-
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+ROOT = str(Path(__file__).resolve().parents[4])
 TOOL = os.path.join(ROOT, "dev", "check_move.py")
 
 spec = importlib.util.spec_from_file_location("check_move", TOOL)

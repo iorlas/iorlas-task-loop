@@ -1,21 +1,15 @@
 """tl-7y6.7.17: a check's output is trimmed before any agent prompt carries it."""
 import re
-import sys
 from pathlib import Path
 
+from tlkernel import checktrim as trim
 from tltestkit.case import Case
+from tltestkit.checks import res
 from tltestkit.tmpdir import TemporaryDirectory
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402, F401
+from tlgate import evidence
 
-sys.path.insert(0, str(ROOT / "tests"))
-from tlgate import evidence  # noqa: E402
-from tlkernel import checktrim as trim  # noqa: E402
-from tltestkit.checks import res  # noqa: E402
-
-FIX = Path(__file__).parents[1] / "fixtures" / "checklogs"
+FIX = Path(__file__).parent / "fixtures" / "checklogs"
 
 # fixture -> lines that must survive: every failing test name, and its first assertion / compile error line
 MUST = {
