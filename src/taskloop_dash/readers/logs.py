@@ -185,7 +185,7 @@ def live_event(data: object) -> LiveEvent:
     """Decode the delegate console format, separately owned from engine state."""
     if not isinstance(data, dict):
         raise ValueError("not a live event")
-    return wire.load(LiveEvent, {**{k: v for k, v in data.items() if k != "k"}, "kind": data.get("k"), "v": 1})
+    return wire.load(LiveEvent, dict(data, v=1))
 
 
 class Logs:
