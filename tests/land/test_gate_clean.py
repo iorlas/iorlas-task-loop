@@ -13,7 +13,7 @@ from support import procsim
 from support.gate_rig import GateCase
 
 from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
-from taskloop.app.run.blocked import Blocked
+from taskloop.app.pipeline.blocked import Blocked
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.procport import Ran
 from taskloop.contracts.slots import SlotGitError

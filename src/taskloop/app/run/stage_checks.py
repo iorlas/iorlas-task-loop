@@ -4,7 +4,7 @@ from typing import Any
 
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.checks.host import CheckFault, CheckStuck
-from taskloop.app.run.blocked import Blocked
+from taskloop.app.pipeline.blocked import Blocked
 from taskloop.contracts.checks import CheckFaultKind, CheckRun
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.plancheck import StageData

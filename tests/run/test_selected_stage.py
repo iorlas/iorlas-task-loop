@@ -14,11 +14,11 @@ from support.memstores import fake_stores
 from support.tlmain import tl_main
 
 from taskloop.app.land.gate import Gate, Problem, ProblemKind
+from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.closing_record import RecordRun
 from taskloop.app.pipeline.cursor import parse_step
 from taskloop.app.pipeline.finish import answer
 from taskloop.app.pipeline.steps import Steps
-from taskloop.app.run.blocked import Blocked
 from taskloop.app.run.stages import round_step, run_stages
 from taskloop.app.write.state import ACCEPT, StageState
 from taskloop.contracts import log as rec
