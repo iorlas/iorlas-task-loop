@@ -1,7 +1,6 @@
 """A fetch pause keeps each loop alive and bypasses all failure accounting."""
 from unittest import mock
 
-from slots.test_slot_pool import Rig
 from support.fake_loop_env import slot_loop_env
 
 from taskloop.app.loop import verdict as vd
@@ -16,6 +15,7 @@ from tlkernel.enums import Result
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.slots import SlotGitError
+from tlslots.testing import Rig
 
 DNS = "fatal: unable to access 'https://github.com/org/repo': Could not resolve host: github.com"
 

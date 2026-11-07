@@ -309,6 +309,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "msgspec" },
     { name = "pytest" },
     { name = "tltestkit" },
 ]
@@ -321,6 +322,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "msgspec" },
     { name = "pytest" },
     { name = "tltestkit", editable = "packages/testkit" },
 ]

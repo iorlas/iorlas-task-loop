@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from tlkernel.beadsport import BeadPatch
 from tlkernel.slots import SlotFail
+
 from tlslots import aside
 from tlslots.marks import mark_held
 from tlslots.pool import Slot

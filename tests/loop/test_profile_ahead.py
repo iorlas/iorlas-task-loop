@@ -9,7 +9,6 @@ from unittest import mock
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from slots.test_slot_pool import ME, Rig
 from support.fake_loop_env import slot_loop_env
 
 from taskloop.app.loop import verdict as vd
@@ -25,6 +24,7 @@ from tlkernel.enums import Result
 from tlkernel.ids import BeadId
 from tlkernel.parks import ParkStore
 from tlkernel.run import RunReport
+from tlslots.testing import ME, Rig
 
 
 class ProfileAhead(Rig):
