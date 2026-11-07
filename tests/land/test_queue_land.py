@@ -39,7 +39,9 @@ class World:
             profile_change=profile_change, jobs=1, repo="/r", cmds=None, last="", trees=SimpleNamespace(main_ref="origin/main"),
             resolve=lambda item: (item.branch, "h" + item.branch, pr[item.branch]), item=lambda item: self.serial.append(item.branch),
             forge=SimpleNamespace(fetch=lambda: None),
-            git=SimpleNamespace(rev_parse=lambda d, rev: "main0" if rev == "origin/main" else rev),
+            beads=SimpleNamespace(show=lambda bead: None),
+            git=SimpleNamespace(merge_base=lambda repo, main, oid: main, diff_entries=lambda repo, base, oid: [],
+                                rev_parse=lambda d, rev: "main0" if rev == "origin/main" else rev),
             gate=SimpleNamespace(judge_queue=lambda q, parent, lock: self.judged.append((q, parent)) or q not in red),
             deliver=self.deliver)
 
@@ -87,3 +89,17 @@ def test_a_head_that_moved_while_queued_is_never_merged():
     stack = mock.create_autospec(Stack, instance=True)
     with pytest.raises(HeadMoved):
         Stack.crossing(stack, "task/a", "new" * 13, Queued(head="old" * 13, q="q1", tree="t1"))
+
+
+@pytest.mark.parametrize("branch,bead", [("a", "child"), ("task/child", "")])
+def test_refusing_enqueue_builds_no_refs_and_merges_nothing(branch, bead):
+    world = World()
+    parent = SimpleNamespace(id="parent", type="blocks", status="open")
+    world.stack.beads.show = lambda name: SimpleNamespace(dependencies=[parent]) if name == "child" else None
+    world.stack.resolve = lambda item: (item.branch, "head", None)
+    with mock.patch.object(queue_land, "QueueRefs", FakeRefs), pytest.raises(Stop) as stop:
+        QueueLand(world.stack).run([StackItem(branch=branch, bead=bead), StackItem(branch="b")])
+    assert stop.value.why == "queue: child waits for parent (not merged to main)"
+    assert FakeRefs.kept == set()
+    assert world.delivered == []
+    assert world.judged == []
