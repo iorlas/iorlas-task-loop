@@ -48,13 +48,13 @@ def entering(cfg: ConfigDir, b: Bead) -> None:
 
 def paused(cfg: ConfigDir, b: Bead, kind: Kind, run: str, now: float, *, reason: str = "",
            not_before: float = 0.0, draw: Callable[[], float] = random, fingerprint: str = "",
-           producer: Producer | None = None, permanence: Permanence | None = None) -> Park | None:
+           producer: Producer | None = None, permanence: Permanence | None = None) -> Park:
     """File a pause's wake, including an empty plan's explicit owner wake."""
     if kind is Kind.NOOP:
         reason = "plan_noop"
     reason = reason or kind.value
     if kind is not Kind.NOOP and kind not in PAUSES:
-        return None
+        raise ValueError(f"no park wake for kind {kind}")
     return ParkStore(cfg).change(b.id, lambda old: pauses.after_pause(old, b, run, now, reason, draw, not_before,
                                                                      fingerprint=fingerprint, producer=producer, permanence=permanence))
 

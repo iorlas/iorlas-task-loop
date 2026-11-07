@@ -26,7 +26,6 @@ class Counters:
     fails: list[str] = field(default_factory=list)  # runs in a row that gave no verdict
     ran: int = 0
     later: dict[str, float] = field(default_factory=dict)  # a paused or taken bead -> when to try it again
-    pauses: dict[str, int] = field(default_factory=dict)
     warned: list[str] = field(default_factory=list)  # once-per-loop-run warnings (a missing install dir)
     slot_quick: dict[str, list[str]] = field(default_factory=dict)  # slot -> the beads that failed in an instant there, in a row
     slot_blocked: dict[str, str] = field(default_factory=dict)  # slot -> bead requiring recovery or different work
@@ -104,20 +103,9 @@ class Settle:
         if bid not in self.c.net_first:
             self.c.net_first.append(bid)
 
-    def paused(self, v: vd.Verdict, bid: str) -> None:
-        t, c, env = self.tune(), self.c, self.env
-        c.pauses[bid] = c.pauses.get(bid, 0) + 1
-        if c.pauses[bid] >= t.pauses_to_rest:
-            c.pauses[bid] = 0
-            c.later[bid] = env.now() + t.rest
-            self.say(f"{bid} paused {t.pauses_to_rest} times: it rests an hour, the next bead first")
-        elif v.role and env.has_delegate():
-            self.gate.hold(bid, v.role)  # the lane's own time is a hint: the bead wakes when delegate says the role is usable
-            hint = f" (a time hint: {time.strftime('%H:%M:%S', time.localtime(v.retry_after))})" if v.retry_after else ""
-            self.say(f"{bid} paused for the {v.role} role{hint}: it wakes when delegate says the role is usable, the next bead first")
-        else:
-            c.later[bid] = env.now() + t.pause_retry
-            self.say(f"{bid} paused ({v.why[:120]}): the next bead first")
+    def paused(self, v: vd.Verdict, bid: str, name: str, slots: bool) -> int | None:
+        self.say(f"{bid} paused without a park ({v.why[:120]}): a fault, rested")
+        return self.failed(v.with_(kind="fault_unparked"), bid, name, slots)
 
     def failed(self, v: vd.Verdict, bid: str, name: str, slots: bool) -> int | None:
         t, c, env = self.tune(), self.c, self.env
@@ -173,5 +161,5 @@ class Settle:
         elif v.outcome is Result.FAILED:
             return self.failed(v, bid, name, slots)
         elif v.outcome is Result.PAUSED:
-            self.paused(v, bid)
+            return self.paused(v, bid, name, slots)
         return None

@@ -564,15 +564,6 @@ class Loop(LoopBase):
         self.run_loop("--max-beads", "2")
         assert [b for b, _ in self.started] == ["x-1", "x-2", "x-1"]
 
-    def test_a_bead_paused_three_times_waits_an_hour_while_others_run(self):
-        def soon():
-            return rec("paused", kind="pause_lane", role="worker", retry_after=self.clock.t + 60)
-        self.beads({"x-1": [None, None, None, rec("landed")], "x-2": [rec("landed")]})
-        self.script["x-1"][:3] = [soon(), soon(), soon()]
-        assert self.run_loop() == 0
-        assert [b for b, _ in self.started] == ["x-1", "x-1", "x-1", "x-2", "x-1"]
-        assert any(n >= 3000 for n in self.clock.naps)
-
     def test_a_park_moves_on_and_two_failures_wait_parks_never_count(self):
         self.beads({"x-1": [rec("failed")], "x-2": [rec("parked")], "x-3": [rec("failed")], "x-4": [rec("landed")]})
         assert self.run_loop() == 0
@@ -731,45 +722,14 @@ class Loop(LoopBase):
         assert self.lines()[0]["outcome"] == "failed"
         assert "no outcome" in self.lines()[0]["why"]
 
-    # tl-7y6.2.8: a paused bead wakes when delegate says its role is usable, not at a clock
-    def test_a_lane_pause_wakes_when_the_role_is_usable_not_at_the_hint(self):
-        up_at = self.clock.t0 + 200
-        self.roles = lambda: {"worker": {"usable": self.clock.t >= up_at, "until": self.clock.t0 + 2 * 3600}}
-        self.beads({"x-1": [rec("paused", kind="pause_lane", role="worker", retry_after=self.clock.t + 2 * 3600), rec("landed")],
-                    "x-2": [rec("landed")]})
-        assert self.run_loop() == 0
-        assert [b for b, _ in self.started] == ["x-1", "x-2", "x-1"]  # the next bead runs while the role is down
-        assert self.clock.t - self.clock.t0 < 600  # woken by the role coming back, 2 hours before the hint
-        assert not [n for n in self.clock.naps if n > LoopConfig().gate_cache + 1]
-        assert "worker role" in self.out
-
-    def test_a_stale_hint_never_blocks_a_usable_role(self):
-        self.beads({"x-1": [rec("paused", kind="pause_lane", role="worker", retry_after=self.clock.t + 5 * 3600), rec("landed")]})
-        assert self.run_loop() == 0
-        assert [b for b, _ in self.started] == ["x-1", "x-1"]
-        assert not [n for n in self.clock.naps if n > 60]
-
-    def test_a_role_delegate_cannot_judge_fails_open_after_the_unknown_wait(self):
-        self.roles = lambda: {}
-        self.beads({"x-1": [rec("paused", kind="pause_lane", role="worker"), rec("landed")]})
-        assert self.run_loop() == 0
-        assert [b for b, _ in self.started] == ["x-1", "x-1"]
-        assert self.clock.t - self.clock.t0 >= LoopConfig().gate_unknown
-        assert self.clock.t - self.clock.t0 < LoopConfig().gate_unknown + 2 * LoopConfig().gate_cache
-        assert len(self.clock.naps) <= LoopConfig().gate_unknown / LoopConfig().gate_cache + 2
-
-    def test_a_role_that_stays_down_keeps_the_bead_waiting_while_others_run(self):
-        self.roles = lambda: {"worker": {"usable": False}}
-        self.beads({"x-1": [rec("paused", kind="pause_lane", role="worker")], "x-2": [rec("landed")]})
-        assert self.run_loop("--until", time.strftime("%H:%M", time.localtime(self.clock.t + 300))) == 0
-        assert [b for b, _ in self.started] == ["x-1", "x-2"]  # x-1 is never run again while its role is down
-
-    def test_a_pause_with_no_role_rests_pause_retry(self):
-        self.beads({"x-1": [rec("paused"), rec("landed")], "x-2": [rec("paused"), rec("landed")]})
-        assert self.run_loop() == 0
-        assert [b for b, _ in self.started] == ["x-1", "x-2", "x-1", "x-2"]
-        assert LoopConfig().pause_retry in self.clock.naps
-
+    def test_a_pause_with_no_park_rests_for_the_fault_cooldown(self):
+        self.beads({"x-1": [rec("paused")], "x-2": [rec("landed")]})
+        assert self.run_loop("--max-beads", "2") == 0
+        assert [b for b, _ in self.started] == ["x-1", "x-2"]
+        rests = looptest.rests(str(self.repo))
+        assert rests == {"x-1": self.clock.t0 + LoopConfig().fault_cooldown}
+        assert rests["x-1"] != self.clock.t0 + LoopConfig().pause_retry
+        assert "paused without a park" in self.out
 
     def test_drained_waits_when_asked_and_polls_until_the_end_time(self):
         self.beads({})
