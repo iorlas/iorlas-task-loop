@@ -44,7 +44,7 @@ Each candidate below follows these independently releasable steps:
 4. Replace one reader, parser or transport at a time; retain the app holdouts and previous production pin as rollback.
 5. Remove the obsolete body only after parity. Any semantic correction is a separate app release.
 
-In particular, do not regenerate tests/dash/golden/closes.json to make an extraction pass. tests/dash/test_dash_golden.py:27-46 records the close cases, and :78-89 normalizes expected contracts and recomputes versions: therefore also assert literal ETag/hash bytes independently. Land/gate/close behavior, denial precedence, resume accounting and stopped-after-answer behavior must not change silently. No floating shelf branches or production imports from this _shelf checkout.
+In particular, do not regenerate tests/dash/golden/closes.json to make an extraction pass. tests/dashwire/test_dash_golden.py:27-46 records the close cases, and :78-89 normalizes expected contracts and recomputes versions: therefore also assert literal ETag/hash bytes independently. Land/gate/close behavior, denial precedence, resume accounting and stopped-after-answer behavior must not change silently. No floating shelf branches or production imports from this _shelf checkout.
 
 No tests, applications, git, tracker commands or network operations were run. No credential files were opened. The namespace sandbox could not start shell reads; exact-command escalations allowed the in-tree reads. This review claims inspection/counting, not runtime validation.
 
@@ -63,7 +63,7 @@ Paths below are the existing implementations/public surfaces, not proposed packa
 | _shelf/packages/http-cache/src/http_cache/__init__.py: HttpCache.get/put, CacheRow, conditional_headers | Cache of fetched HTTP bytes in SQLite. It is neither a Python object cache nor a server response/content-hash engine. Do not distort its contract to absorb either. |
 | _shelf/packages/http-fetch/README.md: fetch_bytes, FetchOutcome, FetchVerdict, conditional_headers | HTTP GET transport; no bounded DNS/TCP fact probe, stdio JSON-RPC session or browser polling lifecycle. |
 | _shelf/packages/async-scope/src/async_scope/asgi.py:39-197: bind_loopback, serve_asgi; ResourceScope | Existing ASGI lifecycle. The dashboard has threaded servers and all-or-none multi-address binding; switching to ASGI is unnecessary migration scope. |
-| _shelf/packages/asgi-token-gate/src/asgi_token_gate/__init__.py: TokenGate, StaticTokenGate, LeaseTokenGate, LeaseSet, stable_token | Auth middleware exists. The dashboard's current access rule is bind restriction, with an explicit no-auth holdout in tests/dash/test_dash.py:59-77. Do not introduce tokens during extraction. |
+| _shelf/packages/asgi-token-gate/src/asgi_token_gate/__init__.py: TokenGate, StaticTokenGate, LeaseTokenGate, LeaseSet, stable_token | Auth middleware exists. The dashboard's current access rule is bind restriction, with an explicit no-auth holdout in tests/dashwire/test_dash.py:59-77. Do not introduce tokens during extraction. |
 | _shelf/packages/event-bus/src/event_bus/__init__.py:26-71: EventBus.subscribe/publish/subscribed | Synchronous, in-process notification. Does not replace persistent file cursors, browser subscriptions or cross-process long polling. |
 | _shelf/packages/json-in-html/src/json_in_html/__init__.py:83: extract_json_payloads | Extracts JSON from HTML. No corresponding job in serving this dashboard's JSON API. |
 | _shelf/packages/lean-wire/src/lean_wire/__init__.py:21-34: encode_tsv, PruneEmpty, prune_dict, dump_model_for_wire | Agent TSV and optional empty-value pruning. Not strict typed decoding, schema projection or preserving ABSENT versus null. |
@@ -364,7 +364,7 @@ Contracts to own:
 - Truncation resets a source; torn rows wait; source discovery adds files without resetting unrelated offsets.
 - Initial fetch never waits; no growth exhausts the bound; growth returns on the next injected tick.
 
-**Volume/risk/cost:** runtime 72 + tests 49 = 121; deleted/replaced 0. Risk 2, cost M: duplicate/missing live lines or stuck requests. **Migration:** cursor contracts/tag → generic Source reader → merge/page → polling wait; keep tests/dash/test_dash_live_page.py as product holdout. Preserve current server wait cap of 20 seconds even though the browser requests 25.
+**Volume/risk/cost:** runtime 72 + tests 49 = 121; deleted/replaced 0. Risk 2, cost M: duplicate/missing live lines or stuck requests. **Migration:** cursor contracts/tag → generic Source reader → merge/page → polling wait; keep tests/dashwire/test_dash_live_page.py as product holdout. Preserve current server wait cap of 20 seconds even though the browser requests 25.
 
 ### E13 — ✅ Object TTL and file-fingerprint caches: 72 runtime lines
 
