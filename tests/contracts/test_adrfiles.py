@@ -2,7 +2,7 @@
 import support.paths  # noqa: F401
 from support import homes
 
-from taskloop.contracts import adrfiles
+from taskloop.contracts import adrfiles, adrs
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ledger import Adr
 
@@ -42,3 +42,10 @@ def test_sync_makes_the_cache_say_what_the_files_say():
     store.sync([adr(retired_t=9.0, retired_by="denis")])
     assert [(a.id, a.retired_t) for a in store.all()] == [("ADR-1", 9.0)]
     assert store.in_force() == []
+
+
+def test_the_cache_rows_are_work_doc_rows():
+    AdrStore.at(homes.cfg(), REPO).sync([adr()])
+    docs = adrs.rows(homes.cfg(), REPO)
+    assert docs.table == "work_doc"
+    assert [k for (k,) in docs.rows.select("SELECT k FROM work_doc")][-1].endswith(":ADR-1")

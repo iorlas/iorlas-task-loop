@@ -13,6 +13,10 @@ from taskloop.contracts.looprows import LoopRows
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.wire import Rec
 
+REPORT_DOCS = "report_doc"  # the report stage's document: the reflect digest state
+WORK_DOCS = "work_doc"  # the work stage's documents: the cache of a repo's decision records
+RELEASE_DOCS = "release_doc"  # the release stage's documents: the pin and the last release result
+
 
 class RowDocs[T: Rec]:
     def __init__(self, cfg: ConfigDir, cls: type[T], *, table: str, key_col: str, body_col: str,

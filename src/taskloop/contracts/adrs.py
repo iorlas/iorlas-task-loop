@@ -1,13 +1,13 @@
-"""The decisions of one repo as tl reads them: a cache (`kv` rows `adr:<repo key>:<id>`) of the repo's `docs/adr/NNNN-title.md` files at
-the base commit, plus the log of plans that cited them. The files are the record (contracts/adrfiles.py): a lane lands each through a
-bead, so tl never writes into a checkout. Whoever has git (the engine's plan stage, the owner verbs) calls `sync` with the files it
-read at the base; the dashboard only reads the rows."""
+"""The decisions of one repo as tl reads them: a cache (`work_doc` rows `adr:<repo key>:<id>`) of the repo's `docs/adr/NNNN-title.md`
+files at the base commit, plus the log of plans that cited them. The files are the record (contracts/adrfiles.py): a lane lands each
+through a bead, so tl never writes into a checkout. Whoever has git (the engine's plan stage, the owner verbs) calls `sync` with the
+files it read at the base; the dashboard only reads the rows."""
 from pathlib import Path
 from typing import final
 
 from taskloop.contracts import paths, wire
 from taskloop.contracts.askstore import AskDocs
-from taskloop.contracts.docrows import RowDocs
+from taskloop.contracts.docrows import WORK_DOCS, RowDocs
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.ledger import Adr, AdrUse
 from taskloop.contracts.stores import JsonlStore
@@ -25,7 +25,7 @@ def decode_use(data: object) -> AdrUse:
 def rows(cfg: paths.ConfigDir, repo: str, quiet: bool = False) -> RowDocs[Adr]:
     """The cache rows of one repo's ADRs."""
     key = loop_key(repo)
-    return RowDocs(cfg, Adr, table="kv", key_col="k", body_col="v", prefix=f"adr:{key}:", quiet=quiet)
+    return RowDocs(cfg, Adr, table=WORK_DOCS, key_col="k", body_col="v", prefix=f"adr:{key}:", quiet=quiet)
 
 
 @final

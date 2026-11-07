@@ -2,9 +2,8 @@
 from collections.abc import Callable
 
 from taskloop.contracts import paths
-from taskloop.contracts.docrows import RowDoc, singleton
+from taskloop.contracts.docrows import RELEASE_DOCS, REPORT_DOCS, RowDoc, singleton
 from taskloop.contracts.docstore import Absent, Present
-from taskloop.contracts.factoryparts import RELEASE_DOCS, REPORT_DOCS
 from taskloop.contracts.guard import guard
 from taskloop.contracts.loop import BadVersions
 from taskloop.contracts.reponame import repo_name
