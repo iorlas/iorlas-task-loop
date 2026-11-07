@@ -15,7 +15,7 @@ from delegate.contracts.codec import ABSENT, Absent, mutable, record
 from delegate.contracts.json_types import Json
 
 CONTRACT = 4
-CAPABILITIES = ("writer_exec_allow", "instructions_ref", "attempts")
+CAPABILITIES = ("writer_exec_allow", "instructions_ref", "attempts", "thread")
 END_OK, END_ERROR, END_TIMEOUT, END_SURVIVED = "ok", "error", "timeout", "worker_survived"
 Scope = Literal["bead", "caller", "machine", "lane", "model"]
 Permanence = Literal["transient", "needs_owner"]
@@ -91,6 +91,8 @@ class RunRequest:
     cwd: str
     schema_file: str | None = None
     resume: str | None = None
+    thread: str = ""  # opaque caller key; delegate owns resume when set
+    delta_file: str | None = None  # resumed prompt; brief_file is always the whole prompt
     authored_by: str | None = None
     timeout_s: int | None = None  # wall limit for the call; delegate stops the worker's process group at it
     idle_s: int | None = None  # no output this long: the worker is hung (delegate's own watchdog; unset = the CLI's default)
@@ -156,7 +158,7 @@ class Tokens:
     out: int | None
 
 
-AttemptKind = Literal["first", "canary", "network_rerun", "lane_poll", "lane_wait", "worker_retry", "schema_reask", "reroute"]
+AttemptKind = Literal["first", "canary", "network_rerun", "lane_poll", "lane_wait", "new_thread", "worker_retry", "schema_reask", "reroute"]
 
 
 @record
