@@ -8,8 +8,8 @@ from typing import Any, Final
 from tlkernel import log as rec
 from tlkernel.delegate import DelegateResult
 from tlkernel.netretry import NET_BACKOFF
+from tlkernel.reviewunavailable import ReviewUnavailable
 from tlkernel.waitenums import WaitWhat
-from tlwork.review.availability import ReviewUnavailable
 
 from taskloop.app.workers import writer_pin
 from taskloop.domain.lanes import pin

@@ -4,8 +4,7 @@ from functools import cached_property
 
 from tlkernel import plancheck
 from tlkernel.paths import PLAN_FILE
-from tlwork.write.briefing import Briefing
-from tlwork.write.stage_loop import StageLoop
+from tlwork.api import Briefing, StageLoop
 
 from taskloop.app.run.plumbing import Plumbing
 
