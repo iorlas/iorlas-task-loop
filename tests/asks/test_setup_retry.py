@@ -17,10 +17,10 @@ from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.wire import asks as wire_asks
 from taskloop.domain.asks import specs
 from tlkernel.ask import AskAnswer
+from tlkernel.askenums import AskKind, AskStatus
 from tlkernel.askstore import HAD_PICK
 from tlkernel.bead import Bead
 from tlkernel.config import load
-from tlkernel.enums import AskKind, AskStatus
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 

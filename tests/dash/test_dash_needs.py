@@ -14,7 +14,7 @@ from taskloop_dash.readers.observed import strays_of
 from taskloop_dash.views import snapshot
 from taskloop_dash.views.world import ProjectIn, World
 from tlkernel.ask import Ask, AskOption
-from tlkernel.enums import AskClass, AskKind, AskStatus
+from tlkernel.askenums import AskClass, AskKind, AskStatus
 from tlkernel.events import Block, Claim, SlotAside, SlotHold, SlotSetup
 from tlkernel.ids import BeadId
 from tlkernel.loop import LoopState, QueueRow, Skip

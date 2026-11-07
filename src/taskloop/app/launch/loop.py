@@ -11,12 +11,12 @@ from pathlib import Path
 from tlkernel import paths
 from tlkernel.beadsport import Beads
 from tlkernel.config import RepoProfile
-from tlkernel.enums import LockWhat
 from tlkernel.env import Env
 from tlkernel.envvars import EnvVar
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.ids import new_loop_id
+from tlkernel.lockenums import LockWhat
 from tlkernel.loop import LoopState
 from tlkernel.procport import Spawner
 from tlkernel.rowstores import ReposStore

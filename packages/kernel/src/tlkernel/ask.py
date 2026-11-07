@@ -4,8 +4,9 @@ from typing import ClassVar, Literal, final
 
 import msgspec
 
+from tlkernel.askenums import AskClass, AskKind, AskStatus
 from tlkernel.dash import OwnerCause, Stick
-from tlkernel.enums import AskClass, AskKind, AskStatus, WhyCode
+from tlkernel.enums import WhyCode
 from tlkernel.ids import BeadId
 from tlkernel.wire import Rec
 

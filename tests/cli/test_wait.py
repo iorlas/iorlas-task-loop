@@ -16,9 +16,9 @@ from support.runs import manifest
 from taskloop.cli import asks as cli_asks
 from taskloop.cli import wait
 from tlkernel.ask import Ask, SimilarRef, ThreadEntry
+from tlkernel.askenums import AskClass, AskKind, AskStatus
 from tlkernel.askstore import AskStore
 from tlkernel.dash import OwnerCause
-from tlkernel.enums import AskClass, AskKind, AskStatus
 from tlkernel.ids import BeadId
 from tlkernel.locator import host_name
 from tlkernel.paths import ConfigDir

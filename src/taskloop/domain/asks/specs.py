@@ -7,8 +7,8 @@ from taskloop.domain.asks.lint import DECISION_MAX, LABEL_MAX, TRIED_MAX
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.asks.text import SPLIT_WORDS, clip
 from tlkernel.ask import AskDetail, AskOption, BudgetLine, ReplanLine
+from tlkernel.askenums import AskClass
 from tlkernel.dash import OwnerCause
-from tlkernel.enums import AskClass
 
 RAW_CAP: Final = 4000
 ONE_BULLET: Final = 160

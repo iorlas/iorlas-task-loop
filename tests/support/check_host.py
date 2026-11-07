@@ -20,10 +20,10 @@ from taskloop.stores.bundle import Stores
 from tlkernel import wire
 from tlkernel.checks import CheckRun
 from tlkernel.config import EngineConfig
-from tlkernel.enums import WaitWhat
 from tlkernel.paths import ConfigDir
 from tlkernel.plancheck import StageData
 from tlkernel.ports import Clock
+from tlkernel.waitenums import WaitWhat
 
 
 class RecordedWaits:

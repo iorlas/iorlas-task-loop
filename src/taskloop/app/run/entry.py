@@ -16,10 +16,11 @@ from typing import Any
 
 from atomic_io import atomic_write_text
 from tlkernel import fence, wire
+from tlkernel.askenums import AskStatus
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, BeadPatch, Beads
 from tlkernel.config import EngineConfig
-from tlkernel.enums import AskStatus, Result
+from tlkernel.enums import Result
 from tlkernel.env import Env
 from tlkernel.envvars import EnvVar
 from tlkernel.fence import SLOT_GEN

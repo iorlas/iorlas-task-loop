@@ -20,10 +20,10 @@ from taskloop.app.asks.paths import ask_marker
 from taskloop.domain.asks import similar, specs
 from tlkernel import wire
 from tlkernel.ask import Ask, AskAnswer, SimilarRef, ThreadEntry
+from tlkernel.askenums import AskStatus
 from tlkernel.askstore import AskStore
 from tlkernel.bead import Bead
 from tlkernel.dash import OwnerCause, Stick
-from tlkernel.enums import AskStatus
 from tlkernel.ids import BeadId
 from tlkernel.ledger import Adr
 from tlkernel.paths import ConfigDir

@@ -7,7 +7,7 @@ from typing import Any, Final
 
 from tlkernel import log as rec
 from tlkernel.delegate import DelegateResult
-from tlkernel.enums import WaitWhat
+from tlkernel.waitenums import WaitWhat
 
 from taskloop.app.workers import writer_pin
 from taskloop.domain.lanes import pin

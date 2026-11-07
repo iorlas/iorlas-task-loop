@@ -20,10 +20,10 @@ from support.runs import manifest
 
 from taskloop.app.pipeline import requests
 from tlkernel import factorydb, wire
+from tlkernel.askenums import AskStatus
 from tlkernel.askstore import AskStore
 from tlkernel.bead import Bead
 from tlkernel.dash import Result
-from tlkernel.enums import AskStatus
 from tlkernel.ids import BeadId, loop_key
 from tlkernel.lookrows import LookRows
 from tlkernel.run import RunState
