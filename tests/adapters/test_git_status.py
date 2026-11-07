@@ -1,17 +1,11 @@
 """Status is a read: a run preview must not refresh the worktree's index."""
 import subprocess
-import sys
-from pathlib import Path
 from unittest import mock
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from taskloop.adapters.git import RealGit
 from tlkernel.env import Env
 from tlkernel.gitfacts import StatusRow
+from tltestkit.case import Case
 
 
 class ReadOnlyStatus(Case):

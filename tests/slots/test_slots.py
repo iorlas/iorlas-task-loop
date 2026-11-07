@@ -18,7 +18,6 @@ import pytest
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # python3 -m unittest tests.test_slots, from the repo root
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import homes
 
 # isort: split

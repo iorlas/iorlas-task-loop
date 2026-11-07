@@ -1,12 +1,5 @@
 """`diff(observed)`: a table, each row an observed state and the actions it maps to. No git, no bd, no process."""
-import sys
 from dataclasses import replace
-from pathlib import Path
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from taskloop.domain.reconcile.diff import DAY, diff
 from taskloop.domain.reconcile.facts import (
@@ -28,6 +21,7 @@ from taskloop.domain.reconcile.facts import (
 )
 from tlkernel.ids import BeadId
 from tlkernel.reconcile import Lease, LoopFact, SlotFact
+from tltestkit.case import Case
 
 NOW = 100 * DAY
 A1, B2, SB1 = BeadId("a-1"), BeadId("b-2"), BeadId("sb-1")

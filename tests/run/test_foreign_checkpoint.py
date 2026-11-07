@@ -1,11 +1,6 @@
 """NO BACKWARD COMPATIBILITY (docs/design/compat.md): a checkpoint of a foreign version is refused by the reader and the engine."""
-import sys
-from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from support import engine_case as T

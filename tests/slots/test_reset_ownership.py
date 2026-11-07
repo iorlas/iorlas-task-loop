@@ -4,7 +4,6 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from git_porcelain.errors import GitUnavailable
 
 from slots.test_slot_pool import Rig

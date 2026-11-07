@@ -1,12 +1,6 @@
 """A green gate can certify only the inputs its checks actually observed."""
-import sys
 from collections.abc import Callable, Sequence
-from pathlib import Path
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.fakegit import ScriptedGit
 from support.memstores import fake_stores
 from support.narrow_hosts import FakeGateHost
@@ -18,6 +12,7 @@ from tlkernel.checks import Check, CheckRun
 from tlkernel.config import CheckSpec, EngineConfig
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.runkey import BaseSha
+from tltestkit.case import Case
 
 
 class MovingGit(ScriptedGit):

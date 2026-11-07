@@ -11,7 +11,6 @@ import types
 from pathlib import Path
 from unittest import mock
 
-import support.paths  # noqa: F401
 from support import engine_case as te
 from support import homes
 from support.fake_beads import FakeBeads

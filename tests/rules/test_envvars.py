@@ -7,7 +7,6 @@ from pathlib import Path
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from tlkernel.envvars import NOT_VARIABLES, PREFIXES, EnvVar, registered
 

@@ -4,7 +4,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import msgspec
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 from taskloop.app.write.state import WriteState
 from tlkernel.checkpoint import RunState

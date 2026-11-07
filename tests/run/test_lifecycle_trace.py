@@ -7,7 +7,6 @@ import time
 from unittest import mock
 
 import pytest
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import homes
 from support.engine_case import stop

@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-import support.paths  # noqa: F401
 from support import homes
 from support.engine_case import EngineTest
 

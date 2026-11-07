@@ -8,7 +8,6 @@ import signal
 import threading
 
 import pytest
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support import homes
 

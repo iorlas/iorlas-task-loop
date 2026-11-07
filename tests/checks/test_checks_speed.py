@@ -7,7 +7,6 @@ from typing import Any, ClassVar, cast
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.check_host import CheckHostCase
 from support.spawn import port_git
 

@@ -1,13 +1,8 @@
 """tl-bxk.10.33.14: a loop holds one slot; a slot it still holds with no run in it is given back before the next take."""
 
-import sys
-from pathlib import Path
 from unittest import mock
 
 import msgspec
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from slots.test_slot_pool import ME, Rig
 from tlslots import verbs

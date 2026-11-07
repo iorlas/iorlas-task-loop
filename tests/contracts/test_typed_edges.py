@@ -1,20 +1,14 @@
 """The typed edges: a bead id is checked once where text becomes a BeadId, and nothing past the edge checks it again."""
 import json
-import sys
-from pathlib import Path
 
 import msgspec
 import pytest
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from taskloop.adapters import bd, delegate_wire
 from tlkernel.beadsport import BdFailure, BeadQuery
 from tlkernel.dash import ParkReq
 from tlkernel.ids import RunId, is_bead_id, parse_bead_id
+from tltestkit.case import Case
 
 
 class BeadIdEdges(Case):

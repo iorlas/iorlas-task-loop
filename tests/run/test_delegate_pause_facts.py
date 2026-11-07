@@ -1,17 +1,10 @@
 """Wire permanence reaches durable parks without changing machine repair or exhausted retry asks."""
-import sys
-from pathlib import Path
 from unittest import mock
 
 import pytest
 from support.parkmock import through_change
 
 from taskloop.adapters import beadtools
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
-
 from taskloop.app.asks import parks
 from taskloop.app.asks.closing import ClosingAsks
 from taskloop.app.workers.lane_acts import LaneActs
@@ -22,6 +15,7 @@ from tlkernel.delegate import DelegateResult, Retry, StopFacts
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlpipeline.api import Blocked, Closer, blocked_for
+from tltestkit.case import Case
 
 
 class DelegatePauseFacts(Case):

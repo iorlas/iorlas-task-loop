@@ -1,13 +1,8 @@
 """Whole beads through the Engine, moved out of tests/checks/test_lanes.py (they run the pipeline, not only the checks stage)."""
-import sys
 import threading
-from pathlib import Path
 from typing import Any
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.engine_case import EngineTest
 
 from tltestkit import procsim

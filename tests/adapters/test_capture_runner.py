@@ -4,7 +4,6 @@ from unittest import mock
 
 import pytest
 import stream_proc
-import support.paths  # noqa: F401
 
 from taskloop.adapters import procs
 from tltestkit.case import Case

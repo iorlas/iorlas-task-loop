@@ -1,7 +1,6 @@
 """Resource waits keep the loop alive, claim nothing, and have explicit wake probes."""
 from unittest.mock import Mock, patch
 
-import support.paths  # noqa: F401
 from slots.test_slot_pool import Rig
 from support.fake_loop_env import slot_loop_env
 

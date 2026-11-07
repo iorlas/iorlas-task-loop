@@ -1,12 +1,6 @@
 """PUSHSLOW (tl-bxk.10.33.1): the land push has its own time limit, a timed-out push rests and is tried again, and a slow push says
 where its time went."""
-import sys
-from pathlib import Path
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.fakegit import FakeGit
 from support.narrow_hosts import table_kit
 
@@ -16,6 +10,7 @@ from taskloop.app.land.host import Land, Next, Phase
 from tlkernel.ids import TreeSha
 from tlkernel.landmatchers import Push as PushText
 from tlkernel.runkey import BaseSha
+from tltestkit.case import Case
 
 TIMED_OUT = (124, "\n(timed out after 10 min: the engine stopped it and everything it started)")
 

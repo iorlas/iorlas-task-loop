@@ -5,7 +5,6 @@ from dataclasses import replace
 from unittest.mock import patch
 
 import pytest
-import support.paths  # noqa: F401
 from sqlite_store import Store
 
 from tlkernel import factorydb, factoryparts

@@ -3,8 +3,6 @@ import os
 import sys
 from unittest import mock
 
-import support.paths  # noqa: F401
-
 # isort: split
 import pytest
 

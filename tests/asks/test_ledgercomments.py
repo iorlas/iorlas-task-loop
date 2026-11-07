@@ -1,7 +1,6 @@
 """The ask ledger is the bead's comments: a row the owner's verbs cause is a comment first, and the table rebuilds from the comments."""
 import contextlib
 
-import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 
 from taskloop.app.asks import intake, ledgercomments, raiser

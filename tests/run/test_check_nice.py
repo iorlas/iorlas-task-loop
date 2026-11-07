@@ -3,8 +3,6 @@ import os
 import threading
 from types import SimpleNamespace
 
-import support.paths  # noqa: F401
-
 from taskloop.app.run.shell import Shell
 from tlkernel.env import Env
 

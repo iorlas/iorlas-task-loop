@@ -4,7 +4,6 @@ import sqlite3
 import uuid
 from dataclasses import replace
 
-import support.paths  # noqa: F401
 from support import homes
 
 from tlkernel import dbparts, wire

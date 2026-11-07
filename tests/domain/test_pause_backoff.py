@@ -1,19 +1,13 @@
 """A retry's backoff grows independently per reason and survives reapplying the same close."""
 
-import sys
-from pathlib import Path
 
 import pytest
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from tlkernel import lanepauses as pauses
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
 from tlkernel.pausereasons import Reason, Unknown, parse
+from tltestkit.case import Case
 
 
 class Backoff(Case):

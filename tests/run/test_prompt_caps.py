@@ -9,7 +9,6 @@ from unittest import mock
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support.spawn import port_git, real_spawner
 from support.who import who

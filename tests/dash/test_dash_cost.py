@@ -1,18 +1,13 @@
 """Time, tokens and cost per stage and bead (views/cost.py) over recorded typed logs: a fixture of 7 calls in 3 runs.
 Each grouping is one exact snapshot; an unknown cost is counted apart, never summed as 0."""
 
-import sys
-from pathlib import Path
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.dashlogs import RunScript, T, bead
 
 from taskloop_dash.views import cost
 from taskloop_dash.views.world import ProjectIn, World
 from tlkernel.dashcost import CostRow
+from tltestkit.case import Case
 
 NOW = T + 20_000
 

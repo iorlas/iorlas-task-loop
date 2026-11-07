@@ -1,14 +1,7 @@
 """A reexec through uv hands the engine lock to a new Python pid for the same bead."""
 import contextlib
-from dataclasses import replace
-import sys
-from pathlib import Path
 from unittest import mock
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support import homes
 
 from taskloop.app.wire.slotfx import FX
@@ -16,6 +9,7 @@ from tlslots import engine_lock
 from tlkernel.env import Env
 from tlkernel.locks import EngineLock as Lock
 from tlkernel.run import Reexec
+from tltestkit.case import Case
 
 
 class ReexecHandoff(Case):

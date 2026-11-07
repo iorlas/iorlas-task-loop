@@ -1,5 +1,4 @@
 """dev/reach.py: the stage of a path, the summary of counts, the files that alone select half, the stage pairs that import each other."""
-import support.paths  # noqa: F401
 from affected import Repo
 from reach import stage_edges, stage_of, summary, two_way, wide_alone
 

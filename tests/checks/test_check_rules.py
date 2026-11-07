@@ -1,11 +1,7 @@
 """E4 (tl-4qh): what a round of checks decides, with real processes and git: a producer that did not run, a red the base also has,
 the same red three rounds in a row, a retry that cannot change the answer, the compile errors Unity wrote elsewhere, the plan lint."""
-import sys
-from pathlib import Path
 from typing import Any, ClassVar
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.check_host import CheckHostCase
 
 from tlgate import evidence

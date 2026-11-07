@@ -10,7 +10,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: E402, F401
 
 from taskloop.adapters.ident import claude_dir, config_dir  # noqa: E402
 from taskloop.app.doctor import setup_checks  # noqa: E402

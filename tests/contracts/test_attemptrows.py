@@ -7,7 +7,6 @@ from threading import Barrier
 from unittest.mock import patch
 
 import pytest
-import support.paths  # noqa: F401
 
 from tlkernel import attemptrows, factorydb
 from tlkernel.enums import Outcome, Result

@@ -2,7 +2,6 @@
 import json
 from unittest import mock
 
-import support.paths  # noqa: F401
 from support.memstores import fake_stores
 
 # isort: split

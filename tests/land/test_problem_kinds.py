@@ -1,12 +1,7 @@
 """Every ProblemKind is handled by every table keyed by it: a new kind cannot be forgotten (a missing STALE ended a 70-minute run)."""
-import sys
-from pathlib import Path
 from unittest.mock import Mock
 
 from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 # isort: split
 from taskloop.app.land.fix_outside import CAUSE, FixOutside

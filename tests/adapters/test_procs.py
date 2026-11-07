@@ -2,8 +2,6 @@
 child is being spawned (the engine's handler raises: the child must not be left running, owned by nobody)."""
 import os
 
-import support.paths  # noqa: F401
-
 from tlkernel import childenv
 from tltestkit.case import Case
 

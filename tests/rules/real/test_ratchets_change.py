@@ -9,7 +9,6 @@ import pytest
 from tltestkit.procsim import CAPABILITIES
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 from rules import layer_ratchet, needs_ratchet, ratchet_change, root_ratchet, temp_ratchet
 from rules.gate_rules import ROOT

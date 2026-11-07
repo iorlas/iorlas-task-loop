@@ -3,7 +3,6 @@ from types import SimpleNamespace
 from unittest import mock
 
 import pytest
-import support.paths  # noqa: F401
 
 from taskloop.app.land.gate import FAULTS
 from tlgate.clean import isolated

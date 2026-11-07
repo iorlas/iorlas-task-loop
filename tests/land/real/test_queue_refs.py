@@ -4,7 +4,6 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-import support.paths  # noqa: F401
 
 # isort: split
 from taskloop.adapters.spawner import RealSpawner

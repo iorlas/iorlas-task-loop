@@ -1,11 +1,7 @@
 """tl-7y6.7.3 at run-task: a parked bead is refused at the entry, a run that ends on a question records its text hash, the owner's
 --fresh takes over a claim no engine runs (per bead, not per actor), and a parked bead lets go of its claim."""
-import sys
-from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import homes
 
 # isort: split

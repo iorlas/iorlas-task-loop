@@ -3,7 +3,6 @@ import threading
 from types import SimpleNamespace
 from unittest import mock
 
-import support.paths  # noqa: F401
 from support.memstores import fake_stores
 
 from taskloop.app.run.shell import Shell

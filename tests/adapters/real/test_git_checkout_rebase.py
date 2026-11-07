@@ -5,7 +5,6 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-import support.paths  # noqa: F401
 
 from taskloop.adapters.git import RealGit
 from tlkernel.env import Env, snapshot

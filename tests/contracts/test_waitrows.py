@@ -3,7 +3,6 @@ import os
 import shutil
 
 import pytest
-import support.paths  # noqa: F401
 
 from tlkernel import factorydb, scratch
 from tlkernel.ids import BeadId

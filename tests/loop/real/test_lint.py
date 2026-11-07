@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from support import looptest

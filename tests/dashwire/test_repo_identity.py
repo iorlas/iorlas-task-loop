@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-import support.paths  # noqa: F401
 from support.dashlogs import RunScript, T, bead
 from support.factory_index import ingest, seed_beads
 from support.fakes import FakeBeadStore

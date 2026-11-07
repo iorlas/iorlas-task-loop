@@ -1,17 +1,11 @@
 """Crash recurrence needs an owner; lease loss must never become a crash park."""
 
-import sys
-from pathlib import Path
 from unittest import mock
 
 import pytest
-
-from taskloop.adapters import beadtools
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.engine_case import EngineTest
 
+from taskloop.adapters import beadtools
 from tlkernel.fence import Fenced
 from tlkernel.kinds import Kind
 from tlkernel.parks import ParkStore

@@ -1,17 +1,11 @@
 """The dashboard's stray rows come from the reconcile sweep's rule: a claim with no live run, and whether its lease ended."""
-import sys
-from pathlib import Path
-
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 
 from taskloop_dash.readers.observed import strays_of
 from taskloop_dash.views.floor import stray_rows
 from taskloop_dash.views.world import ProjectIn
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
+from tltestkit.case import Case
 
 NOW = 1793318400.0  # 2026-10-30T00:00:00Z
 ENDED, RUNNING = "2026-10-29T23:00:00Z", "2026-10-30T01:00:00Z"
