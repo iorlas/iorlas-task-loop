@@ -33,7 +33,7 @@ from taskloop.app.run import (
     engine,
     entry,
 )
-from taskloop.app.slots import config as wslots_config
+from tlslots import config as wslots_config
 from taskloop.domain.write.matchers import count_tests
 from tlgate import evidence as check_evidence
 from tlgate.domain import lint

@@ -14,9 +14,10 @@ from tltestkit.logs import records
 from tltestkit.plans import CLEAN, PLAN, WRITE
 
 # isort: split
+from taskloop.app.wire.slotfx import FX
 from taskloop.app.land import cleanup
 from taskloop.app.land.push import Pusher
-from taskloop.app.slots import owned
+from tlslots import owned
 from tlkernel.ids import loop_key
 
 RUN = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
@@ -73,7 +74,7 @@ class EngineCleanup(EngineTest):
             rc, _ = self.run_engine(RUN)
         assert rc == 0, self.blocked
         assert moved
-        cleanup.retry_logged(self.eng.git, self.eng.log, cfg=homes.cfg())
+        cleanup.retry_logged(self.eng.git, self.eng.log, cfg=homes.cfg(), fx=FX)
         assert gitq.git("ls-remote", "origin", "refs/heads/task/t-1", cwd=main).split()[0] == moved[0]
         done = records(self.eng, "land_cleanup")[-1]
         assert (done["local_outcome"], done["remote_outcome"]) == ("gone", "pending")
@@ -86,7 +87,7 @@ class EngineCleanup(EngineTest):
         def gone(git, log, row, *args, **kw):
             if row.remote_outcome == "pending":
                 gitq.git("push", "-q", "origin", ":refs/heads/task/t-1", cwd=main)
-            return retry(git, log, row, *args, cfg=homes.cfg())
+            return retry(git, log, row, *args, **kw)
 
         with mock.patch.object(cleanup, "retry", gone):
             rc, _ = self.run_engine(RUN)

@@ -12,7 +12,7 @@ from support.fake_loop_env import slot_loop_env
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.settle import Counters, Settle
 from taskloop.app.loop.take import Taker
-from taskloop.app.slots.pool import Slot
+from tlslots.pool import Slot
 from tlkernel import lanepauses as pauses
 from tlkernel.bead import BdError, Bead
 from tlkernel.beadsport import BdFailure
@@ -132,7 +132,7 @@ class Infrastructure(Rig):
                 counters = Counters()
                 settle, _files = self.settle(counters)
                 verdict = vd.Verdict(Result.FAILED, kind="fault_slot", slot_fault="slot_broken", minutes=0.1)
-                with mock.patch("taskloop.app.slots.reset.setup") as setup:
+                with mock.patch("tlslots.reset.setup") as setup:
                     assert not settle.count_slot(verdict, "x-1", "s1")
                 setup.assert_not_called()
                 assert counters.slot_quick["s1"] == (["x-1"] if dirty else [])

@@ -13,7 +13,7 @@ import tomllib
 from pathlib import Path
 
 OLD = 'taskloop.app.wire.slots'
-NEW = 'taskloop.app.slots.config'
+NEW = 'tlslots.config'
 MOVED = frozenset({'profile', 'profile_source', 'load_profile', 'cfg_source', 'load_cfg', 'profile_slots',
                    'slot_source', 'slot_dirs', 'slot_dir', 'slot_excludes', 'exclude_local', 'prio_of'})
 WIRE = Path('src/taskloop/app/wire/slots.py')
@@ -34,7 +34,7 @@ from tlkernel.slottable import WORKTREE, SlotSource
 
 from taskloop.adapters import profile_at
 from taskloop.adapters.ident import hostname
-from taskloop.app.slots.env import DEFAULT_PRIO
+from tlslots.env import DEFAULT_PRIO
 
 
 '''
@@ -124,7 +124,7 @@ def module_imports(tree, edit, aliases, reports):
         names = [a for a in imp.names if a is not imported or stays]
         replacement = ('from taskloop.app.wire import ' + ', '.join(ast.unparse(a) for a in names) + '\n' + ' ' * imp.col_offset
                        if names else '')
-        replacement += f'from taskloop.app.slots import config as {config_alias}'
+        replacement += f'from tlslots import config as {config_alias}'
         edit(imp, replacement)
 
 
@@ -152,7 +152,7 @@ def migrate(root, names):
         outputs[str(WIRE)] = remaining + '\n' if not remaining.endswith('\n') else remaining
         # Only names actually consumed by the composition root are imported there.
         outputs[str(WIRE)] = outputs[str(WIRE)].replace('import contextlib',
-            'from taskloop.app.slots.config import ' + ', '.join(sorted(used)) + '\n\nimport contextlib', 1)
+            'from tlslots.config import ' + ', '.join(sorted(used)) + '\n\nimport contextlib', 1)
         outputs[str(CONFIG)] = (HEADER + '\n\n\n'.join(blocks)).rstrip('\n') + '\n'
     changed = []
     for name, text in outputs.items():
@@ -176,7 +176,7 @@ def main():
     targets = [name for name in tracked.stdout.rstrip('\0').split('\0')
                if name.endswith('.py') and '_vendor/' not in name
                and (OLD in (root / name).read_text() or NEW in (root / name).read_text()
-                    or 'from taskloop.app.slots import config' in (root / name).read_text())]
+                    or 'from tlslots import config' in (root / name).read_text())]
     command = ['uv', 'tool', 'run', f'ruff@{pin}', 'check', '--fix', '-q']
     cleanup = subprocess.run([*command, '--select', 'F401', str(WIRE),
                               'src/taskloop/app/launch/loop.py', 'src/taskloop/app/launch/loop_ops.py'], cwd=root, check=False)

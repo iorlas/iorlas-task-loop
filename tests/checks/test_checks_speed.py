@@ -13,7 +13,7 @@ from support.spawn import port_git
 
 from taskloop.adapters import procs
 from taskloop.app.doctor import setup_checks
-from taskloop.app.slots.config import cfg_source
+from tlslots.config import cfg_source
 from tlgate.cache import InputKeys
 from tlgate.domain import durations, inputs, lint, planref
 from tlgate.domain.names import norm

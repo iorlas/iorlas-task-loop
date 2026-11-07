@@ -10,11 +10,11 @@ from unittest.mock import patch
 import support.paths  # noqa: F401
 
 from slots.test_slot_pool import Rig
-from taskloop.app.slots import aside, watchdog
-from taskloop.app.slots.env import stamp
-from taskloop.app.slots.line import order
-from taskloop.app.slots.pool import Slot
-from taskloop.domain.slot_liveness import LIMITS, Kind
+from tlslots import aside, watchdog
+from tlslots.env import stamp
+from tlslots.line import order
+from tlslots.pool import Slot
+from tlslots.liveness import LIMITS, Kind
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BeadPatch
 from tlkernel.ids import BeadId

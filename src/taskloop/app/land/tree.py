@@ -1,4 +1,5 @@
 """The slot's tree between runs: reset onto the task branch, the wip commit that saves a stopped run's work, leaving the slot."""
+from tlslots.effects import Effects
 import shutil
 import time
 from pathlib import Path
@@ -13,8 +14,8 @@ from tlkernel.slots import SlotGitError
 
 from taskloop.app.land.host import BeginSteps, FetchCheckout, StageCheckout
 from taskloop.app.land.rebase import must
-from taskloop.app.slots.engine_lock import engine_busy
-from taskloop.app.slots.reset import leave_slot
+from tlslots.engine_lock import engine_busy
+from tlslots.reset import leave_slot
 from taskloop.stores.runlog import RunLog
 
 
@@ -66,7 +67,8 @@ class TreeHost(Protocol):
 
 
 class Tree:
-    def __init__(self, host: TreeHost) -> None:
+    def __init__(self, host: TreeHost, *, fx: Effects) -> None:
+        self.fx = fx
         self.e = host
 
     def reset(self, bead: Bead) -> str:
@@ -149,7 +151,7 @@ class Tree:
         here = str(Path(e.wt).resolve())
         for there in e.git.checkouts(e.wt):
             if there.branch == branch and str(Path(there.path).resolve()) != here:
-                busy = engine_busy(e.home, there.path)
+                busy = engine_busy(e.home, there.path, fx=self.fx)
                 if busy:
                     why = f"failed: {branch} is checked out in {there.path}: {busy}; left alone"
                     e.warn(why)
@@ -184,6 +186,6 @@ class Tree:
         if outcome in ("landed", "done") or not branch or branch != (e.branch or None):
             return
         try:
-            leave_slot(e.home, e.git, e.wt, e.cfg.base, branch, dirty=lambda: bool(e.checkout.dirty_status()))
+            leave_slot(e.home, e.git, e.wt, e.cfg.base, branch, dirty=lambda: bool(e.checkout.dirty_status()), fx=self.fx)
         except SlotGitError as err:
             e.warn(f"the slot could not be left at the base: {str(err).strip()}")

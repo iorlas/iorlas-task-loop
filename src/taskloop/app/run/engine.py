@@ -28,7 +28,7 @@ from taskloop.app.run.facts import open_facts
 from taskloop.app.run.host import RunHost
 from taskloop.app.run.stages import run_stages
 from taskloop.app.run.state import carries_state
-from taskloop.app.slots.engine_lock import HeldLock
+from tlslots.engine_lock import HeldLock
 from taskloop.app.track.console import say
 from taskloop.stores.bundle import Stores
 from taskloop.stores.delegate import real_route

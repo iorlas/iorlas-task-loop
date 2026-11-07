@@ -17,7 +17,7 @@ class ArchitectureInvariants(Case):
         assert slice_problems({"taskloop.app.land.x": {"tlgate.x"}}) == []
 
     def test_domain_touches_no_world(self):
-        bad = [problem for module, tree in production_trees().items() if module.startswith(('taskloop.domain.', 'tlgate.domain.'))
+        bad = [problem for module, tree in production_trees().items() if module.startswith(('taskloop.domain.', 'tlgate.domain.', 'tlslots.liveness', 'tlslots.slot_env'))
                for problem in domain_world_problems(module, tree)]
         assert bad == []
 

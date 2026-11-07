@@ -6,6 +6,7 @@ import shutil
 from collections.abc import Callable
 from typing import Any
 
+from taskloop.app.wire import slotfx
 from tlkernel.adrs import AdrStore
 from tlkernel.ask import Ask, AskAction
 from tlkernel.askstore import AskStore
@@ -29,7 +30,7 @@ from taskloop.app.asks.owner_verbs import OwnerVerbs
 from taskloop.app.doctor import profiles
 from taskloop.app.report import card as cards
 from taskloop.app.report.card import score_of
-from taskloop.app.slots import config as wslots_config
+from tlslots import config as wslots_config
 from taskloop.app.track.trail import now
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import real
@@ -148,7 +149,7 @@ def ports(env: Env) -> Ports:
     def slot_source(repo: str) -> SlotSource:
         """What the loops count (origin/main's profile); a profile that does not load shows no lanes, its red row says why."""
         try:
-            return wslots_config.slot_source(repo, git)
+            return wslots_config.slot_source(repo, git, fx=slotfx.FX)
         except (Exception, SystemExit):
             return SlotSource(host=hostname(), source="unreadable")
 

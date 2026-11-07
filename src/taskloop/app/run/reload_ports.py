@@ -7,7 +7,7 @@ from tlkernel.paths import ConfigDir
 from taskloop.adapters import ident
 from taskloop.app.loop.versions import Installs
 from taskloop.app.release import catalog, pins
-from taskloop.app.slots.engine_lock import HeldLock
+from tlslots.engine_lock import HeldLock
 from taskloop.app.track import trail
 
 

@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from slots.test_slot_pool import ME, Rig
-from taskloop.app.slots import verbs
+from tlslots import verbs
 from tlkernel.ids import BeadId
 
 

@@ -38,7 +38,7 @@ from taskloop.app.run import (
     engine,
     running,
 )
-from taskloop.app.slots import config as wslots_config
+from tlslots import config as wslots_config
 from taskloop.app.write.newfiles import NewFiles
 from taskloop.domain.lanes import policy as lp  # noqa: F401
 from tlgate.domain import (

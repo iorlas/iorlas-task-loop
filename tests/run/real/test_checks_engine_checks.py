@@ -27,7 +27,7 @@ from taskloop.adapters import halt as halting
 from taskloop.app.run import (
     engine,
 )
-from taskloop.app.slots import config as wslots_config
+from tlslots import config as wslots_config
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 

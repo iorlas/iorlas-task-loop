@@ -12,7 +12,7 @@ from taskloop.adapters import ident
 from taskloop.app.doctor import selftest
 from taskloop.app.doctor.memory_beads import MemoryBeads
 from taskloop.app.run.engine import Engine
-from taskloop.app.slots import config as wslots_config
+from tlslots import config as wslots_config
 from taskloop.app.wire import real
 from taskloop.stores.delegate import fixed_route, real_route
 

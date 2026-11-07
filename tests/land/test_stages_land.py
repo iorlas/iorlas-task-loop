@@ -29,7 +29,7 @@ from taskloop.adapters import (
 )
 from taskloop.app.asks import admission
 from taskloop.app.run import running as wrunning
-from taskloop.app.slots import config as wslots_config
+from tlslots import config as wslots_config
 from taskloop.app.wire import asks as wasks
 from tlgate.domain.cmd import matchers as sh_matchers
 from tlkernel import checkmatchers as matchers

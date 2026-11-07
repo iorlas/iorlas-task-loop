@@ -21,12 +21,12 @@ from tlkernel.slots import SlotFail, SlotGitError
 from taskloop.app.asks import deferral, parks
 from taskloop.app.loop.env import ReloadNote
 from taskloop.app.loop.ports import LeaseHandle
-from taskloop.app.slots import aside, owned, watchdog
-from taskloop.app.slots import line as slots_line
-from taskloop.app.slots.env import SlotEnv
-from taskloop.app.slots.lease import Lease
-from taskloop.app.slots.pool import SlotPool
-from taskloop.app.slots.reset import setup
+from tlslots import aside, owned, watchdog
+from tlslots import line as slots_line
+from tlslots.env import SlotEnv
+from tlslots.lease import Lease
+from tlslots.pool import SlotPool
+from tlslots.reset import setup
 
 
 class EngineSlots:

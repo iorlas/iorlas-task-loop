@@ -34,8 +34,8 @@ from taskloop.adapters import (  # noqa: E402
 from taskloop.adapters.gitrepo import pinned_env  # noqa: E402
 from taskloop.app.doctor import setup_checks  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
-from taskloop.app.slots import config as wslots_config  # noqa: E402
-from taskloop.app.slots.config import cfg_source  # noqa: E402
+from tlslots import config as wslots_config  # noqa: E402
+from tlslots.config import cfg_source  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlkernel.ids import BeadId  # noqa: E402
 from tltestkit import procsim  # noqa: E402

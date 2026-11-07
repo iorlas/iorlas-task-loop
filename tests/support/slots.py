@@ -6,7 +6,7 @@ import time
 from support import homes
 from support.spawn import port_git, real_spawner
 from support.who import who
-from taskloop.app.slots.pool import SlotPool
+from tlslots.pool import SlotPool
 from taskloop.app.wire import slots as wslots
 from taskloop.stores import ticketrows
 from taskloop.stores.ticketrows import TicketRows

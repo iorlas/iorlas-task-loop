@@ -4,6 +4,7 @@ Per item: push the branch and see it on the remote, open its PR when it has none
 --match-head-commit, check the forge says MERGED, and (still under the lock) record `tl land` with that PR's own merge commit. A PR
 it replaces is closed only after the replacement merged. After the last, bd's Dolt data is synced. The first failure ends the run with
 the failing command's exit code and leaves every later item untouched. Every command is a row of the run's log (Cmds)."""
+from tlslots.effects import Effects
 import argparse
 import contextlib
 import os
@@ -66,7 +67,9 @@ class Stack:
                  sync: Callable[[], DoltPush], owner: str, session: str, gate: StackGate, beads: Beads, wait_min: float | None = None,
                  named: Callable[[str], None] = lambda _bead: None,
                  is_slot: Callable[[str], bool] = lambda _path: False, slot_base: str = "", *, cfg: ConfigDir,
-                 profile_change: str | None = None, jobs: int = 1, assert_trees: bool = False, queue: bool = False) -> None:
+                 profile_change: str | None = None, jobs: int = 1, assert_trees: bool = False, queue: bool = False,
+                 fx: Effects) -> None:
+        self.fx = fx
         self.forge, self.cmds, self.log, self.git, self.repo, self.lock = forge, cmds, log, git, repo, lock
         self.record, self.sync, self.owner, self.session, self.wait_min = record, sync, owner, session, wait_min
         self.gate, self.named = gate, named  # named(bead): the run's manifest learns each bead
@@ -110,7 +113,7 @@ class Stack:
                     self.sync_bd()
         finally:
             for row in self.pending:
-                cleanup.retry(self.git, self.log, row, self.is_slot, self.slot_base, cfg=self.cfg)
+                cleanup.retry(self.git, self.log, row, self.is_slot, self.slot_base, cfg=self.cfg, fx=self.fx)
         return rc
 
     def validate_beads(self, items: list[StackItem]) -> None:
@@ -369,7 +372,7 @@ def run_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs, sto
               tl: list[str], *, record: Callable[[str, str, BeadId, str, str], int],
               slot: Callable[[str, str], str], slot_base: Callable[[str], str],
               runlog: Callable[[Stores, str], RunLog],
-              finish: Callable[[str, float, str, str, bool], object], env: Env | None = None) -> tuple[int, list[str]]:
+              finish: Callable[[str, float, str, str, bool], object], fx: Effects, env: Env | None = None) -> tuple[int, list[str]]:
     """Run the stack and return its exit code and final output lines."""
     env = env or Env()
     profile_change = a.profile_change
@@ -399,7 +402,7 @@ def run_stack(a: argparse.Namespace, who: Identity, git: Git, spawner: Runs, sto
                   StackGate(cmds, git, stores, repo, f"origin/{a.base}", tl, env), store, a.wait_min,
                   lambda bead: locator.add_bead(run, bead),
                   lambda path: bool(slot(slot_repo, path)), slot_base(slot_repo),
-                  cfg=who.config, profile_change=profile_change, jobs=a.jobs)
+                  cfg=who.config, profile_change=profile_change, jobs=a.jobs, fx=fx)
     rc = 1
     try:
         rc = stack.run(items)

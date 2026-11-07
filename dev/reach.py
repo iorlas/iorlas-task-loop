@@ -30,6 +30,8 @@ def stage_of(path):
     parts = path.split("/")
     if parts[:3] == ["packages", "kernel", "src"]:
         return "kernel"
+    if parts[:3] == ["packages", "slots", "src"]:
+        return "slots"
     if parts[0] != "src":
         return None
     if parts[1] != "taskloop":

@@ -39,8 +39,8 @@ from taskloop.app.asks import admission
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine, entry, running
-from taskloop.app.slots import config as wslots_config
-from taskloop.app.slots.lease import Lease
+from tlslots import config as wslots_config
+from tlslots.lease import Lease
 from taskloop.app.track import outcome_line
 from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.write.matchers import count_tests

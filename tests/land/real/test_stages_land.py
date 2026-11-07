@@ -13,7 +13,7 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 import tltestkit.shellkit
-from taskloop.app.slots import config as wslots_config
+from tlslots import config as wslots_config
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tltestkit.plans import CLEAN, PLAN, WRITE

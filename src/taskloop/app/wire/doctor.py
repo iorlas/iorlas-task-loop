@@ -29,8 +29,8 @@ from taskloop.app.doctor.setup_checks import (
     slot_warnings,
 )
 from taskloop.app.release import catalog, manifest
-from taskloop.app.slots import watchdog
-from taskloop.app.slots.config import cfg_source
+from tlslots import watchdog
+from tlslots.config import cfg_source
 from taskloop.app.wire import slots as wslots
 from taskloop.stores.delegate import real_route
 from taskloop.stores.real import real_stores

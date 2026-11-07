@@ -1,5 +1,6 @@
 """Make a slot ready for a bead: a clean tree on the bead's branch, a dead session's work committed where it was (never
 wiped), ignored setup output kept. All of git goes through the Git port; its typed errors become a SlotFail."""
+from tlslots.effects import Effects
 import hashlib
 import os
 from collections.abc import Callable
@@ -12,11 +13,11 @@ from tlkernel.matchers import NetText
 from tlkernel.paths import ConfigDir
 from tlkernel.slots import BranchPinned, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
 
-from taskloop.app.slots import owned
-from taskloop.app.slots.engine_lock import engine_busy
-from taskloop.app.slots.env import SlotEnv, stamp
-from taskloop.app.slots.paths import slot_setup_mark
-from taskloop.app.slots.surface import SlotView
+from tlslots import owned
+from tlslots.engine_lock import engine_busy
+from tlslots.env import SlotEnv, stamp
+from tlslots.paths import slot_setup_mark
+from tlslots.surface import SlotView
 
 T = TypeVar("T")
 TRIES = 3  # a git lock (index.lock, a ref) held by another process is waited for this many times before the slot is broken
@@ -193,9 +194,10 @@ def ensure_tree(slot: SlotView) -> bool:
     return True
 
 
-def leave_slot(cfg: ConfigDir, git: SlotGit, directory: str, base: str, branch: str, *, dirty: Callable[[], bool] | None = None) -> bool:
+def leave_slot(cfg: ConfigDir, git: SlotGit, directory: str, base: str, branch: str, *,
+               dirty: Callable[[], bool] | None = None, fx: Effects) -> bool:
     """Leave a clean slot detached at its base; preserve work that could not be saved."""
-    if engine_busy(cfg, directory):
+    if engine_busy(cfg, directory, fx=fx):
         return False
     unsaved = git.dirty(directory) if dirty is None else dirty()
     if unsaved or git.branch(directory) != branch:

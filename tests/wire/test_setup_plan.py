@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from taskloop.app.doctor import setup
-from taskloop.app.slots import profile_facts
+from tlslots import profile_facts
 from taskloop.cli import setup as cli_setup
 from taskloop.stores.delegate import real_route
 from tlkernel.env import Env

@@ -17,7 +17,7 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.app.launch import loop as wloop
-from taskloop.app.slots.pool import SlotPool
+from tlslots.pool import SlotPool
 from tlkernel.config import LoopConfig
 from tlkernel.env import snapshot
 

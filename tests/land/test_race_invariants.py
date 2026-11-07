@@ -18,8 +18,10 @@ every land under the land lock, rebased, pushed once   test_every_land_holds_the
 every release a distinct version                       test_every_release_takes_a_distinct_version
 nothing left held after all exit                       test_nothing_is_left_held_after_everyone_is_done
 """
+from taskloop.app.wire.slotfx import FX
 
 import contextlib
+from dataclasses import replace
 import io
 import json
 import os
@@ -64,8 +66,8 @@ from taskloop.app.run import (
     entry,
     running,
 )
-from taskloop.app.slots import config as wslots_config
-from taskloop.app.slots import engine_lock, marks, reset
+from tlslots import config as wslots_config
+from tlslots import engine_lock, marks, reset
 from taskloop.app.track import (
     trail,
     verbs,
@@ -129,6 +131,8 @@ class Invariants(test_loop.Base):
         support_who.PER_THREAD = self.actors
         self.out = io.StringIO()
         rebind(self, trail.now, self.clock.now)
+        rebind(self, FX, replace(FX, proc_alive=lambda pid, start="": int(pid) in self.live,
+                                 proc_start=lambda pid: f"T{pid}"))
         rebind(self, pidcheck.proc_alive, lambda pid, start="": int(pid) in self.live)
         rebind(self, pidcheck.proc_start, lambda pid: f"T{pid}")
         gitsim.reset()
@@ -399,7 +403,7 @@ class Invariants(test_loop.Base):
         put_lock(
             s1, {"pid": OTHER_ENGINE, "start": f"T{int(OTHER_ENGINE)}", "bead": "w-9", "started": self.clock.now()}
         )
-        assert f"pid {int(OTHER_ENGINE)} runs w-9" in engine_lock.engine_busy(homes.cfg(), s1)
+        assert f"pid {int(OTHER_ENGINE)} runs w-9" in engine_lock.engine_busy(homes.cfg(), s1, fx=FX)
         assert bd.slots["sl-1"]["status"] == "open"  # the slot bead says free
         assert must(sl.take_slot(self.repo_s, self.cfg, "loop"))[0] == "s2"  # a loop passes over s1
         assert "busy" in wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand", spawner=real_spawner(),
@@ -418,7 +422,7 @@ class Invariants(test_loop.Base):
             )  # its branch is not taken from it
         assert getattr(engine_lock.read_engine_lock(homes.cfg(), s1), "pid", None) == OTHER_ENGINE  # and its lock is still there
         self.live.discard(OTHER_ENGINE)  # the engine died: its lock is no obstacle
-        assert engine_lock.engine_busy(homes.cfg(), s1) == ""
+        assert engine_lock.engine_busy(homes.cfg(), s1, fx=FX) == ""
         assert wslots.take_named_slot(self.repo_s, "s1", self.cfg, "hand", spawner=real_spawner(),
             git=port_git(), who=support_who.who())[1] == ""
 
@@ -597,7 +601,7 @@ class Invariants(test_loop.Base):
             def go():
                 got = sl.take_slot(repo, cfg, "tl loop", bead=bead)
                 if got:
-                    engine_lock.loop_lock(homes.cfg(), got[1], got[0], got[2], bead=bead)
+                    engine_lock.loop_lock(homes.cfg(), got[1], got[0], got[2], bead=bead, fx=FX)
                     engine_lock.drop_engine_lock(homes.cfg(), got[1], os.getpid())
                     wslots.release_slot(repo, got[0], mine=True, spawner=real_spawner(), git=port_git(), who=support_who.who())
             return go

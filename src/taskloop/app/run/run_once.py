@@ -8,7 +8,7 @@ from tlpipeline.api import Lifecycle, RunBody
 from taskloop.adapters import beadtools, deadline, ident
 from taskloop.app.land.closing import LandHistory
 from taskloop.app.release.closing import ReexecBook
-from taskloop.app.slots.lease import Lease
+from tlslots.lease import Lease
 
 
 class RunOnce:

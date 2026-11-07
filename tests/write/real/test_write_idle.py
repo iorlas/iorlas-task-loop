@@ -28,7 +28,7 @@ from support.who import who
 from taskloop.adapters import procs, runner
 from taskloop.adapters.delegate import Stopped
 from taskloop.app.run import engine
-from taskloop.app.slots import config as wslots_config
+from tlslots import config as wslots_config
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tltestkit import fake_route

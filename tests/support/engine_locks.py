@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from support import homes
-from taskloop.app.slots import engine_lock
+from tlslots import engine_lock
 from tlkernel.locks import EngineLock
 
 

@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from taskloop.app.wire import slotfx
 from tlkernel.beadsport import Beads
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
@@ -13,7 +14,7 @@ from tlkernel.lockenums import LockWhat
 from taskloop.adapters import beadtools
 from taskloop.adapters.locks import hold_path
 from taskloop.app.loop.queue import QueueRule, area_busy_text
-from taskloop.app.slots import engine_lock
+from tlslots import engine_lock
 from taskloop.app.track import console
 from taskloop.app.wire import slots as wslots
 
@@ -30,7 +31,7 @@ def running(repo: str, git: Git, who: Identity, store: Beads | None = None) -> d
             out[bid] = b.title.split()[-1]
     for wt in wslots.worktrees(repo, git, who, slots):
         lock = engine_lock.peek_engine_lock(who.config, wt)
-        if lock is not None and is_bead_id(lock.bead) and engine_lock.live(lock):
+        if lock is not None and is_bead_id(lock.bead) and engine_lock.live(lock, fx=slotfx.FX):
             out.setdefault(lock.bead, lock.slot or Path(wt).name)
     return out
 

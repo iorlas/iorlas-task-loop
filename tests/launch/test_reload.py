@@ -42,7 +42,7 @@ from taskloop.app.run import (  # noqa: E402
     entry,
 )
 from taskloop.app.run import reload_ports as run_reload  # noqa: E402
-from taskloop.app.slots import config as wslots_config  # noqa: E402
+from tlslots import config as wslots_config  # noqa: E402
 from tlkernel import childenv  # noqa: E402
 from tlkernel.env import Env, snapshot  # noqa: E402
 from tlkernel.ids import BeadId  # noqa: E402

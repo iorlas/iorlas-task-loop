@@ -15,7 +15,7 @@ from support.engine_case import stop
 from taskloop.adapters import delegate as dl
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
-from taskloop.app.slots import config as wslots_config
+from tlslots import config as wslots_config
 from tlkernel import lifecyclematchers as lifecycle
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId

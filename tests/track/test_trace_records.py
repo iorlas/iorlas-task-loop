@@ -24,7 +24,7 @@ from support.dashes import make_dash  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
 from support.who import who  # noqa: E402
 
-from taskloop.app.slots import config as wslots_config  # noqa: E402
+from tlslots import config as wslots_config  # noqa: E402
 from taskloop.app.track import verbs  # noqa: E402
 from taskloop.stores.real import real_stores  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402

@@ -41,13 +41,13 @@ from taskloop.app.loop.queue import QueueRule
 from taskloop.app.run import (
     entry,
 )
-from taskloop.app.slots import config as wslots_config
-from taskloop.app.slots import (
+from tlslots import config as wslots_config
+from tlslots import (
     engine_lock,
     marks,
 )
-from taskloop.app.slots import line as slots_line
-from taskloop.app.slots.paths import engine_lock as engine_lock_path
+from tlslots import line as slots_line
+from tlslots.paths import engine_lock as engine_lock_path
 from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
 from taskloop.stores.ticketrows import TicketRows

@@ -23,7 +23,7 @@ from taskloop.app.run.reload_ports import installed_newer, locked_slot
 from taskloop.app.run.shared import Shared
 from taskloop.app.run.shell import Shell
 from taskloop.app.run.state import state_names
-from taskloop.app.slots.engine_lock import HeldLock
+from tlslots.engine_lock import HeldLock
 from taskloop.app.track.closing import TrailEvents
 from taskloop.app.workers.delegation import Delegation
 

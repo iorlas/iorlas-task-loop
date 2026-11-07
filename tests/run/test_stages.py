@@ -22,7 +22,7 @@ from support.who import who
 import tltestkit.shellkit
 from taskloop.adapters import pidcheck
 from taskloop.adapters.check_probe import PathProbe
-from taskloop.app.slots import config as wslots_config
+from tlslots import config as wslots_config
 from taskloop.app.write.handoff import HANDOFF_CAP
 from tlgate import evidence as check_evidence
 from tlgate.domain import planref

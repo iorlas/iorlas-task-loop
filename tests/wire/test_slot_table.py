@@ -12,8 +12,9 @@ from support.dashlogs import T, bead
 from support.fakes import FakeBeadStore
 from support.who import who
 
+from taskloop.app.wire.slotfx import FX
 from taskloop.adapters.ident import hostname
-from taskloop.app.slots.config import slot_source
+from tlslots.config import slot_source
 from taskloop.app.wire import brief
 from taskloop.app.wire.slots import slot_table
 from taskloop_dash.views import floor
@@ -52,7 +53,7 @@ class SlotTableSource(Case):
         git.rev_parse.return_value = ""
         with mock.patch.object(Path, "read_text", return_value='{"slots": {"count": 2}}'), \
                 mock.patch.object(Path, "iterdir", return_value=iter(())):
-            src = slot_source("/repo", git)
+            src = slot_source("/repo", git, fx=FX)
         assert (src.count, src.source, src.sha) == (2, WORKTREE, "")
 
 

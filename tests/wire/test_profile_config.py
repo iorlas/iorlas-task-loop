@@ -13,7 +13,7 @@ from tltestkit.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.app.slots.config import cfg_source, load_cfg, load_profile, profile_source
+from tlslots.config import cfg_source, load_cfg, load_profile, profile_source
 from tlkernel import config
 from tlkernel.gitport import Git
 from tlkernel.slots import SlotGitError

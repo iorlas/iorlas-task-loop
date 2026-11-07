@@ -35,8 +35,8 @@ from support.who import who
 
 from slots.test_slots import Slots
 from taskloop.app.loop.queue import QueueRule
-from taskloop.app.slots import config as wslots_config
-from taskloop.app.slots.pool import Slot, SlotPool
+from tlslots import config as wslots_config
+from tlslots.pool import Slot, SlotPool
 from taskloop.app.wire import slots as wslots
 from tlkernel import fence
 from tlkernel.bead import BdError

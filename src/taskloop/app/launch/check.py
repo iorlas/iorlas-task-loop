@@ -16,7 +16,7 @@ from tlpipeline.api import StageRun, stage_run
 
 from taskloop.app.launch.check_host import CliHost
 from taskloop.app.launch.staged import staged_tree
-from taskloop.app.slots import config as wslots_config
+from tlslots import config as wslots_config
 from taskloop.stores import runlog
 from taskloop.stores.bundle import Stores
 from taskloop.stores.real import real_stores

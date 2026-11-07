@@ -19,7 +19,7 @@ from support.dashes import make_dash  # noqa: E402
 from support.factory_index import ingest  # noqa: E402
 
 from taskloop.app.report import card  # noqa: E402
-from taskloop.app.slots.lease import Lease  # noqa: E402
+from tlslots.lease import Lease  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402
 from taskloop_dash.api import live as live_api  # noqa: E402
 from tlkernel import runlayout as layout  # noqa: E402

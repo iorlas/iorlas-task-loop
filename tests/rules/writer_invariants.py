@@ -20,7 +20,7 @@ WRITERS: Final = {
     'ReexecNoteStore': {'taskloop.app.release.reexec', 'taskloop.app.release.closing'},
     'NetPauseStore': {'taskloop.app.release.reexec', 'taskloop.app.release.closing'},
     'RunCountersStore': {'tlpipeline.reload'},
-    'EngineLockStore': {'taskloop.app.slots.engine_lock'},
+    'EngineLockStore': {'tlslots.engine_lock'},
     'RunManifestStore': {'tlkernel.runrows'},
 }
 PATH_STORES: Final = {

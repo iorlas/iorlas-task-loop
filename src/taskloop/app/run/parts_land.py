@@ -3,6 +3,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import override
 
+from taskloop.app.wire import slotfx
 from tlkernel.repourl import repo_url
 
 from taskloop.adapters import landlock
@@ -21,7 +22,9 @@ from taskloop.app.write.newfiles import NewFiles
 
 
 class LandParts(Plumbing):
-    tree = cached_property(Tree)
+    @cached_property
+    def tree(self) -> Tree:
+        return Tree(self, fx=slotfx.FX)
     rebase = cached_property(Rebase)
     restart = cached_property(Restart)
     fixer = cached_property(Fixer)

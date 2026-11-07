@@ -15,6 +15,7 @@ from support.fake_beads import FakeBeads
 from support.forgesim import ForgeSim
 
 # isort: split
+from taskloop.app.wire.slotfx import FX
 from taskloop.adapters.git import RealGit
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
@@ -107,7 +108,7 @@ class RealPush(Case):
         gate = StackGate(self.cmds, self.git, stores, str(other), "origin/main", ["tl"])
         stack = Stack(forge, self.cmds, self.log, self.git, str(other), Path(self.tmp.name) / "lock",
                       lambda b, s: 0, lambda: DoltPush(0, ""),
-                      "me", "s", gate, FakeBeads(actor="me"), cfg=ConfigDir(Path(self.tmp.name) / "cfg"))
+                      "me", "s", gate, FakeBeads(actor="me"), cfg=ConfigDir(Path(self.tmp.name) / "cfg"), fx=FX)
         branch, got, _ = stack.resolve(StackItem(branch="task/remote-only"))
         assert (branch, got) == ("task/remote-only", oid)
         assert self.git.rev_parse(str(other), oid) == oid

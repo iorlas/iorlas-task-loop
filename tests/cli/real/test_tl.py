@@ -33,7 +33,7 @@ from support.tlmain import tl_main  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
     pidcheck,
 )
-from taskloop.app.slots import config as wslots_config  # noqa: E402
+from tlslots import config as wslots_config  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from tlkernel import wire  # noqa: E402

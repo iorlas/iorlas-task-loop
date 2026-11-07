@@ -16,7 +16,7 @@ from support.who import who
 
 from taskloop.app.run import engine
 from taskloop.app.run.closer_ports import closer_over
-from taskloop.app.slots import config as wslots_config
+from tlslots import config as wslots_config
 from tlkernel import askspecs, wire
 from tlkernel import closeeffects as fx
 from tlkernel import runoutcome as oc

@@ -14,11 +14,11 @@ PATHS = ROOT / "packages" / "kernel" / "src" / "tlkernel" / "paths.py"
 PLAIN_PYTHON = {"prepush.py", "layout_migrate.py", "key_migrate.py"}  # no record in the hook (.importlinter); migrators name OLD places
 STAGE_PATHS = {
     ROOT / "src" / name for name in (
-        "taskloop/app/land/paths.py", "taskloop/app/slots/paths.py", "taskloop/app/asks/paths.py",
+        "taskloop/app/land/paths.py", "taskloop/app/asks/paths.py",
         "taskloop/app/release/paths.py", "taskloop/app/prune/paths.py",
         "taskloop/adapters/layout_paths.py", "taskloop_dash/paths.py",
     )
-} | {ROOT / "packages/artifacts/src/tlartifacts/paths.py"}
+} | {ROOT / "packages/artifacts/src/tlartifacts/paths.py", ROOT / "packages/slots/src/tlslots/paths.py"}
 MAKES_CONFIGDIR = {"env.py", "bind.py"}  # where the config root is taken from the process: everything else is handed a ConfigDir
 
 

@@ -15,7 +15,7 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from slots.real.test_slots import NO_FCNTL, Slots
-from taskloop.app.slots import (
+from tlslots import (
     marks,
 )
 from taskloop.app.wire import slots as wslots

@@ -14,6 +14,7 @@ from support.fakegit import ScriptedGit
 # isort: split
 from support.memstores import fake_stores
 
+from taskloop.app.wire.slotfx import FX
 from taskloop.app.land import cleanup
 from taskloop.app.land.closing import LandCleanups
 from taskloop.stores.runlog import RunLog
@@ -77,7 +78,7 @@ class Cleanup(Case):
             with self.subTest(method=method):
                 self.git.calls.clear()
                 with mock.patch.object(self.git, method, side_effect=GitReadFailure("unreadable")):
-                    done = cleanup.retry(self.git, self.log, self.queue(pr=True), lambda path: True, cfg=homes.cfg())
+                    done = cleanup.retry(self.git, self.log, self.queue(pr=True), lambda path: True, cfg=homes.cfg(), fx=FX)
                 assert done.local_outcome == "pending"
                 assert "unreadable" in done.detail
                 assert self.git.calls == []
@@ -91,7 +92,7 @@ class Cleanup(Case):
         return cleanup.record(self.log, "/repo", "task/a", "head", "land", "" if pr else "origin", "" if pr else "wip")
 
     def test_push_land_removes_worktree_and_both_refs_and_records_outcomes(self):
-        done = cleanup.retry(self.git, self.log, self.queue(), cfg=homes.cfg())
+        done = cleanup.retry(self.git, self.log, self.queue(), cfg=homes.cfg(), fx=FX)
         assert (done.local_outcome, done.remote_outcome) == ("gone", "gone")
         assert (self.git.local, self.git.remote) == ("", "")
         assert [co.path for co in self.git.worktrees] == ["/repo"]
@@ -102,13 +103,13 @@ class Cleanup(Case):
         assert queued.local_outcome == "pending"
 
     def test_pr_land_never_calls_remote_delete_even_when_head_still_exists(self):
-        done = cleanup.retry(self.git, self.log, self.queue(pr=True), cfg=homes.cfg())
+        done = cleanup.retry(self.git, self.log, self.queue(pr=True), cfg=homes.cfg(), fx=FX)
         assert done.remote_outcome == "skipped"
         assert self.git.remote == "wip"
         assert not self.git.ran("delete_remote")
 
     def test_slot_is_detached_at_its_base_and_only_the_branch_is_deleted(self):
-        done = cleanup.retry(self.git, self.log, self.queue(), lambda path: path == "/wt", "origin/trunk", cfg=homes.cfg())
+        done = cleanup.retry(self.git, self.log, self.queue(), lambda path: path == "/wt", "origin/trunk", cfg=homes.cfg(), fx=FX)
         assert done.local_outcome == "gone"
         assert [co.path for co in self.git.worktrees] == ["/repo", "/wt"]
         assert self.git.ran("detach", "/wt", "origin/trunk")
@@ -117,14 +118,14 @@ class Cleanup(Case):
 
     def test_unsaved_slot_work_keeps_its_branch_and_directory_for_retry(self):
         self.git.dirty_tree = True
-        done = cleanup.retry(self.git, self.log, self.queue(), lambda path: path == "/wt", cfg=homes.cfg())
+        done = cleanup.retry(self.git, self.log, self.queue(), lambda path: path == "/wt", cfg=homes.cfg(), fx=FX)
         assert done.local_outcome == "pending"
         assert not self.git.ran("remove")
         assert not self.git.ran("detach")
 
     def test_unavailable_slot_registry_keeps_the_worktree_and_branch_retryable(self):
         lookup = mock.Mock(side_effect=RuntimeError("slot registry unavailable"))
-        done = cleanup.retry(self.git, self.log, self.queue(), lookup, cfg=homes.cfg())
+        done = cleanup.retry(self.git, self.log, self.queue(), lookup, cfg=homes.cfg(), fx=FX)
         assert done.local_outcome == "pending"
         assert not self.git.ran("remove")
         assert self.git.local == "head"
@@ -132,7 +133,7 @@ class Cleanup(Case):
     def test_moved_local_and_remote_refs_keep_their_new_work(self):
         row = self.queue()
         self.git.local = self.git.remote = "new"
-        done = cleanup.retry(self.git, self.log, row, cfg=homes.cfg())
+        done = cleanup.retry(self.git, self.log, row, cfg=homes.cfg(), fx=FX)
         assert (done.local_outcome, done.remote_outcome) == ("pending", "pending")
         assert (self.git.local, self.git.remote) == ("new", "new")
         assert not self.git.ran("remove")
@@ -140,17 +141,17 @@ class Cleanup(Case):
     def test_a_move_during_delete_is_protected_by_the_local_compare_oid(self):
         row = self.queue()
         self.git.before_delete = lambda: setattr(self.git, "local", "new")
-        done = cleanup.retry(self.git, self.log, row, cfg=homes.cfg())
+        done = cleanup.retry(self.git, self.log, row, cfg=homes.cfg(), fx=FX)
         assert done.local_outcome == "pending"
         assert self.git.local == "new"
 
     def test_dirty_worktree_failure_is_retryable_with_the_original_oids(self):
         self.git.dirty_tree = True
-        done = cleanup.retry(self.git, self.log, self.queue(), cfg=homes.cfg())
+        done = cleanup.retry(self.git, self.log, self.queue(), cfg=homes.cfg(), fx=FX)
         assert (done.local_outcome, done.remote_outcome) == ("pending", "gone")
         assert "untracked files" in done.detail
         self.git.dirty_tree = False
-        cleanup.retry_logged(self.git, self.log, cfg=homes.cfg())
+        cleanup.retry_logged(self.git, self.log, cfg=homes.cfg(), fx=FX)
         assert self.git.local == ""
         assert self.git.calls.count(("delete_remote", "wip")) == 1
 
@@ -163,16 +164,16 @@ class Cleanup(Case):
         def leave_slot(*args):
             assert self.git.local == "head"
         tree.leave_slot.side_effect = leave_slot
-        cleanups = LandCleanups(self.git, self.log, homes.cfg(), lambda repo: (lambda path: False), lambda repo: "main")
+        cleanups = LandCleanups(self.git, self.log, homes.cfg(), lambda repo: (lambda path: False), lambda repo: "main", fx=FX)
         ReleaseSlot(host, tree, cleanups).run("task/a", Outcome.LANDED)
         tree.leave_slot.assert_called_once()
         assert self.git.local == ""
-        cleanup.retry_logged(self.git, self.log, cfg=homes.cfg())
+        cleanup.retry_logged(self.git, self.log, cfg=homes.cfg(), fx=FX)
         assert self.git.calls.count(("delete_remote", "wip")) == 1
 
     def test_the_main_checkout_is_kept(self):
         self.git.worktrees = [Checkout(path="/repo", branch="task/a", main=True)]
-        done = cleanup.retry(self.git, self.log, self.queue(), cfg=homes.cfg())
+        done = cleanup.retry(self.git, self.log, self.queue(), cfg=homes.cfg(), fx=FX)
         assert done.local_outcome == "pending"
         assert "main checkout" in done.detail
 
@@ -181,6 +182,6 @@ class Cleanup(Case):
         self.git.remote = "new"
         again = cleanup.record(self.log, "/repo", "task/a", "head", "land", "origin", "new", prior=row)
         assert again.remote_oid == "wip"
-        done = cleanup.retry(self.git, self.log, again, cfg=homes.cfg())
+        done = cleanup.retry(self.git, self.log, again, cfg=homes.cfg(), fx=FX)
         assert done.remote_outcome == "pending"
         assert self.git.remote == "new"

@@ -39,8 +39,8 @@ from taskloop.adapters import (  # noqa: E402
 from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.loop.core import Core  # noqa: E402
 from taskloop.app.loop.take import Taker  # noqa: E402
-from taskloop.app.slots import verbs  # noqa: E402
-from taskloop.app.slots.pool import Slot  # noqa: E402
+from tlslots import verbs  # noqa: E402
+from tlslots.pool import Slot  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import real  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
