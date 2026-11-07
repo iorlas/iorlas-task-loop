@@ -2,7 +2,7 @@
 
 Scope: the 72 open, non-hold children of REVIEW9 (tl-7i9k), ZOOMOUT (tl-sqd3), REVIEWFIX (tl-br2), ENCAPSULATION (tl-3cl), DASHBACK (tl-xvl) and the stage epic tl-7y6, judged against main at the time of writing and the open PRs then (#519, #522, #526, #529, #531, #533 and the pipeline R4 lane). Evidence was read by subagents with grep and git log, then spot-checked by hand for the top picks (tl-br2.20, tl-br2.5, tl-7i9k.31, tl-7i9k.41, tl-sqd3.7). Closed beads carry the verdict in their reason; STILL VALID beads keep their text.
 
-Totals: STILL VALID 44, ALREADY DONE 20, WON'T DO 7, DUPLICATE 1.
+Totals: STILL VALID 45, ALREADY DONE 20, WON'T DO 6, DUPLICATE 1.
 
 Rules applied: a design note without code is not "done" (the bead stays valid until its acceptance holds); a container epic with open children stays open and has no work of its own; a bead whose premise a later decision removed (delegate as a library, no hosted CI, no OS service, no backward compatibility) is WON'T DO. Beads in progress under another lane are marked.
 
@@ -54,6 +54,7 @@ Rules applied: a design note without code is not "done" (the bead stays valid un
 | tl-7y6.2 | STILL VALID | - | container | Container epic: 1 child still open; closes with it. No work of its own. | none |
 | tl-7y6.4 | STILL VALID | - | container | Container epic: 2 children still open; stage carves (#529) supersede its S3 plan, so judge it when those 2 close. | #529 |
 | tl-w7lt | STILL VALID | - | container | Container epic: 11 of 41 children still open; no work of its own. | none |
+| tl-7i9k.56 | STILL VALID | - | container | Umbrella with 2 open children (tl-7i9k.56.1 DURABLE-MODULE, tl-7i9k.56.2 COMPOSE-RULE) that this triage did not cover (grandchildren); it closes with them. Not closed: the first pass said WON'T DO and tl refused the close. | none |
 | tl-7i9k.13 | ALREADY DONE | - | - | | Slices 1-6 landed: #272, #274 (dev/killpoints.py real SIGKILL), #275; tests/run/test_crash_matrix.py and dev/killpoints.py exist. Bead is in_progress only as bookkeeping; close it. | none |
 | tl-7i9k.17 | ALREADY DONE | - | - | | pin.warm_second sha1%10 (#250), wired dark behind engine.second_writer_family (#252), doctor share line (#296); tests/run/test_second_family.py, tests/domain/test_writer_pin.py exist. | none |
 | tl-7i9k.18 | ALREADY DONE | - | - | | Slice 1 (queue skips unordered children of 'ordered' epic) landed in #241, src/taskloop/app/loop/queue.py. Slice 2 is an owner action (apply labels), not code; close. | none |
@@ -76,7 +77,6 @@ Rules applied: a design note without code is not "done" (the bead stays valid un
 | tl-xvl.6 | ALREADY DONE | - | - | | #79 idempotency key and accepted/refused receipts in factory.db; #24 cache drop; #85/#381 expected-ask precondition. All F05 parts covered. | none |
 | tl-7i9k.55 | WON'T DO | P3 | code-cut | No groom verb or code exists and none is planned; age rank and an actor allowlist are polish nobody asked for since the loop's queue.py ranks already. | none |
 | tl-7i9k.5 | WON'T DO | - | - | | GitHub server-side ruleset with required status: repo has no hosted CI (CLAUDE.md: the factory is the CI) and dev/release.py pushes straight to main; also deferred and no repo files to change. | none |
-| tl-7i9k.56 | WON'T DO | - | - | | Design-only bead awaiting owner; storm removed (#517), S0 policy/NETPAUSE class landed or in own beads; docs/design/durable-factory.md carries the decisions, bead is a stale umbrella. Decisions live in docs. | none |
 | tl-7i9k.9 | WON'T DO | - | - | | Deferred P4; tl factory start/stop/status (DETACHED, 7e7d07c5) with caffeinate child exists and CLAUDE.md says no OS service (rules test); LaunchAgent premise contradicted. | none |
 | tl-sqd3.17 | WON'T DO | - | - | | Premise stale: delegate is now a library in this repo (src/delegate), so there are not two apps vendoring a shelf set; dev/vendor.json plus VendorGuard (tests/rules/gate_rules.py:10) already fail on drift. | none |
 | tl-sqd3.29 | WON'T DO | - | - | | Owner decision, not work (CLAUDE.md: decisions live in docs, beads are work). Repo already ships one plugin (.claude-plugin/plugin.json) with delegate as an in-repo library. Record in docs, close. | none |
@@ -105,3 +105,9 @@ Rules applied: a design note without code is not "done" (the bead stays valid un
 | 8 | tl-7i9k.39 | Loop subclasses Core and LoopEnv is a wide bag of callables | src/taskloop/app/loop/loop.py, src/taskloop/app/loop/env.py, src/taskloop/app/loop/core.py |
 
 Reserve: tl-sqd3.35 (the "k" shim in adapters/agent.py), tl-7i9k.38 (app/land still 48 files, target 15).
+
+## Closing status
+
+20 of the 28 non-valid beads were closed. Eight refused, none forced: tl-7i9k.13, .18, .47, .50, .51, .63 and tl-br2.16 are assigned to another actor (a close needs the assignee or --force); tl-7i9k.56 has open children (see above). Their verdicts stand; the assignee closes them, or the lead says to force.
+
+Scope note: only direct children of the six parents were triaged. Grandchildren (for example tl-7i9k.56.1/.2, tl-7y6.6.x) are a second pass.
