@@ -7,11 +7,11 @@ from typing import Any
 
 from taskloop.adapters import ident
 from taskloop.adapters.repourl import repo_url
-from taskloop.app.run import ended, summaries
-from taskloop.app.run import trace as runtrace
+from taskloop.app.pipeline import ended, summaries
+from taskloop.app.pipeline import trace as runtrace
+from taskloop.app.pipeline.finish import answer
+from taskloop.app.pipeline.finish import outcome as finished_outcome
 from taskloop.app.run.closer_record import RecordRun
-from taskloop.app.run.finish import answer
-from taskloop.app.run.finish import outcome as finished_outcome
 from taskloop.app.run.layout import repo_of
 from taskloop.app.slots import engine_lock
 from taskloop.contracts import log as rec

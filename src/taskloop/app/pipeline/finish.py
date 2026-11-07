@@ -1,8 +1,8 @@
 """Engine values at the manifest's single terminal-write boundary."""
 import json
 
-from taskloop.app.run import ended
-from taskloop.app.run import trace as runtrace
+from taskloop.app.pipeline import ended
+from taskloop.app.pipeline import trace as runtrace
 from taskloop.contracts import wire
 from taskloop.contracts.checkpoint import EndRec
 from taskloop.contracts.enums import Result
