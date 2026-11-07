@@ -1,7 +1,6 @@
 """The review stage's writes go through its own state and ledger, not through lists on the engine (docs/design/b-review.md, slice 2)."""
-from support.review_host import FakeReview
-
 from tlwork.review.state import ReviewLive
+from tlwork.testing import FakeReview
 
 
 def test_a_verifier_answer_is_recorded_with_its_five_fields():
@@ -20,7 +19,7 @@ def test_an_unverified_item_is_kept_once_by_its_text():
 def test_a_leftover_is_added_once_by_title_and_says_whether_it_was_new(workdir):
     review = FakeReview(workdir)
     host, routing = review.hand, review.routing
-    host.leftovers = [{"title": "t"}]
+    host.leftovers[:] = [{"title": "t"}]
     assert routing.add_leftover({"title": "t", "why": "again"}) is False
     assert routing.add_leftover({"title": "u"}) is True
     assert host.leftovers == [{"title": "t"}, {"title": "u"}]

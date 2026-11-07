@@ -6,7 +6,10 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-INTEGRATION = {"gate": "tests/checks", "asks": "tests/asks", "slots": "tests/slots", "release": "tests/release"}
+INTEGRATION = {
+    "gate": ("tests/checks",), "asks": ("tests/asks",), "slots": ("tests/slots",), "release": ("tests/release",),
+    "work": ("tests/review", "tests/plan", "tests/look", "tests/write"),
+}
 # Import purity cannot identify persistent storage and run-state integration.
 ASKS_DB_RUN_INTEGRATION = {
     "test_dash_same_intake.py": "dashboard and owner intake against persistent AskStore rows",
@@ -70,7 +73,7 @@ def problems(root: Path = ROOT) -> list[str]:
             for line, name in imports(path):
                 if name not in allowed and normalized(name) not in third_party:
                     found.append(f"{path.relative_to(root)}:{line} imports {name} (undeclared in {manifest.relative_to(root)})")
-        if integration := INTEGRATION.get(manifest.parent.name):
+        for integration in INTEGRATION.get(manifest.parent.name, ()):
             for path in sorted((root / integration).rglob("*.py")):
                 if path.name in {"__init__.py", "conftest.py"}:
                     continue

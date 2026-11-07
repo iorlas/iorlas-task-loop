@@ -13,12 +13,14 @@ build-backend = "hatchling.build"
 packages = ["src/tlkernel"]
 
 [dependency-groups]
-dev = ["pytest"]
+dev = ["pytest", "tltestkit"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["*"]
 addopts = "-p no:cacheprovider"
-# A tltestkit dev dependency would cycle: tltestkit depends on tlkernel.
-pythonpath = ["src", "../testkit/src", "../../skills/task-loop/_vendor"]
+pythonpath = ["src", "../../skills/task-loop/_vendor"]
+
+[tool.uv.sources]
+tltestkit = { workspace = true }

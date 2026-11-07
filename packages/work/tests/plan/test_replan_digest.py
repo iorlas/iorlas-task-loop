@@ -1,19 +1,19 @@
 """The replan prompt carries the tree's diff stat and a budget for looking, and only on a replan."""
-from types import SimpleNamespace
 
 import pytest
-from support.plan_host import FakePlan
-
+from tlkernel.ids import TreeSha
 from tltestkit.checks import typed
 from tltestkit.plans import PLAN
+
 from tlwork.plan.prompt import REPLAN_CALLS
+from tlwork.testing import FakePlan
 
 
 @pytest.fixture
 def plan(workdir):
     plan = FakePlan(workdir)
-    plan.ports.checkout = SimpleNamespace(tree_hash=lambda: "abc", base_sha=lambda: "base")
-    plan.ports.hand = SimpleNamespace(rounds_text=lambda: "- stage 1, round 1 (review); sent back: x\n")
+    plan.ports.checkout.tree = TreeSha("abc")
+    plan.ports.hand.value = "- stage 1, round 1 (review); sent back: x\n"
     plan.ports.git.replies[("diff",)] = " a.py | 2 +-\n"
     return plan
 

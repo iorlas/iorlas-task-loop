@@ -375,7 +375,7 @@ class EngineTest(SlotWorld):
             {"author": "tl-x", "text": "Engine paused: paused: no lane for write until 10:00 (no_lane: Hold the task)"}], notes
 
 
-BRIEFS = ROOT / "tests" / "fixtures" / "briefs"
+BRIEFS = ROOT / "packages" / "work" / "tests" / "fixtures" / "briefs"
 
 
 CAP_PARKS = (
