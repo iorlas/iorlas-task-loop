@@ -40,13 +40,15 @@ class CarryDoneMemo(Case):
             con.execute("INSERT INTO step (run,key,try,attempt,status,started) VALUES (?, '[2]',1,1,'running',10)",
                         (self.paused.run,))
         before = self.steps(self.paused.run)
-        Reload(self.host, FakeReexecs(), FakeTrail(), lambda: None, lambda: "", childenv, ident).carry_done_memo(self.paused.dir)
+        Reload(self.host, self.host, self.host, FakeReexecs(), FakeTrail(), lambda: None,
+               lambda: "", childenv, ident).carry_done_memo(self.paused.dir)
         assert self.steps(self.new.run) == [row for row in before if row[3] == "done"]
         assert self.steps(self.paused.run) == before
         assert done_memo.recall(self.new.dir, ("write", 1), "sha") == {"answer": "done"}
         assert done_memo.recall(self.new.dir, ("write", 1), "changed") is None
         done_memo.keep(self.new.dir, ("write", 1), "new-sha", str(answer))
-        Reload(self.host, FakeReexecs(), FakeTrail(), lambda: None, lambda: "", childenv, ident).carry_done_memo(self.paused.dir)
+        Reload(self.host, self.host, self.host, FakeReexecs(), FakeTrail(), lambda: None,
+               lambda: "", childenv, ident).carry_done_memo(self.paused.dir)
         assert self.steps(self.new.run)[0][6] == "new-sha"
 
     def test_copy_requires_destination_run_and_rolls_back_on_foreign_key_failure(self):
@@ -55,5 +57,6 @@ class CarryDoneMemo(Case):
         done_memo.keep(self.paused.dir, (1,), "sha", str(answer))
         self.host.run_id = "missing"
         with pytest.raises(factorydb.DatabaseError):
-            Reload(self.host, FakeReexecs(), FakeTrail(), lambda: None, lambda: "", childenv, ident).carry_done_memo(self.paused.dir)
+            Reload(self.host, self.host, self.host, FakeReexecs(), FakeTrail(), lambda: None,
+                   lambda: "", childenv, ident).carry_done_memo(self.paused.dir)
         assert self.steps("missing") == []

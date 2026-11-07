@@ -44,7 +44,7 @@ class ReviewerTrustRoots(Case):
         host.cfg.reflect = True
         host.dry, host.stop_pending, host.route = False, False, "/fake/route.py"
         host.sessions = [{"node": "write"}]
-        reflector = Reflector(host, ClosingTrust(), childenv.delegate_call_env)
+        reflector = Reflector(host, host, host, ClosingTrust(), childenv.delegate_call_env)
         reflector.reflect_prompt = Mock(side_effect=AssertionError("must not build a reviewer prompt"))
         assert reflector.reflect_run("parked", "trust roots changed") is None
         reflector.reflect_prompt.assert_not_called()
