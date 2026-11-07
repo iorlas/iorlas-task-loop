@@ -12,7 +12,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.memstores import fake_stores
-from support.plans import PLAN
 from support.tlmain import tl_main
 
 from taskloop.app.land.gate import Gate, Problem, ProblemKind
@@ -42,6 +41,7 @@ from tlpipeline.cursor import parse_step
 from tlpipeline.finish import answer
 from tlpipeline.steps import Steps
 from tltestkit.checks import typed
+from tltestkit.plans import PLAN
 
 
 class SelectedStage(Case):

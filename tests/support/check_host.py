@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import support.paths  # noqa: F401
-from support.cfgs import cfg_with
 from support.facts import fake_facts
 from support.memstores import fake_stores
 from support.who import who
@@ -24,6 +23,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.plancheck import StageData
 from tlkernel.ports import Clock
 from tlkernel.waitenums import WaitWhat
+from tltestkit.cfgs import cfg_with
 
 
 class RecordedWaits:

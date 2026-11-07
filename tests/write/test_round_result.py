@@ -9,14 +9,14 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.cfgs import plan_of
-from support.plans import PLAN
 
 from taskloop.app.write.rounds import run_round_step
 from taskloop.app.write.stage_loop import StageLoop
 from taskloop.app.write.state import REPLAN, RoundResult, RoundStop, StageState, WriteState, carrying
 from tlkernel.checks import CheckRun
 from tlkernel.enums import Step
+from tltestkit.cfgs import plan_of
+from tltestkit.plans import PLAN
 
 OLD = {"tests_added": 1, "tests_removed": 2, "rounds": 5, "writes": 7, "reviews": 3}
 
