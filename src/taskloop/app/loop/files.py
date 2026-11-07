@@ -9,10 +9,11 @@ from pathlib import Path
 from typing import Literal
 
 from tlkernel import paths
+from tlkernel.docrows import LOOP_DOCS
 from tlkernel.docstore import Page
 from tlkernel.enums import LockWhat
 from tlkernel.loop import LoopCommand, LoopState, LoopTarget, Rest, StopRequest
-from tlkernel.looprows import DIED, KvDoc, LoopRows
+from tlkernel.looprows import DIED, DocRow, LoopRows
 from tlkernel.run import LoopLogLine
 from tlkernel.stores import LoopLog
 
@@ -82,11 +83,11 @@ class LoopFiles:
     def lock(self) -> contextlib.AbstractContextManager[object]:
         return hold_path(self.cfg.lock_record(LockWhat.LOOP.value, self.key), "loop", what=LockWhat.LOOP)
 
-    def command(self) -> KvDoc[LoopCommand]:
-        return KvDoc(self.rows(), f"loop-command:{self.key}", LoopCommand)
+    def command(self) -> DocRow[LoopCommand]:
+        return DocRow(self.rows(), f"loop-command:{self.key}", LoopCommand, LOOP_DOCS)
 
-    def rest_doc(self) -> KvDoc[Rest]:
-        return KvDoc(self.rows(), f"loop-rest:{self.key}", Rest)
+    def rest_doc(self) -> DocRow[Rest]:
+        return DocRow(self.rows(), f"loop-rest:{self.key}", Rest, LOOP_DOCS)
 
     def stop_for(self, pid: int, started: float) -> StopMode:
         """What the repo's command says to the loop (`pid`, `started`): a loop the command does not name (one started later, even on

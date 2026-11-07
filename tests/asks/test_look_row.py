@@ -1,4 +1,4 @@
-"""The look items' kv row: an owner's answer and the engine's filing of new items write the same row, each by compare-and-set, so
+"""The look items' look_doc row: an owner's answer and the engine's filing of new items write the same row, each by compare-and-set, so
 neither order loses the other's write; the owner's hold on the look bead is not touched by either."""
 from support.look_world import world
 
@@ -98,3 +98,11 @@ def test_the_gallery_reads_the_row_before_the_metadata():
     shown = {"metadata": {"looks": [{"id": "a#1", "status": "open"}]}}
     assert [e["status"] for e in gallery.items_of("b", shown, [{"id": "a#1", "status": "good"}])] == ["good"]
     assert [e["status"] for e in gallery.items_of("b", shown)] == ["open"]
+
+
+def test_gallery_lives_in_look_doc_only(workdir):
+    r = rows(workdir)
+    r.modify("tl-look", lambda: [NEW], lambda items: items)
+    assert r.rows.select("SELECT k FROM look_doc") == [("look:tl-look",)]
+    assert r.rows.select("SELECT k FROM kv WHERE k LIKE 'look:%'") == []
+    assert r.items("tl-look") == [NEW]

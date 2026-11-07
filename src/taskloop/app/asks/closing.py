@@ -20,7 +20,7 @@ class ClosingAsks:
 
     def paused(self, bead: Bead, kind: Kind, run: str, now: float, *, reason: str = "",
                not_before: float = 0.0, fingerprint: str = "", producer: Producer | None = None,
-               permanence: Permanence | None = None) -> Park | None:
+               permanence: Permanence | None = None) -> Park:
         return parks.paused(self.cfg, bead, kind, run, now, reason=reason, not_before=not_before,
                             fingerprint=fingerprint, producer=producer, permanence=permanence)
 

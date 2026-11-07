@@ -35,9 +35,11 @@ class FakeParkBook:
 
     def paused(self, bead: Bead, kind: Kind, run: str, now: float, *, reason: str = "",
                not_before: float = 0.0, fingerprint: str = "", producer: Producer | None = None,
-               permanence: Permanence | None = None) -> Park | None:
+               permanence: Permanence | None = None) -> Park:
         self.paused_calls.append((bead, kind, run, now, reason, not_before, fingerprint, producer, permanence))
-        return self.result
+        return self.result if self.result is not None else Park(
+            bead=bead.id, hash="hash", runs=1, run=run, t=now, reason=reason or kind.value,
+            permanence=permanence or "transient", retry_at=not_before)
 
     def ended(self, bead: Bead, kind: Kind, run: str, now: float) -> None:
         self.ended_calls.append((bead, kind, run, now))
