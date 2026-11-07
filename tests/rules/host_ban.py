@@ -25,7 +25,8 @@ def code_dir(stage: str) -> Path:
         return ROOT / "packages/work/src/tlwork" / stage
     if stage == "checks":
         return ROOT / "packages/gate/src/tlgate"
-    return APP / stage if (APP / stage).is_dir() else ROOT / "packages" / stage / "src" / f"tl{stage}"
+    package = ROOT / "packages" / stage / "src" / f"tl{stage}"
+    return package if package.is_dir() else APP / stage  # the package wins: a stale app/<stage>/__pycache__ is not the stage
 
 
 def ruff_file(stage: str) -> Path:
@@ -33,7 +34,8 @@ def ruff_file(stage: str) -> Path:
         return ROOT / "packages/work/ruff.toml"
     if stage == "checks":
         return ROOT / "packages/gate/ruff.toml"
-    return code_dir(stage) / "ruff.toml" if (APP / stage).is_dir() else ROOT / "packages" / stage / "ruff.toml"
+    package = ROOT / "packages" / stage / "ruff.toml"
+    return package if package.is_file() else code_dir(stage) / "ruff.toml"
 
 
 def protocols_of(tree: ast.Module) -> set[str]:
