@@ -2,6 +2,7 @@
 from tlkernel.checkpoint import Checkpoint
 from tlkernel.enums import Step
 
+from taskloop.adapters import beadtools
 from taskloop.app.pipeline.stage_run import stage_run
 from taskloop.app.pipeline.standalone import Standalone
 from taskloop.app.run.host import RunHost
@@ -24,5 +25,5 @@ def run_stages(e: RunHost, requested: str | None, *, continuous: bool) -> int:
     once = RunOnce(e)
     standalone = Standalone(e, rounds=RoundStages(e), once=lambda: once, lease=once.lease,
                             closing=ClosingBeads(e.who, e.store, guard_for(e.who, e.store, e.git, e.wt)),
-                            has_land=lambda: has_land(e.who, e.bead), repo_of=repo_of, stage_run=stage_run)
+                            has_land=lambda: has_land(e.who, e.bead), repo_of=repo_of, stage_run=stage_run, peek_bead=beadtools.peek)
     return standalone.run_stages(requested, continuous=continuous)

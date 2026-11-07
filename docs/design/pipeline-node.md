@@ -249,3 +249,5 @@ Order and collisions:
 4. **R6** is then the pure `git mv` it was planned to be, now with `tlpipeline -> tlkernel` as its only edge, plus the four edits per carve of `workspace.md` bug 6 (host_ban converted list, `arch_invariants.SLICE_IMPORTS`, the layers contract, `test_dash_state_paths`), the test move rule (a pipeline test that imports a sibling stage belongs to the sibling or `tests/e2e`; today 77 test files outside `tests/pipeline` mention the pipeline), and the vendored-shelf `pythonpath` decision (the pipeline imports `atomic_io` through `adapters`, check in R6b).
 
 Beads: R6a `tl-e5t0.39.12`, R6b `.13`, R6c `.14`; R6 (`.11`) depends on all three.
+
+R6b part 1 done: stuck.py, reload.py, reflect.py, waits.py, run.py, run_roles.py, standalone.py; remaining: closing*.py, lifecycle.py, journal.py

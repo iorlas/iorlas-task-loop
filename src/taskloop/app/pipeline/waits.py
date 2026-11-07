@@ -12,8 +12,8 @@ from tlkernel.kinds import Kind
 from tlkernel.ports import Clock
 from tlkernel.waitenums import WaitWhat
 
-from taskloop.adapters import deadline
 from taskloop.app.pipeline import outcomes
+from taskloop.app.pipeline.adapter_ports import Deadline
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.steps import Open
 from taskloop.domain.asks import specs as askspecs
@@ -67,8 +67,9 @@ class WaitsHost(Protocol):
 
 
 class Waits:
-    def __init__(self, host: WaitsHost) -> None:
+    def __init__(self, host: WaitsHost, deadline: Deadline) -> None:
         self.host = host
+        self.deadline = deadline
         self.earlier: tuple[int, int] | None = None  # (tokens, runs) of the bead's earlier runs
 
     def start(self, what: WaitWhat, holder: str = "", until: float | None = None, lane: str = "", check: str = "") -> str:
@@ -116,7 +117,7 @@ class Waits:
         try:
             with self.host.os_lock(
                 path, holder or self.host.bead, waiting,
-                timeout=deadline.remaining(LIVENESS.lock_wait_s), check=self.host.halt_point,
+                timeout=self.deadline.remaining(LIVENESS.lock_wait_s), check=self.host.halt_point,
             ):
                 acquired = True
                 waited()
@@ -129,7 +130,7 @@ class Waits:
         except TimeoutError as err:
             if acquired:
                 raise
-            deadline.check()
+            self.deadline.check()
             raise Blocked(f"paused: {what} wait deadline exceeded (held by {err}); retry later", kind=Kind.PAUSE_LANE) from None
         finally:
             waited()

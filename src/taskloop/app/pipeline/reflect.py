@@ -16,7 +16,7 @@ from tlkernel.schema import unstrict
 from tlkernel.stores import JsonlStore
 from tlkernel.wire import Open
 
-from taskloop.adapters import childenv
+from taskloop.app.pipeline.adapter_ports import DelegateEnv
 from taskloop.app.pipeline.ports import TrustRefusal
 from taskloop.app.pipeline.reflect_prompt import REFLECT_PROMPT
 from taskloop.domain.lanes import caps
@@ -80,9 +80,10 @@ class ReflectHost(Protocol):
 
 
 class Reflector:
-    def __init__(self, host: ReflectHost, refusal: TrustRefusal) -> None:
+    def __init__(self, host: ReflectHost, refusal: TrustRefusal, delegate_env: DelegateEnv) -> None:
         self.host = host
         self.refusal = refusal
+        self.delegate_env = delegate_env
 
     def worth_asking(self, why: str) -> bool:
         host = self.host
@@ -116,7 +117,7 @@ class Reflector:
             cid = host.calls.start("reflect", "reflect", "reviewer", False, host.live_n)
             runner = host.router.runner(host.err_path, None, host.live("reflect"))
             res = host.router.call(host.resolved, req, prompt, answers.sent_schema("reflect"), runner,
-                                   childenv.delegate_call_env(host.env)).res
+                                   self.delegate_env(host.env)).res
             saved = {k: v for k, v in host.stats.items() if k.startswith("tokens_")}
             host.calls.end(cid, "reflect", "reviewer", 1, res)
             host.stats.update(saved)  # the run's counts are the run's, as the Reflect comment says them

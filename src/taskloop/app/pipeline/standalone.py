@@ -20,7 +20,7 @@ from tlkernel.plancheck import PlanData, RoundState
 from tlkernel.run import RunFinish, RunState
 from tlkernel.wire import Open
 
-from taskloop.adapters import beadtools
+from taskloop.app.pipeline.adapter_ports import PeekBead
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.closing_record import RecordHost, RecordRun, RecordSteps
 from taskloop.app.pipeline.crash import CrashHost, parked_crash
@@ -190,8 +190,9 @@ class Standalone[T]:
     def __init__(self, host: StandaloneHost[T], *, rounds: RoundSteps, once: Callable[[], OnceRun],
                  lease: Callable[[Callable[[], None], Callable[[BaseException], None]], LeaseLike],
                  closing: BeadClosing, has_land: Callable[[], bool], repo_of: Callable[[Git, str], str],
-                 stage_run: StageLifecycle) -> None:
+                 stage_run: StageLifecycle, peek_bead: PeekBead) -> None:
         self.host = host
+        self.peek_bead = peek_bead
         self.rounds, self.once, self.lease = rounds, once, lease
         self.closing, self.has_land, self.repo_of, self.stage_run = closing, has_land, repo_of, stage_run
 
@@ -238,7 +239,7 @@ class Standalone[T]:
             locator.advance(host.run_id, step)  # failures retry the same step
             host.prev_ck = ck.run if ck else ""
             host.records.log_run()
-            bead = beadtools.peek(host.store, host.bead)
+            bead = self.peek_bead(host.store, host.bead)
             if bead is None:
                 raise ValueError(f"bead {host.bead} not found")
             lease.start()

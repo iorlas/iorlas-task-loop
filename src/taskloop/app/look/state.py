@@ -3,9 +3,8 @@ the one it always was); the rest is the stage's own and is not saved."""
 from collections.abc import Callable
 
 from tlkernel.checkpoint import RunState
+from tlkernel.looks import Methods
 from tlkernel.wire import Open
-
-from taskloop.adapters.looks import Methods
 
 LOOK_FIELDS = ("look_notes", "look_unjudged", "look_done", "rendered_names", "last_reqs")  # RunState fields the look stage owns
 

@@ -244,6 +244,7 @@ source_modules =
     taskloop.app.track
     taskloop.app.workers
     taskloop.app.write
+    taskloop.app.pipeline.adapter_ports
     taskloop.app.pipeline.blocked
     taskloop.app.pipeline.budget
     taskloop.app.pipeline.waits

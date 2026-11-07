@@ -1,11 +1,13 @@
 """engine.bead_token_cap: a bead's tokens over all its runs stop the next worker call, as a budget ask with the total.
 Waits runs here over a small typed host (support/narrow_hosts.py FakeWaitsHost), not an Engine."""
+
 import sys
 from pathlib import Path
 from typing import Any, ClassVar
 
 import pytest
 
+from taskloop.adapters import deadline
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -29,7 +31,7 @@ class TokenCap(Case):
         for n, (bead, (i, o)) in enumerate(rows):
             host.stores.traces.append(runtrace.run_trace(str(RunId.new(1.8e9 + n, bytes(10))), {
                 "bead": bead, "outcome": "blocked", "stats": {"tokens_in": i, "tokens_out": o}, **self.TRACE_FIELDS}))
-        return host, Waits(host)
+        return host, Waits(host, deadline)
 
     TRACE_FIELDS: ClassVar[dict[str, Any]] = {
         "repo_url": "r", "worktree": "w", "branch": "b", "coordinator_session": "s", "started": 1.0, "ended": 2.0, "why": "", "sha": ""}

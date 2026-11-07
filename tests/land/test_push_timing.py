@@ -9,6 +9,7 @@ import support.paths  # noqa: F401
 from support.narrow import must
 from support.narrow_hosts import FakeOutboundHost
 
+from taskloop.adapters.agent import last_event_t
 from taskloop.app.land.outbound import Outbound
 from taskloop.app.pipeline.budget import Budget
 from taskloop.app.pipeline.outcomes import run_breakdown
@@ -33,7 +34,7 @@ class PushTiming(Case):
         self.host.log = RunLog(JsonlStore(self.path, rec.decode), clock=self.clock.now)
         self.host.steps = Steps(self.host.log, self.clock.now)
         self.budget = Budget(self.host.cfg, self.clock.now)
-        self.tick = StuckTick(SimpleNamespace(log=self.host.log, live_now="", now=self.clock.now))
+        self.tick = StuckTick(SimpleNamespace(log=self.host.log, live_now="", now=self.clock.now), last_event_t)
         self.host.steps.begin("review", "review stage 1")
         self.clock.advance(559)
         self.enterContext(mock.patch("taskloop.app.land.outbound.uses_lfs", return_value=False))

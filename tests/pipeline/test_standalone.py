@@ -1,10 +1,12 @@
 """Standalone cursor, refusal and close boundaries over injected capabilities."""
+
 from types import SimpleNamespace
 from unittest import mock
 
 import pytest
 from support.pipeline_ports import FakeBeadClosing, FakeRoundSteps
 
+from taskloop.adapters import beadtools
 from taskloop.app.pipeline.standalone import Standalone
 from tlkernel import fence
 from tlkernel.bead import Bead
@@ -21,7 +23,7 @@ from tlkernel.run import RunState
 def standalone(host, *, close_result=0, landed=False):
     return Standalone(host, rounds=FakeRoundSteps(), once=mock.Mock(), lease=mock.Mock(),
                       closing=FakeBeadClosing(close_result), has_land=lambda: landed,
-                      repo_of=lambda git, wt: wt, stage_run=mock.Mock())
+                      repo_of=lambda git, wt: wt, stage_run=mock.Mock(), peek_bead=beadtools.peek)
 
 
 def test_close_refuses_failed_bead_close():
