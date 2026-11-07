@@ -87,7 +87,7 @@ asks-owned `park` table, separately from pipeline `wait` rows. `ParkStore`, writ
 It knows nothing of any record. It provides: connection (open, WAL, `begin_immediate`, `cas_update`, quarantine), the generic doc/log primitives, a **part registry**, a migration runner, a prune runner, and **projections**. One sqlite file stays (single-transaction prune and the dashboard's joins need it).
 
 ```
-Part(name, version, ddl, steps: {to_version: fn}, records: [RecordType], prune: [Predicate], read_from: int)
+Part(name, version, ddl, steps: {to_version: fn}, records: [RecordType], prune: [Predicate])
 register(part)        # at import of the stage's store module
 open(path)            # the launch gate below
 ```
@@ -104,7 +104,11 @@ open(path)            # the launch gate below
 | same version, `ddl_fingerprint` differs from `sqlite_master` | **refuse** ("table T changed without a version bump") |
 | same version, `record_fingerprint` differs | **refuse** ("record R changed without a version bump") |
 
-`ddl_fingerprint` = hash of the normalised DDL of the part's tables. `record_fingerprint` = hash of `msgspec.json.schema` of the part's registered record types. A second, earlier guard runs in the test suite: each part commits a golden `fingerprint.json` per version; a test fails when the code's fingerprints differ from the golden of its declared version, so a schema or DTO change cannot reach `main` without a version bump and a step. The dashboard declares which parts it reads and from which version (`needs = {"gate": 2, "pipeline": 4}`); it refuses to start against a part below that, replacing the global `SCHEMA_READ_FROM`.
+`ddl_fingerprint` = hash of the normalised DDL of the part's tables. `record_fingerprint` = hash of `msgspec.json.schema` of the part's
+registered record types. A second, earlier guard runs in the test suite: each part commits a golden `fingerprint.json` per version; a test
+fails when the code's fingerprints differ from the golden of its declared version, so a schema or DTO change cannot reach `main` without a
+version bump and a step. The dashboard declares which parts it reads and from which version (`needs = {"gate": 2, "pipeline": 4}`); it
+refuses to start against a part below that, with no global schema read floor.
 
 Existing database: the first launch of the new code migrates `schema_part` from `PRAGMA user_version = 5` to version 1 of every part at today's shape (a database migration, not a legacy reader); the global `user_version` is then frozen.
 
