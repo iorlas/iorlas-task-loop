@@ -187,4 +187,3 @@ class Values(Protocol):
 
 class Journalling(RecordHost, CrashHost, Protocol):
     """Inherited recording/crash members are exempt from the 16 ceiling until R4d."""
-
