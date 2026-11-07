@@ -82,6 +82,17 @@ class RunRows:
                 if new != old:
                     self.write(con, new)
 
+    def carry_done_steps(self, src_run: str, dst_run: str) -> None:
+        """Copy the finished steps of a paused run under a new run id.
+
+        A missing destination run raises factorydb.DatabaseError (foreign key) and rolls back.
+        """
+        with self.transaction() as con:
+            con.execute("INSERT INTO step (run,key,try,attempt,status,started,ended,input_digest,result,fingerprint,calls) "
+                        "SELECT ?,key,try,attempt,status,started,ended,input_digest,result,fingerprint,calls "
+                        "FROM step WHERE run=? AND status='done' ON CONFLICT(run,key,try) DO NOTHING",
+                        (dst_run, src_run))
+
     def _select(self, where: str = "", params: tuple[str, ...] = ()) -> list[RunManifest]:
         if not self.cfg.factory_db().exists():
             return []
