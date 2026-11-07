@@ -85,8 +85,7 @@ class EngineReviewTest(EngineTest):
         assert ck["writer"] == "ref-write"
         rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         assert rc == 0
-        assert [c[0] for c in s.calls] == ["worker", "reviewer"]  # no plan, no stage 1
-        assert s.calls[0][1] == "ref-write"                      # the writer's thread goes on
+        assert [c[0] for c in s.calls] == ["reviewer"]  # no plan, no stage 1, no write: its checks were green (tl-q3ma)
         assert "stage two" in s.prompts[0]
         assert "round 2" in self.eng.log_path.read_text()
         self.assertNoCheckpoint()                                # landed: nothing left to resume
