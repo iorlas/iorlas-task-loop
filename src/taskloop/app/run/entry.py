@@ -204,6 +204,8 @@ def run_in(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, spawner:
     if failed:
         return failed
     took, slot = "", ""
+    held = engine_lock.HeldLock()
+    acquired: engine_lock.EngineLock | None = None
     try:
         # a hand run takes its slot's bead as the loop does (a --worktree that is a slot too); one the loop started has
         # it already: TASK_LOOP_SLOT_BEAD names that very slot's bead
@@ -222,13 +224,14 @@ def run_in(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, spawner:
             why = busy if busy.startswith("area ") else f"worktree {wt}: {busy}"
             print(f"TAKEN: {why}")
             return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
-        engine_lock.LOCK = lock
-        return run_bead(a, repo, cfg, wt, store, env=env, spawner=spawner, git=git, who=who)
+        acquired = lock
+        held.set(lock)
+        return run_bead(a, repo, cfg, wt, store, env=env, spawner=spawner, git=git, who=who, held=held)
     finally:
         with _sigterm_ignored():
-            if engine_lock.LOCK:
-                engine_lock.LOCK.release()
-                engine_lock.LOCK = None
+            if acquired is not None:
+                acquired.release()
+                held.clear()
             if took:
                 wslots.release_slot(repo, slot, bead=a.id, mine=True, store=store, gen=getattr(a, "slot_gen", None), spawner=spawner,
                     git=git, who=who)
@@ -248,7 +251,8 @@ def preview(a: Namespace, repo: str, cfg: EngineConfig, wt: str, *, store: Beads
     return 1 if why else 0
 
 
-def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: Env, spawner: Spawner, git: Git, who: Identity) -> Any:
+def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: Env, spawner: Spawner, git: Git, who: Identity,
+             held: engine_lock.HeldLock | None = None) -> Any:
     if a.dry_run:
         return preview(a, repo, cfg, wt, store=store, env=env, git=git, who=who)
     if getattr(a, "stage", None) and not getattr(a, "loop", False):
@@ -290,6 +294,7 @@ def run_bead(a: Any, repo: Any, cfg: Any, wt: Any, store: Any = None, *, env: En
             fresh=bool(getattr(a, "fresh", False)),
             store=store,
             claim=claim,
+            held_lock=held,
             env=env,
             spawner=spawner,
             git=git,

@@ -9,6 +9,7 @@ import time
 from typing import Final
 
 from tlkernel.beadsport import BdFailure, Beads
+from tlkernel.branches import TASK
 from tlkernel.enums import Outcome, Result
 from tlkernel.finish import finish_run
 from tlkernel.finish_projection import history
@@ -29,7 +30,6 @@ ENGINE: Final[Guard] = lambda bead, reason: ""  # noqa: E731  the engine's own c
 GATED: Final = ("task", "feature", "bug")
 FREE: Final = ("duplicate", "wontfix", "superseded", "epic")
 MANUAL: Final = "manual-landed-with-sha:"
-TASK: Final = "task/"
 
 
 def reason_head(reason: str) -> str:

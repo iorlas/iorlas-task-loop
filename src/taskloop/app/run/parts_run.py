@@ -29,6 +29,7 @@ from taskloop.app.run.reload_ports import installed_newer, locked_slot
 from taskloop.app.run.shared import Shared
 from taskloop.app.run.shell import Shell
 from taskloop.app.run.state import state_names
+from taskloop.app.slots.engine_lock import HeldLock
 from taskloop.app.track.closing import TrailEvents
 from taskloop.app.workers.delegation import Delegation
 
@@ -38,7 +39,19 @@ class ResumeBinding[T](ResumeHost[T], ReviewOwner, Protocol):
     def review(self) -> ReviewLists: ...
 
 
+class ReloadBinding(ReloadHost, Protocol):
+    @property
+    def held_lock(self) -> HeldLock: ...
+
+
+class JournalBinding(JournalHost, Protocol):
+    @property
+    def held_lock(self) -> HeldLock: ...
+
+
 class RunParts(Plumbing):
+    held_lock: HeldLock
+
     bead_env = cached_property(bead_env)  # the slot's environment: every command of the bead gets it (Shell.stream, the worker call)
     waits = cached_property(Waits)
     delegation = cached_property(Delegation)
@@ -46,12 +59,12 @@ class RunParts(Plumbing):
     stage_checks = cached_property(StageChecks)
     shell = cached_property(Shell)
     @cached_property
-    def reload(self: ReloadHost) -> Reload:
-        return Reload(self, ReexecBook(self.home), TrailEvents(), lambda: installed_newer(self.env), locked_slot)
+    def reload(self: ReloadBinding) -> Reload:
+        return Reload(self, ReexecBook(self.home), TrailEvents(), lambda: installed_newer(self.env), lambda: locked_slot(self.held_lock))
 
     @cached_property
-    def records(self: JournalHost) -> Journal:
-        return Journal(self, locked_slot, repo_of)
+    def records(self: JournalBinding) -> Journal:
+        return Journal(self, lambda: locked_slot(self.held_lock), repo_of)
     shared = cached_property(Shared)
     stuck = cached_property(StuckTick)
     requests = cached_property(OwnerRequests)

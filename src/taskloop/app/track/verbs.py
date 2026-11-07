@@ -10,6 +10,7 @@ from typing import Any
 from tlkernel import fence
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, BeadPatch, Beads
+from tlkernel.branches import task_branch
 from tlkernel.env import Env
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
@@ -41,7 +42,7 @@ def claim(who: Identity, bead: BeadId, store: Beads, git: Git, worktree: str | N
         print("TAKEN by " + b.assignee)
         return 1
     wt = str(Path(worktree).resolve()) if worktree else git_probe(lambda: git.toplevel("."), "")
-    branch = b.metadata.get("branch") or "task/" + bead
+    branch = b.metadata.get("branch") or task_branch(bead)
     attempt(st.update, bead, BeadPatch(set_metadata=dict({"branch": branch}, **({"slot": slot} if slot else {}))))
     event(who, "claim", bead, worktree=wt, branch=branch, title=b.title, slot=slot)
     provenance(st, bead, "claim", who.session or who.actor, "transcript" if who.session else "work-id",
