@@ -7,6 +7,7 @@ from tlkernel.bd_errors import BdCommandFailure
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
+from tlslots.env import DEFAULT_PRIO
 from tltestkit.case import Case
 
 
@@ -14,7 +15,7 @@ class BdFallbacks(Case):
     def test_priority_defaults_when_bd_is_missing(self):
         who = Identity(actor="owner", home=".")
         with mock.patch.object(slots, "bd_store", side_effect=BdCommandFailure("tl: bd is not on PATH")):
-            assert slots.bead_priority("/repo", BeadId("t-1"), who) == slots.DEFAULT_PRIO
+            assert slots.bead_priority("/repo", BeadId("t-1"), who) == DEFAULT_PRIO
 
     def test_doctor_skips_bead_lint_when_bd_is_missing(self):
         store = mock.Mock(side_effect=BdCommandFailure("tl: bd is not on PATH"))
