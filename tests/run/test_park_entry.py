@@ -12,7 +12,8 @@ from support.who import who
 
 from taskloop.app.run import running as wrunning
 from taskloop.app.wire import asks as wasks
-from tlasks import admission, parks
+from tlasks import admission
+from tlkernel import askparks as parks
 from tlkernel import beadpark as park
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
@@ -29,7 +30,7 @@ class Entry(te.EngineTest):
 
     def test_a_parked_bead_is_refused_at_the_entry_until_its_text_changes(self):
         store = FakeBeadStore().put(BEAD)
-        parks.ended(self.cfg(), must(store.show(BeadId("t-1"))), Kind.ASK_STUCK, "run-1", 1.0)
+        parks.ended(self.cfg(), must(store.show(BeadId("t-1"))), Kind.ASK_STUCK, "run-1", 1.0, store=ParkStore)
         why = admission.parked(wasks.host(), BeadId("t-1"), False, str(self.wt), who(), store)
         assert "unchanged" in why
         assert admission.parked(wasks.host(), BeadId("t-1"), True, str(self.wt), who(), store) == ""  # the owner asks for it
@@ -39,13 +40,13 @@ class Entry(te.EngineTest):
     def test_the_third_run_on_one_text_is_refused_even_with_fresh(self):
         store = FakeBeadStore().put(BEAD)
         for n in (1, 2):
-            parks.ended(self.cfg(), must(store.show(BeadId("t-1"))), Kind.ASK_STUCK, f"run-{n}", float(n))
+            parks.ended(self.cfg(), must(store.show(BeadId("t-1"))), Kind.ASK_STUCK, f"run-{n}", float(n), store=ParkStore)
         assert "change the description" in admission.parked(wasks.host(), BeadId("t-1"), True, str(self.wt), who(), store)
 
     def test_an_answered_ask_runs_the_bead_and_starts_the_count_again(self):
         store = FakeBeadStore().put(BEAD)
         for n in (1, 2):
-            parks.ended(self.cfg(), must(store.show(BeadId("t-1"))), Kind.ASK_STUCK, f"run-{n}", float(n))
+            parks.ended(self.cfg(), must(store.show(BeadId("t-1"))), Kind.ASK_STUCK, f"run-{n}", float(n), store=ParkStore)
         with mock.patch.object(parks, "answered", return_value=True):
             assert admission.parked(wasks.host(), BeadId("t-1"), False, str(self.wt), who(), store) == ""
         assert ParkStore(self.cfg()).get(BeadId("t-1")) is None

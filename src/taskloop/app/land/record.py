@@ -5,9 +5,9 @@ from collections.abc import Mapping, Sequence
 from functools import cached_property
 from typing import Protocol, assert_never
 
-from tlasks import deferral as intake
 from tlkernel import bdcreate
 from tlkernel import closeeffects as effects
+from tlkernel import deferrals as intake
 from tlkernel import followkeys as fu
 from tlkernel.beadsport import BdFailure, BeadQuery, Beads, NewBead
 from tlkernel.checkpoint import RunState

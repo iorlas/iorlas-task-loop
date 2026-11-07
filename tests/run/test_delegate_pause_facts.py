@@ -7,7 +7,6 @@ from support.parkmock import through_change
 from taskloop.adapters import beadtools
 from taskloop.app.workers.lane_acts import LaneActs
 from taskloop.domain.lanes import policy
-from tlasks import parks
 from tlasks.closing import ClosingAsks
 from tlkernel import runoutcome as oc
 from tlkernel.bead import Bead
@@ -22,7 +21,7 @@ class DelegatePauseFacts(Case):
     def test_unknown_wire_stop_reaches_durable_pause_and_preserves_owner_asks(self):
         bead = Bead(id=BeadId("t-1"), title="work", status="open")
         for permanence in policy.PERMANENCES:
-            with self.subTest(permanence=permanence), mock.patch.object(parks, "ParkStore") as store:
+            with self.subTest(permanence=permanence), mock.patch("tlasks.closing.ParkStore") as store:
                 through_change(store)
                 retry = Retry(kind="predicted", at=900) if permanence == "transient" else Retry(kind="none")
                 result = DelegateResult(stop=StopFacts(reason="future_delegate_reason", scope="machine",

@@ -6,7 +6,7 @@ from taskloop.app.loop.net import NetState
 from taskloop.app.loop.settle import Counters, Settle
 from taskloop.app.loop.take import Taken
 from taskloop.app.loop.verdict import Verdict
-from tlasks import parks
+from tlkernel import askparks as parks
 from tlkernel import runoutcome as outcome
 from tlkernel.bead import Bead
 from tlkernel.config import LoopConfig
@@ -42,7 +42,7 @@ def test_stage_fault_keeps_slot_and_retries_until_parked(workdir):
         decision = outcome.apply(fault, bead.id, history, clock.now())
         history.append({"bead": bead.id, "kind": fault.kind.value,
                         "fingerprint": fault.fingerprint, "t": clock.now()})
-        parks.ended(env.cfgdir, bead, decision.kind, str(len(history)), clock.now())
+        parks.ended(env.cfgdir, bead, decision.kind, str(len(history)), clock.now(), store=ParkStore)
         return Taken(Verdict(decision.loop_result, kind=decision.kind.value, run=str(len(history))), bead.id)
 
     loop.taker.attempt_all.side_effect = run

@@ -1,7 +1,8 @@
 """tl-7y6.7.3: the loop's pick leaves a parked bead alone while its text is unchanged, with a typed skip reason."""
-
 import sys
+import time
 from pathlib import Path
+from random import random
 from unittest import mock
 
 import pytest
@@ -20,7 +21,7 @@ from taskloop.app.loop.stages import EngineAsks
 from taskloop.app.loop.take import Taker
 from taskloop.app.loop.verdict import Verdict
 from taskloop.app.wire import asks as asks_wire
-from tlasks import parks
+from tlkernel import askparks as parks
 from tlkernel.bead import Bead
 from tlkernel.config import EngineConfig, LoopConfig
 from tlkernel.enums import Result
@@ -41,7 +42,9 @@ class Pick(Case):
         self.cfg = ConfigDir(Path(self.tmp.name))
 
     def rank(self, b):
-        rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _b: "", parked=lambda x: parks.skip_of(asks_wire.host(), self.cfg, x))
+        rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _b: "",
+                         parked=lambda x: parks.skip_of(asks_wire.host().asks_store(self.cfg), self.cfg, x,
+                                                        store=ParkStore, now=time.time()))
         return rule.rank([b], "")
 
     def test_a_bead_with_no_question_behind_it_is_taken(self):
@@ -49,41 +52,43 @@ class Pick(Case):
         assert ([r.bead.id for r in q.ranked], q.skipped) == (["t-1"], [])
 
     def test_a_run_that_ended_on_a_question_keeps_the_bead_off_the_queue_until_its_text_changes(self):
-        parks.ended(self.cfg, bead(), Kind.ASK_STUCK, "run-1", 1.0)
+        parks.ended(self.cfg, bead(), Kind.ASK_STUCK, "run-1", 1.0, store=ParkStore)
         q = self.rank(bead())
         assert (q.ranked, [(s.bead, s.skip.kind) for s in q.skipped]) == ([], [("t-1", "parked")])
         assert "unchanged" in q.skipped[0].skip.why
         assert [r.bead.id for r in self.rank(bead("do it, and mind the header")).ranked] == ["t-1"]
 
     def test_two_runs_on_one_text_is_a_hard_skip_and_a_landed_run_clears_it(self):
-        parks.ended(self.cfg, bead(), Kind.ASK_STUCK, "run-1", 1.0)
-        parks.ended(self.cfg, bead(), Kind.ASK_BUDGET, "run-2", 2.0)
+        parks.ended(self.cfg, bead(), Kind.ASK_STUCK, "run-1", 1.0, store=ParkStore)
+        parks.ended(self.cfg, bead(), Kind.ASK_BUDGET, "run-2", 2.0, store=ParkStore)
         assert [s.skip.kind for s in self.rank(bead()).skipped] == ["capped"]
-        parks.ended(self.cfg, bead(), Kind.LANDED, "run-3", 3.0)
+        parks.ended(self.cfg, bead(), Kind.LANDED, "run-3", 3.0, store=ParkStore)
         assert ParkStore(self.cfg).get(BeadId("t-1")) is None
 
     def test_a_pause_or_a_fault_is_no_question(self):
         for k in (Kind.PAUSE_NETWORK, Kind.FAULT_INFRA, Kind.WAIT_ASK, Kind.OWNER_PARK):
-            parks.ended(self.cfg, bead(), k, "run-1", 1.0)
+            parks.ended(self.cfg, bead(), k, "run-1", 1.0, store=ParkStore)
         assert ParkStore(self.cfg).get(BeadId("t-1")) is None
 
     def test_transient_pause_is_persisted_and_the_queue_wakes_exactly_when_due(self):
-        rec = parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient")
+        rec = parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5,
+                           permanence="transient", store=ParkStore)
         assert rec is not None
         assert (rec.reason, rec.permanence, rec.retry_at) == ("busy", "transient", 130)
         assert ParkStore(self.cfg).get(bead().id) == rec
         for now, ready in ((129.999, False), (130, True), (131, True)):
             rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _: "",
-                             parked=lambda b, now=now: parks.skip_of(asks_wire.host(), self.cfg, b, now=now))
+                             parked=lambda b, now=now: parks.skip_of(asks_wire.host().asks_store(self.cfg), self.cfg, b,
+                                                                  now=now, store=ParkStore))
             q = rule.rank([bead()], "")
             assert bool(q.ranked) == ready
             if not ready:
                 assert q.skipped[0].skip.until == 130
 
     def test_take_path_cannot_claim_early_but_re_takes_a_due_pause_without_owner_action(self):
-        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient")
+        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient", store=ParkStore)
         env = mock.Mock(cfgdir=self.cfg, now=mock.Mock(return_value=129), claim=mock.Mock(return_value=(True, "")))
-        env.asks = EngineAsks(self.cfg, env.now, asks_wire.host)
+        env.asks = EngineAsks(self.cfg, env.now, asks_wire.host().asks_store)
         runner = mock.Mock()
         runner.run.return_value = Verdict(Result.LANDED)
         taker = Taker(env, runner, mock.Mock(), mock.Mock(), mock.Mock(), {})
@@ -98,9 +103,9 @@ class Pick(Case):
         runner.run.assert_called_once_with(bead(), at)
 
     def test_a_queue_of_timed_pauses_waits_instead_of_exiting_drained(self):
-        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient")
+        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient", store=ParkStore)
         rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _: "",
-            parked=lambda b: parks.skip_of(asks_wire.host(), self.cfg, b, now=100))
+            parked=lambda b: parks.skip_of(asks_wire.host().asks_store(self.cfg), self.cfg, b, now=100, store=ParkStore))
         loop = mock.Mock(env=mock.Mock(now=lambda: 100), until=0)
         assert Loop.idle(loop, rule.rank([bead()], "")) is None
         assert (loop.wait.reason, loop.wait.probe_at) == ("no_lane", 130)
@@ -109,7 +114,7 @@ class Pick(Case):
         loop.left.assert_not_called()
 
     def test_a_persisted_deadline_supersedes_a_stale_role_hold_and_cooldown(self):
-        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient")
+        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, reason="busy", draw=lambda: 0.5, permanence="transient", store=ParkStore)
         rule = QueueRule(mock.Mock(), EngineConfig(), {}, lambda _: "")
         loop = mock.Mock(env=mock.Mock(cfgdir=self.cfg, now=lambda: 130))
         loop.c.later = {"t-1": 99999}
@@ -122,7 +127,7 @@ class Pick(Case):
     @pytest.mark.parametrize("park_run", [None, "older-run"])
     def test_unparked_pause_retries_as_an_engine_fault(self, park_run):
         if park_run:
-            parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, park_run, 100, permanence="transient")
+            parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, park_run, 100, permanence="transient", store=ParkStore, draw=random)
         env = mock.Mock(cfgdir=self.cfg, now=lambda: 100)
         files, said = mock.Mock(), []
         c = Counters()
@@ -134,7 +139,7 @@ class Pick(Case):
 
     @pytest.mark.parametrize("permanence,message", [("transient", "retry at"), ("needs_owner", "parked for the owner")])
     def test_matching_parks_supply_the_only_wake(self, permanence, message):
-        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, producer="delegate", permanence=permanence)
+        parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, "r1", 100, producer="delegate", permanence=permanence, store=ParkStore, draw=random)
         env = mock.Mock(cfgdir=self.cfg, now=lambda: 100)
         files, said = mock.Mock(), []
         c = Counters()

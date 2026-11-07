@@ -1,6 +1,5 @@
 """Intake budget for agent-filed beads (tl-7i9k.19): a follow-up the engine files waits as `deferred` with the label `from-review`, and
 at most `engine.intake_per_day` of them are promoted to `open` a day (oldest priority first). Off when the budget is 0."""
-import time
 from collections.abc import Callable
 from typing import Final
 
@@ -12,10 +11,6 @@ PROMOTED: Final = "promoted:"  # + the day (YYYY-MM-DD): the label that counts a
 
 
 CHECK_EVERY: Final = 600  # seconds between the loop's looks at the deferred ones
-
-
-def day(now: float) -> str:
-    return time.strftime("%Y-%m-%d", time.localtime(now))
 
 
 def defer(store: Beads, bead: BeadId) -> None:
@@ -40,7 +35,8 @@ def promote(store: Beads, per_day: int, today: str) -> list[BeadId]:
     return opened
 
 
-def promote_if_due(store: Beads, per_day: int, now: float, last: float, say: Callable[[str], object]) -> float:
+def promote_if_due(store: Beads, per_day: int, now: float, last: float, say: Callable[[str], object],
+                   day: Callable[[float], str]) -> float:
     """The loop's look at the deferred ones: -> when it last looked (`now` if it did; else `last`)."""
     if per_day <= 0 or now < last + CHECK_EVERY:
         return last

@@ -2,6 +2,8 @@
 import time
 from collections.abc import Callable
 
+from tlkernel import askparks as parks
+from tlkernel import holds as hold
 from tlkernel.askenums import AskStatus
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, BeadPatch, Beads
@@ -9,10 +11,10 @@ from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.locator import RunLocator
+from tlkernel.parks import ParkStore
 from tlkernel.paths import ConfigDir
 from tlkernel.planbrief import owner_written
 
-from tlasks import hold, parks
 from tlasks.contracts.records import AsksHost
 
 
@@ -102,7 +104,7 @@ def parked(h: AsksHost, bead_id: BeadId, fresh: bool, repo: str, who: Identity, 
     lets it run), or this would be the third run on that text (nothing does). An answered ask starts the count again (tl-7y6.7.3)."""
     b = h.peek(store or h.bd(who.actor, repo), bead_id)
     cfg = who.config
-    verdict = parks.gate(h, cfg, b, fresh=fresh) if b else None
+    verdict = parks.gate(h.asks_store(cfg), cfg, b, fresh=fresh, store=ParkStore, now=time.time()) if b else None
     if b and verdict is None:
-        parks.entering(h, cfg, b)
+        parks.entering(h.asks_store(cfg), cfg, b, store=ParkStore)
     return verdict.why if verdict else ""

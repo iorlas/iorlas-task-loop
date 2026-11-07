@@ -6,6 +6,17 @@ Measured on main ddfe6729 with `dev/root_report.py` and `tests/rules/root_ratche
 
 The goal is **root branches <= 110 (stretch 100)** and **long functions <= 8**, as Denis decided 2026-11-08. SLOC is reported and stays **below 3458**, without a reduction target. Move decisions and reporting rules into their owning stages; retain concrete collaborator bindings in roots. The destination table below records the original inventory and constraints, rather than a SLOC target.
 
+## Target counting hook/* apart (lead, 2026-11-08)
+
+`hook/prepush.py` (18 branches) and `hook/main.py` (6) are the documented stdlib-only exception (the PreToolUse hook imports no msgspec and no record). Branches are therefore counted **excluding hook/\* at 90 or fewer** (= 110 including the 24 hook branches); long functions stay at 8 or fewer. Measured on main 2026-11-08: 220 branches (196 outside hook/), 10 long functions.
+
+What is left after PRs 1-5 is mostly `app/run/entry.py` (42 branches, 3 long functions). It moves in this order, each its own PR:
+
+1. Pipeline half (admission, blocked reopen, ~50 sloc): free now, `packages/pipeline` exists.
+2. Slot take (`_slot_taken`, `run_any_slot`, ~35 net): the slots ports (tl-e5t0.17) are closed, so this is free now.
+3. `take_area` (area policy): waits for the areas bead (tl-e5t0.77).
+4. `run_in` / `run_bead` / `_worktree_of` stay as the run's composition.
+
 ## Status (2026-11-07)
 
 | move | PR | root sloc |
