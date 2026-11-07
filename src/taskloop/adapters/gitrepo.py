@@ -23,6 +23,10 @@ def pinned_env(path: str | Path) -> dict[str, str]:
         except OSError:
             continue
         if stat.S_ISDIR(kind):
+            try:
+                os.stat(g / "HEAD")  # A stray empty .git directory is not a checkout.
+            except OSError:
+                continue
             return {"GIT_DIR": str(g), "GIT_WORK_TREE": str(d)}
         if stat.S_ISREG(kind):
             try:
