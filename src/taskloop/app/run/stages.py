@@ -5,7 +5,7 @@ from tlkernel.checkpoint import Checkpoint
 from tlkernel.enums import Step
 from tlkernel.runlayout import repo_of
 from tlpipeline.api import Standalone, stage_run
-from tlwork.write.rounds import round_step
+from tlwork.api import round_step
 
 from taskloop.adapters import beadtools
 from taskloop.app.run.host import RunHost
