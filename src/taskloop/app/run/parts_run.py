@@ -20,12 +20,12 @@ from tlslots.shared import Shared, SharedHost
 from taskloop.adapters import deadline, ident, slotcheck
 from taskloop.adapters.agent import last_event_t, new_live
 from taskloop.adapters.check_probe import PathProbe
+from taskloop.app.checks.shell import Shell
 from taskloop.app.checks.step import StageChecks
 from taskloop.app.land.closing import LandHistory
 from taskloop.app.run.bead_env import bead_env
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.run.reload_ports import installed_newer, locked_slot
-from taskloop.app.run.shell import Shell
 from taskloop.app.run.state import state_names
 from taskloop.app.track.closing import TrailEvents
 from taskloop.app.wire import slotfx

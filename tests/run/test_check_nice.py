@@ -3,7 +3,7 @@ import os
 import threading
 from types import SimpleNamespace
 
-from taskloop.app.run.shell import Shell
+from taskloop.app.checks.shell import Shell
 from tlkernel.env import Env
 
 
