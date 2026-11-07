@@ -31,6 +31,7 @@ from tlkernel import (
     pickset,
     plancheck,
     profile_changes,
+    queue_doc,
     queue_state,
     requests,
     review,
@@ -331,6 +332,11 @@ OTHERS = {
     "ArtifactMeta": artifact.ArtifactMeta(name="home.png", caption="home", role="after", kind="png", size=9, sha256="ab" * 32, created=T),
     "Incident": queue_state.Incident(t=T, kind="corrupt", pr=7, bead="tl-1", main_before="m" * 40, merge_sha="s" * 40, parent="m" * 40,
                                      expected_tree="t1", landed_tree="t2"),
+    "QueueDoc": queue_doc.QueueDoc(entries=[queue_doc.EntryRow(
+        branch="topic", head="head", phase="gating", q="q", tree="tree", ref="refs/tl/queue/topic", reason="",
+        base="base", ahead=["first"], check_set="checks",
+        build=queue_doc.BuildRow(pid=42, start_id="start", lease_expires=T, worktree="/build"))],
+        in_flight=2, last_base="base"),
     "QueueState": queue_state.QueueState(frozen=True, incidents=[queue_state.Incident(
         t=T, kind="raced", pr=7, bead="tl-1", main_before="m" * 40, merge_sha="s" * 40, parent="x" * 40,
         expected_tree="t1", landed_tree="t2")]),

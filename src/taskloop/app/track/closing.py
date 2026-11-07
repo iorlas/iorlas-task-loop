@@ -5,7 +5,7 @@ from tlkernel import fence
 from tlkernel.beadsport import Beads
 from tlkernel.identity import Identity
 
-from taskloop.app.track import verbs
+from taskloop.app.track import trail, verbs
 from taskloop.app.track.verbs import Guard
 
 
@@ -18,3 +18,8 @@ class ClosingBeads:
 
     def block(self, claim: fence.Claim, why: str, say: Callable[[str], None] | None = None) -> int:
         return verbs.block_as(self.who, claim, why, self.store, say)
+
+
+class TrailEvents:
+    def event(self, by: Identity, kind: str, bead: str, **fields: str) -> None:
+        trail.event(by, kind, bead, **fields)

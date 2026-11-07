@@ -384,6 +384,33 @@
   "expected_tree": "t1",
   "landed_tree": "t2"
  },
+ "QueueDoc": {
+  "v": 1,
+  "entries": [
+   {
+    "branch": "topic",
+    "head": "head",
+    "phase": "gating",
+    "q": "q",
+    "tree": "tree",
+    "ref": "refs/tl/queue/topic",
+    "reason": "",
+    "base": "base",
+    "ahead": [
+     "first"
+    ],
+    "check_set": "checks",
+    "build": {
+     "pid": 42,
+     "start_id": "start",
+     "lease_expires": 1793050200.5,
+     "worktree": "/build"
+    }
+   }
+  ],
+  "in_flight": 2,
+  "last_base": "base"
+ },
  "QueueState": {
   "v": 1,
   "frozen": true,
