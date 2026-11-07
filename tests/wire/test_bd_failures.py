@@ -19,9 +19,8 @@ class BdFallbacks(Case):
             assert slots.bead_priority("/repo", BeadId("t-1"), who) == slots.DEFAULT_PRIO
 
     def test_doctor_skips_bead_lint_when_bd_is_missing(self):
-        who = Identity(actor="owner", home=".")
-        with mock.patch.object(setup_checks, "bd_store", side_effect=BdCommandFailure("tl: bd is not on PATH")):
-            assert setup_checks.bead_lint_warnings("/repo", who) == []
+        store = mock.Mock(side_effect=BdCommandFailure("tl: bd is not on PATH"))
+        assert setup_checks.bead_lint_warnings("/repo", store) == []
 
     def test_brief_omits_slots_when_bd_is_missing(self):
         who = Identity(actor="owner", home=".")

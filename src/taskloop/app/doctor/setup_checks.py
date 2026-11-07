@@ -1,7 +1,9 @@
 """Setup checks for the doctor's report, using caller-supplied profile facts."""
+import contextlib
 import os
 import shlex
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 
 from tlkernel import inputsets
@@ -10,12 +12,10 @@ from tlkernel.beadsport import BdFailure, BeadQuery, Beads
 from tlkernel.config import RepoProfile
 from tlkernel.env import Env
 from tlkernel.gitport import Git
-from tlkernel.identity import Identity
 from tlkernel.paths import ConfigDir
 from tlkernel.slots import SlotGitError
+from tlkernel.slottable import SlotTable
 
-from taskloop.adapters.beadtools import bd_store
-from taskloop.adapters.ident import config_dir
 from taskloop.app.doctor import disk, install
 from taskloop.domain.beads import matchers as beadlint
 from taskloop.domain.checks.inputs import dead_globs
@@ -66,10 +66,10 @@ def layout_warnings(repo: str, source: Source, git: Git) -> list[str]:
     return layout.deviations(profile) + layout.leaks(files, read)
 
 
-def bead_lint_warnings(repo: str, who: Identity, store: Beads | None = None) -> list[str]:
+def bead_lint_warnings(repo: str, store: Callable[[], Beads]) -> list[str]:
     """tl-f52: one line per open bead whose text cites material outside the repo (beadlint). [] when bd cannot be read."""
     try:
-        beads = (store or bd_store(who.actor, repo)).find(BeadQuery(status="open"))
+        beads = store().find(BeadQuery(status="open"))
     except (BdCommandFailure, SystemExit, OSError, BdFailure):
         return []
     out: list[str] = []
@@ -84,7 +84,7 @@ def bead_lint_warnings(repo: str, who: Identity, store: Beads | None = None) -> 
     return out
 
 
-def launcher_problems(plugin_root: Path, env: Env) -> list[str]:
+def launcher_problems(plugin_root: Path, root: Path) -> list[str]:
     """One finding for launchers still pointing at an older sibling cache version."""
     try:
         newest = install.newest_install(plugin_root)
@@ -93,7 +93,6 @@ def launcher_problems(plugin_root: Path, env: Env) -> list[str]:
     version = install.version_key(newest.name)
     if not version:
         return []
-    root = config_dir(env)
     stale = []
     for name, path in [("shim", root / "bin/tl"), *((n, ConfigDir(root).hooks_dir() / n) for n in install.HOOK_NAMES)]:
         try:
@@ -113,11 +112,11 @@ def launcher_problems(plugin_root: Path, env: Env) -> list[str]:
     return [f"{', '.join(stale)} points at a version older than newest installed task-loop {newest.name}"] if stale else []
 
 
-def path_link_line(env: Env) -> tuple[str, bool]:
+def path_link_line(env: Env, config: Path) -> tuple[str, bool]:
     """(the doctor's line about the `tl` on PATH, True when a different `tl` is in the way)."""
     state, link = install.link_state(env), install.path_link(env)
     if state == "windows":
-        return f"PATH tl: no link on Windows; run {config_dir(env) / 'bin' / 'tl'}", False
+        return f"PATH tl: no link on Windows; run {config / 'bin' / 'tl'}", False
     on_path = str(link.parent) in (env.get("PATH") or "").split(os.pathsep)
     where = f"{link.parent} is {'on' if on_path else 'NOT on'} PATH"
     if state == "foreign":
@@ -125,9 +124,9 @@ def path_link_line(env: Env) -> tuple[str, bool]:
     return f"PATH tl: {link} {'-> the shim' if state == 'ours' else 'is missing (the next session start links it)'}; {where}", False
 
 
-def legacy_line(env: Env) -> str:
+def legacy_line(config: Path) -> str:
     """'' or a line naming the retired session index folder (SessionStart no longer writes it, nothing reads it): safe to delete by hand."""
-    folder = config_dir(env) / "sessions"
+    folder = config / "sessions"
     if not folder.is_dir():
         return ""
     return f"legacy: {folder} ({sum(1 for _ in folder.iterdir())} files) is the retired session index; nothing reads it, delete it"
@@ -139,3 +138,39 @@ def disk_run(config: ConfigDir) -> int:
     lines = disk.report(root, shutil.disk_usage(root if root.is_dir() else root.parent).free, disk.read_samples(config))
     print("\n".join(lines))
     return 1 if any(ln.startswith("WARN") for ln in lines) else 0
+
+
+OWNERSHIP = "## Ownership"
+
+
+def slot_warnings[SlotContext](
+    table: Callable[[], SlotTable], env: Callable[[], SlotContext] | None, look: Callable[[SlotContext], list[str]],
+) -> tuple[str, list[str]]:
+    """(the slot table's one-line summary, its WARN lines): the slots as `tl status` and the dash list them, against config and folders."""
+    try:
+        slots = table()
+    except (SystemExit, OSError, ValueError, BdFailure) as err:
+        return f"slots: not read ({err})", []
+    states = ", ".join(f"{v.id} {v.state}" for v in slots.slots) or "none"
+    where = f"{slots.source} {slots.source_sha[:7]}".strip()
+    warns = [f"slot {v.id} is {v.state}: {v.idle_why}" for v in slots.slots if v.state == "dead"]
+    warns += [f"slot {v.id} is above slots.count {slots.configured} and still {v.state}" for v in slots.slots
+              if v.beyond_count and v.state not in ("free", "retiring")]
+    if env is not None:  # tl-bxk.10.33.12: the liveness invariants, read only (the loop and the waiters heal)
+        with contextlib.suppress(SystemExit, OSError, ValueError, BdFailure):
+            warns += look(env())
+    return f"slots: {slots.configured} configured from {where}; {states}", warns
+
+
+def install_problems(plugin_root: Path, config: Path, verify_installed: Callable[[], list[str]]) -> list[str]:
+    """What is wrong with the plugin install this tl runs from and the one Claude Code records as installed: a file that differs from
+    MANIFEST.sha256 (named), an AGENTS.md without its ownership section. A source checkout has no manifest and is checked for none."""
+    out = launcher_problems(plugin_root, config)
+    try:
+        agents = (plugin_root / "AGENTS.md").read_text(encoding="utf-8")
+    except OSError:
+        agents = ""
+    if OWNERSHIP not in agents.splitlines():
+        out.append(f"{plugin_root / 'AGENTS.md'} has no '{OWNERSHIP}' section (who may write the checkout, the cache, the ports)")
+    out += verify_installed()
+    return out

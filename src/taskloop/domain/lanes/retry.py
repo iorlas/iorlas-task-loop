@@ -1,6 +1,7 @@
 """RetryPlan: the remaining ways the engine tries a worker step again, as rows. A row says how many retries the step gets
-and what happens when they are spent. Nothing else in the engine counts a retry: `policy.decide` and the
-app's `WorkerCall` read these rows, so changing a limit is changing one line here.
+and whether exhaustion faults or asks. `policy.decide` reads the recovery limits
+and the worker_failed exhaustion action; the app's `WorkerCall` reads validation
+and denial limits. Delegate owns retries within a worker call.
 
     invalid_output   the answer broke its schema: again, on a new thread
     denied_read      the guard refused only read-only commands: once more on a fresh thread told what was refused
@@ -12,7 +13,7 @@ app's `WorkerCall` read these rows, so changing a limit is changing one line her
 from dataclasses import dataclass
 from typing import Final, Literal
 
-Then = Literal["fault", "ask", "reroute", "pause"]
+Then = Literal["fault", "ask"]
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,8 @@ KINDS: Final = tuple(r.kind for r in ROWS)
 
 
 class RetryPlan:
+    """Engine recovery limits, with fault/ask exhaustion for a failed worker."""
+
     def __init__(self, rows: tuple[RetryRow, ...] = ROWS) -> None:
         self.rows = {r.kind: r for r in rows}
 
