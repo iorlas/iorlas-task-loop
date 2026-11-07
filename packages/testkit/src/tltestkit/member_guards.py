@@ -10,7 +10,6 @@ from pathlib import Path
 
 import pytest
 
-from tlkernel import factorydb
 from tltestkit import procsim, work
 from tltestkit.limits import hang_s, kind_of_parts, limit_for
 from tltestkit.wall import wall_guard
@@ -129,13 +128,20 @@ def member_procs(request, member_filesystem):
     yield from procs_guard(request)
 
 
+def forget_factory_db() -> None:
+    """Close the shared factory.db handle and its cache if a test imported tlkernel.factorydb (it needs vendored paths a plugin cannot assume)."""
+    db = sys.modules.get("tlkernel.factorydb")
+    if db is not None:
+        db.close_shared()
+        db.clear_filesystem_cache()
+
+
 @pytest.fixture(autouse=True)
 def member_filesystem(request):
     if KIND not in request.node.stash:
         yield
         return
-    factorydb.close_shared()
-    factorydb.clear_filesystem_cache()
+    forget_factory_db()
     before = set(threading.enumerate())
     tempdir = tempfile.tempdir
     try:
@@ -145,6 +151,5 @@ def member_filesystem(request):
         for thread in set(threading.enumerate()) - before:
             thread.join(0.5)
         left = [thread.name for thread in set(threading.enumerate()) - before if thread.is_alive()]
-        factorydb.close_shared()
-        factorydb.clear_filesystem_cache()
+        forget_factory_db()
         assert not left, f"the test left threads running: {left}"
