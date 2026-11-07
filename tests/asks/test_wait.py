@@ -2,13 +2,13 @@
 from unittest.mock import Mock
 
 import pytest
-from support.narrow import must
-from support.runs import manifest
 
 from taskloop.app.asks import owner_verbs as waiting
 from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunManifest, RunState
+from tltestkit.narrow import must
+from tltestkit.runs import manifest
 
 
 @pytest.mark.parametrize(("state", "reason", "expected"), [

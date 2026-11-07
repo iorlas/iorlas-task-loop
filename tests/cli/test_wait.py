@@ -9,9 +9,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.logs import typed, write_log
-from support.narrow import must
-from support.runs import manifest
 
 from taskloop.cli import wait
 from tlkernel.ask import Ask
@@ -21,6 +18,9 @@ from tlkernel.ids import BeadId
 from tlkernel.locator import RunLocator, host_name
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
+from tltestkit.logs import typed, write_log
+from tltestkit.narrow import must
+from tltestkit.runs import manifest
 
 BEAD, RUN, T = "t-1", "t-1-20261026-100000", 5000.0
 

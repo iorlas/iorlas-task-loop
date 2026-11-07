@@ -19,12 +19,13 @@ import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.fakegit import ScriptedGit
 from support.forgesim import ForgeSim
-from support.logs import records
+
+from tltestkit.logs import records
 
 # isort: split
 from support.memstores import fake_stores
 
-from taskloop.adapters import check_files, landlock, locks
+from taskloop.adapters import landlock, locks
 from taskloop.app.checks.cache import InputKeys, RunMemo, plan_digest
 from taskloop.app.land.carry import Carry
 from taskloop.app.land.cmds import Cmds
@@ -39,7 +40,7 @@ from taskloop.cli.land_stack import cmd_land_stack
 from taskloop.domain import outcome as oc
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
-from tlkernel import log
+from tlkernel import check_files, log
 from tlkernel.bead import Bead
 from tlkernel.beadsport import DoltPush
 from tlkernel.checks import Check, CheckResult

@@ -1,11 +1,11 @@
 """Crash reports observe dead engines without changing authoritative run state."""
-from support.narrow import must
-from support.runs import manifest
 
 from taskloop.app.report import card
 from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
+from tltestkit.narrow import must
+from tltestkit.runs import manifest
 
 
 def test_crashes_sees_dead_run_without_writing(tmp_path, monkeypatch):

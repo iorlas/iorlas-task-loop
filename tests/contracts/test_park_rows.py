@@ -7,13 +7,13 @@ import sqlite3
 import msgspec
 import pytest
 import support.paths  # noqa: F401
-from support.narrow import must
 
 from tlkernel import dbparts, factorydb, factoryparts, scratch
 from tlkernel.ids import BeadId
 from tlkernel.parks import Park, ParkStore
 from tlkernel.paths import ConfigDir
 from tltestkit.case import Case
+from tltestkit.narrow import must
 
 B = BeadId("t-1")
 

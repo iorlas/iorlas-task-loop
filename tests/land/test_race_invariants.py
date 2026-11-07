@@ -48,7 +48,6 @@ from support.args import Args
 from support.cfgs import cfg_with
 from support.engine_locks import put_lock
 from support.fake_clock import FakeClock
-from support.narrow import must
 from support.rebind import rebind
 from support.spawn import port_git, real_spawner
 from support.stdout import stdout_in
@@ -80,6 +79,7 @@ from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.lockrows import EngineLockRows
 from tlkernel.slots import Checkout, SlotGitError
+from tltestkit.narrow import must
 
 try:
     import fcntl

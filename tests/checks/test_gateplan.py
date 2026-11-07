@@ -7,7 +7,6 @@ from unittest import mock
 
 import pytest
 from support.check_host import CheckHostCase
-from support.narrow import must
 from support.plans import FALSE
 
 from taskloop.adapters.childenv import CHECK_SECRETS
@@ -20,6 +19,7 @@ from tlkernel.ids import CheckId, TreeSha
 from tlkernel.procport import Ran
 from tlkernel.runkey import BaseSha
 from tlkernel.slots import GitReadFailure
+from tltestkit.narrow import must
 
 
 def step(name="coverage", run=False, **extra):

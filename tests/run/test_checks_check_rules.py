@@ -7,9 +7,7 @@ from typing import Any, ClassVar
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.cfgs import cfg_with
-from support.checks import ck, typed
 from support.engine_case import EngineTest
-from support.narrow import must
 from support.plans import CLEAN, FALSE, PLAN, WRITE
 
 from taskloop.app.checks import evidence
@@ -18,6 +16,8 @@ from tlkernel import wire
 from tlkernel.checks import CheckRun
 from tlkernel.ids import CheckId
 from tlkernel.plancheck import adhoc
+from tltestkit.checks import ck, typed
+from tltestkit.narrow import must
 
 ST = {"checks": [], "files": []}
 

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+from tltestkit import fake_route
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
@@ -19,12 +20,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 
 # isort: split
-from support import (  # noqa: E402
-    dlcall,
-    fake_route,
-)
+from support import dlcall  # noqa: E402
 from support.argv_of import argv_of  # noqa: E402
-from support.narrow import must  # noqa: E402
 
 from taskloop.adapters import childenv, delegate_wire  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
@@ -33,11 +30,12 @@ from taskloop.domain import outcome as oc  # noqa: E402
 from taskloop.domain.lanes import policy as lp  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlkernel.kinds import Kind  # noqa: E402
+from tltestkit.narrow import must  # noqa: E402
 
 DELEGATE = fake_route.delegate_dir()
 CONTRACT = dl.resolve().contract
 FIXTURES = sorted(fake_route.FIXTURE_DIR.glob("*.json"))
-FAKE = str(Path(__file__).resolve().parents[1] / "support" / "fake_route.py")
+FAKE = str(Path(fake_route.__file__))
 
 
 class Fake(Case):

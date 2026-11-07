@@ -11,25 +11,23 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
 from support.cfgs import cfg_with
 from support.check_host import CheckHostCase
-from support.checks import ck, typed
 from support.plans import FALSE, PLAN
 from support.shellkit import sh
 from support.spawn import port_git
 
-from taskloop.adapters import (
-    check_files,
-    procs,
-)
+from taskloop.adapters import procs
 from taskloop.app.checks.cache import InputKeys
 from taskloop.app.doctor import setup_checks
 from taskloop.app.slots.config import cfg_source
 from taskloop.domain.checks import durations, inputs, lint, planref
 from taskloop.domain.checks.names import norm
 from taskloop.domain.checks.order import CheckOrder
+from tlkernel import check_files
 from tlkernel.argv import text_of
 from tlkernel.checks import Check, Duration, Durations
 from tlkernel.ids import CheckId
 from tlkernel.plancheck import adhoc
+from tltestkit.checks import ck, typed
 
 
 def ignored_paths(wt, globs, exclude=()):
