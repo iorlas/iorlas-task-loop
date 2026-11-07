@@ -144,3 +144,13 @@ def skipped_lines(n: int) -> list[str]:
 
 def table(cols: list[str]) -> str:
     return f"{cols[0]:<16}  {cols[1]:<14} {cols[2]:<4} {cols[3]:<7} {cols[4]:>5} {cols[5]:>6} {cols[6]:>5} {cols[7]:<3}  {cols[8]}"
+
+
+def cutover_lines(live: list[tuple[str, str]], as_json: bool) -> tuple[list[str], int]:
+    if as_json:
+        lines = [json.dumps({"live": [{"kind": k, "what": w} for k, w in live]})]
+    elif live:
+        lines = ["\n".join(f"LIVE {w}" for _, w in live)]
+    else:
+        lines = ["CLEAR: no live loop or run"]
+    return lines, 1 if live else 0

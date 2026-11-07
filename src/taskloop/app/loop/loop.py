@@ -6,14 +6,18 @@ import json
 import socket
 import time
 import traceback
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from os import EX_CONFIG
 from pathlib import Path
+from typing import Protocol
 
 from tlkernel import runlife, wire
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure
 from tlkernel.config import ConfigError
+from tlkernel.env import Env
+from tlkernel.envvars import EnvVar
 from tlkernel.ids import BeadId
 from tlkernel.locator import RunLocator
 from tlkernel.loop import LoopState, LoopWait, QueueRow
@@ -66,6 +70,31 @@ def parse_handover(raw: str) -> tuple[LoopState | None, str]:
         return wire.load(LoopState, json.loads(raw)), ""
     except ValueError as e:  # msgspec.ValidationError, StaleRecord and bad JSON are ValueErrors
         return None, str(e)[:200]
+
+
+class SessionIdentity(Protocol):
+    @property
+    def actor(self) -> str: ...
+
+    @property
+    def home(self) -> str: ...
+
+    @property
+    def session(self) -> str: ...
+
+
+def loop_identity(env: Env, resolve_session: Callable[[Env], SessionIdentity],
+                  token: Callable[[], str]) -> tuple[str, str, SessionIdentity]:
+    """Give each loop its own actor, preserving an actor handed over by exec."""
+    inherited, _ = parse_handover(env.get(EnvVar.TL_LOOP_STATE))  # set when this process is the same loop, exec'd into a newer install
+    # an actor of its own, never the session's: bd lets an actor re-claim its own bead, so two loops (or a loop and a hand run)
+    # started from one session would both win one claim. run-task re-claims as this actor (one for both).
+    own = Env({k: v for k, v in env.vars.items() if k != EnvVar.TASK_LOOP_ACTOR.value})
+    if not resolve_session(own).session:  # without a Claude session the actor would be per folder: two loops would share it
+        own = own.with_(EnvVar.TASK_LOOP_SESSION, "loop-" + token()[:12])
+    session = resolve_session(own)
+    loop_actor = (inherited.actor if inherited else "") or f"{session.actor}-{token()[:6]}"
+    return session.actor, loop_actor, session
 
 
 class Loop(Core):

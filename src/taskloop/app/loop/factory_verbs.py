@@ -10,6 +10,7 @@ from tlkernel.loop import LoopState
 from tlkernel.procport import Child, Spawner
 from tlkernel.slots import SlotGitError
 
+from taskloop.app.loop.exits import last_by_loop
 from taskloop.app.loop.files import LoopFiles
 
 
@@ -182,3 +183,37 @@ def lines(path: Path, n: int, follow: bool = False, sleep: Callable[[float], Non
                 yield line
             else:
                 sleep(0.2)
+
+
+def stop_lines(files: LoopFiles, now: bool, actor: str) -> tuple[Generator[str], int]:
+    stopped = stop(files, now, actor)
+    if stopped is None:
+        return (row for row in ["not running"]), 1
+    return (f"STOP {'NOW' if now else 'after the current bead'}: loop pid {st.pid}" for st in stopped), 0
+
+
+def status_lines(files: LoopFiles, states: list[LoopState], repo: str, version: str,
+                 profile: Callable[[], RepoProfile], dash_url: Callable[[], object]) -> tuple[Generator[str], int]:
+    def rows() -> Generator[str]:
+        yield from status_facts(files, states, repo, version)
+        yield f"LOOPS running={len(states)} wanted={status_wanted(profile)}"
+        for rec in last_by_loop(files.cfg.loop_runs(files.key)):
+            yield (f"LOOP {rec.get('loop', rec['pid'])} LAST EXIT pid={rec['pid']} time={rec.get('t')} "
+                   f"reason={rec['reason']} {rec.get('detail', '')}")
+        dash_url()
+    return rows(), 0 if states else 1
+
+
+def log_lines(files: LoopFiles, states: list[LoopState], loop_no: int, n: int,
+              follow: bool) -> tuple[Generator[str], int]:
+    _, path = logs(files, states, loop_no)
+    return lines(path, n, follow), 0
+
+
+def start_lines(files: LoopFiles, repo: str, version: str, argv: list[str], spawner: Spawner,
+                loops: int | None, profile: Callable[[], RepoProfile],
+                caffeinate_argv: Callable[[int], list[str]]) -> Generator[str]:
+    target = loops if loops is not None else wanted(profile)
+    states, added = start(files, repo, version, argv, spawner, loops=target, caffeinate_argv=caffeinate_argv)
+    yield f"started {added} more loop(s)" if added else f"already running ({len(states)} loops)"
+    yield from facts(files, states, repo, version)
