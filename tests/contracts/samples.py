@@ -481,7 +481,7 @@ OTHERS = {
     "QueueItem": pickset.QueueItem(project="p", bead="t-1", title="queued", pos=1, state="next", why="1st of 2 chosen"),
     "ReposIndex": snapshots.ReposIndex(repos={"o/r": snapshots.RepoEntry(path="/r", added=T)}),
     "SharedNotes": snapshots.SharedNotes(flakes={"test_x": T}, notes=["n"]),
-    "Pin": snapshots.Pin(task_loop="0.23.38", delegate=None, pinned_at=T),
+    "Pin": snapshots.Pin(task_loop="0.23.38", pinned_at=T),
     "ReleaseResult": snapshots.ReleaseResult(
         ok=False, version="0.23.57", summary="s", at=T, branch="b", message="m", tests=["t"], log="/l"),
     "ReflectState": snapshots.ReflectState(until=T, tried=T, filed=[{"cause": "c", "bead": "b-1"}]),

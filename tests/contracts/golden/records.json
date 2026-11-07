@@ -1341,9 +1341,8 @@
   ]
  },
  "Pin": {
-  "v": 1,
+  "v": 2,
   "task-loop": "0.23.38",
-  "delegate": null,
   "pinned_at": 1793050200.5
  },
  "ReleaseResult": {
