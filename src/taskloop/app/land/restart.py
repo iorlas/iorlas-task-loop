@@ -4,9 +4,9 @@ from typing import Protocol
 
 from taskloop.app.land.gitcall import must
 from taskloop.app.land.parts import MoveSteps
+from taskloop.app.plan.amend import AmendState
 from taskloop.contracts.checkpoint import RunState
 from taskloop.contracts.gitport import Git
-from taskloop.contracts.plancheck import PlanData
 from taskloop.contracts.slots import SlotGitError
 from taskloop.stores.runlog import RunLog
 
@@ -35,13 +35,10 @@ class RestartHost(Protocol):
     """What a restart on the base reads of the engine: git, the branch, the checkpoint it drops, and the run's plan
     bookkeeping that the old attempt leaves and a restart clears."""
 
-    old_plan: PlanData | None
-    amend_why: str
-    amend_text: str
+    amend: AmendState
     replan_first: bool
     plan_summary: str
     write: WriteHeld
-    amended: bool
     state: RunState
     review: RestartReview
 
@@ -98,8 +95,9 @@ class Restart:
         """What the old attempt left in the run: the plan, the accepted stages, the writer, the look state (verify_answer stays: the owner's
         word still goes to the planner)."""
         e = self.e
-        e.old_plan, e.amend_why, e.amend_text, e.replan_first = None, "", "", False
-        e.plan_summary, e.amended = "", False
+        e.amend.clear()
+        e.replan_first = False
+        e.plan_summary = ""
         e.write.last_summary = ""
         e.state = e.state.start_again()
         e.review.unverified = list[dict[str, str]]()
