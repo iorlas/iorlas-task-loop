@@ -1,5 +1,5 @@
-"""The merge queue says "gates in flight" (docs/glossary.md; design section 6). The retired words `window` and `lookahead` must not name that
-concept in the queue modules: not as an identifier, an argument, an attribute, nor as a string that is a config key, an event or a metric
+"""The merge queue says "gates in flight" (docs/glossary.md; design section 6). The retired words `window` and `lookahead` must not name it
+in the queue modules: not as an identifier, an argument, an attribute, nor as a string that is a config key, an event or a metric
 name. (An account's usage window is the delegate's own word and lives outside these modules.)"""
 import ast
 import re
