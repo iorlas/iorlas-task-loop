@@ -300,6 +300,7 @@ source_modules =
     taskloop.app.checks
     taskloop.app.doctor
     taskloop.app.loop
+    taskloop.app.plan
     taskloop.app.reconcile
     taskloop.app.release
 forbidden_modules =
