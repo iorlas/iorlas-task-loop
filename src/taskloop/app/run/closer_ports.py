@@ -17,7 +17,7 @@ from taskloop.app.pipeline.closing_notes import FileNotes, Reflect
 from taskloop.app.pipeline.closing_record import RecordRun
 from taskloop.app.pipeline.closing_settle import Settle
 from taskloop.app.pipeline.ports import AskRules, BeadClosing, FollowUps, LandCleanup, ParkBook
-from taskloop.app.run import console
+from taskloop.app.track import console
 from taskloop.app.track.closing import ClosingBeads
 from taskloop.app.wire import closeguard
 from taskloop.app.wire.slots import profile_slots, slot_of

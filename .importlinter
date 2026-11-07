@@ -231,7 +231,6 @@ source_modules =
     taskloop.app.pipeline.closing_notes
     taskloop.app.pipeline.closing_record
     taskloop.app.pipeline.closing_settle
-    taskloop.app.run.console
     taskloop.app.pipeline.crash
     taskloop.app.pipeline.lifecycle
     taskloop.app.pipeline.run

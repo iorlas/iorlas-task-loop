@@ -13,6 +13,8 @@ from tlkernel.looprows import LoopRows
 from tlkernel.paths import ConfigDir
 from tlkernel.wire import Rec
 
+WORKTREE_DOCS = "worktree_doc"  # ownership records of worktrees tl made
+DISK_DOCS = "disk_doc"  # the loop's hourly free-space samples
 LOOP_DOCS = "loop_doc"  # the loop stage's repo stop commands and rests
 LOOK_DOCS = "look_doc"  # the look stage's owner-look galleries
 LANES_DOCS = "lanes_doc"  # the lanes part's status snapshot and last attempt
