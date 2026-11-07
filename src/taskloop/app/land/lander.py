@@ -143,7 +143,7 @@ class Lander:
 
     def lock(self) -> AbstractContextManager[Path | str]:
         """One land at a time per repo, across slots and sessions: an flock the OS drops when the process dies."""
-        return self.e.waits.locked("land_lock", self.e.land_lock_path())
+        return self.e.waits.locked("land_lock", self.e.land_lock_path(), f"land {self.e.bead}")  # "land" names it to the pre-push judge
 
     def land(self) -> str:
         e = self.e

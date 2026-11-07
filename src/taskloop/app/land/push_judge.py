@@ -16,6 +16,7 @@ from taskloop.domain.matchers import secrets_added
 from taskloop.stores.bundle import Stores
 
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+MAIN_MARKERS = ("release:", "land")  # the holder of the land lock while tl's own land push or release pushes to the base branch
 
 
 class PushStatus(IntEnum):
@@ -61,8 +62,10 @@ def push_tips(stdin: str) -> tuple[PushTip, ...]:
 
 
 class PushJudge:
-    def __init__(self, repo: str, stores: Stores, git: Git, env: Env, clock: Clock | None = None) -> None:
+    def __init__(self, repo: str, stores: Stores, git: Git, env: Env, clock: Clock | None = None, *, guard_main: bool = False,
+                 lock_holder: str = "") -> None:
         self.repo, self.stores, self.git = repo, stores, git
+        self.guard_main, self.lock_holder = guard_main, lock_holder
         self.env = env
         self.clock = clock or SystemClock()
         self.unproven: list[CheckId] = []
@@ -154,6 +157,8 @@ class PushJudge:
         if gone:
             return PushDecision(PushStatus.REFUSED, gone)
         tips = tuple(tip for tip in tips if not tip.deleting)
+        if unmarked := self.unmarked(tips, base):
+            return PushDecision(PushStatus.REFUSED, unmarked)
         try:
             policies = [self.policy_profile(tip) for tip in tips]
         except ProfileChanged as err:
@@ -171,6 +176,14 @@ class PushJudge:
         decision = self.judge_delivery(deliveries)
         leaks = self.credential_leaks(deliveries) if decision.status == PushStatus.ALLOWED else ()
         return PushDecision(PushStatus.REFUSED, leaks) if leaks else decision
+
+    def unmarked(self, tips: tuple[PushTip, ...], base: str) -> tuple[str, ...]:
+        """With the guard on (docs/design/merge-queue.md 8.1): a push to the base branch is tl's own (a land push or a release, which hold
+        the land lock and name themselves in it) or it is refused. Pushes to any other branch never meet this."""
+        if not self.guard_main or self.lock_holder.startswith(MAIN_MARKERS):
+            return ()
+        return tuple(f"{tip.ref} ({tip.sha[:12]}) goes to {base} outside `tl land` and the release: land it through the PR flow"
+                     for tip in tips if tip.remote_ref == base)
 
     def why(self, tip: PushTip, cfg: EngineConfig | None) -> dict[CheckId, str]:
         """The first differing key field per unproven step; display only, so a failure to explain never changes the verdict."""
@@ -201,10 +214,11 @@ class PushJudge:
         return PushDecision(PushStatus.REFUSED if refused else PushStatus.ALLOWED, refused)
 
 
-def judge_push(repo: str, stdin: str, stores: Stores, git: Git, *, env: Env, clock: Clock | None = None) -> PushDecision:
+def judge_push(repo: str, stdin: str, stores: Stores, git: Git, *, env: Env, clock: Clock | None = None, guard_main: bool = False,
+               lock_holder: str = "") -> PushDecision:
     """Only this application boundary interprets the request. Failed observations never authorize transport."""
     try:
         tips = push_tips(stdin)
-        return PushJudge(repo, stores, git, env, clock).judge(tips)
+        return PushJudge(repo, stores, git, env, clock, guard_main=guard_main, lock_holder=lock_holder).judge(tips)
     except Exception as err:
         return PushDecision(PushStatus.UNAVAILABLE, (f"delivery judge unavailable: {err}",))

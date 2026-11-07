@@ -152,6 +152,7 @@ def owner_parsers(sp):
     sp.add_parser("selftest", help="run one bead through the engine with a fake lane in a temp repo; exit 1 when it cannot")
     p = sp.add_parser("doctor", help="warn about git settings that let a slot's git leave the slot")
     p.add_argument("--reindex", action="store_true", help="rebuild the dashboard's run index in factory.db")
+    p.add_argument("--print-guard-rails", action="store_true", help="print the gh api calls that set the guard rails of main")
     p.add_argument("--disk", action="store_true", help="where the config folder's bytes are, and the free space of its volume")
     sp.add_parser("layout", help="`tl layout migrate`: move an old config dir to runs/<run>/ and repos/<repo>/ once (stop the loops first)"
                   ).add_argument("op", choices=["migrate"])
@@ -415,6 +416,8 @@ def v_doctor(a: Any, c: Ctx) -> int:
         return reindex.run(c.who.config)
     if a.disk:
         return doctor.disk_run(c.who.config)
+    if a.print_guard_rails:
+        return doctor.print_guard_rails(c.env, c.git)
     return doctor.run(c.here.parents[1], c.env, c.git, c.who, c.spawner)
 
 
