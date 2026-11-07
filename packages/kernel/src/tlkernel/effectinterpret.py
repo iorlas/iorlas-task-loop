@@ -9,7 +9,7 @@ import contextlib
 from collections.abc import Callable
 from typing import Protocol
 
-from taskloop.domain import effects as fx
+from tlkernel import closeeffects as fx
 from tlkernel import fence
 
 

@@ -1,6 +1,5 @@
 """Small typed fakes of what a slice reads of the engine (app/pipeline/waits.py WaitsHost, app/land/outbound.py OutboundHost): a class that
 has just those members, so the type checker proves the fake is enough and a slice that reads one more member breaks the test's types."""
-
 import contextlib
 import tempfile
 import threading
@@ -18,6 +17,7 @@ from support.fakegit import FakeGit, ScriptedGit
 from support.memstores import fake_stores
 from support.pipeline_ports import FakeAskRules, FakeParkBook
 from support.who import who
+from taskloop.adapters import beadtools
 from taskloop.app.land.commit import Commit
 from taskloop.app.land.fix_outside import FixOutside
 from taskloop.app.land.gate import Gate, GateChecker, GateCheckout
@@ -31,7 +31,6 @@ from taskloop.app.land.sync import Sync
 from taskloop.app.pipeline.budget import Budget
 from taskloop.app.pipeline.closing import CloseParts, Closer
 from taskloop.app.pipeline.steps import Steps
-from taskloop.domain.lanes.pause_reasons import Producer
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 from tlkernel import fence
@@ -47,6 +46,7 @@ from tlkernel.enums import Outcome
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId, TreeSha
 from tlkernel.kinds import Kind
+from tlkernel.pausereasons import Producer
 from tlkernel.plancheck import PlanCheck, PlanData, StageData
 from tlkernel.ports import Clock
 from tlkernel.run import RunFinish
@@ -812,4 +812,4 @@ class CloseKit:
                 reflect=SpyReflect(),
                 settle=SpySettle(),
             ), FakeAskRules(), FakeParkBook(),
-        )
+            beadtools.peek)

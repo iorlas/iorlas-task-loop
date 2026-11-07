@@ -11,12 +11,12 @@ from typing import Final
 
 from any_failure_fp import backoff
 
-from taskloop.domain.beads.park import text_hash
-from taskloop.domain.lanes.pause_reasons import Producer, Reason, Unknown
 from tlkernel.bead import Bead
+from tlkernel.beadpark import text_hash
 from tlkernel.delegate import Permanence
 from tlkernel.kinds import Kind
 from tlkernel.parks import Park
+from tlkernel.pausereasons import Producer, Reason, Unknown
 
 
 @dataclass(frozen=True)

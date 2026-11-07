@@ -31,11 +31,11 @@ def child(config: str, kill: str, seed: bool) -> int:
     sys.path[:0] = [str(ROOT / "src"), str(ROOT / "skills" / "task-loop" / "_vendor")]
     import tlpaths  # noqa: F401, PLC0415
     from taskloop.app.parts import STAGE_PARTS  # noqa: PLC0415
-    from taskloop.domain import effects as fx  # noqa: PLC0415
-    from taskloop.domain.interpret import CheckpointLedger, interpret  # noqa: PLC0415
     from taskloop.stores.real import real_stores  # noqa: PLC0415
+    from tlkernel import closeeffects as fx  # noqa: PLC0415
     from tlkernel import runoutcome as oc  # noqa: PLC0415
     from tlkernel.checkpoint import Checkpoint  # noqa: PLC0415
+    from tlkernel.effectinterpret import CheckpointLedger, interpret  # noqa: PLC0415
     from tlkernel.factorydb import declare_parts  # noqa: PLC0415
     from tlkernel.kinds import Kind  # noqa: PLC0415
     from tlkernel.paths import ConfigDir  # noqa: PLC0415
@@ -85,7 +85,7 @@ def child(config: str, kill: str, seed: bool) -> int:
 def plan_names() -> list[str]:
     sys.path[:0] = [str(ROOT / "src"), str(ROOT / "skills" / "task-loop" / "_vendor")]
     import tlpaths  # noqa: F401, PLC0415
-    from taskloop.domain import effects as fx  # noqa: PLC0415
+    from tlkernel import closeeffects as fx  # noqa: PLC0415
     from tlkernel import runoutcome as oc  # noqa: PLC0415
     from tlkernel.kinds import Kind  # noqa: PLC0415
 

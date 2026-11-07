@@ -17,6 +17,7 @@ from tlkernel.identity import Identity
 from tlkernel.ids import BeadId, TreeSha
 from tlkernel.kinds import Kind
 from tlkernel.paths import ConfigDir
+from tlkernel.pausereasons import Producer
 from tlkernel.ports import Clock
 from tlkernel.procport import Spawner
 from tlkernel.review import Unfiled
@@ -38,7 +39,6 @@ from taskloop.app.run.field_ports import FieldParts
 from taskloop.app.run.sections import checkpoint_hooks, restarted
 from taskloop.app.run.state import StateAttrs
 from taskloop.app.write.state import WriteState
-from taskloop.domain.lanes.pause_reasons import Producer
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 

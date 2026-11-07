@@ -6,8 +6,7 @@ from typing import Protocol
 
 from tlkernel import runoutcome as oc
 from tlkernel.kinds import Kind
-
-from taskloop.domain.lanes.pause_reasons import Producer
+from tlkernel.pausereasons import Producer
 
 
 class CrashLog(Protocol):
