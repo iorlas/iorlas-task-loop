@@ -127,9 +127,9 @@ class RowDoc[T: Rec]:
             con.execute(f"DELETE FROM {d.table} WHERE {d.key_col}=?", (self.k,))
 
 
-def singleton[T: Rec](cfg: ConfigDir, cls: type[T], name: str, quiet: bool = False) -> RowDoc[T]:
-    """One cold document (a pin, a release result, a snapshot) as the `kv` row `name`."""
-    return RowDocs(cfg, cls, table="kv", key_col="k", body_col="v", prefix=name, quiet=quiet).of("")
+def singleton[T: Rec](cfg: ConfigDir, cls: type[T], name: str, quiet: bool = False, *, table: str = "kv") -> RowDoc[T]:
+    """One cold document (a pin, a release result, a snapshot) as the row `name` of `table` (`kv`, or its owner's own table)."""
+    return RowDocs(cfg, cls, table=table, key_col="k", body_col="v", prefix=name, quiet=quiet).of("")
 
 
 class StaleRevision(ValueError):

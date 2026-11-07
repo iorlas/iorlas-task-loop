@@ -97,6 +97,12 @@ def prune_order(parts: Iterable[Part] | None = None) -> tuple[Prune, ...]:
     return tuple(ordered)
 
 
+def doc_table(table: str) -> str:
+    """The DDL of a stage's own table of typed documents (`k` the key with the record's name as prefix, `v` its JSON, `t` the write time):
+    what `kv` was for every stage at once, now one per owner (read and written by docrows.RowDocs with `table=`)."""
+    return f"CREATE TABLE {table} (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL);"
+
+
 def ddl() -> str:
     """The DDL of every registered part: what a fresh database is created from."""
     return "\n".join(p.ddl.strip() for p in _REGISTRY.values())
