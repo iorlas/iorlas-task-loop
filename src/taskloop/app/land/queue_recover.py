@@ -1,6 +1,5 @@
 """Observe and clean an interrupted queue without starting builds or merging PRs."""
 from collections.abc import Callable, Sequence
-from pathlib import Path
 from typing import Protocol
 
 from tlkernel.gitport import Git
@@ -8,9 +7,9 @@ from tlkernel.queue_doc import QueueDoc
 
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
-from taskloop.app.land.queue_refs import PREFIX, QueueRefs
+from taskloop.app.land.queue_refs import QueueRefs
 from taskloop.app.land.treecheck import Tested, TreeGuard
-from taskloop.domain.land.queue_model import Entry, Phase
+from taskloop.domain.land.queue_model import Entry
 from taskloop.domain.land.queue_persist import from_doc
 from taskloop.domain.land.queue_reconcile import (
     Action,
@@ -24,6 +23,7 @@ from taskloop.domain.land.queue_reconcile import (
     ResetPending,
     reconcile,
 )
+from taskloop.domain.land.queue_world import world
 from taskloop.stores.runlog import RunLog
 
 
@@ -48,15 +48,8 @@ def facts(host: Host, doc_entries: QueueDoc, now: Callable[[], float]) -> Facts:
         if pr is not None:
             pr = host.forge.view(pr.number)
             prs[entry.branch] = PrFact(pr.state.lower(), pr.merge_sha)
-    return Facts(
-        refs=frozenset(ref.name for ref in host.git.for_each_ref(host.repo, PREFIX)),
-        worktrees=frozenset(tree.path for tree in host.git.checkouts(host.repo)
-                            if Path(tree.path).name.startswith("tl-land-gate-")),
-        alive={}, main_sha=host.git.rev_parse(host.repo, host.trees.main_ref),
-        prs=prs, builds=builds,
-        recorded=frozenset(e.branch for e in entries if e.phase is Phase.MERGED),
-        notified=frozenset(), now=now(),
-    )
+    return world(host.git, host.repo, host.trees.main_ref, entries, builds, prs, now())
+
 
 
 class Recover:
