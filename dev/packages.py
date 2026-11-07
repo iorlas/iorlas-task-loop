@@ -18,8 +18,11 @@ def members(root: Path) -> dict[str, tuple[str, set[str]]]:
     """{project name: (directory name, names of the workspace members it declares)}."""
     found = {}
     for manifest in sorted((root / "packages").glob("*/pyproject.toml")):
-        project = tomllib.loads(manifest.read_text(encoding="utf-8"))["project"]
-        names = {re.split(r"[\s\[<>=!~;]", d, maxsplit=1)[0] for d in project.get("dependencies", [])}
+        data = tomllib.loads(manifest.read_text(encoding="utf-8"))
+        project = data["project"]
+        # the dev group is in the isolated env too
+        declared = [*project.get("dependencies", []), *data.get("dependency-groups", {}).get("dev", [])]
+        names = {re.split(r"[\s\[<>=!~;]", d, maxsplit=1)[0] for d in declared if isinstance(d, str)}
         found[project["name"]] = (manifest.parent.name, names)
     return {name: (folder, deps & found.keys()) for name, (folder, deps) in found.items()}
 
@@ -30,7 +33,7 @@ def reached(root: Path, changed: set[str]) -> list[str]:
     folders = {folder: name for name, (folder, _) in graph.items()}
     if any(not path.startswith("packages/") or path.split("/")[1] not in folders for path in changed):
         return sorted(folders)  # a file outside every package: the root config, the lock, the tooling
-    out = {folders[path.split("/")[1]] for path in changed}
+    out = {path.split("/")[1] for path in changed}
     grew = True
     while grew:
         grew = False

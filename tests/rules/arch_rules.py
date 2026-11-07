@@ -13,11 +13,11 @@ MAX_FANOUT = 40
 
 def production_trees(root=ROOT):
     trees = {}
-    for path in py_files(root, ("src", "packages/kernel/src", "skills", "dev")):
+    for path in py_files(root, ("src", *(p.relative_to(root).as_posix() for p in sorted(root.glob("packages/*/src"))), "skills", "dev")):
         parts = path.relative_to(root).with_suffix("").parts
         if parts[0] == "src":
             parts = parts[1:]
-        elif parts[:3] == ("packages", "kernel", "src"):
+        elif parts[0] == "packages" and parts[2:3] == ("src",):
             parts = parts[3:]
         if parts[-1] == "__init__":
             parts = parts[:-1]
