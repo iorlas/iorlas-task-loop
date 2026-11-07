@@ -8,7 +8,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from run.test_stages import StagesTest
 from support.engine_case import engine, real_git
-from support.plans import CLEAN, PLAN, WRITE
 from support.pushsim import pusher
 from support.spawn import port_git, real_spawner
 from support.who import who
@@ -17,6 +16,7 @@ import tltestkit.shellkit
 from taskloop.app.slots import config as wslots_config
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
+from tltestkit.plans import CLEAN, PLAN, WRITE
 
 
 class SlotHygiene(StagesTest):
