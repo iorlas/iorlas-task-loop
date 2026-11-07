@@ -26,11 +26,11 @@ from support.who import who
 
 from taskloop.adapters import pidcheck
 from taskloop.adapters.check_probe import PathProbe
-from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.write.handoff import HANDOFF_CAP
-from taskloop.domain.checks import planref
 from taskloop.domain.plan.matchers import AcceptanceText
+from tlgate import evidence as check_evidence
+from tlgate.domain import planref
 from tlkernel import childenv, rundocs
 from tlkernel.answers import IRREVERSIBLE
 from tlkernel.argv import argv_of

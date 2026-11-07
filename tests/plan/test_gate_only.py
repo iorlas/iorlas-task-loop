@@ -11,7 +11,7 @@ from support.plan_host import FakePlan
 from support.plans import CLEAN, HAS_F, PLAN, WRITE
 
 from taskloop.app.plan.planner import Planner
-from taskloop.domain.checks import lint
+from tlgate.domain import lint
 from tlkernel.plancheck import adhoc
 from tltestkit.checks import typed
 

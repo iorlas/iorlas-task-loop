@@ -11,8 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 
 sys.path.insert(0, str(ROOT / "tests"))
-from taskloop.app.checks import evidence  # noqa: E402
-from taskloop.domain.checks import trim  # noqa: E402
+from tlgate import evidence  # noqa: E402
+from tlgate.domain import trim  # noqa: E402
 from tltestkit.checks import res  # noqa: E402
 
 FIX = Path(__file__).parents[1] / "fixtures" / "checklogs"

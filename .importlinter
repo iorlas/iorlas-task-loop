@@ -8,6 +8,7 @@ root_packages =
     taskloop_dash
     tlkernel
     tlartifacts
+    tlgate
     msgspec
     re
     urllib
@@ -233,6 +234,17 @@ forbidden_modules =
     delegate
 allow_indirect_imports = True
 
+[importlinter:contract:package-gate-imports-only-the-kernel]
+name = The gate package (tlgate) imports the kernel and third parties, never the tree or another package
+type = forbidden
+source_modules =
+    tlgate
+forbidden_modules =
+    taskloop
+    taskloop_dash
+    delegate
+allow_indirect_imports = True
+
 [importlinter:contract:nobody-imports-a-root]
 name = Nobody imports a root: nodes, run's logic modules and the layers below never import launch, wire or run's composition files
 type = forbidden
@@ -329,6 +341,7 @@ name = A converted stage imports no host (not the Engine, run, wire or launch)
 type = forbidden
 source_modules =
     tlartifacts
+    tlgate
     taskloop.app.checks
     taskloop.app.doctor
     taskloop.app.loop

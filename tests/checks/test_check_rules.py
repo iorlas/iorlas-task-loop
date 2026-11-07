@@ -10,8 +10,8 @@ from support.cfgs import cfg_with
 from support.check_host import CheckHostCase
 from support.plans import FALSE, PLAN
 
-from taskloop.app.checks import evidence
-from taskloop.domain.checks import lint, planref
+from tlgate import evidence
+from tlgate.domain import lint, planref
 from tlkernel.ids import CheckId
 from tlkernel.plancheck import adhoc
 from tltestkit.checks import ck, typed

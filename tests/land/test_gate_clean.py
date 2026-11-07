@@ -14,7 +14,7 @@ from support.gate_rig import GateCase
 
 from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
 from taskloop.app.pipeline.blocked import Blocked
-from taskloop.domain.checks.specs import gate_items
+from tlgate.domain.specs import gate_items
 from tlkernel.envvars import EnvVar
 from tlkernel.procport import Ran
 from tlkernel.slots import SlotGitError
@@ -112,7 +112,7 @@ class CleanGate(GateCase):
         def which(name, **kw):  # only the plan word is faked: `nice` and the rest resolve as on the host
             return "repo-plan" if name == "repo-plan" else real_which(name, **kw)
 
-        with (mock.patch("taskloop.app.checks.gateplan.shutil.which", side_effect=which),
+        with (mock.patch("tlgate.gateplan.shutil.which", side_effect=which),
               mock.patch.object(eng.spawner, "run", side_effect=plan)):
             got = Gate(eng).run()
         assert isinstance(got, Problem)

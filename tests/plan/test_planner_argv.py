@@ -2,7 +2,7 @@
 outside the program words of the registered checks, is refused with the list that rejected it."""
 from support.cfgs import cfg_with
 
-from taskloop.domain.checks import planref
+from tlgate.domain import planref
 from tlkernel.plancheck import adhoc
 
 ALLOW = [["python3", "-m", "unittest"], ["just", "test"]]

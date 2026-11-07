@@ -21,11 +21,11 @@ from support.procsim import real_proc
 from any_lease import Leases
 from support.memstores import fake_stores
 
-from taskloop.app.checks import resources
-from taskloop.app.checks.resources import Resources
 from taskloop.app.land import verified
 from taskloop.app.wire.brief import held_resources
-from taskloop.domain.checks.inputs import touched
+from tlgate import resources
+from tlgate.domain.inputs import touched
+from tlgate.resources import Resources
 from tlkernel.checks import UNVERIFIED_EXIT, Check, CheckResult, CheckRun
 from tlkernel.config import ConfigError, EngineConfig, HostResources, ResourceSpec, load
 from tlkernel.ids import CheckId

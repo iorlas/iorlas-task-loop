@@ -16,10 +16,10 @@ from support.checked import run_checked
 
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
-from taskloop.app.checks import authorization
 from taskloop.app.release import gate, shell
 from taskloop.app.release.shell import Abort, Shell
 from taskloop.stores.real import real_stores
+from tlgate import authorization
 from tlkernel.env import Env
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.paths import ConfigDir

@@ -5,6 +5,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol
 
+from tlgate.domain.matchers import slot_wait_secs
 from tlkernel import log as rec
 from tlkernel.config import EngineConfig
 from tlkernel.ids import BeadId
@@ -19,7 +20,6 @@ from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.steps import Open
 from taskloop.app.pipeline.store_ports import WaitStores
 from taskloop.domain.asks import specs as askspecs
-from taskloop.domain.checks.matchers import slot_wait_secs
 from taskloop.domain.lanes.liveness import LIVENESS
 
 

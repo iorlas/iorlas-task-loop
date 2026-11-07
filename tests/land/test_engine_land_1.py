@@ -34,8 +34,8 @@ from taskloop.adapters import (
 )
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
-from taskloop.domain.checks import lint
 from taskloop.domain.plan.matchers import gate_only_criteria
+from tlgate.domain import lint
 from tlkernel.config import EngineConfig
 from tltestkit import fake_route
 from tltestkit.logs import records

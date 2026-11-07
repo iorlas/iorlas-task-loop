@@ -7,8 +7,8 @@ import pytest
 from taskloop.adapters import check_net
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.run.shell import Shell
-from taskloop.domain.checks.inputs import config_digest
-from taskloop.domain.checks.specs import repo_check
+from tlgate.domain.inputs import config_digest
+from tlgate.domain.specs import repo_check
 from tlkernel import log as rec
 from tlkernel.checks import Check
 from tlkernel.config import CheckSpec, ConfigError, EngineConfig, load

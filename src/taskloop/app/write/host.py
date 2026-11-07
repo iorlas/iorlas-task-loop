@@ -3,6 +3,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
+from tlgate.domain.writer_split import WriterSplit
 from tlkernel.asked import Asked
 from tlkernel.beadsport import Beads
 from tlkernel.checkpoint import Handoff as HandoffState
@@ -19,7 +20,6 @@ from tlkernel.wire import Open
 
 from taskloop.app.write.state import WriteState
 from taskloop.domain.asks.spec import AskSpec
-from taskloop.domain.checks.writer_split import WriterSplit
 from taskloop.domain.work.ledger import Ledger
 
 

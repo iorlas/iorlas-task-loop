@@ -16,7 +16,7 @@ from support import procsim
 from support.check_host import CheckHostCase
 
 # isort: split
-from taskloop.domain.checks.specs import gate_items
+from tlgate.domain.specs import gate_items
 from tlkernel.config import ConfigError, load
 
 UNITY = {"unity": {"limit": 1}}

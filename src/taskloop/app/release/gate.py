@@ -8,6 +8,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from tlgate import authorization
+from tlgate.cache import RunMemo
+from tlgate.domain.specs import gate_items
 from tlkernel.checks import Check, CheckResult
 from tlkernel.config import EngineConfig
 from tlkernel.envvars import EnvVar
@@ -18,11 +21,8 @@ from tlkernel.slots import SlotGitError
 
 from taskloop.adapters.ident import config_dir
 from taskloop.adapters.suiteout import failing_tests, failure_report
-from taskloop.app.checks import authorization
-from taskloop.app.checks.cache import RunMemo
 from taskloop.app.release.paths import releases_dir
 from taskloop.app.release.shell import Abort, Shell, say
-from taskloop.domain.checks.specs import gate_items
 from taskloop.stores.real import real_stores
 
 LONG = 3 * 3600.0  # a hang guard for a whole gate run

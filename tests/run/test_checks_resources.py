@@ -14,9 +14,9 @@ from tltestkit.logs import records
 
 # isort: split
 
-from taskloop.app.checks import resources
 from taskloop.app.pipeline.waits import Waits
 from taskloop.app.plan.planner import Planner
+from tlgate import resources
 from tlkernel.config import HostResources
 
 ANSWERS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}

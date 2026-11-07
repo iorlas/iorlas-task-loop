@@ -24,8 +24,8 @@ from tltestkit.narrow import must
 from support.memstores import fake_stores
 from support.spawn import port_git
 
-from taskloop.app.checks.cache import KEEP, InputKeys, RunMemo, green_result, is_green, key_digest, plan_digest
 from taskloop.stores.real import real_stores
+from tlgate.cache import KEEP, InputKeys, RunMemo, green_result, is_green, key_digest, plan_digest
 from tlkernel import paths, wire
 from tlkernel.checks import Check, CheckResult, PassRecord
 from tlkernel.ids import CheckId, TreeSha

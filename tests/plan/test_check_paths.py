@@ -11,7 +11,7 @@ from support.cfgs import cfg_with
 from support.engine_case import EngineTest
 from support.plans import CLEAN, PLAN, WRITE
 
-from taskloop.domain.checks import lint
+from tlgate.domain import lint
 from tlkernel.checksport import TreeProbe
 from tlkernel.ids import CheckId
 from tlkernel.plancheck import PlanCheck, PlanData, Ref, StageData, adhoc

@@ -6,11 +6,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from tlgate.checklog import CheckLog
 from tlkernel.config import EngineConfig
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
 
-from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.pipeline.budget import Budget
 from taskloop.app.pipeline.steps import Steps
 from taskloop.app.track import console

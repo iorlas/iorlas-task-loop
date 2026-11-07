@@ -3,6 +3,8 @@
 import json
 from typing import Final, Protocol
 
+from tlgate.domain import planref
+from tlgate.runner import Checker
 from tlkernel import childenv
 from tlkernel import log as rec
 from tlkernel.beadsport import Beads
@@ -18,12 +20,10 @@ from tlkernel.stop import Stop
 
 from taskloop.adapters import ident
 from taskloop.app.asks import trustroots
-from taskloop.app.checks.runner import Checker
 from taskloop.app.workers import writer_pin
 from taskloop.app.workers.call import Call
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks.spec import AskSpec
-from taskloop.domain.checks import planref
 from taskloop.domain.lanes import caps, pin
 from taskloop.stores.runlog import RunLog
 

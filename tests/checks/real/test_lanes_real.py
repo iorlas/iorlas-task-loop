@@ -15,7 +15,7 @@ from support.shellkit import POSIX_CHECK, PY, shq
 from support.waits import until
 
 # isort: split
-from taskloop.domain.checks.specs import gate_items
+from tlgate.domain.specs import gate_items
 
 
 def alive(pid: int) -> bool:

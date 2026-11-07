@@ -9,7 +9,7 @@ from support.engine_case import EngineTest
 from support.plans import CLEAN, PLAN, WRITE
 
 # isort: split
-from taskloop.domain.checks.specs import engine_digest, gate_items, items_of
+from tlgate.domain.specs import engine_digest, gate_items, items_of
 from tltestkit.logs import records
 
 STEP = "true"

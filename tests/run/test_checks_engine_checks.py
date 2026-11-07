@@ -28,17 +28,17 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.adapters.check_probe import PathProbe
-from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.run import (
     engine,
     entry,
 )
 from taskloop.app.slots import config as wslots_config
-from taskloop.domain.checks import lint
-from taskloop.domain.checks import matchers as check_matchers
-from taskloop.domain.checks.writer_split import WriterSplit
 from taskloop.domain.review.matchers import Tools
 from taskloop.domain.write.matchers import count_tests
+from tlgate import evidence as check_evidence
+from tlgate.domain import lint
+from tlgate.domain import matchers as check_matchers
+from tlgate.domain.writer_split import WriterSplit
 from tlkernel import answers, childenv, plancheck
 from tlkernel.config import EngineConfig
 from tlkernel.env import snapshot

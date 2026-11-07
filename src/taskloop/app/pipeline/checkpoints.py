@@ -7,6 +7,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
+from tlgate.domain import trim
 from tlkernel import fence
 from tlkernel.beadsport import Beads
 from tlkernel.checkpoint import Checkpoint, CloseIntent, Notes, RunState, StageProgress
@@ -17,7 +18,6 @@ from tlkernel.review import Unfiled
 
 from taskloop.app.pipeline.review_glue import ReviewLists, review_of
 from taskloop.app.pipeline.store_ports import CheckpointDoc, CheckpointStores
-from taskloop.domain.checks import trim
 from taskloop.domain.followups import FollowKey
 
 

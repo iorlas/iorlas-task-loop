@@ -5,6 +5,7 @@ import time
 from functools import cached_property
 from pathlib import Path
 
+from tlgate.domain import affinity
 from tlkernel import fence
 from tlkernel.kinds import Kind
 from tlkernel.log import Assumed, Said
@@ -18,7 +19,6 @@ from taskloop.app.track import trail
 from taskloop.app.track.console import say
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks.spec import AskSpec
-from taskloop.domain.checks import affinity
 
 
 class Plumbing(RunFields):

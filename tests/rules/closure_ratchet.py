@@ -14,12 +14,13 @@ from rules import ratchet_change
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "dev"))
 from importgraph import targets_of
 
-TREES = ("src/taskloop", "packages/kernel/src/tlkernel")
+TREES = ("src/taskloop", "packages/kernel/src/tlkernel", "packages/gate/src/tlgate")
 
 
 def closures(texts: Mapping[str, str]) -> dict[str, int]:
     """Count reachable local files and distinct external module roots for each stage."""
-    modules = {path.removeprefix("packages/kernel/").removeprefix("src/").removesuffix(".py").replace("/", ".").removesuffix(".__init__"):
+    modules = {path.removeprefix("packages/kernel/").removeprefix("packages/gate/").removeprefix("src/")
+               .removesuffix(".py").replace("/", ".").removesuffix(".__init__"):
                path for path in texts if path.startswith(tuple(tree + "/" for tree in TREES)) and path.endswith(".py")}
     packages = {name for name, path in modules.items() if path.endswith("/__init__.py")}
     local_roots = {"taskloop", "tlkernel"} | {name.split(".")[0] for name in modules}
@@ -39,6 +40,8 @@ def closures(texts: Mapping[str, str]) -> dict[str, int]:
                     break
                 candidate = candidate.rpartition(".")[0]
     stages = sorted(name for name in packages if name.startswith("taskloop.app.") and name.count(".") == 2)
+    if "tlgate" in packages:
+        stages.append("tlgate")
     counts = {}
     for stage in stages:
         pending = [name for name in modules if name == stage or name.startswith(stage + ".")]
@@ -48,7 +51,7 @@ def closures(texts: Mapping[str, str]) -> dict[str, int]:
             if name not in reached:
                 reached.add(name)
                 pending.extend(edges[name] - reached)
-        key = stage.rsplit(".", 1)[1]
+        key = "gate" if stage == "tlgate" else stage.rsplit(".", 1)[1]
         counts[key] = len(reached)
         counts[key + " (external modules)"] = len(set().union(*(external[name] for name in reached)))
     return counts

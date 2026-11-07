@@ -5,13 +5,13 @@ from unittest import mock
 from support import procsim
 from support.check_host import CheckHostCase
 
-from taskloop.app.checks import authorization
-from taskloop.app.checks.cache import RunMemo
-from taskloop.app.checks.execution import check_env
-from taskloop.app.checks.runner import Checker, cached_gate
 from taskloop.app.launch.check_host import CliHost
-from taskloop.domain.checks.specs import gate_items
 from taskloop.domain.slot_env import slot_env
+from tlgate import authorization
+from tlgate.cache import RunMemo
+from tlgate.domain.specs import gate_items
+from tlgate.execution import check_env
+from tlgate.runner import Checker, cached_gate
 from tlkernel.runkey import BaseSha
 
 
@@ -68,7 +68,7 @@ class KeyedEnv(CheckHostCase):
             memos.append(memo)
             return memo
 
-        with mock.patch("taskloop.app.checks.runner.RunMemo", side_effect=capture):
+        with mock.patch("tlgate.runner.RunMemo", side_effect=capture):
             assert cached_gate(eng.cfg, eng.git, str(eng.wt), eng.stores, eng.env, tree, None)
         assert len(memos) == 1
         key = engine.key(check)

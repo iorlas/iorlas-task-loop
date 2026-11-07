@@ -4,12 +4,12 @@ import json
 from pathlib import Path
 from typing import Protocol
 
+from tlgate.domain.inputs import matching
+from tlgate.domain.matchers import expand_braces
 from tlkernel import rundocs
 
 from taskloop.app.write.host import PreparePorts
 from taskloop.app.write.state import StageState
-from taskloop.domain.checks.inputs import matching
-from taskloop.domain.checks.matchers import expand_braces
 
 PREPARED = "prepared"
 

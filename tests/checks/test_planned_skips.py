@@ -7,8 +7,8 @@ import support.paths  # noqa: F401
 from support.check_host import CheckHostCase
 from support.plans import FALSE
 
-from taskloop.app.checks.cache import is_green
-from taskloop.domain.checks.specs import gate_items
+from tlgate.cache import is_green
+from tlgate.domain.specs import gate_items
 from tlkernel import wire
 from tlkernel.checks import CheckResult
 from tlkernel.ids import CheckId, TreeSha

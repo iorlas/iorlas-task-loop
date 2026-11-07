@@ -3,9 +3,9 @@ the writer calls impossible, red tries used up, or the rounds used up ask for a 
 at once (ASK_STUCK): it is not the code, so the writer is not asked and nothing is retried."""
 from typing import Any
 
+from tlgate import evidence as check_evidence
 from tlkernel.plancheck import StageData
 
-from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.write.host import WriteHost
 from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.prompts import REPEAT_RED

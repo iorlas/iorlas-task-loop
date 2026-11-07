@@ -4,6 +4,7 @@ import argparse
 from collections.abc import Callable
 from pathlib import Path
 
+from tlgate import authorization
 from tlkernel.env import Env
 from tlkernel.gitport import Git
 from tlkernel.ids import CheckId, TreeSha
@@ -11,7 +12,6 @@ from tlkernel.paths import ConfigDir
 from tlkernel.runkey import BaseSha
 from tlkernel.slots import SlotGitError
 
-from taskloop.app.checks import authorization
 from taskloop.stores.real import real_stores
 
 GREEN, NOT_GREEN = 0, 1

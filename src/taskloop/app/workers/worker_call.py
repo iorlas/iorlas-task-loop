@@ -11,6 +11,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from tlgate.step_env import step_env
 from tlkernel import answers, childenv
 from tlkernel import log as rec
 from tlkernel.asked import Asked, Fallback, Updates
@@ -18,7 +19,6 @@ from tlkernel.delegate import REASON_OVERRUN, DelegateResult, RunRequest, StopFa
 from tlkernel.delegateport import Answer
 
 from taskloop.adapters import delegate_wire
-from taskloop.app.checks.step_env import step_env
 from taskloop.app.workers import asked, strays, worker_identity, worker_recovery, worker_request
 from taskloop.app.workers import call_state as callstate
 from taskloop.app.workers.call import Call
