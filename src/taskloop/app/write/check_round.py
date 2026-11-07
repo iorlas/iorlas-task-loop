@@ -4,15 +4,17 @@ at once (ASK_STUCK): it is not the code, so the writer is not asked and nothing 
 from typing import Any
 
 from taskloop.app.checks import evidence as check_evidence
+from taskloop.app.write.host import WriteHost
 from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.prompts import REPEAT_RED
 from taskloop.app.write.state import AGAIN, REPLAN, RoundResult, StageState, carrying
+from taskloop.contracts.plancheck import StageData
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.write.matchers import count_tests
 
 
 class CheckRound:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: WriteHost) -> None:
         self.e = host
 
     def run(self, s: StageState) -> RoundResult:
@@ -25,7 +27,7 @@ class CheckRound:
     def go(self, s: StageState, out: RoundResult) -> str:
         e = self.e
         s.acc_first = s.acc_only and not s.acc_first  # once, then the normal order: a check may read what a tests-group check writes
-        stage = dict(s.st, checks=s.st["checks"] + (e.cases.case_checks() if s.last else []))
+        stage: StageData = {**s.st, "checks": s.st["checks"] + (e.cases.case_checks() if s.last else [])}
         run = e.stage_checks.stoppable(stage, s.name, acceptance_first=s.acc_first,
                                        conflict_fix=s.state.get("conflict_fix"), round=s.rounds + 1, **s.meta)
         s.run = out.run = run
@@ -87,13 +89,13 @@ class CheckRound:
             s.feedback += REPEAT_RED % "\n".join(f"- {c[:200]}" for c in again)
         red_text = f"{len(failed)} failed: {', '.join(c.id[:60] for c in failed)}"
         e.hand.note_round(s.name, s.rounds + 1, "checks_red", s.w["summary"], [c.id for c in failed])
-        if s.red < int(e.cfg.max_check_tries):
+        if s.red < e.cfg.max_check_tries:
             e.steps.move("write", "checks_red", red_text)
             return AGAIN
         s.red, s.rounds = 0, s.rounds + 1
         out.rounds += 1
         stuck = out.stuck_why = f"checks still red after {e.cfg.max_check_tries} tries: {check_evidence.compact(failed)}"
-        if s.rounds >= int(e.cfg.max_rounds):
+        if s.rounds >= e.cfg.max_rounds:
             brief = check_evidence.failure_brief(failed, e.run_dir)
             (e.run_dir / "replan.md").write_text(stuck + "\n\nTheir output:\n" + brief)
             e.steps.move("replan", "rounds_used", f"{red_text}; {s.rounds} rounds used")

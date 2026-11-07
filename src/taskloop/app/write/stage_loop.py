@@ -3,9 +3,9 @@
 reaches the reviewer. The writer's or the reviewer's question is the owner's. The rounds themselves are WriteRound, CheckRound and
 ReviewRound; the host (the engine) lends the run's state."""
 from collections.abc import Callable
-from typing import Any
 
 from taskloop.app.write.check_round import CheckRound
+from taskloop.app.write.host import WriteHost
 from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.review_round import ReviewRound
 from taskloop.app.write.state import AGAIN, RoundResult, RoundStop, StageState
@@ -14,7 +14,7 @@ from taskloop.contracts.plancheck import PlanData, RoundState
 
 
 class StageLoop:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: WriteHost) -> None:
         self.e = host
         self.writing = WriteRound(host)
         self.checking = CheckRound(host)
