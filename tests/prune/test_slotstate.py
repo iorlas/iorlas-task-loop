@@ -3,9 +3,9 @@ import os
 from pathlib import Path
 
 from taskloop.app.prune import slotstate
+from taskloop.contracts.ids import loop_key
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.slots import Checkout
-from taskloop.domain import slot_env
 
 DAY = 86400.0
 NOW = 100 * DAY
@@ -35,7 +35,7 @@ def folder(root: Path, key: str, slot: str, age_days: float) -> Path:
 
 def test_only_an_old_folder_of_a_vanished_slot_goes(workdir):
     root = Path(workdir)
-    key = slot_env.state_key(ORIGIN, "/r")
+    key = loop_key("/r")
     live = folder(root, key, "slot-1", 90)
     orphan = folder(root, key, "slot-gone", 90)
     young = folder(root, key, "slot-new", 2)
@@ -47,7 +47,7 @@ def test_only_an_old_folder_of_a_vanished_slot_goes(workdir):
 
 def test_a_dry_run_names_the_orphan_and_removes_nothing(workdir):
     root = Path(workdir)
-    orphan = folder(root, slot_env.state_key(ORIGIN, "/r"), "slot-gone", 90)
+    orphan = folder(root, loop_key("/r"), "slot-gone", 90)
     gone = slotstate.prune(ConfigDir(root), ["/r"], StubGit({"/r": ["/r"]}, {"/r": ORIGIN}), NOW, dry_run=True)
     assert [g.path for g in gone] == [orphan]
     assert orphan.exists()
@@ -55,6 +55,6 @@ def test_a_dry_run_names_the_orphan_and_removes_nothing(workdir):
 
 def test_the_state_of_a_repo_no_registered_checkout_resolves_to_is_kept(workdir):
     root = Path(workdir)
-    stranger = folder(root, slot_env.state_key("https://example.test/other.git", "/x"), "slot-1", 90)
+    stranger = folder(root, loop_key("/x"), "slot-1", 90)
     assert slotstate.prune(ConfigDir(root), ["/r"], StubGit({"/r": ["/r"]}, {"/r": ORIGIN}), NOW, dry_run=False) == []
     assert stranger.exists()

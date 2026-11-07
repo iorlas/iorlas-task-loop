@@ -22,7 +22,7 @@ from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.run import RunFinish, RunState
 from taskloop.contracts.slots import git_probe
-from taskloop.contracts.stores import TraceStore
+from taskloop.stores.real import real_stores
 
 ENGINE: Final[Guard] = lambda bead, reason: ""  # noqa: E731  the engine's own close: its run is the record
 GATED: Final = ("task", "feature", "bug")
@@ -42,7 +42,7 @@ def manual_sha(reason: str) -> str:
 
 
 def has_land(who: Identity, bead: BeadId) -> bool:
-    return any(i.rec.bead == bead and i.rec.outcome is Outcome.LANDED for i in TraceStore(who.config).read_from(0).items)
+    return any(i.rec.bead == bead and i.rec.outcome is Outcome.LANDED for i in real_stores(who.config).traces.read_from(0).items)
 
 
 def has_work(who: Identity, git: Git, repo: str, bead: BeadId) -> bool:

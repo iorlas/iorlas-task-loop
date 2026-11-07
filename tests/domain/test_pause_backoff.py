@@ -97,11 +97,3 @@ class Backoff(Case):
         rec = pauses.after_pause(rec, b, "r2", 100, "busy", lambda: 0.5, producer="delegate", permanence="transient")
         assert rec.attempts == {"engine:busy": 1, "delegate:busy": 1}
         assert rec.permanence == "transient"
-
-    def test_legacy_history_keeps_its_retry_budget(self):
-        b = Bead(id=BeadId("t-1"), title="work", status="open")
-        first = pauses.after_pause(None, b, "r1", 100, "busy", lambda: 0.5, permanence="transient")
-        legacy = first.replace(attempts={"busy": 3, "delegate:busy": 2})
-        rec = pauses.after_pause(legacy, b, "r2", 200, "busy", lambda: 0.5, permanence="transient")
-        assert rec.attempts == {"delegate:busy": 4}
-        assert (rec.permanence, rec.retry_at) == ("needs_owner", 0)

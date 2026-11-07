@@ -393,7 +393,7 @@ def v_next(a: Any, c: Ctx) -> int:
 
 
 def v_layout(a: argparse.Namespace, c: Ctx) -> int:
-    return verbs.layout(c.who.config, c.now())
+    return verbs.layout(c.who.config, c.now(), c.git)
 
 
 def v_prune(a: Any, c: Ctx) -> int:

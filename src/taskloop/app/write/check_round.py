@@ -5,9 +5,9 @@ from typing import Any
 
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.write.prepare import PREPARED, Prepare
+from taskloop.app.write.prompts import REPEAT_RED
 from taskloop.app.write.state import AGAIN, REPLAN, RoundResult, StageState, carrying
 from taskloop.domain.asks import specs as askspecs
-from taskloop.domain.prompts.write import REPEAT_RED
 from taskloop.domain.write.matchers import count_tests
 
 
