@@ -32,7 +32,7 @@ def test_memory_lock_with_a_live_holder_has_a_safety_deadline(monkeypatch):
     table = MemLockTable(alive=lambda pid: True)
     table.plant(LockWhat.LAND, "repo", LockRecord(what=LockWhat.LAND, holder="stuck", pid=123, t=0))
     ticks = itertools.count(0, 10)
-    monkeypatch.setattr("support.memstores.time.monotonic", lambda: next(ticks))
+    monkeypatch.setattr("tltestkit.memdoc.time.monotonic", lambda: next(ticks))
     polls = 0
 
     def wait(timeout):
