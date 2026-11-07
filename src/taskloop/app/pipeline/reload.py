@@ -49,7 +49,8 @@ class ReloadLog(Protocol):
 
 
 class ReloadHost(Protocol):
-    t0: float
+    @property
+    def t0(self) -> float: ...
     waited: float
     cost: float
     stats: dict[str, int]
