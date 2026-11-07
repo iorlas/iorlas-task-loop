@@ -11,8 +11,10 @@ from support.who import who
 from tlkernel.bd_errors import BdCommandFailure
 from tlkernel.ids import BeadId
 from tlslots import machine
+from tlslots.effects import Effects
 from tlslots.env import DEFAULT_PRIO
 from tlslots.host import SlotsHost
+from tltestkit.narrow import must
 
 HOST = "fakehost"
 PACKAGE = Path(machine.__file__).parent
@@ -24,7 +26,8 @@ def fake_host(store, *, peek=None):
 
     return SlotsHost(
         bd=lambda actor, repo: store, peek=peek or (lambda s, bead_id: s.show(bead_id)), repo_root=lambda: "/repo",
-        hostname=lambda: HOST, os_lock=refused, event=refused, tickets=refused, now=lambda: 1.0, fx=refused)
+        hostname=lambda: HOST, os_lock=refused, event=refused, tickets=refused, now=lambda: 1.0,
+        fx=Effects(hostname=refused, proc_alive=refused, proc_start=refused, hold_path=refused, running_for=refused))
 
 
 def slot(name, host=HOST, status="open"):
@@ -40,7 +43,7 @@ def test_the_slot_beads_are_those_of_the_hosts_own_name():
 def test_a_named_slot_is_found_among_them_and_a_missing_one_is_none():
     store = FakeBeadStore().put(slot("s1"))
     h = fake_host(store)
-    assert machine.slot_bead(h, "/repo", "s1", who()).title == f"slot {HOST} s1"
+    assert must(machine.slot_bead(h, "/repo", "s1", who())).title == f"slot {HOST} s1"
     assert machine.slot_bead(h, "/repo", "s9", who()) is None
 
 
