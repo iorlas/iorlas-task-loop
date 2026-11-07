@@ -4,7 +4,7 @@ import os
 import sys
 import time
 import traceback
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
 
@@ -51,8 +51,12 @@ class ReloadLog(Protocol):
 class ReloadHost(Protocol):
     @property
     def t0(self) -> float: ...
-    waited: float
-    cost: float
+    @property
+    def waited(self) -> float: ...
+    @property
+    def cost(self) -> float: ...
+    @cost.setter
+    def cost(self, value: float) -> None: ...
     stats: dict[str, int]
     sessions: list[Open]
     home: ConfigDir
@@ -61,7 +65,7 @@ class ReloadHost(Protocol):
     wt: str
     who: Identity
     env: Env
-    argv: Sequence[str] | None
+    argv: list[str] | None
     dry: bool
     moved: bool
     newer_fn: Callable[[], tuple[str, Path] | None] | None
