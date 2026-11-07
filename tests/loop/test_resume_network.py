@@ -29,7 +29,7 @@ from support.plans import CLEAN, PLAN, WRITE, verdict
 
 from taskloop.app.loop.gate import GateRole
 from taskloop.app.release import reexec
-from taskloop.stores import call_state as callstate
+from taskloop.app.workers import call_state as callstate
 from tlkernel.config import LoopConfig
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator

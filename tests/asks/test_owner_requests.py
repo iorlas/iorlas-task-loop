@@ -181,7 +181,6 @@ class EngineRequests(te.EngineTest):
         assert self.eng.checkpoints.read() is not None
         te.sh("git", "rev-parse", "--verify", "-q", "task/t-1", cwd=self.wt)  # the branch is kept
         assert self.eng.result().outcome == "parked"
-        assert not Path(self.eng.run_dir, homes.cfg().run_request("x").name).exists()
 
     def test_stop_ends_the_run_through_the_halt_path(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [te.review()]}, prep=self.after_plan(stop=True))

@@ -384,8 +384,20 @@
   "expected_tree": "t1",
   "landed_tree": "t2"
  },
- "QueueDoc": {
+ "FlakeLog": {
   "v": 1,
+  "rows": [
+   {
+    "test": "test_a",
+    "t": 1793050200.5,
+    "how": "retry",
+    "run": "run-1",
+    "bead": "tl-1"
+   }
+  ]
+ },
+ "QueueDoc": {
+  "v": 2,
   "entries": [
    {
     "branch": "topic",
@@ -395,6 +407,7 @@
     "tree": "tree",
     "ref": "refs/tl/queue/topic",
     "reason": "",
+    "after": "first",
     "base": "base",
     "ahead": [
      "first"
@@ -1575,6 +1588,7 @@
    ],
    "land_mode": "push",
    "land_queue": "off",
+   "land_queue_max_in_flight": 4,
    "base": "origin/main",
    "check_links": true,
    "owner_author": "",

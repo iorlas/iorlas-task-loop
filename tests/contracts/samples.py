@@ -17,6 +17,7 @@ from tlkernel import (
     dashruns,
     delegate,
     events,
+    flakes,
     followups,
     gateplan,
     gitfacts,
@@ -332,9 +333,10 @@ OTHERS = {
     "ArtifactMeta": artifact.ArtifactMeta(name="home.png", caption="home", role="after", kind="png", size=9, sha256="ab" * 32, created=T),
     "Incident": queue_state.Incident(t=T, kind="corrupt", pr=7, bead="tl-1", main_before="m" * 40, merge_sha="s" * 40, parent="m" * 40,
                                      expected_tree="t1", landed_tree="t2"),
+    "FlakeLog": flakes.FlakeLog(rows=[flakes.FlakeRow(test="test_a", t=T, how="retry", run="run-1", bead="tl-1")]),
     "QueueDoc": queue_doc.QueueDoc(entries=[queue_doc.EntryRow(
         branch="topic", head="head", phase="gating", q="q", tree="tree", ref="refs/tl/queue/topic", reason="",
-        base="base", ahead=["first"], check_set="checks",
+        base="base", ahead=["first"], check_set="checks", after="first",
         build=queue_doc.BuildRow(pid=42, start_id="start", lease_expires=T, worktree="/build"))],
         in_flight=2, last_base="base"),
     "QueueState": queue_state.QueueState(frozen=True, incidents=[queue_state.Incident(

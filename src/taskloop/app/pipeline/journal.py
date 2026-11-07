@@ -33,7 +33,7 @@ from taskloop.app.pipeline.finish import answer
 from taskloop.app.pipeline.finish import outcome as finished_outcome
 from taskloop.domain import outcome as oc
 from taskloop.domain.lifecycle import matchers as lifecycle
-from taskloop.domain.review import switch
+from taskloop.domain.work import switch
 from taskloop.stores.api import Log
 
 

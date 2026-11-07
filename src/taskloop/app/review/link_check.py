@@ -8,7 +8,7 @@ from taskloop.app.review.host import ReviewHand, ReviewPorts
 from taskloop.app.review.state import ReviewLive
 from taskloop.domain.matchers import clip
 from taskloop.domain.review.findings import engine_finding
-from taskloop.domain.review.matchers import Wording
+from taskloop.domain.work.matchers import Wording
 
 Answer = dict[str, Any]  # a review answer: the dict the reviewer wrote
 

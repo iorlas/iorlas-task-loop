@@ -4,8 +4,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final
 
-from taskloop.domain.review.ledger import Ledger
 from taskloop.domain.review.matchers import BdDemand
+from taskloop.domain.work.ledger import Ledger
 
 SEVERITY: Final = ("low", "medium", "high")
 Finding = Mapping[str, Any]

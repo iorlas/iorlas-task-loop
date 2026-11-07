@@ -15,7 +15,7 @@ from taskloop.app.land.outbound import Outbound
 from taskloop.app.pipeline.budget import Budget
 from taskloop.app.pipeline.outcomes import run_breakdown
 from taskloop.app.pipeline.steps import Steps
-from taskloop.app.run.stuck import StuckTick
+from taskloop.app.pipeline.stuck import StuckTick
 from taskloop.stores.runlog import RunLog
 from tlkernel import log as rec
 from tlkernel.gitfacts import GitOutcome

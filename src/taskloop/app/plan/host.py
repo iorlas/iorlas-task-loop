@@ -20,7 +20,7 @@ from tlkernel.wire import Open
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.looks import Methods
 from taskloop.domain.asks.spec import AskSpec
-from taskloop.domain.review.ledger import Ledger
+from taskloop.domain.work.ledger import Ledger
 
 
 class Answered(Protocol):

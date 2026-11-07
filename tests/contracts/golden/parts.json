@@ -56,6 +56,20 @@
   },
   "version": 1
  },
+ "lanes": {
+  "ddl": "5d9ed42ba4be19cacb10ea477deb1f5d408f4eaf16ca1cf7d406341c18482f15",
+  "records": {
+   "StatusSnapshot": {
+    "schema": "4e0fa3addea2554278c483183a6fe42f8e806cc45da18bbb46c561fe7b002fa1",
+    "v": 1
+   },
+   "StatusTried": {
+    "schema": "3e25c95d19fe1a61ac5a1cd7a37344dc79cabf3a9cbfbadfff04c135efe6df9b",
+    "v": 1
+   }
+  },
+  "version": 1
+ },
  "pipeline": {
   "ddl": "1d77451b0e5719cc5b77970482b15ee6770f5f4007f482f4789911fe17a5cb08",
   "records": {

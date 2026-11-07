@@ -12,9 +12,9 @@ from taskloop.adapters import looks
 from taskloop.app.look.host import LookHost, LookPorts
 from taskloop.app.look.prompts import LOOK_FEEDBACK, LOOK_WRITE_TABLE
 from taskloop.app.look.state import LookState
-from taskloop.domain.review import switch
-from taskloop.domain.review.matchers import Wording
-from taskloop.domain.review.skip import SkipKind
+from taskloop.domain.work import switch
+from taskloop.domain.work.matchers import Wording
+from taskloop.domain.work.skip import SkipKind
 
 NOT_VISUAL = "\nlook: empty when nothing here is visual.\n"
 

@@ -11,6 +11,7 @@ from tlkernel.askstore import AskStore
 from tlkernel.checks import BaseRedRecord, CheckRun, Durations
 from tlkernel.config import HostResources
 from tlkernel.events import Event
+from tlkernel.flakes import FlakeLog
 from tlkernel.followups import FollowupOutbox
 from tlkernel.log import EngineLog
 from tlkernel.profile_changes import ProfileChange
@@ -29,6 +30,7 @@ class Stores:
     adrs: Callable[[str], AdrStore]  # the decision store of a repo (its path)
     checkpoints: CheckpointBook
     followups: DocSet[FollowupOutbox]
+    flakes: DocSet[FlakeLog]  # one per repo (repo key): the flake score log, last 30 days
     queue: DocSet[QueueDoc]  # one per repo (repo key): the merge queue's entries, builds, gates in flight; its runner thread writes
     queue_state: DocSet[QueueState]  # one per repo (repo key): the tree assertion's incidents and the queue's freeze flag
     results: Callable[[str, str], Passes]  # the passes of a check of a repo (repo key, check id), one per run key

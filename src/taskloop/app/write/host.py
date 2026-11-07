@@ -20,7 +20,7 @@ from tlkernel.wire import Open
 from taskloop.app.write.state import WriteState
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks.writer_split import WriterSplit
-from taskloop.domain.review.ledger import Ledger
+from taskloop.domain.work.ledger import Ledger
 
 
 class CaseBook(Protocol):

@@ -164,9 +164,9 @@ These are source-relative module paths, not invented services. Each row states i
 | domain/report/reflect.py | Group recurring faults into candidate fixes | Q/E, heuristic identity and historical window | U ⚠; R |
 | domain/review/findings.py | Blocking and follow-up routing | P, criterion scope and textual classification | U ⚠; R |
 | domain/review/followups.py | Stable item keys and batch/cap decisions | E/F, key must reach external creation; D.F08 | K ✅; R |
-| domain/review/ledger.py | Criterion proof/defer decisions | P/C, actual check authority versus planned proof | U ⚠; R |
+| domain/work/ledger.py | Criterion proof/defer decisions | P/C, actual check authority versus planned proof | U ⚠; R |
 | domain/review/matchers.py | Tools/actions/gate-proof/acceptance recognizers | P/C, grammar-dependent inference can settle work | U ⚠; R |
-| domain/review/visual.py | Visual classification from typed facts | P, changed paths/criteria/config complete | K ✅; R |
+| domain/work/visual.py | Visual classification from typed facts | P, changed paths/criteria/config complete | K ✅; R |
 
 ## Module inventory: task-loop adapters, stores, CLI and hook
 
