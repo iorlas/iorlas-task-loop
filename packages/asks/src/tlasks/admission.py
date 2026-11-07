@@ -13,7 +13,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.planbrief import owner_written
 
 from tlasks import hold, parks
-from tlasks.host import AsksHost
+from tlasks.contracts.records import AsksHost
 
 
 def release_dead(h: AsksHost, repo: str, git: Git, who: Identity, store: Beads | None = None, *,

@@ -4,9 +4,9 @@ from support.dashes import make_dash
 from support.fake_beads import FakeBeads
 
 from asks.dash_ports import answering
-from asks.samples import MOCKS
 from tlasks import ask_verbs as cli_asks
 from tlasks import ledgercomments
+from tlasks.testing import MOCKS
 from tlkernel.askstore import AskStore
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId

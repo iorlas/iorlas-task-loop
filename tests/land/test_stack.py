@@ -38,7 +38,7 @@ from taskloop.cli.land_stack import cmd_land_stack
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 from tlgate.cache import InputKeys, RunMemo, plan_digest
-from tlkernel import check_files, log
+from tlkernel import check_files, log, wire
 from tlkernel import runoutcome as oc
 from tlkernel.bead import Bead
 from tlkernel.beadsport import DoltPush
@@ -151,6 +151,7 @@ class RepoGit(ScriptedGit):
 
 class StackCase(Case):
     def setup_method(self):
+        self.stores = fake_stores()
         self.tmp = TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.cfg = ConfigDir(self.tmp.name)
@@ -177,18 +178,20 @@ class StackCase(Case):
 
     def deliver(self, *items, **kw):
         run = RunLocator(self.cfg).create(str(self.repo), "", 100.0, mode=MODE).run
-        log = RunLog(real_stores(self.cfg).run_log(run), run_id=run, host="h")
+        log = RunLog(self.stores.run_log(run), run_id=run, host="h")
         cmds = Cmds(self.sim, log, str(self.repo), self.cfg.run_dir(run))
         lock = landlock.land_lock_path(self.cfg, "git@example.com:o/r.git")
         forge = Forge(cmds, self.git, str(self.repo), "main")
-        gate = StackGate(cmds, self.git, real_stores(self.cfg), str(self.repo), "origin/main", ["tl"])
+        gate = StackGate(cmds, self.git, self.stores, str(self.repo), "origin/main", ["tl"])
         stack = Stack(forge, cmds, log, self.git, str(self.repo), lock, self.record, lambda: self.synced, "tl-me", "sess-1", gate,
-                      FakeBeads(actor="tl-me"), named=self.beads.append, cfg=self.cfg, **kw, fx=FX)
+                      FakeBeads(actor="tl-me"), named=self.beads.append, cfg=self.cfg, **kw, fx=FX, queue_docs=self.stores.queue,
+                      queue_state=self.stores.queue_state, profile_changes=self.stores.profile_changes)
         self.rc = stack.run(list(items))
         done = oc.make(Kind.LANDED if self.rc == 0 else Kind.FAULT_LAND,
                        f"{len(items)} delivered" if self.rc == 0 else stack.failure_reason, sha=stack.last)
         finish_run(self.cfg, run, answer(done, 200.0))
-        self.rows = records(self.cfg.engine_log(run))
+        self.rows = [wire.dump(item.rec) for item in self.stores.run_log(run).read_from().items]
+        self.rows.extend(records(self.cfg.engine_log(run)))
         return self.rc
 
     def kinds(self, *kinds):
@@ -383,7 +386,7 @@ class RemoteOnly(StackCase):
 
 class StoredGate(StackCase):
     def test_delivery_compares_planned_skips_to_the_base_policy_producer(self):
-        stores = real_stores(self.cfg)
+        stores = self.stores
         tree, base = TreeSha("tree-" + OID["task/a"][:6]), BaseSha("origin/main")
         keys = InputKeys(self.git, str(self.repo), tree)
         keys.files = {}

@@ -12,7 +12,7 @@ from taskloop.app.land.stackgate import StackGate
 from taskloop.cli.green import cmd_green
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
-from tlgate.cache import KEEP, InputKeys, RunMemo
+from tlgate.cache import KEEP, InputKeys, RunnerMemo
 from tlgate.domain.specs import diff_check, gate_items
 from tlgate.gateplan import PlanDecision
 from tlgate.runner import cached_gate
@@ -34,7 +34,7 @@ class Identity(Case):
     def setup_method(self):
         keys = InputKeys(port_git(), "/unused", TreeSha("tree"))
         keys.files = {}
-        self.memo = RunMemo(fake_stores(), "repo", keys, BaseSha("base"), {})
+        self.memo = RunnerMemo(fake_stores(), "repo", keys, BaseSha("base"), {})
         self.check = Check(id=CheckId("test"), cmd="true")
 
     def test_authorization_compares_every_key_field(self):
@@ -103,7 +103,8 @@ class DatabaseIdentity(Identity):
         self.addCleanup(tmp.cleanup)
         self.addCleanup(factorydb.close_shared)
         self.cfg = ConfigDir(Path(tmp.name))
-        self.memo.stores = real_stores(self.cfg)
+        self.memo = RunnerMemo(real_stores(self.cfg), self.memo.repo, self.memo.keys, self.memo.base,
+                               self.memo.engine_env, self.memo.run_id, executor=self.memo.executor)
 
     def test_remember_hit_latest_and_base_red_survive_a_new_store_bundle(self):
         key = self.memo.key(self.check)
@@ -111,7 +112,8 @@ class DatabaseIdentity(Identity):
         result = CheckResult(id=self.check.id, cmd=self.check.cmd, group="tests", exit=0, status="passed")
         self.memo.remember(key, result, 4, "/logs/check")
         self.memo.set_base_red(self.check, True)
-        self.memo.stores = real_stores(self.cfg)
+        self.memo = RunnerMemo(real_stores(self.cfg), self.memo.repo, self.memo.keys, self.memo.base,
+                               self.memo.engine_env, self.memo.run_id, executor=self.memo.executor)
         self.memo.receipts.clear()
         hit = self.memo.hit(key)
         assert hit is not None
@@ -151,7 +153,7 @@ class DeliveryIdentity(Case):
         tree, base, stores = TreeSha("tree"), BaseSha("base"), self.stores()
         cfg = load({"engine": {"checks": [{"id": "test", "argv": ["true"], "run": "gate"}]}}).engine
         keys = InputKeys(git, "/repo", tree)
-        memo = RunMemo(stores, check_files.repo_key(git, "/repo"), keys, base, {"TL_SLOT": "check"})
+        memo = RunnerMemo(stores, check_files.repo_key(git, "/repo"), keys, base, {"TL_SLOT": "check"})
         for check in [*gate_items(cfg), diff_check(base, tree)]:
             key = memo.key(check)
             assert key is not None

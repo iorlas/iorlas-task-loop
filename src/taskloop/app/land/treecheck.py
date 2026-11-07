@@ -16,7 +16,7 @@ from tlkernel.storeapi import Doc
 from tlkernel.wire import Rec
 
 from taskloop.app.land.cmds import Cmds, Stop
-from taskloop.stores.bundle import Stores
+from taskloop.app.land.ports import QueueStates
 
 
 @final
@@ -29,12 +29,12 @@ class Tested(Rec):
 
 
 class TreeGuard:
-    def __init__(self, cmds: Cmds, git: Git, stores: Stores, repo: str, main_ref: str) -> None:
-        self.cmds, self.git, self.stores, self.repo, self.main_ref = cmds, git, stores, repo, main_ref
+    def __init__(self, cmds: Cmds, git: Git, queue_state: QueueStates, repo: str, main_ref: str) -> None:
+        self.cmds, self.git, self.queue_state, self.repo, self.main_ref = cmds, git, queue_state, repo, main_ref
 
     @property
     def doc(self) -> Doc[QueueState]:
-        return self.stores.queue_state.of(check_files.repo_key(self.git, self.repo))
+        return self.queue_state.of(check_files.repo_key(self.git, self.repo))
 
     def tree(self, rev: str) -> str:
         return self.git.rev_parse(self.repo, f"{rev}^{{tree}}")

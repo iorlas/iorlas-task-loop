@@ -6,12 +6,13 @@ from unittest.mock import patch
 
 from tlkernel.beadsport import BeadPatch
 from tlkernel.slots import SlotFail
+from tltestkit.case import Case
+
 from tlslots import aside, watchdog
 from tlslots.line import wait_slot
 from tlslots.liveness import Kind, Limits, SlotFact, Waiter, violations
 from tlslots.pool import Slot
 from tlslots.testing import Rig
-from tltestkit.case import Case
 
 L = Limits(grant_s=100, idle_s=600, aside_s=1800, orphan_s=900)
 

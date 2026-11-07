@@ -14,6 +14,7 @@ from support.memstores import fake_stores
 from support.tiers import domain
 
 from tlasks import intake, raiser, similar, sweeps
+from tlasks.contracts.records import Asking
 from tlasks.paths import ask_marker
 from tlkernel import askspecs as specs
 from tlkernel import wire
@@ -33,8 +34,8 @@ OPTS = [{"label": "Keep v1", "cost": "none", "answer": "keep v1", "recommended":
         {"label": "Migrate", "cost": "a run", "answer": "migrate", "recommended": False}]
 
 
-def asking(bead: str = "t-1", now: float = T, repo: str = "/r/demo") -> raiser.Asking:
-    return raiser.Asking(bead=BeadId(bead), run="r", brief_hash="h", repo=repo, title="T", now=now)
+def asking(bead: str = "t-1", now: float = T, repo: str = "/r/demo") -> Asking:
+    return Asking(bead=BeadId(bead), run="r", brief_hash="h", repo=repo, title="T", now=now)
 
 
 def question(cause: str = "decision", default: str = "") -> specs.AskSpec:

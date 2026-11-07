@@ -1,4 +1,4 @@
-"""Consumer toolchain names stay only at explicit executable migration sites (tl-w7lt.32)."""
+"""Consumer toolchain names stay only at explicit migration sites and quoted test fixtures (tl-w7lt.32)."""
 import re
 from pathlib import Path
 
@@ -10,6 +10,7 @@ CONSUMERS = re.compile(r"unity|dotnet|nuget|msbuild|roslyn|prefab|asmdef|lifesim
 
 UNTIL = " stays until PROFILEGEN A lands (tl-w7lt.32 A1/A2: profile fields)"
 EXCEPTIONS = {
+    "packages/asks/src/tlasks/testing.py": (22, "reason: quoted owner ask fixtures moved from tests/asks/samples.py; no consumer behavior"),
     "src/taskloop/app/doctor/setup.py": (5, "reason: project marks dict and unity-lease question" + UNTIL),
     "src/taskloop/app/doctor/setup_apply.py": (9, "reason: unity lease profile and host resource setup" + UNTIL),
     "packages/gate/src/tlgate/domain/produced.py": (4, "reason: dotnet build output matcher and helper" + UNTIL),

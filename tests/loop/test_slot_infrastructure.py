@@ -2,7 +2,6 @@
 
 from unittest import mock
 
-from slots.test_slot_pool import ME, Rig
 from support.fake_loop_env import slot_loop_env
 
 from taskloop.app.loop import verdict as vd
@@ -16,6 +15,7 @@ from tlkernel.enums import Result
 from tlkernel.ids import BeadId
 from tlkernel.slots import SlotFail, SlotGitError
 from tlslots.pool import Slot
+from tlslots.testing import ME, Rig
 
 
 class Infrastructure(Rig):

@@ -322,24 +322,10 @@ def build_parser():
     return ap
 
 
-def lazy(module: str, name: str) -> Handler:
-    """A verb whose module is imported when the verb runs (the engine and the loop are heavy; `tl actor` should not load them)."""
-    def call(a: Any, c: Ctx) -> int:
-        return int(getattr(importlib.import_module(module), name)(a))
-    return call
-
-
 def lazy_env(module: str, name: str) -> Handler:
     """A lazy verb that takes the environment too: `name(a, env=..., git=..., who=...)`."""
     def call(a: Any, c: Ctx) -> int:
         return int(getattr(importlib.import_module(module), name)(a, env=c.env, git=c.git, who=c.who))
-    return call
-
-
-def of_args(fn: Callable[..., int], *names: str) -> Handler:
-    """A verb that is a function of some of its parsed arguments, by name."""
-    def call(a: Any, c: Ctx) -> int:
-        return fn(*[getattr(a, n) for n in names])
     return call
 
 
