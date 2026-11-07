@@ -154,6 +154,9 @@ def main() -> None:
     if not manifest.exists():
         manifest.write_text(MANIFEST, encoding="utf-8")
     print(f"rewrote {rewrite(root)} files, {edit(root)} config edits")
+    pin = re.search(r'^ruff = "([^"]+)"', (root / "mise.toml").read_text(encoding="utf-8"), re.M)
+    if pin:  # the import blocks: tlkernel sorts after taskloop, and `from taskloop import contracts` became a plain import
+        subprocess.run(["uv", "tool", "run", f"ruff@{pin.group(1)}", "check", "--select", "I", "--fix", "-q", "."], cwd=root, check=False)
     for where in shorten(root):
         print(f"too long, wrap by hand: {where}")
 
