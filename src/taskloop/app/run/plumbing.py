@@ -7,6 +7,7 @@ from pathlib import Path
 
 from taskloop.adapters import beadtools
 from taskloop.adapters import halt as halting
+from taskloop.app.plan.planned import Planned
 from taskloop.app.run.blocked import Blocked, FixFailed, blocked_for
 from taskloop.app.run.console import say
 from taskloop.app.run.fields import RunFields
@@ -14,6 +15,8 @@ from taskloop.app.track import trail
 from taskloop.contracts import fence
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.log import Assumed, Said
+from taskloop.contracts.plancheck import PlanData
+from taskloop.contracts.wire import Open
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks import affinity
 from taskloop.domain.matchers import redact
@@ -94,3 +97,20 @@ class Plumbing(RunFields):
 
     def call_dir(self) -> Path:
         return self.home.root / "checkpoints"
+
+    # -- what the planner keeps of the run's plan (PlanKeep, app/plan/host.py)
+    def keep_draft(self, data: PlanData) -> None:
+        self.plan_data = data
+
+    def set_summary(self, text: str) -> None:
+        self.plan_summary = text
+
+    def count_plan(self) -> None:
+        self.planned += 1
+
+    def add_leftovers(self, items: list[Open]) -> None:
+        self.leftovers.extend(items)
+
+    def take_planned(self, p: Planned) -> PlanData:
+        self.plan_data, self.plan_summary, self.planned = p.plan_data, p.summary, p.planned
+        return p.plan_data
