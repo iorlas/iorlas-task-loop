@@ -9,10 +9,9 @@ from tlkernel.checkpoint import RunState
 from tlkernel.config import EngineConfig
 from tlkernel.delegateport import Refusal
 from tlkernel.ids import BeadId
+from tlkernel.looks import Methods
 from tlkernel.plancheck import PlanData, RoundState
 from tlkernel.wire import Open
-
-from taskloop.adapters.looks import Methods
 
 
 class PlannerCap(Protocol):

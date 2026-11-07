@@ -2,7 +2,7 @@
 
 The pure policy maps stop facts to NewThread, Reroute, Yield or Fail. Fixed rows
 carry outcome kinds; functions handle the remaining context-dependent recovery.
-Delegate owns worker retries; the engine still recovers resumed calls and secret
+Delegate owns worker retries and thread recovery; the engine handles secret
 false positives. Delegate crashes fail immediately and network stops pause.
 """
 
@@ -73,12 +73,10 @@ def net_data(res: DelegateResult) -> bool:
 class Ctx:
     """Recovery state the executor has counted for this step."""
 
-    resumed: bool = False  # this call resumed a vendor thread
     attempt: int = 0
     denied_retried: bool = False
     secret_fp: bool = False  # the denial was `secrets` on a heredoc body that names .env (denials.secret_false_positive)
     node: str = ""
-    resume_refused: int = 0  # resumed calls the vendor refused, each answered with one new thread
 
 
 @dataclass(frozen=True)
@@ -123,14 +121,6 @@ def _machine_none(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
     return Fail("FAULT_CRASHED")
 
 
-def _caller_owner(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
-    """bad_request, caller (an unknown ref): the call itself is wrong. When it resumed a thread, the vendor may have refused that ref:
-    once on a new thread with the whole prompt, then the fault."""
-    if ctx.resumed and plan.left("resume_refused", ctx.resume_refused):
-        return NewThread("", "resume_refused", "resume_refused")
-    return Fail("FAULT_BAD_REQUEST")
-
-
 def _bead_owner(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
     """secrets: a heredoc body that merely names .env gets one fresh thread told to use apply_patch (2.14), a second denial is a
     fault, and a real secret path is never retried. Never an ask."""
@@ -140,27 +130,21 @@ def _bead_owner(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
 
 
 def _bead_none(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
-    """Delegate exhausted recovery. Only resumed calls need a fresh engine prompt first."""
+    """Delegate exhausted recovery. Hurt writes ask; other worker failures fault."""
     hurt = stop.timed_out or stop.exit_code == -15
-    if ctx.resumed and plan.left("worker_failed", ctx.attempt):
-        if hurt and ctx.node == "write":
-            return Reroute(_excluded(stop), "attempt", "worker_failed")
-        return NewThread("", "attempt", "worker_failed")
     if hurt and ctx.node == "write" and plan.row("worker_failed").then == "ask":
         return Fail("ASK_STUCK", "worker_failed")
     return Fail("FAULT_INFRA", "worker_failed")
 
 
 def _lane_predicted(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
-    """Delegate exhausted its short waits; park fresh calls and move resumed threads."""
-    if ctx.resumed:
-        return NewThread("lane_out")
+    """Delegate exhausted its short waits; park the call."""
     return Yield("PAUSE_LANE", stop.retry_at)
 
 
 def _lane_poll(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
     """Delegate exhausted its polls; try another lane."""
-    return NewThread("lane_out") if ctx.resumed else Reroute(_excluded(stop))
+    return Reroute(_excluded(stop))
 
 
 def _lane_none(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
@@ -178,13 +162,13 @@ TABLE: Final[dict[tuple[str, str, str], Row]] = {
     ("machine", "transient", "predicted"): ("PAUSE_LANE", True),
     ("machine", "transient", "none"): _machine_none,
     ("machine", "needs_owner", "none"): ("PAUSE_LANE", False),
-    ("caller", "needs_owner", "none"): _caller_owner,
+    ("caller", "needs_owner", "none"): ("FAULT_BAD_REQUEST", False),
     ("caller", "transient", "none"): ("FAULT_BAD_REQUEST", False),  # no doc row: a caller's request does not heal by waiting
     ("caller", "transient", "predicted"): ("FAULT_BAD_REQUEST", False),  # no doc row
     ("caller", "transient", "poll"): ("FAULT_BAD_REQUEST", False),  # no doc row
     ("bead", "needs_owner", "none"): _bead_owner,
     ("bead", "transient", "none"): _bead_none,
-    ("bead", "transient", "predicted"): _bead_none,  # no doc row: the bead's own failure, tried once more
+    ("bead", "transient", "predicted"): _bead_none,  # the bead's own failure after delegate recovery
     ("bead", "transient", "poll"): ("PAUSE_LANE", False),
     ("lane", "needs_owner", "none"): ("PAUSE_LANE", False),
     ("model", "needs_owner", "none"): ("PAUSE_LANE", False),

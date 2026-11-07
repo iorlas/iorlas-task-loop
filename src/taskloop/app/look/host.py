@@ -10,11 +10,10 @@ from tlkernel.asked import Asked
 from tlkernel.beadsport import Beads
 from tlkernel.checks import CheckRun
 from tlkernel.config import VisualConfig
+from tlkernel.looks import Methods
 from tlkernel.plancheck import StageData
 from tlkernel.stagefacts import LeftoverSink, Narrate, RepoKey
 from tlkernel.wire import Open
-
-from taskloop.adapters.looks import Methods
 
 
 class OwnerItems(Protocol):

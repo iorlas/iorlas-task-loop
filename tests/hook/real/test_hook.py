@@ -60,7 +60,7 @@ class Sessions(Case):
             (self.root / name).write_text("")
 
     def event(self, **kw):
-        return json.dumps({"session_id": "s1", "transcript_path": "/t.jsonl", "cwd": str(self.repo), **kw})
+        return json.dumps({"session_id": "s1", "cwd": str(self.repo), **kw})
 
     def test_session_start_writes_no_session_index_and_points_the_tl_shim_at_this_install(self):
         assert session.start(self.event(source="startup"), self.root, snapshot(), port_git()) == ""
