@@ -1,13 +1,10 @@
-"""The owner's inbox on this machine: the AskStore of the config dir and the throttled passes over it (close the ask of a closed bead,
-park the unanswered, shout about an answer no run used)."""
+"""Bind the owner's inbox and its machine sweeps to the shell services."""
 from collections.abc import Callable
+from typing import Concatenate
 
-from tlasks import pr_wake, setup_retry, sweeps
-from tlasks.host import AsksHost
-from tlasks.paths import ask_marker
+from tlasks import sweeps
+from tlasks.sweeps import SweepHost
 from tlkernel.askstore import AskStore
-from tlkernel.bd_errors import BdCommandFailure
-from tlkernel.beadsport import BdFailure
 from tlkernel.config import EngineConfig
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
@@ -25,44 +22,19 @@ def store(home: ConfigDir) -> AskStore:
     return real_stores(home).asks
 
 
-def sweep(which: str, who: Identity, home: ConfigDir, every: int = 600) -> list[str]:
-    """The throttled sweeps over open asks (app/asks/sweeps.py): close those of closed or missing beads, park those unanswered in 3 days."""
-    fn = sweeps.close_stale if which == "close" else sweeps.park_stale
-    try:
-        return list(fn(store(home), lambda repo: bd_store(who.actor, repo), ask_marker(home, "swept" if which == "close" else "parked"),
-                       now(),
-            every))
-    except BdCommandFailure:  # no bd on this machine
-        return []
+def host() -> SweepHost:
+    return SweepHost(lambda actor, repo: bd_store(actor, repo), beadtools.peek, ident.hostname, store, now, ident.plugin_version)
+
+
+def bound[**P, R](fn: Callable[Concatenate[SweepHost, P], R]) -> Callable[P, R]:
+    def call(*args: P.args, **kwargs: P.kwargs) -> R:
+        return fn(host(), *args, **kwargs)
+    return call
+
+
+sweep = bound(sweeps.sweep)
+sweep_asks = bound(sweeps.sweep_asks)
 
 
 def wake_prs(who: Identity, home: ConfigDir, spawner: Runs, cfg: EngineConfig, repo: str, every: int = 120) -> list[BeadId]:
-    """The loop's look at the PRs its PR-mode lands wait on (throttled by a marker): a merged or closed one wakes its bead."""
-    if cfg.land_mode != "pr" or not sweeps.due(ask_marker(home, "pr"), every, now()):
-        return []
-    sweeps.touch(ask_marker(home, "pr"))
-    return pr_wake.wake_decided(store(home), bd_store(who.actor, repo), lambda n: forge.peek(spawner, repo, n), repo, now(), cfg)
-
-
-def sweep_asks(who: Identity, home: ConfigDir, say: Callable[[str], None] = print, cfg: EngineConfig | None = None,
-               repo: str = "") -> None:
-    """The loop's pass over asks: close the stale, park the unanswered, and shout about an answer no run used for 30 minutes (an engine
-    fault, not the owner's). The three are throttled by marker files, so any caller may call it as often as it likes."""
-    sweep("close", who, home)
-    sweep("park", who, home)
-    if cfg:
-        asks = store(home)
-        for ask in asks.live():
-            if not repo or ask.repo != repo:
-                continue
-            try:
-                setup_retry.retry_setup(asks, bd_store(who.actor, ask.repo), ask.bead, ident.plugin_version(), now(), cfg)
-            except BdFailure:
-                continue
-        sweeps.reask_orphans(store(home), bd_store(who.actor), ask_marker(home, "orphans"), now(), cfg.pick_label or "",
-            cfg.needs_info_label or "", say)
-    sweeps.shout(store(home), ask_marker(home, "unused"), now(), say)
-
-
-def host() -> AsksHost:
-    return AsksHost(beadtools.bd_store, beadtools.peek, ident.hostname, store)
+    return sweeps.wake_prs(host(), who, home, lambda n: forge.peek(spawner, repo, n), cfg, repo, every)

@@ -15,3 +15,5 @@ class AsksHost:
     peek: Callable[[Beads, BeadId], Bead | None]
     hostname: Callable[[], str]
     asks_store: Callable[[ConfigDir], AskReader]
+    now: Callable[[], float]
+    plugin_version: Callable[[], str]
