@@ -243,7 +243,7 @@ R1 applies only where named. Moving an Engine method into a file and passing the
 | app/land/push.py | Delivery argv/LFS/data sync | E/S, exact pushed ref and separate effects | U ⚠; R |
 | app/land/push.py | Validate token and push under land lock | E/C/S, proof authority, fence and ambiguous remote result | U ⚠; R |
 | app/land/rebase.py | Resume-branch rebase and recovery choice | E/S/P, conflict snapshot, salvage limits and restart | U ⚠; R |
-| app/land/restart.py | Preserve conflicting branch and reset planning | E/S/P, state invalidation spans host members | U ⚠; R |
+| app/land/record.py | Preserve conflicting branch and reset planning | E/S/P, state invalidation spans host members | U ⚠; R |
 | app/land/stack.py | Existing branch/PR stack delivery | S/C/F, source/check/cleanup identity across items | U ⚠; R |
 | app/land/tree.py | Reset/WIP/leave directory | E/S, multiple directory mutators; D.F04 | U ⚠; R |
 | app/land/stackgate.py | Authorize stack tip from check evidence | C, erases expected Check to CheckId; M04 | R ⚠; R |

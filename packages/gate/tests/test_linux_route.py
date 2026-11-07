@@ -1,11 +1,12 @@
 """A check with `in: linux` never runs on this machine: with no executor it is a red result and the host shell is not called."""
 from unittest import mock
 
-from tlgate.attempts import Attempts
-from tlgate.linux import EXECUTOR_DOWN_RC, Remote
 from tlkernel.checks import Check
 from tlkernel.config import ExecutorConfig
 from tlkernel.ids import CheckId
+
+from tlgate.attempts import Attempts
+from tlgate.linux import EXECUTOR_DOWN_RC, Remote
 
 
 def test_without_an_executor_the_check_fails_loudly_and_does_not_run_here(workdir):

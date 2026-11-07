@@ -23,7 +23,7 @@ from taskloop.app.land.lander_host import LanderHost, LandHost
 from taskloop.app.land.pr_land import PrLand
 from taskloop.app.land.push import Landed, Outbound, Pusher
 from taskloop.app.land.rebase import Commit, LandRebase, Recheck
-from taskloop.app.land.sync import Sync
+from taskloop.app.land.record import Sync
 from taskloop.domain.lanes.notes import NET_WAIT_CAP_S
 
 

@@ -2,18 +2,17 @@
 command text again."""
 
 import pytest
-
 from tltestkit.case import Case
 
 # isort: split
 import msgspec
-
-from tlgate.domain.plan import CheckPlan
-from tlgate.domain.specs import diff_check, gate_items, repo_check, tags_of, wall_limit
 from tlkernel.checks import Check, CheckResult, Durations, Phase
 from tlkernel.config import CheckSpec, EngineConfig
 from tlkernel.ids import CheckId
 from tlkernel.wire import load
+
+from tlgate.domain.plan import CheckPlan
+from tlgate.domain.specs import diff_check, gate_items, repo_check, tags_of, wall_limit
 
 
 def chk(name: str, cmd: str = "true", **kw) -> Check:

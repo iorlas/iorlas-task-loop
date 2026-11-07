@@ -17,7 +17,7 @@ from taskloop.app.land.host import BeginSteps, FetchCheckout, LandLocks, MoveSte
 from taskloop.app.land.pr_land import PrHost
 from taskloop.app.land.push import LandedHost, OutboundCheckout, OutboundHost, OutboundSteps, PushHost
 from taskloop.app.land.rebase import CommitHost, LandRebaseHost, RecheckCheckpoints, RecheckHost
-from taskloop.app.land.sync import SyncCheckpoints, SyncHost
+from taskloop.app.land.record import SyncCheckpoints, SyncHost
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 
