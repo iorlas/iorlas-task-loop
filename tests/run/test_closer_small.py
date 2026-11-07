@@ -11,9 +11,11 @@ from support.narrow_hosts import CloseKit, FakeReleaseSlotHost, FakeSettleHost
 from support.pipeline_ports import FakeParkBook
 
 # isort: split
+from support.pipeline_ports import FakeLandCleanup
+
 from taskloop.app.asks import raiser
+from taskloop.app.pipeline.closing_branch import ReleaseSlot
 from taskloop.app.pipeline.closing_settle import Settle
-from taskloop.app.run.closer_branch import ReleaseSlot
 from taskloop.app.track.closing import ClosingBeads
 from taskloop.app.wire import closeguard
 from taskloop.contracts.bead import Bead
@@ -80,5 +82,5 @@ class Settling(Case):
 class Leaving(Case):
     def test_the_slot_is_left_by_its_own_run_only(self):
         host = FakeReleaseSlotHost()
-        ReleaseSlot(host).run("task/t-1", Outcome.DONE)
+        ReleaseSlot(host, host.tree, FakeLandCleanup()).run("task/t-1", Outcome.DONE)
         assert host.tree.left == [("done", "task/t-1")]

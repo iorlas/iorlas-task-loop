@@ -1,5 +1,5 @@
 """The run's stats line quotes each worker session's transcript file (a Codex rollout, a Claude transcript)."""
-from taskloop.app.run.closer import transcript_stats
+from taskloop.app.pipeline.closing import transcript_stats
 
 ROLLOUT = "/home/u/.codex/sessions/2026/11/05/rollout-2026-11-05T01-02-03-abc.jsonl"
 
