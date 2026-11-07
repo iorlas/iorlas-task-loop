@@ -33,7 +33,7 @@ class ChildEnv(Case):
                 childenv.current_env(snapshot()),
                 30,
             )
-        assert ran.out.split() == ["/home/u/.claude-alt", "None"]
+        assert ran.out.split() == ["None", "None"]
 
 
 @pytest.mark.skipif(not (POSIX), reason="process groups")

@@ -8,7 +8,6 @@ from typing import Any, cast
 import pytest
 from contracts import samples as S
 from rigs import dead_pid
-from support.narrow import must
 
 from tlkernel import wire
 from tlkernel.ask import Ask, AskAnswer
@@ -18,6 +17,7 @@ from tlkernel.followups import FollowupOutbox
 from tlkernel.lockenums import LockWhat
 from tlkernel.locks import LockTimeout
 from tltestkit.case import Case
+from tltestkit.narrow import must
 
 CK = cast(Checkpoint, S.OTHERS["Checkpoint"])
 

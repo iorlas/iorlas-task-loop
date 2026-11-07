@@ -19,8 +19,6 @@ from support.dashlogs import RunScript, T, bead
 from support.factory_index import ingest, seed_beads
 from support.fakes import FakeBeadStore
 from support.hostname import hostname
-from support.narrow import must
-from support.repos import write_repos
 
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
@@ -34,6 +32,8 @@ from tlkernel.dash import BeadDetail, Snapshot
 from tlkernel.dashcost import CostPage
 from tlkernel.ids import BeadId, loop_key
 from tlkernel.locator import RunLocator
+from tltestkit.narrow import must
+from tltestkit.repos import write_repos
 
 NOW = T + 3600
 

@@ -11,7 +11,8 @@ from support.plans import BEAD, CLEAN, PLAN, WRITE
 
 # isort: split
 from support import procsim
-from support.logs import records
+
+from tltestkit.logs import records
 
 ANSWERS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 

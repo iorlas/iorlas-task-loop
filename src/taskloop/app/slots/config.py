@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from tlkernel import config
+from tlkernel import config, profile_at
 from tlkernel.bead import Bead
 from tlkernel.config import EngineConfig, RepoProfile, SlotsConfig
 from tlkernel.gitport import Git
@@ -12,7 +12,6 @@ from tlkernel.paths import TASK_EXCLUDE
 from tlkernel.slots import NotARepo, SlotGitError
 from tlkernel.slottable import WORKTREE, SlotSource
 
-from taskloop.adapters import profile_at
 from taskloop.adapters.ident import hostname
 from taskloop.app.slots.env import DEFAULT_PRIO
 

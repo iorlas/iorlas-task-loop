@@ -7,9 +7,9 @@ from tltestkit.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support.fakes import as_bead as _as_bead
-from support.narrow import must
 
 from taskloop.domain.beads import matchers as beadlint
+from tltestkit.narrow import must
 
 
 def as_bead(f):

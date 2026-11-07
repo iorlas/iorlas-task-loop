@@ -11,7 +11,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.narrow import must
 
 from taskloop.app.wire import lanes
 from taskloop_dash.views import snapshot
@@ -24,6 +23,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.snapshots import LaneStatus, StatusSnapshot, WindowStatus
 from tlkernel.stores import UsageHistory
 from tlkernel.usage import USAGE_KEEP_S, UsageRow, forecast, rows_of
+from tltestkit.narrow import must
 
 T = 1_800_000_000.0
 H = 3600.0

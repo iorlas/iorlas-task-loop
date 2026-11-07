@@ -13,8 +13,6 @@ from tltestkit.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
-from support import fake_route
-from support.logs import records
 from support.spawn import port_git, real_spawner
 from support.who import who
 
@@ -26,6 +24,8 @@ from taskloop.domain.lanes import retry
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.paths import RunFiles
+from tltestkit import fake_route
+from tltestkit.logs import records
 
 
 def napper(nap):

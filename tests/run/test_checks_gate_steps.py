@@ -9,9 +9,8 @@ from support.engine_case import EngineTest
 from support.plans import CLEAN, PLAN, WRITE
 
 # isort: split
-from support.logs import records
-
 from taskloop.domain.checks.specs import engine_digest, gate_items, items_of
+from tltestkit.logs import records
 
 STEP = "true"
 RED_ON_D2 = procsim.default("red-on-d2", lambda cwd, env: (1 if procsim.f_txt(cwd) == "d2" else 0, f"step saw {procsim.f_txt(cwd)}"))
