@@ -35,11 +35,11 @@ OWNERS: dict[str, str] = {
     "check_round": "gate",
     "ask": "engine",
     "ask_ledger": "engine",
-    "park": "engine",
+    "park": "engine",  # asks-owned park rows, written through ParkStore
     "kv": "index",
     "followup": "engine",  # the land's outbox (app/land/store.py)
     "effect": "engine",
-    "wait": "loop",
+    "wait": "loop",  # pipeline waits; parks live in the asks-owned park table
     "signal": "owner",
     "timed": "engine",  # what the engine log's end records timed: tl runs show|slow read these
     "report_doc": "engine",  # the report part's reflect digest state (tl reflect)
