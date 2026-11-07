@@ -17,29 +17,13 @@ from taskloop.app.run import bead_env
 from taskloop.app.run.shell import Shell
 from taskloop.stores.bundle import Stores
 from tlgate.runner import Checker
+from tlgate.testing import RecordedWaits
 from tlkernel import wire
 from tlkernel.checks import CheckRun
 from tlkernel.config import EngineConfig
 from tlkernel.paths import ConfigDir
 from tlkernel.plancheck import StageData
 from tlkernel.ports import Clock
-from tlkernel.waitenums import WaitWhat
-
-
-class RecordedWaits:
-    """WaitsView: the waits a check reported, kept in a list."""
-
-    def __init__(self) -> None:
-        self.seen: list[tuple[str, float]] = []
-
-    def note_slot_waits(self, text: str, wall: float) -> None:
-        self.seen.append((text, wall))
-
-    def start(self, what: WaitWhat, holder: str = "", until: float | None = None, lane: str = "", check: str = "") -> str:
-        return f"w{len(self.seen)}"
-
-    def add(self, secs: float, what: WaitWhat, wid: str | None = None, lane: str = "", check: str = "") -> None:
-        self.seen.append((what.value, secs))
 
 
 class FakeCheckHost:
