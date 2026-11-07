@@ -60,6 +60,32 @@ forbidden_modules =
     delegate
 allow_indirect_imports = True
 
+[importlinter:contract:kernel-core-is-a-leaf]
+name = the kernel core (wire, ids, enums, paths, env, envvars, identity, bead) imports no other tlkernel module (docs/design/architecture-vertical.md K1)
+type = forbidden
+source_modules =
+    tlkernel.wire
+    tlkernel.ids
+    tlkernel.enums
+    tlkernel.paths
+    tlkernel.env
+    tlkernel.envvars
+    tlkernel.identity
+    tlkernel.bead
+forbidden_modules =
+    tlkernel.*
+allow_indirect_imports = True
+ignore_imports =
+    # The core's own edges (paths -> env, ids; env -> envvars, ids; identity -> paths, wire; bead -> ids, wire). A new one is a decision, not a drift.
+    tlkernel.paths -> tlkernel.env
+    tlkernel.paths -> tlkernel.ids
+    tlkernel.env -> tlkernel.envvars
+    tlkernel.env -> tlkernel.ids
+    tlkernel.identity -> tlkernel.paths
+    tlkernel.identity -> tlkernel.wire
+    tlkernel.bead -> tlkernel.ids
+    tlkernel.bead -> tlkernel.wire
+
 [importlinter:contract:hot-hook-path-is-light]
 name = the PreToolUse and git pre-push hooks import no msgspec and no record model
 type = forbidden
@@ -275,7 +301,6 @@ forbidden_modules =
     taskloop.app.run.shared
     taskloop.app.run.shell
     taskloop.app.run.stage_checks
-    taskloop.app.run.stage_rounds
     taskloop.app.run.stages
     taskloop.app.run.state
     taskloop.app.wire

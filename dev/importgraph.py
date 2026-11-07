@@ -6,7 +6,7 @@ import ast
 def bindings(module, tree, packages=(), nodes=None):
     """Resolve import aliases and local definitions to qualified names."""
     names = {}
-    for node in nodes or ast.walk(tree):
+    for node in ast.walk(tree) if nodes is None else nodes:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 names[alias.asname or alias.name.split('.')[0]] = alias.name if alias.asname else alias.name.split('.')[0]
@@ -43,4 +43,4 @@ def import_targets(module, node, names, packages):
 def targets_of(module, tree, packages=(), nodes=None):
     """Every dotted name `module` imports, lazy, TYPE_CHECKING and relative imports included (`packages`: the names that are packages)."""
     names = bindings(module, tree, packages, nodes)
-    return [target for node in nodes or ast.walk(tree) for target in import_targets(module, node, names, packages)]
+    return [target for node in (ast.walk(tree) if nodes is None else nodes) for target in import_targets(module, node, names, packages)]
