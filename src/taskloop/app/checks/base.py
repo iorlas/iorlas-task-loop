@@ -45,7 +45,8 @@ class BaseCheck:
     def _rc(self, tree: Path, c: Check, stop: threading.Event | None) -> int | None:
         started = time.time()
         try:
-            rc, _ = self.host.sh(argv_of(c.cmd), timeout=c.wall_min * 60, save=None, env=c.env, cwd=tree, stop=stop, what="check")
+            rc, _ = self.host.sh(argv_of(c.cmd), timeout=c.wall_min * 60, save=None, env=c.env, cwd=tree, stop=stop,
+                                 what="check", network=c.network)
         except OSError as error:
             rc = 127 if isinstance(error, FileNotFoundError) else 126
         self.host.log.note(f"base run of `{norm(c.cmd)[:80]}`: exit {rc} in {time.time() - started:.0f} s ({self.sha[:12]})")

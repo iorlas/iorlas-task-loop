@@ -107,7 +107,7 @@ LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", start="99
 CMD = {"pick_label": "auto", "skip_review": config.ReviewSkipConfig(tests=["t/**"]),
        "prepare": config.PrepareConfig(cmd=["dotnet", "restore"], inputs=["**/*.csproj"]),
        "visual_paths": config.VisualConfig(include=["a/**"]), "write_fresh_above_k": 150.0, "max_rounds": 4,
-       "checks": [config.CheckSpec(id=CheckId("fmt"), argv=["just", "fmt"], group="static", when=["x/**"], inputs="a/**"),
+       "checks": [config.CheckSpec(id=CheckId("fmt"), argv=["just", "fmt"], group="static", network=True, when=["x/**"], inputs="a/**"),
                   config.CheckSpec(id=CheckId("unity"), argv=["just", "check-unity"], run="gate", run_in="slot", needs=["unity"])],
        "resources": {"unity": config.ResourceSpec(limit=2)}}
 
@@ -385,6 +385,7 @@ OTHERS: dict[str, Rec] = {
     "Check": checks.Check(
         id=CheckId("unity-tests"),
         cmd="just unity-tests",
+        network=True,
         run_in="slot",
         group="tests",
         when=["client/**"],
