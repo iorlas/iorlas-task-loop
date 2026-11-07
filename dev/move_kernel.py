@@ -89,6 +89,27 @@ def rewrite(root: Path) -> int:
     return n
 
 
+LIMIT = 140
+LONG = "packages/kernel/src/tlkernel/"
+
+
+def shorten(root: Path) -> list[str]:
+    """The new path is 6 characters longer than the old, so a few comment and docstring lines pass the lint limit: name the file by its
+    package-relative path (`tlkernel/x.py`) there. A line with the path in quotes (code) is left alone. -> the lines still too long."""
+    left = []
+    for name in git(root, "ls-files", "*.py").split("\n"):
+        path = root / name
+        if not name or name.startswith(SKIP) or not path.is_file():
+            continue
+        lines = path.read_text(encoding="utf-8").split("\n")
+        for i, line in enumerate(lines):
+            if len(line) > LIMIT and LONG in line and '"' + LONG not in line and "'" + LONG not in line:
+                lines[i] = line.replace(LONG, "tlkernel/")
+        path.write_text("\n".join(lines), encoding="utf-8")
+        left += [f"{name}:{i + 1}" for i, line in enumerate(lines) if len(line) > LIMIT]
+    return left
+
+
 def edit(root: Path) -> int:
     n = 0
     dash = root / "src/taskloop_dash/__init__.py"
@@ -125,6 +146,8 @@ def main() -> None:
     if not manifest.exists():
         manifest.write_text(MANIFEST, encoding="utf-8")
     print(f"rewrote {rewrite(root)} files, {edit(root)} config edits")
+    for where in shorten(root):
+        print(f"too long, wrap by hand: {where}")
 
 
 if __name__ == "__main__":
