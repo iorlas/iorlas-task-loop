@@ -15,6 +15,7 @@ import support.paths  # noqa: F401
 from support.tlmain import tl_main
 
 from taskloop.app.pipeline.stage_run import stage_run
+from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 from tlkernel.checks import CheckResult, CheckRun
 from tlkernel.identity import Identity
@@ -111,7 +112,8 @@ class StageRuns(Case):
         with mock.patch("taskloop.app.pipeline.stage_run.threading.Event", return_value=stopped), \
              mock.patch("taskloop.app.pipeline.stage_run.threading.Thread", return_value=thread) as make_thread, \
              mock.patch("taskloop.app.pipeline.stage_run.time.time", side_effect=lambda: float(next(ticks))), \
-             stage_run(self.who, str(self.repo), "stage:check") as stage:
+             stage_run(self.who, str(self.repo), "stage:check", stores_factory=real_stores,
+                       log_factory=lambda rows, run_id, machine: RunLog(rows, run_id=run_id, host=machine)) as stage:
             before = self.locator.runs()[-1].manifest.heartbeat
             make_thread.call_args.kwargs["target"](*make_thread.call_args.kwargs["args"])
             assert self.locator.runs()[-1].manifest.heartbeat > before
@@ -126,7 +128,8 @@ class StageRuns(Case):
         with mock.patch("taskloop.app.pipeline.stage_run.threading.Event", return_value=stopped), \
              mock.patch("taskloop.app.pipeline.stage_run.threading.Thread", return_value=thread) as make_thread, \
              mock.patch.object(RunLog, "warn") as warn, \
-             stage_run(self.who, str(self.repo), "stage:check") as stage:
+             stage_run(self.who, str(self.repo), "stage:check", stores_factory=real_stores,
+                       log_factory=lambda rows, run_id, machine: RunLog(rows, run_id=run_id, host=machine)) as stage:
             with mock.patch.object(RunLocator, "beat", side_effect=RuntimeError("database is locked")):
                 make_thread.call_args.kwargs["target"](*make_thread.call_args.kwargs["args"])
             stage.rc = 0
