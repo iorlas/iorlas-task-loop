@@ -4,7 +4,6 @@ from typing import Protocol
 
 from taskloop.app.land.gitcall import must
 from taskloop.app.land.parts import MoveSteps
-from taskloop.app.plan.amend import AmendState
 from taskloop.contracts.checkpoint import RunState
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import SlotGitError
@@ -31,11 +30,17 @@ class RestartReview(Protocol):
     unchecked: list[dict[str, str]]
 
 
+class AmendHeld(Protocol):
+    """The engine's `amend` (the plan stage's amendment context) as a restart clears it."""
+
+    def clear(self) -> None: ...
+
+
 class RestartHost(Protocol):
     """What a restart on the base reads of the engine: git, the branch, the checkpoint it drops, and the run's plan
     bookkeeping that the old attempt leaves and a restart clears."""
 
-    amend: AmendState
+    amend: AmendHeld
     replan_first: bool
     plan_summary: str
     write: WriteHeld
