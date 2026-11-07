@@ -19,13 +19,13 @@ class LegacySessions(Case):
         self.folder = self.home / ".config" / "task-loop" / "sessions"
 
     def test_no_folder_no_line(self):
-        assert setup_checks.legacy_line(self.env) == ""
+        assert setup_checks.legacy_line(self.folder.parent) == ""
 
     def test_the_folder_is_named_as_legacy_and_left_alone(self):
         self.folder.mkdir(parents=True)
         (self.folder / "a.json").write_text("{}")
         (self.folder / "b.json").write_text("{}")
-        line = setup_checks.legacy_line(self.env)
+        line = setup_checks.legacy_line(self.folder.parent)
         assert line.startswith("legacy: ") and "(2 files)" in line and "nothing reads it" in line
         assert sorted(p.name for p in self.folder.iterdir()) == ["a.json", "b.json"]
 

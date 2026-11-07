@@ -12,8 +12,9 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 
-from taskloop.app.release import manifest  # noqa: E402
-from taskloop.app.wire import doctor  # noqa: E402
+from taskloop.adapters.ident import claude_dir, config_dir  # noqa: E402
+from taskloop.app.doctor import setup_checks  # noqa: E402
+from taskloop.app.release import catalog, manifest  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 
 NAME, MARKET = "iorlas-task-loop", "iorlas-marketplace"
@@ -71,7 +72,13 @@ class DoctorInstall(Case):
         (self.root / "AGENTS.md").write_text("# x\n\n## Ownership\n\n| a | b |\n")
 
     def problems(self):
-        return doctor.install_problems(self.root, snapshot())
+        def verify_installed():
+            claude = claude_dir(snapshot())
+            version = catalog.installed_version(claude)
+            installed = catalog.cache_dirs(claude).get(version)
+            return [f"installed task-loop {version}: {p}" for p in manifest.verify(installed)] if installed else []
+
+        return setup_checks.install_problems(self.root, config_dir(snapshot()), verify_installed)
 
     def test_a_clean_install_and_an_agents_file_with_its_section_have_no_problem(self):
         assert self.problems() == []
@@ -85,4 +92,4 @@ class DoctorInstall(Case):
         assert "Ownership" in self.problems()[0]
 
     def test_the_repos_own_agents_file_has_the_section(self):
-        assert [p for p in doctor.install_problems(ROOT, snapshot()) if "Ownership" in p] == []
+        assert [p for p in setup_checks.install_problems(ROOT, config_dir(snapshot()), lambda: []) if "Ownership" in p] == []
