@@ -45,9 +45,10 @@ def imports(tree: ast.Module) -> dict[str, Path]:
         if isinstance(n, ast.ImportFrom) and n.module == "tlpipeline.api":
             found.update({a.asname or a.name: homes[a.name] for a in n.names if a.name in homes})
             continue
-        if isinstance(n, ast.ImportFrom) and n.module and n.module.startswith(("taskloop.app.", "tlpipeline.")):
+        if isinstance(n, ast.ImportFrom) and n.module and n.module.startswith(("taskloop.app.", "tlpipeline.", "tlwork.")):
             base, module = ((ROOT / "packages/pipeline/src", n.module) if n.module.startswith("tlpipeline.")
-                            else (APP, n.module.removeprefix("taskloop.app.")))
+                            else ((ROOT / "packages/work/src", n.module) if n.module.startswith("tlwork.")
+                                  else (APP, n.module.removeprefix("taskloop.app."))))
             path = base / (module.replace(".", "/") + ".py")
             found.update({a.asname or a.name: path for a in n.names if path.is_file()})
     return found

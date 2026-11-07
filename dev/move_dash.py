@@ -88,12 +88,8 @@ def special(path: str, text: str) -> str:
 
 def tool_paths(path: str, text: str) -> str:
     """Point the tool configs and the reach map at the package."""
-    if path == "dev/reach.py":
-        old = ('    if parts[:3] == ["packages", "kernel", "src"]:\n        return "kernel"\n'
-               '    if parts[:3] == ["packages", "slots", "src"]:\n        return "slots"\n')
-        new = ('    if parts[0] == "packages" and parts[2:3] == ["src"] and parts[1] in {"dash", "kernel", "slots"}:\n'
-               '        return parts[1]\n')
-        text = text.replace(old, new)
+    if path == "dev/reach.py" and '"dash", "kernel"' not in text:
+        text = text.replace('parts[1] in {"kernel",', 'parts[1] in {"dash", "kernel",')
     if path == "tests/rules/test_dash_state_paths.py":
         text = text.replace(', "tldash/paths.py"', "")
         if 'DASH / "paths.py"' not in text:

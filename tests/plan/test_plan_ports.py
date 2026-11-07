@@ -8,7 +8,6 @@ from support.plan_host import FakePlan
 from taskloop.app.asks import intake
 from taskloop.app.plan import adrsync
 from taskloop.app.plan.planned import Planned
-from taskloop.domain.prompts.common import RULES_MAX
 from tlkernel import adrfiles
 from tlkernel.bead import Bead
 from tlkernel.ledger import Adr
@@ -17,6 +16,7 @@ from tlkernel.stop import Stop
 from tltestkit.cfgs import cfg_with
 from tltestkit.checks import typed
 from tltestkit.plans import HAS_F, PLAN
+from tlwork.prompts.common import RULES_MAX
 
 
 def test_outside_scope_is_filed_once_and_taste_stays(workdir):

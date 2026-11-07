@@ -15,6 +15,8 @@ from tlkernel.matchers import clip
 from tlkernel.planbrief import COMMENTS_ONLY
 from tlkernel.plancheck import PlanData
 from tlkernel.stagefacts import RunFacts
+from tlwork.prompts.common import DECIDED_TEXT
+from tlwork.work import visual
 
 from taskloop.app.plan import assume
 from taskloop.app.plan.amend import AmendState
@@ -28,8 +30,6 @@ from taskloop.app.plan.prompts import ASSUME_TEXT, PLAN_BRIEF_KB, PLAN_DECIDED_T
 from taskloop.app.plan.sendback import SendBack
 from taskloop.app.plan.state import PlanState
 from taskloop.domain.plan.stored import stored
-from taskloop.domain.prompts.common import DECIDED_TEXT
-from taskloop.domain.work import visual
 
 REPLAN_TAIL = 12500  # characters of replan.md the planner reads
 

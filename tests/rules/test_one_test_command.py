@@ -9,8 +9,8 @@ from tltestkit.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 TEXTS = ("AGENTS.md", "CLAUDE.md", "README.md", "skills/task-loop/SKILL.md")
-BRIEFS = ("src/taskloop/domain/prompts", "src/taskloop/app/*/prompts.py", "src/taskloop/app/write/review_prompt.py",
-          "src/taskloop/app/review/verify_prompt.py",
+BRIEFS = ("packages/work/src/tlwork/prompts", "src/taskloop/app/*/prompts.py", "src/taskloop/app/write/review_prompt.py",
+          "packages/work/src/tlwork/review/verify_prompt.py",
           "packages/pipeline/src/tlpipeline/reflect_prompt.py")
 FORBIDDEN = re.compile(
     r"suite\.py|suite-docker|test-fast|test-all|check-all|-n auto"
