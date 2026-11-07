@@ -32,7 +32,7 @@ def plan(request: RunRequest, state: StateDoc) -> ThreadPlan:
     if previous is not None and request.delta_file is not None:
         resume, path = previous.ref, request.delta_file
     text = Path(path).read_text(encoding="utf-8", errors="replace")
-    takeover = previous is not None and resume is None
+    takeover = request.role == "worker" and previous is not None and resume is None
     return ThreadPlan(
         key=key,
         resume=resume if key else request.resume,

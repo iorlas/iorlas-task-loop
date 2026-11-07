@@ -71,7 +71,7 @@ def request(e: RequestHost, c: Call, live: str, timeout_s: int, idle_s: int) -> 
         parent=e.session,
         task=e.bead,
         title=f"{e.bead} · {c.node}: {c.title}",
-        resume=c.resume or "",
+        thread=c.thread,
         authored_by=c.writer or "",
         timeout_s=timeout_s,
         idle_s=idle_s,

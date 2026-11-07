@@ -48,6 +48,17 @@ class TestThreads(Case):
         state = StateDoc(threads={"other/write": ThreadRecord(ref="other", lane="L", model="M")})
         assert threads.plan(replace(self.request, delta_file=str(self.delta)), state).resume is None
 
+    def test_planner_fresh_prompt_has_no_writer_takeover_note(self):
+        state = StateDoc(threads={"bead/planner": ThreadRecord(ref="session", lane="L", model="M")})
+        planned = threads.plan(replace(self.request, role="planner", thread="planner"), state)
+        assert (planned.resume, planned.brief_text, planned.takeover) == (None, "whole", False)
+
+    def test_planner_fresh_rerun_has_no_writer_takeover_note(self, monkeypatch):
+        env.update_state(lambda state: threads.settle(state, "bead/write", result()))
+        calls = self.fake_calls(monkeypatch, [result("busy"), result(ref="fresh")])
+        api.run(replace(self.request, role="planner", delta_file=str(self.delta)))
+        assert calls == [("session", "delta"), (None, "whole")]
+
     def test_api_stores_then_resumes_delta(self, monkeypatch):
         calls = self.fake_calls(monkeypatch, [result(ref="first"), result(ref="second")])
         assert api.run(self.request).ref == "first"
