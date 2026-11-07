@@ -15,7 +15,7 @@ from support.who import who
 
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
-from tlkernel.docrows import RowDoc
+from tlkernel.checkpointrows import CheckpointDoc
 from tlkernel.docstore import ForeignVersion
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
@@ -29,14 +29,14 @@ class ForeignCheckpoint(T.EngineTest):
             git=port_git(), who=who())
         put_ck(eng, step="close")
         doc = eng.stores.checkpoints.of(eng.bead)
-        assert isinstance(doc, RowDoc)
+        assert isinstance(doc, CheckpointDoc)
         with doc.docs.rows.transaction() as con:  # the install that wrote it is another version
-            con.execute("UPDATE checkpoint SET body=json_set(body, '$.v', 3) WHERE bead=?", (eng.bead,))
+            con.execute("UPDATE checkpoint SET body=json_set(body, '$.v', 4) WHERE bead=?", (eng.bead,))
         assert isinstance(doc.read(), ForeignVersion)
-        with pytest.raises(Refused, match="v3"):
+        with pytest.raises(Refused, match="v4"):
             doc.need()
-        with pytest.raises(Refused, match="v3"):  # a run does not read past it either: the owner deletes or restores the record
+        with pytest.raises(Refused, match="v4"):  # a run does not read past it either: the owner deletes or restores the record
             eng.checkpoints.read()
-        with pytest.raises(Refused, match="v3"):
+        with pytest.raises(Refused, match="v4"):
             engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
                 git=port_git(), who=who())

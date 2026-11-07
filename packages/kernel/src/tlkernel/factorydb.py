@@ -60,6 +60,7 @@ OWNERS: dict[str, str] = {
     "lanes_doc": "engine",  # the lanes part's status records (tl lanes, tl usage)
     "work_doc": "engine",  # the work part's decision-record cache (plan refreshes it)
     "release_doc": "engine",  # the release part's pin and last result (tl pin, tl release)
+    "checkpoint_section": "engine",
     "checkpoint": "engine",  # one row per bead across runs; the engine writes it with the revision it read
 }
 REVISIONED_TABLES = frozenset({"run", "ask", "bead", "checkpoint"})

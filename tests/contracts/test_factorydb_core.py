@@ -37,6 +37,7 @@ TABLES = {
     "wait",
     "signal",
     "checkpoint",
+    "checkpoint_section",
     "timed",
     "schema_part",
     "release_doc",

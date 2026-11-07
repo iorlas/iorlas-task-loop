@@ -63,6 +63,7 @@ def test_real_v2_database_upgrades_in_place_preserving_rows(tmp_path):
         con.execute("PRAGMA journal_mode=WAL")
         con.executescript(V2_DDL)
         con.execute(factoryparts.PARK_DDL)  # a database with no part rows adopts a part whole or not at all
+        con.execute(factoryparts.SECTION_DDL)
         con.execute("PRAGMA user_version=2")
         con.execute("INSERT INTO bead(id,repo_key,status,updated,fetched,rev) VALUES ('b','repo','open',1,2,7)")
         con.execute("INSERT INTO run(run,repo,repo_key,state,started,manifest) VALUES ('r','/repo','repo','done',1,'{}')")

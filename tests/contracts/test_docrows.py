@@ -11,7 +11,8 @@ from support.case import Case
 from taskloop.stores.real import real_stores
 from tlkernel import scratch
 from tlkernel.checkpoint import Checkpoint
-from tlkernel.docrows import RowDocs, StaleRevision
+from tlkernel.checkpointrows import CheckpointRows
+from tlkernel.docrows import StaleRevision
 from tlkernel.docstore import Absent, ForeignVersion, Torn
 from tlkernel.followups import FollowupOutbox
 from tlkernel.paths import ConfigDir
@@ -22,13 +23,13 @@ def ck(step: str = "", closed: bool = False, bead: str = "t-1") -> Checkpoint:
     return Checkpoint(bead=bead, run="r1", t=5.0, step=step, closed=closed)
 
 
-class CheckpointRows(Case):
+class CheckpointRowContract(Case):
     def setup_method(self):
         folder = scratch.scratch_dir(os.environ)
         self.addCleanup(shutil.rmtree, folder, True)
         self.cfg = ConfigDir(folder)
         self.stores = real_stores(self.cfg)
-        self.docs = RowDocs(self.cfg, Checkpoint, table="checkpoint", key_col="bead", body_col="body", revisioned=True)
+        self.docs = CheckpointRows(self.cfg)
         self.doc = self.docs.of("t-1")
 
     def set_body(self, body: str):
