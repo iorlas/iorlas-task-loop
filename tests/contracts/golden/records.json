@@ -1553,6 +1553,7 @@
     "**/.*cache*/**"
    ],
    "land_mode": "push",
+   "land_queue": "off",
    "base": "origin/main",
    "check_links": true,
    "owner_author": "",
