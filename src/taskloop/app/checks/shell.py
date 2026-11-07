@@ -2,13 +2,17 @@
 import shutil
 import threading
 import time
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from tlkernel import childenv
 from tlkernel import log as rec
 from tlkernel.argv import text_of
+from tlkernel.env import Env
 from tlkernel.kinds import Kind
+from tlkernel.procport import Spawner
+from tlkernel.stagefacts import RunLogPort
 from tlpipeline.api import Blocked
 
 from taskloop.adapters import check_net
@@ -23,9 +27,44 @@ def check_nice(path: str) -> tuple[str, ...]:
     return (found, *CHECK_NICE[1:]) if found else ()
 
 
+class ShellConfig(Protocol):
+    @property
+    def check_net_isolate(self) -> bool: ...
+    @property
+    def check_scratch_home(self) -> bool: ...
+
+
+class ShellHost(Protocol):
+    """What a command of the run reads and sets on the engine: its halt, its log, its working tree and its children's environment."""
+    @property
+    def halt(self) -> threading.Event: ...
+    @property
+    def killed(self) -> bool: ...
+    @killed.setter
+    def killed(self, value: bool) -> None: ...
+    @property
+    def wall_hit(self) -> bool: ...
+    @wall_hit.setter
+    def wall_hit(self, value: bool) -> None: ...
+    @property
+    def log(self) -> RunLogPort: ...
+    @property
+    def wt(self) -> str: ...
+    @property
+    def bead_env(self) -> Mapping[str, str]: ...
+    @property
+    def env(self) -> Env: ...
+    @property
+    def cfg(self) -> ShellConfig: ...
+    @property
+    def spawner(self) -> Spawner: ...
+
+    def halt_point(self, when: bool = ..., wait: float = ...) -> None: ...
+
+
 class Shell:
-    def __init__(self, host: Any) -> None:
-        self.e = host
+    def __init__(self, host: ShellHost) -> None:
+        self.host = host
 
     def run(self, cmd: Any, timeout: float = 3600, check: bool = False, save: Any = None, env: Any = None, pin: bool = False,
             what: str = "command", cwd: Any = None,
@@ -36,7 +75,7 @@ class Shell:
         GIT_DIR/GIT_WORK_TREE of the slot; checks and gates run unpinned (they may run git on other repos). `stop`: the flag of one
         lane of a gate (a first red elsewhere sets it) in place of the run's halt, which the lanes' owner passes on to it.
         `network=True`: a check or check fix may use the network, bypassing isolation and its host refusal."""
-        e = self.e
+        e = self.host
         if isinstance(cmd, str):
             raise TypeError(f"a command is an argv list, never a string: {cmd[:80]!r}")
         if what == "check" and (stop or e.halt).is_set():  # a stop: no check starts; it reports itself failed, the run stops at its next
@@ -67,7 +106,7 @@ class Shell:
 
     def stream(self, cmd: Any, cwd: Any, env: Any, pin: bool, chunks: list[str], timeout: float, cid: str, what: str,
                started: float, stop: threading.Event, *, network: bool = False) -> Any:
-        e = self.e
+        e = self.host
         extra = {**childenv.WORKER_MARK, **e.bead_env, **(pinned_env(e.wt) if pin else {}), **(env or {})}
         network_prefix = self.no_network() if what in {"check", "check fix"} and not network else ()
         try:
@@ -87,7 +126,7 @@ class Shell:
 
     def no_network(self) -> tuple[str, ...]:
         """engine.check_net_isolate: take a check's network away, or refuse it with the host's reason when isolation is on."""
-        if not self.e.cfg.check_net_isolate:
+        if not self.host.cfg.check_net_isolate:
             return ()
         found = check_net.current()
         if found.warning:
@@ -96,7 +135,7 @@ class Shell:
 
     def killed(self, res: Any, rc: int, what: str, timeout: float, started: float) -> str:
         """The engine stopped the command (its wall limit, or a stop): recorded; the words added to its output."""
-        e = self.e
+        e = self.host
         now = time.time()
         e.killed, e.wall_hit = True, res.timed_out == "wall"
         e.log.emit(rec.Kill(what=what, why="timeout" if e.wall_hit else res.timed_out, secs=round(res.secs), exit=rc,

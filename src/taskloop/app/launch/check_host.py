@@ -21,9 +21,9 @@ from tlkernel.waitenums import WaitWhat
 from taskloop.adapters import ident
 from taskloop.adapters.ignored import ignored_by
 from taskloop.adapters.threadflag import ThreadFlag
+from taskloop.app.checks.shell import Shell
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.launch.staged import StagedCheckout
-from taskloop.app.run.shell import Shell
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 
