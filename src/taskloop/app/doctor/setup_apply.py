@@ -12,8 +12,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.procport import Ran
 
 from taskloop.adapters.ident import config_dir
-from taskloop.app.doctor import install
-from taskloop.app.wire import setup
+from taskloop.app.doctor import install, setup
 from taskloop.stores.real import real_stores
 
 BRANCH = "tl-setup-profile"

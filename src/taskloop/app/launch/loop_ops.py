@@ -19,6 +19,7 @@ from taskloop.adapters import beadtools, ident, ram
 from taskloop.adapters.bd import BdStore
 from taskloop.app.asks import admission
 from taskloop.app.doctor import disk
+from taskloop.app.doctor import lanes as wlanes
 from taskloop.app.loop import stages
 from taskloop.app.loop.env import ReloadNote
 from taskloop.app.reconcile import leases
@@ -29,7 +30,6 @@ from taskloop.app.slots import config as wslots_config
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import console, trail, verbs
 from taskloop.app.wire import asks as wasks
-from taskloop.app.wire import lanes as wlanes
 from taskloop.app.wire import slots as wslots
 
 STOP_GRACE_S = stages.STOP_GRACE_S

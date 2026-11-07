@@ -3,7 +3,7 @@ import argparse
 import json
 from pathlib import Path
 
-from taskloop.app.wire import setup
+from taskloop.app.doctor import setup
 from taskloop.cli import setup as cli_setup
 from tlkernel.env import Env
 from tltestkit.case import Case

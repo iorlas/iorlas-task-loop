@@ -78,13 +78,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # taskloop
 
 from taskloop.adapters import beadtools, gitrepo, ident, landlock
 from taskloop.app.doctor import install
+from taskloop.app.doctor import lanes as wire_lanes
 from taskloop.app.land.lock_cmd import cmd_land_lock
 from taskloop.app.launch import dash as wire_dash
 from taskloop.app.parts import STAGE_PARTS
 from taskloop.app.release import pins
 from taskloop.app.track import trail, verbs
 from taskloop.app.wire import asks as wire_asks
-from taskloop.app.wire import lanes as wire_lanes
 from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire import usage as wire_usage

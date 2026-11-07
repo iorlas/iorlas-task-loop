@@ -12,7 +12,7 @@ from tltestkit.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.app.wire import lanes
+from taskloop.app.doctor import lanes
 from taskloop_dash.views import snapshot
 from taskloop_dash.views.lanecards import STATUS_MAX_AGE, lane_cards
 from taskloop_dash.views.world import World

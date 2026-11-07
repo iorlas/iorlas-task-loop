@@ -8,7 +8,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from taskloop.adapters import delegate as dg
-from taskloop.app.wire import lanes, setup
+from taskloop.app.doctor import lanes, setup
 
 
 def row(lane, enabled=True, ready=True, fix=""):

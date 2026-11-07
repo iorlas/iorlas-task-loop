@@ -4,8 +4,8 @@ import base64
 import json
 from pathlib import Path
 
+from taskloop.app.doctor import setup, setup_apply
 from taskloop.app.slots import config as slots_config
-from taskloop.app.wire import setup, setup_apply
 from taskloop.cli import setup as cli_setup
 from tlkernel.env import Env
 from tlkernel.procport import Ran

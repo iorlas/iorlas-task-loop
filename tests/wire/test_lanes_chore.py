@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.spawn import real_spawner
 
-from taskloop.app.wire import lanes
+from taskloop.app.doctor import lanes
 from tlkernel.delegate_status import snapshot_of
 from tlkernel.env import Env
 from tlkernel.paths import ConfigDir
