@@ -23,7 +23,7 @@ from tlkernel.runkey import BaseSha, Digest
 from tlkernel.stagefacts import RunLogPort
 
 from taskloop.app.land import verified
-from taskloop.app.land.state import LandState
+from taskloop.app.land.host import LandState
 
 FAULTS = MappingProxyType({CheckFaultKind.STALE_BASE: "FAULT_STALE_BASE", CheckFaultKind.KILLED: "PAUSE_KILLED",
                          CheckFaultKind.DIRTY_SLOT: "FAULT_SLOT",})

@@ -6,7 +6,7 @@ from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 
 from taskloop.app.land.gitcall import must
-from taskloop.app.land.parts import StageCheckout, Strays
+from taskloop.app.land.host import StageCheckout, Strays
 
 
 class CommitHost(Protocol):
