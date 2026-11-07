@@ -13,7 +13,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-STAGE = ROOT / "packages" / "work" / "src" / "tlwork" / "review"
+STAGE = ROOT / "packages" / "work" / "src" / "tlwork" / "plan"
 SEED = STAGE / "zz_hostban_seed.py"
 PINS = tomllib.loads((ROOT / "mise.toml").read_text(encoding="utf-8"))["tools"]
 

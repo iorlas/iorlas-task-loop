@@ -51,7 +51,7 @@ from tltestkit.cfgs import cfg_with  # noqa: E402
 from tltestkit.narrow import must  # noqa: E402
 
 PLAN_DEF = "    def plan(self, again: bool = False) -> Planned:\n"
-BREAK_PLAN = (PLAN_DEF, PLAN_DEF + "        raise RuntimeError('planted: cannot plan')\n", "src/taskloop/app/plan/planner.py")
+BREAK_PLAN = (PLAN_DEF, PLAN_DEF + "        raise RuntimeError('planted: cannot plan')\n", "packages/work/src/tlwork/plan/planner.py")
 
 
 class Reload(te.EngineTest):

@@ -6,11 +6,6 @@ from support.facts import FakeChecker, MemCheckpoints, fake_facts
 from support.fake_beads import FakeBeads
 from support.fakegit import FakeGit
 from taskloop.adapters.check_probe import PathProbe
-from taskloop.app.plan.amend import AmendState
-from taskloop.app.plan.briefs import Briefs
-from taskloop.app.plan.cases import Cases
-from taskloop.app.plan.planner import Planner
-from taskloop.app.plan.state import PlanState
 from tlkernel.asked import Asked
 from tlkernel.askspec import AskSpec
 from tlkernel.config import EngineConfig
@@ -18,6 +13,11 @@ from tlkernel.gitfacts import TreeEntry
 from tlkernel.plancheck import PlanData
 from tlkernel.stop import Stop
 from tlpipeline.api import LeftoverQueue
+from tlwork.plan.amend import AmendState
+from tlwork.plan.briefs import Briefs
+from tlwork.plan.cases import Cases
+from tlwork.plan.planner import Planner
+from tlwork.plan.state import PlanState
 from tlwork.work.ledger import Ledger
 
 

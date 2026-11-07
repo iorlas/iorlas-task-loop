@@ -2,7 +2,7 @@
 
 from support.fakes import as_bead as _as_bead
 
-from taskloop.domain.beads import matchers as beadlint
+from tlkernel import beadmatchers as beadlint
 from tltestkit.case import Case
 from tltestkit.narrow import must
 

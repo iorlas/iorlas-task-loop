@@ -18,6 +18,18 @@ TREES = ("src/taskloop", "packages/kernel/src/tlkernel", "packages/gate/src/tlga
          "packages/work/src/tlwork", "packages/slots/src/tlslots")
 
 
+def stage_packages(packages):
+    stages = sorted(name for name in packages if name.startswith("taskloop.app.") and name.count(".") == 2)
+    if "tlgate" in packages:  # the gate is its package now; the shell's app/checks (step.py) is glue and keeps no budget of its own
+        stages = [name for name in stages if name != "taskloop.app.checks"] + ["tlgate"]
+    if "tlslots" in packages:
+        stages = [name for name in stages if name != "tlslots"] + ["tlslots"]
+    for stage in ('review', 'plan'):
+        if f'tlwork.{stage}' in packages:
+            stages = [name for name in stages if name != 'taskloop.app.' + stage] + [f'tlwork.{stage}']
+    return stages
+
+
 def closures(texts: Mapping[str, str]) -> dict[str, int]:
     """Count reachable local files and distinct external module roots for each stage."""
     modules = {path.removeprefix("packages/kernel/").removeprefix("packages/gate/")
@@ -41,13 +53,7 @@ def closures(texts: Mapping[str, str]) -> dict[str, int]:
                     edges[name].add(candidate)
                     break
                 candidate = candidate.rpartition(".")[0]
-    stages = sorted(name for name in packages if name.startswith("taskloop.app.") and name.count(".") == 2)
-    if "tlgate" in packages:  # the gate is its package now; the shell's app/checks (step.py) is glue and keeps no budget of its own
-        stages = [name for name in stages if name != "taskloop.app.checks"] + ["tlgate"]
-    if "tlslots" in packages:
-        stages = [name for name in stages if name != "tlslots"] + ["tlslots"]
-    if "tlwork.review" in packages:
-        stages = [name for name in stages if name != "taskloop.app" + ".review"] + ["tlwork.review"]
+    stages = stage_packages(packages)
     counts = {}
     for stage in stages:
         # a package's testing.py is its fakes for tests (the charter's third public name): not part of the production closure

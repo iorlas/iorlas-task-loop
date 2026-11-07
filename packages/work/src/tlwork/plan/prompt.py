@@ -10,12 +10,12 @@ from tlkernel.gitport import Git
 from tlkernel.plancheck import PlanData
 from tlkernel.stagefacts import RunFacts
 
-from taskloop.app.plan.amend import AmendState
-from taskloop.app.plan.decisions import Decisions
-from taskloop.app.plan.host import PlanHand, PlanPorts
-from taskloop.app.plan.probe import AcProbe
-from taskloop.app.plan.prompts import PLAN_PROMPT, SHOW_PLAN, VISUAL_PLAN, VISUAL_STAGES
-from taskloop.app.plan.state import PlanState
+from tlwork.plan.amend import AmendState
+from tlwork.plan.decisions import Decisions
+from tlwork.plan.host import PlanHand, PlanPorts
+from tlwork.plan.probe import AcProbe
+from tlwork.plan.prompts import PLAN_PROMPT, SHOW_PLAN, VISUAL_PLAN, VISUAL_STAGES
+from tlwork.plan.state import PlanState
 
 REPLAN_CALLS = 6  # the calls a replan may spend looking (study 63: the median replan used 4)
 

@@ -1,17 +1,18 @@
+
 """The brief functions the way the tests call them (the engine no longer has them: tlkernel/planbrief.py and app/plan/briefs.py)."""
 from collections.abc import Sequence
 from typing import Any
 
-from taskloop.adapters.bdids import mentioned_ids
-from taskloop.app.asks import intake
-from taskloop.app.plan.briefs import ENGINE_LABELS
 from tlkernel import planbrief as bf
+from tlkernel.bdids import mentioned_ids
 from tlkernel.bead import Bead, Comment
 from tlkernel.checkpoint import BriefSnap
+from tlkernel.ownerkeys import HINT
+from tlwork.plan.briefs import ENGINE_LABELS
 
 
 def brief_digest(bead: Bead, comments: Sequence[Comment], owner_only: bool = False, ignore: Sequence[str] = ()) -> str:
-    hint = str(bead.metadata.get(intake.HINT) or "")
+    hint = str(bead.metadata.get(HINT) or "")
     return bf.render(bead, comments, "denis", hint, owner_only, (*ENGINE_LABELS, *ignore)).text
 
 

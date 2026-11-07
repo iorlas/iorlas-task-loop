@@ -1,3 +1,4 @@
+
 """app/asks on fakes: raise and consume, the sweeps, and the owner's typed verbs."""
 import dataclasses
 import sys
@@ -5,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from tlkernel.ownerkeys import HINT, OVERRIDE
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
@@ -202,7 +204,7 @@ class IntakeTest(Case):
         self.verbs.override(BeadId("fk-1"), "replan-cap")
         assert (
             self.store.beads[BeadId("fk-1")].metadata
-            == {intake.HINT: "mind the cache", intake.HOLD: "denis", intake.OVERRIDE: "replan-cap"}
+            == {HINT: "mind the cache", intake.HOLD: "denis", OVERRIDE: "replan-cap"}
         )
         self.verbs.hold(BeadId("fk-1"), on=False)
         assert intake.HOLD not in self.store.beads[BeadId("fk-1")].metadata

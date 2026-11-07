@@ -15,20 +15,20 @@ def converted(text: str | None = None) -> list[str]:
     names = [m.strip() for m in cp[CONTRACT]["source_modules"].splitlines() if m.strip()]
     return sorted({m.removeprefix("taskloop.app.") if m.startswith("taskloop.")
                    else ("checks" if m == "tlgate" else ("review" if m in {"tlwork", "tlwork.review"}
-                                                        else m.removeprefix("tl"))) for m in names})
+                                                        else ("plan" if m == "tlwork.plan" else m.removeprefix("tl")))) for m in names})
 
 
 def code_dir(stage: str) -> Path:
     """Where a converted stage's code is: its app slice, or its workspace package once it moved."""
-    if stage == "review":
-        return ROOT / "packages/work/src/tlwork/review"
+    if stage in {"review", "plan"}:
+        return ROOT / "packages/work/src/tlwork" / stage
     if stage == "checks":
         return ROOT / "packages/gate/src/tlgate"
     return APP / stage if (APP / stage).is_dir() else ROOT / "packages" / stage / "src" / f"tl{stage}"
 
 
 def ruff_file(stage: str) -> Path:
-    if stage == "review":
+    if stage in {"review", "plan"}:
         return ROOT / "packages/work/ruff.toml"
     if stage == "checks":
         return ROOT / "packages/gate/ruff.toml"

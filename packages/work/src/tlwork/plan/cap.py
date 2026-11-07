@@ -1,20 +1,18 @@
 """The re-plan cap: when the planner has run too often the bead asks the owner; the owner's answer (or an override on the bead)
 allows one more run."""
-
-
 from tlkernel import askspecs, asktext
 from tlkernel.askenums import AskClass
 from tlkernel.bdsafe import attempt, peek
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BeadPatch
 from tlkernel.checkpoint import Checkpoint
+from tlkernel.ownerkeys import OVERRIDE
 from tlkernel.stagefacts import RunFacts
 
-from taskloop.app.asks import intake
-from taskloop.app.plan.amend import AmendState
-from taskloop.app.plan.host import PlanHand, PlanPorts
-from taskloop.app.plan.prompts import REPLAN_CAP
-from taskloop.app.plan.state import PlanState
+from tlwork.plan.amend import AmendState
+from tlwork.plan.host import PlanHand, PlanPorts
+from tlwork.plan.prompts import REPLAN_CAP
+from tlwork.plan.state import PlanState
 
 
 class ReplanCap:
@@ -37,7 +35,7 @@ class ReplanCap:
         a = self.hand.answered
         by_ask = a is not None and a.ask_class == AskClass.CAP_REACHED
         bead = peek(self.ports.store, self.facts.bead) or Bead(id=self.facts.bead, title="", status="")
-        by_override = bead.metadata.get(intake.OVERRIDE) == "replan-cap"
+        by_override = bead.metadata.get(OVERRIDE) == "replan-cap"
         if self.plan_state.cap_granted or not (by_ask or by_override):
             return
         self.plan_state.cap_granted = True
@@ -51,7 +49,7 @@ class ReplanCap:
             return
         self.ports.log.note("the owner allowed one more planner run (%s)" % ("the override" if by_override else "ask " + said))
         if by_override:
-            attempt(self.ports.store.update, self.facts.bead, BeadPatch(unset_metadata=[intake.OVERRIDE]))
+            attempt(self.ports.store.update, self.facts.bead, BeadPatch(unset_metadata=[OVERRIDE]))
         self.add_to_checkpoint()
 
     def add_to_checkpoint(self) -> None:

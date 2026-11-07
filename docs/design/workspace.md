@@ -99,3 +99,5 @@ keeps both the imports and requested config.
 S1 slots code carve: `packages/slots` (`tlslots`) owns slot orchestration, liveness and slot environment rules. Tests remain in `tests/slots`; machine effects are supplied through `Effects`, bound by `app/wire/slotfx.py`.
 
 E1 slice 1: `packages/work` (`tlwork`) owns review application code and review, work and prompts domain rules. Tests remain in their original slice directories. Link checking receives the network adapter through the `Links` Protocol from run/host.py. The carve is rerunnable with `dev/carve_work.py --root DIR`.
+
+E1 slice 2: `tlwork.plan` owns plan application and domain code. Shared bead IDs, bead matchers and owner metadata keys live in `tlkernel`; plan receives the existing `TreeProbe` protocol. Tests remain in their original directories.

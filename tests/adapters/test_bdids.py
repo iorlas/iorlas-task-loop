@@ -1,7 +1,7 @@
 """Tracker ID syntax is interpreted only by the beads adapter."""
 
 
-from taskloop.adapters.bdids import mentioned_ids, prefix_of
+from tlkernel.bdids import mentioned_ids, prefix_of
 from tltestkit.case import Case
 
 

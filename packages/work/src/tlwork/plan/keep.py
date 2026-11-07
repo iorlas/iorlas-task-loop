@@ -7,7 +7,7 @@ from tlkernel.plancheck import PlanData
 from tlkernel.stagefacts import LeftoverSink
 from tlkernel.wire import Open
 
-from taskloop.app.plan.planned import Planned
+from tlwork.plan.planned import Planned
 
 
 class PlanFields(Protocol):

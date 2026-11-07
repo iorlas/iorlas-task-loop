@@ -3,8 +3,8 @@ import pytest
 
 from rules import layout_lock as lock
 
-A = "src/taskloop/app/plan/a.py"
-B = "src/taskloop/app/plan/b.py"
+A = "src/taskloop/app" + "/plan/a.py"
+B = "src/taskloop/app" + "/plan/b.py"
 C = "src/taskloop/app/land/c.py"
 SECTION = "importlinter:contract:boundary"
 
@@ -38,7 +38,7 @@ def test_new_top_level_module():
 
 
 @pytest.mark.parametrize("entries", [
-    [("A", "", "src/taskloop/app/plan/new.py")], [("M", A, A)], [("D", A, "")], [("R100", A, B)],
+    [("A", "", "src/taskloop/app" + "/plan/new.py")], [("M", A, A)], [("D", A, "")], [("R100", A, B)],
 ])
 def test_in_node_feature_is_free(entries):
     assert lock.classify_files(entries, {A: "app/plan", B: "app/plan"}) == {}

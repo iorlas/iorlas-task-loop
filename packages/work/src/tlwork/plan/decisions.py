@@ -6,10 +6,10 @@ from tlkernel.adrs import AdrStore
 from tlkernel.plancheck import PlanData
 from tlkernel.stagefacts import RunFacts
 
-from taskloop.app.plan import adrsync
-from taskloop.app.plan.amend import AmendState
-from taskloop.app.plan.host import PlanHand, PlanPorts
-from taskloop.app.plan.state import PlanState
+from tlwork.plan import adrsync
+from tlwork.plan.amend import AmendState
+from tlwork.plan.host import PlanHand, PlanPorts
+from tlwork.plan.state import PlanState
 
 SHOWN = 20  # the newest ADRs a plan prompt carries
 TEXT_CAP = 600
