@@ -12,7 +12,7 @@ from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import factory as adapter
-from taskloop.app.launch import factory
+from taskloop.app.loop import factory
 from taskloop.app.loop.files import LoopFiles
 from taskloop.cli import factory as cli
 from tlkernel.config import RepoProfile, SlotsConfig

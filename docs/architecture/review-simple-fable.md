@@ -71,7 +71,7 @@ Also measured, because it explains the shape: 383 of the 1,198 commits are versi
 | `prompts.py` | the brief texts, one per step | 500 | `domain/prompts/` (8 files), `domain/plan/brief.py` 182, `domain/brief.py` 120 |
 | `checks.py` | registry, plan, executor, full-key evidence, container run | 700 | `app/checks/` 1,890, `domain/checks/` (16 files), `adapters/container_run.py` 93 |
 | `judge.py` | `judge(repo, tips, base) -> Allowed | Refused | Unavailable`: the one delivery authority | 150 | `app/land/push_judge.py` 107, `stackgate.py` 69, `app/land/gate.py` 178, `cli/green.py` 40, `checks/cache.py:255-272` |
-| `loop.py` | pick, admit (bundle), spawn `tl run`, settle; N lanes = N processes of this one module | 500 | `app/loop/` 1,733, `app/launch/loop.py` 317, `app/launch/factory.py` 134, `cli/loop*.py` 181, `cli/factory.py` 107 |
+| `loop.py` | pick, admit (bundle), spawn `tl run`, settle; N lanes = N processes of this one module | 500 | `app/loop/` 1,733, `app/launch/loop.py` 317, `app/loop/factory.py` 134, `cli/loop*.py` 181, `cli/factory.py` 107 |
 | `cli.py` | 12 verbs, argparse, one `Ctx` | 300 | `tl.py` 460 + `cli/` 1,110 + `app/wire/` 865 + `app/track/` 287 |
 | `hook.py` | pretool (pkill guard) and the pre-push client, stdlib only | 120 | `hook/` 223 (keep the shape) |
 | `dash/serve.py` + `dash/page.html` | reads `factory.db` read-only, serves one page, `POST /api/<verb>` spawns `tl <verb>` | 600 + 2,000 | `taskloop_dash/` 3,518 py + 2,811 static, `app/launch/dash_ports.py` 154, `app/launch/dash.py` 222 |
@@ -236,7 +236,7 @@ are so frequent that the checkout lags; see D4.
 | Repo key | `ids.loop_key`, `ids.repo_key`, `check_files.repo_key`, `shared.py:29` | one `RepoId` |
 | Delegate path | `adapters/delegate.py:88-113` resolve, `:116-129` find_route | one |
 | Stop reason | delegate's four sites, task-loop's synthesized stops (`adapters/delegate.py:197-205`) and four permanence re-derivations (A.F07) | delegate's `classify`; the engine maps `(producer, reason)` once in `policy.py` |
-| Loop state | factory placeholder + child + renaming reader (`tl/app/launch/factory.py:67-70`, `app/loop/files.py:59-61`) + dashboard's own glob | the `loop` row |
+| Loop state | factory placeholder + child + renaming reader (`tl/app/loop/factory.py:67-70`, `app/loop/files.py:59-61`) + dashboard's own glob | the `loop` row |
 
 ### D7. Contracts, layers and rules that police the deleted shape
 

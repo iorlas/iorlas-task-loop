@@ -13,7 +13,8 @@ from tlkernel.procport import Spawner
 from tlkernel.slots import SlotGitError
 
 from taskloop.app.artifacts import server
-from taskloop.app.launch import dash, factory, loop, repos
+from taskloop.app.launch import dash, loop, repos
+from taskloop.app.loop import factory
 from taskloop.app.loop.exits import last_by_lane
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.wire import real
