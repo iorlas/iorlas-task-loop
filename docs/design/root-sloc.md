@@ -1,10 +1,10 @@
 # Root sloc: what stays in `src/taskloop` roots and why (tl-e5t0.40.6)
 
-Measured on main ddfe6729 with `dev/root_report.py` and `tests/rules/root_ratchet.py`: 77 root files, 4030 sloc, 340 branches, 12 long functions, 150 engine attributes. Design goal: under 1500 sloc (gap 2531). A root is what the `nobody-imports-a-root` contract in `.importlinter` names (launch, wire, run's composition files) plus the `cli` and `hook` packages and `tl.py`.
+Measured on main ddfe6729 with `dev/root_report.py` and `tests/rules/root_ratchet.py`: 77 root files, 4030 sloc, 340 branches, 12 long functions, 150 engine attributes. Denis decided 2026-11-08: root branches <= 110 (stretch 100) and long functions <= 8. SLOC is reported and must stay below 3458; it is not a reduction target. A root is what the `nobody-imports-a-root` contract in `.importlinter` names (launch, wire, run's composition files) plus the `cli` and `hook` packages and `tl.py`.
 
 ## Result in one line
 
-Everything in the table that has a destination can leave: **1650 sloc**. That lands at **about 2380**, not 1500. The 880 left over is not a missing move: it is run/* construction (fields, engine, host, parts_*, context, state, plumbing, closer_ports: about 600 sloc, bound to the Engine's 150 attributes), the small cli/hook argparse files (693 sloc in 36 files, roots by definition) and `prepush.py` (documented stdlib exception). 1500 needs either the Engine attributes to fall (R4 landed; the attribute count has not moved: 150) or the goal to count cli argparse wiring as not-root.
+The goal is **root branches <= 110 (stretch 100)** and **long functions <= 8**, as Denis decided 2026-11-08. SLOC is reported and stays **below 3458**, without a reduction target. Move decisions and reporting rules into their owning stages; retain concrete collaborator bindings in roots. The destination table below records the original inventory and constraints, rather than a SLOC target.
 
 ## Status (2026-11-07)
 
@@ -13,6 +13,7 @@ Everything in the table that has a destination can leave: **1650 sloc**. That la
 | setup, setup_apply, lanes to app/doctor (route, config dir, host store and slot facts injected; bindings in app/launch) | #603 | -223 net |
 | closeguard rules, preflight admission and entry sequencing to tlpipeline over ports | #606 | -57 (closeguard 78 -> ~35, preflight 62 -> 22, entry admission only -2: those rules already lived in app/asks/admission; entry keeps ~48 slot-take sloc for the slots carve) |
 | run/layout.py to tlkernel.runlayout | #608 | -98 |
+| doctor report, usage validation and setup answer/verdict rules (tl-e5t0.40 PR 3) | uncommitted | 3409 -> 3369 (-40); branches 235 -> 223 (-12); long functions 11 -> 10 (-1) |
 
 Net root 4030 -> about 3650. The slots carve is the largest cut left (docs/design/slots-carve.md); gate moves wait for the land-gate move.
 
@@ -42,7 +43,7 @@ Packages that exist: `kernel`, `gate`, `artifacts`, `pipeline`, `testkit`, `slot
 | `app/run/layout.py` | 98 | 13 | 60 | kernel (paths/locator: the run's file names) | pure naming; the manifest stays the authority; no blocker |
 | `app/run/engine.py` | 97 | 3 | 0 | stays | the Engine construction; its 150 attributes are the lever for run/* |
 | `hook/prepush.py` | 91 | 18 | 0 | stays | documented exception: stdlib-only hot path (18 branches) |
-| `app/wire/doctor.py` | 86 | 8 | 0 | stays | multi-stage root: doctor.run imports release, which sits above doctor in the layers contract (corrected after the first move) |
+| `app/wire/doctor.py` | 86 | 8 | report rules | app/doctor/ops.py in PR 3; binding stays | multi-stage root: release catalog/manifest verification stays injected from wire; app/doctor must not import tlrelease or stages above doctor |
 | `cli/factory.py` | 86 | 15 | 40 | app/launch factory verbs | argparse + exit mapping stay (~45); start/inspect/stop/tail rules move |
 | `app/run/host.py` | 83 | 2 | 0 | stays | run construction |
 | `app/run/parts_run.py` | 82 | 3 | 0 | stays | run construction |
