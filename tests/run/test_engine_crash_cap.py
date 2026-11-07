@@ -50,7 +50,7 @@ class CrashCap(EngineTest):
         self.crash({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         store = ParkStore(self.eng.home)
         first = must(store.get(self.eng.bead))
-        store.put(first.replace(attempts={"engine_crash": 3}, fingerprint="another-site"))
+        store.put(first.replace(attempts={"engine:engine_crash": 3}, fingerprint="another-site"))
         self.crash({})
         park = must(store.get(self.eng.bead))
         assert (park.permanence, park.retry_at) == ("needs_owner", 0.0)

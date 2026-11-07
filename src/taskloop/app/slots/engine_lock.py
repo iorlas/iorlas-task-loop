@@ -2,8 +2,8 @@
 a worker can write (contracts/locks.py EngineLock: pid, start,
 bead, slot, slot_bead, by); the loop writes one (by "loop") from its slot take until its run-task replaces it. The loop,
 `tl slot reset|release` and another run-task keep off a worktree whose lock names a live process, whatever the slot bead says. A process is
-the one in the lock only while its start time matches (pid reuse) and it is no zombie. The record is a `lease` row (contracts/lockrows.py;
-an older tl's file is read until the next write); the check and the write of a take happen under `hold_path` on
+the one in the lock only while its start time matches (pid reuse) and it is no zombie. The record is a `lease` row (contracts/lockrows.py);
+the check and the write of a take happen under `hold_path` on
 ConfigDir.engine_take, so two runs starting at once cannot both win."""
 import contextlib
 import os

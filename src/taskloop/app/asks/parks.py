@@ -6,7 +6,6 @@ from random import random
 
 from taskloop.app.asks import intake
 from taskloop.contracts.ask import Ask
-from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.delegate import Permanence
 from taskloop.contracts.kinds import ASKS, FINISH, PAUSES, Kind
@@ -16,6 +15,7 @@ from taskloop.contracts.paths import ConfigDir
 from taskloop.domain.beads import park
 from taskloop.domain.lanes import pauses
 from taskloop.domain.lanes.pause_reasons import Producer
+from taskloop.stores.real import real_stores
 
 
 def answered(ask: Ask | None) -> bool:
@@ -28,7 +28,7 @@ def gate(cfg: ConfigDir, b: Bead, *, fresh: bool = False, now: float | None = No
     rec = ParkStore(cfg).get(b.id)
     if rec and rec.reason == Kind.OWNER_PARK.value and not intake.held(b.metadata, stamp):
         return None  # releasing the owner's hold is this park's explicit wake rule
-    return park.verdict(rec, b, fresh=fresh, answered=answered(AskStore.at(cfg).get(b.id)), now=stamp)
+    return park.verdict(rec, b, fresh=fresh, answered=answered(real_stores(cfg).asks.get(b.id)), now=stamp)
 
 
 def skip_of(cfg: ConfigDir, b: Bead, *, now: float | None = None) -> Skip | None:
@@ -40,7 +40,7 @@ def skip_of(cfg: ConfigDir, b: Bead, *, now: float | None = None) -> Skip | None
 
 def entering(cfg: ConfigDir, b: Bead) -> None:
     """A run goes on from the owner's answer: the count of runs on this text starts again."""
-    if answered(AskStore.at(cfg).get(b.id)):
+    if answered(real_stores(cfg).asks.get(b.id)):
         ParkStore(cfg).drop(b.id)
 
 
