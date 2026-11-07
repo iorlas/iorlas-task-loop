@@ -5,7 +5,8 @@ import pytest
 import support.paths  # noqa: F401
 from sqlite_store import SchemaError
 
-from taskloop.contracts import dbparts, factoryparts  # noqa: F401
+from taskloop.app.parts import STAGE_PARTS
+from taskloop.contracts import dbparts, factorydb
 from taskloop.contracts.checks import PassRecord
 from taskloop.contracts.dbparts import Part, Prune
 
@@ -109,13 +110,11 @@ def test_read_only_launch_skips_a_part_without_a_row_and_refuses_an_old_one():
     dbparts.launch(c, readonly=True, parts=[part(version=2, read_from=1)])
 
 
-def test_a_table_claimed_by_two_parts_is_refused(monkeypatch):
-    monkeypatch.setattr(dbparts, "_REGISTRY", {})
-    dbparts.register(part())
+def test_a_table_claimed_by_two_parts_is_refused():
     with pytest.raises(ValueError, match="registered twice"):
-        dbparts.register(part())
+        dbparts.ddl([part(), part()])
     with pytest.raises(ValueError, match="already belongs to part"):
-        dbparts.register(Part(name="q", version=1, tables=("t",), ddl="CREATE TABLE t (a INTEGER);"))
+        dbparts.ddl([part(), Part(name="q", version=1, tables=("t",), ddl="CREATE TABLE t (a INTEGER);")])
 
 
 def two(name, rules, table):
@@ -138,12 +137,43 @@ def test_prune_order_refuses_a_cycle_and_a_rule_nobody_declares():
         dbparts.prune_order([a])
 
 
-def test_a_part_prunes_only_its_own_tables(monkeypatch):
-    monkeypatch.setattr(dbparts, "_REGISTRY", {})
+def test_a_part_prunes_only_its_own_tables():
     with pytest.raises(ValueError, match="which is not its table"):
-        dbparts.register(two("a", [Prune("other", "1")], "t"))
+        dbparts.ddl([two("a", [Prune("other", "1")], "t")])
 
 
 def test_the_registered_rules_delete_children_before_the_run():
-    order = [r.table for r in dbparts.prune_order()]
+    order = [r.table for r in dbparts.prune_order(STAGE_PARTS)]
     assert order.index("run") > max(order.index(t) for t in ("step", "attempt", "effect", "timed", "check_round"))
+
+
+def test_undeclared_writer_refused_and_reader_allowed(tmp_path, monkeypatch):
+    path = tmp_path / "factory.db"
+    writer = factorydb.open_rw(path)
+    assert writer is not None
+    writer.close()
+    monkeypatch.setattr(factorydb._STORE, "parts", None)
+    with pytest.raises(SchemaError, match=r"factory.db opened before this process declared its parts \(factorydb.declare_parts\)"):
+        factorydb.open_rw(path)
+    reader = factorydb.open_ro(path)
+    assert reader is not None
+    reader.close()
+
+
+def test_parts_cannot_be_redeclared_differently(monkeypatch):
+    monkeypatch.setattr(factorydb._STORE, "parts", None)
+    factorydb.declare_parts(STAGE_PARTS)
+    factorydb.declare_parts(STAGE_PARTS)
+    with pytest.raises(ValueError, match="different list"):
+        factorydb.declare_parts(STAGE_PARTS[:-1])
+
+
+@pytest.mark.parametrize("readonly", [False, True])
+def test_launch_validates_part_ownership_before_touching_database(readonly):
+    c = con()
+    with pytest.raises(ValueError, match="registered twice"):
+        dbparts.launch(c, readonly=readonly, parts=[part(), part()])
+    other = Part(name="q", version=1, tables=("t",), ddl="CREATE TABLE t (a INTEGER);")
+    with pytest.raises(ValueError, match="already belongs to part"):
+        dbparts.launch(c, readonly=readonly, parts=[part(), other])
+    assert c.execute("SELECT name FROM sqlite_master").fetchall() == []

@@ -5,14 +5,16 @@ from collections.abc import Iterator
 
 import pytest
 
-from taskloop.contracts import factorydb
-from taskloop.contracts.factoryprune import HISTORY
+from taskloop.app.parts import STAGE_PARTS
+from taskloop.contracts import dbparts, factorydb
+
+HISTORY = tuple(rule.table for rule in dbparts.prune_order(STAGE_PARTS))
 
 
 @pytest.fixture
 def con() -> Iterator[sqlite3.Connection]:
     db = sqlite3.connect(":memory:", isolation_level=None)
-    db.executescript(factorydb.DDL)
+    db.executescript(dbparts.ddl(STAGE_PARTS))
     db.execute("PRAGMA foreign_keys=ON")
     try:
         yield db
