@@ -3,6 +3,7 @@ import threading
 from unittest import mock
 
 from tlkernel.ids import BeadId
+
 from tlslots.lease import Lease
 
 BEAD = BeadId("a")
