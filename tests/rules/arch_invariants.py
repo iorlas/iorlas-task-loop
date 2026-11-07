@@ -16,7 +16,8 @@ SLICE_IMPORTS: Final = {
     "parts": frozenset({"checks", "land", "slots"}),  # the one list of stage parts imports each stage that owns its tables (store.py)
     "pipeline": frozenset(),
     "plan": frozenset({"asks", "checks"}),
-    "prune": frozenset({"reconcile", "release", "run", "slots", "track"}),  # slots: D-PRUNE is the cross-part runner, so it reads slot_state_roots
+    # prune -> slots: D-PRUNE is the cross-part runner, so it reads slot_state_roots
+    "prune": frozenset({"reconcile", "release", "run", "slots", "track"}),
     "reconcile": frozenset({"release"}),
     "release": frozenset({"checks"}),
     "report": frozenset({"asks", "reconcile"}),
