@@ -25,7 +25,9 @@ TABLES = {
     "report_doc",
     "work_doc",
     "followup",
+    "park",
 }
+
 INDEXES = {
     "run_bead", "run_recent", "run_live", "bead_status", "check_tree", "ask_live",
 }
