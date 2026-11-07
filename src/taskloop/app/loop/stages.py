@@ -4,8 +4,6 @@ import contextlib
 import os
 import sys
 from collections.abc import Callable, Iterable, Mapping
-from pathlib import Path
-from typing import Any
 
 from jsonl_log import close_held
 from tlkernel.bead import Bead
@@ -20,7 +18,7 @@ from tlkernel.run import ReexecNote
 from tlkernel.slots import SlotFail, SlotGitError
 
 from taskloop.app.asks import deferral, parks
-from taskloop.app.loop.env import ReloadNote, Storm
+from taskloop.app.loop.env import ReloadNote
 from taskloop.app.loop.ports import LeaseHandle
 from taskloop.app.slots import aside, owned, watchdog
 from taskloop.app.slots import line as slots_line
@@ -206,13 +204,3 @@ def landed_on_base(repo: str, wt: str, bead_id: BeadId, git: Git, base_of: Calla
     return git.is_ancestor(wt, tip, base)
 
 
-def storm(path_of: Callable[[], Path], read: Callable[[Path], Mapping[str, Any] | None], window_s: float) -> Storm | None:
-    path = path_of()
-    rec = read(path)
-    if not rec:
-        return None
-    banner = (
-        "WAIT: storm {} on {}; the beads stay open (look at their logs). Record {} expires {:d} min after it was written; "
-        "clear it to wake sooner"
-    ).format(rec.get("fingerprint"), ",".join(rec.get("beads") or []), path, (window_s // 60))
-    return Storm(rec.get("fingerprint") or "", banner, float(rec["t"]) + window_s)

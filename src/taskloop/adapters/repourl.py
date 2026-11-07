@@ -1,5 +1,5 @@
 """The one name of a repo that its slots, its worktrees and the loop's own checkout all share: the origin url, else the common git dir.
-The storm record, the trace's repo, the land lock and the review lock key on it; a worktree's own path is no key (each slot has one)."""
+The trace's repo, the land lock and the review lock key on it; a worktree's own path is no key (each slot has one)."""
 from tlkernel.gitport import Git
 from tlkernel.slots import MissingRemote, NotARepo
 

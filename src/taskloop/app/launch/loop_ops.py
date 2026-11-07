@@ -16,13 +16,11 @@ from tlkernel.procport import Child, Hold, Spawner
 from tlkernel.slots import git_probe
 
 from taskloop.adapters import beadtools, childenv, ident, ram
-from taskloop.adapters import storm as storm_file
 from taskloop.adapters.bd import BdStore
-from taskloop.adapters.repourl import repo_url
 from taskloop.app.asks import admission
 from taskloop.app.doctor import disk
 from taskloop.app.loop import stages
-from taskloop.app.loop.env import ReloadNote, Storm
+from taskloop.app.loop.env import ReloadNote
 from taskloop.app.reconcile import leases
 from taskloop.app.release import reexec
 from taskloop.app.report import reflect
@@ -33,7 +31,6 @@ from taskloop.app.track import console, trail, verbs
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import lanes as wlanes
 from taskloop.app.wire import slots as wslots
-from taskloop.domain import outcome as oc
 
 STOP_GRACE_S = stages.STOP_GRACE_S
 
@@ -117,9 +114,3 @@ def _landed_on_base(repo: str, cfg: paths.ConfigDir, store: Beads, wt: str, bead
                                  lambda: landed_by(store)(bead_id), lambda: beadtools.peek(store, bead_id))
 
 
-def storm(repo: str, cfg: paths.ConfigDir, now: Callable[[], float] = trail.now, *, git: Git) -> Storm | None:
-    return stages.storm(
-        lambda: storm_file.storm_path(cfg.root, repo_url(git, repo)),
-        lambda path: storm_file.read_storm(path, now(), oc.KNOBS["storm_window_s"]),
-        oc.KNOBS["storm_window_s"],
-    )

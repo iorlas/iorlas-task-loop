@@ -121,7 +121,7 @@ class Closer:
         self.finish(done, self.stats_line())
 
     def resume(self, ck: Checkpoint) -> None:
-        """The close of a run that died: its outcome and decision come from the checkpoint (POLICY and the storm check are not asked
+        """The close of a run that died: its outcome and decision come from the checkpoint (POLICY is not asked
         again), and the effects whose keys are not there run, under the dead run's id."""
         e = self.host
         assert ck.ended is not None

@@ -91,9 +91,3 @@ def test_exec_failure_restores_repo_after_flushing_and_closing(monkeypatch):
                                 call.environ(), call.execve("uv", ["uv", "script"], {"handover": "state"}), call.chdir("repo")]
 
 
-def test_storm_banner_and_expiry_are_unchanged():
-    path = Mock()
-    path.__str__ = Mock(return_value="storm-record")
-    note = stages.storm(lambda: path, lambda _: {"fingerprint": "crash", "beads": ["a", "b"], "t": 12}, 120)
-    assert note == stages.Storm("crash", "WAIT: storm crash on a,b; the beads stay open (look at their logs). "
-                               "Record storm-record expires 2 min after it was written; clear it to wake sooner", 132)
