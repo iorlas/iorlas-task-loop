@@ -1,13 +1,25 @@
-"""A resumed branch is rebased onto the latest base before it is planned. A conflict in few files is fixed in place (land/salvage.py),
-else the task starts again on the base (land/restart.py)."""
+"""Resume and landing rebases, retry checks, task commits, and git failure handling."""
+
 from collections.abc import Callable
+from contextlib import AbstractContextManager
+from pathlib import Path
 from typing import Protocol
 
+from tlgate import evidence as check_evidence
+from tlkernel import plancheck
+from tlkernel.bead import Bead
 from tlkernel.checkpoint import Checkpoint, PlanStep
+from tlkernel.checks import CheckRun
 from tlkernel.gitport import Git
+from tlkernel.ids import BeadId
+from tlkernel.matchers import NetText
+from tlkernel.plancheck import PlanData, StageData
 from tlkernel.slots import SlotGitError
 
-from taskloop.app.land.host import LandState
+from taskloop.app.land import gate
+from taskloop.app.land.gate import Problem, ProblemKind
+from taskloop.app.land.host import BeginSteps, CaseChecks, LandState, OutcomeSteps, StageCheckout, Strays
+from taskloop.app.land.landed import LandedConfig
 from taskloop.stores.runlog import RunLog
 
 MAX_REBASE_RESETS = 2  # the plan count starts again at most this often per bead: a red gate for a real reason must still reach the limit
@@ -142,3 +154,154 @@ class Rebase:
                                        why=f"the branch moved to a new base; {e.planned} plan(s) before it do not count"))
             e.planned, e.rebase_resets = 0, e.rebase_resets + 1
         return "rebased"
+
+
+class LandRebaseHost(Protocol):
+    """What the land's rebase reads of the engine: the base, git, the step's outcome."""
+
+    @property
+    def cfg(self) -> LandedConfig: ...
+    @property
+    def git(self) -> Git: ...
+    @property
+    def wt(self) -> str: ...
+    @property
+    def steps(self) -> OutcomeSteps: ...
+    def blocked_for(self, why: str, kind: str) -> Exception: ...
+
+
+class LandRebase:
+    def __init__(self, host: LandRebaseHost) -> None:
+        self.e = host
+
+    def run(self, fetched: int, tail: str) -> Problem | None:
+        e = self.e
+        ok = fetched == 0
+        if ok:
+            done = e.git.rebase(e.wt, e.cfg.base)
+            ok, tail = done.ok, done.output
+        if ok:
+            return None
+        unmerged = e.git.unmerged(e.wt)
+        if not unmerged:
+            e.git.rebase_abort(e.wt)
+            raise e.blocked_for(f"failed: fetch or rebase onto {e.cfg.base} failed; branch kept\n{tail}", "FAULT_LAND")
+        e.steps.outcome("conflict", ", ".join(unmerged))
+        return Problem(ProblemKind.CONFLICT, "Conflicted files: {}\n{}".format(", ".join(unmerged), tail))
+
+
+class RecheckStageChecks(Protocol):
+    def stoppable(self, st: StageData, name: str) -> CheckRun: ...
+
+
+class RecheckCheckpoints(Protocol):
+    def save(self, *, step: str = ..., stage: int = ..., rounds: int = ..., n: int = ..., feedback: str = ...) -> None: ...
+
+
+class RecheckHost(Protocol):
+    """What the retry checks read of the engine: the plan and the cases, the checks and their stop, the barrier and its checkpoint."""
+
+    pending_land_validation: str  # set while the land's retry checks still need accepted checks and review
+
+    @property
+    def plan_data(self) -> PlanData | None: ...
+    @property
+    def run_dir(self) -> Path: ...
+    @property
+    def cases(self) -> CaseChecks: ...
+    @property
+    def stage_checks(self) -> RecheckStageChecks: ...
+    @property
+    def checkpoints(self) -> RecheckCheckpoints: ...
+    @property
+    def steps(self) -> BeginSteps: ...
+    def stop_deferred(self) -> AbstractContextManager[list[bool]]: ...
+    def blocked_for(self, why: str, kind: str) -> Exception: ...
+    def move_host(self, needs: list[str], why: str) -> Exception: ...
+
+
+class Recheck:
+    def __init__(self, host: RecheckHost) -> None:
+        self.e = host
+
+    def run(self, tries: int) -> Problem | None:
+        """Repo checks reuse their input cache; stage/case checks stay conservative because they can depend on state outside the
+        tracked tree. `tries`: the push tries so far, for the land step's text."""
+        e = self.e
+        stages = plancheck.stages_of(e.plan_data)
+        checks = list(dict.fromkeys([*(c for s in stages for c in s["checks"]), *e.cases.case_checks()]))
+        # A stop during checks or just after they return must resume through acceptance: save that barrier first
+        self.park("land retry checks require successful checks and review before landing", "land-verify-red")
+        results = e.stage_checks.stoppable({"checks": checks, "files": []}, "land retry")
+        gate.refuse(results, e)
+        bad = results.failed
+        problem = Problem(ProblemKind.VERIFY, check_evidence.failure_brief(bad, e.run_dir)) if bad else None
+        self.park(problem.text if problem else "", "land-verify-red" if bad else "land")
+        e.steps.begin("land", f"land (try {tries + 1})", **{"try": tries + 1})
+        return problem
+
+    def park(self, pending: str, step: str) -> None:
+        """Save the barrier with SIGTERM deferred; a stop that came meanwhile ends the run after the save."""
+        e = self.e
+        with e.stop_deferred() as stop:
+            e.pending_land_validation = pending
+            e.checkpoints.save(stage=len(plancheck.stages_of(e.plan_data)), step=step)
+        if stop:
+            raise e.blocked_for("failed: stopped (SIGTERM)", "PAUSE_KILLED")
+
+
+class CommitHost(Protocol):
+    """What the commit reads of the engine: the bead, git, the staging and the strays."""
+
+    @property
+    def bead(self) -> BeadId: ...
+    @property
+    def git(self) -> Git: ...
+    @property
+    def wt(self) -> str: ...
+    @property
+    def checkout(self) -> StageCheckout: ...
+    @property
+    def newfiles(self) -> Strays: ...
+    def blocked_for(self, why: str, kind: str) -> Exception: ...
+
+
+class Commit:
+    def __init__(self, host: CommitHost) -> None:
+        self.e = host
+
+    def run(self, bead: Bead, base_ref: str) -> bool:
+        """One commit per task, titled after the bead. -> False: the wip commits add up to nothing."""
+        e = self.e
+        base = e.git.merge_base(e.wt, "HEAD", base_ref)
+        if base:
+            must(e, f"reset --soft {base}", lambda: e.git.reset(e.wt, base, "soft"))
+        e.checkout.stage_all(check=True)
+        e.newfiles.quarantine_strays()
+        if base and not e.git.staged(e.wt):
+            return False
+        done = e.git.try_commit(e.wt, f"{bead.title[:72]} ({e.bead})")
+        if not done.ok:
+            raise e.blocked_for("failed: commit refused (hooks)\n" + done.output, "FAULT_LAND")
+        return True
+
+
+class BlockedFor(Protocol):
+    def blocked_for(self, why: str, kind: str) -> Exception: ...
+
+
+def must[T](e: BlockedFor, what: str, call: Callable[[], T], kind: str = "FAULT_INFRA") -> T:
+    """`call()`; a git failure raises `e.blocked_for("failed: `git <what>`: <git's words>")` (the run stops, the branch is kept)."""
+    try:
+        return call()
+    except SlotGitError as err:
+        down = kind == "FAULT_INFRA" and NetText.down(str(err))
+        raise e.blocked_for(f"{'paused' if down else 'failed'}: `git {what}`: {err}", "PAUSE_NETWORK" if down else kind) from err
+
+
+def oneline(git: Git, d: str, include: list[str], exclude: list[str], limit: int) -> str:
+    """The newest `limit` commits of `include` not on `exclude`, one `<short oid> <subject>` per line; empty when git cannot say."""
+    try:
+        return "\n".join(f"{r.oid[:7]} {r.subject}" for r in git.log(d, include, exclude, limit=limit))
+    except SlotGitError:
+        return ""
