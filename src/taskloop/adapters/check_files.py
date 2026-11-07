@@ -1,11 +1,11 @@
 """The files a check's cache key reads: a git tree's listing, the ignored files under some globs, a file's digest."""
 import hashlib
 import os
-import re
 from collections.abc import Sequence
 from pathlib import Path
 
 from taskloop.contracts.gitport import Git
+from taskloop.contracts.ids import loop_key
 from taskloop.contracts.slots import SlotGitError
 
 BIG = 16 * 1024 * 1024  # an ignored input bigger than this counts by size, not content
@@ -42,12 +42,10 @@ def file_digest(path: str) -> str:
 
 
 def repo_key(git: Git, wt: str) -> str:
-    """One name per repo, shared by its slots and worktrees: the origin url, else the common git dir."""
-    ident = git.config_get(wt, "remote.origin.url") or git.common_dir(wt) or wt
-    return "{}-{}".format(
-        re.sub(r"[^\w.-]+", "_", Path(ident.rstrip("/")).name)[:40] or "repo",
-        hashlib.sha1(ident.encode("utf-8", "surrogateescape")).hexdigest()[:10],
-    )
+    """The repo's one key, shared by its slots, loop, checks and artifacts: ids.loop_key of the repo folder (the parent of the git
+    common dir, the worktree when git cannot say), so a slot's worktree and the checkout name the same repo."""
+    common = git.common_dir(wt)
+    return loop_key(Path(common).parent if common else wt)
 
 
 def read_lines(path: str | Path, n: int = 2000) -> list[str]:

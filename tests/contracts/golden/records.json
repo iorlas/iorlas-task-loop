@@ -373,6 +373,34 @@
   "sha256": "abababababababababababababababababababababababababababababababab",
   "created": 1793050200.5
  },
+ "Incident": {
+  "t": 1793050200.5,
+  "kind": "corrupt",
+  "pr": 7,
+  "bead": "tl-1",
+  "main_before": "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "merge_sha": "ssssssssssssssssssssssssssssssssssssssss",
+  "parent": "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+  "expected_tree": "t1",
+  "landed_tree": "t2"
+ },
+ "QueueState": {
+  "v": 1,
+  "frozen": true,
+  "incidents": [
+   {
+    "t": 1793050200.5,
+    "kind": "raced",
+    "pr": 7,
+    "bead": "tl-1",
+    "main_before": "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+    "merge_sha": "ssssssssssssssssssssssssssssssssssssssss",
+    "parent": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "expected_tree": "t1",
+    "landed_tree": "t2"
+   }
+  ]
+ },
  "FollowupOutbox": {
   "v": 1,
   "pending": [

@@ -27,6 +27,7 @@ from taskloop.contracts.followups import FollowupOutbox
 from taskloop.contracts.ledger import Adr, AdrUse, LedgerEntry
 from taskloop.contracts.locks import LockRecord, LockTimeout, Ticket, pid_alive
 from taskloop.contracts.profile_changes import ProfileChange
+from taskloop.contracts.queue_state import QueueState
 from taskloop.contracts.rotating import RotatingJsonl
 from taskloop.contracts.stores import JsonlStore
 from taskloop.contracts.trace import RunTrace
@@ -233,7 +234,7 @@ def fake_stores(pid: int | None = None) -> Stores:
         asks=AskStore(MemDocSet(Ask), MemLog(_decode(LedgerEntry))),
         adrs=lambda repo: adrs.setdefault(repo, AdrStore(MemDocSet(Adr), MemLog(_decode(AdrUse)))),
         checkpoints=CheckpointBook(MemDocSet(Checkpoint)),
-        followups=MemDocSet(FollowupOutbox),
+        followups=MemDocSet(FollowupOutbox), queue_state=MemDocSet(QueueState),
         results=lambda repo, check: passes.setdefault((repo, check), MemDocSet(PassRecord)),
         base_red=lambda repo: reds.setdefault(repo, MemDocSet(BaseRedRecord)),
         durations=MemDocSet(Durations),

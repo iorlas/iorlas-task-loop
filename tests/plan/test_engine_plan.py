@@ -18,20 +18,20 @@ from support import fake_route, procsim
 from support.cfgs import cfg_with
 from support.logs import records
 
+from taskloop.app.plan import prompts as pp
 from taskloop.app.plan.planner import Planner
+from taskloop.app.plan.prompts import REPLAN_CAP
 from taskloop.app.plan.sendback import SendBack
 from taskloop.app.run import engine
+from taskloop.app.write import prompts as wp
+from taskloop.app.write import review_prompt as rp
 from taskloop.contracts import answers, plancheck
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.ids import CheckId
 from taskloop.contracts.kinds import Kind
 from taskloop.domain.checks import planref
 from taskloop.domain.checks.names import log_var
-from taskloop.domain.prompts import plan as pp
-from taskloop.domain.prompts import review as rp
-from taskloop.domain.prompts import write as wp
 from taskloop.domain.prompts.common import RULES_MAX
-from taskloop.domain.prompts.plan import REPLAN_CAP
 
 
 class EnginePlanTest(EngineTest):

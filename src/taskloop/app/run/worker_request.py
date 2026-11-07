@@ -12,6 +12,7 @@ from taskloop.app.run import writer_pin
 from taskloop.app.run.blocked import Blocked, refuse_over_cap
 from taskloop.app.run.budget import Budget
 from taskloop.app.run.call import Call
+from taskloop.app.write.prompts import ENGINE_ONLY_ADVISORY
 from taskloop.contracts import log as rec
 from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.config import EngineConfig
@@ -24,7 +25,6 @@ from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks import planref
 from taskloop.domain.lanes import pin
-from taskloop.domain.prompts.write import ENGINE_ONLY_ADVISORY
 from taskloop.stores.runlog import RunLog
 
 
