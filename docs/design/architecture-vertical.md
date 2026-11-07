@@ -64,7 +64,7 @@ Option judgments:
     a namespace package has no `__init__`.
 - **Mechanics checklist** (review, all hard-code `src` or the package names today): `tl.py:77`, `hooks/hook.py:15`, `dev/release.py:40`, `dev/{dash_fixtures,dash_profile,race}.py`,
   `tests/delegate/hermetic.py:13`, `tests/support/paths.py:14-26`; runtime `app/launch/dash.py:23,160` (dash child PYTHONPATH), `app/loop/versions.py:34` (install_key sees only `src`:
-  a change under `packages/` would go unnoticed), `app/release/selfupdate.py:14`; tests `tests/conftest.py:44-90,140-143` (preload walks `taskloop` only; the test kind is
+  a change under `packages/` would go unnoticed), `app/release/selfupdate.py:14` (now compares all of `src`, `packages`, and `dev/release.py`); tests `tests/conftest.py:44-90,140-143` (preload walks `taskloop` only; the test kind is
   decided from the path under TESTS_DIR), `pyproject testpaths=["tests"]` (so `packages/*/tests` are not collected and get no guards); selection `dev/affected.py:48-50,171-195`,
   `dev/runtests.py:155`, `tests/support/scope.py:13`; `pyrefly.toml:3,7,20`, `ruff.toml:5` + nested ruff.toml, `justfile:70`, `.importlinter` (root_packages, `msgspec-in-contracts-only`, `hot-hook`); `tests/rules/gate_rules.py:45,132,155,278,301,310`
   (SCAN has no `packages`: **the 400/80/800 caps silently stop applying there**), `arch_rules.py:16`, `temp_ratchet.py:12`, `layer_ratchet.py:28`; ~20 tests build `ROOT/"src"/"delegate"` or `"tldash"`.
