@@ -27,7 +27,6 @@ from support.fakes import as_bead, must_bead
 from support.spawn import port_git, real_spawner
 from support.who import who
 
-from taskloop.adapters import childenv
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.run import (
@@ -38,7 +37,7 @@ from taskloop.app.slots import config as wslots_config
 from taskloop.domain.checks import lint
 from taskloop.domain.checks.writer_split import WriterSplit
 from taskloop.domain.write.matchers import count_tests
-from tlkernel import answers, plancheck
+from tlkernel import answers, childenv, plancheck
 from tlkernel import checkmatchers as check_matchers
 from tlkernel.config import EngineConfig
 from tlkernel.env import snapshot
