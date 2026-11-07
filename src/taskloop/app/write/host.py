@@ -46,7 +46,8 @@ class Checkout(Protocol):
 
 
 class Checkpoints(Protocol):
-    def save(self, *, step: str = ..., stage: int = ..., rounds: int = ..., n: int = ..., feedback: str = ..., progress: StageProgress | None = ...) -> None: ...
+    def save(self, *, step: str = ..., stage: int = ..., rounds: int = ..., n: int = ..., feedback: str = ...,
+             progress: StageProgress | None = ...) -> None: ...
     def keep_pending(self, origin: str = ...) -> None: ...
 
 
