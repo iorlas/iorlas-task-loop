@@ -3,7 +3,9 @@ from functools import cached_property
 from pathlib import Path
 from typing import override
 
+from tlkernel.checks import CheckRun
 from tlkernel.repourl import repo_url
+from tlkernel.storeapi import Doc
 from tlwork.api import NewFiles
 
 from taskloop.adapters import landlock
@@ -25,6 +27,10 @@ def tree_over(host: TreeHost) -> Tree:
 
 
 class LandParts(Plumbing):
+    @property
+    def latest_check(self) -> Doc[CheckRun]:
+        return self.stores.check_run(self.run_dir.name, None)
+
     tree = cached_property(tree_over)
     rebase = cached_property(Rebase)
     restart = cached_property(Restart)

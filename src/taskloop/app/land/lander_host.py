@@ -11,6 +11,7 @@ from tlkernel.checks import CheckRun
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.stagefacts import RunLogPort
+from tlkernel.storeapi import Doc
 
 from taskloop.app.land.fix import FixOutsideHost
 from taskloop.app.land.gate import GateCheckout, GateHost, GateSteps
@@ -19,7 +20,6 @@ from taskloop.app.land.pr_land import PrHost
 from taskloop.app.land.push import LandedHost, OutboundCheckout, OutboundHost, OutboundSteps, PushHost
 from taskloop.app.land.rebase import CommitHost, LandRebaseHost, RecheckCheckpoints, RecheckHost
 from taskloop.app.land.record import SyncCheckpoints, SyncHost
-from taskloop.stores.bundle import Stores
 
 
 class LandConfig(Protocol):
@@ -52,7 +52,7 @@ class LandHost(Protocol):
     @property
     def last_run(self) -> CheckRun | None: ...
     @property
-    def stores(self) -> Stores: ...
+    def latest_check(self) -> Doc[CheckRun]: ...
     @property
     def run_dir(self) -> Path: ...
     @property

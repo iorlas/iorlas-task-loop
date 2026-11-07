@@ -15,7 +15,7 @@ from tlgate import keydiff
 from tlgate.cache import InputKeys, RunMemo, plan_digest
 from tlgate.domain.specs import gate_items, repo_check
 from tlgate.execution import keyed_env
-from tlgate.ports import GateStores
+from tlgate.ports import ReceiptStores
 
 
 def profile(git: GateGit, wt: str, tree: TreeSha) -> config.EngineConfig:
@@ -26,7 +26,7 @@ def profile(git: GateGit, wt: str, tree: TreeSha) -> config.EngineConfig:
     return found.engine
 
 
-def memo_for(stores: GateStores, git: GateGit, wt: str, cfg: config.EngineConfig, tree: TreeSha, base: BaseSha, env: Env) -> RunMemo:
+def memo_for(stores: ReceiptStores, git: GateGit, wt: str, cfg: config.EngineConfig, tree: TreeSha, base: BaseSha, env: Env) -> RunMemo:
     """The memo a delivery asks: the judged tree's inputs as `wt` holds them (its gitignored files under `inputs` too), the shared
     receipt environment."""
     memo = RunMemo(stores, check_files.repo_key(git, wt), InputKeys(git, wt, tree, pins=cfg.pin_files), base, keyed_env(env),
@@ -35,14 +35,14 @@ def memo_for(stores: GateStores, git: GateGit, wt: str, cfg: config.EngineConfig
     return memo
 
 
-def results(stores: GateStores, git: GateGit, wt: str, cfg: config.EngineConfig, tree: TreeSha, base: BaseSha,
+def results(stores: ReceiptStores, git: GateGit, wt: str, cfg: config.EngineConfig, tree: TreeSha, base: BaseSha,
             env: Env, step: CheckId | None = None) -> dict[CheckId, CheckResult | None]:
     checks = gate_items(cfg) if step is None else [repo_check(c, cfg) for c in cfg.checks if c.id == step]
     memo = memo_for(stores, git, wt, cfg, tree, base, env)
     return {c.id: memo.result(c, plan_digest(cfg.plan_cmd)) for c in checks}
 
 
-def explain(stores: GateStores, git: GateGit, wt: str, cfg: config.EngineConfig, tree: TreeSha, base: BaseSha, env: Env,
+def explain(stores: ReceiptStores, git: GateGit, wt: str, cfg: config.EngineConfig, tree: TreeSha, base: BaseSha, env: Env,
             steps: list[CheckId]) -> dict[CheckId, str]:
     """{step: the first key field where its expected key and its newest receipt on this tree and base part}; display only."""
     memo = memo_for(stores, git, wt, cfg, tree, base, env)

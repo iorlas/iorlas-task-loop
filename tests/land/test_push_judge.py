@@ -56,7 +56,7 @@ class PushJudge(Case):
 
     def judge(self, text=None):
         return judge_push(self.repo, self.request("head") if text is None else text, self.stores, self.git,
-                          env=self.env)
+                          profile_changes=self.stores.profile_changes, env=self.env)
 
     def stamp(self, tree="tree", base="base", profile=None, planned=False):
         from_env = {"TL_SLOT": "check"}

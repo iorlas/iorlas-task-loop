@@ -6,7 +6,7 @@ command by hand. Still not green: it stops with the check's exit code. Each refu
 from its newest receipt on the tree and base. A commit with no gate step passes. Its plan_cmd identifies the producer of planned skips."""
 import threading
 
-from tlgate.api import authorization
+from tlgate.api import ReceiptStores, authorization
 from tlkernel import config, profile_at, scratch
 from tlkernel.argv import text_of
 from tlkernel.env import Env
@@ -19,11 +19,11 @@ from tlkernel.slots import NotARepo
 from taskloop.app.land.carry import Carry
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.gate import owner_refusal
-from taskloop.stores.bundle import Stores
 
 
 class StackGate:
-    def __init__(self, cmds: Cmds, git: Git, stores: Stores, repo: str, base_ref: str, tl: list[str], env: Env | None = None) -> None:
+    def __init__(self, cmds: Cmds, git: Git, stores: ReceiptStores, repo: str,
+                 base_ref: str, tl: list[str], env: Env | None = None) -> None:
         self.cmds, self.git, self.stores, self.repo, self.base_ref, self.tl = cmds, git, stores, repo, base_ref, tl
         self.env = env or Env()
         self.ledger_env = self.env.with_(EnvVar.TL_GREEN_LEDGER, "1")  # the gate's own run skips test files already green (dev/runtests.py)

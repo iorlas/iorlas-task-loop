@@ -60,7 +60,7 @@ class ReleaseReceipt(Case):
             tip, tree = git("rev-parse", "HEAD"), git("rev-parse", "HEAD^{tree}")
             assert tree != before_tree
             request = f"refs/heads/main {tip} refs/heads/main {base}\n"
-            decision = judge_push(d, request, stores, port, env=env)
+            decision = judge_push(d, request, stores, port, profile_changes=stores.profile_changes, env=env)
             assert decision.status == PushStatus.ALLOWED, decision.reasons
             cfg = authorization.profile(port, d, TreeSha(base))
             memo = authorization.memo_for(stores, port, d, cfg, TreeSha(tree), BaseSha(base), env)

@@ -533,6 +533,7 @@ class FakeLandHost:
         self.dry = dry
         self.stores: Stores = fake_stores()
         self.log = RunLog(self.stores.run_log("run"))
+        self.latest_check = self.stores.check_run("run", None)
         self.last_run = last_run
         self.run_dir = Path("run")
         self.steps = Begins()
