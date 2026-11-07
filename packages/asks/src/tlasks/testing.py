@@ -1,9 +1,47 @@
-"""The 8 asks of tl-7y6.2.16 as the old engine put them to the owner (the quoted text, cut with `[...]` where the original was long) and
-the 3 rewrites of 68-design-asks section 5. Lint must refuse the first and pass the second."""
+"""In-memory stores, tracker, clock, identity and quoted ask fixtures for consumers."""
+from dataclasses import dataclass, field
 
+from tlkernel import wire
+from tlkernel.adrs import AdrStore
 from tlkernel.ask import Ask, AskOption
 from tlkernel.askenums import AskClass, AskKind, AskStatus
+from tlkernel.askstore import AskStore
+from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
+from tlkernel.ledger import Adr, AdrUse, LedgerEntry
+from tlkernel.memory_beads import MemoryBeads as FakeBeads
+from tltestkit.fake_clock import FakeClock
+from tltestkit.memdoc import MemDocSet, MemLog
+
+__all__ = ["BAD", "MOCKS", "RAW", "FakeAskStores", "FakeBeads", "FakeClock", "ask", "ask_store", "fake_stores", "identity", "opt"]
+
+
+def ask_store() -> AskStore:
+    """An ask store with memory documents and an independent ledger."""
+    return AskStore(MemDocSet(Ask), MemLog(lambda body: wire.load(LedgerEntry, body)))
+
+
+@dataclass
+class FakeAskStores:
+    """Only the stores an asks flow consumes."""
+
+    asks: AskStore = field(default_factory=ask_store)
+    _adrs: dict[str, AdrStore] = field(default_factory=dict)
+
+    def adrs(self, repo: str) -> AdrStore:
+        if repo not in self._adrs:
+            self._adrs[repo] = AdrStore(MemDocSet(Adr), MemLog(lambda body: wire.load(AdrUse, body)))
+        return self._adrs[repo]
+
+
+def fake_stores() -> FakeAskStores:
+    """A fresh asks bundle without shell dependencies."""
+    return FakeAskStores()
+
+
+def identity(actor: str = "owner", home: str = "<memory>", session: str = "test-session") -> Identity:
+    """An explicit identity independent of the process environment."""
+    return Identity(actor=actor, home=home, session=session)
 
 
 def ask(bead: str, kind: AskKind, cls: AskClass, decision: str, options: list[AskOption], tried: list[str] | None = None) -> Ask:

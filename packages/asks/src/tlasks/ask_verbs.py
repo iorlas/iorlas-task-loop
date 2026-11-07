@@ -2,7 +2,6 @@
 import json
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
@@ -16,6 +15,7 @@ from tlkernel.paths import ConfigDir
 
 from tlasks import intake, sweeps
 from tlasks import owner_verbs as requests
+from tlasks.contracts.records import Arguments
 
 Out = Callable[[str], None]
 FLAG_ACTIONS: Final[tuple[AskAction, ...]] = ("rerun", "confirm", "split")  # `tl answer --rerun|--confirm|--split`
@@ -23,29 +23,6 @@ SAYS: Final = {"gone": "there is no ask for this bead", "superseded": "the engin
         "withdrawn": "the ask was withdrawn", "closed": "the ask is closed", "consumed": "a run already used the answer",
         "answered": "this ask is already answered (replace the answer with --amend)"}
 NEXT: Final = "The bead %s runs again from your answer on the next pass of its loop."
-
-
-@dataclass(frozen=True)
-class Arguments:
-    """An owner operation, independent of the command-line parser."""
-
-    op: str
-    bead: BeadId | None = None
-    text: tuple[str, ...] = ()
-    json: bool = False
-    option: int | None = None
-    verdict: str | None = None
-    rerun: bool = False
-    confirm: bool = False
-    split: bool = False
-    amend: bool = False
-    expect: str | None = None
-    waive: str | None = None
-    defer: str | None = None
-    drop: str | None = None
-    approval: str | None = None
-    until: str | None = None
-    release: bool = False
 
 
 def action_of(a: Arguments, ask: Ask | None) -> tuple[AskAction, str]:

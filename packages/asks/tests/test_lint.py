@@ -1,28 +1,21 @@
 """Ask lint: the 8 quoted bad asks fail, the 3 rewrites pass, and each rule is one failing case."""
-import sys
-from pathlib import Path
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from support.tiers import domain
-
-from asks import samples
 from tlkernel.askenums import AskClass, AskKind
 from tlkernel.asklint import INFRA, KIND_OF, lint
+from tltestkit.case import Case
 
-GOOD = samples.MOCKS["lifesim-22b3"]
+from tlasks.testing import BAD, MOCKS
+
+GOOD = MOCKS["lifesim-22b3"]
 
 
-@domain
 class QuotedAsksTest(Case):
     def test_each_of_the_eight_bad_asks_fails(self) -> None:
-        for bead, a in samples.BAD.items():
+        for bead, a in BAD.items():
             assert lint(a), bead
 
     def test_the_three_rewrites_pass(self) -> None:
-        for bead, a in samples.MOCKS.items():
+        for bead, a in MOCKS.items():
             assert lint(a) == [], bead
 
     def test_infra_classes_never_become_asks(self) -> None:
@@ -31,7 +24,6 @@ class QuotedAsksTest(Case):
         assert set(AskClass) - INFRA == {cls for cls, kind in KIND_OF.items() if kind is not None}
 
 
-@domain
 class RuleTest(Case):
     def problems(self, **kw) -> str:
         return " | ".join(lint(GOOD.replace(**kw)))

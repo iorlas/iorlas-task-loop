@@ -9,10 +9,10 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from asks.dash_ports import answering
-from asks.samples import MOCKS
 from support.dashes import make_dash
 from support.look_world import world
 
+from tlasks.testing import MOCKS
 from tlkernel import factorydb, wire
 from tlkernel.askenums import AskStatus
 from tlkernel.askstore import AskStore

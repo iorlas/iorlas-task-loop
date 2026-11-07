@@ -4,6 +4,7 @@ import contextlib
 from support.fake_beads import FakeBeads
 
 from tlasks import intake, ledgercomments, raiser
+from tlasks.contracts.records import Asking
 from tlkernel import askspecs as specs
 from tlkernel.askrows import AskRows
 from tlkernel.askstore import AskStore
@@ -22,7 +23,7 @@ def world(workdir):
     beads = FakeBeads()
     beads.beads[BEAD] = Bead(id=BEAD, title="Saves", status="blocked", description="Keep saves working.")
     verbs = intake.Intake(asks, beads, lambda: 2000.0, "denis")
-    raiser.raise_ask(asks, specs.open_question("Which save format?", OPTS), raiser.Asking(
+    raiser.raise_ask(asks, specs.open_question("Which save format?", OPTS), Asking(
         bead=BEAD, run="r", brief_hash="h", repo="/r/demo", title="Saves", now=1000.0))
     verbs.answer(BEAD, "text", "keep v1")
     return asks, beads

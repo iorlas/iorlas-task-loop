@@ -17,7 +17,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.pausereasons import Producer
 
 from tlasks import hold
-from tlasks.host import AsksHost
+from tlasks.contracts.records import AsksHost
 
 
 def answered(ask: Ask | None) -> bool:

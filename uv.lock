@@ -182,7 +182,6 @@ version = "0"
 source = { editable = "packages/asks" }
 dependencies = [
     { name = "tlkernel" },
-    { name = "tltestkit" },
 ]
 
 [package.dev-dependencies]
@@ -192,10 +191,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "tlkernel", editable = "packages/kernel" },
-    { name = "tltestkit", editable = "packages/testkit" },
-]
+requires-dist = [{ name = "tlkernel", editable = "packages/kernel" }]
 
 [package.metadata.requires-dev]
 dev = [
