@@ -6,12 +6,7 @@ from pathlib import Path
 
 from taskloop.app.plan.assume import assume
 from taskloop.app.plan.host import PlanHost
-from taskloop.contracts import plancheck
-from taskloop.contracts.plancheck import PlanData
-from taskloop.domain.checks import lint, planref
-from taskloop.domain.plan.matchers import gate_only_criteria
-from taskloop.domain.prompts.anchors import MAX_ANCHORS, unanchored
-from taskloop.domain.prompts.plan import (
+from taskloop.app.plan.prompts import (
     DRY_CHECK_TEXT,
     EMPTY_PLAN_TEXT,
     GATE_ONLY_ACCEPTANCE,
@@ -20,6 +15,11 @@ from taskloop.domain.prompts.plan import (
     TRACKER_TEXT,
     UNANCHORED_TEXT,
 )
+from taskloop.contracts import plancheck
+from taskloop.contracts.plancheck import PlanData
+from taskloop.domain.checks import lint, planref
+from taskloop.domain.plan.matchers import gate_only_criteria
+from taskloop.domain.prompts.anchors import MAX_ANCHORS, unanchored
 
 
 @dataclass

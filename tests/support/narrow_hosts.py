@@ -25,6 +25,7 @@ from taskloop.app.land.landed import Landed
 from taskloop.app.land.lander import GateStep, Lander, LandParts
 from taskloop.app.land.push import Pusher
 from taskloop.app.land.recheck import Recheck
+from taskloop.app.land.state import LandState
 from taskloop.app.land.sync import Sync
 from taskloop.app.run.budget import Budget
 from taskloop.app.run.closer import CloseParts, Closer
@@ -330,7 +331,7 @@ class FakeLandedHost:
 
     def __init__(self, git: Git, sh: ShFn, dry: bool = False, fetch: Fetches | None = None) -> None:
         self.landed_sha = ""
-        self.land_remote_oid = ""
+        self.land_state = LandState()
         self.bead = BeadId("t-1")
         self.cfg = EngineConfig(base="origin/main", land=[])
         self.dry = dry
@@ -362,7 +363,7 @@ class FakePushHost:
 
     def __init__(self, git: Git, sh: ShFn, up: bool | None = True, cfg: EngineConfig | None = None) -> None:
         self.landed_sha = ""
-        self.land_remote_oid, self.task_branch = "", ""
+        self.land_state, self.task_branch = LandState(), ""
         self.cfg = cfg or EngineConfig(base="origin/main", land=["git", "push", "-q", "origin", "HEAD:main"])
         self.git, self.sh = git, sh
         self.wt = "/wt"
@@ -491,7 +492,7 @@ class FakeGateHost:
     """GateHost: `checker` answers the gate (none by default: the repo has no gate step)."""
 
     def __init__(self, git: Git, cfg: EngineConfig, log: RunLog, checker: GateChecker | None = None) -> None:
-        self.gate_log: Path | None = None
+        self.land_state = LandState()
         self.cfg, self.log, self.git = cfg, log, git
         self.wt = "/wt"
         self.checkout: GateCheckout = GateTree(git, self.wt)
