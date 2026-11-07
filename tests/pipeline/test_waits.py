@@ -51,6 +51,7 @@ def test_lock_deadline_pauses_lane_and_books_wait(monkeypatch):
         assert check is not None
         check()
         waiting("holder")
+        assert timeout is not None
         host.fake_clock.advance(timeout)
         raise TimeoutError("holder")
         yield

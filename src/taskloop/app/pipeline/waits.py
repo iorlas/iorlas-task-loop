@@ -22,15 +22,6 @@ from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 
 
-class OsLock(Protocol):
-    """Acquire a shared lock, reporting its holder while waiting."""
-
-    def __call__(
-        self, path: Path | str, holder: str, waiting: Callable[[str], None] | None = None, *,
-        timeout: float | None = None, check: Callable[[], None] | None = None,
-    ) -> AbstractContextManager[None]: ...
-
-
 class WaitsBudget(Protocol):
     def wait(self, secs: float) -> float: ...
     def over(self) -> list[str]: ...
@@ -69,8 +60,8 @@ class WaitsHost(Protocol):
     @property
     def log_path(self) -> Path: ...
 
-    @property
-    def os_lock(self) -> OsLock: ...
+    def os_lock(self, path: Path | str, holder: str, waiting: Callable[[str], None] | None = ..., timeout: float | None = ...,
+                check: Callable[[], None] | None = ...) -> AbstractContextManager[Path | str]: ...
     def halt_point(self, when: bool = ..., wait: float = ...) -> None: ...
 
 
