@@ -6,6 +6,7 @@ from tlkernel import attemptrows
 from tlkernel.enums import Outcome, Result
 from tlkernel.finish_projection import history
 from tlkernel.guard import guard
+from tlkernel.kinds import Kind
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunFinish, RunManifest, RunState
 from tlkernel.runrows import RunRows
@@ -23,9 +24,9 @@ def previous_finish(m: RunManifest) -> RunFinish:
         return m.finish
     outcome, result, kind = {
         RunState.DONE: (Outcome.DONE, Result.LANDED, "done"),
-        RunState.PARKED: (Outcome.BLOCKED, Result.PARKED, "owner_park"),
-        RunState.STOPPED: (Outcome.FAILED, Result.PAUSED, "pause_killed"),
-    }.get(m.state, (Outcome.FAILED, Result.FAILED, "fault_engine"))
+        RunState.PARKED: (Outcome.BLOCKED, Result.PARKED, Kind.OWNER_PARK.value),
+        RunState.STOPPED: (Outcome.FAILED, Result.PAUSED, Kind.PAUSE_KILLED.value),
+    }.get(m.state, (Outcome.FAILED, Result.FAILED, Kind.FAULT_ENGINE.value))
     return RunFinish(state=m.state, ended=m.ended if m.ended is not None else m.heartbeat,
                      outcome=outcome, result=result, kind=kind, why=m.reason, sha=m.sha)
 
