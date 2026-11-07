@@ -23,7 +23,6 @@ from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
 from tlkernel.run import LoopLogLine, Reexec, RunFinish, RunManifest, RunState
 from tlkernel.slots import git_probe
-from tlkernel.storeapi import Log
 from tlkernel.trace import RunTrace
 
 from taskloop.adapters import ident
