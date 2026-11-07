@@ -6,7 +6,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-INTEGRATION = {"gate": "tests/checks", "asks": "tests/asks"}
+INTEGRATION = {"gate": "tests/checks", "asks": "tests/asks", "slots": "tests/slots"}
 # Import purity cannot identify persistent storage and run-state integration.
 ASKS_DB_RUN_INTEGRATION = {
     "test_dash_same_intake.py": "dashboard and owner intake against persistent AskStore rows",

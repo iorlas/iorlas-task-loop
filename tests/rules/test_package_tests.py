@@ -54,10 +54,12 @@ def test_standard_library_own_pytest_and_normalized_third_party_imports_pass(tmp
     "def lazy():\n    import gate\n",
     "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    import kernel\n",
 ])
-@pytest.mark.parametrize("folder,integration", [("gate", "checks"), ("asks", "asks")])
-def test_package_pure_integration_tests_must_move_to_the_member(tmp_path, source, folder, integration):
+@pytest.mark.parametrize("folder,package,integration", [
+    ("gate", "tlgate", "checks"), ("asks", "tlasks", "asks"), ("slots", "tlslots", "slots"),
+])
+def test_package_pure_integration_tests_must_move_to_the_member(tmp_path, source, folder, package, integration):
     member(tmp_path, "kernel", "tlkernel", "kernel")
-    member(tmp_path, folder, "tl" + folder, "gate", ["tlkernel"], ["msgspec"])
+    member(tmp_path, folder, package, "gate", ["tlkernel"], ["msgspec"])
     tests = tmp_path / "tests" / integration
     tests.mkdir(parents=True)
     path = tests / "test_pure.py"

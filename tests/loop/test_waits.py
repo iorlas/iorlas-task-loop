@@ -1,7 +1,6 @@
 """Resource waits keep the loop alive, claim nothing, and have explicit wake probes."""
 from unittest.mock import Mock, patch
 
-from slots.test_slot_pool import Rig
 from support.fake_loop_env import slot_loop_env
 
 from taskloop.app.loop.loop import Loop, LoopArgs
@@ -14,6 +13,7 @@ from tlkernel.ids import BeadId
 from tlkernel.slots import SlotFail
 from tlslots import aside
 from tlslots.pool import Slot
+from tlslots.testing import Rig
 
 
 class Waits(Rig):

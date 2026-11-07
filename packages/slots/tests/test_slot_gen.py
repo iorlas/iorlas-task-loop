@@ -2,6 +2,7 @@
 from tlkernel.beadsport import BeadPatch
 from tlkernel.fence import SLOT_GEN, gen_of
 from tlkernel.ids import BeadId
+
 from tlslots.testing import Rig
 
 SLOT = BeadId("sl-s1")
