@@ -85,7 +85,8 @@ def bd_findings(path: str, run: Runner, opens: Callable[[], object], repo: str) 
             out.append(Finding("FAIL", f"bd at {build} cannot start ({err})", f"remove {build} from PATH or reinstall it"))
             continue
         if ran.exit != 0:
-            out.append(Finding("FAIL", f"bd at {build} does not run (exit {ran.exit}){why_it_failed(ran.err or ran.out)}", bd_fix(build, ran.err + ran.out)))
+            out.append(Finding("FAIL", f"bd at {build} does not run (exit {ran.exit}){why_it_failed(ran.err or ran.out)}",
+                               bd_fix(build, ran.err + ran.out)))
             continue
         versions[build] = version_of(ran.out + ran.err)
     newest = max(versions, key=lambda b: version_key(versions[b]), default=None)
