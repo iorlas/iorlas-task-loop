@@ -19,7 +19,8 @@ import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.fakegit import ScriptedGit
 from support.forgesim import ForgeSim
-from support.logs import records
+
+from tltestkit.logs import records
 
 # isort: split
 from support.memstores import fake_stores

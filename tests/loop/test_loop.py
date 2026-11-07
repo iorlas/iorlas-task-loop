@@ -26,7 +26,6 @@ from support import (  # noqa: E402
     looptest,
     tlbd,
 )
-from support.narrow import must  # noqa: E402
 from support.who import who  # noqa: E402
 
 from taskloop.adapters import (  # noqa: E402
@@ -41,6 +40,7 @@ from taskloop.app.wire import real  # noqa: E402
 from tlkernel import wire  # noqa: E402
 from tlkernel.loop import Carry, LoopState  # noqa: E402
 from tlkernel.procport import WaitTimeout  # noqa: E402
+from tltestkit.narrow import must  # noqa: E402
 
 
 def bead(id, priority=2, parent=None, labels=(), type="task"):

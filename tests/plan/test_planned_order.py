@@ -4,12 +4,12 @@ from contextlib import ExitStack
 from pathlib import Path
 
 import pytest
-from support.checks import typed
 from support.engine_case import EngineTest
 from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.app.plan import planner
 from taskloop.app.plan.planned import Planned
+from tltestkit.checks import typed
 
 
 @pytest.fixture

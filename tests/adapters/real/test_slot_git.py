@@ -10,6 +10,7 @@ from unittest import mock
 
 import pytest
 
+from tltestkit import fake_route
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
@@ -18,11 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
 
 sys.path.insert(0, str(ROOT / "tests"))
-from support import (  # noqa: E402
-    dlcall,
-    fake_route,
-    procsim,
-)
+from support import dlcall, procsim  # noqa: E402
 from support import engine_case as te  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 from support.checked import run_checked  # noqa: E402

@@ -6,10 +6,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from support.narrow import must
 
 from tlkernel import factorybackup, factorydb
 from tlkernel.paths import ConfigDir
+from tltestkit.narrow import must
 
 DAY = datetime(2026, 11, 4, tzinfo=UTC).timestamp()
 

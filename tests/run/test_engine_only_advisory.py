@@ -10,10 +10,10 @@ from tltestkit.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import engine_case as te
-from support.logs import records
 
 from taskloop.app.workers.worker_call import WorkerCall
 from tlkernel.delegate import REASON_ENGINE_ONLY_UNENFORCED
+from tltestkit.logs import records
 
 
 class Request(Case):

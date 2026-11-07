@@ -5,11 +5,11 @@ import uuid
 import pytest
 import support.paths  # noqa: F401
 from support import homes
-from support.narrow import must
 
 from tlkernel import wire
 from tlkernel.worktreerows import WorktreeDocs
 from tlkernel.worktrees import Owned
+from tltestkit.narrow import must
 
 
 @pytest.fixture
