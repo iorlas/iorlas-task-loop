@@ -1,4 +1,5 @@
 """No secondary reviewer loads unapproved worktree trust roots."""
+
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -7,6 +8,7 @@ import pytest
 from support.engine_case import EngineTest
 from support.plans import BEAD, CLEAN, PLAN, WRITE
 
+from taskloop.adapters import childenv
 from taskloop.app.asks.admission import _blocked_by_engine
 from taskloop.app.asks.closing import ClosingTrust
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
@@ -42,7 +44,7 @@ class ReviewerTrustRoots(Case):
         host.cfg.reflect = True
         host.dry, host.stop_pending, host.route = False, False, "/fake/route.py"
         host.sessions = [{"node": "write"}]
-        reflector = Reflector(host, ClosingTrust())
+        reflector = Reflector(host, ClosingTrust(), childenv.delegate_call_env)
         reflector.reflect_prompt = Mock(side_effect=AssertionError("must not build a reviewer prompt"))
         assert reflector.reflect_run("parked", "trust roots changed") is None
         reflector.reflect_prompt.assert_not_called()
