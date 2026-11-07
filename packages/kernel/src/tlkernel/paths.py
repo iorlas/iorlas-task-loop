@@ -64,13 +64,6 @@ class ConfigDir:
     def run_dir(self, run: RunId | str) -> Path:
         return self.runs_dir() / str(run)
 
-    def run_request(self, run: RunId | str) -> Path:
-        """The owner's requests to the live run (park, stop, notes): contracts/requests.py; the run takes it at a step boundary."""
-        return self.run_dir(run) / "owner-request.json"
-
-    def run_request_lock(self, run: RunId | str) -> Path:
-        return self.run_dir(run) / "owner-request.lock"
-
     def check_run(self, run: RunId | str, rnd: int | None = None) -> Path:
         """The CheckRun of a round of the run; no round: the latest."""
         return self.run_dir(run) / ("engine-checks.json" if rnd is None else f"engine-checks.r{rnd}.json")

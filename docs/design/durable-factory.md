@@ -285,8 +285,7 @@ Z05/R2/FREEZEBUNDLE and Q-10; the journal only makes it checkable.
 ### 2.7 Signals, timers, queries
 
 - **Timers** are `wait.wake_at` for pipeline waits and `retry_at` in asks-owned `park` rows; the loop's idle computes the earliest wake (today `loop.py:270-280` already does this over parks).
-- **Signals** are `signal` rows: `stop`, `park`, `note`, `answer`; the engine reads them at step boundaries (today `runs/<run>/owner-request.json`
-  under a lock, `app/run/requests.py`, unverified lines). `answer` is also in bd; the row only tells the loop to pick the bead now.
+- **Signals** are `signal` rows: `stop`, `park`, `note`, `answer`; the engine reads them at step boundaries through `SignalRows`. `answer` is also in bd; the row only tells the loop to pick the bead now.
 - **Queries**: the dashboard opens `factory.db?mode=ro` and calls `project()`; it writes nothing (this makes "the dashboard only reads" true
   for run state; its nine POST verbs become `signal` rows or bd writes).
 
