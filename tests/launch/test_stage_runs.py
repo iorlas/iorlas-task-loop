@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.tlmain import tl_main
 
-from taskloop.app.run.stage_run import stage_run
+from taskloop.app.pipeline.stage_run import stage_run
 from taskloop.stores.runlog import RunLog
 from tlkernel.checks import CheckResult, CheckRun
 from tlkernel.identity import Identity
@@ -107,9 +107,9 @@ class StageRuns(Case):
         stopped, thread = mock.Mock(), mock.Mock()
         stopped.wait.side_effect = [False, True]
         ticks = itertools.count(1000)
-        with mock.patch("taskloop.app.run.stage_run.threading.Event", return_value=stopped), \
-             mock.patch("taskloop.app.run.stage_run.threading.Thread", return_value=thread) as make_thread, \
-             mock.patch("taskloop.app.run.stage_run.time.time", side_effect=lambda: float(next(ticks))), \
+        with mock.patch("taskloop.app.pipeline.stage_run.threading.Event", return_value=stopped), \
+             mock.patch("taskloop.app.pipeline.stage_run.threading.Thread", return_value=thread) as make_thread, \
+             mock.patch("taskloop.app.pipeline.stage_run.time.time", side_effect=lambda: float(next(ticks))), \
              stage_run(self.who, str(self.repo), "stage:check") as stage:
             before = self.locator.runs()[-1].manifest.heartbeat
             make_thread.call_args.kwargs["target"](*make_thread.call_args.kwargs["args"])
@@ -122,8 +122,8 @@ class StageRuns(Case):
     def test_a_heartbeat_that_cannot_be_written_is_logged_when_it_ends_the_beat_thread(self):
         stopped, thread = mock.Mock(), mock.Mock()
         stopped.wait.side_effect = [False, True]
-        with mock.patch("taskloop.app.run.stage_run.threading.Event", return_value=stopped), \
-             mock.patch("taskloop.app.run.stage_run.threading.Thread", return_value=thread) as make_thread, \
+        with mock.patch("taskloop.app.pipeline.stage_run.threading.Event", return_value=stopped), \
+             mock.patch("taskloop.app.pipeline.stage_run.threading.Thread", return_value=thread) as make_thread, \
              mock.patch.object(RunLog, "warn") as warn, \
              stage_run(self.who, str(self.repo), "stage:check") as stage:
             with mock.patch.object(RunLocator, "beat", side_effect=RuntimeError("database is locked")):

@@ -14,6 +14,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.run import RunManifest, RunState
 
 BEAT_EVERY: Final = 60.0  # seconds between the heartbeats of a live run (the manifest's `heartbeat`)
+JOIN_WAIT: Final = 30.0  # seconds stop() waits for a beat in flight (a bd call that hangs must not hang the close)
 SUSPECT_AFTER: Final = 2 * BEAT_EVERY  # a heartbeat this old with its process gone is shown SUSPECT: not running, not yet written lost
 STALE_AFTER: Final = 300.0  # a heartbeat older than this (5 missed) lets the reconciler look at the run's pid
 RETAIN: Final = 7 * 86400  # seconds the dashboard and `tl report` look back; it deletes nothing (the sweep is KEEP_DAYS)
