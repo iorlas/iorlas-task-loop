@@ -2,7 +2,6 @@
 cancels the others: a lane's running check is stopped through the Spawner (its own process tree, with the engine's usual stop and
 grace), its queue for a resource lease ends, and its steps not yet begun are recorded as cancelled, never as a verdict. A stop of the
 whole run (the halt) is passed to every lane the same way. Nothing of a cancelled lane is remembered as green."""
-import faulthandler
 import sys
 import threading
 import time
@@ -70,7 +69,7 @@ class Lanes:
             if stuck:
                 message = f"Lanes still running after {STOP_JOIN_S} seconds: {', '.join(stuck)}"
                 print(message, file=sys.stderr, flush=True)
-                faulthandler.dump_traceback(file=sys.stderr, all_threads=True)
+                _dump_threads()
                 raise LaneStuck(message) from err
             raise
         if race.fails:
@@ -127,3 +126,16 @@ class Lanes:
 def replace_round(st: Round, cancel: Cancel) -> Round:
     """A lane's own round: the numbers of `st`, nothing decided yet, the lane's flag."""
     return replace(st, results=[], by_step={}, red="", red_skipped=set(), env=dict(st.env), timings=[], cancel=cancel)
+
+
+def _dump_threads() -> None:
+    """Report live thread stacks without expanding the stages' import closures."""
+    frames = sys._current_frames()
+    for thread in threading.enumerate():
+        print(f"Thread {thread.name} ({thread.ident}):", file=sys.stderr)
+        frame = frames.get(thread.ident) if thread.ident is not None else None
+        while frame is not None:
+            code = frame.f_code
+            print(f'  File "{code.co_filename}", line {frame.f_lineno}, in {code.co_name}', file=sys.stderr)
+            frame = frame.f_back
+    sys.stderr.flush()

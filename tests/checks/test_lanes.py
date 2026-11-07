@@ -171,8 +171,8 @@ def test_stop_reports_a_stuck_lane(monkeypatch: pytest.MonkeyPatch, request: pyt
         assert "0.2" in str(caught.value)
         assert caught.value.__cause__ is host.error
         stderr = capfd.readouterr().err
-        assert "lane-blocked" in stderr
-        assert "most recent call first" in stderr or "Thread 0x" in stderr
+        assert "Thread lane-blocked (" in stderr
+        assert "in step" in stderr
     finally:
         release.set()
         for worker in workers:
@@ -180,7 +180,8 @@ def test_stop_reports_a_stuck_lane(monkeypatch: pytest.MonkeyPatch, request: pyt
             assert not worker.is_alive()
 
 
-def test_stop_reraises_original_when_lane_ends(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_stop_reraises_original_when_lane_ends(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> None:
+    capfd = request.getfixturevalue("capfd")
     monkeypatch.setattr(lanes, "STOP_JOIN_S", 0.2)
     started = threading.Event()
     host = StopHost(started)
@@ -194,3 +195,4 @@ def test_stop_reraises_original_when_lane_ends(monkeypatch: pytest.MonkeyPatch) 
     with pytest.raises(RunStopped) as caught:
         lanes.Lanes(host, step, lambda *args: None).run(plan, {"prompt": [0]}, Round(1))
     assert caught.value is host.error
+    assert capfd.readouterr().err == ""
