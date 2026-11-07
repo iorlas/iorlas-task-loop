@@ -283,3 +283,9 @@ The 16-member ceiling ratchet in `packages/pipeline/tests/test_role_ceiling.py` 
 API done (`tl-e5t0.39.21`): `tlpipeline.api` is the public surface; the rule `tests/rules/test_package_surface.py` fails on any outside import of another tlpipeline module.
 
 Remaining: narrowing `CheckpointHost` (18 own members).
+
+## 16. Root moves
+
+- `wire/closeguard.py` binds storage, work detection and land recording; `tlpipeline/closeguard.py` owns typed reasons and close refusal.
+- `run/preflight.py` binds stores, git, printing and cached gates; `tlpipeline/admission.py` owns read-only admission and preview decisions.
+- `run/entry.py` binds lease release, parked/admit and claim adapters; `tlpipeline/admission.py` sequences them. Reopening remains inside the existing asks admission rule.
