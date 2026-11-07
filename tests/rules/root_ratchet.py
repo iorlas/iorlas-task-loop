@@ -50,13 +50,85 @@ def file_counts(rel: str, tree: ast.Module) -> dict[str, int]:
     return out
 
 
+def root_counts(root: Path) -> list[tuple[str, dict[str, int]]]:
+    """Parse each source file once and retain the roots counted by file_counts."""
+    rows = []
+    paths = [*sorted((root / "src").rglob("*.py")), root / "skills/task-loop/tl.py"]
+    for path in paths:
+        if path.is_file():
+            rel = path.relative_to(root).as_posix()
+            counts = file_counts(rel, ast.parse(path.read_text(encoding="utf-8")))
+            if counts:
+                rows.append((rel, counts))
+    return rows
+
+
+def totals(root: Path = ROOT) -> dict[str, int]:
+    """Sum the per-file root counts without a separate counting pass."""
+    rows = root_counts(root)
+    return {"files": len(rows), **{key: sum(c[key] for _, c in rows) for key in ("sloc", "branch", "long_function")}}
+
+
 def offenders(root: Path = ROOT) -> list[str]:
     """Every root file, worst first: 'rel: branches, long functions, sloc' (the list the ratchet is judged against)."""
     rows = []
-    for path in [*sorted((root / "src").rglob("*.py")), root / "skills/task-loop/tl.py"]:
-        rel = path.relative_to(root).as_posix()
-        c = file_counts(rel, ast.parse(path.read_text(encoding="utf-8")))
-        if c:
-            said = f"{rel}: {c['branch']} branches, {c['long_function']} long functions, {c['sloc']} sloc"
-            rows.append((c["branch"] + 5 * c["long_function"], said))
+    for rel, c in root_counts(root):
+        said = f"{rel}: {c['branch']} branches, {c['long_function']} long functions, {c['sloc']} sloc"
+        rows.append((c["branch"] + 5 * c["long_function"], said))
     return [r for _, r in sorted(rows, reverse=True)]
+
+
+def declared_attributes(cls: ast.ClassDef) -> set[str]:
+    """Attribute declarations in this class alone, excluding unrelated nested classes."""
+    names = {node.target.id for node in cls.body if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)}
+    for method in cls.body:
+        if not isinstance(method, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if any(ast.unparse(d).split(".")[-1] in ("property", "cached_property") for d in method.decorator_list):
+            names.add(method.name)
+        for statement in ast.walk(method):
+            if isinstance(statement, ast.Assign):
+                targets = statement.targets
+            elif isinstance(statement, (ast.AnnAssign, ast.AugAssign)):
+                targets = [statement.target]
+            else:
+                continue
+            for target in targets:
+                for node in ast.walk(target):
+                    if (isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store)
+                            and isinstance(node.value, ast.Name) and node.value.id == "self"):
+                        names.add(node.attr)
+    return names
+
+
+def engine_attributes(root: Path = ROOT) -> int:
+    """Count distinct names Engine and its AST-followed bases declare as annotated class fields,
+    self.<name> assignment targets in methods, or @property/@cached_property methods. Ordinary
+    methods and unannotated class assignments do not count; inherited names count only once.
+    Resolve local classes and imported bases from source, without importing the engine.
+    """
+    pending = [("taskloop.app.run.engine", "Engine")]
+    seen: set[tuple[str, str]] = set()
+    names: set[str] = set()
+    while pending:
+        module, name = pending.pop()
+        if (module, name) in seen or (module, name) == ("builtins", "object"):
+            continue
+        seen.add((module, name))
+        path = root / "src" / (module.replace(".", "/") + ".py")
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        classes = {n.name: n for n in tree.body if isinstance(n, ast.ClassDef)}
+        imports = {}
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom):
+                prefix = module.split(".")[:-node.level] if node.level else []
+                source = ".".join([*prefix, node.module] if node.module else prefix)
+                imports.update({a.asname or a.name: (source, a.name) for a in node.names})
+        cls = classes[name]
+        names.update(declared_attributes(cls))
+        for base in cls.bases:
+            if isinstance(base, ast.Name) and base.id != "object":
+                pending.append(imports.get(base.id, (module, base.id)))
+            elif isinstance(base, ast.Attribute):
+                pending.append((ast.unparse(base.value), base.attr))
+    return len(names)
