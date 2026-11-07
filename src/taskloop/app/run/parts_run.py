@@ -6,6 +6,7 @@ from typing import Any, Protocol
 
 from tlkernel import childenv
 from tlkernel.kinds import Kind
+from tlkernel.runlayout import repo_of
 from tlpipeline import api
 
 from taskloop.adapters import deadline, ident, slotcheck
@@ -17,7 +18,6 @@ from taskloop.app.land.closing import LandHistory
 from taskloop.app.release.closing import ReexecBook
 from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.run.bead_env import bead_env
-from taskloop.app.run.layout import repo_of
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.run.reload_ports import installed_newer, locked_slot
 from taskloop.app.run.shared import Shared

@@ -11,10 +11,10 @@ from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId, TreeSha
 from tlkernel.locator import RunBundle, RunLocator
+from tlkernel.runlayout import repo_of
 from tlkernel.slots import NotARepo
 from tlpipeline.api import read_checkpoint, select_step
 
-from taskloop.app.run.layout import repo_of
 from taskloop.app.track.console import say
 from taskloop.app.wire.closeguard import has_land
 from taskloop.stores.real import real_stores

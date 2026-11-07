@@ -76,7 +76,7 @@ slot or worktree/
     `-- B/brief.md, evidence/, artifacts/
 ```
 
-Path evidence: `packages/kernel/src/tlkernel/paths.py:22`, `:93`, `:101`, `:122`, `:133`, `:145`, `:161`, `:182`, `:195`, `:233`, `:243`, `:264`. Additional filenames come from `src/taskloop/app/run/layout.py:105`, `src/taskloop/app/run/engine.py:350`, `src/taskloop/stores/call_state.py:83`, `src/taskloop/app/loop/run.py:64`, and the factory layout documented in README.md. The release clone mentioned in AGENTS.md is outside this review's task-execution path.
+Path evidence: `packages/kernel/src/tlkernel/paths.py:22`, `:93`, `:101`, `:122`, `:133`, `:145`, `:161`, `:182`, `:195`, `:233`, `:243`, `:264`. Additional filenames come from `packages/kernel/src/tlkernel/runlayout.py:105`, `src/taskloop/app/run/engine.py:350`, `src/taskloop/stores/call_state.py:83`, `src/taskloop/app/loop/run.py:64`, and the factory layout documented in README.md. The release clone mentioned in AGENTS.md is outside this review's task-execution path.
 
 | Authority | Stored fact versus derived view | Cache / staleness boundary |
 | --- | --- | --- |

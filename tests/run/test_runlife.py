@@ -19,11 +19,11 @@ from support.dashes import make_dash  # noqa: E402
 from support.factory_index import ingest  # noqa: E402
 
 from taskloop.app.report import card  # noqa: E402
-from taskloop.app.run import layout  # noqa: E402
 from taskloop.app.slots.lease import Lease  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402
 from taskloop_dash.api import live as live_api  # noqa: E402
 from tlkernel import runlife  # noqa: E402
+from tlkernel import runlayout as layout  # noqa: E402
 from tlkernel.enums import Outcome  # noqa: E402
 from tlkernel.ids import BeadId, RunId, loop_key  # noqa: E402
 from tlkernel.locator import RunLocator, host_name  # noqa: E402

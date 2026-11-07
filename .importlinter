@@ -294,7 +294,6 @@ forbidden_modules =
     taskloop.app.run.field_ports
     taskloop.app.run.fields
     taskloop.app.run.host
-    taskloop.app.run.layout
     taskloop.app.run.parts_land
     taskloop.app.run.parts_plan
     taskloop.app.run.parts_run
@@ -310,9 +309,6 @@ forbidden_modules =
     taskloop.app.run.state
     taskloop.app.wire
 allow_indirect_imports = True
-ignore_imports =
-    # The baseline (tl-e5t0.30): edges that exist today. The contract fails on a new one; each removal shrinks this list, never grows it.
-    taskloop.app.prune.runs -> taskloop.app.run.layout
 
 [importlinter:contract:converted-stages-take-no-host]
 name = A converted stage imports no host (not the Engine, run, wire or launch)
