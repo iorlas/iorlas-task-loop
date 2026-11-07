@@ -29,8 +29,8 @@ from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.app.plan.planner import Planner  # noqa: E402
 from taskloop.app.slots import config as wslots_config  # noqa: E402
 from taskloop.app.track import outcome_line  # noqa: E402
-from taskloop.domain import outcome as oc  # noqa: E402
 from tlkernel import answers  # noqa: E402
+from tlkernel import runoutcome as oc  # noqa: E402
 from tlkernel.enums import Result  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlkernel.ids import BeadId  # noqa: E402

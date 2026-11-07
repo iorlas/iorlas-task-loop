@@ -116,7 +116,7 @@ class RunState(Rec, frozen=False, forbid_unknown_fields=False):
 @final
 class EndRec(Rec):
     """The final outcome of a run (after POLICY and any escalation), kept before the close's first effect, with what the effects read of
-    the decision: a restart rebuilds the same plan from it. `spec` is the ask (domain/asks/spec.AskSpec) as JSON text."""
+    the decision: a restart rebuilds the same plan from it. `spec` is the ask (tlkernel/askspec.AskSpec) as JSON text."""
 
     run: str  # the run that closed (its id is in every key; the checkpoint's own `run` is the run that saved it)
     kind: str

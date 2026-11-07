@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Protocol
 
 from tlkernel.asked import Asked
+from tlkernel.askspec import AskSpec
 from tlkernel.checks import Check, CheckRun
 from tlkernel.ids import TreeSha
 from tlkernel.plancheck import PlanCheck, PlanData
@@ -12,7 +13,6 @@ from tlkernel.stagefacts import LeftoverSink
 from tlkernel.stop import Stop
 from tlkernel.wire import Open
 
-from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.work.ledger import Ledger
 
 

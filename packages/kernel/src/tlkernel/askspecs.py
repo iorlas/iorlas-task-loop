@@ -3,11 +3,11 @@ never from the text of a message. Each returns an AskSpec that passes lint."""
 from collections.abc import Sequence
 from typing import Any, Final
 
-from taskloop.domain.asks.lint import DECISION_MAX, LABEL_MAX, TRIED_MAX
-from taskloop.domain.asks.spec import AskSpec
-from taskloop.domain.asks.text import SPLIT_WORDS, clip
 from tlkernel.ask import AskDetail, AskOption, BudgetLine, ReplanLine
 from tlkernel.askenums import AskClass
+from tlkernel.asklint import DECISION_MAX, LABEL_MAX, TRIED_MAX
+from tlkernel.askspec import AskSpec
+from tlkernel.asktext import SPLIT_WORDS, clip
 from tlkernel.dash import OwnerCause
 
 RAW_CAP: Final = 4000
