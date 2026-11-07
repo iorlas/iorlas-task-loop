@@ -6,10 +6,10 @@ import sys
 from dataclasses import replace
 from unittest.mock import patch
 
+from dash import test_dash_api as fixtures
 from support.dashlogs import bead
 from support.factory_index import ingest
 
-from dash import test_dash_api as fixtures
 from taskloop.adapters.ident import hostname
 from taskloop.app.doctor import profiles
 from taskloop.app.launch import dash_ports
