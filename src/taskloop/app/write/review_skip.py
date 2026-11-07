@@ -1,9 +1,9 @@
-"""review_skip: a stage whose every changed path is mechanical (domain/review/skip.py) is accepted without a review call. The diff is
+"""review_skip: a stage whose every changed path is mechanical (domain/work/skip.py) is accepted without a review call. The diff is
 read here; the rule is the domain's."""
 from tlkernel.config import EngineConfig
 from tlkernel.gitport import Git
 
-from taskloop.domain.review.skip import SkipKind, decide
+from taskloop.domain.work.skip import SkipKind, decide
 
 
 def why(git: Git, wt: str, start: str, now: str, cfg: EngineConfig, *, maps_acceptance: bool) -> tuple[SkipKind, ...]:

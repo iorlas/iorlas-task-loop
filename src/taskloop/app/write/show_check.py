@@ -6,7 +6,7 @@ from tlkernel.artifact import ArtifactSlot
 from tlkernel.plancheck import Open
 
 from taskloop.app.artifacts import store
-from taskloop.domain.review import visual
+from taskloop.domain.work import visual
 
 SHOW_BACK = ("\nThe plan's `show` items name pictures or files that must be registered with the artifact_add tool for this write, with "
              "the stated name and role. These are not registered:\n%s\nRegister each one (the tool says what is wrong with a file), "

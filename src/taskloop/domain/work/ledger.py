@@ -1,10 +1,12 @@
 """The ledger (tl-bxk.13.16.1): how the plan says each criterion is proved. A criterion deferred to a follow-up bead (leftover) or left to
-the engine (engine_step) is not the reviewer's or the verifier's to judge: an item about it is routed here, never sent back."""
+the engine (engine_step) is not the reviewer's or the verifier's to judge: an item about it is routed here, never sent back.
+
+Used by: plan, review, write.
+"""
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
-from taskloop.domain.plan.matchers import word_set
-from taskloop.domain.review.matchers import Wording
+from taskloop.domain.work.matchers import Wording, word_set
 
 Entry = dict[str, str]
 
