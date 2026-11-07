@@ -34,15 +34,15 @@ class SelfTest(Case):
         """`tl selftest` as tl.main(argv) in this process (one scenario run, not a second one in a child). The old gate was "under 10 s",
         which a loaded machine fails. A slow selftest is one that spawns far more processes than the ~140 (git calls, one check) it
         takes now; count them instead of timing them."""
-        real, spawned, out = subprocess.Popen, [], io.StringIO()
+        real, spawned, out, err = subprocess.Popen, [], io.StringIO(), io.StringIO()
 
         class Counting(real):
             def __init__(self, *a, **k):
                 spawned.append(a[0] if a else k.get("args"))
                 super().__init__(*a, **k)
-        with mock.patch.object(subprocess, "Popen", Counting), contextlib.redirect_stdout(out):
+        with mock.patch.object(subprocess, "Popen", Counting), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             rc = tl.main(["selftest"])
-        assert rc == 0, out.getvalue()[-800:]
+        assert rc == 0, out.getvalue()[-800:] + err.getvalue()[-800:]  # a failure says why on stderr
         assert "selftest ok" in out.getvalue()
         print("selftest:", out.getvalue().strip().splitlines()[-1], f"{len(spawned)} processes (metric only)")
         assert not (Path.home() / ".config").exists()  # the real config dir was never made
