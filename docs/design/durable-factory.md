@@ -564,7 +564,7 @@ the brief's incidents, with no count available here.
 | stage accept | `p{g}/accept[{i}]` | `{wip_sha}` | task branch on origin == wip_sha (ls-remote) |
 | land | `land.t{k}` (k = land try) | `{land_sha}` | `land_sha` ancestor of `origin/<base>` |
 | close | `close` | effect keys | per effect (section 2.4) |
-| follow-ups | `followups` | `{key → bead id}` | bd label `fu:` lookup (`tl/app/land/followups.py:54`) |
+| follow-ups | `followups` | `{key → bead id}` | bd label `fu:` lookup (`tl/app/land/record.py:54`) |
 
 Replan is a new generation `g`, so ids never collide and old rows stay as history. The cursor is `first id in table(plan) with no ok row`. This is
 what `RunOnce.prepare`/`stages` compute by hand today from checkpoint fields (`tl/app/run/run_once.py:141-186`). The 13 `checkpoints.save(` call

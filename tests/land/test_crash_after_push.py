@@ -4,7 +4,7 @@ same checkpoint) does the effects that are missing and none that was done: one l
 import pytest
 from support.narrow_hosts import BdOut, FakeSyncHost, Stopped
 
-from taskloop.app.land.sync import Sync
+from taskloop.app.land.record import Sync
 
 SHA = "abc123def456"
 

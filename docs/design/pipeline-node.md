@@ -124,7 +124,7 @@ P3a showed the close family (`closer.py`, `closer_notes.py`, `closer_branch.py`,
 |---|---|---|---|---|
 | `AskRules` | `problems(spec: AskSpec) -> list[str]` | `raiser.problems(ended.spec)` (closer.py:112) | asks (`app/asks/closing.py`, a thin class over `raiser`) | `run/closer_ports.py` |
 | `ParkBook` | `paused(bead: Bead, kind: Kind, run: str, now: float, *, reason, not_before, fingerprint, producer, permanence) -> Park or None` ; `ended(bead: Bead, kind: Kind, run: str, now: float) -> None` | `parks.paused(e.home, ...)` (closer.py:156), `parks.ended(e.home, ...)` (closer_settle.py:71) | asks (`ParkBook(cfg)` over `app/asks/parks.py`; `cfg` is bound at construction, so the port has no `home`) | same |
-| `FollowUps` | `file() -> list[dict[str, str]]` (the leftovers bd refused) | `file_follow_ups(e)` (closer_notes.py:98); it reads the run's leftovers, filed set, stats, store and checkpoint | land (`app/land/followups.py` keeps `file_follow_ups`; the binder closes it over the run) | same |
+| `FollowUps` | `file() -> list[dict[str, str]]` (the leftovers bd refused) | `file_follow_ups(e)` (closer_notes.py:98); it reads the run's leftovers, filed set, stats, store and checkpoint | land (`app/land/record.py` keeps `file_follow_ups`; the binder closes it over the run) | same |
 | `LandCleanup` | `retry(repo: str) -> None` (the cleanup rows a landed run left) | `cleanup.retry_logged(e.git, e.log, is_slot, profile_slots(repo).base, cfg=e.home)` (closer_branch.py:98); `is_slot` is `wire.slots.slot_of` | land (`cleanup`) with the slot predicate from `wire.slots` | the root: it is the only place allowed to name `wire` |
 | `BeadClosing` | `close(claim: Claim, reason: str) -> int` ; `block(claim: Claim, why: str, say: Callable[[str], None]) -> int` | `track.close_as(e.who, e.claim, reason, e.store, closeguard.ENGINE)`, `track.block_as(...)` (closer_settle.py:59-67) | track (`app/track/closing.py`, over `verbs`), with `closeguard.ENGINE` (a pure `lambda`) bound by the root, so the pipeline names no guard | same |
 | `Slotting` | `leave_slot(outcome: Outcome, branch: str) -> None` | `e.tree.leave_slot(outcome, branch)` (closer_branch.py, a local `LeaveTree` Protocol today) | slots/land (`Tree`) | same; `fence.stale(store, claim)` is `contracts`, no port |
@@ -141,7 +141,7 @@ Rules for the slices: a port class lives in the stage that implements it (`app/<
 | **P4b** | `closer_settle`, `closer_decide`, `closer_notes` take the ports; they move to `app/pipeline/` (`closing_settle.py`, `closing_decide.py`, `closing_notes.py`) with tests on the fakes | those three files, `closer_host.py`, `closer.py` imports |
 | **P4c** | `closer_branch` (`LandCleanup`, `Slotting`) and `closer.py` (`AskRules`, `ParkBook`) move; `closer_host.py` shrinks to the binder `run/closer_ports.py`; the pipeline joins no new exception | `closer_branch.py`, `closer.py`, `closer_host.py`, `run/host.py` |
 
-P4a is safe beside the B-* lanes (new files and one-line additions). P4b and P4c edit files only the close family owns, plus `run/host.py`'s `closer` property. The B-LAND bead owns `app/land/followups.py`; P4a adds the adapter beside it, not inside it, to avoid a conflict.
+P4a is safe beside the B-* lanes (new files and one-line additions). P4b and P4c edit files only the close family owns, plus `run/host.py`'s `closer` property. The B-LAND bead owns `app/land/record.py`; P4a adds the adapter beside it, not inside it, to avoid a conflict.
 
 ## 10. P6: waits, requests, reload, reflect, resume, from today's call sites (added 2026-11-07, after P4)
 
@@ -264,7 +264,7 @@ Pipeline files import 22 `taskloop.domain` modules (section 13). Consumers outsi
 
 | cluster | modules (consumers outside pipeline) | destination | PR |
 |---|---|---|---|
-| pipeline-only | stuck only; interpret is also imported by app/land/sync.py, so it is not pipeline-only and goes with effects in R6c5 | `app/pipeline` (their only deps are `tlkernel`) | **R6c1** |
+| pipeline-only | stuck only; interpret is also imported by app/land/record.py, so it is not pipeline-only and goes with effects in R6c5 | `app/pipeline` (their only deps are `tlkernel`) | **R6c1** |
 | small pure helpers | `lanes.caps` (5), `lanes.liveness` (4), `followups` (5), `work.switch` (4), `checks.trim` (3) + `checks.matchers` (18), `review.kinds` (3) | kernel (no `taskloop` deps beyond each other) | **R6c2** |
 | the plan/land matchers | `plan.brief` (7), `plan.matchers` (5, needs `domain.checks`), `land.matchers` (9) | kernel, or the pipeline receives the three values it uses (`COMMENTS_ONLY`, `AcceptanceText`, `without_prefix`) as constructor arguments if a move drags more than two further modules | **R6c3** — done: plan.brief (planbrief), land.matchers (landmatchers) and AcceptanceText (acceptancetext) moved to the kernel; plan.matchers stays in the domain (gate_only_criteria needs domain.checks.lint) |
 | the run-end vocabulary | `outcome` (27), `lifecycle.matchers` (11), `asks.spec` (19), `asks.lint`, `asks.text`, `asks.specs` (27) | kernel (the WORKKERNEL precedent, tl-e5t0.70); `outcome` needs `asks.spec`, `lifecycle` and `tlkernel.reconcile`, so they move together | **R6c4** |

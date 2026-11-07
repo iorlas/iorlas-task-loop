@@ -22,7 +22,7 @@ from taskloop.app.land.host import LandState
 from taskloop.app.land.lander import GateStep, Lander, LandParts
 from taskloop.app.land.push import Landed, Pusher
 from taskloop.app.land.rebase import Commit, LandRebase, Recheck
-from taskloop.app.land.sync import Sync
+from taskloop.app.land.record import Sync
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 from tlkernel import fence
