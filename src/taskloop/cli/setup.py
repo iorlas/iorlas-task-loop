@@ -7,13 +7,9 @@ from collections.abc import Callable
 from pathlib import Path
 
 from tlkernel.env import Env
-from tlkernel.paths import ConfigDir
 
-from taskloop.adapters.ident import config_dir
 from taskloop.app.doctor import setup, setup_apply
-from taskloop.app.slots import profile_facts
-from taskloop.stores.delegate import real_route
-from taskloop.stores.real import real_stores
+from taskloop.app.launch import setup_ports
 
 
 def answers_of(a: argparse.Namespace, repo: Path, facts: setup.ProfileFacts) -> dict[str, str]:
@@ -30,11 +26,11 @@ def cmd_setup(a: argparse.Namespace, env: Env, plugin_root: Path, out: Callable[
     if a.apply:
         if sh is None:
             raise SystemExit("tl setup --apply needs a spawner")
-        code, lines = setup_apply.apply(plugin_root, env, repo, answers_of(a, repo, profile_facts), sh, profile_facts,
-                                       real_route(), real_stores(ConfigDir(config_dir(env))).host)
+        code, lines = setup_apply.apply(plugin_root, env, repo, answers_of(a, repo, setup_ports.facts), sh, setup_ports.facts,
+                                       setup_ports.route(), setup_ports.host_store(env))
         out("\n".join(lines))
         return code
-    plan = setup.plan(plugin_root, env, repo, profile_facts, real_route())
+    plan = setup.plan(plugin_root, env, repo, setup_ports.facts, setup_ports.route())
     out(setup.as_json(plan) if a.json else setup.render(plan))
     return 0 if all(c.ok for c in plan.checks) else 1
 
