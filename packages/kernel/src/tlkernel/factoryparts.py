@@ -10,13 +10,13 @@ from tlkernel.ask import Ask
 from tlkernel.bead import Bead
 from tlkernel.checkpoint import Checkpoint
 from tlkernel.dbparts import Part, Prune, doc_table
-from tlkernel.docrows import LOOK_DOCS, LOOP_DOCS, RELEASE_DOCS, REPORT_DOCS, WORK_DOCS
+from tlkernel.docrows import LANES_DOCS, LOOK_DOCS, LOOP_DOCS, RELEASE_DOCS, REPORT_DOCS, WORK_DOCS
 from tlkernel.ledger import Adr, LedgerEntry
 from tlkernel.loop import LoopCommand, Rest
 from tlkernel.parks import Park
 from tlkernel.requests import OwnerRequest
 from tlkernel.run import RunManifest
-from tlkernel.snapshots import Pin, ReflectState, ReleaseResult
+from tlkernel.snapshots import Pin, ReflectState, ReleaseResult, StatusSnapshot, StatusTried
 
 # The runs that may age out (the pipeline's rule; the history of other parts is pruned by it too). `?` is the cutoff; the temp table
 # prune_keep_bead holds the beads the caller exempts.
@@ -147,3 +147,4 @@ WORK = Part(name="work", version=1, tables=(WORK_DOCS,), records=(Adr,), ddl=doc
 
 LOOP = Part(name="loop", version=1, tables=(LOOP_DOCS,), records=(LoopCommand, Rest), ddl=doc_table(LOOP_DOCS))
 LOOK = Part(name="look", version=1, tables=(LOOK_DOCS,), records=(), ddl=doc_table(LOOK_DOCS))
+LANES = Part(name="lanes", version=1, tables=(LANES_DOCS,), records=(StatusSnapshot, StatusTried), ddl=doc_table(LANES_DOCS))

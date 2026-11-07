@@ -336,7 +336,7 @@ OTHERS = {
     "FlakeLog": flakes.FlakeLog(rows=[flakes.FlakeRow(test="test_a", t=T, how="retry", run="run-1", bead="tl-1")]),
     "QueueDoc": queue_doc.QueueDoc(entries=[queue_doc.EntryRow(
         branch="topic", head="head", phase="gating", q="q", tree="tree", ref="refs/tl/queue/topic", reason="",
-        base="base", ahead=["first"], check_set="checks",
+        base="base", ahead=["first"], check_set="checks", after="first",
         build=queue_doc.BuildRow(pid=42, start_id="start", lease_expires=T, worktree="/build"))],
         in_flight=2, last_base="base"),
     "QueueState": queue_state.QueueState(frozen=True, incidents=[queue_state.Incident(

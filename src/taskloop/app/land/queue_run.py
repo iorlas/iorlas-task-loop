@@ -5,8 +5,9 @@ through three ports, so the queue is tested with fakes and wired to git, the gat
   gate   (entry) -> bool: judge Q(N) in a fresh worktree; called on a thread, up to `in_flight` at a time
   merge  (entry, main) -> the new main: land the entry's PR (the tree assertion of app/land/treecheck.py lives behind it)
 
-Merges happen on this thread, head first. A red gate or a conflict ejects its entry and stops the building and gating of the rest (the
-repair of the entries behind it is bead tl-7s2f.5); what is already green still merges in order. The entries that left lose their refs."""
+Merges happen on this thread, head first. Attribution ejects culprits and rebuilds only entries behind them.
+Invalidated futures are discarded. Running gates cannot yet be killed: process-group cancellation needs a spawner cancel API
+in a follow-up. Entries that left lose their refs."""
 import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
@@ -14,12 +15,14 @@ from typing import Protocol
 
 from taskloop.app.land.queue import InFlight
 from taskloop.app.land.queue_refs import Conflict, Made
+from taskloop.domain.land.queue_in_flight import Cause
 from taskloop.domain.land.queue_in_flight import Event as FlightEvent
 from taskloop.domain.land.queue_model import (
     Build,
     Built,
     Drop,
     Dropped,
+    Eject,
     Ejected,
     Entry,
     Event,
@@ -28,6 +31,7 @@ from taskloop.domain.land.queue_model import (
     Landed,
     Merge,
     Phase,
+    Reset,
     Started,
     apply,
     plan,
@@ -51,7 +55,7 @@ class QueueRun:
         self.entries: list[Entry] = []
         self.on_change = on_change
         self.built = 0
-        self.halted = False
+        self.doomed: set[Future[bool]] = set()
 
     def see(self, event: Event) -> None:
         self.entries = apply(self.entries, event)
@@ -66,9 +70,8 @@ class QueueRun:
         if isinstance(got, Conflict):
             self.flight.happened(FlightEvent.CONFLICT_EJECT)
             self.see(Ejected(act.branch, f"conflict: {got.why}"))
-            self.halted = True
         else:
-            self.see(Built(act.branch, got.q, got.tree, got.ref))
+            self.see(Built(act.branch, got.q, got.tree, got.ref, act.after))
 
     def land(self, act: Merge) -> None:
         self.main = self.merge(self.by(act.branch), self.main)
@@ -79,13 +82,24 @@ class QueueRun:
         done, _ = wait(running, return_when=FIRST_COMPLETED)
         for fut in done:
             branch = running.pop(fut)
+            if fut in self.doomed:
+                self.doomed.remove(fut)
+                continue
             green = fut.result()
             started = self.started.pop(branch, None)
             self.gate_s[branch] = self.clock() - started if started is not None else 0.0
-            if not green:
-                self.flight.happened(FlightEvent.GATE_FAILED)
             self.see(Gated(branch, green))
-            self.halted = self.halted or not green
+
+    def reset(self, act: Reset, running: dict[Future[bool], str]) -> None:
+        for fut, branch in running.items():
+            if branch == act.branch and fut not in self.doomed:
+                self.doomed.add(fut)
+                fut.cancel()
+                self.flight.waste(self.clock() - self.started.pop(branch, self.clock()), Cause.CULPRIT_AHEAD)
+        if act.branch in self.gate_s:
+            self.flight.waste(self.gate_s.pop(act.branch), Cause.CULPRIT_AHEAD)
+        self.refs.drop(act.ref)
+        self.see(Reset(act.branch))
 
     def run(self, items: Sequence[tuple[str, str]]) -> list[Entry]:
         """Drive (branch, head) items to the end: merged, or ejected with a reason. -> the entries."""
@@ -100,13 +114,20 @@ class QueueRun:
                         self.refs.drop(act.ref)
                         self.see(Dropped(act.branch))
                         moved = True
+                    elif isinstance(act, Eject):
+                        self.flight.happened(FlightEvent.GATE_FAILED)
+                        self.see(Ejected(act.branch, act.reason))
+                        moved = True
+                    elif isinstance(act, Reset):
+                        self.reset(act, running)
+                        moved = True
                     elif isinstance(act, Merge):
                         self.land(act)
                         moved = True
-                    elif isinstance(act, Build) and not self.halted:
+                    elif isinstance(act, Build):
                         self.build(act)
                         moved = True
-                    elif isinstance(act, Gate) and not self.halted:
+                    elif isinstance(act, Gate):
                         self.started[act.branch] = self.clock()
                         running[pool.submit(self.gate, self.by(act.branch))] = act.branch
                         self.see(Started(act.branch))

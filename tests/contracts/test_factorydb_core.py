@@ -27,6 +27,7 @@ TABLES = {
     "work_doc",
     "loop_doc",
     "look_doc",
+    "lanes_doc",
     "followup",
     "park",
 }

@@ -54,7 +54,7 @@ def metrics(samples: Sequence[Sample], flakes: Sequence[FlakeRow], now: float) -
     useful = sum(s.gate_s for s in merged)
     wasted = sum(s.wasted_gate_s for s in samples)
     return Metrics(
-        depth=sum(s.outcome in ("waiting", "gating") for s in samples),
+        depth=sum(s.outcome in ("waiting", "built", "gating", "green", "red") for s in samples),
         wait_s_p50=percentile(waits, P50),
         wait_s_p90=percentile(waits, P90),
         gate_s_total=sum(s.gate_s for s in samples),
