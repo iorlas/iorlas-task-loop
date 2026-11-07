@@ -74,6 +74,7 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 just test                      # THE test command: runs only the tests this change can break (dev/affected.py: the diff against origin/main followed up the import graph; tests/rules always), all kinds, once per tree, in at most 4 workers; the gate and the release run this and nothing else
 uv run pytest tests/land -q    # one slice folder, module or test (tests/land/test_x.py::Class::test) while you edit; the tests are plain pytest classes: `assert`, `setup_method`, fixtures; `support.case.Case` still gives `addCleanup` and `subTest`; write new tests as pytest functions or classes, never `unittest`
 just check                     # ruff + pyrefly on the changed .py files only (`just lint-all` / `types-all`: whole tree), then import-linter (tools pinned in mise.toml; `mise install`)
+just test-pkg <stage>          # stage tests + its dependencies' contract tests; inner loop only, `just test` stays the gate
 just test-delegate            # tests/delegate (real processes, minutes): collected by no other run unless the change touches src/delegate, tests/delegate or skills/task-loop/_vendor (tests/support/scope.py); a task-loop or dashboard change never runs them
 ```
 
