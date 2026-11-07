@@ -9,7 +9,7 @@ Part of ARCHVERT (`stage-isolation.md` section 7, finding 6). Docs only; the sli
 | write | where | what it is |
 |---|---|---|
 | `e.writer_fallback`, `e.fallback_lane` | `take_answer` | the writer's thread ran on a fallback lane (only when the call resumes the writer) |
-| `e.writer.delegate`, `.ctx`, `.seen` | `take_answer` | the writer's session ref, its context size, what it has seen |
+| `e.writer.seen` | `take_answer` | the brief and plan hashes the writer has seen |
 | `e.planner_ref` | `end_call` | the planner's session ref |
 | `e.last_flag` | `end_call` | `same_family` / `degraded` of the last call, read by look, verify and review |
 | `e.lane_notes`, warn, comment | `end_call` | the same-family note |
@@ -24,7 +24,7 @@ reuses the answer and starts the next call with a stale thread.
 1. **`AskAi.ask(req) -> Asked`** (kernel port, `stage-isolation.md` (b)). `Asked` is a frozen value:
    `data`, `family`, and `updates: Updates`. The call never touches the engine.
 2. **`Updates`** (frozen, one per call; contracts layer, no delegate import):
-   - `session: SessionUpdate | None`: `ref`, `ctx`, `seen` for the caller's thread (writer or planner: the request names which, `Thread.WRITER | Thread.PLANNER`);
+   - `session: SessionUpdate | None`: `seen` for the writer's brief and plan hashes; delegate owns the thread ref and context;
    - `fallback: Fallback | None`: `on: bool`, `lane: str`, set only when delegate said it on this answer (as `take_answer` does now);
    - `flag: str`: `same_family` / `degraded` / `""`, with the read-only same-family override folded in by `ask` (it has the writer family in the request);
    - `note: str`: the lane note, or `""`.
