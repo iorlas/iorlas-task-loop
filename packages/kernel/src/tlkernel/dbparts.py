@@ -12,7 +12,7 @@ part with its row in `schema_part`:
   version bump (and a step). The golden test (tests/contracts/test_dbparts_golden.py) holds the same line before a change reaches main.
 
 A read-only open writes nothing: it refuses a part newer than the code, or below the reader's declared needs.
-Without needs, absent and older parts are accepted.
+Without needs, absent and older parts are accepted. Stored parts unknown to this code are ignored; their tables and rows stay untouched.
 """
 import functools
 import hashlib
@@ -93,7 +93,7 @@ def prune_order(parts: Iterable[Part]) -> tuple[Prune, ...]:
 
 def doc_table(table: str) -> str:
     """The DDL of a stage's own table of typed documents (`k` the key with the record's name as prefix, `v` its JSON, `t` the write time):
-    what `kv` was for every stage at once, now one per owner (read and written by docrows.RowDocs with `table=`)."""
+    one per owner (read and written by docrows.RowDocs with `table=`)."""
     return f"CREATE TABLE {table} (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL);"
 
 

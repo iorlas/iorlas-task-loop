@@ -68,7 +68,6 @@ class StopRequests(LoopBase):
         rows = self.files.rows()
         assert {k for (k,) in rows.select("SELECT k FROM loop_doc")} == {
             f"loop-command:{self.files.key}", f"loop-rest:{self.files.key}"}
-        assert rows.select("SELECT k FROM kv WHERE k LIKE 'loop-command:%' OR k LIKE 'loop-rest:%'") == []
         assert self.files.command().get() == command
         assert self.files.rests() == {"b": self.clock.t + 60}
         self.files.command().delete()

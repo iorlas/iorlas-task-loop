@@ -22,13 +22,13 @@ def cfg(tmp_path):
 def seed(cfg, value="saved"):
     cfg.root.mkdir(parents=True, exist_ok=True)
     with closing(must(factorydb.open_rw(cfg.factory_db()))) as con:
-        con.execute("INSERT INTO kv(k,v,t) VALUES ('test',?,1)", (value,))
+        con.execute("INSERT INTO look_doc(k,v,t) VALUES ('test',?,1)", (value,))
 
 
 def values(path):
     with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)) as con:
         assert con.execute("PRAGMA quick_check").fetchall() == [("ok",)]
-        return con.execute("SELECT k,v,t FROM kv ORDER BY k").fetchall()
+        return con.execute("SELECT k,v,t FROM look_doc ORDER BY k").fetchall()
 
 
 def test_backup_once_per_utc_day(cfg):
@@ -59,7 +59,7 @@ def test_backup_keeps_seven_newest_names(cfg):
 def test_backup_contains_committed_wal_rows(cfg):
     seed(cfg)
     with closing(must(factorydb.open_rw(cfg.factory_db()))) as writer:
-        writer.execute("INSERT INTO kv(k,v,t) VALUES ('wal','committed',2)")
+        writer.execute("INSERT INTO look_doc(k,v,t) VALUES ('wal','committed',2)")
         snapshot = must(factorybackup.backup(cfg, DAY))
         assert values(snapshot) == values(cfg.factory_db())
     assert sorted(path.name for path in snapshot.parent.iterdir()) == [snapshot.name]
@@ -107,7 +107,7 @@ def test_restore_selects_newest_valid_backup(cfg):
     seed(cfg, "old")
     factorybackup.backup(cfg, DAY)
     with closing(must(factorydb.open_rw(cfg.factory_db()))) as con:
-        con.execute("UPDATE kv SET v='new'")
+        con.execute("UPDATE look_doc SET v='new'")
     newest = must(factorybackup.backup(cfg, DAY + 86400))
     (newest.parent / "factory-20261106.db").write_bytes(b"garbage" * 100)
     (newest.parent / "factory-20261107.db").write_bytes(b"")

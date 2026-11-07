@@ -195,3 +195,16 @@ def test_launch_validates_part_ownership_before_touching_database(readonly):
     with pytest.raises(ValueError, match="already belongs to part"):
         dbparts.launch(c, readonly=readonly, parts=[part(), other])
     assert c.execute("SELECT name FROM sqlite_master").fetchall() == []
+
+
+@pytest.mark.parametrize("readonly", [False, True])
+def test_launch_ignores_a_retired_part_and_leaves_its_table_alone(readonly):
+    c = con()
+    retired = Part(name="kv", version=1, tables=("kv",),
+                   ddl="CREATE TABLE kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL, stamp TEXT);")
+    dbparts.launch(c, readonly=False, parts=[part(), retired])
+    c.execute("INSERT INTO kv(k,v,t) VALUES ('orphan','untouched',1)")
+    before = c.execute("SELECT * FROM schema_part WHERE name='kv'").fetchone()
+    dbparts.launch(c, readonly=readonly, parts=[part()], needs={"p": 1})
+    assert c.execute("SELECT * FROM schema_part WHERE name='kv'").fetchone() == before
+    assert c.execute("SELECT k,v,t FROM kv").fetchall() == [("orphan", "untouched", 1.0)]
