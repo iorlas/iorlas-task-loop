@@ -453,7 +453,7 @@
   ]
  },
  "Checkpoint": {
-  "v": 4,
+  "v": 5,
   "bead": "tl-1",
   "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "t": 1793050200.5,
@@ -2036,5 +2036,162 @@
   ],
   "by": "dash",
   "t": 1793050200.5
+ },
+ "CursorBody": {
+  "v": 5,
+  "bead": "tl-1",
+  "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
+  "t": 1793050200.5,
+  "branch": "task/tl-1",
+  "head": "abc",
+  "closed": false,
+  "step": "write",
+  "stage": 2,
+  "rounds": 3,
+  "n": 4,
+  "feedback": "f",
+  "gate_tail": "",
+  "applied": [
+   "tl-1/r/save_branch"
+  ],
+  "ended": {
+   "outcome": {
+    "run": "r",
+    "kind": "ask_decision",
+    "fingerprint": "fp",
+    "detail": "d",
+    "sha": "",
+    "spec": "{\"ask_class\":\"decision\",\"decision\":\"q\"}",
+    "fp": "fp0",
+    "comment": false,
+    "escalated": true,
+    "leftovers": []
+   },
+   "pause": {
+    "reason": "no_lane",
+    "producer": "engine",
+    "permanence": null,
+    "retry_after": 0.0,
+    "crash_fingerprint": "",
+    "crash_site": ""
+   },
+   "stats": "cost=$1.23",
+   "plan_summary": "",
+   "asked": false
+  },
+  "notes": {
+   "filed": 2,
+   "unfiled": 1
+  },
+  "shared": {
+   "done": [
+    "g1"
+   ],
+   "accepted": [
+    0
+   ],
+   "accepted_new": []
+  },
+  "progress": null
+ },
+ "Shared": {
+  "done": [
+   "g1"
+  ],
+  "accepted": [
+   0
+  ],
+  "accepted_new": []
+ },
+ "PlanSection": {
+  "v": 1,
+  "plan_data": {
+   "summary": "s",
+   "stages": [
+    {
+     "goal": "g",
+     "files": [],
+     "checks": []
+    }
+   ]
+  },
+  "brief_hash": "b0",
+  "snap": {
+   "fields": {
+    "title": "t"
+   },
+   "issue_type": "task",
+   "deps": [
+    "x:blocks"
+   ],
+   "comments": [
+    "c"
+   ]
+  },
+  "planner_ref": "",
+  "planned": 0,
+  "replans": 0,
+  "extra": 0,
+  "rebase_resets": 0,
+  "plan_log": [
+   {
+    "mode": "plan",
+    "why": "first",
+    "counted": true
+   }
+  ]
+ },
+ "WriteSection": {
+  "v": 1,
+  "writer": {
+   "delegate": "codex",
+   "ctx": 35.0,
+   "seen": [
+    "abc"
+   ],
+   "last_stage": false
+  },
+  "writer_family": null,
+  "writer_fallback": false,
+  "fallback_lane": "",
+  "handoff": {
+   "rounds": [
+    {
+     "stage": "1/1",
+     "round": 1,
+     "kind": "bad_checks",
+     "writer": "",
+     "open": []
+    }
+   ],
+   "seen_lows": []
+  },
+  "stage_tree": "",
+  "denials": []
+ },
+ "LandSection": {
+  "v": 1,
+  "pending_land_validation": "red",
+  "leftovers": [],
+  "followup_ids": {},
+  "fixes": 0
+ },
+ "LookSection": {
+  "v": 1,
+  "look_notes": [],
+  "look_unjudged": {},
+  "look_done": 0,
+  "rendered_names": [
+   "r"
+  ],
+  "last_reqs": [
+   {
+    "method": "Shots",
+    "names": [
+     "n"
+    ]
+   }
+  ],
+  "render_stale": false
  }
 }

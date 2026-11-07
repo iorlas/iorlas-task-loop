@@ -46,3 +46,28 @@ The checkpoint stays one record. Sections keep resumable stage progress only: `R
 ## Not verified
 
 The table is read from the code, not exercised: whether a restart really files `cost=$0.00` was not run. `e.sessions` and `e.stats` as defaults are read from `run/fields.py` names only. Whether P3 changes `Closer.finish`'s signature is the pipeline lane's to say.
+
+## 4. Per-part persistence (C3, tl-e5t0.29; one PR)
+
+Storage only. The in-memory `Checkpoint` and the flat `RunState` (engine attributes through `StateField`) do not change, so no call site of `ck.state.X` moves; `Checkpoints` (app/run/state.py) keeps its methods. What changes is how the record is stored: no more one body that holds every stage's fields.
+
+**Rows.** The pipeline Part keeps `checkpoint` (bead, t, rev, body) as the **cursor row** and gains `checkpoint_section` (bead, section, body), primary key (bead, section). The cursor body is the `Checkpoint` without the owned fields (branch, head, step, stage, rounds, n, feedback, gate_tail, applied, `ended: CloseIntent`, notes, progress, closed, and the shared fields below). Each section row is one kernel record. The cursor's `rev` is the only fence: a write is one SQLite transaction that checks the cursor revision, writes the cursor and upserts only the sections whose body changed. A read is one transaction that assembles the `Checkpoint`. A section row missing, torn or of another version refuses the whole record (`Refused`); nothing is migrated (compat.md).
+
+**Who owns which RunState field** (every field has one owner; no catch-all section):
+
+| owner | section record | fields |
+|---|---|---|
+| plan | `PlanSection` | plan_data, brief_hash, snap, planner_ref, planned, replans, extra, rebase_resets, plan_log |
+| write | `WriteSection` | writer, writer_family, writer_fallback, fallback_lane, handoff, stage_tree, denials |
+| land | `LandSection` | pending_land_validation, leftovers, followup_ids, fixes |
+| look | `LookSection` | look_notes, look_unjudged, look_done, rendered_names, last_reqs, render_stale (LOOK_FIELDS plus render_stale) |
+| review | `ReviewState` (existing) | review |
+| cursor body (shared by pipeline, write, look, land) | n/a | done, accepted, accepted_new |
+
+The `write` section holds the write stage's persisted `RunState` fields; `WriteState` (rounds, summaries, strays) is not checkpointed today and stays out. The three shared fields are the stage progress every stage reads and the pipeline advances, so they live with the cursor, not in a stage's section.
+
+**Primitive.** A kernel store (`tlkernel/checkpointrows.py`) over the pipeline tables: `read(bead)`, `write(ck, expect_rev)`, `delete(bead)`, `keys()`, with the same revision semantics as `RowDoc.write_in` and the same `Fenced`/`StaleRevision` outcomes. `AmendDoc.modify` / `modify_with` keep their meaning: `fn` sees the assembled record, the result is written in one transaction. One contract suite runs against the real SQLite store and against the in-memory fake (`MemDoc`-based, assembled the same way), so the fake cannot drift.
+
+**Versions.** `Checkpoint.V` 4 to 5; pipeline Part 2 to 3 with a no-op step (a record changed its V needs a Part bump, #460); goldens regenerated. A v4 checkpoint is refused loudly and the run starts over; no dual read, no dual write.
+
+**Not done here.** Moving a section's record into its stage's own package (stage packages carve), and `Checkpoint` losing `state` in memory.
