@@ -2,7 +2,6 @@
 from unittest.mock import Mock
 
 import pytest
-
 from tlkernel import trustroots
 from tlkernel.bead import Bead
 from tlkernel.gitfacts import DiffEntry
