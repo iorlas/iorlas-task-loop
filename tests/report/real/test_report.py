@@ -347,7 +347,7 @@ class Scorecard(Base):
         assert c["minutes"]["p90"] == 45
         assert c["rounds"] == 1
         assert c["replans"] == 1
-        assert c["tokens"]["lane"]["codex"] == {"in": 1010, "cached": 900, "out": 51}
+        assert c["tokens"]["lane"]["openai"] == {"in": 1010, "cached": 900, "out": 51}
         assert c["tokens"]["lane"]["claude"] == {"in": 100, "cached": 80, "out": 10}
         assert c["tokens"]["role"]["worker"]["in"] == 1000
 

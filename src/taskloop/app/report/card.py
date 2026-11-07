@@ -180,7 +180,7 @@ def _tokens(runs: Sequence[RunTrace]) -> dict[str, dict[str, dict[str, int]]]:
             if not any(tk.values()):
                 continue
             fam = s.family or (s.lane or "?").split("_")[0].lower()
-            for key, name in (("lane", "codex" if fam == "openai" else fam), ("role", s.role or "?")):
+            for key, name in (("lane", fam), ("role", s.role or "?")):
                 d = tokens[key].setdefault(name, {"in": 0, "cached": 0, "out": 0})
                 d["in"] += input_tokens(tk)
                 d["cached"] += tk["cached"]

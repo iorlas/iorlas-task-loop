@@ -4,9 +4,6 @@ split with str methods."""
 import time
 from typing import Final
 
-FAMILY: Final = {"openai": "Codex", "claude": "Claude", "xai": "Grok"}
-
-
 IMAGES: Final = ("image/png", "image/jpeg", "image/gif", "image/webp")
 # The one table of what is served by its name; the host's mime database (/etc/mime.types) answers differently per machine.
 TYPES: Final = {
@@ -35,15 +32,8 @@ def num(ident: object) -> int:
 
 
 def lane_name(lane: str | None = "", family: str | None = "") -> str:
-    """Codex, Claude or Grok, from delegate's family or lane name."""
-    if family and family in FAMILY:
-        return FAMILY[family]
-    up = (lane or "").upper()
-    if "GROK" in up or up.endswith("XAI") or "_XAI" in up:
-        return "Grok"
-    if "OPENAI" in up or "CODEX" in up:
-        return "Codex"
-    return "Claude" if "CLAUDE" in up or "ANTHROPIC" in up else ""
+    """Delegate's family, or the lane name's first part, title-cased."""
+    return (family or (lane or "").split("_")[0]).title()
 
 
 def hhmm(t: float | None) -> str:
