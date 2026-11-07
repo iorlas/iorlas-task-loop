@@ -52,6 +52,8 @@ TABLES = {
     "repos_doc",
     "ticket_doc",
     "index_doc",
+    "queue_doc",
+    "flake_doc",
 }
 
 INDEXES = {

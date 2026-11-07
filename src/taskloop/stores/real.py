@@ -12,7 +12,7 @@ from tlkernel.askstore import AskStore
 from tlkernel.checkpoint import Checkpoint
 from tlkernel.checks import BaseRedRecord, CheckRun, PassRecord
 from tlkernel.config import HostResources
-from tlkernel.docrows import RowDocs
+from tlkernel.docrows import FLAKE_DOCS, QUEUE_DOCS, RowDocs
 from tlkernel.docstore import JsonStore
 from tlkernel.flakes import FlakeLog
 from tlkernel.followups import FollowupOutbox
@@ -29,9 +29,9 @@ def real_stores(cfg: paths.ConfigDir) -> Stores:
         checkpoints=CheckpointBook(RowDocs(cfg, Checkpoint, table="checkpoint", key_col="bead", body_col="body",
                                            revisioned=True)),
         followups=RowDocs(cfg, FollowupOutbox, table="followup", key_col="bead", body_col="body"),
-        flakes=RowDocs(cfg, FlakeLog, table="kv", key_col="k", body_col="v", prefix="flakes:"),
-        queue=RowDocs(cfg, QueueDoc, table="kv", key_col="k", body_col="v", prefix="queue:"),
-        queue_state=RowDocs(cfg, QueueState, table="kv", key_col="k", body_col="v", prefix="queue-state:"),
+        flakes=RowDocs(cfg, FlakeLog, table=FLAKE_DOCS, key_col="k", body_col="v", prefix="flakes:"),
+        queue=RowDocs(cfg, QueueDoc, table=QUEUE_DOCS, key_col="k", body_col="v", prefix="queue:"),
+        queue_state=RowDocs(cfg, QueueState, table=QUEUE_DOCS, key_col="k", body_col="v", prefix="queue-state:"),
         results=lambda repo, check: DbDocSet(cfg, repo, check, "pass", PassRecord),
         base_red=lambda repo: DbDocSet(cfg, repo, None, "base_red", BaseRedRecord),
         durations=rundocs.durations(cfg),

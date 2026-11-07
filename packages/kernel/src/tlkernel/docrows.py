@@ -13,6 +13,9 @@ from tlkernel.looprows import LoopRows
 from tlkernel.paths import ConfigDir
 from tlkernel.wire import Rec
 
+QUEUE_DOCS = "queue_doc"  # merge queue entries and tree assertion state
+FLAKE_DOCS = "flake_doc"  # per-repository flake score logs
+
 RECEIPT_DOCS = "receipt_doc"  # owner-command idempotency receipts
 BEADCACHE_DOCS = "bead_doc"  # index-owned tracker observations, separate from bead rows
 REPOS_DOCS = "repos_doc"  # the registered repositories index

@@ -13,10 +13,12 @@ from tlkernel.dbparts import Part, Prune, doc_table
 from tlkernel.docrows import (
     BEADCACHE_DOCS,
     DISK_DOCS,
+    FLAKE_DOCS,
     INDEX_DOCS,
     LANES_DOCS,
     LOOK_DOCS,
     LOOP_DOCS,
+    QUEUE_DOCS,
     RECEIPT_DOCS,
     RELEASE_DOCS,
     REPORT_DOCS,
@@ -25,9 +27,12 @@ from tlkernel.docrows import (
     WORK_DOCS,
     WORKTREE_DOCS,
 )
+from tlkernel.flakes import FlakeLog
 from tlkernel.ledger import Adr, LedgerEntry
 from tlkernel.loop import LoopCommand, Rest
 from tlkernel.parks import Park
+from tlkernel.queue_doc import QueueDoc
+from tlkernel.queue_state import QueueState
 from tlkernel.requests import OwnerRequest
 from tlkernel.run import RunManifest
 from tlkernel.snapshots import Pin, ReflectState, ReleaseResult, ReposIndex, StatusSnapshot, StatusTried
@@ -176,3 +181,6 @@ TICKET = Part(name="ticket", version=1, tables=(TICKET_DOCS,), records=(), ddl=d
 INDEX = Part(name="index", version=1, tables=(INDEX_DOCS,), records=(), ddl=doc_table(INDEX_DOCS))
 WORKTREE = Part(name="worktree", version=1, tables=(WORKTREE_DOCS,), records=(Owned,), ddl=doc_table(WORKTREE_DOCS))
 DISK = Part(name="disk", version=1, tables=(DISK_DOCS,), records=(), ddl=doc_table(DISK_DOCS))
+
+QUEUE = Part(name="queue", version=1, tables=(QUEUE_DOCS,), records=(QueueDoc, QueueState), ddl=doc_table(QUEUE_DOCS))
+FLAKE = Part(name="flake", version=1, tables=(FLAKE_DOCS,), records=(FlakeLog,), ddl=doc_table(FLAKE_DOCS))
