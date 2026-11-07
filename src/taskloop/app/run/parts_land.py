@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import override
 
 from tlkernel.repourl import repo_url
-from tlwork.write.newfiles import NewFiles
+from tlwork.api import NewFiles
 
 from taskloop.adapters import landlock
 from taskloop.app.land import cleanup

@@ -24,7 +24,10 @@ def git(root, *argv):
 def test_this_change_raises_no_ratchet():
     if ratchet_change.merge_base(ROOT) is None:
         pytest.skip("no origin/main to compare with")
-    bad = {name: ratchet_change.problems(name, counter, ROOT) for name, counter in RATCHETS.items()}
+    bad = {
+        name: ratchet_change.problems(name, counter, ROOT, counter_at=root_ratchet.counter_for if name == "root" else None)
+        for name, counter in RATCHETS.items()
+    }
     assert {k: v for k, v in bad.items() if v} == {}, "fix it, or say it in a commit: `Ratchet-allow: <name> +N <reason in words>`"
 
 
@@ -76,3 +79,48 @@ def test_a_commit_line_with_a_reason_allows_a_rise(workdir):
 def test_no_origin_main_means_no_judgement(workdir):
     git(workdir, "init", "-q", "-b", "main")
     assert ratchet_change.merge_base(workdir) is None
+    assert ratchet_change.problems("root", root_ratchet.file_counts, workdir, counter_at=root_ratchet.counter_for) is None
+
+
+def root_contract(*modules):
+    return "[importlinter:contract:nobody-imports-a-root]\nforbidden_modules =\n" + "".join(f"    {m}\n" for m in modules)
+
+
+def root_repo(workdir, monkeypatch):
+    root = repo(workdir)
+    monkeypatch.setattr(root_ratchet, "ROOT", root)
+    (root / ".importlinter").write_text(root_contract("old", "keep"), encoding="utf-8")
+    (root / "src/old.py").write_text("a = 1\nb = 2\nc = 3\nd = 4\n", encoding="utf-8")
+    (root / "src/keep.py").write_text("x = 1\n", encoding="utf-8")
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "roots")
+    git(root, "update-ref", "refs/remotes/origin/main", "HEAD")
+    return root
+
+
+def test_a_deleted_root_removed_from_the_contract_pays_down_sloc(workdir, monkeypatch):
+    root = root_repo(workdir, monkeypatch)
+    (root / ".importlinter").write_text(root_contract("keep"), encoding="utf-8")
+    (root / "src/old.py").unlink()
+    base = ratchet_change.merge_base(root)
+    assert base is not None
+    before, after = ratchet_change.net(root_ratchet.file_counts, root, base, ratchet_change.changed_py(root, base),
+                                      counter_at=root_ratchet.counter_for)
+    assert before.get("sloc", 0) == 4
+    assert after.get("sloc", 0) == 0
+
+
+def test_a_removed_root_pays_for_a_binding_elsewhere(workdir, monkeypatch):
+    root = root_repo(workdir, monkeypatch)
+    (root / ".importlinter").write_text(root_contract("keep"), encoding="utf-8")
+    (root / "src/old.py").unlink()
+    (root / "src/keep.py").write_text("x = 1\na = 2\nb = 3\nc = 4\n", encoding="utf-8")
+    assert ratchet_change.problems("root", root_ratchet.file_counts, root, counter_at=root_ratchet.counter_for) == []
+
+
+def test_a_new_root_in_the_contract_counts_as_a_rise(workdir, monkeypatch):
+    root = root_repo(workdir, monkeypatch)
+    (root / ".importlinter").write_text(root_contract("old", "keep", "new"), encoding="utf-8")
+    (root / "src/new.py").write_text("x = 1\ny = 2\nz = 3\n", encoding="utf-8")
+    assert ratchet_change.problems("root", root_ratchet.file_counts, root,
+                                  counter_at=root_ratchet.counter_for) == ["sloc: +3"]

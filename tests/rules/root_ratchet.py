@@ -8,20 +8,38 @@ import ast
 import configparser
 from pathlib import Path
 
+from rules.ratchet_change import Counter
+
 ROOT = Path(__file__).resolve().parents[2]
 LONG_SLOC = 25
 BRANCHES = (ast.If, ast.For, ast.While, ast.Try, ast.Match)
 BEYOND = ("src/taskloop/cli/", "src/taskloop/hook/", "skills/task-loop/tl.py")
 
 
-def is_root(rel: str) -> bool:
+def forbidden_modules(text: str | None) -> tuple[str, ...]:
+    cp = configparser.ConfigParser(interpolation=None, comment_prefixes=("#",), inline_comment_prefixes=None)
+    cp.read_string(text or "")
+    modules = cp.get("importlinter:contract:nobody-imports-a-root", "forbidden_modules", fallback="")
+    return tuple(m.strip() for m in modules.splitlines() if m.strip())
+
+
+def is_root(rel: str, forbidden: tuple[str, ...] | None = None) -> bool:
     if rel.startswith(BEYOND):
         return True
     module = rel.removesuffix(".py").removeprefix("src/").replace("/", ".")
-    cp = configparser.ConfigParser(interpolation=None, comment_prefixes=("#",), inline_comment_prefixes=None)
-    cp.read(ROOT / ".importlinter", encoding="utf-8")
-    forbidden = [m.strip() for m in cp["importlinter:contract:nobody-imports-a-root"]["forbidden_modules"].splitlines() if m.strip()]
+    if forbidden is None:
+        forbidden = forbidden_modules((ROOT / ".importlinter").read_text(encoding="utf-8"))
     return any(module == m or module.startswith(m + ".") for m in forbidden)
+
+
+def counter_for(importlinter_text: str | None) -> Counter:
+    """Freeze root membership from one side of a change; absent config has only the fixed roots."""
+    forbidden = forbidden_modules(importlinter_text)
+
+    def counter(rel: str, tree: ast.Module) -> dict[str, int]:
+        return root_file_counts(rel, tree) if is_root(rel, forbidden) else {}
+
+    return counter
 
 
 def code_lines(tree: ast.Module) -> set[int]:
@@ -37,7 +55,11 @@ def code_lines(tree: ast.Module) -> set[int]:
 
 
 def file_counts(rel: str, tree: ast.Module) -> dict[str, int]:
-    if not rel.endswith(".py") or not is_root(rel):
+    return counter_for((ROOT / ".importlinter").read_text(encoding="utf-8"))(rel, tree)
+
+
+def root_file_counts(rel: str, tree: ast.Module) -> dict[str, int]:
+    if not rel.endswith(".py"):
         return {}
     code = code_lines(tree)
     out = {"branch": 0, "long_function": 0, "sloc": len(code)}
