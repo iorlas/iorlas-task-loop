@@ -131,7 +131,14 @@ KV = Part(
 CREATE TABLE kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL, stamp TEXT);
 """)
 
-RELEASE = Part(name="release", version=1, tables=(RELEASE_DOCS,), records=(Pin, ReleaseResult), ddl=doc_table(RELEASE_DOCS))
+
+def discard_old_pin(con: sqlite3.Connection) -> None:
+    """release v1 -> v2: discard the retired two-plugin pin."""
+    con.execute(f"DELETE FROM {RELEASE_DOCS} WHERE k='pin'")
+
+
+RELEASE = Part(name="release", version=2, tables=(RELEASE_DOCS,), records=(Pin, ReleaseResult),
+               ddl=doc_table(RELEASE_DOCS), steps={1: discard_old_pin})
 
 REPORT = Part(name="report", version=1, tables=(REPORT_DOCS,), records=(ReflectState,), ddl=doc_table(REPORT_DOCS))
 

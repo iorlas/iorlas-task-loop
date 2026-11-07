@@ -25,7 +25,7 @@ from taskloop.app.wire import slots as wslots
 
 def installs(cfg: paths.ConfigDir, env: Env, here: Path = HERE, now: Callable[[], float] = trail.now) -> Installs:
     """The installs of task-loop on this machine."""
-    return Installs(cfg, here.parents[1], lambda: catalog.installed_version("task-loop", ident.claude_dir(env)),
+    return Installs(cfg, here.parents[1], lambda: catalog.installed_version(ident.claude_dir(env)),
                     lambda: pins.read_pin(env).task_loop or "",
                     now=now)
 

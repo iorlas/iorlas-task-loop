@@ -24,7 +24,7 @@ from tlkernel.slots import SlotGitError
 from taskloop.adapters import layout_migrate
 from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.ident import claude_dir, config_dir
-from taskloop.app.doctor import disk, env_checks, ops, profiles, rails
+from taskloop.app.doctor import disk, env_checks, ops, profiles, queue, rails
 from taskloop.app.release import catalog, manifest
 from taskloop.app.report.inputs import repo_traces
 from taskloop.app.slots import watchdog
@@ -36,6 +36,7 @@ from taskloop.domain.checks.inputs import dead_globs
 from taskloop.domain.lanes import pin
 from taskloop.domain.layout import matchers as layout
 from taskloop.stores.delegate import real_route
+from taskloop.stores.real import real_stores
 
 Source = tuple[RepoProfile, str, str]
 
@@ -183,8 +184,8 @@ def install_problems(plugin_root: Path, env: Env) -> list[str]:
     if OWNERSHIP not in agents.splitlines():
         out.append(f"{plugin_root / 'AGENTS.md'} has no '{OWNERSHIP}' section (who may write the checkout, the cache, the ports)")
     claude = claude_dir(env)
-    version = catalog.installed_version("task-loop", claude)
-    installed = catalog.cache_dirs("task-loop", claude).get(version)
+    version = catalog.installed_version(claude)
+    installed = catalog.cache_dirs(claude).get(version)
     if installed:
         out += [f"installed task-loop {version}: {p}" for p in manifest.verify(installed)]
     return out
@@ -241,6 +242,7 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
     fails += [f.text for f in found if f.level == "FAIL"]
     fails += rails.report(ConfigDir(config_dir(env)), hook.GIT_HOOK, hook.readable_install(plugin_root), git, repo, spawner,
                           [c.id for c in source[0].engine.gate_checks])
+    fails += queue.report(real_stores(who.config), git, repo, f"origin/{base or 'main'}", time.time())
     if not warns and not found and not fails:
         print("ok: no setup problems found in " + repo)
     return 1 if fails else 0
