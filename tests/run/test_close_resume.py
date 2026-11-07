@@ -14,7 +14,8 @@ from support.checkpoints import read_ck
 from support.spawn import port_git, real_spawner
 from support.who import who
 
-from taskloop.app.run import ended, engine
+from taskloop.app.pipeline import ended
+from taskloop.app.run import engine
 from taskloop.app.run.closer import Closer, closer_over
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import wire

@@ -6,9 +6,9 @@ from pathlib import Path
 from typing import Protocol
 
 from taskloop.adapters import deadline
-from taskloop.app.run import outcomes
+from taskloop.app.pipeline import outcomes
+from taskloop.app.pipeline.steps import Open
 from taskloop.app.run.blocked import Blocked
-from taskloop.app.run.steps import Open
 from taskloop.contracts import log as rec
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import WaitWhat
