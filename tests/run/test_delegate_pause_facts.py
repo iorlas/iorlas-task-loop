@@ -50,7 +50,8 @@ class DelegatePauseFacts(Case):
                 assert host.pause_permanence == permanence
                 store.return_value.get.return_value = None
                 with mock.patch("taskloop.app.pipeline.closing.beadtools.peek", return_value=bead):
-                    Closer(host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home)).pause(oc.make(Kind.PAUSE_LANE, "paused"))
+                    Closer(host, host, host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home)).pause(
+                            oc.make(Kind.PAUSE_LANE, "paused"))
                 saved = store.return_value.put.call_args.args[0]
                 assert saved.permanence == permanence
                 assert saved.retry_at == (900 if permanence == "transient" else 0)

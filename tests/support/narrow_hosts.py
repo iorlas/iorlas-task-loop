@@ -697,7 +697,7 @@ class CloseRecords:
 
 
 class FakeCloseHost(Said):
-    """CloseHost: the Closer's own flow, over an in-memory log. `dry` keeps the checkpoint out of it."""
+    """The close roles for the Closer's own flow, over an in-memory log. `dry` keeps the checkpoint out of it."""
 
     def __init__(self, dry: bool = True, disp: oc.Disposition | None = None) -> None:
         super().__init__()
@@ -802,7 +802,7 @@ class CloseKit:
         self.slot = SpySlot()
         self.calls: list[str] = []
         self.closer = Closer(
-            self.host,
+            self.host, self.host, self.host,
             CloseParts(
                 decide=SpyDecide(),
                 branch=SpyBranch(self.calls),

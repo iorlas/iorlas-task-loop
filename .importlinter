@@ -262,7 +262,6 @@ source_modules =
     taskloop.app.pipeline.closing
     taskloop.app.pipeline.closing_branch
     taskloop.app.pipeline.closing_decide
-    taskloop.app.pipeline.closing_host
     taskloop.app.pipeline.closing_notes
     taskloop.app.pipeline.closing_record
     taskloop.app.pipeline.closing_settle
