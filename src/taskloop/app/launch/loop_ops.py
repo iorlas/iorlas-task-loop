@@ -21,19 +21,23 @@ from tlkernel.procport import Child, Hold, Spawner
 from tlkernel.slots import SlotGitError, git_probe
 
 from taskloop.adapters import beadtools, childenv, ident, ram
+from taskloop.adapters import storm as storm_file
 from taskloop.adapters.bd import BdStore
+from taskloop.adapters.repourl import repo_url
 from taskloop.app.asks import admission
 from taskloop.app.doctor import disk
-from taskloop.app.loop.env import ReloadNote
+from taskloop.app.loop.env import ReloadNote, Storm
 from taskloop.app.reconcile import leases
 from taskloop.app.release import reexec
 from taskloop.app.report import reflect
 from taskloop.app.run.running import running
+from taskloop.app.slots import config as wslots_config
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import console, trail, verbs
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import lanes as wlanes
 from taskloop.app.wire import slots as wslots
+from taskloop.domain import outcome as oc
 
 STOP_GRACE_S = 300.0  # a stopped run-task is given this long to run its close step before stream-proc ends it
 
@@ -58,7 +62,7 @@ def release_dead(repo: str, store: Beads, now: float, git: Git, who: Identity) -
 def chores(repo: str, spawner: Spawner, env: Env, git: Git, who: Identity, store: BdStore | None = None) -> None:
     wlanes.chore(console.say, spawner, env)  # delegate's lane status filed again when the snapshot is 20 min old (the dash reads the file)
     # asks of closed beads closed, unanswered ones parked, answers no run used flagged
-    cfg = wslots.load_cfg(repo, git)
+    cfg = wslots_config.load_cfg(repo, git)
     wasks.sweep_asks(who, who.config, console.say, cfg, repo)
     wasks.wake_prs(who, who.config, spawner, cfg, repo)  # a PR-mode land's PR the owner merged or closed: its bead runs again
     try:
@@ -146,7 +150,7 @@ def _landed_on_base(repo: str, cfg: paths.ConfigDir, store: Beads, wt: str, bead
     """Only positive evidence lets the loop treat a bead as landed; an unknown probe stays not ready."""
     if not os.path.isdir(wt):
         return False
-    base = wslots.load_cfg(repo, git).base
+    base = wslots_config.load_cfg(repo, git).base
     rec = landed_by(store)(bead_id)
     if rec is not None:
         return git.is_ancestor(wt, rec.sha, base)
@@ -158,3 +162,15 @@ def _landed_on_base(repo: str, cfg: paths.ConfigDir, store: Beads, wt: str, bead
     if not last or not last[0].subject.endswith(f"({bead_id})"):
         return False
     return git.is_ancestor(wt, tip, base)
+
+
+def storm(repo: str, cfg: paths.ConfigDir, now: Callable[[], float] = trail.now, *, git: Git) -> Storm | None:
+    path = storm_file.storm_path(cfg.root, repo_url(git, repo))
+    rec = storm_file.read_storm(path, now(), oc.KNOBS["storm_window_s"])
+    if not rec:
+        return None
+    banner = (
+        "WAIT: storm {} on {}; the beads stay open (look at their logs). Record {} expires {:d} min after it was written; "
+        "clear it to wake sooner"
+    ).format(rec.get("fingerprint"), ",".join(rec.get("beads") or []), path, (oc.KNOBS["storm_window_s"] // 60))
+    return Storm(rec.get("fingerprint") or "", banner, float(rec["t"]) + oc.KNOBS["storm_window_s"])

@@ -65,7 +65,7 @@ from taskloop.app.run import (
     engine,
     running,
 )
-from taskloop.app.wire import slots as wslots
+from taskloop.app.slots import config as wslots_config
 from taskloop.app.write.newfiles import NewFiles
 from taskloop.domain.checks import (
     lint,  # noqa: F401
@@ -205,7 +205,7 @@ class EngineTest(SlotWorld):
         """`raw` puts keys in the loaded config without committing them. probe: the network probe (netgate.FakeProbe). prep: called
         with the engine before it runs."""
         script = fake_route.Script(answers, j_extra)
-        c = wslots.load_cfg(str(self.wt), port_git())
+        c = wslots_config.load_cfg(str(self.wt), port_git())
         fresh = cfg.pop("fresh", False)
         c = cfg_with(c, **{"reflect": False, "owner_author": "denis", **cfg, **(raw or {})})
         with delegate_stack(script, route):
@@ -466,7 +466,7 @@ class LandReviewBase(EngineTest):
             self.eng = engine.Engine(
                 BeadId("t-1"),
                 str(self.wt),
-                wslots.load_cfg(str(self.wt), port_git()),
+                wslots_config.load_cfg(str(self.wt), port_git()),
                 store=self.store,
                 env=snapshot(),
                 spawner=real_spawner(),

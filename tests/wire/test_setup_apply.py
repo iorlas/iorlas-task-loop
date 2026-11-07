@@ -7,7 +7,8 @@ from pathlib import Path
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.app.wire import setup, setup_apply, slots
+from taskloop.app.slots import config as slots_config
+from taskloop.app.wire import setup, setup_apply
 from taskloop.cli import setup as cli_setup
 from tlkernel.env import Env
 from tlkernel.procport import Ran
@@ -57,7 +58,7 @@ class SetupApply(Case):
     def test_the_answers_make_a_profile_the_loader_accepts(self):
         for answers in ({"gate": "no"}, {"unity-lease": "yes", "gate": "yes"}, {"gate": "yes"}):
             with self.subTest(answers=answers):
-                slots.load_profile(setup_apply.profile_of(answers))
+                slots_config.load_profile(setup_apply.profile_of(answers))
 
     def test_a_profile_goes_in_as_a_pr_over_gh_alone(self):
         sh = Recorder()

@@ -14,7 +14,7 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.app.run import engine
-from taskloop.app.wire import slots as wslots
+from taskloop.app.slots import config as wslots_config
 from tlkernel.docrows import RowDoc
 from tlkernel.docstore import ForeignVersion
 from tlkernel.env import snapshot
@@ -24,7 +24,7 @@ from tlkernel.wire import Refused
 
 class ForeignCheckpoint(T.EngineTest):
     def test_a_foreign_version_is_refused_by_the_reader_and_the_engine(self):
-        c = wslots.load_cfg(str(self.wt), port_git())
+        c = wslots_config.load_cfg(str(self.wt), port_git())
         eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
             git=port_git(), who=who())
         put_ck(eng, step="close")

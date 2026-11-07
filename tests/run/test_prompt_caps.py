@@ -16,7 +16,7 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.app.run import engine
-from taskloop.app.wire import slots as wslots
+from taskloop.app.slots import config as wslots_config
 from taskloop.app.write import prompts as write
 from taskloop.app.write import review_prompt as review
 from taskloop.domain.lanes import caps
@@ -72,7 +72,7 @@ class Feedback(Case):
 
 class Refusal(te.EngineTest):
     def go(self, role, script):
-        c = wslots.load_cfg(str(self.wt), port_git())
+        c = wslots_config.load_cfg(str(self.wt), port_git())
         with te.delegate_stack(script), mock.patch.dict(caps.CAPS, {role: 1}):
             self.eng = engine.Engine(
                 BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()

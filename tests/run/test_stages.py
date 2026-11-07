@@ -29,7 +29,7 @@ from support.who import who
 from taskloop.adapters import childenv, pidcheck
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.checks import evidence as check_evidence
-from taskloop.app.wire import slots as wslots
+from taskloop.app.slots import config as wslots_config
 from taskloop.app.write.handoff import HANDOFF_CAP
 from taskloop.domain.checks import planref
 from taskloop.domain.plan.matchers import AcceptanceText
@@ -195,7 +195,7 @@ class Scope(StagesTest):
         e = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
@@ -255,7 +255,7 @@ class Handoff(StagesTest):
         e = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
@@ -548,7 +548,7 @@ class Executable(StagesTest):
         e = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
@@ -565,7 +565,7 @@ class Executable(StagesTest):
         e = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
@@ -577,7 +577,7 @@ class Executable(StagesTest):
         again = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
@@ -590,7 +590,7 @@ class Executable(StagesTest):
         e = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
@@ -602,7 +602,7 @@ class Executable(StagesTest):
         again = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
@@ -616,7 +616,7 @@ class Executable(StagesTest):
         third = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
