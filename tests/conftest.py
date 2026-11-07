@@ -49,7 +49,7 @@ from taskloop.app.parts import STAGE_PARTS  # noqa: E402
 from tlkernel import factorydb, scratch  # noqa: E402
 from tltestkit.limits import hang_s, kind_of_parts, limit_for  # noqa: E402
 
-factorydb.declare_parts(STAGE_PARTS)
+factorydb.declare_parts(STAGE_PARTS, complete=True)
 
 
 def preload_src():

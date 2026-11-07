@@ -12,7 +12,9 @@ part with its row in `schema_part`:
   version bump (and a step). The golden test (tests/contracts/test_dbparts_golden.py) holds the same line before a change reaches main.
 
 A read-only open writes nothing: it refuses a part newer than the code, or below the reader's declared needs.
-Without needs, absent and older parts are accepted.
+Without needs, absent and older parts are accepted. Complete declarations refuse unknown stored parts, except explicitly dropped parts.
+A writable launch deletes dropped parts' rows and tables in the same transaction as declared parts. Read-only opens leave them untouched.
+Partial declarations stay lenient: the dashboard declares only the parts it can import and leaves other stored parts alone.
 """
 import functools
 import hashlib
@@ -93,7 +95,7 @@ def prune_order(parts: Iterable[Part]) -> tuple[Prune, ...]:
 
 def doc_table(table: str) -> str:
     """The DDL of a stage's own table of typed documents (`k` the key with the record's name as prefix, `v` its JSON, `t` the write time):
-    what `kv` was for every stage at once, now one per owner (read and written by docrows.RowDocs with `table=`)."""
+    one per owner (read and written by docrows.RowDocs with `table=`)."""
     return f"CREATE TABLE {table} (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL);"
 
 
@@ -156,8 +158,10 @@ def schema_hash(cls: type[Rec]) -> str:
 
 
 def golden(parts: Iterable[Part]) -> dict[str, dict[str, object]]:
-    """What the golden file holds per part: its version, DDL fingerprint and each record's `V` and schema hash."""
-    return {p.name: {"version": p.version, "ddl": ddl_fingerprint(p), "records": _shapes(p)}
+    """What the golden file holds per part: its version, DDL fingerprint, each record's `V` and schema hash, and the `history`
+    entry of the current version (the DDL and record fingerprints a db stores for it)."""
+    return {p.name: {"version": p.version, "ddl": ddl_fingerprint(p), "records": _shapes(p),
+                     "history": {str(p.version): {"ddl": ddl_fingerprint(p), "record": record_fingerprint(p)}}}
             for p in parts}
 
 
@@ -224,6 +228,7 @@ def _launch_part(con: sqlite3.Connection, part: Part, row: tuple[int, str, str] 
 
 def launch(
     con: sqlite3.Connection, *, readonly: bool, parts: Iterable[Part], needs: Mapping[str, int] | None = None,
+    complete: bool = False, dropped: Mapping[str, Collection[str]] | None = None,
 ) -> None:
     """The check every open of factory.db makes; raises SchemaError (the open then fails) and leaves the database as it was."""
     todo = _validate(parts)
@@ -231,12 +236,32 @@ def launch(
         raise ValueError(f"unknown factory.db parts: {sorted(unknown)}")
     if readonly:
         _launch_readonly(con, todo, needs)
+        _other_parts(con, todo, readonly=True, complete=complete, dropped=dropped)
         return
     with begin_immediate(con):
         con.execute(PART_DDL)
         stored = _stored(con)
         for part in todo:
             _launch_part(con, part, stored.get(part.name))
+        _other_parts(con, todo, readonly=False, complete=complete, dropped=dropped)
+
+
+def _other_parts(
+    con: sqlite3.Connection, parts: Iterable[Part], *, readonly: bool, complete: bool,
+    dropped: Mapping[str, Collection[str]] | None,
+) -> None:
+    declared = {part.name for part in parts}
+    for name, (version, _, _) in _stored(con).items():
+        if name in declared:
+            continue
+        if dropped is not None and name in dropped:
+            if not readonly:
+                con.execute(f"DELETE FROM {PART_TABLE} WHERE name=?", (name,))
+                for table in dropped[name]:
+                    quoted = table.replace('"', '""')
+                    con.execute(f'DROP TABLE IF EXISTS "{quoted}"')
+        elif complete:
+            raise SchemaError(f"factory.db has part {name} v{version} this code does not know: update it")
 
 
 def _launch_readonly(con: sqlite3.Connection, parts: Iterable[Part], needs: Mapping[str, int] | None) -> None:

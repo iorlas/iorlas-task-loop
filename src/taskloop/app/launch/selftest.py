@@ -21,8 +21,8 @@ from tlkernel.slots import SlotGitError
 from taskloop.adapters import ident
 from taskloop.app.launch.selftest_beads import MemoryBeads
 from taskloop.app.run.engine import Engine
+from taskloop.app.slots import config as wslots_config
 from taskloop.app.wire import real
-from taskloop.app.wire import slots as wslots
 from taskloop.stores.delegate import fixed_route, real_route
 
 # an argv list; the plan schema wraps it as an adhoc check
@@ -93,7 +93,7 @@ def git_repo(home: Path, wt: Path, git: Git) -> str | None:
 
 def run_engine(home: Path, wt: Path, env: Env) -> tuple[int, Bead]:
     """(exit code, the bead as the fake bd holds it) after one bead ran through the engine on the scripted lane."""
-    cfg = wslots.load_cfg(str(wt), real.git(env))
+    cfg = wslots_config.load_cfg(str(wt), real.git(env))
     found = real_route().resolve()
     resolved = Resolved(Path("/selftest"), "/selftest/route.py", found.contract if isinstance(found, Resolved) else {}, "explicit")
     store = MemoryBeads()

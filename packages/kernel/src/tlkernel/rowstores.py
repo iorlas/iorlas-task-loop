@@ -2,7 +2,7 @@
 from collections.abc import Callable
 
 from tlkernel import paths
-from tlkernel.docrows import LANES_DOCS, RELEASE_DOCS, REPORT_DOCS, REPOS_DOCS, RowDoc, singleton
+from tlkernel.docrows import LANES_DOCS, LOOP_DOCS, RELEASE_DOCS, REPORT_DOCS, REPOS_DOCS, RowDoc, singleton
 from tlkernel.docstore import Absent, Present
 from tlkernel.guard import guard
 from tlkernel.loop import BadVersions
@@ -31,7 +31,7 @@ class StatusTriedStore(RowDoc[StatusTried]):
 
 class SharedNotesStore(RowDoc[SharedNotes]):
     def __init__(self, cfg: paths.ConfigDir, repo_key: str) -> None:
-        super().__init__(singleton(cfg, SharedNotes, "shared:" + repo_key).docs, "")
+        super().__init__(singleton(cfg, SharedNotes, "shared:" + repo_key, table=LANES_DOCS).docs, "")
 
 
 class ReposStore:
@@ -115,7 +115,7 @@ class ReleaseResultStore(RowDoc[ReleaseResult]):
 
 class BadVersionStore(RowDoc[BadVersions]):
     def __init__(self, cfg: paths.ConfigDir) -> None:
-        super().__init__(singleton(cfg, BadVersions, "bad-versions").docs, "")
+        super().__init__(singleton(cfg, BadVersions, "bad-versions", table=LOOP_DOCS).docs, "")
 
 
 class ReflectStateStore(RowDoc[ReflectState]):

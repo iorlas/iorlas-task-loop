@@ -41,9 +41,9 @@ from taskloop.app.land.checkout import Checkout
 from taskloop.app.pipeline import outcomes
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine, entry, running
+from taskloop.app.slots import config as wslots_config
 from taskloop.app.slots.lease import Lease
 from taskloop.app.track import outcome_line
-from taskloop.app.wire import slots as wslots
 from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks import retry
 from taskloop.domain.lanes.matchers import read_only_command
@@ -695,7 +695,7 @@ class EngineRunTest(EngineTest):
         assert trace["lanes"] == {}
 
     def test_a_refused_delegate_blocks_before_any_step(self):
-        c = wslots.load_cfg(str(self.wt), port_git())
+        c = wslots_config.load_cfg(str(self.wt), port_git())
         refusal = dl.Refusal("skew_delegate_older", "delegate speaks contract 2")
         script = fake_route.Script({})
         with (

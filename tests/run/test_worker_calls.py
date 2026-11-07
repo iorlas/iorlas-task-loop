@@ -21,7 +21,7 @@ from support.who import who
 from taskloop.adapters import delegate as dl
 from taskloop.adapters.delegate import Stopped
 from taskloop.app.run import engine
-from taskloop.app.wire import slots as wslots
+from taskloop.app.slots import config as wslots_config
 from taskloop.domain.lanes import retry
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
@@ -48,7 +48,7 @@ class RetryRows(Case):
 
 class Calls(te.EngineTest):
     def go(self, script):
-        c = wslots.load_cfg(str(self.wt), port_git())
+        c = wslots_config.load_cfg(str(self.wt), port_git())
         nap = mock.Mock()
         with te.delegate_stack(script), mock.patch("taskloop.app.workers.lane_acts.time", napper(nap)):
             self.eng = engine.Engine(

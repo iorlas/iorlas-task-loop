@@ -31,8 +31,8 @@ from taskloop.app.doctor.setup_checks import (
 from taskloop.app.release import catalog, manifest
 from taskloop.app.report.inputs import repo_traces
 from taskloop.app.slots import watchdog
+from taskloop.app.slots.config import cfg_source
 from taskloop.app.wire import slots as wslots
-from taskloop.app.wire.slots import cfg_source
 from taskloop.domain.lanes import pin
 from taskloop.stores.delegate import real_route
 from taskloop.stores.real import real_stores

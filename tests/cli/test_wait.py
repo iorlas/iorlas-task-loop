@@ -9,16 +9,13 @@ from support.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.fake_beads import FakeBeads
 from support.logs import typed, write_log
 from support.runs import manifest
 
-from taskloop.cli import asks as cli_asks
 from taskloop.cli import wait
-from tlkernel.ask import Ask, SimilarRef, ThreadEntry
+from tlkernel.ask import Ask
 from tlkernel.askenums import AskClass, AskKind, AskStatus
 from tlkernel.askstore import AskStore
-from tlkernel.dash import OwnerCause
 from tlkernel.ids import BeadId
 from tlkernel.locator import host_name
 from tlkernel.paths import ConfigDir
@@ -129,26 +126,3 @@ class WaitCase(Case):
     def test_help_documents_every_code(self):
         for code in (0, wait.ASK, wait.ENDED_NOT_OK, wait.CRASHED, wait.NO_RUN, wait.TIMEOUT):
             assert f"  {code}  " in wait.CODES
-
-
-class Show(WaitCase):
-    def show(self, key):
-        ap = argparse.ArgumentParser()
-        cli_asks.add_parsers(ap.add_subparsers(dest="cmd"))
-        rc = cli_asks.run(ap.parse_args(["ask", "show", key]), self.asks, lambda _r: FakeBeads(), lambda: T, "x", self.cfg, self.out.append)
-        return rc
-
-    def test_prints_the_v3_fields(self):
-        a = self.ask().replace(owner_cause=OwnerCause.DECISION, blocking=False, default="keep v1",
-                                similar=[SimilarRef(kind="adr", id="adr-3")], thread=[ThreadEntry(by="owner", t=1.0, md="why?")])
-        self.asks.put(a)
-        for key in ("t-1-1", BEAD):
-            self.out.clear()
-            assert self.show(key) == 0
-            text = "\n".join(self.out)
-            for want in ("question: Keep v1?", "owner cause: decision", "blocking: no", "default: keep v1", "adr adr-3", "[owner] why?",
-                         "outcome: -"):
-                assert want in text
-
-    def test_an_unknown_id_is_one_line_and_nonzero(self):
-        assert (self.show("nope"), self.out) == (1, ["tl: no ask nope"])

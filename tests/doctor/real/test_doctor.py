@@ -24,8 +24,8 @@ from taskloop.app.doctor import (  # noqa: E402
     install,
     setup_checks,
 )
+from taskloop.app.slots import config as wslots_config  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 
 
@@ -117,7 +117,7 @@ class DoctorSource(Case):
         assert "base origin/main at commit " + commit in out
         assert "stale" in (self.repo / ".task-loop.json").read_text()
         assert self.git("rev-parse", "HEAD") != commit
-        assert wslots.load_cfg(str(self.wt), port_git()).checks[0].id == "new-base"
+        assert wslots_config.load_cfg(str(self.wt), port_git()).checks[0].id == "new-base"
         assert "check new-base:" in self.doctor(self.repo)
 
     def test_worktree_and_nested_directory_use_base(self):
@@ -137,7 +137,7 @@ class DoctorSource(Case):
         assert "base release at commit " + commit in out
         assert "check custom:" in out
         assert "check stale:" not in out
-        assert wslots.load_cfg(str(self.wt), port_git()).checks[0].id == "custom"
+        assert wslots_config.load_cfg(str(self.wt), port_git()).checks[0].id == "custom"
 
     def test_reports_exact_commit_with_warnings(self):
         commit = self.advance_base(self.config("bad-glob"))
@@ -209,7 +209,7 @@ class DoctorSource(Case):
         assert "working tree " + shown(self.wt) in out
         assert "base missing-base unresolved; no commit read" in out
         assert "ok:" in out
-        assert wslots.load_cfg(str(self.wt), port_git()).checks[0].id == "fallback"
+        assert wslots_config.load_cfg(str(self.wt), port_git()).checks[0].id == "fallback"
 
     def test_default_unresolved_base_falls_back(self):
         self.git("update-ref", "-d", "refs/remotes/origin/main")
@@ -234,9 +234,9 @@ class DoctorSource(Case):
                     out = self.doctor()
                     assert "base origin/main at commit " + commit in out
                     assert out.count("WARN") == 1 and "WARN plan check argv unrestricted" in out  # defaults list nothing
-                    assert wslots.load_cfg(str(self.wt), port_git()).checks == []
+                    assert wslots_config.load_cfg(str(self.wt), port_git()).checks == []
                 else:
-                    for refused_call in (self.doctor, lambda: wslots.load_cfg(str(self.wt), port_git())):
+                    for refused_call in (self.doctor, lambda: wslots_config.load_cfg(str(self.wt), port_git())):
                         with pytest.raises(SystemExit) as refused:
                             refused_call()
                         assert refused.value.code == 78
@@ -264,7 +264,7 @@ class DoctorSource(Case):
                 return super().ls_tree(d, rev, *paths, recursive=recursive)
 
         moving_ref = MovingRef(snapshot())
-        source = wslots.cfg_source(str(self.wt), moving_ref)
+        source = wslots_config.cfg_source(str(self.wt), moving_ref)
         assert setup_checks.git_warnings(str(self.wt), source, moving_ref) == []
         assert source[2] == commit
         assert ("show", commit + ":.task-loop.json") in calls

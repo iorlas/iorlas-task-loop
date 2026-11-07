@@ -9,7 +9,7 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 from taskloop.app.look.state import LOOK_FIELDS
 from taskloop.app.run import engine
-from taskloop.app.wire import slots as wslots
+from taskloop.app.slots import config as wslots_config
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 
@@ -17,7 +17,7 @@ from tlkernel.ids import BeadId
 def make_engine(wt, bead="t-1", cfg=None, script=None, attrs=None, **seams):
     """An engine on `wt`. `cfg` is merged over the checkout's loaded config. Seams not given are fakes: `store`, `route`, `clock`;
     `attrs` sets engine state a test starts from (`{"plan_data": ..., "stage_tree": "old"}`) in place of `e.x = ...` lines."""
-    c = wslots.load_cfg(str(wt), port_git())
+    c = wslots_config.load_cfg(str(wt), port_git())
     c = cfg_with(c, **(cfg or {}))
     seams.setdefault("store", FakeBeadStore())
     seams.setdefault("route", FakeRouter(script))

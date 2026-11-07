@@ -255,7 +255,7 @@ sequenceDiagram
     Note over L2: lane 2 keeps running without idle prevention
 ```
 
-"Lane" means three things here: a loop process (`factory-lane-N.log`, `tl/app/launch/factory.py:58-66`), a delegate subscription lane with its
+"Lane" means three things here: a loop process (`factory-lane-N.log`, `tl/app/loop/factory.py:58-66`), a delegate subscription lane with its
 own `max_parallel` 4 slots and leases (`dg:domain/lanes/lane.py:85-91`), and a check lane that runs checks in parallel
 (`tl/contracts/config.py:340`). The unity resource is the only cross-lane scheduler that knows about Unity; delegate's slot accounting
 knows nothing about task-loop slots, and task-loop's slot pool knows nothing about delegate's lane capacity.
@@ -293,7 +293,7 @@ is kept. Crash = what a `kill -9` of a writer leaves. `C` = `~/.config/task-loop
 | `asks/B.json`, `ask-ledger.jsonl` | `Ask` v3, locked per bead | engine, verbs, sweeps, dashboard via Intake | same | until answered | consistent; but the dashboard does not carry the ask id (`tl/app/launch/dash_ports.py:50-54`, A.F09) |
 | `decisions/K/` | ADR JSON, `uses.jsonl` | engine, owner verbs, dashboard | planner, dashboard | long | lock behaviour unverified |
 | `results/K/<sha1(check)>/`, `check-durations/` | `PassRecord`, `Durations` | **every check runner: stage, gate, `tl check`, push judge** (one file per key) | gate, push judge, `tl green`, dashboard | long | a key per file, so races are per key |
-| `loop/K.<pid>.json` | `LoopState` v2 | **factory placeholder + child; any `LoopFiles.live()` reader renames dead ones** (`tl/app/launch/factory.py:67-70`, `tl/app/loop/files.py:59-61`) | dashboard (own glob), status, other loops | while live, then `died-<pid>.json` | phantom loop under uv after an exec (A.F06) |
+| `loop/K.<pid>.json` | `LoopState` v2 | **factory placeholder + child; any `LoopFiles.live()` reader renames dead ones** (`tl/app/loop/factory.py:67-70`, `tl/app/loop/files.py:59-61`) | dashboard (own glob), status, other loops | while live, then `died-<pid>.json` | phantom loop under uv after an exec (A.F06) |
 | `loop/K.command.json`, `K-rest.json` | locked | stop verbs; every lane | loops | short | stop aimed at the old pid after a hop (A.F06) |
 | `loop/K.jsonl`, `loop/K/` logs, outcomes, `exits.jsonl` | JSONL, logs, symlinks | loops, engines, factory | `tl factory logs`, dashboard | rotated | unmatched start/end rows |
 | `slots/K/`, `slot-state/`, `worktrees/K/` | tickets, stamps, `Owned` | loop, run-task, slot verbs | same | slot life | ticket by pid only (L09) |

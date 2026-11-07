@@ -67,6 +67,7 @@ from taskloop.app.run import (
     entry,
     running,
 )
+from taskloop.app.slots import config as wslots_config
 from taskloop.app.slots import engine_lock, marks, reset
 from taskloop.app.track import (
     trail,
@@ -167,7 +168,7 @@ class Invariants(test_loop.Base):
         (self.repo / ".task-loop.json").write_text(json.dumps({"slots": {"count": slots}, "engine": cfg or {}}))
         self.bd = SafeBd(beads, slots=slots)
         tlbd.install(self, self.bd)
-        self.cfg = wslots.profile_slots(self.repo_s)
+        self.cfg = wslots_config.profile_slots(self.repo_s)
         return self.bd
 
     def together(self, fns):
@@ -394,7 +395,7 @@ class Invariants(test_loop.Base):
         Red when: tl.py engine_busy, `lock = read_engine_lock(wt)` is `lock = {}` (every lock reads as no lock)."""
         bd = self.tracker(slots=2)
         self.live.add(OTHER_ENGINE)
-        s1, s2 = (wslots.slot_dir(self.repo_s, n, self.cfg) for n in ("s1", "s2"))
+        s1, s2 = (wslots_config.slot_dir(self.repo_s, n, self.cfg) for n in ("s1", "s2"))
         put_lock(
             s1, {"pid": OTHER_ENGINE, "start": f"T{int(OTHER_ENGINE)}", "bead": "w-9", "started": self.clock.now()}
         )
@@ -579,7 +580,7 @@ class Invariants(test_loop.Base):
             assert not set(b.get("metadata") or {}) & set(marks.HELD_KEYS), b
         assert sl.ticket_names(self.repo_s) == []
         for n in slots:
-            assert not EngineLockRows(homes.cfg(), wslots.slot_dir(self.repo_s, n, self.cfg)).exists(), n
+            assert not EngineLockRows(homes.cfg(), wslots_config.slot_dir(self.repo_s, n, self.cfg)).exists(), n
         for lock in (homes.config_dir() / "locks").glob("*.lock"):
             with open(str(lock), "a+") as f:
                 must(fcntl).flock(f, must(fcntl).LOCK_EX | must(fcntl).LOCK_NB)  # raises while a holder is left
@@ -622,7 +623,7 @@ class Invariants(test_loop.Base):
         self.actors["MainThread"] = "tl-ghost"
         self.hold("s1", minutes=1)
         self.clock.advance(61)  # the hold has run out
-        d2 = wslots.slot_dir(repo, "s2", cfg)
+        d2 = wslots_config.slot_dir(repo, "s2", cfg)
         put_lock(d2, {"pid": 5252, "start": "T5252", "bead": "w-3", "started": 1})  # not in the process table
         sl.put_ticket(repo, v=1, seq=77, prio=0, pid=sl.dead_pid(), why="dead", since=1)
         self.actors["MainThread"] = "tl-main"

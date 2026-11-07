@@ -39,7 +39,7 @@ def journal(tmp_path: Path) -> Iterator[tuple[ConfigDir, sqlite3.Connection, Wak
 
 def commit(con: sqlite3.Connection) -> None:
     with factorydb.begin_immediate(con):
-        con.execute("INSERT OR REPLACE INTO kv(k,v,t) VALUES ('wake','changed',1)")
+        con.execute("INSERT OR REPLACE INTO look_doc(k,v,t) VALUES ('wake','changed',1)")
 
 
 def test_token_changes_only_after_another_connection_commits(journal) -> None:
@@ -49,15 +49,15 @@ def test_token_changes_only_after_another_connection_commits(journal) -> None:
     assert wake.token() == before
     assert wake.con is not None
     assert before == factorydb.change_counter(wake.con)
-    wake.con.execute("SELECT * FROM kv").fetchall()
+    wake.con.execute("SELECT * FROM look_doc").fetchall()
     assert wake.token() == before
     con.execute("BEGIN IMMEDIATE")
-    con.execute("INSERT INTO kv(k,v,t) VALUES ('uncommitted','x',1)")
+    con.execute("INSERT INTO look_doc(k,v,t) VALUES ('uncommitted','x',1)")
     assert wake.token() == before
     con.commit()
     assert wake.token() != before
     with pytest.raises(sqlite3.OperationalError):
-        wake.con.execute("INSERT INTO kv(k,v,t) VALUES ('forbidden','x',1)")
+        wake.con.execute("INSERT INTO look_doc(k,v,t) VALUES ('forbidden','x',1)")
 
 
 def test_wait_returns_immediately_for_an_already_changed_token(journal) -> None:
