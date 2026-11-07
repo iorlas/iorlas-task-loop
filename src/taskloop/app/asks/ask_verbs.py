@@ -182,4 +182,3 @@ def verb(a: Arguments, op: str, bead: BeadId, ask: Ask | None, verbs: intake.Int
         return 2
     out("done")
     return 0
-
