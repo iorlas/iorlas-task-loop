@@ -1,4 +1,4 @@
-"""Best-effort lane exit evidence, shared by the lane and dead-process reconciliation."""
+"""Best-effort loop exit evidence, shared by the loop and dead-process reconciliation."""
 import contextlib
 import json
 import sys
@@ -21,11 +21,11 @@ def rows(path: Path) -> list[dict[str, object]]:
     return found
 
 
-def lane_of(directory: Path, pid: int) -> int:
-    for path in directory.glob("factory-lane-*.log"):
+def loop_of(directory: Path, pid: int) -> int:
+    for path in directory.glob("factory-loop-*.log"):
         try:
             if path.readlink().name == f"factory-{pid}.log":
-                return int(path.stem.removeprefix("factory-lane-"))
+                return int(path.stem.removeprefix("factory-loop-"))
         except (OSError, ValueError):
             continue
     return pid  # foreground loops have no numbered launcher link
@@ -45,13 +45,13 @@ def append(path: Path, rec: dict[str, object]) -> None:
 
 
 def record(directory: Path, rec: dict[str, object]) -> None:
-    rec = {**rec, "lane": lane_of(directory, int(str(rec["pid"])))}
+    rec = {**rec, "loop": loop_of(directory, int(str(rec["pid"])))}
     append(directory / "factory.log", rec)
     append(directory / "exits.jsonl", rec)
 
 
-def last_by_lane(directory: Path) -> list[dict[str, object]]:
+def last_by_loop(directory: Path) -> list[dict[str, object]]:
     latest: dict[str, dict[str, object]] = {}
     for rec in rows(directory / "factory.log"):
-        latest[str(rec.get("lane", rec["pid"]))] = rec
+        latest[str(rec.get("loop", rec["pid"]))] = rec
     return list(latest.values())
