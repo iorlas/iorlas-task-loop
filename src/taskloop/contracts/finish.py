@@ -30,8 +30,12 @@ def previous_finish(m: RunManifest) -> RunFinish:
                      outcome=outcome, result=result, kind=kind, why=m.reason, sha=m.sha)
 
 
+class BeatMoved(ValueError):
+    """The run beat after the caller decided it was lost: it is alive, so nothing is written."""
+
+
 def finish_run(cfg: ConfigDir, run: str, candidate: RunFinish,
-               project: Callable[[RunManifest, RunFinish], None] | None = None) -> FinishResult:
+               project: Callable[[RunManifest, RunFinish], None] | None = None, *, seen_beat: float | None = None) -> FinishResult:
     """Atomically choose a terminal answer; serialize and recover its projections under a separate lock.
 
     A missing or unreadable manifest is an error, never permission to invent a second authority.
@@ -44,6 +48,8 @@ def finish_run(cfg: ConfigDir, run: str, candidate: RunFinish,
         old = doc.read(con, run)
         if old is None or old.run != run:
             raise ValueError(f"no manifest for run {run}")
+        if seen_beat is not None and old.state.live and old.heartbeat != seen_beat:
+            raise BeatMoved(run)  # checked in the transaction that would write the answer: a beat in between keeps the run alive
         won = old.state.live
         record = candidate if won else previous_finish(old)
         if won:

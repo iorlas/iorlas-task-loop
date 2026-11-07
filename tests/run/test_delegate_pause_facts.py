@@ -6,6 +6,7 @@ from unittest import mock
 
 import pytest
 from support.case import Case
+from support.parkmock import through_change
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -27,6 +28,7 @@ class DelegatePauseFacts(Case):
         bead = Bead(id=BeadId("t-1"), title="work", status="open")
         for permanence in policy.PERMANENCES:
             with self.subTest(permanence=permanence), mock.patch.object(parks, "ParkStore") as store:
+                through_change(store)
                 retry = Retry(kind="predicted", at=900) if permanence == "transient" else Retry(kind="none")
                 result = DelegateResult(stop=StopFacts(reason="future_delegate_reason", scope="machine",
                                                        permanence=permanence, retry=retry))

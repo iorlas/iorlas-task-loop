@@ -84,12 +84,12 @@ class StageLoop:
         if out.stuck_why is not None:
             e.stuck_why = out.stuck_why
         if out.summary is not None:
-            e.last_summary = out.summary
+            e.write.last_summary = out.summary
         if out.family is not None:
             e.writer_family = out.family
         if out.last_stage is not None:
             e.writer.last_stage = out.last_stage
-        e.write_rounds.extend(out.write_rows)
+        e.write.write_rounds.extend(out.write_rows)
         e.stats["reviews"] += out.reviews
         e.stats["rounds"] += out.rounds
         e.stats["writes"] += out.writes
