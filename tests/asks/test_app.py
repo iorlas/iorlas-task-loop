@@ -17,6 +17,7 @@ from support.tiers import domain
 
 from taskloop.adapters.bd import BdRun, BdStore
 from tlasks import intake, raiser, sweeps
+from tlasks.contracts.records import Asking
 from tlkernel import askspecs as specs
 from tlkernel.askenums import AskKind, AskStatus
 from tlkernel.asklint import INFRA
@@ -28,8 +29,8 @@ from tltestkit.narrow import must
 T = 1000.0
 
 
-def asking(bead: str = "t-1", repo: str = "", now: float = T, brief: str = "h") -> raiser.Asking:
-    return raiser.Asking(bead=BeadId(bead), run="r", brief_hash=brief, repo=repo, title="T", now=now)
+def asking(bead: str = "t-1", repo: str = "", now: float = T, brief: str = "h") -> Asking:
+    return Asking(bead=BeadId(bead), run="r", brief_hash=brief, repo=repo, title="T", now=now)
 
 
 @domain

@@ -13,6 +13,7 @@ from support.tiers import domain
 from taskloop.app.loop.queue import QueueRule
 from taskloop.cli import asks as cli
 from tlasks import ask_verbs, hold, intake, raiser, timespec
+from tlasks.contracts.records import Asking
 from tlkernel import askspecs as specs
 from tlkernel.beadsport import NewBead
 from tlkernel.config import EngineConfig
@@ -41,7 +42,7 @@ class VerbSurface(Case):
         self.store = FakeBeads()
         self.store.create(NewBead(title="x"))
         raiser.raise_ask(
-            self.asks, specs.missing_criteria(), raiser.Asking(bead=BeadId("fk-1"), run="r", brief_hash="h", repo="", title="T", now=T)
+            self.asks, specs.missing_criteria(), Asking(bead=BeadId("fk-1"), run="r", brief_hash="h", repo="", title="T", now=T)
         )
         self.out: list[str] = []
 

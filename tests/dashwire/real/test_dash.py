@@ -14,11 +14,11 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from asks.samples import MOCKS  # noqa: E402
 from support import tlbd  # noqa: E402
 from support.dashes import serving  # noqa: E402
 
 from taskloop.app.launch import dash_ports  # noqa: E402
+from tlasks.testing import MOCKS  # noqa: E402
 from tldash.needs import NEEDS  # noqa: E402
 from tlkernel.askstore import AskStore  # noqa: E402
 from tlkernel.dash import READ_PROTOCOL  # noqa: E402
