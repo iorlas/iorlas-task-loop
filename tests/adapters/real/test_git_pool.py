@@ -12,13 +12,13 @@ from tltestkit.tmpdir import TemporaryDirectory
 import pytest
 from git_porcelain import real_env
 from git_porcelain.real import RealRepo
-from support.checked import run_checked
 
 from taskloop.adapters import treehash
 from taskloop.adapters.git import RealGit
 from tlkernel.env import Env, snapshot
 from tlkernel.slots import SlotGitError
 from tltestkit.case import Case
+from tltestkit.checked import run_checked
 
 
 class RealGitPoolTest(Case):
