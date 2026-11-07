@@ -72,6 +72,12 @@ def policy_of(repo: str, git: Git, commit: str) -> EngineConfig:
     return authorization.profile(git, repo, TreeSha(commit))
 
 
+def with_base(cfg: EngineConfig, commit: str | None) -> EngineConfig:
+    """`tl check --base-commit SHA`: the run's base (what receipts are keyed at, and what the changed files are measured against) is that
+    commit, not the base branch. The merge queue gates Q(N) at Q(N-1) (docs/design/merge-queue.md 3.5). No commit: `cfg` as it is."""
+    return cfg.replace(base=commit) if commit else cfg
+
+
 def cmd_check(a: argparse.Namespace, *, who: Identity, env: Env, spawner: Spawner, git: Git,
               policy: EngineConfig | None = None) -> int:
     repo = git.toplevel(a.repo) or str(Path(a.repo).resolve())
@@ -85,6 +91,7 @@ def run_check(a: argparse.Namespace, stage: StageRun, *, env: Env, spawner: Spaw
     repo = stage.bundle.repo
     commit = a.policy_commit
     cfg = policy if policy is not None else policy_of(repo, git, commit) if commit else profile_of(repo)
+    cfg = with_base(cfg, getattr(a, "base_commit", None))
     if a.list:
         print("\n".join(listing(cfg)) or "(no checks in engine.checks)")
         return 0
