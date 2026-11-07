@@ -222,7 +222,8 @@ source_modules =
     taskloop.app.pipeline.closing_record
     taskloop.app.pipeline.closing_settle
     taskloop.app.run.console
-    taskloop.app.run.crash
+    taskloop.app.pipeline.crash
+    taskloop.app.pipeline.lifecycle
     taskloop.app.pipeline.decide
     taskloop.app.pipeline.ended
     taskloop.app.pipeline.finish
@@ -272,7 +273,6 @@ forbidden_modules =
 allow_indirect_imports = True
 ignore_imports =
     # The baseline (tl-e5t0.30): edges that exist today. The contract fails on a new one; each removal shrinks this list, never grows it.
-    taskloop.app.run.crash -> taskloop.app.run.host
     taskloop.app.run.stage_rounds -> taskloop.app.run.host
     taskloop.app.run.stages -> taskloop.app.run.host
     taskloop.app.prune.runs -> taskloop.app.run.layout
