@@ -7,11 +7,14 @@ through three ports, so the queue is tested with fakes and wired to git, the gat
 
 Merges happen on this thread, head first. A red gate or a conflict ejects its entry and stops the building and gating of the rest (the
 repair of the entries behind it is bead tl-7s2f.5); what is already green still merges in order. The entries that left lose their refs."""
+import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from typing import Protocol
 
+from taskloop.app.land.queue import InFlight
 from taskloop.app.land.queue_refs import Conflict, Made
+from taskloop.domain.land.queue_in_flight import Event as FlightEvent
 from taskloop.domain.land.queue_model import (
     Build,
     Built,
@@ -37,10 +40,14 @@ class Refs(Protocol):
 
 
 class QueueRun:
-    def __init__(self, refs: Refs, gate: Callable[[Entry], bool], merge: Callable[[Entry, str], str], *, in_flight: int, main: str,
-                 on_change: Callable[[Sequence[Entry]], None] = lambda _e: None) -> None:
+    def __init__(self, refs: Refs, gate: Callable[[Entry], bool], merge: Callable[[Entry, str], str], *, flight: InFlight, main: str,
+                 on_change: Callable[[Sequence[Entry]], None] = lambda _e: None,
+                 clock: Callable[[], float] = time.monotonic) -> None:
         self.refs, self.gate, self.merge = refs, gate, merge
-        self.in_flight, self.main = max(1, in_flight), main
+        self.flight, self.main = flight, main
+        self.clock = clock
+        self.started: dict[str, float] = {}
+        self.gate_s: dict[str, float] = {}
         self.entries: list[Entry] = []
         self.on_change = on_change
         self.built = 0
@@ -57,6 +64,7 @@ class QueueRun:
         self.built += 1
         got = self.refs.make(self.built, act.parent, act.head)
         if isinstance(got, Conflict):
+            self.flight.happened(FlightEvent.CONFLICT_EJECT)
             self.see(Ejected(act.branch, f"conflict: {got.why}"))
             self.halted = True
         else:
@@ -64,6 +72,7 @@ class QueueRun:
 
     def land(self, act: Merge) -> None:
         self.main = self.merge(self.by(act.branch), self.main)
+        self.flight.merged(len(self.merged()) + 1, self.gate_s.pop(act.branch, 0.0))
         self.see(Landed(act.branch))
 
     def settle(self, running: dict[Future[bool], str]) -> None:
@@ -71,6 +80,10 @@ class QueueRun:
         for fut in done:
             branch = running.pop(fut)
             green = fut.result()
+            started = self.started.pop(branch, None)
+            self.gate_s[branch] = self.clock() - started if started is not None else 0.0
+            if not green:
+                self.flight.happened(FlightEvent.GATE_FAILED)
             self.see(Gated(branch, green))
             self.halted = self.halted or not green
 
@@ -79,10 +92,10 @@ class QueueRun:
         self.entries = [Entry(branch=b, head=h) for b, h in items]
         self.on_change(self.entries)
         running: dict[Future[bool], str] = {}
-        with ThreadPoolExecutor(max_workers=self.in_flight) as pool:
+        with ThreadPoolExecutor(max_workers=self.flight.cap) as pool:
             while True:
                 moved = False
-                for act in plan(self.entries, self.main, self.in_flight):
+                for act in plan(self.entries, self.main, self.flight.current):
                     if isinstance(act, Drop):
                         self.refs.drop(act.ref)
                         self.see(Dropped(act.branch))
@@ -94,6 +107,7 @@ class QueueRun:
                         self.build(act)
                         moved = True
                     elif isinstance(act, Gate) and not self.halted:
+                        self.started[act.branch] = self.clock()
                         running[pool.submit(self.gate, self.by(act.branch))] = act.branch
                         self.see(Started(act.branch))
                         moved = True

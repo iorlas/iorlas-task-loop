@@ -23,7 +23,8 @@ from taskloop.app.pipeline.finish import answer
 from taskloop.app.pipeline.steps import Steps
 from taskloop.app.plan.keep import PlanKeeper
 from taskloop.app.plan.planned import Planned
-from taskloop.app.run.stages import round_step, run_stages
+from taskloop.app.run.stage_rounds import round_step
+from taskloop.app.run.stages import run_stages
 from taskloop.app.write.state import ACCEPT, StageState
 from taskloop.domain import effects
 from taskloop.domain import outcome as oc
@@ -95,7 +96,7 @@ class SelectedStage(Case):
 
     def invoke(self, stage=None):
         self.open_run()
-        with mock.patch("taskloop.app.run.stages.Lease"):
+        with mock.patch("taskloop.app.run.run_once.Lease"):
             rc = run_stages(self.e, stage, continuous=False)
         return rc, self.manifest()
 

@@ -5,8 +5,9 @@ from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes.pause_reasons import Producer
 from tlkernel import fence
 from tlkernel.bead import Bead
+from tlkernel.checkpoint import Checkpoint
 from tlkernel.delegate import Permanence
-from tlkernel.enums import Outcome
+from tlkernel.enums import Outcome, Step
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
@@ -164,3 +165,13 @@ class FakeTrail:
 
     def event(self, by: Identity, kind: str, bead: str, **fields: str) -> None:
         self.events.append((by, kind, bead, fields))
+
+
+class FakeRoundSteps:
+    def __init__(self, following: Step = Step.VERIFY) -> None:
+        self.following = following
+        self.calls: list[tuple[Step, Checkpoint | None]] = []
+
+    def round_step(self, step: Step, ck: Checkpoint | None) -> Step:
+        self.calls.append((step, ck))
+        return self.following
