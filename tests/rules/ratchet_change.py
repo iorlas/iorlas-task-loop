@@ -5,7 +5,7 @@ different areas conflicted on it and one landing turned the others red. Now noth
 works): a ratchet counts its offenders in the .py files the change touches, at the merge base with origin/main (`git show`) and in the
 working tree, per key (offender kind, or capability and reason), and fails when a key's count went up. A move is net zero; a cleanup
 needs no `--write`; two PRs that touch different files share no file. No origin/main (a bare checkout): skipped, said so.
-A deliberate rise is a line in a commit message of the change: `Ratchet-allow: <temp|layer|needs> +N <a reason in words>`.
+A deliberate rise is a line in a commit message of the change: `Ratchet-allow: <temp|layer|needs|closure> +N <a reason in words>`.
 """
 import ast
 import functools

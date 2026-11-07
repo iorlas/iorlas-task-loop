@@ -211,13 +211,14 @@ source_modules =
     taskloop.app.run.bead_env
     taskloop.app.run.blocked
     taskloop.app.pipeline.budget
-    taskloop.app.run.closer
-    taskloop.app.run.closer_branch
-    taskloop.app.run.closer_decide
-    taskloop.app.run.closer_host
-    taskloop.app.run.closer_notes
+    taskloop.app.pipeline.closing
+    taskloop.app.pipeline.closing_branch
+    taskloop.app.pipeline.closing_decide
+    taskloop.app.pipeline.closing_host
+    taskloop.app.run.closer_ports
+    taskloop.app.pipeline.closing_notes
     taskloop.app.pipeline.closing_record
-    taskloop.app.run.closer_settle
+    taskloop.app.pipeline.closing_settle
     taskloop.app.run.console
     taskloop.app.run.crash
     taskloop.app.pipeline.decide
@@ -277,8 +278,8 @@ ignore_imports =
     taskloop.app.run.records -> taskloop.app.run.layout
     taskloop.app.run.stages -> taskloop.app.run.layout
     taskloop.app.run.stages -> taskloop.app.run.run_once
-    taskloop.app.run.closer_branch -> taskloop.app.wire.slots
-    taskloop.app.run.closer_settle -> taskloop.app.wire.closeguard
+    taskloop.app.run.closer_ports -> taskloop.app.wire.slots
+    taskloop.app.run.closer_ports -> taskloop.app.wire.closeguard
     taskloop.app.run.preflight -> taskloop.app.wire.closeguard
     taskloop.app.run.running -> taskloop.app.wire.slots
     taskloop.app.run.stages -> taskloop.app.wire.closeguard

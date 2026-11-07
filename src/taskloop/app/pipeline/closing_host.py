@@ -6,11 +6,12 @@ import threading
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
+from taskloop.app.pipeline.closing_branch import BranchCheckpoints, BranchTree, ReleaseSlotHost, SaveBranchHost
+from taskloop.app.pipeline.closing_decide import DecideHost
+from taskloop.app.pipeline.closing_notes import FileNotesHost, NotesCheckpoints, ReflectCheckpoints, ReflectHost
 from taskloop.app.pipeline.closing_record import RecordHost, RecordRecords
-from taskloop.app.run.closer_branch import BranchCheckpoints, BranchTree, LeaveTree, ReleaseSlotHost, SaveBranchHost
-from taskloop.app.run.closer_decide import DecideHost
-from taskloop.app.run.closer_notes import FileNotesHost, NotesCheckpoints, ReflectCheckpoints, ReflectHost
-from taskloop.app.run.closer_settle import SettleHost
+from taskloop.app.pipeline.closing_settle import SettleHost
+from taskloop.app.pipeline.ports import Slotting
 from taskloop.contracts import fence
 from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.checkpoint import Checkpoint, EndRec
@@ -18,7 +19,6 @@ from taskloop.contracts.delegate import Permanence
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
-from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Clock
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec
@@ -56,8 +56,6 @@ class CloseHost(Protocol):
     @property
     def crash_site(self) -> str: ...
 
-    @property
-    def home(self) -> ConfigDir: ...
     @property
     def store(self) -> Beads: ...
     @property
@@ -103,11 +101,12 @@ class CloseAllCheckpoints(CloseCheckpoints, BranchCheckpoints, NotesCheckpoints,
     pass
 
 
-class CloseTree(BranchTree, LeaveTree, Protocol):
+class CloseTree(BranchTree, Slotting, Protocol):
     pass
 
 
-class CloserHost(CloseHost, DecideHost, SaveBranchHost, ReleaseSlotHost, RecordHost, FileNotesHost, ReflectHost, SettleHost, Protocol):
+class CloserHost(CloseHost, DecideHost, SaveBranchHost, ReleaseSlotHost, RecordHost,
+                 FileNotesHost, ReflectHost, SettleHost, Protocol):
     """The engine, as the close reads it: the sum of the parts above (no member of its own but the one that joins them)."""
 
     @property

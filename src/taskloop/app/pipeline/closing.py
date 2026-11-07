@@ -1,22 +1,18 @@
 """The close: the one step every run ends with. The branch is saved (a wip commit, the checkpoint marked closed), the outcome is decided by
 POLICY, the run is written to the log and the trace, follow-ups are filed, and the bead is closed, blocked or left open. Each of those is
-a step of its own with its own small host (closer_*.py); the Closer is the order they run in."""
+a step of its own with its own small host (closing_*.py); the Closer is the order they run in."""
 import signal
 import threading
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Protocol, assert_never
 
 from taskloop.adapters import beadtools
-from taskloop.app.asks import parks, raiser
 from taskloop.app.pipeline import ended as stored_end
-from taskloop.app.pipeline.closing_record import RecordRun
-from taskloop.app.run.closer_branch import DONE, ReleaseSlot, SaveBranch
-from taskloop.app.run.closer_decide import Decide
-from taskloop.app.run.closer_host import CloseHost, CloserHost
-from taskloop.app.run.closer_notes import FileNotes, Reflect
-from taskloop.app.run.closer_settle import Settle
+from taskloop.app.pipeline.closing_host import CloseHost
+from taskloop.app.pipeline.outcomes import DONE
+from taskloop.app.pipeline.ports import AskRules, ParkBook
 from taskloop.contracts.checkpoint import Checkpoint, Notes
 from taskloop.contracts.enums import Outcome
 from taskloop.contracts.kinds import ASKS, Kind
@@ -66,7 +62,7 @@ class SettleStep(Protocol):
 
 @dataclass(frozen=True)
 class CloseParts:
-    """The steps the Closer composes; each is built over its own small host (see Closer.of)."""
+    """The steps the Closer composes; each is built over its own small host ."""
 
     decide: DecideStep
     branch: BranchStep
@@ -80,8 +76,10 @@ class CloseParts:
 class Closer:
     """The close of a run: the order of its steps."""
 
-    def __init__(self, host: CloseHost, parts: CloseParts) -> None:
-        self.e = host
+    def __init__(self, host: CloseHost, parts: CloseParts, rules: AskRules, parks: ParkBook) -> None:
+        self.host = host
+        self.rules = rules
+        self.parks = parks
         self.decide = parts.decide
         self.branch = parts.branch
         self.slot = parts.slot
@@ -92,7 +90,7 @@ class Closer:
         self.noted: Notes | None = None  # FileNotes' result, for a run with no checkpoint to keep it in
 
     def close(self, ended: oc.RunOutcome) -> None:
-        e = self.e
+        e = self.host
         e.halt.clear()  # the close-out runs commands: the stop flag has done its work
         old = None
         if hasattr(signal, "SIGTERM") and threading.current_thread() is threading.main_thread():
@@ -107,9 +105,9 @@ class Closer:
                 signal.signal(signal.SIGTERM, old)
 
     def run(self, ended: oc.RunOutcome) -> None:
-        e = self.e
+        e = self.host
         why = ended.detail or ("stopped before a reason was recorded" if ended.word is Outcome.FAILED else "")
-        bad = raiser.problems(ended.spec) if ended.spec else []
+        bad = self.rules.problems(ended.spec) if ended.spec else []
         if bad:  # an ask that is no ask an owner can answer is the engine's own fault; no prose question takes its place
             first = why.splitlines()[0][:200] if why else ""
             why = f"failed: ask_lint: {'; '.join(bad)[:300]} ({first})"
@@ -124,7 +122,7 @@ class Closer:
     def resume(self, ck: Checkpoint) -> None:
         """The close of a run that died: its outcome and decision come from the checkpoint (POLICY and the storm check are not asked
         again), and the effects whose keys are not there run, under the dead run's id."""
-        e = self.e
+        e = self.host
         assert ck.ended is not None
         done, e.disp, e.fp = stored_end.loaded(ck.ended)
         e.kind = done.kind
@@ -132,7 +130,7 @@ class Closer:
         self.finish(done)
 
     def finish(self, done: oc.RunOutcome) -> None:
-        e = self.e
+        e = self.host
         self.pause(done)
         if done.kind is Kind.ENGINE_CRASH:
             done = oc.make(done.kind, e.why)
@@ -147,13 +145,13 @@ class Closer:
 
     def pause(self, done: oc.RunOutcome) -> None:
         """Persist pause wakes; the close plan files an empty plan's owner ask."""
-        e = self.e
+        e = self.host
         if e.dry or done.finished:
             return
         bead = beadtools.peek(e.store, e.bead)
         if bead is None:
             return
-        rec = parks.paused(e.home, bead, done.kind, e.run_id, e.clock.now(), reason=e.pause_reason,
+        rec = self.parks.paused( bead, done.kind, e.run_id, e.clock.now(), reason=e.pause_reason,
                            not_before=e.retry_after, fingerprint=e.crash_fingerprint if done.kind is Kind.ENGINE_CRASH else "",
                            producer=e.pause_producer, permanence=e.pause_permanence)
         if rec is None:
@@ -164,7 +162,7 @@ class Closer:
 
     def ask_pause(self, rec: Park, done: oc.RunOutcome) -> None:
         """Ask for owner help or exhausted retries; machine fixes stay pauses, and task asks keep their close effect."""
-        e = self.e
+        e = self.host
         if done.kind is Kind.ENGINE_CRASH:
             e.fp = rec.fingerprint
             if rec.permanence == "needs_owner" and not e.asked:
@@ -183,7 +181,7 @@ class Closer:
 
     def apply(self, eff: effects.CloseEffect, done: oc.RunOutcome, stats: str) -> None:
         """One effect of the close plan, done. The match is closed: a new effect is one more case here."""
-        e = self.e
+        e = self.host
         outcome, why = done.word, done.detail
         match eff:
             case effects.SaveBranch():
@@ -209,9 +207,3 @@ class Closer:
                 e.checkpoints.drop_unless_fenced()
             case _:
                 assert_never(eff)
-
-
-def closer_over(host: CloserHost, after_save: Callable[[], None] | None = None) -> Closer:
-    """The Closer over the engine: each step gets the host typed as that step's own Protocol."""
-    return Closer(host, CloseParts(decide=Decide(host), branch=SaveBranch(host, after_save), slot=ReleaseSlot(host), record=RecordRun(host),
-                                   notes=FileNotes(host), reflect=Reflect(host), settle=Settle(host)))

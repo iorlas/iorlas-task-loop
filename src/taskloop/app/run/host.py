@@ -7,7 +7,8 @@ from taskloop.app.look.judge import Judge
 from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.look.shots import Pictures
 from taskloop.app.pipeline import summaries
-from taskloop.app.run.closer import Closer, closer_over
+from taskloop.app.pipeline.closing import Closer
+from taskloop.app.run.closer_ports import closer_over
 from taskloop.app.run.parts_land import LandParts
 from taskloop.app.run.parts_plan import PlanParts
 from taskloop.app.run.parts_run import RunParts
