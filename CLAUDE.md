@@ -85,6 +85,8 @@ Tests live in `tests/<slice>/`, mirroring `src/taskloop/app/<slice>` (a test's h
 the other layers have their own folders (`contracts`, `stores`, `adapters`, `ports`, `domain`, `cli`, `hook`, `dash`, `rules` for the gate).
 **Test layers. A test's layer comes from its path (tests/conftest.py, the rule itself is `packages/testkit`: `tltestkit.limits.kind_of_parts`, which reads the parts below `tests/` or `packages/<stage>/tests/`), never from a hand marker; a guard fails a test that touches more than its layer allows.**
 
+For a converted stage, `tests/<slice>/` is its integration layer on the shell host (imports the package plus the shell); package-pure tests live in `packages/<stage>/tests/`, and the rules fail a package-pure file in the mapped `tests/<slice>/`, with no cap or kind change.
+
 | layer | path | may touch | per test (CPU) | layer total (affected-only, 1 worker) |
 |---|---|---|---|---|
 | unit | `tests/<slice>/` | memory; files and sqlite only through the `workdir` fixture; git, processes and time only as fakes (gitsim, procsim, fake_clock); no `time.sleep` | 100 ms | 60 s |

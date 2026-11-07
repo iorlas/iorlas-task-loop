@@ -6,6 +6,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+INTEGRATION = {"gate": "tests/checks"}
 
 
 def normalized(name: str) -> str:
@@ -41,8 +42,6 @@ def problems(root: Path = ROOT) -> list[str]:
     found = []
     for manifest, (_, own, deps) in manifests.items():
         tests = manifest.parent / "tests"
-        if not tests.is_dir():
-            continue
         allowed = own | {"pytest"} | sys.stdlib_module_names
         for dep in deps & members.keys():
             allowed |= members[dep]
@@ -51,4 +50,11 @@ def problems(root: Path = ROOT) -> list[str]:
             for line, name in imports(path):
                 if name not in allowed and normalized(name) not in third_party:
                     found.append(f"{path.relative_to(root)}:{line} imports {name} (undeclared in {manifest.relative_to(root)})")
+        if integration := INTEGRATION.get(manifest.parent.name):
+            for path in sorted((root / integration).rglob("*.py")):
+                if path.name in {"__init__.py", "conftest.py"}:
+                    continue
+                if all(name in allowed or normalized(name) in third_party for _, name in imports(path)):
+                    folder = manifest.parent.name
+                    found.append(f"{path.relative_to(root)}: imports only the {folder} package; move it to packages/{folder}/tests")
     return found
