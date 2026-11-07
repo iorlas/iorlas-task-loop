@@ -97,7 +97,7 @@ class CloseHost(Protocol):
     def warn(self, text: str) -> None: ...
 
 
-class CloseAllCheckpoints(CloseCheckpoints, BranchCheckpoints, NotesCheckpoints, ReflectCheckpoints, Protocol):
+class CloseAllCheckpoints(CloseCheckpoints, BranchCheckpoints, NotesCheckpoints, ReflectCheckpoints, FollowUpCheckpoints, Protocol):
     pass
 
 
