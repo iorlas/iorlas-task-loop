@@ -12,9 +12,11 @@ from types import ModuleType
 
 from taskloop import contracts
 from taskloop.contracts import env as penv
+from taskloop.contracts.factorydb import declare_parts
 from taskloop.contracts.paths import default_root
 from taskloop_dash import serve
 from taskloop_dash.env import Env, Ports
+from taskloop_dash.parts import DASH_PARTS
 
 PACKAGE = Path(__file__).resolve().parents[1]
 CONTRACTS = Path(contracts.__file__).resolve().parent  # the records it reads and the commands it sends
@@ -43,6 +45,7 @@ def resolve_ports(spec: str | None, env: penv.Env, load: Callable[[str], ModuleT
 
 def main(argv: Sequence[str] | None = None, load: Callable[[str], ModuleType] = importlib.import_module,
          here: Path = PACKAGE) -> None:
+    declare_parts(DASH_PARTS)
     ap = argparse.ArgumentParser(prog="python3 -m taskloop_dash", add_help=False, allow_abbrev=False)
     ap.add_argument("--ports", default=None, help="MODULE:FUNC returning the Ports (the engine's read-only facts)")
     known, rest = ap.parse_known_args(argv)
