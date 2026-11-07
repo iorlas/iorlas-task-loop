@@ -13,16 +13,14 @@ from support import homes
 
 # isort: split
 from support import engine_case as te
-from support import (
-    netgate,
-    procsim,
-)
+from support import netgate
 from support.engine_case import stop
 from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.app.release import reexec
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
+from tltestkit import procsim
 
 SAY = "codex: Reconnecting... waiting for network (Connection failed: error sending request)"
 

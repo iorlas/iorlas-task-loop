@@ -16,7 +16,6 @@ import routing_support as support
 from any_agent.harnesses import opencode_sandbox as box
 from run_support import RunBase
 from stream_proc import proc_start
-from support.procsim import real_proc
 from test_route import at, obj, route, why
 
 from delegate.app import env, harnesses, status, usage
@@ -25,6 +24,7 @@ from delegate.contracts.routing import Settings
 from delegate.contracts.state import StateDoc, UsageCache
 from delegate.domain.lanes import leases
 from delegate.domain.lanes.lane import Lane
+from tltestkit.procsim import real_proc
 
 
 class RunCommand(RunBase):

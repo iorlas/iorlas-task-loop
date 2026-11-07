@@ -410,7 +410,7 @@ ActivityClock.touch(); ActivityClock.poll() -> Deadline | None
 |---|---:|---|
 | `tests/support/procsim.py:1–125` | 125 | M |
 | `tests/support/procsim.py:128–249` | 122 | M |
-| `tests/support/fake_clock.py:1–16` | 16 | M |
+| `packages/testkit/src/tltestkit/fake_clock.py:1–16` | 16 | M |
 | `tests/rules/test_procsim.py:1–71` | 71 | M |
 | `tests/rules/real/test_procsim.py:1–18` | 18 | M |
 

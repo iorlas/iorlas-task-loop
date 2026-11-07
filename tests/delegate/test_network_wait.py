@@ -4,10 +4,10 @@ import argparse
 
 import pytest
 from any_agent.supervisor import RunHooks
-from support.fake_clock import FakeClock
 
 from delegate.app import net, run
 from delegate.app.run_legs import CONTINUE_NOTE
+from tltestkit.fake_clock import FakeClock
 
 
 @pytest.mark.parametrize("started,ref", [(True, "session-1"), (False, None), (False, "unstarted-session")])

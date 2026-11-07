@@ -4,8 +4,9 @@ import copy
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
-from support.procsim import real_proc
 from test_review_order import CFG, T, lanes
+
+from tltestkit.procsim import real_proc
 
 
 class OnlyFamilyTest:

@@ -12,7 +12,6 @@ from typing import Any
 import support.paths  # noqa: F401
 from support import homes
 from support.fake_beads import FakeBeads
-from support.fake_clock import FakeClock
 from support.fakegit import FakeGit, ScriptedGit
 from support.memstores import fake_stores
 from support.who import who
@@ -50,6 +49,7 @@ from tlpipeline.budget import Budget
 from tlpipeline.closing import CloseParts, Closer
 from tlpipeline.steps import Steps
 from tlpipeline.testing import FakeAskRules, FakeParkBook
+from tltestkit.fake_clock import FakeClock
 
 
 class FakeWaitsHost:

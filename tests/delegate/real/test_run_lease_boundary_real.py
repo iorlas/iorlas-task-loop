@@ -4,11 +4,11 @@ from unittest import mock
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 from run_support import RunBase
-from support.procsim import real_proc
 from test_route import why
 
 from delegate.app import env
 from delegate.app.run import Run
+from tltestkit.procsim import real_proc
 
 
 class LeaseBoundary(RunBase):

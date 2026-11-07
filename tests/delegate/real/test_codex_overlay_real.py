@@ -7,10 +7,10 @@ import subprocess
 import sys
 
 from any_agent.protocol import LaunchSpec
-from support.procsim import real_proc
 
 from delegate.app import codex_policy, env
 from tltestkit.case import Case
+from tltestkit.procsim import real_proc
 
 
 def rules_at(home):

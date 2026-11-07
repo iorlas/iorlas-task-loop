@@ -15,7 +15,6 @@ import json
 from pathlib import Path
 from unittest import mock
 
-from support import procsim
 from support.cfgs import cfg_with
 
 from taskloop.app.plan import prompts as pp
@@ -32,7 +31,7 @@ from tlkernel import answers, plancheck
 from tlkernel.config import EngineConfig
 from tlkernel.ids import CheckId
 from tlkernel.kinds import Kind
-from tltestkit import fake_route
+from tltestkit import fake_route, procsim
 from tltestkit.logs import records
 
 

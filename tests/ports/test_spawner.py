@@ -1,7 +1,6 @@
 """adapters/spawner.py on the procsim: the Spawner contract (ports/spawner_contract.py) with the children answered in process."""
-from support import procsim
-
 from ports.spawner_contract import SpawnerContract, contract
+from tltestkit import procsim
 
 
 @contract
