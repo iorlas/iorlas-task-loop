@@ -134,3 +134,13 @@ class Locator(Case):
         assert (saved.manifest.mode, saved.manifest.owner, saved.manifest.session) == ("stage:gate", "owner", "session")
         assert saved.manifest.state == RunState.RUNNING
         assert saved.manifest.heartbeat == T0 + 9
+
+    def test_a_run_that_beat_after_the_reconciler_looked_is_not_marked_lost(self):
+        a = self.where.create("/r/x", "tl-1", T0)
+        seen = self.where.get(a.run).manifest.heartbeat  # type: ignore[union-attr]
+        self.where.beat(a.run, T0 + 400)  # the engine beats between the reconciler's read and its write
+        assert self.where.mark_lost(a.run, "gone", seen) is None
+        got = self.where.get(a.run).manifest  # type: ignore[union-attr]
+        assert (got.state, got.heartbeat) == (RunState.RUNNING, T0 + 400)
+        assert self.where.mark_lost(a.run, "gone", T0 + 400) is not None  # a beat it did see: lost, as before
+        assert self.where.get(a.run).manifest.state == RunState.LOST  # type: ignore[union-attr]

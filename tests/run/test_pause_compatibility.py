@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest import mock
 
 from support.case import Case
+from support.parkmock import through_change
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -37,6 +38,7 @@ class PauseCompatibility(Case):
             "engine_only_unenforced",
         ):
             with self.subTest(reason=reason), mock.patch.object(parks, "ParkStore") as store:
+                through_change(store)
                 host = mock.Mock(
                     dry=False, home=self.cfg, bead=self.bead.id, run_id="r1", pause_reason=reason,
                     pause_producer="delegate", pause_permanence="needs_owner", retry_after=0.0, asked=False
@@ -56,6 +58,7 @@ class PauseCompatibility(Case):
     def test_owner_pauses_without_retry_caps_ask_unless_the_machine_needs_repair(self):
         for reason, producer in (("stage_refused", "engine"), ("crash", "delegate"), ("new_vendor_reason", "delegate")):
             with self.subTest(reason=reason), mock.patch.object(parks, "ParkStore") as store:
+                through_change(store)
                 host = mock.Mock(
                     dry=False, home=self.cfg, bead=self.bead.id, run_id="r1", pause_reason=reason,
                     pause_producer=producer, pause_permanence="needs_owner", retry_after=0.0, asked=False
@@ -81,6 +84,7 @@ class PauseCompatibility(Case):
             if not policy.max_attempts:
                 continue
             with self.subTest(producer=producer, reason=reason), mock.patch.object(parks, "ParkStore") as store:
+                through_change(store)
                 store.return_value.get.return_value = None
                 for n in range(policy.max_attempts + 1):
                     host = mock.Mock(
@@ -100,18 +104,21 @@ class PauseCompatibility(Case):
     def test_faults_asks_and_owner_holds_do_not_acquire_retry_records(self):
         for kind in (*FAULTS, *ASKS, Kind.WAIT_ASK, Kind.OWNER_PARK):
             with self.subTest(kind=kind), mock.patch.object(parks, "ParkStore") as store:
+                through_change(store)
                 # Even a transient delegate reason must not override the outcome's existing handling.
                 assert parks.paused(self.cfg, self.bead, kind, "r1", 100, reason="worker_failed") is None
                 store.assert_not_called()
 
     def test_question_close_keeps_its_original_record_fields(self):
         with mock.patch.object(parks, "ParkStore") as store:
+            through_change(store)
             store.return_value.get.return_value = None
             parks.ended(self.cfg, self.bead, Kind.ASK_STUCK, "r1", 100)
             store.return_value.put.assert_called_once_with(Park(bead=self.bead.id, hash=text_hash(self.bead), runs=1, run="r1", t=100))
 
     def test_transient_pause_still_records_backoff_and_predicted_lower_bound(self):
         with mock.patch.object(parks, "ParkStore") as store:
+            through_change(store)
             store.return_value.get.return_value = None
             rec = parks.paused(self.cfg, self.bead, Kind.PAUSE_LANE, "r1", 100, reason="rate_limited",
                                not_before=900, draw=lambda: 0.5, permanence="transient")
@@ -124,6 +131,7 @@ class PauseCompatibility(Case):
 
     def test_noop_is_parked_for_the_owner_without_a_timer(self):
         with mock.patch.object(parks, "ParkStore") as store:
+            through_change(store)
             store.return_value.get.return_value = None
             rec = parks.paused(self.cfg, self.bead, Kind.NOOP, "r1", 100, draw=lambda: 0.5)
             assert rec is not None
