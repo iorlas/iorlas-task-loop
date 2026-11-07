@@ -11,10 +11,15 @@ import support.paths  # noqa: F401
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.decide import Decision
 from taskloop.app.run.resume import Resume
-from taskloop.contracts.checkpoint import Checkpoint, RunState
+from taskloop.contracts import wire
+from taskloop.contracts.answers import WriteAnswerLook
+from taskloop.contracts.checkpoint import Checkpoint, RunState, StageProgress
 from taskloop.contracts.plancheck import PlanData
 
 PLAN: PlanData = {"summary": "two stages", "stages": [{"goal": "a", "files": [], "checks": []}, {"goal": "b", "files": [], "checks": []}]}
+
+ANSWER = WriteAnswerLook(summary="s", checks_run=[], question="", options=[], decided="", bad_checks=[], new_cases=[], unchecked=[],
+                         logic_only="")
 
 
 class Host:
@@ -39,6 +44,25 @@ class Apply(Case):
         plan, stage, state = Resume(h).apply(ck(), Decision(kind="resume", stage=1))
         assert (plan, stage, state) == (PLAN, 1, {"rounds": 2, "n": 3, "feedback": "fb"})
         assert (h.plan_data, h.plan_summary, h.accepted, h.published) == (PLAN, "two stages", [0], 1)
+
+    def test_a_review_checkpoint_hands_the_stage_its_progress_and_the_check_run(self):  # tl-q3ma
+        h = Host()
+        run = SimpleNamespace()
+        h.run_id = "r2"
+        written: list[object] = []
+        h.stores = SimpleNamespace(check_run=lambda rid, _: SimpleNamespace(get=lambda: run, write=written.append))
+        progress = StageProgress(write=ANSWER)
+        _, _, state = Resume(h).apply(ck(step="review").replace(progress=progress), Decision(kind="resume", stage=1))
+        assert state == {"rounds": 2, "n": 3, "feedback": "fb", "review_from": wire.dump(progress)}
+        assert (h.last_run, written) == (run, [run])
+
+    def test_a_review_checkpoint_without_its_check_run_goes_on_at_the_write(self):
+        h = Host()
+        h.run_id = "r2"
+        h.stores = SimpleNamespace(check_run=lambda rid, _: SimpleNamespace(get=lambda: None))
+        progress = StageProgress(write=ANSWER)
+        _, _, state = Resume(h).apply(ck(step="review").replace(progress=progress), Decision(kind="resume", stage=1))
+        assert state == {"rounds": 2, "n": 3, "feedback": "fb"}
 
     def test_every_stage_accepted_goes_straight_to_land_with_no_stage_state(self):
         h = Host()
