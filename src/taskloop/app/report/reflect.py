@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from tlkernel import lifecyclematchers as matchers
 from tlkernel import wire
 from tlkernel.beadsport import BdFailure, BeadQuery, NewBead
 from tlkernel.env import Env
@@ -25,7 +26,6 @@ from tlkernel.rowstores import ReflectStateStore, ReposStore
 from tlkernel.snapshots import ReflectState
 
 from taskloop.adapters import beadtools, childenv, ident, landlock
-from taskloop.domain.lifecycle import matchers
 from taskloop.domain.report.reflect import (
     OWNERS,
     TITLE_SIMILAR,

@@ -14,7 +14,7 @@ from support.memstores import fake_stores
 from taskloop.app.asks import raiser, setup_retry
 from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.wire import asks as wire_asks
-from taskloop.domain.asks import specs
+from tlkernel import askspecs as specs
 from tlkernel.ask import AskAnswer
 from tlkernel.askenums import AskKind, AskStatus
 from tlkernel.askstore import HAD_PICK

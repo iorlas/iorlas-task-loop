@@ -1,5 +1,5 @@
 """The closed set of ways a run ends (`Kind`) and the sealed `Fault` union over the ones that did not finish. Lives in contracts so the
-dashboard and the report read a stored run's end by the same types the engine wrote it with; the policy table is domain/outcome."""
+dashboard and the report read a stored run's end by the same types the engine wrote it with; the policy table is tlkernel/runoutcome."""
 
 import enum
 from dataclasses import dataclass

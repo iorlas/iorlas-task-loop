@@ -6,6 +6,7 @@ from functools import cached_property
 from pathlib import Path
 
 from tlkernel import fence
+from tlkernel.askspec import AskSpec
 from tlkernel.kinds import Kind
 from tlkernel.log import Assumed, Said
 from tlkernel.matchers import redact
@@ -16,7 +17,6 @@ from taskloop.app.pipeline.blocked import Blocked, FixFailed, blocked_for
 from taskloop.app.run.fields import RunFields
 from taskloop.app.track import trail
 from taskloop.app.track.console import say
-from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks import affinity
 
 

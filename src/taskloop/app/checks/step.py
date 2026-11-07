@@ -3,6 +3,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel import askspecs
+from tlkernel.askspec import AskSpec
 from tlkernel.checks import CheckFaultKind, CheckRun
 from tlkernel.kinds import Kind
 from tlkernel.plancheck import StageData
@@ -10,8 +12,6 @@ from tlkernel.plancheck import StageData
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.checks.host import CheckFault, CheckStuck
 from taskloop.app.checks.runner import Checker
-from taskloop.domain.asks import specs as askspecs
-from taskloop.domain.asks.spec import AskSpec
 
 
 class CheckStepHost(Protocol):

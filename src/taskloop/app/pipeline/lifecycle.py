@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from tlkernel import fence
+from tlkernel import runoutcome as oc
 from tlkernel.beadsport import Beads
 from tlkernel.checkpoint import Checkpoint
 from tlkernel.checkpoint import RunState as CheckpointState
@@ -26,7 +27,6 @@ from taskloop.app.pipeline.finish import outcome as finished_outcome
 from taskloop.app.pipeline.finish import terminal_state
 from taskloop.app.pipeline.ports import Reexecs
 from taskloop.app.pipeline.reload import Exec
-from taskloop.domain import outcome as oc
 
 
 class LeaseLike(Protocol):

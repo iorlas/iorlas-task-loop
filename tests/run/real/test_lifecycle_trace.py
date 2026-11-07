@@ -14,7 +14,7 @@ from support import homes
 
 from taskloop.app.run import engine
 from taskloop.app.slots import config as wslots_config
-from taskloop.domain.lifecycle import matchers as lifecycle
+from tlkernel import lifecyclematchers as lifecycle
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 
