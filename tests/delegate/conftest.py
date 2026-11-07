@@ -44,6 +44,7 @@ def worker_clis():
 @pytest.fixture(autouse=True)
 def own_home():
     saved = {k: os.environ.get(k) for k in ENV}
+    tempfile.gettempdir()  # cache the outer temp dir before TMPDIR moves into this home
     d = tempfile.mkdtemp(prefix="t-", dir=hermetic.ROOT)
     hermetic.home(d)
     try:
