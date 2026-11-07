@@ -931,6 +931,7 @@
         "network_rerun",
         "lane_poll",
         "lane_wait",
+        "new_thread",
         "worker_retry",
         "schema_reask",
         "reroute"
@@ -1865,7 +1866,8 @@
  "capabilities": [
   "writer_exec_allow",
   "instructions_ref",
-  "attempts"
+  "attempts",
+  "thread"
  ],
  "request_schema": {
   "type": "object",
@@ -1892,6 +1894,15 @@
     ]
    },
    "resume": {
+    "type": [
+     "string",
+     "null"
+    ]
+   },
+   "thread": {
+    "type": "string"
+   },
+   "delta_file": {
     "type": [
      "string",
      "null"

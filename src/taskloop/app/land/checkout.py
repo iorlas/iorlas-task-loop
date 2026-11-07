@@ -7,11 +7,11 @@ from typing import Protocol
 from tlkernel.gitfacts import StatusRow
 from tlkernel.gitport import Git
 from tlkernel.ids import TreeSha
+from tlkernel.matchers import NetText
 from tlkernel.slots import SlotGitError
 from tlkernel.stagefacts import RunLogPort
 
 from taskloop.adapters import treehash
-from taskloop.domain.matchers import NetText
 from taskloop.domain.write.newfiles import new_file_kind
 
 

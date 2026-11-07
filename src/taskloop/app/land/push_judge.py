@@ -7,6 +7,7 @@ from tlkernel.env import Env
 from tlkernel.gitport import Git
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.locks import LockTimeout
+from tlkernel.matchers import secrets_added
 from tlkernel.paths import ConfigDir
 from tlkernel.ports import Clock
 from tlkernel.runkey import BaseSha
@@ -16,7 +17,6 @@ from taskloop.adapters import landlock, locks, profile_at
 from taskloop.adapters.clock import SystemClock
 from taskloop.app.checks import authorization
 from taskloop.app.land.profile_change import diff_sha
-from taskloop.domain.matchers import secrets_added
 from taskloop.stores.bundle import Stores
 
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"

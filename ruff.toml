@@ -1,6 +1,6 @@
 # Lint (88 sec 6). `just check` runs `ruff check`; `ruff format` applies to src/ only (see justfile).
 target-version = "py315"
-src = ["src", "packages/kernel/src", "packages/testkit/src"]
+src = ["src", "packages/kernel/src", "packages/testkit/src", "packages/artifacts/src"]
 line-length = 140
 output-format = "concise"
 exclude = [".worktrees", ".slots", ".task", "tests/fixtures", "src/*/_vendor", "skills/task-loop/_vendor"]

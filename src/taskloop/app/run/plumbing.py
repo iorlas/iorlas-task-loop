@@ -8,6 +8,7 @@ from pathlib import Path
 from tlkernel import fence
 from tlkernel.kinds import Kind
 from tlkernel.log import Assumed, Said
+from tlkernel.matchers import redact
 
 from taskloop.adapters import beadtools
 from taskloop.adapters import halt as halting
@@ -17,7 +18,6 @@ from taskloop.app.track import trail
 from taskloop.app.track.console import say
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks import affinity
-from taskloop.domain.matchers import redact
 
 
 class Plumbing(RunFields):

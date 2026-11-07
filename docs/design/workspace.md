@@ -61,7 +61,11 @@ Honest reading: the **selection gain is nil for a leaf that the shell still impo
 | 7 | S1c (.13) delegate into packages/ | `src/delegate` moves | alone | **B3 (pix-deleg-iso)** edits `src/delegate`; run S1c only after B3 lands |
 | 8 | T-BUDGET (.55) | per-package closure and import-time ratchet; `closure_ratchet` reads the member list | last, after 5 | none; its numbers are meaningful only once stages left the tree |
 
+Status: step 0 (WS-MECH) merged; step 1 (artifacts) is the workspace member `packages/artifacts` (`tlartifacts`), with isolated package tests.
+
 Parallel now: step 0 first (this week, one PR); then 1, 2 and 4 together. Hold 5 and 6 until C-PIPELINE lands; hold 7 until B3 lands.
+
+TESTISO (step 4) is done: member tests may import only their own package, declared runtime and dev dependencies, pytest and the standard library. `tests/rules/package_tests.py` checks every member test import (lazy and TYPE_CHECKING too); `tests/rules/test_package_tests.py` runs it in the gate and proves an undeclared sibling fails.
 
 ## 7. Decisions asked of the owner
 
