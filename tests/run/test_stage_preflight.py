@@ -246,7 +246,7 @@ class StagePreflight(Case):
     def test_any_slot_without_slot_beads_says_so_instead_of_queueing(self):
         """tl-erhs: slots.count is set but `tl slot init` never ran, so no slot can come free: --wait must not queue for good."""
         self.a.slot, self.a.worktree, self.a.dry_run, self.a.wait = "any", None, False, True
-        with mock.patch.object(entry.wslots, "profile_slots", return_value=SlotsConfig(count=2)), \
+        with mock.patch.object(entry.wslots_config, "profile_slots", return_value=SlotsConfig(count=2)), \
                 mock.patch.object(entry.wslots, "wait_slot") as wait:
             report = entry.run_any_slot(self.a, str(self.wt), self.cfg, self.store, env=self.env,
                                         spawner=self.spawner, git=self.git, who=self.who)

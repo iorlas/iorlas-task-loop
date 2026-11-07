@@ -1,5 +1,8 @@
 """Move slot configuration rules and rewrite importers; rerunnable with --root DIR.
 
+Not handled (fix by hand after a run): `mock.patch.object(mod.wslots, "<moved>")` and `mod.wslots.<moved>` through a module attribute; they become
+`mod.wslots_config` (tests/loop/real/test_loop.py, tests/run/test_stage_preflight.py, tests/track/test_closeguard.py were the three).
+
 Unsupported uses are reported before any writes; finish with the pinned ruff sorter.
 """
 import argparse
