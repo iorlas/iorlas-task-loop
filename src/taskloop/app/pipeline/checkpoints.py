@@ -14,11 +14,11 @@ from tlkernel.followups import FollowupOutbox
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.review import Unfiled
+from tlkernel.storeapi import AmendDoc
 
 from taskloop.app.pipeline.review_glue import ReviewLists, review_of
 from taskloop.domain.checks import trim
 from taskloop.domain.followups import FollowKey
-from taskloop.stores.api import AmendDoc
 from taskloop.stores.bundle import Stores
 
 

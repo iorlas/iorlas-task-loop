@@ -4,9 +4,9 @@ import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
-from taskloop.stores.api import AmendDoc
 from tlkernel import wire
 from tlkernel.docstore import Absent, ForeignVersion, Present, Read, Torn, refusal
+from tlkernel.storeapi import AmendDoc
 from tlkernel.wire import Open, Refused
 
 

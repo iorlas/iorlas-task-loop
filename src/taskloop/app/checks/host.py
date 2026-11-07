@@ -11,10 +11,10 @@ from tlkernel.gitport import Git
 from tlkernel.ids import TreeSha
 from tlkernel.paths import ConfigDir
 from tlkernel.procport import Spawner
-from tlkernel.stagefacts import CheckLogPort, RunLogPort
+from tlkernel.stagefacts import CheckLogPort
 from tlkernel.waitenums import WaitWhat
 
-from taskloop.stores.bundle import Stores
+from taskloop.app.checks.ports import GateLog, GateStores
 
 
 class CheckFault(Exception):
@@ -81,13 +81,13 @@ class CheckHost(Protocol):
     @property
     def cfg(self) -> EngineConfig: ...
     @property
-    def log(self) -> RunLogPort: ...
+    def log(self) -> GateLog: ...
     @property
     def steps(self) -> CheckSteps: ...
     @property
     def checklog(self) -> CheckLogPort: ...
     @property
-    def stores(self) -> Stores: ...
+    def stores(self) -> GateStores: ...
     @property
     def spawner(self) -> Spawner: ...  # how a check's helper processes are started
     @property

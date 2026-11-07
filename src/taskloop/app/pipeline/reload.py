@@ -17,12 +17,12 @@ from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
 from tlkernel.run import NetPause, Reexec, ReexecNote, RunCounters
 from tlkernel.runrows import RunRows
+from tlkernel.storeapi import Doc
 from tlkernel.wire import Open
 
 from taskloop.adapters import childenv, ident
 from taskloop.adapters.halt import RUN_SLOT
 from taskloop.app.pipeline.ports import Reexecs, Trail
-from taskloop.stores.api import Doc
 
 
 class Exec(BaseException):
