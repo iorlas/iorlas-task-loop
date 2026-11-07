@@ -2,7 +2,10 @@
 cancels the others: a lane's running check is stopped through the Spawner (its own process tree, with the engine's usual stop and
 grace), its queue for a resource lease ends, and its steps not yet begun are recorded as cancelled, never as a verdict. A stop of the
 whole run (the halt) is passed to every lane the same way. Nothing of a cancelled lane is remembered as green."""
+import faulthandler
+import sys
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Protocol
@@ -10,7 +13,12 @@ from typing import Protocol
 from taskloop.app.checks.round import Cancel, Round
 from taskloop.domain.checks.plan import CheckPlan, Step
 
+STOP_JOIN_S = 60.0
 POLL_S = 0.05  # how often the owner looks at the run's halt while the lanes run
+
+
+class LaneStuck(RuntimeError):
+    """Lanes that did not end within the run stop deadline."""
 
 
 class LaneHost(Protocol):
@@ -53,10 +61,17 @@ class Lanes:
                 pending[0].join(POLL_S)
                 pending = [t for t in pending if t.is_alive()]
                 self.host.halt_point()  # a stop of the run raises here: the lanes are cancelled below
-        except BaseException:
+        except BaseException as err:
             self._cancel(parts, "", "the run was stopped")
+            deadline = time.monotonic() + STOP_JOIN_S
             for t in threads:
-                t.join()
+                t.join(max(0.0, deadline - time.monotonic()))
+            stuck = [t.name for t in threads if t.is_alive()]
+            if stuck:
+                message = f"Lanes still running after {STOP_JOIN_S} seconds: {', '.join(stuck)}"
+                print(message, file=sys.stderr, flush=True)
+                faulthandler.dump_traceback(file=sys.stderr, all_threads=True)
+                raise LaneStuck(message) from err
             raise
         if race.fails:
             raise race.fails[0].error
