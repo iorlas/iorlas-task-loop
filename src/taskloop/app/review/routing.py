@@ -6,6 +6,7 @@ from typing import Any
 from taskloop.app.review.host import ReviewHost
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.plancheck import PlanData
+from taskloop.contracts.stop import Stop
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.plan.matchers import word_set
 from taskloop.domain.review import kinds
@@ -18,27 +19,27 @@ AT_LAND = "the engine does this at land"
 
 class Routing:
     def __init__(self, host: ReviewHost, git: Git) -> None:
-        self.e = host
+        self.host = host
         self.git = git
 
     def ledger(self) -> Ledger:
-        return Ledger(self.e.plan_data, self.e.leftovers)
+        return Ledger(self.host.plan_data, self.host.leftovers)
 
     def ledger_of(self, plan: PlanData) -> Ledger:
         """The ledger of a plan not yet accepted (the engine's leftovers count as deferred)."""
-        return Ledger(plan, self.e.leftovers)
+        return Ledger(plan, self.host.leftovers)
 
     def ledger_route(self, what: str) -> str:
         return self.ledger().route(what)
 
     def has_leftovers(self) -> bool:
-        return bool(self.e.leftovers or (self.e.plan_data or {}).get("leftovers"))
+        return bool(self.host.leftovers or (self.host.plan_data or {}).get("leftovers"))
 
     def engine_does(self, what: str) -> bool:
         return kinds.engine_does(what, self.has_leftovers())
 
     def names_code(self, what: str) -> bool:
-        e = self.e
+        e = self.host
         files = set(self.git.ls_files(e.wt)) | set(e.checkout.changed_paths())
         return kinds.names_code(what, files, {f.rsplit("/", 1)[-1] for f in files}, e.diff_text)
 
@@ -49,16 +50,16 @@ class Routing:
                                   lambda: self.names_code(u["what"])), source
 
     def settle_engine_step(self, u: Item) -> None:
-        self.e.review.add_verified(u, "settled", AT_LAND, AT_LAND)
+        self.host.review.add_verified(u, "settled", AT_LAND, AT_LAND)
 
     def add_unverified(self, u: Item, why: str) -> None:
-        self.e.review.add_unverified(u, why)
+        self.host.review.add_unverified(u, why)
 
     def add_leftover(self, lo: Item) -> bool:
         """File a follow-up bead at the close, once per title; True when it was new."""
-        if lo["title"] in {x["title"] for x in self.e.leftovers}:
+        if lo["title"] in {x["title"] for x in self.host.leftovers}:
             return False
-        self.e.leftovers.append(lo)
+        self.host.leftovers.append(lo)
         return True
 
     def backed_by_leftover(self, what: str) -> bool:
@@ -67,7 +68,7 @@ class Routing:
         mine = word_set(what)
         if len(mine) < 3:
             return False
-        for lo in self.e.leftovers:  # the beads the engine will file
+        for lo in self.host.leftovers:  # the beads the engine will file
             t, w = " ".join(str(lo.get("title") or "").split()), str(lo.get("why") or "")
             if Wording.ownerish(t) and len(mine & word_set(t + " " + w)) >= max(4, int(0.5 * len(mine))):
                 return True
@@ -91,11 +92,11 @@ class Routing:
                 out.append(u)
         return out
 
-    def proof_stuck(self, items: list[Item]) -> Any:
-        cap = self.e.cfg.max_fix_rounds
+    def proof_stuck(self, items: list[Item]) -> Stop:
+        cap = self.host.cfg.max_fix_rounds
         what = [u["what"] for u in items]
         why = f"the check before land: nothing proves {'; '.join(what)[:600]} after {cap} fix rounds: it needs the owner's hint"
-        return self.e.blocked_for(why, "ASK_STUCK", spec=askspecs.unproven(what, cap))
+        return self.host.blocked_for(why, "ASK_STUCK", spec=askspecs.unproven(what, cap))
 
     def route_open(self, u: Item, a: Item, why: str) -> tuple[str, Item, str, str]:
         """Where an item the verifier left open goes, by its (resolved) kind: (verdict, answer, why, route). An engine step is settled; a
@@ -108,7 +109,7 @@ class Routing:
         if k == "engine_step" or route == "engine_step":
             return "settled", dict(a, evidence=AT_LAND), AT_LAND, ""
         if k == "checkable":
-            if self.e.fixes >= self.e.cfg.max_fix_rounds:
+            if self.host.fixes >= self.host.cfg.max_fix_rounds:
                 raise self.proof_stuck([u])
             return "wrong", a, "add a test or check that proves: {}".format(u["what"]), "proof"
         if k in ("external_fact", "taste"):

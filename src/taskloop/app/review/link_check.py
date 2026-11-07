@@ -7,19 +7,21 @@ from taskloop.domain.matchers import clip
 from taskloop.domain.review.findings import engine_finding
 from taskloop.domain.review.matchers import Wording
 
+Answer = dict[str, Any]  # a review answer: the dict the reviewer wrote
+
 LINK_CAP = 200  # links opened per review
 
 
 class LinkCheck:
     def __init__(self, host: ReviewHost) -> None:
-        self.e = host
+        self.host = host
 
-    def link_judged(self, review: Any) -> None:
+    def link_judged(self, review: Answer) -> None:
         """tl-bxk.7: every link the task adds to a text file is opened from the engine's host (the writer's sandbox has no network,
         and 'verified' there means nothing). One that does not open is a finding for the writer: replace it, or write `unverified` on
         its line; a link marked unverified lands as an item for the owner with the claim it carries (a bot-blocking site answers
         403 from here and opens for a person). Opened links are not asked again."""
-        e = self.e
+        e = self.host
         if not e.cfg.check_links:
             return
         try:
@@ -44,7 +46,7 @@ class LinkCheck:
         self.report(found, review)
 
     def remember(self, got: dict[str, tuple[bool, str]]) -> None:
-        e = self.e
+        e = self.host
         for url, (ok, why) in got.items():
             e.review.link_tries[url] = e.review.link_tries.get(url, 0) + 1
             if ok:
@@ -53,8 +55,8 @@ class LinkCheck:
             elif why != links.UNKNOWN:  # out of time is no verdict
                 e.review.link_bad[url] = why
 
-    def report(self, found: list[tuple[str, str, str]], review: Any) -> None:
-        e = self.e
+    def report(self, found: list[tuple[str, str, str]], review: Answer) -> None:
+        e = self.host
         seen: set[tuple[str, str]] = set()
         for path, line, url in found:
             why = e.review.link_bad.get(url)
