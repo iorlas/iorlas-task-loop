@@ -56,4 +56,3 @@ def ignore_rules(base: str, lines_of: dict[str, list[str]]) -> list[str]:
             else:
                 rules.append(f"{neg}/{d}/**/{pat}")
     return rules
-
