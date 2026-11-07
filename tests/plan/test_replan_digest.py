@@ -3,10 +3,10 @@ from types import SimpleNamespace
 
 import pytest
 from support.plan_host import FakePlan
-from support.plans import PLAN
 
 from taskloop.app.plan.prompt import REPLAN_CALLS
 from tltestkit.checks import typed
+from tltestkit.plans import PLAN
 
 
 @pytest.fixture

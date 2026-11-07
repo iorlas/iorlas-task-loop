@@ -8,7 +8,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import homes
 from support.engine_case import EngineTest
-from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.app.asks import intake
 from taskloop.app.plan import adrsync
@@ -23,6 +22,7 @@ from tlkernel.ids import BeadId
 from tlkernel.ledger import Adr
 from tltestkit.checked import run_checked
 from tltestkit.narrow import must
+from tltestkit.plans import CLEAN, PLAN, WRITE
 
 OPTS = [{"label": "Push", "cost": "shared", "answer": "push", "recommended": True},
         {"label": "Hold", "cost": "slow", "answer": "hold", "recommended": False}]

@@ -6,7 +6,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 from support.engine_case import EngineTest
-from support.plans import BEAD, CLEAN, PLAN, WRITE
 
 from taskloop.app.asks.admission import _blocked_by_engine
 from taskloop.app.asks.closing import ClosingTrust
@@ -20,6 +19,7 @@ from tlkernel.paths import ConfigDir
 from tlpipeline.blocked import Blocked, blocked_for
 from tlpipeline.reflect import Reflector
 from tltestkit.case import Case
+from tltestkit.plans import BEAD, CLEAN, PLAN, WRITE
 
 
 class ReviewerTrustRoots(Case):
