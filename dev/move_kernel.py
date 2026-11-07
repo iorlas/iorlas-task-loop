@@ -157,8 +157,8 @@ def main() -> None:
     pin = re.search(r'^ruff = "([^"]+)"', (root / "mise.toml").read_text(encoding="utf-8"), re.M)
     if pin:  # the import blocks: tlkernel sorts after taskloop, and `from taskloop import contracts` became a plain import
         subprocess.run(["uv", "tool", "run", f"ruff@{pin.group(1)}", "check", "--select", "I", "--fix", "-q", "."], cwd=root, check=False)
-    for where in shorten(root):
-        print(f"too long, wrap by hand: {where}")
+    shorten(root)
+    subprocess.run(["uv", "lock", "-q"], cwd=root, check=False)  # tlkernel is a new workspace member
 
 
 if __name__ == "__main__":
