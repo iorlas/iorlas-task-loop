@@ -4,6 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SURFACE = {"tlpipeline": ("api", "testing", "contracts")}
+PACKAGE_ONLY = {"tlartifacts": ("api",)}
 
 
 def imported_names(node: ast.Import | ast.ImportFrom, package: str) -> list[str]:
@@ -21,7 +22,7 @@ def test_package_surface():
     for folder in ("src", "tests", "dev", "skills", "packages"):
         for path in sorted((ROOT / folder).rglob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-            for package, allowed in SURFACE.items():
+            for package, allowed in (SURFACE | (PACKAGE_ONLY if folder == "packages" else {})).items():
                 own_folder = ROOT / "packages" / package.removeprefix("tl")
                 if path.is_relative_to(own_folder):
                     continue
