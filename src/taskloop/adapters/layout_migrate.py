@@ -16,7 +16,7 @@ from taskloop.adapters import key_migrate, locks
 from taskloop.contracts import factorydb
 from taskloop.contracts.paths import ConfigDir, RunFiles
 from taskloop.contracts.ports import Git
-from taskloop.contracts.stores import ReposStore
+from taskloop.contracts.rowstores import ReposStore
 
 COMMAND = "tl layout migrate"
 RUN_FILE = re.compile(r"(?P<run>.+?)(?P<tail>\.jsonl(?:\.\d+)?|\.stderr|\.live)")

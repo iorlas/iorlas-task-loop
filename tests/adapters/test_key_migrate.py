@@ -9,9 +9,9 @@ from taskloop.adapters import layout_migrate as lm
 from taskloop.contracts import factorydb
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.rowstores import ReposStore
 from taskloop.contracts.rundocs import Durations, durations
 from taskloop.contracts.snapshots import RepoEntry, ReposIndex
-from taskloop.contracts.stores import ReposStore
 
 ORIGIN = "git@example.com:acme/widget.git"
 
