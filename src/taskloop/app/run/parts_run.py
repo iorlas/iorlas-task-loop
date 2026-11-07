@@ -14,7 +14,7 @@ from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.run.records import Records
 from taskloop.app.run.reflect import Reflector
 from taskloop.app.run.reload import Reload
-from taskloop.app.run.requests import OwnerRequests
+from taskloop.app.pipeline.requests import OwnerRequests
 from taskloop.app.run.resume import Resume
 from taskloop.app.run.shared import Shared
 from taskloop.app.run.shell import Shell

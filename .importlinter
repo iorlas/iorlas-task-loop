@@ -231,7 +231,7 @@ source_modules =
     taskloop.app.run.reflect
     taskloop.app.run.reflect_prompt
     taskloop.app.run.reload
-    taskloop.app.run.requests
+    taskloop.app.pipeline.requests
     taskloop.app.run.resume
     taskloop.app.run.review_glue
     taskloop.app.run.running
