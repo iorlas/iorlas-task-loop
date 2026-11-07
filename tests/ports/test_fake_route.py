@@ -23,10 +23,11 @@ import support.paths  # noqa: E402, F401
 from support import dlcall  # noqa: E402
 from support.argv_of import argv_of  # noqa: E402
 
-from taskloop.adapters import childenv, delegate_wire  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
+from taskloop.adapters import delegate_wire  # noqa: E402
 from taskloop.app.workers import call_state as cs  # noqa: E402
 from taskloop.domain.lanes import policy as lp  # noqa: E402
+from tlkernel import childenv  # noqa: E402
 from tlkernel import runoutcome as oc  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlkernel.kinds import Kind  # noqa: E402

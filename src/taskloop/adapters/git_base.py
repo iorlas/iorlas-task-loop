@@ -9,8 +9,8 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from taskloop.adapters import gitmemo, procs
-from taskloop.adapters.childenv import tool_env, without
 from taskloop.adapters.gitrepo import pinned_env
+from tlkernel.childenv import tool_env, without
 from tlkernel.env import Env
 from tlkernel.gitfacts import GitOutcome
 from tlkernel.slots import (

@@ -110,7 +110,7 @@ def plan(root: Path) -> tuple[list[tuple[Path, str]], list[str]]:
         text = path.read_text()
         new = text.replace("adapters/check_files.py", "tlkernel/check_files.py")
         new = new.replace("adapters.{check_files,base_tree,childenv,profile_at}",
-                          "tlkernel.{check_files,profile_at}, app.checks.base_tree, adapters.childenv")
+                          "tlkernel.{check_files,profile_at}, app.checks.base_tree, tlkernel.childenv")
         new = new.replace("adapters.{pidcheck,ident,agent,locks,profile_at}",
                           "adapters.{pidcheck,ident,agent,locks}, tlkernel.profile_at")
         if new != text:
