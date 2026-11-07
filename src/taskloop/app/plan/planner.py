@@ -117,12 +117,12 @@ class Planner:
         taste or show case goes back once (not a counted re-plan); the second answer stands."""
         e = self.e
         vp = e.cfg.visual_paths
-        if e.plan_visual_back or not (vp and vp.include) or not data["stages"] or visual.is_visual(data.get("cases") or []):
+        if e.plan_state.visual_back or not (vp and vp.include) or not data["stages"] or visual.is_visual(data.get("cases") or []):
             return data
         files = [f for st in data["stages"] for f in st["files"]]
         if not visual.touches_visual_path(files, vp.include, vp.exclude):
             return data
-        e.plan_visual_back = True
+        e.plan_state.visual_back = True
         e.warn("the plan touches a visual path and has no look-objective, taste or show case: sent back once")
         e.steps.outcome("sent back", "a visual path is touched and no case is look-objective, taste or show")
         e.steps.move(step, "plan_visual_back", "a visual path is touched and no case is look-objective, taste or show")
@@ -133,8 +133,8 @@ class Planner:
         e = self.e
         q = data["question"].strip()
         decided = data["decided"].strip() if q else ""
-        if decided and not e.plan_decided:  # tl-bxk.10.3: no owner ask, the planner plans again
-            e.plan_decided = True
+        if decided and not e.plan_state.decided:  # tl-bxk.10.3: no owner ask, the planner plans again
+            e.plan_state.decided = True
             e.warn(f"the planner asked what an accepted requirement decides: {decided[:300]}")
             e.steps.outcome("sent back", "an accepted requirement decides its question")
             e.steps.move(step, "planner_decided", f"an accepted requirement decides it: {decided}")
@@ -151,8 +151,8 @@ class Planner:
         e = self.e
         asked = data["question"].strip()
         data = assume.assume_question(data, e.assumed, e.ask_flow.raise_soft)
-        if not data["stages"] and not data.get("leftovers") and not e.leftovers and not e.plan_assumed:
-            e.plan_assumed = True
+        if not data["stages"] and not data.get("leftovers") and not e.leftovers and not e.plan_state.assumed:
+            e.plan_state.assumed = True
             e.warn(f"the planner asked a question about a step that can be undone, sent back: {asked[:300]}")
             e.steps.outcome("sent back", "its question is about a step that can be undone")
             e.steps.move(step, "planner_assumed", f"a question about a reversible step is an assumption: {asked[:200]}")

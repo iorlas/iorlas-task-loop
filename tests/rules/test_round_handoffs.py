@@ -1,0 +1,38 @@
+"""ROUNDRESULT: a write, check or review round hands what it decided to StageLoop by value (a RoundResult); it assigns none of these fields
+on the engine. An AST scan of the three round files fails an assignment or augmented assignment to one of them on the host."""
+import ast
+from pathlib import Path
+
+from rules.gate_rules import parsed
+
+APP_WRITE = Path(__file__).resolve().parents[2] / "src/taskloop/app/write"
+ROUNDS = ("write_round.py", "check_round.py", "review_round.py")
+HANDED = {"last_run", "stuck_why", "last_summary", "writer_family", "write_rounds", "stats"}  # engine fields a round's result carries
+HOST = {"e", "host"}
+
+
+def handed_writes(tree: ast.Module) -> list[tuple[int, str]]:
+    """[(line, field)]: `e.<field> = ...`, `e.<field> += ...`, `e.<field>[k] = ...`, `e.<field>.append/extend(...)` on the host."""
+    found = []
+    for n in ast.walk(tree):
+        targets = n.targets if isinstance(n, ast.Assign) else [n.target] if isinstance(n, (ast.AugAssign, ast.AnnAssign)) else []
+        for t in targets:
+            base = t.value if isinstance(t, ast.Subscript) else t
+            if isinstance(base, ast.Attribute) and base.attr in HANDED and isinstance(base.value, ast.Name) and base.value.id in HOST:
+                found.append((base.lineno, base.attr))
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr in {"append", "extend"}:
+            owner = n.func.value
+            if isinstance(owner, ast.Attribute) and owner.attr in HANDED and isinstance(owner.value, ast.Name) and owner.value.id in HOST:
+                found.append((owner.lineno, owner.attr))
+    return found
+
+
+def test_the_rounds_assign_no_hand_off_on_the_engine():
+    bad = [f"{name}:{line} e.{field}" for name in ROUNDS for line, field in handed_writes(parsed(APP_WRITE / name)[1])]
+    why = "a round returns these in its RoundResult (app/write/state.py); StageLoop.apply puts them on the engine:\n"
+    assert not bad, why + "\n".join(bad)
+
+
+def test_the_scan_sees_each_form():
+    tree = ast.parse("e.stuck_why = 'x'\ne.stats['rounds'] += 1\ne.write_rounds.append(1)\ne.other = 1\nself.e.stuck_why = 2\n")
+    assert [f for _, f in handed_writes(tree)] == ["stuck_why", "stats", "write_rounds"]

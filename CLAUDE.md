@@ -2,6 +2,16 @@
 
 This file provides instructions and context for AI coding agents working on this project.
 
+> ## ⚠️ NO BACKWARD COMPATIBILITY ⚠️
+>
+> **WE DO NOT KEEP OLD RUNS, OLD STORED FORMATS, OLD CONFIG SHAPES OR OLD LOG LAYOUTS WORKING.**
+>
+> - A change to a stored format is made directly. Old data is discarded, or migrated later by a migration tool when there is one.
+> - No N-1 readers, no two-release add/remove dance, no compat shims, no deprecation periods, no "legacy" code paths kept.
+> - A stale or foreign-version record is refused loudly (`wire.load` raises `StaleRecord`: that is a rule, not compatibility) and the run starts over. Effects of an unfinished close may need manual cleanup; that is accepted.
+> - Exceptions: data in git history, and anything Denis names.
+> - Detail: `docs/design/compat.md`.
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:1105d646 -->
 ## Beads Issue Tracker
 
@@ -118,5 +128,4 @@ reader, and how delegate connects (`delegate.api`, one table in SKILL.md).
 - Never touch a transcript or another tool's state: the dashboard reads, `tl.py` writes only `~/.config/task-loop` and bd.
 - Release only through `uv run --script dev/release.py "message" [--bead ID --reason R] [--from-branch B]`: it takes the
   release lock, works in its own persistent clone (`<config>/release/`; the main checkout is never touched), bumps `.claude-plugin/plugin.json` from origin/main and the iorlas-marketplace entry, runs the suite,
-  pushes and installs. Never bump a version by hand. A new `.task-loop.json` key ships one release after the code that reads it: the installed
-  pre-push judge reads the profile at the pushed tip and refuses a key it does not know (`unknown field`).
+  pushes and installs. Never bump a version by hand. A `.task-loop.json` is an in-repo file read by the same version that ships it; a key the reader does not know is refused (`unknown field`), and a new key is added with the code that reads it, with no two-release step.

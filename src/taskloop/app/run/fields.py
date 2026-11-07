@@ -10,6 +10,7 @@ from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.checks.checklog import CheckLog
 from taskloop.app.checks.runner import Checker
 from taskloop.app.look.state import LookState
+from taskloop.app.plan.state import PlanState
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.budget import Budget
 from taskloop.app.run.calls import Calls
@@ -96,7 +97,6 @@ class RunFields(StateAttrs):
         self.unfiled: list[Unfiled] = []  # follow-ups bd refused (the ReviewState keeps both)
         self.amended = False  # a plan was amended or replanned: its first stage does not start at the task's base
         self.strays: list[str] = []  # unaccepted untracked files moved to evidence/strays before the land gate (tl-bxk.10.24)
-        self.cap_granted = False
         self.old_plan, self.amend_text, self.amend_why = None, "", ""  # set where a checkpoint's plan is kept to be amended
         self.answered: Any = None  # the owner ask this run starts from, once answered
         self.verify_answer = ""  # the owner's answer to a verify ask, when it asks for more than a yes
@@ -113,9 +113,7 @@ class RunFields(StateAttrs):
         self.pause_producer: Producer = "engine"
         self.pause_permanence: Permanence | None = None
         self.budget_warned: set[float] = set()
-        self.plan_assumed = False  # tl-ntp: the planner was sent back once to plan on assumptions
-        self.plan_decided = False  # the planner was sent back once with the requirement that answers its question
-        self.plan_visual_back = False  # the planner was sent back once for a visual path touched with no look-objective, taste or show case
+        self.plan_state = PlanState()  # the plan stage's flags: the send-backs used, the cap raised
         self.land_fields()
 
     def land_fields(self) -> None:
