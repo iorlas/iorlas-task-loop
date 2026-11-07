@@ -11,7 +11,7 @@ from support.logs import records
 from support.narrow import must
 from support.plans import CLEAN, PLAN, RED_ONCE, WRITE
 
-from taskloop.app.run.blocked import Blocked
+from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.write.prepare import Prepare
 from taskloop.app.write.state import StageState
 from taskloop.contracts import rundocs

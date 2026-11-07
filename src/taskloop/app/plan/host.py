@@ -7,6 +7,7 @@ from typing import Protocol
 
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.looks import Methods
+from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.state import PlanState
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import AskAnswer
@@ -138,10 +139,7 @@ class PlanHost(Protocol):
     leftovers: list[Open]
     brief_hash: str
     snap: BriefSnap | None
-    old_plan: PlanData | None
-    amend_text: str
-    amend_why: str
-    amended: bool
+    amend: AmendState
     plan_state: PlanState
     log: PlanLog
     steps: PlanSteps
