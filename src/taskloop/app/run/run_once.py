@@ -4,6 +4,7 @@ from typing import Any
 
 from tlkernel.envvars import EnvVar
 
+from taskloop.adapters import beadtools, ident
 from taskloop.app.land.closing import LandHistory
 from taskloop.app.pipeline.lifecycle import Lifecycle
 from taskloop.app.pipeline.run import RunBody
@@ -14,7 +15,7 @@ from taskloop.app.slots.lease import Lease
 class RunOnce:
     def __init__(self, host: Any) -> None:
         self.host = host
-        body = RunBody(host, host, host, host, host, host, host, LandHistory(host.git), self.beat)
+        body = RunBody(host, host, host, host, host, host, host, LandHistory(host.git), self.beat, beadtools.peek, ident.plugin_version)
         self.lifecycle = Lifecycle(host, body=body.run, lease=self.lease, reexecs=ReexecBook(host.home))
 
     def lease(self, on_beat: Callable[[], None], on_death: Callable[[BaseException], None]) -> Lease:

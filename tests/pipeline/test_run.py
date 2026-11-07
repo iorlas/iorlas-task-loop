@@ -1,10 +1,12 @@
 """The run body's refusal boundaries and stage hand-offs over fakes."""
+
 from types import SimpleNamespace
 from unittest import mock
 
 import pytest
 from support.pipeline_ports import FakeHeadHistory, FakeNarrate
 
+from taskloop.adapters import beadtools, ident
 from taskloop.app.pipeline import run, run_roles
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.run import RunBody
@@ -35,7 +37,7 @@ def roles():
 
 def run_body(parts, history=None, beat=None):
     return RunBody(parts.leasing, parts.delegating, parts.stages, parts.records, parts.moves,
-                   parts.values, parts.crashes, history or FakeHeadHistory(), beat or mock.Mock())
+                   parts.values, parts.crashes, history or FakeHeadHistory(), beat or mock.Mock(), beadtools.peek, ident.plugin_version)
 
 
 @pytest.mark.parametrize("refusal,kind", [
@@ -49,8 +51,8 @@ def test_begin_refuses(refusal, kind):
         h.delegating.route = ""
     bead = None if refusal == "missing" else Bead(id=BeadId("t-1"), title="Task", status="open")
     lease, beat = mock.Mock(), mock.Mock()
-    with mock.patch("taskloop.app.pipeline.run.beadtools.peek", return_value=bead), \
-            mock.patch("taskloop.app.pipeline.run.ident.plugin_version", return_value="test"), \
+    with mock.patch("taskloop.adapters.beadtools.peek", return_value=bead), \
+            mock.patch("taskloop.adapters.ident.plugin_version", return_value="test"), \
             pytest.raises(Blocked) as caught:
         run_body(h, FakeHeadHistory(), beat).begin(lease)
     assert caught.value.kind is kind
@@ -135,4 +137,5 @@ def test_constructing_body_does_not_resolve_lazy_role_members():
 
     lazy = LazyRole()
     parts = roles()
-    RunBody(lazy, lazy, lazy, lazy, lazy, parts.values, parts.crashes, FakeHeadHistory(), lambda: None)
+    RunBody(lazy, lazy, lazy, lazy, lazy, parts.values, parts.crashes, FakeHeadHistory(), lambda: None,
+            beadtools.peek, ident.plugin_version)
