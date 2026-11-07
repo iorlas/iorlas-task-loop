@@ -145,46 +145,64 @@ class Writes(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+class PreparedModule:
+    def __init__(self, module, tree):
+        self.names = bindings(module, tree)
+        self.functions = []
+        for function in ast.walk(tree):
+            if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                statements: list[tuple[ast.Assign | ast.Return, list[str]]] = []
+                for node in ast.walk(function):
+                    if isinstance(node, ast.Assign):
+                        statements.append((node, [ast.unparse(target) for target in node.targets]))
+                    elif isinstance(node, ast.Return) and node.value is not None:
+                        statements.append((node, []))
+                self.functions.append((function.name, statements))
+
+    def factories(self, external):
+        factories = dict(external)
+        for _ in range(len(self.functions) + 1):
+            before = factories.copy()
+            for name, statements in self.functions:
+                local = self.names.copy()
+                for node, targets in statements:
+                    if isinstance(node, ast.Assign):
+                        for target in targets:
+                            local[target] = store_identity(node.value, local, factories)
+                    else:
+                        identity = store_identity(node.value, local, factories)
+                        if identity:
+                            factories[name] = identity
+                            factories['self.' + name] = identity
+            if factories == before:
+                break
+        return factories
+
+    def problems(self, module, tree, external):
+        visitor = Writes(module, self.names, self.factories(external))
+        visitor.visit(tree)
+        return visitor.problems
+
+
 def local_factories(module, tree, external):
-    names = bindings(module, tree)
-    factories = dict(external)
-    functions = [node for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))]
-    for _ in range(len(functions) + 1):
-        before = factories.copy()
-        for function in functions:
-            local = names.copy()
-            for node in ast.walk(function):
-                if isinstance(node, ast.Assign):
-                    for target in node.targets:
-                        local[ast.unparse(target)] = store_identity(node.value, local, factories)
-                elif isinstance(node, ast.Return) and node.value is not None:
-                    identity = store_identity(node.value, local, factories)
-                    if identity:
-                        factories[function.name] = identity
-                        factories['self.' + function.name] = identity
-        if factories == before:
-            break
-    return factories
+    return PreparedModule(module, tree).factories(external)
 
 
 def writer_problems(module, tree, external=()):
-    names = bindings(module, tree)
-    factories = local_factories(module, tree, external)
-    visitor = Writes(module, names, factories)
-    visitor.visit(tree)
-    return visitor.problems
+    return PreparedModule(module, tree).problems(module, tree, external)
 
 
 def writer_tree_problems(trees):
     """Resolve store factories across module imports before checking mutation capabilities."""
+    prepared = {module: PreparedModule(module, tree) for module, tree in trees.items()}
     external = {}
     for _ in range(len(trees) + 1):
         before = external.copy()
         for module, tree in trees.items():
-            found = local_factories(module, tree, external)
+            found = prepared[module].factories(external)
             for node in tree.body:
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in found:
                     external[module + '.' + node.name] = found[node.name]
         if external == before:
             break
-    return [problem for module, tree in trees.items() for problem in writer_problems(module, tree, external)]
+    return [problem for module, tree in trees.items() for problem in prepared[module].problems(module, tree, external)]
