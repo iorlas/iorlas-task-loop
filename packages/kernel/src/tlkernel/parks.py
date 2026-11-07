@@ -1,4 +1,4 @@
-"""Parks (rows of the `park` table): question counts and durable pause wakes. `runs` counts questions on
+"""Parks (rows of the asks-owned `park` table): question counts and durable pause wakes. `runs` counts questions on
 the same bead text; `attempts` counts pauses by producer:reason across runs. Transient
 pauses carry an epoch retry_at; needs_owner pauses wake on owner input."""
 from collections.abc import Callable

@@ -1,28 +1,24 @@
-"""What the plan stage reads and writes of the engine that runs it: one Protocol, so the stage has no hidden reach into the Engine
-(docs/design/b-plan.md, slice 1; the same shape as look/host.py and review/host.py). Each part types the members it reads as the
-narrow view it needs (`CapHost`, `BriefsHost`, ...), all of them subsets of `PlanHost`."""
+"""Plan capabilities and shared hand-offs, separate from run facts and the stage's owned state."""
 from collections.abc import Callable, Sequence
-from pathlib import Path
 from typing import Protocol
 
 from tlkernel.adrs import AdrStore
 from tlkernel.ask import AskAnswer
 from tlkernel.asked import Asked
 from tlkernel.beadsport import Beads
-from tlkernel.checkpoint import BriefSnap, PlanStep
+from tlkernel.checkpoint import BriefSnap, Checkpoint, PlanStep, StageProgress
 from tlkernel.checks import Check, CheckRun
-from tlkernel.config import EngineConfig, HostResources, VisualConfig
+from tlkernel.config import HostResources, VisualConfig
 from tlkernel.enums import AskClass
 from tlkernel.gitport import Git
-from tlkernel.ids import BeadId, TreeSha
+from tlkernel.ids import TreeSha
 from tlkernel.plancheck import PlanData
 from tlkernel.stop import Stop
 from tlkernel.wire import Open
 
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.looks import Methods
-from taskloop.app.plan.amend import AmendState
-from taskloop.app.plan.state import PlanState
+from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.review.ledger import Ledger
 
 
@@ -53,21 +49,22 @@ class PlanSteps(Protocol):
 
 
 class PlanCheckpoints(Protocol):
-    def amend(self, fn: object) -> bool: ...
+    def amend(self, fn: Callable[[Checkpoint], Checkpoint]) -> bool: ...
     def save(self, *, step: str = ..., stage: int = ..., rounds: int = ..., n: int = ..., feedback: str = ...,
-             progress: object = ...) -> None: ...
+             progress: StageProgress | None = ...) -> None: ...
     def keep_pending(self, origin: str = ...) -> None: ...
 
 
-class PlanHostResources(Protocol):
+class PlanResources(Protocol):
     def need(self) -> HostResources | None: ...
 
 
 class PlanStores(Protocol):
-    adrs: Callable[[str], AdrStore]
+    @property
+    def adrs(self) -> Callable[[str], AdrStore]: ...
 
     @property
-    def host(self) -> PlanHostResources: ...
+    def host(self) -> PlanResources: ...
 
 
 class PlanCheckout(Protocol):
@@ -105,7 +102,7 @@ class PlanBriefing(Protocol):
     def where(self, node: str, checks: Sequence[object] = ..., failed: object = ..., listed: Sequence[str] = ...) -> str: ...
 
 
-class PlanHand(Protocol):
+class PlanRounds(Protocol):
     def rounds_text(self, last: int = ..., each: int = ..., cap: int = ...) -> str: ...
 
 
@@ -113,24 +110,13 @@ class PlanShared(Protocol):
     def shared_text(self) -> str: ...
 
 
-class PlanHost(Protocol):
-    bead: BeadId
-    wt: str
-    cfg: EngineConfig
-    dry: bool
-    run_id: str
-    run_dir: Path
-    task_dir: Path
-    brief_file: Path
-    evidence_dir: Path
+class PlanHand(Protocol):
+    """Plain run fields shared with plan; PlanKeeper writes the plan fields here."""
     scope: str
-    git: Git
-    store: Beads
     answered: Answered | None
     verify_answer: str
     landed_sha: str
     planner_ref: str
-    kind: object
     plan_data: PlanData | None
     plan_summary: str
     plan_log: list[PlanStep]
@@ -140,22 +126,43 @@ class PlanHost(Protocol):
     leftovers: list[Open]
     brief_hash: str
     snap: BriefSnap | None
-    amend: AmendState
-    plan_state: PlanState
-    log: PlanLog
-    steps: PlanSteps
-    checkpoints: PlanCheckpoints
-    stores: PlanStores
-    checkout: PlanCheckout
-    routing: PlanRouting
-    briefs: PlanBriefs
-    ask_flow: PlanAskFlow
-    cases: PlanCases
-    pictures: PlanPictures
-    briefing: PlanBriefing
-    hand: PlanHand
-    shared: PlanShared
-    checker: ProbeChecker
+
+
+class PlanPorts(Protocol):
+    """Capabilities the plan stage calls on the rest of the run."""
+
+    @property
+    def git(self) -> Git: ...
+    @property
+    def store(self) -> Beads: ...
+    @property
+    def log(self) -> PlanLog: ...
+    @property
+    def steps(self) -> PlanSteps: ...
+    @property
+    def checkpoints(self) -> PlanCheckpoints: ...
+    @property
+    def stores(self) -> PlanStores: ...
+    @property
+    def checkout(self) -> PlanCheckout: ...
+    @property
+    def routing(self) -> PlanRouting: ...
+    @property
+    def briefs(self) -> PlanBriefs: ...
+    @property
+    def ask_flow(self) -> PlanAskFlow: ...
+    @property
+    def cases(self) -> PlanCases: ...
+    @property
+    def pictures(self) -> PlanPictures: ...
+    @property
+    def briefing(self) -> PlanBriefing: ...
+    @property
+    def hand(self) -> PlanRounds: ...
+    @property
+    def shared(self) -> PlanShared: ...
+    @property
+    def checker(self) -> ProbeChecker: ...
 
     def ai(self, node: str, title: str, prompt: str, *a: object, **kw: object) -> Asked: ...
     def comment(self, text: str) -> None: ...
@@ -164,5 +171,5 @@ class PlanHost(Protocol):
     def assumed(self, text: str) -> None: ...
     def publish_plan(self) -> None: ...
     def shell_probe(self) -> PathProbe: ...
-    def blocked_for(self, why: str, kind: str, stop: object = None, spec: object = None, fix: bool = False) -> Stop: ...
+    def blocked_for(self, why: str, kind: str, stop: object = None, spec: AskSpec | None = None, fix: bool = False) -> Stop: ...
     def move_host(self, needs: list[str], why: str) -> Stop: ...
