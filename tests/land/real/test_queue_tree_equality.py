@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-CASES, CHUNKS = 1000, 10
+CASES, CHUNKS = 200, 10  # seeds 0..199: ~0.8 s per chunk, inside the real layer's 1 s per test
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
            "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull,
            "GIT_CONFIG_COUNT": "2", "GIT_CONFIG_KEY_0": "gc.auto", "GIT_CONFIG_VALUE_0": "0",  # a gc would prune the refless objects
@@ -82,8 +82,9 @@ def build(repo: Path, rng: random.Random, n: int) -> list[str]:
 def run_case(repo: Path, work: Path, seed: int) -> tuple[int, int]:
     """(PRs compared, PRs the queue ejected on a conflict); raises on any inequality."""
     rng = random.Random(seed)
-    for ref in out(repo, "for-each-ref", "--format=%(refname)").split():
-        git(repo, "update-ref", "-d", ref)
+    refs = out(repo, "for-each-ref", "--format=delete %(refname)")
+    if refs:
+        assert git(repo, "update-ref", "--stdin", stdin=refs + "\n").returncode == 0
     heads = build(repo, rng, rng.randint(2, 4))
     q = out(repo, "rev-parse", "main")
     chain: list[str] = []
