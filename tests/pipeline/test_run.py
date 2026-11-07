@@ -8,6 +8,7 @@ from support.pipeline_ports import FakeHeadHistory, FakeNarrate
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.run import RunBody
 from tlkernel.bead import Bead
+from tlkernel.checkpoint import RunState
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.plancheck import PlanData, RoundState
@@ -20,9 +21,9 @@ def host():
         cfg=SimpleNamespace(writer_exec_allow=[], writer_family=[], base="main", max_replans=1, max_rounds=3),
         contract={"contract": 1, "capabilities": []}, router=SimpleNamespace(contract_no=1),
         log=FakeNarrate(), tree=mock.Mock(), budget=SimpleNamespace(labels=[]), ask_flow=mock.Mock(),
-        planner=mock.Mock(), answered=None, accepted=[], done=[], dry=True, pending_land_validation="",
+        planner=mock.Mock(), answered=None, state=RunState(replans=1), dry=True,
         stage_loop=mock.Mock(), lander=mock.Mock(), checkpoints=mock.Mock(), reload=mock.Mock(),
-        replans=1, extra=0, stats={}, stuck_why="stuck", wt="tree",
+        stats={}, stuck_why="stuck", wt="tree",
     )
 
 
@@ -52,7 +53,7 @@ def test_begin_refuses(refusal, kind):
 
 def test_stages_accept_push_checkpoint_and_reload_in_order():
     h = host()
-    h.pending_land_validation = "recovering"
+    h.state.pending_land_validation = "recovering"
     h.stage_loop.run.return_value = ""
     events = mock.Mock()
     for name, child in [("stage", h.stage_loop.run), ("push", h.lander.out.wip_push),
@@ -62,9 +63,9 @@ def test_stages_accept_push_checkpoint_and_reload_in_order():
                                  {"goal": "second", "files": [], "checks": []}]}
     state: RoundState = {"fix": False}
     RunBody(h, FakeHeadHistory(), mock.Mock()).stages(plan, 0, state)
-    assert h.accepted == [0, 1]
-    assert h.done == ["first", "second"]
-    assert h.pending_land_validation == ""
+    assert h.state.accepted == [0, 1]
+    assert h.state.done == ["first", "second"]
+    assert h.state.pending_land_validation == ""
     assert events.mock_calls == [
         mock.call.stage(plan, 0, state), mock.call.push(1),
         mock.call.save(stage=1, rounds=0, n=0, feedback="", step="write"),
@@ -90,3 +91,15 @@ def test_its_work_formats_the_history_port():
     history = FakeHeadHistory("one\ntwo")
     assert RunBody(h, history, mock.Mock()).its_work() == "Its work: one; two"
     assert history.calls == [("tree", "main", 3)]
+
+
+def test_stages_follow_state_replaced_by_restart_between_calls():
+    h = host()
+    original = h.state
+    body = RunBody(h, FakeHeadHistory(), mock.Mock())
+    fresh = RunState(pending_land_validation="validate restarted attempt")
+    h.stage_loop.run.side_effect = lambda *_: setattr(h, "state", fresh) or ""
+    plan: PlanData = {"stages": [{"goal": "restarted", "files": [], "checks": []}]}
+    body.stages(plan, 0, None)
+    assert original.accepted == original.done == []
+    assert (fresh.accepted, fresh.done, fresh.pending_land_validation) == ([0], ["restarted"], "")

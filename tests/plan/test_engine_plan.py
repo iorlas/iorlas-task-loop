@@ -292,7 +292,7 @@ class EnginePlanTest(EngineTest):
         assert [c[0] for c in s.calls] == ["planner", "worker", "reviewer"]
         assert text in s.prompts[0]
         assert "- add f\n" in s.prompts[0]  # the accepted stage, not planned again
-        assert self.eng.replans == 0
+        assert self.eng.state.replans == 0
 
     def test_a_bead_without_acceptance_criteria_is_a_ticket_and_never_planned(self):
         with self.store.stub(show={"id": "t-1", "title": "Add f", "metadata": {}, "description": "Add f."}):
