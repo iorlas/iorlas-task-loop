@@ -11,7 +11,6 @@ from taskloop.contracts.kinds import ASK_NAME, ASKS, FINISH, Kind
 from taskloop.contracts.stores import JsonlStore
 from taskloop.domain.matchers import clip
 
-
 DONE = (Outcome.LANDED, Outcome.DONE)
 
 def node_outcome(outcome: Outcome, kind: Kind) -> str:

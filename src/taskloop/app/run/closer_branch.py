@@ -15,7 +15,6 @@ from taskloop.contracts.paths import ConfigDir
 from taskloop.stores.runlog import RunLog
 
 
-
 class BranchTree(Protocol):
     def wip(self, why: str, everything: bool = ...) -> bool: ...
 
