@@ -1,7 +1,6 @@
 """One repo key (tl-sqd3.18, Z18): ids.loop_key is the one place a repo path becomes a key; check_files.repo_key only picks the folder
 (the git common dir's parent) and asks it. No other module hashes a path into a key or defines its own loop_key/repo_key."""
 import ast
-from pathlib import Path
 
 from rules.gate_rules import ROOT, parsed, py_files
 
