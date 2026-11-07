@@ -17,9 +17,9 @@ from taskloop.app.plan.prompts import (
     UNANCHORED_TEXT,
 )
 from taskloop.app.plan.state import PlanState
-from taskloop.contracts import plancheck
-from taskloop.contracts.plancheck import PlanData
-from taskloop.contracts.stagefacts import RunFacts
+from tlkernel import plancheck
+from tlkernel.plancheck import PlanData
+from tlkernel.stagefacts import RunFacts
 from taskloop.domain.checks import lint, planref
 from taskloop.domain.plan.matchers import gate_only_criteria
 from taskloop.domain.prompts.anchors import MAX_ANCHORS, unanchored

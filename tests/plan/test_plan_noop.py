@@ -5,7 +5,7 @@ from support.plan_host import FakePlan
 from support.plans import PLAN
 
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
-from taskloop.contracts.kinds import Kind
+from tlkernel.kinds import Kind
 
 
 @pytest.fixture

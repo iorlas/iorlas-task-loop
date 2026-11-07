@@ -7,12 +7,12 @@ from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.host import PlanHand, PlanPorts
 from taskloop.app.plan.prompts import REPLAN_CAP
 from taskloop.app.plan.state import PlanState
-from taskloop.contracts.bdsafe import attempt, peek
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import BeadPatch
-from taskloop.contracts.checkpoint import Checkpoint
-from taskloop.contracts.enums import AskClass
-from taskloop.contracts.stagefacts import RunFacts
+from tlkernel.bdsafe import attempt, peek
+from tlkernel.bead import Bead
+from tlkernel.beadsport import BeadPatch
+from tlkernel.checkpoint import Checkpoint
+from tlkernel.enums import AskClass
+from tlkernel.stagefacts import RunFacts
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks import text as asktext
 

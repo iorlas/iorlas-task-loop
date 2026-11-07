@@ -42,12 +42,12 @@ from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine, entry
 from taskloop.app.slots.lease import Lease
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.enums import Result, WaitWhat
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.run import RunReport
+from tlkernel.config import EngineConfig
+from tlkernel.enums import Result, WaitWhat
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.run import RunReport
 from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks import retry
 from taskloop.domain.lanes.matchers import read_only_command

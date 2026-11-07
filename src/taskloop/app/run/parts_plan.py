@@ -5,8 +5,8 @@ from functools import cached_property
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.write.briefing import Briefing
 from taskloop.app.write.stage_loop import StageLoop
-from taskloop.contracts import plancheck
-from taskloop.contracts.paths import PLAN_FILE
+from tlkernel import plancheck
+from tlkernel.paths import PLAN_FILE
 
 
 class PlanParts(Plumbing):

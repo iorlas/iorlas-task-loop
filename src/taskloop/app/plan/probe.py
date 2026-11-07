@@ -7,9 +7,9 @@ from pathlib import Path
 from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.host import PlanHand, PlanPorts
 from taskloop.app.plan.state import PlanState
-from taskloop.contracts.checks import UNVERIFIED_EXIT, CheckResult
-from taskloop.contracts.config import CheckSpec
-from taskloop.contracts.stagefacts import RunFacts
+from tlkernel.checks import UNVERIFIED_EXIT, CheckResult
+from tlkernel.config import CheckSpec
+from tlkernel.stagefacts import RunFacts
 from taskloop.domain.beads import matchers as acnames
 from taskloop.domain.checks.specs import repo_check
 from taskloop.domain.matchers import clip

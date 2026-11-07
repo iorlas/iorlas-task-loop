@@ -11,11 +11,11 @@ from taskloop.app.plan.briefs import Briefs
 from taskloop.app.plan.cases import Cases
 from taskloop.app.plan.planner import Planner
 from taskloop.app.plan.state import PlanState
-from taskloop.contracts.asked import Asked
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.gitfacts import TreeEntry
-from taskloop.contracts.plancheck import PlanData
-from taskloop.contracts.stop import Stop
+from tlkernel.asked import Asked
+from tlkernel.config import EngineConfig
+from tlkernel.gitfacts import TreeEntry
+from tlkernel.plancheck import PlanData
+from tlkernel.stop import Stop
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.review.ledger import Ledger
 

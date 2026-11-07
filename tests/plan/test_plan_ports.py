@@ -11,11 +11,11 @@ from support.plans import HAS_F, PLAN
 from taskloop.app.asks import intake
 from taskloop.app.plan import adrsync
 from taskloop.app.plan.planned import Planned
-from taskloop.contracts import adrfiles
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.ledger import Adr
-from taskloop.contracts.plancheck import adhoc
-from taskloop.contracts.stop import Stop
+from tlkernel import adrfiles
+from tlkernel.bead import Bead
+from tlkernel.ledger import Adr
+from tlkernel.plancheck import adhoc
+from tlkernel.stop import Stop
 from taskloop.domain.prompts.common import RULES_MAX
 
 

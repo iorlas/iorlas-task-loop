@@ -9,10 +9,10 @@ from taskloop.app.plan.host import PlanHand, PlanPorts
 from taskloop.app.plan.probe import AcProbe
 from taskloop.app.plan.prompts import PLAN_PROMPT, SHOW_PLAN, VISUAL_PLAN, VISUAL_STAGES
 from taskloop.app.plan.state import PlanState
-from taskloop.contracts import plancheck
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.plancheck import PlanData
-from taskloop.contracts.stagefacts import RunFacts
+from tlkernel import plancheck
+from tlkernel.gitport import Git
+from tlkernel.plancheck import PlanData
+from tlkernel.stagefacts import RunFacts
 from taskloop.domain.checks import lint
 from taskloop.domain.checks.names import norm
 

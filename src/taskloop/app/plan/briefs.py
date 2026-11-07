@@ -8,10 +8,10 @@ from taskloop.app.asks import intake
 from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.host import PlanHand, PlanPorts
 from taskloop.app.plan.state import PlanState
-from taskloop.contracts.bdsafe import peek
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.stagefacts import RunFacts
+from tlkernel.bdsafe import peek
+from tlkernel.bead import Bead
+from tlkernel.ids import BeadId
+from tlkernel.stagefacts import RunFacts
 from taskloop.domain.asks import text as asktext
 from taskloop.domain.plan import brief as bf
 

@@ -4,19 +4,19 @@ from typing import Protocol
 
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.looks import Methods
-from taskloop.contracts.adrs import AdrStore
-from taskloop.contracts.ask import AskAnswer
-from taskloop.contracts.asked import Asked
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.checkpoint import BriefSnap, Checkpoint, PlanStep, StageProgress
-from taskloop.contracts.checks import Check, CheckRun
-from taskloop.contracts.config import HostResources, VisualConfig
-from taskloop.contracts.enums import AskClass
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.plancheck import PlanData
-from taskloop.contracts.stop import Stop
-from taskloop.contracts.wire import Open
+from tlkernel.adrs import AdrStore
+from tlkernel.ask import AskAnswer
+from tlkernel.asked import Asked
+from tlkernel.beadsport import Beads
+from tlkernel.checkpoint import BriefSnap, Checkpoint, PlanStep, StageProgress
+from tlkernel.checks import Check, CheckRun
+from tlkernel.config import HostResources, VisualConfig
+from tlkernel.enums import AskClass
+from tlkernel.gitport import Git
+from tlkernel.ids import TreeSha
+from tlkernel.plancheck import PlanData
+from tlkernel.stop import Stop
+from tlkernel.wire import Open
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.review.ledger import Ledger
 

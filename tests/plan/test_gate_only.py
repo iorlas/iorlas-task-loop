@@ -12,7 +12,7 @@ from support.plan_host import FakePlan
 from support.plans import CLEAN, HAS_F, PLAN, WRITE
 
 from taskloop.app.plan.planner import Planner
-from taskloop.contracts.plancheck import adhoc
+from tlkernel.plancheck import adhoc
 from taskloop.domain.checks import lint
 
 

@@ -22,8 +22,8 @@ from taskloop.app.run.parts_run import RunParts
 from taskloop.app.workers import asked
 from taskloop.app.workers.worker_call import Ops, WorkerCall
 from taskloop.app.write.handoff import Handoff
-from taskloop.contracts import plancheck
-from taskloop.contracts.stagefacts import RunFacts
+from tlkernel import plancheck
+from tlkernel.stagefacts import RunFacts
 from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.lanes.says import stop_say, stop_why
 from taskloop.stores.runports import RunPorts
