@@ -50,7 +50,7 @@ WHY: Final[dict[str, Callable[[Said], str]]] = {
     "PAUSE_KILLED": lambda w: f"failed: stopped (the {w.node} worker was ended by a signal: {w.said})",
     "FAULT_BAD_REQUEST": lambda w: f"failed: infrastructure: {w.stop.reason}: {w.said}{w.fix}",
     "FAULT_DENIED": _denied,
-    "FAULT_CRASHED": lambda w: f"failed: delegate crashed {w.crashes} times on the {w.node} step: {w.said}",
+    "FAULT_CRASHED": lambda w: f"failed: delegate crashed on the {w.node} step: {w.said}",
     "ASK_STUCK": _stuck,
 }
 
