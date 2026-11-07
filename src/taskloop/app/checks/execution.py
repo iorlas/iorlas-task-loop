@@ -1,9 +1,8 @@
 """Where a check runs (on the host) and the environment its receipt is keyed by."""
+from tlkernel import childenv
 from tlkernel.env import Env
 from tlkernel.envvars import EnvVar
 from tlkernel.runkey import Digest
-
-from taskloop.adapters import childenv
 
 HOST_IDENTITY = Digest("host-v1")  # every check runs on this machine: the execution field of its run key
 

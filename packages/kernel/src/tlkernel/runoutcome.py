@@ -16,8 +16,8 @@ from typing import Any, Final
 
 from any_failure_fp import Event, seen_within, streak
 
-from taskloop.domain.asks.spec import AskSpec
-from taskloop.domain.lifecycle import matchers as lifecycle
+from tlkernel import lifecyclematchers as lifecycle
+from tlkernel.askspec import AskSpec
 from tlkernel.enums import Outcome, Result
 from tlkernel.kinds import (
     ASKS,

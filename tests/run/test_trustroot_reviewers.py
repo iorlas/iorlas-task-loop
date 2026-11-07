@@ -8,12 +8,12 @@ import pytest
 from support.engine_case import EngineTest
 from support.plans import BEAD, CLEAN, PLAN, WRITE
 
-from taskloop.adapters import childenv
 from taskloop.app.asks.admission import _blocked_by_engine
 from taskloop.app.asks.closing import ClosingTrust
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from taskloop.app.pipeline.reflect import Reflector
 from taskloop.app.workers.worker_request import request
+from tlkernel import childenv
 from tlkernel.bead import Bead, Comment
 from tlkernel.gitfacts import DiffEntry
 from tlkernel.ids import BeadId
@@ -44,7 +44,7 @@ class ReviewerTrustRoots(Case):
         host.cfg.reflect = True
         host.dry, host.stop_pending, host.route = False, False, "/fake/route.py"
         host.sessions = [{"node": "write"}]
-        reflector = Reflector(host, ClosingTrust(), childenv.delegate_call_env)
+        reflector = Reflector(host, host, host, ClosingTrust(), childenv.delegate_call_env)
         reflector.reflect_prompt = Mock(side_effect=AssertionError("must not build a reviewer prompt"))
         assert reflector.reflect_run("parked", "trust roots changed") is None
         reflector.reflect_prompt.assert_not_called()

@@ -12,7 +12,7 @@ import sys
 from collections.abc import Mapping
 from pathlib import Path
 
-JUDGE_TL = "TL_JUDGE_TL"  # contracts/envvars.py: the tl.py of the install that started this engine child (adapters/childenv.hooks_vars)
+JUDGE_TL = "TL_JUDGE_TL"  # contracts/envvars.py: the tl.py of the install that started this engine child (tlkernel/childenv.hooks_vars)
 
 
 def judge_command(tl: str, environ: Mapping[str, str]) -> list[str]:

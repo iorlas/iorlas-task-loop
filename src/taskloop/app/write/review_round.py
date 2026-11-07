@@ -4,13 +4,14 @@ the writer, until the rounds are used up."""
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from tlkernel import askspecs
+
 from taskloop.app.asks import trustroots
 from taskloop.app.checks.evidence import compact
 from taskloop.app.write import review_skip
 from taskloop.app.write.host import WriteHost
 from taskloop.app.write.review_prompt import acceptance_text, review_prompt
 from taskloop.app.write.state import ACCEPT, AGAIN, REPLAN, RoundResult, StageState, carrying
-from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.lanes import caps
 from taskloop.domain.prompts.common import LATER_CASES, UNCHECKED_TEXT
 from taskloop.domain.review import findings as fnd

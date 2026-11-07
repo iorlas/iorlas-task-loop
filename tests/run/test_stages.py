@@ -24,17 +24,16 @@ from support.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE
 from support.spawn import port_git, real_spawner
 from support.who import who
 
-from taskloop.adapters import childenv, pidcheck
+from taskloop.adapters import pidcheck
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.write.handoff import HANDOFF_CAP
 from taskloop.domain.checks import planref
 from taskloop.domain.plan.matchers import AcceptanceText
-from tlkernel import rundocs
+from tlkernel import childenv, rundocs
 from tlkernel.answers import IRREVERSIBLE
 from tlkernel.argv import argv_of
-from tlkernel.config import EngineConfig
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId, CheckId
 from tlkernel.plancheck import PlanData, adhoc
@@ -274,21 +273,12 @@ class Handoff(StagesTest):
         return self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]},
                                j_extra={"write": [extra, extra]}, **cfg)
 
-    def test_a_writer_session_over_100k_starts_the_next_stage_fresh(self):
-        rc, s = self.boundary(120)  # under the 150k a claude session may grow to inside a stage
+    def test_stage_boundary_keeps_sending_a_delta_even_above_100k(self):
+        rc, s = self.boundary(120)
         assert rc == 0, self.blocked
         writes = [(p, c) for p, c in zip(s.prompts, s.calls, strict=False) if c[0] == "worker"]
-        assert writes[1][1][1] is None
-        assert "fresh session for the next one" in writes[1][0]
-        assert "add f" in writes[1][0]  # the accepted stage's goal
+        assert writes[1][1][1] == "ref-write"
 
-    def test_a_smaller_session_goes_on_and_the_limit_is_the_repos_to_set(self):
-        _rc, s = self.boundary(90)
-        assert [c[1] for c in s.calls if c[0] == "worker"][1] == "ref-write"
-        _rc, s = self.boundary(120, write_fresh_above_k=0)  # 0 is never, for the stage boundary too
-        assert [c[1] for c in s.calls if c[0] == "worker"][1] == "ref-write"
-        _rc, s = self.boundary(120, write_fresh_stage_k=0)
-        assert [c[1] for c in s.calls if c[0] == "worker"][1] == "ref-write"
 
 
 class Anchors(StagesTest):
@@ -405,10 +395,6 @@ class Fdyo(StagesTest):
         assert "failed in the last round too" not in writes[1]  # red for the first time
         assert "failed in the last round too" in writes[2]
         assert "list it in bad_checks" in writes[2]
-
-    @te.no_repo
-    def test_a_codex_session_is_not_resumed_above_100k_inside_a_stage(self):
-        assert EngineConfig().write_fresh_above_k == {"claude": 150, "codex": 100, "xai": 100}
 
     def test_python_isolated_mode_with_a_repo_module_is_sent_back(self):
         (self.wt / "tools" / "tests").mkdir(parents=True)

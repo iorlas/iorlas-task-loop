@@ -6,6 +6,7 @@ from delegate.app import run_legs
 from delegate.contracts import codec
 from delegate.contracts.codec import record
 from delegate.contracts.json_types import Json, arr, as_num, obj
+from delegate.contracts.routing import Routing
 from delegate.contracts.state import StateDoc, ThreadRecord
 from delegate.contracts.wire import RunRequest, RunResult
 
@@ -24,12 +25,17 @@ class ThreadPlan:
     takeover: bool
 
 
-def plan(request: RunRequest, state: StateDoc) -> ThreadPlan:
+def plan(request: RunRequest, state: StateDoc, routing: Routing) -> ThreadPlan:
     key = f"{request.task}/{request.thread}" if request.thread else ""
     previous = state.threads.get(key) if key else None
     resume = None
     path = request.brief_file
-    if previous is not None and request.delta_file is not None:
+    lane = routing.lanes.get(previous.lane or "") if previous else None
+    limit = routing.settings.fresh_above_k.get(lane.family, 0) if lane else 0
+    if request.boundary and limit > 0 and routing.settings.fresh_stage_k > 0:
+        limit = min(limit, routing.settings.fresh_stage_k)
+    oversized = previous is not None and previous.context_k is not None and limit > 0 and previous.context_k > limit
+    if previous is not None and request.delta_file is not None and not oversized:
         resume, path = previous.ref, request.delta_file
     text = Path(path).read_text(encoding="utf-8", errors="replace")
     takeover = request.role == "worker" and previous is not None and resume is None
@@ -45,7 +51,7 @@ def settle(state: StateDoc, key: str, res: RunResult) -> None:
     if not key or not res.ref:
         return
     state.threads.pop(key, None)
-    state.threads[key] = ThreadRecord(ref=res.ref, lane=res.lane, model=res.model)
+    state.threads[key] = ThreadRecord(ref=res.ref, lane=res.lane, model=res.model, context_k=res.usage.context_k)
     for old in list(state.threads)[:-200]:
         del state.threads[old]
 
