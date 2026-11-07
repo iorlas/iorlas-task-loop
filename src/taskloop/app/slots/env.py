@@ -11,8 +11,7 @@ from tlkernel import paths
 from tlkernel.beadsport import Beads
 from tlkernel.config import SlotsConfig
 from tlkernel.gitport import SlotGit
-
-from taskloop.stores.api import Tickets
+from tlkernel.storeapi import Tickets
 
 DEFAULT_PRIO = 2
 TICKET_POLL = (1, 5)  # a waiter's seconds between looks: the first, and the most

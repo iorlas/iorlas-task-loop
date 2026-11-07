@@ -13,6 +13,8 @@ A package may import `tlkernel` and other packages' api, contracts and testing, 
 
 What is shared and must be settled first (each one is a pure move of its own, before any carve that needs it):
 
+P1 update: the store interfaces formerly in `stores/api.py` (`stores.api`) now live in `packages/kernel/src/tlkernel/storeapi.py` (`tlkernel.storeapi`). The inventory below records the pre-carve counts. Checks now use their own `GateStores` and `GateLog` protocols in `app/checks/ports.py`; the concrete bundle and log remain in the shell.
+
 | shared piece | users (files) | home |
 |---|---|---|
 | `domain/checks` (20 files) | checks 27, plan 7, write 5, land 3, domain.work 2, pipeline 2 | gate's `contracts` for the records, gate's `api` for the functions |
