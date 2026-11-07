@@ -4,8 +4,9 @@ from typing import Protocol
 
 from tlkernel import fence
 from tlkernel.bead import Bead
+from tlkernel.checkpoint import Checkpoint
 from tlkernel.delegate import Permanence
-from tlkernel.enums import Outcome
+from tlkernel.enums import Outcome, Step
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
@@ -72,3 +73,7 @@ class Reexecs(Protocol):
 
 class Trail(Protocol):
     def event(self, by: Identity, kind: str, bead: str, **fields: str) -> None: ...
+
+
+class RoundSteps(Protocol):
+    def round_step(self, step: Step, ck: Checkpoint | None) -> Step: ...
