@@ -19,10 +19,13 @@ from support.spawn import real_spawner  # noqa: E402
 
 from taskloop.adapters import procs  # noqa: E402
 from taskloop.app.launch import dash as dash_server  # noqa: E402
+from taskloop.app.parts import STAGE_PARTS  # noqa: E402
 from taskloop_dash import bind  # noqa: E402
 from tlkernel.dash import READ_PROTOCOL  # noqa: E402
 from tlkernel.env import Env as ProcessEnv  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
+
+INSTALLED = {p.name: p.version for p in STAGE_PARTS}
 
 
 def _const(value):
@@ -53,44 +56,44 @@ class StaleReason(Case):
         self.tmp.cleanup()
 
     def test_current_server_is_not_stale(self):
-        assert dash_server.stale_reason(live(self.script), "v1", ["127.0.0.1"]) is None
+        assert dash_server.stale_reason(live(self.script), "v1", ["127.0.0.1"], INSTALLED) is None
 
     def test_deleted_script_is_stale(self):
         v = live(Path(self.tmp.name) / "gone" / "server.py")
-        assert "gone" in must(dash_server.stale_reason(v, "v1", ["127.0.0.1"]))
+        assert "gone" in must(dash_server.stale_reason(v, "v1", ["127.0.0.1"], INSTALLED))
 
     def test_version_differs_is_stale(self):
-        assert "version" in must(dash_server.stale_reason(live(self.script, "v0"), "v1", ["127.0.0.1"]))
+        assert "version" in must(dash_server.stale_reason(live(self.script, "v0"), "v1", ["127.0.0.1"], INSTALLED))
 
     def test_a_server_speaking_another_read_protocol_is_stale_even_at_the_same_code_version(self):
-        assert "protocol" in must(dash_server.stale_reason(live(self.script, protocol=READ_PROTOCOL + 1), "v1", ["127.0.0.1"]))
-        assert "protocol" in must(dash_server.stale_reason(live(self.script, protocol=None), "v1", ["127.0.0.1"]))
+        assert "protocol" in must(dash_server.stale_reason(live(self.script, protocol=READ_PROTOCOL + 1), "v1", ["127.0.0.1"], INSTALLED))
+        assert "protocol" in must(dash_server.stale_reason(live(self.script, protocol=None), "v1", ["127.0.0.1"], INSTALLED))
 
     def test_a_server_whose_part_needs_miss_the_installed_version_is_replaced(self):
         for needs, parts, reason in [({"pipeline": 3}, {"pipeline": 3}, "it needs part pipeline v3, installed is v2"),
                                      ({"pipeline": 1}, {"pipeline": 0}, "installed part pipeline is v2, it reads up to v0")]:
             v = dict(live(self.script), needs=needs, parts=parts)
-            assert dash_server.stale_reason(v, "v1", ["127.0.0.1"]) == reason
+            assert dash_server.stale_reason(v, "v1", ["127.0.0.1"], INSTALLED) == reason
         ok = dict(live(self.script), needs={"pipeline": 1}, parts={"pipeline": 2})
-        assert dash_server.stale_reason(ok, "v1", ["127.0.0.1"]) is None
+        assert dash_server.stale_reason(ok, "v1", ["127.0.0.1"], INSTALLED) is None
 
     def test_server_must_report_part_contracts(self):
         for fields in ({"needs": None}, {"parts": None}, {"needs": {"pipeline": "1"}},
                        {"needs": {"pipeline": 1}, "parts": {}}):
             v = dict(live(self.script), **fields)
-            assert dash_server.stale_reason(v, "v1", ["127.0.0.1"]) is not None
+            assert dash_server.stale_reason(v, "v1", ["127.0.0.1"], INSTALLED) is not None
 
     def test_missing_address_is_stale(self):
-        r = dash_server.stale_reason(live(self.script), "v1", ["127.0.0.1", "100.1.2.3"])
+        r = dash_server.stale_reason(live(self.script), "v1", ["127.0.0.1", "100.1.2.3"], INSTALLED)
         assert "100.1.2.3" in must(r)
 
     def test_extra_address_is_fine(self):
-        assert dash_server.stale_reason(live(self.script, binds=("127.0.0.1", "100.1.2.3")), "v1", ["127.0.0.1"]) is None
+        assert dash_server.stale_reason(live(self.script, binds=("127.0.0.1", "100.1.2.3")), "v1", ["127.0.0.1"], INSTALLED) is None
 
     def test_old_server_without_script_or_binds_is_stale(self):
         v = live(self.script)
         del v["script"], v["binds"]
-        assert dash_server.stale_reason(v, "v1", ["127.0.0.1"]) is not None
+        assert dash_server.stale_reason(v, "v1", ["127.0.0.1"], INSTALLED) is not None
 
     def test_is_task_loop_server_shape(self):
         assert dash_server.is_dash_server(live(self.script))
@@ -126,7 +129,7 @@ class EnsureFlow(Case):
                 mock.patch.object(dash_server, "stop_server", side_effect=lambda v=None, *a, **k: stops.append(v)), \
                 mock.patch.object(procs, "spawn", side_effect=lambda *a, **k: popens.append(a) or proc), \
                 mock.patch.object(dash_server.time, "sleep"):
-            rc = dash_server.run("ensure", snapshot(), spawner=real_spawner())
+            rc = dash_server.run("ensure", snapshot(), spawner=real_spawner(), installed=INSTALLED)
         return rc, stops, popens
 
     def test_current_server_is_kept(self):
@@ -168,7 +171,7 @@ class EnsureFlow(Case):
                 mock.patch.object(dash_server, "log_tail", return_value="bind 100.1.2.3:7878 failed (held by pid 99)"), \
                 mock.patch.object(dash_server.time, "sleep"), \
                 mock.patch("builtins.print") as pr:
-            rc = dash_server.run("ensure", snapshot(), spawner=real_spawner())
+            rc = dash_server.run("ensure", snapshot(), spawner=real_spawner(), installed=INSTALLED)
         assert rc == 1
         out = " ".join(str(c.args[0]) for c in pr.call_args_list)
         assert "100.1.2.3" in out
@@ -185,7 +188,7 @@ class EnsureFlow(Case):
             with mock.patch.object(dash_server, "ping", ping), mock.patch.object(dash_server, "stop_server", stop), \
                     mock.patch.object(procs, "spawn", return_value=proc) as popen, \
                     mock.patch.object(dash_server.time, "sleep"):
-                rc = dash_server.run("ensure", snapshot(), spawner=real_spawner())
+                rc = dash_server.run("ensure", snapshot(), spawner=real_spawner(), installed=INSTALLED)
         assert rc == 0
         stop.assert_not_called()
         cmd = popen.call_args.args[0]
