@@ -1,16 +1,16 @@
-"""What the planner costs per bead: delegate's history rows split by the engine logs' plan nodes. Reads only."""
+"""What the planner costs per bead: engine log calls split by their plan nodes. Reads only."""
 
 import json
 import statistics
-from collections.abc import Collection, Iterable
+from collections.abc import Collection
 from typing import Any
 
-from tlkernel.delegateport import RunRecord
 from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
 
 from taskloop.app.report.inputs import prefix, read_jsonl
-from taskloop.stores.delegate import real_route
+
+SPLIT = ("first", "again", "amend", "back", "other")
 
 
 def plan_class(rec: dict[str, Any]) -> str:
@@ -28,34 +28,44 @@ def input_tokens(tk: dict[str, Any] | None) -> int:
     return i if i >= c else i + c
 
 
-def planner_stats(
-    cfg: ConfigDir, since: float, until: float, prefixes: Collection[str] = (), rows: Iterable[RunRecord] | None = None
-) -> dict[str, Any]:
-    """Planner calls per bead from delegate's run rows (`rows`, default delegate's history; input: `in`, plus cached on rows from
-    before delegate 0.22), split by the engine logs' plan nodes:
+def _bead_calls(locator: RunLocator, bead: str, since: float, until: float) -> tuple[list[int], dict[str, int]]:
+    """The input tokens of the bead's planner calls and its plan steps by class, from its engine logs within the window."""
+    ins: list[int] = []
+    kinds = {"full": 0, "amend": 0, "back": 0}
+    for log in (b.log for b in locator.of_bead(bead) if b.log.exists()):
+        records = read_jsonl(log)
+        planner_ids = {rec["id"] for rec in records
+                       if rec.get("kind") == "call_start" and rec.get("role") == "planner" and rec.get("id")}
+        for rec in records:
+            if not since <= (rec.get("t") or 0) <= until:
+                continue
+            if rec.get("kind") == "call_end" and rec.get("id") in planner_ids:
+                ins.append(input_tokens(rec.get("tokens")))
+            if rec.get("kind") == "step_start" and rec.get("step") == "plan":
+                kinds[plan_class(rec)] += 1
+    return ins, kinds
+
+
+def planner_stats(cfg: ConfigDir, since: float, until: float, prefixes: Collection[str] = ()) -> dict[str, Any]:
+    """Planner calls and input tokens per bead from engine logs, split by plan nodes:
     first plan, full plans again (a new thread from scratch), amends, check send-backs. Reads only."""
     locator = RunLocator(cfg)
     calls = {}
-    for r in real_route().history(since) if rows is None else rows:
-        t = r.get("ts") or 0
-        task = r.get("task") or ""
-        if r.get("role") != "planner" or not (since <= t <= until) or not task:
+    for bead in sorted({run.bead for run in locator.runs() if run.bead}):
+        if prefixes and prefix(bead) not in prefixes:
             continue
-        if prefixes and prefix(task) not in prefixes:
-            continue
-        tk = r.get("tokens") or {}
-        calls.setdefault(task, []).append(input_tokens(tk))
+        ins, kinds = _bead_calls(locator, bead, since, until)
+        if ins:
+            calls[bead] = (ins, kinds)
     rows = []
-    for bead, ins in sorted(calls.items()):
-        kinds = {"full": 0, "amend": 0, "back": 0}
-        for log in (b.log for b in locator.of_bead(bead) if b.log.exists()):
-            for rec in read_jsonl(log):
-                if rec.get("kind") == "step_start" and rec.get("step") == "plan" and since <= (rec.get("t") or 0) <= until:
-                    kinds[plan_class(rec)] += 1
+    totals = dict.fromkeys(SPLIT, 0)
+    for bead, (ins, kinds) in calls.items():
         n = len(ins)
         first = min(1, kinds["full"] or n)
         again = max(kinds["full"] - first, 0)
         other = max(n - first - again - kinds["amend"] - kinds["back"], 0)  # retries of an invalid answer, missing logs
+        for k, v in zip(SPLIT, (first, again, kinds["amend"], kinds["back"], other), strict=True):
+            totals[k] += v
         rows.append(
             {
                 "bead": bead,
@@ -68,13 +78,13 @@ def planner_stats(
                 "input": sum(ins),
             }
         )
-    allin = [x for ins in calls.values() for x in ins]
+    allin = [x for ins, _ in calls.values() for x in ins]
     return {
         "calls": len(allin),
         "beads": len(rows),
         "input": sum(allin),
         "median_input": int(statistics.median(allin)) if allin else 0,
-        **{k: sum(x[k] for x in rows) for k in ("first", "again", "amend", "back", "other")},
+        **totals,
         "per_bead": rows,
     }
 
