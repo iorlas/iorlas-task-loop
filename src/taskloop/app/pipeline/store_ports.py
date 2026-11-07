@@ -3,10 +3,12 @@ import sqlite3
 from collections.abc import Callable
 from typing import Protocol
 
+from tlkernel.ask import Ask
 from tlkernel.checkpoint import Checkpoint
 from tlkernel.checks import CheckRun
 from tlkernel.docstore import Ledger, Page
 from tlkernel.followups import FollowupOutbox
+from tlkernel.ids import BeadId
 from tlkernel.log import EngineLog
 from tlkernel.paths import ConfigDir
 from tlkernel.stagefacts import RunLogPort
@@ -76,3 +78,22 @@ class LogFactory[L: RunLogPort](Protocol):
 
 class StoresFactory[S: StageStores](Protocol):
     def __call__(self, cfg: ConfigDir) -> S: ...
+
+
+class EngineLogReader(Protocol):
+    def read_from(self, offset: int = 0, limit: int | None = None) -> Page[EngineLog]: ...
+
+
+class RecordLog(RunLogPort, Protocol):
+    @property
+    def log(self) -> EngineLogReader: ...
+
+
+class NotesAsks(Protocol):
+    def get(self, bead: BeadId) -> Ask | None: ...
+    def close(self, bead: BeadId, ask_id: str, why: str, now: float = ...) -> bool: ...
+
+
+class NotesStores(Protocol):
+    @property
+    def asks(self) -> NotesAsks: ...

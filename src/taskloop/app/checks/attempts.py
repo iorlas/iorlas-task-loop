@@ -5,12 +5,12 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from tlkernel import check_files
 from tlkernel.argv import argv_of
 from tlkernel.checks import UNVERIFIED_EXIT, Check
 from tlkernel.envvars import EnvVar
 from tlkernel.waitenums import WaitWhat
 
-from taskloop.adapters import check_files
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.host import CheckHost
 from taskloop.app.checks.keep import keep
@@ -80,7 +80,7 @@ class Attempts:
             if c.where == "linux":
                 rc, tail = self._linux(c, argv, env, ids, log, stop)
             else:
-                rc, tail = self.host.sh(argv, timeout=c.wall_min * 60, save=log, what="check", env=env, stop=stop)
+                rc, tail = self.host.sh(argv, timeout=c.wall_min * 60, save=log, what="check", env=env, stop=stop, network=c.network)
         except OSError as error:
             rc = 127 if isinstance(error, FileNotFoundError) else 126
             tail = f"check `{c.id}` could not start `{argv[0]}`: {error}"

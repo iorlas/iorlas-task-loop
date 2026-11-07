@@ -78,6 +78,7 @@ class Check(Rec):
     reads: list[CheckId] = msgspec.field(default_factory=list)  # registered checks whose log and exit code it reads: it runs after them
     tags: list[Tag] = msgspec.field(default_factory=list)
     needs: list[str] = msgspec.field(default_factory=list)  # resources it holds a machine-wide lease on while it runs
+    network: bool = False  # allow network access even when engine.check_net_isolate is enabled
     pass_files: bool = False  # the repo check takes the changed files as trailing argv (`files`, resolved per round)
     files: list[str] = msgspec.field(default_factory=list)  # those files; part of the result key
     run_in: Literal["clean", "slot"] = "clean"  # filesystem used by the committed land gate; stage rounds always use the slot

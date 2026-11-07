@@ -7,7 +7,7 @@ from pathlib import Path
 from tlkernel.gitport import Git
 from tlkernel.ids import TreeSha
 
-from taskloop.adapters.base_tree import clean_tree
+from taskloop.app.checks.base_tree import clean_tree
 from taskloop.app.checks.host import CheckoutView
 
 

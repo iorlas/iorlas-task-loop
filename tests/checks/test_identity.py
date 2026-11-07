@@ -8,7 +8,6 @@ from support.check_host import CheckHostCase
 from support.memstores import fake_stores
 from support.spawn import port_git
 
-from taskloop.adapters import check_files
 from taskloop.app.checks.cache import KEEP, InputKeys, RunMemo
 from taskloop.app.checks.gateplan import PlanDecision
 from taskloop.app.checks.runner import cached_gate
@@ -18,7 +17,7 @@ from taskloop.cli.green import cmd_green
 from taskloop.domain.checks.specs import diff_check, gate_items
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
-from tlkernel import factorydb, wire
+from tlkernel import check_files, factorydb, wire
 from tlkernel.checks import Check, CheckResult, PassRecord
 from tlkernel.config import load
 from tlkernel.env import Env
