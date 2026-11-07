@@ -139,16 +139,14 @@ class TraceRecords(te.EngineTest):
         ends = {num(r.id): r for r in records(self.eng, rec.StepEnd)}
         assert ends[2].outcome == "asks"
 
-    def test_a_resumed_writer_whose_lane_is_out_goes_on_as_a_new_thread(self):
-        L = test_engine_units.DelegateLauncher
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, L.OUT_LONG, L.FRESH],
-                                 "review": [review(unmet=["more"]), CLEAN]})
-        assert rc == 0, self.blocked
-        t = next(r for r in records(self.eng, rec.Transition) if r.cause == "lane_out")
-        assert (num(t.from_id), t.to) == (6, "write")
-        sess = [(s, e) for s, e in calls(self.eng) if num(s.node) == 6]
-        assert [(e.status, e.reason, s.resume) for s, e in sess] == [("stopped", "rate_limited", True), ("done", None, False)]
-        assert sess[1][1].model == "sonnet"
+    def test_a_resumed_writer_whose_lane_is_out_pauses(self):
+        lane = test_engine_units.DelegateLauncher
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE, lane.OUT_LONG],
+                                 "review": [review(unmet=["more"])]})
+        assert rc == 2
+        sessions = [(s, e) for s, e in calls(self.eng) if num(s.node) == 6]
+        assert [(e.status, e.reason, s.resume) for s, e in sessions] == [("stopped", "rate_limited", True)]
+        assert not [r for r in records(self.eng, rec.Transition) if r.cause == "lane_out"]
 
     def test_a_long_lane_out_pauses_with_the_time_the_lane_is_back(self):
         due = time.time() + 3 * 3600
@@ -225,3 +223,4 @@ class TraceRecords(te.EngineTest):
             rc = verbs.trace(BeadId("t-1"), 0, False, snapshot())
         assert rc == 0
         assert "landed" in out.getvalue()
+        assert "transcript" not in out.getvalue()

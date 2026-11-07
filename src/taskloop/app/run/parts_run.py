@@ -6,8 +6,8 @@ from typing import Any, Protocol
 
 from tlkernel.kinds import Kind
 
-from taskloop.adapters import childenv, slotcheck
-from taskloop.adapters.agent import new_live
+from taskloop.adapters import childenv, deadline, ident, slotcheck
+from taskloop.adapters.agent import last_event_t, new_live
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.asks.closing import ClosingTrust
 from taskloop.app.checks.step import StageChecks
@@ -18,8 +18,8 @@ from taskloop.app.pipeline.reload import Reload, ReloadHost
 from taskloop.app.pipeline.requests import OwnerRequests
 from taskloop.app.pipeline.resume import Resume, ResumeHost
 from taskloop.app.pipeline.review_glue import ReviewGlue, ReviewLists, ReviewOwner
-from taskloop.app.pipeline.stuck import StuckTick
-from taskloop.app.pipeline.waits import Waits
+from taskloop.app.pipeline.stuck import StuckHost, StuckTick
+from taskloop.app.pipeline.waits import Waits, WaitsHost
 from taskloop.app.release.closing import ReexecBook
 from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.run.bead_env import bead_env
@@ -40,20 +40,22 @@ class ResumeBinding[T](ResumeHost[T], ReviewOwner, Protocol):
 
 class RunParts(Plumbing):
     bead_env = cached_property(bead_env)  # the slot's environment: every command of the bead gets it (Shell.stream, the worker call)
-    waits = cached_property(Waits)
+    @cached_property
+    def waits(self: WaitsHost) -> Waits: return Waits(self, deadline)
     delegation = cached_property(Delegation)
     ask_flow = cached_property(AskFlow)
     stage_checks = cached_property(StageChecks)
     shell = cached_property(Shell)
     @cached_property
     def reload(self: ReloadHost) -> Reload:
-        return Reload(self, ReexecBook(self.home), TrailEvents(), lambda: installed_newer(self.env), locked_slot)
+        return Reload(self, ReexecBook(self.home), TrailEvents(), lambda: installed_newer(self.env), locked_slot, childenv, ident)
 
     @cached_property
     def records(self: JournalHost) -> Journal:
         return Journal(self, locked_slot, repo_of)
     shared = cached_property(Shared)
-    stuck = cached_property(StuckTick)
+    @cached_property
+    def stuck(self: StuckHost) -> StuckTick: return StuckTick(self, last_event_t)
     requests = cached_property(OwnerRequests)
 
     @cached_property
@@ -61,7 +63,7 @@ class RunParts(Plumbing):
 
     @cached_property
     def reflector(self) -> Reflector:
-        return Reflector(self, ClosingTrust())
+        return Reflector(self, ClosingTrust(), childenv.delegate_call_env)
 
     def sh(self, cmd: Any, timeout: float = 3600, check: bool = False, save: Any = None, env: Any = None, pin: bool = False,
            what: str = "command", cwd: Any = None, stop: threading.Event | None = None, *, network: bool = False) -> tuple[int, str]:

@@ -39,7 +39,7 @@ class Settling(Protocol):
 def thread_updates(c: Call, res: DelegateResult, fallback_lane: str, ctx: float | None, seen: list[str]) -> Updates:
     """The writer's thread after an answer that resumed it: delegate's ref, and the fallback it reported (every answer that picked a
     lane says it, a resumed one too). `fallback_lane` is the lane held now; `ctx` and `seen` are what the writer holds."""
-    if not (c.resume_key and res.ref):
+    if not (c.thread == "writer" and res.ref):
         return Updates()
     fallback = None
     if res.fallback is not None:

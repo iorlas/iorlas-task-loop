@@ -3,10 +3,9 @@ import json
 
 from support.fakegit import ScriptedGit
 
-from taskloop.adapters import check_files
 from taskloop.adapters import key_migrate as km
 from taskloop.adapters import layout_migrate as lm
-from tlkernel import factorydb
+from tlkernel import check_files, factorydb
 from tlkernel.ids import loop_key
 from tlkernel.paths import ConfigDir
 from tlkernel.rowstores import ReposStore

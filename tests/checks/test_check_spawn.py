@@ -6,12 +6,12 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.check_host import CheckHostCase
-from support.checks import ck
 
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.cache import RunMemo
 from tlkernel.checks import Check
 from tlkernel.ids import CheckId
+from tltestkit.checks import ck
 
 
 class SpawnFailure(CheckHostCase):

@@ -90,7 +90,7 @@ class FakeCheckHost:
         return None
 
     def records(self, *kinds: str) -> list[dict[str, Any]]:
-        """The run's log records as wire dicts (what support.logs.records reads from a file), of `kinds` only when given."""
+        """The run's log records as wire dicts (what tltestkit.logs.records reads from a file), of `kinds` only when given."""
         seen = self.stores.run_log(self.run_id).read_from()
         return [row for row in (wire.dump(i.rec) for i in seen.items) if not kinds or row["kind"] in kinds]
 

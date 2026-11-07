@@ -22,10 +22,10 @@ from tlkernel.snapshots import Pin
 from support import (
     looptest,
 )
-from support.narrow import must
 
 import loop.test_loop_more as more
 from taskloop.app.launch import loop_start as wstart
+from tltestkit.narrow import must
 
 
 class Moving(LoopBase):

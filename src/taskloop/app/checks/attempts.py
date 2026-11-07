@@ -5,12 +5,12 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from tlkernel import check_files
 from tlkernel.argv import argv_of
 from tlkernel.checks import UNVERIFIED_EXIT, Check
 from tlkernel.envvars import EnvVar
 from tlkernel.waitenums import WaitWhat
 
-from taskloop.adapters import check_files
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.host import CheckHost
 from taskloop.app.checks.keep import keep

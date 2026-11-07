@@ -9,9 +9,9 @@ import support.paths  # noqa: F401
 from support import engine_case as te
 from support.dashlogs import RunScript
 from support.memstores import MemLog
-from support.narrow import must
 from support.plans import FALSE, PLAN, WRITE
 
+from taskloop.adapters.agent import last_event_t
 from taskloop.app.pipeline.stuck import StuckTick
 from taskloop.domain.stuck import StuckWatch
 from taskloop.stores.runlog import RunLog
@@ -24,6 +24,7 @@ from tlkernel.ids import CheckId
 from tlkernel.runlife import SAME_RED, silent_limit
 from tlkernel.waitenums import WaitWhat
 from tltestkit.case import Case
+from tltestkit.narrow import must
 
 T = 1_800_000_000.0
 WRITE_LIMIT = silent_limit("write")
@@ -113,7 +114,7 @@ class Tick(Case):
         clock = types.SimpleNamespace(t=T)
         log = RunLog(MemLog(rec.decode), clock=lambda: clock.t)
         host = types.SimpleNamespace(log=log, live_now="", now=lambda: clock.t)
-        tick = StuckTick(host)
+        tick = StuckTick(host, last_event_t)
         log.emit(rec.StepStart(id="n1", step="write"))
         tick.tick()
         clock.t = T + WRITE_LIMIT

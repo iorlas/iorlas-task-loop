@@ -18,7 +18,7 @@
   "total": 2
  },
  "RunTrace": {
-  "v": 2,
+  "v": 3,
   "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "bead": "tl-7y6.3.1",
   "repo_url": "https://github.com/x/y.git",
@@ -68,7 +68,6 @@
     "status": "done",
     "role": "worker",
     "t": 1793050200.5,
-    "transcript": "/t/x.jsonl",
     "node_id": 4,
     "attempt": 1,
     "run_id": "r1",
@@ -1812,6 +1811,7 @@
   }
  },
  "RunRequest": {
+  "v": 1,
   "role": "worker",
   "brief_path": "/b.md",
   "cwd": "/w",
@@ -1820,7 +1820,8 @@
   "parent": "p",
   "task": "t",
   "title": "T",
-  "resume": "ses",
+  "thread": "writer",
+  "delta_path": "/delta.md",
   "authored_by": "openai",
   "call_id": "c1",
   "timeout_s": 2820,
@@ -1905,15 +1906,6 @@
   "secs": 3.0,
   "run_id": "r1",
   "call_id": "c1",
-  "transcript": "/t",
-  "transcript_info": {
-   "path": "/t",
-   "kind": "codex",
-   "from": 0,
-   "to": 9,
-   "bytes": 9
-  },
-  "transcript_status": "ok",
   "say": "s",
   "git_violation": [
    "g"

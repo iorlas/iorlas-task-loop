@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import ClassVar
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[1]
+ROOT = HERE.parents[3]
 CONTRACT_FILE = ROOT / "src" / "delegate" / "data" / "contract.json"
 FIXTURE_DIR = ROOT / "tests" / "delegate" / "contract" / "fixtures"
 
@@ -107,8 +107,6 @@ def answer(c, reason, ref="", resumed=False, data=None, text="ok", **kw):
         "secs": 0.1,
         "run_id": "fake-run",
         "call_id": "fake-call",
-        "transcript": None,
-        "transcript_info": None,
         "denied": [],
         "git_violation": [],
         "warnings": [],
@@ -178,28 +176,6 @@ def opt(argv, flag):
 NO_ANSWER = "no_answer"  # an answers entry: route.py died without printing an answer (exit 1, nothing on stdout)
 
 
-def transcript_context_k(path):
-    """The last turn's input tokens in thousands from a Claude or Codex transcript (delegate's job in production; the fake does it too)."""
-    try:
-        lines = Path(path).read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return None
-    for line in reversed(lines):
-        try:
-            rec = json.loads(line)
-            if rec.get("type") == "assistant" and not rec.get("isSidechain"):
-                u = rec["message"]["usage"]
-                n = sum(int(u.get(k) or 0) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
-            elif (rec.get("payload") or {}).get("type") == "token_count":
-                n = int(rec["payload"]["info"]["last_token_usage"]["input_tokens"])
-            else:
-                continue
-        except (ValueError, KeyError, TypeError, AttributeError):
-            continue
-        return round(n / 1000, 1)
-    return None
-
-
 class Script:
     """The in-process route.py: a `runner(cmd, **kw)` for delegate_link.call (the engine's `make_runner` seam), which also has the
     runner's `stop`, `obs` and `secs` (a test sets `stop` to say the engine ended the call: `reply` may also raise
@@ -241,8 +217,17 @@ class Script:
         self.requests.append(kw.get("request"))
         self.stop, self.obs, self.secs, self.worker = {}, {}, 0.0, None
         schema = json.loads(Path(opt(cmd, "--schema")).read_text(encoding="utf-8"))
-        j = self.reply(cmd[3], Path(opt(cmd, "--brief")).read_text(encoding="utf-8"), schema, opt(cmd, "--cwd"), opt(cmd, "--resume"),
+        request = kw.get("request")
+        threads = getattr(self, "threads", {})
+        thread = request.thread if request else ""
+        delta = request.delta_file if request else None
+        resume = threads.get(thread) if delta else None
+        prompt = Path(delta or opt(cmd, "--brief")).read_text(encoding="utf-8")
+        j = self.reply(cmd[3], prompt, schema, opt(cmd, "--cwd"), resume,
                        opt(cmd, "--authored-by"), kw.get("timeout"))
+        if isinstance(j, dict) and j.get("ref") and thread:
+            threads[thread] = j["ref"]
+        self.threads = threads
         if j == NO_ANSWER:
             return subprocess.CompletedProcess(cmd, 1, "", "route.py exit 1, no answer object")
         return subprocess.CompletedProcess(cmd, 0, json.dumps(j), "")
@@ -271,8 +256,6 @@ class Script:
                    context={"instructions": ["/repo/AGENTS.md"], "env_keys": ["PATH"]})
         if self.j_extra.get(node):
             j.update(self.j_extra[node].pop(0))
-        if j.get("transcript") and isinstance(j.get("usage"), dict):  # like delegate: the last turn of the transcript is the context size
-            j["usage"] = dict(j["usage"], context_k=transcript_context_k(j["transcript"]))
         if node == "write":
             self.writer_family = j.get("family", "")
         return self.mapped(node, prompt, j)

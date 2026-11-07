@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+from tltestkit import fake_route
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
@@ -19,12 +20,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 
 # isort: split
-from support import (  # noqa: E402
-    dlcall,
-    fake_route,
-)
+from support import dlcall  # noqa: E402
 from support.argv_of import argv_of  # noqa: E402
-from support.narrow import must  # noqa: E402
 
 from taskloop.adapters import childenv, delegate_wire  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
@@ -33,11 +30,12 @@ from taskloop.domain import outcome as oc  # noqa: E402
 from taskloop.domain.lanes import policy as lp  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlkernel.kinds import Kind  # noqa: E402
+from tltestkit.narrow import must  # noqa: E402
 
 DELEGATE = fake_route.delegate_dir()
 CONTRACT = dl.resolve().contract
 FIXTURES = sorted(fake_route.FIXTURE_DIR.glob("*.json"))
-FAKE = str(Path(__file__).resolve().parents[1] / "support" / "fake_route.py")
+FAKE = str(Path(fake_route.__file__))
 
 
 class Fake(Case):
@@ -74,7 +72,7 @@ class Fake(Case):
     # --- the seam itself -------------------------------------------------------------------------------------------
 
     def test_argv_uses_only_flags_the_contract_lists(self):
-        argv = argv_of(self.req(resume="r", authored_by="a", call_id="c", brief_path="b.md", schema_path="s.json",
+        argv = argv_of(self.req(thread="writer", authored_by="a", call_id="c", brief_path="b.md", schema_path="s.json",
                         writer_exec_allow=[["just", "shot"]]))
         assert "--host" not in argv
         assert "--no-wait" not in argv
@@ -137,10 +135,10 @@ class Fake(Case):
     # --- synthesized stops, never a raise ---------------------------------------------------------------------------
 
     def test_no_answer_is_a_synthesized_stop_of_the_machine_that_tries_again(self):
-        r = self.call(runner=lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, "", "Traceback"), resume="r1")
+        r = self.call(runner=lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, "", "Traceback"), thread="writer")
         assert (r.source, must(r.stop).reason) == ("synthesized", "no_answer")  # not delegate's own `crash` (needs_owner)
         assert (must(r.stop).scope, must(r.stop).permanence, must(r.stop).retry_kind) == ("machine", "transient", "none")
-        assert must(r.res.stop).ref == "r1"
+        assert must(r.res.stop).ref == ""
 
     def test_a_wrong_shape_is_a_contract_violation_and_a_call_the_engine_ended_is_a_timeout(self):
         for bad in ('{"v": 2, "status": "done"}', '{"contract": 2, "stop": null}', '{"contract": 4}', '{"contract": 4, "stop": 7}'):
@@ -150,8 +148,8 @@ class Fake(Case):
 
         def hang(cmd, **kw):
             raise dl.Stopped("no worker output for 20 min")
-        r = self.call(runner=hang, resume="r9")
-        assert (must(r.stop).reason, must(r.stop).scope, must(r.res.stop).ref) == ("timeout", "bead", "r9")
+        r = self.call(runner=hang, thread="writer")
+        assert (must(r.stop).reason, must(r.stop).scope, must(r.res.stop).ref) == ("timeout", "bead", "")
         assert "no worker output" in r.say
 
         def backstop(cmd, **kw):
@@ -177,15 +175,16 @@ class Fake(Case):
         }
         assert [d.kind for d in delegate_wire.denied_of(j["denied"])] == ["policy"]
 
-    def test_a_restart_after_the_first_drop_resumes_the_ref_from_the_call_state(self):
+    def test_a_restart_after_the_first_drop_keeps_the_thread_key(self):
         self.script_with(["network", "done"])
         st = cs.begin(self.dir / "ck", "run-1", "t-1", ("write", 1, 0, 1))
         first = self.call()
         st.note_ref(first.ref)
         what = cs.reattach(cs.load_for(self.dir / "ck", "t-1", ("write", 1, 0, 1)))  # the loop was killed here
         assert must(what)[:2] == ("resume", "fake-1")
-        again = self.call(resume=must(what)[1])
-        assert (again.done, again.ref) == (True, "fake-1")
+        again = self.call(thread="writer")
+        assert again.done
+        assert "--resume" not in self.argv_log()[-1]
 
 
 def lp_facts(reason):
