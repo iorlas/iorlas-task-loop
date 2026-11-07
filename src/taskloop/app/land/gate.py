@@ -14,6 +14,7 @@ from typing import Protocol, final
 from taskloop.app.checks import evidence
 from taskloop.app.checks.host import CheckFault
 from taskloop.app.land import verified
+from taskloop.app.land.state import LandState
 from taskloop.contracts import log as rec
 from taskloop.contracts.checks import Check, CheckFaultKind, CheckRun
 from taskloop.contracts.config import EngineConfig
@@ -86,7 +87,7 @@ class GateCheckout(Protocol):
 class GateHost(Protocol):
     """What the gate reads of the engine: the repo's gate steps and the checker that runs them, git, the log and the stop point."""
 
-    gate_log: Path | None  # the log of the first red step, for the fix round
+    land_state: LandState
 
     @property
     def cfg(self) -> EngineConfig: ...
@@ -135,7 +136,7 @@ class Gate:
             if not self.green():
                 raise ValueError("land refused: gate is no longer green for this tree and base; run --stage gate")
             return self.issue()
-        e.gate_log = None
+        e.land_state.gate_log = None
         tree = e.git.rev_parse(e.wt, "HEAD^{tree}")
         head = e.git.rev_parse(e.wt, "HEAD")
         config = engine_digest(e.cfg)
@@ -175,7 +176,7 @@ class Gate:
             return Problem(ProblemKind.STALE, text)
         if not reds:
             return mint(run.tree, run.base, run.config)
-        e.gate_log = e.run_dir / reds[0].log if reds[0].log else None
+        e.land_state.gate_log = e.run_dir / reds[0].log if reds[0].log else None
         names = ", ".join(c.id for c in reds)
         e.steps.outcome("gate red", names)
         return Problem(ProblemKind.GATE, f"gate steps red: {names}\n" + evidence.failure_brief(reds, e.run_dir), names)

@@ -4,7 +4,7 @@ Two parts. `RunState` is everything the run carries across a park, one typed val
 engine reads and writes it through `engine.state`, `dump()` is the payload). `Checkpoint` is that state plus where the run
 stood: branch, head, step and the stage counters. The big nested parts the planner and the writer own (`plan`, `snap`,
 `handoff`) stay open dicts until their own records land. Review and verify state is ONE field, `review`, a `ReviewState`
-this module never opens. An old checkpoint (another `v`) reads as absent: nothing is migrated.
+this module never opens. A checkpoint of another `v` is refused (Refused): nothing is migrated.
 """
 
 from typing import Any, ClassVar, final

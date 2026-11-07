@@ -31,8 +31,7 @@ from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import paths
 from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.config import HostResources, RepoProfile
-from taskloop.contracts.docstore import JsonStore
+from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
@@ -44,6 +43,7 @@ from taskloop.contracts.procport import Spawner
 from taskloop.contracts.rowstores import ReposStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.beads import rules as beadlint
+from taskloop.stores.real import real_stores
 
 HERE = ident.PLUGIN_ROOT / "skills" / "task-loop"  # the install this code runs from; tl.main takes it as a parameter for a test
 
@@ -157,7 +157,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         actor=lambda: who.actor,
         exec_into=lambda d, argv, handover: ops.exec_into(repo, d, argv, handover, env, who, start_cwd),
         take_handover=lambda: env.get(EnvVar.TL_LOOP_STATE),
-        host=lambda: JsonStore(cfg.host(), HostResources).need(),
+        host=real_stores(cfg).host.need,
         say=console.say,
         now=now,
         pid=os.getpid(),
