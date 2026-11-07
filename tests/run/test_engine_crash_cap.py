@@ -9,10 +9,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.engine_case import EngineTest
 from support.narrow import must
+from support.pipeline_ports import FakeBeadClosing, FakeRoundSteps
 from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.app.pipeline.crash import parked_crash
-from taskloop.app.run.stages import one_stage
+from taskloop.app.pipeline.standalone import Standalone
 from tlkernel.fence import Fenced
 from tlkernel.kinds import Kind
 from tlkernel.parks import ParkStore
@@ -93,8 +94,11 @@ class CrashCap(EngineTest):
         self.crash({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         e = self.eng
         before = must(ParkStore(e.home).get(e.bead))
-        with mock.patch("taskloop.app.run.stages.next_step", side_effect=Fenced("lease lost")), \
-                mock.patch("taskloop.app.run.stages.record_stage") as record, pytest.raises(Fenced):
-            one_stage(e, "land", mock.Mock())
+        runner = Standalone(e, rounds=FakeRoundSteps(), once=mock.Mock(), lease=mock.Mock(),
+                            closing=FakeBeadClosing(), has_land=lambda: True,
+                            repo_of=lambda git, wt: wt, stage_run=mock.Mock())
+        with mock.patch.object(runner, "next_step", side_effect=Fenced("lease lost")), \
+                mock.patch.object(runner, "record_stage") as record, pytest.raises(Fenced):
+            runner.one_stage("land", mock.Mock())
         record.assert_not_called()
         assert ParkStore(e.home).get(e.bead) == before
