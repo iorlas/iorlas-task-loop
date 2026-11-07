@@ -17,7 +17,7 @@ from tlkernel.config import EngineConfig
 from tlkernel.gitfacts import GrepHit
 from tlkernel.kinds import Kind
 from tlkernel.stop import Stop
-from tlpipeline.leftover_queue import LeftoverQueue
+from tlpipeline.api import LeftoverQueue
 
 
 class ReviewGit(FakeGit):

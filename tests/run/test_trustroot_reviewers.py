@@ -16,8 +16,7 @@ from tlkernel.gitfacts import DiffEntry
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.paths import ConfigDir
-from tlpipeline.blocked import Blocked, blocked_for
-from tlpipeline.reflect import Reflector
+from tlpipeline.api import Blocked, Reflector, blocked_for
 from tltestkit.case import Case
 from tltestkit.plans import BEAD, CLEAN, PLAN, WRITE
 

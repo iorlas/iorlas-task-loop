@@ -9,7 +9,7 @@ from tlkernel import childenv
 from tlkernel import log as rec
 from tlkernel.argv import text_of
 from tlkernel.kinds import Kind
-from tlpipeline.blocked import Blocked
+from tlpipeline.api import Blocked
 
 from taskloop.adapters import check_net
 from taskloop.adapters.gitrepo import pinned_env

@@ -9,7 +9,7 @@ from taskloop.adapters.deadline import DeadlineExpired
 from tlkernel import fence
 from tlkernel.kinds import Kind
 from tlkernel.run import RunState
-from tlpipeline.lifecycle import Ended
+from tlpipeline.api import Ended
 
 
 def host():

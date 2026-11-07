@@ -8,8 +8,7 @@ from tlkernel.kinds import Kind
 from tlkernel.paths import ConfigDir
 from tlkernel.requests import OwnerNote, OwnerRequest
 from tlkernel.signalrows import SignalRows
-from tlpipeline.blocked import Blocked
-from tlpipeline.requests import NOTE_HEAD, OwnerRequests, peek
+from tlpipeline.api import NOTE_HEAD, Blocked, OwnerRequests, peek
 
 
 @dataclass

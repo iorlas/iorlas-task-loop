@@ -11,7 +11,7 @@ from taskloop.app.workers import done_memo
 from tlkernel import childenv, factorydb
 from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
-from tlpipeline.reload import Reload
+from tlpipeline.api import Reload
 from tlpipeline.testing import FakeReexecs, FakeTrail
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory

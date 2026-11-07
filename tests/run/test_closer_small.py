@@ -24,8 +24,7 @@ from tlkernel.enums import Outcome
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.log import Note
-from tlpipeline.closing_branch import ReleaseSlot
-from tlpipeline.closing_settle import Settle
+from tlpipeline.api import ReleaseSlot, Settle
 from tlpipeline.testing import FakeLandCleanup
 
 

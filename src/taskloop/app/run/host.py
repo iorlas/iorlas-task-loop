@@ -6,9 +6,7 @@ from functools import cached_property
 from tlkernel import plancheck
 from tlkernel.asked import Asked
 from tlkernel.stagefacts import RunFacts
-from tlpipeline import summaries
-from tlpipeline.closing import Closer
-from tlpipeline.leftover_queue import LeftoverQueue
+from tlpipeline.api import Closer, LeftoverQueue, summaries
 
 from taskloop.app.look.judge import Judge
 from taskloop.app.look.owner_look import OwnerLook

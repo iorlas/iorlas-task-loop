@@ -6,7 +6,7 @@ import pytest
 
 from taskloop.adapters import beadtools
 from tlkernel.enums import Outcome
-from tlpipeline.closing_notes import FileNotes
+from tlpipeline.api import FileNotes
 from tlpipeline.testing import FakeFollowUps
 
 
