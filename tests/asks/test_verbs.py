@@ -18,7 +18,7 @@ from support.memstores import fake_stores
 from support.narrow import must
 from support.tiers import domain
 
-from taskloop.app.asks import intake, raiser
+from taskloop.app.asks import ask_verbs, intake, raiser
 from taskloop.app.loop.queue import QueueRule
 from taskloop.cli import asks as cli
 from taskloop.domain import timespec
@@ -52,7 +52,8 @@ class VerbSurface(Case):
         self.out: list[str] = []
 
     def say(self, *argv: str) -> int:
-        return cli.run(parse(*argv), self.asks, lambda _r: self.store, lambda: T + 5, "denis", self.cfg, self.out.append)
+        return ask_verbs.run(cli.arguments(parse(*argv)), self.asks, lambda _r: self.store, lambda: T + 5,
+                             "denis", self.cfg, self.out.append)
 
     def test_verdict_maps_to_a_typed_action(self) -> None:
         assert self.say("answer", "fk-1", "--verdict", "work") == 0
