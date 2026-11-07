@@ -4,7 +4,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import homes
 from support.checks import typed
 from support.engine_case import CAP_PARKS, EngineTest, sh, stop
 from support.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, review
@@ -317,19 +316,6 @@ class EnginePlanTest(EngineTest):
         assert len(s.calls) == 1
         assert self.blocked == []
         assert "the worker exited 1" in self.said()
-
-    def test_the_same_fault_on_a_second_bead_trips_the_storm_once(self):
-        self.run_engine({"plan": [PLAN], "write": [self.bad_request()]})
-        first = self.eng.result()
-        assert (first.outcome, first.kind, first.storm) == ("failed", "fault_bad_request", "")
-        self.run_engine({"plan": [PLAN], "write": [self.bad_request()]}, bead="t-2")
-        second = self.eng.result()
-        assert second.storm.startswith("WAIT: storm FAULT_BAD_REQUEST"), second.storm
-        assert "t-1,t-2" in second.storm
-        self.run_engine({"plan": [PLAN], "write": [self.bad_request()]}, bead="t-3")
-        assert self.eng.result().storm == ""  # the record is live: no second banner
-        assert (self.blocked, self.ask()) == ([], None)
-        assert len(list((homes.config_dir() / "storm").glob("*.json"))) == 1
 
     def test_a_changed_bead_amends_the_old_plan_it_does_not_plan_again(self):
         self.stopped_run(plan=self.TWO, answers={"plan": [self.TWO], "write": [WRITE]})

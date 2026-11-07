@@ -47,3 +47,15 @@ def test_a_stage_growth_fails_and_a_commit_allowance_passes(workdir):
     git(root, "add", "-A")
     git(root, "commit", "-qm", "grow\n\nRatchet-allow: closure +1 one more file for the demo")
     assert closure_ratchet.problems(root) == []
+
+
+def test_a_stage_external_import_fails_and_a_commit_allowance_passes(workdir):
+    root = repo(workdir)
+    stage = root / "src" / "taskloop" / "app" / "first" / "__init__.py"
+    stage.write_text("import json\n", encoding="utf-8")
+    counts = closure_ratchet.closures({stage.relative_to(root).as_posix(): stage.read_text(encoding="utf-8")})
+    assert counts == {"first": 1, "first (external modules)": 1}
+    assert closure_ratchet.problems(root) == ["first: +1 external modules imported"]
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "grow\n\nRatchet-allow: closure +1 one external module for the demo")
+    assert closure_ratchet.problems(root) == []
