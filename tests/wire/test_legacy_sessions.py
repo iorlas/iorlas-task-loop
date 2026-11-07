@@ -1,11 +1,10 @@
 """The retired session index folder: doctor names it as removable legacy, never deletes it, and no source reads it."""
 from pathlib import Path
 
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
-
 from taskloop.app.doctor import setup_checks
 from tlkernel.env import Env
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 

@@ -4,7 +4,8 @@ together stay within 100 KB gzip; and the fixture dev server (dev/dash_fixtures.
 from pathlib import Path
 
 import static_page_check as spc
-from support.case import Case
+
+from tltestkit.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 STATIC = ROOT / "src" / "taskloop_dash" / "static"

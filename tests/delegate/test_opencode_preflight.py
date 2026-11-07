@@ -10,11 +10,11 @@ import hermetic  # noqa: F401  (a home of its own for every test)
 from any_agent.harnesses import opencode_sandbox as box
 from any_agent.harnesses.opencode import OpenCodeHarness, Profile
 from any_agent.protocol import LaunchInputs
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
 from test_route import CFG
 
 from delegate.app import cockpit, env, launch, onboard
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class XdgWritable(Case):

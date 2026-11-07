@@ -6,7 +6,6 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.case import Case
 from support.who import who
 
 from taskloop.app.track import verbs
@@ -14,6 +13,7 @@ from tlkernel.bead import BdError, Bead
 from tlkernel.beadsport import BdFailure, BeadPatch
 from tlkernel.ids import BeadId
 from tlkernel.landed import LANDED_SHA, landed_by, landed_in, landed_meta
+from tltestkit.case import Case
 
 BEAD = BeadId("x-1")
 

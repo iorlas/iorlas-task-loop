@@ -2,11 +2,11 @@
 from unittest import mock
 
 import support.paths  # noqa: F401
-from support.case import Case
 
 from taskloop.domain.plan.brief import linked
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
+from tltestkit.case import Case
 
 
 class LinkedIds(Case):

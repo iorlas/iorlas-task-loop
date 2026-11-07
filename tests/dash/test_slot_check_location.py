@@ -1,6 +1,5 @@
 """The dashboard's existing run event feed names checks executed in the slot."""
 
-from support.case import Case
 from support.memstores import fake_stores
 
 from taskloop.app.checks.checklog import CheckLog
@@ -10,6 +9,7 @@ from tlkernel import log
 from tlkernel.checks import Check
 from tlkernel.ids import CheckId
 from tlkernel.runlife import Liveness
+from tltestkit.case import Case
 
 
 class SlotCheckLocation(Case):

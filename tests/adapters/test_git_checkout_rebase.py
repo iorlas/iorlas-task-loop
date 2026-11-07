@@ -12,12 +12,12 @@ from git_porcelain import errors
 from git_porcelain.api import CommandResult, LogEntry, Pick, Sha
 from git_porcelain.real import Done
 from git_porcelain.testing import FakeRepo
-from support.case import Case
 
 from taskloop.adapters.git import RealGit
 from tlkernel.env import Env
 from tlkernel.gitfacts import GitOutcome
 from tlkernel.slots import BranchPinned, DirtyTree, GitReadFailure, IndexLocked, NotAWorktree, RefRace, SlotGitError
+from tltestkit.case import Case
 
 
 class GitCheckoutRebaseTest(Case):

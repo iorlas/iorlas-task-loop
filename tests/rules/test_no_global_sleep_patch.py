@@ -3,7 +3,7 @@ RSS, the shard-memory runaway of 2026-10-28; docs/dev/runaway-process.md). Use s
 import re
 from pathlib import Path
 
-from support.case import Case
+from tltestkit.case import Case
 
 TESTS = Path(__file__).resolve().parents[1]
 BANNED = re.compile(r"""patch\(\s*["']time\.sleep["']|patch\.object\(\s*time\s*,\s*["']sleep["']""")

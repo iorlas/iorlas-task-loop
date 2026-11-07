@@ -12,8 +12,9 @@ from unittest import mock
 
 import hermetic  # noqa: F401
 from run_support import short_limits
-from support.case import Case
 from test_route import ROOT
+
+from tltestkit.case import Case
 
 sys.path.insert(0, str(ROOT / "skills" / "delegate"))
 import stream_proc

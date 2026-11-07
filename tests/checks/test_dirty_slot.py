@@ -4,12 +4,12 @@ from unittest import mock
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
 
 from taskloop.app.checks.clean import isolated
 from taskloop.app.checks.host import CheckFault
 from taskloop.app.land.gate import FAULTS
 from tlkernel.checks import CheckFaultKind
+from tltestkit.case import Case
 
 
 class DirtySlot(Case):

@@ -6,7 +6,6 @@ import shutil
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
 
 from taskloop.stores.real import real_stores
 from tlkernel import scratch
@@ -17,6 +16,7 @@ from tlkernel.docstore import Absent, ForeignVersion, Torn
 from tlkernel.followups import FollowupOutbox
 from tlkernel.paths import ConfigDir
 from tlkernel.wire import Refused
+from tltestkit.case import Case
 
 
 def ck(step: str = "", closed: bool = False, bead: str = "t-1") -> Checkpoint:

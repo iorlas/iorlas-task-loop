@@ -4,13 +4,13 @@ import subprocess
 from pathlib import Path
 
 from support.argv_checks import ArgvChecks
-from support.case import Case
 from support.checked import run_checked
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters.git import RealGit
 from tlkernel.checksport import CheckSpec
 from tlkernel.env import Env
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class CheckHooks(Case):

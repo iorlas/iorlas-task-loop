@@ -3,11 +3,10 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
-
 from taskloop.app.doctor import install
 from tlkernel.env import Env
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class ShimResolves(Case):

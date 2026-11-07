@@ -6,9 +6,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from support.case import Case
 from support.memstores import fake_stores
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import check_files, childenv
 from taskloop.app.checks.cache import InputKeys, RunMemo
@@ -28,6 +26,8 @@ from tlkernel.ids import CheckId, TreeSha
 from tlkernel.procport import Ran
 from tlkernel.runkey import BaseSha, Digest
 from tlkernel.slots import Checkout, NotARepo
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 OID, TREE, BASE = "1550b77c" + "0" * 32, TreeSha("tree-1"), BaseSha("base-1")
 INPUTS = ["src/**"]

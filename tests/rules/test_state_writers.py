@@ -1,9 +1,8 @@
 """WRITERS: typed store mutations and raw publications stay with their authoritative module."""
 
-from support.case import Case
-
 from rules.arch_rules import production_trees
 from rules.writer_invariants import WRITERS, writer_tree_problems
+from tltestkit.case import Case
 
 
 class StateFilesHaveOneWriter(Case):

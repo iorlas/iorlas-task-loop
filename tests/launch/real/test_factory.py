@@ -5,10 +5,10 @@ import time
 from pathlib import Path
 
 import support.paths
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import procs
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class DetachedFactory(Case):

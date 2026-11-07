@@ -7,9 +7,7 @@ from unittest.mock import patch
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
 from support.memstores import MemDocSet
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.stores.real import real_stores
 from tlkernel import factorydb, wire
@@ -19,6 +17,8 @@ from tlkernel.ids import CheckId, TreeSha
 from tlkernel.paths import ConfigDir
 from tlkernel.receiptrows import DbDocSet
 from tlkernel.runkey import BaseSha, Digest, RunKey
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class ReceiptRowsTest(Case):
