@@ -324,8 +324,9 @@ class Run:
             return leg
 
         res = self._canary(launch_one, d, a) if canary_due else None  # the one probe before full traffic; None = it passed
-        res = res or launch_one(brief, a, "reroute" if self.rerouted else "first")
-        res = run_legs.network(res, launch_one, brief, a, as_str(d["lane"]), self.now, self.sleep)
+        if res is None:  # a failed canary is the answer (the next rung starts from it): the wait is for the real leg only
+            res = launch_one(brief, a, "reroute" if self.rerouted else "first")
+            res = run_legs.network(res, launch_one, brief, a, as_str(d["lane"]), self.now, self.sleep)
         if res.get("outcome") is None and a.schema:
             res = self._schema(res, launch_one)
         res.pop("started", None)  # the launcher's own bookkeeping, whichever launch (first, re-ask) produced `res`
