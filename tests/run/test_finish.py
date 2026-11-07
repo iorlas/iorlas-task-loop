@@ -24,7 +24,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
 from tlkernel.runrows import RunRows
 from tlkernel.stores import EventLog, LoopLog, RunLog, TraceStore
-from tlpipeline.finish import answer, outcome
+from tlpipeline.api import answer, outcome
 from tltestkit.case import Case
 from tltestkit.plans import CLEAN, PLAN, WRITE
 from tltestkit.tmpdir import TemporaryDirectory

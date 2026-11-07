@@ -18,7 +18,7 @@ from tlkernel.config import EngineConfig
 from tlkernel.gitfacts import TreeEntry
 from tlkernel.plancheck import PlanData
 from tlkernel.stop import Stop
-from tlpipeline.leftover_queue import LeftoverQueue
+from tlpipeline.api import LeftoverQueue
 
 
 class PlanGit(FakeGit):

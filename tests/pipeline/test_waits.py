@@ -12,8 +12,7 @@ from tlkernel import log as rec
 from tlkernel.kinds import Kind
 from tlkernel.lanesliveness import LIVENESS
 from tlkernel.waitenums import WaitWhat
-from tlpipeline.blocked import Blocked
-from tlpipeline.waits import Waits
+from tlpipeline.api import Blocked, Waits
 
 
 def test_wait_books_seconds_outside_the_budget():

@@ -35,11 +35,7 @@ from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
 from tlkernel.parks import Park, ParkStore
 from tlkernel.run import RunManifest, RunState
-from tlpipeline.blocked import Blocked
-from tlpipeline.closing_record import RecordRun
-from tlpipeline.cursor import parse_step
-from tlpipeline.finish import answer
-from tlpipeline.steps import Steps
+from tlpipeline.api import Blocked, RecordRun, Steps, answer, parse_step
 from tltestkit.checks import typed
 from tltestkit.plans import PLAN
 

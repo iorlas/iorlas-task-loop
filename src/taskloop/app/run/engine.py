@@ -17,8 +17,7 @@ from tlkernel.kinds import Kind
 from tlkernel.ports import Clock
 from tlkernel.procport import Spawner
 from tlkernel.run import RunReport
-from tlpipeline import ended
-from tlpipeline.blocked import Blocked, FixFailed
+from tlpipeline.api import Blocked, FixFailed, ended
 
 from taskloop.adapters import landlock
 from taskloop.adapters.clock import SystemClock

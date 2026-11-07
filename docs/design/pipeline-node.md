@@ -273,3 +273,7 @@ Pipeline files import 22 `taskloop.domain` modules (section 13). Consumers outsi
 Order: R6c1 and R6c2 first (small, independent); R6c3 after R6c2 (`plan.matchers` needs `checks`); R6c4 and R6c5 are the large sweeps (27 and 13 consumers) and run one at a time, each as one PR with `Layout-allow: move` and a closure line. Each PR ends with `grep taskloop.domain` of its modules empty in `app/pipeline`. R6c (`tl-e5t0.39.14`) closes when the last of them lands; R6 (`.11`) follows.
 
 Beads: R6c1 `tl-e5t0.39.15`, R6c2 `.16`, R6c3 `.17`, R6c4 `.18`, R6c5 `.19`.
+
+## 15. Status
+
+API done: tlpipeline.api is the public surface; rule tests/rules/test_package_surface.py

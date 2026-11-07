@@ -39,7 +39,7 @@ from tlkernel.gitfacts import GitOutcome, LogRow
 from tlkernel.ids import BeadId, TreeSha
 from tlkernel.kinds import Kind
 from tlkernel.runkey import BaseSha
-from tlpipeline.blocked import Blocked, blocked_for
+from tlpipeline.api import Blocked, blocked_for
 
 BEAD = BeadId("t-1")
 BRANCH = "task/t-1"

@@ -23,7 +23,7 @@ from tlkernel.procport import Spawner
 from tlkernel.review import Unfiled
 from tlkernel.run import Reexec
 from tlkernel.wire import Open
-from tlpipeline.checkpoints import Checkpoints
+from tlpipeline.api import Checkpoints
 
 from taskloop.adapters import beadtools, ident, treehash
 from taskloop.adapters.check_probe import PathProbe

@@ -17,8 +17,7 @@ from tlkernel import log as rec
 from tlkernel.config import EngineConfig
 from tlkernel.kinds import Kind
 from tlkernel.lanesliveness import LIVENESS
-from tlpipeline.blocked import Blocked
-from tlpipeline.waits import Waits
+from tlpipeline.api import Blocked, Waits
 from tltestkit.case import Case
 
 

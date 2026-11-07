@@ -21,7 +21,7 @@ from tlkernel.identity import Identity
 from tlkernel.ids import CheckId
 from tlkernel.locator import RunLocator
 from tlkernel.run import RunState
-from tlpipeline.stage_run import stage_run
+from tlpipeline.api import stage_run
 
 
 class StageRuns(Case):

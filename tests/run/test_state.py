@@ -30,9 +30,7 @@ from tlkernel.review import (
     Unfiled,
 )
 from tlkernel.run import Round
-from tlpipeline.checkpoints import Checkpoints
-from tlpipeline.resume import KEEP_FOR_ACTIVE, LATE, Resume
-from tlpipeline.review_glue import ReviewGlue
+from tlpipeline.api import KEEP_FOR_ACTIVE, LATE, Checkpoints, Resume, ReviewGlue
 from tlpipeline.testing import FakeHeadHistory
 
 ROOT = Path(__file__).resolve().parents[2]
