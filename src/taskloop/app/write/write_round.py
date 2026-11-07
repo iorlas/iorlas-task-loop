@@ -45,6 +45,7 @@ class WriteRound:
         if flow:
             return flow
         self.shots_contract(s, prompt, out)
+        self.requests(s)
         e.cases.add_cases(s.w.get("new_cases") or [])
         if e.pictures.shot_methods() and e.pictures.stage_visual(s.st):
             e.pictures.mark_stale()  # a write after the last render: its pictures show an older tree
@@ -57,16 +58,32 @@ class WriteRound:
             return AGAIN
         return ""
 
+    def requests(self, s: StageState) -> None:
+        """Admit only declared, opted-in checks, once each and within the round cap."""
+        declared = {c.id: c for c in self.e.cfg.checks}
+        s.run_checks = []
+        s.request_feedback = ""
+        for cid in dict.fromkeys(s.w.get("run_checks", [])):
+            spec = declared.get(cid)
+            why = ("undeclared engine check" if spec is None else
+                   "check is not requestable" if not spec.requestable else
+                   "engine.max_run_checks exceeded" if len(s.run_checks) >= self.e.cfg.max_run_checks else "")
+            if why:
+                s.request_feedback += f"\nrun_checks {cid!r}: {why}."
+            else:
+                s.run_checks.append(cid)
+
     def prompts(self, s: StageState, boundary: bool) -> tuple[str, str | None]:
         """(the whole prompt, the delta a resumed writer gets instead or None)."""
         e, st = self.e, s.st
+        feedback = s.feedback + s.request_feedback
         listed = planref.commands(st["checks"], e.cfg)
         stage_checks = e.briefing.stage_checks_text(listed, skip=s.failed_cmds)
         where_text = e.briefing.where("write", [c.cmd for c in e.cfg.stage_checks] + listed, s.failed_cmds, listed=listed)
         tail = CASES_TAIL + ("" if s.last else LATER_CASES) + UNCHECKED_TEXT + e.judge.look_write(st)
         gate = f" (`{e.cfg.gate_text}`)" if e.cfg.gate_checks else ""
         prompt = write_prompt(e.cases.rules_text(), brief=e.briefs.text(), plan=e.cases.plan_text(s.i), n=s.i + 1, goal=st["goal"],
-                              files=", ".join(st["files"]), anchors=anchors_text(st), checks=stage_checks, feedback=s.feedback,
+                              files=", ".join(st["files"]), anchors=anchors_text(st), checks=stage_checks, feedback=feedback,
                               evidence=e.evidence_dir, where=where_text, gate=gate) + tail
         dtail = ""  # what a resumed writer still needs that its first prompt did not say for this stage
         if s.last and not e.writer.last_stage:  # the acceptance cases run now: it has not been told
@@ -74,7 +91,7 @@ class WriteRound:
         if e.review.unchecked:
             dtail += UNCHECKED_TEXT
         delta = e.hand.delta(s.i + 1, st["goal"], ", ".join(st["files"]), anchors_text(st), stage_checks,
-                                                where_text, s.feedback, dtail + e.judge.look_write(st))
+                                                where_text, feedback, dtail + e.judge.look_write(st))
         if delta is not None:
             prompt += e.hand.accepted_text() if boundary else e.hand.so_far_text()
         if delta is not None:  # the writer may have edited its copy: the engine's brief goes back before it reads it again
@@ -154,5 +171,5 @@ class WriteRound:
             e.steps.outcome("asks", w2["question"][:200])
             spec = askspecs.open_question(w2["question"], w2.get("options"), w2.get("owner_cause"))
             raise e.blocked_for("owner decision needed", "ASK_DECISION", spec=spec)
-        both = {k: (w.get(k) or []) + (w2.get(k) or []) for k in ("new_cases", "unchecked", "bad_checks")}
+        both = {k: (w.get(k) or []) + (w2.get(k) or []) for k in ("new_cases", "unchecked", "bad_checks", "run_checks")}
         s.w = dict(w2, summary=w["summary"] + "\n" + w2["summary"], **both)

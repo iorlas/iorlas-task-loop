@@ -62,3 +62,9 @@ Counts are from a grep for `e.X = / += / .append / .add` in `app/write`; the tab
 ## Not verified
 
 The attribute scan counts name mentions of `e.`, `self.e.`, `eng.` and `host.` and is an upper bound on shared use. No test was run for this note. The size of `RoundResult` is a first guess; slice 2 fixes it round by round.
+
+## Decisions recorded
+
+| Finding | Decision | Contract |
+|---|---|---|
+| Z11 (ENGINECMD) | Option (d): the writer requests a declared engine check; the engine runs it after normal checks and feeds its output to the next write. Requested reds are informational and consume no red tries. | `engine.checks[].requestable` (false), `engine.max_run_checks` (2), writer `run_checks` ([]). |

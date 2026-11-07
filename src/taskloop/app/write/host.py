@@ -12,7 +12,7 @@ from tlkernel.checkpoint import StageProgress, WriterSession
 from tlkernel.checks import CheckResult, CheckRun
 from tlkernel.config import EngineConfig
 from tlkernel.gitport import Git
-from tlkernel.ids import BeadId, TreeSha
+from tlkernel.ids import BeadId, CheckId, TreeSha
 from tlkernel.paths import ConfigDir
 from tlkernel.plancheck import PlanCheck, PlanData, StageData
 from tlkernel.procport import Spawner
@@ -62,6 +62,8 @@ class CheckerPort(Protocol):
 
 
 class StageChecks(Protocol):
+    def requested(self, ids: Sequence[CheckId], name: str, **meta: object) -> CheckRun: ...
+
     def stoppable(self, st: StageData, name: str, acceptance_first: bool = ..., groups: Sequence[str] | None = ...,
                   conflict_fix: Sequence[str] | None = ..., **meta: object) -> CheckRun: ...
 
@@ -127,6 +129,9 @@ class RepoHolder(Protocol):
 
 
 class BriefingHost(Protocol):
+    @property
+    def cfg(self) -> EngineConfig: ...
+
     @property
     def checker(self) -> CheckerPort: ...
     @property

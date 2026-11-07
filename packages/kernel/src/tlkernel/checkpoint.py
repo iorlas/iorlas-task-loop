@@ -14,6 +14,7 @@ import msgspec
 from tlkernel import wire
 from tlkernel.answers import WriteAnswerLook
 from tlkernel.delegate import Permanence
+from tlkernel.ids import CheckId
 from tlkernel.plancheck import PlanData
 from tlkernel.review import ReviewState
 from tlkernel.run import Round
@@ -163,6 +164,8 @@ class Notes(Rec):
 class StageProgress(Rec):
     """A separated write/check/review round, carried by the existing checkpoint."""
 
+    run_checks: list[CheckId] = msgspec.field(default_factory=list)
+    request_feedback: str = ""
     write: WriteAnswerLook | None = None
     red: int = 0
     red_now: list[str] = msgspec.field(default_factory=list)
@@ -175,7 +178,7 @@ class StageProgress(Rec):
 
 @final
 class Checkpoint(Rec):
-    V: ClassVar[int] = 7
+    V: ClassVar[int] = 8
     bead: str
     run: str
     t: float
@@ -260,7 +263,7 @@ class Shared(Rec):
 class CursorBody(Rec):
     """Checkpoint envelope without stage-owned state."""
 
-    V: ClassVar[int] = 7
+    V: ClassVar[int] = 8
     bead: str
     run: str
     t: float
