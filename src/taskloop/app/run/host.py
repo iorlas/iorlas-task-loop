@@ -12,6 +12,9 @@ from taskloop.app.look.shots import Pictures
 from taskloop.app.pipeline import summaries
 from taskloop.app.pipeline.closing import Closer
 from taskloop.app.pipeline.leftover_queue import LeftoverQueue
+from taskloop.app.plan.briefs import Briefs
+from taskloop.app.plan.cases import Cases
+from taskloop.app.plan.planner import Planner
 from taskloop.app.review.link_check import LinkCheck
 from taskloop.app.review.routing import Routing
 from taskloop.app.review.settles import Settles
@@ -50,6 +53,18 @@ class RunHost(LandParts, PlanParts, RunParts):
     @cached_property
     def hand(self) -> Handoff:
         return Handoff(self, self.git)
+
+    @cached_property
+    def cases(self) -> Cases:
+        return Cases(self.facts, self, self.plan_state, self.amend, self)
+
+    @cached_property
+    def briefs(self) -> Briefs:
+        return Briefs(self.facts, self, self.plan_state, self.amend, self)
+
+    @cached_property
+    def planner(self) -> Planner:
+        return Planner(self.facts, self, self.plan_state, self.amend, self)
 
     @cached_property
     def pictures(self) -> Pictures:

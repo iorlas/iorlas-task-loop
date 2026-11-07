@@ -1,22 +1,28 @@
-"""The Engine satisfies PlanHost: every member the plan stage names is on the engine a run builds."""
+"""Engine and fake satisfy the plan capabilities and shared hand-offs."""
 from support.builders import make_engine
 from support.engine_case import EngineTest
 from support.host_conformance import missing
+from support.plan_host import FakePlan
 
-from taskloop.app.plan.host import PlanHost
+from taskloop.app.plan.host import PlanHand, PlanPorts
 
 
 class PlanHostConformance(EngineTest):
     def test_the_engine_has_every_member_the_plan_stage_reads(self):
         eng = make_engine(self.wt, store=self.store)
-        assert missing(eng, PlanHost) == []
-        sink = eng.leftover_sink
-        assert eng.leftover_sink is sink
-        eng.leftovers = []
-        assert sink.add_titled({"title": "later"})
-        assert eng.leftovers == [{"title": "later"}]
+        assert missing(eng, PlanPorts) == []
+        assert missing(eng, PlanHand) == []
+        assert eng.leftover_sink is eng.leftover_sink
 
     def test_the_check_names_a_member_the_host_lacks(self):
         eng = make_engine(self.wt, store=self.store)
         del eng.checker
-        assert missing(eng, PlanHost) == ["checker"]
+        assert missing(eng, PlanPorts) == ["checker"]
+
+
+def test_fake_has_every_plan_capability_and_hand_field(workdir):
+    plan = FakePlan(workdir)
+    assert missing(plan.ports, PlanPorts) == []
+    assert missing(plan.hand, PlanHand) == []
+    plan.ports.leftover_sink.add_titled({"title": "later", "why": "x"})
+    assert plan.hand.leftovers == [{"title": "later", "why": "x"}]
