@@ -260,11 +260,11 @@ Pipeline files import 22 `taskloop.domain` modules (section 13). Consumers outsi
 
 | cluster | modules (consumers outside pipeline) | destination | PR |
 |---|---|---|---|
-| pipeline-only | `interpret` (2), `stuck` (2) | `app/pipeline` (their only deps are `tlkernel`) | **R6c1** |
+| pipeline-only | `stuck` (2) | `app/pipeline` (its only deps are `tlkernel`); `interpret` is also imported by `app/land/sync.py`, so it is not pipeline-only and goes with `effects` in R6c5 | **R6c1** |
 | small pure helpers | `lanes.caps` (5), `lanes.liveness` (4), `followups` (5), `work.switch` (4), `checks.trim` (3) + `checks.matchers` (18), `review.kinds` (3) | kernel (no `taskloop` deps beyond each other) | **R6c2** |
 | the plan/land matchers | `plan.brief` (7), `plan.matchers` (5, needs `domain.checks`), `land.matchers` (9) | kernel, or the pipeline receives the three values it uses (`COMMENTS_ONLY`, `AcceptanceText`, `without_prefix`) as constructor arguments if a move drags more than two further modules | **R6c3** |
 | the run-end vocabulary | `outcome` (27), `lifecycle.matchers` (11), `asks.spec` (19), `asks.lint`, `asks.text`, `asks.specs` (27) | kernel (the WORKKERNEL precedent, tl-e5t0.70); `outcome` needs `asks.spec`, `lifecycle` and `tlkernel.reconcile`, so they move together | **R6c4** |
-| pause and effect words | `effects` (9), `lanes.pauses` (13), `lanes.pause_reasons` (11), `beads.park` | kernel; B3-5 (#554, merged) edited `pauses` and `pause_reasons`, so this is free to start | **R6c5** |
+| pause and effect words | `effects` (9), `interpret` (2), `lanes.pauses` (13), `lanes.pause_reasons` (11), `beads.park` | kernel; B3-5 (#554, merged) edited `pauses` and `pause_reasons`, so this is free to start | **R6c5** |
 
 Order: R6c1 and R6c2 first (small, independent); R6c3 after R6c2 (`plan.matchers` needs `checks`); R6c4 and R6c5 are the large sweeps (27 and 13 consumers) and run one at a time, each as one PR with `Layout-allow: move` and a closure line. Each PR ends with `grep taskloop.domain` of its modules empty in `app/pipeline`. R6c (`tl-e5t0.39.14`) closes when the last of them lands; R6 (`.11`) follows.
 
