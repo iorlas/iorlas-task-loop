@@ -32,6 +32,7 @@ from support.who import who
 from run.test_stages import StagesTest
 from taskloop.app.artifacts import store
 from taskloop.app.land.rebase import MAX_REBASE_RESETS
+from taskloop.app.plan.prompts import REPLAN_CAP
 from taskloop.app.run import (
     entry,
     outcomes,
@@ -45,7 +46,6 @@ from taskloop.contracts.ids import BeadId
 from taskloop.contracts.lookrows import LookRows
 from taskloop.contracts.run import Round
 from taskloop.contracts.slots import SlotGitError
-from taskloop.domain.prompts.plan import REPLAN_CAP
 
 
 class VisualWork(StagesTest):

@@ -143,14 +143,6 @@ class DoneEntry(Rec):
 
 
 @final
-class DoneMemo(Rec):
-    """Legacy memo import record: call key -> execution digest (legacy: prompt sha) and raw copy's file."""
-
-    V: ClassVar[int] = 1
-    done: dict[str, DoneEntry] = msgspec.field(default_factory=dict)
-
-
-@final
 class Round(Rec):
     """One writer/review round, as the next writer is told of it (app/write/handoff)."""
 

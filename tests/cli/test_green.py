@@ -32,6 +32,9 @@ class RepoGit(ScriptedGit):
 
     profile = json.dumps({"engine": {"checks": [{"id": "unit", "argv": ["x"], "run": "gate"}]}})
 
+    def common_dir(self, d):
+        return f"{d}/.git"
+
     def show(self, d, rev, path):
         return self.profile
 
@@ -101,11 +104,11 @@ class GreenCase(Case):
                 with self.subTest(argv=argv):
                     self.git.profile = json.dumps({"engine": {"plan_cmd": argv, "checks": [
                         {"id": "unit", "argv": ["x"], "run": "gate"}]}})
-                    assert self.ask(repo=self.tmp.name) == expected
+                    assert self.ask() == expected
             self.git.profile = "invalid json"
-            assert self.ask(repo=self.tmp.name) == 1
+            assert self.ask() == 1
             self.store(run())
-            assert self.ask(repo=self.tmp.name) == 1
+            assert self.ask() == 1
 
     def test_metadata_cannot_relabel_a_whole_tree_pass_for_another_subject(self):
         self.store(run().replace(tree=TreeSha("T2"), base=BaseSha("B2")))  # metadata cannot change the key's subject

@@ -168,7 +168,7 @@ class Records:
                         strays=e.strays,
                         reflection=e.reflection,
                         lane_notes=e.lane_notes,
-                        salvaged=e.salvaged,
+                        salvaged=e.land_state.salvaged,
                     ),
                 )
             )
