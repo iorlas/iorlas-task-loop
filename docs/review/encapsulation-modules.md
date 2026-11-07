@@ -236,7 +236,7 @@ R1 applies only where named. Moving an Engine method into a file and passing the
 | app/run/worker_call.py | Complete AI call, recovery and policy loop | E/D/P, ops callbacks, persistent call/memo/worker identities | U ⚠; R |
 | app/land/checkout.py | View/stage/hash checkout | E/S/C, pinned git and expected tree/revision | U ⚠; R |
 | app/land/cleanup.py | Retry recorded local/remote cleanup | S/F, active ownership not guaranteed; D.F04 | U ⚠; R |
-| app/land/fixer.py | Writer round for land failures | E/P/C, accepted-state barrier and limited retry | U ⚠; R |
+| app/land/fix.py | Writer round for land failures | E/P/C, accepted-state barrier and limited retry | U ⚠; R |
 | app/land/gate.py | Gate checks and proof token | C/E, capture/issue ordering; D.F02 | U ⚠; R |
 | app/land/lander.py | Optimistic/locked delivery state machine | E/C/S, host/parts split still aliases Engine; R1 | R ⚠; R |
 | app/land/lander_host.py | Union of land host surfaces | E/C/S, typing sum does not hide transaction; R1 | R ❌; V |

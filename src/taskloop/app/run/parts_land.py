@@ -8,7 +8,7 @@ from tlkernel.repourl import repo_url
 from taskloop.adapters import landlock
 from taskloop.app.land import cleanup
 from taskloop.app.land.checkout import Checkout
-from taskloop.app.land.fixer import Fixer
+from taskloop.app.land.fix import Fixer
 from taskloop.app.land.lander import lander_over
 from taskloop.app.land.push import target
 from taskloop.app.land.rebase import Rebase
