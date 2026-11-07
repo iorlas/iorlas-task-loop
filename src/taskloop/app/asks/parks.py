@@ -53,12 +53,8 @@ def paused(cfg: ConfigDir, b: Bead, kind: Kind, run: str, now: float, *, reason:
     reason = reason or kind.value
     if kind is not Kind.NOOP and kind not in PAUSES:
         return None
-    store = ParkStore(cfg)
-    old = store.get(b.id)
-    rec = pauses.after_pause(old, b, run, now, reason, draw, not_before,
-                             fingerprint=fingerprint, producer=producer, permanence=permanence)
-    store.put(rec)
-    return rec
+    return ParkStore(cfg).change(b.id, lambda old: pauses.after_pause(old, b, run, now, reason, draw, not_before,
+                                                                     fingerprint=fingerprint, producer=producer, permanence=permanence))
 
 
 def ended(cfg: ConfigDir, b: Bead, kind: Kind, run: str, now: float) -> None:
@@ -67,4 +63,4 @@ def ended(cfg: ConfigDir, b: Bead, kind: Kind, run: str, now: float) -> None:
     if kind in FINISH:
         store.drop(b.id)
     elif kind in ASKS:
-        store.put(park.after_question(store.get(b.id), b, run, now))
+        store.change(b.id, lambda old: park.after_question(old, b, run, now))
