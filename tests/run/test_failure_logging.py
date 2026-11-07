@@ -7,9 +7,10 @@ from support.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
+from support.pipeline_ports import FakeLandCleanup
 
-from taskloop.app.run.closer_branch import ReleaseSlot
-from taskloop.app.run.closer_decide import Decide
+from taskloop.app.pipeline.closing_branch import ReleaseSlot
+from taskloop.app.pipeline.closing_decide import Decide
 from taskloop.app.run.records import Records
 from taskloop.app.run.reflect import Reflector
 from taskloop.app.run.reload import Reload
@@ -30,7 +31,7 @@ class FailureLogging(Case):
         host.clock.now.return_value = 100
         with mock.patch("taskloop.adapters.storm.recent_closes", side_effect=OSError("unreadable")), \
                 mock.patch.object(Decide, "repo_id", return_value="repo"):
-            assert Decide(host).run(oc.make(Kind.PAUSE_LANE, "paused")) == Kind.PAUSE_LANE
+            assert Decide(host, mock.Mock()).run(oc.make(Kind.PAUSE_LANE, "paused")) == Kind.PAUSE_LANE
         self.assert_traceback(host.warn.call_args.args[0], "could not read retry history: unreadable")
 
     def test_settle_failure_is_logged_and_does_not_replace_the_run_outcome(self):
@@ -55,7 +56,7 @@ class FailureLogging(Case):
         host = mock.Mock()
         host.claim.slot_bead = ""
         host.tree.leave_slot.side_effect = RuntimeError("slot")
-        ReleaseSlot(host).run("task/t-1", Outcome.PARKED)
+        ReleaseSlot(host, host.tree, FakeLandCleanup()).run("task/t-1", Outcome.PARKED)
         self.assert_traceback(host.log.warn.call_args.args[0], "RuntimeError: slot")
 
     def test_reload_lookup_catch_all_logs_traceback(self):

@@ -134,3 +134,17 @@ Rules for the slices: a port class lives in the stage that implements it (`app/<
 | **P4c** | `closer_branch` (`LandCleanup`, `Slotting`) and `closer.py` (`AskRules`, `ParkBook`) move; `closer_host.py` shrinks to the binder `run/closer_ports.py`; the pipeline joins no new exception | `closer_branch.py`, `closer.py`, `closer_host.py`, `run/host.py` |
 
 P4a is safe beside the B-* lanes (new files and one-line additions). P4b and P4c edit files only the close family owns, plus `run/host.py`'s `closer` property. The B-LAND bead owns `app/land/followups.py`; P4a adds the adapter beside it, not inside it, to avoid a conflict.
+
+## 10. P6: waits, requests, reload, reflect, resume, from today's call sites (added 2026-11-07, after P4)
+
+P5 (lifecycle and run) is the large slice and waits for the rename freeze; P6 does not need it. Each file below is its own slice and its own PR, in this order (smallest port set first). The call sites were read on main (526b4eda).
+
+| slice | file (lines) | what it reaches that a pipeline file may not | port or move | implemented by / bound by |
+|---|---|---|---|---|
+| **P6a** | `waits.py` (165) | `app.run.blocked.Blocked` (a pure class over `contracts`, `domain`); `e.os_lock(path, holder, waiting, timeout=, check=)` is a host method | **move** `blocked.py` to `app/pipeline/blocked.py` (every run importer follows; no shim); `OsLock` port: `__call__(path, holder, waiting, *, timeout, check) -> ContextManager[None]` | the engine already owns `os_lock`; the binder passes it. Tests on a fake lock |
+| **P6b** | `requests.py` (151) | `app.asks.intake.Intake`, `receipt` | `OwnerIntake` port: `hold(...)`, `note(bead, text)` as `Requests` calls them (read the three call sites); `receipt(kind, text)` is a pure formatter, so it moves with the port (`asks/closing.py`) | asks (`asks/closing.py`), bound by the root file for requests |
+| **P6c** | `reload.py` (136) | `loop.versions.Installs`, `release.catalog/pins/reexec`, `slots.engine_lock`, `track.trail`, `adapters.halt.RUN_SLOT`, `ident` | `Reloader` port set: `NewerInstall.newer(env) -> (version, dir) or None`; `ReexecBook` (`net_pause`, `note`, `drop`); `Handoff.exec(argv, env)`; `Trail.event(...)`; the `engine_lock` slot read becomes a plain `slot: str` argument | release/loop/track classes in their stages; bound in `run/` |
+| **P6d** | `reflect.py` (79), `reflect_prompt.py` | `asks.trustroots.refusal(git, wt, base, bead)`; `adapters.childenv.delegate_call_env` | `TrustRefusal.refusal(wt, base, bead) -> str or None` port; `childenv` is an adapter (allowed), so no port for it | asks (`asks/closing.py`) |
+| **P6e** | `resume.py` (196) | `land.gitcall.oneline`; `run.review_glue.apply_review`; `run.state.state_names` | `HeadHistory.oneline(wt, new, old, n) -> str` (land); `apply_review` and `state_names` are run-local: they move with `resume` only if their own imports are free of a stage, else `ReviewRestore.apply(review, *, unchecked, late)` port and `state_names` passed as a tuple | land (`land/closing.py`), root binder |
+
+Rules as in section 9: a port class lives in the stage that implements it; the pipeline holds the Protocols (`pipeline/ports.py`); each moved file takes `self.host`; `.importlinter` lists and the converted-stage contracts follow the move. Each slice lands green with behaviour unchanged. Order by lowest risk: P6a, P6d, P6b, P6e, P6c.

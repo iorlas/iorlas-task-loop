@@ -18,7 +18,7 @@ from support.who import who
 
 from taskloop.app.look import shots
 from taskloop.app.look.owner_look import OwnerLook
-from taskloop.app.run.closer import Closer
+from taskloop.app.pipeline.closing import Closer
 from taskloop.contracts import answers, wire
 from taskloop.contracts.artifact import ArtifactMeta
 from taskloop.contracts.config import RepoProfile, VisualConfig
