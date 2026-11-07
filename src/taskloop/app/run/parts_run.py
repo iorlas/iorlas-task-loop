@@ -13,7 +13,7 @@ from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.asks.closing import ClosingTrust
 from taskloop.app.checks.step import StageChecks
 from taskloop.app.land.closing import LandHistory
-from taskloop.app.pipeline.journal import Journal, JournalHost
+from taskloop.app.pipeline.journal import Journal
 from taskloop.app.pipeline.reflect import Reflector
 from taskloop.app.pipeline.reload import Reload, ReloadChoice, ReloadCounters, ReloadTransfer
 from taskloop.app.pipeline.requests import OwnerRequests
@@ -45,11 +45,6 @@ class ReloadBinding(ReloadCounters, ReloadTransfer, ReloadChoice, Protocol):
     def held_lock(self) -> HeldLock: ...
 
 
-class JournalBinding(JournalHost, Protocol):
-    @property
-    def held_lock(self) -> HeldLock: ...
-
-
 class RunParts(Plumbing):
     held_lock: HeldLock
 
@@ -66,8 +61,8 @@ class RunParts(Plumbing):
                       lambda: locked_slot(self.held_lock), childenv, ident)
 
     @cached_property
-    def records(self: JournalBinding) -> Journal:
-        return Journal(self, lambda: locked_slot(self.held_lock), repo_of)
+    def records(self) -> Journal:
+        return Journal(self, self, self, self, self, self, lambda: locked_slot(self.held_lock), repo_of)
     shared = cached_property(Shared)
     @cached_property
     def stuck(self: StuckHost) -> StuckTick: return StuckTick(self, last_event_t)
