@@ -32,6 +32,15 @@ def earlier_pass(check_id: str, expected: RunKey, repo: str, stores: Stores) -> 
     return max(found, key=lambda r: r.ts, default=None)
 
 
+def queue_parent_pass(check_id: str, expected: RunKey, parent: str, repo: str, stores: Stores) -> PassRecord | None:
+    """The newest pass made at base `parent` (the commit of the queue ahead) whose key is `expected` in every other field."""
+    docs = stores.results(repo, check_id)
+    found = [rec for name in docs.keys() if (rec := docs.of(name).get()) is not None  # noqa: SIM118 (a DocSet is not iterable)
+             and rec.result.status == "passed" and satisfied(rec.result) and rec.key.base == parent
+             and rec.key.replace(base=expected.base) == expected]
+    return max(found, key=lambda r: r.ts, default=None)
+
+
 def digest_of(root: str, paths: list[str]) -> dict[str, str]:
     """{path: sha1 of its bytes, '' when it is gone}."""
     out = {}
@@ -92,6 +101,25 @@ class Carry:
         memo.run_id = "carry"
         memo.carry_over(key, found)
         self.cmds.log.note(f"carry: {step} carried, the closure of {len(mine)} files is the same on the moved base")
+        return True
+
+    def queue_carried(self, engine: config.EngineConfig, step: str, tree: str, base: str, parent: str, wt: str) -> bool:
+        """True when the step's pass at the queue parent `parent` now counts under `base` (main) and has been stored under that key. It
+        counts when main has the tree of the parent, so no closure command is needed; any other difference in the key is a miss."""
+        spec = next((k for k in engine.checks if k.id == step), None)
+        if spec is None:
+            return False
+        if self.git.rev_parse(self.repo, f"{base}^{{tree}}") != self.git.rev_parse(self.repo, f"{parent}^{{tree}}"):
+            return self.miss(step, "main is not the tree of the queue parent")
+        memo = authorization.memo_for(self.stores, self.git, wt, engine, TreeSha(tree), BaseSha(base), self.env)
+        check = repo_check(spec, engine)
+        key = memo.key(check)
+        found = queue_parent_pass(check.id, key, parent, memo.repo, self.stores) if key is not None else None
+        if found is None or key is None:
+            return self.miss(step, "no pass of this tree at the queue parent")
+        memo.run_id = "queue-carry"
+        memo.carry_over(key, found)
+        self.cmds.log.note(f"carry: {step} carried from the queue parent {parent[:12]}, main has its tree")
         return True
 
     def miss(self, step: str, why: str) -> bool:
