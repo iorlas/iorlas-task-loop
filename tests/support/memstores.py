@@ -31,6 +31,7 @@ from tlkernel.followups import FollowupOutbox
 from tlkernel.ledger import Adr, AdrUse, LedgerEntry
 from tlkernel.locks import LockRecord, LockTimeout, Ticket, pid_alive
 from tlkernel.profile_changes import ProfileChange
+from tlkernel.queue_doc import QueueDoc
 from tlkernel.queue_state import QueueState
 from tlkernel.rotating import RotatingJsonl
 from tlkernel.stores import JsonlStore
@@ -234,7 +235,7 @@ def fake_stores(pid: int | None = None) -> Stores:
         asks=AskStore(MemDocSet(Ask), MemLog(_decode(LedgerEntry))),
         adrs=lambda repo: adrs.setdefault(repo, AdrStore(MemDocSet(Adr), MemLog(_decode(AdrUse)))),
         checkpoints=CheckpointBook(MemDocSet(Checkpoint)),
-        followups=MemDocSet(FollowupOutbox), queue_state=MemDocSet(QueueState),
+        followups=MemDocSet(FollowupOutbox), queue=MemDocSet(QueueDoc), queue_state=MemDocSet(QueueState),
         results=lambda repo, check: passes.setdefault((repo, check), MemDocSet(PassRecord)),
         base_red=lambda repo: reds.setdefault(repo, MemDocSet(BaseRedRecord)),
         durations=MemDocSet(Durations),
