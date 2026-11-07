@@ -37,6 +37,8 @@ OWNERS: dict[str, str] = {
     "ask_ledger": "engine",
     "park": "engine",  # asks-owned park rows, written through ParkStore
     "kv": "index",
+    "worktree_doc": "engine",  # worktree creation and cleanup through app/slots/owned.py
+    "disk_doc": "loop",  # hourly free-space samples through app/doctor/disk.py
     "followup": "engine",  # the land's outbox (app/land/store.py)
     "effect": "engine",
     "wait": "loop",  # pipeline waits; parks live in the asks-owned park table

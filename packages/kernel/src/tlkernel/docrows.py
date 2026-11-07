@@ -13,6 +13,8 @@ from tlkernel.looprows import LoopRows
 from tlkernel.paths import ConfigDir
 from tlkernel.wire import Rec
 
+WORKTREE_DOCS = "worktree_doc"  # ownership records of worktrees tl made
+DISK_DOCS = "disk_doc"  # the loop's hourly free-space samples
 LANES_DOCS = "lanes_doc"  # the lanes part's status snapshot and last attempt
 REPORT_DOCS = "report_doc"  # the report stage's document: the reflect digest state
 WORK_DOCS = "work_doc"  # the work stage's documents: the cache of a repo's decision records

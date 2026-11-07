@@ -27,6 +27,11 @@
   },
   "version": 1
  },
+ "disk": {
+  "ddl": "659b52a08f15fc66505d734c7ab78dae9bac666d2d710d776a9451ef326ed3b8",
+  "records": {},
+  "version": 1
+ },
  "gate": {
   "ddl": "58123ec3b52045d7fd0b1b9d88e43ee98422c4a75ce51537ffa9314b640c2110",
   "records": {
@@ -128,6 +133,16 @@
    "Adr": {
     "schema": "2fb6fae03b95bbb707e04fe6af07747b1006fd8fdf2d5db502f5320290e84770",
     "v": 1
+   }
+  },
+  "version": 1
+ },
+ "worktree": {
+  "ddl": "d88d04d9fcf0962f86447edac1aad91a722a35ac3d443571bbc5e1257cc90e5b",
+  "records": {
+   "Owned": {
+    "schema": "81078e5569b3eaea2382aa76c49bb18c8998e43bd9394228833c7f5b2f94273a",
+    "v": null
    }
   },
   "version": 1
