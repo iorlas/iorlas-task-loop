@@ -1,6 +1,5 @@
 """The ownership records of the worktrees tl made, as `kv` rows in factory.db (key `worktree:<repo key>:<worktree key>`, the Owned in `v`).
-A record says who made a worktree and is kept until the worktree is removed: evidence, not a lease. An older tl's
-`worktrees/<repo>/<key>.json` is read while there is no row, and the next write moves it (dual-read, never dual-write)."""
+A record says who made a worktree and is kept until the worktree is removed: evidence, not a lease."""
 import json
 import time
 
@@ -19,7 +18,7 @@ class WorktreeDoc:
         if found:
             try:
                 body = json.loads(found[0][0])
-                return wire.load(Owned, {k: v for k, v in body.items() if k in wire.keys(Owned)})  # a newer writer's keys are read past
+                return wire.load(Owned, body)
             except (ValueError, TypeError, AttributeError):
                 return None
         return None
