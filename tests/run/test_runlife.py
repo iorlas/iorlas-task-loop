@@ -257,6 +257,6 @@ class BeatsAreNoEvents(Case):
         ingest(self.cfg, self.t0 + 201)
         run = dash.live.live_run(self.bundle.run)
         run.refresh()
-        assert [e["k"] for e in live_api.page(run)["events"]] == ["run_start", "step_start", "warn"]
+        assert [e["kind"] for e in live_api.page(run)["events"]] == ["run_start", "step_start", "warn"]
         assert dash.live.page(loop_key(self.bundle.repo), BEAD)[1]["state"] == "live"
         assert jsonl.records(str(self.log))[-1].kind == "warn"

@@ -16,6 +16,7 @@ from pathlib import Path
 from tlkernel import check_files
 from tlkernel import log as rec
 from tlkernel.beadsport import Beads, DoltPush
+from tlkernel.branches import TASK
 from tlkernel.env import Env
 from tlkernel.forge import CLOSED, MERGED, OPEN, Pr, StackItem
 from tlkernel.gitport import Git
@@ -44,7 +45,6 @@ from taskloop.stores.runlog import RunLog
 
 MODE = "stage:land-stack"
 LOCK_BUSY = 75
-TASK = "task/"
 HEAD_TRIES = 2  # a head that moved after the gate is judged again once: the owner pushed a fix while the gate ran
 
 
