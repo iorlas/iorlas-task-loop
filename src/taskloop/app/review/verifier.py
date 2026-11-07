@@ -11,9 +11,9 @@ from taskloop.app.review.host import ReviewHand, ReviewPorts
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.review.verify_prompt import VERIFY_PROMPT
 from taskloop.domain import followups
-from taskloop.domain.review import switch, visual
 from taskloop.domain.review.kinds import UNCHECKED_KINDS
-from taskloop.domain.review.skip import SkipKind
+from taskloop.domain.work import switch, visual
+from taskloop.domain.work.skip import SkipKind
 
 Item = dict[str, Any]
 RAISE_KINDS = ("FAULT_BAD_REQUEST", "PAUSE_NETWORK", "PAUSE_KILLED")
@@ -49,7 +49,7 @@ class Verifier:
         return self.settle_wrong(still, wrong) if wrong else self.after_clean(still, self.counts())
 
     def visual(self) -> bool:
-        """Verify runs only on a visual bead: some plan case is look-objective, taste or show (domain/review/visual.py)."""
+        """Verify runs only on a visual bead: some plan case is look-objective, taste or show (domain/work/visual.py)."""
         return visual.is_visual((self.hand.plan_data or {}).get("cases") or [])
 
     def defer(self, gaps: list[Item], review_off: bool = False) -> list[Item]:

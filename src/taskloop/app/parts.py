@@ -3,10 +3,10 @@
 The test in tests/rules/test_stage_parts.py fails until it is added.
 """
 from tlkernel.dbparts import Part
-from tlkernel.factoryparts import ASKS, DASH, KV, LANES, PIPELINE, RELEASE, REPORT, WORK
+from tlkernel.factoryparts import ASKS, DASH, KV, LANES, LOOK, LOOP, PIPELINE, RELEASE, REPORT, WORK
 
 from taskloop.app.checks.store import GATE
 from taskloop.app.land.store import LAND
 from taskloop.app.slots.store import SLOTS
 
-STAGE_PARTS: tuple[Part, ...] = (DASH, PIPELINE, SLOTS, GATE, ASKS, KV, RELEASE, REPORT, LAND, WORK, LANES)
+STAGE_PARTS: tuple[Part, ...] = (DASH, PIPELINE, SLOTS, GATE, ASKS, KV, RELEASE, REPORT, LAND, WORK, LANES, LOOP, LOOK)

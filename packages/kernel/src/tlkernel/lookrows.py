@@ -1,4 +1,4 @@
-"""The items of one owner-look bead as the `kv` row `look:<look bead>` of factory.db: a JSON list of gallery items. Two writers change
+"""The items of one owner-look bead as the `look_doc` row `look:<look bead>` of factory.db: a JSON list of gallery items. Two writers change
 it (the engine filing new items, the owner's answer), so a write is a compare-and-set on the body that was read: the row changes only
 if no one else wrote since, and a lost race re-reads and decides again. The bead's metadata is never written for items, so a hold or any
 other key the owner set meanwhile is not overwritten. A look bead from before the row has its items in metadata `looks` (or its
@@ -7,6 +7,7 @@ import json
 import time
 from collections.abc import Callable
 
+from tlkernel.docrows import LOOK_DOCS
 from tlkernel.gallery import Item
 from tlkernel.looprows import LoopRows
 from tlkernel.paths import ConfigDir
@@ -24,7 +25,7 @@ class LookRows:
         self.rows = LoopRows(cfg, "", quiet=quiet)
 
     def raw(self, look_bead: str) -> str | None:
-        found = self.rows.select("SELECT v FROM kv WHERE k=?", (PREFIX + look_bead,))
+        found = self.rows.select(f"SELECT v FROM {LOOK_DOCS} WHERE k=?", (PREFIX + look_bead,))
         return found[0][0] if found else None
 
     def items(self, look_bead: str) -> list[Item] | None:
@@ -52,8 +53,8 @@ class LookRows:
     def _swap(self, look_bead: str, old: str | None, body: str) -> bool:
         with self.rows.transaction() as con:
             if old is None:
-                got = con.execute("INSERT INTO kv (k, v, t) VALUES (?, ?, ?) ON CONFLICT(k) DO NOTHING",
+                got = con.execute(f"INSERT INTO {LOOK_DOCS} (k, v, t) VALUES (?, ?, ?) ON CONFLICT(k) DO NOTHING",
                                   (PREFIX + look_bead, body, time.time()))
             else:
-                got = con.execute("UPDATE kv SET v=?, t=? WHERE k=? AND v=?", (body, time.time(), PREFIX + look_bead, old))
+                got = con.execute(f"UPDATE {LOOK_DOCS} SET v=?, t=? WHERE k=? AND v=?", (body, time.time(), PREFIX + look_bead, old))
             return got.rowcount == 1

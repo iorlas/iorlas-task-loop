@@ -1,6 +1,7 @@
 """The close lints asks and records pauses through supplied ports."""
 from unittest.mock import Mock
 
+import pytest
 from support.narrow_hosts import CloseKit
 from support.pipeline_ports import FakeAskRules, FakeParkBook
 
@@ -88,3 +89,12 @@ def test_resume_restores_dead_runs_pause_and_passes_stats_unchanged(monkeypatch)
     assert kit.host.crash_site == "write"
     assert kit.host.plan_summary == "dead plan"
     assert kit.host.asked
+
+
+@pytest.mark.parametrize("kind", [Kind.ASK_STUCK, Kind.FAULT_INFRA, Kind.LANDED])
+def test_non_pause_does_not_call_park_book(kind):
+    kit = CloseKit(dry=False)
+    parks = FakeParkBook()
+    kit.closer.parks = parks
+    kit.closer.pause(oc.make(kind, "done", spec=specs.plan_noop("t-1", "summary") if kind is Kind.ASK_STUCK else None))
+    assert parks.paused_calls == []

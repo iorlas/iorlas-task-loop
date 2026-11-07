@@ -14,9 +14,10 @@ from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.host import PlanHand, PlanPorts
 from taskloop.app.plan.state import PlanState
 from taskloop.domain.checks import planref
-from taskloop.domain.plan.matchers import evidence_files, word_set
+from taskloop.domain.plan.matchers import evidence_files
 from taskloop.domain.plan.stored import role_view
 from taskloop.domain.prompts.common import RULES_MAX
+from taskloop.domain.work.matchers import word_set
 
 
 class Cases:

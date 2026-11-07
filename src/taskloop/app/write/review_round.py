@@ -14,10 +14,10 @@ from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.lanes import caps
 from taskloop.domain.prompts.common import LATER_CASES, UNCHECKED_TEXT
 from taskloop.domain.review import findings as fnd
-from taskloop.domain.review import switch
 from taskloop.domain.review.availability import ReviewUnavailable
 from taskloop.domain.review.matchers import AcceptanceItems
-from taskloop.domain.review.skip import SkipKind
+from taskloop.domain.work import switch
+from taskloop.domain.work.skip import SkipKind
 
 CASES_RAN = ("The engine ran every case above with the checks, so a case is never an unchecked item; a case whose "
              "check does not prove its criterion is a finding.\n")
@@ -88,7 +88,7 @@ class ReviewRound:
         return True
 
     def skipped(self, s: StageState) -> bool:
-        """True when the stage needs no review: every changed path is mechanical (domain/review/skip.py). A fix round, an item nobody
+        """True when the stage needs no review: every changed path is mechanical (domain/work/skip.py). A fix round, an item nobody
         has checked or a diff git cannot read is reviewed.
         The skip is the review step's own end: outcome `skipped`, the reasons its detail."""
         e = self.e

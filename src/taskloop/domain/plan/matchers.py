@@ -9,9 +9,6 @@ from tlkernel.config import EngineConfig
 from tlkernel.paths import TASK_EXCLUDE
 from tlkernel.plancheck import PlanData
 
-STOP_WORDS = frozenset({"that", "this", "with", "from", "into", "have", "been", "were", "which", "their", "there", "than", "then", "when",
-                        "what", "does", "should", "would", "could", "also", "only", "each", "every", "about", "after", "before", "bead",
-                        "beads", "task", "work", "tests", "test", "file", "files", "code", "check", "checks"})
 _FILLER_TEXT: Final = (
     "the a an of and or is are be pass passes passed passing green succeed succeeds succeeded success "
     "clean ok okay exit exits exited code zero 0 run runs running ran must should shall without no error "
@@ -19,27 +16,15 @@ _FILLER_TEXT: Final = (
     "that on with"
 )
 GATE_FILLER: Final = frozenset(_FILLER_TEXT.split())
-GATE_RUNNER: Final = re.compile(r"^(?:just|make|npm run|npm|yarn|pnpm run|pnpm|cargo|task|poe|tox|nox)\s+")
-_WORD: Final = re.compile(r"[^\W_]{3,}")
 _GATE_PUNCT: Final = re.compile(r"[`'\"*_.,;:()\[\]]")
 _HEADING: Final = re.compile(r"^#{1,6}\s*(?:Acceptance Criteria|Done when)\s*:?\s*$(.*?)(?=^#{1,6}\s|\Z)", re.M | re.S | re.I)
 _DONE_LINE: Final = re.compile(r"^[ \t>*_#-]*Done when[ \t]*[:*_]+[ \t]*(?:[^\s:*_]|\n\s*[-*\d])", re.M | re.I)
 _ACCEPT_START: Final = re.compile(r"^[ \t>*_#-]*(?:Acceptance Criteria|Done when)\b", re.M | re.I)
 
 
-def word_set(text: object) -> set[str]:
-    """The words of `text` worth comparing: lower case, 3+ letters or digits (any script), no filler."""
-    return {w for w in _WORD.findall(str(text).lower()) if w not in STOP_WORDS}
-
-
 def evidence_files(bead: str, text: str) -> list[str]:
     """The evidence files (.task/<bead>/evidence/...) a check command names."""
     return re.findall(rf"{re.escape(TASK_EXCLUDE)}{re.escape(bead)}/evidence/[^\s\"'<>|;&)]+", text)
-
-
-def without_runner(cmd: str) -> str:
-    """The command without its task runner (`just unity-tests` -> `unity-tests`)."""
-    return GATE_RUNNER.sub("", cmd)
 
 
 class AcceptanceText:

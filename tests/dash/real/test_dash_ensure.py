@@ -62,7 +62,8 @@ class LoudBind(Case):
         cfg = mkdtemp()
         err = io.StringIO()
         with mock.patch.dict(os.environ, {"TASK_LOOP_DASH_DEV_PUBLIC": "1", "XDG_CONFIG_HOME": cfg, "APPDATA": cfg}), \
-                contextlib.redirect_stderr(err), mock.patch.object(factorydb._STORE, "parts", None), pytest.raises(SystemExit) as stop:
+                contextlib.redirect_stderr(err), mock.patch.object(factorydb._STORE, "parts", None), \
+                mock.patch.object(factorydb._STORE, "needs", None), pytest.raises(SystemExit) as stop:
             dash_cli.main(["--port", str(port), "--bind", "127.0.0.1,100.64.0.199"])  # a Tailscale address this host does not have
         assert stop.value.code != 0
         assert f"100.64.0.199:{port}" in err.getvalue()

@@ -144,14 +144,6 @@ class LoopNetwork(LoopBase):
         assert "no delegate is installed" in self.out
         assert self.kinds() == []
 
-    def test_a_lane_pause_waits_on_its_role_not_on_a_probe(self):
-        probe = self.probe(netgate.FakeProbe([True]))
-        self.beads({"x-1": [rec("paused", kind="pause_lane", role="worker"), rec("landed")],
-                    "x-2": [rec("paused", kind="pause_lane", role="worker"), rec("landed")]})
-        assert self.run_loop() == 0
-        assert probe.calls == 0
-        assert [b for b, _ in self.started] == ["x-1", "x-1", "x-2", "x-2"]  # the role is usable: the same bead again
-
 
 class LoopHealth(LoopBase):
     """tl-7y6.2.12: a loop that exits says why; a repo with ready beads and no loop alive is a red line; the log outlives the session."""

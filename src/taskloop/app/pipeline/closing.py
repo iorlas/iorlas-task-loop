@@ -10,7 +10,7 @@ from typing import Protocol, assert_never
 
 from tlkernel.checkpoint import Checkpoint, Notes
 from tlkernel.enums import Outcome
-from tlkernel.kinds import ASKS, Kind
+from tlkernel.kinds import ASKS, PAUSES, Kind
 from tlkernel.parks import Park
 from tlkernel.run import RunFinish
 
@@ -158,7 +158,7 @@ class Closer:
     def pause(self, done: oc.RunOutcome) -> None:
         """Persist pause wakes; the close plan files an empty plan's owner ask."""
         e = self.host
-        if e.dry or done.finished:
+        if e.dry or done.finished or (done.kind is not Kind.NOOP and done.kind not in PAUSES):
             return
         bead = beadtools.peek(e.store, e.bead)
         if bead is None:
@@ -166,8 +166,6 @@ class Closer:
         rec = self.parks.paused( bead, done.kind, e.run_id, e.clock.now(), reason=e.pause_reason,
                            not_before=e.retry_after, fingerprint=e.crash_fingerprint if done.kind is Kind.ENGINE_CRASH else "",
                            producer=e.pause_producer, permanence=e.pause_permanence)
-        if rec is None:
-            return
         e.retry_after = rec.retry_at
         e.pause_reason = rec.reason
         self.ask_pause(rec, done)

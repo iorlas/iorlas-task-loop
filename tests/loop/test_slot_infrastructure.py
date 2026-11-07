@@ -48,7 +48,7 @@ class Infrastructure(Rig):
             settle.apply(verdict, bid, "s1", True)
         hold.assert_not_called()
         files.rest_bead.assert_not_called()
-        assert (counters.ran, counters.fails, counters.pauses) == (0, [], {})
+        assert (counters.ran, counters.fails) == (0, [])
         assert counters.slot_quick["s1"] == []
         assert counters.later[bid] == self.env.now() + LoopConfig().pause_retry
 

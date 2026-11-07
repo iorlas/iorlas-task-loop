@@ -13,7 +13,7 @@ from taskloop.app.plan.cases import Cases
 from taskloop.app.plan.planner import Planner
 from taskloop.app.plan.state import PlanState
 from taskloop.domain.asks.spec import AskSpec
-from taskloop.domain.review.ledger import Ledger
+from taskloop.domain.work.ledger import Ledger
 from tlkernel.asked import Asked
 from tlkernel.config import EngineConfig
 from tlkernel.gitfacts import TreeEntry

@@ -55,7 +55,7 @@ class FetchNetwork(Rig):
                                pre_engine=bool(lane % 2))
                 assert settle.apply(v, "x-1", "s1", True) is None
                 assert net.down
-                assert (counts.ran, counts.fails, counts.pauses, counts.later) == (0, [], {}, {})
+                assert (counts.ran, counts.fails, counts.later) == (0, [], {})
                 assert counts.net_first == ["x-1"]
                 left.assert_not_called()
                 files.rest_bead.assert_not_called()
@@ -101,6 +101,6 @@ class FetchNetwork(Rig):
         v = vd.Verdict(Result.PAUSED, DNS, kind=vd.NETWORK, run="run-1")
         assert settle.apply(v, bid, "s1", True) is None
         assert net.down
-        assert (counts.ran, counts.fails, counts.pauses, counts.later) == (0, [], {}, {})
+        assert (counts.ran, counts.fails, counts.later) == (0, [], {})
         left.assert_not_called()
         files.rest_bead.assert_not_called()

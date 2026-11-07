@@ -1,6 +1,6 @@
 """The loop's state, one `lease` row (kind `loop`) per loop process in factory.db: its LoopState in `body`, its pid and start in the
 columns. A loop that died keeps its row renamed `died-<name>` as evidence (the file store kept `died-<pid>.json`). Its repo's stop
-command and rests are `kv` rows."""
+command and rests are `loop_doc` rows."""
 import json
 import time
 from collections.abc import Generator
@@ -83,26 +83,26 @@ class LoopRows:
             return None  # a torn or foreign-version body reads as absent, as the file store did
 
 
-class KvDoc[T]:
-    """One record of the repo's loop (its stop command, its rests) as a `kv` row; the same get / write / delete the file store had."""
+class DocRow[T]:
+    """One record of the repo's loop (its stop command, its rests) as a document row; the same get / write / delete the file store had."""
 
-    def __init__(self, rows: LoopRows, key: str, tp: type[T]) -> None:
-        self.rows, self.k, self.tp = rows, key, tp
+    def __init__(self, rows: LoopRows, key: str, tp: type[T], table: str) -> None:
+        self.rows, self.k, self.tp, self.table = rows, key, tp, table
 
     def get(self) -> T | None:
-        found = self.rows.select("SELECT v FROM kv WHERE k=?", (self.k,))
+        found = self.rows.select(f"SELECT v FROM {self.table} WHERE k=?", (self.k,))
         if found:
             return self.decode(found[0][0])
         return None
 
     def write(self, rec: T) -> None:
         with self.rows.transaction() as con:
-            con.execute("INSERT INTO kv (k, v, t) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, t=excluded.t",
+            con.execute(f"INSERT INTO {self.table} (k, v, t) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, t=excluded.t",
                         (self.k, json.dumps(wire.dump(rec), ensure_ascii=False), time.time()))
 
     def delete(self) -> None:
         with self.rows.transaction() as con:
-            con.execute("DELETE FROM kv WHERE k=?", (self.k,))
+            con.execute(f"DELETE FROM {self.table} WHERE k=?", (self.k,))
 
     def decode(self, text: str) -> T | None:
         try:
