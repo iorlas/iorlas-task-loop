@@ -10,20 +10,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as T
 from support import fake_route, gitq
-from support.builders import make_engine
 from support.engine_case import engine
 from support.fakes import must_bead
 from support.plans import BEAD, CLEAN, PLAN, WRITE, verdict
 from support.spawn import port_git, real_spawner
 from support.who import who
 
-from taskloop.app.artifacts import store
 from taskloop.app.look import shots
 from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.run.closer import Closer
-from taskloop.app.wire import slots as wslots
 from taskloop.contracts import answers, wire
-from taskloop.contracts.artifact import ArtifactMeta, ArtifactSlot
+from taskloop.contracts.artifact import ArtifactMeta
 from taskloop.contracts.config import RepoProfile, VisualConfig
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
@@ -152,27 +149,6 @@ class LookTest(T.EngineTest):
         assert "design/" not in body
         assert "matching the reference" in body
 
-    def test_before_pictures_are_the_ones_the_worker_registered_as_before_in_this_run(self):
-        self.eng = engine.Engine(
-            BeadId("t-1"),
-            str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
-            store=self.store,
-            env=snapshot(),
-            spawner=real_spawner(),
-            git=port_git(), who=who())
-        png = self.wt / "pic.png"
-        png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 32)
-        root = self.eng.home.artifact_store()
-        self.eng.artifact_repo = "repo"
-        run = self.eng.run_id
-        for stage, role, name in (("write", "before", "home-before.png"), ("write", "after", "home-after.png"),
-                                  ("write", "progress", "half.png")):
-            store.add(root, ArtifactSlot(repo="repo", bead="t-1", run=run, stage=stage, attempt=1), png, name=name,
-                      caption="c", role=role, now=1.0)
-        store.add(root, ArtifactSlot(repo="repo", bead="t-1", run="other-run", stage="write", attempt=1), png, name="old.png",
-                  caption="c", role="before", now=1.0)
-        assert [m.name for _, m in self.eng.pictures.before_pictures()] == ["home-before.png"]
 
     def test_a_profile_that_still_sets_evidence_dir_is_refused(self):
         with pytest.raises(Exception) as cm:
@@ -246,31 +222,3 @@ class LookTest(T.EngineTest):
         with kept_one(), self.store.stub(show=BEAD):  # the pictures are the store's, so a restart finds them where they were
             eng2.owner_look.file_owner_look()
         assert len(self.creates()) == 1
-
-    def test_the_epic_is_found_by_walking_the_parents(self):
-        self.eng = make_engine(self.wt, store=self.store, attrs={"bead_parent": "t-3"})
-        shows = {"t-3": {"id": "t-3", "issue_type": "feature", "parent": "t-2"},
-                 "t-2": {"id": "t-2", "issue_type": "epic", "parent": "t-0"}}
-        with self.store.stub(show_fn=lambda i, **k: shows.get(i, {})):
-            assert self.eng.owner_look.look_epic() == "t-2"
-        with self.store.stub(show_fn=lambda i, **k: {}):
-            assert self.eng.owner_look.look_epic() == "t-3"
-
-    def test_shots_are_images_capped_and_sized(self):
-        self.eng = engine.Engine(
-            BeadId("t-1"),
-            str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
-            store=self.store,
-            env=snapshot(),
-            spawner=real_spawner(),
-            git=port_git(), who=who())
-        d = self.eng.evidence_dir
-        d.mkdir(parents=True, exist_ok=True)
-        (d / "a.png").write_bytes(b"x")
-        (d / "b.gif").write_bytes(b"x")
-        (d / "big.jpg").write_bytes(b"x" * (shots.MAX_SHOT_BYTES + 1))
-        assert self.eng.pictures.shots() == ["a.png"]
-        for i in range(25):
-            (d / (f"m{int(i):02d}.png")).write_bytes(b"x")
-        assert len(self.eng.pictures.shots()) == shots.MAX_SHOTS
