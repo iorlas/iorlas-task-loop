@@ -230,6 +230,7 @@ source_modules =
     taskloop.app.run.preflight
     taskloop.app.run.records
     taskloop.app.run.reflect
+    taskloop.app.run.reflect_prompt
     taskloop.app.run.reload
     taskloop.app.run.requests
     taskloop.app.run.resume
