@@ -6,12 +6,12 @@ from unittest import mock
 
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
-from taskloop.app.checks import authorization
 from taskloop.app.land.push_judge import PushStatus, judge_push
 from taskloop.app.release import flow, gate, shell
 from taskloop.app.release.push import push_main
-from taskloop.domain.checks.specs import gate_items
 from taskloop.stores.real import real_stores
+from tlgate import authorization
+from tlgate.domain.specs import gate_items
 from tlkernel.env import Env
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.paths import ConfigDir

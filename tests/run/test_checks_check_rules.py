@@ -10,8 +10,8 @@ from support.cfgs import cfg_with
 from support.engine_case import EngineTest
 from support.plans import CLEAN, FALSE, PLAN, WRITE
 
-from taskloop.app.checks import evidence
-from taskloop.domain.checks import lint, planref
+from tlgate import evidence
+from tlgate.domain import lint, planref
 from tlkernel import wire
 from tlkernel.checks import CheckRun
 from tlkernel.ids import CheckId

@@ -48,16 +48,16 @@ from support.spawn import port_git, real_spawner  # noqa: E402
 from support.who import who  # noqa: E402
 
 from taskloop.adapters import delegate as lroute  # noqa: E402
-from taskloop.app.checks import evidence  # noqa: E402
 from taskloop.app.run import (  # noqa: E402
     engine,
     entry,
 )
-from taskloop.domain.checks import (  # noqa: E402
+from tlgate import evidence  # noqa: E402
+from tlgate.domain import (  # noqa: E402
     durations,
     lint,  # noqa: F401
 )
-from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
+from tlgate.domain.writer_split import WriterSplit  # noqa: E402
 from tlkernel.checks import Duration, Durations  # noqa: E402
 from tltestkit.checks import res  # noqa: E402
 from tltestkit.narrow import must  # noqa: E402

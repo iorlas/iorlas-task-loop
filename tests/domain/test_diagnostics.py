@@ -2,8 +2,8 @@
 
 import re
 
-from taskloop.domain.checks import diagnostics as dg
-from taskloop.domain.checks.diagnostics import Diagnostic
+from tlgate.domain import diagnostics as dg
+from tlgate.domain.diagnostics import Diagnostic
 from tltestkit.case import Case
 
 

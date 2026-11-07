@@ -42,6 +42,10 @@ def slice_problems(graph):
             continue
         for target in targets:
             bits = target.split(".")
+            if target == "tlgate":
+                continue  # package parent of both application and domain imports
+            if bits[0] == "tlgate" and bits[1:2] != ["domain"]:
+                bits = ["taskloop", "app", "checks", *bits[1:]]
             if bits[:2] != ["taskloop", "app"] or len(bits) < 3 or bits[2] == source:
                 continue
             if source not in COMPOSITION_ROOTS and bits[2] not in SLICE_IMPORTS[source]:

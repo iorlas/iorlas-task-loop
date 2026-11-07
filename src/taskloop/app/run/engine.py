@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from typing import Any, override
 
+from tlgate.runner import Checker
 from tlkernel import fence, rundocs
 from tlkernel import runoutcome as oc
 from tlkernel.config import EngineConfig
@@ -19,7 +20,6 @@ from tlkernel.run import RunReport
 
 from taskloop.adapters import landlock
 from taskloop.adapters.clock import SystemClock
-from taskloop.app.checks.runner import Checker
 from taskloop.app.pipeline import ended
 from taskloop.app.pipeline.blocked import Blocked, FixFailed
 from taskloop.app.release import reexec

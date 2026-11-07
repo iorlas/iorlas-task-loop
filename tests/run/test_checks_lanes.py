@@ -15,7 +15,7 @@ from tltestkit.logs import records
 
 # isort: split
 from taskloop.app.pipeline.blocked import Blocked
-from taskloop.domain.checks.specs import gate_items
+from tlgate.domain.specs import gate_items
 
 UNITY = {"unity": {"limit": 1}}
 from checks.test_lanes import spec  # noqa: E402

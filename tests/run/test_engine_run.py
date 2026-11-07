@@ -44,9 +44,9 @@ from taskloop.app.run import engine, entry, running
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.slots.lease import Lease
 from taskloop.app.track import outcome_line
-from taskloop.domain.checks import retry
 from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.write.matchers import count_tests
+from tlgate.domain import retry
 from tlkernel import checkmatchers as check_matchers
 from tlkernel.acceptancetext import AcceptanceText
 from tlkernel.config import EngineConfig

@@ -32,7 +32,7 @@ from taskloop.adapters import delegate as lroute  # noqa: E402
 from taskloop.app.run import (  # noqa: E402
     entry,
 )
-from taskloop.domain.checks import (  # noqa: E402
+from tlgate.domain import (  # noqa: E402
     lint,  # noqa: F401
 )
 from tlkernel.env import snapshot  # noqa: E402

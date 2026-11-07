@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from enum import StrEnum
 from typing import Final, final
 
-from taskloop.domain.checks.retry import retry_allowed
+from tlgate.domain.retry import retry_allowed
 from tlkernel.flakes import FlakeRow
 from tlkernel.wire import Rec
 

@@ -14,7 +14,7 @@ from support.cfgs import cfg_with
 from support.plans import PLAN
 
 from checks.test_check_rules import Base
-from taskloop.domain.checks import planref
+from tlgate.domain import planref
 from tlkernel import answers, plancheck
 from tlkernel.ids import CheckId
 from tlkernel.plancheck import Adhoc, PlanData, Ref, adhoc

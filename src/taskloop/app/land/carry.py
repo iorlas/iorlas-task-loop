@@ -7,6 +7,9 @@ fails: no carry, the check runs. The caller owns the worktree at the judged oid;
 import hashlib
 from pathlib import Path
 
+from tlgate import authorization
+from tlgate.cache import satisfied
+from tlgate.domain.specs import repo_check
 from tlkernel import config, scratch
 from tlkernel.checks import PassRecord
 from tlkernel.env import Env
@@ -14,10 +17,7 @@ from tlkernel.gitport import Git
 from tlkernel.ids import TreeSha
 from tlkernel.runkey import BaseSha, RunKey
 
-from taskloop.app.checks import authorization
-from taskloop.app.checks.cache import satisfied
 from taskloop.app.land.cmds import Cmds
-from taskloop.domain.checks.specs import repo_check
 from taskloop.stores.bundle import Stores
 
 # git-port-exempt: a throwaway merge in a scratch worktree beside the closure command; a Git port method waits for a second caller

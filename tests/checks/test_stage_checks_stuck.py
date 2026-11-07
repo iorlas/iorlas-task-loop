@@ -4,8 +4,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from taskloop.app.checks.host import CheckStuck
 from taskloop.app.checks.step import CheckStepHost, StageChecks
+from tlgate.host import CheckStuck
 
 
 def test_stuck_checks_raise_the_hosts_stop(tmp_path: Path) -> None:

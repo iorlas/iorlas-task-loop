@@ -10,7 +10,7 @@ from tltestkit import procsim
 from tltestkit.narrow import must
 
 # isort: split
-from taskloop.app.checks import evidence
+from tlgate import evidence
 from tlkernel import checkmatchers as matchers
 
 ST = {"checks": [], "files": []}

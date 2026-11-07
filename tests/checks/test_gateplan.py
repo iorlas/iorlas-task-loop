@@ -9,9 +9,9 @@ import pytest
 from support.check_host import CheckHostCase
 from support.plans import FALSE
 
-from taskloop.app.checks.cache import is_green, plan_digest
-from taskloop.app.checks.gateplan import PlanDecision, parse, skipped
-from taskloop.domain.checks.specs import gate_items
+from tlgate.cache import is_green, plan_digest
+from tlgate.domain.specs import gate_items
+from tlgate.gateplan import PlanDecision, parse, skipped
 from tlkernel.childenv import CHECK_SECRETS
 from tlkernel.config import ConfigError
 from tlkernel.env import Env
@@ -87,7 +87,7 @@ class GatePlans(CheckHostCase):
     def setup_plan(self, answer=None, checks=None):
         self.eng = self.checks_engine(plan_cmd=["repo-plan", "steps", "--json"], checks=checks or [
             {"id": "coverage", "cmd": "true", "run": "gate", "when": ["never/**"]}])
-        which = mock.patch("taskloop.app.checks.gateplan.shutil.which", side_effect=lambda word, **kw: word)
+        which = mock.patch("tlgate.gateplan.shutil.which", side_effect=lambda word, **kw: word)
         which.start()
         self.addCleanup(which.stop)
         self.answer = answer if answer is not None else Ran(exit=0, out=json.dumps(document()))
@@ -285,7 +285,7 @@ class GatePlans(CheckHostCase):
     def test_python_uses_python3_when_only_python3_resolves(self):
         self.setup_plan()
         self.eng.cfg = self.eng.cfg.replace(plan_cmd=["python", "tools/gate_plan.py", "steps", "--json"])
-        with mock.patch("taskloop.app.checks.gateplan.shutil.which", side_effect=lambda word, **kw:
+        with mock.patch("tlgate.gateplan.shutil.which", side_effect=lambda word, **kw:
                         {"python3": "/bin/python3", "git": "/usr/bin/git"}.get(word)):
             self.run_gate()
         assert self.calls[0][0][:4] == ["python3", "tools/gate_plan.py", "steps", "--json"]
@@ -293,14 +293,14 @@ class GatePlans(CheckHostCase):
     def test_python_uses_coordinator_interpreter_when_neither_spelling_exists(self):
         self.setup_plan()
         self.eng.cfg = self.eng.cfg.replace(plan_cmd=["python", "plan.py"])
-        with mock.patch("taskloop.app.checks.gateplan.shutil.which", side_effect=lambda word, **kw:
+        with mock.patch("tlgate.gateplan.shutil.which", side_effect=lambda word, **kw:
                         word if word not in ("python", "python3") else None):
             self.run_gate()
         assert self.calls[0][0][0] == sys.executable
 
     def test_missing_executable_is_one_config_note_without_spawning(self):
         self.setup_plan()
-        with mock.patch("taskloop.app.checks.gateplan.shutil.which",
+        with mock.patch("tlgate.gateplan.shutil.which",
                            side_effect=lambda word, **kw: "/usr/bin/git" if word == "git" else None), \
                 mock.patch.object(self.eng.log, "note") as note:
             for _ in range(3):

@@ -13,15 +13,20 @@ def converted(text: str | None = None) -> list[str]:
     cp = configparser.ConfigParser(interpolation=None, comment_prefixes=("#",), inline_comment_prefixes=None)
     cp.read_string(text if text is not None else (ROOT / ".importlinter").read_text(encoding="utf-8"))
     names = [m.strip() for m in cp[CONTRACT]["source_modules"].splitlines() if m.strip()]
-    return [m.removeprefix("taskloop.app.") if m.startswith("taskloop.") else m.removeprefix("tl") for m in names]
+    return sorted({m.removeprefix("taskloop.app.") if m.startswith("taskloop.")
+                   else ("checks" if m == "tlgate" else m.removeprefix("tl")) for m in names})
 
 
 def code_dir(stage: str) -> Path:
     """Where a converted stage's code is: its app slice, or its workspace package once it moved."""
+    if stage == "checks":
+        return ROOT / "packages/gate/src/tlgate"
     return APP / stage if (APP / stage).is_dir() else ROOT / "packages" / stage / "src" / f"tl{stage}"
 
 
 def ruff_file(stage: str) -> Path:
+    if stage == "checks":
+        return ROOT / "packages/gate/ruff.toml"
     return code_dir(stage) / "ruff.toml" if (APP / stage).is_dir() else ROOT / "packages" / stage / "ruff.toml"
 
 
@@ -46,8 +51,15 @@ def host_problems(source: str, protocols: frozenset[str] = frozenset()) -> list[
     return found
 
 
+def stage_files(stage: str) -> list[Path]:
+    files = list(code_dir(stage).rglob("*.py"))
+    if stage == "checks":
+        files.extend((APP / stage).rglob("*.py"))
+    return sorted(files)
+
+
 def stage_protocols(stage: str) -> frozenset[str]:
     names: set[str] = set()
-    for f in code_dir(stage).rglob("*.py"):
+    for f in stage_files(stage):
         names |= protocols_of(ast.parse(f.read_text(encoding="utf-8")))
     return frozenset(names)
