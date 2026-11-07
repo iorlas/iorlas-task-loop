@@ -2,7 +2,7 @@
 (docs/design/b-review.md, slice 3; the same shape as look/host.py). The stage's own parts that read each other (`settles`, `routing`,
 `judge`-style views) are typed by the verbs the reader calls."""
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
@@ -14,6 +14,7 @@ from taskloop.contracts.ids import BeadId, TreeSha
 from taskloop.contracts.plancheck import PlanCheck, PlanData
 from taskloop.contracts.stop import Stop
 from taskloop.contracts.wire import Open
+from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.review.ledger import Ledger
 
 
@@ -33,7 +34,8 @@ class ReviewLog(Protocol):
 
 
 class ReviewStores(Protocol):
-    def check_run(self, run: str, rnd: int | None = ...) -> SavedRun: ...
+    @property
+    def check_run(self) -> Callable[[str, int | None], SavedRun]: ...
 
 
 class SavedRun(Protocol):
@@ -112,28 +114,44 @@ class ReviewHost(Protocol):
     leftovers: list[Open]
     at_stage: int
     last_flag: str
-    writer_family: str
-    review: ReviewLive
-    steps: ReviewSteps
-    budget: ReviewBudget
-    log: ReviewLog
-    stores: ReviewStores
-    checkout: TreeView
-    cases: CaseBook
-    briefs: BriefView
-    briefing: Briefing
-    judge: LookView
-    fixer: FixRound
-    checkpoints: PendingKeeper
-    settles: SettlesView
-    routing: RoutingView
-    Blocked: type[Stop]
+    @property
+    def writer_family(self) -> str | None: ...
+    @property
+    def review(self) -> ReviewLive: ...
+    @property
+    def steps(self) -> ReviewSteps: ...
+    @property
+    def budget(self) -> ReviewBudget: ...
+    @property
+    def log(self) -> ReviewLog: ...
+    @property
+    def stores(self) -> ReviewStores: ...
+    @property
+    def checkout(self) -> TreeView: ...
+    @property
+    def cases(self) -> CaseBook: ...
+    @property
+    def briefs(self) -> BriefView: ...
+    @property
+    def briefing(self) -> Briefing: ...
+    @property
+    def judge(self) -> LookView: ...
+    @property
+    def fixer(self) -> FixRound: ...
+    @property
+    def checkpoints(self) -> PendingKeeper: ...
+    @property
+    def settles(self) -> SettlesView: ...
+    @property
+    def routing(self) -> RoutingView: ...
+    @property
+    def Blocked(self) -> type[Stop]: ...
 
     def ai(self, node: str, title: str, prompt: str, *a: object, **kw: object) -> Asked: ...
     def comment(self, text: str) -> None: ...
     def warn(self, text: str) -> None: ...
     def diff_text(self) -> str: ...
     def on_path(self, name: str) -> str | None: ...
-    def blocked_for(self, why: str, kind: str, stop: object = None, spec: object = None, fix: bool = False) -> Stop: ...
+    def blocked_for(self, why: str, kind: str, stop: object = None, spec: AskSpec | None = None, fix: bool = False) -> Stop: ...
     def sh(self, cmd: Sequence[str], timeout: float = ..., check: bool = ..., save: Path | None = ..., env: Mapping[str, str] | None = ...,
            pin: bool = ..., what: str = ..., cwd: Path | None = ..., stop: threading.Event | None = ...) -> tuple[int, str]: ...
