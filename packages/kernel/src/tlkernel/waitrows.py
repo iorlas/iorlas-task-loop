@@ -3,7 +3,6 @@ A deleted row keeps its place as evidence with `cleared` set."""
 import json
 import sqlite3
 import time
-from collections.abc import Callable
 
 from tlkernel import wire
 from tlkernel.looprows import LoopRows
@@ -29,15 +28,6 @@ class WaitDoc[T: Rec]:
     def write(self, rec: T) -> None:
         with self.rows.transaction() as con:
             self._write(con, rec)
-
-    def change(self, fn: Callable[[T | None], T]) -> T:
-        """Read, `fn`, write: all in one write transaction, so two writers of the record never lose each other's change."""
-        with self.rows.transaction() as con:
-            found = con.execute("SELECT facts FROM wait WHERE kind=? AND wake_on=? AND cleared IS NULL ORDER BY id DESC LIMIT 1",
-                                (self.kind, self.bead)).fetchone()
-            rec = fn(self.decode(found[0]) if found else None)
-            self._write(con, rec)
-        return rec
 
     def _write(self, con: sqlite3.Connection, rec: T) -> None:
         facts = json.dumps(wire.dump(rec), ensure_ascii=False)

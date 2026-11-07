@@ -47,7 +47,7 @@ from taskloop.app.run import (  # noqa: E402
     engine,
     entry,
 )
-from taskloop.app.run import reload as run_reload  # noqa: E402
+from taskloop.app.run import reload_ports as run_reload  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from tlkernel.env import Env, snapshot  # noqa: E402
 from tlkernel.ids import BeadId  # noqa: E402
@@ -116,7 +116,7 @@ class Reload(te.EngineTest):
             marker = reexec.read_reexec(homes.cfg(), BeadId("t-1"))
             self.execs.append({"argv": argv, "env": json.loads(environ["TL_REEXEC"]), "marker": marker.to_dict() if marker else None})
         eng.exec_fn = fake_exec
-        eng.newer_fn = lambda: run_reload.newer(snapshot(), self.here.parents[1])  # pyrefly: ignore[bad-assignment]
+        eng.newer_fn = lambda: run_reload.installed_newer(snapshot(), self.here.parents[1])  # pyrefly: ignore[bad-assignment]
         return eng
 
     def patches(self, script, during=None):
@@ -207,14 +207,14 @@ class Reload(te.EngineTest):
     def test_a_refused_version_is_skipped_until_it_is_installed_again_and_a_newer_one_is_taken(self):
         inst = wstart.installs(homes.cfg(), snapshot(), here=self.here)
         self.install("0.2.0", plant=BREAK_PLAN)  # a copy: a link would share the files the install key is made of
-        assert must(run_reload.newer(snapshot(), self.here.parents[1])) == ("0.2.0", self.cache / "0.2.0")
+        assert must(run_reload.installed_newer(snapshot(), self.here.parents[1])) == ("0.2.0", self.cache / "0.2.0")
         inst.record_bad("0.2.0", "run-task died (exit 1) 3 s after the exec into it")  # what the crash fallback writes
-        assert run_reload.newer(snapshot(), self.here.parents[1]) is None  # refused, key unchanged
+        assert run_reload.installed_newer(snapshot(), self.here.parents[1]) is None  # refused, key unchanged
         shutil.rmtree(self.cache / "0.2.0")
         self.install("0.2.0")  # the same number, re-released
-        assert must(run_reload.newer(snapshot(), self.here.parents[1]))[0] == "0.2.0"
+        assert must(run_reload.installed_newer(snapshot(), self.here.parents[1]))[0] == "0.2.0"
         self.install("0.3.0")
-        assert must(run_reload.newer(snapshot(), self.here.parents[1]))[0] == "0.3.0"
+        assert must(run_reload.installed_newer(snapshot(), self.here.parents[1]))[0] == "0.3.0"
 
     # -- the crash after an exec: the loop puts the run back on the version it came from, once
     def test_a_run_task_that_dies_right_after_the_exec_is_restarted_once_on_the_old_version(self):

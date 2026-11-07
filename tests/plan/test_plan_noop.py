@@ -1,59 +1,52 @@
 """An untouched empty plan parks; existing work keeps the finished-work policy."""
-import sys
-from pathlib import Path
-from unittest import mock
-
 import pytest
-from support.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import support.paths  # noqa: F401
 from support.checks import typed
+from support.plan_host import FakePlan
 from support.plans import PLAN
 
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
-from taskloop.app.plan.planner import Planner
 from tlkernel.kinds import Kind
 
 
-class EmptyPlan(Case):
-    def host(self, *, done=False, diff="", landed=""):
-        host = mock.Mock(done=done, landed_sha=landed, leftovers=[])
-        host.checkout.task_diff.return_value = diff
-        host.blocked_for = blocked_for
-        return host
+@pytest.fixture
+def plan(workdir):
+    plan = FakePlan(workdir)
+    plan.ports.blocked_for = blocked_for
+    return plan
 
-    def test_noop_with_or_without_followups_and_on_replan(self):
-        for leftovers in ([], [{"title": "Follow up", "why": "later"}]):
-            for again in (False, True):
-                with self.subTest(leftovers=leftovers, again=again):
-                    host = self.host()
-                    plan = typed(dict(PLAN, stages=[], leftovers=leftovers, summary="x" * 250))
-                    with pytest.raises(Blocked) as caught:
-                        Planner(host).finished_work(plan, again)
-                    assert caught.value.kind == Kind.NOOP
-                    assert caught.value.why == "noop: the plan found nothing to implement: " + "x" * 200
-                    assert host.leftovers == leftovers
-                    host.publish_plan.assert_called_once_with()
 
-    def test_accepted_work_keeps_finished_work_behavior(self):
-        for diff in ("", "patch"):
-            with self.subTest(diff=diff):
-                host = self.host(done=True, diff=diff)
-                plan = typed(dict(PLAN, stages=[], leftovers=[{"title": "Follow up", "why": "later"}]))
-                assert Planner(host).finished_work(plan, False) is plan
-                assert host.leftovers == plan["leftovers"]
+@pytest.mark.parametrize("leftovers", [[], [{"title": "Follow up", "why": "later"}]])
+@pytest.mark.parametrize("again", [False, True])
+def test_noop_with_or_without_followups_and_on_replan(plan, leftovers, again):
+    data = typed(dict(PLAN, stages=[], leftovers=leftovers, summary="x" * 250))
+    with pytest.raises(Blocked) as caught:
+        plan.planner.finished_work(data, again)
+    assert caught.value.kind == Kind.NOOP
+    assert caught.value.why == "noop: the plan found nothing to implement: " + "x" * 200
+    assert plan.hand.leftovers == leftovers
+    assert plan.ports.published == 1
 
-    def test_existing_diff_or_land_never_becomes_noop(self):
-        for host in (self.host(diff="patch"), self.host(landed="abc")):
-            with pytest.raises(Blocked) as caught:
-                Planner(host).finished_work(typed(dict(PLAN, stages=[])), False)
-            assert caught.value.kind == Kind.FAULT_PLAN
 
-    def test_verify_answer_without_work_also_becomes_noop(self):
-        host = self.host()
-        host.verify_answer = True
-        host.wt = "."
-        with pytest.raises(Blocked) as caught:
-            Planner(host).accept(typed(dict(PLAN, stages=[])), False)
-        assert caught.value.kind == Kind.NOOP
+@pytest.mark.parametrize("diff", ["", "patch"])
+def test_accepted_work_keeps_finished_work_behavior(plan, diff):
+    plan.hand.done = ["accepted"]
+    plan.ports.checkout.task_diff = lambda: diff
+    data = typed(dict(PLAN, stages=[], leftovers=[{"title": "Follow up", "why": "later"}]))
+    assert plan.planner.finished_work(data, False) is data
+    assert plan.hand.leftovers == data["leftovers"]
+
+
+@pytest.mark.parametrize("diff,landed", [("patch", ""), ("", "abc")])
+def test_existing_diff_or_land_never_becomes_noop(plan, diff, landed):
+    plan.hand.landed_sha = landed
+    plan.ports.checkout.task_diff = lambda: diff
+    with pytest.raises(Blocked) as caught:
+        plan.planner.finished_work(typed(dict(PLAN, stages=[])), False)
+    assert caught.value.kind == Kind.FAULT_PLAN
+
+
+def test_verify_answer_without_work_also_becomes_noop(plan):
+    plan.hand.verify_answer = "the work is right"
+    with pytest.raises(Blocked) as caught:
+        plan.planner.accept(typed(dict(PLAN, stages=[])), False)
+    assert caught.value.kind == Kind.NOOP
