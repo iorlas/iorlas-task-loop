@@ -18,3 +18,6 @@ dev = ["pytest"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-p no:cacheprovider"
+
+[project.entry-points.pytest11]
+tltestkit = "tltestkit.plugin"

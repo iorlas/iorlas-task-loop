@@ -46,11 +46,13 @@ from pathlib import Path
 
 from importgraph import bindings, qualified, targets_of
 
-ROOTS = {"src": "src", "kernel": "packages/kernel/src", "tests": "tests", "dev": "dev", "vendor": "skills/task-loop/_vendor",
-         "tl": "skills/task-loop"}
-VISIBLE = {"src": ("src", "kernel", "vendor"), "tests": ("tests", "dev", "src", "kernel", "vendor"),
-           "dev": ("dev", "src", "kernel", "vendor"), "kernel": ("kernel", "vendor"), "vendor": ("vendor",),
-           "tl": ("src", "kernel", "vendor")}
+HERE = Path(__file__).resolve().parent.parent
+PACKAGES = sorted(src.parent.name for src in (HERE / "packages").glob("*/src"))
+ROOTS = {"src": "src", **{name: f"packages/{name}/src" for name in PACKAGES}, "tests": "tests", "dev": "dev",
+         "vendor": "skills/task-loop/_vendor", "tl": "skills/task-loop"}
+VISIBLE = {"src": ("src", *PACKAGES, "vendor"), "tests": ("tests", "dev", "src", *PACKAGES, "vendor"),
+           "dev": ("dev", "src", *PACKAGES, "vendor"), "vendor": ("vendor",), "tl": ("src", *PACKAGES, "vendor"),
+           **{name: tuple(dict.fromkeys((name, "kernel", "vendor"))) for name in PACKAGES}}
 CONFIG = {"pyproject.toml": ("tests/rules", "tests/release"), "uv.lock": ("tests/rules", "tests/release"),
           "mise.toml": ("tests/rules", "tests/release"), "mise.lock": ("tests/rules", "tests/release"),
           ".importlinter": ("tests/rules",), "ruff.toml": ("tests/rules",), "pyrefly.toml": ("tests/rules",), "justfile": ("tests/rules",)}
