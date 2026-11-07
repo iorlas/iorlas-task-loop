@@ -1,6 +1,4 @@
-"""LOCATOR (tl-9un.42): the dashboard reads state only through the run locator and ConfigDir. Under src/taskloop_dash no module names a
-state file or folder of ours (every name ConfigDir joins to the config root), builds a path from another by `.parent.parent`, or builds a
-ConfigDir outside the two places that take the config root (env.py, bind.py)."""
+"""State names belong to core or stage path modules; dashboard readers use those helpers and the run locator."""
 import ast
 import sys
 from pathlib import Path
@@ -14,15 +12,21 @@ ROOT = Path(__file__).resolve().parents[2]
 DASH = ROOT / "src" / "taskloop_dash"
 PATHS = ROOT / "packages" / "kernel" / "src" / "tlkernel" / "paths.py"
 PLAIN_PYTHON = {"prepush.py", "layout_migrate.py", "key_migrate.py"}  # no record in the hook (.importlinter); migrators name OLD places
+STAGE_PATHS = {
+    ROOT / "src" / name for name in (
+        "taskloop/app/land/paths.py", "taskloop/app/slots/paths.py", "taskloop/app/asks/paths.py",
+        "taskloop/app/release/paths.py", "taskloop/app/prune/paths.py", "taskloop/app/artifacts/paths.py",
+        "taskloop/adapters/layout_paths.py", "taskloop_dash/paths.py",
+    )
+}
 MAKES_CONFIGDIR = {"env.py", "bind.py"}  # where the config root is taken from the process: everything else is handed a ConfigDir
 
 
 def state_names() -> set[str]:
-    """Every literal ConfigDir joins to the config root ("engine", "runs", "dash.pid", "repos.json", ...): the names of our state."""
-    tree = ast.parse(PATHS.read_text(encoding="utf-8"))
-    cfg = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == "ConfigDir")
+    """Every literal the core or stage path helpers join to the config root."""
+    trees = [ast.parse(path.read_text(encoding="utf-8")) for path in sorted(STAGE_PATHS | {PATHS})]
     names: set[str] = set()
-    for n in ast.walk(cfg):
+    for n in (node for tree in trees for node in ast.walk(tree)):
         under_root = isinstance(n, ast.BinOp) and isinstance(n.op, ast.Div) and isinstance(n.left, ast.Attribute) and n.left.attr == "root"
         if under_root and isinstance(n.right, ast.Constant) and isinstance(n.right.value, str):  # type: ignore[union-attr]
             names.add(n.right.value)
@@ -54,9 +58,11 @@ def problems() -> list[str]:
     names = state_names()
     out: list[str] = []
     for f in sorted(DASH.rglob("*.py")):
+        if f in STAGE_PATHS:
+            continue
         tree = ast.parse(f.read_text(encoding="utf-8"))
         rel = f.relative_to(ROOT)
-        out += [f"{rel}:{line}: names the state path {text!r}: go through ConfigDir or the run locator"
+        out += [f"{rel}:{line}: names the state path {text!r}: go through the owning path helper or the run locator"
                 for line, text in path_operands(tree) if text in names]
         for n in ast.walk(tree):
             if isinstance(n, ast.Attribute) and n.attr == "parent" and isinstance(n.value, ast.Attribute) and n.value.attr == "parent":
@@ -82,7 +88,7 @@ class DashReadsThroughTheLocator(Case):
 class PathsIsTheOnlyNamingPoint(Case):
     def test_no_taskloop_module_but_paths_names_a_state_folder_of_ours(self):
         names = state_names()
-        found = [f"{f.relative_to(ROOT)}:{line}: names the state path {text!r}: add a method to contracts/paths.py"
-                 for f in sorted((ROOT / "src" / "taskloop").rglob("*.py")) if f != PATHS and f.name not in PLAIN_PYTHON
+        found = [f"{f.relative_to(ROOT)}:{line}: names the state path {text!r}: use the owning stage path module"
+                 for f in sorted((ROOT / "src" / "taskloop").rglob("*.py")) if f not in STAGE_PATHS and f.name not in PLAIN_PYTHON
                  for line, text in path_operands(ast.parse(f.read_text(encoding="utf-8"))) if text in names]
         assert found == []

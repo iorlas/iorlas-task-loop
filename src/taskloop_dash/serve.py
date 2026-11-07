@@ -16,6 +16,7 @@ from taskloop_dash.env import Env
 from taskloop_dash.http import make_handler
 from taskloop_dash.index.worker import Worker
 from taskloop_dash.parts import DASH_PARTS
+from taskloop_dash.paths import dash_pid
 from tlkernel.env import Env as ProcessEnv
 from tlkernel.envvars import EnvVar
 from tlkernel.factorydb import declare_parts
@@ -63,7 +64,7 @@ def start(env: Env, here: Path, process: ProcessEnv,
         s.RequestHandlerClass = handler
     if not bind.is_dev_checkout(here):  # a dev server must not claim the shared pid file
         env.config.root.mkdir(parents=True, exist_ok=True)
-        pid = env.config.dash_pid()
+        pid = dash_pid(env.config)
         tmp = pid.with_name(pid.name + ".tmp")
         tmp.write_text(str(os.getpid()))
         os.replace(tmp, pid)  # a reader never sees the file empty

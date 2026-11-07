@@ -13,6 +13,7 @@ from tlkernel.paths import ConfigDir
 from taskloop.adapters import ident
 from taskloop.adapters.beadtools import bd_store
 from taskloop.app.asks import pr_wake, setup_retry, sweeps
+from taskloop.app.asks.paths import ask_marker
 from taskloop.app.land import forge
 from taskloop.app.land.cmds import Runs
 from taskloop.app.track.trail import now
@@ -27,7 +28,7 @@ def sweep(which: str, who: Identity, home: ConfigDir, every: int = 600) -> list[
     """The throttled sweeps over open asks (app/asks/sweeps.py): close those of closed or missing beads, park those unanswered in 3 days."""
     fn = sweeps.close_stale if which == "close" else sweeps.park_stale
     try:
-        return list(fn(store(home), lambda repo: bd_store(who.actor, repo), home.ask_marker("swept" if which == "close" else "parked"),
+        return list(fn(store(home), lambda repo: bd_store(who.actor, repo), ask_marker(home, "swept" if which == "close" else "parked"),
                        now(),
             every))
     except BdCommandFailure:  # no bd on this machine
@@ -36,9 +37,9 @@ def sweep(which: str, who: Identity, home: ConfigDir, every: int = 600) -> list[
 
 def wake_prs(who: Identity, home: ConfigDir, spawner: Runs, cfg: EngineConfig, repo: str, every: int = 120) -> list[BeadId]:
     """The loop's look at the PRs its PR-mode lands wait on (throttled by a marker): a merged or closed one wakes its bead."""
-    if cfg.land_mode != "pr" or not sweeps.due(home.ask_marker("pr"), every, now()):
+    if cfg.land_mode != "pr" or not sweeps.due(ask_marker(home, "pr"), every, now()):
         return []
-    sweeps.touch(home.ask_marker("pr"))
+    sweeps.touch(ask_marker(home, "pr"))
     return pr_wake.wake_decided(store(home), bd_store(who.actor, repo), lambda n: forge.peek(spawner, repo, n), repo, now(), cfg)
 
 
@@ -57,6 +58,6 @@ def sweep_asks(who: Identity, home: ConfigDir, say: Callable[[str], None] = prin
                 setup_retry.retry_setup(asks, bd_store(who.actor, ask.repo), ask.bead, ident.plugin_version(), now(), cfg)
             except BdFailure:
                 continue
-        sweeps.reask_orphans(store(home), bd_store(who.actor), home.ask_marker("orphans"), now(), cfg.pick_label or "",
+        sweeps.reask_orphans(store(home), bd_store(who.actor), ask_marker(home, "orphans"), now(), cfg.pick_label or "",
             cfg.needs_info_label or "", say)
-    sweeps.shout(store(home), home.ask_marker("unused"), now(), say)
+    sweeps.shout(store(home), ask_marker(home, "unused"), now(), say)
