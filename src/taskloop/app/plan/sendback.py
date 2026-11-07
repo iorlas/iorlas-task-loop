@@ -4,6 +4,9 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from tlkernel import plancheck
+from tlkernel.plancheck import PlanData
+
 from taskloop.app.plan.assume import assume
 from taskloop.app.plan.host import PlanHost
 from taskloop.app.plan.prompts import (
@@ -15,8 +18,6 @@ from taskloop.app.plan.prompts import (
     TRACKER_TEXT,
     UNANCHORED_TEXT,
 )
-from taskloop.contracts import plancheck
-from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.checks import lint, planref
 from taskloop.domain.plan.matchers import gate_only_criteria
 from taskloop.domain.prompts.anchors import MAX_ANCHORS, unanchored

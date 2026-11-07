@@ -16,11 +16,11 @@ from taskloop.app.pipeline.budget import Budget
 from taskloop.app.pipeline.outcomes import run_breakdown
 from taskloop.app.pipeline.steps import Steps
 from taskloop.app.run.stuck import StuckTick
-from taskloop.contracts import log as rec
-from taskloop.contracts.gitfacts import GitOutcome
-from taskloop.contracts.runlife import silent_limit
-from taskloop.contracts.stores import JsonlStore
 from taskloop.stores.runlog import RunLog
+from tlkernel import log as rec
+from tlkernel.gitfacts import GitOutcome
+from tlkernel.runlife import silent_limit
+from tlkernel.stores import JsonlStore
 
 
 class PushTiming(Case):

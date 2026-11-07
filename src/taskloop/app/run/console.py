@@ -4,7 +4,7 @@ import sys
 import time
 from collections.abc import Callable
 
-from taskloop.contracts.log import Assumed, CmdStart, EngineLog, Note, StepStart, Stuck, Warn
+from tlkernel.log import Assumed, CmdStart, EngineLog, Note, StepStart, Stuck, Warn
 
 QUIET = frozenset(
     {

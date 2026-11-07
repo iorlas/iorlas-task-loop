@@ -15,7 +15,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
 from support.engine_case import engine
 
-from taskloop.contracts.kinds import Kind
+from tlkernel.kinds import Kind
 
 
 class Halt(te.EngineTest):

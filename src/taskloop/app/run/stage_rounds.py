@@ -1,11 +1,12 @@
 """One round of a standalone write, checks, look or review step: its state from the checkpoint, the step, what it remembers."""
+from tlkernel.checkpoint import Checkpoint
+from tlkernel.enums import Step
+from tlkernel.plancheck import RoundState
+
 from taskloop.app.run.host import RunHost
 from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.progress import progress_of, restore_progress
 from taskloop.app.write.state import ACCEPT, REPLAN, StageState
-from taskloop.contracts.checkpoint import Checkpoint
-from taskloop.contracts.enums import Step
-from taskloop.contracts.plancheck import RoundState
 
 
 def round_step(e: RunHost, step: Step, ck: Checkpoint | None) -> Step:

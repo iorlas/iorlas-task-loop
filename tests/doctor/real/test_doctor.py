@@ -23,7 +23,7 @@ from taskloop.adapters.git import RealGit  # noqa: E402
 from taskloop.app.wire import doctor  # noqa: E402
 from taskloop.app.wire import hook as hook_wire  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
-from taskloop.contracts.env import snapshot  # noqa: E402
+from tlkernel.env import snapshot  # noqa: E402
 
 
 def shown(p):

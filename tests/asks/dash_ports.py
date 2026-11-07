@@ -4,14 +4,14 @@ from collections.abc import Callable
 from pathlib import Path
 
 from taskloop.app.launch.dash_ports import owner_intake, owner_writes
-from taskloop.contracts.adrs import AdrStore
-from taskloop.contracts.ask import Ask, AskAction
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.lookrows import LookRows
-from taskloop.contracts.paths import ConfigDir
 from taskloop_dash.env import Ports
+from tlkernel.adrs import AdrStore
+from tlkernel.ask import Ask, AskAction
+from tlkernel.askstore import AskStore
+from tlkernel.beadsport import Beads
+from tlkernel.ids import BeadId
+from tlkernel.lookrows import LookRows
+from tlkernel.paths import ConfigDir
 
 
 def answering(store: Callable[[str], Beads], config: Path | str, by: str = "dash", clock: Callable[[], float] = time.time,

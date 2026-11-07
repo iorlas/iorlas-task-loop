@@ -6,14 +6,14 @@ from pathlib import Path
 import pytest
 from support.fakes import FakeBeadStore
 
-from taskloop.contracts.bead import BdError, Bead
-from taskloop.contracts.beadsport import BdFailure, BeadQuery
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir
 from taskloop_dash.env import Env, Ports
 from taskloop_dash.index import Indexer, reindex
 from taskloop_dash.readers.beads import Beads
 from taskloop_dash.readers.records import Records
+from tlkernel.bead import BdError, Bead
+from tlkernel.beadsport import BdFailure, BeadQuery
+from tlkernel.ids import BeadId
+from tlkernel.paths import ConfigDir
 
 
 class CountingStore(FakeBeadStore):

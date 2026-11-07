@@ -12,13 +12,13 @@ from support.engine_case import EngineTest
 from support.narrow import must
 from support.plans import CLEAN, PLAN, WRITE
 
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.parks import ParkStore
-from taskloop.contracts.run import RunState
 from taskloop.domain import effects
 from taskloop.domain import outcome as oc
 from taskloop.domain.lanes import pauses
+from tlkernel.kinds import Kind
+from tlkernel.locator import RunLocator
+from tlkernel.parks import ParkStore
+from tlkernel.run import RunState
 
 
 class EngineCrash(EngineTest):

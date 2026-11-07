@@ -8,8 +8,8 @@ import pytest
 from support import homes
 from support import slots as sl
 
-from taskloop.contracts.locks import Ticket
 from taskloop.stores.ticketrows import TicketRows
+from tlkernel.locks import Ticket
 
 
 @pytest.fixture

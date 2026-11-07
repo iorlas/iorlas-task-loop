@@ -9,10 +9,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.app.track import runs
-from taskloop.contracts import log, timedrows
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.stores import RunLog
+from tlkernel import log, timedrows
+from tlkernel.locator import RunLocator
+from tlkernel.paths import ConfigDir
+from tlkernel.stores import RunLog
 
 
 def row(kind: str, t: float, **kw):

@@ -1,15 +1,16 @@
 """Delivery queries resolve the judged profile and require its complete check identities."""
 
+from tlkernel import config
+from tlkernel.checks import CheckResult
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.runkey import BaseSha
+
 from taskloop.adapters import check_files, profile_at
 from taskloop.app.checks import keydiff
 from taskloop.app.checks.cache import InputKeys, RunMemo, plan_digest
 from taskloop.app.checks.execution import keyed_env
-from taskloop.contracts import config
-from taskloop.contracts.checks import CheckResult
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.specs import gate_items, repo_check
 from taskloop.stores.bundle import Stores
 

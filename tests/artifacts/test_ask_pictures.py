@@ -5,8 +5,8 @@ from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.artifacts import ask_pictures, store
-from taskloop.contracts.artifact import ArtifactSlot
-from taskloop.contracts.paths import RunFiles
+from tlkernel.artifact import ArtifactSlot
+from tlkernel.paths import RunFiles
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 32
 

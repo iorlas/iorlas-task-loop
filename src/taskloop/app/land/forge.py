@@ -4,9 +4,10 @@ import json
 from collections.abc import Mapping
 from types import MappingProxyType
 
+from tlkernel.forge import MERGED, OPEN, Pr, gh_pr
+from tlkernel.gitport import Git
+
 from taskloop.app.land.cmds import Cmds, Runs, Stop
-from taskloop.contracts.forge import MERGED, OPEN, Pr, gh_pr
-from taskloop.contracts.gitport import Git
 
 FIELDS = "number,state,headRefName,headRefOid,baseRefName,mergeCommit,url,title"
 MERGE_FLAG: Mapping[str, str] = MappingProxyType({"squash": "--squash", "merge": "--merge", "rebase": "--rebase"})

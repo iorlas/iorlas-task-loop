@@ -14,9 +14,9 @@ from support.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts import factorydb
-from taskloop.contracts.looprows import LoopRows
-from taskloop.contracts.paths import ConfigDir
+from tlkernel import factorydb
+from tlkernel.looprows import LoopRows
+from tlkernel.paths import ConfigDir
 
 TABLES = {
     "source", "bead", "run", "attempt", "step", "lease", "check_pass",

@@ -14,9 +14,9 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import homes
 
 from loop.test_loop import LoopBase
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.rowstores import PinStore
-from taskloop.contracts.snapshots import Pin
+from tlkernel.env import snapshot
+from tlkernel.rowstores import PinStore
+from tlkernel.snapshots import Pin
 
 # isort: split
 from support import (

@@ -10,8 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.adapters.git import RealGit
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitfacts import StatusRow
+from tlkernel.env import Env
+from tlkernel.gitfacts import StatusRow
 
 
 class ReadOnlyStatus(Case):

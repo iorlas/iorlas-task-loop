@@ -13,11 +13,11 @@ from support.factory_index import ingest
 from support.logs import typed
 from support.runs import manifest
 
-from taskloop.contracts import wire
-from taskloop.contracts.dash import LivePage
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.run import RunState
 from taskloop_dash.api import live
+from tlkernel import wire
+from tlkernel.dash import LivePage
+from tlkernel.ids import loop_key
+from tlkernel.run import RunState
 
 BEAD, RUN = "tl-live.1", "tl-live.1-20261026-100000"
 T = 1793000000.0

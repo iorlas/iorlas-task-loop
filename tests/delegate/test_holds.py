@@ -11,8 +11,14 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+import hermetic  # noqa: F401  (a home of its own for every test)
 import pytest
+import routing_support as support
 from any_agent.supervisor import RunHooks
+from support.case import Case
+from support.tmpdir import TemporaryDirectory
+from test_route import CFG, T, argparse_ns, lanes, route
+
 from delegate.app import answer, env, fleet, launch, status
 from delegate.app import decide as dec
 from delegate.cli import verbs
@@ -20,12 +26,6 @@ from delegate.contracts import stops
 from delegate.contracts.state import RefRecord
 from delegate.domain.holds.book import HoldBook
 from delegate.domain.lanes.lane import Lane
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
-from test_route import CFG, T, argparse_ns, lanes, route
 
 
 class Holds(Case):

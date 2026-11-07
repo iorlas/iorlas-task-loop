@@ -2,8 +2,9 @@
 from pathlib import Path
 from typing import Any
 
+from tlkernel.slots import git_probe
+
 from taskloop.adapters.check_files import repo_key
-from taskloop.contracts.slots import git_probe
 from taskloop.domain import slot_env
 
 

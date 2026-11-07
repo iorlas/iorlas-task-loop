@@ -16,10 +16,10 @@ from support.checks import ck, typed
 from support.plans import PLAN
 
 from checks.test_check_rules import Base
-from taskloop.contracts import answers, plancheck
-from taskloop.contracts.ids import CheckId
-from taskloop.contracts.plancheck import Adhoc, PlanData, Ref, adhoc
 from taskloop.domain.checks import planref
+from tlkernel import answers, plancheck
+from tlkernel.ids import CheckId
+from tlkernel.plancheck import Adhoc, PlanData, Ref, adhoc
 
 REPO: list[dict[str, Any]] = [{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"}]
 UNITY = CheckId("unity-tests")

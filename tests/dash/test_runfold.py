@@ -10,11 +10,11 @@ import msgspec
 from support.case import Case
 from support.dashlogs import RunScript, T
 
-from taskloop.contracts import log as rec
-from taskloop.contracts import wire
-from taskloop.contracts.runlife import Liveness
 from taskloop_dash import jsonl
 from taskloop_dash.views import runfacts as facts
+from tlkernel import log as rec
+from tlkernel import wire
+from tlkernel.runlife import Liveness
 
 
 def fixture_records(path):

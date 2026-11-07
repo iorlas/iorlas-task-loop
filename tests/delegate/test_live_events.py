@@ -12,11 +12,11 @@ import hermetic  # noqa: F401  (a home of its own for every test)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "delegate"))
+import test_stream_supervisor as tss
 from any_agent.harnesses.codex import CodexHarness
-from delegate.app.publish import LiveSink
 from support.case import Case
 
-import test_stream_supervisor as tss
+from delegate.app.publish import LiveSink
 
 j = tss.j
 LONG = "x" * 3000

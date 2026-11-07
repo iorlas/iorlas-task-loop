@@ -5,8 +5,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Final
 
-from taskloop.contracts.bead import Bead, Comment
-from taskloop.contracts.checkpoint import BriefSnap
+from tlkernel.bead import Bead, Comment
+from tlkernel.checkpoint import BriefSnap
 
 FIELDS: Final = ("title", "description", "acceptance_criteria", "design", "notes")
 DIFF_CAP: Final = 4096

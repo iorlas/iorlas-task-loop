@@ -5,23 +5,24 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel.adrs import AdrStore
+from tlkernel.ask import AskAnswer
+from tlkernel.asked import Asked
+from tlkernel.beadsport import Beads
+from tlkernel.checkpoint import BriefSnap, PlanStep
+from tlkernel.checks import Check, CheckRun
+from tlkernel.config import EngineConfig, HostResources, VisualConfig
+from tlkernel.enums import AskClass
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId, TreeSha
+from tlkernel.plancheck import PlanData
+from tlkernel.stop import Stop
+from tlkernel.wire import Open
+
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.adapters.looks import Methods
 from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.state import PlanState
-from taskloop.contracts.adrs import AdrStore
-from taskloop.contracts.ask import AskAnswer
-from taskloop.contracts.asked import Asked
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.checkpoint import BriefSnap, PlanStep
-from taskloop.contracts.checks import Check, CheckRun
-from taskloop.contracts.config import EngineConfig, HostResources, VisualConfig
-from taskloop.contracts.enums import AskClass
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId, TreeSha
-from taskloop.contracts.plancheck import PlanData
-from taskloop.contracts.stop import Stop
-from taskloop.contracts.wire import Open
 from taskloop.domain.review.ledger import Ledger
 
 

@@ -6,16 +6,17 @@ from collections.abc import Generator
 from pathlib import Path
 from urllib.parse import urlencode
 
+from tlkernel import factorydb, gallery
+from tlkernel.beadsport import BdFailure, BeadPatch, BeadQuery, NewBead
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId, is_bead_id
+from tlkernel.lookrows import LookRaced, LookRows
+from tlkernel.stagefacts import RunFacts
+
 from taskloop.adapters import bdcreate, beadtools
 from taskloop.adapters.repourl import repo_url
 from taskloop.app.look.host import LookHost, LookPorts
 from taskloop.app.look.state import LookState
-from taskloop.contracts import factorydb, gallery
-from taskloop.contracts.beadsport import BdFailure, BeadPatch, BeadQuery, NewBead
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId, is_bead_id
-from taskloop.contracts.lookrows import LookRaced, LookRows
-from taskloop.contracts.stagefacts import RunFacts
 from taskloop.domain.look.matchers import sections
 
 LOOK_LABEL = "owner-look"

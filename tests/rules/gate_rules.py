@@ -557,7 +557,7 @@ class Planted(Case):
 
     def test_file_names_only_in_contracts_paths(self):
         lit = PATH_LITERALS[0]
-        assert self.problems({"src/taskloop/contracts/paths.py": f"A = {lit!r}\n"}) == []
+        assert self.problems({"packages/kernel/src/tlkernel/paths.py": f"A = {lit!r}\n"}) == []
         self.only({"src/taskloop/app/a.py": f"p = root / {lit!r}\n"}, "contracts/paths.py")
         assert self.problems({"src/taskloop/app/a.py": f'"""Writes {lit}."""\n'}) == []
 

@@ -9,12 +9,12 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.delegate import Permanence
-from taskloop.contracts.ids import BeadId
 from taskloop.domain.lanes import pauses
 from taskloop.domain.lanes.pause_reasons import Producer
 from taskloop.domain.lanes.pauses import PauseRule
+from tlkernel.bead import Bead
+from tlkernel.delegate import Permanence
+from tlkernel.ids import BeadId
 
 # Literal snapshot of the old TABLE, independent of current enums, backoffs and overrides.
 RELEASED: dict[tuple[Producer, str], PauseRule] = {

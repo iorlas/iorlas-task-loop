@@ -9,10 +9,10 @@ from support.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.profile_changes import ProfileChange
-from taskloop.contracts.wire import dump
 from taskloop.stores.real import real_stores
+from tlkernel.paths import ConfigDir
+from tlkernel.profile_changes import ProfileChange
+from tlkernel.wire import dump
 
 
 class ProfileAudit(Case):

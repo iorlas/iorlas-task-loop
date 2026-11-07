@@ -7,10 +7,11 @@ Nothing here raises into the engine: evidence is never worth a run."""
 import hashlib
 from pathlib import Path
 
+from tlkernel.artifact import secret_name
+from tlkernel.checks import Check
+from tlkernel.log import Evidence
+
 from taskloop.app.checks.host import CheckHost
-from taskloop.contracts.artifact import secret_name
-from taskloop.contracts.checks import Check
-from taskloop.contracts.log import Evidence
 
 LOG_NAME = "check.log"
 MAX_BYTES = 512 * 1024 * 1024

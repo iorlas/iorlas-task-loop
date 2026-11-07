@@ -8,20 +8,21 @@ then recorded as the land, exactly as `tl land` records one)."""
 import time
 from typing import Final
 
+from tlkernel.beadsport import BdFailure, Beads
+from tlkernel.enums import Outcome, Result
+from tlkernel.finish import finish_run
+from tlkernel.finish_projection import history
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.locator import RunLocator
+from tlkernel.run import RunFinish, RunState
+from tlkernel.slots import git_probe
+
 from taskloop.app.track import verbs
 from taskloop.app.track.verbs import Guard
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.beadsport import BdFailure, Beads
-from taskloop.contracts.enums import Outcome, Result
-from taskloop.contracts.finish import finish_run
-from taskloop.contracts.finish_projection import history
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.run import RunFinish, RunState
-from taskloop.contracts.slots import git_probe
 from taskloop.stores.real import real_stores
 
 ENGINE: Final[Guard] = lambda bead, reason: ""  # noqa: E731  the engine's own close: its run is the record

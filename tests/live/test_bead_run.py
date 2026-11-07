@@ -5,7 +5,7 @@ from support.checked import run_checked
 
 from taskloop.adapters.git import RealGit
 from taskloop.app.launch import selftest
-from taskloop.contracts.env import snapshot
+from tlkernel.env import snapshot
 
 
 def git(cwd, *args):

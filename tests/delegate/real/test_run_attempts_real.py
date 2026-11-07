@@ -2,12 +2,12 @@
 
 from unittest import mock
 
-from delegate.app import launch, net
-from support.procsim import real_proc
-
 import routing_support as support
 from run_support import RunBase
+from support.procsim import real_proc
 from test_route import lanes
+
+from delegate.app import launch, net
 
 GOOD = {"data": {"a": 1}, "text": '{"a":1}', "outcome": None}
 BAD = {"data": None, "text": "prose", "outcome": None}

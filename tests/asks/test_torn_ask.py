@@ -12,11 +12,11 @@ import support.paths  # noqa: F401
 from contracts import samples as S
 from support.askjson import unreadable_ask
 
-from taskloop.contracts.askrows import AskRows
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.wire import Refused
+from tlkernel.askrows import AskRows
+from tlkernel.askstore import AskStore
+from tlkernel.ids import BeadId
+from tlkernel.paths import ConfigDir
+from tlkernel.wire import Refused
 
 
 class TornAsk(Case):

@@ -5,16 +5,17 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel import log as rec
+from tlkernel.config import EngineConfig
+from tlkernel.enums import WaitWhat
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.ports import Clock
+
 from taskloop.adapters import deadline
 from taskloop.app.pipeline import outcomes
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.steps import Open
-from taskloop.contracts import log as rec
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.enums import WaitWhat
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.ports import Clock
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.checks.matchers import slot_wait_secs
 from taskloop.domain.lanes.liveness import LIVENESS

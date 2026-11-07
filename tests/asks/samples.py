@@ -6,9 +6,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts.ask import Ask, AskOption
-from taskloop.contracts.enums import AskClass, AskKind, AskStatus
-from taskloop.contracts.ids import BeadId
+from tlkernel.ask import Ask, AskOption
+from tlkernel.enums import AskClass, AskKind, AskStatus
+from tlkernel.ids import BeadId
 
 
 def ask(bead: str, kind: AskKind, cls: AskClass, decision: str, options: list[AskOption], tried: list[str] | None = None) -> Ask:

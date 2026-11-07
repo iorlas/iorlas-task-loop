@@ -23,12 +23,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import dash_profile_fixture
 
 from taskloop.app.launch import dash_ports
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.paths import ConfigDir, default_root
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env
 from taskloop_dash.index import Indexer, reindex
 from taskloop_dash.views import snapshot as snapshots
+from tlkernel.env import snapshot
+from tlkernel.paths import ConfigDir, default_root
 
 
 class CountedFile:

@@ -2,8 +2,9 @@
 
 from collections.abc import Collection
 
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.plancheck import PlanData
+from tlkernel.config import EngineConfig
+from tlkernel.plancheck import PlanData
+
 from taskloop.domain.lanes import pin
 
 

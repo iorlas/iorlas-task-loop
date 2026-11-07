@@ -26,14 +26,14 @@ from support.checkpoints import read_ck  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.app.plan.planner import Planner  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
-from taskloop.contracts import answers  # noqa: E402
-from taskloop.contracts.enums import Result  # noqa: E402
-from taskloop.contracts.env import snapshot  # noqa: E402
-from taskloop.contracts.ids import BeadId  # noqa: E402
-from taskloop.contracts.kinds import Kind  # noqa: E402
-from taskloop.contracts.run import RunReport  # noqa: E402
-from taskloop.contracts.schema import unstrict  # noqa: E402
 from taskloop.domain import outcome as oc  # noqa: E402
+from tlkernel import answers  # noqa: E402
+from tlkernel.enums import Result  # noqa: E402
+from tlkernel.env import snapshot  # noqa: E402
+from tlkernel.ids import BeadId  # noqa: E402
+from tlkernel.kinds import Kind  # noqa: E402
+from tlkernel.run import RunReport  # noqa: E402
+from tlkernel.schema import unstrict  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import engine_case as T  # noqa: E402
@@ -55,13 +55,13 @@ from taskloop.app.run import (  # noqa: E402
     engine,
     entry,
 )
-from taskloop.contracts.checks import Duration, Durations  # noqa: E402
 from taskloop.domain.checks import (  # noqa: E402
     durations,
     lint,  # noqa: F401
 )
 from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
 from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT  # noqa: E402
+from tlkernel.checks import Duration, Durations  # noqa: E402
 
 
 class FailureBriefAndDurations(Case):

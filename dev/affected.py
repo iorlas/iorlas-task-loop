@@ -45,9 +45,11 @@ from pathlib import Path
 
 from importgraph import bindings, qualified, targets_of
 
-ROOTS = {"src": "src", "tests": "tests", "dev": "dev", "vendor": "skills/task-loop/_vendor", "tl": "skills/task-loop"}
-VISIBLE = {"src": ("src", "vendor"), "tests": ("tests", "dev", "src", "vendor"), "dev": ("dev", "src", "vendor"), "vendor": ("vendor",),
-           "tl": ("src", "vendor")}
+ROOTS = {"src": "src", "kernel": "packages/kernel/src", "tests": "tests", "dev": "dev", "vendor": "skills/task-loop/_vendor",
+         "tl": "skills/task-loop"}
+VISIBLE = {"src": ("src", "kernel", "vendor"), "tests": ("tests", "dev", "src", "kernel", "vendor"),
+           "dev": ("dev", "src", "kernel", "vendor"), "kernel": ("kernel", "vendor"), "vendor": ("vendor",),
+           "tl": ("src", "kernel", "vendor")}
 CONFIG = {"pyproject.toml": ("tests/rules", "tests/release"), "uv.lock": ("tests/rules", "tests/release"),
           "mise.toml": ("tests/rules", "tests/release"), "mise.lock": ("tests/rules", "tests/release"),
           ".importlinter": ("tests/rules",), "ruff.toml": ("tests/rules",), "pyrefly.toml": ("tests/rules",), "justfile": ("tests/rules",)}

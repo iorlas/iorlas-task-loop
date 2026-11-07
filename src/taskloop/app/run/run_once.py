@@ -4,6 +4,16 @@ import traceback
 from dataclasses import dataclass, field
 from typing import Any
 
+from tlkernel import fence
+from tlkernel.delegateport import Refusal
+from tlkernel.enums import AskClass, Step
+from tlkernel.envvars import EnvVar
+from tlkernel.kinds import Kind
+from tlkernel.locator import RunLocator
+from tlkernel.log import Beat
+from tlkernel.plancheck import PlanData, RoundState
+from tlkernel.run import RunState
+
 from taskloop.adapters import beadtools, ident
 from taskloop.adapters.deadline import DeadlineExpired, deadline
 from taskloop.app.land.gitcall import oneline
@@ -15,15 +25,6 @@ from taskloop.app.pipeline.reload import Exec
 from taskloop.app.release import reexec
 from taskloop.app.run.crash import parked_crash
 from taskloop.app.slots.lease import Lease
-from taskloop.contracts import fence
-from taskloop.contracts.delegateport import Refusal
-from taskloop.contracts.enums import AskClass, Step
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.log import Beat
-from taskloop.contracts.plancheck import PlanData, RoundState
-from taskloop.contracts.run import RunState
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.lanes import pin

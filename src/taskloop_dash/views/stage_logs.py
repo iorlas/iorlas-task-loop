@@ -2,12 +2,12 @@
 
 from collections.abc import Sequence
 
-from taskloop.contracts import delegate, log
-from taskloop.contracts.dash import Phase, StageAttempt, StageLog, StageRole, TermLine
-from taskloop.contracts.runlife import Liveness
 from taskloop_dash.views import live_lines
 from taskloop_dash.views.passview import PassView
 from taskloop_dash.views.runfacts import Run, Span
+from tlkernel import delegate, log
+from tlkernel.dash import Phase, StageAttempt, StageLog, StageRole, TermLine
+from tlkernel.runlife import Liveness
 
 
 def rows_of(run: Run, span: Span) -> list[log.EngineLog]:

@@ -4,11 +4,12 @@ A waiter (a loop, run-task --slot any) takes a Ticket; only the first live ticke
 gone is dropped by whoever reads the line (the store does it)."""
 from collections.abc import Callable
 
+from tlkernel.ids import BeadId
+from tlkernel.locks import Ticket
+
 from taskloop.app.slots import watchdog
 from taskloop.app.slots.env import DEFAULT_PRIO, TICKET_POLL, SlotEnv
 from taskloop.app.slots.pool import SlotPool
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.locks import Ticket
 
 
 def order(t: Ticket) -> tuple[int, int]:

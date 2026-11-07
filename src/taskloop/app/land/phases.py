@@ -5,7 +5,8 @@ import contextlib
 import time
 from collections.abc import Generator
 
-from taskloop.contracts import log as rec
+from tlkernel import log as rec
+
 from taskloop.stores.runlog import RunLog
 
 

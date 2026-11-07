@@ -4,20 +4,21 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel import answers
+from tlkernel import log as rec
+from tlkernel.bead import Bead
+from tlkernel.delegate import DelegateResult, RunRequest
+from tlkernel.delegateport import Answer, Resolved, Seam
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId
+from tlkernel.schema import unstrict
+from tlkernel.stores import JsonlStore
+from tlkernel.wire import Open
+
 from taskloop.adapters import childenv
 from taskloop.app.pipeline.ports import TrustRefusal
 from taskloop.app.pipeline.reflect_prompt import REFLECT_PROMPT
-from taskloop.contracts import answers
-from taskloop.contracts import log as rec
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.delegate import DelegateResult, RunRequest
-from taskloop.contracts.delegateport import Answer, Resolved, Seam
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.schema import unstrict
-from taskloop.contracts.stores import JsonlStore
-from taskloop.contracts.wire import Open
 from taskloop.domain.lanes import caps
 from taskloop.domain.matchers import clip
 

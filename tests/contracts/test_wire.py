@@ -15,13 +15,13 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-import taskloop.contracts as pkg
+import tlkernel as pkg
 from contracts import samples as S
-from taskloop.contracts import delegate, enums, events, ids, log, trace, wire
-from taskloop.contracts.ask import Ask
-from taskloop.contracts.loop import LoopCommand
-from taskloop.contracts.parks import Park
-from taskloop.contracts.wire import Rec, StaleRecord
+from tlkernel import delegate, enums, events, ids, log, trace, wire
+from tlkernel.ask import Ask
+from tlkernel.loop import LoopCommand
+from tlkernel.parks import Park
+from tlkernel.wire import Rec, StaleRecord
 
 GOLDEN = Path(__file__).resolve().parent / "golden"
 FAMILIES = {"engine_log": (S.LOG, log.EngineLog), "events": (S.EVENTS, events.Event), "live_events": (S.LIVE, delegate.LiveEvent)}
@@ -80,7 +80,7 @@ class RoundTrip(Case):
             # dash, dashcost, dashhealth, needs: dashboard views, sampled by tests/fixtures/dash and tests/contracts/test_dash.py)
             ):
                 continue
-            mod = importlib.import_module("taskloop.contracts." + m.name)
+            mod = importlib.import_module("tlkernel." + m.name)
             for n, c in vars(mod).items():
                 if (
                     isinstance(c, type)

@@ -4,7 +4,7 @@ from argparse import Namespace
 import pytest
 
 from taskloop.app.run.target import resolve
-from taskloop.contracts.procport import Ran
+from tlkernel.procport import Ran
 
 
 class FakeSpawner:

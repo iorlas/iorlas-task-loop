@@ -5,9 +5,9 @@ taste or show; only a visual bead runs the verify stage, any other lands with it
 from collections.abc import Collection, Iterable, Sequence
 from typing import Final
 
-from taskloop.contracts.plancheck import Open
 from taskloop.domain.checks.matchers import glob_re
 from taskloop.domain.plan.matchers import word_set
+from tlkernel.plancheck import Open
 
 VISUAL_CLASSES: Final = frozenset({"look-objective", "taste", "show"})
 

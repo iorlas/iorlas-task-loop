@@ -11,17 +11,17 @@ network wait of a loop that has no bead in it (in memory only), and a Park whose
 from collections.abc import Sequence
 from typing import Final, Literal
 
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.dash import LoopInfo
-from taskloop.contracts.events import Block, EventRec, SlotAside, SlotHold, SlotSetup
-from taskloop.contracts.loop import LoopState
-from taskloop.contracts.needs import NeedRow
-from taskloop.contracts.reconcile import LOOP_ABSENT_S, LOOP_STALL_S, LoopFact, loop_absent
-from taskloop.contracts.snapshots import LaneStatus, NeedInput
 from taskloop_dash.views import floor
 from taskloop_dash.views.board import LOOP_STALE, ask_facts, blockers, is_work, when
 from taskloop_dash.views.lanecards import state_of
 from taskloop_dash.views.world import ProjectIn, World
+from tlkernel.bead import Bead
+from tlkernel.dash import LoopInfo
+from tlkernel.events import Block, EventRec, SlotAside, SlotHold, SlotSetup
+from tlkernel.loop import LoopState
+from tlkernel.needs import NeedRow
+from tlkernel.reconcile import LOOP_ABSENT_S, LOOP_STALL_S, LoopFact, loop_absent
+from tlkernel.snapshots import LaneStatus, NeedInput
 
 WAITS: Final = {  # the labels that put a bead on the owner, and what each asks of him
     "needs-ac": "needs acceptance criteria",

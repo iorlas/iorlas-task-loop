@@ -8,8 +8,8 @@ import pytest
 from support.case import Case
 
 from ports.git_contract import sh
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.slots import DirtyTree, SlotGitError
+from tlkernel.gitport import Git
+from tlkernel.slots import DirtyTree, SlotGitError
 
 _Base = Case
 

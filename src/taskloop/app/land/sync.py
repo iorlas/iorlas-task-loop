@@ -3,7 +3,8 @@ by key under this run's id."""
 from functools import cached_property
 from typing import Protocol, assert_never
 
-from taskloop.contracts.ids import BeadId
+from tlkernel.ids import BeadId
+
 from taskloop.domain import effects
 from taskloop.domain.interpret import CheckpointLedger, interpret
 

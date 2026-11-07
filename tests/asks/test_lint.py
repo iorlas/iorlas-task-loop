@@ -10,8 +10,8 @@ import support.paths  # noqa: F401
 from support.tiers import domain
 
 from asks import samples
-from taskloop.contracts.enums import AskClass, AskKind
 from taskloop.domain.asks.lint import INFRA, KIND_OF, lint
+from tlkernel.enums import AskClass, AskKind
 
 GOOD = samples.MOCKS["lifesim-22b3"]
 

@@ -3,11 +3,12 @@ from collections import deque
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
+from tlkernel.beadsport import Beads
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId
+
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.treecheck import TreeGuard
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId
 from taskloop.domain.land.queue_deps import Gate, State, find_cycle, gate
 from taskloop.domain.land.queue_overlap import waits_for
 

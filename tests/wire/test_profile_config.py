@@ -13,9 +13,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.app.wire.slots import cfg_source, load_cfg, load_profile, profile_source
-from taskloop.contracts import config
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.slots import SlotGitError
+from tlkernel import config
+from tlkernel.gitport import Git
+from tlkernel.slots import SlotGitError
 
 
 class ProfileConfig(Case):

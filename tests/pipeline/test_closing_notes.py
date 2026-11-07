@@ -6,7 +6,7 @@ import pytest
 from support.pipeline_ports import FakeFollowUps
 
 from taskloop.app.pipeline.closing_notes import FileNotes
-from taskloop.contracts.enums import Outcome
+from tlkernel.enums import Outcome
 
 
 @pytest.mark.parametrize('refused', [False, True])

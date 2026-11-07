@@ -17,9 +17,9 @@ from beads_client.records import bead_of as client_bead_of
 from beads_client.runner import BdRun, Runner
 
 from taskloop.adapters import procs
-from taskloop.contracts.bead import BdError, Bead, Comment, Dep
-from taskloop.contracts.beadsport import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
-from taskloop.contracts.ids import BeadId, parse_bead_id
+from tlkernel.bead import BdError, Bead, Comment, Dep
+from tlkernel.beadsport import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
+from tlkernel.ids import BeadId, parse_bead_id
 
 T = TypeVar("T")
 VERSION = re.compile(r"(\d+)\.(\d+)\.(\d+)")

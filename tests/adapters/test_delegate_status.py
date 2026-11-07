@@ -11,9 +11,9 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 
-from taskloop.contracts import wire  # noqa: E402
-from taskloop.contracts.delegate_status import snapshot_of  # noqa: E402
-from taskloop.contracts.snapshots import StatusSnapshot  # noqa: E402
+from tlkernel import wire  # noqa: E402
+from tlkernel.delegate_status import snapshot_of  # noqa: E402
+from tlkernel.snapshots import StatusSnapshot  # noqa: E402
 
 REAL = json.loads((ROOT / "tests" / "fixtures" / "delegate_status_0.51.0_real.json").read_text())
 FIXTURE_SCHEMA = json.loads((ROOT / "src/delegate/data/contract.json").read_text(

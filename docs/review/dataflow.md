@@ -6,7 +6,7 @@ The principal defect is that there is no single durable task transition. Beads, 
 
 ## Authorities and storage
 
-`C` below means `$XDG_CONFIG_HOME/task-loop`, otherwise `~/.config/task-loop` (`src/taskloop/contracts/paths.py:10`). These locations are descriptions from code; the review did not open the actual config directory. `K` is a repository key, `B` a full bead ID, and `R` an opaque run ID. Do not assume every key uses the same algorithm: the loop uses a checkout-path key, while the slot environment derives its state key from origin (`src/taskloop/app/run/bead_env.py:12`).
+`C` below means `$XDG_CONFIG_HOME/task-loop`, otherwise `~/.config/task-loop` (`packages/kernel/src/tlkernel/paths.py:10`). These locations are descriptions from code; the review did not open the actual config directory. `K` is a repository key, `B` a full bead ID, and `R` an opaque run ID. Do not assume every key uses the same algorithm: the loop uses a checkout-path key, while the slot environment derives its state key from origin (`src/taskloop/app/run/bead_env.py:12`).
 
 ```text
 C/
@@ -76,7 +76,7 @@ slot or worktree/
     `-- B/brief.md, evidence/, artifacts/
 ```
 
-Path evidence: `src/taskloop/contracts/paths.py:22`, `:93`, `:101`, `:122`, `:133`, `:145`, `:161`, `:182`, `:195`, `:233`, `:243`, `:264`. Additional filenames come from `src/taskloop/app/run/layout.py:105`, `src/taskloop/app/run/engine.py:350`, `src/taskloop/stores/call_state.py:83`, `src/taskloop/app/loop/run.py:64`, and the factory layout documented in README.md. The release clone mentioned in AGENTS.md is outside this review's task-execution path.
+Path evidence: `packages/kernel/src/tlkernel/paths.py:22`, `:93`, `:101`, `:122`, `:133`, `:145`, `:161`, `:182`, `:195`, `:233`, `:243`, `:264`. Additional filenames come from `src/taskloop/app/run/layout.py:105`, `src/taskloop/app/run/engine.py:350`, `src/taskloop/stores/call_state.py:83`, `src/taskloop/app/loop/run.py:64`, and the factory layout documented in README.md. The release clone mentioned in AGENTS.md is outside this review's task-execution path.
 
 | Authority | Stored fact versus derived view | Cache / staleness boundary |
 | --- | --- | --- |
@@ -91,7 +91,7 @@ Path evidence: `src/taskloop/contracts/paths.py:22`, `:93`, `:101`, `:122`, `:13
 
 ### Crash model used below
 
-Every arrow below can be interrupted by `kill -9`. For `JsonStore.write`, a process kill before rename leaves the previous document (or no document); after rename the new whole document is visible. Writes use `fsync=False` (`src/taskloop/contracts/stores.py:115`); this is not a power-loss durability guarantee. The vendored implementation is at `skills/task-loop/_vendor/atomic_io/__init__.py:21`.
+Every arrow below can be interrupted by `kill -9`. For `JsonStore.write`, a process kill before rename leaves the previous document (or no document); after rename the new whole document is visible. Writes use `fsync=False` (`packages/kernel/src/tlkernel/stores.py:115`); this is not a power-loss durability guarantee. The vendored implementation is at `skills/task-loop/_vendor/atomic_io/__init__.py:21`.
 
 There is no transaction across two JSON documents, across JSON and bd, or across a git push and a receipt. Effect keys are written **after** calling the effect (`src/taskloop/domain/interpret.py:35`). A crash in that gap repeats the effect; a function returning after merely warning about failure nevertheless gets a completed key. Plain `write_text` exports such as plan/brief and the setup marker can be partial (`app/run/engine.py:353`, `app/plan/briefs.py:43`, `app/slots/reset.py:144`).
 
@@ -275,7 +275,7 @@ plan/check registry + duration history + writer-family labels
      -> call/checkpoint/park/outcome records -> loop verdict
 ```
 
-The request builder is `src/taskloop/app/run/worker_request.py:19`; argv construction is exclusively `src/taskloop/contracts/delegate.py:52`. Engine-only recipes are bare configured `just` recipes for write calls. A pinned family plus such recipes automatically enables `--engine-only-advisory` (`worker_request.py:38`); that is a different enforcement mode from the unconditional guard wording in `docs/dev/integrations.md`. Read-only calls do not receive those recipes. The outside delegate's enforcement cannot be established from these files.
+The request builder is `src/taskloop/app/run/worker_request.py:19`; argv construction is exclusively `packages/kernel/src/tlkernel/delegate.py:52`. Engine-only recipes are bare configured `just` recipes for write calls. A pinned family plus such recipes automatically enables `--engine-only-advisory` (`worker_request.py:38`); that is a different enforcement mode from the unconditional guard wording in `docs/dev/integrations.md`. Read-only calls do not receive those recipes. The outside delegate's enforcement cannot be established from these files.
 
 Delegate is resolved again before each call; a refused new installation keeps the previously resolved route (`src/taskloop/app/run/delegation.py:11`). There is no task-long immutable route artifact in the manifest; each later subprocess opens the selected installed path. For the same major contract, minor fields/defaults can change between writer and reviewer. `contract: 3`, stop scope/permanence/retry and schema validation are the local contract, not proof that delegate accepted a durable exactly-once call. `RunRequest.call_id` exists, but `worker_request.request` does not fill it; call intent is local.
 
@@ -440,7 +440,7 @@ The error/visibility gaps in these observations are recorded here as data proven
 
 ### F01 — P1: malformed/unreadable committed profile becomes a default policy
 
-**Evidence:** `src/taskloop/app/wire/slots.py:42` resolves a commit and returns `{}` on JSON parse or git-show error at line 48; working-tree fallback also returns `{}` on errors at line 52. `src/taskloop/contracts/config.py:164` supplies a default push command and line 181 defaults checks to an empty list. `src/taskloop/app/land/gate.py:108` allows a pass when the resulting config has no gate checks.
+**Evidence:** `src/taskloop/app/wire/slots.py:42` resolves a commit and returns `{}` on JSON parse or git-show error at line 48; working-tree fallback also returns `{}` on errors at line 52. `packages/kernel/src/tlkernel/config.py:164` supplies a default push command and line 181 defaults checks to an empty list. `src/taskloop/app/land/gate.py:108` allows a pass when the resulting config has no gate checks.
 
 **Failure:** A committed malformed `.task-loop.json`, or a failed read of an existing profile, becomes “no configured checks” instead of a refusal. The engine can run and land using defaults, with the configuration error erased before strict typed validation sees it.
 
@@ -460,7 +460,7 @@ The error/visibility gaps in these observations are recorded here as data proven
 
 ### F03 — P1: version hops discard pending follow-ups before close
 
-**Evidence:** `src/taskloop/app/run/fields.py:37` initializes `e.leftovers=[]`. Plans add to it at `src/taskloop/app/plan/planner.py:62`; reviews add at `src/taskloop/app/write/review_round.py:125` and line 152. `src/taskloop/contracts/checkpoint.py:70` has no pending-leftovers field in RunState, and `src/taskloop/app/run/review_glue.py:15` persists only filed/refused review work. `src/taskloop/app/run/reload.py:39` serializes counters without leftovers; `src/taskloop/app/run/resume.py:118` restores the plan without rebuilding `e.leftovers`. They are first saved for close in `src/taskloop/app/run/closer.py:113`.
+**Evidence:** `src/taskloop/app/run/fields.py:37` initializes `e.leftovers=[]`. Plans add to it at `src/taskloop/app/plan/planner.py:62`; reviews add at `src/taskloop/app/write/review_round.py:125` and line 152. `packages/kernel/src/tlkernel/checkpoint.py:70` has no pending-leftovers field in RunState, and `src/taskloop/app/run/review_glue.py:15` persists only filed/refused review work. `src/taskloop/app/run/reload.py:39` serializes counters without leftovers; `src/taskloop/app/run/resume.py:118` restores the plan without rebuilding `e.leftovers`. They are first saved for close in `src/taskloop/app/run/closer.py:113`.
 
 **Failure:** Accept a stage with planned/review follow-ups, install an update, and exec at the next write/land boundary. The new process retains the plan/cursor but its filing queue is empty; a land-boundary hop can close the task without filing any of those follow-ups. A normal pre-close crash has the same omission.
 
@@ -480,7 +480,7 @@ The error/visibility gaps in these observations are recorded here as data proven
 
 ### F05 — P1: generation fencing fails open and is not an atomic authorization
 
-**Evidence:** `src/taskloop/contracts/fence.py:15` converts bd failure to `None`; `stale` at line 87 explicitly fences nothing on an outage. `take` at line 74 reads and then unconditionally writes the next generation. `src/taskloop/app/run/state.py:113` checks before returning a document whose write happens afterward, and `src/taskloop/app/land/push.py:68` checks before external push. `src/taskloop/app/track/verbs.py:78` guards close by assignee, not generation.
+**Evidence:** `packages/kernel/src/tlkernel/fence.py:15` converts bd failure to `None`; `stale` at line 87 explicitly fences nothing on an outage. `take` at line 74 reads and then unconditionally writes the next generation. `src/taskloop/app/run/state.py:113` checks before returning a document whose write happens afterward, and `src/taskloop/app/land/push.py:68` checks before external push. `src/taskloop/app/track/verbs.py:78` guards close by assignee, not generation.
 
 **Failure:** A stale run can pass fence validation while bd is unavailable, write its checkpoint, or push, even though another holder has taken the task/slot. Two same-actor processes can also read the same generation and both write the same increment; subsequent actor guards cannot distinguish them. A local engine lock covers a worktree, not the bead across different worktrees.
 
@@ -530,7 +530,7 @@ The error/visibility gaps in these observations are recorded here as data proven
 
 ### F10 — P2: one task uses incompatible configuration snapshots across selection, slots and reexec
 
-**Evidence:** `src/taskloop/app/wire/slots.py:65` fully decodes the main working-tree profile just to get the base, then reads another profile at the resolved base commit. `profile_slots` at line 78 reads the main working-tree copy again. `src/taskloop/app/run/entry.py:195` reloads config for each new process, including exec, while `src/taskloop/contracts/checkpoint.py:160` stores no effective profile/commit identity. `src/taskloop/app/loop/loop.py:208` refreshes before attempting the installed-version move.
+**Evidence:** `src/taskloop/app/wire/slots.py:65` fully decodes the main working-tree profile just to get the base, then reads another profile at the resolved base commit. `profile_slots` at line 78 reads the main working-tree copy again. `src/taskloop/app/run/entry.py:195` reloads config for each new process, including exec, while `packages/kernel/src/tlkernel/checkpoint.py:160` stores no effective profile/commit identity. `src/taskloop/app/loop/loop.py:208` refreshes before attempting the installed-version move.
 
 **Failure:** Fast-forward the main checkout while an engine is active: later slot lookup/setup/release can use a changed slot directory/base/count while the engine still uses its earlier checks/land command. Exec can adopt the old plan/cursor with new checks and limits, or an old loop can reject a new working-tree key before it gets to upgrade, even if only the base hint was needed.
 

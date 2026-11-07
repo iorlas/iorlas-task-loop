@@ -1,7 +1,8 @@
 """pass_files: the files a check is handed as trailing argv (the pre-commit model), and the skip when none match."""
 from collections.abc import Sequence
 
-from taskloop.contracts.checks import Check
+from tlkernel.checks import Check
+
 from taskloop.domain.checks.inputs import matching
 
 

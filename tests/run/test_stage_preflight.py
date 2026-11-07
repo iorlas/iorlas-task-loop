@@ -19,16 +19,16 @@ from support.tlmain import tl
 from taskloop.app.run import entry
 from taskloop.app.run.engine import Engine
 from taskloop.app.run.layout import RunLayout
-from taskloop.contracts.config import EngineConfig, SlotsConfig
-from taskloop.contracts.enums import Result, Step
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitfacts import StatusRow
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.run import RunReport, RunState
-from taskloop.contracts.runrows import RunRows
+from tlkernel.config import EngineConfig, SlotsConfig
+from tlkernel.enums import Result, Step
+from tlkernel.env import Env
+from tlkernel.gitfacts import StatusRow
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId
+from tlkernel.locator import RunLocator
+from tlkernel.run import RunReport, RunState
+from tlkernel.runrows import RunRows
 
 
 @stdout_in("output")

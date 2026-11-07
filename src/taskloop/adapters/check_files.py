@@ -4,9 +4,9 @@ import os
 from collections.abc import Sequence
 from pathlib import Path
 
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.slots import SlotGitError
+from tlkernel.gitport import Git
+from tlkernel.ids import loop_key
+from tlkernel.slots import SlotGitError
 
 BIG = 16 * 1024 * 1024  # an ignored input bigger than this counts by size, not content
 

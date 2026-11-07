@@ -17,12 +17,12 @@ import support.paths  # noqa: F401
 from support import procsim
 from support.memstores import MemDoc, MemLockTable, MemLog, fake_stores
 
-from taskloop.contracts import paths, wire
-from taskloop.contracts.docstore import JsonStore
-from taskloop.contracts.enums import LockWhat
-from taskloop.contracts.locks import LockRecord
 from taskloop.stores.bundle import Stores
 from taskloop.stores.real import real_stores
+from tlkernel import paths, wire
+from tlkernel.docstore import JsonStore
+from tlkernel.enums import LockWhat
+from tlkernel.locks import LockRecord
 
 
 class Holder:

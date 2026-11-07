@@ -1,20 +1,20 @@
 """The task-loop records the dash reads and never writes: the event index, registered repos, traces, engine logs, and the spans a
-bead's claims make. Each is one file or folder under the config dir (taskloop.contracts.paths names them)."""
+bead's claims make. Each is one file or folder under the config dir (tlkernel.paths names them)."""
 
 import json
 import os
 from dataclasses import dataclass
 from typing import Any
 
-from taskloop.contracts import events, wire
-from taskloop.contracts.events import Event
-from taskloop.contracts.parks import Park, ParkStore
-from taskloop.contracts.rowstores import ReposStore
-from taskloop.contracts.run import NetPause
-from taskloop.contracts.runlife import RETAIN
-from taskloop.contracts.trace import RunTrace
-from taskloop.contracts.waitrows import NET_PAUSE, open_records
 from taskloop_dash.env import Env
+from tlkernel import events, wire
+from tlkernel.events import Event
+from tlkernel.parks import Park, ParkStore
+from tlkernel.rowstores import ReposStore
+from tlkernel.run import NetPause
+from tlkernel.runlife import RETAIN
+from tlkernel.trace import RunTrace
+from tlkernel.waitrows import NET_PAUSE, open_records
 
 Span = dict[str, Any]
 

@@ -6,9 +6,9 @@ import pytest
 
 from taskloop.app.report.card import score_of
 from taskloop.app.report.mainstate import main_state
-from taskloop.contracts.gitfacts import LogRow
-from taskloop.contracts.slots import SlotGitError
-from taskloop.contracts.snapshots import ReleaseResult
+from tlkernel.gitfacts import LogRow
+from tlkernel.slots import SlotGitError
+from tlkernel.snapshots import ReleaseResult
 
 T = 1793000000.0
 CARD = {"since": T, "until": T + 600, "beads": 1, "landed": 1, "landed_no_ask": 1, "asks": {"count": 0}, "lost": 0, "crashes": 0,

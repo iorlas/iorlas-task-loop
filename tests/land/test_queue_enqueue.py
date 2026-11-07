@@ -5,9 +5,9 @@ import pytest
 
 from taskloop.app.land.cmds import Stop
 from taskloop.app.land.queue_enqueue import enqueue
-from taskloop.contracts.bead import Bead, Dep
-from taskloop.contracts.gitfacts import DiffEntry
-from taskloop.contracts.ids import BeadId
+from tlkernel.bead import Bead, Dep
+from tlkernel.gitfacts import DiffEntry
+from tlkernel.ids import BeadId
 
 
 def host_for(records=(), paths=None):

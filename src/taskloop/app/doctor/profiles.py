@@ -4,13 +4,14 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
+from tlkernel import config
+from tlkernel.gitport import Git
+from tlkernel.rowstores import ReposStore
+from tlkernel.slots import NotARepo, SlotGitError
+
 from taskloop.adapters import profile_at
 from taskloop.adapters.gitmemo import ref_files
 from taskloop.adapters.gitrepo import Sig, git_dirs, is_dir_sig, sig
-from taskloop.contracts import config
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.rowstores import ReposStore
-from taskloop.contracts.slots import NotARepo, SlotGitError
 
 FILE = profile_at.FILE
 

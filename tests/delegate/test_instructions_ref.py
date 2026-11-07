@@ -1,5 +1,6 @@
 """`instructions_ref`: a worker reads the repo's instruction files as committed at a commit, not the work tree's (tl-7i9k.58)."""
 import pytest
+
 from delegate.app import decide, launch
 from delegate.contracts import wire
 from delegate.contracts.json_types import Json

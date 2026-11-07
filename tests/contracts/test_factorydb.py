@@ -9,10 +9,10 @@ from support.case import Case
 from support.narrow import must
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.contracts import factorydb
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import RunManifest
-from taskloop.contracts.runrows import RunRows
+from tlkernel import factorydb
+from tlkernel.paths import ConfigDir
+from tlkernel.run import RunManifest
+from tlkernel.runrows import RunRows
 
 
 class SharedWriterTest(Case):

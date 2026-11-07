@@ -42,9 +42,9 @@ from taskloop.app.loop.loop import parse_handover  # noqa: E402
 from taskloop.app.loop.take import Taker  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import real  # noqa: E402
-from taskloop.contracts import wire  # noqa: E402
-from taskloop.contracts.loop import Carry, LoopState  # noqa: E402
-from taskloop.contracts.procport import WaitTimeout  # noqa: E402
+from tlkernel import wire  # noqa: E402
+from tlkernel.loop import Carry, LoopState  # noqa: E402
+from tlkernel.procport import WaitTimeout  # noqa: E402
 
 
 def bead(id, priority=2, parent=None, labels=(), type="task"):

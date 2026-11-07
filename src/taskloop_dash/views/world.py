@@ -4,19 +4,19 @@ it; a test builds it from recorded logs and fakes). Nothing in it is a path or a
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
-from taskloop.contracts.ask import Ask
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.dashhealth import Score
-from taskloop.contracts.dashruns import ResourceLease, RunHeader
-from taskloop.contracts.events import Event
-from taskloop.contracts.ledger import Adr, LedgerEntry
-from taskloop.contracts.loop import LoopState
-from taskloop.contracts.parks import Park
-from taskloop.contracts.reconcile import Stray
-from taskloop.contracts.run import NetPause
-from taskloop.contracts.slottable import SlotSource
-from taskloop.contracts.snapshots import StatusSnapshot
 from taskloop_dash.views.runfacts import Run
+from tlkernel.ask import Ask
+from tlkernel.bead import Bead
+from tlkernel.dashhealth import Score
+from tlkernel.dashruns import ResourceLease, RunHeader
+from tlkernel.events import Event
+from tlkernel.ledger import Adr, LedgerEntry
+from tlkernel.loop import LoopState
+from tlkernel.parks import Park
+from tlkernel.reconcile import Stray
+from tlkernel.run import NetPause
+from tlkernel.slottable import SlotSource
+from tlkernel.snapshots import StatusSnapshot
 
 
 @dataclass(frozen=True)

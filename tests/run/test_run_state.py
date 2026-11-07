@@ -23,11 +23,11 @@ from taskloop.app.pipeline.finish import terminal_state
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
 from taskloop.app.run.run_once import Ended, RunOnce
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.run import RunManifest, RunState
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
+from tlkernel.kinds import Kind
+from tlkernel.locator import RunLocator
+from tlkernel.run import RunManifest, RunState
 
 LANDS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 

@@ -14,13 +14,13 @@ from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.launch.dash_ports import owner_intake, owner_writes
 from taskloop.app.pipeline import requests
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.lookrows import LookRows
-from taskloop.contracts.run import RunState
-from taskloop.contracts.runrows import RunRows
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
+from tlkernel.askstore import AskStore
+from tlkernel.ids import loop_key
+from tlkernel.lookrows import LookRows
+from tlkernel.run import RunState
+from tlkernel.runrows import RunRows
 
 
 class RepoIdentity(Case):

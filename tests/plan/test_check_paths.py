@@ -11,10 +11,10 @@ from support.cfgs import cfg_with
 from support.engine_case import EngineTest
 from support.plans import CLEAN, PLAN, WRITE
 
-from taskloop.contracts.checksport import TreeProbe
-from taskloop.contracts.ids import CheckId
-from taskloop.contracts.plancheck import PlanCheck, PlanData, Ref, StageData, adhoc
 from taskloop.domain.checks import lint
+from tlkernel.checksport import TreeProbe
+from tlkernel.ids import CheckId
+from tlkernel.plancheck import PlanCheck, PlanData, Ref, StageData, adhoc
 
 OUTPUT = "tests/Sim.Scenarios/bin/Debug/net10.0/Sim.Scenarios"
 TYPO = "tests/Sim.Scenarios/bin/Debug/net10.0/Sim.Scenenarios"

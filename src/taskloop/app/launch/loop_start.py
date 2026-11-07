@@ -5,6 +5,13 @@ import uuid
 from collections.abc import Callable
 from pathlib import Path
 
+from tlkernel import paths
+from tlkernel.env import Env
+from tlkernel.envvars import EnvVar
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+from tlkernel.rowstores import ReposStore
+
 from taskloop.adapters import ident
 from taskloop.app.doctor import profiles
 from taskloop.app.launch.loop import HERE, live_loops
@@ -14,12 +21,6 @@ from taskloop.app.release import catalog, pins
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import trail
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import paths
-from taskloop.contracts.env import Env
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.rowstores import ReposStore
 
 
 def installs(cfg: paths.ConfigDir, env: Env, here: Path = HERE, now: Callable[[], float] = trail.now) -> Installs:

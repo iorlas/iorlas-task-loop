@@ -2,9 +2,9 @@
 
 from typing import Any
 
-from taskloop.contracts import wire
-from taskloop.contracts.review import ReviewState, Unchecked, Unverified
-from taskloop.contracts.wire import Rec
+from tlkernel import wire
+from tlkernel.review import ReviewState, Unchecked, Unverified
+from tlkernel.wire import Rec
 
 
 def known[T: Rec](cls: type[T], items: list[dict[str, Any]]) -> list[T]:

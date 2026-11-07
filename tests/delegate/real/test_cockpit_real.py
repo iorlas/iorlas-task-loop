@@ -9,13 +9,13 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-from delegate.app import cockpit, env, harnesses, onboard, status, usage
-from delegate.domain.lanes.lane import Lane
+import routing_support as support
 from support.procsim import real_proc
 from support.tmpdir import TemporaryDirectory
-
-import routing_support as support
 from test_route import CFG, T, route
+
+from delegate.app import cockpit, env, harnesses, onboard, status, usage
+from delegate.domain.lanes.lane import Lane
 
 HOUR = 3600
 

@@ -8,18 +8,19 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from tlkernel.checks import Check, CheckResult
+from tlkernel.config import EngineConfig
+from tlkernel.envvars import EnvVar
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.paths import ConfigDir
+from tlkernel.runkey import BaseSha, RunKey
+from tlkernel.slots import SlotGitError
+
 from taskloop.adapters.ident import config_dir
 from taskloop.adapters.suiteout import failing_tests, failure_report
 from taskloop.app.checks import authorization
 from taskloop.app.checks.cache import RunMemo
 from taskloop.app.release.shell import Abort, Shell, say
-from taskloop.contracts.checks import Check, CheckResult
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.runkey import BaseSha, RunKey
-from taskloop.contracts.slots import SlotGitError
 from taskloop.domain.checks.specs import gate_items
 from taskloop.stores.real import real_stores
 

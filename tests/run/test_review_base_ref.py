@@ -5,8 +5,8 @@ import pytest
 from support.argv_of import argv_of
 
 from taskloop.app.workers import worker_identity, worker_request
-from taskloop.contracts import config
-from taskloop.contracts.delegate import RunRequest
+from tlkernel import config
+from tlkernel.delegate import RunRequest
 
 
 def build(role: str, node: str, resolved: str = "basesha"):

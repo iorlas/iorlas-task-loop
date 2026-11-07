@@ -12,9 +12,10 @@ from unittest import mock
 from any_agent import events as ev
 from any_agent.harnesses.codex import CodexHarness
 from any_agent.protocol import LaunchInputs
-from delegate.app.publish import LiveSink
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
+
+from delegate.app.publish import LiveSink
 
 HERE = Path(__file__).resolve().parent
 

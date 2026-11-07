@@ -5,10 +5,6 @@ import json
 import threading
 from dataclasses import replace
 
-from taskloop.contracts import wire
-from taskloop.contracts.dash import BeadDetail, Snapshot
-from taskloop.contracts.dashcost import CostPage
-from taskloop.contracts.ids import BeadId, is_bead_id
 from taskloop_dash.api.artifacts import Artifacts
 from taskloop_dash.env import Env
 from taskloop_dash.readers.wake import Wake, wait_seconds
@@ -18,6 +14,10 @@ from taskloop_dash.views import bead_detail, cost, snapshot
 from taskloop_dash.views.board import Board
 from taskloop_dash.views.runfacts import Run
 from taskloop_dash.views.world import World
+from tlkernel import wire
+from tlkernel.dash import BeadDetail, Snapshot
+from tlkernel.dashcost import CostPage
+from tlkernel.ids import BeadId, is_bead_id
 
 SNAPSHOT_TTL = 3.0  # at least the page's polling interval
 Reply = tuple[int, bytes, dict[str, str]]

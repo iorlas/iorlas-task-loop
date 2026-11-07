@@ -3,11 +3,11 @@ from pathlib import Path
 
 from taskloop.adapters import childenv
 from taskloop.app.run.layout import loop_id_of
-from taskloop.contracts.env import Env
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.ids import new_loop_id
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.env import Env
+from tlkernel.envvars import EnvVar
+from tlkernel.ids import new_loop_id
+from tlkernel.locator import RunLocator
+from tlkernel.paths import ConfigDir
 
 
 def test_a_new_loop_id_is_opaque_and_unique() -> None:

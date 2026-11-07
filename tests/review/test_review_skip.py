@@ -11,7 +11,7 @@ import support.paths  # noqa: F401
 from support import engine_case as T
 from support.plans import BEAD, CLEAN, PLAN, WRITE
 
-from taskloop.contracts.config import ReviewSkipConfig
+from tlkernel.config import ReviewSkipConfig
 
 ALLOW = ReviewSkipConfig(tests=["f.txt"])
 

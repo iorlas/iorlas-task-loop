@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from taskloop.contracts import factorydb, runfacts
+from tlkernel import factorydb, runfacts
 
 
 @pytest.fixture

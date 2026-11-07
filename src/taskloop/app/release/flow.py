@@ -9,22 +9,22 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from any_plugin_cache import NoVersionError, set_json_version
+from tlkernel.bd_errors import BdCommandFailure
+from tlkernel.beadsport import BdFailure, BeadQuery, Beads
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+from tlkernel.ids import MARKETPLACE, BeadId, parse_bead_id
+from tlkernel.paths import ConfigDir
+from tlkernel.procport import Spawner
+from tlkernel.rowstores import ReleaseResultStore
+from tlkernel.snapshots import ReleaseResult
 
 from taskloop.adapters import beadtools, gitrepo, ident, landlock
 from taskloop.adapters.ident import config_dir
 from taskloop.app.release import canary, clone, gate, manifest, publish, selfupdate, shell, tidy
 from taskloop.app.release.push import push_main, release_lock_path
 from taskloop.app.release.shell import Abort, Shell, say
-from taskloop.contracts.bd_errors import BdCommandFailure
-from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import MARKETPLACE, BeadId, parse_bead_id
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.procport import Spawner
-from taskloop.contracts.rowstores import ReleaseResultStore
-from taskloop.contracts.snapshots import ReleaseResult
 
 
 @dataclass(frozen=True)

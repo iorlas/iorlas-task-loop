@@ -9,10 +9,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.parks import Park
 from taskloop.domain.beads import park
+from tlkernel.bead import Bead
+from tlkernel.ids import BeadId
+from tlkernel.parks import Park
 
 FIX = Path(__file__).resolve().parents[1] / "fixtures" / "replay"
 

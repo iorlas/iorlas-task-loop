@@ -1,7 +1,7 @@
 """An ask as the owner reads it, built from the record's fields: no parsing of prose, no pattern matching."""
 from typing import Final
 
-from taskloop.contracts.ask import Ask, AskAnswer
+from tlkernel.ask import Ask, AskAnswer
 
 KIND_TITLE: Final = {"decision": "Decision needed", "stuck": "Stuck: direction needed", "budget": "Over its time limit",
               "ticket": "The bead needs sorting out"}

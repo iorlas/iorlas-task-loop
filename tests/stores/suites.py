@@ -11,12 +11,12 @@ from rigs import dead_pid
 from support.case import Case
 from support.narrow import must
 
-from taskloop.contracts import wire
-from taskloop.contracts.ask import Ask, AskAnswer
-from taskloop.contracts.checkpoint import Checkpoint
-from taskloop.contracts.enums import AskStatus, LockWhat
-from taskloop.contracts.followups import FollowupOutbox
-from taskloop.contracts.locks import LockTimeout
+from tlkernel import wire
+from tlkernel.ask import Ask, AskAnswer
+from tlkernel.checkpoint import Checkpoint
+from tlkernel.enums import AskStatus, LockWhat
+from tlkernel.followups import FollowupOutbox
+from tlkernel.locks import LockTimeout
 
 CK = cast(Checkpoint, S.OTHERS["Checkpoint"])
 

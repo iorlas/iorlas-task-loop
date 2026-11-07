@@ -10,18 +10,18 @@ WRITERS: Final = {
     'HostResourcesStore': {'taskloop.app.wire.setup_apply'},
     'StatusStore': {'taskloop.app.wire.lanes'},
     'StatusTriedStore': {'taskloop.app.wire.lanes'},
-    'ReposStore': {'taskloop.app.track.trail', 'taskloop.contracts.rowstores'},
+    'ReposStore': {'taskloop.app.track.trail', 'tlkernel.rowstores'},
     'ReleaseResultStore': {'taskloop.app.release.flow'},
     'ReflectStateStore': {'taskloop.app.report.reflect'},
-    'ParkStore': {'taskloop.app.asks.parks', 'taskloop.contracts.parks'},
-    'TraceStore': {'taskloop.app.run.records', 'taskloop.contracts.finish_projection'},
+    'ParkStore': {'taskloop.app.asks.parks', 'tlkernel.parks'},
+    'TraceStore': {'taskloop.app.run.records', 'tlkernel.finish_projection'},
     'BadVersionStore': {'taskloop.app.loop.versions'},
     'HandoffMirrorStore': {'taskloop.app.write.handoff'},
     'ReexecNoteStore': {'taskloop.app.release.reexec', 'taskloop.app.release.closing'},
     'NetPauseStore': {'taskloop.app.release.reexec', 'taskloop.app.release.closing'},
     'RunCountersStore': {'taskloop.app.pipeline.reload'},
     'EngineLockStore': {'taskloop.app.slots.engine_lock'},
-    'RunManifestStore': {'taskloop.contracts.runrows'},
+    'RunManifestStore': {'tlkernel.runrows'},
 }
 PATH_STORES: Final = {
     'pin': 'PinStore', 'status': 'StatusStore', 'status_tried': 'StatusTriedStore', 'repos': 'ReposStore',
@@ -48,7 +48,7 @@ def store_identity(node, names, factories):
     if isinstance(node, ast.Call):
         name = qualified(node.func, names)
         short = name.rsplit('.', 1)[-1]
-        if short.endswith('Store') and short not in {'JsonStore', 'JsonlStore'} and name.startswith('taskloop.contracts.'):
+        if short.endswith('Store') and short not in {'JsonStore', 'JsonlStore'} and name.startswith('tlkernel.'):
             return short
         if short in {'JsonStore', 'JsonlStore'} and node.args:
             return json_store_identity(node, names)

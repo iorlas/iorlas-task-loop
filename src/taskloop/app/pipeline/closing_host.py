@@ -6,20 +6,21 @@ import threading
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
+from tlkernel import fence
+from tlkernel.beadsport import Beads
+from tlkernel.checkpoint import Checkpoint, EndRec
+from tlkernel.delegate import Permanence
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.ports import Clock
+
 from taskloop.app.pipeline.closing_branch import BranchCheckpoints, BranchTree, ReleaseSlotHost, SaveBranchHost
 from taskloop.app.pipeline.closing_decide import DecideHost
 from taskloop.app.pipeline.closing_notes import FileNotesHost, NotesCheckpoints, ReflectCheckpoints, ReflectHost
 from taskloop.app.pipeline.closing_record import RecordHost, RecordRecords
 from taskloop.app.pipeline.closing_settle import SettleHost
 from taskloop.app.pipeline.ports import Slotting
-from taskloop.contracts import fence
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.checkpoint import Checkpoint, EndRec
-from taskloop.contracts.delegate import Permanence
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.ports import Clock
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes.pause_reasons import Producer

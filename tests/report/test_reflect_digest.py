@@ -18,8 +18,8 @@ from support import tlbd
 from support.repos import write_repos
 
 from taskloop.app.report import reflect as rd
-from taskloop.contracts.env import snapshot
 from taskloop.domain.report import reflect as rules
+from tlkernel.env import snapshot
 
 NOW = 1_800_000_000.0
 

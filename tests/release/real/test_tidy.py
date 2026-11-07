@@ -12,7 +12,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 from taskloop.adapters.git import RealGit
 from taskloop.app.release import tidy
-from taskloop.contracts.env import snapshot
+from tlkernel.env import snapshot
 
 GIT = RealGit(snapshot())
 

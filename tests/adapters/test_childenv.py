@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.adapters import childenv
-from taskloop.contracts.env import Env
+from tlkernel.env import Env
 
 BASE = {"PATH": "/venv/bin:/usr/bin", "VIRTUAL_ENV": "/venv", "VIRTUAL_ENV_PROMPT": "x", "PYTHONHOME": "/h", "HOME": "/home/u",
         "TL_SLOT": "s1", "TL_BOGUS": "1", "TASK_LOOP_NOPE": "1", "TL_CHECK_LOG_A": "/log"}
@@ -32,7 +32,7 @@ class Venv(Case):
         assert out["PATH"] == "/usr/bin"
 
     def test_the_process_environment_is_cleaned(self):
-        from taskloop.contracts import env as penv  # noqa: PLC0415
+        from tlkernel import env as penv  # noqa: PLC0415
         with penv.patched({"VIRTUAL_ENV": "/venv"}):
             assert "VIRTUAL_ENV" not in childenv.tool_env(penv.snapshot().vars)
 

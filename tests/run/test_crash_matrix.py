@@ -12,10 +12,10 @@ import pytest
 from support import stepgraph
 
 from taskloop.app.pipeline.cursor import select_step
-from taskloop.contracts.checkpoint import Checkpoint, EndRec
-from taskloop.contracts.enums import Step
-from taskloop.contracts.locator import RunBundle
-from taskloop.contracts.run import RunManifest, RunState
+from tlkernel.checkpoint import Checkpoint, EndRec
+from tlkernel.enums import Step
+from tlkernel.locator import RunBundle
+from tlkernel.run import RunManifest, RunState
 
 S = Step
 GRAPH = stepgraph.graph()  # read off the code (tests/support/stepgraph.py), not typed here

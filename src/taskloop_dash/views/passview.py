@@ -1,9 +1,9 @@
 """One pass of a run: the spans between two loop turns, its end and its resume note."""
 from dataclasses import dataclass
 
-from taskloop.contracts.dash import PassEnd, Resumed
-from taskloop.contracts.runlife import Liveness
 from taskloop_dash.views.runfacts import Run, Span
+from tlkernel.dash import PassEnd, Resumed
+from tlkernel.runlife import Liveness
 
 
 @dataclass(frozen=True)

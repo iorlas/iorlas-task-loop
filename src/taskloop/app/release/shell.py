@@ -4,10 +4,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.procport import Spawner
-from taskloop.contracts.slots import SlotGitError
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.procport import Spawner
+from tlkernel.slots import SlotGitError
 
 
 class Abort(Exception):

@@ -14,13 +14,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import dash_fixtures as fx
 
-from taskloop.contracts import dash as D
-from taskloop.contracts import dashcost as DC
-from taskloop.contracts import dashhealth as DH
-from taskloop.contracts import schema, wire
-from taskloop.contracts.wire import Rec
 from taskloop_dash.api.writes import Writes
 from taskloop_dash.views.snapshot import version_of
+from tlkernel import dash as D
+from tlkernel import dashcost as DC
+from tlkernel import dashhealth as DH
+from tlkernel import schema, wire
+from tlkernel.wire import Rec
 
 CLASS = {"snapshot.json": D.Snapshot, "bead/": D.BeadDetail, "live/": D.LivePage, "result.json": D.Result, "cost.json": DC.CostPage}
 

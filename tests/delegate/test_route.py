@@ -11,17 +11,17 @@ import time
 from pathlib import Path
 from typing import Any
 
+import hermetic  # noqa: F401  (a home of its own for every test)
 import pytest
+import routing_support as support
+from support.tmpdir import TemporaryDirectory, mkdtemp
+
 from delegate.app import net, usage
 from delegate.contracts.routing import Settings
 from delegate.contracts.state import StateDoc
 from delegate.contracts.stores import locked
 from delegate.domain.lanes.lane import Lane
 from delegate.domain.time import spec
-from support.tmpdir import TemporaryDirectory, mkdtemp
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
 
 ROOT = Path(__file__).resolve().parents[2]
 _entry = importlib.util.spec_from_file_location("route", ROOT / "src" / "delegate" / "entry.py")

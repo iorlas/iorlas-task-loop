@@ -1,4 +1,4 @@
-"""One liveness rule and one retention (taskloop.contracts.runlife): a run is live, ended or lost from its manifest's recorded state alone,
+"""One liveness rule and one retention (tlkernel.runlife): a run is live, ended or lost from its manifest's recorded state alone,
 the dash API and `tl report` read it the same way, the one reconciler marks a run whose heartbeat is stale and whose pid is gone lost, the
 run-start sweep removes old logs with their .live/ folders, and the live API pages a long log. A fake clock throughout; the pids are
 numbers (one that is nobody's, and this test process's own)."""
@@ -24,16 +24,16 @@ from support.runs import manifest  # noqa: E402
 from taskloop.app.report import card  # noqa: E402
 from taskloop.app.run import layout  # noqa: E402
 from taskloop.app.slots.lease import Lease  # noqa: E402
-from taskloop.contracts import runlife  # noqa: E402
-from taskloop.contracts.enums import Outcome  # noqa: E402
-from taskloop.contracts.ids import BeadId, RunId, loop_key  # noqa: E402
-from taskloop.contracts.locator import RunLocator, host_name  # noqa: E402
-from taskloop.contracts.paths import ConfigDir  # noqa: E402
-from taskloop.contracts.run import RunManifest, RunState  # noqa: E402
-from taskloop.contracts.runlife import BEAT_EVERY, KEEP_DAYS, STALE_AFTER, Liveness, liveness  # noqa: E402
-from taskloop.contracts.trace import RunTrace  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402
 from taskloop_dash.api import live as live_api  # noqa: E402
+from tlkernel import runlife  # noqa: E402
+from tlkernel.enums import Outcome  # noqa: E402
+from tlkernel.ids import BeadId, RunId, loop_key  # noqa: E402
+from tlkernel.locator import RunLocator, host_name  # noqa: E402
+from tlkernel.paths import ConfigDir  # noqa: E402
+from tlkernel.run import RunManifest, RunState  # noqa: E402
+from tlkernel.runlife import BEAT_EVERY, KEEP_DAYS, STALE_AFTER, Liveness, liveness  # noqa: E402
+from tlkernel.trace import RunTrace  # noqa: E402
 
 BEAD, STAMP = "t-1", "20261026-100000"
 RUN = f"{BEAD}-{STAMP}"

@@ -17,12 +17,12 @@ import support.paths  # noqa: F401
 from jsonl_log import Jsonl, cursor
 
 from contracts import samples as S
-from taskloop.contracts import askstore, paths, stores, wire
-from taskloop.contracts.ask import Ask
-from taskloop.contracts.docstore import JsonStore
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.log import CmdStart
-from taskloop.contracts.snapshots import Pin
+from tlkernel import askstore, paths, stores, wire
+from tlkernel.ask import Ask
+from tlkernel.docstore import JsonStore
+from tlkernel.ids import BeadId
+from tlkernel.log import CmdStart
+from tlkernel.snapshots import Pin
 
 
 class JsonlTest(Case):

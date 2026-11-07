@@ -14,7 +14,7 @@ from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import childenv, procs
-from taskloop.contracts.env import snapshot
+from tlkernel.env import snapshot
 
 POSIX = os.name != "nt"
 

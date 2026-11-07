@@ -13,7 +13,7 @@ from support.plans import PLAN
 
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from taskloop.app.plan.planner import Planner
-from taskloop.contracts.kinds import Kind
+from tlkernel.kinds import Kind
 
 
 class EmptyPlan(Case):

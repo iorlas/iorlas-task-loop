@@ -14,12 +14,12 @@ import support.paths  # noqa: F401
 from support.dashlogs import T
 from support.narrow import must
 
-from taskloop.contracts import wire
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.ids import RunId
-from taskloop.contracts.trace import RunTrace, Stats
 from taskloop_dash.env import Env
 from taskloop_dash.readers.records import Records
+from tlkernel import wire
+from tlkernel.enums import Outcome
+from tlkernel.ids import RunId
+from tlkernel.trace import RunTrace, Stats
 
 
 def trace(run: str, outcome: Outcome, ended: float, replans: int = 0) -> RunTrace:

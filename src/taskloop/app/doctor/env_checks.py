@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Protocol
 
-from taskloop.contracts.bd_errors import BdCommandFailure
-from taskloop.contracts.beadsport import BdFailure
-from taskloop.contracts.procport import Ran
+from tlkernel.bd_errors import BdCommandFailure
+from tlkernel.beadsport import BdFailure
+from tlkernel.procport import Ran
 
 MIN_PYTHON: Final = (3, 15)
 SHARED_TMP: Final = ("/tmp", "/var/tmp")

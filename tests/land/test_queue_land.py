@@ -11,7 +11,7 @@ from taskloop.app.land.cmds import Stop
 from taskloop.app.land.queue_land import Queued, QueueLand
 from taskloop.app.land.queue_refs import Made
 from taskloop.app.land.stack import HeadMoved, Stack
-from taskloop.contracts.forge import CLOSED, OPEN, StackItem
+from tlkernel.forge import CLOSED, OPEN, StackItem
 
 
 class FakeRefs:

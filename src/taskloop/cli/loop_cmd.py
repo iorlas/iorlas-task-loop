@@ -5,16 +5,17 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+from tlkernel.procport import Spawner
+
 from taskloop.app.doctor import profiles
 from taskloop.app.launch import loop as wloop
 from taskloop.app.launch import loop_start as wstart
 from taskloop.app.launch import repos
 from taskloop.app.track import trail
 from taskloop.cli import loop as cli
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.procport import Spawner
 
 
 def cmd_next(a: Any, env: Env, spawner: Spawner, git: Git, who: Identity, here: Path = wloop.HERE, now: Callable[[],

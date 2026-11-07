@@ -28,14 +28,14 @@ from taskloop.app.land.stackgate import StackGate
 from taskloop.app.land.state import Land
 from taskloop.app.launch.check import run_check
 from taskloop.cli.land_stack import add_parser, cmd_land_stack
-from taskloop.contracts.config import load
-from taskloop.contracts.env import Env
-from taskloop.contracts.envvars import EnvVar, registered
-from taskloop.contracts.forge import StackItem
-from taskloop.contracts.gitfacts import TreeEntry
-from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.profile_changes import ProfileChange
-from taskloop.contracts.runkey import BaseSha
+from tlkernel.config import load
+from tlkernel.env import Env
+from tlkernel.envvars import EnvVar, registered
+from tlkernel.forge import StackItem
+from tlkernel.gitfacts import TreeEntry
+from tlkernel.ids import TreeSha
+from tlkernel.profile_changes import ProfileChange
+from tlkernel.runkey import BaseSha
 
 TEXT = 'Denis: "I approve this profile" 2026-11-02T12:00Z'
 PATCH = 'diff --git a/.task-loop.json b/.task-loop.json\n-old\n+new\n'

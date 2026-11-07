@@ -6,8 +6,8 @@ from support.pipeline_ports import FakeHeadHistory, FakeNarrate, FakeReviewResto
 
 from taskloop.app.pipeline.decide import Decision
 from taskloop.app.pipeline.resume import GATE_NOTE, KEEP_FOR_ACTIVE, LATE, Resume
-from taskloop.contracts import wire
-from taskloop.contracts.checkpoint import Checkpoint, RunState
+from tlkernel import wire
+from tlkernel.checkpoint import Checkpoint, RunState
 
 
 def checkpoint(**kw) -> Checkpoint:

@@ -13,15 +13,15 @@ from support.narrow import must
 from support.repos import write_repos
 
 from taskloop.app.run.layout import RunLayout
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import RunState
-from taskloop.contracts.runlife import RETAIN
-from taskloop.contracts.runrows import RunRows
-from taskloop.contracts.slottable import SlotSource
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
+from tlkernel.ids import loop_key
+from tlkernel.locator import RunLocator
+from tlkernel.paths import ConfigDir
+from tlkernel.run import RunState
+from tlkernel.runlife import RETAIN
+from tlkernel.runrows import RunRows
+from tlkernel.slottable import SlotSource
 
 
 class RunHeaders(Case):

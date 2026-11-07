@@ -2,11 +2,11 @@
 
 from dataclasses import dataclass, replace
 
-from taskloop.contracts import factorydb, wire
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import RunManifest
-from taskloop.contracts.runlife import shown
 from taskloop_dash.views.runfacts import FoldState, Run, run_from
+from tlkernel import factorydb, wire
+from tlkernel.paths import ConfigDir
+from tlkernel.run import RunManifest
+from tlkernel.runlife import shown
 
 
 @dataclass(frozen=True)

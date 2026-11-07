@@ -1,13 +1,14 @@
 """Root bindings for installed versions and the engine lock."""
 from pathlib import Path
 
+from tlkernel.env import Env
+from tlkernel.paths import ConfigDir
+
 from taskloop.adapters import ident
 from taskloop.app.loop.versions import Installs
 from taskloop.app.release import catalog, pins
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import trail
-from taskloop.contracts.env import Env
-from taskloop.contracts.paths import ConfigDir
 
 
 def installed_newer(env: Env, root: Path = ident.PLUGIN_ROOT) -> tuple[str, Path] | None:

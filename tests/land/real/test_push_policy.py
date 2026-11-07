@@ -14,7 +14,7 @@ from support.memstores import fake_stores
 
 from taskloop.adapters.git import RealGit
 from taskloop.app.land.push_judge import PushStatus, judge_push
-from taskloop.contracts.env import snapshot
+from tlkernel.env import snapshot
 
 
 class PushPolicy(Case):

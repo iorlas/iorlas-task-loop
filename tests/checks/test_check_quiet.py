@@ -16,7 +16,7 @@ from support.tmpdir import TemporaryDirectory
 
 from checks.test_checks_speed import SpeedTest
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts import config
+from tlkernel import config
 
 
 class Quiet(SpeedTest):

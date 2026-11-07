@@ -15,10 +15,10 @@ from support.who import who
 from taskloop.adapters.ident import hostname
 from taskloop.app.wire import brief
 from taskloop.app.wire.slots import slot_source, slot_table
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.slottable import WORKTREE, LiveSlot, SlotSource, build_slot_table
 from taskloop_dash.views import floor
 from taskloop_dash.views.world import ProjectIn
+from tlkernel.gitport import Git
+from tlkernel.slottable import WORKTREE, LiveSlot, SlotSource, build_slot_table
 
 NOW = T + 600
 

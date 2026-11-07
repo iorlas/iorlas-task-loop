@@ -11,8 +11,8 @@ from support.check_host import CheckHostCase
 from support import procsim
 
 from taskloop.adapters import childenv
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.paths import RunFiles
+from tlkernel.envvars import EnvVar
+from tlkernel.paths import RunFiles
 
 NAMES = (EnvVar.TL_RUN_ID, EnvVar.TL_RUN_DIR, EnvVar.TL_ATTEMPT, EnvVar.TL_ARTIFACT_DIR, EnvVar.TL_WORKTREE, EnvVar.TL_BRANCH)
 

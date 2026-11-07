@@ -1,11 +1,12 @@
 # The architecture rules (was tests/gate_rules.py layer_problems / placement_problems and the contracts and ports rule files).
 # Run by `just rules` with src/ on PYTHONPATH. stdlib modules that are one file (subprocess, socket, threading) cannot be root packages
-# here (urllib, http, multiprocessing, re are packages): their ban is ruff TID251 (src/taskloop/contracts/ruff.toml, src/taskloop/stores/ruff.toml). "delegate" is banned by TID251 in ruff.toml.
+# here (urllib, http, multiprocessing, re are packages): their ban is ruff TID251 (packages/kernel/src/tlkernel/ruff.toml, src/taskloop/stores/ruff.toml). "delegate" is banned by TID251 in ruff.toml.
 [importlinter]
 root_packages =
     taskloop
     delegate
     taskloop_dash
+    tlkernel
     msgspec
     re
     urllib
@@ -22,7 +23,7 @@ layers =
     taskloop.app
     taskloop.stores
     taskloop.domain | taskloop.adapters
-    taskloop.contracts
+    tlkernel
 
 [importlinter:contract:forbidden-regex]
 name = import re only in adapters and domain matchers
@@ -42,7 +43,7 @@ ignore_imports =
 [importlinter:contract:contracts-no-network-or-processes]
 name = contracts never imports urllib, http or multiprocessing
 type = forbidden
-source_modules = taskloop.contracts
+source_modules = tlkernel
 forbidden_modules =
     urllib
     http
@@ -59,14 +60,14 @@ source_modules =
     taskloop.hook.prepush
 forbidden_modules =
     msgspec
-    taskloop.contracts
+    tlkernel
     taskloop.app
     taskloop.adapters
     taskloop.stores
     taskloop.domain
 
 [importlinter:contract:msgspec-in-contracts-only]
-name = only taskloop.contracts imports msgspec
+name = only tlkernel imports msgspec
 type = forbidden
 source_modules =
     taskloop
@@ -74,7 +75,7 @@ source_modules =
 forbidden_modules = msgspec
 allow_indirect_imports = True
 ignore_imports =
-    taskloop.contracts.** -> msgspec
+    tlkernel.** -> msgspec
 
 [importlinter:contract:layers-no-skips]
 name = cli and hook never import domain or adapters
@@ -95,7 +96,7 @@ forbidden_modules = taskloop.domain
 allow_indirect_imports = True
 
 [importlinter:contract:dash-imports-contracts-only]
-name = the dashboard imports taskloop.contracts only
+name = the dashboard imports tlkernel only
 type = forbidden
 source_modules = taskloop_dash
 forbidden_modules =
@@ -251,7 +252,7 @@ source_modules =
     taskloop.stores
     taskloop.domain
     taskloop.adapters
-    taskloop.contracts
+    tlkernel
 forbidden_modules =
     taskloop.app.launch
     taskloop.app.wire
@@ -312,7 +313,7 @@ source_modules =
     taskloop.cli
     taskloop.hook
     taskloop.domain
-    taskloop.contracts
+    tlkernel
 forbidden_modules =
     taskloop.adapters.delegate
     taskloop.adapters.runner

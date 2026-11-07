@@ -1,10 +1,11 @@
 """The land's rebase onto the base, and the conflict it can stop on."""
 from typing import Protocol
 
+from tlkernel.gitport import Git
+
 from taskloop.app.land.gate import Problem, ProblemKind
 from taskloop.app.land.landed import LandedConfig
 from taskloop.app.land.parts import OutcomeSteps
-from taskloop.contracts.gitport import Git
 
 
 class LandRebaseHost(Protocol):

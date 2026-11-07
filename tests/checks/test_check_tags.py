@@ -12,12 +12,12 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 # isort: split
 import msgspec
 
-from taskloop.contracts.checks import Check, CheckResult, Durations, Phase
-from taskloop.contracts.config import CheckSpec, EngineConfig
-from taskloop.contracts.ids import CheckId
-from taskloop.contracts.wire import load
 from taskloop.domain.checks.plan import CheckPlan
 from taskloop.domain.checks.specs import diff_check, gate_items, repo_check, tags_of, wall_limit
+from tlkernel.checks import Check, CheckResult, Durations, Phase
+from tlkernel.config import CheckSpec, EngineConfig
+from tlkernel.ids import CheckId
+from tlkernel.wire import load
 
 
 def chk(name: str, cmd: str = "true", **kw) -> Check:

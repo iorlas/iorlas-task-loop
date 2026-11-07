@@ -10,8 +10,8 @@ import pytest
 from support.case import Case
 
 from taskloop.adapters.spawner import RealSpawner
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.procport import WaitTimeout
+from tlkernel.env import snapshot
+from tlkernel.procport import WaitTimeout
 
 
 class RealSpawn(Case):

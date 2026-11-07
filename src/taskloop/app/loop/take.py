@@ -4,18 +4,19 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from os import EX_CONFIG
 
+from tlkernel.bdsafe import attempt
+from tlkernel.bead import Bead
+from tlkernel.beadsport import BdFailure, BeadPatch
+from tlkernel.config import ConfigError, EngineConfig, LoopConfig
+from tlkernel.enums import Result
+from tlkernel.ids import BeadId
+from tlkernel.slots import SlotFail, SlotGitError
+
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.ports import LeaseHandle
 from taskloop.app.loop.queue import QueueRule, has_areas
 from taskloop.app.loop.run import BeadRun, Where
-from taskloop.contracts.bdsafe import attempt
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import BdFailure, BeadPatch
-from taskloop.contracts.config import ConfigError, EngineConfig, LoopConfig
-from taskloop.contracts.enums import Result
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.slots import SlotFail, SlotGitError
 
 
 @dataclass

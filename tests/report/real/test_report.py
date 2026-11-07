@@ -41,12 +41,12 @@ from taskloop.adapters.git import RealGit  # noqa: E402
 from taskloop.app.launch import repos  # noqa: E402
 from taskloop.app.reconcile import lost  # noqa: E402
 from taskloop.app.report import card, inputs  # noqa: E402
-from taskloop.contracts import wire  # noqa: E402
-from taskloop.contracts.env import snapshot  # noqa: E402
-from taskloop.contracts.ids import BeadId, RunId  # noqa: E402
-from taskloop.contracts.landed import Landed  # noqa: E402
-from taskloop.contracts.run import RunState  # noqa: E402
-from taskloop.contracts.trace import RunTrace  # noqa: E402
+from tlkernel import wire  # noqa: E402
+from tlkernel.env import snapshot  # noqa: E402
+from tlkernel.ids import BeadId, RunId  # noqa: E402
+from tlkernel.landed import Landed  # noqa: E402
+from tlkernel.run import RunState  # noqa: E402
+from tlkernel.trace import RunTrace  # noqa: E402
 
 T0 = datetime(2026, 10, 21, 6, 0).timestamp()  # the window's start in the fixtures: local 06:00
 MIN = 60.0

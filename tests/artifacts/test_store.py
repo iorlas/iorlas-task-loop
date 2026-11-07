@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from taskloop.app.artifacts import rules, store
-from taskloop.contracts.artifact import ArtifactSlot
-from taskloop.contracts.wire import Refused
+from tlkernel.artifact import ArtifactSlot
+from tlkernel.wire import Refused
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"x" * 64
 JPG = b"\xff\xd8\xff\xe0" + b"x" * 64

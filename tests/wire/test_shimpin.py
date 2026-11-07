@@ -8,7 +8,7 @@ from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.wire import doctor, hook
-from taskloop.contracts.env import Env
+from tlkernel.env import Env
 
 
 class ShimPin(Case):

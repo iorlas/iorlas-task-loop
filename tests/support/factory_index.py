@@ -1,9 +1,9 @@
 """Prepare fixture runs through the production indexer before asking a view to read."""
 
-from taskloop.contracts import beadrows, factorydb
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.paths import ConfigDir
 from taskloop_dash.index import Indexer
+from tlkernel import beadrows, factorydb
+from tlkernel.ids import loop_key
+from tlkernel.paths import ConfigDir
 
 
 def ingest(cfg, now):

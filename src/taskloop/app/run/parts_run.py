@@ -4,6 +4,8 @@ import threading
 from functools import cached_property
 from typing import Any
 
+from tlkernel.kinds import Kind
+
 from taskloop.adapters import childenv, slotcheck
 from taskloop.adapters.agent import new_live
 from taskloop.adapters.check_probe import PathProbe
@@ -28,7 +30,6 @@ from taskloop.app.run.state import state_names
 from taskloop.app.run.stuck import StuckTick
 from taskloop.app.track.closing import TrailEvents
 from taskloop.app.workers.delegation import Delegation
-from taskloop.contracts.kinds import Kind
 
 
 class RunParts(Plumbing):

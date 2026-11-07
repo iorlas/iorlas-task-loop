@@ -6,12 +6,13 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel.config import HostResources
+from tlkernel.env import Env
+from tlkernel.paths import ConfigDir
+from tlkernel.procport import Ran
+
 from taskloop.adapters.ident import config_dir
 from taskloop.app.wire import hook, setup
-from taskloop.contracts.config import HostResources
-from taskloop.contracts.env import Env
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.procport import Ran
 from taskloop.stores.real import real_stores
 
 BRANCH = "tl-setup-profile"

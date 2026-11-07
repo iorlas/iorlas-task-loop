@@ -5,12 +5,11 @@ import json
 import re
 from pathlib import Path
 
+import hermetic  # noqa: F401  (a home of its own for every test)
 from any_agent.harnesses.opencode import OpenCodeHarness, Profile
 from any_agent.protocol import LaunchInputs
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
-
-import hermetic  # noqa: F401  (a home of its own for every test)
 
 DIR_VARS = re.compile(r"^(UV_CACHE_DIR|XDG_\w+_HOME|MISE_\w*_DIR)$")
 

@@ -4,14 +4,14 @@ import copy
 import os
 from typing import Any
 
+import hermetic  # noqa: F401  (a home of its own for every test)
+import routing_support as support
+from support.tmpdir import TemporaryDirectory
+from test_route import CFG, T, lanes
+
 from delegate.app import cockpit, env, usage
 from delegate.contracts.state import UsageCache
 from delegate.domain.lanes.lane import Lane
-from support.tmpdir import TemporaryDirectory
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
-from test_route import CFG, T, lanes
 
 # `account/rateLimits/read` as recorded: Pro Lite, one weekly window sent as `primary`, no `secondary`, no other bucket, no credits.
 RECORDED: dict[str, Any] = {

@@ -4,8 +4,8 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Final
 
-from taskloop.contracts import diskrows, factorydb
-from taskloop.contracts.paths import ConfigDir
+from tlkernel import diskrows, factorydb
+from tlkernel.paths import ConfigDir
 
 LOW_FREE: Final = 5 << 30  # bytes free on the volume below which doctor warns
 WINDOW_S: Final = 7 * 24 * 3600.0  # the samples a forecast fits: the last week up to the latest

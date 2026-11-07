@@ -4,7 +4,7 @@ It lives here, not on the engine's `NewFiles` part, so the checkout can ask it w
 import fnmatch
 from collections.abc import Mapping, Sequence
 
-from taskloop.contracts.paths import TASK_EXCLUDE
+from tlkernel.paths import TASK_EXCLUDE
 
 
 def planned(q: str, plan_data: Mapping[str, object] | None) -> bool:

@@ -3,9 +3,6 @@ from collections.abc import Callable
 
 from taskloop.app.track import trail, verbs
 from taskloop.app.track.verbs import Guard
-from taskloop.contracts import fence
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.identity import Identity
 
 
 class ClosingBeads:

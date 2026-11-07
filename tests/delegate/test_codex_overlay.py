@@ -12,13 +12,13 @@ from unittest import mock
 
 import pytest
 from any_agent.protocol import LaunchSpec
+from support.case import Case
+from test_route import route
+
 from delegate.app import codex_policy, env
 from delegate.cli import parser
 from delegate.contracts import stops, wire
 from delegate.contracts.json_types import Json, arr
-from support.case import Case
-
-from test_route import route
 
 
 def rules_at(home):

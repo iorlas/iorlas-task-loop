@@ -15,12 +15,12 @@ from taskloop.adapters import factory as adapter
 from taskloop.app.launch import factory
 from taskloop.app.loop.files import LoopFiles
 from taskloop.cli import factory as cli
-from taskloop.contracts.config import RepoProfile, SlotsConfig
-from taskloop.contracts.env import Env
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.loop import LoopState
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.procport import Spawner
+from tlkernel.config import RepoProfile, SlotsConfig
+from tlkernel.env import Env
+from tlkernel.identity import Identity
+from tlkernel.loop import LoopState
+from tlkernel.paths import ConfigDir
+from tlkernel.procport import Spawner
 
 
 class Factory(Case):

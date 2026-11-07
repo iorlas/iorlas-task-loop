@@ -8,13 +8,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from tlkernel import paths
+from tlkernel.bead import Bead
+from tlkernel.beadsport import Beads
+from tlkernel.config import HostResources, RepoProfile
+from tlkernel.ids import BeadId
+from tlkernel.procport import Child, Hold
+
 from taskloop.app.loop.ports import LoopAsks, LoopSlots
-from taskloop.contracts import paths
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.config import HostResources, RepoProfile
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.procport import Child, Hold
 
 
 class Probe(Protocol):

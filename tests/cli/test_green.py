@@ -18,11 +18,11 @@ from support.memstores import fake_stores
 from taskloop.adapters import check_files
 from taskloop.app.checks.cache import InputKeys, RunMemo, key_digest, plan_digest
 from taskloop.cli import green
-from taskloop.contracts.checks import Check, CheckResult, PassRecord, Verdict
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.runkey import BaseSha
 from taskloop.stores.real import real_stores
+from tlkernel.checks import Check, CheckResult, PassRecord, Verdict
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.paths import ConfigDir
+from tlkernel.runkey import BaseSha
 
 
 class RepoGit(ScriptedGit):

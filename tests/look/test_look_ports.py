@@ -5,7 +5,7 @@ from support.look_host import FakeLook
 
 from taskloop.app.artifacts import store
 from taskloop.app.look import shots
-from taskloop.contracts.artifact import ArtifactSlot
+from tlkernel.artifact import ArtifactSlot
 
 
 def test_the_epic_is_found_by_walking_the_parents(workdir):

@@ -1,4 +1,4 @@
-"""The scripts that import taskloop.contracts carry a PEP 723 header, and every header declares what pyproject.toml's dependencies do."""
+"""The scripts that import tlkernel carry a PEP 723 header, and every header declares what pyproject.toml's dependencies do."""
 import re
 import sys
 import tomllib

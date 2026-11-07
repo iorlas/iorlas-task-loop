@@ -22,9 +22,9 @@ import tl  # noqa: E402
 from support.checked import run_checked  # noqa: E402
 from support.spawn import port_git  # noqa: E402
 
-from taskloop.contracts.env import snapshot  # noqa: E402
 from taskloop.domain.brief import HANDOFF_BYTES, RULES  # noqa: E402
 from taskloop.hook import pretool, session  # noqa: E402
+from tlkernel.env import snapshot  # noqa: E402
 
 
 def call(tool, **args):
@@ -124,7 +124,7 @@ class Speed(Case):
     def test_pretool_imports_no_store_adapter_app_module_record_or_msgspec(self):
         code = (
             "import sys; sys.path.insert(0, {!r}); from taskloop.hook import main, pretool; pretool.main('{{}}'); "
-            "print([m for m in sys.modules if m.startswith(('taskloop.app', 'taskloop.adapters', 'taskloop.stores', 'taskloop.contracts', "
+            "print([m for m in sys.modules if m.startswith(('taskloop.app', 'taskloop.adapters', 'taskloop.stores', 'tlkernel', "
             "'msgspec'))])"
         ).format(str(ROOT / "src"))
         r = run_checked([sys.executable, "-c", code], None, text=True)

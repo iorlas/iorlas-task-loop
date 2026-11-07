@@ -15,19 +15,19 @@ from support.plans import CLEAN, PLAN, WRITE
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.pipeline.finish import answer, outcome
-from taskloop.contracts import log, runlife, wire
-from taskloop.contracts.checkpoint import EndRec
-from taskloop.contracts.events import Stage
-from taskloop.contracts.finish import finish_run
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.locator import RunLocator, host_name
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import RunState
-from taskloop.contracts.runrows import RunRows
-from taskloop.contracts.stores import EventLog, LoopLog, RunLog, TraceStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs
+from tlkernel import log, runlife, wire
+from tlkernel.checkpoint import EndRec
+from tlkernel.events import Stage
+from tlkernel.finish import finish_run
+from tlkernel.ids import loop_key
+from tlkernel.kinds import Kind
+from tlkernel.locator import RunLocator, host_name
+from tlkernel.paths import ConfigDir
+from tlkernel.run import RunState
+from tlkernel.runrows import RunRows
+from tlkernel.stores import EventLog, LoopLog, RunLog, TraceStore
 
 
 class Finish(Case):
@@ -170,14 +170,14 @@ class Finish(Case):
     def test_reconcile_does_not_report_a_run_lost_if_another_finisher_won(self):
         stale = self.manifest().replace(heartbeat=100.0, host=host_name(), pid=999999)
         with mock.patch.object(RunLocator, "runs", return_value=[self.where.bundle(stale)]), \
-                mock.patch("taskloop.contracts.runlife.pid_alive", return_value=False):
+                mock.patch("tlkernel.runlife.pid_alive", return_value=False):
             finish_run(self.cfg, self.run_id, answer(oc.make(Kind.DONE), 200.0))
             assert runlife.reconcile(self.cfg, 1000.0) == []
 
     def test_a_projection_failure_cannot_reopen_the_outcome(self):
         first = answer(oc.make(Kind.LANDED, sha="1" * 40), 200.0)
         with pytest.raises(OSError, match="disk"), \
-                mock.patch("taskloop.contracts.finish.history", side_effect=OSError("disk")):
+                mock.patch("tlkernel.finish.history", side_effect=OSError("disk")):
             finish_run(self.cfg, self.run_id, first)
         late = finish_run(self.cfg, self.run_id, answer(oc.make(Kind.FAULT_ENGINE, "disk"), 210.0))
         assert not late.won
@@ -187,7 +187,7 @@ class Finish(Case):
 
     def test_a_partial_projection_is_repaired_without_duplicate_close_or_trace(self):
         first = answer(oc.make(Kind.LANDED, "first", sha="2" * 40), 220.0)
-        with mock.patch("taskloop.contracts.finish_projection.indexes", side_effect=OSError("index disk")), \
+        with mock.patch("tlkernel.finish_projection.indexes", side_effect=OSError("index disk")), \
                 pytest.raises(OSError, match="index disk"):
             finish_run(self.cfg, self.run_id, first)
         assert [len(rows) for rows in self.rows()] == [1, 1, 0, 0]

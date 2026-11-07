@@ -15,11 +15,11 @@ from support.fakes import FakeBeadStore
 from support.repos import write_repos
 
 from taskloop.adapters.locks import resource_holders
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.paths import ConfigDir
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
+from tlkernel.ids import loop_key
+from tlkernel.locator import RunLocator
+from tlkernel.paths import ConfigDir
 
 
 class ResourceLeases(Case):

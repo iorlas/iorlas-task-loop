@@ -5,10 +5,10 @@ import pytest
 from support.pipeline_ports import FakeReexecs, FakeTrail
 
 from taskloop.app.pipeline.reload import Exec, Reload
-from taskloop.contracts import rundocs
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir
+from tlkernel import rundocs
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId
+from tlkernel.paths import ConfigDir
 
 
 @pytest.fixture

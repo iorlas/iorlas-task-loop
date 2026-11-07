@@ -8,7 +8,7 @@ import support.paths  # noqa: F401
 
 from taskloop.app.report.card import typed_log
 from taskloop.app.report.landphases import land_stats, tries_of
-from taskloop.contracts import log as rec
+from tlkernel import log as rec
 
 
 def test_causes_and_median_phase_seconds_of_the_tries() -> None:

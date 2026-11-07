@@ -1,8 +1,8 @@
 """A CheckResult for a test, in one call: the status follows the exit code unless given."""
 from support import fake_route
-from taskloop.contracts import plancheck
-from taskloop.contracts.checks import CheckResult
-from taskloop.contracts.plancheck import Adhoc, Ref, adhoc
+from tlkernel import plancheck
+from tlkernel.checks import CheckResult
+from tlkernel.plancheck import Adhoc, Ref, adhoc
 
 
 def res(cmd="c", exit=1, **kw):

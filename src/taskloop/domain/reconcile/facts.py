@@ -1,9 +1,9 @@
 """What `observe` sees, as plain facts (no IO, no git, no bd), and what `diff` answers with: the actions."""
 from dataclasses import dataclass
 
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.reconcile import Lease, LoopFact, SlotFact
 from taskloop.domain.reconcile.lost import BranchCommit
+from tlkernel.ids import BeadId
+from tlkernel.reconcile import Lease, LoopFact, SlotFact
 
 
 @dataclass(frozen=True)

@@ -3,11 +3,11 @@ import os
 import subprocess as sp
 from pathlib import Path
 
-from delegate.app import launch
+import hermetic  # noqa: F401
 from support.procsim import real_proc
 from support.tmpdir import TemporaryDirectory
 
-import hermetic  # noqa: F401
+from delegate.app import launch
 
 ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"}
 

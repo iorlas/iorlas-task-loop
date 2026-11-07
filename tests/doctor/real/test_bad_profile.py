@@ -24,9 +24,9 @@ from taskloop.app.doctor import profiles
 from taskloop.app.launch import dash_ports
 from taskloop.app.launch import loop_start as wstart
 from taskloop.app.wire import brief, doctor
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.rowstores import ReposStore
+from tlkernel.env import snapshot
+from tlkernel.paths import ConfigDir
+from tlkernel.rowstores import ReposStore
 
 ROOT = Path(__file__).resolve().parents[3]
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid", "GIT_COMMITTER_NAME": "t",

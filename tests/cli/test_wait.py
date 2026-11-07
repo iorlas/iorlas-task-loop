@@ -15,14 +15,14 @@ from support.runs import manifest
 
 from taskloop.cli import asks as cli_asks
 from taskloop.cli import wait
-from taskloop.contracts.ask import Ask, SimilarRef, ThreadEntry
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.dash import OwnerCause
-from taskloop.contracts.enums import AskClass, AskKind, AskStatus
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.locator import host_name
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import RunState
+from tlkernel.ask import Ask, SimilarRef, ThreadEntry
+from tlkernel.askstore import AskStore
+from tlkernel.dash import OwnerCause
+from tlkernel.enums import AskClass, AskKind, AskStatus
+from tlkernel.ids import BeadId
+from tlkernel.locator import host_name
+from tlkernel.paths import ConfigDir
+from tlkernel.run import RunState
 
 BEAD, RUN, T = "t-1", "t-1-20261026-100000", 5000.0
 

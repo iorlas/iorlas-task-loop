@@ -6,11 +6,11 @@ from support.fake_beads import FakeBeads
 
 from taskloop.app.track import verbs
 from taskloop.app.track.closing import ClosingBeads
-from taskloop.contracts import fence
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import BeadPatch
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId
+from tlkernel import fence
+from tlkernel.bead import Bead
+from tlkernel.beadsport import BeadPatch
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId
 
 
 class RecordingBeads(FakeBeads):

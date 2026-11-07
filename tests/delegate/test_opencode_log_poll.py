@@ -2,12 +2,11 @@
 
 from pathlib import Path
 
+import hermetic  # noqa: F401  (a home of its own for every test)
 from any_agent import vendors
 from any_agent.harnesses.opencode import OpenCodeHarness
 from any_agent.supervisor import LogWatcher
 from support.tmpdir import TemporaryDirectory
-
-import hermetic  # noqa: F401  (a home of its own for every test)
 
 ECHO = [
     'INFO  2026-10-26T21:32:01 +3ms service=permission evaluated permission=bash pattern="cat <<EOF\\ntry again later\\nEOF" action=allow',

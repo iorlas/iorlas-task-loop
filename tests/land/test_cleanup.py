@@ -17,12 +17,12 @@ from support.memstores import fake_stores
 from taskloop.app.land import cleanup
 from taskloop.app.land.closing import LandCleanups
 from taskloop.app.pipeline.closing_branch import ReleaseSlot
-from taskloop.contracts import fence
-from taskloop.contracts import log as rec
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.slots import Checkout, GitReadFailure, SlotGitError
 from taskloop.stores.runlog import RunLog
+from tlkernel import fence
+from tlkernel import log as rec
+from tlkernel.enums import Outcome
+from tlkernel.ids import BeadId
+from tlkernel.slots import Checkout, GitReadFailure, SlotGitError
 
 
 class CleanupGit(ScriptedGit):

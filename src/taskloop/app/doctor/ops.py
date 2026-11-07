@@ -3,8 +3,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Final
 
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.trace import RunTrace
+from tlkernel.gitport import Git
+from tlkernel.trace import RunTrace
 
 SHARE_OF_BEADS: Final = 20  # the doctor looks at this many of the latest beads for the second family's routed share
 WORKER_ROLE: Final = "worker"

@@ -17,8 +17,8 @@ from support import eventlog
 from support.who import who
 
 from taskloop.app.track import trail
-from taskloop.contracts import events, wire
-from taskloop.contracts.events import EventRec
+from tlkernel import events, wire
+from tlkernel.events import EventRec
 
 # one call per kind, the fields the code passes (a field the writer sets itself is not here)
 CALLS = {

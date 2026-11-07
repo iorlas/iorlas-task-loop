@@ -4,10 +4,10 @@ from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Any
 
-from taskloop.contracts import ids, wire
-from taskloop.contracts import trace as t
-from taskloop.contracts.enums import Outcome, WhyCode
-from taskloop.contracts.wire import Rec
+from tlkernel import ids, wire
+from tlkernel import trace as t
+from tlkernel.enums import Outcome, WhyCode
+from tlkernel.wire import Rec
 
 WHY_CODE: Mapping[str, WhyCode] = MappingProxyType(
     {

@@ -21,12 +21,12 @@ from support.tiers import domain
 from taskloop.app.asks import intake, raiser
 from taskloop.app.loop.queue import QueueRule
 from taskloop.cli import asks as cli
-from taskloop.contracts.beadsport import NewBead
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir
 from taskloop.domain import timespec
 from taskloop.domain.asks import hold, specs
+from tlkernel.beadsport import NewBead
+from tlkernel.config import EngineConfig
+from tlkernel.ids import BeadId
+from tlkernel.paths import ConfigDir
 
 T = 1_000_000.0
 

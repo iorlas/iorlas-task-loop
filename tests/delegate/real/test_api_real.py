@@ -4,11 +4,11 @@ import os
 import threading
 import time
 
-from delegate import api
-from delegate.contracts.wire import RunResult
+from run_support import RunBase
 from support.procsim import real_proc
 
-from run_support import RunBase
+from delegate import api
+from delegate.contracts.wire import RunResult
 
 LIMIT_S = 60  # each test runs a fake CLI and git
 

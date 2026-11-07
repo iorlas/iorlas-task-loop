@@ -11,9 +11,9 @@ from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.pipeline.reload import Reload
 from taskloop.app.workers import done_memo
-from taskloop.contracts import factorydb
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.paths import ConfigDir
+from tlkernel import factorydb
+from tlkernel.locator import RunLocator
+from tlkernel.paths import ConfigDir
 
 
 class CarryDoneMemo(Case):

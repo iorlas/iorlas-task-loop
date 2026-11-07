@@ -8,9 +8,9 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from taskloop.contracts import factorydb, log, timedrows
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.timedrows import Item
+from tlkernel import factorydb, log, timedrows
+from tlkernel.paths import ConfigDir
+from tlkernel.timedrows import Item
 
 
 def records(path: Path) -> list[log.EngineLog]:

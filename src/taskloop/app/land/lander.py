@@ -8,6 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel import log as rec
+from tlkernel.bead import Bead
+
 from taskloop.adapters.deadline import DeadlineExpired, deadline
 from taskloop.app.asks import trustroots
 from taskloop.app.land import verified
@@ -23,8 +26,6 @@ from taskloop.app.land.push import Pusher
 from taskloop.app.land.recheck import Recheck
 from taskloop.app.land.state import Land, Next, Phase, Placing
 from taskloop.app.land.sync import Sync
-from taskloop.contracts import log as rec
-from taskloop.contracts.bead import Bead
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.lanes import policy as lp
 from taskloop.domain.lanes.liveness import LIVENESS

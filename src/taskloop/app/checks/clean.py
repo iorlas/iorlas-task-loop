@@ -3,11 +3,12 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
+from tlkernel.checks import CheckFaultKind
+from tlkernel.gitport import Git
+from tlkernel.ids import TreeSha
+
 from taskloop.adapters.base_tree import clean_tree
 from taskloop.app.checks.host import CheckFault, CheckHost, CleanHost
-from taskloop.contracts.checks import CheckFaultKind
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import TreeSha
 from taskloop.domain.checks import inputs
 
 

@@ -7,8 +7,8 @@ import support.paths  # noqa: F401
 from support import procsim
 from support.check_host import CheckHostCase
 
-from taskloop.contracts.checks import Check
-from taskloop.contracts.ids import CheckId
+from tlkernel.checks import Check
+from tlkernel.ids import CheckId
 
 
 class AcceptanceLogs(CheckHostCase):

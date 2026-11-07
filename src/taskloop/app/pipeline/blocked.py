@@ -1,6 +1,7 @@
 """The stop a step ends with: what the engine does at the close follows from its kind."""
-from taskloop.contracts.kinds import ASKS, Kind
-from taskloop.contracts.stop import Stop
+from tlkernel.kinds import ASKS, Kind
+from tlkernel.stop import Stop
+
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks.spec import AskSpec

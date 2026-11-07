@@ -9,14 +9,14 @@ import sys
 import threading
 from pathlib import Path
 
-from delegate.contracts.state import Dwell
-from delegate.contracts.stores import StateStore
+import hermetic  # noqa: F401
 from stream_proc import stop_tree
 from support.case import Case
 from support.procsim import real_proc
 from support.tmpdir import TemporaryDirectory
 
-import hermetic  # noqa: F401
+from delegate.contracts.state import Dwell
+from delegate.contracts.stores import StateStore
 
 T = 1_800_000_000
 LANES = ("OPENAI_SUBSCRIPTION", "GROK_SUBSCRIPTION", "DEEPSEEK_FREE", "ZAI_CODING_SUBSCRIPTION")

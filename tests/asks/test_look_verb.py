@@ -12,12 +12,12 @@ import support.paths  # noqa: F401
 from support.look_world import FakeBd, looks, world
 
 from taskloop.app.asks.intake import Intake
-from taskloop.contracts import factorydb, gallery
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.lookrows import LookRows
-from taskloop.contracts.paths import ConfigDir
+from tlkernel import factorydb, gallery
+from tlkernel.askstore import AskStore
+from tlkernel.bead import Bead
+from tlkernel.ids import BeadId
+from tlkernel.lookrows import LookRows
+from tlkernel.paths import ConfigDir
 
 NOW = 1_800_000_000.0
 

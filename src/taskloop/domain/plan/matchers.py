@@ -3,11 +3,11 @@
 import re
 from typing import Final
 
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.paths import TASK_EXCLUDE
-from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.checks import lint
+from tlkernel.bead import Bead
+from tlkernel.config import EngineConfig
+from tlkernel.paths import TASK_EXCLUDE
+from tlkernel.plancheck import PlanData
 
 STOP_WORDS = frozenset({"that", "this", "with", "from", "into", "have", "been", "were", "which", "their", "there", "than", "then", "when",
                         "what", "does", "should", "would", "could", "also", "only", "each", "every", "about", "after", "before", "bead",

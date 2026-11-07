@@ -5,8 +5,8 @@ import threading
 import time
 from collections.abc import Callable
 
-from taskloop.contracts import factorydb
-from taskloop.contracts.paths import ConfigDir
+from tlkernel import factorydb
+from tlkernel.paths import ConfigDir
 
 MAX_WAIT = 25.0
 POLL_EVERY = 0.05

@@ -21,14 +21,14 @@ from taskloop.app.land.followups import file_follow_ups
 from taskloop.app.pipeline.closing_notes import FileNotes
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.state import Checkpoints, StateAttrs, carries_state
-from taskloop.contracts import fence
-from taskloop.contracts.bead import BdError
-from taskloop.contracts.beadsport import BdFailure
-from taskloop.contracts.checkpoint import RunState
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.ids import BeadId
 from taskloop.domain.followups import FollowKey
 from taskloop.stores.runlog import RunLog
+from tlkernel import fence
+from tlkernel.bead import BdError
+from tlkernel.beadsport import BdFailure
+from tlkernel.checkpoint import RunState
+from tlkernel.enums import Outcome
+from tlkernel.ids import BeadId
 
 
 class Killed(BaseException):

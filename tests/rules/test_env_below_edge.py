@@ -1,6 +1,6 @@
 """Code below the edge takes an `Env` instead of reading the live process: no call may remain.
 
-A call is `ambient(`, `ambient_bead(`, `ambient_set(` or `snapshot(` of taskloop.contracts.env.
+A call is `ambient(`, `ambient_bead(`, `ambient_set(` or `snapshot(` of tlkernel.env.
 Any such call outside the edges fails. The edges (tl.py, the
 dev scripts, the dashboard's command line, the hook entry) take the snapshot once and are not counted. A real Spawner is built only at an
 edge and handed down (SPAWNER_EDGES). The same holds for the rest of what the process is: a real Git or Spawner is never a module-level
@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[2]
-EDGE = frozenset({"src/taskloop/contracts/env.py", "src/taskloop_dash/cli/dash.py",  # the owner of os.environ, and the dashboard's edge
+EDGE = frozenset({"packages/kernel/src/tlkernel/env.py", "src/taskloop_dash/cli/dash.py",  # os.environ's owner, the dashboard's edge
                   "src/taskloop/hook/session.py"})  # the hooks' edge
 CALL = re.compile(r"\b(?:penv\.)?(?:ambient|ambient_bead|ambient_set|snapshot)\(")
 NOT_ENV = re.compile(r"\b(?:looks|bf|cfg|self|snap|wt)\.snapshot\(|def snapshot|def ambient")
@@ -62,7 +62,7 @@ IDENTITY_SITES = frozenset({"src/taskloop/adapters/ident.py", "src/taskloop/app/
 HANDOVERS = "TL_REEXEC|TL_LOOP_STATE|TL_RELEASE_REEXEC"
 HANDOVER_NAME = re.compile(rf"EnvVar\.(?:{HANDOVERS})\b|[\"'](?:{HANDOVERS})[\"']")
 HANDOVER_OK = re.compile(r"\.get\(EnvVar\.|exec_env\(|\bEnvVar\.\w+\.value: \w+")  # a read of it, the one writer, a child's `extra`
-HANDOVER_FILES = ("src/taskloop/contracts/envvars.py", "src/taskloop/adapters/childenv.py")
+HANDOVER_FILES = ("packages/kernel/src/tlkernel/envvars.py", "src/taskloop/adapters/childenv.py")
 
 
 def ambient_ports(text: str) -> list[str]:

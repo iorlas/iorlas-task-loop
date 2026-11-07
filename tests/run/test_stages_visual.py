@@ -38,12 +38,12 @@ from taskloop.app.run import entry
 from taskloop.app.run import running as wrunning
 from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
-from taskloop.contracts.artifact import ArtifactSlot
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.lookrows import LookRows
-from taskloop.contracts.run import Round
-from taskloop.contracts.slots import SlotGitError
+from tlkernel.artifact import ArtifactSlot
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId
+from tlkernel.lookrows import LookRows
+from tlkernel.run import Round
+from tlkernel.slots import SlotGitError
 
 
 class VisualWork(StagesTest):

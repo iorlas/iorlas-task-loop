@@ -5,8 +5,7 @@ import dataclasses
 from collections.abc import Callable
 
 from any_clock import PhaseClock
-
-from taskloop.contracts.config import EngineConfig
+from tlkernel.config import EngineConfig
 
 WAIT = "wait"  # the clock's phase for time spent waiting for a shared resource: exempt from the minutes
 

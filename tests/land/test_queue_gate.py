@@ -11,8 +11,8 @@ from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.stackgate import StackGate
-from taskloop.contracts.procport import Ran
 from taskloop.stores.runlog import RunLog
+from tlkernel.procport import Ran
 
 from .test_stackgate_keys import OID, Checkouts, write_receipts
 

@@ -1,10 +1,11 @@
 """Release hand-over notes and process replacement bound to a config directory."""
 from collections.abc import Sequence
 
+from tlkernel.ids import BeadId
+from tlkernel.paths import ConfigDir
+from tlkernel.run import NetPause, ReexecNote
+
 from taskloop.app.release import reexec
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import NetPause, ReexecNote
 
 
 class ReexecBook:

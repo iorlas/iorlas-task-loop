@@ -15,8 +15,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from taskloop.contracts import effectrows
-from taskloop.contracts.paths import ConfigDir
+from tlkernel import effectrows
+from tlkernel.paths import ConfigDir
 
 V = 1
 NETWORK_RESUME_DELTA = "The connection dropped. Continue from where you stopped; your last output was cut. Do not restart."

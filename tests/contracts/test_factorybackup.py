@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 from support.narrow import must
 
-from taskloop.contracts import factorybackup, factorydb
-from taskloop.contracts.paths import ConfigDir
+from tlkernel import factorybackup, factorydb
+from tlkernel.paths import ConfigDir
 
 DAY = datetime(2026, 11, 4, tzinfo=UTC).timestamp()
 
