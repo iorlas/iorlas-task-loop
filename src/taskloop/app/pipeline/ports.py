@@ -13,10 +13,9 @@ from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.parks import Park
+from tlkernel.pausereasons import Producer
 from tlkernel.review import ReviewState
 from tlkernel.run import NetPause, ReexecNote
-
-from taskloop.domain.lanes.pause_reasons import Producer
 
 
 class AskRules(Protocol):

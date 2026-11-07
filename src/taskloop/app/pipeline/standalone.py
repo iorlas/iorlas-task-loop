@@ -2,6 +2,7 @@
 import time
 from collections.abc import Callable
 
+from tlkernel import closeeffects as effects
 from tlkernel import fence, wire
 from tlkernel import runoutcome as oc
 from tlkernel.acceptancetext import AcceptanceText
@@ -31,7 +32,6 @@ from taskloop.app.pipeline.standalone_roles import (
     StageLifecycle,
     Values,
 )
-from taskloop.domain import effects
 
 
 class Standalone[T]:

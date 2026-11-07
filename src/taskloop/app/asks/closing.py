@@ -6,9 +6,9 @@ from tlkernel.gitport import Git
 from tlkernel.kinds import Kind
 from tlkernel.parks import Park
 from tlkernel.paths import ConfigDir
+from tlkernel.pausereasons import Producer
 
 from taskloop.app.asks import parks, raiser, trustroots
-from taskloop.domain.lanes.pause_reasons import Producer
 
 
 class ClosingAsks:

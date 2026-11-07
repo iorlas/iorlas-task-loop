@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from taskloop.domain.lanes import pauses
+from tlkernel import lanepauses as pauses
 
 REASONS = json.loads((Path(__file__).resolve().parents[2] / "src/delegate/data/contract.json").read_text(encoding="utf-8"))["reasons"]
 SYNTHESIZED = {"only_family_unready"}  # a delegate-keyed reason the engine synthesizes, absent from the contract

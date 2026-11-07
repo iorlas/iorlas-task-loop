@@ -13,8 +13,8 @@ from taskloop.adapters import beadtools
 from taskloop.app.pipeline.closing_settle import Settle
 from taskloop.app.track.closing import ClosingBeads
 from taskloop.app.wire import closeguard
-from taskloop.domain import effects as fx
 from tlkernel import askspecs
+from tlkernel import closeeffects as fx
 from tlkernel import runoutcome as oc
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId

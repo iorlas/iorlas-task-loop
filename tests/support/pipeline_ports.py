@@ -1,7 +1,6 @@
 """Recording structural fakes for the pipeline close capabilities."""
 from collections.abc import Callable, Sequence
 
-from taskloop.domain.lanes.pause_reasons import Producer
 from tlkernel import fence
 from tlkernel.askspec import AskSpec
 from tlkernel.bead import Bead
@@ -13,6 +12,7 @@ from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.parks import Park
+from tlkernel.pausereasons import Producer
 from tlkernel.review import ReviewState
 from tlkernel.run import NetPause, ReexecNote
 
