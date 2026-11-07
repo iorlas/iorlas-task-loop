@@ -11,6 +11,10 @@ from taskloop.contracts.slots import SlotGitError
 from taskloop.stores.runlog import RunLog
 
 
+class WriteHeld(Protocol):
+    last_summary: str  # the write stage's (engine.write): the restart forgets it
+
+
 class RestartConfig(Protocol):
     @property
     def base(self) -> str: ...
@@ -36,7 +40,7 @@ class RestartHost(Protocol):
     amend_text: str
     replan_first: bool
     plan_summary: str
-    last_summary: str
+    write: WriteHeld
     amended: bool
     state: RunState
     review: RestartReview
@@ -95,7 +99,8 @@ class Restart:
         word still goes to the planner)."""
         e = self.e
         e.old_plan, e.amend_why, e.amend_text, e.replan_first = None, "", "", False
-        e.plan_summary, e.last_summary, e.amended = "", "", False
+        e.plan_summary, e.amended = "", False
+        e.write.last_summary = ""
         e.state = e.state.start_again()
         e.review.unverified = list[dict[str, str]]()
         e.review.unchecked = list[dict[str, str]]()

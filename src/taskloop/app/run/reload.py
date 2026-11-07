@@ -41,7 +41,7 @@ class Reload:
     def counters(self) -> RunCounters:
         e = self.e
         return RunCounters(elapsed=time.time() - e.t0, waited=e.waited, cost=e.cost, stats=dict(e.stats), sessions=list(e.sessions),
-                           write_rounds=list(e.write_rounds), node_n=e.steps.n)
+                           write_rounds=list(e.write.write_rounds), node_n=e.steps.n)
 
     def restore_run(self, doc: Doc[RunCounters]) -> None:
         """The counters of the run that exec'd (RunFiles.reexec) or paused for the network (RunFiles.pause), so the run's cost,
@@ -54,7 +54,7 @@ class Reload:
         e.cost = c.cost
         e.stats.update(c.stats)
         e.sessions[:] = c.sessions
-        e.write_rounds = list(c.write_rounds)
+        e.write.write_rounds = list(c.write_rounds)
         e.steps.n = c.node_n
 
     def carry_done_memo(self, paused: Path) -> None:

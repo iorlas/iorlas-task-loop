@@ -173,14 +173,14 @@ class EngineAsksTest(EngineTest):
         for part in (self.MARK, "<plan>", "These checks fail", "Done so far", "f.txt", "wrote f"):
             assert part in again
         assert "fresh writer: session at 160k" in self.eng.log_path.read_text()
-        a, b = self.eng.write_rounds
+        a, b = self.eng.write.write_rounds
         assert (a["resumed"], a["context_k"], b["resumed"], b["fresh"]) == ("no", 160, "no", "session at 160k")
         assert b["prompt_chars"] == len(again)
 
     def test_a_session_under_the_threshold_is_resumed_and_the_trace_has_its_size(self):
         _rc, s = self.two_writes(ctx_k=149)
         assert s.calls[2][1] == "ref-write"
-        a, b = self.eng.write_rounds
+        a, b = self.eng.write.write_rounds
         assert (b["resumed"], b["context_k"], b["fresh"]) == ("yes", 149, "")
         assert b["prompt_chars"] < a["prompt_chars"]
 

@@ -94,7 +94,7 @@ def reconcile(cfg: ConfigDir, now: float) -> list[str]:
     marked: list[str] = []
     for b in where.runs():
         if is_lost(b.manifest, host, now, pid_alive):
-            result = where.mark_lost(b.run, lost_reason(b.manifest, now))
+            result = where.mark_lost(b.run, lost_reason(b.manifest, now), b.manifest.heartbeat)
             if result is not None and result.won:
                 marked.append(b.run)
     return marked

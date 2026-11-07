@@ -402,8 +402,8 @@ class WorkerCall:
             note = "the {} step ran on the writer's own model family{}".format(
                 c.node, (": " + res.warning.strip()[:300]) if res.warning.strip() else " (no other lane was free)"
             )
-            if note not in e.lane_notes:
-                e.lane_notes.append(note)
+            if note not in e.write.lane_notes:
+                e.write.lane_notes.append(note)
                 e.warn(note)
                 e.comment("Lane (engine): " + note)
         model = f"{res.model} {res.effort} on {res.lane}"

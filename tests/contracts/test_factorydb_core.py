@@ -20,7 +20,7 @@ from taskloop.contracts.paths import ConfigDir
 
 TABLES = {
     "source", "bead", "run", "attempt", "step", "lease", "check_pass",
-    "check_round", "ask", "ask_ledger", "kv", "effect", "wait", "signal", "checkpoint", "timed",
+    "check_round", "ask", "ask_ledger", "kv", "effect", "wait", "signal", "checkpoint", "timed", "schema_part",
 }
 INDEXES = {
     "run_bead", "run_recent", "run_live", "bead_status", "check_tree", "ask_live",
@@ -147,7 +147,7 @@ class FactoryDbTest(Case):
 
     def test_owners_cover_exactly_the_created_tables(self):
         tables = {row[0] for row in self.rw().execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        assert set(factorydb.OWNERS) == tables
+        assert set(factorydb.OWNERS) == tables - {"schema_part"}  # the kernel's own table: every open writes it
         assert set(factorydb.OWNERS.values()) <= {"index", "engine", "loop", "owner"}
 
     def test_cas_rejects_unrevisioned_tables_and_missing_transaction(self):
