@@ -87,7 +87,7 @@ Remaining cuts (direct src imports, re-counted by the reviewer):
 | pair | edge | cut |
 |---|---|---|
 | land → work back edges | `land/fixer.py:18-20` → `domain/prompts/land`; `land/followups.py:9` → `domain/review/followups` | move those two domain files into land (2 files) |
-| land ↔ slots | `slots/reset.py:16` imports `NetText`, a git network-error matcher used by land, slots and `loop/verdict.py:12` | `NetText` moves to the git adapter / kernel side (1 file); not "slots owns matchers" |
+| land ↔ slots | `slots/reset.py:16` imports `NetText`, a git network-error matcher used by land, slots and `loop/verdict.py:12` | `NetText` lives in `tlkernel.matchers` (1 file); not "slots owns matchers" |
 | release ↔ report | `reconcile/commits.py:12`, `observe.py:26` → `domain/report/matchers` vs `report/card.py:12` → `reconcile/lost`; the matchers are also used by `run/records.py:27`, `domain/outcome.py:29` | matchers to a shared home (gate or kernel), not into reconcile |
 | shell → release | 8 loop files import release (`loop_ops`, `loop_start`, `selftest`, `prune/verb`, `report/card`, `wire/brief`, `wire/doctor`, `launch/loop`); `run/engine.py:11`, `reload.py:13`, `entry.py:23` → `reconcile/leases` | allowed (shell is on top); `leases` is the one engine-used piece: leases belong to slots/store |
 | kernel → stage | `contracts/{stores,runrows,checkpoint,finish*,rundocs,adrs}` import upward through record types | records move to owners (§2) |

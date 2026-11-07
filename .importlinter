@@ -37,7 +37,6 @@ allow_indirect_imports = True
 ignore_imports =
     taskloop.adapters.** -> re
     taskloop.domain.**.matchers -> re
-    taskloop.domain.matchers -> re
     delegate.domain.**.matchers -> re
 
 [importlinter:contract:contracts-no-network-or-processes]
