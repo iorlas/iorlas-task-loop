@@ -81,5 +81,8 @@ class EngineAsks:
     def skip_of(self, b: Bead) -> Skip | None:
         return parks.skip_of(self.cfgdir, b, now=self.now())
 
+    def profile_ahead(self, b: Bead, run: str, why: str) -> None:
+        parks.profile_ahead(self.cfgdir, b, run, self.now(), why)
+
     def promote_if_due(self, store: Beads, per_day: int, now: float, last: float, say: Callable[[str], object]) -> float:
         return deferral.promote_if_due(store, per_day, now, last, say)
