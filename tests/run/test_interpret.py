@@ -10,9 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
-from taskloop.domain import effects as fx
-from taskloop.domain import outcome as oc
-from taskloop.domain.interpret import MemoryLedger, interpret
+from tlkernel import closeeffects as fx
+from tlkernel import runoutcome as oc
+from tlkernel.effectinterpret import MemoryLedger, interpret
 from tlkernel.kinds import Kind
 
 PLAN = fx.plan_close(oc.make(Kind.LANDED, sha="abc"), dry=False, branch="task/t-1", slot_gen=2)

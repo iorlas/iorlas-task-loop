@@ -8,7 +8,7 @@ from collections.abc import Collection, Sequence
 from enum import StrEnum
 from typing import Final
 
-from tlgate.domain.matchers import glob_re
+from tlkernel.checkmatchers import glob_re
 from tlkernel.config import ReviewSkipConfig
 from tlkernel.gitfacts import DiffEntry
 

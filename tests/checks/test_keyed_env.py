@@ -2,7 +2,6 @@
 from pathlib import Path
 from unittest import mock
 
-from support import procsim
 from support.check_host import CheckHostCase
 
 from taskloop.app.launch.check_host import CliHost
@@ -13,6 +12,7 @@ from tlgate.domain.specs import gate_items
 from tlgate.execution import check_env
 from tlgate.runner import Checker, cached_gate
 from tlkernel.runkey import BaseSha
+from tltestkit import procsim
 
 
 class KeyedEnv(CheckHostCase):

@@ -10,7 +10,6 @@ from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import procsim
 from support.cfgs import cfg_with
 from support.plans import PLAN
 
@@ -19,6 +18,7 @@ from tlgate.domain import planref
 from tlkernel import answers, plancheck
 from tlkernel.ids import CheckId
 from tlkernel.plancheck import Adhoc, PlanData, Ref, adhoc
+from tltestkit import procsim
 from tltestkit.checks import ck, typed
 
 REPO: list[dict[str, Any]] = [{"id": "unity-tests", "cmd": "just unity-tests", "group": "tests"}]

@@ -1,5 +1,4 @@
 """Wire permanence reaches durable parks without changing machine repair or exhausted retry asks."""
-
 import sys
 from pathlib import Path
 from unittest import mock
@@ -7,6 +6,7 @@ from unittest import mock
 import pytest
 from support.parkmock import through_change
 
+from taskloop.adapters import beadtools
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -17,8 +17,8 @@ from taskloop.app.asks.closing import ClosingAsks
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from taskloop.app.pipeline.closing import Closer
 from taskloop.app.workers.lane_acts import LaneActs
-from taskloop.domain import outcome as oc
 from taskloop.domain.lanes import policy
+from tlkernel import runoutcome as oc
 from tlkernel.bead import Bead
 from tlkernel.delegate import DelegateResult, Retry, StopFacts
 from tlkernel.ids import BeadId
@@ -39,7 +39,7 @@ class DelegatePauseFacts(Case):
                 action = policy.decide(stop, policy.Ctx())
                 assert isinstance(action, policy.Yield)
                 host = mock.Mock(dry=False, home=mock.Mock(), bead=bead.id, run_id="r1", asked=False)
-                host.cfg.writer_family, host.cfg.second_writer_family, host.plan_data, host.budget.labels = [], "", None, []
+                host.plan_data, host.budget.labels = None, []
                 host.clock.now.return_value = 100
                 host.ask_flow.raise_ask.return_value = True
                 worker = mock.Mock()
@@ -49,8 +49,9 @@ class DelegatePauseFacts(Case):
                     LaneActs(host, worker).end(call, result, stop, action)
                 assert host.pause_permanence == permanence
                 store.return_value.get.return_value = None
-                with mock.patch("taskloop.app.pipeline.closing.beadtools.peek", return_value=bead):
-                    Closer(host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home)).pause(oc.make(Kind.PAUSE_LANE, "paused"))
+                with mock.patch("taskloop.adapters.beadtools.peek", return_value=bead):
+                    Closer(host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home),
+                        beadtools.peek).pause(oc.make(Kind.PAUSE_LANE, "paused"))
                 saved = store.return_value.put.call_args.args[0]
                 assert saved.permanence == permanence
                 assert saved.retry_at == (900 if permanence == "transient" else 0)

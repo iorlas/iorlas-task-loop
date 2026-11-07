@@ -5,11 +5,13 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol
 
-from tlgate.domain.matchers import slot_wait_secs
+from tlkernel import askspecs
 from tlkernel import log as rec
+from tlkernel.checkmatchers import slot_wait_secs
 from tlkernel.config import EngineConfig
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
+from tlkernel.lanesliveness import LIVENESS
 from tlkernel.ports import Clock
 from tlkernel.stagefacts import RunLogPort
 from tlkernel.waitenums import WaitWhat
@@ -19,8 +21,6 @@ from taskloop.app.pipeline.adapter_ports import Deadline
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.steps import Open
 from taskloop.app.pipeline.store_ports import WaitStores
-from taskloop.domain.asks import specs as askspecs
-from taskloop.domain.lanes.liveness import LIVENESS
 
 
 class WaitsBudget(Protocol):

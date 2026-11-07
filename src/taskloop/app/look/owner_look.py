@@ -11,10 +11,10 @@ from tlkernel.beadsport import BdFailure, BeadPatch, BeadQuery, NewBead
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId, is_bead_id
 from tlkernel.lookrows import LookRaced, LookRows
+from tlkernel.repourl import repo_url
 from tlkernel.stagefacts import RunFacts
 
 from taskloop.adapters import bdcreate, beadtools
-from taskloop.adapters.repourl import repo_url
 from taskloop.app.look.host import LookHost, LookPorts
 from taskloop.app.look.state import LookState
 from taskloop.domain.look.matchers import sections

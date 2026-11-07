@@ -4,11 +4,11 @@ command starts, so a tool writes its logs and results straight into
 keep.py adds the check's own log and its `keep` globs to the same directory afterwards."""
 
 from tlkernel import childenv, factorydb
+from tlkernel.checkmatchers import safe_name
 from tlkernel.ids import CheckId
 from tlkernel.paths import RunFiles
 from tlkernel.slots import git_probe
 
-from tlgate.domain.matchers import safe_name
 from tlgate.host import CheckHost
 from tlgate.keep import attempt_dir
 

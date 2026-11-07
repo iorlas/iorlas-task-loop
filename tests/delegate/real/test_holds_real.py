@@ -10,11 +10,11 @@ from unittest import mock
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
-from support.procsim import real_proc
 from test_route import CFG, T, lanes, route
 
 from delegate.app import env
 from tltestkit.case import Case
+from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory
 
 

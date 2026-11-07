@@ -6,13 +6,13 @@ from typing import Final, assert_never
 
 from tlkernel import inputsets
 from tlkernel.argv import text_of
+from tlkernel.checkmatchers import glob_re, is_build, is_queued
 from tlkernel.checks import Check, Phase, Tag
 from tlkernel.config import CheckSpec, EngineConfig
 from tlkernel.ids import CheckId
 from tlkernel.plancheck import Adhoc, PlanCheck
 from tlkernel.runkey import Digest
 
-from tlgate.domain.matchers import glob_re, is_build, is_queued
 from tlgate.domain.planref import adhocs
 
 DIFF_CHECK: Final = CheckId("diff-check")  # the engine's own check: `git diff --check <base>`, always first in every round and the gate

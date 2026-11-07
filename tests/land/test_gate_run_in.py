@@ -7,7 +7,6 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support import procsim
 from support.engine_case import EngineTest
 from support.gate_rig import GateCase
 from support.plans import CLEAN, PLAN, WRITE
@@ -18,6 +17,7 @@ from tlgate.domain.specs import gate_items
 from tlgate.host import CheckFault
 from tlgate.runner import cached_gate
 from tlkernel.checks import CheckFaultKind
+from tltestkit import procsim
 
 
 class SlotGate(GateCase):

@@ -87,7 +87,6 @@ def write_round(w: Mapping[str, Any]) -> t.WriteRound:
         turns=w.get("turns"),
         prompt_chars=w.get("prompt_chars"),
         context_k=w.get("context_k"),
-        fresh=w.get("fresh") or "",
     )
 
 

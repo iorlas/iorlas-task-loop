@@ -8,7 +8,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from tlgate.domain import trim
+from tlkernel import checktrim as trim
+
 from tlgate.domain.diag import matchers
 
 ITEM_MAX: Final = 240  # a message longer than this is cut

@@ -19,10 +19,9 @@ from taskloop.app.pipeline.closing import Closer
 from taskloop.app.run import engine
 from taskloop.app.run.closer_ports import closer_over
 from taskloop.app.slots import config as wslots_config
-from taskloop.domain import effects as fx
-from taskloop.domain import outcome as oc
-from taskloop.domain.asks import specs as askspecs
-from tlkernel import wire
+from tlkernel import askspecs, wire
+from tlkernel import closeeffects as fx
+from tlkernel import runoutcome as oc
 from tlkernel.checkpoint import EndRec
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId

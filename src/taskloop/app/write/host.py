@@ -5,6 +5,7 @@ from typing import Protocol
 
 from tlgate.domain.writer_split import WriterSplit
 from tlkernel.asked import Asked
+from tlkernel.askspec import AskSpec
 from tlkernel.beadsport import Beads
 from tlkernel.checkpoint import Handoff as HandoffState
 from tlkernel.checkpoint import StageProgress, WriterSession
@@ -19,7 +20,6 @@ from tlkernel.stagefacts import LeftoverSink, Narrate, RepoKey, StepBook
 from tlkernel.wire import Open
 
 from taskloop.app.write.state import WriteState
-from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.work.ledger import Ledger
 
 
@@ -221,7 +221,6 @@ class Briefing(Protocol):
 
 
 class Handoff(Protocol):
-    def drop_big(self, boundary: bool = ...) -> str: ...
     def accepted_text(self) -> str: ...
     def so_far_text(self) -> str: ...
     def delta(self, n: int, goal: str, files: str, anchors: str, checks: str, where: str, feedback: str, tail: str) -> str | None: ...

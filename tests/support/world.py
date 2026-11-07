@@ -10,13 +10,14 @@ from unittest import mock
 import pytest
 from jsonl_log import close_held
 
-from support import gitsim, procsim
-from support.checked import run_checked
+from support import gitsim
 from support.waits import until
 from taskloop.adapters import halt as halting
 from taskloop.adapters import ident
 from tlkernel.argv import text_of
+from tltestkit import procsim
 from tltestkit.case import Case
+from tltestkit.checked import run_checked
 from tltestkit.tmpdir import TemporaryDirectory, mkdtemp
 
 # Engine.MARKERS; tests/checks/test_check_host_contract.py holds them equal
@@ -77,6 +78,11 @@ def no_repo(fn):
 
 
 def pid_gone(pid):
+    try:
+        if Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[1][0] in ("Z", "X"):
+            return True
+    except FileNotFoundError:
+        pass
     try:
         os.kill(pid, 0)
     except ProcessLookupError:

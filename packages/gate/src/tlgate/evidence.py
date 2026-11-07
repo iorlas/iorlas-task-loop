@@ -4,9 +4,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import assert_never
 
+from tlkernel import checkmatchers as matchers
+from tlkernel import checktrim as trim
 from tlkernel.checks import UNVERIFIED_EXIT, CheckResult, CheckRun
 
-from tlgate.domain import diagnostics, matchers, trim
+from tlgate.domain import diagnostics
 from tlgate.domain.diagnostics import CheckDiagnostics
 from tlgate.domain.names import norm
 

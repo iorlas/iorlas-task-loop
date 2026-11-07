@@ -1,5 +1,6 @@
 """The Spawner contract, one suite for every implementation: RealSpawner over real processes (`sh -c`) and the same adapter over the
-procsim (tests/support/procsim.py, which answers a registered command in process). A subclass sets `command` (the argv of a child that
+procsim (packages/testkit/src/tltestkit/procsim.py, which answers a registered command in process). A subclass sets `command` (the
+argv of a child that
 prints `out` and exits with `code`, or hangs past any limit) and gets every test."""
 from support.tags import contract  # noqa: F401  (re-exported for the subclasses)
 

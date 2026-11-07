@@ -7,8 +7,8 @@ from typing import Any
 
 from tlartifacts import store
 from tlartifacts.keep import Keeper
-from tlgate.domain.matchers import glob_re
 from tlkernel.artifact import ArtifactMeta, ArtifactSlot
+from tlkernel.checkmatchers import glob_re
 from tlkernel.gitport import Git
 from tlkernel.plancheck import StageData
 from tlkernel.slots import SlotGitError

@@ -93,6 +93,9 @@ class RunRequest:
     resume: str | None = None
     thread: str = ""  # opaque caller key; delegate owns resume when set
     delta_file: str | None = None  # resumed prompt; brief_file is always the whole prompt
+    prefer: str = ""
+    writer_exec: bool = False
+    reviewer_other_family: bool = False
     authored_by: str | None = None
     timeout_s: int | None = None  # wall limit for the call; delegate stops the worker's process group at it
     idle_s: int | None = None  # no output this long: the worker is hung (delegate's own watchdog; unset = the CLI's default)
@@ -110,6 +113,7 @@ class RunRequest:
     writer_exec_allow: list[list[str]] = field(default_factory=list)  # Codex writers only; host.json bounds this per-call grant
     read_roots: list[str] = field(default_factory=list)  # OpenCode write steps only: folders outside cwd it may read
     instructions_ref: str = ""  # a commit sha: the instruction files are read from it, not the work tree (refused on OpenCode)
+    boundary: bool = False
     worker_env: dict[str, str] = field(default_factory=dict)  # variables the worker's environment gains (the caller's per-call values)
     tools: list[ToolServer] = field(default_factory=list)  # tool servers for this call; not wired to any harness yet
 

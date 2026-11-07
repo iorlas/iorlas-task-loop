@@ -2,9 +2,9 @@
 from support.pipeline_ports import FakeAskRules, FakeBeadClosing, FakeFollowUps, FakeLandCleanup, FakeParkBook, FakeSlotting
 
 from taskloop.app.pipeline.ports import AskRules, BeadClosing, FollowUps, LandCleanup, ParkBook, Slotting
-from taskloop.domain.asks.spec import AskSpec
 from tlkernel import fence
 from tlkernel.askenums import AskClass
+from tlkernel.askspec import AskSpec
 from tlkernel.bead import Bead
 from tlkernel.enums import Outcome
 from tlkernel.ids import BeadId

@@ -6,13 +6,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from tlkernel import check_files
+from tlkernel import checkmatchers as matchers
 from tlkernel.argv import argv_of
 from tlkernel.checks import UNVERIFIED_EXIT, Check
 from tlkernel.envvars import EnvVar
 from tlkernel.waitenums import WaitWhat
 
 from tlgate.base import BaseCheck
-from tlgate.domain import matchers, retry
+from tlgate.domain import retry
 from tlgate.host import CheckHost
 from tlgate.keep import keep
 from tlgate.linux import LinuxRun

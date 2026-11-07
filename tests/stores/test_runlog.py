@@ -5,9 +5,10 @@ import sys
 from pathlib import Path
 
 from support import engine_case as te
-from support import homes, procsim
+from support import homes
 from support.plans import CLEAN, PLAN, WRITE
 
+from tltestkit import procsim
 from tltestkit.logs import pairs, records
 
 ROOT = Path(__file__).resolve().parents[2]

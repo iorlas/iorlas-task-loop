@@ -19,14 +19,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
 
 sys.path.insert(0, str(ROOT / "tests"))
-from support import dlcall, procsim  # noqa: E402
+from support import dlcall  # noqa: E402
 from support import engine_case as te  # noqa: E402
 from support.builders import make_engine  # noqa: E402
-from support.checked import run_checked  # noqa: E402
 from support.fakes import FakeBeadStore  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
 from support.who import who  # noqa: E402
 
+import tltestkit.shellkit  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
     gitrepo,
@@ -38,6 +38,8 @@ from taskloop.app.slots import config as wslots_config  # noqa: E402
 from taskloop.app.slots.config import cfg_source  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlkernel.ids import BeadId  # noqa: E402
+from tltestkit import procsim  # noqa: E402
+from tltestkit.checked import run_checked  # noqa: E402
 
 GIT_KEYS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")
 
@@ -154,7 +156,7 @@ class SlotGitTest(Case):
         assert eng.checkout.stage_all(check=True) == 0
         assert sh("git", "diff", "--cached", "--name-status", cwd=self.wt).split("\n") == ["D\ta.txt", "A\tnew file.txt"]
 
-    @te.POSIX_CHECK
+    @tltestkit.shellkit.POSIX_CHECK
     def test_workers_and_checks_are_not_pinned_but_the_engines_own_git_is(self):
         def worker(cmd, **kw):  # the delegate call: what git variables its request hands the worker's environment
             env_names = [k for k in GIT_KEYS if k in kw["request"].worker_env]
@@ -184,7 +186,7 @@ class SlotGitTest(Case):
         assert (os.path.realpath(d), os.path.realpath(w)) == (gitdir, str(self.wt))
         assert pinned_env(self.repo)["GIT_DIR"] == str(self.repo / ".git")
 
-    @te.POSIX_CHECK
+    @tltestkit.shellkit.POSIX_CHECK
     def test_a_check_runs_git_on_another_repo(self):
         other = Path(self.tmp.name) / "other"
         sh("git", "init", "-q", "-b", "main", str(other), cwd=self.tmp.name)

@@ -4,18 +4,18 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel import followkeys as fu
 from tlkernel.answers import VERDICTS
 from tlkernel.beadsport import Beads
 from tlkernel.checkpoint import Notes
 from tlkernel.enums import Outcome
 from tlkernel.ids import BeadId
 
-from taskloop.adapters import beadtools
 from taskloop.app.pipeline import outcomes
+from taskloop.app.pipeline.adapter_ports import Attempt
 from taskloop.app.pipeline.outcomes import DONE
 from taskloop.app.pipeline.ports import FollowUps
 from taskloop.app.pipeline.store_ports import NotesStores
-from taskloop.domain import followups as fu
 
 
 class NotesCheckpoints(Protocol):
@@ -77,8 +77,9 @@ class FileNotesHost(Protocol):
 
 
 class FileNotes:
-    def __init__(self, host: FileNotesHost, follow_ups: FollowUps) -> None:
-        self.host = host
+    def __init__(self, context: FileNotesHost, follow_ups: FollowUps, attempt: Attempt) -> None:
+        self.host = context
+        self.attempt = attempt
         self.follow_ups_port = follow_ups
 
     def run(self, outcome: Outcome) -> Notes:
@@ -105,7 +106,7 @@ class FileNotes:
                 host.comment("Land (engine): " + host.owner_look.unverified_text())
             look = [u for u in host.review.unchecked if u["kind"] == "other" and not host.judge.is_look(u)]
             if look:
-                beadtools.attempt(host.store.add_label, host.bead, "needs-owner-check")
+                self.attempt(host.store.add_label, host.bead, "needs-owner-check")
                 host.comment("Look (engine): landed, but nobody checked: " + "; ".join(u["what"] for u in look))
         shots = host.pictures.keep_evidence()
         if shots:

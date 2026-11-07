@@ -4,8 +4,6 @@ import os
 from pathlib import Path
 from unittest import mock
 
-from support.checked import run_checked
-
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.land.push_judge import PushStatus, judge_push
@@ -19,6 +17,7 @@ from tlkernel.ids import CheckId, TreeSha
 from tlkernel.paths import ConfigDir
 from tlkernel.runkey import BaseSha
 from tltestkit.case import Case
+from tltestkit.checked import run_checked
 from tltestkit.tmpdir import TemporaryDirectory
 
 

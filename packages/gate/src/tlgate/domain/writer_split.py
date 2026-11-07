@@ -2,10 +2,10 @@
 from collections.abc import Mapping, Sequence
 
 from tlkernel.argv import argv_of
+from tlkernel.checkmatchers import looks_slow
 from tlkernel.checks import Check
 from tlkernel.config import EngineConfig
 
-from tlgate.domain.matchers import looks_slow
 from tlgate.domain.names import norm
 from tlgate.domain.specs import repo_check
 

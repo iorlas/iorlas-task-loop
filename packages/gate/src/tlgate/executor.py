@@ -5,6 +5,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from tlkernel import check_files
+from tlkernel.checkmatchers import cs_error_lines, diff_check_text, output_signature, safe_name, stale_tree
 from tlkernel.checks import UNVERIFIED_EXIT, Check, CheckFaultKind, CheckResult, Duration, Durations, verdict_of
 from tlkernel.runkey import RunKey
 from tlkernel.stagefacts import CheckLogPort
@@ -13,7 +14,6 @@ from tlgate.attempts import Attempts, Outcome
 from tlgate.cache import RunMemo
 from tlgate.domain.durations import CHEAP_S, expected_secs
 from tlgate.domain.inputs import touched
-from tlgate.domain.matchers import cs_error_lines, diff_check_text, output_signature, safe_name, stale_tree
 from tlgate.domain.names import log_var, rc_var
 from tlgate.domain.plan import CheckPlan, Step
 from tlgate.domain.specs import due

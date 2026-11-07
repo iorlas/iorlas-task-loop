@@ -7,10 +7,11 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
-from tlgate.domain import trim
+from tlkernel import checktrim as trim
 from tlkernel import fence
 from tlkernel.beadsport import Beads
 from tlkernel.checkpoint import Checkpoint, CloseIntent, Notes, RunState, StageProgress
+from tlkernel.followkeys import FollowKey
 from tlkernel.followups import FollowupOutbox
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
@@ -18,7 +19,6 @@ from tlkernel.review import Unfiled
 
 from taskloop.app.pipeline.review_glue import ReviewLists, review_of
 from taskloop.app.pipeline.store_ports import CheckpointDoc, CheckpointStores
-from taskloop.domain.followups import FollowKey
 
 
 class CheckpointLook(Protocol):

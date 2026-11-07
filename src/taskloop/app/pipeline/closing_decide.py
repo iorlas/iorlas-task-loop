@@ -4,15 +4,15 @@ import traceback
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
+from tlkernel import runoutcome as oc
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.paths import ConfigDir
 from tlkernel.ports import Clock
+from tlkernel.repourl import repo_url
 
-from taskloop.adapters import closes
-from taskloop.adapters.repourl import repo_url
-from taskloop.domain import outcome as oc
+from taskloop.app.pipeline.adapter_ports import RecentCloses
 
 
 class DecideHost(Protocol):
@@ -37,8 +37,9 @@ class DecideHost(Protocol):
 
 
 class Decide:
-    def __init__(self, host: DecideHost) -> None:
-        self.host = host
+    def __init__(self, context: DecideHost, recent_closes: RecentCloses) -> None:
+        self.host = context
+        self.recent_closes = recent_closes
 
     def repo_id(self) -> str:
         return repo_url(self.host.git, self.host.wt)
@@ -51,7 +52,7 @@ class Decide:
         host.fp = o.fingerprint
         history: Sequence[Mapping[str, object]] = ()
         try:
-            history = closes.recent_closes(self.host.home.traces(), self.repo_id(), now)
+            history = self.recent_closes(self.host.home.traces(), self.repo_id(), now)
         except OSError as err:
             host.warn(f"could not read retry history: {err}\n" + traceback.format_exc())
         host.disp = oc.apply(o, host.bead, history, now)

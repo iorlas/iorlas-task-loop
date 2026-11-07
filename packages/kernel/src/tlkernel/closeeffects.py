@@ -1,5 +1,5 @@
-"""The close of a run as a list of effects: `plan_close` is pure, `key_of` names each effect once, an interpreter (domain/interpret.py)
-applies them.
+"""The close of a run as a list of effects: `plan_close` is pure, `key_of` names each effect once, an interpreter
+(tlkernel/effectinterpret.py) applies them.
 
 What a run does when it ends (save the branch, write the log and trace, raise the ask, file the notes, close or block or free the bead,
 release the slot) is one `Effect` each, in one order. The list depends on the outcome and the dry flag only. An effect is applied once
@@ -9,7 +9,7 @@ unapplied one and repeats none. Stdlib only; imports outcome, never app.
 from dataclasses import dataclass
 from typing import Final, assert_never, final
 
-from taskloop.domain import outcome as oc
+from tlkernel import runoutcome as oc
 from tlkernel.kinds import ASKS, Infra, Kind, Owner, Task
 
 

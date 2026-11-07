@@ -6,22 +6,13 @@ from tlkernel.wire import Open
 
 
 @dataclass(frozen=True)
-class Fallback:
-    on: bool  # the writer's thread ran on a fallback lane
-    lane: str  # which one ("" when it did not)
-
-
-@dataclass(frozen=True)
 class SessionUpdate:
-    ref: str  # the writer's delegate session
-    ctx: float | None  # k tokens it holds, None = unknown
     seen: tuple[str, ...]  # the brief and plan hashes it now holds
 
 
 @dataclass(frozen=True)
 class Updates:
     session: SessionUpdate | None = None  # only when the call resumes the writer and delegate gave a ref
-    fallback: Fallback | None = None  # only when delegate said it on this answer
     planner_ref: str = ""  # the plan node's session, "" = unchanged
     flag: str = ""  # same_family | degraded | "": what the call reports about its lane
 

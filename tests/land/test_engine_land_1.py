@@ -10,11 +10,12 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes
-from support.engine_case import ENGINE_BASH, POSIX_CHECK, EngineTest, _cells, no_repo, sh, stop
+from support.engine_case import EngineTest, _cells, no_repo, stop
 from support.gitsim import verbs
 from support.plans import CLEAN, FALSE, HAS_F, PLAN, WRITE, finding, review
 
 from tltestkit.checks import typed
+from tltestkit.shellkit import ENGINE_BASH, POSIX_CHECK, sh
 
 # isort: split
 import contextlib
@@ -25,7 +26,6 @@ import time
 from pathlib import Path
 from unittest import mock
 
-from support import procsim
 from support.cfgs import cfg_with
 from support.interrupts import Interrupter, Recovery, RecoveryRig
 
@@ -37,7 +37,7 @@ from taskloop.app.run import engine
 from taskloop.domain.plan.matchers import gate_only_criteria
 from tlgate.domain import lint
 from tlkernel.config import EngineConfig
-from tltestkit import fake_route
+from tltestkit import fake_route, procsim
 from tltestkit.logs import records
 from tltestkit.narrow import must
 
@@ -55,7 +55,8 @@ class EngineLand1Test(EngineTest):
         assert any(remote in a for a in meta) and any("origin/main" in a for a in meta), meta
         assert any(c[:2] == ("comments", "add") and "Reflect (engine)" in c[3] for c in self.bd_calls)
         # the facets of this one run, each of which used to be a run of its own
-        assert ("reviewer", None, "openai") in s.calls  # every green stage gets a cross-family review
+        assert s.requests[2].reviewer_other_family
+        assert s.results[2]["family"] != s.results[1]["family"]
         rv = s.prompts[2]
         assert "git diff HEAD" not in rv
         assert "<diff>\ndiff --git a/f.txt b/f.txt" in rv  # the stage's diff, inline (tl-bxk.10.18)

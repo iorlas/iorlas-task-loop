@@ -4,10 +4,10 @@ import argparse
 
 import pytest
 from any_agent.supervisor import RunHooks
-from support.fake_clock import FakeClock
 
 from delegate.app import run
 from delegate.app.run_legs import CONTINUE_NOTE, lane_wait
+from tltestkit.fake_clock import FakeClock
 
 
 def recover(first, following):

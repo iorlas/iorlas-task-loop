@@ -23,10 +23,9 @@ from support import homes
 # isort: split
 from contracts import samples as S
 
-from support import gitq, procsim
+from support import gitq
 from support.builders import make_engine
 from support.cfgs import argv_cfg, cfg_with
-from support.checked import run_checked  # noqa: F401
 from support.checkpoints import flat_ck, stored_ck
 from support.fakes import FakeBeadStore
 from support.plans import (  # noqa: F401  (the tests' old import point)
@@ -44,9 +43,7 @@ from support.plans import (  # noqa: F401  (the tests' old import point)
     review,
     verdict,
 )
-from support.procsim import real_proc  # noqa: F401
 from support.push_race import PushRace
-from support.shellkit import ENGINE_BASH, EXIT_127, NO_FCNTL, POSIX_CHECK, PY, pyc, sh, shown, shq, without_shims  # noqa: F401  (the tests' old import point)
 from support.spawn import port_git, real_spawner
 from support.waits import until  # noqa: F401
 from support.who import who
@@ -71,10 +68,13 @@ from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.plancheck import adhoc
-from tltestkit import fake_route
+from tltestkit import fake_route, procsim
+from tltestkit.checked import run_checked  # noqa: F401
 from tltestkit.checks import res
 from tltestkit.logs import records
 from tltestkit.narrow import must
+from tltestkit.procsim import real_proc  # noqa: F401
+from tltestkit.shellkit import sh
 
 ROOT = Path(__file__).resolve().parents[2]
 

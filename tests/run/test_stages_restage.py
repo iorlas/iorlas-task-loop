@@ -4,11 +4,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import engine_case as te
-from support import gitq, procsim
+from support import gitq
 from support.plans import CLEAN, PLAN, WRITE
 
+import tltestkit.shellkit
 from run.test_stages import StagesTest
+from tltestkit import procsim
 
 HAS_G = procsim.default("has-g", lambda cwd, env: (0 if (cwd / "g.txt").exists() else 1, ""))
 TWO = dict(PLAN, stages=[PLAN["stages"][0], dict(PLAN["stages"][0], goal="add g", files=["g.txt"], checks=[HAS_G], anchors=[])])
@@ -20,12 +21,12 @@ class Restage(StagesTest):
         def answer(*_a):
             base = Path(self.tmp.name, "base-moves")
             if not base.exists():
-                te.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
-            te.sh("git", "pull", "-q", "origin", "main", cwd=base)
+                tltestkit.shellkit.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+            tltestkit.shellkit.sh("git", "pull", "-q", "origin", "main", cwd=base)
             (base / name).write_text(text)
-            te.sh("git", "add", "-A", cwd=base)
-            te.sh("git", "commit", "-qm", "main moves", cwd=base)
-            te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+            tltestkit.shellkit.sh("git", "add", "-A", cwd=base)
+            tltestkit.shellkit.sh("git", "commit", "-qm", "main moves", cwd=base)
+            tltestkit.shellkit.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
             return CLEAN
         return answer
 

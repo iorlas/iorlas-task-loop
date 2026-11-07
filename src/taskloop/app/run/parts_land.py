@@ -3,8 +3,9 @@ from functools import cached_property
 from pathlib import Path
 from typing import override
 
+from tlkernel.repourl import repo_url
+
 from taskloop.adapters import landlock
-from taskloop.adapters.repourl import repo_url
 from taskloop.app.land import cleanup
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.fixer import Fixer

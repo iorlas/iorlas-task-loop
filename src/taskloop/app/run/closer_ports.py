@@ -5,6 +5,7 @@ from typing import Protocol
 
 from tlkernel.identity import Identity
 
+from taskloop.adapters import beadtools, closes
 from taskloop.app.asks.closing import ClosingAsks
 from taskloop.app.land.closing import LandCleanups, LandFollowUps
 from taskloop.app.land.followups import FollowUpCheckpoints, FollowUpHost, file_follow_ups
@@ -57,7 +58,7 @@ def closer_over(host: BindingHost, after_save: Callable[[], None] | None = None)
     """The Closer over the engine: each step gets the host typed as that step's own Protocol."""
     ports = closing_ports(host)
     return Closer(host, CloseParts(
-        decide=Decide(host), branch=SaveBranch(host, after_save),
+        decide=Decide(host, closes.recent_closes), branch=SaveBranch(host, after_save),
         slot=ReleaseSlot(host, host.tree, ports.cleanup), record=RecordRun(host),
-        notes=FileNotes(host, ports.follow_ups), reflect=Reflect(host),
-        settle=Settle(host, ports.beads, ports.asks)), ports.rules, ports.asks)
+        notes=FileNotes(host, ports.follow_ups, beadtools.attempt), reflect=Reflect(host),
+        settle=Settle(host, ports.beads, ports.asks, beadtools.peek, beadtools.attempt)), ports.rules, ports.asks, beadtools.peek)

@@ -6,10 +6,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from support.checked import run_checked
 from support.tlmain import tl_main
 
 from tltestkit.case import Case
+from tltestkit.checked import run_checked
 from tltestkit.tmpdir import TemporaryDirectory
 
 SEES = "import sys; open(sys.argv[1], 'a').write(' '.join(f'{p}={open(p).read().strip()}' for p in sys.argv[2:]) + '\\n')"

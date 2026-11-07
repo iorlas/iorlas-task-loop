@@ -6,12 +6,14 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import gitq, procsim
+from support import gitq
 from support.aging import age
 from support.engine_case import EngineTest
 from support.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE
-from support.shellkit import sh
 from support.world import no_repo
+
+from tltestkit import procsim
+from tltestkit.shellkit import sh
 
 # isort: split
 import contextlib
@@ -33,17 +35,17 @@ from taskloop.app.run import (
     entry,
 )
 from taskloop.app.slots import config as wslots_config
-from taskloop.domain.review.matchers import Tools
 from taskloop.domain.write.matchers import count_tests
 from tlgate import evidence as check_evidence
 from tlgate.domain import lint
-from tlgate.domain import matchers as check_matchers
 from tlgate.domain.writer_split import WriterSplit
 from tlkernel import answers, childenv, plancheck
+from tlkernel import checkmatchers as check_matchers
 from tlkernel.config import EngineConfig
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId, CheckId
 from tlkernel.plancheck import Adhoc, adhoc
+from tlkernel.reviewmatchers import Tools
 from tlkernel.waitenums import WaitWhat
 from tltestkit.checks import ck, res, typed
 from tltestkit.narrow import must

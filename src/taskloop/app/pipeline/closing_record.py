@@ -3,6 +3,7 @@ from collections.abc import Callable, Mapping
 from typing import Protocol
 
 from tlkernel import log as rec
+from tlkernel import runoutcome as oc
 from tlkernel.enums import Outcome
 from tlkernel.ids import BeadId
 from tlkernel.parks import ParkStore
@@ -13,7 +14,6 @@ from taskloop.app.pipeline import outcomes
 from taskloop.app.pipeline.finish import outcome as finished_outcome
 from taskloop.app.pipeline.steps import Open
 from taskloop.app.pipeline.store_ports import RecordLog
-from taskloop.domain import outcome as oc
 
 
 class RecordSteps(Protocol):

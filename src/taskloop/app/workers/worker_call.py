@@ -14,7 +14,7 @@ from typing import Any
 from tlgate.step_env import step_env
 from tlkernel import answers, childenv
 from tlkernel import log as rec
-from tlkernel.asked import Asked, Fallback, Updates
+from tlkernel.asked import Asked, Updates
 from tlkernel.delegate import REASON_OVERRUN, DelegateResult, RunRequest, StopFacts
 from tlkernel.delegateport import Answer
 
@@ -62,6 +62,7 @@ class WorkerCall:
         thread: str = "",
         visual: bool = False,
         delta: str | None = None,
+        boundary: bool = False,
         cwd: Any = None,
         at: tuple[int, ...] = (0, 0, 0),
         **meta: Any,
@@ -71,7 +72,7 @@ class WorkerCall:
         e.halt_point()
         e.waits.budget_check()
         e.stats["nodes"] += 1
-        c = self.start_call(node, title, prompt, resume_key, writer_family, step, thread, visual, delta, cwd, at)
+        c = self.start_call(node, title, prompt, resume_key, writer_family, step, thread, visual, delta, cwd, at, boundary)
         e.steps.begin(step or node, f"{node}: {title}", node=node, backend="delegate", role=c.role, resume=bool(c.delta), **meta)
         while True:
             ans = c.finished or self.call_once(c)
@@ -118,26 +119,10 @@ class WorkerCall:
         delta: str | None,
         cwd: Any,
         at: tuple[int, ...],
+        boundary: bool = False,
     ) -> Call:
         e = self.e
-        writer = writer_family if node in READ_ONLY_NODES else None
-        has_thread = bool(resume_key and e.writer.delegate)
-        reset = False
-        if has_thread and e.writer_fallback:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
-            lane = e.router.lane(e.fallback_lane) if e.fallback_lane else None
-            if e.fallback_lane and lane is None:  # that lane is not configured here: no fallback
-                reset = True
-                has_thread = False
-            elif lane is None or lane.usable is True:  # back again, or no lane known to wait for
-                e.steps.move(
-                    step or node,
-                    "fallback_retake",
-                    "{}: delegate routes afresh instead of resuming the fallback writer ({})".format(
-                        f"{e.fallback_lane} is usable again" if e.fallback_lane else "its first-choice lane is not known",
-                        e.writer_family or "?",
-                    ),
-                )
-                has_thread = False
+        has_thread = bool(resume_key and delta is not None)
         e.publish_plan()  # an unsandboxed worker can write here: every step reads the engine's plan
         delta = delta if (bool(e.planner_ref) if node == "plan" else has_thread or thread) else None
         key = (step or node, *tuple(at))
@@ -148,16 +133,14 @@ class WorkerCall:
             cwd or e.wt,
             prompt,
             prompt,
-            writer,
             delta,
             key,
             "writer" if resume_key else "planner" if node == "plan" else "/".join(map(str, key)),
-            writer_family,
             step,
             title,
         )
+        c.boundary = boundary
         c.visual = visual
-        c.updates = Updates(fallback=Fallback(False, "")) if reset else Updates()  # a fallback to a lane not configured here is dropped
         self.attach(c)
         if node == "plan":
             c.delta = delta
@@ -332,9 +315,8 @@ class WorkerCall:
         e = self.e
         if res.git_violation:
             e.warn("{} changed git: {}".format(c.node, "; ".join(res.git_violation)))
-        ctx = (e.sessions[-1] if e.sessions else {}).get("context_k")  # k tokens, None = unknown
         seen = e.hand.seen_now() if c.thread == "writer" and res.ref else []
-        c.updates = asked.then(c.updates, asked.thread_updates(c, res, e.fallback_lane, ctx, seen))
+        c.updates = asked.then(c.updates, asked.thread_updates(c, res, seen))
         return answers.sent_errors(c.node, c.visual, res.data, res.say or res.text)
 
     def refused(self, c: Call, res: DelegateResult, denied: list[Any], errs: Any = True) -> bool:

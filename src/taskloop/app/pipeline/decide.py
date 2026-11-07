@@ -10,8 +10,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from tlkernel.checkpoint import Checkpoint
-
-from taskloop.domain.plan.brief import COMMENTS_ONLY
+from tlkernel.planbrief import COMMENTS_ONLY
 
 OUTSIDE = "the branch changed outside the engine"
 CONFIRMED = "the owner confirmed the verify ask"

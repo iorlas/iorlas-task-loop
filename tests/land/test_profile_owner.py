@@ -14,7 +14,6 @@ from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.fake_clock import FakeClock
 from support.fakegit import FakeGit
 from support.memstores import fake_stores
 from support.narrow_hosts import FakePushHost, Stopped
@@ -37,6 +36,7 @@ from tlkernel.gitfacts import TreeEntry
 from tlkernel.ids import TreeSha
 from tlkernel.profile_changes import ProfileChange
 from tlkernel.runkey import BaseSha
+from tltestkit.fake_clock import FakeClock
 
 TEXT = 'Denis: "I approve this profile" 2026-11-02T12:00Z'
 PATCH = 'diff --git a/.task-loop.json b/.task-loop.json\n-old\n+new\n'

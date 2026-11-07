@@ -3,7 +3,6 @@ from argparse import Namespace
 from pathlib import Path
 from unittest import mock
 
-from support import procsim
 from support.check_host import CheckHostCase
 from support.memstores import fake_stores
 from support.spawn import port_git
@@ -26,6 +25,7 @@ from tlkernel.gitport import Git
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.paths import ConfigDir
 from tlkernel.runkey import BaseSha, Digest
+from tltestkit import procsim
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 

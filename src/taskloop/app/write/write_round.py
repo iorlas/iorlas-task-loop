@@ -2,13 +2,13 @@
 means (a question, an accepted requirement that decides it, shots a visual stage owes) and the cases it adds."""
 
 from tlgate.domain import planref
+from tlkernel import askspecs
 
 from taskloop.app.write import show_check
 from taskloop.app.write.host import WriteHost
 from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.prompts import SHOTS_FIX, write_prompt
 from taskloop.app.write.state import AGAIN, REPLAN, RoundResult, StageState, carrying
-from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.prompts.anchors import anchors_text
 from taskloop.domain.prompts.common import DECIDED_TEXT, LATER_CASES, UNCHECKED_TEXT
 
@@ -32,13 +32,12 @@ class WriteRound:
     def go(self, s: StageState, out: RoundResult, look: bool) -> str:
         e = self.e
         boundary = s.n == 1 and s.i > 0 and not s.state  # the first write of a later stage
-        fresh = e.hand.drop_big(boundary)
-        prompt, delta = self.prompts(s, boundary, fresh)
-        got = e.ai("write", f"{s.name} write {s.n}", prompt, delta=delta, resume_key="writer", write=s.n,
+        prompt, delta = self.prompts(s, boundary)
+        got = e.ai("write", f"{s.name} write {s.n}", prompt, delta=delta, boundary=boundary, resume_key="writer", write=s.n,
                            visual=e.pictures.stage_visual(s.st), round=s.rounds + 1,
                            at=(s.sk, s.rounds, s.n + (10000 if s.prepare_retried else 0)), **s.meta)
         s.w, s.wfam = got.data, got.family
-        self.record(s, fresh, out)
+        self.record(s, out)
         if Prepare(e).retry(s, str(s.w.get("bad_checks", [])) + str(s.w.get("problem", ""))):
             return PREPARED
         s.wrote_unchecked = s.w.get("unchecked") or []  # the review decides what is still unproven after the checks
@@ -58,7 +57,7 @@ class WriteRound:
             return AGAIN
         return ""
 
-    def prompts(self, s: StageState, boundary: bool, fresh: str) -> tuple[str, str | None]:
+    def prompts(self, s: StageState, boundary: bool) -> tuple[str, str | None]:
         """(the whole prompt, the delta a resumed writer gets instead or None)."""
         e, st = self.e, s.st
         listed = planref.commands(st["checks"], e.cfg)
@@ -69,30 +68,29 @@ class WriteRound:
         prompt = write_prompt(e.cases.rules_text(), brief=e.briefs.text(), plan=e.cases.plan_text(s.i), n=s.i + 1, goal=st["goal"],
                               files=", ".join(st["files"]), anchors=anchors_text(st), checks=stage_checks, feedback=s.feedback,
                               evidence=e.evidence_dir, where=where_text, gate=gate) + tail
-        if fresh:
-            prompt += e.hand.accepted_text() if boundary else e.hand.so_far_text()
         dtail = ""  # what a resumed writer still needs that its first prompt did not say for this stage
         if s.last and not e.writer.last_stage:  # the acceptance cases run now: it has not been told
             dtail += CASES_NOW
         if e.review.unchecked:
             dtail += UNCHECKED_TEXT
-        delta = None if fresh else e.hand.delta(s.i + 1, st["goal"], ", ".join(st["files"]), anchors_text(st), stage_checks,
+        delta = e.hand.delta(s.i + 1, st["goal"], ", ".join(st["files"]), anchors_text(st), stage_checks,
                                                 where_text, s.feedback, dtail + e.judge.look_write(st))
-        if delta:  # the writer may have edited its copy: the engine's brief goes back before it reads it again
+        if delta is not None:
+            prompt += e.hand.accepted_text() if boundary else e.hand.so_far_text()
+        if delta is not None:  # the writer may have edited its copy: the engine's brief goes back before it reads it again
             e.brief_file.write_text(e.briefs.text(), encoding="utf-8")
         else:  # a whole prompt (a first write, a fresh writer): what the tasks beside this one are doing (tl-bxk.13.8)
             prompt += e.shared.shared_text() + e.routing.ledger().text()
         return prompt, delta
 
-    def record(self, s: StageState, fresh: str, out: RoundResult) -> None:
+    def record(self, s: StageState, out: RoundResult) -> None:
         """The writer's thread, its summary and its flakes, as the later rounds read them."""
         e, w = self.e, s.w
         out.family, out.last_stage = s.wfam, s.last
         wr = e.sessions[-1] if e.sessions else {}
         out.write_rows += ({"write": s.n, "round": s.rounds + 1, "node_id": wr.get("node_id"), "ref": wr.get("ref"),
                             "resumed": "yes" if wr.get("resume") else "no", "input_tokens": (wr.get("tokens") or {}).get("in"),
-                            "turns": wr.get("turns"), "prompt_chars": wr.get("prompt_chars"), "context_k": wr.get("context_k"),
-                            "fresh": fresh},)
+                            "turns": wr.get("turns"), "prompt_chars": wr.get("prompt_chars"), "context_k": wr.get("context_k")},)
         e.shared.add_flakes(w.get("flakes") or [])
         out.summary = w["summary"]
 

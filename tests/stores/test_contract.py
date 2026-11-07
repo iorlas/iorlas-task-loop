@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -19,12 +20,12 @@ import support.paths  # noqa: F401
 import jsonl_log as jsonl
 import suites
 from rigs import FakeRig, RealRig
-from support.procsim import real_proc
 from support.tiers import contract
 
 from taskloop.adapters.locks import ProcessLockTable
 from tlkernel import paths
 from tlkernel.lockenums import LockWhat
+from tltestkit.procsim import real_proc
 
 SUITES = [suites.DocContract, suites.AskContract, suites.CheckpointContract, suites.LogContract, suites.LockContract,
           suites.TicketContract]
@@ -81,7 +82,9 @@ class RealRaces(Case):
         path = self.cfg.root / "y.jsonl"
         writers = self.append_from(path, 80, [f"p{i}" for i in range(3)])
         seen, cursor = [], 0
+        end = time.monotonic() + 30.0
         while any(t.is_alive() for t in writers):
+            assert time.monotonic() < end, "JSONL writers did not settle in 30 s"
             entries, cursor = jsonl.Jsonl(path).read_from(cursor)
             seen += [(e.data["who"], e.data["i"]) for e in entries]
         entries, cursor = jsonl.Jsonl(path).read_from(cursor)

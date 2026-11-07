@@ -17,10 +17,10 @@ from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
 
 from taskloop.app.asks import intake, raiser
-from taskloop.domain.asks import specs
 from taskloop_dash.views import bead_detail, snapshot
 from taskloop_dash.views.board import Board
 from taskloop_dash.views.world import AdrIn, Landing, ProjectIn, World
+from tlkernel import askspecs as specs
 from tlkernel import wire
 from tlkernel.adrs import AdrStore
 from tlkernel.ask import SimilarRef, ThreadEntry

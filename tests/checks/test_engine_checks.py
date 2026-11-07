@@ -4,10 +4,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import gitq, procsim
+from support import gitq
 from support.check_host import CheckHostCase
 from support.plans import BEAD, FALSE, HAS_F, PLAN
 from support.world import no_repo
+
+from tltestkit import procsim
 
 # isort: split
 import os
@@ -20,7 +22,6 @@ from support.cfgs import cfg_with
 from support.fakes import as_bead, must_bead
 
 from taskloop.adapters.check_probe import PathProbe
-from taskloop.domain.review.matchers import Tools
 from taskloop.domain.write.matchers import count_tests
 from tlgate import evidence as check_evidence
 from tlgate.domain import lint
@@ -28,6 +29,7 @@ from tlgate.domain.writer_split import WriterSplit
 from tlkernel import answers, childenv, plancheck
 from tlkernel.config import EngineConfig
 from tlkernel.env import snapshot
+from tlkernel.reviewmatchers import Tools
 from tltestkit.checks import ck, res, typed
 
 

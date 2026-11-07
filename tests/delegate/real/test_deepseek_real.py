@@ -12,11 +12,11 @@ from any_agent.harnesses import opencode_sandbox
 from any_agent.harnesses.opencode import OpenCodeHarness
 from any_agent.supervisor import RunHooks
 from delegate_fakes.fake_run import replay
-from support.procsim import real_proc
 from test_route import CFG, decide, lanes
 
 from delegate.app import env, launch
 from delegate.app.settle import Settler
+from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory
 
 
