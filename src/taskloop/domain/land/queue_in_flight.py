@@ -55,11 +55,8 @@ def in_flight(current: int, event: Event, *, cap: int = DEFAULT_CAP, ratio: floa
     """The gates in flight after `event`: +1 on a merge unless the wasted `ratio` holds it, halved (rounded down) on a gate failure or a
     conflict eject, unchanged on a flake or an infra stop; always between FLOOR and `cap`."""
     cap = max(FLOOR, cap)
-    match event:
-        case Event.MERGED:
-            current += 0 if ratio > WASTE_HOLD else 1
-        case Event.GATE_FAILED | Event.CONFLICT_EJECT:
-            current //= 2
-        case Event.FLAKE | Event.INFRA:
-            pass
+    if event is Event.MERGED:
+        current += 0 if ratio > WASTE_HOLD else 1
+    elif event in (Event.GATE_FAILED, Event.CONFLICT_EJECT):
+        current //= 2
     return min(cap, max(FLOOR, current))
