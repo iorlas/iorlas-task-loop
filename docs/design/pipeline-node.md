@@ -148,3 +148,23 @@ P5 (lifecycle and run) is the large slice and waits for the rename freeze; P6 do
 | **P6e** | `resume.py` (196) | `land.gitcall.oneline`; `run.review_glue.apply_review`; `run.state.state_names` | `HeadHistory.oneline(wt, new, old, n) -> str` (land); `apply_review` and `state_names` are run-local: they move with `resume` only if their own imports are free of a stage, else `ReviewRestore.apply(review, *, unchecked, late)` port and `state_names` passed as a tuple | land (`land/closing.py`), root binder |
 
 Rules as in section 9: a port class lives in the stage that implements it; the pipeline holds the Protocols (`pipeline/ports.py`); each moved file takes `self.host`; `.importlinter` lists and the converted-stage contracts follow the move. Each slice lands green with behaviour unchanged. Order by lowest risk: P6a, P6d, P6b, P6e, P6c.
+
+## 11. D-PIPELINE: ownership of the tables, and the thread rules of the ports (added 2026-11-07, tl-e5t0.52)
+
+**Who owns the pipeline's tables.** The `pipeline` Part (`run`, `attempt`, `step`, `effect`, `wait`, `checkpoint`, `timed`, `signal`, and the `ELIGIBLE` prune rule) is owned by the pipeline node but declared in the kernel (`tlkernel/factoryparts.py`), by the same rule as tl-11m4 (the slots Part): a Part the dashboard reads is declared in the kernel and owned by one stage in this design, because `taskloop_dash` imports only the kernel (`.importlinter`, the dash contract) and `DASH_PARTS` lists it. The rows modules the dashboard reads (`runrows`, `waitrows`, `signalrows`, `effectrows`, `locator`, `finish`) stay beside it. What the pipeline owns in code is the *writes*: `RunRows.carry_done_steps` (D1, tl-e5t0.52) is the one cross-run copy, so `pipeline/reload.py` holds no SQL. The checkpoint's stage sections are stored through CKPT (tl-e5t0.29), not here.
+
+**CallState** (the vendor call in flight) is the worker call's own state: every user is in `app/workers`, and the arch table forbids workers importing the pipeline, so it lives in `app/workers/call_state.py` (D2). Its row is the pipeline's `effect` table (`call:<bead>`), written through `tlkernel.effectrows`.
+
+**RunCounters** (`pipeline/reload.py`, `Reload.counters` / `restore_run`) are the run's cost, waited seconds, stats, sessions, write rounds and node counter; they are written by `rundocs.pause` (a network pause) or `rundocs.reexec` (a move to a newer install) and read back once by the next process, which restores them and leaves the time between neither spent nor waited.
+
+**Thread rules per port** (the engine has three threads that touch a run: the main thread, the lease/heartbeat thread, and the close-out under `stop_deferred`):
+
+| port or object | rule |
+|---|---|
+| `Lifecycle.beat` (called by the lease thread) | runs `records.heartbeat`, emits a `Beat`, calls `StuckTick.tick` and `OwnerRequests.at_beat`; a file that cannot be written must not kill the thread, so every write is suppressed on `OSError` and the thread's death goes to `beat_died` |
+| `StuckTick.tick` | holds its own lock: the lease thread and the close-out may tick at once; it reads the log from its last offset, so a second tick sees nothing twice |
+| `live_now` (the newest delegate call's live file) | a plain string the main thread sets and the stuck tick reads without a lock; a stale read only delays a stuck episode by one beat |
+| `ThreadFlag` (`killed`, `wall_hit`) | one value per thread: the lanes of a gate run checks at once, so a shared flag would be the answer of whichever lane wrote last; a port must not move the check onto another thread |
+| `OwnerRequests` | `at_beat` only peeks and sets the stop flag; `at_step` takes the rows, on the main thread, at a step boundary; `drop` sets `closing` first so nothing is taken any more |
+| `Closer` and its ports (`ParkBook`, `BeadClosing`, `LandCleanup`, `Slotting`) | called on the main thread inside `stop_deferred`; none may start a thread or wait for the lease thread |
+| `Reexecs`, `Trail`, `HeadHistory`, `ReviewRestore`, `TrustRefusal`, `AskRules`, `FollowUps` | called on the main thread only; each is a plain function over its own store, with no state of its own |
