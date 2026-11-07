@@ -1,32 +1,49 @@
-"""The engine and the skill name no consumer repo: what a repo needs is in its .task-loop.json. A name here would make the next
-reader think the engine serves one project (tl-w7lt.32)."""
+"""Consumer toolchain names stay only at explicit executable migration sites (tl-w7lt.32)."""
 import re
-import sys
 from pathlib import Path
 
-from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
 ROOT = Path(__file__).resolve().parents[2]
-ROOTS = ("src/taskloop", "skills/task-loop")
-SKIP = ("_vendor",)
+ROOTS = (ROOT / "src/taskloop", *(ROOT / "packages").glob("*/src"), ROOT / "skills/task-loop")
+SKIP = {"_vendor", "tltestkit"}
 SUFFIXES = {".py", ".md", ".json"}
-CONSUMERS = re.compile(r"lifesim", re.I)
+CONSUMERS = re.compile(r"unity|dotnet|nuget|msbuild|roslyn|prefab|asmdef|lifesim|\bfld\b", re.I)
+
+UNTIL = " stays until PROFILEGEN A lands (tl-w7lt.32 A1/A2: profile fields)"
+EXCEPTIONS = {
+    "src/taskloop/app/doctor/setup.py": (5, "reason: project marks dict and unity-lease question" + UNTIL),
+    "src/taskloop/app/doctor/setup_apply.py": (9, "reason: unity lease profile and host resource setup" + UNTIL),
+    "packages/gate/src/tlgate/domain/produced.py": (4, "reason: dotnet build output matcher and helper" + UNTIL),
+    "packages/gate/src/tlgate/domain/diag/matchers.py": (2, "reason: Roslyn/MSBuild diagnostic regex and format id" + UNTIL),
+    "packages/kernel/src/tlkernel/config.py": (1, "reason: TEST_PATTERN names the UnityTest attribute" + UNTIL),
+    "packages/kernel/src/tlkernel/reviewmatchers.py": (1, "reason: asmdef|unity|prefab review suffix matcher" + UNTIL),
+    "packages/kernel/src/tlkernel/checkmatchers.py": (1, "reason: unity-slot wait parser docstring" + UNTIL),
+    "packages/pipeline/src/tlpipeline/waits.py": (1, "reason: unity-slot output parsing and wait accounting docstring" + UNTIL),
+}
 
 
-def offenders() -> list[str]:
-    found = []
+def hits() -> dict[str, list[str]]:
+    found: dict[str, list[str]] = {}
     for top in ROOTS:
-        for path in sorted((ROOT / top).rglob("*")):
-            if not path.is_file() or path.suffix not in SUFFIXES or any(part in SKIP for part in path.parts):
+        for path in sorted(top.rglob("*")):
+            if not path.is_file() or path.suffix not in SUFFIXES or SKIP.intersection(path.relative_to(ROOT).parts):
                 continue
+            name = path.relative_to(ROOT).as_posix()
             for n, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
                 if CONSUMERS.search(line):
-                    found.append(f"{path.relative_to(ROOT)}:{n}: {line.strip()[:100]}")
+                    found.setdefault(name, []).append(f"{name}:{n}: {line.strip()[:100]}")
     return found
 
 
-class NoConsumerNames(Case):
-    def test_no_file_of_the_engine_or_the_skill_names_a_consumer_repo(self):
-        assert offenders() == []
+def test_no_file_names_a_consumer_outside_migration_sites():
+    found = hits()
+    failures = []
+    for name in sorted(found.keys() | EXCEPTIONS.keys()):
+        lines = found.get(name, [])
+        expected = EXCEPTIONS.get(name, (0, ""))[0]
+        if len(lines) != expected:
+            failures.append(f"{name}:1: expected {expected} hit lines, found {len(lines)}\n" + "\n".join(lines))
+    assert not failures, "\n".join(failures)
+
+
+def test_every_exception_has_a_reason():
+    assert all(reason.strip() for _, reason in EXCEPTIONS.values())

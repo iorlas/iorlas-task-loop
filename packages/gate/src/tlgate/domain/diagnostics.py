@@ -1,8 +1,8 @@
 """The diagnostics of a red check, read out of its output (tl-9un.13). Pure: text in, records and text out.
 
-A writer that cannot run a check (a Unity analyzer build its sandbox blocks) fixes only what the engine tells it, so the engine
+A writer that cannot run a check (an editor analyzer build its sandbox blocks) fixes only what the engine tells it, so the engine
 tells it each diagnostic: where (file:line:col), the rule and the message, once, not a trimmed log. The formats are the tables of
-diag/matchers.py (Roslyn/MSBuild, ruff, pyrefly, the generic `path:line:col: message`); output that holds none falls back to the
+diag/matchers.py (compiler diagnostics, ruff, pyrefly, the generic `path:line:col: message`); output that holds none falls back to the
 log trimmed to a byte cap (trim.trim_log), the command's own words."""
 from collections.abc import Sequence
 from dataclasses import dataclass
