@@ -3,13 +3,13 @@ per repo, so a flaky repo does not shrink another's speculation. The numbers are
 nothing, and nothing calls it until the queue builder does."""
 from collections import deque
 
-from taskloop.domain.land.queue_in_flight import DEFAULT_CAP, WASTE_WINDOW, Account, Cause, Event, in_flight, wasted_ratio
+from taskloop.domain.land.queue_in_flight import DEFAULT_CAP, WASTE_LAST_MERGES, Account, Cause, Event, in_flight, wasted_ratio
 
 
 class InFlight:
     def __init__(self, cap: int = DEFAULT_CAP) -> None:
         self.cap, self.current = cap, 1
-        self.accounts: deque[Account] = deque(maxlen=WASTE_WINDOW)
+        self.accounts: deque[Account] = deque(maxlen=WASTE_LAST_MERGES)
         self.pending_s: float = 0.0  # wasted seconds since the last merge, and why
         self.pending_causes: list[Cause] = []
 

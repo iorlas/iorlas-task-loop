@@ -3,7 +3,7 @@ infra stop never shrinks, a wasted ratio over 0.5 holds the growth; the state is
 import pytest
 
 from taskloop.app.land.queue import InFlight
-from taskloop.domain.land.queue_in_flight import WASTE_WINDOW, Account, Cause, Event, in_flight, wasted_ratio
+from taskloop.domain.land.queue_in_flight import WASTE_LAST_MERGES, Account, Cause, Event, in_flight, wasted_ratio
 
 
 @pytest.mark.parametrize("current, event, cap, ratio, want", [
@@ -29,9 +29,9 @@ def test_in_flight_table(current, event, cap, ratio, want):
 def test_the_ratio_is_wasted_over_all_gate_seconds_of_the_last_twenty_merges():
     assert wasted_ratio([]) == 0.0
     old = [Account(pr=i, useful_gate_s=1, wasted_gate_s=100, causes=(Cause.BASE_MOVED,)) for i in range(5)]
-    recent = [Account(pr=100 + i, useful_gate_s=10) for i in range(WASTE_WINDOW - 1)] + [
+    recent = [Account(pr=100 + i, useful_gate_s=10) for i in range(WASTE_LAST_MERGES - 1)] + [
         Account(pr=200, useful_gate_s=10, wasted_gate_s=10, causes=(Cause.CULPRIT_AHEAD,))]
-    assert wasted_ratio(old + recent) == pytest.approx(10 / 210)  # the five old ones fell out of the window
+    assert wasted_ratio(old + recent) == pytest.approx(10 / 210)  # the five old ones fell out of the last twenty
 
 
 def test_wasted_seconds_need_a_cause():

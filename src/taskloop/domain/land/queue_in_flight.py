@@ -1,7 +1,7 @@
 """Gates in flight (docs/design/merge-queue.md section 6, terms in docs/glossary.md): how many PRs of the merge queue are tested at the
 same time. It starts at the floor, 1 (today's serial landing), grows by 1 after each merged PR, halves after the queue's own gate failure
 or a conflict eject, and stays between the floor and the cap. A flake or an infra stop says nothing about the speculation, so it never
-shrinks it. A wasted ratio above WASTE_HOLD over the last WASTE_WINDOW merges holds the growth."""
+shrinks it. A wasted ratio above WASTE_HOLD over the last WASTE_LAST_MERGES merges holds the growth."""
 from collections.abc import Iterable
 from enum import StrEnum
 from typing import Final, final
@@ -10,7 +10,7 @@ from taskloop.contracts.wire import Rec
 
 FLOOR: Final = 1
 DEFAULT_CAP: Final = 4  # land-stack's --jobs default; the config key `land.queue.max_in_flight` will carry it
-WASTE_WINDOW: Final = 20  # merges the wasted ratio looks back over
+WASTE_LAST_MERGES: Final = 20  # how many merges the wasted ratio looks back over
 WASTE_HOLD: Final = 0.5  # a guess, tunable (design section 6)
 
 
@@ -45,8 +45,8 @@ class Account(Rec):
 
 
 def wasted_ratio(accounts: Iterable[Account]) -> float:
-    """wasted / (wasted + useful) over the newest WASTE_WINDOW accounts; 0 when nothing ran."""
-    last = list(accounts)[-WASTE_WINDOW:]
+    """wasted / (wasted + useful) over the newest WASTE_LAST_MERGES accounts; 0 when nothing ran."""
+    last = list(accounts)[-WASTE_LAST_MERGES:]
     wasted, useful = sum(a.wasted_gate_s for a in last), sum(a.useful_gate_s for a in last)
     return wasted / (wasted + useful) if wasted + useful else 0.0
 
