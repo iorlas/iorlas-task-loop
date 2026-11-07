@@ -17,6 +17,10 @@ test-packages:
 test-inner +paths:
     uv run --with pytest-testmon pytest --testmon -o addopts="-p no:cacheprovider" --ignore=tests/e2e --ignore=tests/delegate --ignore=tests/live {{paths}}
 
+# INNER LOOP ONLY developer tool, never the gate: stage tests plus dependencies' contract tests. `just test` stays the gate.
+test-pkg stage:
+    uv run pytest -q $(python3 dev/test_pkg.py {{stage}})
+
 # Every test of every kind, in 4 workers then the serial group. Started by a person, never by the gate, the release, a cron or a background job.
 test-full:
     uv run pytest -m "not serial" -n 4
