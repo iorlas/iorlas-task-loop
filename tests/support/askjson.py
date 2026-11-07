@@ -4,8 +4,7 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 # isort: split
 from typing import Any
 
-from asks.samples import MOCKS
-
+from tlasks.testing import MOCKS
 from tlkernel import wire
 from tlkernel.askrows import AskRows
 from tlkernel.askstore import AskStore

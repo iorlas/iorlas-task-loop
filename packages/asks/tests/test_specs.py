@@ -1,8 +1,6 @@
 """Each stop of the engine builds an ask that passes lint, and the card text reads from the record's fields."""
 
-from support.tiers import domain
 
-from tlasks.raiser import Asking, build
 from tlkernel import askspecs as specs
 from tlkernel import asktext as text
 from tlkernel.ask import AskAnswer, BudgetLine
@@ -10,6 +8,9 @@ from tlkernel.askenums import AskClass
 from tlkernel.asklint import lint
 from tlkernel.ids import BeadId
 from tltestkit.case import Case
+
+from tlasks.contracts.records import Asking
+from tlasks.raiser import build
 
 AT = Asking(bead=BeadId("t-1"), run="t-1-20261026-101010", brief_hash="h", repo="/r", title="T", now=10.0)
 LONG = "word " * 200
@@ -19,7 +20,6 @@ def ask_of(spec):
     return build(spec, 1, AT)
 
 
-@domain
 class SpecsTest(Case):
     def check(self, spec) -> None:
         assert lint(ask_of(spec)) == [], spec.decision
@@ -65,7 +65,6 @@ class SpecsTest(Case):
         assert bud.detail.budget[0].rounds == 20
 
 
-@domain
 class TextTest(Case):
     def test_clip_cuts_at_a_word_and_marks_it(self) -> None:
         assert text.clip("a b c d", 5) == "a b…"

@@ -15,6 +15,7 @@ from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
 
 from tlasks import intake, raiser
+from tlasks.contracts.records import Asking
 from tldash.testing import T, bead
 from tldash.views import bead_detail, snapshot
 from tldash.views.board import Board
@@ -64,7 +65,7 @@ class Case(Case):
         time.tzset()
 
     def raise_(self, bead_id, now, question=Q, cause="decision", default="", adrs=None):
-        return must(raiser.raise_ask(self.asks, specs.open_question(question, OPTS, cause, default), raiser.Asking(
+        return must(raiser.raise_ask(self.asks, specs.open_question(question, OPTS, cause, default), Asking(
             bead=bead_id, run="r", brief_hash="h", repo=REPO, title=bead_id, now=now), adrs)[0])
 
     def world(self, beads, adrs=(), landings=(), live=None):
@@ -238,7 +239,7 @@ class Stick_(Case):
         write_repos(self.dash.env.config.repos(), repo)
         self.repo = repo
         self.asks = AskStore.at(self.dash.env.config)
-        self.ask = must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), raiser.Asking(
+        self.ask = must(raiser.raise_ask(self.asks, specs.open_question(Q, OPTS), Asking(
             bead=BeadId("b-1"), run="r", brief_hash="h", repo=str(repo), title="Bills", now=NOW - 60))[0])
         self.post("answer", {"project": loop_key(self.repo), "ask": self.ask.id, "kind": "answer", "option": 0})
 
@@ -311,7 +312,7 @@ class Stick_(Case):
         assert self.stick("ref", "ADR-1").ok is False
 
     def test_an_unanswered_ask_cannot_stick(self):
-        other = must(raiser.raise_ask(self.asks, specs.missing_criteria(), raiser.Asking(
+        other = must(raiser.raise_ask(self.asks, specs.missing_criteria(), Asking(
             bead=BeadId("b-2"), run="r", brief_hash="h", repo=self.tmp.name, title="x", now=NOW))[0])
         res = self.post("stick", {"project": loop_key(self.repo), "ask": other.id, "outcome": "adr"})
         assert (res.ok, res.message) == (False, "answer the ask first")

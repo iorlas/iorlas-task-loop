@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterable, Mapping
 
 from jsonl_log import close_held
 from tlasks import deferral, parks
-from tlasks.host import AsksHost
+from tlasks.contracts.records import AsksHost
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, Beads
 from tlkernel.branches import task_branch

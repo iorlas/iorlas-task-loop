@@ -1,10 +1,10 @@
 """INTAKE (tl-7i9k.19): agent-filed follow-ups wait as `deferred` with the label `from-review`; at most K a day are promoted to open."""
 
 import pytest
-from support.fake_beads import FakeBeads
+from tlkernel.beadsport import BeadQuery, NewBead
 
 from tlasks import deferral as intake
-from tlkernel.beadsport import BeadQuery, NewBead
+from tlasks.testing import FakeBeads
 
 
 def filed(store, n, priority=None):

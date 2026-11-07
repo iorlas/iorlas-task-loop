@@ -10,9 +10,4 @@ from taskloop.app.loop import lintrun
 
 def cmd_lint(a: Any, who: Identity) -> int:
     root = repos.repo_root(a.repo)
-    if a.ready:
-        return lintrun.lint_ready(wloop.bd_of(who, root), root, a.fix)
-    if a.fix or not a.bead:
-        print("usage: tl lint BEAD | tl lint --ready [--fix]")
-        return 2
-    return lintrun.lint_one(wloop.bd_of(who, root), root, a.bead)
+    return lintrun.run(wloop.bd_of(who, root), root, a.ready, a.fix, a.bead)

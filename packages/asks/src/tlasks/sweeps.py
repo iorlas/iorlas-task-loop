@@ -19,7 +19,7 @@ from tlkernel.ids import BeadId, is_bead_id
 from tlkernel.paths import ConfigDir
 
 from tlasks import release
-from tlasks.host import AsksHost
+from tlasks.contracts.records import AsksHost
 from tlasks.paths import ask_marker
 
 UNUSED_ANSWER_S = 30 * 60

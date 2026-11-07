@@ -18,6 +18,7 @@ from tlkernel.kinds import Kind
 from tlkernel.paths import ConfigDir
 
 from tlasks import raiser, sweeps
+from tlasks.contracts.records import Asking
 
 
 class OpenQuestion(Protocol):
@@ -136,7 +137,7 @@ class AskFlow:
         """File the ask the stop carries. Lint decides whether it is one an owner can answer: if not, nothing is filed and the stop is
         the engine's own fault, never a prose question. -> the Ask, or None."""
         e = self.e
-        at = raiser.Asking(bead=e.bead, run=e.run_id, brief_hash=e.state.brief_hash, now=time.time(), why=why, repo=self.repo(),
+        at = Asking(bead=e.bead, run=e.run_id, brief_hash=e.state.brief_hash, now=time.time(), why=why, repo=self.repo(),
                            title=e.bead_title, artifacts=tuple(self.pictures()))
         a, problems = raiser.raise_ask(e.stores.asks, spec, at, e.stores.adrs(at.repo))
         if a is None:
