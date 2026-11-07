@@ -20,8 +20,8 @@ from tlkernel.checks import Check
 from tlkernel.config import EngineConfig
 from tlkernel.waitenums import WaitWhat
 
+from taskloop.app.checks.ports import GateStores
 from taskloop.domain.checks import affinity
-from taskloop.stores.bundle import Stores
 
 POLL_S = 0.5  # how often a waiting check looks for a free lease
 
@@ -39,7 +39,7 @@ class ResourceHost(Protocol):
     @property
     def cfg(self) -> EngineConfig: ...
     @property
-    def stores(self) -> Stores: ...
+    def stores(self) -> GateStores: ...
     @property
     def waits(self) -> ResourceWaits: ...
 

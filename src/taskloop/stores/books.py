@@ -1,6 +1,6 @@
 """Logic over a DocSet that real and fake share, so the two cannot differ: checkpoints (read here; app/pipeline/checkpoints.py writes)."""
-from taskloop.stores.api import AmendDoc, AmendSet
 from tlkernel.checkpoint import Checkpoint
+from tlkernel.storeapi import AmendDoc, AmendSet
 
 
 class CheckpointBook:

@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 
 from tltestkit.case import install_case_helpers
+from tltestkit.wall import wall_guard
 
 REAL_HOME = os.environ.get("HOME", "")
 REAL_CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME", str(Path(REAL_HOME) / ".config"))
@@ -109,6 +110,11 @@ def pytest_collection_modifyitems(items):
             item.add_marker(getattr(pytest.mark, kind))
 
 
+def test_limit(item):
+    return limit_for(item.stash.get(KIND, "logic"), rules=(TESTS_DIR / "rules") in Path(str(item.path)).parents,
+                     module_limit=getattr(item.module, "LIMIT_S", 0))
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     """A test whose call ran past its kind's limit fails, with the limit and the time in the message."""
@@ -116,8 +122,7 @@ def pytest_runtest_makereport(item, call):
     report = outcome.get_result()
     if call.when == "call" and report.skipped:
         item.stash[SKIPPED] = True  # a skipped test spawned nothing, and a real one is not failed for it
-    limit = limit_for(item.stash.get(KIND, "logic"), rules=(TESTS_DIR / "rules") in Path(str(item.path)).parents,
-                      module_limit=getattr(item.module, "LIMIT_S", 0))  # a module that says why it is heavier names its own
+    limit = test_limit(item)
     kind, wall = item.stash.get(KIND, "logic"), call.duration
     if CPU_S not in item.stash:  # a subtest's own report, made inside the call: the whole call is judged when it ends
         return
@@ -164,10 +169,13 @@ def pytest_runtest_setup(item):
 def pytest_runtest_call(item):
     patched = item.stash.get(_SETUP_STD, (None, None))
     own = sys.stdout, sys.stderr
-    sys.stdout, sys.stderr = (p or o for p, o in zip(patched, own, strict=True))
     cpu, instr = cpu_s(), work.instructions()
+    guard = contextlib.nullcontext() if item.stash.get(KIND, "logic") == "live" else wall_guard(
+        hang_s(test_limit(item), float(os.environ.get("TL_TIME_SCALE") or 1)), item.nodeid)
     try:
-        return (yield)
+        with guard:
+            sys.stdout, sys.stderr = (p or o for p, o in zip(patched, own, strict=True))
+            return (yield)
     finally:
         sys.stdout, sys.stderr = own
         item.stash[CPU_S] = cpu_s() - cpu
