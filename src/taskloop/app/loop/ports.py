@@ -47,4 +47,7 @@ class LoopAsks(Protocol):
     def skip_of(self, b: Bead) -> Skip | None:
         """The queue's typed skip for the park gate (None when the bead may be taken)."""
 
+    def profile_ahead(self, b: Bead, run: str, why: str) -> None:
+        """Park the bead for a short, random time: its profile is ahead of this checkout, or its setup is on its own tree."""
+
     def promote_if_due(self, store: Beads, per_day: int, now: float, last: float, say: Callable[[str], object]) -> float: ...

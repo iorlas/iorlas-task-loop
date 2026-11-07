@@ -6,12 +6,12 @@ from typing import Protocol
 
 from taskloop.adapters import storm as storm_file
 from taskloop.adapters.repourl import repo_url
-from taskloop.app.run.console import say
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Clock
+from taskloop.contracts.stagefacts import Narrate
 from taskloop.domain import outcome as oc
 from taskloop.domain import storm
 
@@ -41,38 +41,39 @@ class DecideHost(Protocol):
 
 
 class Decide:
-    def __init__(self, host: DecideHost) -> None:
-        self.e = host
+    def __init__(self, host: DecideHost, say: Narrate) -> None:
+        self.host = host
+        self.say = say
 
     def repo_id(self) -> str:
-        return repo_url(self.e.git, self.e.wt)
+        return repo_url(self.host.git, self.host.wt)
 
     def run(self, o: oc.RunOutcome) -> Kind:
         """The close's Kind after POLICY. The trace fields, the fingerprint and the storm check are set here."""
-        e = self.e
-        e.disp = None
+        host = self.host
+        host.disp = None
         kind, why = o.kind, o.detail
-        now = e.clock.now()
-        e.fp = o.fingerprint
+        now = host.clock.now()
+        host.fp = o.fingerprint
         history: Sequence[Mapping[str, object]] = ()
         try:
-            history = storm_file.recent_closes(self.e.home.traces(), self.repo_id(), now)
+            history = storm_file.recent_closes(self.host.home.traces(), self.repo_id(), now)
         except OSError as err:
-            e.warn(f"could not read retry history: {err}\n" + traceback.format_exc())
-        e.disp = oc.apply(o, e.bead, history, now)
-        e.kind = e.disp.kind
-        if e.disp.escalated:
-            e.warn(f"the same fault {oc.KNOBS['fault_retries']} times on this bead: asking the owner once")
+            host.warn(f"could not read retry history: {err}\n" + traceback.format_exc())
+        host.disp = oc.apply(o, host.bead, history, now)
+        host.kind = host.disp.kind
+        if host.disp.escalated:
+            host.warn(f"the same fault {oc.KNOBS['fault_retries']} times on this bead: asking the owner once")
         if o.rule.storm:
             self.storm(history, kind, o, why)
-        return e.kind
+        return host.kind
 
     def storm(self, history: Sequence[Mapping[str, object]], kind: Kind, o: oc.RunOutcome, why: str) -> None:
-        e = self.e
-        trip = storm.storm_trip(history, e.bead, kind, o.fingerprint, e.clock.now())
-        if trip and not e.dry:
-            path = storm_file.storm_path(e.home.root, self.repo_id())
-            if storm_file.write_storm(path, trip.fingerprint, trip.beads, trip.t, e.clock.now(), oc.KNOBS["storm_window_s"], why):
-                e.storm = storm.banner(trip, str(path))
-                e.warn(e.storm)
-                say(e.storm)
+        host = self.host
+        trip = storm.storm_trip(history, host.bead, kind, o.fingerprint, host.clock.now())
+        if trip and not host.dry:
+            path = storm_file.storm_path(host.home.root, self.repo_id())
+            if storm_file.write_storm(path, trip.fingerprint, trip.beads, trip.t, host.clock.now(), oc.KNOBS["storm_window_s"], why):
+                host.storm = storm.banner(trip, str(path))
+                host.warn(host.storm)
+                self.say.note(host.storm)
