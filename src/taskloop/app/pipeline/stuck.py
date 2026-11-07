@@ -8,7 +8,7 @@ from typing import Protocol
 from tlkernel.docstore import Page
 from tlkernel.log import EngineLog, Stuck
 
-from taskloop.adapters.agent import last_event_t
+from taskloop.app.pipeline.adapter_ports import LastEvent
 from taskloop.domain.stuck import StuckWatch
 
 
@@ -34,8 +34,9 @@ class StuckHost(Protocol):
 
 
 class StuckTick:
-    def __init__(self, host: StuckHost) -> None:
+    def __init__(self, host: StuckHost, last_event: LastEvent) -> None:
         self.host = host
+        self.last_event = last_event
         self.watch = StuckWatch()
         self.offset = 0
         self.lock = threading.Lock()  # the Beat thread and the close-out may tick at once
@@ -43,7 +44,7 @@ class StuckTick:
     def worker_t(self) -> float:
         """When the worker of the open call last wrote its live file (0 when there is none)."""
         path = self.host.live_now
-        return last_event_t(path) if path else 0.0
+        return self.last_event(path) if path else 0.0
 
     def tick(self) -> None:
         host = self.host

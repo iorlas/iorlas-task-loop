@@ -35,13 +35,12 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.adapters import procs
-
-Method = dict[str, Any]
-Methods = dict[str, Method]
+from tlkernel.looks import Method as _Method
+from tlkernel.looks import Methods as _Methods
 
 DEFAULT_ARG = r"[\w.=,:@/+][\w.=,:@/+-]{0,199}"   # no space, quote or shell character, and no leading dash (never an option)
 MAX_REQUESTS = 6                        # shot requests one write may make
-def parse_row(r: object) -> tuple[Method | None, str]:
+def parse_row(r: object) -> tuple[_Method | None, str]:
     """(the method entry, error) of one row of the shot table."""
     if not isinstance(r, dict) or not str(r.get("method") or "").strip() or not isinstance(r.get("argv"), list) or not r["argv"] \
             or not all(isinstance(x, str) for x in r["argv"]):
@@ -50,7 +49,7 @@ def parse_row(r: object) -> tuple[Method | None, str]:
         timeout = float(r.get("timeout_min") or 15)
     except (TypeError, ValueError):
         return None, f"shot table: method {r['method']} has a timeout_min that is not a number"
-    args: list[Method] = []
+    args: list[_Method] = []
     for a in r.get("args") or []:
         if not isinstance(a, dict) or not a.get("name") or "flag" not in a:  # flag "" = a positional argument
             return None, f"shot table: method {r['method']} has an argument without a name and a flag (flag \"\" is positional)"
@@ -65,7 +64,7 @@ def parse_row(r: object) -> tuple[Method | None, str]:
             "args": args, "out": str(r.get("out") or "").strip("/"), "files": str(r.get("files") or "*.png"), "timeout_min": timeout}, ""
 
 
-def parse_table(text: str) -> tuple[Methods, str]:
+def parse_table(text: str) -> tuple[_Methods, str]:
     """({method name: entry}, error): the table's methods, or an error text naming what is wrong. An empty table is an error."""
     try:
         data = json.loads(text)
@@ -74,7 +73,7 @@ def parse_table(text: str) -> tuple[Methods, str]:
     rows = data.get("methods") if isinstance(data, dict) else None
     if not isinstance(rows, list) or not rows:
         return {}, "shot table has no methods"
-    out: Methods = {}
+    out: _Methods = {}
     for r in rows:
         entry, err = parse_row(r)
         if entry is None:
@@ -89,7 +88,7 @@ def short(summary: object, n: int = 150) -> str:
     return first if len(first) <= n else first[:n - 3].rstrip() + "..."
 
 
-def table_text(methods: Methods, cap: int = 1800) -> str:
+def table_text(methods: _Methods, cap: int = 1800) -> str:
     """The menu of shot methods: each method, what it covers (a short line), the arguments it takes."""
     lines = []
     for m in methods.values():
@@ -100,7 +99,7 @@ def table_text(methods: Methods, cap: int = 1800) -> str:
     return text if len(text) <= cap else text[:cap - 3] + "..."
 
 
-def build(methods: Methods, req: dict[str, Any], out_dir: str | Path) -> tuple[list[str], Method | None, str]:
+def build(methods: _Methods, req: dict[str, Any], out_dir: str | Path) -> tuple[list[str], _Method | None, str]:
     """(argv, method entry, error) for a writer's request {method, args: [{name, value}], names}. The argv is built only
     from the table's argv with its declared arguments filled in; no shell runs it."""
     m = methods.get(str(req.get("method") or "").strip())
@@ -130,7 +129,7 @@ def build(methods: Methods, req: dict[str, Any], out_dir: str | Path) -> tuple[l
     return (argv if "{args}" in m["argv"] else argv + parts), m, ""
 
 
-def snapshot(m: Method, wt: str | Path) -> dict[Path, tuple[float, int]]:
+def snapshot(m: _Method, wt: str | Path) -> dict[Path, tuple[float, int]]:
     """{path: (mtime, size)} of the method's own `out` folder before it runs: only what changes after is its picture."""
     snap: dict[Path, tuple[float, int]] = {}
     folder = Path(wt) / m["out"] if m["out"] else None
@@ -142,7 +141,7 @@ def snapshot(m: Method, wt: str | Path) -> dict[Path, tuple[float, int]]:
     return snap
 
 
-def collect(m: Method, wt: str | Path, out_dir: str | Path, before: dict[Path, tuple[float, int]] | None = None) -> list[Path]:
+def collect(m: _Method, wt: str | Path, out_dir: str | Path, before: dict[Path, tuple[float, int]] | None = None) -> list[Path]:
     """The pictures a method made: files matching its `files` in the folder the engine gave it (when argv has {out}), or new or
     changed since `before` (snapshot) in its `out` folder (repo-relative). Never a symlink. Sorted."""
     before = before or {}
