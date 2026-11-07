@@ -15,6 +15,11 @@ parsing the tree with `dev/affected.py`'s own graph (`Repo`, `select`, `closure`
    files. In those 45, 61 changed files alone select ≥ half; 46 of the 61 (75%) are `contracts/*.py` (`config.py` 8, `stores.py` 5,
    `paths.py` 4, `envvars/factorydb/docrows/looprows` 3 each, ...), 8 are conftests, 7 vendored/adapters/support. Not the engine, not the dashboard.
 3. Selection today: median 271 of 584 tests (47%), p90 = all 584. Closure per test: median 393 files, p90 905, max 1159.
+
+   Measured with `dev/reach.py` on 2026-11-07 across 37 commits and 774 tests: median 268, mean 333, p90 774. The median is set by
+   `tests/conftest.py`, `tests/live/conftest.py`, `tests/delegate/conftest.py` and `tl.py` edits selecting half the suite, not by package
+   selection; the public-surface rule changes nothing until a package has an `api.py`.
+
 4. The stages are already nameable and mostly separable: `delegate` and `taskloop_dash` already are packages. Cutting two import edges
    (`adapters/delegate.py`, `adapters/runner.py` → `delegate.api`) drops `delegate.api`'s reach from 199 tests to 2. That is the proof of
    what a real package boundary does; it is also the proof that **one boundary alone does not move the median** (271 → 269): the hub is
