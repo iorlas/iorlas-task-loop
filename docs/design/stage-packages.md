@@ -147,5 +147,8 @@ Each member still needs entries in:
 - `pyrefly.toml` `search-path`.
 - `.importlinter` `root_packages` and its package contract.
 - The converted-stages contract when the stage is converted.
+- The carve's own narrowed ConfigDir imports (tl-1nbh, ARCHVERT-PATHS-B): take a typed per-stage dir (or a Path) from the composition root
+  instead of importing `tlkernel.paths.ConfigDir`, so editing `tlkernel/paths.py` stops selecting half the suite; acceptance: `dev/reach.py`
+  shows the stage's tests no longer reached through `paths.py`.
 
 The rules and mutation tools' Python paths, affected-test scan roots and visibility, production architecture trees, and package selection now discover `packages/*/src` or member manifests automatically. `just test-pkg <stage>` detects a member manifest and runs its isolated environment.
