@@ -2,7 +2,7 @@
 
 import pytest
 from carve_release import plan, rewrite
-from rules.arch_rules import graph_of, production_trees
+from rules.arch_rules import production_graph
 
 OLD = "taskloop" + ".app.release"
 
@@ -37,7 +37,7 @@ def test_release_carve_plans_renames_and_rewrites_then_accepts_the_moved_tree(tm
 
 
 def test_release_imports_only_kernel_gate_and_third_parties():
-    graph = graph_of(production_trees())
+    graph = production_graph("tlrelease.")
     bad = [(source, target) for source, targets in graph.items() if source.startswith("tlrelease.")
            for target in targets if target.split(".")[0] not in {"tlrelease", "tlkernel", "tlgate"}]
     assert bad == []
