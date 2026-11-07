@@ -163,7 +163,7 @@ Rules as in section 9: a port class lives in the stage that implements it; the p
 |---|---|
 | `Lifecycle.beat` (called by the lease thread) | runs `records.heartbeat`, emits a `Beat`, calls `StuckTick.tick` and `OwnerRequests.at_beat`; a file that cannot be written must not kill the thread, so every write is suppressed on `OSError` and the thread's death goes to `beat_died` |
 | `StuckTick.tick` | holds its own lock: the lease thread and the close-out may tick at once; it reads the log from its last offset, so a second tick sees nothing twice |
-| `live_now` (the newest delegate call's live file) | a plain string the main thread sets and the stuck tick reads without a lock; a stale read only delays a stuck episode by one beat |
+| `live_now` (the newest delegate call's live file) | a plain string set by `RunParts.live()` on the thread that starts a delegate call and read by the stuck tick without a lock; a stale read only delays a stuck episode by one beat |
 | `ThreadFlag` (`killed`, `wall_hit`) | one value per thread: the lanes of a gate run checks at once, so a shared flag would be the answer of whichever lane wrote last; a port must not move the check onto another thread |
 | `OwnerRequests` | `at_beat` only peeks and sets the stop flag; `at_step` takes the rows, on the main thread, at a step boundary; `drop` sets `closing` first so nothing is taken any more |
 | `Closer` and its ports (`ParkBook`, `BeadClosing`, `LandCleanup`, `Slotting`) | called on the main thread inside `stop_deferred`; none may start a thread or wait for the lease thread |
