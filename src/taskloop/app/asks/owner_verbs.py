@@ -141,4 +141,3 @@ def wait(cfg: ConfigDir, asks: AskStore, repo: str, bead: str | None, limit: flo
         if limit is not None and t - start >= limit:
             return TIMEOUT, f"timeout: nothing ended or asked in {limit:g} s"
         sleep(min(POLL, limit - (t - start)) if limit is not None else POLL)
-
