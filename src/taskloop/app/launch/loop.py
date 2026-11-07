@@ -22,25 +22,23 @@ from tlkernel.procport import Spawner
 from tlkernel.rowstores import ReposStore
 
 from taskloop.adapters import beadtools, childenv, ident, pidcheck
-from taskloop.adapters import storm as storm_file
 from taskloop.adapters.bd import BdStore
 from taskloop.adapters.locks import hold_path
-from taskloop.adapters.repourl import repo_url
 from taskloop.app.asks import sweeps as ask_sweeps
 from taskloop.app.doctor import profiles
 from taskloop.app.launch import loop_ops as ops
 from taskloop.app.loop import lintrun
-from taskloop.app.loop.env import LoopEnv, Storm
+from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.stages import EngineAsks, EngineSlots
 from taskloop.app.prune import verb as prune_verb
 from taskloop.app.release import catalog, shell
 from taskloop.app.run.running import area_lock, running
+from taskloop.app.slots import config as wslots_config
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import console, trail
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import slots as wslots
-from taskloop.domain import outcome as oc
 from taskloop.domain.beads import rules as beadlint
 from taskloop.stores.delegate import make_probe as make_net_probe
 from taskloop.stores.delegate import route_name
@@ -50,7 +48,7 @@ HERE = ident.PLUGIN_ROOT / "skills" / "task-loop"  # the install this code runs 
 
 
 def profile_of(repo: str, git: Git) -> RepoProfile:
-    return wslots.cfg_source(repo, git)[0]
+    return wslots_config.cfg_source(repo, git)[0]
 
 
 def prune_repos(repo: str, cfg: paths.ConfigDir) -> list[str]:
@@ -82,18 +80,6 @@ def delegate_route(repo: str | Path, env: Env, git: Git) -> str | None:
 
 def make_probe(repo: str | Path, env: Env, git: Git):
     return make_net_probe(("github.com",)) if delegate_route(repo, env, git) else None
-
-
-def storm(repo: str, cfg: paths.ConfigDir, now: Callable[[], float] = trail.now, *, git: Git) -> Storm | None:
-    path = storm_file.storm_path(cfg.root, repo_url(git, repo))
-    rec = storm_file.read_storm(path, now(), oc.KNOBS["storm_window_s"])
-    if not rec:
-        return None
-    banner = (
-        "WAIT: storm {} on {}; the beads stay open (look at their logs). Record {} expires {:d} min after it was written; "
-        "clear it to wake sooner"
-    ).format(rec.get("fingerprint"), ",".join(rec.get("beads") or []), path, (oc.KNOBS["storm_window_s"] // 60))
-    return Storm(rec.get("fingerprint") or "", banner, float(rec["t"]) + oc.KNOBS["storm_window_s"])
 
 
 def build(repo: str, store: Beads | None = None, session_actor: str = "", here: Path = HERE, now: Callable[[], float] = trail.now,
@@ -137,7 +123,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         chores=lambda: ops.chores(repo, spawner, env, git, who, store if isinstance(store, BdStore) else None),
         release_dead=lambda: ops.release_dead(repo, store, now(), git, who),
         ask_lines=lambda: ask_sweeps.orphan_lines(wasks.store(cfg)),
-        storm=lambda: storm(repo, cfg, now, git=git),
+        storm=lambda: ops.storm(repo, cfg, now, git=git),
         probe=lambda: make_probe(repo, env, git),
         event=functools.partial(trail.event, who),
         pid_alive=pidcheck.pid_alive,

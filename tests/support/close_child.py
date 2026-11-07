@@ -19,7 +19,7 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 from taskloop.app.pipeline.closing import Closer
 from taskloop.app.run import engine
-from taskloop.app.wire import slots as wslots
+from taskloop.app.slots import config as wslots_config
 from taskloop.cli.ctx import declare_stage_parts
 from taskloop.domain import outcome as oc
 from tlkernel.env import snapshot
@@ -52,7 +52,7 @@ def main(argv: list[str]) -> None:
     eng = engine.Engine(
         BeadId("t-1"),
         os.environ["CLOSE_WT"],
-        wslots.load_cfg(os.environ["CLOSE_WT"], port_git()),
+        wslots_config.load_cfg(os.environ["CLOSE_WT"], port_git()),
         store=store,
         env=snapshot(),
         spawner=real_spawner(),

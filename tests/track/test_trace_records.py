@@ -22,8 +22,8 @@ from support.dashes import make_dash  # noqa: E402
 from support.spawn import port_git, real_spawner  # noqa: E402
 from support.who import who  # noqa: E402
 
+from taskloop.app.slots import config as wslots_config  # noqa: E402
 from taskloop.app.track import verbs  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.stores.real import real_stores  # noqa: E402
 from taskloop_dash import jsonl  # noqa: E402
 from tlkernel import log as rec  # noqa: E402
@@ -209,7 +209,7 @@ class TraceRecords(te.EngineTest):
         engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),

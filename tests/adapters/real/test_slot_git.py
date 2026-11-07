@@ -36,8 +36,8 @@ from taskloop.adapters import (  # noqa: E402
 from taskloop.adapters.gitrepo import pinned_env  # noqa: E402
 from taskloop.app.doctor import setup_checks  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
-from taskloop.app.wire.slots import cfg_source  # noqa: E402
+from taskloop.app.slots import config as wslots_config  # noqa: E402
+from taskloop.app.slots.config import cfg_source  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlkernel.ids import BeadId  # noqa: E402
 
@@ -117,7 +117,7 @@ class SlotGitTest(Case):
     def test_core_bare_true_stops_the_run_too(self):
         sh("git", "config", "core.bare", "true", cwd=self.repo)
         eng = engine.Engine(
-            BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
+            BeadId("t-1"), str(self.wt), wslots_config.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
                 git=port_git(), who=who()
         )
         with pytest.raises(engine.Blocked) as cm:
@@ -126,7 +126,7 @@ class SlotGitTest(Case):
 
     def test_a_clean_slot_passes_the_tree_assert(self):
         eng = engine.Engine(
-            BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
+            BeadId("t-1"), str(self.wt), wslots_config.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
                 git=port_git(), who=who()
         )
         eng.assert_tree("plan")
@@ -134,7 +134,7 @@ class SlotGitTest(Case):
     def test_pinned_git_stays_in_the_slot_whatever_the_shared_config_says(self):
         self.plant_decoy()
         eng = engine.Engine(
-            BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
+            BeadId("t-1"), str(self.wt), wslots_config.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
                 git=port_git(), who=who()
         )
         assert os.path.realpath(eng.git.toplevel(str(self.wt))) == str(self.wt)
@@ -147,7 +147,7 @@ class SlotGitTest(Case):
 
     def test_stage_all_takes_only_the_slots_status_paths_deletions_and_untracked_included(self):
         eng = engine.Engine(
-            BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
+            BeadId("t-1"), str(self.wt), wslots_config.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
                 git=port_git(), who=who()
         )
         (self.wt / "a.txt").unlink()
@@ -174,7 +174,7 @@ class SlotGitTest(Case):
                 timeout_s=30,
             )
             eng = engine.Engine(
-                BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
+                BeadId("t-1"), str(self.wt), wslots_config.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
                     git=port_git(), who=who()
             )
             rc, tail = eng.sh([show])
@@ -195,7 +195,7 @@ class SlotGitTest(Case):
         sh("git", "commit", "-qm", "o", cwd=other)
         sha = sh("git", "rev-parse", "HEAD", cwd=other)
         eng = engine.Engine(
-            BeadId("t-1"), str(self.wt), wslots.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
+            BeadId("t-1"), str(self.wt), wslots_config.load_cfg(str(self.wt), port_git()), env=snapshot(), spawner=real_spawner(),
                 git=port_git(), who=who()
         )
         rc, tail = eng.sh(["git", "-C", str(other), "rev-parse", "HEAD"])

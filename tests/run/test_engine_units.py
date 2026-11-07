@@ -27,8 +27,8 @@ from support.checkpoints import read_ck  # noqa: E402
 
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.app.plan.planner import Planner  # noqa: E402
+from taskloop.app.slots import config as wslots_config  # noqa: E402
 from taskloop.app.track import outcome_line  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
 from taskloop.domain import outcome as oc  # noqa: E402
 from tlkernel import answers  # noqa: E402
 from tlkernel.enums import Result  # noqa: E402
@@ -458,7 +458,7 @@ class DelegateLauncher(T.EngineTest):
         assert self.eng.retry_after == 0
 
     def test_close_with_an_empty_reason_still_closes(self):
-        c = wslots.load_cfg(str(self.wt), port_git())
+        c = wslots_config.load_cfg(str(self.wt), port_git())
         eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
             git=port_git(), who=who())
         eng.closer.close(oc.make(Kind.FAULT_ENGINE))
@@ -510,7 +510,7 @@ class DelegateLauncher(T.EngineTest):
         assert "contract_violation" in self.said()
 
     def test_a_refused_delegate_blocks_with_its_reason(self):
-        c = wslots.load_cfg(str(self.wt), port_git())
+        c = wslots_config.load_cfg(str(self.wt), port_git())
         with mock.patch.object(dl, "resolve", return_value=dl.Refusal("not_installed")):
             rc = engine.Engine(
                 BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()

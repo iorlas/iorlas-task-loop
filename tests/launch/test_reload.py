@@ -48,7 +48,7 @@ from taskloop.app.run import (  # noqa: E402
     entry,
 )
 from taskloop.app.run import reload_ports as run_reload  # noqa: E402
-from taskloop.app.wire import slots as wslots  # noqa: E402
+from taskloop.app.slots import config as wslots_config  # noqa: E402
 from tlkernel.env import Env, snapshot  # noqa: E402
 from tlkernel.ids import BeadId  # noqa: E402
 from tlkernel.rowstores import BadVersionStore  # noqa: E402
@@ -106,7 +106,7 @@ class Reload(te.EngineTest):
         return [json.loads(x) for x in f.read_text().splitlines()] if f.exists() else []
 
     def engine_for(self, script, env=None, **cfg):
-        c = wslots.load_cfg(str(self.wt), port_git())
+        c = wslots_config.load_cfg(str(self.wt), port_git())
         c = cfg_with(c, **{"reflect": False, **cfg})
         eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=env or snapshot(), spawner=real_spawner(),
             git=port_git(), who=who())
@@ -272,7 +272,7 @@ class Reload(te.EngineTest):
 
     # -- point 2: delegate is resolved per call, never held
     def test_delegate_route_is_resolved_again_each_call(self):
-        c = wslots.load_cfg(str(self.wt), port_git())
+        c = wslots_config.load_cfg(str(self.wt), port_git())
         with mock.patch.object(
             dl, "resolve", side_effect=[self.res("/a/route.py"), self.res("/b/route.py"), self.res("/b/route.py")]
         ) as fr:

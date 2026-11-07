@@ -32,6 +32,7 @@ from taskloop.app.loop.queue import has_areas
 from taskloop.app.reconcile import leases
 from taskloop.app.run import preflight, running, target
 from taskloop.app.run.engine import Blocked, Engine
+from taskloop.app.slots import config as wslots_config
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import console, verbs
 from taskloop.app.track.outcome_line import append_output, pause_line, report
@@ -70,7 +71,7 @@ def run_main_stoppable(a: Any, store: Any = None, *, env: Env, spawner: Spawner,
         env = env.with_(EnvVar.TASK_LOOP_SESSION, "engine-" + uuid.uuid4().hex[:12])
         who = ident.identity(env)
     repo = gitrepo.repo_root()
-    cfg = wslots.load_cfg(repo, git)
+    cfg = wslots_config.load_cfg(repo, git)
     if not a.dry_run:
         setup_retry.retry_setup(real_stores(who.config).asks, store or beadtools.bd_store(who.actor, repo),
                                 a.id, ident.plugin_version(), time.time(), cfg, starting=True)
@@ -84,7 +85,7 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, sp
     run there as `--slot NAME`, given back at the end."""
     if a.dry_run:
         return preview(a, repo, cfg, "", store=store, env=env, git=git, who=who)
-    cfg_slots = wslots.profile_slots(repo)
+    cfg_slots = wslots_config.profile_slots(repo)
     if why := wslots.uninitialised(repo, cfg_slots, store, spawner=spawner, git=git, who=who):
         print(f"TAKEN: {why}")
         return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
@@ -149,7 +150,7 @@ def _worktree_of(a: Any, repo: Any, spawner: Spawner, env: Env, who: Identity) -
     """(worktree, failure): the directory the run works in (the slot's, the named one, or a new one), or the outcome that says why none."""
     wt = a.worktree
     if not wt and a.slot:  # the slot is the worktree
-        wt = wslots.slot_dir(repo, a.slot, wslots.profile_slots(repo))
+        wt = wslots_config.slot_dir(repo, a.slot, wslots_config.profile_slots(repo))
     if not wt:
         r = spawner.run([*childenv.script_argv(TL_PY, env), "worktree", "start"], extra=childenv.identity_env(who))
         wt = r.out.strip().splitlines()[-1] if r.exit == 0 and r.out.strip() else ""
@@ -172,7 +173,7 @@ def _slot_taken(a: Any, repo: Any, wt: str, slot: str, sb: BeadId | None, store:
         halting.RUN_SLOT["owned"] = slot
         return sb, None  # exec'd by the run-task that took this slot: it is still ours, and this process gives it back
     if slot and not (sb and named):
-        took, why = wslots.take_named_slot(repo, slot, wslots.profile_slots(repo), "run-task " + a.id, store=store, spawner=spawner,
+        took, why = wslots.take_named_slot(repo, slot, wslots_config.profile_slots(repo), "run-task " + a.id, store=store, spawner=spawner,
             git=git, who=who)
         if not took:
             print(f"TAKEN: {why}")
@@ -196,7 +197,7 @@ def _sigterm_ignored() -> Generator[None]:
 
 def run_in(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, spawner: Spawner, git: Git, who: Identity) -> Any:
     if a.dry_run:
-        wt = a.worktree or (wslots.slot_dir(repo, a.slot, wslots.profile_slots(repo)) if a.slot else "")
+        wt = a.worktree or (wslots_config.slot_dir(repo, a.slot, wslots_config.profile_slots(repo)) if a.slot else "")
         return preview(a, repo, cfg, str(Path(wt).resolve()) if wt else "", store=store, env=env, git=git, who=who)
     wt, failed = _worktree_of(a, repo, spawner, env, who)
     if failed:
