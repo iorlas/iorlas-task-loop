@@ -20,6 +20,7 @@ from tlkernel.delegateport import Answer
 from taskloop.adapters import childenv, delegate_wire
 from taskloop.app.checks.step_env import step_env
 from taskloop.app.workers import asked, strays, worker_identity, worker_recovery, worker_request
+from taskloop.app.workers import call_state as callstate
 from taskloop.app.workers.call import Call
 from taskloop.app.workers.calls import timing
 from taskloop.app.workers.lane_acts import LaneActs
@@ -28,7 +29,6 @@ from taskloop.domain.lanes.denials import command_of, secret_false_positive
 from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT, RESUME_AFTER_STOP
 from taskloop.domain.lanes.retry import PLAN
 from taskloop.domain.lanes.roles import READ_ONLY_NODES, ROLES
-from taskloop.app.workers import call_state as callstate
 
 READ_TOOLS = ("Bash", "shell", "bash")
 

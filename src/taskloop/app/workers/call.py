@@ -4,8 +4,8 @@ from typing import Any
 from tlkernel.asked import Updates
 from tlkernel.delegateport import Answer
 
-from taskloop.app.workers import worker_identity
 from taskloop.app.workers import call_state as callstate
+from taskloop.app.workers import worker_identity
 
 
 class Call:
