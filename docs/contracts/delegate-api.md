@@ -14,6 +14,8 @@ subprocess and its JSON wire): there is no process boundary to the router any mo
 | `accounts()` / `set_account(lane, enabled)` | | `list[Account]` (lane, enabled, ready, fix) / the owner's choice stored |
 | `network(hosts=())` | vendor hosts, else all | reachable now (sockets only) |
 | `history(since=0.0)` | epoch seconds | the finished runs after it, oldest first, as wire objects (`ts`, `role`, `task`, `lane`, `model`, `tokens`, ...): the only read of delegate's history |
+| `live_files(live_dir)` | live folder | `list[LiveFile]` (`name` without suffix, `mtime`), sorted by name; missing folder is empty |
+| `live_read(live_dir, name, cursor=0, ident=0)` | folder, stream name, byte cursor and opaque identity | `LiveRead` (`lines`: `LiveLine(offset, event)`, next `cursor`, `ident`, `reset`); complete event lines only, at most 1 MiB; replacement or shrink resets, missing file clears the cursor |
 | `contract()` | | contract.json: reasons with scope/permanence/retry, capabilities |
 | `as_json(record)` | a `RunResult` or `Status` | its wire object |
 

@@ -7,11 +7,11 @@ from types import SimpleNamespace
 import pytest
 from support.dashlogs import RunScript, T, bead
 
+from delegate import api
 from taskloop.app.asks import owner_verbs
 from taskloop_dash.api import live
 from taskloop_dash.readers.logs import live_event
 from taskloop_dash.views.floor import slot_of
-from taskloop_dash.views.live_events import decode_worker
 from taskloop_dash.views.live_lines import retype
 from taskloop_dash.views.world import ProjectIn
 from tlkernel.paths import ConfigDir
@@ -86,10 +86,12 @@ def test_an_engine_log_removed_by_retention_between_polls_is_not_an_error():
         assert isinstance(live.page(run)["events"], list)  # no raise; what was already read may remain
 
 
-def test_worker_lines_require_the_default_kind_tag():
-    assert decode_worker({"kind": "msg", "t": NOW, "text": "hi"})["kind"] == "msg"
-    with pytest.raises(ValueError, match="not a worker event"):
-        decode_worker({"k": "msg", "t": NOW, "text": "old"})
+def test_worker_lines_require_the_default_kind_tag(tmp_path):
+    path = tmp_path / "worker.jsonl"
+    path.write_text('{"kind":"msg","t":1800000000,"text":"hi"}\n'
+                    '{"k":"msg","t":1800000000,"text":"old"}\n')
+    result = api.live_read(str(tmp_path), "worker")
+    assert [line.event["kind"] for line in result.lines] == ["msg"]
 
 
 def test_typed_worker_readers_refuse_the_old_tag():
