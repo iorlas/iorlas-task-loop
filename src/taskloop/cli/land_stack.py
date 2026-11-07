@@ -9,7 +9,7 @@ from tlkernel.finish import finish_run
 from tlkernel.finish_projection import history
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
-from tlpipeline.finish import land_answer
+from tlpipeline.api import land_answer
 
 from taskloop.app.land.cmds import Runs
 from taskloop.app.land.stack import item_of, pairs, run_stack

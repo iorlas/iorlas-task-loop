@@ -11,7 +11,7 @@ from tlkernel.askspec import AskSpec
 from tlkernel.kinds import Kind
 from tlkernel.log import Assumed, Said
 from tlkernel.matchers import redact
-from tlpipeline.blocked import Blocked, FixFailed, blocked_for
+from tlpipeline.api import Blocked, FixFailed, blocked_for
 
 from taskloop.adapters import beadtools
 from taskloop.adapters import halt as halting

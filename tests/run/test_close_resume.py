@@ -25,8 +25,7 @@ from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
-from tlpipeline import ended
-from tlpipeline.closing import Closer
+from tlpipeline.api import Closer, ended
 
 
 class Killed(BaseException):

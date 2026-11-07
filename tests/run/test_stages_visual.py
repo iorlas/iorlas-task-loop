@@ -37,7 +37,7 @@ from tlkernel.ids import BeadId
 from tlkernel.lookrows import LookRows
 from tlkernel.run import Round
 from tlkernel.slots import SlotGitError
-from tlpipeline import outcomes
+from tlpipeline.api import outcomes
 from tltestkit import fake_route, procsim
 from tltestkit.cfgs import cfg_with, plan_of
 from tltestkit.plans import BEAD, CLEAN, FALSE, PLAN, WRITE

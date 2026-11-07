@@ -20,8 +20,7 @@ from taskloop.stores.bundle import Stores
 from tlgate import evidence as check_evidence
 from tlkernel.kinds import Kind
 from tlkernel.paths import ConfigDir
-from tlpipeline.checkpoints import Checkpoints
-from tlpipeline.steps import Steps
+from tlpipeline.api import Checkpoints, Steps
 from tltestkit import fake_route
 from tltestkit.fake_clock import FakeClock
 

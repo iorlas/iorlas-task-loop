@@ -11,9 +11,7 @@ from tlkernel.checkpoint import RunState
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.plancheck import PlanData, RoundState
-from tlpipeline import run, run_roles
-from tlpipeline.blocked import Blocked
-from tlpipeline.run import RunBody
+from tlpipeline.api import Blocked, RunBody, run, run_roles
 from tlpipeline.testing import FakeHeadHistory, FakeNarrate
 
 

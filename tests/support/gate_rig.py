@@ -11,7 +11,7 @@ from taskloop.app.land.host import LandState
 from tlkernel.config import EngineConfig
 from tlkernel.paths import ConfigDir
 from tlkernel.ports import Clock
-from tlpipeline.blocked import Blocked, blocked_for
+from tlpipeline.api import Blocked, blocked_for
 from tltestkit.cfgs import cfg_with
 
 

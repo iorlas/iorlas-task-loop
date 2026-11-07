@@ -6,8 +6,8 @@ from tlkernel.checkpoint import RunState
 from tlkernel.gitport import Git
 from tlkernel.slots import SlotGitError
 
-from taskloop.app.land.gitcall import must
 from taskloop.app.land.host import MoveSteps
+from taskloop.app.land.rebase import must
 from taskloop.stores.runlog import RunLog
 
 

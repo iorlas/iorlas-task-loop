@@ -16,15 +16,13 @@ from support.fakegit import FakeGit, ScriptedGit
 from support.memstores import fake_stores
 from support.who import who
 from taskloop.adapters import beadtools
-from taskloop.app.land.commit import Commit
 from taskloop.app.land.fix_outside import FixOutside
 from taskloop.app.land.gate import Gate, GateChecker, GateCheckout
 from taskloop.app.land.host import LandState
-from taskloop.app.land.land_rebase import LandRebase
 from taskloop.app.land.landed import Landed
 from taskloop.app.land.lander import GateStep, Lander, LandParts
 from taskloop.app.land.push import Pusher
-from taskloop.app.land.recheck import Recheck
+from taskloop.app.land.rebase import Commit, LandRebase, Recheck
 from taskloop.app.land.sync import Sync
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
@@ -45,9 +43,7 @@ from tlkernel.pausereasons import Producer
 from tlkernel.plancheck import PlanCheck, PlanData, StageData
 from tlkernel.ports import Clock
 from tlkernel.run import RunFinish
-from tlpipeline.budget import Budget
-from tlpipeline.closing import CloseParts, Closer
-from tlpipeline.steps import Steps
+from tlpipeline.api import Budget, CloseParts, Closer, Steps
 from tlpipeline.testing import FakeAskRules, FakeParkBook
 from tltestkit.fake_clock import FakeClock
 

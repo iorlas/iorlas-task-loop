@@ -15,9 +15,7 @@ from tlkernel.answers import WriteAnswerLook
 from tlkernel.checkpoint import Checkpoint, RunState, StageProgress
 from tlkernel.checks import CheckRun
 from tlkernel.plancheck import PlanData
-from tlpipeline.decide import Decision
-from tlpipeline.resume import Resume
-from tlpipeline.review_glue import ReviewGlue
+from tlpipeline.api import Decision, Resume, ReviewGlue
 from tlpipeline.testing import FakeHeadHistory
 
 PLAN: PlanData = {"summary": "two stages", "stages": [{"goal": "a", "files": [], "checks": []}, {"goal": "b", "files": [], "checks": []}]}

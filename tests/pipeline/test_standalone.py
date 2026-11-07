@@ -16,9 +16,8 @@ from tlkernel.locator import RunLocator
 from tlkernel.parks import Park, ParkStore
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
-from tlpipeline import standalone as standalone_module
-from tlpipeline import standalone_roles
-from tlpipeline.standalone import Standalone
+from tlpipeline.api import Standalone, standalone_roles
+from tlpipeline.api import standalone as standalone_module
 from tlpipeline.testing import FakeBeadClosing, FakeRoundSteps
 
 

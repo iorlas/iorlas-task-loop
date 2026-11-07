@@ -6,16 +6,7 @@ from typing import Any, Protocol
 
 from tlkernel import childenv
 from tlkernel.kinds import Kind
-from tlpipeline.closing_record import RecordHost
-from tlpipeline.ended import HostFacts
-from tlpipeline.journal import Journal, JournalActivity, JournalOrigin, JournalOutcome, JournalProjection, JournalTrace
-from tlpipeline.reflect import Reflector
-from tlpipeline.reload import Reload, ReloadChoice, ReloadCounters, ReloadTransfer
-from tlpipeline.requests import OwnerRequests
-from tlpipeline.resume import Resume, ResumePlanning, ResumeProgress, ResumeRecords
-from tlpipeline.review_glue import ReviewGlue, ReviewLists, ReviewOwner
-from tlpipeline.stuck import StuckHost, StuckTick
-from tlpipeline.waits import Waits, WaitsHost
+from tlpipeline import api
 
 from taskloop.adapters import deadline, ident, slotcheck
 from taskloop.adapters.agent import last_event_t, new_live
@@ -37,18 +28,18 @@ from taskloop.app.track.closing import TrailEvents
 from taskloop.app.workers.delegation import Delegation
 
 
-class ResumeBinding[T](ResumeProgress, ResumePlanning[T], ResumeRecords, ReviewOwner, Protocol):
+class ResumeBinding[T](api.ResumeProgress, api.ResumePlanning[T], api.ResumeRecords, api.ReviewOwner, Protocol):
     @property
-    def review(self) -> ReviewLists: ...
+    def review(self) -> api.ReviewLists: ...
 
 
-class ReloadBinding(ReloadCounters, ReloadTransfer, ReloadChoice, Protocol):
+class ReloadBinding(api.ReloadCounters, api.ReloadTransfer, api.ReloadChoice, Protocol):
     @property
     def held_lock(self) -> HeldLock: ...
 
 
-class JournalBinding(JournalOrigin, JournalActivity, JournalOutcome, JournalTrace, JournalProjection,
-                     RecordHost, HostFacts, Protocol):
+class JournalBinding(api.JournalOrigin, api.JournalActivity, api.JournalOutcome, api.JournalTrace, api.JournalProjection,
+                     api.RecordHost, api.HostFacts, Protocol):
     @property
     def held_lock(self) -> HeldLock: ...
 
@@ -58,31 +49,31 @@ class RunParts(Plumbing):
 
     bead_env = cached_property(bead_env)  # the slot's environment: every command of the bead gets it (Shell.stream, the worker call)
     @cached_property
-    def waits(self: WaitsHost) -> Waits: return Waits(self, deadline)
+    def waits(self: api.WaitsHost) -> api.Waits: return api.Waits(self, deadline)
     delegation = cached_property(Delegation)
     ask_flow = cached_property(AskFlow)
     stage_checks = cached_property(StageChecks)
     shell = cached_property(Shell)
     @cached_property
-    def reload(self: ReloadBinding) -> Reload:
-        return Reload(self, self, self, ReexecBook(self.home), TrailEvents(), lambda: installed_newer(self.env),
+    def reload(self: ReloadBinding) -> api.Reload:
+        return api.Reload(self, self, self, ReexecBook(self.home), TrailEvents(), lambda: installed_newer(self.env),
                       lambda: locked_slot(self.held_lock), childenv, ident)
 
     @cached_property
-    def records(self: JournalBinding) -> Journal:
-        return Journal(self, self, self, self, self, self, self, lambda: locked_slot(self.held_lock), repo_of, ident.plugin_version)
+    def records(self: JournalBinding) -> api.Journal:
+        return api.Journal(self, self, self, self, self, self, self, lambda: locked_slot(self.held_lock), repo_of, ident.plugin_version)
     shared = cached_property(Shared)
     @cached_property
-    def stuck(self: StuckHost) -> StuckTick: return StuckTick(self, last_event_t)
-    requests = cached_property(OwnerRequests)
+    def stuck(self: api.StuckHost) -> api.StuckTick: return api.StuckTick(self, last_event_t)
+    requests = cached_property(api.OwnerRequests)
 
     @cached_property
-    def resume[T](self: ResumeBinding[T]) -> Resume[T]:
-        return Resume(self, self, self, LandHistory(self.git), ReviewGlue(self), state_names())
+    def resume[T](self: ResumeBinding[T]) -> api.Resume[T]:
+        return api.Resume(self, self, self, LandHistory(self.git), api.ReviewGlue(self), state_names())
 
     @cached_property
-    def reflector(self) -> Reflector:
-        return Reflector(self, self, self, ClosingTrust(), childenv.delegate_call_env)
+    def reflector(self) -> api.Reflector:
+        return api.Reflector(self, self, self, ClosingTrust(), childenv.delegate_call_env)
 
     def sh(self, cmd: Any, timeout: float = 3600, check: bool = False, save: Any = None, env: Any = None, pin: bool = False,
            what: str = "command", cwd: Any = None, stop: threading.Event | None = None, *, network: bool = False) -> tuple[int, str]:

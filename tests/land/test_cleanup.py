@@ -22,7 +22,7 @@ from tlkernel import log as rec
 from tlkernel.enums import Outcome
 from tlkernel.ids import BeadId
 from tlkernel.slots import Checkout, GitReadFailure, SlotGitError
-from tlpipeline.closing_branch import ReleaseSlot
+from tlpipeline.api import ReleaseSlot
 
 
 class CleanupGit(ScriptedGit):
