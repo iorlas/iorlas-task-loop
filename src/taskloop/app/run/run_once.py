@@ -171,4 +171,3 @@ class RunOnce:
             raise e.planner.cap.blocked(f"stage {i + 1} stuck after {e.cfg.max_rounds} rounds. What failed: {e.stuck_why[:600]}")
         e.accepted = list[int]()
         return e.planner.take(e.planner.plan(again=True))
-
