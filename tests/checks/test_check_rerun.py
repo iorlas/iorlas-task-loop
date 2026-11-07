@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 from checks.test_check_rules import Base
-from taskloop.domain.checks import planref
+from tlgate.domain import planref
 from tlkernel import answers, plancheck
 from tlkernel.ids import CheckId
 from tlkernel.plancheck import Adhoc, PlanData, Ref, adhoc

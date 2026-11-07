@@ -5,7 +5,7 @@ import stat
 
 from support.spawn import port_git, real_spawner
 
-from taskloop.app.checks.linux import LinuxRun
+from tlgate.linux import LinuxRun
 from tlkernel.config import ExecutorConfig
 from tlkernel.ids import CheckId
 from tltestkit.checked import run_checked

@@ -3,10 +3,10 @@ import inspect
 
 import pytest
 
-from tlpipeline import closing_roles, journal, reflect, reload, resume
+from tlpipeline import closing_roles, journal, lifecycle, reflect, reload, resume
 
 
-@pytest.mark.parametrize("module", [resume, reflect, reload, journal, closing_roles])
+@pytest.mark.parametrize("module", [resume, reflect, reload, journal, lifecycle, closing_roles])
 def test_role_protocols_have_at_most_sixteen_own_members(module):
     protocols = {name: value for name, value in vars(module).items()
                  if isinstance(value, type) and getattr(value, "_is_protocol", False)

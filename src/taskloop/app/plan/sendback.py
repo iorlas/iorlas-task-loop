@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from tlgate.domain import lint, planref
 from tlkernel import plancheck
 from tlkernel.plancheck import PlanData
 from tlkernel.stagefacts import RunFacts
@@ -21,7 +22,6 @@ from taskloop.app.plan.prompts import (
     UNANCHORED_TEXT,
 )
 from taskloop.app.plan.state import PlanState
-from taskloop.domain.checks import lint, planref
 from taskloop.domain.plan.matchers import gate_only_criteria
 from taskloop.domain.prompts.anchors import MAX_ANCHORS, unanchored
 

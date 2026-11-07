@@ -40,10 +40,10 @@ from taskloop.app.run import (
 )
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.write.newfiles import NewFiles
-from taskloop.domain.checks import (
+from taskloop.domain.lanes import policy as lp  # noqa: F401
+from tlgate.domain import (
     lint,  # noqa: F401
 )
-from taskloop.domain.lanes import policy as lp  # noqa: F401
 from tlkernel import wire
 from tlkernel.ask import Ask, AskAnswer
 from tlkernel.askstore import AskStore
