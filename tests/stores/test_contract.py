@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -81,7 +82,9 @@ class RealRaces(Case):
         path = self.cfg.root / "y.jsonl"
         writers = self.append_from(path, 80, [f"p{i}" for i in range(3)])
         seen, cursor = [], 0
+        end = time.monotonic() + 30.0
         while any(t.is_alive() for t in writers):
+            assert time.monotonic() < end, "JSONL writers did not settle in 30 s"
             entries, cursor = jsonl.Jsonl(path).read_from(cursor)
             seen += [(e.data["who"], e.data["i"]) for e in entries]
         entries, cursor = jsonl.Jsonl(path).read_from(cursor)
