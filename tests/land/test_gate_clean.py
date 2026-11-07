@@ -68,7 +68,7 @@ class CleanGate(EngineTest):
         assert seen != [self.wt]
         assert all(not root.exists() for root in seen)
         assert (self.wt / "ignored.txt").read_text() == "keep me"
-        assert list(eng.run_dir.glob("artifacts/evidence/attempt-*/result.txt"))
+        assert list(eng.run_dir.glob("attempts/*/artifacts/evidence/attempt-*/result.txt"))
         assert Gate(eng).green()
         Gate(eng).run()
         assert len(seen) == 1  # only a clean gate's pass can be reused

@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 from taskloop.app.loop.loop import Loop
+from taskloop.app.slots import owned
 
 REPO = "/w/repo"
 SESSION = "tl-eaa4b1f2"
@@ -25,7 +26,8 @@ class Fleet:
         self.states: dict[int, str] = {}  # pid -> the worktree it published
 
     def start(self, pid: int, suffix: str) -> str:
-        env = SimpleNamespace(session_actor=SESSION, actor=lambda: f"{SESSION}-{suffix}", pid=pid, repo=REPO)
+        env = SimpleNamespace(session_actor=SESSION, actor=lambda: f"{SESSION}-{suffix}", pid=pid, repo=REPO,
+                              slots=SimpleNamespace(worktree_path=owned.loop_path))
         files = SimpleNamespace(live=lambda but=None: [SimpleNamespace(worktree=w) for p, w in self.states.items() if p != but])
         name = Loop.worktree_name(SimpleNamespace(env=env, files=files))  # type: ignore[arg-type]
         self.states[pid] = wt(name)

@@ -13,8 +13,8 @@ from support import engine_case as te
 from support import exchanges as ex
 
 from taskloop.app.plan import prompt as pp
-from taskloop.domain.prompts import review as rp
-from taskloop.domain.prompts import write as wp
+from taskloop.app.write import prompts as wp
+from taskloop.app.write import review_prompt as rp
 
 LIMIT_S = 6.0  # replays every recorded exchange through the engine: 2.0-3.4 s of CPU under 7 xdist workers
 ALL = ex.cases()

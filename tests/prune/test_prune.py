@@ -31,7 +31,7 @@ from taskloop.contracts.checkpoint import RunState as CheckpointState
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.paths import ConfigDir, RunFiles
 from taskloop.contracts.run import RunState
 from taskloop.stores.real import real_stores
 
@@ -178,16 +178,15 @@ class RunData(Case):
     def test_the_evidence_of_a_closed_bead_goes_with_its_run_folder_after_30_days_not_before(self):
         for bead, age in (("x-5", 29), ("x-6", 31)):
             self.run_of(bead, age)
-            art = self.cfg.run_dir(f"{bead}-20260101-000000") / "artifacts" / "u" / "attempt-1"
+            art = RunFiles(self.cfg.run_dir(f"{bead}-20260101-000000")).artifacts(1) / "u" / "attempt-1"
             art.mkdir(parents=True)
             (art / "check.log").write_text("log")
             os.utime(art / "check.log", (self.now - age * DAY,) * 2)
-            os.utime(art, (self.now - age * DAY,) * 2)
-            os.utime(art.parent, (self.now - age * DAY,) * 2)
-            os.utime(art.parent.parent, (self.now - age * DAY,) * 2)
+            for d in [art, *art.parents[:4]]:  # up to the run folder's attempts/
+                os.utime(d, (self.now - age * DAY,) * 2)
             os.utime(self.cfg.run_dir(f"{bead}-20260101-000000"), (self.now - age * DAY,) * 2)
         self.prune(Store())
-        assert (self.cfg.run_dir("x-5-20260101-000000") / "artifacts/u/attempt-1/check.log").exists()
+        assert (RunFiles(self.cfg.run_dir("x-5-20260101-000000")).artifacts(1) / "u/attempt-1/check.log").exists()
         assert not self.cfg.run_dir("x-6-20260101-000000").exists()
 
     def test_the_one_age_number_is_the_config_key(self):

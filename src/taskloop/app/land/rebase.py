@@ -3,6 +3,7 @@ else the task starts again on the base (land/restart.py)."""
 from collections.abc import Callable
 from typing import Protocol
 
+from taskloop.app.land.state import LandState
 from taskloop.contracts.checkpoint import Checkpoint, PlanStep
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import SlotGitError
@@ -31,9 +32,7 @@ class RebaseHost(Protocol):
     plan count a move to a new base starts again."""
 
     left_dirty: bool
-    rebase_orig: str  # the branch's head before the rebase, for start_again
-    rebase_pre: list[str]  # the heads the checkpoint may name before the rebase
-    salvage_tail: str  # the conflict's words for the fix round
+    land_state: LandState
     planned: int
     rebase_resets: int
     plan_log: list[PlanStep]
@@ -79,7 +78,7 @@ class Rebase:
         orig = e.git.rev_parse(e.wt, "HEAD")
         old_parent = e.git.rev_parse(e.wt, "HEAD~1") if e.left_dirty else ""
         self.squash_wip(orig)
-        e.rebase_orig, e.rebase_pre = orig, [x for x in (orig, old_parent) if x]
+        e.land_state.rebase_orig, e.land_state.rebase_pre = orig, [x for x in (orig, old_parent) if x]
         done = e.git.rebase(e.wt, e.cfg.base)
         if not done.ok:
             return self.stopped(salvage, done.output, orig)
@@ -109,7 +108,7 @@ class Rebase:
         e = self.e
         unmerged = e.git.unmerged(e.wt)
         if salvage and unmerged and len(unmerged) <= SALVAGE_MAX_FILES:
-            e.salvage_tail = "Conflicted files: {}\n{}".format(", ".join(unmerged), tail)
+            e.land_state.salvage_tail = "Conflicted files: {}\n{}".format(", ".join(unmerged), tail)
             return "conflict-fixable"
         e.git.rebase_abort(e.wt)
         if self.squashed:
@@ -123,10 +122,10 @@ class Rebase:
         e = self.e
 
         def move(ck: Checkpoint) -> Checkpoint:
-            if ck.head not in e.rebase_pre:
+            if ck.head not in e.land_state.rebase_pre:
                 return ck
             # unsquashed, the wip commit reset() made on top of the checkpoint's head is still on top of it
-            above = not self.squashed and len(e.rebase_pre) > 1 and ck.head == e.rebase_pre[1]
+            above = not self.squashed and len(e.land_state.rebase_pre) > 1 and ck.head == e.land_state.rebase_pre[1]
             return ck.replace(head=e.git.rev_parse(e.wt, "HEAD~1" if above else "HEAD"))
 
         e.checkpoints.amend(move)

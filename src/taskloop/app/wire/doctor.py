@@ -11,7 +11,7 @@ from taskloop import contracts
 from taskloop.adapters import delegate, layout_migrate
 from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.ident import claude_dir, config_dir
-from taskloop.app.doctor import disk, env_checks, ops, profiles
+from taskloop.app.doctor import disk, env_checks, ops, profiles, rails
 from taskloop.app.release import catalog, manifest
 from taskloop.app.report.inputs import repo_traces
 from taskloop.app.slots import watchdog
@@ -235,6 +235,8 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
         lambda: bd_store(who.actor, repo).find(BeadQuery(status="open")), repo)
     sys.stdout.write("".join(f.line() + "\n" for f in found))
     fails += [f.text for f in found if f.level == "FAIL"]
+    fails += rails.report(ConfigDir(config_dir(env)), hook.GIT_HOOK, hook.readable_install(plugin_root), git, repo, spawner,
+                          [c.id for c in source[0].engine.gate_checks])
     if not warns and not found and not fails:
         print("ok: no setup problems found in " + repo)
     return 1 if fails else 0

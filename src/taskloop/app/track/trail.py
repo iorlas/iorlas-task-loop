@@ -21,7 +21,7 @@ from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.rotating import NO_ROTATION
 from taskloop.contracts.rowstores import ReposStore
-from taskloop.contracts.stores import EventLog
+from taskloop.stores.real import real_stores
 
 SOURCE: Final = "task-loop"
 RETAIN_DAYS: Final = 7
@@ -45,7 +45,7 @@ def event(by: Identity, kind: str, bead: str = "", **fields: Any) -> Event:
     cfg = by.config
     with guard(events_lock(cfg)):  # prune_events rewrites the file under this lock
         if kind == "stage" and rec.step == "close" and rec.run_id:
-            existing = next((i.rec for i in EventLog(cfg).read_from().items
+            existing = next((i.rec for i in real_stores(cfg).events.read_from().items
                              if i.rec.run_id == rec.run_id and i.rec.step == "close"), None)
             if existing is not None:
                 return existing

@@ -117,7 +117,9 @@ class Checkpoints:
         return self.doc
 
     def read(self) -> Checkpoint | None:
-        return self.doc.get()
+        """The stored record, None when there is none. A record of another version or a torn one raises Refused (no backward
+        compatibility: nothing is migrated, nothing is read past)."""
+        return self.doc.need()
 
     def save(self, *, step: str = "", stage: int = 0, rounds: int = 0, n: int = 0, feedback: str = "",
              progress: StageProgress | None = None) -> None:
@@ -154,7 +156,7 @@ class Checkpoints:
         def closed(ck: Checkpoint) -> Checkpoint:
             red = why.startswith("gate red") and not ck.state.pending_land_validation
             done = ck.replace(head=head, closed=True, state=ck.state.replace(review=ck.state.review.replace(filed=list(self.e.filed))))
-            return done.replace(step="gate-red", gate_tail=trim.trim_log(why, log=str(self.e.gate_log or ""))) if red else done
+            return done.replace(step="gate-red", gate_tail=trim.trim_log(why, log=str(self.e.land_state.gate_log or ""))) if red else done
         self.amend(closed)
 
     def applied(self) -> frozenset[str]:

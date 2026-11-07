@@ -1,6 +1,6 @@
 """Answers a run already took, indexed by call coordinates and semantic execution digest.
 
-Legacy prompt-only hashes cannot match the versioned execution identity; their output stays on disk for inspection.
+A prompt-only hash does not match the versioned execution identity: such a memo is refused.
 """
 
 import json

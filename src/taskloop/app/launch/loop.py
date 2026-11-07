@@ -20,6 +20,7 @@ from taskloop.app.launch import loop_ops as ops
 from taskloop.app.loop import lintrun
 from taskloop.app.loop.env import LoopEnv, Storm
 from taskloop.app.loop.files import LoopFiles
+from taskloop.app.loop.stages import EngineAsks, EngineSlots
 from taskloop.app.prune import verb as prune_verb
 from taskloop.app.release import catalog, shell
 from taskloop.app.run import console
@@ -30,8 +31,7 @@ from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import paths
 from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.config import HostResources, RepoProfile
-from taskloop.contracts.docstore import JsonStore
+from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
@@ -43,6 +43,7 @@ from taskloop.contracts.procport import Spawner
 from taskloop.contracts.rowstores import ReposStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.beads import rules as beadlint
+from taskloop.stores.real import real_stores
 
 HERE = ident.PLUGIN_ROOT / "skills" / "task-loop"  # the install this code runs from; tl.main takes it as a parameter for a test
 
@@ -118,7 +119,8 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         repo_key=wslots.repo_key(repo),
         cfgdir=cfg,
         store=store,
-        slot_env=lambda: wslots.slot_env(repo, store, profile().slots, now, spawner=spawner, git=git, who=who),
+        slots=EngineSlots(lambda: wslots.slot_env(repo, store, profile().slots, now, spawner=spawner, git=git, who=who)),
+        asks=EngineAsks(cfg, now),
         profile=profile,
         fetch=lambda: ops.fetch(repo, git),
         lint=lambda b: beadlint.why(b, repo, lambda: lintrun.has_children(store, b.id)),
@@ -155,7 +157,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         actor=lambda: who.actor,
         exec_into=lambda d, argv, handover: ops.exec_into(repo, d, argv, handover, env, who, start_cwd),
         take_handover=lambda: env.get(EnvVar.TL_LOOP_STATE),
-        host=lambda: JsonStore(cfg.host(), HostResources).need(),
+        host=real_stores(cfg).host.need,
         say=console.say,
         now=now,
         pid=os.getpid(),
