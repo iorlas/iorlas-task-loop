@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from tlkernel.gitport import GateGit
-from tlkernel.ids import loop_key
+from tlkernel.ids import RepoKey, loop_key
 from tlkernel.slots import SlotGitError
 
 BIG = 16 * 1024 * 1024  # an ignored input bigger than this counts by size, not content
@@ -41,7 +41,7 @@ def file_digest(path: str) -> str:
     return h.hexdigest()
 
 
-def repo_key(git: GateGit, wt: str) -> str:
+def repo_key(git: GateGit, wt: str) -> RepoKey:
     """The repo's one key, shared by its slots, loop, checks and artifacts: ids.loop_key of the repo folder (the parent of the git
     common dir, the worktree when git cannot say), so a slot's worktree and the checkout name the same repo."""
     common = git.common_dir(wt)
