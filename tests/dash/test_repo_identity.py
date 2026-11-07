@@ -13,7 +13,7 @@ from support.runs import manifest
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.launch.dash_ports import owner_intake, owner_writes
-from taskloop.app.run import requests
+from taskloop.app.pipeline import requests
 from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.lookrows import LookRows

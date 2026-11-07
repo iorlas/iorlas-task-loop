@@ -7,7 +7,7 @@ from argparse import Namespace
 from collections.abc import Callable
 from typing import Any, Final
 
-from taskloop.app.run import requests
+from taskloop.app.asks import owner_verbs as requests
 from taskloop.contracts import runlife
 from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.locator import RunLocator
