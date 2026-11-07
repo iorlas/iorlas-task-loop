@@ -1,5 +1,5 @@
 """The engine's stuck tick: at every Beat (and once more before the Close) the run's own log is read from where the last tick ended and
-the StuckWatch (domain/stuck.py) says whether a new stuck episode began; each one is written as one Stuck record."""
+the StuckWatch (app/pipeline/stuck_rule.py) says whether a new stuck episode began; each one is written as one Stuck record."""
 
 import contextlib
 import threading
@@ -9,7 +9,7 @@ from tlkernel.docstore import Page
 from tlkernel.log import EngineLog, Stuck
 
 from taskloop.app.pipeline.adapter_ports import LastEvent
-from taskloop.domain.stuck import StuckWatch
+from taskloop.app.pipeline.stuck_rule import StuckWatch
 
 
 class StuckReader(Protocol):
