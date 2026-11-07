@@ -28,6 +28,7 @@ class Host:
         self.log = SimpleNamespace(note=self.notes.append)
         self.review = ReviewLive()
         self.plan_data, self.plan_summary, self.accepted, self.published = None, "", [], 0
+        self.run_id, self.last_run, self.stores = "r2", None, SimpleNamespace()
 
     def publish_plan(self) -> None:
         self.published += 1
@@ -48,7 +49,6 @@ class Apply(Case):
     def test_a_review_checkpoint_hands_the_stage_its_progress_and_the_check_run(self):  # tl-q3ma
         h = Host()
         run = SimpleNamespace()
-        h.run_id = "r2"
         written: list[object] = []
         h.stores = SimpleNamespace(check_run=lambda rid, _: SimpleNamespace(get=lambda: run, write=written.append))
         progress = StageProgress(write=ANSWER)
@@ -58,7 +58,6 @@ class Apply(Case):
 
     def test_a_review_checkpoint_without_its_check_run_goes_on_at_the_write(self):
         h = Host()
-        h.run_id = "r2"
         h.stores = SimpleNamespace(check_run=lambda rid, _: SimpleNamespace(get=lambda: None))
         progress = StageProgress(write=ANSWER)
         _, _, state = Resume(h).apply(ck(step="review").replace(progress=progress), Decision(kind="resume", stage=1))

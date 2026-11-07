@@ -48,7 +48,7 @@ class StageLoop:
         """One write, its checks and its review. -> AGAIN, or what the stage came to."""
         e = self.e
         if s.state.get("review_from"):  # the write and the checks of this round were green when the run parked: only the review is left
-            s.state = {k: v for k, v in s.state.items() if k != "review_from"}
+            s.state.pop("review_from")
             e.log.note(f"{s.name}: write and checks were green when the run parked, going on at the review")
             return self.review(s)
         if not s.fix:  # a fix runs at land: its checkpoint stays at land, and a resume lands again
