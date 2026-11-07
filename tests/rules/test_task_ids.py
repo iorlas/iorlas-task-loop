@@ -2,7 +2,7 @@
 import ast
 from pathlib import Path
 
-from support.case import Case
+from tltestkit.case import Case
 
 SRC = Path(__file__).resolve().parents[2] / "src"
 ID_NAMES = {"bead", "bead_id", "task_id", "bid", "parent_id"}

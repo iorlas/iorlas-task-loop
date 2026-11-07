@@ -9,7 +9,6 @@ import pytest
 from git_porcelain import errors
 from git_porcelain.real import Done
 from git_porcelain.testing import FakeRepo
-from support.case import Case
 
 from taskloop.adapters.git import RealGit
 from tlkernel.env import Env
@@ -24,6 +23,7 @@ from tlkernel.slots import (
     RefRace,
     SlotGitError,
 )
+from tltestkit.case import Case
 
 
 class GitPoolTest(Case):

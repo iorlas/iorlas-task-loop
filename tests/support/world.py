@@ -11,13 +11,13 @@ import pytest
 from jsonl_log import close_held
 
 from support import gitsim, procsim
-from support.case import Case
 from support.checked import run_checked
-from support.tmpdir import TemporaryDirectory, mkdtemp
 from support.waits import until
 from taskloop.adapters import halt as halting
 from taskloop.adapters import ident
 from tlkernel.argv import text_of
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory, mkdtemp
 
 # Engine.MARKERS; tests/checks/test_check_host_contract.py holds them equal
 MARKERS = text_of(["python3", str(ident.PLUGIN_ROOT / "src" / "taskloop" / "adapters" / "markers.py")])

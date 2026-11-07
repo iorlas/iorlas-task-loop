@@ -8,12 +8,12 @@ import os
 import pwd
 from pathlib import Path
 
-from support.case import Case
 from support.checked import run_checked
 from support.tlmain import tl_main
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters.childenv import CHECK_HOME_NAMES, allowed, check_caches
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[3]
 IDENT = ["-c", "user.email=t@t", "-c", "user.name=t"]

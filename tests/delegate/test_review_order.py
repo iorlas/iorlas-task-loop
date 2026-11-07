@@ -16,11 +16,11 @@ from unittest import mock
 import hermetic  # noqa: F401  (a home of its own for every test)
 import pytest
 import routing_support as support
-from support.tmpdir import mkdtemp
 
 from delegate.app import decide as dec
 from delegate.cli import verbs
 from delegate.domain.lanes.lane import Lane
+from tltestkit.tmpdir import mkdtemp
 
 LIMIT_S = 10  # the Opus sweep decides about 7000 routes in process
 ROOT = Path(__file__).resolve().parents[2]

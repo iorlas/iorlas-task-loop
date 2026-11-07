@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 import support.paths  # noqa: F401
-from support.case import Case
 
 from slots.test_slot_pool import Rig
 from taskloop.app.slots import aside, watchdog
@@ -14,6 +13,7 @@ from taskloop.app.slots.pool import Slot
 from taskloop.domain.slot_liveness import Kind, Limits, SlotFact, Waiter, violations
 from tlkernel.beadsport import BeadPatch
 from tlkernel.slots import SlotFail
+from tltestkit.case import Case
 
 L = Limits(grant_s=100, idle_s=600, aside_s=1800, orphan_s=900)
 

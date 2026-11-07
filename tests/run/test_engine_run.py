@@ -32,7 +32,6 @@ from support.checkpoints import drop_ck, stored_ck
 from support.fakes import as_bead, as_comment, must_bead
 from support.logs import records
 from support.spawn import port_git, real_spawner
-from support.tmpdir import mkdtemp
 from support.who import who
 
 from taskloop.adapters import delegate as dl
@@ -56,6 +55,7 @@ from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.run import RunReport
 from tlkernel.waitenums import WaitWhat
+from tltestkit.tmpdir import mkdtemp
 
 
 class EngineRunTest(EngineTest):

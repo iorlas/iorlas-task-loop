@@ -5,12 +5,12 @@ import support.paths  # noqa: F401
 
 # isort: split
 from support import gitsim
-from support.case import Case
 
 from ports.git_contract import GitContract, contract
 from ports.git_contract_land import LandContract
 from taskloop.adapters.git import RealGit
 from tlkernel.env import snapshot
+from tltestkit.case import Case
 
 
 @contract

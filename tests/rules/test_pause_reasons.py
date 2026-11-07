@@ -7,9 +7,8 @@ from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
 
-from support.case import Case
-
 from rules.gate_rules import parsed
+from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
