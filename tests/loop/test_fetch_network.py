@@ -13,7 +13,7 @@ from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.net import NetState
 from taskloop.app.loop.settle import Counters, Settle
 from taskloop.app.loop.take import Taker
-from taskloop.domain import outcome, storm
+from taskloop.domain import outcome
 from tlkernel.bead import Bead
 from tlkernel.config import LoopConfig
 from tlkernel.enums import Result
@@ -39,7 +39,7 @@ class FetchNetwork(Rig):
         assert self.bd.beads[bid].labels == []
         assert not {"checkout", "checkout_new", "clean"} & {c[0] for c in self.git.calls}
 
-    def test_four_loops_pause_without_runs_failures_cooldowns_or_storm_exit(self):
+    def test_four_loops_pause_without_runs_failures_cooldowns(self):
         for lane in range(4):
             with self.subTest(lane=lane):
                 env = slot_loop_env(self.env)
@@ -63,7 +63,7 @@ class FetchNetwork(Rig):
                 assert net.poll(probe, self.t[0] + 60)
                 assert not net.down
 
-    def test_network_fetch_pauses_never_feed_storm_or_escalate(self):
+    def test_network_fetch_pauses_never_escalate(self):
         done = outcome.make(Kind.PAUSE_NETWORK, f"paused: `git fetch -q origin`: {DNS}")
         history = []
         for n in range(20):
@@ -72,13 +72,7 @@ class FetchNetwork(Rig):
             assert decision.kind == Kind.PAUSE_NETWORK
             assert not decision.escalated
             assert not decision.ask
-            assert storm.storm_trip(history, bead, done.kind, done.fingerprint, 100 + n) is None
             history.append({"bead": bead, "kind": done.kind.value, "fingerprint": done.fingerprint, "t": 100 + n})
-
-    def test_network_history_cannot_contribute_to_a_later_fault_storm(self):
-        done = outcome.make(Kind.FAULT_INFRA, DNS)
-        history = [{"bead": "x-1", "kind": Kind.PAUSE_NETWORK.value, "fingerprint": done.fingerprint, "t": 100}]
-        assert storm.storm_trip(history, "x-2", done.kind, done.fingerprint, 101) is None
 
     def test_pre_engine_network_classification_keeps_other_errors_as_infrastructure(self):
         assert vd.pre_engine(DNS).paused_for_network

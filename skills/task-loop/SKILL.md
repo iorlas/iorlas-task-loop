@@ -63,7 +63,7 @@ engine checks the call's grants before any step and blocks the task when delegat
 tells each worker what its sandbox allows and the git and credential rules; the engine's briefs say only what the step is for.
 A stopped answer carries `stop{reason, scope, permanence, retry}`, and `taskloop.domain.lanes.policy.decide` (a pure function of those facts)
 is the whole policy: wait, retry, a new thread, reroute, pause, or fail. The engine matches no error text. A network
-stop never counts as a lane failure or toward any retry, replan, ask or storm cap and never opens a breaker: every step
+stop never counts as a lane failure or toward any retry, replan, ask cap and never opens a breaker: every step
 (plan, write, review, verify, look, checks, land) waits for the network on the same ref, with a short resume prompt, and
 a finished answer is not asked for again (`done.json`). Past the network wait cap the run pauses (bead open, auto
 label, run id and time budget kept; pause time is not charged) and the next run adopts it. Land detects a push that
@@ -441,7 +441,7 @@ The first lane's PID is `loop.pid` under `<config>/loop/<repo-key>/`; each `fact
 On macOS an available `caffeinate -i -w <pid>` prevents idle sleep while the first newly launched loop lives. No OS service
 is installed; manually run `tl factory start` again after a reboot. Start/stop also work from a phone's SSH terminal on the host.
 Stopping a repo's factory leaves the shared dashboard available.
-Storm, low disk, low RAM and no-lane conditions are waits, each with a probe time and wake condition in loop state.
+Low disk, low RAM and no-lane conditions are waits, each with a probe time and wake condition in loop state.
 After repeated quick failures of the same bead in one slot, that loop needs a successful reset/setup probe or a different
 eligible bead before retaking it there. Different beads never accumulate toward this threshold. A failed probe excludes
 the slot until a probe succeeds on a normal loop pass, with no timed hold. Resource and lane waits poll wake conditions;

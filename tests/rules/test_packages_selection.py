@@ -23,3 +23,20 @@ def test_a_file_outside_every_package_reaches_all(tmp_path):
     root = workspace(tmp_path)
     assert reached(root, {"pyproject.toml"}) == ["compose", "kernel", "plan", "review"]
     assert reached(root, {"packages/review/x.py", "uv.lock"}) == ["compose", "kernel", "plan", "review"]
+
+
+def test_the_folder_is_named_not_the_project(tmp_path):
+    for folder, name, deps in (("kernel", "tlkernel", []), ("land", "tlland", ["tlkernel"])):
+        manifest = tmp_path / "packages" / folder / "pyproject.toml"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(f'[project]\nname = "{name}"\nversion = "0"\ndependencies = {deps!r}\n'.replace("\'", '"'))
+    assert reached(tmp_path, {"packages/land/src/tlland/x.py"}) == ["land"]
+    assert reached(tmp_path, {"packages/kernel/src/tlkernel/x.py"}) == ["kernel", "land"]
+
+
+def test_a_dev_group_member_reaches_its_users(tmp_path):
+    for folder, name, extra in (("testkit", "tltestkit", ""), ("land", "tlland", '\n[dependency-groups]\ndev = ["pytest", "tltestkit"]\n')):
+        manifest = tmp_path / "packages" / folder / "pyproject.toml"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text(f'[project]\nname = "{name}"\nversion = "0"\ndependencies = []\n{extra}')
+    assert reached(tmp_path, {"packages/testkit/src/tltestkit/plugin.py"}) == ["land", "testkit"]

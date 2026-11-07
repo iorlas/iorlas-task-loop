@@ -117,7 +117,7 @@ class Pick(Case):
 
 
     @pytest.mark.parametrize("park_run", [None, "older-run"])
-    def test_unparked_pause_is_rested_as_an_engine_fault(self, park_run):
+    def test_unparked_pause_retries_as_an_engine_fault(self, park_run):
         if park_run:
             parks.paused(self.cfg, bead(), Kind.PAUSE_LANE, park_run, 100, permanence="transient")
         env = mock.Mock(cfgdir=self.cfg, now=lambda: 100)
@@ -125,10 +125,8 @@ class Pick(Case):
         c = Counters()
         settle = Settle(env, files, LoopConfig, said.append, c, mock.Mock(), mock.Mock())
         settle.apply(Verdict(Result.PAUSED, "stopped", run="r1"), "t-1", "", False)
-        cooldown = 100 + LoopConfig().fault_cooldown
-        files.rest_bead.assert_called_once_with("t-1", cooldown)
-        assert c.later == {"t-1": cooldown}
-        assert cooldown != 100 + LoopConfig().pause_retry
+        files.rest_bead.assert_not_called()
+        assert c.later == {}
         assert any("without a park" in line for line in said)
 
     @pytest.mark.parametrize("permanence,message", [("transient", "retry at"), ("needs_owner", "parked for the owner")])

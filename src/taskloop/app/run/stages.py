@@ -7,9 +7,9 @@ from taskloop.app.pipeline.standalone import Standalone
 from taskloop.app.run.host import RunHost
 from taskloop.app.run.layout import repo_of
 from taskloop.app.run.run_once import RunOnce
-from taskloop.app.run.stage_rounds import round_step
 from taskloop.app.track.closing import ClosingBeads
 from taskloop.app.wire.closeguard import guard_for, has_land
+from taskloop.app.write.rounds import round_step
 
 
 class RoundStages:

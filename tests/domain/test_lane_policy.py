@@ -85,7 +85,6 @@ def test_network_stop_pauses_immediately():
     action = lp.decide(stop("machine", "transient", "poll"), ctx(resumed=True))
     assert isinstance(action, lp.Yield)
     assert (action.kind, action.retry_after) == ("PAUSE_NETWORK", 0)
-    assert not oc.POLICY[Kind.PAUSE_NETWORK].storm
 
 
 class Incidents(Case):

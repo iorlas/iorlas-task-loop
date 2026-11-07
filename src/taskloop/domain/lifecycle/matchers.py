@@ -1,6 +1,6 @@
 """Stable run fingerprints and the start reasons of a run.
 
-A fingerprint is what groups failures (the storm detector, the retry escalation, the close comment): the same cause
+A fingerprint is what groups failures (the retry escalation, the close comment): the same cause
 with different bead ids, session refs, paths, commit shas or durations must produce the same string, and a quoted payload
 keeps a short hash of its own normalised text (`authentication expired` and `quota exhausted` stay apart), while two
 different causes must not. It is derived from the run's `why` only, never from the run name or the clock, so it can be
@@ -48,7 +48,7 @@ def fingerprint(why: object) -> str:
 
 
 def fingerprint_head(why: object) -> str:
-    """`fingerprint` without the hash of a long tail: a storm is the same head."""
+    """`fingerprint` without the hash of a long tail: retries share the same head."""
     return failure_fp.head(fingerprint(why))
 
 
