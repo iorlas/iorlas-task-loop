@@ -50,3 +50,28 @@ def test_production_trees_leave_out_the_test_support_member():
     names = set(arch_rules.production_trees())
     assert not any(n == "tltestkit" or n.startswith("tltestkit.") for n in names)
     assert "tlkernel.ids" in names
+
+
+def test_selected_production_graph_matches_full_graph_and_parses_only_sources(tmp_path, monkeypatch):
+    sources = {"src/pkg/__init__.py": "from . import leaf",
+               "src/pkg/leaf.py": "from . import sibling\nimport external.tool",
+               "src/pkg/sibling.py": "import pkg.leaf",
+               "packages/other/src/other/__init__.py": "",
+               "packages/other/src/other/leaf.py": "import pkg.leaf"}
+    for name, text in sources.items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+    full = graph_of(arch_rules.production_trees(tmp_path))
+    parsed_paths = []
+    original = arch_rules.parsed
+
+    def record(path):
+        parsed_paths.append(path.relative_to(tmp_path).as_posix())
+        return original(path)
+
+    monkeypatch.setattr(arch_rules, "parsed", record)
+    selected = arch_rules.production_graph("pkg.leaf", tmp_path)
+    assert selected == {"pkg.leaf": full["pkg.leaf"]}
+    assert selected["pkg.leaf"] == {"pkg", "pkg.sibling"}
+    assert parsed_paths == ["src/pkg/leaf.py"]
