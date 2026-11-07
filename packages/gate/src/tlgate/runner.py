@@ -15,7 +15,7 @@ from tlkernel.storeapi import Doc
 from tlgate import evidence, gateplan
 from tlgate.attempts import Attempts
 from tlgate.base import BaseCheck
-from tlgate.cache import InputKeys, RunMemo
+from tlgate.cache import InputKeys, RunnerMemo
 from tlgate.clean import guard_slot, isolated
 from tlgate.domain.durations import merged, seconds
 from tlgate.domain.plan import CheckPlan
@@ -41,7 +41,7 @@ def cached_gate(cfg: EngineConfig, git: GateGit, wt: str, stores: GateStores, en
     start = git.merge_base(wt, "HEAD", cfg.base) or base
     items = [*([diff_check(start, tree)] if start else []), *steps]
     keys = InputKeys(git, wt, tree, clean=clean, pins=cfg.pin_files)
-    memo = RunMemo(stores, check_files.repo_key(git, wt), keys, BaseSha(base), keyed_env(env), executor=cfg.executor.host)
+    memo = RunnerMemo(stores, check_files.repo_key(git, wt), keys, BaseSha(base), keyed_env(env), executor=cfg.executor.host)
     if clean or slot_wt is not None:
         memo.slot_keys = InputKeys(git, slot_wt or wt, tree, pins=cfg.pin_files)
     memo.checks = {c.id: repo_check(c, cfg) for c in cfg.checks}
@@ -146,20 +146,20 @@ class Checker:
         doc = host.stores.durations.of(check_files.repo_key(host.git, str(host.wt)))
         return doc, doc.get() or Durations()
 
-    def _memo(self, tree: TreeSha, base: str) -> RunMemo:
+    def _memo(self, tree: TreeSha, base: str) -> RunnerMemo:
         """The result store of this repo for this tree and base: the one place a round, `tl check` and the gate's question get theirs.
         Slot names and state paths do not distinguish receipts; each check's declared env still does."""
         host = self.host
         keys = InputKeys(host.git, host.wt, tree, clean=self.clean, pins=host.cfg.pin_files)
         repo = check_files.repo_key(host.git, str(host.wt))
-        memo = RunMemo(host.stores, repo, keys, BaseSha(base), keyed_env(host.env), host.run_id, executor=host.cfg.executor.host)
+        memo = RunnerMemo(host.stores, repo, keys, BaseSha(base), keyed_env(host.env), host.run_id, executor=host.cfg.executor.host)
         if self.slot_host is not None:
             # The mixed plan shares receipts, but slot requirements use a non-clean checker's ignored-input digests.
             slot_checker = Checker(self.slot_host, self.sleep, clean=False)
             memo.slot_keys = slot_checker._memo(tree, base).keys
         return memo
 
-    def _executor(self, memo: RunMemo, history: Durations, base_run: bool, fix_red: dict[str, CheckResult] | None = None,
+    def _executor(self, memo: RunnerMemo, history: Durations, base_run: bool, fix_red: dict[str, CheckResult] | None = None,
                   everything: bool = False, planned: gateplan.PlanDecision | None = None,
                   all_files: bool = False) -> CheckExecutor:
         host = self.host

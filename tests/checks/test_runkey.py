@@ -24,7 +24,7 @@ from support.memstores import fake_stores
 from support.spawn import port_git
 
 from taskloop.stores.real import real_stores
-from tlgate.cache import KEEP, InputKeys, RunMemo, green_result, is_green, key_digest, plan_digest
+from tlgate.cache import KEEP, InputKeys, RunnerMemo, green_result, is_green, key_digest, plan_digest
 from tlkernel import paths, wire
 from tlkernel.checks import Check, CheckResult, PassRecord
 from tlkernel.ids import CheckId, TreeSha
@@ -45,7 +45,7 @@ def memo(env=None, stores=None, tree="t", base="b", files=None, run_id="r1"):
     """A store over `stores` (the repo "repo"), as the runner of `run_id` sees this tree and base; `files` is the tree's file list."""
     keys = TreeKeys(port_git(), "/nonexistent", TreeSha(tree))
     keys.files = files or {}
-    return RunMemo(stores or fake_stores(), "repo", keys, BaseSha(base), env or {}, run_id)
+    return RunnerMemo(stores or fake_stores(), "repo", keys, BaseSha(base), env or {}, run_id)
 
 
 class Gate(CheckHostCase):

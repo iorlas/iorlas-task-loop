@@ -7,7 +7,7 @@ fails: no carry, the check runs. The caller owns the worktree at the judged oid;
 import hashlib
 from pathlib import Path
 
-from tlgate.api import authorization, repo_check, satisfied
+from tlgate.api import ReceiptStores, authorization, repo_check, satisfied
 from tlkernel import config, scratch
 from tlkernel.checks import PassRecord
 from tlkernel.env import Env
@@ -16,13 +16,12 @@ from tlkernel.ids import TreeSha
 from tlkernel.runkey import BaseSha, RunKey
 
 from taskloop.app.land.cmds import Cmds
-from taskloop.stores.bundle import Stores
 
 # git-port-exempt: a throwaway merge in a scratch worktree beside the closure command; a Git port method waits for a second caller
 MERGE = ("git", "-c", "user.name=task-loop", "-c", "user.email=task-loop@localhost", "merge", "--no-ff", "--no-edit", "-q")
 
 
-def earlier_pass(check_id: str, expected: RunKey, repo: str, stores: Stores) -> PassRecord | None:
+def earlier_pass(check_id: str, expected: RunKey, repo: str, stores: ReceiptStores) -> PassRecord | None:
     """The newest pass whose key differs from `expected` only in the base."""
     docs = stores.results(repo, check_id)
     found = [rec for name in docs.keys() if (rec := docs.of(name).get()) is not None  # noqa: SIM118 (a DocSet is not iterable)
@@ -31,7 +30,7 @@ def earlier_pass(check_id: str, expected: RunKey, repo: str, stores: Stores) -> 
     return max(found, key=lambda r: r.ts, default=None)
 
 
-def queue_parent_pass(check_id: str, expected: RunKey, parent: str, repo: str, stores: Stores) -> PassRecord | None:
+def queue_parent_pass(check_id: str, expected: RunKey, parent: str, repo: str, stores: ReceiptStores) -> PassRecord | None:
     """The newest pass made at base `parent` (the commit of the queue ahead) whose key is `expected` in every other field."""
     docs = stores.results(repo, check_id)
     found = [rec for name in docs.keys() if (rec := docs.of(name).get()) is not None  # noqa: SIM118 (a DocSet is not iterable)
@@ -50,7 +49,7 @@ def digest_of(root: str, paths: list[str]) -> dict[str, str]:
 
 
 class Carry:
-    def __init__(self, cmds: Cmds, git: Git, stores: Stores, repo: str, env: Env) -> None:
+    def __init__(self, cmds: Cmds, git: Git, stores: ReceiptStores, repo: str, env: Env) -> None:
         self.cmds, self.git, self.stores, self.repo, self.env = cmds, git, stores, repo, env
 
     def closure(self, argv: list[str], wt: str, rev: str) -> dict[str, str] | None:
