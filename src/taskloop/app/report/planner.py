@@ -3,10 +3,11 @@ import statistics
 from collections.abc import Collection, Iterable
 from typing import Any
 
-from taskloop.adapters.delegate import RunRecord, run_history
 from taskloop.app.report.inputs import prefix, read_jsonl
+from taskloop.contracts.delegateport import RunRecord
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
+from taskloop.stores.delegate import real_route
 
 
 def plan_class(rec: dict[str, Any]) -> str:
@@ -26,12 +27,12 @@ def input_tokens(tk: dict[str, Any] | None) -> int:
 
 def planner_stats(cfg: ConfigDir, since: float, until: float, prefixes: Collection[str] = (),
                   rows: Iterable[RunRecord] | None = None) -> dict[str, Any]:
-    """Planner calls per bead from delegate's run rows (`rows`, default `run_history`; input: `in`, plus cached on rows from
+    """Planner calls per bead from delegate's run rows (`rows`, default delegate's history; input: `in`, plus cached on rows from
     before delegate 0.22), split by the engine logs' plan nodes:
     first plan, full plans again (a new thread from scratch), amends, check send-backs. Reads only."""
     locator = RunLocator(cfg)
     calls = {}
-    for r in run_history(since) if rows is None else rows:
+    for r in real_route().history(since) if rows is None else rows:
         t = r.get("ts") or 0
         task = r.get("task") or ""
         if r.get("role") != "planner" or not (since <= t <= until) or not task:
