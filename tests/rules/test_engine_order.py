@@ -12,6 +12,8 @@ PARTS_FILES = ("parts_run.py", "parts_land.py", "parts_plan.py", "host.py", "eng
 # how a part holds the engine: `self.e`, `self.host`, `self.h`, a local alias, or the look stage's two views of it (`hand`, `ports`)
 HOST_NAMES = {"e", "host", "h", "hand", "ports"}
 
+# Construction layers include run composition roots (ask_flow, bead_env, shared, shell, stage_checks).
+# This is a build-order table, independent of the node/root import classification.
 LAYERS = {
     "bead_env": 0, "briefing": 0, "briefs": 0, "checkout": 0, "delegation": 0, "leftover_sink": 0, "records": 0, "reload": 0,
     "requests": 0, "restart": 0, "stage_checks": 0, "stuck": 0, "waits": 0,
