@@ -4,11 +4,11 @@ import argparse
 
 import pytest
 from any_agent.supervisor import RunHooks
-from support.fake_clock import FakeClock
 
 from delegate.app import run
 from delegate.app.run_legs import CONTINUE_NOTE, retry
 from delegate.contracts.json_types import Json, as_str
+from tltestkit.fake_clock import FakeClock
 
 
 @pytest.mark.parametrize("resumable,ref", [(True, "session"), (False, "session"), (True, None)])

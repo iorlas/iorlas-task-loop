@@ -15,7 +15,7 @@ from unittest import mock
 from any_agent import supervisor
 from any_agent.procs import StopReport, Worker
 
-from support.fake_clock import SteppingClock
+from tltestkit.fake_clock import SteppingClock
 
 
 @dataclasses.dataclass(frozen=True)
