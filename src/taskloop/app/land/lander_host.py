@@ -10,6 +10,7 @@ from tlkernel.beadsport import Beads
 from tlkernel.checks import CheckRun
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
+from tlkernel.stagefacts import RunLogPort
 
 from taskloop.app.land.fix import FixOutsideHost
 from taskloop.app.land.gate import GateCheckout, GateHost, GateSteps
@@ -19,7 +20,6 @@ from taskloop.app.land.push import LandedHost, OutboundCheckout, OutboundHost, O
 from taskloop.app.land.rebase import CommitHost, LandRebaseHost, RecheckCheckpoints, RecheckHost
 from taskloop.app.land.record import SyncCheckpoints, SyncHost
 from taskloop.stores.bundle import Stores
-from taskloop.stores.runlog import RunLog
 
 
 class LandConfig(Protocol):
@@ -48,7 +48,7 @@ class LandHost(Protocol):
     @property
     def dry(self) -> bool: ...
     @property
-    def log(self) -> RunLog: ...
+    def log(self) -> RunLogPort: ...
     @property
     def last_run(self) -> CheckRun | None: ...
     @property
