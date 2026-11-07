@@ -109,7 +109,7 @@ class Lander:
             raise e.blocked_for(why, "ASK_DECISION", spec=askspecs.open_question(why, None, "decision"))
         if e.pending_land_validation:
             raise e.blocked_for("land retry validation still needs accepted checks and review; branch kept", "FAULT_LAND")
-        skipped = gate.refuse(gate.latest(e.last_run, lambda: e.stores.check_run(e.run_dir.name, None).get()), e)
+        skipped = gate.refuse(gate.latest(e.last_run, e.latest_check.get), e)
         if skipped:
             e.log.note(f"landing with deferred checks (no such resource here, inputs unchanged): {', '.join(skipped)}")
         merged = self.pr.settled() if self.pr else ""  # a PR the owner merged since: its merge commit is the land

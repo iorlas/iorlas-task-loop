@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from enum import IntEnum
 
-from tlgate.api import authorization
+from tlgate.api import ReceiptStores, authorization
 from tlkernel import profile_at
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env
@@ -12,13 +12,14 @@ from tlkernel.locks import LockTimeout
 from tlkernel.matchers import secrets_added
 from tlkernel.paths import ConfigDir
 from tlkernel.ports import Clock
+from tlkernel.profile_changes import ProfileChange
 from tlkernel.runkey import BaseSha
 from tlkernel.slots import MissingRemote
+from tlkernel.storeapi import Log
 from tlkernel.systemclock import SystemClock
 
 from taskloop.adapters import landlock, locks
 from taskloop.app.land.gate import diff_sha
-from taskloop.stores.bundle import Stores
 
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
@@ -66,16 +67,19 @@ def push_tips(stdin: str) -> tuple[PushTip, ...]:
 
 
 class PushJudge:
-    def __init__(self, repo: str, stores: Stores, git: Git, env: Env, clock: Clock | None = None, *, guard_main: bool = False,
+    def __init__(self, repo: str, stores: ReceiptStores, git: Git, env: Env, clock: Clock | None = None, *,
+                 profile_changes: Log[ProfileChange],
+                 guard_main: bool = False,
                  land_lock_held: bool = False) -> None:
         self.repo, self.stores, self.git = repo, stores, git
+        self.profile_changes = profile_changes
         self.guard_main, self.land_lock_held = guard_main, land_lock_held
         self.env = env
         self.clock = clock or SystemClock()
         self.unproven: list[CheckId] = []
 
     def owner_approved(self, tip: str, base: str) -> bool:
-        rows = self.stores.profile_changes.read_from().items
+        rows = self.profile_changes.read_from().items
         now = self.clock.now()
         candidates = [item.rec for item in rows if item.rec.tip == tip and 0 <= now - item.rec.t <= 600]
         if not candidates:
@@ -231,11 +235,13 @@ def land_lock_held(home: ConfigDir, git: Git, repo: str) -> bool:
         return True
 
 
-def judge_push(repo: str, stdin: str, stores: Stores, git: Git, *, env: Env, clock: Clock | None = None, guard_main: bool = False,
+def judge_push(repo: str, stdin: str, stores: ReceiptStores, git: Git, *, profile_changes: Log[ProfileChange], env: Env,
+               clock: Clock | None = None, guard_main: bool = False,
                land_lock_held: bool = False) -> PushDecision:
     """Only this application boundary interprets the request. Failed observations never authorize transport."""
     try:
         tips = push_tips(stdin)
-        return PushJudge(repo, stores, git, env, clock, guard_main=guard_main, land_lock_held=land_lock_held).judge(tips)
+        return PushJudge(repo, stores, git, env, clock,
+                          profile_changes=profile_changes, guard_main=guard_main, land_lock_held=land_lock_held).judge(tips)
     except Exception as err:
         return PushDecision(PushStatus.UNAVAILABLE, (f"delivery judge unavailable: {err}",))

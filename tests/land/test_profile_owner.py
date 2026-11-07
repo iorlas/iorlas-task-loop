@@ -135,7 +135,9 @@ class OwnerGate(Case):
         log, forge = mock.Mock(), mock.Mock()
         log.stamp = {}
         stack = Stack(forge, self.cmds, log, self.git, "/repo", Path("/lock"), mock.Mock(), mock.Mock(),
-                      "owner", "session", self.gate, mock.Mock(), cfg=mock.Mock(), profile_change=TEXT, fx=FX)
+                      "owner", "session", self.gate, mock.Mock(), cfg=mock.Mock(), profile_change=TEXT,
+                          fx=FX, queue_docs=self.stores.queue, queue_state=self.stores.queue_state,
+                      profile_changes=self.stores.profile_changes)
         pr = mock.Mock(state="OPEN", head_oid="tip")
 
         def prepared(*args):
@@ -163,7 +165,9 @@ class OwnerGate(Case):
     def test_a_failed_audit_stops_before_push_or_merge(self):
         log = mock.Mock(stamp={})
         stack = Stack(mock.Mock(), self.cmds, log, self.git, "/repo", Path("/lock"), mock.Mock(), mock.Mock(),
-                      "owner", "session", self.gate, mock.Mock(), cfg=mock.Mock(), profile_change=TEXT, fx=FX)
+                      "owner", "session", self.gate, mock.Mock(), cfg=mock.Mock(), profile_change=TEXT,
+                          fx=FX, queue_docs=self.stores.queue, queue_state=self.stores.queue_state,
+                      profile_changes=self.stores.profile_changes)
         with (mock.patch.object(stack, "resolve", return_value=("topic", "tip", None)),
               mock.patch.object(self.git, "show", return_value="{}"),
               mock.patch.object(self.git, "profile_diff", return_value=PATCH),
@@ -198,7 +202,7 @@ class OwnerJudge(Case):
 
     def judge(self):
         return judge_push("/repo", f"refs/heads/topic tip refs/heads/main {'0' * 40}\n", self.stores, self.git,
-                          env=Env(), clock=self.clock)
+                          profile_changes=self.stores.profile_changes, env=Env(), clock=self.clock)
 
     def test_fresh_matching_row_allows_but_only_with_base_evidence(self):
         self.audit()
