@@ -4,12 +4,12 @@ import tempfile
 from collections.abc import Generator
 from pathlib import Path
 
-from tlkernel.gitport import Git
+from tlkernel.gitport import GateGit
 from tlkernel.slots import SlotGitError
 
 
 @contextlib.contextmanager
-def clean_tree(git: Git, wt: str | Path, sha: str) -> Generator[Path]:
+def clean_tree(git: GateGit, wt: str | Path, sha: str) -> Generator[Path]:
     """A fresh detached checkout, with no slot files copied in; creation failures propagate without a fallback."""
     with tempfile.TemporaryDirectory(prefix="tl-gate-") as tmp:
         dest = Path(tmp) / "tree"
@@ -21,7 +21,7 @@ def clean_tree(git: Git, wt: str | Path, sha: str) -> Generator[Path]:
 
 
 @contextlib.contextmanager
-def base_tree(git: Git, wt: str | Path, sha: str, dest: Path) -> Generator[Path | None]:
+def base_tree(git: GateGit, wt: str | Path, sha: str, dest: Path) -> Generator[Path | None]:
     """`dest` holds the commit `sha` for the `with` block (a detached git worktree of the repo of `wt`); None when git could not make it."""
     made = True
     try:

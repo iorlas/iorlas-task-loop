@@ -256,3 +256,59 @@ class Git(SlotGit, Protocol):
     def delete_remote_at(self, d: str, remote: str, ref: str, oid: str) -> None:
         """Delete the remote's `ref` only while it is at `oid` (force-with-lease); already absent is success."""
         ...
+
+
+class GateGit(Protocol):
+    """Git observations and detached worktrees used by the gate, including executor delivery."""
+
+    def rev_parse(self, d: str, rev: str) -> str:
+        """The oid `rev` names, empty when it names nothing."""
+        ...
+
+    def merge_base(self, d: str, a: str, b: str) -> str:
+        """The best common ancestor of a and b, empty when a revision is absent or they share none; unknown reads raise."""
+        ...
+
+    def changed_paths(self, d: str, a: str, b: str, *, required: bool = False) -> list[str]:
+        """Paths differing between a and b; a missing revision is empty unless required for a write or skip decision.
+        Other read failures always raise."""
+        ...
+
+    def ls_files(self, d: str, scope: Literal["tracked", "unignored", "ignored"] = "tracked", *spec: str) -> list[str]:
+        """The tracked files; with `unignored` those and the untracked files the ignore rules do not cover; with `ignored` the untracked
+        ones they cover, optionally only those under the pathspecs `spec`."""
+        ...
+
+    def ls_tree(self, d: str, rev: str, *paths: str, recursive: bool = False) -> list[TreeEntry]: ...
+
+    def tree_of(self, d: str) -> str:
+        """The tree id the work tree would commit now, untracked files included, without touching its index; raises when git cannot say."""
+        ...
+
+    def show(self, d: str, rev: str, path: str) -> str:
+        """The text of the file `path` as it is at `rev`; raises when there is no such file there."""
+        ...
+
+    def dirty(self, d: str) -> bool: ...
+
+    def common_dir(self, d: str) -> str:
+        """The absolute git dir the worktrees of `d`'s repo share, empty when `d` is in no repo."""
+        ...
+
+    def branch(self, d: str) -> str:
+        """The branch checked out in `d`, empty when HEAD is detached."""
+        ...
+
+    def add_worktree(self, repo: str, path: str, ref: str) -> None: ...
+
+    def add_worktree_force(self, repo: str, path: str, ref: str) -> None:
+        """Like add_worktree, again if the path is registered but missing."""
+        ...
+
+    def remove_worktree_force(self, repo: str, path: str) -> None:
+        """Remove a worktree whatever it holds; a failure is not an error."""
+        ...
+
+    def prune_worktrees(self, repo: str) -> None: ...
+
+    def push(self, d: str, remote: str, refspec: str) -> None: ...
