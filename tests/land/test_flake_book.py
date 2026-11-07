@@ -1,13 +1,13 @@
 """Flake persistence and repair filing use memory stores and fake beads."""
 import pytest
 from support.fake_beads import FakeBeads
-from support.memstores import MemDoc
 
 from taskloop.app.land.flake_book import FlakeBook
 from tlkernel.bead import BdError
 from tlkernel.beadsport import BdFailure, NewBead
 from tlkernel.flakes import FlakeLog, FlakeRow
 from tlkernel.ids import BeadId
+from tltestkit.memdoc import MemDoc
 
 NOW = 40 * 86400.0
 
