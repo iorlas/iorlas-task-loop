@@ -103,21 +103,13 @@ class Settle:
             self.c.net_first.append(bid)
 
     def paused(self, v: vd.Verdict, bid: str, name: str, slots: bool) -> int | None:
-        self.say(f"{bid} paused without a park ({v.why[:120]}): a fault, rested")
+        self.say(f"{bid} paused without a park ({v.why[:120]}): a fault, retrying")
         return self.failed(v.with_(kind="fault_unparked"), bid, name, slots)
 
     def failed(self, v: vd.Verdict, bid: str, name: str, slots: bool) -> int | None:
-        t, c, env = self.tune(), self.c, self.env
-        if v.fault:  # a fault of the machine or engine: the bead is open, labelled and cooled; a storm waits
-            self.files.rest_bead(bid, env.now() + t.fault_cooldown)
-            c.later[bid] = env.now() + t.fault_cooldown
-        elif not (slots and name and c.slot_quick.get(name)):  # no verdict at all (run-task died); an instant slot failure is the slot's
+        c = self.c
+        if not v.fault and not (slots and name and c.slot_quick.get(name)):
             c.fails.append(bid)
-        if len(c.fails) >= t.fails_to_stop:
-            self.say(f"WAIT: {len(c.fails)} runs gave no outcome; quarantined until the cooldown probe")
-            c.wait = LoopWait(reason="storm", fingerprint="missing_outcome", wake="failure cooldown expires",
-                              probe_at=env.now() + t.fault_cooldown)
-            c.fails = []
         return None
 
     def apply(self, v: vd.Verdict, bid: str, name: str, slots: bool) -> int | None:
@@ -150,10 +142,6 @@ class Settle:
     def counted(self, v: vd.Verdict, bid: str, name: str, slots: bool) -> int | None:
         c = self.c
         c.ran += 1
-        if v.storm:  # this run's close tripped the storm detector (the engine wrote the record and the banner)
-            self.say(v.storm)
-            c.wait = LoopWait(reason="storm", fingerprint=v.fingerprint, wake="storm record expires or is cleared",
-                              probe_at=self.env.now() + self.tune().poll)
         if v.outcome is Result.LANDED:
             c.fails = []
         elif v.outcome is Result.FAILED:

@@ -360,16 +360,21 @@ class Loop(Core):
             env.loop_lock(d, name, slot_bead, "")  # from the take through reset: no hand run gets in
             if slots:
                 cands = self.settle.candidates(name, cands)
-            taken = self.taker.attempt_all(cands, Where(name, d, slot_bead, self.started), slots, self.prof.engine, rule, lease)
+            while True:
+                taken = self.taker.attempt_all(cands, Where(name, d, slot_bead, self.started), slots, self.prof.engine, rule, lease)
+                if taken.verdict is None:
+                    return None
+                result = self.settle.apply(taken.verdict, taken.bead, name, slots)
+                if (not taken.verdict.fault or taken.verdict.pre_engine or name in self.c.slot_blocked
+                        or taken.bead in self.c.later or self.ends() is not None):
+                    return result
+                cands = [b for b in cands if b.id == taken.bead]
         finally:
             lease.stop()
             env.drop_engine_lock(d)
             if slots:
                 self.release(name)
             self.running(None)
-        if taken.verdict is None:  # every candidate is held by another session: the next pass sleeps until one is due
-            return None
-        return self.settle.apply(taken.verdict, taken.bead, name, slots)
 
     def release(self, name: str) -> None:
         try:

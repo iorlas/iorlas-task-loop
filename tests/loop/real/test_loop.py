@@ -21,7 +21,6 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
-from support import homes  # noqa: E402
 
 # isort: split
 import tl  # noqa: E402
@@ -38,8 +37,6 @@ from support.who import who  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
     ident,
 )
-from taskloop.adapters.repourl import repo_url  # noqa: E402
-from taskloop.adapters.storm import storm_path, write_storm  # noqa: E402
 from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.loop.core import Core  # noqa: E402
 from taskloop.app.loop.take import Taker  # noqa: E402
@@ -48,7 +45,6 @@ from taskloop.app.slots.pool import Slot  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import real  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
-from taskloop.domain import outcome as oc  # noqa: E402
 from tlkernel.config import LoopConfig  # noqa: E402
 from tlkernel.procport import WaitTimeout  # noqa: E402
 from tlkernel.slots import SlotFail  # noqa: E402
@@ -556,63 +552,23 @@ class Loop(LoopBase):
         self.run_loop("--max-beads", "2")
         assert [b for b, _ in self.started] == ["x-1", "x-2", "x-1"]
 
-    def test_a_park_moves_on_and_two_failures_wait_parks_never_count(self):
+    def test_a_park_moves_on_and_failures_do_not_wait(self):
         self.beads({"x-1": [rec("failed")], "x-2": [rec("parked")], "x-3": [rec("failed")], "x-4": [rec("landed")]})
         assert self.run_loop() == 0
         assert [b for b, _ in self.started] == ["x-1", "x-2", "x-3", "x-4"]
-        assert "WAIT: 2 runs gave no outcome" in self.out
+        assert "WAIT:" not in self.out
 
-    def test_faults_with_a_kind_cool_their_bead_and_do_not_count_toward_a_stop(self):
-        # tl-7y6.2.3: a FAULT_* is the storm detector's, not a failure count. Two different faults: both beads rest, the third runs.
+    def test_faults_with_a_kind_retry_without_cooldown(self):
+        # tl-7y6.2.3: a FAULT_* is retry policy's, not a failure count. Two different faults: both beads retry.
         def fault(fp):
             return rec("failed", why="failed: infrastructure: x", kind="fault_infra", fingerprint=fp)
-        self.beads({"x-1": [fault("FAULT_INFRA a")], "x-2": [fault("FAULT_INFRA b")], "x-3": [rec("landed")]})
-        assert self.run_loop("--max-beads", "3") == 0
-        assert [b for b, _ in self.started] == ["x-1", "x-2", "x-3"]
-        assert [self.bd.beads[b]["status"] for b in ("x-1", "x-2")] == ["open", "open"]
+        self.beads({"x-1": [fault("FAULT_INFRA a"), rec("parked", kind="ask_stuck")],
+                    "x-2": [fault("FAULT_INFRA b"), rec("parked", kind="ask_stuck")], "x-3": [rec("landed")]})
+        assert self.run_loop("--max-beads", "5") == 0
+        assert [b for b, _ in self.started] == ["x-1", "x-1", "x-2", "x-2", "x-3"]
+        assert [self.bd.beads[b]["status"] for b in ("x-1", "x-2")] == ["blocked", "blocked"]
         rests = looptest.rests(str(self.repo))
-        assert sorted(rests) == ["x-1", "x-2"]
-        assert all(abs(t - (self.clock.t0 + 1800)) < 600 for t in rests.values())  # fault_cooldown_s, not an hour
-
-    def test_a_run_that_tripped_the_storm_waits_and_leaves_the_beads_open(self):
-        # tl-bxk.10.31: Codex rejected the schema for every bead; the loop drained 53 of them. The second bead trips the storm.
-        banner = "WAIT: storm FAULT_BAD_REQUEST bad_request on x-1,x-2 (the beads stay open; look at their logs)"
-        def bad(**kw):
-            return rec(
-                "failed",
-                why="failed: infrastructure: bad_request",
-                kind="fault_bad_request",
-                fingerprint="FAULT_BAD_REQUEST bad_request",
-                **kw,
-            )
-
-        self.beads({"x-1": [bad()], "x-2": [bad(storm=banner)], "x-3": [rec("landed")]})
-        assert self.run_loop("--max-beads", "3") == 0
-        assert [b for b, _ in self.started] == ["x-1", "x-2", "x-3"]
-        assert self.out.count("WAIT: storm") == 1
-        assert [self.bd.beads[b]["status"] for b in ("x-1", "x-2")] == ["open", "open"]
-        assert "WAIT storm" in self.out
-        assert looptest.last_exit(str(self.repo))["reason"] == "max_beads"
-
-    def test_a_live_storm_record_waits_before_any_claim_then_expires(self):
-        self.beads({"x-1": [rec("landed")]})
-        path = storm_path(homes.config_dir(), repo_url(port_git(), str(self.repo)))
-        write_storm(path, "FAULT_INFRA y", ("x-8", "x-9"), self.clock.t, self.clock.t, oc.KNOBS["storm_window_s"])
-        assert self.run_loop() == 0
-        assert [b for b, _ in self.started] == ["x-1"]
-        assert "WAIT storm FAULT_INFRA y" in self.out
-        assert self.clock.t - self.clock.t0 >= oc.KNOBS["storm_window_s"]
-        assert self.out.count("WAIT storm FAULT_INFRA y") == oc.KNOBS["storm_window_s"] / LoopConfig().wait_poll
-
-    def test_a_storm_expiring_before_the_next_probe_wakes_at_expiry(self):
-        self.beads({"x-1": [rec("landed")]})
-        path = storm_path(homes.config_dir(), repo_url(port_git(), str(self.repo)))
-        window = oc.KNOBS["storm_window_s"]
-        write_storm(path, "FAULT_INFRA y", ("x-8", "x-9"), self.clock.t - window + 7, self.clock.t, window)
-        assert self.run_loop() == 0
-        assert [b for b, _ in self.started] == ["x-1"]
-        assert self.clock.naps[0] == 7
-        assert self.out.count("WAIT storm FAULT_INFRA y") == 1
+        assert rests == {}
 
     def test_different_beads_failing_quickly_do_not_hold_the_slot(self):
         # tl-g6a: s4 fed 7 beads in under a minute each, 'worktree has uncommitted work of another branch'
@@ -714,13 +670,12 @@ class Loop(LoopBase):
         assert self.lines()[0]["outcome"] == "failed"
         assert "no outcome" in self.lines()[0]["why"]
 
-    def test_a_pause_with_no_park_rests_for_the_fault_cooldown(self):
-        self.beads({"x-1": [rec("paused")], "x-2": [rec("landed")]})
+    def test_a_pause_with_no_park_retries_without_cooldown(self):
+        self.beads({"x-1": [rec("paused"), rec("landed")]})
         assert self.run_loop("--max-beads", "2") == 0
-        assert [b for b, _ in self.started] == ["x-1", "x-2"]
+        assert [b for b, _ in self.started] == ["x-1", "x-1"]
         rests = looptest.rests(str(self.repo))
-        assert rests == {"x-1": self.clock.t0 + LoopConfig().fault_cooldown}
-        assert rests["x-1"] != self.clock.t0 + LoopConfig().pause_retry
+        assert rests == {}
         assert "paused without a park" in self.out
 
     def test_drained_waits_when_asked_and_polls_until_the_end_time(self):

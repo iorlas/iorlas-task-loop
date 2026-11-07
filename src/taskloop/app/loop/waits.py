@@ -1,4 +1,4 @@
-"""Resource and storm waits, probed between beads without changing NETPAUSE."""
+"""Resource waits, probed between beads without changing NETPAUSE."""
 from tlkernel.config import LoopConfig
 from tlkernel.loop import LoopWait
 
@@ -14,10 +14,4 @@ def blocked(env: LoopEnv, tune: LoopConfig) -> LoopWait | None:
     ram = env.available_mb()
     if ram is not None and ram < tune.min_ram_mb:
         return LoopWait(reason="low_ram", wake=f"available RAM >= {tune.min_ram_mb} MB", probe_at=probe_at)
-    storm = env.storm()
-    if storm:
-        if storm.expires is not None:
-            probe_at = now + max(1, min(tune.wait_poll, storm.expires - now))
-        return LoopWait(reason="storm", wake="storm record expires or is cleared", probe_at=probe_at,
-                        fingerprint=storm.fingerprint)
     return None
