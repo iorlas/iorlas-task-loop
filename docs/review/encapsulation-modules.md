@@ -217,7 +217,8 @@ R1 applies only where named. Moving an Engine method into a file and passing the
 | app/run/context.py | Construct run writers and observers | E, duplicates objects also copied to Engine; R1 | R ⚠; R |
 | app/run/decide.py | Pure resume decision over checkpoint/world | E/P, freshness and compatible accepted plan required | K ✅; R |
 | app/run/engine.py | Compose attempt and common methods | E, state aliases, lazy parts, global lock and optional offline claim; R1 | R ⚠; R |
-| app/run/entry.py | Admit/claim/select directory/start engine | E/S/L, multiple pre-engine exits and release ordering | U ⚠; R |
+| app/asks/admission.py | Admit/reopen/refuse held, claimed or parked beads | E/A, holds, live claims and retry admission | U ⚠; R |
+| app/run/entry.py | Bind admission dependencies/claim/select directory/start engine | E/S/L, multiple pre-engine exits and release ordering | U ⚠; R |
 | app/run/fields.py | Initialize mutable Engine fields | E, full field taxonomy and persistent/ephemeral split; R1 | R ❌; V |
 | app/run/lane_acts.py | Execute retry/wait/reroute/yield policy | E/D/L, original stop, family and durable wake | U ⚠; R |
 | app/run/layout.py | Run layout plus age-based pruning | E/F, open/adopt identity and retention exemptions | U ⚠; R |

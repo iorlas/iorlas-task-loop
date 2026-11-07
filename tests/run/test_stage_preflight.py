@@ -16,6 +16,7 @@ from support.memstores import fake_stores
 from support.stdout import stdout_in
 from support.tlmain import tl
 
+from taskloop.app.asks import admission
 from taskloop.app.run import entry
 from taskloop.app.run.engine import Engine
 from taskloop.app.run.layout import RunLayout
@@ -175,8 +176,8 @@ class StagePreflight(Case):
 
     def test_plain_run_without_stage_bypasses_preflight_and_its_git_calls(self):
         self.a.dry_run, self.a.stage, self.a.outcome_file = False, None, None
-        with mock.patch.object(entry, "release_dead"), mock.patch.object(entry, "parked", return_value=""), \
-                mock.patch.object(entry, "admit", return_value=(True, "")), \
+        with mock.patch.object(admission, "release_dead"), mock.patch.object(admission, "parked", return_value=""), \
+                mock.patch.object(admission, "admit", return_value=(True, "")), \
                 mock.patch.object(entry.verbs, "claim", return_value=0), mock.patch.object(entry.fence, "take"), \
                 mock.patch.object(entry.preflight, "inspect", side_effect=AssertionError("plain run preflight")), \
                 mock.patch.object(entry, "Engine") as engine:
@@ -196,8 +197,8 @@ class StagePreflight(Case):
     def test_force_proceeds_after_listing_paths_and_loop_bypasses_hand_admission(self):
         self.dirty_previous(RunState.STOPPED)
         self.a.dry_run, self.a.outcome_file = False, None
-        with mock.patch.object(entry, "release_dead"), mock.patch.object(entry, "parked", return_value=""), \
-                mock.patch.object(entry, "admit", return_value=(True, "")), \
+        with mock.patch.object(admission, "release_dead"), mock.patch.object(admission, "parked", return_value=""), \
+                mock.patch.object(admission, "admit", return_value=(True, "")), \
                 mock.patch.object(entry.verbs, "claim", return_value=0), mock.patch.object(entry.fence, "take"), \
                 mock.patch.object(entry, "Engine") as engine:
             engine.return_value.run.return_value = 0

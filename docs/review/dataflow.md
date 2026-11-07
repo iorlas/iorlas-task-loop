@@ -176,7 +176,7 @@ The requested conceptual sequence “land → cleanup → close/follow-ups → r
 
 ### H4 — setup → engine admission/reset
 
-**Truth/copies:** run-task reloads config, resolves its worktree, takes over `.task/engine.lock`, rechecks park/admission, claims again, bumps the bead generation, creates/adopts a manifest, then starts the engine (`src/taskloop/app/run/entry.py:189`, `:313`, `:375`). The engine lock stores process start identity as well as PID; the manifest stores PID/host/heartbeat as a different liveness record.
+**Truth/copies:** run-task reloads config, resolves its worktree, takes over `.task/engine.lock`, rechecks park/admission (`app/asks/admission.py`), claims again, bumps the bead generation, creates/adopts a manifest, then starts the engine (`src/taskloop/app/run/entry.py:189`, `:313`, `:375`). The engine lock stores process start identity as well as PID; the manifest stores PID/host/heartbeat as a different liveness record.
 
 **Kill/idempotency:** Killing between claim, generation update and manifest creation leaves different subsets of these facts. Killing during manifest directory creation can leave an invisible run directory (`contracts/locator.py:122`). Run reset fetches and checks out again, preserves same-branch dirty work as WIP, clears scratch except evidence, and rewrites the two brief copies (`app/land/tree.py:67`). A kill between the brief copies leaves disagreement; these files are not an atomic pair.
 
@@ -248,7 +248,7 @@ The requested conceptual sequence “land → cleanup → close/follow-ups → r
 
 ### H13 — settlement → cleanup/release → loop's next pick
 
-**Truth/copies:** The late ReleaseSlot effect detaches unfinished branches and retries logged land cleanup; entry/loop finally blocks release the engine lock and slot lease. Finished close drops the checkpoint; `RunOnce.settle` then writes manifest terminal state, and entry writes the outcome file for the parent (`src/taskloop/app/run/closer_branch.py:83`, `app/run/run_once.py:210`, `app/run/entry.py:165`). The loop publishes a verdict row and separately updates counters/cooldowns.
+**Truth/copies:** The late ReleaseSlot effect detaches unfinished branches and retries logged land cleanup; entry/loop finally blocks release the engine lock and slot lease. Finished close drops the checkpoint; `RunOnce.settle` then writes manifest terminal state, and track.outcome_line writes the outcome file for the parent (`src/taskloop/app/run/closer_branch.py:83`, `app/run/run_once.py:210`, `app/track/outcome_line.py:44`). The loop publishes a verdict row and separately updates counters/cooldowns.
 
 **Kill/idempotency:** A kill after cleanup but before its result row makes the next attempt inspect refs again. A kill after checkpoint deletion but before manifest end/outcome leaves completed work without the parent's verdict; missing-outcome handling can report failure despite a closed bead. A kill after slot-mark clearing but before unclaim leaves a claimed slot missing holder marks (`app/slots/pool.py:100`). A kill after outcome but before loop row/counter publication loses queue accounting. No one atomic operation ties these endpoints together.
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from tlkernel.beadsport import Beads
 from tlkernel.config import LoopConfig
-from tlkernel.identity import Identity
+from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
 from tlkernel.rowstores import ReposStore
 from tlkernel.scratch import scratch_root
@@ -16,7 +16,6 @@ from taskloop.adapters.ident import hostname
 from taskloop.app.prune import retention, runs, slotstate
 from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.release.shell import Shell
-from taskloop.app.run import running
 
 
 def mb(n: int) -> str:
@@ -35,7 +34,7 @@ def _forget_missing(cfg: ConfigDir, dry_run: bool, say: Callable[[str], None]) -
 
 
 def run(cfg: ConfigDir, loop: LoopConfig, repos: list[str], store_of: Callable[[str], Beads], now: float, dry_run: bool,
-        sh: Shell, say: Callable[[str], None] = print, *, who: Identity) -> int:
+        sh: Shell, say: Callable[[str], None] = print, *, live: Callable[[str], dict[BeadId, str]]) -> int:
     """Prune once. -> how many things went (would, with `dry_run`)."""
     would = "would remove " if dry_run else "removed "
     _forget_missing(cfg, dry_run, say)
@@ -65,7 +64,7 @@ def run(cfg: ConfigDir, loop: LoopConfig, repos: list[str], store_of: Callable[[
         say(f"prune: {would}{g.path} ({mb(g.bytes)}): its slot is gone")
     count += len(orphans)
     gone, stays = sweep(repos, store_of, Path(loop.build_dir).expanduser(), loop.keep_days, now, dry_run, sh.port, cfg,
-                        lambda repo: running.running(repo, sh.port, who, store_of(repo)), hostname())
+                        live, hostname())
     for line in gone:
         say(f"prune: {line if dry_run else 'removed ' + line}")
     for line in stays:

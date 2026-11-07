@@ -10,6 +10,7 @@ from taskloop.app.launch import loop as wloop
 from taskloop.app.launch import repos
 from taskloop.app.prune import verb
 from taskloop.app.release import shell
+from taskloop.app.run import running
 from taskloop.app.track import trail
 from taskloop.app.wire import real
 
@@ -24,6 +25,6 @@ def cmd_prune(a: Any, env: Env, git: Git, who: Identity, now: Callable[[], float
         now(),
         a.dry_run,
         shell.of(real.spawner(env), git, env),
-        who=who,
+        live=lambda r: running.running(r, git, who, wloop.bd_of(who, r)),
     )
     return 0
