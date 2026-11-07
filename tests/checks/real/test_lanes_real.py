@@ -16,7 +16,7 @@ from tltestkit.procsim import real_proc
 from tltestkit.shellkit import POSIX_CHECK, PY, shq
 
 # isort: split
-from taskloop.domain.checks.specs import gate_items
+from tlgate.domain.specs import gate_items
 
 
 def alive(pid: int) -> bool:

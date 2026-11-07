@@ -9,7 +9,7 @@ from pathlib import Path
 import msgspec
 import pytest
 
-from taskloop.app.checks.linux import EXECUTOR_DOWN_RC, LinuxRun, Remote
+from tlgate.linux import EXECUTOR_DOWN_RC, LinuxRun, Remote
 from tlkernel.config import CheckSpec, ExecutorConfig
 from tlkernel.ids import CheckId
 from tlkernel.procport import Ran, RanBytes, Streamed

@@ -2,6 +2,7 @@
 
 The test in tests/rules/test_stage_parts.py fails until it is added.
 """
+from tlgate.store import GATE
 from tlkernel.dbparts import Part
 from tlkernel.factoryparts import (
     ASKS,
@@ -27,7 +28,6 @@ from tlkernel.factoryparts import (
     WORKTREE,
 )
 
-from taskloop.app.checks.store import GATE
 from taskloop.app.land.store import LAND
 
 STAGE_PARTS: tuple[Part, ...] = (

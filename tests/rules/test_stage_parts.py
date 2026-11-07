@@ -9,7 +9,7 @@ from taskloop_dash.parts import DASH_PARTS
 def test_stage_parts_include_every_part():
     src = Path(__file__).resolve().parents[2] / "src"
     names = set()
-    for root in (src / "taskloop", src / "taskloop_dash", src.parent / "packages/kernel/src/tlkernel"):
+    for root in (src / "taskloop", src / "taskloop_dash", *src.parent.glob("packages/*/src")):
         for path in root.rglob("*.py"):
             if path.name == "dbparts.py":
                 continue

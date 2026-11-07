@@ -7,15 +7,15 @@ from support.check_host import CheckHostCase
 from support.memstores import fake_stores
 from support.spawn import port_git
 
-from taskloop.app.checks.cache import KEEP, InputKeys, RunMemo
-from taskloop.app.checks.gateplan import PlanDecision
-from taskloop.app.checks.runner import cached_gate
 from taskloop.app.land.cmds import Cmds
 from taskloop.app.land.stackgate import StackGate
 from taskloop.cli.green import cmd_green
-from taskloop.domain.checks.specs import diff_check, gate_items
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
+from tlgate.cache import KEEP, InputKeys, RunMemo
+from tlgate.domain.specs import diff_check, gate_items
+from tlgate.gateplan import PlanDecision
+from tlgate.runner import cached_gate
 from tlkernel import check_files, factorydb, wire
 from tlkernel.checks import Check, CheckResult, PassRecord
 from tlkernel.config import load
@@ -130,7 +130,7 @@ class DatabaseIdentity(Identity):
             assert key is not None
             keys.append(key)
             result = CheckResult(id=self.check.id, cmd=self.check.cmd, group="tests", exit=0, status="passed")
-            with mock.patch("taskloop.app.checks.cache.time.time", return_value=float(i)):
+            with mock.patch("tlgate.cache.time.time", return_value=float(i)):
                 self.memo.remember(key, result, i, "")
         assert len(self.memo.stores.results("repo", self.check.id).keys()) == KEEP
         assert self.memo.hit(keys[0]) is None

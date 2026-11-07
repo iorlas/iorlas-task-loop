@@ -14,7 +14,7 @@ from tltestkit import procsim
 from tltestkit.logs import records
 
 # isort: split
-from taskloop.domain.checks.specs import gate_items
+from tlgate.domain.specs import gate_items
 from tlpipeline.blocked import Blocked
 
 UNITY = {"unity": {"limit": 1}}
