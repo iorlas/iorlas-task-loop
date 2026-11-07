@@ -9,11 +9,11 @@ import pytest
 import support.paths  # noqa: F401
 from support.case import Case
 from support.fake_deadline import FakeDeadline
+from support.lifecycle import lifecycle
 from support.narrow_hosts import FakeWaitsHost
 
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.waits import Waits
-from taskloop.app.run.run_once import RunOnce
 from taskloop.domain.lanes.liveness import LIVENESS
 from tlkernel import log as rec
 from tlkernel.config import EngineConfig
@@ -24,10 +24,9 @@ class RunDeadline(Case):
     def test_deadline_parks_and_still_closes_a_hung_run(self):
         host = SimpleNamespace(store=None, bead="b", env=mock.Mock(), checkpoints=mock.Mock(), dead=None,
                                Blocked=Blocked, moved=False, cfg=EngineConfig(run_deadline_min=0.02 / 60))
-        once = RunOnce(host)
+        once = lifecycle(host)
         timer = FakeDeadline()
-        with timer.patched(), mock.patch("taskloop.app.run.run_once.Lease"), \
-                mock.patch.object(once, "run", side_effect=lambda *a: timer.wait(0.5)), \
+        with timer.patched(), mock.patch.object(once, "body", side_effect=lambda *a: timer.wait(0.5)), \
                 mock.patch.object(once, "close_out") as close:
             assert once.go() == 2
         assert close.call_args.args[1].outcome.kind is Kind.OWNER_PARK
@@ -38,13 +37,13 @@ class RunDeadline(Case):
         assert EngineConfig().run_deadline_min == 45
         host = SimpleNamespace(store=None, bead="b", env=mock.Mock(), checkpoints=mock.Mock(), dead=None,
                                Blocked=Blocked, moved=False, cfg=EngineConfig())
-        once = RunOnce(host)
+        once = lifecycle(host)
         seen: list[float] = []
         def timed(secs: float, what: str) -> contextlib.AbstractContextManager[None]:
             seen.append(secs)
             return contextlib.nullcontext()
-        with mock.patch("taskloop.app.run.run_once.Lease"), mock.patch("taskloop.app.run.run_once.deadline", side_effect=timed), \
-                mock.patch.object(once, "run"), mock.patch.object(once, "close_out"):
+        with mock.patch("taskloop.app.pipeline.lifecycle.deadline", side_effect=timed), \
+                mock.patch.object(once, "body"), mock.patch.object(once, "close_out"):
             once.go()
         assert seen == [45 * 60]
 
