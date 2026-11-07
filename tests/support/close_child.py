@@ -21,7 +21,7 @@ from taskloop.app.pipeline.closing import Closer
 from taskloop.app.run import engine
 from taskloop.app.slots import config as wslots_config
 from taskloop.cli.ctx import declare_stage_parts
-from taskloop.domain import outcome as oc
+from tlkernel import runoutcome as oc
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
