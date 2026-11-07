@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from taskloop.app.pipeline.cursor import checkpoint_next, manifest_next, parse_step, stage_kind
-from tlkernel.checkpoint import Checkpoint, EndRec
+from tlkernel.checkpoint import Checkpoint, CloseIntent, EndRec, PauseFacts
 from tlkernel.enums import Step
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunBundle
@@ -39,7 +39,7 @@ def test_stage_kind(step, expected):
     ("", None, Step.PLAN),
 ])
 def test_checkpoint_next(step, ended, expected):
-    ck = Checkpoint(bead="t-1", run="r1", t=1500.0, step=step, ended=ended)
+    ck = Checkpoint(bead="t-1", run="r1", t=1500.0, step=step, ended=CloseIntent(outcome=ended, pause=PauseFacts()) if ended else None)
     assert checkpoint_next(ck) is expected
 
 

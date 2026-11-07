@@ -453,7 +453,7 @@
   ]
  },
  "Checkpoint": {
-  "v": 3,
+  "v": 4,
   "bead": "tl-1",
   "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "t": 1793050200.5,
@@ -470,16 +470,29 @@
    "tl-1/r/save_branch"
   ],
   "ended": {
-   "run": "r",
-   "kind": "ask_decision",
-   "fingerprint": "fp",
-   "detail": "d",
-   "sha": "",
-   "spec": "{\"ask_class\":\"decision\",\"decision\":\"q\"}",
-   "fp": "fp0",
-   "comment": false,
-   "escalated": true,
-   "leftovers": []
+   "outcome": {
+    "run": "r",
+    "kind": "ask_decision",
+    "fingerprint": "fp",
+    "detail": "d",
+    "sha": "",
+    "spec": "{\"ask_class\":\"decision\",\"decision\":\"q\"}",
+    "fp": "fp0",
+    "comment": false,
+    "escalated": true,
+    "leftovers": []
+   },
+   "pause": {
+    "reason": "no_lane",
+    "producer": "engine",
+    "permanence": null,
+    "retry_after": 0.0,
+    "crash_fingerprint": "",
+    "crash_site": ""
+   },
+   "stats": "cost=$1.23",
+   "plan_summary": "",
+   "asked": false
   },
   "notes": {
    "filed": 2,

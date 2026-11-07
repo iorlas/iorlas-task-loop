@@ -1,11 +1,13 @@
 """The close's outcome as the checkpoint keeps it (contracts EndRec), and the question a restart asks of it: is a close still unfinished?"""
 import json
 from collections.abc import Mapping, Sequence
+from typing import Protocol
 
 from tlkernel import wire
 from tlkernel.ask import AskDetail, AskOption
-from tlkernel.checkpoint import Checkpoint, EndRec
+from tlkernel.checkpoint import Checkpoint, CloseIntent, EndRec, PauseFacts, Producer
 from tlkernel.dash import OwnerCause
+from tlkernel.delegate import Permanence
 from tlkernel.enums import AskClass
 from tlkernel.kinds import Kind
 
@@ -52,6 +54,28 @@ def unfinished(ck: Checkpoint | None) -> bool:
     """A run died inside its close: its checkpoint holds the outcome and a key of the plan is not applied."""
     if ck is None or ck.ended is None:
         return False
-    done, _, _ = loaded(ck.ended)
+    done, _, _ = loaded(ck.ended.outcome)
     plan = effects.plan_close(done, dry=False, branch="", slot_gen=0)
-    return any(effects.key_of(ck.bead, ck.ended.run, eff) not in ck.applied for eff in plan)
+    return any(effects.key_of(ck.bead, ck.ended.outcome.run, eff) not in ck.applied for eff in plan)
+
+
+class HostFacts(Protocol):
+    """Only the host facts the close must keep across an engine restart."""
+
+    pause_reason: str
+    pause_producer: Producer
+    pause_permanence: Permanence | None
+    retry_after: float
+    crash_fingerprint: str
+    crash_site: str
+    plan_summary: str
+    asked: bool
+
+
+def intent_of(end: EndRec, host_facts: HostFacts, stats: str) -> CloseIntent:
+    """Keep the final pause facts and the already built stats beside the outcome."""
+    h = host_facts
+    return CloseIntent(outcome=end, pause=PauseFacts(reason=h.pause_reason, producer=h.pause_producer,
+                       permanence=h.pause_permanence, retry_after=h.retry_after,
+                       crash_fingerprint=h.crash_fingerprint, crash_site=h.crash_site),
+                       stats=stats, plan_summary=h.plan_summary, asked=h.asked)
