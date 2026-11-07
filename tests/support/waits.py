@@ -18,3 +18,11 @@ def until(predicate, limit=10.0, poll=0.005):
 def settle(index, *, limit=30.0, **kw):
     """Finish an index sweep, failing if repeated passes never settle."""
     assert until(lambda: index.pass_once(**kw), limit=limit), f"indexer did not settle in {limit:g} s"
+
+
+def until_marker(marker, child, limit=30.0):
+    """Wait for a child process to write its marker; a child that exits first fails the test with its stderr."""
+    assert until(lambda: marker.exists() or child.poll() is not None, limit=limit), "the child never wrote its marker"
+    if not marker.exists():
+        err = child.stderr.read().decode() if child.stderr else ""
+        raise AssertionError(f"the child exited ({child.returncode}) before it wrote its marker: {err}")
