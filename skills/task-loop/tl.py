@@ -77,19 +77,19 @@ except ModuleNotFoundError:
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # taskloop ships in the plugin dir; importing it adds _vendor
 
 from taskloop.adapters import beadtools, gitrepo, ident, landlock
-from taskloop.app.doctor import install, rails
+from taskloop.app.doctor import install
 from taskloop.app.launch import dash as wire_dash
-from taskloop.app.launch import reindex
 from taskloop.app.release import pins
 from taskloop.app.track import trail, verbs
 from taskloop.app.wire import asks as wire_asks
-from taskloop.app.wire import doctor, real
 from taskloop.app.wire import lanes as wire_lanes
+from taskloop.app.wire import real
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire import usage as wire_usage
 from taskloop.cli import asks as cli_asks
 from taskloop.cli import bd as cli_bd
 from taskloop.cli import closing as cli_closing
+from taskloop.cli import doctor as cli_doctor
 from taskloop.cli import factory as cli_factory
 from taskloop.cli import green as cli_green
 from taskloop.cli import land as cli_land
@@ -411,16 +411,6 @@ def repo_of(a: Any, c: Ctx) -> str:
     return a.repo or install.main_checkout(c.git, str(Path.cwd()))
 
 
-def v_doctor(a: Any, c: Ctx) -> int:
-    if a.reindex:
-        return reindex.run(c.who.config)
-    if a.disk:
-        return doctor.disk_run(c.who.config)
-    if a.print_guard_rails:
-        return rails.print_calls(c.git)
-    return doctor.run(c.here.parents[1], c.env, c.git, c.who, c.spawner)
-
-
 def v_status(a: Any, c: Ctx) -> int:
     return status.run_status(repo_of(a, c), c.here.parents[1], c.now(), a.json, c.env, c.who, c.git)
 
@@ -453,7 +443,7 @@ VERBS: Final[dict[str, Handler]] = {
     "factory": lambda a, c: cli_factory.run(a, c.env, c.spawner, c.who, c.here),
     "pin": lambda a, c: pins.run_pin(c.env, a.version, a.clear, c.git),
     "rollback": lambda a, c: pins.run_rollback(c.env, c.git),
-    "doctor": v_doctor,
+    "doctor": cli_doctor.run,
     "slot": v_slot,
     "ask": v_ask, "answer": v_ask, "hint": v_ask, "hold": v_ask, "override": v_ask, "park": v_ask, "note": v_ask,
     "reflect": lazy_env("taskloop.cli.report", "cmd_reflect"),

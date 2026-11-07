@@ -3,7 +3,7 @@ leaked into it. Read-only: nothing is removed. A compliant repo gets no line."""
 from pathlib import Path
 from types import SimpleNamespace
 
-from taskloop.app.wire import doctor
+from taskloop.app.doctor import setup_checks
 from taskloop.domain.layout import matchers as layout
 from tlkernel import config
 
@@ -61,5 +61,5 @@ def test_doctor_wires_both_into_its_warnings(tmp_path: Path) -> None:
     (tmp_path / "run.sh").write_text("echo $TL_RUN_ID")
     (tmp_path / "journal.md").write_text("x")
     git = SimpleNamespace(ls_files=lambda repo: ["run.sh", "journal.md"])
-    out = doctor.layout_warnings(str(tmp_path), (profile(GOOD), "main", "abc"), git)  # type: ignore[arg-type]
+    out = setup_checks.layout_warnings(str(tmp_path), (profile(GOOD), "main", "abc"), git)  # type: ignore[arg-type]
     assert len(out) == 2

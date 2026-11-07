@@ -20,7 +20,10 @@ from support.tlmain import tl_main  # noqa: E402
 from support.who import who  # noqa: E402
 
 from taskloop.adapters.git import RealGit  # noqa: E402
-from taskloop.app.doctor import install  # noqa: E402
+from taskloop.app.doctor import (  # noqa: E402
+    install,
+    setup_checks,
+)
 from taskloop.app.wire import doctor  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
@@ -262,7 +265,7 @@ class DoctorSource(Case):
 
         moving_ref = MovingRef(snapshot())
         source = wslots.cfg_source(str(self.wt), moving_ref)
-        assert doctor.git_warnings(str(self.wt), source, moving_ref) == []
+        assert setup_checks.git_warnings(str(self.wt), source, moving_ref) == []
         assert source[2] == commit
         assert ("show", commit + ":.task-loop.json") in calls
         assert ("ls-tree", commit) in calls
