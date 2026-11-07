@@ -259,6 +259,7 @@ source_modules =
     taskloop.app.pipeline.lifecycle
     taskloop.app.pipeline.run
     taskloop.app.pipeline.run_roles
+    taskloop.app.pipeline.standalone_roles
     taskloop.app.pipeline.standalone
     taskloop.app.pipeline.decide
     taskloop.app.pipeline.ended
