@@ -7,8 +7,7 @@ from typing import final
 
 from taskloop.contracts import paths, wire
 from taskloop.contracts.askstore import AskDocs
-from taskloop.contracts.docrows import RowDocs
-from taskloop.contracts.factoryparts import WORK_DOCS
+from taskloop.contracts.docrows import WORK_DOCS, RowDocs
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.ledger import Adr, AdrUse
 from taskloop.contracts.stores import JsonlStore
