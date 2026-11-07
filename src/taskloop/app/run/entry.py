@@ -37,8 +37,9 @@ from taskloop.adapters import beadtools, childenv, gitrepo, ident
 from taskloop.adapters import halt as halting
 from taskloop.app.asks import intake, parks, setup_retry
 from taskloop.app.loop.queue import has_areas
+from taskloop.app.pipeline import target
 from taskloop.app.reconcile import leases
-from taskloop.app.run import preflight, running, target
+from taskloop.app.run import preflight, running
 from taskloop.app.run.engine import Blocked, Engine
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import console, verbs

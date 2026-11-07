@@ -1,23 +1,36 @@
 """The one place the engine's review and verify attributes meet `RunState.review` (a `ReviewState`, opaque to the run state)."""
 
-from typing import Any
+from typing import Protocol
 
 from tlkernel import wire
-from tlkernel.review import ReviewState, Unchecked, Unverified
+from tlkernel.review import ReviewState, Unchecked, Unfiled, Unverified
 from tlkernel.wire import Rec
 
 
-def known[T: Rec](cls: type[T], items: list[dict[str, Any]]) -> list[T]:
+class ReviewLists(Protocol):
+    unchecked: list[dict[str, object]]
+    unverified: list[dict[str, object]]
+
+
+class ReviewOwner(Protocol):
+    @property
+    def review(self) -> ReviewLists: ...
+
+    filed: list[str]
+    unfiled: list[Unfiled]
+
+
+def known[T: Rec](cls: type[T], items: list[dict[str, object]]) -> list[T]:
     names = set(wire.names(cls))
     return [cls(**{k: v for k, v in x.items() if k in names}) for x in items]
 
 
-def review_of(e: Any) -> ReviewState:
+def review_of(e: ReviewOwner) -> ReviewState:
     return ReviewState(unchecked=known(Unchecked, e.review.unchecked), unverified=known(Unverified, e.review.unverified),
                        filed=list(e.filed), unfiled=list(e.unfiled))
 
 
-def apply_review(e: Any, review: ReviewState, *, unchecked: bool, late: bool = False) -> None:
+def apply_review(e: ReviewOwner, review: ReviewState, *, unchecked: bool, late: bool = False) -> None:
     """A resume hands back what review and verify left: the unverified items always, the unchecked ones only to a run that lands, the
     follow-ups filed or refused only from a checkpoint this engine left (`late`)."""
     if late:
@@ -28,7 +41,7 @@ def apply_review(e: Any, review: ReviewState, *, unchecked: bool, late: bool = F
 
 
 class ReviewGlue:
-    def __init__(self, host: object) -> None:
+    def __init__(self, host: ReviewOwner) -> None:
         self.host = host
 
     def apply(self, review: ReviewState, *, unchecked: bool, late: bool = False) -> None:

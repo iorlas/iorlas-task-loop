@@ -2,7 +2,7 @@
 tree check every node is wrapped in, and the live file and engine lock a worker call leaves."""
 import threading
 from functools import cached_property
-from typing import Any
+from typing import Any, Protocol
 
 from tlkernel.kinds import Kind
 
@@ -16,6 +16,7 @@ from taskloop.app.pipeline.reflect import Reflector
 from taskloop.app.pipeline.reload import Reload, ReloadHost
 from taskloop.app.pipeline.requests import OwnerRequests
 from taskloop.app.pipeline.resume import Resume, ResumeHost
+from taskloop.app.pipeline.review_glue import ReviewGlue, ReviewLists, ReviewOwner
 from taskloop.app.pipeline.stuck import StuckTick
 from taskloop.app.pipeline.waits import Waits
 from taskloop.app.release.closing import ReexecBook
@@ -24,13 +25,17 @@ from taskloop.app.run.bead_env import bead_env
 from taskloop.app.run.layout import repo_of
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.run.reload_ports import installed_newer, locked_slot
-from taskloop.app.run.review_glue import ReviewGlue
 from taskloop.app.run.shared import Shared
 from taskloop.app.run.shell import Shell
 from taskloop.app.run.stage_checks import StageChecks
 from taskloop.app.run.state import state_names
 from taskloop.app.track.closing import TrailEvents
 from taskloop.app.workers.delegation import Delegation
+
+
+class ResumeBinding[T](ResumeHost[T], ReviewOwner, Protocol):
+    @property
+    def review(self) -> ReviewLists: ...
 
 
 class RunParts(Plumbing):
@@ -52,7 +57,7 @@ class RunParts(Plumbing):
     requests = cached_property(OwnerRequests)
 
     @cached_property
-    def resume[T](self: ResumeHost[T]) -> Resume[T]: return Resume(self, LandHistory(self.git), ReviewGlue(self), state_names())
+    def resume[T](self: ResumeBinding[T]) -> Resume[T]: return Resume(self, LandHistory(self.git), ReviewGlue(self), state_names())
 
     @cached_property
     def reflector(self) -> Reflector:

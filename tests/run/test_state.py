@@ -19,8 +19,8 @@ from support.pipeline_ports import FakeHeadHistory
 from taskloop.app.land.state import LandState
 from taskloop.app.look.state import LOOK_FIELDS, LookState
 from taskloop.app.pipeline.resume import KEEP_FOR_ACTIVE, LATE, Resume
+from taskloop.app.pipeline.review_glue import ReviewGlue
 from taskloop.app.review.state import ReviewLive
-from taskloop.app.run.review_glue import ReviewGlue
 from taskloop.app.run.state import Checkpoints, StateAttrs, attr_names, carries_state, checkpoint_hooks, restarted, state_names
 from taskloop.app.write.state import WriteState
 from tlkernel import fence, wire
