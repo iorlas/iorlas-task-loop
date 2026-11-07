@@ -34,6 +34,8 @@ def test_work_reaches_no_stage(workdir, stage_import):
     with config_path.open("w") as stream:
         synthetic.write(stream)
     pins = tomllib.loads((ROOT / "mise.toml").read_text(encoding="utf-8"))["tools"]
+    # `just check` runs this same pinned tool first in the gate, so its uv cache is warm here (no network); the bare mise shim fails
+    # outside the repo cwd.
     lint = ["uv", "tool", "run", "--from", f"import-linter@{pins['pipx:import-linter']}", "lint-imports"]  # the pinned tool
     ran = subprocess.run(
         [*lint, "--config", str(config_path), "--no-cache"],
