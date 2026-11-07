@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from taskloop.app.wire import asks as asks_wire
-from tlasks import parks
+from tlkernel import askparks as parks
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
@@ -16,4 +16,4 @@ def test_an_owner_park_with_no_hold_is_released_by_the_gate():
         cfg = ConfigDir(Path(tmp))
         bead = Bead(id=BeadId("t-1"), title="work", status="open")
         ParkStore(cfg).put(Park(bead=bead.id, hash="h", runs=1, run="r", t=1.0, reason=Kind.OWNER_PARK.value))
-        assert parks.gate(asks_wire.host(), cfg, bead, now=2.0) is None
+        assert parks.gate(asks_wire.host().asks_store(cfg), cfg, bead, now=2.0, store=ParkStore) is None

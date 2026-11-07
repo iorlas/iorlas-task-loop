@@ -1,7 +1,6 @@
 """A typed loop environment for tests exercising only slot preparation and recovery."""
 from typing import Never
 
-import support.paths  # noqa: F401
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.stages import EngineAsks, EngineSlots
 from taskloop.app.wire import asks as asks_wire
@@ -16,7 +15,7 @@ def slot_loop_env(env: SlotEnv) -> LoopEnv:
     """Use the slot's ports; fail loudly if the loop asks for an unrelated effect."""
     return LoopEnv(
         repo=env.repo, repo_key=env.repo_key, cfgdir=env.cfgdir, store=env.store,
-        slots=EngineSlots(lambda: env), asks=EngineAsks(env.cfgdir, env.now, asks_wire.host),
+        slots=EngineSlots(lambda: env), asks=EngineAsks(env.cfgdir, env.now, asks_wire.host().asks_store),
         profile=unused, fetch=unused, lint=unused, running=unused,
         area_lock=unused, wt_lock=unused, start_worktree=unused, claim=unused,
         loop_lock=unused, drop_engine_lock=unused, spawn=unused, stop_now=unused,

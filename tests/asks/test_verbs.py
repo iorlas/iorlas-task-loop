@@ -12,9 +12,10 @@ from support.tiers import domain
 
 from taskloop.app.loop.queue import QueueRule
 from taskloop.cli import asks as cli
-from tlasks import ask_verbs, hold, intake, raiser, timespec
+from tlasks import ask_verbs, intake, raiser, timespec
 from tlasks.contracts.records import Asking
 from tlkernel import askspecs as specs
+from tlkernel import holds as hold
 from tlkernel.beadsport import NewBead
 from tlkernel.config import EngineConfig
 from tlkernel.ids import BeadId

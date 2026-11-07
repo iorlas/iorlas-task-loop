@@ -15,11 +15,11 @@ from tlkernel.askenums import AskKind
 from tlkernel.askstore import AskStore
 from tlkernel.beadsport import BdFailure, BeadPatch, Beads
 from tlkernel.dash import OwnerCause, Stick
+from tlkernel.holds import HOLD, HOLD_UNTIL
 from tlkernel.ids import BeadId
 from tlkernel.lookrows import LookRows
 
 from tlasks import ledgercomments, looks, stick, sweeps, timespec
-from tlasks.hold import HOLD, HOLD_UNTIL
 
 WAIVERS: Final = "owner_waivers"  # JSON list of Waiver: what the owner waived, deferred or dropped, with the quoted approval
 WAIVER_KINDS: Final = ("waive", "defer", "drop")

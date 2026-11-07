@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
-from tlasks import hold
+from tlkernel import holds as hold
 from tlkernel import pickset
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, BeadPatch, BeadQuery, Beads

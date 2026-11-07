@@ -13,7 +13,7 @@ WRITERS: Final = {
     'ReposStore': {'taskloop.app.track.trail', 'tlkernel.rowstores'},
     'ReleaseResultStore': {'tlrelease.flow'},
     'ReflectStateStore': {'taskloop.app.report.reflect'},
-    'ParkStore': {'tlasks.parks', 'tlpipeline.standalone', 'tlkernel.parks'},
+    'ParkStore': {'tlkernel.askparks', 'tlpipeline.standalone', 'tlkernel.parks'},
     'TraceStore': {'tlpipeline.journal', 'tlkernel.finish_projection'},
     'BadVersionStore': {'tlrelease.versions'},
     'HandoffMirrorStore': {'tlwork.write.handoff'},
