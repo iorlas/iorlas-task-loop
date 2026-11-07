@@ -62,6 +62,7 @@ class WorkerCall:
         thread: str = "",
         visual: bool = False,
         delta: str | None = None,
+        boundary: bool = False,
         cwd: Any = None,
         at: tuple[int, ...] = (0, 0, 0),
         **meta: Any,
@@ -71,7 +72,7 @@ class WorkerCall:
         e.halt_point()
         e.waits.budget_check()
         e.stats["nodes"] += 1
-        c = self.start_call(node, title, prompt, resume_key, writer_family, step, thread, visual, delta, cwd, at)
+        c = self.start_call(node, title, prompt, resume_key, writer_family, step, thread, visual, delta, cwd, at, boundary)
         e.steps.begin(step or node, f"{node}: {title}", node=node, backend="delegate", role=c.role, resume=bool(c.delta), **meta)
         while True:
             ans = c.finished or self.call_once(c)
@@ -118,10 +119,11 @@ class WorkerCall:
         delta: str | None,
         cwd: Any,
         at: tuple[int, ...],
+        boundary: bool = False,
     ) -> Call:
         e = self.e
         writer = writer_family if node in READ_ONLY_NODES else None
-        has_thread = bool(resume_key and e.writer.delegate)
+        has_thread = bool(resume_key and delta is not None)
         reset = False
         if has_thread and e.writer_fallback:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
             lane = e.router.lane(e.fallback_lane) if e.fallback_lane else None
@@ -156,6 +158,7 @@ class WorkerCall:
             step,
             title,
         )
+        c.boundary = boundary
         c.visual = visual
         c.updates = Updates(fallback=Fallback(False, "")) if reset else Updates()  # a fallback to a lane not configured here is dropped
         self.attach(c)
@@ -332,9 +335,8 @@ class WorkerCall:
         e = self.e
         if res.git_violation:
             e.warn("{} changed git: {}".format(c.node, "; ".join(res.git_violation)))
-        ctx = (e.sessions[-1] if e.sessions else {}).get("context_k")  # k tokens, None = unknown
         seen = e.hand.seen_now() if c.thread == "writer" and res.ref else []
-        c.updates = asked.then(c.updates, asked.thread_updates(c, res, e.fallback_lane, ctx, seen))
+        c.updates = asked.then(c.updates, asked.thread_updates(c, res, e.fallback_lane, seen))
         return answers.sent_errors(c.node, c.visual, res.data, res.say or res.text)
 
     def refused(self, c: Call, res: DelegateResult, denied: list[Any], errs: Any = True) -> bool:

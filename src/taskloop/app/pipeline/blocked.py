@@ -1,11 +1,10 @@
 """The stop a step ends with: what the engine does at the close follows from its kind."""
+from tlkernel import askspecs
 from tlkernel import lanecaps as caps
+from tlkernel import runoutcome as oc
+from tlkernel.askspec import AskSpec
 from tlkernel.kinds import ASKS, Kind
 from tlkernel.stop import Stop
-
-from taskloop.domain import outcome as oc
-from taskloop.domain.asks import specs as askspecs
-from taskloop.domain.asks.spec import AskSpec
 
 
 class Blocked(Stop):

@@ -1,1977 +1,1980 @@
 {
- "contract": 4,
- "about": "Contract 4 adds writer_exec_allow (guarded Codex host execution); require capability writer_exec_allow before sending the field. Every answer carries stop (null = done or agent handoff). Reasons are open, facts are closed. A bump means a change to the answer or the run flags.",
- "scopes": [
-  "bead",
-  "caller",
-  "machine",
-  "lane",
-  "model"
- ],
- "permanences": [
-  "transient",
-  "needs_owner"
- ],
- "retry_kinds": [
-  "none",
-  "predicted",
-  "poll"
- ],
- "health_effects": [
-  "none",
-  "exhausted",
-  "breaker"
- ],
- "denied_kinds": [
-  "policy",
-  "sandbox_limit",
-  "secret"
- ],
- "reasons": {
-  "secrets": {
-   "scope": "bead",
-   "permanence": "needs_owner",
-   "retry": "none",
-   "health": "none",
-   "wording": "the worker ran a command on a secret path and was stopped"
-  },
-  "rate_limited": {
-   "scope": "lane",
-   "permanence": "transient",
-   "retry": "predicted",
-   "health": "exhausted",
-   "wording": "the lane hit a usage limit"
-  },
-  "credit_exhausted": {
-   "scope": "lane",
-   "permanence": "needs_owner",
-   "retry": "none",
-   "health": "exhausted",
-   "wording": "the lane is out of credits or hit a spending limit"
-  },
-  "logged_out": {
-   "scope": "lane",
-   "permanence": "needs_owner",
-   "retry": "none",
-   "health": "exhausted",
-   "wording": "the vendor CLI is not logged in"
-  },
-  "hung": {
-   "scope": "model",
-   "permanence": "transient",
-   "retry": "predicted",
-   "health": "breaker",
-   "wording": "the worker printed nothing and was stopped"
-  },
-  "timeout": {
-   "scope": "bead",
-   "permanence": "transient",
-   "retry": "none",
-   "health": "none",
-   "wording": "the worker did not finish within --timeout and was killed"
-  },
-  "killed": {
-   "scope": "machine",
-   "permanence": "transient",
-   "retry": "none",
-   "health": "none",
-   "wording": "the worker was ended by a signal route.py did not send"
-  },
-  "worker_survived": {
-   "scope": "machine",
-   "permanence": "needs_owner",
-   "retry": "none",
-   "health": "none",
-   "wording": "a worker process outlived SIGTERM and SIGKILL (pids in worker.survivors)"
-  },
-  "bad_request": {
-   "scope": "caller",
-   "permanence": "needs_owner",
-   "retry": "none",
-   "health": "none",
-   "wording": "the vendor rejected the request itself (schema, flags, arguments)"
-  },
-  "network": {
-   "scope": "machine",
-   "permanence": "transient",
-   "retry": "poll",
-   "health": "none",
-   "wording": "the vendor could not be reached"
-  },
-  "vendor_blip": {
-   "scope": "lane",
-   "permanence": "transient",
-   "retry": "poll",
-   "health": "breaker",
-   "wording": "the vendor failed before the worker did anything"
-  },
-  "worker_failed": {
-   "scope": "bead",
-   "permanence": "transient",
-   "retry": "none",
-   "health": "breaker",
-   "wording": "the worker failed after it started"
-  },
-  "schema_invalid": {
-   "scope": "bead",
-   "permanence": "transient",
-   "retry": "none",
-   "health": "none",
-   "wording": "the answer does not match the schema, after one re-ask"
-  },
-  "held": {
-   "scope": "lane",
-   "permanence": "transient",
-   "retry": "predicted",
-   "health": "none",
-   "wording": "the owner holds the lane for this role until a stated time"
-  },
-  "busy": {
-   "scope": "lane",
-   "permanence": "transient",
-   "retry": "poll",
-   "health": "none",
-   "wording": "every slot of an otherwise usable lane is taken, including a pinned --only-family"
-  },
-  "no_lane": {
-   "scope": "machine",
-   "permanence": "needs_owner",
-   "retry": "none",
-   "health": "none",
-   "wording": "no lane can take this role now"
-  },
-  "engine_only_unenforced": {
-   "scope": "caller",
-   "permanence": "needs_owner",
-   "retry": "none",
-   "health": "none",
-   "wording": "a write lane cannot deny the engine-only recipes, including with --only-family; use --engine-only-advisory and state it in the brief to proceed"
-  },
-  "duplicate_task": {
-   "scope": "bead",
-   "permanence": "transient",
-   "retry": "poll",
-   "health": "none",
-   "wording": "the task already has a running worker"
-  },
-  "lock": {
-   "scope": "machine",
-   "permanence": "transient",
-   "retry": "poll",
-   "health": "none",
-   "wording": "the state lock was held too long"
-  },
-  "caller": {
-   "scope": "caller",
-   "permanence": "needs_owner",
-   "retry": "none",
-   "health": "none",
-   "wording": "the call itself is wrong (empty brief, unknown ref, bad flag)"
-  },
-  "setup": {
-   "scope": "machine",
-   "permanence": "needs_owner",
-   "retry": "none",
-   "health": "none",
-   "wording": "a CLI or key is missing"
-  },
-  "crash": {
-   "scope": "machine",
-   "permanence": "needs_owner",
-   "retry": "none",
-   "health": "none",
-   "wording": "route.py itself failed"
-  },
-  "only_family_unready": {
-   "scope": "lane",
-   "permanence": "transient",
-   "retry": "poll",
-   "health": "none",
-   "wording": "no step of the --only-family families is ready now; no other family is used"
-  },
-  "loop_excluded": {
-   "scope": "machine",
-   "permanence": "needs_owner",
-   "retry": "none",
-   "health": "none",
-   "wording": "every step for the role is barred by the loop's exclusions; nothing is left to route"
-  }
- },
- "run_args": [
-  "--authored-by",
-  "--premium",
-  "--allow-degraded",
-  "--claude-usage",
-  "--cwd",
-  "--brief",
-  "--timeout",
-  "--idle",
-  "--unattended",
-  "--schema",
-  "--resume",
-  "--cap",
-  "--parent",
-  "--task",
-  "--title",
-  "--engine-only",
-  "--engine-only-advisory",
-  "--only-family",
-  "--call-id",
-  "--writer-exec-allow",
-  "--read-root",
-  "--instructions-ref"
- ],
- "usage": {
-  "tokens": "in includes cached; also per call, never cumulative: in_fresh (uncached input), cache_read, cache_write (null when the vendor does not report it), out, and cache_write_by_ttl {5m,1h} on claude",
-  "turns": "claude num_turns; opencode step_finish count; codex turn.completed count",
-  "context_k": "input tokens of the last model request in thousands, null when the vendor does not say",
-  "answer_bytes": "utf-8 length of text",
-  "ref": "the vendor session or thread id the call ran in (same as the top-level ref)",
-  "last_activity_at": "ISO 8601 UTC time the call ended; null without a ref",
-  "warm_until": "last_activity_at + ttl_s: when the vendor prompt cache probably expires. Telemetry only; no routing uses it. null = unknown",
-  "ttl_s": "cache lifetime assumed: claude subscription 3600, codex 3600; null for opencode lanes",
-  "ttl_source": "vendor_default | observed | unknown",
-  "cost_usd": "what the harness returned for this call (claude total_cost_usd, opencode step cost summed); null when it returns none (codex, zai)",
-  "cost_source": "harness | unknown | free",
-  "accounting": "exact (codex tokens) | estimated (harness-computed cost) | unknown"
- },
- "answer_schema": {
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-   "contract",
-   "data",
-   "text",
-   "ref",
-   "lane",
-   "model",
-   "effort",
-   "family",
-   "flag",
-   "cost",
-   "tokens",
-   "denied",
-   "secs",
-   "run_id",
-   "transcript",
-   "say",
-   "git_violation",
-   "call_id",
-   "transcript_info",
-   "transcript_status",
-   "stop",
-   "usage"
+  "contract": 4,
+  "about": "Contract 4 adds writer_exec_allow (guarded Codex host execution); require capability writer_exec_allow before sending the field. Every answer carries stop (null = done or agent handoff). Reasons are open, facts are closed. A bump means a change to the answer or the run flags.",
+  "scopes": [
+    "bead",
+    "caller",
+    "machine",
+    "lane",
+    "model"
   ],
-  "properties": {
-   "contract": {
-    "enum": [
-     4
-    ]
-   },
-   "data": {},
-   "text": {
-    "type": "string"
-   },
-   "ref": {
-    "type": [
-     "string",
-     "null"
-    ]
-   },
-   "lane": {
-    "type": [
-     "string",
-     "null"
-    ]
-   },
-   "model": {
-    "type": [
-     "string",
-     "null"
-    ]
-   },
-   "effort": {
-    "type": [
-     "string",
-     "null"
-    ]
-   },
-   "family": {
-    "type": [
-     "string",
-     "null"
-    ]
-   },
-   "flag": {
-    "type": [
-     "string",
-     "null"
-    ]
-   },
-   "cost": {
-    "type": "number"
-   },
-   "tokens": {
-    "type": [
-     "object",
-     "null"
-    ],
-    "additionalProperties": false,
-    "required": [
-     "in",
-     "cached",
-     "out"
-    ],
-    "properties": {
-     "in": {
-      "type": [
-       "integer",
-       "null"
-      ]
-     },
-     "cached": {
-      "type": [
-       "integer",
-       "null"
-      ]
-     },
-     "out": {
-      "type": [
-       "integer",
-       "null"
-      ]
-     }
-    }
-   },
-   "denied": {
-    "type": "array",
-    "items": {
-     "type": "object",
-     "additionalProperties": false,
-     "required": [
-      "kind",
-      "tool",
-      "path",
-      "input"
-     ],
-     "properties": {
-      "kind": {
-       "type": "string",
-       "enum": [
-        "policy",
-        "sandbox_limit",
-        "secret"
-       ]
-      },
-      "tool": {
-       "type": [
-        "string",
-        "null"
-       ]
-      },
-      "path": {
-       "type": [
-        "string",
-        "null"
-       ]
-      },
-      "input": {
-       "type": "object",
-       "additionalProperties": {}
-      },
-      "reason": {
-       "type": [
-        "string",
-        "null"
-       ]
-      }
-     }
-    }
-   },
-   "secs": {
-    "type": "number"
-   },
-   "run_id": {
-    "type": [
-     "string",
-     "null"
-    ]
-   },
-   "transcript": {
-    "type": [
-     "string",
-     "null"
-    ]
-   },
-   "say": {
-    "type": "string"
-   },
-   "git_violation": {
-    "type": "array",
-    "items": {
-     "type": "string"
-    }
-   },
-   "call_id": {
-    "type": [
-     "string",
-     "null"
-    ]
-   },
-   "transcript_info": {
-    "type": [
-     "object",
-     "null"
-    ],
-    "additionalProperties": false,
-    "required": [
-     "path",
-     "kind",
-     "from",
-     "to",
-     "bytes"
-    ],
-    "properties": {
-     "path": {
-      "type": "string"
-     },
-     "kind": {
-      "type": "string",
-      "enum": [
-       "codex",
-       "claude",
-       "opencode_export"
-      ]
-     },
-     "from": {
-      "type": "integer"
-     },
-     "to": {
-      "type": "integer"
-     },
-     "bytes": {
-      "type": "integer"
-     }
-    }
-   },
-   "transcript_status": {
-    "type": [
-     "string",
-     "null"
-    ],
-    "enum": [
-     "ok",
-     "ref_unresolvable",
-     "died_before_session_id",
-     "not_launched",
-     "unsupported",
-     null
-    ]
-   },
-   "stop": {
-    "type": [
-     "object",
-     "null"
-    ],
-    "additionalProperties": false,
-    "required": [
-     "reason",
-     "scope",
-     "permanence",
-     "retry",
-     "ref"
-    ],
-    "properties": {
-     "reason": {
-      "type": "string"
-     },
-     "scope": {
-      "type": "string",
-      "enum": [
-       "bead",
-       "caller",
-       "machine",
-       "lane",
-       "model"
-      ]
-     },
-     "permanence": {
-      "type": "string",
-      "enum": [
-       "transient",
-       "needs_owner"
-      ]
-     },
-     "retry": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-       "kind",
-       "at"
-      ],
-      "properties": {
-       "kind": {
-        "type": "string",
-        "enum": [
-         "none",
-         "predicted",
-         "poll"
-        ]
-       },
-       "at": {
-        "type": [
-         "number",
-         "null"
-        ]
-       }
-      }
-     },
-     "ref": {
-      "type": [
-       "string",
-       "null"
-      ]
-     },
-     "fix": {
-      "type": "string"
-     },
-     "resumable": {
-      "type": "boolean"
-     },
-     "partial": {
-      "type": "boolean"
-     }
-    }
-   },
-   "usage": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": [
-     "tokens",
-     "cost",
-     "secs",
-     "turns",
-     "context_k",
-     "answer_bytes",
-     "ref",
-     "last_activity_at",
-     "warm_until",
-     "ttl_s",
-     "ttl_source",
-     "cost_usd",
-     "cost_source",
-     "accounting"
-    ],
-    "properties": {
-     "tokens": {
-      "anyOf": [
-       {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-         "in",
-         "cached",
-         "out",
-         "in_fresh",
-         "cache_read",
-         "cache_write"
-        ],
-        "properties": {
-         "in": {
-          "type": [
-           "integer",
-           "null"
-          ]
-         },
-         "cached": {
-          "type": [
-           "integer",
-           "null"
-          ]
-         },
-         "out": {
-          "type": [
-           "integer",
-           "null"
-          ]
-         },
-         "in_fresh": {
-          "type": [
-           "integer",
-           "null"
-          ]
-         },
-         "cache_read": {
-          "type": [
-           "integer",
-           "null"
-          ]
-         },
-         "cache_write": {
-          "type": [
-           "integer",
-           "null"
-          ]
-         },
-         "cache_write_by_ttl": {
-          "type": "object",
-          "additionalProperties": {
-           "type": "integer"
-          }
-         }
-        }
-       },
-       {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-         "in",
-         "cached",
-         "out"
-        ],
-        "properties": {
-         "in": {
-          "type": [
-           "integer",
-           "null"
-          ]
-         },
-         "cached": {
-          "type": [
-           "integer",
-           "null"
-          ]
-         },
-         "out": {
-          "type": [
-           "integer",
-           "null"
-          ]
-         }
-        }
-       },
-       {
-        "type": "null"
-       }
-      ]
-     },
-     "cost": {
-      "type": "number"
-     },
-     "secs": {
-      "type": "number"
-     },
-     "turns": {
-      "type": [
-       "integer",
-       "null"
-      ]
-     },
-     "context_k": {
-      "type": [
-       "number",
-       "null"
-      ]
-     },
-     "answer_bytes": {
-      "type": "integer"
-     },
-     "ref": {
-      "type": [
-       "string",
-       "null"
-      ]
-     },
-     "last_activity_at": {
-      "type": [
-       "string",
-       "null"
-      ]
-     },
-     "warm_until": {
-      "type": [
-       "string",
-       "null"
-      ]
-     },
-     "ttl_s": {
-      "type": [
-       "integer",
-       "null"
-      ]
-     },
-     "ttl_source": {
-      "type": "string",
-      "enum": [
-       "vendor_default",
-       "observed",
-       "unknown"
-      ]
-     },
-     "cost_usd": {
-      "type": [
-       "number",
-       "null"
-      ]
-     },
-     "cost_source": {
-      "type": "string",
-      "enum": [
-       "harness",
-       "unknown",
-       "free"
-      ]
-     },
-     "accounting": {
-      "type": "string",
-      "enum": [
-       "exact",
-       "estimated",
-       "unknown"
-      ]
-     }
-    }
-   },
-   "rung": {
-    "type": [
-     "integer",
-     "null"
-    ]
-   },
-   "fallback": {
-    "type": [
-     "boolean",
-     "null"
-    ]
-   },
-   "fallback_reason": {
-    "type": [
-     "string",
-     "null"
-    ]
-   },
-   "first_lane": {
-    "type": [
-     "string",
-     "null"
-    ]
-   },
-   "warnings": {
-    "type": "array",
-    "items": {
-     "type": "string"
-    }
-   },
-   "notice": {
-    "type": "string"
-   },
-   "warning": {
-    "type": "string"
-   },
-   "needs_input": {
-    "type": "array",
-    "items": {
-     "type": "string"
-    }
-   },
-   "ask_user": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": [
-     "question",
-     "options",
-     "then"
-    ],
-    "properties": {
-     "question": {
-      "type": "string"
-     },
-     "options": {
-      "type": "array",
-      "items": {
-       "type": "string"
-      }
-     },
-     "then": {
-      "type": "string"
-     }
-    }
-   },
-   "ask_kind": {
-    "type": "string",
-    "enum": [
-     "decision"
-    ],
-    "description": "what the caller is asked, when ask_user is set"
-   },
-   "agent_model": {
-    "type": "string",
-    "description": "set only on the agent-tool handoff (stop is null): the model the orchestrator's Agent tool should run"
-   },
-   "brief_prefix": {
-    "type": "string"
-   },
-   "cwd": {
-    "type": "string"
-   },
-   "context": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": [
-     "instructions",
-     "env_keys"
-    ],
-    "properties": {
-     "instructions": {
-      "type": "array",
-      "items": {
-       "type": "string"
-      }
-     },
-     "env_keys": {
-      "type": "array",
-      "items": {
-       "type": "string"
-      }
-     }
-    }
-   },
-   "exit_code": {
-    "type": [
-     "integer",
-     "null"
-    ],
-    "description": "the worker's exit status (negative = killed by that signal)"
-   },
-   "first_error": {
-    "type": "string",
-    "description": "the first error the harness or the process reported, cut to 240 characters"
-   },
-   "worker": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": [],
-    "properties": {
-     "end": {
-      "type": "string",
-      "enum": [
-       "ok",
-       "error",
-       "timeout",
-       "worker_survived"
-      ]
-     },
-     "stopped": {
-      "type": "boolean"
-     },
-     "term_sent": {
-      "type": "boolean"
-     },
-     "kill_sent": {
-      "type": "boolean"
-     },
-     "waited_s": {
-      "type": "number"
-     },
-     "survivors": {
-      "type": "array",
-      "items": {
-       "type": "object",
-       "additionalProperties": false,
-       "required": [
-        "pid"
-       ],
-       "properties": {
-        "pid": {
-         "type": "integer"
-        },
-        "start": {
-         "type": [
-          "string",
-          "null"
-         ]
-        }
-       }
-      }
-     },
-     "pid": {
-      "type": "integer"
-     },
-     "pgid": {
-      "type": "integer"
-     },
-     "start": {
-      "type": [
-       "string",
-       "null"
-      ]
-     }
+  "permanences": [
+    "transient",
+    "needs_owner"
+  ],
+  "retry_kinds": [
+    "none",
+    "predicted",
+    "poll"
+  ],
+  "health_effects": [
+    "none",
+    "exhausted",
+    "breaker"
+  ],
+  "denied_kinds": [
+    "policy",
+    "sandbox_limit",
+    "secret"
+  ],
+  "reasons": {
+    "secrets": {
+      "scope": "bead",
+      "permanence": "needs_owner",
+      "retry": "none",
+      "health": "none",
+      "wording": "the worker ran a command on a secret path and was stopped"
     },
-    "description": "how the worker's life ended; absent when no worker was launched"
-   },
-   "attempts": {
-    "type": "array",
-    "items": {
-     "type": "object",
-     "additionalProperties": false,
-     "required": [
-      "kind",
+    "rate_limited": {
+      "scope": "lane",
+      "permanence": "transient",
+      "retry": "predicted",
+      "health": "exhausted",
+      "wording": "the lane hit a usage limit"
+    },
+    "credit_exhausted": {
+      "scope": "lane",
+      "permanence": "needs_owner",
+      "retry": "none",
+      "health": "exhausted",
+      "wording": "the lane is out of credits or hit a spending limit"
+    },
+    "logged_out": {
+      "scope": "lane",
+      "permanence": "needs_owner",
+      "retry": "none",
+      "health": "exhausted",
+      "wording": "the vendor CLI is not logged in"
+    },
+    "hung": {
+      "scope": "model",
+      "permanence": "transient",
+      "retry": "predicted",
+      "health": "breaker",
+      "wording": "the worker printed nothing and was stopped"
+    },
+    "timeout": {
+      "scope": "bead",
+      "permanence": "transient",
+      "retry": "none",
+      "health": "none",
+      "wording": "the worker did not finish within --timeout and was killed"
+    },
+    "killed": {
+      "scope": "machine",
+      "permanence": "transient",
+      "retry": "none",
+      "health": "none",
+      "wording": "the worker was ended by a signal route.py did not send"
+    },
+    "worker_survived": {
+      "scope": "machine",
+      "permanence": "needs_owner",
+      "retry": "none",
+      "health": "none",
+      "wording": "a worker process outlived SIGTERM and SIGKILL (pids in worker.survivors)"
+    },
+    "bad_request": {
+      "scope": "caller",
+      "permanence": "needs_owner",
+      "retry": "none",
+      "health": "none",
+      "wording": "the vendor rejected the request itself (schema, flags, arguments)"
+    },
+    "network": {
+      "scope": "machine",
+      "permanence": "transient",
+      "retry": "poll",
+      "health": "none",
+      "wording": "the vendor could not be reached"
+    },
+    "vendor_blip": {
+      "scope": "lane",
+      "permanence": "transient",
+      "retry": "poll",
+      "health": "breaker",
+      "wording": "the vendor failed before the worker did anything"
+    },
+    "worker_failed": {
+      "scope": "bead",
+      "permanence": "transient",
+      "retry": "none",
+      "health": "breaker",
+      "wording": "the worker failed after it started"
+    },
+    "schema_invalid": {
+      "scope": "bead",
+      "permanence": "transient",
+      "retry": "none",
+      "health": "none",
+      "wording": "the answer does not match the schema, after one re-ask"
+    },
+    "held": {
+      "scope": "lane",
+      "permanence": "transient",
+      "retry": "predicted",
+      "health": "none",
+      "wording": "the owner holds the lane for this role until a stated time"
+    },
+    "busy": {
+      "scope": "lane",
+      "permanence": "transient",
+      "retry": "poll",
+      "health": "none",
+      "wording": "every slot of an otherwise usable lane is taken, including a pinned --only-family"
+    },
+    "no_lane": {
+      "scope": "machine",
+      "permanence": "needs_owner",
+      "retry": "none",
+      "health": "none",
+      "wording": "no lane can take this role now"
+    },
+    "engine_only_unenforced": {
+      "scope": "caller",
+      "permanence": "needs_owner",
+      "retry": "none",
+      "health": "none",
+      "wording": "a write lane cannot deny the engine-only recipes, including with --only-family; use --engine-only-advisory and state it in the brief to proceed"
+    },
+    "duplicate_task": {
+      "scope": "bead",
+      "permanence": "transient",
+      "retry": "poll",
+      "health": "none",
+      "wording": "the task already has a running worker"
+    },
+    "lock": {
+      "scope": "machine",
+      "permanence": "transient",
+      "retry": "poll",
+      "health": "none",
+      "wording": "the state lock was held too long"
+    },
+    "caller": {
+      "scope": "caller",
+      "permanence": "needs_owner",
+      "retry": "none",
+      "health": "none",
+      "wording": "the call itself is wrong (empty brief, unknown ref, bad flag)"
+    },
+    "setup": {
+      "scope": "machine",
+      "permanence": "needs_owner",
+      "retry": "none",
+      "health": "none",
+      "wording": "a CLI or key is missing"
+    },
+    "crash": {
+      "scope": "machine",
+      "permanence": "needs_owner",
+      "retry": "none",
+      "health": "none",
+      "wording": "route.py itself failed"
+    },
+    "only_family_unready": {
+      "scope": "lane",
+      "permanence": "transient",
+      "retry": "poll",
+      "health": "none",
+      "wording": "no step of the --only-family families is ready now; no other family is used"
+    },
+    "loop_excluded": {
+      "scope": "machine",
+      "permanence": "needs_owner",
+      "retry": "none",
+      "health": "none",
+      "wording": "every step for the role is barred by the loop's exclusions; nothing is left to route"
+    }
+  },
+  "run_args": [
+    "--authored-by",
+    "--premium",
+    "--allow-degraded",
+    "--claude-usage",
+    "--cwd",
+    "--brief",
+    "--timeout",
+    "--idle",
+    "--unattended",
+    "--schema",
+    "--resume",
+    "--cap",
+    "--parent",
+    "--task",
+    "--title",
+    "--engine-only",
+    "--engine-only-advisory",
+    "--only-family",
+    "--call-id",
+    "--writer-exec-allow",
+    "--read-root",
+    "--instructions-ref"
+  ],
+  "usage": {
+    "tokens": "in includes cached; also per call, never cumulative: in_fresh (uncached input), cache_read, cache_write (null when the vendor does not report it), out, and cache_write_by_ttl {5m,1h} on claude",
+    "turns": "claude num_turns; opencode step_finish count; codex turn.completed count",
+    "context_k": "input tokens of the last model request in thousands, null when the vendor does not say",
+    "answer_bytes": "utf-8 length of text",
+    "ref": "the vendor session or thread id the call ran in (same as the top-level ref)",
+    "last_activity_at": "ISO 8601 UTC time the call ended; null without a ref",
+    "warm_until": "last_activity_at + ttl_s: when the vendor prompt cache probably expires. Telemetry only; no routing uses it. null = unknown",
+    "ttl_s": "cache lifetime assumed: claude subscription 3600, codex 3600; null for opencode lanes",
+    "ttl_source": "vendor_default | observed | unknown",
+    "cost_usd": "what the harness returned for this call (claude total_cost_usd, opencode step cost summed); null when it returns none (codex, zai)",
+    "cost_source": "harness | unknown | free",
+    "accounting": "exact (codex tokens) | estimated (harness-computed cost) | unknown"
+  },
+  "answer_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "contract",
+      "data",
+      "text",
+      "ref",
       "lane",
       "model",
-      "outcome",
+      "effort",
+      "family",
+      "flag",
+      "cost",
+      "tokens",
+      "denied",
       "secs",
-      "tokens"
-     ],
-     "properties": {
-      "kind": {
-       "type": "string",
-       "enum": [
-        "first",
-        "canary",
-        "network_rerun",
-        "lane_poll",
-        "lane_wait",
-        "new_thread",
-        "worker_retry",
-        "schema_reask",
-        "reroute"
-       ]
+      "run_id",
+      "transcript",
+      "say",
+      "git_violation",
+      "call_id",
+      "transcript_info",
+      "transcript_status",
+      "stop",
+      "usage"
+    ],
+    "properties": {
+      "contract": {
+        "enum": [
+          4
+        ]
+      },
+      "data": {},
+      "text": {
+        "type": "string"
+      },
+      "ref": {
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "lane": {
-       "type": [
-        "string",
-        "null"
-       ]
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "model": {
-       "type": [
-        "string",
-        "null"
-       ]
+        "type": [
+          "string",
+          "null"
+        ]
       },
-      "outcome": {
-       "type": [
-        "string",
-        "null"
-       ]
+      "effort": {
+        "type": [
+          "string",
+          "null"
+        ]
       },
-      "secs": {
-       "type": "number"
+      "family": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "flag": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "cost": {
+        "type": "number"
       },
       "tokens": {
-       "type": [
-        "object",
-        "null"
-       ],
-       "additionalProperties": false,
-       "required": [
-        "in",
-        "cached",
-        "out"
-       ],
-       "properties": {
-        "in": {
-         "type": [
-          "integer",
-          "null"
-         ]
-        },
-        "cached": {
-         "type": [
-          "integer",
-          "null"
-         ]
-        },
-        "out": {
-         "type": [
-          "integer",
-          "null"
-         ]
-        }
-       }
-      }
-     }
-    },
-    "description": "every launch the call made, in order; absent when it made a single one (capability attempts)"
-   }
-  }
- },
- "status_schema": {
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-   "v",
-   "ts",
-   "lanes",
-   "cockpit",
-   "running",
-   "needs_input",
-   "holds",
-   "asks",
-   "health",
-   "roles",
-   "network"
-  ],
-  "properties": {
-   "v": {
-    "type": "integer",
-    "enum": [
-     1
-    ]
-   },
-   "ts": {
-    "type": "number"
-   },
-   "lanes": {
-    "type": "object",
-    "additionalProperties": {
-     "type": "object",
-     "additionalProperties": false,
-     "required": [
-      "family",
-      "kind",
-      "out",
-      "out_until",
-      "reason",
-      "five",
-      "week",
-      "pace",
-      "burn",
-      "notes"
-     ],
-     "properties": {
-      "family": {
-       "type": "string"
-      },
-      "kind": {
-       "type": "string"
-      },
-      "out": {
-       "type": "boolean"
-      },
-      "out_until": {
-       "type": [
-        "number",
-        "null"
-       ]
-      },
-      "reason": {
-       "type": [
-        "string",
-        "null"
-       ],
-       "description": "why the lane is out (limit | logged_out | busy | error | credit | hung), else null"
-      },
-      "five": {
-       "type": [
-        "number",
-        "null"
-       ],
-       "description": "percent of the 5-hour window used, null = unknown"
-      },
-      "week": {
-       "type": [
-        "number",
-        "null"
-       ],
-       "description": "percent of the weekly window used, null = unknown"
-      },
-      "pace": {
-       "type": [
-        "number",
-        "null"
-       ]
-      },
-      "burn": {
-       "type": "boolean"
-      },
-      "notes": {
-       "type": "array",
-       "items": {
-        "type": "string"
-       }
-      }
-     }
-    }
-   },
-   "cockpit": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": [
-     "v",
-     "at",
-     "legend",
-     "next_worker",
-     "lanes"
-    ],
-    "properties": {
-     "v": {
-      "enum": [
-       1
-      ]
-     },
-     "at": {
-      "type": "number"
-     },
-     "legend": {
-      "type": "object",
-      "additionalProperties": {
-       "type": "string"
-      }
-     },
-     "next_worker": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-       "action",
-       "lane",
-       "model",
-       "effort"
-      ],
-      "properties": {
-       "action": {
-        "type": "string"
-       },
-       "lane": {
         "type": [
-         "string",
-         "null"
-        ]
-       },
-       "model": {
-        "type": [
-         "string",
-         "null"
-        ]
-       },
-       "effort": {
-        "type": [
-         "string",
-         "null"
-        ]
-       },
-       "pass": {
-        "type": "string"
-       },
-       "fallback": {
-        "type": "boolean"
-       },
-       "why": {
-        "type": [
-         "string",
-         "null"
-        ]
-       },
-       "say": {
-        "type": [
-         "string",
-         "null"
-        ]
-       }
-      }
-     },
-     "lanes": {
-      "type": "array",
-      "items": {
-       "type": "object",
-       "additionalProperties": false,
-       "required": [
-        "id",
-        "label",
-        "family",
-        "kind",
-        "model",
-        "state",
-        "emoji",
-        "reason",
-        "detail",
-        "unlock",
-        "windows",
-        "low_tokens",
-        "warnings",
-        "meter",
-        "login",
-        "running"
-       ],
-       "properties": {
-        "id": {
-         "type": "string"
-        },
-        "label": {
-         "type": "string"
-        },
-        "family": {
-         "type": "string"
-        },
-        "kind": {
-         "type": "string"
-        },
-        "model": {
-         "type": [
-          "string",
+          "object",
           "null"
-         ]
-        },
-        "state": {
-         "type": "string",
-         "enum": [
-          "ready",
-          "resting",
-          "logged_out",
-          "spend",
-          "slow",
-          "off",
-          "unknown"
-         ]
-        },
-        "emoji": {
-         "type": "string"
-        },
-        "reason": {
-         "type": "string"
-        },
-        "detail": {
-         "type": [
-          "string",
-          "null"
-         ]
-        },
-        "unlock": {
-         "type": "object",
-         "additionalProperties": false,
-         "required": [
-          "locked",
-          "known",
-          "at",
-          "in_s",
-          "text",
-          "why"
-         ],
-         "properties": {
-          "locked": {
-           "type": "boolean"
+        ],
+        "additionalProperties": false,
+        "required": [
+          "in",
+          "cached",
+          "out"
+        ],
+        "properties": {
+          "in": {
+            "type": [
+              "integer",
+              "null"
+            ]
           },
-          "known": {
-           "type": "boolean"
+          "cached": {
+            "type": [
+              "integer",
+              "null"
+            ]
           },
-          "at": {
-           "type": [
-            "number",
-            "null"
-           ]
-          },
-          "in_s": {
-           "type": [
-            "integer",
-            "null"
-           ]
-          },
-          "text": {
-           "type": [
-            "string",
-            "null"
-           ]
-          },
-          "why": {
-           "type": [
-            "string",
-            "null"
-           ]
+          "out": {
+            "type": [
+              "integer",
+              "null"
+            ]
           }
-         }
-        },
-        "windows": {
-         "type": "array",
-         "items": {
+        }
+      },
+      "denied": {
+        "type": "array",
+        "items": {
           "type": "object",
           "additionalProperties": false,
           "required": [
-           "name",
-           "used_pct",
-           "resets_at",
-           "resets_in_s",
-           "source",
-           "age_s"
+            "kind",
+            "tool",
+            "path",
+            "input"
           ],
           "properties": {
-           "name": {
-            "type": "string"
-           },
-           "used_pct": {
-            "type": [
-             "number",
-             "null"
-            ]
-           },
-           "resets_at": {
-            "type": [
-             "number",
-             "null"
-            ]
-           },
-           "resets_in_s": {
-            "type": [
-             "integer",
-             "null"
-            ]
-           },
-           "source": {
-            "type": [
-             "string",
-             "null"
-            ]
-           },
-           "age_s": {
-            "type": [
-             "integer",
-             "null"
-            ]
-           }
+            "kind": {
+              "type": "string",
+              "enum": [
+                "policy",
+                "sandbox_limit",
+                "secret"
+              ]
+            },
+            "tool": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "input": {
+              "type": "object",
+              "additionalProperties": {}
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
           }
-         }
-        },
-        "low_tokens": {
-         "type": "array",
-         "items": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-           "window",
-           "used_pct",
-           "limit",
-           "over",
-           "limit_name"
-          ],
-          "properties": {
-           "window": {
-            "type": "string"
-           },
-           "used_pct": {
-            "type": "number"
-           },
-           "limit": {
-            "type": "number"
-           },
-           "over": {
-            "type": "string",
-            "enum": [
-             "ceiling",
-             "gate"
-            ]
-           },
-           "limit_name": {
-            "type": "string"
-           }
-          }
-         }
-        },
-        "warnings": {
-         "type": "array",
-         "items": {
-          "type": "string"
-         }
-        },
-        "meter": {
-         "type": "boolean"
-        },
-        "login": {
-         "type": "object",
-         "additionalProperties": false,
-         "required": [
-          "ok",
-          "why",
-          "checked_at"
-         ],
-         "properties": {
-          "ok": {
-           "type": [
-            "boolean",
-            "null"
-           ]
-          },
-          "why": {
-           "type": "string"
-          },
-          "checked_at": {
-           "type": [
-            "number",
-            "null"
-           ]
-          }
-         }
-        },
-        "running": {
-         "type": "integer"
         }
-       }
-      }
-     }
-    }
-   },
-   "running": {
-    "type": "array",
-    "items": {
-     "type": "object",
-     "additionalProperties": false,
-     "required": [
-      "run_id",
-      "lane",
-      "role",
-      "task",
-      "started",
-      "age_s",
-      "pid",
-      "worker_pid",
-      "suspect"
-     ],
-     "properties": {
+      },
+      "secs": {
+        "type": "number"
+      },
       "run_id": {
-       "type": "string"
+        "type": [
+          "string",
+          "null"
+        ]
       },
-      "lane": {
-       "type": "string"
-      },
-      "role": {
-       "type": [
-        "string",
-        "null"
-       ]
-      },
-      "task": {
-       "type": "string"
-      },
-      "started": {
-       "type": "number"
-      },
-      "age_s": {
-       "type": "integer"
-      },
-      "pid": {
-       "type": "integer"
-      },
-      "worker_pid": {
-       "type": [
-        "integer",
-        "null"
-       ]
-      },
-      "suspect": {
-       "type": "boolean"
-      }
-     }
-    }
-   },
-   "needs_input": {
-    "type": "array",
-    "items": {
-     "type": "object",
-     "additionalProperties": false,
-     "required": [
-      "what",
-      "why",
-      "how"
-     ],
-     "properties": {
-      "what": {
-       "type": "string"
-      },
-      "why": {
-       "type": "string"
-      },
-      "how": {
-       "type": "string"
-      }
-     }
-    }
-   },
-   "holds": {
-    "type": "array",
-    "items": {
-     "type": "object",
-     "additionalProperties": false,
-     "required": [
-      "id",
-      "lane",
-      "roles",
-      "set_by",
-      "set_at",
-      "until",
-      "reason",
-      "stale_at",
-      "ends_in_s",
-      "stale"
-     ],
-     "properties": {
-      "id": {
-       "type": "string"
-      },
-      "lane": {
-       "type": "string"
-      },
-      "roles": {
-       "type": "array",
-       "items": {
-        "type": "string"
-       }
-      },
-      "set_by": {
-       "type": "string"
-      },
-      "set_at": {
-       "type": "number"
-      },
-      "until": {
-       "type": "number"
-      },
-      "reason": {
-       "type": "string"
-      },
-      "stale_at": {
-       "type": [
-        "number",
-        "null"
-       ]
-      },
-      "ends_in_s": {
-       "type": "integer"
-      },
-      "stale": {
-       "type": "boolean"
-      }
-     }
-    }
-   },
-   "asks": {
-    "type": "array",
-    "items": {
-     "type": "object",
-     "additionalProperties": false,
-     "required": [
-      "kind",
-      "id",
-      "lane",
-      "raised_at",
-      "used_pct",
-      "say",
-      "answer"
-     ],
-     "properties": {
-      "kind": {
-       "type": "string"
-      },
-      "id": {
-       "type": "string"
-      },
-      "lane": {
-       "type": "string"
-      },
-      "raised_at": {
-       "type": [
-        "number",
-        "null"
-       ]
-      },
-      "used_pct": {
-       "type": "number"
+      "transcript": {
+        "type": [
+          "string",
+          "null"
+        ]
       },
       "say": {
-       "type": "string"
+        "type": "string"
       },
-      "answer": {
-       "type": "string"
-      }
-     }
-    }
-   },
-   "health": {
-    "type": "array",
-    "items": {
-     "type": "object",
-     "additionalProperties": false,
-     "required": [
-      "lane",
-      "model",
-      "state",
-      "until",
-      "source",
-      "kind",
-      "evidence",
-      "canary",
-      "rung",
-      "leases",
-      "last_failures",
-      "needs_login",
-      "usage"
-     ],
-     "properties": {
-      "lane": {
-       "type": "string"
-      },
-      "model": {
-       "type": "string"
-      },
-      "state": {
-       "type": "string"
-      },
-      "until": {
-       "type": [
-        "number",
-        "null"
-       ]
-      },
-      "source": {
-       "type": [
-        "string",
-        "null"
-       ]
-      },
-      "kind": {
-       "type": [
-        "string",
-        "null"
-       ]
-      },
-      "evidence": {
-       "type": "string"
-      },
-      "canary": {
-       "type": "boolean"
-      },
-      "rung": {
-       "type": "integer"
-      },
-      "leases": {
-       "type": "object",
-       "additionalProperties": false,
-       "required": [
-        "live",
-        "suspect"
-       ],
-       "properties": {
-        "live": {
-         "type": "integer"
-        },
-        "suspect": {
-         "type": "integer"
+      "git_violation": {
+        "type": "array",
+        "items": {
+          "type": "string"
         }
-       }
       },
-      "last_failures": {
-       "type": "array",
-       "items": {
+      "call_id": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "transcript_info": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "kind",
+          "from",
+          "to",
+          "bytes"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "claude",
+              "opencode_export"
+            ]
+          },
+          "from": {
+            "type": "integer"
+          },
+          "to": {
+            "type": "integer"
+          },
+          "bytes": {
+            "type": "integer"
+          }
+        }
+      },
+      "transcript_status": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "enum": [
+          "ok",
+          "ref_unresolvable",
+          "died_before_session_id",
+          "not_launched",
+          "unsupported",
+          null
+        ]
+      },
+      "stop": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "required": [
+          "reason",
+          "scope",
+          "permanence",
+          "retry",
+          "ref"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "bead",
+              "caller",
+              "machine",
+              "lane",
+              "model"
+            ]
+          },
+          "permanence": {
+            "type": "string",
+            "enum": [
+              "transient",
+              "needs_owner"
+            ]
+          },
+          "retry": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "at"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "predicted",
+                  "poll"
+                ]
+              },
+              "at": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "fix": {
+            "type": "string"
+          },
+          "resumable": {
+            "type": "boolean"
+          },
+          "partial": {
+            "type": "boolean"
+          }
+        }
+      },
+      "usage": {
         "type": "object",
         "additionalProperties": false,
         "required": [
-         "ts",
-         "outcome",
-         "say"
+          "tokens",
+          "cost",
+          "secs",
+          "turns",
+          "context_k",
+          "answer_bytes",
+          "ref",
+          "last_activity_at",
+          "warm_until",
+          "ttl_s",
+          "ttl_source",
+          "cost_usd",
+          "cost_source",
+          "accounting"
         ],
         "properties": {
-         "ts": {
-          "type": "number"
-         },
-         "outcome": {
-          "type": "string"
-         },
-         "say": {
-          "type": "string"
-         }
+          "tokens": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "in",
+                  "cached",
+                  "out",
+                  "in_fresh",
+                  "cache_read",
+                  "cache_write"
+                ],
+                "properties": {
+                  "in": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "cached": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "out": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "in_fresh": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "cache_read": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "cache_write": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "cache_write_by_ttl": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "in",
+                  "cached",
+                  "out"
+                ],
+                "properties": {
+                  "in": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "cached": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "out": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cost": {
+            "type": "number"
+          },
+          "secs": {
+            "type": "number"
+          },
+          "turns": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "context_k": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "answer_bytes": {
+            "type": "integer"
+          },
+          "ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_activity_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "warm_until": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ttl_s": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ttl_source": {
+            "type": "string",
+            "enum": [
+              "vendor_default",
+              "observed",
+              "unknown"
+            ]
+          },
+          "cost_usd": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "cost_source": {
+            "type": "string",
+            "enum": [
+              "harness",
+              "unknown",
+              "free"
+            ]
+          },
+          "accounting": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "estimated",
+              "unknown"
+            ]
+          }
         }
-       }
       },
-      "needs_login": {
-       "type": "boolean"
-      },
-      "usage": {
-       "type": "object",
-       "additionalProperties": false,
-       "required": [
-        "known",
-        "text"
-       ],
-       "properties": {
-        "known": {
-         "type": "boolean"
-        },
-        "text": {
-         "type": [
-          "string",
-          "null"
-         ]
-        }
-       }
-      }
-     }
-    }
-   },
-   "roles": {
-    "type": "object",
-    "additionalProperties": {
-     "type": "object",
-     "additionalProperties": false,
-     "required": [
-      "usable",
-      "lane",
-      "model",
-      "why",
-      "until",
-      "hosts",
-      "net"
-     ],
-     "properties": {
-      "usable": {
-       "type": [
-        "boolean",
-        "null"
-       ]
-      },
-      "lane": {
-       "type": [
-        "string",
-        "null"
-       ]
-      },
-      "model": {
-       "type": [
-        "string",
-        "null"
-       ]
-      },
-      "why": {
-       "type": [
-        "string",
-        "null"
-       ]
-      },
-      "until": {
-       "type": [
-        "number",
-        "null"
-       ]
-      },
-      "hosts": {
-       "type": "array",
-       "items": {
-        "type": "string"
-       }
-      },
-      "net": {
-       "type": "object",
-       "additionalProperties": false,
-       "required": [
-        "up",
-        "since",
-        "age_s"
-       ],
-       "properties": {
-        "up": {
-         "type": [
-          "boolean",
-          "null"
-         ]
-        },
-        "since": {
-         "type": [
-          "number",
-          "null"
-         ]
-        },
-        "age_s": {
-         "type": [
+      "rung": {
+        "type": [
           "integer",
           "null"
-         ]
-        }
-       }
+        ]
       },
-      "due": {
-       "type": "boolean",
-       "description": "`status --cheap` only: a stopped role's `until` has passed"
+      "fallback": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "fallback_reason": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "first_lane": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "warnings": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "notice": {
+        "type": "string"
+      },
+      "warning": {
+        "type": "string"
+      },
+      "needs_input": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "ask_user": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "question",
+          "options",
+          "then"
+        ],
+        "properties": {
+          "question": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "then": {
+            "type": "string"
+          }
+        }
+      },
+      "ask_kind": {
+        "type": "string",
+        "enum": [
+          "decision"
+        ],
+        "description": "what the caller is asked, when ask_user is set"
+      },
+      "agent_model": {
+        "type": "string",
+        "description": "set only on the agent-tool handoff (stop is null): the model the orchestrator's Agent tool should run"
+      },
+      "brief_prefix": {
+        "type": "string"
+      },
+      "cwd": {
+        "type": "string"
+      },
+      "context": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "instructions",
+          "env_keys"
+        ],
+        "properties": {
+          "instructions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "env_keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "exit_code": {
+        "type": [
+          "integer",
+          "null"
+        ],
+        "description": "the worker's exit status (negative = killed by that signal)"
+      },
+      "first_error": {
+        "type": "string",
+        "description": "the first error the harness or the process reported, cut to 240 characters"
+      },
+      "worker": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "end": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "error",
+              "timeout",
+              "worker_survived"
+            ]
+          },
+          "stopped": {
+            "type": "boolean"
+          },
+          "term_sent": {
+            "type": "boolean"
+          },
+          "kill_sent": {
+            "type": "boolean"
+          },
+          "waited_s": {
+            "type": "number"
+          },
+          "survivors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "pid"
+              ],
+              "properties": {
+                "pid": {
+                  "type": "integer"
+                },
+                "start": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "pid": {
+            "type": "integer"
+          },
+          "pgid": {
+            "type": "integer"
+          },
+          "start": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "description": "how the worker's life ended; absent when no worker was launched"
+      },
+      "attempts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "lane",
+            "model",
+            "outcome",
+            "secs",
+            "tokens"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "first",
+                "canary",
+                "network_rerun",
+                "lane_poll",
+                "lane_wait",
+                "new_thread",
+                "worker_retry",
+                "schema_reask",
+                "reroute"
+              ]
+            },
+            "lane": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "outcome": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "secs": {
+              "type": "number"
+            },
+            "tokens": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": false,
+              "required": [
+                "in",
+                "cached",
+                "out"
+              ],
+              "properties": {
+                "in": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "cached": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "out": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "every launch the call made, in order; absent when it made a single one (capability attempts)"
       }
-     }
     }
-   },
-   "network": {
+  },
+  "status_schema": {
     "type": "object",
     "additionalProperties": false,
     "required": [
-     "up",
-     "since",
-     "age_s",
-     "why"
+      "v",
+      "ts",
+      "lanes",
+      "cockpit",
+      "running",
+      "needs_input",
+      "holds",
+      "asks",
+      "health",
+      "roles",
+      "network"
     ],
     "properties": {
-     "up": {
-      "type": [
-       "boolean",
-       "null"
-      ]
-     },
-     "since": {
-      "type": [
-       "number",
-       "null"
-      ]
-     },
-     "age_s": {
-      "type": [
-       "integer",
-       "null"
-      ]
-     },
-     "why": {
-      "type": [
-       "string",
-       "null"
-      ]
-     }
-    }
-   },
-   "cheap": {
-    "type": "boolean"
-   },
-   "age_s": {
-    "type": [
-     "integer",
-     "null"
-    ],
-    "description": "`status --cheap` only: seconds since the snapshot"
-   },
-   "auth": {
-    "type": "object",
-    "additionalProperties": {
-     "type": "object",
-     "additionalProperties": false,
-     "required": [
-      "ok",
-      "why",
-      "age_s"
-     ],
-     "properties": {
-      "ok": {
-       "type": "boolean"
+      "v": {
+        "type": "integer",
+        "enum": [
+          1
+        ]
       },
-      "why": {
-       "type": "string"
+      "ts": {
+        "type": "number"
+      },
+      "lanes": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "family",
+            "kind",
+            "out",
+            "out_until",
+            "reason",
+            "five",
+            "week",
+            "pace",
+            "burn",
+            "notes"
+          ],
+          "properties": {
+            "family": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "out": {
+              "type": "boolean"
+            },
+            "out_until": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "why the lane is out (limit | logged_out | busy | error | credit | hung), else null"
+            },
+            "five": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "percent of the 5-hour window used, null = unknown"
+            },
+            "week": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "percent of the weekly window used, null = unknown"
+            },
+            "pace": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "burn": {
+              "type": "boolean"
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "cockpit": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "v",
+          "at",
+          "legend",
+          "next_worker",
+          "lanes"
+        ],
+        "properties": {
+          "v": {
+            "enum": [
+              1
+            ]
+          },
+          "at": {
+            "type": "number"
+          },
+          "legend": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "next_worker": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "lane",
+              "model",
+              "effort"
+            ],
+            "properties": {
+              "action": {
+                "type": "string"
+              },
+              "lane": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "effort": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "pass": {
+                "type": "string"
+              },
+              "fallback": {
+                "type": "boolean"
+              },
+              "why": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "say": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "lanes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "label",
+                "family",
+                "kind",
+                "model",
+                "state",
+                "emoji",
+                "reason",
+                "detail",
+                "unlock",
+                "windows",
+                "low_tokens",
+                "warnings",
+                "meter",
+                "login",
+                "running"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "family": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "model": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "ready",
+                    "resting",
+                    "logged_out",
+                    "spend",
+                    "slow",
+                    "off",
+                    "unknown"
+                  ]
+                },
+                "emoji": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "detail": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "unlock": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "locked",
+                    "known",
+                    "at",
+                    "in_s",
+                    "text",
+                    "why"
+                  ],
+                  "properties": {
+                    "locked": {
+                      "type": "boolean"
+                    },
+                    "known": {
+                      "type": "boolean"
+                    },
+                    "at": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "in_s": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "text": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "why": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                },
+                "windows": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "name",
+                      "used_pct",
+                      "resets_at",
+                      "resets_in_s",
+                      "source",
+                      "age_s"
+                    ],
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "used_pct": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "resets_at": {
+                        "type": [
+                          "number",
+                          "null"
+                        ]
+                      },
+                      "resets_in_s": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "source": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "age_s": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
+                },
+                "low_tokens": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "window",
+                      "used_pct",
+                      "limit",
+                      "over",
+                      "limit_name"
+                    ],
+                    "properties": {
+                      "window": {
+                        "type": "string"
+                      },
+                      "used_pct": {
+                        "type": "number"
+                      },
+                      "limit": {
+                        "type": "number"
+                      },
+                      "over": {
+                        "type": "string",
+                        "enum": [
+                          "ceiling",
+                          "gate"
+                        ]
+                      },
+                      "limit_name": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "warnings": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "meter": {
+                  "type": "boolean"
+                },
+                "login": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "ok",
+                    "why",
+                    "checked_at"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "why": {
+                      "type": "string"
+                    },
+                    "checked_at": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    }
+                  }
+                },
+                "running": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "running": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "run_id",
+            "lane",
+            "role",
+            "task",
+            "started",
+            "age_s",
+            "pid",
+            "worker_pid",
+            "suspect"
+          ],
+          "properties": {
+            "run_id": {
+              "type": "string"
+            },
+            "lane": {
+              "type": "string"
+            },
+            "role": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "task": {
+              "type": "string"
+            },
+            "started": {
+              "type": "number"
+            },
+            "age_s": {
+              "type": "integer"
+            },
+            "pid": {
+              "type": "integer"
+            },
+            "worker_pid": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "suspect": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "needs_input": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "what",
+            "why",
+            "how"
+          ],
+          "properties": {
+            "what": {
+              "type": "string"
+            },
+            "why": {
+              "type": "string"
+            },
+            "how": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "holds": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "lane",
+            "roles",
+            "set_by",
+            "set_at",
+            "until",
+            "reason",
+            "stale_at",
+            "ends_in_s",
+            "stale"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "lane": {
+              "type": "string"
+            },
+            "roles": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "set_by": {
+              "type": "string"
+            },
+            "set_at": {
+              "type": "number"
+            },
+            "until": {
+              "type": "number"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "stale_at": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "ends_in_s": {
+              "type": "integer"
+            },
+            "stale": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "asks": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "id",
+            "lane",
+            "raised_at",
+            "used_pct",
+            "say",
+            "answer"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "lane": {
+              "type": "string"
+            },
+            "raised_at": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "used_pct": {
+              "type": "number"
+            },
+            "say": {
+              "type": "string"
+            },
+            "answer": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "health": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "lane",
+            "model",
+            "state",
+            "until",
+            "source",
+            "kind",
+            "evidence",
+            "canary",
+            "rung",
+            "leases",
+            "last_failures",
+            "needs_login",
+            "usage"
+          ],
+          "properties": {
+            "lane": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string"
+            },
+            "until": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "source": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "evidence": {
+              "type": "string"
+            },
+            "canary": {
+              "type": "boolean"
+            },
+            "rung": {
+              "type": "integer"
+            },
+            "leases": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "live",
+                "suspect"
+              ],
+              "properties": {
+                "live": {
+                  "type": "integer"
+                },
+                "suspect": {
+                  "type": "integer"
+                }
+              }
+            },
+            "last_failures": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "ts",
+                  "outcome",
+                  "say"
+                ],
+                "properties": {
+                  "ts": {
+                    "type": "number"
+                  },
+                  "outcome": {
+                    "type": "string"
+                  },
+                  "say": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "needs_login": {
+              "type": "boolean"
+            },
+            "usage": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "known",
+                "text"
+              ],
+              "properties": {
+                "known": {
+                  "type": "boolean"
+                },
+                "text": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "roles": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "usable",
+            "lane",
+            "model",
+            "why",
+            "until",
+            "hosts",
+            "net"
+          ],
+          "properties": {
+            "usable": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "lane": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "why": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "until": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "hosts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "net": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "up",
+                "since",
+                "age_s"
+              ],
+              "properties": {
+                "up": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "since": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "age_s": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "due": {
+              "type": "boolean",
+              "description": "`status --cheap` only: a stopped role's `until` has passed"
+            }
+          }
+        }
+      },
+      "network": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "up",
+          "since",
+          "age_s",
+          "why"
+        ],
+        "properties": {
+          "up": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "since": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "age_s": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "why": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "cheap": {
+        "type": "boolean"
       },
       "age_s": {
-       "type": "integer"
+        "type": [
+          "integer",
+          "null"
+        ],
+        "description": "`status --cheap` only: seconds since the snapshot"
+      },
+      "auth": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ok",
+            "why",
+            "age_s"
+          ],
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            },
+            "why": {
+              "type": "string"
+            },
+            "age_s": {
+              "type": "integer"
+            }
+          }
+        },
+        "description": "`status --cheap` only: the cached logins by lane"
       }
-     }
-    },
-    "description": "`status --cheap` only: the cached logins by lane"
-   }
-  }
- },
- "capabilities": [
-  "writer_exec_allow",
-  "instructions_ref",
-  "attempts",
-  "thread"
- ],
- "request_schema": {
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-   "role",
-   "brief_file",
-   "cwd"
+    }
+  },
+  "capabilities": [
+    "writer_exec_allow",
+    "instructions_ref",
+    "attempts",
+    "thread"
   ],
-  "properties": {
-   "role": {
-    "type": "string"
-   },
-   "brief_file": {
-    "type": "string"
-   },
-   "cwd": {
-    "type": "string"
-   },
-   "schema_file": {
-    "type": [
-     "string",
-     "null"
-    ]
-   },
-   "resume": {
-    "type": [
-     "string",
-     "null"
-    ]
-   },
-   "thread": {
-    "type": "string"
-   },
-   "delta_file": {
-    "type": [
-     "string",
-     "null"
-    ]
-   },
-   "authored_by": {
-    "type": [
-     "string",
-     "null"
-    ]
-   },
-   "timeout_s": {
-    "type": [
-     "integer",
-     "null"
-    ]
-   },
-   "idle_s": {
-    "type": [
-     "integer",
-     "null"
-    ]
-   },
-   "unattended": {
-    "type": "boolean"
-   },
-   "parent": {
-    "type": "string"
-   },
-   "task": {
-    "type": "string"
-   },
-   "title": {
-    "type": "string"
-   },
-   "call_id": {
-    "type": [
-     "string",
-     "null"
-    ]
-   },
-   "live_file": {
-    "type": [
-     "string",
-     "null"
-    ]
-   },
-   "engine_only": {
-    "type": "array",
-    "items": {
-     "type": "string"
+  "request_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "role",
+      "brief_file",
+      "cwd"
+    ],
+    "properties": {
+      "role": {
+        "type": "string"
+      },
+      "brief_file": {
+        "type": "string"
+      },
+      "cwd": {
+        "type": "string"
+      },
+      "schema_file": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "resume": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "thread": {
+        "type": "string"
+      },
+      "delta_file": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "authored_by": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "timeout_s": {
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "idle_s": {
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "unattended": {
+        "type": "boolean"
+      },
+      "parent": {
+        "type": "string"
+      },
+      "task": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "call_id": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "live_file": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "engine_only": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "engine_only_advisory": {
+        "type": "boolean"
+      },
+      "writer_exec_allow": {
+        "type": "array",
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "instructions_ref": {
+        "type": "string",
+        "description": "a commit sha: the instruction files are read from it, not the work tree (capability instructions_ref)"
+      },
+      "boundary": {
+        "type": "boolean"
+      }
     }
-   },
-   "engine_only_advisory": {
-    "type": "boolean"
-   },
-   "writer_exec_allow": {
-    "type": "array",
-    "items": {
-     "type": "array",
-     "items": {
-      "type": "string"
-     }
-    }
-   },
-   "instructions_ref": {
-    "type": "string",
-    "description": "a commit sha: the instruction files are read from it, not the work tree (capability instructions_ref)"
-   }
   }
- }
 }

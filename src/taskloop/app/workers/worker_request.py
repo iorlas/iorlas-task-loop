@@ -3,9 +3,10 @@
 import json
 from typing import Final, Protocol
 
-from tlkernel import childenv
+from tlkernel import askspecs, childenv
 from tlkernel import lanecaps as caps
 from tlkernel import log as rec
+from tlkernel.askspec import AskSpec
 from tlkernel.beadsport import Beads
 from tlkernel.check_files import repo_key
 from tlkernel.config import EngineConfig
@@ -22,8 +23,6 @@ from taskloop.app.asks import trustroots
 from taskloop.app.checks.runner import Checker
 from taskloop.app.workers import writer_pin
 from taskloop.app.workers.call import Call
-from taskloop.domain.asks import specs as askspecs
-from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks import planref
 from taskloop.domain.lanes import pin
 from taskloop.stores.runlog import RunLog
@@ -74,6 +73,7 @@ def request(e: RequestHost, c: Call, live: str, timeout_s: int, idle_s: int) -> 
         task=e.bead,
         title=f"{e.bead} · {c.node}: {c.title}",
         thread=c.thread,
+        boundary=c.boundary,
         authored_by=c.writer or "",
         timeout_s=timeout_s,
         idle_s=idle_s,

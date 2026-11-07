@@ -1,9 +1,9 @@
 """What a raise site knows about an ask, before it has an id, a time or a file: the class, the decision, what was tried, the options."""
 from dataclasses import dataclass, field
 
-from taskloop.domain.asks.lint import KIND_OF
 from tlkernel.ask import AskDetail, AskOption
 from tlkernel.askenums import AskClass, AskKind
+from tlkernel.asklint import KIND_OF
 from tlkernel.dash import OwnerCause
 
 

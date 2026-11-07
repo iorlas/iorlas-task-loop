@@ -7,6 +7,8 @@ import time
 from dataclasses import dataclass, replace
 from typing import Protocol, assert_never
 
+from tlkernel import askspecs
+from tlkernel import runoutcome as oc
 from tlkernel.checkpoint import Checkpoint, Notes
 from tlkernel.enums import Outcome
 from tlkernel.kinds import ASKS, PAUSES, Kind
@@ -19,8 +21,6 @@ from taskloop.app.pipeline.closing_host import CloseHost
 from taskloop.app.pipeline.outcomes import DONE
 from taskloop.app.pipeline.ports import AskRules, ParkBook
 from taskloop.domain import effects
-from taskloop.domain import outcome as oc
-from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.interpret import CheckpointLedger, interpret
 from taskloop.domain.lanes import pauses
 

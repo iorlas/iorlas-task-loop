@@ -5,6 +5,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel import askspecs
 from tlkernel import log as rec
 from tlkernel.checkmatchers import slot_wait_secs
 from tlkernel.config import EngineConfig
@@ -20,7 +21,6 @@ from taskloop.app.pipeline.adapter_ports import Deadline
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.steps import Open
 from taskloop.app.pipeline.store_ports import WaitStores
-from taskloop.domain.asks import specs as askspecs
 
 
 class WaitsBudget(Protocol):

@@ -2,6 +2,7 @@
 allows one more run."""
 
 
+from tlkernel import askspecs, asktext
 from tlkernel.askenums import AskClass
 from tlkernel.bdsafe import attempt, peek
 from tlkernel.bead import Bead
@@ -14,8 +15,6 @@ from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.host import PlanHand, PlanPorts
 from taskloop.app.plan.prompts import REPLAN_CAP
 from taskloop.app.plan.state import PlanState
-from taskloop.domain.asks import specs as askspecs
-from taskloop.domain.asks import text as asktext
 
 
 class ReplanCap:

@@ -14,7 +14,8 @@ from support.memstores import fake_stores
 from support.tiers import domain
 
 from taskloop.app.asks import intake, raiser
-from taskloop.domain.asks import similar, specs
+from taskloop.domain.asks import similar
+from tlkernel import askspecs as specs
 from tlkernel.ask import SimilarRef
 from tlkernel.bead import Bead
 from tlkernel.dash import Stick

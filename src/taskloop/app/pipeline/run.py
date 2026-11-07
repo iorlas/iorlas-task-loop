@@ -1,7 +1,8 @@
 """The run body over local stage capabilities and shared run state."""
 from collections.abc import Callable
 
-from tlkernel import fence
+from tlkernel import askspecs, fence
+from tlkernel import runoutcome as oc
 from tlkernel.acceptancetext import AcceptanceText
 from tlkernel.askenums import AskClass
 from tlkernel.bead import Bead
@@ -17,8 +18,6 @@ from taskloop.app.pipeline.crash import CrashHost, parked_crash
 from taskloop.app.pipeline.lifecycle import Ended, LeaseLike
 from taskloop.app.pipeline.ports import HeadHistory
 from taskloop.app.pipeline.run_roles import Delegating, GitMoves, Leasing, RunRecords, RunValues, Stages
-from taskloop.domain import outcome as oc
-from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.lanes import pin
 
 

@@ -5,14 +5,14 @@ from dataclasses import dataclass
 from tlkernel.adrs import AdrStore
 from tlkernel.ask import Ask
 from tlkernel.askenums import AskStatus
+from tlkernel.asklint import lint
+from tlkernel.askspec import AskSpec
 from tlkernel.askstore import HAD_PICK, AskStore
 from tlkernel.beadsport import BdFailure, BeadPatch, Beads
 from tlkernel.enums import WhyCode
 from tlkernel.ids import BeadId, parse_bead_id
 
 from taskloop.domain.asks import similar
-from taskloop.domain.asks.lint import lint
-from taskloop.domain.asks.spec import AskSpec
 
 PARK_AFTER_S = 3 * 86400
 WHY_CAP = 4000
