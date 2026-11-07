@@ -2,7 +2,7 @@
 where its time went."""
 
 from support.fakegit import FakeGit
-from support.narrow_hosts import table_kit
+from support.narrow_land import table_kit
 
 from taskloop.app.land import push
 from taskloop.app.land.gate import mint

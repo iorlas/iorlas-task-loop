@@ -6,7 +6,8 @@ from collections.abc import Sequence
 from typing import Any
 
 from support.fakegit import ScriptedGit
-from support.narrow_hosts import Fetches, LandKit, Locks
+from support.narrow_hosts import Fetches, Locks
+from support.narrow_land import LandKit
 
 from tltestkit.case import Case
 
