@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+import pytest
 from support.case import Case
 from support.parkmock import through_change
 
@@ -106,8 +107,8 @@ class PauseCompatibility(Case):
         for kind in (*FAULTS, *ASKS, Kind.WAIT_ASK, Kind.OWNER_PARK):
             with self.subTest(kind=kind), mock.patch.object(parks, "ParkStore") as store:
                 through_change(store)
-                # Even a transient delegate reason must not override the outcome's existing handling.
-                assert parks.paused(self.cfg, self.bead, kind, "r1", 100, reason="worker_failed") is None
+                with pytest.raises(ValueError, match="no park wake for kind"):
+                    parks.paused(self.cfg, self.bead, kind, "r1", 100, reason="worker_failed")
                 store.assert_not_called()
 
     def test_question_close_keeps_its_original_record_fields(self):
