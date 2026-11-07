@@ -6,7 +6,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-INTEGRATION = {"gate": "tests/checks"}
+INTEGRATION = {"gate": "tests/checks", "release": "tests/release"}
 
 
 def normalized(name: str) -> str:

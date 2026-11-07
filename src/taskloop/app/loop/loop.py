@@ -20,6 +20,7 @@ from tlkernel.loop import LoopState, LoopWait, QueueRow
 from tlkernel.parks import ParkStore
 from tlkernel.run import LoopLogLine
 from tlkernel.slots import SlotFail
+from tlrelease.versions import Installs
 
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop import waits
@@ -31,7 +32,6 @@ from taskloop.app.loop.refuse import Refuser
 from taskloop.app.loop.run import BeadRun, Where
 from taskloop.app.loop.settle import Settle
 from taskloop.app.loop.take import Taker
-from taskloop.app.loop.versions import Installs
 
 SKIPPED_KEPT = 100
 

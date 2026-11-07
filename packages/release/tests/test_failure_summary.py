@@ -1,19 +1,26 @@
 """Release failure records and the final status line retain multiline refusal reasons."""
 import io
-from contextlib import nullcontext, redirect_stderr
+from contextlib import redirect_stderr
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
-from support.release_world import beadtools, gitrepo, ident, landlock, release_host
-
 from tlkernel.env import Env
 from tlkernel.slots import SlotGitError
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
+
 from tlrelease import flow, publish
 from tlrelease.shell import Abort
-from tltestkit.case import Case
+from tlrelease.testing import FakeReleaseHost
 
 
 class FailureSummary(Case):
+    def setup_method(self):
+        tmp = TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+
     def test_failed_release_keeps_the_reason_in_the_record_comment_and_final_line(self):
         refusal = "! [remote rejected] main -> main (pre-receive hook declined)"
         message = "the push was refused and origin/main did not move:\n" + refusal
@@ -31,18 +38,17 @@ class FailureSummary(Case):
         port, spawner, store = mock.Mock(), mock.Mock(), mock.Mock()
         port.remote_url.return_value = "origin"
         output = io.StringIO()
-        with (mock.patch.object(gitrepo, "repo_root", return_value="repo"),
-              mock.patch.object(ident, "identity"),
-              mock.patch.object(ident, "config_dir", return_value=Path("config")),
-              mock.patch.object(flow, "release_lock_path", return_value=Path("release.lock")),
-              mock.patch.object(landlock, "os_lock", return_value=nullcontext()),
+        rig = FakeReleaseHost(self.root)
+        host = replace(rig.host, bd_store=lambda actor, repo: store)
+        with (mock.patch.object(flow, "release_lock_path", return_value=Path("release.lock")),
               mock.patch.object(flow.clone, "ready", return_value=Path("clone")),
               mock.patch.object(flow.selfupdate, "newer_release", return_value=None),
               mock.patch.object(flow, "release", side_effect=error),
               mock.patch.object(flow, "ReleaseResultStore") as results,
-              mock.patch.object(beadtools, "bd_store", return_value=store), redirect_stderr(output)):
-            code = flow.main(["fix", "--bead", "tl-v11i"], Path("tool"), spawner, port, Env(), mock.Mock(),
-                             clock=lambda: 1.0, host=release_host())
+              redirect_stderr(output)):
+            code = flow.main(["fix", "--bead", "tl-v11i"], Path("tool"), spawner, port,
+                             Env({"XDG_CONFIG_HOME": str(self.root / "cfg")}), mock.Mock(),
+                             clock=lambda: 1.0, host=host)
         assert code == 1
         result = results.return_value.write.call_args.args[0]
         assert result.summary == expected

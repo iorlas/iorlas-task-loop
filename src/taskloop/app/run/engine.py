@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, override
 
 from tlgate.runner import Checker
-from tlkernel import fence, rundocs
+from tlkernel import fence
 from tlkernel import runoutcome as oc
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env
@@ -73,18 +73,11 @@ class Engine(RunHost):
         self.git = git  # the port every git call of the run goes through, pinned to the slot, built at the edge with the same env
         super().__init__(bead, wt, cfg, dry_run, verbose, store, route, fresh, claim, who)
         self.clock = clock or SystemClock()
-        self.reexec = reexec.take_reexec(env)  # this run-task came from an exec into a newer install, or a fallback
-        if self.reexec and self.reexec.bead != bead:
-            self.reexec = None
-        # a network pause continues its work and budget under a new run id; the old answer remains terminal
-        pause = None if self.reexec else reexec.take_net_pause(self.home, bead)
         self.stores = stores or real_stores(self.home)
-        # a run that died inside its close: its id goes on (the keys of the effects it applied are under it)
-        ck = None if dry_run or self.reexec or pause else self.checkpoints.read()
-        self.dead = ck if ended.unfinished(ck) else None
-        # exec and an unfinished close retain their run id; a completed network pause retains only its counters
-        dead_run = self.dead.ended.outcome.run if self.dead and self.dead.ended else None
-        taken = (self.reexec.run if self.reexec else None) or (live_run(self.home, pause.run) if pause else None) or dead_run
+        resumed = reexec.resume(env, self.home, bead, dry_run, self.checkpoints.read, ended.unfinished)
+        self.reexec, pause, self.dead = resumed.reexec, resumed.pause, resumed.dead
+        taken = (self.reexec.run if self.reexec else None) or (live_run(self.home, pause.run) if pause else None)
+        taken = taken or (self.dead.ended.outcome.run if self.dead and self.dead.ended else None)
         repo = repo_of(self.git, wt)
         layout = RunLayout.open(bead, wt, taken, self.home, repo, self.clock.now(),
                                 loop=loop_of(self.env, self.git, wt), loop_id=loop_id_of(self.env),
@@ -105,12 +98,7 @@ class Engine(RunHost):
         self.log, self.steps, self.budget, self.calls, self.checklog = c.log, c.steps, c.budget, c.calls, c.checklog
         self.checker = Checker(self, lambda secs: self.halt_point(wait=secs))
         self.delegation.route(quiet=True)
-        if self.reexec:
-            self.reload.restore_run(rundocs.reexec(self.home, self.run_id))
-        elif pause:
-            self.reload.restore_run(rundocs.pause(self.home, pause.run))
-            self.reload.carry_done_memo(self.home.run_dir(pause.run))
-            self.log.note(f"back from the network pause of {pause.run}: continuing as run {stem}")
+        resumed.restore(self.home, self.run_id, self.reload.restore_run, self.reload.carry_done_memo, self.log.note)
         self.facts, self.ports = open_facts(self, repo)  # the stages' read path (docs/design/facts.md): the engine's own handles, frozen
 
     @property

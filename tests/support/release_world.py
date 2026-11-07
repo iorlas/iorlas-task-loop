@@ -21,29 +21,16 @@ from support import homes
 
 # isort: split
 from support.fakes import FakeBeadStore
-from taskloop.adapters import beadtools, gitrepo, ident, landlock, suiteout
+from taskloop.adapters import beadtools
 from taskloop.adapters.git import RealGit
+from taskloop.app.launch.release_host import release_host
 from taskloop.app.wire import closeguard
-from taskloop.stores.real import real_stores
-from tlgate import authorization
 from tlkernel.env import snapshot
-from tlkernel.paths import ConfigDir
 from tlkernel.procport import Ran, Spawner
 from tlrelease import flow, gate, shell
-from tlrelease.host import ReleaseHost
+from tlrelease.gate import GateHost
 from tlrelease.shell import say
 from tltestkit.checked import run_checked
-
-
-def release_host() -> ReleaseHost:
-    return ReleaseHost(
-        config_dir=ident.config_dir, claude_dir=ident.claude_dir, identity=ident.identity, plugin_root=ident.PLUGIN_ROOT,
-        land_lock_path=landlock.land_lock_path, os_lock=landlock.os_lock, bd_store=beadtools.bd_store, repo_root=gitrepo.repo_root,
-        suite_report=suiteout.failure_report, failing_tests=suiteout.failing_tests,
-        memo_for=lambda git, wt, cfg, tree, base, env: authorization.memo_for(
-            real_stores(ConfigDir(ident.config_dir(env))), git, wt, cfg, tree, base, env),
-    )
-
 
 PLUGIN = ".claude-plugin/plugin.json"
 MARKET = ".claude-plugin/marketplace.json"
@@ -145,7 +132,7 @@ class World:
         """What the release is handed at its edge: the world's processes (git real, claude and the gate faked)."""
         return cast(Spawner, SimpleNamespace(run=self.spawn))
 
-    def suite(self, repo: Path, sh: shell.Shell, host: ReleaseHost) -> None:
+    def suite(self, repo: Path, sh: shell.Shell, host: GateHost) -> None:
         gate.gate(repo, sh, host=host)
         say("running the tests")
         tree = {p: (repo / p).read_bytes() for p in git("ls-files", cwd=repo).splitlines()}
@@ -154,10 +141,10 @@ class World:
             self.on_suite(repo)
         if "tests/RED" in tree:
             out = tree["tests/RED"].decode()
-            raise gate.red(out, "`just test`", sh, host=host)
+            raise gate.red(out, "`just test`", host.config_dir(sh.env))
         say("suite green")
 
-    def verify(self, repo: Path, sh: shell.Shell, *, host: ReleaseHost) -> bool:
+    def verify(self, repo: Path, sh: shell.Shell, *, host: GateHost) -> bool:
         return REAL_VERIFY(repo, sh, self.suite, host=host)
 
     def release(self, *args: str) -> Result:
