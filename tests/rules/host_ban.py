@@ -28,7 +28,8 @@ def host_problems(source: str, protocols: frozenset[str] = frozenset()) -> list[
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name == "__init__":
             for a in [*node.args.args, *node.args.kwonlyargs]:
-                if a.arg in HOST_NAMES and not (a.annotation is not None and ast.unparse(a.annotation).split(".")[-1] in known):
+                annotation = a.annotation.value if isinstance(a.annotation, ast.Subscript) else a.annotation
+                if a.arg in HOST_NAMES and not (annotation is not None and ast.unparse(annotation).split(".")[-1] in known):
                     found.append(f"line {a.lineno}: parameter {a.arg!r} is not a Protocol of the stage")
         if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store) and node.attr == "e" and ast.unparse(node.value) == "self":
             found.append(f"line {node.lineno}: self.e = ...")
