@@ -21,7 +21,8 @@ from taskloop.adapters import (
     procs,
 )
 from taskloop.app.checks.cache import InputKeys
-from taskloop.app.wire import doctor
+from taskloop.app.doctor import setup_checks
+from taskloop.app.wire.slots import cfg_source
 from taskloop.domain.checks import durations, inputs, lint, planref
 from taskloop.domain.checks.names import norm
 from taskloop.domain.checks.order import CheckOrder
@@ -216,7 +217,7 @@ class InputCache(SpeedTest):
         sh("git", "add", ".task-loop.json", cwd=self.wt)
         sh("git", "commit", "-qm", "doctor config", cwd=self.wt)
         sh("git", "update-ref", "refs/remotes/origin/main", "HEAD", cwd=self.wt)
-        warns = doctor.git_warnings(str(self.wt), None, port_git())
+        warns = setup_checks.git_warnings(str(self.wt), cfg_source(str(self.wt), port_git()), port_git())
         assert len([w for w in warns if "matches no tracked file" in w]) == 1
         assert "client/{A,B}/**" in " ".join(warns)
         assert [w.split(":")[0] for w in warns if "declares no inputs" in w] == ["check w"]  # the one without inputs
@@ -229,7 +230,7 @@ class InputCache(SpeedTest):
         sh("git", "add", "-A", cwd=self.wt)
         sh("git", "commit", "-qm", "sets", cwd=self.wt)
         sh("git", "update-ref", "refs/remotes/origin/main", "HEAD", cwd=self.wt)
-        warns = doctor.git_warnings(str(self.wt), None, port_git())
+        warns = setup_checks.git_warnings(str(self.wt), cfg_source(str(self.wt), port_git()), port_git())
         [idle] = [w for w in warns if "input_sets" in w]
         assert idle.startswith("engine.input_sets.idle is named by no check"), idle
         assert not [w for w in warns if "matches no tracked file" in w]  # @cs was read as *.cs
