@@ -1,17 +1,32 @@
 """`tl setup --plan`: what this machine, host and repo still need before task-loop can work. Read-only: it looks, and returns the checks,
 the fixes that are safe to make by themselves and the questions only the owner can answer. Nothing is created, written or linked here."""
-import contextlib
-import io
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Protocol
 
+from tlkernel.delegateport import Route
 from tlkernel.env import Env
 from tlkernel.paths import ConfigDir, default_root
 
 from taskloop.app.doctor import install, setup_checks
-from taskloop.app.slots import config as slots_config
-from taskloop.stores.delegate import real_route
+
+
+class SlotFolderFacts(Protocol):
+    @property
+    def count(self) -> int: ...
+
+    @property
+    def root(self) -> Path: ...
+
+    @property
+    def missing(self) -> tuple[str, ...]: ...
+
+
+class ProfileFacts(Protocol):
+    def profile_problem(self, profile: Path) -> str: ...
+
+    def slot_folders(self, repo: Path) -> SlotFolderFacts | None: ...
 
 
 @dataclass(frozen=True)
@@ -43,7 +58,7 @@ class Plan:
     questions: list[Question] = field(default_factory=list)
 
 
-def machine(plugin_root: Path, env: Env) -> Plan:
+def machine(plugin_root: Path, env: Env, route: Route) -> Plan:
     """The per-user part: the config folder, the shim, the `tl` on PATH and the git hooks. Every fix here is idempotent and safe."""
     root = default_root(env)
     checks = [Check("config", root.is_dir(), str(root))]
@@ -65,14 +80,14 @@ def machine(plugin_root: Path, env: Env) -> Plan:
                         + "".join(f"; {p}" for p in problems)))
     if names or problems:
         fixes.append(Fix("githooks", "write the git hooks (pre-push asks the delivery judge) into " + str(ConfigDir(root).hooks_dir())))
-    checks.append(accounts_check())
+    checks.append(accounts_check(route))
     return Plan(checks, fixes)
 
 
-def accounts_check() -> Check:
+def accounts_check(route: Route) -> Check:
     """Worker accounts: at least one enabled lane that is ready. The login itself is the owner's (`tl accounts` names each fix)."""
     try:
-        rows = real_route().accounts()
+        rows = route.accounts()
     except (ValueError, SystemExit, OSError) as e:
         return Check("accounts", False, f"delegate has no account state yet: {e}")
     ready = [r.lane for r in rows if r.enabled and r.ready]
@@ -87,43 +102,27 @@ def stacks(repo: Path) -> dict[str, str]:
     return found if "unity" in found or nested is None else {**found, "unity": str(nested.relative_to(repo))}
 
 
-def profile_problem(profile: Path) -> str:
-    """'' when the profile loads, else why not (the loader exits naming the key; its message is caught, not printed)."""
-    err = io.StringIO()
-    try:
-        with contextlib.redirect_stderr(err):
-            slots_config.load_profile(json.loads(profile.read_text(encoding="utf-8")))
-    except (SystemExit, ValueError, OSError) as e:
-        return (err.getvalue().strip() or str(e) or "unreadable")[:300]
-    return ""
-
-
-def slots_part(repo: Path) -> Plan:
-    """The slot folders the profile counts (`slots.count` under `slots.dir`) must exist: a run takes its worktree from one, so a missing
-    folder fails the run after its first stage. Nothing when the profile counts none."""
-    try:
-        cfg = slots_config.load_profile(json.loads((repo / ".task-loop.json").read_text(encoding="utf-8"))).slots
-    except (SystemExit, ValueError, OSError):
+def slots_part(repo: Path, facts: ProfileFacts) -> Plan:
+    """Build the slot checks and fixes from the configured folder facts."""
+    folders = facts.slot_folders(repo)
+    if folders is None:
         return Plan()
-    if cfg.count < 1:
-        return Plan()
-    root = Path(slots_config.slot_dir(str(repo), "x", cfg)).parent
-    missing = [n for n in (f"s{i}" for i in range(1, cfg.count + 1)) if not (root / n).is_dir()]
-    if not missing:
-        return Plan([Check("slots", True, f"{cfg.count} under {root}")])
-    return Plan([Check("slots", False, f"{', '.join(missing)} missing under {root}")], [Fix("slots", "run `tl slot init` to make them")])
+    if not folders.missing:
+        return Plan([Check("slots", True, f"{folders.count} under {folders.root}")])
+    return Plan([Check("slots", False, f"{', '.join(folders.missing)} missing under {folders.root}")],
+                [Fix("slots", "run `tl slot init` to make them")])
 
 
-def repo_part(repo: Path) -> Plan:
+def repo_part(repo: Path, facts: ProfileFacts) -> Plan:
     """The repo's part: its .task-loop.json (loads? stale?) and, when there is none, the questions that write one."""
     profile, found = repo / ".task-loop.json", stacks(repo)
     checks = [Check("stack", True, ", ".join(f"{k} ({v})" for k, v in found.items()) or "none recognised")]
     if profile.is_file():
-        problem = profile_problem(profile)
+        problem = facts.profile_problem(profile)
         checks.append(Check("profile", not problem, problem or f"{profile} loads"))
         if problem:
             return Plan(checks)
-        more = slots_part(repo)
+        more = slots_part(repo, facts)
         return Plan([*checks, *more.checks], more.fixes)
     checks.append(Check("profile", False, f"{profile} does not exist"))
     asks: list[Question] = []
@@ -135,8 +134,8 @@ def repo_part(repo: Path) -> Plan:
     return Plan(checks, [], asks)
 
 
-def plan(plugin_root: Path, env: Env, repo: Path | None) -> Plan:
-    parts = [machine(plugin_root, env)] + ([repo_part(repo)] if repo else [])
+def plan(plugin_root: Path, env: Env, repo: Path | None, facts: ProfileFacts, route: Route) -> Plan:
+    parts = [machine(plugin_root, env, route)] + ([repo_part(repo, facts)] if repo else [])
     return Plan([c for p in parts for c in p.checks], [f for p in parts for f in p.fixes], [q for p in parts for q in p.questions])
 
 

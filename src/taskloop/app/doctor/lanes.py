@@ -4,14 +4,10 @@ import time
 from collections.abc import Callable
 
 from tlkernel import paths
-from tlkernel.env import Env
-from tlkernel.procport import Spawner
+from tlkernel.delegateport import Route
 from tlkernel.rowstores import StatusStore, StatusTriedStore
 from tlkernel.snapshots import StatusSnapshot, StatusTried
 from tlkernel.stores import UsageHistory
-
-from taskloop.adapters.ident import config_dir
-from taskloop.stores.delegate import real_route
 
 EVERY_S = 20 * 60  # the loop files delegate's status again when the snapshot is this old
 
@@ -28,17 +24,17 @@ def file_snapshot(snap: StatusSnapshot, cfg: paths.ConfigDir) -> str | None:
     return None
 
 
-def file_status(spawner: Spawner, env: Env) -> str | None:
+def file_status(route: Route, cfg: paths.ConfigDir) -> str | None:
     """Ask delegate and file the answer. None when filed, else a line saying why not."""
     try:
-        snap = real_route().status_snapshot()
+        snap = route.status_snapshot()
     except ValueError as e:
         return f"delegate status not filed: {e}"
-    return file_snapshot(snap, paths.ConfigDir(config_dir(env)))
+    return file_snapshot(snap, cfg)
 
 
-def refresh(spawner: Spawner, env: Env) -> int:
-    why = file_status(spawner, env)
+def refresh(route: Route, cfg: paths.ConfigDir) -> int:
+    why = file_status(route, cfg)
     print(why or f"filed delegate status at {time.strftime('%H:%M:%S')}")
     return 1 if why else 0
 
@@ -51,22 +47,20 @@ def due(cfg: paths.ConfigDir, now: float, every: float = EVERY_S) -> bool:
     return now - max(snap.at if snap else 0.0, tried) >= every
 
 
-def chore(say: Callable[[str], None], spawner: Spawner, env: Env, now: float | None = None) -> bool:
+def chore(say: Callable[[str], None], route: Route, cfg: paths.ConfigDir, now: float | None = None) -> bool:
     """The loop's `chores` step: file delegate's status again when the snapshot is `EVERY_S` old. -> whether it asked."""
-    cfg = paths.ConfigDir(config_dir(env))
     when = time.time() if now is None else now
     if not due(cfg, when):
         return False
     StatusTriedStore(cfg).write(StatusTried(t=when))
-    why = file_status(spawner, env)
+    why = file_status(route, cfg)
     if why:
         say(f"loop: {why}")
     return True
 
 
-def accounts(op: str, lane: str) -> int:
+def accounts(op: str, lane: str, route: Route, cfg: paths.ConfigDir) -> int:
     """`tl accounts [enable|decline LANE]`: the worker accounts delegate can use, what each needs, and the owner's choice for one."""
-    route = real_route()
     try:
         if op in ("enable", "decline"):
             if not lane:

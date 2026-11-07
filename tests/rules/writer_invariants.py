@@ -7,9 +7,9 @@ from importgraph import bindings, qualified
 # State authority, rather than a budget of write sites. Reads are unrestricted.
 WRITERS: Final = {
     'PinStore': {'taskloop.app.release.pins'},
-    'HostResourcesStore': {'taskloop.app.wire.setup_apply'},
-    'StatusStore': {'taskloop.app.wire.lanes'},
-    'StatusTriedStore': {'taskloop.app.wire.lanes'},
+    'HostResourcesStore': {'taskloop.app.doctor.setup_apply'},
+    'StatusStore': {'taskloop.app.doctor.lanes'},
+    'StatusTriedStore': {'taskloop.app.doctor.lanes'},
     'ReposStore': {'taskloop.app.track.trail', 'tlkernel.rowstores'},
     'ReleaseResultStore': {'taskloop.app.release.flow'},
     'ReflectStateStore': {'taskloop.app.report.reflect'},

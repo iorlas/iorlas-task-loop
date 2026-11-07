@@ -19,6 +19,7 @@ from taskloop.adapters import beadtools, ident, ram
 from taskloop.adapters.bd import BdStore
 from taskloop.app.asks import admission
 from taskloop.app.doctor import disk
+from taskloop.app.doctor import lanes as wlanes
 from taskloop.app.loop import stages
 from taskloop.app.loop.env import ReloadNote
 from taskloop.app.reconcile import leases
@@ -29,8 +30,8 @@ from taskloop.app.slots import config as wslots_config
 from taskloop.app.slots import engine_lock
 from taskloop.app.track import console, trail, verbs
 from taskloop.app.wire import asks as wasks
-from taskloop.app.wire import lanes as wlanes
 from taskloop.app.wire import slots as wslots
+from taskloop.stores.delegate import real_route
 
 STOP_GRACE_S = stages.STOP_GRACE_S
 
@@ -49,7 +50,7 @@ def release_dead(repo: str, store: Beads, now: float, git: Git, who: Identity) -
 
 def chores(repo: str, spawner: Spawner, env: Env, git: Git, who: Identity, store: BdStore | None = None) -> None:
     stages.chores(
-        lambda: wlanes.chore(console.say, spawner, env),
+        lambda: wlanes.chore(console.say, real_route(), paths.ConfigDir(ident.config_dir(env))),
         lambda: wslots_config.load_cfg(repo, git),
         lambda cfg: wasks.sweep_asks(who, who.config, console.say, cfg, repo),
         lambda cfg: wasks.wake_prs(who, who.config, spawner, cfg, repo),
