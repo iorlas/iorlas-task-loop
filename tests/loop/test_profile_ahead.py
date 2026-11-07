@@ -141,7 +141,7 @@ class ProfileAhead(Rig):
         with (
             mock.patch.object(loop, "acquire", return_value=("s1", self.d1, slot_bead)),
             mock.patch.object(loop.taker, "prepare", return_value=None),
-            mock.patch("taskloop.app.loop.loop.Lease") as lease,
+            mock.patch.object(self.loop_env.slots, "lease") as lease,
             mock.patch.object(loop, "prune"),
             mock.patch.object(loop, "run", side_effect=lambda: loop.work([bead], mock.Mock())),
         ):
