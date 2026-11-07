@@ -3,7 +3,7 @@ import pytest
 from support.plan_host import FakePlan
 
 from tlkernel.kinds import Kind
-from tlpipeline.blocked import Blocked, blocked_for
+from tlpipeline.api import Blocked, blocked_for
 from tltestkit.checks import typed
 from tltestkit.plans import PLAN
 

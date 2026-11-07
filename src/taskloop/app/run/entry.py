@@ -25,7 +25,7 @@ from tlkernel.kinds import Kind
 from tlkernel.procport import Spawner
 from tlkernel.run import Reexec, RunReport
 from tlkernel.run_slot import RUN_SLOT
-from tlpipeline import target
+from tlpipeline.api import target
 
 from taskloop.adapters import beadtools, gitrepo, ident
 from taskloop.adapters import halt as halting

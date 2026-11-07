@@ -27,7 +27,7 @@ from tlkernel.enums import WhyCode
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
-from tlpipeline import requests
+from tlpipeline.api import requests
 from tltestkit.case import Case
 from tltestkit.logs import typed
 from tltestkit.narrow import must

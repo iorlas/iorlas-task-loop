@@ -15,7 +15,7 @@ from tlkernel.ids import loop_key
 from tlkernel.lookrows import LookRows
 from tlkernel.run import RunState
 from tlkernel.runrows import RunRows
-from tlpipeline import requests
+from tlpipeline.api import requests
 from tltestkit.case import Case
 from tltestkit.narrow import must
 from tltestkit.repos import write_repos

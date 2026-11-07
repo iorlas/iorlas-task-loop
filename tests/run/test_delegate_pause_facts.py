@@ -21,8 +21,7 @@ from tlkernel.bead import Bead
 from tlkernel.delegate import DelegateResult, Retry, StopFacts
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
-from tlpipeline.blocked import Blocked, blocked_for
-from tlpipeline.closing import Closer
+from tlpipeline.api import Blocked, Closer, blocked_for
 
 
 class DelegatePauseFacts(Case):

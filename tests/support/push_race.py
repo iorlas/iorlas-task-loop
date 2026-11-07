@@ -16,7 +16,7 @@ from taskloop.app.run import engine
 from tlkernel.checks import CheckRun
 from tlkernel.kinds import Kind
 from tlkernel.waitenums import WaitWhat
-from tlpipeline.waits import Waits
+from tlpipeline.api import Waits
 from tltestkit.checked import run_checked
 from tltestkit.checks import ck, res
 

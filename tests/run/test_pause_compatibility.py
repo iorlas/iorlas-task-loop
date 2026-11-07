@@ -22,7 +22,7 @@ from tlkernel.beadpark import text_hash
 from tlkernel.ids import BeadId
 from tlkernel.kinds import ASKS, FAULTS, Kind
 from tlkernel.parks import Park
-from tlpipeline.closing import Closer
+from tlpipeline.api import Closer
 
 
 class PauseCompatibility(Case):

@@ -7,7 +7,7 @@ from tlkernel import askspecs as specs
 from tlkernel import runoutcome as oc
 from tlkernel.bead import Bead
 from tlkernel.kinds import Kind
-from tlpipeline.closing_settle import Settle
+from tlpipeline.api import Settle
 from tlpipeline.testing import FakeBeadClosing, FakeParkBook
 
 

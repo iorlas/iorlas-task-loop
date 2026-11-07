@@ -15,8 +15,7 @@ from support.engine_case import EngineTest
 from tlkernel.fence import Fenced
 from tlkernel.kinds import Kind
 from tlkernel.parks import ParkStore
-from tlpipeline.crash import parked_crash
-from tlpipeline.standalone import Standalone
+from tlpipeline.api import Standalone, parked_crash
 from tlpipeline.testing import FakeBeadClosing, FakeRoundSteps
 from tltestkit.narrow import must
 from tltestkit.plans import CLEAN, PLAN, WRITE

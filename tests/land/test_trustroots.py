@@ -8,7 +8,7 @@ from tlkernel.bead import Bead
 from tlkernel.gitfacts import DiffEntry
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
-from tlpipeline.blocked import Blocked, blocked_for
+from tlpipeline.api import Blocked, blocked_for
 from tltestkit.case import Case
 
 

@@ -15,7 +15,7 @@ from taskloop.app.workers.lane_acts import LaneActs
 from taskloop.domain.lanes import policy
 from tlkernel import lanepauses as pauses
 from tlkernel.delegate import RunRequest
-from tlpipeline.blocked import Blocked, blocked_for
+from tlpipeline.api import Blocked, blocked_for
 
 
 class PauseProducers(Case):

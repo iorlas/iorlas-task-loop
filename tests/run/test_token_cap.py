@@ -18,9 +18,8 @@ from support.narrow_hosts import FakeWaitsHost
 from tlkernel.ids import RunId
 from tlkernel.kinds import Kind
 from tlkernel.waitenums import WaitWhat
-from tlpipeline import trace as runtrace
-from tlpipeline.blocked import Blocked
-from tlpipeline.waits import Waits
+from tlpipeline.api import Blocked, Waits
+from tlpipeline.api import trace as runtrace
 
 
 class TokenCap(Case):
