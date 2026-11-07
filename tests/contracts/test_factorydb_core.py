@@ -31,6 +31,8 @@ TABLES = {
     "ask",
     "ask_ledger",
     "kv",
+    "run_doc",
+    "duration_doc",
     "effect",
     "wait",
     "signal",

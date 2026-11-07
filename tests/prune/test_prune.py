@@ -17,7 +17,6 @@ import support.paths  # noqa: F401
 from support import homes
 from support.runs import manifest
 from support.shells import quiet_shell
-from support.who import who
 
 from taskloop.adapters.git import RealGit
 from taskloop.app.prune import runs, verb
@@ -87,7 +86,8 @@ class RunData(Case):
     def prune(self, store, dry_run=False, days=14):
         out = []
         loop = LoopConfig(keep_days=days, build_dir=str(self.root / "nowhere"))
-        verb.run(self.cfg, loop, [str(self.root)], lambda r: cast(Beads, store), self.now, dry_run, quiet_shell(), out.append, who=who())
+        verb.run(self.cfg, loop, [str(self.root)], lambda r: cast(Beads, store), self.now, dry_run, quiet_shell(), out.append,
+                 live=lambda repo: {})
         return out
 
     def left(self):

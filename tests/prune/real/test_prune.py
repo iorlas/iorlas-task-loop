@@ -14,7 +14,6 @@ from support.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 from support import homes
-from support.who import who
 
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
@@ -214,7 +213,7 @@ class Trees(Case):
         for _ in range(2):
             out.append([])
             verb.run(cfg, LoopConfig(build_dir=str(self.build)), [str(self.repo)], lambda r: cast(Beads, Store()), self.later, False,
-                     SH, out[-1].append, who=who())
+                     SH, out[-1].append, live=lambda repo: {})
         assert not d.exists()
         assert any(ln.startswith("prune: removed worktree") for ln in out[0])
         assert not any("removed worktree" in ln for ln in out[1])

@@ -5,12 +5,14 @@ from support.narrow import must
 from taskloop.stores.real import real_stores
 from taskloop.stores.ticketrows import TicketRows
 from taskloop_dash.index import Indexer
-from tlkernel import beadrows, factorydb, receipts
+from tlkernel import beadrows, factorydb, receipts, rundocs
+from tlkernel.checks import Durations
 from tlkernel.flakes import FlakeLog, FlakeRow
 from tlkernel.paths import ConfigDir
 from tlkernel.queue_doc import QueueDoc
 from tlkernel.queue_state import QueueState
 from tlkernel.rowstores import ReposStore
+from tlkernel.run import HandoffMirror, RunCounters
 from tlkernel.snapshots import ReposIndex
 
 
@@ -92,3 +94,34 @@ def test_flake_owns_the_score_log(cfg):
     doc.write(log)
     assert doc.need() == log
     assert_row(cfg, "flake_doc", "flakes:repo")
+def test_run_documents_and_once_notes_live_in_run_doc(cfg):
+    counters = RunCounters(elapsed=1, waited=0, cost=0, stats={}, sessions=[], write_rounds=[], node_n=0)
+    for store in (rundocs.pause(cfg, "r_1"), rundocs.reexec(cfg, "r_1")):
+        store.write(counters)
+        assert store.get() == counters
+        assert_row(cfg, "run_doc", store.k)
+    mirror = HandoffMirror()
+    rundocs.handoff(cfg, "r_1").write(mirror)
+    assert rundocs.handoff(cfg, "r_1").get() == mirror
+    assert_row(cfg, "run_doc", "run:r_1:handoff")
+    stamp = rundocs.stamped("inputs")
+    rundocs.prepare_stamp(cfg, "r_1").write(stamp)
+    assert rundocs.prepare_stamp(cfg, "r_1").get() == stamp
+    assert_row(cfg, "run_doc", "run:r_1:prepare")
+    assert rundocs.once(cfg, "r_1", "note")
+    assert not rundocs.once(cfg, "r_1", "note")
+    assert_row(cfg, "run_doc", "run:r_1:once:note")
+    assert rundocs.once(cfg, "rx1", "note")
+    rundocs.forget(cfg, "r_1")
+    con = must(factorydb.open_rw(cfg.factory_db()))
+    try:
+        assert con.execute("SELECT k FROM run_doc").fetchall() == [("run:rx1:once:note",)]
+    finally:
+        con.close()
+
+
+def test_durations_live_in_duration_doc(cfg):
+    store = rundocs.durations(cfg).of("repo")
+    store.write(Durations())
+    assert store.get() == Durations()
+    assert_row(cfg, "duration_doc", "durations:repo")
