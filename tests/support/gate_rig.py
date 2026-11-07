@@ -9,7 +9,7 @@ from support.check_host import CheckHostCase, FakeCheckHost
 from support.memstores import fake_stores
 from support.who import who
 from taskloop.app.land.state import LandState
-from taskloop.app.run.blocked import Blocked, blocked_for
+from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.ports import Clock
