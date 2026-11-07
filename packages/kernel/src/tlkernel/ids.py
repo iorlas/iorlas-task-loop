@@ -10,6 +10,7 @@ import msgspec
 
 BeadId = NewType("BeadId", str)
 CheckId = NewType("CheckId", str)  # a check's id in the registry or the plan: never a bead id
+RepoKey = NewType("RepoKey", str)  # a repo's one key in every file family and table (loop_key; check_files.repo_key for a worktree)
 TreeSha = NewType("TreeSha", str)  # the hash of a worktree's files (adapters/treehash.py): never a commit sha
 # A bead id as a request body field: msgspec checks the shape when it decodes (a 400 for anything else), so a handler holds a BeadId.
 WireBead = Annotated[BeadId, msgspec.Meta(pattern="^[A-Za-z0-9][A-Za-z0-9_.-]*$")]
@@ -115,11 +116,11 @@ def new_loop_id() -> str:
     return secrets.token_hex(6)
 
 
-def loop_key(repo: object) -> str:
+def loop_key(repo: object) -> RepoKey:
     """The key of a repo checkout in the loop's and the slots' files: its folder name and 8 hex of sha1 of its real path (a symlinked
     spelling of the same folder gets the same key)."""
     real = os.path.realpath(str(repo))
-    return f"{Path(real).name}-{hashlib.sha1(real.encode()).hexdigest()[:8]}"
+    return RepoKey(f"{Path(real).name}-{hashlib.sha1(real.encode()).hexdigest()[:8]}")
 
 
 def mangle(check_id: CheckId) -> str:
