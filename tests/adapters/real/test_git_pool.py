@@ -5,19 +5,20 @@ from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401
-from support.tmpdir import TemporaryDirectory
+
+from tltestkit.tmpdir import TemporaryDirectory
 
 # isort: split
 import pytest
 from git_porcelain import real_env
 from git_porcelain.real import RealRepo
-from support.case import Case
 from support.checked import run_checked
 
 from taskloop.adapters import treehash
 from taskloop.adapters.git import RealGit
 from tlkernel.env import Env, snapshot
 from tlkernel.slots import SlotGitError
+from tltestkit.case import Case
 
 
 class RealGitPoolTest(Case):

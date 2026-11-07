@@ -7,7 +7,8 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from support.case import Case
+
+from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
@@ -23,7 +24,7 @@ from taskloop.app.pipeline.resume import KEEP_FOR_ACTIVE, LATE, Resume
 from taskloop.app.pipeline.review_glue import ReviewGlue
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.sections import checkpoint_hooks, restarted
-from taskloop.app.run.state import StateAttrs, attr_names, carries_state, state_names
+from taskloop.app.run.state import STATE_ONLY, StateAttrs, attr_names, carries_state, state_names
 from taskloop.app.write.state import WriteState
 from tlkernel import fence, wire
 from tlkernel.checkpoint import BriefSnap, Checkpoint, Handoff, PlanStep, RunState, WriterSession
@@ -116,7 +117,8 @@ class Fields(Case):
 
     def test_the_engine_declares_every_field_with_the_type_the_state_holds(self):
         declared, held = typing.get_type_hints(StateAttrs), typing.get_type_hints(RunState)
-        assert {k: declared[k] for k in attr_names()} == {k: held[k] for k in attr_names()}
+        assert declared == {k: held[k] for k in attr_names()}
+        assert set(attr_names()) == set(state_names()) - set(LOOK_FIELDS) - set(STATE_ONLY)
         assert not set(LOOK_FIELDS) & set(declared)  # the look stage's fields are `engine.look`, not engine attributes
         assert not hasattr(StateAttrs, "__getattr__")  # an attribute the state lacks is an error, not an Any
 
@@ -176,7 +178,7 @@ class Park(Case):
         _a, b = self.parked()
         Resume(b, FakeHeadHistory(), ReviewGlue(b), state_names()).restore(stored(b), late=False)
         for name in LATE:
-            assert getattr(b, name) == getattr(RunState(), name), name
+            assert getattr(b.state, name) == getattr(RunState(), name), name
         assert (b.filed, b.unfiled) == ([], [])  # filed titles are the late ones too
 
     def test_a_pending_land_validation_parks_at_land_verify_red(self):

@@ -13,9 +13,10 @@ from unittest import mock
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 from any_agent.harnesses import opencode_sandbox
-from support.case import Case
 from support.fake_clock import SteppingClock
-from support.tmpdir import TemporaryDirectory
+
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "delegate"))
 import shutil

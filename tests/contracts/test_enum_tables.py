@@ -1,10 +1,9 @@
 """Previously implicit enum cases have explicit behavior in constant tables."""
 
-from support.case import Case
-
 from tlkernel.enums import Step
 from tlkernel.kinds import ASK_NAME, ASKS, Kind
 from tlkernel.runlife import silent_limit
+from tltestkit.case import Case
 
 
 class ContractTables(Case):

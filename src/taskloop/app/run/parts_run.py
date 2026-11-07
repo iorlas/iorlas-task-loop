@@ -10,6 +10,7 @@ from taskloop.adapters import childenv, slotcheck
 from taskloop.adapters.agent import new_live
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.asks.closing import ClosingTrust
+from taskloop.app.checks.step import StageChecks
 from taskloop.app.land.closing import LandHistory
 from taskloop.app.pipeline.journal import Journal, JournalHost
 from taskloop.app.pipeline.reflect import Reflector
@@ -27,7 +28,6 @@ from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.run.reload_ports import installed_newer, locked_slot
 from taskloop.app.run.shared import Shared
 from taskloop.app.run.shell import Shell
-from taskloop.app.run.stage_checks import StageChecks
 from taskloop.app.run.state import state_names
 from taskloop.app.track.closing import TrailEvents
 from taskloop.app.workers.delegation import Delegation

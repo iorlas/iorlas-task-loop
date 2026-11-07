@@ -5,9 +5,9 @@ from unittest import mock
 import pytest
 import stream_proc
 import support.paths  # noqa: F401
-from support.case import Case
 
 from taskloop.adapters import procs
+from tltestkit.case import Case
 
 
 def _bytes(exit_: int = 0, out: bytes = b"", err: bytes = b"", timed_out: bool = False) -> stream_proc.CapturedBytes:

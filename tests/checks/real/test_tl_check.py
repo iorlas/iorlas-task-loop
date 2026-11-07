@@ -7,10 +7,11 @@ import sys
 from pathlib import Path
 
 from support import procsim
-from support.case import Case
 from support.checked import run_checked
 from support.tlmain import tl_main
-from support.tmpdir import TemporaryDirectory
+
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 CHECKS = [
     {"id": "fmt", "argv": [procsim.default("fmt-fine", procsim.exits(0, "fmt fine"))], "group": "static", "run": "gate"},

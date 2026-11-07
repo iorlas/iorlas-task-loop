@@ -1,10 +1,10 @@
 """bd's lint error as a list (one section per line, each with its reason): every missing section is named, none with the reason."""
 
 import support.paths  # noqa: F401
-from support.case import Case
 
 from taskloop.adapters import bd
 from taskloop.adapters.bdcreate import with_sections
+from tltestkit.case import Case
 
 LIST = """Error: missing required sections for task:
   - ## Acceptance Criteria (Define criteria to verify completion)

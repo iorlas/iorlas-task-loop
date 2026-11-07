@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
 from support.narrow import must
-from support.tmpdir import TemporaryDirectory
 
 from tlkernel import factorydb
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunManifest
 from tlkernel.runrows import RunRows
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class SharedWriterTest(Case):

@@ -8,12 +8,12 @@ from unittest import mock
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import procs
 from taskloop.adapters.spawner import RealSpawner
 from tlkernel.env import snapshot
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class CapturedProcesses(Case):

@@ -4,12 +4,11 @@ import ast
 import sqlite3
 from pathlib import Path
 
-from support.case import Case
-
 from rules.gate_rules import parsed
 from taskloop.app.parts import STAGE_PARTS
 from tlkernel.dbparts import ddl
 from tlkernel.tableowners import OWNERS
+from tltestkit.case import Case
 
 RUN_FILE_READERS = {"tlkernel.runrows"}
 

@@ -5,15 +5,15 @@ from unittest import mock
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
 from support.tlmain import tl, tl_main
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import beadtools
 from taskloop.cli import bd
 from tlkernel.bd_errors import BdCommandFailure
 from tlkernel.bead import BdError
 from tlkernel.beadsport import BdFailure
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class BdExit(Case):

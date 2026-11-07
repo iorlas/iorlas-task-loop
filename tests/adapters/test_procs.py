@@ -3,9 +3,9 @@ child is being spawned (the engine's handler raises: the child must not be left 
 import os
 
 import support.paths  # noqa: F401
-from support.case import Case
 
 from taskloop.adapters import childenv
+from tltestkit.case import Case
 
 POSIX = os.name != "nt"
 

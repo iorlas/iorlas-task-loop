@@ -1,9 +1,8 @@
 """Cases for the module graph rules: no import cycle, a fan-out cap."""
 import ast
 
-from support.case import Case
-
 from rules.arch_rules import cyclic_components, fanout_problems, graph_of, problems
+from tltestkit.case import Case
 
 
 class ArchitectureRules(Case):

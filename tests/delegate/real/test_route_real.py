@@ -14,7 +14,6 @@ from typing import Any
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
 from support.procsim import real_proc
-from support.tmpdir import TemporaryDirectory, mkdtemp
 
 from delegate.app import decide as dec
 from delegate.app import env, net, usage
@@ -22,6 +21,7 @@ from delegate.contracts.routing import Settings
 from delegate.contracts.state import StateDoc
 from delegate.domain.health import ledger as health_ledger
 from delegate.domain.lanes.lane import Lane
+from tltestkit.tmpdir import TemporaryDirectory, mkdtemp
 
 ROOT = Path(__file__).resolve().parents[3]
 _entry = importlib.util.spec_from_file_location("route", ROOT / "src" / "delegate" / "entry.py")

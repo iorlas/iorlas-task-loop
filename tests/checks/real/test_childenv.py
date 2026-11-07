@@ -7,10 +7,8 @@ from types import SimpleNamespace
 from unittest import mock
 
 from support.argv_checks import ArgvChecks
-from support.case import Case
 from support.checked import run_checked
 from support.tlmain import tl_main
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import childenv
 from taskloop.adapters.childenv import CHECK_SECRETS
@@ -19,6 +17,8 @@ from taskloop.app.run.shell import Shell
 from tlkernel.checksport import CheckSpec
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class CheckHomeCanaryTest(Case):
