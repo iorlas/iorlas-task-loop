@@ -1,4 +1,4 @@
-"""Ownership records of tl's worktrees as kv rows: written and read back, an older tl's file adopted, a newer writer's keys read past."""
+"""Ownership records of tl's worktrees as kv rows: written and read back, an unknown key refused."""
 import json
 import uuid
 
@@ -30,12 +30,12 @@ def test_a_record_is_written_read_listed_and_deleted(repo):
     assert docs.of("a-1").get() is None and docs.keys() == []
 
 
-def test_a_newer_writers_extra_keys_are_read_past_and_repos_do_not_mix(repo):
+def test_an_unknown_key_is_refused_and_repos_do_not_mix(repo):
     cfg = homes.cfg()
     docs = WorktreeDocs(cfg, repo)
     docs.of("a-1").write(owned())
     with docs.of("a-1").rows.transaction() as con:
         body = dict(wire.dump(owned()), future=1)
         con.execute("UPDATE kv SET v=? WHERE k=?", (json.dumps(body), docs.of("a-1").k))
-    assert must(docs.of("a-1").get()).kind == "slot"
+    assert docs.of("a-1").get() is None
     assert WorktreeDocs(cfg, repo + "x").keys() == []

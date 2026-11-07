@@ -9,7 +9,9 @@ from support.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 TEXTS = ("AGENTS.md", "CLAUDE.md", "README.md", "skills/task-loop/SKILL.md")
-BRIEFS = "src/taskloop/domain/prompts"
+BRIEFS = ("src/taskloop/domain/prompts", "src/taskloop/app/*/prompts.py", "src/taskloop/app/write/review_prompt.py",
+          "src/taskloop/app/review/verify_prompt.py",
+          "src/taskloop/app/run/reflect_prompt.py")
 FORBIDDEN = re.compile(
     r"suite\.py|suite-docker|test-fast|test-all|check-all|-n auto"
     r"|\bpytest\s+-\S+"            # pytest with options and no path: the whole suite
@@ -20,7 +22,7 @@ FORBIDDEN = re.compile(
 
 def agent_texts():
     yield from (ROOT / name for name in TEXTS)
-    yield from sorted((ROOT / BRIEFS).glob("*.py"))
+    yield from sorted(p for pattern in BRIEFS for p in ROOT.glob(pattern if pattern.endswith(".py") else pattern + "/*.py"))
 
 
 class OneTestCommand(Case):

@@ -13,6 +13,7 @@ def test_without_an_executor_the_check_fails_loudly_and_does_not_run_here(workdi
     host.wt, host.run_dir, host.run_id = workdir, workdir, "r1"
     host.cfg.executor = ExecutorConfig()
     host.git.rev_parse.return_value = "abc"
+    host.git.common_dir.return_value = ""
     host.git.config_get.return_value = "https://example.com/repo.git"
     host.spawner = mock.Mock()
     log = workdir / "log"
@@ -28,6 +29,7 @@ def test_a_stopped_linux_check_is_reported_as_stopped_by_the_engine(workdir):
     host = mock.Mock()
     host.wt, host.run_dir, host.run_id = workdir, workdir, "r1"
     host.git.rev_parse.return_value = "abc"
+    host.git.common_dir.return_value = ""
     host.git.config_get.return_value = "https://example.com/repo.git"
     done = Remote(rc=-15, tail="", stopped=True)
     with mock.patch("taskloop.app.checks.attempts.step_env", return_value={"TL_ARTIFACT_DIR": str(workdir)}), \

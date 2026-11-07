@@ -5,32 +5,31 @@ from pathlib import Path
 from typing import Final, Protocol
 
 from taskloop.app.prune.runs import Gone, size_of
+from taskloop.contracts.ids import loop_key
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.slots import Checkout, SlotGitError
-from taskloop.domain import slot_env
 
 MIN_AGE_DAYS: Final = 14
 
 
 class SlotGit(Protocol):
-    """The two reads of the Git port the pruner uses."""
+    """The read of the Git port the pruner uses."""
 
     def checkouts(self, d: str) -> list[Checkout]: ...
-    def remote_url(self, d: str, remote: str) -> str: ...
 
 
 def prune(cfg: ConfigDir, repos: list[str], git: SlotGit, now: float, dry_run: bool) -> list[Gone]:
     """Remove (name, with `dry_run`) the orphan slot folders of every registered repo. The repo's state folder is found the way the engine
-    makes it (origin url); a repo whose worktrees git cannot list keeps all its slots, and state of a repo not in `repos` is left alone."""
+    makes it (ids.loop_key of the repo); a repo whose worktrees git cannot list keeps all its slots,
+    and state of a repo not in `repos` is left alone."""
     old = _old_folders(cfg, now)
     gone: list[Gone] = []
     for repo in repos if old else []:  # git is asked only when some folder is old enough to go
         try:
             slots = {Path(c.path).name for c in git.checkouts(repo)}
-            key = slot_env.state_key(git.remote_url(repo, "origin") or "", repo)
         except SlotGitError:
             continue
-        for path in old.get(key, []):
+        for path in old.get(loop_key(repo), []):
             if path.name in slots:
                 continue
             size = size_of(path)
