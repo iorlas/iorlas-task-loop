@@ -19,7 +19,7 @@ test-inner +paths:
 
 # INNER LOOP ONLY developer tool, never the gate: stage tests plus dependencies' contract tests. `just test` stays the gate.
 test-pkg stage:
-    uv run pytest -q $(python3 dev/test_pkg.py {{stage}})
+    if [ -f packages/{{stage}}/pyproject.toml ]; then uv run --isolated --package tl{{stage}} --group dev pytest -q -c packages/{{stage}}/pyproject.toml --rootdir packages/{{stage}} packages/{{stage}}; else uv run pytest -q $(python3 dev/test_pkg.py {{stage}}); fi
 
 # Every test of every kind, in 4 workers then the serial group. Started by a person, never by the gate, the release, a cron or a background job.
 test-full:
@@ -75,7 +75,7 @@ rules:
     set -euo pipefail
     # skills/task-loop/_vendor: .importlinter names stream_proc (the vendored process library) as a root package, so grimp must find it
     # --with msgspec: .importlinter names msgspec as a root package (the hook contract), and grimp must find it
-    PYTHONPATH=src:packages/kernel/src:skills/task-loop/_vendor uv tool run --with msgspec --from "import-linter@$(just pin pipx:import-linter)" lint-imports
+    PYTHONPATH=src:$(ls -d packages/*/src | paste -sd: -):skills/task-loop/_vendor uv tool run --with msgspec --from "import-linter@$(just pin pipx:import-linter)" lint-imports
 
 # The .py files this change touches: committed since origin/main, edited, or new; deleted ones, the vendored copy and fixtures left out.
 [private]

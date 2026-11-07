@@ -98,9 +98,8 @@ On macOS, installed `caffeinate` prevents idle sleep while the first newly launc
 After a reboot, manually run `tl factory start` again. From a phone's SSH terminal, run `tl factory start --repo /path/to/repo`
 or `tl factory stop --repo /path/to/repo` on the host. The shared dashboard stays available after a stop.
 
-Storms, low disk, low available RAM and unavailable lanes keep loops alive as waits with explicit probe times and wake
-conditions. Disk and RAM wake when their configured thresholds (`loop.min_free_gb`, `loop.min_ram_mb`) are met; storms wake
-when their fingerprint record expires or is cleared; lanes wake when usable or their retry is due. Stops and `--until` still work.
+Low disk, low available RAM and unavailable lanes keep loops alive as waits with explicit probe times and wake
+conditions. Disk and RAM wake when their configured thresholds (`loop.min_free_gb`, `loop.min_ram_mb`) are met; lanes wake when usable or their retry is due. Stops and `--until` still work.
 Consecutive quick failures of the same bead in a slot make that bead wait for a successful reset/setup probe or different
 eligible work. Different beads do not accumulate failures together. Failed probes exclude the slot until a probe passes
 on a normal loop pass; there is no timed set-aside. Resource and lane waits poll their wake conditions at the pass interval.
