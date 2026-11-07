@@ -15,6 +15,7 @@ from tlkernel.config import HostResources
 from tlkernel.docrows import RowDocs
 from tlkernel.docstore import JsonStore
 from tlkernel.followups import FollowupOutbox
+from tlkernel.queue_doc import QueueDoc
 from tlkernel.queue_state import QueueState
 from tlkernel.receiptrows import DbDocSet
 
@@ -27,6 +28,7 @@ def real_stores(cfg: paths.ConfigDir) -> Stores:
         checkpoints=CheckpointBook(RowDocs(cfg, Checkpoint, table="checkpoint", key_col="bead", body_col="body",
                                            revisioned=True)),
         followups=RowDocs(cfg, FollowupOutbox, table="followup", key_col="bead", body_col="body"),
+        queue=RowDocs(cfg, QueueDoc, table="kv", key_col="k", body_col="v", prefix="queue:"),
         queue_state=RowDocs(cfg, QueueState, table="kv", key_col="k", body_col="v", prefix="queue-state:"),
         results=lambda repo, check: DbDocSet(cfg, repo, check, "pass", PassRecord),
         base_red=lambda repo: DbDocSet(cfg, repo, None, "base_red", BaseRedRecord),

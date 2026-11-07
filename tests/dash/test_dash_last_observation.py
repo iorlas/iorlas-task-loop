@@ -47,7 +47,7 @@ def test_a_corrupt_database_still_drops_the_rows(tmp_path: Path) -> None:
     assert rows == [] and error, error
 
 
-@pytest.mark.parametrize("version", range(factorydb.SCHEMA_READ_FROM - 1, factorydb.SCHEMA_VERSION + 2))
+@pytest.mark.parametrize("version", range(factorydb.SCHEMA_VERSION - 1, factorydb.SCHEMA_VERSION + 2))
 def test_a_schema_inside_the_supported_range_reads_and_one_outside_shows_the_error(tmp_path: Path, version: int) -> None:
     cfg = ConfigDir(tmp_path)
     RunScript("b-1", at=1).step("plan", 2, 3).close("done").write(cfg.root)
@@ -61,4 +61,4 @@ def test_a_schema_inside_the_supported_range_reads_and_one_outside_shows_the_err
     con.close()
     again, error = dbruns.read_kept(kept, cfg, NOW)
     assert again == rows  # inside the range the rows are read; outside, the last observation stays
-    assert (error == "") is (factorydb.SCHEMA_READ_FROM <= version <= factorydb.SCHEMA_VERSION)
+    assert (error == "") is (version == factorydb.SCHEMA_VERSION)

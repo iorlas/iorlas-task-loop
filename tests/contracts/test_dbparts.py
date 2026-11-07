@@ -16,8 +16,8 @@ def con():
     return c
 
 
-def part(version=1, ddl="CREATE TABLE t (a INTEGER);", records=(), steps=None, read_from=None):
-    return Part(name="p", version=version, tables=("t",), ddl=ddl, records=records, steps=steps or {}, read_from=read_from)
+def part(version=1, ddl="CREATE TABLE t (a INTEGER);", records=(), steps=None):
+    return Part(name="p", version=version, tables=("t",), ddl=ddl, records=records, steps=steps or {})
 
 
 def row(c):
@@ -100,14 +100,32 @@ def test_a_missing_step_is_refused():
         dbparts.launch(c, readonly=False, parts=[part(version=2)])
 
 
-def test_read_only_launch_skips_a_part_without_a_row_and_refuses_an_old_one():
+def test_read_only_without_needs_accepts_absent_and_older_parts():
     c = con()
     dbparts.launch(c, readonly=True, parts=[part()])
     assert c.execute("SELECT 1 FROM sqlite_master").fetchone() is None
     dbparts.launch(c, readonly=False, parts=[part()])
-    with pytest.raises(SchemaError, match="the writer has not upgraded it yet"):
-        dbparts.launch(c, readonly=True, parts=[part(version=2)])
-    dbparts.launch(c, readonly=True, parts=[part(version=2, read_from=1)])
+    dbparts.launch(c, readonly=True, parts=[part(version=2)])
+
+
+@pytest.mark.parametrize("found", [0, 1])
+def test_read_only_refuses_parts_below_need(found):
+    c = con()
+    if found:
+        dbparts.launch(c, readonly=False, parts=[part()])
+    with pytest.raises(SchemaError, match=f"p is v{found}, this process needs v2: the writer has not upgraded it yet"):
+        dbparts.launch(c, readonly=True, parts=[part(version=2)], needs={"p": 2})
+
+
+def test_read_only_accepts_met_need():
+    c = con()
+    dbparts.launch(c, readonly=False, parts=[part()])
+    dbparts.launch(c, readonly=True, parts=[part(version=2)], needs={"p": 1})
+
+
+def test_unknown_needed_part_is_refused():
+    with pytest.raises(ValueError, match="unknown"):
+        dbparts.launch(con(), readonly=True, parts=[part()], needs={"unknown": 1})
 
 
 def test_a_table_claimed_by_two_parts_is_refused():

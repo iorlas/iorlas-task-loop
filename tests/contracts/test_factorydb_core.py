@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from tlkernel import factorydb
+from tlkernel.factoryparts import KV
 from tlkernel.looprows import LoopRows
 from tlkernel.paths import ConfigDir
 
@@ -107,13 +108,6 @@ class FactoryDbTest(Case):
         self.path.write_bytes(b"this is not a SQLite database")
         assert factorydb.open_rw(self.path) is None
         assert factorydb.open_ro(self.path) is None
-
-    def test_reader_names_schema_errors_as_database_unavailable(self):
-        con = self.rw()
-        con.execute("PRAGMA user_version=99")
-        expected = "database unavailable: factory.db is schema v99, this code knows v5: update it"
-        assert factorydb.database_error(self.path, 1) == expected
-        assert factorydb.run_rows(self.path, 1) == ([], expected)
 
     def test_non_wal_database_is_rejected(self):
         assert factorydb.open_rw(":memory:") is None
@@ -312,3 +306,26 @@ def test_a_reader_meets_a_database_a_writer_is_still_creating_as_not_there_yet(t
     cfg.factory_db().touch()
     assert factorydb.open_ro(cfg.factory_db()) is None
     assert LoopRows(cfg, "k").select("SELECT 1") == []
+
+
+def test_declared_versions_and_reader_needs(tmp_path, monkeypatch):
+    monkeypatch.setattr(factorydb._STORE, "parts", None)
+    monkeypatch.setattr(factorydb._STORE, "needs", None)
+    monkeypatch.setattr(factorydb._STORE, "schema", factorydb.SCHEMA)
+    factorydb.declare_parts([KV])
+    assert factorydb.versions() == {"kv": KV.version}
+    path = tmp_path / "factory.db"
+    con = factorydb.open_rw(path)
+    assert con is not None
+    con.execute("DELETE FROM schema_part WHERE name='kv'")
+    con.close()
+    reader = factorydb.open_ro(path)
+    assert reader is not None
+    reader.close()
+    factorydb.declare_needs({"kv": 1})
+    factorydb.declare_needs({"kv": 1})
+    with pytest.raises(ValueError, match="different versions"):
+        factorydb.declare_needs({"kv": 2})
+    for opener in (factorydb.open_ro, factorydb.open_watch):
+        with pytest.raises(factorydb.SchemaError, match="part kv is v0, this process needs v1"):
+            opener(path)
