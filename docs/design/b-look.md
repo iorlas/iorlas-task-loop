@@ -43,3 +43,21 @@ Slice 1 touches `run/fields.py`, `run/state.py`, `run/run_once.py`, `write/*`, w
 ## Not verified
 
 Counts are greps of `src/taskloop`. Nothing was run for this note. Whether `shot_cache` (a vendor-methods cache, not run data) belongs to look state or to the `Pictures` object is open until slice 1 is written; it is never checkpointed, so either is safe.
+
+## Result (slices 1 to 3 and the fakes, measured 2026-11-07)
+
+Method: `dev/attrmap.py --root DIR` (engine attributes) and the forward import closure of `src/taskloop/app/look/*.py` over `dev/affected.Repo` edges (files under `src/`, stage by `dev/reach.stage_of`), on the commit before B-LOOK 1 (#312) and on this branch.
+
+| | before B-LOOK | after slice 3 |
+|---|---|---|
+| look files | 5 | 6 (`state.py`) |
+| look closure, `src/` files | 75 | 73 |
+| of which the shell (`run`, `launch`, ...) | 0 | 0 |
+| of which the store layer | 3 | 0 |
+| engine attributes (attrmap, all stages) | 186 | 180 |
+| `LookHost` members | 40 | 13 (hand-offs only) |
+
+- The look stage never imported the shell; what fell out of its closure is the `stores` layer (3 files: it now sees `RunFacts` and the Protocols, not `RunLog`). `app/look` itself grew by one file (`state.py`) and the closure by one `work` file.
+- The engine total fell by 6, not by the nine look fields: other lanes added and removed attributes in the same window. The look-owned attributes that left the engine are exactly the nine of `LookState`; `render_stale` and `artifact_repo` stay as hand-offs (decisions 1 and 2 above).
+- `tests/support/look_host.py` (`FakeLook`) builds the three parts on fake ports; `tests/look/test_look_ports.py` holds the tests that no longer need an Engine (epic walk, shot caps, before pictures). The flow tests in `tests/look/test_look.py` run the whole engine on purpose and stay.
+- Left for T-BUDGET (tl-e5t0.55): the closure and import-time budget per stage. `LookHost` is deleted when the 13 hand-offs have homes (RunFacts' `artifact_repo`, WRITER/REVIEW state for `leftovers`/`review`).
