@@ -12,6 +12,7 @@ from tlkernel.ask import Ask
 from tlkernel.checkpoint import CloseIntent, EndRec
 from tlkernel.config import EngineConfig
 from tlkernel.delegate import DelegateResult
+from tlkernel.docstore import Ledger
 from tlkernel.env import Env
 from tlkernel.envvars import EnvVar
 from tlkernel.finish import finish_run, previous_finish
@@ -75,7 +76,7 @@ class JournalLand(Protocol):
 
 class JournalTraces(Protocol):
     @property
-    def traces(self) -> Log[RunTrace]: ...
+    def traces(self) -> Ledger[RunTrace]: ...
 
 
 class JournalHost(RecordHost, ended.HostFacts, Protocol):

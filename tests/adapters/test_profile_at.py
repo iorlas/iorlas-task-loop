@@ -4,7 +4,7 @@ from unittest import mock
 
 import pytest
 
-from taskloop.adapters import profile_at as pa
+from tlkernel import profile_at as pa
 from tlkernel.config import ConfigError
 from tlkernel.gitfacts import TreeEntry
 from tlkernel.gitport import Git

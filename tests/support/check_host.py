@@ -69,8 +69,8 @@ class FakeCheckHost:
 
     def sh(self, cmd: Sequence[str], timeout: float = 3600, check: bool = False, save: Path | None = None,
            env: Mapping[str, str] | None = None, pin: bool = False, what: str = "command", cwd: Path | None = None,
-           stop: threading.Event | None = None) -> tuple[int, str]:
-        return self.shell.run(cmd, timeout, check, save, env, pin, what, cwd, stop)
+           stop: threading.Event | None = None, *, network: bool = False) -> tuple[int, str]:
+        return self.shell.run(cmd, timeout, check, save, env, pin, what, cwd, stop, network=network)
 
     def run_checks(self, st: StageData, name: str, acceptance_first: bool = False, groups: Sequence[str] | None = None,
                    conflict_fix: Sequence[str] | None = None, **meta: Any) -> CheckRun:
@@ -90,7 +90,7 @@ class FakeCheckHost:
         return None
 
     def records(self, *kinds: str) -> list[dict[str, Any]]:
-        """The run's log records as wire dicts (what support.logs.records reads from a file), of `kinds` only when given."""
+        """The run's log records as wire dicts (what tltestkit.logs.records reads from a file), of `kinds` only when given."""
         seen = self.stores.run_log(self.run_id).read_from()
         return [row for row in (wire.dump(i.rec) for i in seen.items) if not kinds or row["kind"] in kinds]
 

@@ -11,9 +11,7 @@ from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
-from support.checks import res
 from support.dashlogs import RunScript, T, bead
-from support.narrow import must
 
 from taskloop_dash.views import bead_detail, snapshot
 from taskloop_dash.views.board import Board, review_of
@@ -29,6 +27,8 @@ from tlkernel.ids import BeadId
 from tlkernel.log import RunStart
 from tlkernel.loop import LoopState, QueueRow, Skip
 from tlkernel.parks import Park
+from tltestkit.checks import res
+from tltestkit.narrow import must
 
 NOW = T + 3600
 

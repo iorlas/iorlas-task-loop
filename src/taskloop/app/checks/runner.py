@@ -2,6 +2,7 @@
 import time
 from collections.abc import Callable, Sequence
 
+from tlkernel import check_files
 from tlkernel.checks import Check, CheckResult, CheckRun, Durations
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env
@@ -11,7 +12,6 @@ from tlkernel.plancheck import PlanCheck
 from tlkernel.runkey import BaseSha
 from tlkernel.storeapi import Doc
 
-from taskloop.adapters import check_files
 from taskloop.app.checks import evidence, gateplan
 from taskloop.app.checks.attempts import Attempts
 from taskloop.app.checks.base import BaseCheck

@@ -6,13 +6,13 @@ from dataclasses import replace
 
 import support.paths  # noqa: F401
 from support import homes
-from support.narrow import must
 
 from tlkernel import dbparts, wire
 from tlkernel.factoryparts import RELEASE
 from tlkernel.loop import BadVersions
 from tlkernel.rowstores import BadVersionStore, PinStore, ReflectStateStore, SharedNotesStore, StatusStore, StatusTriedStore
 from tlkernel.snapshots import Pin, ReflectState, SharedNotes, StatusSnapshot, StatusTried
+from tltestkit.narrow import must
 
 
 def test_a_pin_is_a_release_doc_row_written_read_and_cleared():

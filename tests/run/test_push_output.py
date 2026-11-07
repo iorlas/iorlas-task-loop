@@ -20,7 +20,7 @@ class PushOutput(Case):
                                halt_point=lambda _when: None)
         shell = Shell(host)
 
-        def stream(_cmd, _cwd, _env, _pin, output, *_args):
+        def stream(_cmd, _cwd, _env, _pin, output, *_args, network=False):
             output.extend(chunks)
             return SimpleNamespace(timed_out=None, signal=None, returncode=1)
 

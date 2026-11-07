@@ -2,6 +2,7 @@
 import time
 
 from tlkernel.beadsport import Beads
+from tlkernel.branches import task_branch
 from tlkernel.finish import finish_run
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
@@ -23,7 +24,7 @@ def cmd_land(who: Identity, bead: BeadId, sha: str, store: Beads, git: Git, work
     """The standalone verb is a direct land; PR delivery records through land-stack and never deletes a remote head."""
     where = worktree or "."
     base = base or load_cfg(where, git).base
-    branch = "task/" + bead
+    branch = task_branch(bead)
     head = git.rev_parse(where, f"refs/heads/{branch}")
     remote_oid = cleanup.remote_oid(git, where, "origin", branch)
     full = git.rev_parse(where, sha + "^{commit}") or sha

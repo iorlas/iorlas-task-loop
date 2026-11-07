@@ -17,12 +17,11 @@ class Interrupted(Exception):
 
 
 class ChildEnv(Case):
-    def test_a_session_identity_is_dropped_and_a_custom_claude_login_is_kept(self):
+    def test_session_configuration_is_dropped_and_credentials_stay(self):
         env = {"ANTHROPIC_BASE_URL": "x", "CLAUDE_CODE_SESSION_ID": "s", "CLAUDE_CONFIG_DIR": "/home/u/.claude-alt", "TASK_LOOP_STATE": "x",
                "GIT_DIR": "/x", "GIT_INDEX_FILE": "/i", "OPENAI_API_KEY": "k", "PATH": "/bin"}
         out = childenv.child_env_of(env)
-        assert out["CLAUDE_CONFIG_DIR"] == "/home/u/.claude-alt"  # a worker on a custom login finds it
-        for gone in ("ANTHROPIC_BASE_URL", "CLAUDE_CODE_SESSION_ID", "TASK_LOOP_STATE", "GIT_DIR", "GIT_INDEX_FILE"):
+        for gone in ("CLAUDE_CONFIG_DIR", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_SESSION_ID", "TASK_LOOP_STATE", "GIT_DIR", "GIT_INDEX_FILE"):
             assert gone not in out
         assert (out["OPENAI_API_KEY"], out["PATH"]) == ("k", "/bin")  # credentials stay: delegate scrubs its workers itself
         assert (out["DELEGATE_DEPTH"], out["TASK_LOOP_WORKER"]) == ("1", "1")

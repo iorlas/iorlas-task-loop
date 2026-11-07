@@ -9,12 +9,12 @@ same broken path."""
 import time
 from typing import final
 
+from tlkernel import check_files
 from tlkernel.gitport import Git
 from tlkernel.queue_state import CORRUPT, RACED, Incident, QueueState
 from tlkernel.storeapi import Doc
 from tlkernel.wire import Rec
 
-from taskloop.adapters import check_files
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.stores.bundle import Stores
 

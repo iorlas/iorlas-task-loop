@@ -1,6 +1,5 @@
 """Each document is written to its owning table."""
 import pytest
-from support.narrow import must
 
 from taskloop.stores.real import real_stores
 from taskloop.stores.ticketrows import TicketRows
@@ -14,6 +13,7 @@ from tlkernel.queue_state import QueueState
 from tlkernel.rowstores import ReposStore
 from tlkernel.run import HandoffMirror, RunCounters
 from tlkernel.snapshots import ReposIndex
+from tltestkit.narrow import must
 
 
 @pytest.fixture
