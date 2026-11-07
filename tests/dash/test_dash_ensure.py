@@ -23,6 +23,7 @@ from taskloop_dash import bind  # noqa: E402
 from tlkernel.dash import READ_PROTOCOL  # noqa: E402
 from tlkernel.env import Env as ProcessEnv  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
+from tlkernel.factoryparts import PIPELINE  # noqa: E402
 
 
 def _const(value):
@@ -40,7 +41,7 @@ def free_port():
 def live(script, version="v1", binds=("127.0.0.1",), pid=4242, protocol=READ_PROTOCOL):
     return {"version": version, "pid": pid, "script": str(script), "binds": list(binds),
             "urls": [f"http://{b}:7878" for b in binds], "started": 1.0, "protocol": protocol,
-            "needs": {"pipeline": 1}, "parts": {"pipeline": 2}}
+            "needs": {"pipeline": 1}, "parts": {"pipeline": PIPELINE.version}}
 
 
 class StaleReason(Case):
@@ -67,11 +68,15 @@ class StaleReason(Case):
         assert "protocol" in must(dash_server.stale_reason(live(self.script, protocol=None), "v1", ["127.0.0.1"]))
 
     def test_a_server_whose_part_needs_miss_the_installed_version_is_replaced(self):
-        for needs, parts, reason in [({"pipeline": 3}, {"pipeline": 3}, "it needs part pipeline v3, installed is v2"),
-                                     ({"pipeline": 1}, {"pipeline": 0}, "installed part pipeline is v2, it reads up to v0")]:
+        version = PIPELINE.version
+        for needs, parts, reason in [
+            ({"pipeline": version + 1}, {"pipeline": version + 1},
+             f"it needs part pipeline v{version + 1}, installed is v{version}"),
+            ({"pipeline": 1}, {"pipeline": 0}, f"installed part pipeline is v{version}, it reads up to v0"),
+        ]:
             v = dict(live(self.script), needs=needs, parts=parts)
             assert dash_server.stale_reason(v, "v1", ["127.0.0.1"]) == reason
-        ok = dict(live(self.script), needs={"pipeline": 1}, parts={"pipeline": 2})
+        ok = dict(live(self.script), needs={"pipeline": 1}, parts={"pipeline": PIPELINE.version})
         assert dash_server.stale_reason(ok, "v1", ["127.0.0.1"]) is None
 
     def test_server_must_report_part_contracts(self):

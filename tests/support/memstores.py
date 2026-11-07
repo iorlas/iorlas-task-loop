@@ -4,7 +4,6 @@ the same. The contract suite runs these and the file-backed stores through one s
 import contextlib
 import json
 import os
-import sqlite3
 import threading
 import time
 from collections.abc import Callable, Generator
@@ -14,7 +13,9 @@ from typing import Any, override
 from jsonl_log import Entry, decode_object
 from jsonl_log.cursor import _parse  # shelf lacks: a public parse of in-memory bytes
 
-from taskloop.stores.api import AmendDoc, DocSet
+from support.memcheckpoints import MemCheckpointRows
+from support.memdoc import MemDoc
+from taskloop.stores.api import DocSet
 from taskloop.stores.books import CheckpointBook
 from taskloop.stores.bundle import Stores
 from taskloop.stores.files import temp_leases
@@ -22,10 +23,8 @@ from tlkernel import events, log, wire
 from tlkernel.adrs import AdrStore
 from tlkernel.ask import Ask
 from tlkernel.askstore import AskStore
-from tlkernel.checkpoint import Checkpoint
 from tlkernel.checks import BaseRedRecord, CheckRun, Durations, PassRecord
 from tlkernel.config import HostResources
-from tlkernel.docstore import Absent, ForeignVersion, Present, Read, Torn, refusal
 from tlkernel.flakes import FlakeLog
 from tlkernel.followups import FollowupOutbox
 from tlkernel.ledger import Adr, AdrUse, LedgerEntry
@@ -37,51 +36,6 @@ from tlkernel.queue_state import QueueState
 from tlkernel.rotating import RotatingJsonl
 from tlkernel.stores import JsonlStore
 from tlkernel.trace import RunTrace
-from tlkernel.wire import Refused
-
-
-class MemDoc[T](AmendDoc[T]):
-    def __init__(self, cls: type[T]) -> None:
-        self.cls = cls
-        self.data: dict[str, Any] | None = None
-
-    def read(self) -> Read[T]:
-        if self.data is None:
-            return Absent()
-        path = Path("<memory>")
-        try:
-            return Present(wire.load(self.cls, self.data))
-        except wire.StaleRecord as err:
-            return ForeignVersion(path, err.found, err.want)
-        except ValueError as err:
-            return Torn(path, str(err))
-
-    def get(self) -> T | None:
-        r = self.read()
-        return r.rec if isinstance(r, Present) else None
-
-    def need(self) -> T | None:
-        r = self.read()
-        if isinstance(r, (Torn, ForeignVersion)):
-            raise Refused(refusal(r))
-        return r.rec if isinstance(r, Present) else None
-
-    def write(self, rec: T) -> None:
-        self.data = json.loads(json.dumps(wire.dump(rec)))
-
-    def modify(self, fn: Callable[[T], T]) -> bool:
-        rec = self.get()
-        if rec is None:
-            return False
-        self.write(fn(rec))
-        return True
-
-    def modify_with(self, fn: Callable[[T], T], also: Callable[[sqlite3.Connection | None], None]) -> bool:
-        also(None)
-        return self.modify(fn)
-
-    def delete(self) -> None:
-        self.data = None
 
 
 class MemDocSet[T](DocSet[T]):
@@ -235,7 +189,7 @@ def fake_stores(pid: int | None = None) -> Stores:
         profile_changes=MemLog(_decode(ProfileChange)),
         asks=AskStore(MemDocSet(Ask), MemLog(_decode(LedgerEntry))),
         adrs=lambda repo: adrs.setdefault(repo, AdrStore(MemDocSet(Adr), MemLog(_decode(AdrUse)))),
-        checkpoints=CheckpointBook(MemDocSet(Checkpoint)),
+        checkpoints=CheckpointBook(MemCheckpointRows()),
         flakes=MemDocSet(FlakeLog),
         followups=MemDocSet(FollowupOutbox), queue=MemDocSet(QueueDoc), queue_state=MemDocSet(QueueState),
         results=lambda repo, check: passes.setdefault((repo, check), MemDocSet(PassRecord)),

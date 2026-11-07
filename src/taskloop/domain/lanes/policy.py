@@ -1,11 +1,12 @@
 """Engine decisions after delegate has exhausted its worker retries and write reroute.
 
-The pure policy maps stop facts to NewThread, Reroute, Yield or Fail. Only resumed
-calls retain the engine's fresh-prompt recovery; delegate crashes fail immediately.
-Network stops pause without charging a retry or marking a lane out.
+The pure policy maps stop facts to NewThread, Reroute, Yield or Fail. Fixed rows
+carry outcome kinds; functions handle the remaining context-dependent recovery.
+Delegate owns worker retries; the engine still recovers resumed calls and secret
+false positives. Delegate crashes fail immediately and network stops pause.
 """
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final, get_args
 
@@ -17,55 +18,41 @@ SCOPES: Final[tuple[Scope, ...]] = get_args(Scope)
 PERMANENCES: Final[tuple[Permanence, ...]] = get_args(Permanence)
 RETRY_KINDS: Final[tuple[RetryKind, ...]] = get_args(RetryKind)
 
-# Engine scheduling policy; these knobs are not fields or defaults in delegate's schema.
-KNOBS: Final = {
-    "net_wait_cap_s": 600,  # the lander waits this long for its git push network retry
-}
-
 
 @dataclass(frozen=True)
 class Stop:
-    """The facts of one stopped call (the contract's `stop{}` plus `run.ref`). Built by delegate_link from the answer."""
+    """The stopped-call facts still read by engine policy, logging and pause wording."""
 
     scope: str
     permanence: str
     retry_kind: str = "none"
     retry_at: float = 0.0  # epoch the lane is predicted back, or the suggested poll gap (0: none given)
     reason: str = ""  # wording only
-    resumable: bool = False
-    partial: bool = False  # work was seen before the stop
-    ref: str = ""  # the vendor session of the call ("" when it never got one)
     lane: str = ""
     model: str = ""
     signal: int = 0  # the signal that ended the call (killed), 0 for none
     fix: str = ""
-    fingerprint: str = ""
     exit_code: int | None = None  # the worker's exit status (negative: ended by that signal)
     timed_out: bool = False  # the engine or delegate ended the call at its time limit
     producer: Producer = "delegate"
 
 
 def stop_of(res: DelegateResult) -> Stop | None:
-    """The `Stop` of a result that stopped (None for a done call): the answer's `stop{}` facts plus what its worker did. A `killed`
+    """The engine facts of a stopped result (None for a done call). A `killed`
     stop is a signal (contract 4 states no signal number, and (machine, transient, none) alone cannot tell it from a crash)."""
     st = res.stop
     if st is None:
         return None
-    ref = st.ref or res.ref or (res.usage.ref if res.usage and res.usage.ref else "")
     return Stop(
         st.scope,
         st.permanence,
         st.retry.kind,
         float(st.retry.at or 0.0),
         st.reason,
-        st.resumable,
-        st.partial,
-        ref,
         res.lane or "",
         res.model or "",
         1 if st.reason == "killed" else 0,
         st.fix,
-        "",
         res.exit_code,
         st.reason == REASON_TIMEOUT,
         st.producer,
@@ -84,9 +71,8 @@ def net_data(res: DelegateResult) -> bool:
 
 @dataclass(frozen=True)
 class Ctx:
-    """What the executor has counted for this step. now: the Clock's wall time."""
+    """Recovery state the executor has counted for this step."""
 
-    now: float
     resumed: bool = False  # this call resumed a vendor thread
     attempt: int = 0
     denied_retried: bool = False
@@ -111,83 +97,49 @@ class Reroute:
 
 @dataclass(frozen=True)
 class Yield:
-    """The run pauses with a wake; the bead stays open. retry_after: epoch hint (0: none). banner: say it once."""
+    """The run pauses; the bead stays open. retry_after is an epoch hint (0: none)."""
 
-    kind: str  # the outcome.Kind name (PAUSE_LANE, PAUSE_NETWORK, PAUSE_KILLED)
-    say: str = ""
+    kind: str
     retry_after: float = 0.0
-    fix: str = ""
-    banner: bool = False
-    charges: str = ""
 
 
 @dataclass(frozen=True)
 class Fail:
-    kind: str  # the outcome.Kind name (FAULT_*, or ASK_STUCK for the one ask a failing worker gets)
-    say: str = ""
-    charges: str = ""
+    kind: str
     plan: str = ""
 
 
 Action = NewThread | Reroute | Yield | Fail
-Knobs = Mapping[str, float]
-
-
-def _say(stop: Stop) -> str:
-    return (f"{stop.reason} {stop.fix}").strip() or f"{stop.scope}/{stop.permanence}/{stop.retry_kind}"
-
-
-def _yield(kind: str, stop: Stop, retry_after: float = 0.0, banner: bool = False) -> Yield:
-    return Yield(kind, _say(stop), retry_after, stop.fix, banner)
-
-
-def _fail(kind: str, stop: Stop, plan: str = "") -> Fail:
-    return Fail(kind, _say(stop), plan=plan)
 
 
 def _excluded(stop: Stop) -> str:
     return stop.lane if stop.scope == "lane" or not stop.model else stop.model
 
 
-def _machine_predicted(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
-    return _yield("PAUSE_LANE", stop, stop.retry_at)
-
-
-def _machine_none(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
+def _machine_none(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
     """A delegate crash fails immediately; a signal still pauses the run."""
     if stop.signal:
-        return _yield("PAUSE_KILLED", stop)
-    return _fail("FAULT_CRASHED", stop)
+        return Yield("PAUSE_KILLED")
+    return Fail("FAULT_CRASHED")
 
 
-def _machine_owner(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
-    """setup, contract violations, no lane and no time: the machine's owner fixes it; the loop never asks per bead."""
-    if stop.signal:
-        return _yield("PAUSE_KILLED", stop)
-    return _yield("PAUSE_LANE", stop)
-
-
-def _caller_owner(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
+def _caller_owner(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
     """bad_request, caller (an unknown ref): the call itself is wrong. When it resumed a thread, the vendor may have refused that ref:
     once on a new thread with the whole prompt, then the fault."""
     if ctx.resumed and plan.left("resume_refused", ctx.resume_refused):
         return NewThread("", "resume_refused", "resume_refused")
-    return _caller(stop, ctx, cfg, plan)
+    return Fail("FAULT_BAD_REQUEST")
 
 
-def _caller(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
-    return _fail("FAULT_BAD_REQUEST", stop)
-
-
-def _bead_owner(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
+def _bead_owner(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
     """secrets: a heredoc body that merely names .env gets one fresh thread told to use apply_patch (2.14), a second denial is a
     fault, and a real secret path is never retried. Never an ask."""
     if ctx.secret_fp and plan.left("denied_secret", int(ctx.denied_retried)):
         return NewThread("apply_patch", "denied_retried", "denied_secret")
-    return _fail("FAULT_DENIED", stop, "denied_secret")
+    return Fail("FAULT_DENIED", "denied_secret")
 
 
-def _bead_none(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
+def _bead_none(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
     """Delegate exhausted recovery. Only resumed calls need a fresh engine prompt first."""
     hurt = stop.timed_out or stop.exit_code == -15
     if ctx.resumed and plan.left("worker_failed", ctx.attempt):
@@ -195,54 +147,47 @@ def _bead_none(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
             return Reroute(_excluded(stop), "attempt", "worker_failed")
         return NewThread("", "attempt", "worker_failed")
     if hurt and ctx.node == "write" and plan.row("worker_failed").then == "ask":
-        return Fail("ASK_STUCK", _say(stop), plan="worker_failed")
-    return _fail("FAULT_INFRA", stop, "worker_failed")
+        return Fail("ASK_STUCK", "worker_failed")
+    return Fail("FAULT_INFRA", "worker_failed")
 
 
-def _bead_poll(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
-    return _yield("PAUSE_LANE", stop)
-
-
-def _lane_owner(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
-    """logged_out, credit_exhausted, model unsupported: the lane (or model) waits for its owner; the loop does not ask."""
-    return _yield("PAUSE_LANE", stop)
-
-
-def _lane_predicted(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
+def _lane_predicted(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
     """Delegate exhausted its short waits; park fresh calls and move resumed threads."""
     if ctx.resumed:
         return NewThread("lane_out")
-    return _yield("PAUSE_LANE", stop, stop.retry_at)
+    return Yield("PAUSE_LANE", stop.retry_at)
 
 
-def _lane_poll(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
+def _lane_poll(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
     """Delegate exhausted its polls; try another lane."""
     return NewThread("lane_out") if ctx.resumed else Reroute(_excluded(stop))
 
 
-def _lane_none(stop: Stop, ctx: Ctx, cfg: Knobs, plan: RetryPlan) -> Action:
+def _lane_none(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
     """A lane or model transient with no time: one other pick, then a pause."""
     if ctx.attempt < 2:
         return Reroute(_excluded(stop))
-    return _yield("PAUSE_LANE", stop)
+    return Yield("PAUSE_LANE")
 
 
 # The table. Every legal tuple has a row; a new reason is a delegate classifier line, never a row here.
-TABLE: Final[dict[tuple[str, str, str], Callable[[Stop, Ctx, Knobs, RetryPlan], Action]]] = {
-    ("machine", "transient", "poll"): lambda stop, ctx, cfg, plan: _yield("PAUSE_NETWORK", stop),
-    ("machine", "transient", "predicted"): _machine_predicted,
+# Fixed rows are (outcome kind, whether to copy the predicted retry time).
+Row = tuple[str, bool] | Callable[[Stop, Ctx, RetryPlan], Action]
+TABLE: Final[dict[tuple[str, str, str], Row]] = {
+    ("machine", "transient", "poll"): ("PAUSE_NETWORK", False),
+    ("machine", "transient", "predicted"): ("PAUSE_LANE", True),
     ("machine", "transient", "none"): _machine_none,
-    ("machine", "needs_owner", "none"): _machine_owner,
+    ("machine", "needs_owner", "none"): ("PAUSE_LANE", False),
     ("caller", "needs_owner", "none"): _caller_owner,
-    ("caller", "transient", "none"): _caller,  # no doc row: a caller's request does not heal by waiting
-    ("caller", "transient", "predicted"): _caller,  # no doc row
-    ("caller", "transient", "poll"): _caller,  # no doc row
+    ("caller", "transient", "none"): ("FAULT_BAD_REQUEST", False),  # no doc row: a caller's request does not heal by waiting
+    ("caller", "transient", "predicted"): ("FAULT_BAD_REQUEST", False),  # no doc row
+    ("caller", "transient", "poll"): ("FAULT_BAD_REQUEST", False),  # no doc row
     ("bead", "needs_owner", "none"): _bead_owner,
     ("bead", "transient", "none"): _bead_none,
     ("bead", "transient", "predicted"): _bead_none,  # no doc row: the bead's own failure, tried once more
-    ("bead", "transient", "poll"): _bead_poll,
-    ("lane", "needs_owner", "none"): _lane_owner,
-    ("model", "needs_owner", "none"): _lane_owner,
+    ("bead", "transient", "poll"): ("PAUSE_LANE", False),
+    ("lane", "needs_owner", "none"): ("PAUSE_LANE", False),
+    ("model", "needs_owner", "none"): ("PAUSE_LANE", False),
     ("lane", "transient", "predicted"): _lane_predicted,
     ("model", "transient", "predicted"): _lane_predicted,
     ("lane", "transient", "poll"): _lane_poll,
@@ -255,12 +200,15 @@ TABLE: Final[dict[tuple[str, str, str], Callable[[Stop, Ctx, Knobs, RetryPlan], 
 LEGAL: Final = tuple(TABLE)
 
 
-def decide(stop: Stop, ctx: Ctx, cfg: Knobs = KNOBS, plan: RetryPlan = PLAN) -> Action:
+def decide(stop: Stop, ctx: Ctx, plan: RetryPlan = PLAN) -> Action:
     """The next Action for a stopped call. A signal on a machine stop is a kill (checkpoint kept, never a fail, never an
     ask). An unknown tuple pauses the lane: the contract may grow, the loop never fails or asks on what it cannot read."""
     if stop.signal and stop.scope == "machine":
-        return _yield("PAUSE_KILLED", stop)
+        return Yield("PAUSE_KILLED")
     row = TABLE.get((stop.scope, stop.permanence, stop.retry_kind))
     if row is None:
-        return _yield("PAUSE_LANE", stop)
-    return row(stop, ctx, cfg, plan)
+        return Yield("PAUSE_LANE")
+    if callable(row):
+        return row(stop, ctx, plan)
+    kind, predicted = row
+    return Fail(kind) if kind.startswith("FAULT_") else Yield(kind, stop.retry_at if predicted else 0.0)

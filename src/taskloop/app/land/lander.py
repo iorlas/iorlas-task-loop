@@ -27,8 +27,8 @@ from taskloop.app.land.recheck import Recheck
 from taskloop.app.land.state import Land, Next, Phase, Placing
 from taskloop.app.land.sync import Sync
 from taskloop.domain.asks import specs as askspecs
-from taskloop.domain.lanes import policy as lp
 from taskloop.domain.lanes.liveness import LIVENESS
+from taskloop.domain.lanes.notes import NET_WAIT_CAP_S
 
 
 class GateStep(Protocol):
@@ -154,7 +154,7 @@ class Lander:
                 raise e.blocked_for(f"land iteration cap ({LIVENESS.land_iterations}) reached; branch kept", "OWNER_PARK")
             st.iterations += 1
             if resting:  # a network failure, with the lock let go: wait for the network, then fetch and look again
-                waited, back = e.worker.acts.await_net(e.worker.acts.net_up(), lp.KNOBS["net_wait_cap_s"])
+                waited, back = e.worker.acts.await_net(e.worker.acts.net_up(), NET_WAIT_CAP_S)
                 if not back:
                     raise e.blocked_for(f"paused: no network for the land push after {waited} s; the branch is kept, the next run lands it",
                                         "PAUSE_NETWORK")
