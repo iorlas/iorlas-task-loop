@@ -5,10 +5,10 @@ from unittest.mock import Mock
 
 import pytest
 from support import waits
-from support.memstores import MemLockTable
 
 from tlkernel.lockenums import LockWhat
 from tlkernel.locks import LockRecord
+from tltestkit.memdoc import MemLockTable
 
 
 def test_settle_fails_at_its_limit():

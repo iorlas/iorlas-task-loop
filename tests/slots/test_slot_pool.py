@@ -17,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.fake_slot_git import FakeSlotGit
-from support.memstores import MemTickets
 
 from taskloop.adapters.git import classify
 from taskloop.app.slots.env import SlotEnv
@@ -30,6 +29,7 @@ from tlkernel.bead import Bead
 from tlkernel.config import SlotsConfig
 from tlkernel.ids import BeadId
 from tlkernel.slots import BranchPinned, Checkout, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
+from tltestkit.memdoc import MemTickets
 
 ME = "tl-me"
 LIVE_PID = os.getpid()  # a pid the ticket line reads as alive: pid 1 is launchd on macOS, which libproc will not show to a user process
