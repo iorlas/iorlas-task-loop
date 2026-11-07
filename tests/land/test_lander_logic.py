@@ -14,7 +14,7 @@ from support.narrow_hosts import FakeLandedHost, FakeLandRebaseHost, Stopped
 # isort: split
 from taskloop.app.land.land_rebase import LandRebase
 from taskloop.app.land.landed import Landed
-from taskloop.domain.land.matchers import Push
+from tlkernel.landmatchers import Push
 
 
 def rebase(git: FakeGit) -> LandRebase:

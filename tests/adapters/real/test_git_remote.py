@@ -10,8 +10,8 @@ from support.checked import run_checked
 
 from taskloop.adapters import git_ops
 from taskloop.adapters.git import RealGit
-from taskloop.domain.land.matchers import Push
 from tlkernel.env import Env, snapshot
+from tlkernel.landmatchers import Push
 from tlkernel.slots import GitReadFailure, RefRace, SlotGitError
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory

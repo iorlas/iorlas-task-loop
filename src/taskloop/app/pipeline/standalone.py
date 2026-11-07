@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from tlkernel import fence, wire
 from tlkernel import runoutcome as oc
+from tlkernel.acceptancetext import AcceptanceText
 from tlkernel.bead import Bead
 from tlkernel.checkpoint import Checkpoint
 from tlkernel.enums import Step
@@ -31,7 +32,6 @@ from taskloop.app.pipeline.standalone_roles import (
     Values,
 )
 from taskloop.domain import effects
-from taskloop.domain.plan.matchers import AcceptanceText
 
 
 class Standalone[T]:
