@@ -5,7 +5,7 @@ import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 
 from taskloop.app.asks import intake, ledgercomments, raiser
-from taskloop.domain.asks import specs
+from tlkernel import askspecs as specs
 from tlkernel.askrows import AskRows
 from tlkernel.askstore import AskStore
 from tlkernel.bead import BdError, Bead

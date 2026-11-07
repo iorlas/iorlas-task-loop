@@ -15,10 +15,10 @@ import support.paths  # noqa: F401
 from taskloop.app.asks import parks
 from taskloop.app.asks.closing import ClosingAsks
 from taskloop.app.pipeline.closing import Closer
-from taskloop.domain import outcome as oc
 from taskloop.domain.beads import park
 from taskloop.domain.beads.park import text_hash
 from taskloop.domain.lanes import pauses
+from tlkernel import runoutcome as oc
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
 from tlkernel.kinds import ASKS, FAULTS, Kind

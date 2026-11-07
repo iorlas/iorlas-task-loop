@@ -10,6 +10,7 @@ from tlkernel.gitport import Git
 from tlkernel.ids import TreeSha
 from tlkernel.plancheck import PlanCheck
 from tlkernel.runkey import BaseSha
+from tlkernel.storeapi import Doc
 
 from taskloop.app.checks import evidence, gateplan
 from taskloop.app.checks.attempts import Attempts
@@ -20,16 +21,15 @@ from taskloop.app.checks.execution import keyed_env
 from taskloop.app.checks.executor import CheckExecutor
 from taskloop.app.checks.fixer import Fixer
 from taskloop.app.checks.host import CheckFault, CheckHost, CheckStuck
+from taskloop.app.checks.ports import GateStores
 from taskloop.app.checks.round import Round
 from taskloop.domain.checks.durations import merged, seconds
 from taskloop.domain.checks.plan import CheckPlan
 from taskloop.domain.checks.specs import diff_check, due, engine_digest, gate_items, items_of, repo_check
 from taskloop.domain.checks.writer_split import WriterSplit
-from taskloop.stores.api import Doc
-from taskloop.stores.bundle import Stores
 
 
-def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: Stores, env: Env,
+def cached_gate(cfg: EngineConfig, git: Git, wt: str, stores: GateStores, env: Env,
                 tree: TreeSha, planned: gateplan.PlanDecision | None, *, clean: bool = False,
                 slot_wt: str | None = None) -> bool:
     """Read gate evidence without running checks or a plan producer."""

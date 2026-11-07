@@ -6,6 +6,7 @@ from tlkernel.adrs import AdrStore
 from tlkernel.ask import AskAnswer
 from tlkernel.asked import Asked
 from tlkernel.askenums import AskClass
+from tlkernel.askspec import AskSpec
 from tlkernel.beadsport import Beads
 from tlkernel.checkpoint import BriefSnap, Checkpoint, PlanStep, StageProgress
 from tlkernel.checks import Check, CheckRun
@@ -19,7 +20,6 @@ from tlkernel.stop import Stop
 from tlkernel.wire import Open
 
 from taskloop.adapters.check_probe import PathProbe
-from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.work.ledger import Ledger
 
 

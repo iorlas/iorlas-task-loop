@@ -15,7 +15,6 @@ from jsonl_log.cursor import _parse  # shelf lacks: a public parse of in-memory 
 
 from support.memcheckpoints import MemCheckpointRows
 from support.memdoc import MemDoc
-from taskloop.stores.api import DocSet
 from taskloop.stores.books import CheckpointBook
 from taskloop.stores.bundle import Stores
 from taskloop.stores.files import temp_leases
@@ -34,6 +33,7 @@ from tlkernel.profile_changes import ProfileChange
 from tlkernel.queue_doc import QueueDoc
 from tlkernel.queue_state import QueueState
 from tlkernel.rotating import RotatingJsonl
+from tlkernel.storeapi import DocSet
 from tlkernel.stores import JsonlStore
 from tlkernel.trace import RunTrace
 

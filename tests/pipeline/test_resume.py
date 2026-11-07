@@ -16,7 +16,7 @@ def checkpoint(**kw) -> Checkpoint:
 
 def test_outside_text_asks_history_and_clips():
     history = FakeHeadHistory("x" * 801)
-    resume = Resume(SimpleNamespace(wt="tree"), history, FakeReviewRestore(), ())
+    resume = Resume(SimpleNamespace(), SimpleNamespace(), SimpleNamespace(wt="tree"), history, FakeReviewRestore(), ())
     text = resume.outside_text(checkpoint())
     assert history.calls == [("tree", "abcdef0123456789", 15)]
     assert "x" * 800 in text and "x" * 801 not in text
@@ -33,7 +33,7 @@ def test_restore_copies_only_selected_state_and_restores_review(late):
     host = SimpleNamespace(state=state,
                            checkpoints=SimpleNamespace(keep_pending=lambda: pending.append(True)))
     review = FakeReviewRestore()
-    Resume(host, FakeHeadHistory(), review, names).restore(checkpoint(state=saved), late=late)
+    Resume(host, host, host, FakeHeadHistory(), review, names).restore(checkpoint(state=saved), late=late)
     for name in names:
         expected = getattr(saved if name not in KEEP_FOR_ACTIVE and (late or name not in LATE) else RunState(), name)
         if name not in ("extra", "planner_ref"):
@@ -46,7 +46,7 @@ def test_restore_copies_only_selected_state_and_restores_review(late):
 
 def test_replan_note_writes_gate_output_and_marks_first(workdir):
     host = SimpleNamespace(run_dir=workdir, log=FakeNarrate(), state=RunState(done=["stage"]), replan_first=False)
-    Resume(host, FakeHeadHistory(), FakeReviewRestore(), ()).replan_note(checkpoint(step="gate-red", gate_tail="failure"))
+    Resume(host, host, host, FakeHeadHistory(), FakeReviewRestore(), ()).replan_note(checkpoint(step="gate-red", gate_tail="failure"))
     assert (workdir / "replan.md").read_text() == GATE_NOTE + "failure"
     assert host.replan_first
 
@@ -54,7 +54,7 @@ def test_replan_note_writes_gate_output_and_marks_first(workdir):
 def test_amend_keeps_verify_answer_for_planning():
     host = SimpleNamespace(log=FakeNarrate(), answered=None, state=RunState(done=["stage"]))
     plan = {"summary": "saved"}
-    result = Resume(host, FakeHeadHistory(), FakeReviewRestore(), ()).amend(
+    result = Resume(host, host, host, FakeHeadHistory(), FakeReviewRestore(), ()).amend(
         checkpoint(state=RunState(plan_data=plan)), Decision(kind="amend", verify_answer="owner asks for a fix"))
     assert result == (None, 0, None)
     assert (host.state.plan_data, host.plan_summary, host.verify_answer) == (plan, "saved", "owner asks for a fix")

@@ -1,4 +1,4 @@
-"""The child env is an allowlist (adapters/childenv.py): a check run through `tl check` sees only the allowlist and its declared env.
+"""The child env is an allowlist (tlkernel/childenv.py): a check run through `tl check` sees only the allowlist and its declared env.
 
 The probe check dumps its environment; nothing outside ALLOWED and the declared env may reach it. That is the guard. That a real gate
 (task-loop's own `just check`, lifesim's checks) still passes under the list is too heavy for the real-test limit:
@@ -11,7 +11,7 @@ from pathlib import Path
 from support.checked import run_checked
 from support.tlmain import tl_main
 
-from taskloop.adapters.childenv import CHECK_HOME_NAMES, allowed, check_caches
+from tlkernel.childenv import CHECK_HOME_NAMES, allowed, check_caches
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 

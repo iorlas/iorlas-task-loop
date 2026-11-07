@@ -4,6 +4,7 @@ import traceback
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
+from tlkernel import runoutcome as oc
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
@@ -12,7 +13,6 @@ from tlkernel.ports import Clock
 
 from taskloop.adapters import closes
 from taskloop.adapters.repourl import repo_url
-from taskloop.domain import outcome as oc
 
 
 class DecideHost(Protocol):
