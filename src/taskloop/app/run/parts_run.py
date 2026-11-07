@@ -11,6 +11,7 @@ from taskloop.adapters.agent import new_live
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.asks.closing import ClosingTrust
 from taskloop.app.land.closing import LandHistory
+from taskloop.app.pipeline.journal import Journal, JournalHost
 from taskloop.app.pipeline.reflect import Reflector
 from taskloop.app.pipeline.reload import Reload, ReloadHost
 from taskloop.app.pipeline.requests import OwnerRequests
@@ -19,8 +20,8 @@ from taskloop.app.pipeline.waits import Waits
 from taskloop.app.release.closing import ReexecBook
 from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.run.bead_env import bead_env
+from taskloop.app.run.layout import repo_of
 from taskloop.app.run.plumbing import Plumbing
-from taskloop.app.run.records import Records
 from taskloop.app.run.reload_ports import installed_newer, locked_slot
 from taskloop.app.run.review_glue import ReviewGlue
 from taskloop.app.run.shared import Shared
@@ -42,7 +43,10 @@ class RunParts(Plumbing):
     @cached_property
     def reload(self: ReloadHost) -> Reload:
         return Reload(self, ReexecBook(self.home), TrailEvents(), lambda: installed_newer(self.env), locked_slot)
-    records = cached_property(Records)
+
+    @cached_property
+    def records(self: JournalHost) -> Journal:
+        return Journal(self, locked_slot, repo_of)
     shared = cached_property(Shared)
     stuck = cached_property(StuckTick)
     requests = cached_property(OwnerRequests)
