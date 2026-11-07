@@ -18,12 +18,12 @@ from tlkernel.ports import Clock
 from tlkernel.procport import Spawner
 from tlkernel.run import RunReport
 from tlkernel.runlayout import RunLayout, finish_of, live_run, loop_id_of, loop_of, repo_of
+from tlkernel.systemclock import SystemClock
 from tlpipeline.api import Blocked, FixFailed, ended
 from tlrelease import reexec
 from tlslots.engine_lock import HeldLock
 
 from taskloop.adapters import landlock
-from taskloop.adapters.clock import SystemClock
 from taskloop.app.run.context import RunContext
 from taskloop.app.run.facts import open_facts
 from taskloop.app.run.host import RunHost

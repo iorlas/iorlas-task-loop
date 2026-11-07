@@ -8,6 +8,7 @@ import shutil
 from collections.abc import Callable
 from pathlib import Path
 
+from tlasks import sweeps as ask_sweeps
 from tlkernel import childenv, paths
 from tlkernel.beadsport import Beads
 from tlkernel.config import RepoProfile
@@ -27,7 +28,6 @@ from tlslots import engine_lock
 from taskloop.adapters import beadtools, ident, pidcheck
 from taskloop.adapters.bd import BdStore
 from taskloop.adapters.locks import hold_path
-from taskloop.app.asks import sweeps as ask_sweeps
 from taskloop.app.doctor import profiles
 from taskloop.app.launch import loop_ops as ops
 from taskloop.app.loop import lintrun
@@ -99,7 +99,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         cfgdir=cfg,
         store=store,
         slots=EngineSlots(lambda: wslots.slot_env(repo, store, profile().slots, now, spawner=spawner, git=git, who=who)),
-        asks=EngineAsks(cfg, now),
+        asks=EngineAsks(cfg, now, wasks.host),
         profile=profile,
         fetch=lambda: ops.fetch(repo, git),
         lint=lambda b: beadlint.why(b, repo, lambda: lintrun.has_children(store, b.id)),

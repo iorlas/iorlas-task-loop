@@ -34,13 +34,12 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.adapters import delegate as dl
-from taskloop.app.asks import admission
 from taskloop.app.land.checkout import Checkout
-from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine, entry, running
 from taskloop.app.track import outcome_line
+from taskloop.app.wire import asks as wasks
 from taskloop.domain.lanes.matchers import read_only_command
-from taskloop.domain.write.matchers import count_tests
+from tlasks import admission
 from tlgate.domain import retry
 from tlkernel import checkmatchers as check_matchers
 from tlkernel.acceptancetext import AcceptanceText
@@ -58,6 +57,8 @@ from tltestkit import fake_route
 from tltestkit.cfgs import cfg_with
 from tltestkit.logs import records
 from tltestkit.tmpdir import mkdtemp
+from tlwork.plan.planner import Planner
+from tlwork.write.matchers import count_tests
 
 
 class EngineRunTest(EngineTest):
@@ -709,7 +710,8 @@ class EngineRunTest(EngineTest):
         calls = []
         with self.store.stub(show=blocked), self.store.stub(comments=cs), \
                 self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
-            ok, why = admission.admit(BeadId("t-1"), str(self.wt), port_git(), who(), store=self.store, running_now=running.running)
+            ok, why = admission.admit(wasks.host(), BeadId("t-1"), str(self.wt), port_git(), who(),
+                store=self.store, running_now=running.running)
         assert ok, why
 
     def test_a_pause_is_a_comment_never_a_line_of_notes(self):

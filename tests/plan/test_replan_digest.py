@@ -4,9 +4,9 @@ from types import SimpleNamespace
 import pytest
 from support.plan_host import FakePlan
 
-from taskloop.app.plan.prompt import REPLAN_CALLS
 from tltestkit.checks import typed
 from tltestkit.plans import PLAN
+from tlwork.plan.prompt import REPLAN_CALLS
 
 
 @pytest.fixture

@@ -21,7 +21,6 @@ from support.who import who
 import tltestkit.shellkit
 from taskloop.adapters import pidcheck
 from taskloop.adapters.check_probe import PathProbe
-from taskloop.app.write.handoff import HANDOFF_CAP
 from tlgate import evidence as check_evidence
 from tlgate.domain import planref
 from tlkernel import childenv, rundocs
@@ -37,6 +36,7 @@ from tltestkit.cfgs import plan_of
 from tltestkit.checks import ck, res, typed
 from tltestkit.narrow import must
 from tltestkit.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE
+from tlwork.write.handoff import HANDOFF_CAP
 
 
 class StagesTest(te.EngineTest):

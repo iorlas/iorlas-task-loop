@@ -5,7 +5,7 @@ from pathlib import Path
 STAGE_MODULES = {
     "land": "taskloop.app.land.paths",
     "slot": "tlslots.paths",
-    "ask": "taskloop.app.asks.paths",
+    "ask": "tlasks.paths",
     "release": "tlrelease.paths",
     "suite": "taskloop.app.prune.paths",
     "dash": "tldash.paths",

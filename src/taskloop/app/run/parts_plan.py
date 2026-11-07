@@ -4,10 +4,10 @@ from functools import cached_property
 
 from tlkernel import plancheck
 from tlkernel.paths import PLAN_FILE
+from tlwork.write.briefing import Briefing
+from tlwork.write.stage_loop import StageLoop
 
 from taskloop.app.run.plumbing import Plumbing
-from taskloop.app.write.briefing import Briefing
-from taskloop.app.write.stage_loop import StageLoop
 
 
 class PlanParts(Plumbing):

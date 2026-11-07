@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import contextlib  # noqa: E402
 
-from taskloop.adapters import looks  # noqa: E402
+from taskloop.adapters import looks as image_adapter  # noqa: E402
+from tlwork.look import shotspec as looks  # noqa: E402
 
 TABLE = {"v": 1, "methods": [
     {"method": "CreatorShots", "summary": "named creator categories",
@@ -129,6 +130,6 @@ class Judge(Case):
         with TemporaryDirectory() as d, without_image_tools():
             src = Path(d, "a.png")
             src.write_bytes(b"not an image")
-            why = looks.downscale(src, Path(d, "sub", "b.png"), 100)
+            why = image_adapter.downscale(src, Path(d, "sub", "b.png"), 100)
             assert Path(d, "sub", "b.png").is_file()
             assert "not downscaled" in why  # the bytes are no picture: the tool fails, the copy stands

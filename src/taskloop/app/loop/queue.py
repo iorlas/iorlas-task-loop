@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
+from tlasks import hold
 from tlkernel import pickset
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, BeadPatch, BeadQuery, Beads
@@ -15,7 +16,6 @@ from tlkernel.loop import Skip
 
 from taskloop.app.loop import hosts
 from taskloop.app.loop.env import LoopEnv
-from taskloop.domain.asks import hold
 
 Key = tuple[int, int, list[tuple[int, int | str]], Bead]  # (priority, epic rank, natural id, bead)
 ORDERED = "ordered"  # the label of an epic whose children must name what they follow
@@ -23,7 +23,7 @@ ANY_AREA = "*"  # busy_areas key for a running bead that could not be read: ever
 
 
 def natural(bead_id: BeadId) -> list[tuple[int, int | str]]:
-    """fld.26.9 before fld.26.10: digit runs compare as numbers."""
+    """a1.26.9 before a1.26.10: digit runs compare as numbers."""
     return [(0, int(g)) if d else (1, g) for d, g in ((k, "".join(v)) for k, v in itertools.groupby(bead_id, str.isdigit))]
 
 

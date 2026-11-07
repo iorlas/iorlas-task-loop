@@ -20,7 +20,7 @@ def slot_setup_mark(cfg: ConfigDir, key: str) -> Path:
 
 
 def slot_state(cfg: ConfigDir, repo_key: str, slot: str) -> Path:
-    """What one slot of one repo keeps for its commands (temp, dotnet and NuGet scratch): outside the worktree, kept across reuse."""
+    """What one slot of one repo keeps for its commands (temporary files and toolchain scratch): outside the worktree, kept across reuse."""
     return cfg.repo_dir(repo_key) / "slot-state" / slot
 
 

@@ -78,7 +78,7 @@ class Shell:
                                             on_output=chunks.append, timeout_s=timeout, stop=stop)
             return e.spawner.stream(list(cmd), cwd=None if cwd is None else str(cwd), extra=extra, on_output=chunks.append,
                                     timeout_s=timeout, stop=stop)
-        except BaseException:  # stopped (stream-proc stopped the tree first): never leave a check (just check, Unity) running
+        except BaseException:  # stopped (stream-proc stopped the tree first): never leave a check (just check, editor) running
             now = time.time()
             e.killed = True
             e.log.emit(rec.Kill(what=what, why="interrupted", secs=round(now - started), started_t=started, kill_t=now, observed_t=now))

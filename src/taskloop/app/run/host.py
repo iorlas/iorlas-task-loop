@@ -7,25 +7,25 @@ from tlkernel import plancheck
 from tlkernel.asked import Asked
 from tlkernel.stagefacts import RunFacts
 from tlpipeline.api import Closer, LeftoverQueue, summaries
+from tlwork.look.judge import Judge
+from tlwork.look.owner_look import OwnerLook
+from tlwork.look.shots import Pictures
+from tlwork.plan.briefs import Briefs
+from tlwork.plan.cases import Cases
+from tlwork.plan.planner import Planner
 from tlwork.review.link_check import LinkCheck
 from tlwork.review.routing import Routing
 from tlwork.review.settles import Settles
 from tlwork.review.verifier import Verifier
+from tlwork.write.handoff import Handoff
 
-from taskloop.adapters import links
-from taskloop.app.look.judge import Judge
-from taskloop.app.look.owner_look import OwnerLook
-from taskloop.app.look.shots import Pictures
-from taskloop.app.plan.briefs import Briefs
-from taskloop.app.plan.cases import Cases
-from taskloop.app.plan.planner import Planner
+from taskloop.adapters import links, looks
 from taskloop.app.run.closer_ports import closer_over
 from taskloop.app.run.parts_land import LandParts
 from taskloop.app.run.parts_plan import PlanParts
 from taskloop.app.run.parts_run import RunParts
 from taskloop.app.workers import asked
 from taskloop.app.workers.worker_call import Ops, WorkerCall
-from taskloop.app.write.handoff import Handoff
 from taskloop.domain.lanes.matchers import read_only_command
 from taskloop.domain.lanes.says import stop_say, stop_why
 from taskloop.stores.runports import RunPorts
@@ -101,6 +101,8 @@ class RunHost(LandParts, PlanParts, RunParts):
     @cached_property
     def closer(self) -> Closer:
         return closer_over(self, self.worker.saved)
+
+    downscale = staticmethod(looks.downscale)
 
     def ai(self, node: str, title: str, prompt: str, *a: object, **kw: object) -> Asked:
         """One AI node, then the tree check: a worker that wrote core.worktree is caught before review or land. Before it, the

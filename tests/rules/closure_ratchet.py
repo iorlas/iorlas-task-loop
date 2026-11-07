@@ -15,13 +15,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "dev"))
 from importgraph import targets_of
 
 TREES = ("src/taskloop", "packages/kernel/src/tlkernel", "packages/gate/src/tlgate",
-         "packages/work/src/tlwork", "packages/slots/src/tlslots", "packages/release/src/tlrelease")
+         "packages/work/src/tlwork", "packages/slots/src/tlslots", "packages/asks/src/tlasks", "packages/release/src/tlrelease")
+
+
+def stage_packages(packages):
+    stages = sorted(name for name in packages if name.startswith("taskloop.app.") and name.count(".") == 2)
+    if "tlgate" in packages:  # the gate is its package now; the shell's app/checks (step.py) is glue and keeps no budget of its own
+        stages = [name for name in stages if name != "taskloop.app.checks"] + ["tlgate"]
+    if "tlslots" in packages:
+        stages = [name for name in stages if name != "tlslots"] + ["tlslots"]
+    if "tlrelease" in packages:
+        stages = [name for name in stages if name != "taskloop.app." + "release"] + ["tlrelease"]
+    if "tlasks" in packages:
+        stages = [name for name in stages if name != "taskloop.app." + "asks"] + ["tlasks"]
+    for stage in ('review', 'plan', 'look', 'write'):
+        if f'tlwork.{stage}' in packages:
+            stages = [name for name in stages if name != 'taskloop.app.' + stage] + [f'tlwork.{stage}']
+    return stages
 
 
 def closures(texts: Mapping[str, str]) -> dict[str, int]:
     """Count reachable local files and distinct external module roots for each stage."""
     modules = {path.removeprefix("packages/kernel/").removeprefix("packages/gate/")
-               .removeprefix("packages/release/").removeprefix("packages/work/").removeprefix("packages/slots/").removeprefix("src/")
+               .removeprefix("packages/work/").removeprefix("packages/slots/").removeprefix("packages/asks/").removeprefix("packages/release/").removeprefix("src/")
                .removesuffix(".py").replace("/", ".").removesuffix(".__init__"):
                path for path in texts if path.startswith(tuple(tree + "/" for tree in TREES)) and path.endswith(".py")}
     packages = {name for name, path in modules.items() if path.endswith("/__init__.py")}
@@ -41,12 +57,7 @@ def closures(texts: Mapping[str, str]) -> dict[str, int]:
                     edges[name].add(candidate)
                     break
                 candidate = candidate.rpartition(".")[0]
-    stages = sorted(name for name in packages if name.startswith("taskloop.app.") and name.count(".") == 2)
-    for package, shell in {"tlgate": "checks", "tlslots": "slots", "tlrelease": "release"}.items():
-        if package in packages:
-            stages = [name for name in stages if name != "taskloop.app." + shell] + [package]
-    if "tlwork.review" in packages:
-        stages = [name for name in stages if name != "taskloop.app" + ".review"] + ["tlwork.review"]
+    stages = stage_packages(packages)
     counts = {}
     for stage in stages:
         # a package's testing.py is its fakes for tests (the charter's third public name): not part of the production closure
@@ -57,7 +68,7 @@ def closures(texts: Mapping[str, str]) -> dict[str, int]:
             if name not in reached:
                 reached.add(name)
                 pending.extend(edges[name] - reached)
-        key = {"tlgate": "checks", "tlslots": "slots", "tlrelease": "release"}.get(stage, stage.rsplit(".", 1)[-1])
+        key = "checks" if stage == "tlgate" else ({"tlslots": "slots", "tlasks": "asks", "tlrelease": "release"}.get(stage, stage.rsplit(".", 1)[-1]))
         counts[key] = len(reached)
         counts[key + " (external modules)"] = len(set().union(*(external[name] for name in reached)))
     return counts

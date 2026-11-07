@@ -8,9 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import homes
 from support.engine_case import EngineTest
 
-from taskloop.app.asks import intake
-from taskloop.app.plan import adrsync
-from taskloop.domain.asks import similar
+from tlasks import intake, similar
 from tlkernel import adrfiles
 from tlkernel import askspecs as specs
 from tlkernel.adrs import AdrStore
@@ -22,6 +20,7 @@ from tlkernel.ledger import Adr
 from tltestkit.checked import run_checked
 from tltestkit.narrow import must
 from tltestkit.plans import CLEAN, PLAN, WRITE
+from tlwork.plan import adrsync
 
 OPTS = [{"label": "Push", "cost": "shared", "answer": "push", "recommended": True},
         {"label": "Hold", "cost": "slow", "answer": "hold", "recommended": False}]

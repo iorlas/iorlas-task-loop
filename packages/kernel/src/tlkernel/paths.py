@@ -92,7 +92,7 @@ class ConfigDir:
 
     def leases(self) -> Path:
         """The lease table (any_lease): `<name>.limit` and `<name>-<n>.lock` for each engine.resources entry, shared with manual
-        runs (`python3 -m any_lease run --root <this> unity N label -- cmd`)."""
+        runs (`python3 -m any_lease run --root <this> editor N label -- cmd`)."""
         return self.root / "leases"
 
     def repos(self) -> Path:

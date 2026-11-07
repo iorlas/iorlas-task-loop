@@ -8,13 +8,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from tlkernel import askspecs
+from tlkernel import askspecs, trustroots
 from tlkernel import log as rec
 from tlkernel.bead import Bead
 from tlkernel.lanesliveness import LIVENESS
+from tlkernel.netretry import NET_WAIT_CAP_S
 
 from taskloop.adapters.deadline import DeadlineExpired, deadline
-from taskloop.app.asks import trustroots
 from taskloop.app.land import gate
 from taskloop.app.land.fix import FixOutside
 from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
@@ -24,7 +24,6 @@ from taskloop.app.land.pr_land import PrLand
 from taskloop.app.land.push import Landed, Outbound, Pusher
 from taskloop.app.land.rebase import Commit, LandRebase, Recheck
 from taskloop.app.land.record import Sync
-from taskloop.domain.lanes.notes import NET_WAIT_CAP_S
 
 
 class GateStep(Protocol):

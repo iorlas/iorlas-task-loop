@@ -12,6 +12,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[3]
 
 
+def sampled(text: str) -> str:
+    return text.replace("taskloop", "sample").replace("tlwork", "sample").replace("tlasks", "sample")
+
+
 @pytest.mark.parametrize("stage_import", [False, True])
 def test_work_reaches_no_stage(workdir, stage_import):
     config = configparser.ConfigParser()
@@ -20,18 +24,18 @@ def test_work_reaches_no_stage(workdir, stage_import):
     synthetic = configparser.ConfigParser()
     synthetic["importlinter"] = {"root_package": "sample"}
     synthetic["importlinter:contract:work"] = {
-        key: value.replace("taskloop", "sample").replace("tlwork", "sample") if key in {"source_modules", "forbidden_modules"} else value
+        key: sampled(value) if key in {"source_modules", "forbidden_modules"} else value
         for key, value in contract.items()
     }
     modules = (contract["source_modules"] + contract["forbidden_modules"]).split()
     for module in modules:
-        folder = workdir.joinpath(*module.replace("taskloop", "sample").replace("tlwork", "sample").split("."))
+        folder = workdir.joinpath(*sampled(module).split("."))
         folder.mkdir(parents=True, exist_ok=True)
         for package in (folder, *folder.parents):
             if package == workdir:
                 break
             (package / "__init__.py").touch()
-    (workdir / "sample/work/policy.py").write_text("import sample.domain.plan\n" if stage_import else "VALUE = 1\n")
+    (workdir / "sample/work/policy.py").write_text("import sample.plan\n" if stage_import else "VALUE = 1\n")
     config_path = workdir / "imports.ini"
     with config_path.open("w") as stream:
         synthetic.write(stream)

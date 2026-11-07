@@ -5,8 +5,8 @@ import pytest
 from support.parkmock import through_change
 
 from taskloop.adapters import beadtools
-from taskloop.app.asks import parks
-from taskloop.app.asks.closing import ClosingAsks
+from tlasks import parks
+from tlasks.closing import ClosingAsks
 from tlkernel import beadpark as park
 from tlkernel import lanepauses as pauses
 from tlkernel import runoutcome as oc

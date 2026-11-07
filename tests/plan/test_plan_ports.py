@@ -1,3 +1,4 @@
+
 """Plan behaviour on fake ports, without constructing an Engine."""
 from dataclasses import replace
 from pathlib import Path
@@ -5,17 +6,17 @@ from pathlib import Path
 import pytest
 from support.plan_host import FakePlan
 
-from taskloop.app.asks import intake
-from taskloop.app.plan import adrsync
-from taskloop.app.plan.planned import Planned
 from tlkernel import adrfiles
 from tlkernel.bead import Bead
 from tlkernel.ledger import Adr
+from tlkernel.ownerkeys import OVERRIDE
 from tlkernel.plancheck import adhoc
 from tlkernel.stop import Stop
 from tltestkit.cfgs import cfg_with
 from tltestkit.checks import typed
 from tltestkit.plans import HAS_F, PLAN
+from tlwork.plan import adrsync
+from tlwork.plan.planned import Planned
 from tlwork.prompts.common import RULES_MAX
 
 
@@ -47,12 +48,12 @@ def test_cases_without_commands_are_not_run(workdir):
 def test_cap_override_grants_one_extra_run_once(workdir):
     plan = FakePlan(workdir)
     bead = plan.facts.bead
-    plan.ports.store.beads[bead] = Bead(id=bead, title="task", status="open", metadata={intake.OVERRIDE: "replan-cap"})
+    plan.ports.store.beads[bead] = Bead(id=bead, title="task", status="open", metadata={OVERRIDE: "replan-cap"})
     plan.cap.grant()
     plan.cap.grant()
     assert plan.plan_state.cap_granted
     assert plan.hand.extra == 1
-    assert intake.OVERRIDE not in plan.ports.store.beads[bead].metadata
+    assert OVERRIDE not in plan.ports.store.beads[bead].metadata
 
 
 def test_cap_stops_before_counting_another_plan(workdir):

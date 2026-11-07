@@ -12,9 +12,9 @@ from support.askjson import unreadable_ask
 from support.fake_beads import FakeBeads
 from support.tiers import domain
 
-from taskloop.app.asks import ask_verbs as cli
-from taskloop.app.asks import sweeps
-from taskloop.app.asks.paths import ask_marker
+from tlasks import ask_verbs as cli
+from tlasks import sweeps
+from tlasks.paths import ask_marker
 from tlkernel.askstore import HAD_PICK, ORPHAN, AskStore
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId

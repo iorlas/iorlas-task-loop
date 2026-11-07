@@ -16,10 +16,8 @@ from support.fakegit import ScriptedGit
 from support.memstores import fake_stores
 
 from taskloop.app.land.host import LandState
-from taskloop.app.look.state import LOOK_FIELDS, LookState
 from taskloop.app.run.sections import checkpoint_hooks, restarted
 from taskloop.app.run.state import STATE_ONLY, StateAttrs, attr_names, carries_state, state_names
-from taskloop.app.write.state import WriteState
 from tlkernel import fence, wire
 from tlkernel.checkpoint import BriefSnap, Checkpoint, Handoff, PlanStep, RunState, WriterSession
 from tlkernel.ids import BeadId
@@ -30,7 +28,9 @@ from tlkernel.review import (
 from tlkernel.run import Round
 from tlpipeline.api import KEEP_FOR_ACTIVE, LATE, Checkpoints, Resume, ReviewGlue
 from tlpipeline.testing import FakeHeadHistory
+from tlwork.look.state import LOOK_FIELDS, LookState
 from tlwork.review.state import ReviewLive
+from tlwork.write.state import WriteState
 
 ROOT = Path(__file__).resolve().parents[2]
 # a value that is not the default, for each field: the park test fails on a new field until it is listed here

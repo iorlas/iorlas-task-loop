@@ -7,7 +7,7 @@ from typing import Any
 from tlgate.checklog import CheckLog
 from tlgate.execution import check_env
 from tlgate.host import CheckoutView
-from tlkernel import check_files
+from tlkernel import check_files, treehash
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env
 from tlkernel.gitport import Git
@@ -17,7 +17,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.procport import Spawner
 from tlkernel.waitenums import WaitWhat
 
-from taskloop.adapters import ident, treehash
+from taskloop.adapters import ident
 from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.launch.staged import StagedCheckout

@@ -3,7 +3,7 @@
 import pytest
 from support.fake_beads import FakeBeads
 
-from taskloop.app.asks import deferral as intake
+from tlasks import deferral as intake
 from tlkernel.beadsport import BeadQuery, NewBead
 
 

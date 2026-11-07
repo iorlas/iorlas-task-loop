@@ -4,11 +4,11 @@ from unittest import mock
 from slots.test_slot_pool import Rig
 from support.fake_loop_env import slot_loop_env
 
-from taskloop.app.asks import parks
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.net import NetState
 from taskloop.app.loop.settle import Counters, Settle
 from taskloop.app.loop.take import Taker
+from tlasks import parks
 from tlkernel import runoutcome as outcome
 from tlkernel.bead import Bead
 from tlkernel.config import LoopConfig

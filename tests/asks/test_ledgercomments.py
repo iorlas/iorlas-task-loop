@@ -3,7 +3,7 @@ import contextlib
 
 from support.fake_beads import FakeBeads
 
-from taskloop.app.asks import intake, ledgercomments, raiser
+from tlasks import intake, ledgercomments, raiser
 from tlkernel import askspecs as specs
 from tlkernel.askrows import AskRows
 from tlkernel.askstore import AskStore

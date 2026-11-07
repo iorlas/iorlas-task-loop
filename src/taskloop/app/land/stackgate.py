@@ -6,7 +6,7 @@ command by hand. Still not green: it stops with the check's exit code. Each refu
 from its newest receipt on the tree and base. A commit with no gate step passes. Its plan_cmd identifies the producer of planned skips."""
 import threading
 
-from tlgate import authorization
+from tlgate.api import authorization
 from tlkernel import config, profile_at, scratch
 from tlkernel.argv import text_of
 from tlkernel.env import Env

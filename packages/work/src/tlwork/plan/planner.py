@@ -1,0 +1,256 @@
+"""Planner: the planner node. It asks for a plan (the prompt is PlanPrompt's, the send-back of a bad answer SendBack's), counts the run
+against the re-plan cap, answers a question it may not ask with an Assumption, and turns the accepted answer into the run's plan.
+Facts, capabilities, owned state and shared hand-offs are separate inputs."""
+import contextlib
+import copy
+from pathlib import Path
+
+from tlgate.domain import affinity
+from tlgate.domain.specs import repo_check
+from tlkernel import askspecs, plancheck
+from tlkernel.answers import ASSUMPTION, IRREVERSIBLE
+from tlkernel.askenums import AskClass
+from tlkernel.checkpoint import PlanStep
+from tlkernel.matchers import clip
+from tlkernel.planbrief import COMMENTS_ONLY
+from tlkernel.plancheck import PlanData
+from tlkernel.stagefacts import RunFacts
+
+from tlwork.plan import assume
+from tlwork.plan.amend import AmendState
+from tlwork.plan.cap import ReplanCap
+from tlwork.plan.decisions import Decisions
+from tlwork.plan.host import PlanHand, PlanPorts
+from tlwork.plan.keep import PlanKeeper
+from tlwork.plan.planned import Planned
+from tlwork.plan.prompt import PlanPrompt
+from tlwork.plan.prompts import ASSUME_TEXT, PLAN_BRIEF_KB, PLAN_DECIDED_TEXT, VISUAL_BACK
+from tlwork.plan.sendback import SendBack
+from tlwork.plan.state import PlanState
+from tlwork.plan.stored import stored
+from tlwork.prompts.common import DECIDED_TEXT
+from tlwork.work import visual
+
+REPLAN_TAIL = 12500  # characters of replan.md the planner reads
+
+
+class Planner:
+    def __init__(self, facts: RunFacts, ports: PlanPorts, plan_state: PlanState, amend: AmendState,
+                 hand: PlanHand) -> None:
+        self.facts, self.ports, self.plan_state, self.amend, self.hand = facts, ports, plan_state, amend, hand
+        self.keep = PlanKeeper(hand, ports.leftover_sink)
+        self.cap = ReplanCap(facts, ports, plan_state, amend, hand)
+        self.prompts = PlanPrompt(facts, ports, plan_state, amend, hand, ports.git)
+        self.decisions = Decisions(facts, ports, plan_state, amend, hand)
+        self.sendback = SendBack(facts, ports, plan_state, amend, hand)
+
+    # -- one planner answer
+    def ask(self, prompt: str, step: str, title: str, mode: str = "plan") -> PlanData:
+        """One planner answer, its checks validated before any write; the bad ones go back once."""
+        data = plancheck.plan_of(self.ports.ai("plan", title, prompt, step=step, mode=mode, at=(self.hand.planned, 0, 0)).data)
+        if self.fits(data):  # keep the answer through a stop, but revalidate it before any write
+            self.keep.draft(copy.deepcopy(data))
+            self.ports.checkpoints.save(stage=0, rounds=0, n=0, feedback="", step="plan")
+        return self.validate(data, prompt, step)
+
+    def validate(self, data: PlanData, prompt: str, step: str) -> PlanData:
+        """Validate a new or checkpointed draft; send a rejected answer back once before accepting it."""
+        p = self.sendback.find(data)
+        if p.any():  # asked once to rewrite them, like an invalid answer; not a counted re-plan
+            why = self.sendback.text(p)
+            self.ports.steps.outcome("sent back", "it has no stages" if p.empty else
+                            "checks read the tracker, rerun a registered check, run gate-only commands or cannot run; files lack anchors")
+            self.ports.steps.move(step, "plan_sent_back", p.moved())
+            data = self.sendback.rewrite(data, prompt, step, why)
+            self.sendback.after_rewrite(data)
+        return data
+
+    def resume_draft(self, data: PlanData) -> Planned:
+        """Reuse the saved planner answer without counting or calling the planner again unless it needs a rewrite."""
+        prompt = self.prompts.build(data, False, "")
+        data = self.validate(data, prompt, "plan")
+        data = self.accept(self.settle_question(data, prompt, "plan"), False)
+        return Planned(plan_data=data, summary=data["summary"], planned=self.hand.planned)
+
+    def take(self, p: Planned) -> PlanData:
+        """The pipeline stores what `plan` returned (idempotent: the keeper already holds all of it)."""
+        return self.keep.take(p)
+
+    def fits(self, data: PlanData) -> bool:
+        """A plan worth keeping through a stop: it has stages, asks nothing, and is not a split ask."""
+        return bool(data["stages"] and not data["question"].strip() and (
+            len(data["stages"]) <= self.facts.cfg.max_stages or self.cap.kept_whole()))
+
+    def add_leftovers(self, data: PlanData) -> None:
+        """The follow-up work the plan wants filed: filed at the close with the reviews' leftovers. Only a plan the run goes on with
+        adds them, so a plan that asks the owner is not filed twice by the plan after the answer."""
+        have = {lo["title"] for lo in self.hand.leftovers}
+        self.keep.leftovers([lo for lo in data["leftovers"] if lo["title"] not in have])
+        self.ports.checkpoints.keep_pending("plan")
+
+    # -- the run's plan
+    def count(self, old: PlanData | None, again: bool, why: str) -> None:
+        """The planner is about to run: against the cap, unless the owner's answer or edit of the bead caused it (tl-19i)."""
+        why_amend = self.amend.why or ""
+        # a cap ask answered 'split' stays blocked
+        owner = (bool(old) and not again and why_amend.startswith("bead changed: the owner answered")
+                 and not (self.hand.answered and self.hand.answered.ask_class == AskClass.CAP_REACHED))
+        owner = owner or (bool(old) and not again and why_amend.startswith(f"bead changed ({COMMENTS_ONLY})"))  # tl-9un.12
+        if not owner and self.hand.planned >= 1 + self.facts.cfg.max_replans + self.hand.extra:
+            raise self.cap.blocked()
+        if not owner:
+            self.keep.count()
+        self.hand.plan_log.append(PlanStep(mode="amend" if old else "plan", counted=not owner,
+                                   why=clip(self.amend.why or ("a re-plan: " + clip(why, 160) if again else "first plan"), 240)))
+        if old and not again and not self.amend.text:
+            self.amend.text = "The bead is the same as when the old plan was made."
+
+    def plan(self, again: bool = False) -> Planned:
+        old = self.amend.old_plan or (self.hand.plan_data if again and self.hand.plan_data else None)
+        self.amend.amended = self.amend.amended or bool(old)  # tl-bxk.10.24: work exists before this plan's first stage
+        why = ""
+        if again:
+            with contextlib.suppress(OSError):
+                why = (self.facts.run_dir / "replan.md").read_text(encoding="utf-8")[-REPLAN_TAIL:]
+        self.count(old, again, why)
+        prompt = self.prompts.build(old, again, why)
+        if len(prompt.encode("utf-8")) > PLAN_BRIEF_KB * 1024:
+            self.ports.warn(f"the planner's brief is {len(prompt.encode('utf-8')) / 1024:.0f} KB (over {PLAN_BRIEF_KB} KB)")
+        step = "replan" if again else "plan"
+        data = self.settle_question(self.ask(prompt, step, "amend" if old else "plan", "amend" if old else "plan"), prompt, step)
+        data = self.accept(self.cover_visual(data, prompt, step), again)
+        return Planned(plan_data=data, summary=data["summary"], planned=self.hand.planned)
+
+    def cover_visual(self, data: PlanData, prompt: str, step: str) -> PlanData:
+        """tl-jvpm.15: `visual_paths` only checks the planner's judgement. A plan that has stages in a visual path and no look-objective,
+        taste or show case goes back once (not a counted re-plan); the second answer stands."""
+        vp = self.facts.cfg.visual_paths
+        if self.plan_state.visual_back or not (vp and vp.include) or not data["stages"] or visual.is_visual(data.get("cases") or []):
+            return data
+        files = [f for st in data["stages"] for f in st["files"]]
+        if not visual.touches_visual_path(files, vp.include, vp.exclude):
+            return data
+        self.plan_state.visual_back = True
+        self.ports.warn("the plan touches a visual path and has no look-objective, taste or show case: sent back once")
+        self.ports.steps.outcome("sent back", "a visual path is touched and no case is look-objective, taste or show")
+        self.ports.steps.move(step, "plan_visual_back", "a visual path is touched and no case is look-objective, taste or show")
+        return copy.deepcopy(self.ask(prompt + VISUAL_BACK % ", ".join(vp.include)[:300], step, "plan with a look class", "checks_back"))
+
+    def settle_question(self, data: PlanData, prompt: str, step: str) -> PlanData:
+        """A question an accepted requirement answers, or about a step that can be undone, is no ask: the planner plans again once."""
+        q = data["question"].strip()
+        decided = data["decided"].strip() if q else ""
+        if decided and not self.plan_state.decided:  # tl-bxk.10.3: no owner ask, the planner plans again
+            self.plan_state.decided = True
+            self.ports.warn(f"the planner asked what an accepted requirement decides: {decided[:300]}")
+            self.ports.steps.outcome("sent back", "an accepted requirement decides its question")
+            self.ports.steps.move(step, "planner_decided", f"an accepted requirement decides it: {decided}")
+            self.keep.count()  # a planner run like the others: the cap counts it
+            self.hand.plan_log.append(PlanStep(mode="plan", why="an accepted requirement decides its question"))
+            data = self.ask(prompt + DECIDED_TEXT % (q, decided) + PLAN_DECIDED_TEXT, step, "plan to meet it", "checks_back")
+        data = copy.deepcopy(data)  # the engine's own copy: cases are added to it as the task runs
+        if data["question"].strip() and data.get("irreversible") not in IRREVERSIBLE:
+            data = self.assume_question(data, prompt, step)
+        return data
+
+    def assume_question(self, data: PlanData, prompt: str, step: str) -> PlanData:
+        """tl-ntp: a question about anything that can be undone is an assumption, not an ask (82 item 1)."""
+        asked = data["question"].strip()
+        data = assume.assume_question(data, self.ports.assumed, self.ports.ask_flow.raise_soft)
+        if not data["stages"] and not data.get("leftovers") and not self.hand.leftovers and not self.plan_state.assumed:
+            self.plan_state.assumed = True
+            self.ports.warn(f"the planner asked a question about a step that can be undone, sent back: {asked[:300]}")
+            self.ports.steps.outcome("sent back", "its question is about a step that can be undone")
+            self.ports.steps.move(step, "planner_assumed", f"a question about a reversible step is an assumption: {asked[:200]}")
+            self.keep.count()
+            self.hand.plan_log.append(PlanStep(mode="plan", why="its question is about a step that can be undone"))
+            prior = data["assumptions"]
+            data = copy.deepcopy(self.ask(prompt + ASSUME_TEXT % asked, step, "plan on assumptions", "checks_back"))
+            data["assumptions"] = prior + data.get("assumptions", [])
+            if data["question"].strip() and data.get("irreversible") not in IRREVERSIBLE:
+                data = assume.assume_question(data, self.ports.assumed, self.ports.ask_flow.raise_soft)
+        return data
+
+    def accept(self, data: PlanData, again: bool) -> PlanData:
+        """The answer is the run's plan, or a stop: a question for the owner, a finished-work plan, a plan with no stages or too many."""
+        if self.fits(data):
+            self.keep.draft(data)  # a SIGTERM from here on resumes with this plan (d5f.38 lost a finished 1.1M plan before its checkpoint)
+            self.ports.checkpoints.save(stage=0, rounds=0, n=0, feedback="", step="write")
+        if (self.hand.verify_answer and not data["stages"] and not data["question"].strip()
+                and (self.hand.done or self.hand.landed_sha or self.ports.checkout.task_diff().strip())):
+            self.ports.log.note("the planner finds the owner's answer asks for nothing more: landing")
+            self.add_leftovers(data)
+            return data
+        self.keep.summary(data["summary"])
+        for c in data.get("cases") or []:
+            c.setdefault("by", "plan")
+        self.keep.draft(data)
+        if data["question"].strip():
+            self.ports.steps.outcome("asks", data["question"][:200])
+            spec = askspecs.open_question(data["question"], data.get("options"), data.get("owner_cause"))
+            raise self.ports.blocked_for("owner decision needed", "ASK_DECISION", spec=spec)
+        n = len(data["stages"])
+        self.ports.steps.outcome(f"{n} stage{'' if n == 1 else 's'}", data["summary"][:200])
+        assume.check_unresolved(data, Path(self.facts.wt), self.ports.log, self.ports.assumed)
+        if not data["stages"]:
+            return self.finished_work(data, again)
+        return self.finish(data)
+
+    def finished_work(self, data: PlanData, again: bool) -> PlanData:
+        """tl-bxk.13.2: the work is done and only the filing is left: the engine files and closes. Never after a failed stage (a
+        re-plan), and never over work no review accepted: that tree is not "done"."""
+        if not self.hand.done and not self.hand.landed_sha and not self.ports.checkout.task_diff().strip():
+            self.add_leftovers(data)
+            stored(data)
+            self.ports.publish_plan()
+            raise self.ports.blocked_for("noop: the plan found nothing to implement: " + data["summary"][:200], "NOOP")
+        if (data["leftovers"] or self.hand.leftovers) and not again and (self.hand.done or not self.ports.checkout.task_diff().strip()):
+            self.ports.log.note("the planner finds the work done and leaves only follow-up beads to file: closing")
+            self.add_leftovers(data)
+            self.keep.summary(data["summary"])
+            stored(data)
+            self.ports.publish_plan()
+            return data
+        raise self.ports.blocked_for("failed: the plan has no stages", "FAULT_PLAN")
+
+    def move_if_lacking(self, data: PlanData) -> None:
+        """Bead affinity (tl-7k8.8): the planned files hit a repo check that needs a resource this host lacks: the needs label is set and
+        the bead goes back to the queue for a host that has it."""
+        files = sorted({f for s in data["stages"] for f in s["files"]})
+        need = affinity.planned([repo_check(k, self.facts.cfg) for k in self.facts.cfg.checks],
+                                files, self.facts.cfg, self.ports.stores.host.need())
+        if need:
+            names = ", ".join(need)
+            raise self.ports.move_host(
+                need, f"paused: the plan changes files that a check needing {names} reads, and this host does not have "
+                                    f"{names}; the bead is labelled needs:{names} and goes back to the queue for a host that has it")
+
+    def finish(self, data: PlanData) -> PlanData:
+        self.move_if_lacking(data)
+        big = self.facts.cfg.max_stages
+        if len(data["stages"]) > big and not self.cap.kept_whole():
+            why = f"ticket: the plan has {len(data['stages'])} stages (more than {big}): the bead may be too big for one task"
+            raise self.ports.blocked_for(why, "ASK_TICKET", spec=askspecs.too_big([st["goal"] for st in data["stages"]], big))
+        for lo in self.ports.routing.ledger_of(data).missing_leftovers(t for t, _ in self.ports.routing.ledger().deferred()):
+            data.setdefault("leftovers", []).append(lo)
+            self.ports.log.note("the ledger defers a criterion the leftovers did not list; listed: {}".format(lo["title"][:160]))
+        self.add_leftovers(data)
+        self.decisions.cited(data)
+        self.ports.comment(self.summary(data))
+        stored(data)
+        self.ports.publish_plan()
+        self.ports.briefs.export()
+        self.ports.checkpoints.save(stage=0, rounds=0, n=0, feedback="", step="write")
+        return data
+
+    @staticmethod
+    def summary(data: PlanData) -> str:
+        """The plan as the bead's comment says it."""
+        lines = ["Plan (engine): " + data["summary"]]
+        for n, s in enumerate(data["stages"]):
+            hard = " (hard)" if s.get("hard") else ""
+            checks = "; ".join(map(plancheck.text_of, s["checks"]))
+            lines.append(f"{n + 1}. {s['goal']}{hard} [files: {', '.join(s['files'])}] [checks: {checks}]")
+        lines += [f"Risk: {r['what']} → {plancheck.shown(r['check'])}" for r in data["risks"]]
+        lines += [ASSUMPTION + a["text"] for a in data.get("assumptions") or []]
+        return "\n".join(lines)

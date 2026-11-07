@@ -87,3 +87,13 @@ def test_release_member_keeps_its_stage_identity_and_reaches_the_gate():
         "packages/gate/src/tlgate/cache.py": "import dataclasses",
     })
     assert counts == {"checks": 2, "checks (external modules)": 1, "release": 3, "release (external modules)": 1}
+
+
+def test_asks_member_keeps_its_stage_identity_and_reaches_its_domain():
+    counts = closures({
+        "packages/asks/src/tlasks/__init__.py": "",
+        "packages/asks/src/tlasks/admission.py": "from tlasks import hold",
+        "packages/asks/src/tlasks/hold.py": "from tlkernel.ids import BeadId",
+        "packages/kernel/src/tlkernel/ids.py": "import typing",
+    })
+    assert counts == {"asks": 4, "asks (external modules)": 1}

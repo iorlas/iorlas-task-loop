@@ -1,7 +1,7 @@
+
 """The owner's park, stop and note: asks/owner_verbs.py posts signal rows, pipeline/requests.py consumes them. Requests are merged and
 taken once; park ends the run at its next step boundary with the branch and checkpoint kept, stop ends it through the stop flag (the
 halt path), a note reaches the next worker's prompt; a request for a run that is not live is refused, one left at the close dropped."""
-
 import argparse
 import json
 import os
@@ -17,12 +17,13 @@ from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
 
 import tltestkit.shellkit
-from taskloop.app.asks import ask_verbs, intake, owner_verbs
 from taskloop.cli import asks as cli
+from tlasks import ask_verbs, intake, owner_verbs
 from tlkernel import log as rec
 from tlkernel.beadsport import NewBead
 from tlkernel.enums import WhyCode
 from tlkernel.ids import BeadId
+from tlkernel.ownerkeys import HINT
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
 from tlkernel.runlayout import prune_run_logs
@@ -151,7 +152,7 @@ class Cli(Case):
         assert self.say("park", "fk-1") == 0
         assert self.say("note", "fk-1", "later") == 0
         meta = self.store.beads[BeadId("fk-1")].metadata
-        assert (meta[intake.HOLD], meta[intake.HINT]) == ("denis", "later")
+        assert (meta[intake.HOLD], meta[HINT]) == ("denis", "later")
         assert "hint" in self.out[-1]
 
 

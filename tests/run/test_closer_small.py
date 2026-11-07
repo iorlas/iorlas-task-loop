@@ -8,9 +8,9 @@ from tlpipeline.testing import FakeParkBook
 from tltestkit.case import Case
 
 # isort: split
-from taskloop.app.asks import raiser
 from taskloop.app.track.closing import ClosingBeads
 from taskloop.app.wire import closeguard
+from tlasks import raiser
 from tlkernel import askspecs
 from tlkernel import closeeffects as fx
 from tlkernel import runoutcome as oc

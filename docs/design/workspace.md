@@ -22,7 +22,7 @@ Package `packages/artifacts`: `pyproject.toml` (name `tlartifacts`, dependency `
 | b | naming | **folder `packages/<stage>`, project `tl<stage>`, import root `tl<stage>`** (`tlkernel`, `tltestkit`, `tlartifacts`). One rule, no clash with `taskloop.app.<stage>` words, greppable. The folder is the short name: `uv run --package tl<stage>`, `just test-pkg <stage>`. |
 | c | tl.py puts member src on sys.path | yes, `src/tlpaths.py` globs `packages/*/src`; nothing to add per package. `tl.py --help` and `import taskloop.cli.factory` resolve `tlartifacts` from the checkout. |
 | d | tools cover `packages/*/{src,tests}` | **not for free**: each of these hard-coded `packages/kernel/src` and had to become a glob: `justfile` rules PYTHONPATH, `dev/affected.py` ROOTS/VISIBLE, `tests/rules/arch_rules.py` production trees, `dev/hostban_mutation.py`, plus root `ruff.toml` `src`, `pyrefly.toml` `search-path`, `.importlinter` `root_packages` (those three are one line per member; list them or derive them). pyrefly needed `project-includes = packages` (already there). |
-| e | `uv run --isolated --package PKG` runs its tests and fails an undeclared sibling | yes. 33 tests pass alone (0.15 s test time, 0.84 s wall with the environment). A seeded `from taskloop.app.look import shots` in a package test failed `ModuleNotFoundError: No module named 'taskloop'`. The very first run also failed on `atomic_io` (see bugs). |
+| e | `uv run --isolated --package PKG` runs its tests and fails an undeclared sibling | yes. 33 tests pass alone (0.15 s test time, 0.84 s wall with the environment). A seeded import of `shots` from the former look application slice in a package test failed `ModuleNotFoundError: No module named 'taskloop'`. The very first run also failed on `atomic_io` (see bugs). |
 
 ### Bugs and gaps the spike found (each is a line item of the order below)
 
@@ -101,6 +101,13 @@ S1 slots code carve: `packages/slots` (`tlslots`) owns slot orchestration, liven
 E1 slice 1: `packages/work` (`tlwork`) owns review application code and review, work and prompts domain rules. Tests remain in their original slice directories. Link checking receives the network adapter through the `Links` Protocol from run/host.py. The carve is rerunnable with `dev/carve_work.py --root DIR`.
 
 Dash is carved into `packages/dash` (`tldash`), with isolated package tests.
+
+E1 slice 2: `tlwork.plan` owns plan application and domain code. Shared bead IDs, bead matchers and owner metadata keys live in `tlkernel`; plan receives the existing `TreeProbe` protocol. Tests remain in their original directories.
+
+PR A asks code carve: `packages/asks` (`tlasks`) owns asks, admission, holds, matching, time specifications and parks. Tests remain in `tests/asks`; machine services come through `AsksHost`, built per call by `app/wire/asks.py`.
+E1 slice 3: `tlwork.look` owns look application and domain code and the shot specification helpers. `tlkernel.bdcreate` owns checked bead creation. Look receives the image downscaler through `LookPorts`, bound by run/host.py; the subprocess adapter stays in the shell. Tests remain in their original directories.
+
+E1 slice 4: `tlwork.write` owns write application and domain code; shared trust-root checks live in `tlkernel.trustroots`. Tests remain in their original directories. E1 is complete: review, plan, look and write live in `tlwork`.
 
 Release R1 (tl-e5t0.19): code carve done in `packages/release/src/tlrelease`, flat modules with no api.py.
 `ReleaseHost` supplies shell effects, bound by `app/launch/release_host.py`; tests stay in `tests/release` until R2.

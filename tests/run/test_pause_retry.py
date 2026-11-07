@@ -4,7 +4,8 @@ from unittest import mock
 
 from support import engine_case as te
 
-from taskloop.app.asks import parks
+from taskloop.app.wire import asks as asks_wire
+from tlasks import parks
 from tlkernel.log import Close
 from tlkernel.parks import ParkStore
 
@@ -26,7 +27,7 @@ class Retry(te.EngineTest):
         assert (paused.reason, paused.permanence, paused.retry_at) == ("plan_noop", "needs_owner", 0)
         bead = self.store.show(self.eng.bead)
         assert bead is not None
-        assert parks.skip_of(self.eng.home, bead, now=paused.t + 1_000_000) is not None
+        assert parks.skip_of(asks_wire.host(), self.eng.home, bead, now=paused.t + 1_000_000) is not None
         ask = self.asks().get(self.eng.bead)
         assert ask is not None
         assert ask.detail.text == (f"The plan finds nothing to implement for {self.eng.bead}: {summary}. "

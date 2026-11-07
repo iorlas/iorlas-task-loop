@@ -22,16 +22,13 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 import tltestkit.shellkit
-from taskloop.adapters import (
-    bd,
-    bdcreate,
-)
-from taskloop.app.asks import admission
+from taskloop.adapters import bd
 from taskloop.app.run import running as wrunning
 from taskloop.app.wire import asks as wasks
+from tlasks import admission
 from tlgate.domain.cmd import matchers as sh_matchers
+from tlkernel import bdcreate, wire
 from tlkernel import checkmatchers as matchers
-from tlkernel import wire
 from tlkernel.ask import Ask
 from tlkernel.env import snapshot
 from tlkernel.gitfacts import GitOutcome
@@ -525,7 +522,8 @@ class ClaimPerBead(StagesTest):
 
     def admit_when(self, bead, running):
         with self.store.stub(show=bead), mock.patch.object(wrunning, "running", return_value=running), self.store.stub(comments=[]):
-            return admission.admit(BeadId("o67g"), str(self.wt), port_git(), who(), store=self.store, running_now=wrunning.running)
+            return admission.admit(wasks.host(), BeadId("o67g"), str(self.wt), port_git(), who(),
+                store=self.store, running_now=wrunning.running)
 
     BEAD: ClassVar[Any] = {
         "id": "o67g",
@@ -554,7 +552,8 @@ class ClaimPerBead(StagesTest):
             self.store.stub(comments=cs),
             self.store.stub(bd_fn=lambda *a, **k: mock.Mock(returncode=1)),
         ):
-            ok, why = admission.admit(BeadId("o67g"), str(self.wt), port_git(), who(), store=self.store, running_now=wrunning.running)
+            ok, why = admission.admit(wasks.host(), BeadId("o67g"), str(self.wt), port_git(), who(),
+                store=self.store, running_now=wrunning.running)
         assert not ok
         assert "changed hands" in why
 

@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from taskloop.app.asks import owner_verbs as waiting
+from tlasks import owner_verbs as waiting
 from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunManifest, RunState

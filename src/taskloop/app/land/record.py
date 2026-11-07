@@ -5,6 +5,8 @@ from collections.abc import Mapping, Sequence
 from functools import cached_property
 from typing import Protocol, assert_never
 
+from tlasks import deferral as intake
+from tlkernel import bdcreate
 from tlkernel import closeeffects as effects
 from tlkernel import followkeys as fu
 from tlkernel.beadsport import BdFailure, BeadQuery, Beads, NewBead
@@ -14,8 +16,6 @@ from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.slots import SlotGitError
 
-from taskloop.adapters import bdcreate
-from taskloop.app.asks import deferral as intake
 from taskloop.app.land.host import LandState, MoveSteps
 from taskloop.app.land.rebase import Rebase, must
 from taskloop.stores.runlog import RunLog

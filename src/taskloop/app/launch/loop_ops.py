@@ -4,6 +4,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import IO
 
+from tlasks import admission
 from tlkernel import childenv, paths
 from tlkernel.beadsport import Beads
 from tlkernel.env import Env
@@ -20,7 +21,6 @@ from tlslots import engine_lock
 
 from taskloop.adapters import bdbackup, beadtools, factorybackup, ident, ram
 from taskloop.adapters.bd import BdStore
-from taskloop.app.asks import admission
 from taskloop.app.doctor import disk
 from taskloop.app.doctor import lanes as wlanes
 from taskloop.app.loop import stages
@@ -72,7 +72,7 @@ def _bd(store: BdStore, argv: list[str]) -> tuple[int, str, str]:
 def claim(repo: str, store: Beads, bead: BeadId, wt: str, slot: str, git: Git, who: Identity,
           now: Callable[[], float] = trail.now) -> tuple[bool, str]:
     return stages.claim(
-        lambda: admission.admit(bead, repo, git, who, store, now(), running_now=running),
+        lambda: admission.admit(wasks.host(), bead, repo, git, who, store, now(), running_now=running),
         lambda: verbs.claim(who, bead, store, git, wt, slot),
     )
 

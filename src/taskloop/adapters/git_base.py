@@ -12,7 +12,7 @@ from taskloop.adapters import gitmemo, procs
 from taskloop.adapters.gitrepo import pinned_env
 from tlkernel.childenv import tool_env, without
 from tlkernel.env import Env
-from tlkernel.gitfacts import GitOutcome
+from tlkernel.gitfacts import GitOutcome, push_error_line
 from tlkernel.slots import (
     BranchPinned,
     DirtyTree,
@@ -42,14 +42,6 @@ def error_line(text: str) -> str:
     """The line of git's stderr that says what went wrong: the first fatal/error one, else the last."""
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
     return next((ln for ln in lines if ln.startswith(("fatal:", "error:"))), lines[-1] if lines else "no message from git")
-
-
-def push_error_line(text: str) -> str:
-    """Keep push rejection and hook diagnostics instead of git's generic failed-to-push trailer."""
-    lines = [ln for ln in text.splitlines() if ln.strip() and "failed to push some refs" not in ln.lower()]
-    selected = [ln.strip() for ln in lines if ln.lstrip().startswith(("!", "remote:", "hint:"))
-                or any(word in ln.lower() for word in ("refus", "reject", "error:", "pre-push", "gate:"))]
-    return " | ".join(selected[:8] or lines[-8:]) or "no message from git"
 
 
 def classify(stderr: str, *, push: bool = False) -> SlotGitError:

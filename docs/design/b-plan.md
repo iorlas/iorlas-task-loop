@@ -1,6 +1,6 @@
 # B-PLAN: the plan stage without the engine (tl-e5t0.35)
 
-Design and slicing only; no code moves with it. Follows `stage-isolation.md`, `attr-map.md` (the amend family is the one open design question there), `engine-order.md`, `facts.md`, and `b-review.md` / `b-look.md` as the method: **a typed host first, owned state second, hand-offs last**. Checkpoint on disk unchanged. Measured on origin/main, 2026-11-07 by an AST scan of `src/taskloop/app/plan` (reads and writes off the host) and a grep of every writer; nothing was run.
+Design and slicing only; no code moves with it. Follows `stage-isolation.md`, `attr-map.md` (the amend family is the one open design question there), `engine-order.md`, `facts.md`, and `b-review.md` / `b-look.md` as the method: **a typed host first, owned state second, hand-offs last**. Checkpoint on disk unchanged. Measured on origin/main, 2026-11-07 by an AST scan of `packages/work/src/tlwork/plan` (reads and writes off the host) and a grep of every writer; nothing was run.
 
 ## What the stage is today
 
