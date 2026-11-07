@@ -16,7 +16,7 @@ class WriterInvariants(Case):
             "from tlkernel import stores as s\nx = s.PinStore(cfg)\nf = x.delete\nf()",
         ):
             assert self.problems("taskloop.app.loop.versions", code), code
-            assert self.problems("taskloop.app.release.pins", code) == []
+            assert self.problems("tlrelease.pins", code) == []
 
     def test_reading_a_store_is_allowed_and_comments_do_not_write(self):
         assert self.problems("taskloop.app.loop.versions",
@@ -46,7 +46,7 @@ class WriterInvariants(Case):
 
     def test_multiple_legitimate_writes_do_not_spend_a_count_budget(self):
         code = "from tlkernel.rowstores import PinStore\n" + "PinStore(cfg).write(pin)\n" * 3
-        assert self.problems("taskloop.app.release.pins", code) == []
+        assert self.problems("tlrelease.pins", code) == []
 
     def test_generic_json_store_cannot_bypass_the_pin_owner(self):
         assert self.problems("taskloop.app.loop.versions",
@@ -69,9 +69,9 @@ class WriterInvariants(Case):
 
     def test_importing_a_writer_factory_does_not_grant_ownership(self):
         trees = {
-            "taskloop.app.release.pins": ast.parse("from tlkernel.rowstores import PinStore\n"
+            "tlrelease.pins": ast.parse("from tlkernel.rowstores import PinStore\n"
                                                   "def pin_store(cfg):\n return PinStore(cfg)"),
-            "taskloop.app.loop.versions": ast.parse("from taskloop.app.release.pins import pin_store as factory\n"
+            "taskloop.app.loop.versions": ast.parse("from tlrelease.pins import pin_store as factory\n"
                                                    "factory(cfg).write(pin)"),
         }
         assert writer_tree_problems(trees)

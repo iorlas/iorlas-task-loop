@@ -13,13 +13,13 @@ from tlkernel.ids import loop_key
 from tlkernel.paths import ConfigDir
 from tlkernel.rowstores import ReposStore
 from tlkernel.slots import SlotView
+from tlrelease import catalog, pins
 
 from taskloop.adapters import pidcheck
 from taskloop.adapters.ident import claude_dir, config_dir
 from taskloop.adapters.locks import resource_holders
 from taskloop.app.doctor import profiles
 from taskloop.app.loop.files import LoopFiles
-from taskloop.app.release import catalog, pins
 from taskloop.app.wire import asks as wire_asks
 from taskloop.app.wire import slots as wslots
 from taskloop.domain.brief import AskLine, Brief, LoopLine, ResourceLine, status_json, status_lines
@@ -80,7 +80,7 @@ def build(repo: str, plugin_root: Path, now: float, env: Env, who: Identity | No
     last_beat = max([*beats, float(str(last.get("t") or 0))])
     asks = tuple(AskLine(a.bead, a.kind, a.decision, a.t) for a in wire_asks.store(cfg).live() if not a.repo or a.repo == repo)
     recent = tuple(f"{i.rec.bead} {i.rec.outcome.value} ({i.rec.minutes} min)" for i in files.log_rows(RECENT).items)
-    pin = pins.read_pin(env).task_loop
+    pin = pins.read_pin(cfg).task_loop
     return Brief(
         repo=repo, now=now,
         loops=tuple(LoopLine(st.pid, st.started, st.bead or "", st.slot or "", st.version) for st in loops),

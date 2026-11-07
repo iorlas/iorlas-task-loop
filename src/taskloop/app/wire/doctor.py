@@ -14,6 +14,7 @@ from tlkernel.identity import Identity
 from tlkernel.paths import ConfigDir
 from tlkernel.procport import Spawner
 from tlkernel.rowstores import ReposStore
+from tlrelease import catalog, manifest
 from tlslots import watchdog
 from tlslots.config import cfg_source
 
@@ -30,7 +31,6 @@ from taskloop.app.doctor.setup_checks import (
     path_link_line,
     slot_warnings,
 )
-from taskloop.app.release import catalog, manifest
 from taskloop.app.wire import slots as wslots
 from taskloop.stores.delegate import real_route
 from taskloop.stores.real import real_stores

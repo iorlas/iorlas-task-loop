@@ -5,9 +5,9 @@ from pathlib import Path
 from tlkernel.paths import ConfigDir
 from tlkernel.slots import SlotGitError
 
-from taskloop.adapters import ident, landlock
-from taskloop.app.release import clone
-from taskloop.app.release.shell import Abort, Shell, fetch_or_abort
+from tlrelease import clone
+from tlrelease.host import ReleaseHost
+from tlrelease.shell import Abort, Shell, fetch_or_abort
 
 
 def release_lock_path(config: Path, url: str) -> Path:
@@ -16,7 +16,7 @@ def release_lock_path(config: Path, url: str) -> Path:
     return ConfigDir(config).lock_file(f"release-{clone.clone_dir(config, url).name}.lock")
 
 
-def push_main(repo: Path, message: str, version: str, base: str, bump: Callable[[], str], sh: Shell) -> str:
+def push_main(repo: Path, message: str, version: str, base: str, bump: Callable[[], str], sh: Shell, *, host: ReleaseHost) -> str:
     """Push under the land lock; a moved base is rebased and verified after releasing it.
 
     Every changed pre-bump tree needs its own green suite. Bounded retries refuse a perpetually moving base rather than
@@ -25,9 +25,9 @@ def push_main(repo: Path, message: str, version: str, base: str, bump: Callable[
     git = sh.port
     d = str(repo)
     url = git.remote_url(d, "origin") or d
-    lock = landlock.land_lock_path(ConfigDir(ident.config_dir(sh.env)), url)
+    lock = host.land_lock_path(ConfigDir(host.config_dir(sh.env)), url)
     for attempt in range(3):
-        with landlock.os_lock(lock, "release: " + message, lambda who: sh.say(f"waiting for the land lock (held by {who})")):
+        with host.os_lock(lock, "release: " + message, lambda who: sh.say(f"waiting for the land lock (held by {who})")):
             fetch_or_abort(git, repo)
             head = git.rev_parse(d, "origin/main")
             if not any(r.subject.startswith(version + ":") for r in git.log(d, ["HEAD"], limit=1)):

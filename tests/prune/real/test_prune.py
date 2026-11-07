@@ -19,7 +19,6 @@ from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.prune import verb
 from taskloop.app.reconcile import apply, observe
 from taskloop.app.reconcile.sweep import sweep
-from taskloop.app.release.shell import of
 from taskloop.app.wire.slotfx import FX
 from tlkernel.bead import BdError, Bead
 from tlkernel.beadsport import BdFailure, Beads
@@ -29,6 +28,7 @@ from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.landed import Landed as LandedRec
 from tlkernel.paths import ConfigDir
+from tlrelease.shell import of
 from tlslots import engine_lock
 
 DAY = 86400

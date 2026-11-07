@@ -4,9 +4,9 @@ from pathlib import Path
 from tlkernel.gitport import Git
 from tlkernel.slots import SlotGitError
 
-from taskloop.app.release import clone, publish
-from taskloop.app.release.catalog import version_tuple
-from taskloop.app.release.shell import Abort, Shell
+from tlrelease import clone, publish
+from tlrelease.catalog import version_tuple
+from tlrelease.shell import Abort, Shell
 
 
 def devbox_ok(config: Path, url: str, version: str, sh: Shell) -> None:

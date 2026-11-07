@@ -20,11 +20,10 @@ from tlkernel.procport import Spawner
 from tlkernel.rowstores import ReleaseResultStore
 from tlkernel.snapshots import ReleaseResult
 
-from taskloop.adapters import beadtools, gitrepo, ident, landlock
-from taskloop.adapters.ident import config_dir
-from taskloop.app.release import canary, clone, gate, manifest, publish, selfupdate, shell, tidy
-from taskloop.app.release.push import push_main, release_lock_path
-from taskloop.app.release.shell import Abort, Shell, say
+from tlrelease import canary, clone, gate, manifest, publish, selfupdate, shell, tidy
+from tlrelease.host import ReleaseHost
+from tlrelease.push import push_main, release_lock_path
+from tlrelease.shell import Abort, Shell, say
 
 
 @dataclass(frozen=True)
@@ -51,10 +50,10 @@ def require_clean_main(wt: Path, what: str, sh: Shell) -> None:
         raise Abort(f"the {what} checkout {wt} is dirty; commit or stash first:\n{dirty}")
 
 
-def bump_and_commit(where: Path, req: Request, sh: Shell) -> str:
+def bump_and_commit(where: Path, req: Request, sh: Shell, *, host: ReleaseHost) -> str:
     """Verify the pre-bump tree once, then commit only the version and generated manifest."""
     before = sh.port.rev_parse(str(where), "HEAD")
-    gate.verify(where, sh)
+    gate.verify(where, sh, host=host)
     if sh.port.rev_parse(str(where), "HEAD") != before:
         raise Abort("release clone HEAD changed during the suite; nothing pushed")
     version = next_version(where, req.minor, sh)
@@ -67,7 +66,7 @@ def bump_and_commit(where: Path, req: Request, sh: Shell) -> str:
     publish.git_must(lambda: sh.port.stage(str(where), publish.PLUGIN, manifest.NAME), where)
     publish.git_must(lambda: sh.port.commit_staged(str(where), f"{version}: {req.message}{publish.TRAILER}"), where)
     check_bump(where, before, version, sh)
-    gate.record_receipt(where, sh)
+    gate.record_receipt(where, sh, host=host)
     return version
 
 
@@ -89,13 +88,13 @@ def check_bump(where: Path, before: str, version: str, sh: Shell) -> None:
         raise Abort("release version or manifest is invalid; nothing pushed")
 
 
-def refuse_open_children(req: Request, repo: Path, who: Identity, store: Beads | None) -> None:
+def refuse_open_children(req: Request, repo: Path, who: Identity, store: Beads | None, *, host: ReleaseHost) -> None:
     """--bead names the work this release finishes: a bead with an open child is only half done (tl-t7i.5 was closed with its other half
     open). Refused before anything is pushed. A bd that cannot be asked does not stop the release (the close itself reports that)."""
     if not req.bead:
         return
     try:
-        kids = [b.id for b in (store or beadtools.bd_store(who.actor, repo)).find(BeadQuery()) if b.parent == req.bead]
+        kids = [b.id for b in (store or host.bd_store(who.actor, repo)).find(BeadQuery()) if b.parent == req.bead]
     except (BdCommandFailure, BdFailure, SystemExit):
         return
     if kids:
@@ -106,13 +105,13 @@ Closer = Callable[[Identity, Beads, Git, str, BeadId, str, str], str]  # (who, b
 
 
 def close_bead(req: Request, repo: Path, who: Identity, store: Beads | None, where: Path, sh: Shell, version: str,
-               closer: Closer) -> None:
+               closer: Closer, *, host: ReleaseHost) -> None:
     """The release is the bead's land: `closer` records the pushed commit as the land, then closes the bead through the close guard
     (app/wire/closeguard.py close_released; the edge hands it in)."""
     if not req.bead:
         return
     try:
-        why = closer(who, store or beadtools.bd_store(who.actor, repo), sh.port, str(where), req.bead, req.reason or req.message, version)
+        why = closer(who, store or host.bd_store(who.actor, repo), sh.port, str(where), req.bead, req.reason or req.message, version)
     except (BdCommandFailure, BdFailure, SystemExit) as e:
         why = str(getattr(e, "error", e))[-300:]
     if why:
@@ -120,25 +119,25 @@ def close_bead(req: Request, repo: Path, who: Identity, store: Beads | None, whe
 
 
 def release(req: Request, repo: Path, market: Path, sh: Shell, who: Identity, closer: Closer,
-            store: Beads | None = None) -> str:
+            store: Beads | None = None, *, host: ReleaseHost) -> str:
     """Release `repo` from the clone: its main checkout may be dirty or on any branch and is left as it was. The marketplace
     checkout must be clean on main (it is pushed from)."""
-    refuse_open_children(req, repo, who, store)
+    refuse_open_children(req, repo, who, store, host=host)
     require_clean_main(market, "marketplace", sh)
     url = sh.port.remote_url(str(repo), "origin")
     if not url:
         raise Abort(f"{repo} has no origin remote")
-    where = clone.ready(config_dir(sh.env), url, sh)
+    where = clone.ready(host.config_dir(sh.env), url, sh)
     tip = sh.port.rev_parse(str(repo), "refs/heads/" + req.from_branch) if req.from_branch else ""
     if req.from_branch:
         clone.replay_branch(where, repo, req.from_branch, sh)
     base = sh.port.rev_parse(str(where), "origin/main")
     def again() -> str:
-        return bump_and_commit(where, req, sh)
-    version = push_main(where, req.message, again(), base, again, sh)
+        return bump_and_commit(where, req, sh, host=host)
+    version = push_main(where, req.message, again(), base, again, sh, host=host)
     say(f"pushed {version}: {req.message}")
     publish.tag(where, "v" + version, "the plugin repo", sh)
-    close_bead(req, repo, who, store, where, sh, version, closer)
+    close_bead(req, repo, who, store, where, sh, version, closer, host=host)
     try:
         publish.bump_marketplace(market, version, sh)
     except Abort as e:
@@ -146,7 +145,7 @@ def release(req: Request, repo: Path, market: Path, sh: Shell, who: Identity, cl
         raise
     say(f"marketplace at {version}")
     publish.tag(market, f"{publish.NAME}-v{version}", "the marketplace", sh)
-    publish.install(where, version, sh)
+    publish.install(where, version, sh, host=host)
     drop_landed_branch(req, repo, where, tip, sh)
     return version
 
@@ -163,23 +162,24 @@ def drop_landed_branch(req: Request, repo: Path, where: Path, tip: str, sh: Shel
         say(f"removed branch {req.from_branch} and its worktrees")
 
 
-def record(result: ReleaseResult, req: Request, repo: Path, who: Identity, home: ConfigDir, store: Beads | None = None) -> None:
+def record(result: ReleaseResult, req: Request, repo: Path, who: Identity, home: ConfigDir, store: Beads | None = None, *,
+           host: ReleaseHost) -> None:
     """releases/last.json: the latest release's result (a later success replaces a failure); and, when it failed, a comment on --bead."""
     ReleaseResultStore(home).write(result)
     if not result.ok and req.bead:
         text = "release FAILED: {}{}".format(result.summary, ("; log " + result.log) if result.log else "")
         try:
-            (store or beadtools.bd_store(who.actor, repo)).add_comment(req.bead, text)
+            (store or host.bd_store(who.actor, repo)).add_comment(req.bead, text)
         except (BdCommandFailure, BdFailure, SystemExit) as e:
             say("warning: bd comment {} failed: {}".format(req.bead, str(getattr(e, "error", e))[-300:]))
 
 
 def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, env: Env, closer: Closer, doc: str = "", *,
-         clock: Callable[[], float] = time.time) -> int:
+         clock: Callable[[], float] = time.time, host: ReleaseHost) -> int:
     """One release from the command line; every process it starts goes through `spawner` (the edge makes it)."""
     sh = shell.of(spawner, port, env)
-    who = ident.identity(env)
-    home = ConfigDir(config_dir(env))
+    who = host.identity(env)
+    home = ConfigDir(host.config_dir(env))
     ap = argparse.ArgumentParser(prog="release.py", description=doc)
     ap.add_argument("message", nargs="?")
     ap.add_argument("--devbox-ok", metavar="VERSION", help="acknowledge the devbox canary before moving the Mac pin")
@@ -187,35 +187,35 @@ def main(argv: list[str] | None, tool_root: Path, spawner: Spawner, port: Git, e
     ap.add_argument("--reason", default="", help="the close reason (default: the message)")
     ap.add_argument("--from-branch", default="", help="replay this branch's commits on origin/main in the release clone")
     ap.add_argument("--minor", action="store_true", help="bump the minor version, not the patch")
-    ap.add_argument("--repo", default=gitrepo.repo_root(str(tool_root)), help="the main checkout (default: this repo's)")
+    ap.add_argument("--repo", default=host.repo_root(str(tool_root)), help="the main checkout (default: this repo's)")
     ap.add_argument("--marketplace", default=str(Path.home() / "Workspaces" / MARKETPLACE))
     a = ap.parse_args(argv)
     if bool(a.message) == bool(a.devbox_ok):
         ap.error("provide a release message or --devbox-ok VERSION")
     req = Request(a.message or "devbox-ok " + a.devbox_ok, a.bead, a.reason, a.from_branch, a.minor)
-    repo, market = Path(gitrepo.repo_root(a.repo)), Path(a.marketplace)
+    repo, market = Path(host.repo_root(a.repo)), Path(a.marketplace)
     url = sh.port.remote_url(str(repo), "origin") or str(repo)
     holder = f"pid {os.getpid()} since {time.strftime('%H:%M:%S')}: {req.message}"
     try:
         path = release_lock_path(home.root, url)
         newer = None
-        with landlock.os_lock(path, holder, lambda by: say(f"waiting for the release lock (held by {by})")):
+        with host.os_lock(path, holder, lambda by: say(f"waiting for the release lock (held by {by})")):
             if a.devbox_ok:
                 canary.devbox_ok(home.root, url, a.devbox_ok, sh)
                 say(f"ring devbox-ok: {a.devbox_ok}; Mac standing pin may now move through tl pin")
                 return 0
             newer = selfupdate.newer_release(tool_root, clone.ready(home.root, url, sh), sh, env)
-            version = "" if newer else release(req, repo, market, sh, who, closer)
+            version = "" if newer else release(req, repo, market, sh, who, closer, host=host)
         if newer:  # the lock is released above: the exec'd release takes it
             selfupdate.exec_release(newer, sys.argv[1:] if argv is None else argv, repo, env)
         record(ReleaseResult(ok=True, version=version, summary="released " + version, at=clock(), branch=req.from_branch or "main",
-                             message=req.message, repo=str(repo)), req, repo, who, home)
+                             message=req.message, repo=str(repo)), req, repo, who, home, host=host)
     except Abort as e:
         print("release: " + str(e), file=sys.stderr)
         message = " | ".join(str(e).strip().splitlines()) or "failed"
         summary = ((f"{e.version} was pushed but " if e.version else "nothing released: ") + message)[:500]
         record(ReleaseResult(ok=False, version=e.version, summary=summary, tests=list(e.tests), log=e.log, at=clock(),
-                             branch=req.from_branch or "main", message=req.message, repo=str(repo)), req, repo, who, home)
+                             branch=req.from_branch or "main", message=req.message, repo=str(repo)), req, repo, who, home, host=host)
         print("release FAILED: " + summary + ((f" (log {e.log})") if e.log else ""), file=sys.stderr)
         return 1
     return 0

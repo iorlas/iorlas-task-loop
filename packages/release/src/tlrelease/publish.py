@@ -7,8 +7,8 @@ from any_plugin_cache import NoVersionError, entry_offset, set_json_version
 from tlkernel.ids import MARKETPLACE
 from tlkernel.slots import SlotGitError
 
-from taskloop.adapters.ident import claude_dir
-from taskloop.app.release.shell import Abort, Shell, fetch_or_abort
+from tlrelease.host import ReleaseHost
+from tlrelease.shell import Abort, Shell, fetch_or_abort
 
 PLUGIN = ".claude-plugin/plugin.json"
 MARKET = ".claude-plugin/marketplace.json"
@@ -71,10 +71,10 @@ def installed_manifest(version: str, claude: Path) -> Path:
     return claude / "plugins" / "cache" / MARKETPLACE / NAME / version / ".claude-plugin" / "plugin.json"
 
 
-def install(cwd: Path, version: str, sh: Shell) -> None:
+def install(cwd: Path, version: str, sh: Shell, *, host: ReleaseHost) -> None:
     """Update the marketplace and the plugin, then check the new version's cache dir exists. A silent failure (0.23.0: a git
     fetch-pack error with exit 0) leaves the old version installed: run both commands once more, then fail loudly."""
-    cache = installed_manifest(version, claude_dir(sh.env))
+    cache = installed_manifest(version, host.claude_dir(sh.env))
     cmds = [["claude", "plugin", "marketplace", "update", MARKETPLACE], ["claude", "plugin", "update", f"{NAME}@{MARKETPLACE}"]]
     failing: list[str] | None = None
     text = ""

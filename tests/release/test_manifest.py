@@ -13,8 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from taskloop.adapters.ident import claude_dir, config_dir  # noqa: E402
 from taskloop.app.doctor import setup_checks  # noqa: E402
-from taskloop.app.release import catalog, manifest  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
+from tlrelease import catalog, manifest  # noqa: E402
 
 NAME, MARKET = "iorlas-task-loop", "iorlas-marketplace"
 

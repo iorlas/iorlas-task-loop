@@ -11,11 +11,11 @@ from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
 from tlkernel.rowstores import ReposStore
 from tlkernel.scratch import scratch_root
+from tlrelease.shell import Shell
 
 from taskloop.adapters.ident import hostname
 from taskloop.app.prune import retention, runs, slotstate
 from taskloop.app.reconcile.sweep import sweep
-from taskloop.app.release.shell import Shell
 
 
 def mb(n: int) -> str:
