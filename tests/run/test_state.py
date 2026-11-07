@@ -52,7 +52,7 @@ SAMPLE: dict[str, Any] = {
     "accepted": [0],
     "accepted_new": ["f.txt"],
     "denials": ["rm"],
-    "writer": WriterSession(delegate="w1", ctx=5, seen=["a"], last_stage=True),
+    "writer": WriterSession(seen=["a"], last_stage=True),
     "writer_family": "codex",
     "writer_fallback": True,
     "fallback_lane": "L",
@@ -249,6 +249,8 @@ class OldCheckpoint(Case):
     def test_an_old_checkpoint_gives_the_look_stage_its_fields_and_saves_them_back(self):
         old = json.loads((ROOT / "tests" / "fixtures" / "checkpoint_v3_look.json").read_text(encoding="utf-8"))
         old["v"] = Checkpoint.V  # this test covers the look fields; foreign envelope versions are refused separately
+        old["state"]["writer"].pop("delegate", None)
+        old["state"]["writer"].pop("ctx", None)
         ck = wire.load(Checkpoint, old)
         h = Host()
         Resume(h, FakeHeadHistory(), ReviewGlue(h), state_names()).restore(ck, late=True)

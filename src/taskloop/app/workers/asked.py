@@ -36,15 +36,14 @@ class Settling(Protocol):
     def checkpoints(self) -> Amends: ...
 
 
-def thread_updates(c: Call, res: DelegateResult, fallback_lane: str, ctx: float | None, seen: list[str]) -> Updates:
-    """The writer's thread after an answer that resumed it: delegate's ref, and the fallback it reported (every answer that picked a
-    lane says it, a resumed one too). `fallback_lane` is the lane held now; `ctx` and `seen` are what the writer holds."""
+def thread_updates(c: Call, res: DelegateResult, fallback_lane: str, seen: list[str]) -> Updates:
+    """The prompt hashes the writer has seen and the fallback delegate reported. `fallback_lane` is the lane held now."""
     if not (c.thread == "writer" and res.ref):
         return Updates()
     fallback = None
     if res.fallback is not None:
         fallback = Fallback(res.fallback, (res.first_lane or c.out_on or fallback_lane) if res.fallback else "")
-    return Updates(session=SessionUpdate(res.ref, ctx, tuple(seen)), fallback=fallback)
+    return Updates(session=SessionUpdate(tuple(seen)), fallback=fallback)
 
 
 def done_updates(c: Call, res: DelegateResult, thread: Updates) -> Updates:
@@ -66,7 +65,7 @@ def with_updates(state: RunState, u: Updates) -> RunState:
     if u.fallback is not None:
         state = state.replace(writer_fallback=u.fallback.on, fallback_lane=u.fallback.lane)
     if u.session is not None:
-        state = state.replace(writer=state.writer.replace(delegate=u.session.ref, ctx=u.session.ctx, seen=list(u.session.seen)))
+        state = state.replace(writer=state.writer.replace(seen=list(u.session.seen)))
     if u.planner_ref:
         state = state.replace(planner_ref=u.planner_ref)
     return state
@@ -77,7 +76,7 @@ def apply(e: Threads, u: Updates) -> None:
     if u.fallback is not None:
         e.writer_fallback, e.fallback_lane = u.fallback.on, u.fallback.lane
     if u.session is not None:
-        e.writer.delegate, e.writer.ctx, e.writer.seen = u.session.ref, u.session.ctx, list(u.session.seen)
+        e.writer.seen = list(u.session.seen)
     if u.planner_ref:
         e.planner_ref = u.planner_ref
     e.last_flag = u.flag

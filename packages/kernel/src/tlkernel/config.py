@@ -9,7 +9,6 @@ from tlkernel.argv import FORM, shape_problem, text_of
 from tlkernel.ids import CheckId, mangle
 from tlkernel.wire import Rec
 
-FRESH_ABOVE_K: Final = {"claude": 150.0, "codex": 100.0, "xai": 100.0}
 TEST_PATTERN = r"^\s*(def test_|async def test_|\[(Test|UnityTest|Fact|Theory|TestMethod|TestCase)\b|#\[test\]|(it|test)\(|func Test)"
 
 
@@ -214,8 +213,6 @@ class EngineConfig(Rec):
     writer_read_roots: list[str] = msgspec.field(default_factory=list)  # absolute folders an OpenCode write step may read outside its cwd
     planner_notes: str = ""
     shot_table: str = ""
-    write_fresh_stage_k: float = 100
-    write_fresh_above_k: float | dict[str, float] = msgspec.field(default_factory=lambda: dict(FRESH_ABOVE_K))
     delegate: str = ""
     untracked_ignore: list[str] = msgspec.field(default_factory=list)
     checks: list[CheckSpec] = msgspec.field(default_factory=list)

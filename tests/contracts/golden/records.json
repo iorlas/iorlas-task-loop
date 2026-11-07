@@ -18,7 +18,7 @@
   "total": 2
  },
  "RunTrace": {
-  "v": 3,
+  "v": 4,
   "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "bead": "tl-7y6.3.1",
   "repo_url": "https://github.com/x/y.git",
@@ -122,8 +122,7 @@
     "input_tokens": 10,
     "turns": null,
     "prompt_chars": null,
-    "context_k": 5,
-    "fresh": ""
+    "context_k": 5
    }
   ],
   "strays": [
@@ -452,7 +451,7 @@
   ]
  },
  "Checkpoint": {
-  "v": 5,
+  "v": 6,
   "bead": "tl-1",
   "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "t": 1793050200.5,
@@ -543,8 +542,6 @@
    "accepted_new": [],
    "denials": [],
    "writer": {
-    "delegate": "codex",
-    "ctx": 35,
     "seen": [
      "abc"
     ],
@@ -1613,8 +1610,6 @@
    "writer_read_roots": [],
    "planner_notes": "",
    "shot_table": "",
-   "write_fresh_stage_k": 100,
-   "write_fresh_above_k": 150.0,
    "delegate": "",
    "untracked_ignore": [],
    "checks": [
@@ -1808,7 +1803,7 @@
   }
  },
  "RunRequest": {
-  "v": 1,
+  "v": 2,
   "role": "worker",
   "brief_path": "/b.md",
   "cwd": "/w",
@@ -1819,6 +1814,7 @@
   "title": "T",
   "thread": "writer",
   "delta_path": "/delta.md",
+  "boundary": false,
   "authored_by": "openai",
   "call_id": "c1",
   "timeout_s": 2820,
@@ -2027,7 +2023,7 @@
   "t": 1793050200.5
  },
  "CursorBody": {
-  "v": 5,
+  "v": 6,
   "bead": "tl-1",
   "run": "01KBN6Z0M4R5E8YQ2T7C9W3XHD",
   "t": 1793050200.5,
@@ -2131,10 +2127,8 @@
   ]
  },
  "WriteSection": {
-  "v": 1,
+  "v": 2,
   "writer": {
-   "delegate": "codex",
-   "ctx": 35.0,
    "seen": [
     "abc"
    ],

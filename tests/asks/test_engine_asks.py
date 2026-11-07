@@ -165,23 +165,20 @@ class EngineAsksTest(EngineTest):
         assert self.MARK in s.prompts[1]
         assert "<plan>" in s.prompts[1]
 
-    def test_a_session_over_the_threshold_gives_way_to_a_fresh_writer_with_brief_and_done_so_far(self):
-        rc, s = self.two_writes(ctx_k=160)  # claude: 150
+    def test_context_size_leaves_the_delta_and_trace_telemetry_intact(self):
+        rc, s = self.two_writes(ctx_k=160)
         assert rc == 0, self.blocked
-        again = s.prompts[2]
-        assert s.calls[2][1] is None  # a new session
-        for part in (self.MARK, "<plan>", "These checks fail", "Done so far", "f.txt", "wrote f"):
-            assert part in again
-        assert "fresh writer: session at 160k" in self.eng.log_path.read_text()
+        assert s.calls[2][1] == "ref-write"
         a, b = self.eng.write.write_rounds
-        assert (a["resumed"], a["context_k"], b["resumed"], b["fresh"]) == ("no", 160, "no", "session at 160k")
-        assert b["prompt_chars"] == len(again)
+        assert (a["resumed"], a["context_k"], b["resumed"]) == ("no", 160, "yes")
+        assert "fresh" not in a and "fresh" not in b
+        assert b["prompt_chars"] == len(s.prompts[2])
 
     def test_a_session_under_the_threshold_is_resumed_and_the_trace_has_its_size(self):
         _rc, s = self.two_writes(ctx_k=149)
         assert s.calls[2][1] == "ref-write"
         a, b = self.eng.write.write_rounds
-        assert (b["resumed"], b["context_k"], b["fresh"]) == ("yes", 149, "")
+        assert (b["resumed"], b["context_k"]) == ("yes", 149)
         assert b["prompt_chars"] < a["prompt_chars"]
 
     def test_a_bead_parked_on_a_dropped_v1_ask_asks_again_with_a_v3_ask(self):

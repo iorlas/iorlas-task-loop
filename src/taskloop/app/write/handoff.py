@@ -1,4 +1,4 @@
-"""Handoff: what a writer that did not see the earlier rounds is told, and when a writer session is dropped for a new one. The record
+"""Handoff: what a writer that did not see the earlier rounds is told. The record
 (`handoff`: the rounds so far, the low findings a review already noted) lives on the host and in the checkpoint; this class reads and
 extends it and renders it into the writer's and the reviewer's prompts."""
 import contextlib
@@ -7,7 +7,6 @@ from collections.abc import Sequence
 from typing import Any
 
 from tlkernel import rundocs
-from tlkernel.config import FRESH_ABOVE_K
 from tlkernel.gitport import Git
 from tlkernel.run import HandoffMirror, Round
 
@@ -26,29 +25,6 @@ class Handoff:
     def seen_now(self) -> list[str]:
         """What a writer session holds of the task once it has answered: the brief's and the plan's hash."""
         return [hashlib.sha1(t.encode("utf-8")).hexdigest() for t in (self.e.briefs.text(), self.e.cases.plan_text())]
-
-    def fresh_above_k(self, family: str) -> float:
-        v = self.e.cfg.write_fresh_above_k
-        if isinstance(v, dict):
-            key = "codex" if family == "openai" else family
-            v = v.get(key, FRESH_ABOVE_K.get(key, 0))
-        return float(v or 0)
-
-    def drop_big(self, boundary: bool = False) -> str:
-        """tl-bxk.10.29: -> why a new writer starts, or "". The session's last context is above write_fresh_above_k for its
-        family: it is not resumed (every later turn would carry it all); the next write is a new session. At a stage
-        boundary the lower write_fresh_stage_k applies (tl-bxk.13.7): one consumer bead carried 276K into stage 2 (11.7M tokens)."""
-        ref, ctx = self.e.writer.delegate, self.e.writer.ctx
-        limit = self.fresh_above_k(self.e.writer_family or "")
-        if boundary and limit:  # write_fresh_above_k 0 means never: the stage limit does not override it
-            b = float(self.e.cfg.write_fresh_stage_k or 0)
-            limit = min(limit, b) if b else limit
-        if not ref or not ctx or not limit or ctx <= limit:
-            return ""
-        self.e.writer.delegate = None
-        why = f"session at {ctx:.0f}k"
-        self.e.log.note(f"fresh writer: {why} (above {limit:g}k for {self.e.writer_family})")
-        return why
 
     def so_far_text(self) -> str:
         """What a fresh writer is told its predecessor did: the diff --stat of the stage so far, and its last summary."""
