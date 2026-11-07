@@ -15,17 +15,13 @@ class StaleRevision(ValueError):
 
 
 def manifest_of(text: str, run: str) -> RunManifest:
-    """The manifest in a row. Forward-readable: a top-level key this tl does not know (a newer writer's) is read past, not an error,
-    so one newer row cannot block every landing; a write back keeps only the keys this tl knows. A row that still does not
-    validate raises a DatabaseError that says so (the run and the msgspec reason), not a bare 'unreadable'."""
+    """The manifest in a row. A row that does not validate (an unknown key, another `v`) raises a DatabaseError naming the run and the
+    reason: the row is from another version, delete it (no backward compatibility)."""
     try:
-        body = json.loads(text)
-        if isinstance(body, dict):
-            known = {"v", *wire.names(RunManifest)}
-            body = {k: v for k, v in body.items() if k in known}
-        return wire.load(RunManifest, body)
+        return wire.load(RunManifest, json.loads(text))
     except (ValueError, TypeError) as error:
-        raise factorydb.DatabaseError(f"run manifest {run} does not validate: {error}") from error
+        raise factorydb.DatabaseError(
+            f"run manifest {run} does not validate: {error}; the row is from another version, delete it") from error
 
 
 class RunRows:
