@@ -21,7 +21,7 @@ SRC = ROOT / "src"
 
 ALLOWS_BEAT = {
     "packages/kernel/src/tlkernel/log.py",  # the record's definition
-    "src/taskloop/domain/stuck.py",  # the stuck rule: a Beat is the tick, not activity
+    "src/taskloop/app/pipeline/stuck_rule.py",  # the stuck rule: a Beat is the tick, not activity
     "src/taskloop/app/pipeline/lifecycle.py",  # the engine writes it
     "src/taskloop_dash/jsonl.py", "src/taskloop_dash/readers/logs.py", "src/taskloop_dash/views/runfacts.py",  # a Beat is no event
     "src/taskloop_dash/index/facts.py",  # only the indexer compacts engine Beats
@@ -121,3 +121,10 @@ class LivenessIsRecorded(Case):
     def test_the_allow_lists_name_files_that_exist(self):
         for rel in ALLOWS_BEAT | ALLOWS_STALE | ALLOWS_PID_ALIVE | ALLOWS_LOST:
             assert (ROOT / rel).is_file(), rel
+
+
+def test_read_verbs_do_not_reconcile():
+    roots = [SRC / "taskloop" / part for part in ("app/asks", "app/report", "cli")]
+    bad = [f"{f.relative_to(ROOT)}:{line}" for root in roots for f in sorted(root.rglob("*.py"))
+           for line, name in names(parsed(f)[1]) if name == "reconcile"]
+    assert bad == [], "read verbs use runlife.shown; only the loop and doctor reconcile"

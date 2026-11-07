@@ -12,6 +12,7 @@ from tlkernel.branches import bead_of
 from tlkernel.forge import OPEN, Pr, StackItem
 from tlkernel.gitport import Git
 from tlkernel.queue_doc import QueueDoc
+from tlkernel.storeapi import Doc
 from tlkernel.wire import Rec, Refused
 
 from taskloop.app.land.cmds import Cmds, Stop
@@ -25,7 +26,6 @@ from taskloop.app.land.stackgate import StackGate
 from taskloop.app.land.treecheck import TreeGuard
 from taskloop.domain.land.queue_model import Entry, Phase
 from taskloop.domain.land.queue_persist import to_doc
-from taskloop.stores.api import Doc
 from taskloop.stores.runlog import RunLog
 
 

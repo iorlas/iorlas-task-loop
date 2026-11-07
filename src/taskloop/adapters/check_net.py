@@ -2,7 +2,7 @@
 
 macOS: `sandbox-exec` with a profile that denies the network except loopback. Linux: `unshare -rn` (a user and a network namespace; the
 loopback is brought up, so a check's own local servers work). A host with neither cannot remove the network: the plan says so in words
-and adds nothing. With engine.check_net_isolate on, the shell refuses the check with that reason."""
+and adds nothing. With engine.check_net_isolate on, the shell refuses checks that do not declare network=True with that reason."""
 import functools
 import platform
 import shutil

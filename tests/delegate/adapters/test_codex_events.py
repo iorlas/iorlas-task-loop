@@ -66,9 +66,9 @@ class Streams(Case):
         with TemporaryDirectory() as d:
             out = live_lines(parse("session")[1], Path(d) / "live.jsonl")
         assert out[0] == {"v": 1, "pid": 4242, "pgid": 4242, "run_id": "rid"}
-        assert [e["k"] for e in out[1:3]] == ["start", "cmd_start"]
-        opened = {e["id"] for e in out if e.get("k", "").endswith("_start") and "id" in e}
-        closed = {e["id"] for e in out if e.get("k", "").endswith("_end") and "id" in e}
+        assert [e["kind"] for e in out[1:3]] == ["start", "cmd_start"]
+        opened = {e["id"] for e in out if e.get("kind", "").endswith("_start") and "id" in e}
+        closed = {e["id"] for e in out if e.get("kind", "").endswith("_end") and "id" in e}
         assert (opened - closed) == set()
 
 
@@ -77,7 +77,7 @@ class Facts:
         h, per_line = parse("reconnecting")
         assert [e for evs in per_line for e in evs if isinstance(e, ev.Reconnecting)][1] == ev.Reconnecting(n=2, of=5, text=mock.ANY)
         with TemporaryDirectory() as d:
-            retries = [e for e in live_lines(per_line, Path(d) / "l.jsonl") if e.get("k") == "retry"]
+            retries = [e for e in live_lines(per_line, Path(d) / "l.jsonl") if e.get("kind") == "retry"]
         assert [(r["n"], r["of"]) for r in retries] == [(1, 5), (2, 5)]
         h, per_line = parse("retries_exhausted")
         assert [type(e).__name__ for evs in per_line for e in evs] == ["Started", "Reconnecting", "HarnessError", "HarnessError"]
@@ -99,7 +99,7 @@ class Facts:
         assert [e.http_status for evs in parse("http_429")[1] for e in evs] == [429]
         with TemporaryDirectory() as d:
             out = live_lines(parse("http_429")[1], Path(d) / "l.jsonl")
-        assert [(e["k"], e["why"]) for e in out if e.get("k") == "retry"] == [("retry", "http 429")]
+        assert [(e["kind"], e["why"]) for e in out if e.get("kind") == "retry"] == [("retry", "http 429")]
 
     def test_a_permission_line_that_says_rate_limit_is_not_a_retry(self):
         h = CodexHarness()
