@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from test_pkg import closure, main, selection
 
 
