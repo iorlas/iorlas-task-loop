@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from support.facts import fake_facts
 from support.fakegit import FakeGit
+from taskloop.app.pipeline.leftover_queue import LeftoverQueue
 from taskloop.app.review.link_check import LinkCheck
 from taskloop.app.review.routing import Routing
 from taskloop.app.review.settles import Settles
@@ -39,6 +40,8 @@ class FakeReviewPorts:
     """Review's calls: in-memory steps and stores, queued answers and an empty checkout."""
 
     Blocked = ReviewStop
+
+    leftover_sink: LeftoverQueue
 
     def __init__(self, workdir: Path, cfg: EngineConfig | None = None) -> None:
         self.facts, run = fake_facts(workdir, cfg=cfg)
@@ -90,6 +93,7 @@ class FakeReview:
         self.facts, self.live = self.ports.facts, ReviewLive()
         self.hand = SimpleNamespace(scope="", plan_data=None, last_run=None, fixes=0, leftovers=[], at_stage=0,
                                     last_flag="", writer_family="claude")
+        self.ports.leftover_sink = LeftoverQueue(self.hand)
         self.git = ReviewGit()
         self.routing = self.hand.routing = Routing(self.facts, self.ports, self.live, self.hand, self.git)
         self.settles = self.hand.settles = Settles(self.facts, self.ports, self.live, self.hand, self.git)

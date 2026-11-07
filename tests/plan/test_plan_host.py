@@ -12,6 +12,7 @@ class PlanHostConformance(EngineTest):
         eng = make_engine(self.wt, store=self.store)
         assert missing(eng, PlanPorts) == []
         assert missing(eng, PlanHand) == []
+        assert eng.leftover_sink is eng.leftover_sink
 
     def test_the_check_names_a_member_the_host_lacks(self):
         eng = make_engine(self.wt, store=self.store)
@@ -23,3 +24,5 @@ def test_fake_has_every_plan_capability_and_hand_field(workdir):
     plan = FakePlan(workdir)
     assert missing(plan.ports, PlanPorts) == []
     assert missing(plan.hand, PlanHand) == []
+    plan.ports.leftover_sink.add_titled({"title": "later", "why": "x"})
+    assert plan.hand.leftovers == [{"title": "later", "why": "x"}]

@@ -21,3 +21,9 @@ class ReviewHandConformance(EngineTest):
 def test_the_fake_review_has_every_member_the_stage_reads(workdir):
     review = FakeReview(workdir)
     assert (missing(review.hand, ReviewHand), missing(review.ports, ReviewPorts)) == ([], [])
+
+def test_the_fake_review_sink_writes_its_hand_off_list(workdir):
+    review = FakeReview(workdir)
+    lo = {"title": "later"}
+    assert review.ports.leftover_sink.add_titled(lo)
+    assert review.hand.leftovers == [lo]
