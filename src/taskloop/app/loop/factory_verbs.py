@@ -1,14 +1,58 @@
-"""A terminal-independent loop, using the loop's existing liveness, lock, logs and stop command."""
+"""Factory lane targets, stop results, log selection and status facts for the loop node."""
 import contextlib
 import time
 from collections import deque
 from collections.abc import Callable, Generator
 from pathlib import Path
 
+from tlkernel.config import RepoProfile
 from tlkernel.loop import LoopState
 from tlkernel.procport import Child, Spawner
+from tlkernel.slots import SlotGitError
 
 from taskloop.app.loop.files import LoopFiles
+
+
+def wanted(profile: Callable[[], RepoProfile]) -> int:
+    try:
+        return max(1, profile().slots.count)
+    except SystemExit as error:
+        raise RuntimeError("cannot read repo profile") from error
+    except SlotGitError as error:
+        raise RuntimeError(f"cannot read repo profile: {error}") from error
+
+
+def status_wanted(profile: Callable[[], RepoProfile]) -> str:
+    """Status must answer even when the profile cannot be read."""
+    try:
+        return str(wanted(profile))
+    except RuntimeError:
+        return "?"
+
+
+def stop(files: LoopFiles, now: bool, actor: str) -> list[LoopState] | None:
+    return files.request_stop(now, actor) or None
+
+
+def logs(files: LoopFiles, states: list[LoopState], lane: int) -> tuple[LoopState, Path]:
+    state = lane_states(files, states).get(lane)
+    if state is None:
+        raise RuntimeError(f"no live lane {lane}")
+    return state, log_path(files, state)
+
+
+def facts(files: LoopFiles, states: list[LoopState], repo: str, version: str) -> list[str]:
+    rows = ["REPO " + repo]
+    if not states:
+        rows.extend(("not running", "VERSION " + version, "LOG " + str(log_path(files))))
+    for st in states:
+        rows.append(f"PID {st.pid}\nVERSION {st.version}\nLOG {log_path(files, st)}")
+        rows.append("BEAD " + (st.bead or "-"))
+    return rows
+
+
+def status_facts(files: LoopFiles, states: list[LoopState], repo: str, version: str) -> list[str]:
+    return facts(files, list(lane_states(files, states).values()), repo, version)
 
 
 def no_keep_awake(pid: int) -> list[str]:
