@@ -16,12 +16,12 @@ import hermetic  # noqa: F401  (a home of its own for every test)
 import pytest
 import routing_support as support
 from any_agent import watch
-from support import fake_worker
 from test_route import no_reader, route
 
 from delegate.app import env, harnesses, run, usage
 from delegate.contracts import history as hist
 from delegate.domain.health import ledger as health_ledger
+from tltestkit import fake_worker
 from tltestkit.case import Case
 from tltestkit.fake_clock import FakeClock, SteppingClock
 from tltestkit.tmpdir import TemporaryDirectory
@@ -137,7 +137,7 @@ class RunBase(Case):
         )
 
     def play(self, *script):
-        """The worker of the next run is a script (tests/support/fake_worker.py): nothing is spawned. -> the workers started."""
+        """The worker of the next run is a script (tltestkit.fake_worker): nothing is spawned. -> the workers started."""
         return self.enterContext(fake_worker.install(list(script), clock=self.clock))
 
     def real_clock(self):

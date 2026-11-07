@@ -25,12 +25,12 @@ from any_agent import watch
 from any_agent.harnesses import claude
 from any_agent.harnesses.opencode import OpenCodeHarness
 from any_agent.supervisor import RunHooks
-from support import fake_worker
-from support.fake_worker import Jump
 
 from delegate.adapters import codex_account, git
 from delegate.app import env, harnesses, launch
 from delegate.contracts.json_types import Json
+from tltestkit import fake_worker
+from tltestkit.fake_worker import Jump
 
 T = 1_000_000.0
 LIMIT_S = 30  # replays wait out the grace and stall limits (about 4 s each)
@@ -127,7 +127,7 @@ class Replay(Case):
         return {"lane": lane, "model": "m", "effort": "high", "role": "worker", "how": how}
 
     def launch(self, kind, *script, a=None):
-        """The worker plays `script` (tests/support/fake_worker.py); -> the answer and the workers started."""
+        """The worker plays `script` (packages/testkit/src/tltestkit/fake_worker.py); -> the answer and the workers started."""
         a = a or self.a
         d = self.d(kind)
         exe = "/fake/" + kind
