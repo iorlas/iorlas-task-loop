@@ -1,14 +1,16 @@
 """What a worker is told of its checks: which it may run, which are the engine's, which were red on the untouched base too."""
 from typing import Any
 
+from taskloop.app.write.host import BriefingHost
+from taskloop.contracts.checks import CheckRun
 from taskloop.domain.checks.names import norm as norm_cmd
 
 
 class Briefing:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: BriefingHost) -> None:
         self.e = host
 
-    def where(self, node: Any, checks: Any = (), failed: Any = None, listed: Any = ()):
+    def where(self, node: str, checks: Any = (), failed: Any = None, listed: Any = ()):
         """What the step is for, never what its sandbox allows: delegate tells each worker that (worker-run v4).
         For the writer: which checks it may run (fast ones) and which are the engine's (slow ones), minus `listed` (the
         commands the stage's own check list already names)."""
@@ -37,7 +39,7 @@ class Briefing:
                     "command more than 3 times.")
         return "You may run commands to check facts (read files, run a linter or a test); never edit, create or delete files."
 
-    def base_red_text(self, run: Any):
+    def base_red_text(self, run: CheckRun):
         """What the writer is told of the checks that were red on the untouched base too: they are not its to fix."""
         if not run.base_red:
             return ""
