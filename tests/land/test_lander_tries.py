@@ -3,7 +3,8 @@ What `git` itself does on a rebase or a push race stays in test_engine_land_1 an
 
 import pytest
 from support.fakegit import FakeGit
-from support.narrow_hosts import LandKit, Stopped, table_kit
+from support.narrow_hosts import Stopped
+from support.narrow_land import LandKit, table_kit
 
 from tltestkit.case import Case
 
