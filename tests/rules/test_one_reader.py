@@ -1,6 +1,6 @@
 """One reader per fact (tl-sqd3.30, RCA R-A): a fact (the repo profile, the delivery verdict) is read by a named set of modules. The set is
-the whole list, not a floor: a new reader fails here until it is named with its reason, and a reader removed must leave the list, so the list
-can only shrink toward the target (one reader). The repo key's single definition site is tests/rules/test_one_repo_key.py."""
+the whole list, not a floor: a new reader fails here until it is named with its reason, and a reader removed must leave the list, so
+the list can only shrink toward the target (one reader). The repo key's single definition site is tests/rules/test_one_repo_key.py."""
 import ast
 
 from rules.gate_rules import ROOT, parsed, py_files
