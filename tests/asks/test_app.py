@@ -12,7 +12,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
-from support.narrow import must
 from support.tiers import domain
 
 from taskloop.adapters.bd import BdRun, BdStore
@@ -23,6 +22,7 @@ from tlkernel.askenums import AskKind, AskStatus
 from tlkernel.bead import Bead
 from tlkernel.beadsport import NewBead
 from tlkernel.ids import BeadId
+from tltestkit.narrow import must
 
 T = 1000.0
 

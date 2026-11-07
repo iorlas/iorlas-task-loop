@@ -16,11 +16,11 @@ from asks.dash_ports import answering  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
 from support.factory_index import seed_beads  # noqa: E402
 from support.look_world import looks, world  # noqa: E402
-from support.narrow import must  # noqa: E402
-from support.repos import write_repos  # noqa: E402
 
 from tlkernel import gallery  # noqa: E402
 from tlkernel.ids import loop_key  # noqa: E402
+from tltestkit.narrow import must  # noqa: E402
+from tltestkit.repos import write_repos  # noqa: E402
 
 LOOKS = make_dash().looks
 

@@ -15,7 +15,6 @@ from support import engine_case as te
 from support import homes
 from support.dashes import make_dash
 from support.factory_index import ingest
-from support.narrow import must
 from support.waits import until
 
 from taskloop.app.asks import owner_verbs as requests
@@ -26,6 +25,7 @@ from tlkernel.ids import loop_key
 from tlkernel.locator import RunLocator
 from tlkernel.run import RunState
 from tlkernel.runlife import STALE_AFTER, Liveness
+from tltestkit.narrow import must
 
 CHILD = Path(te.ROOT, "tests", "support", "state_child.py")
 WAIT = 120

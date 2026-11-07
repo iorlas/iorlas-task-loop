@@ -3,13 +3,13 @@ from unittest import mock
 
 import support.paths  # noqa: F401
 from support import homes
-from support.runs import manifest
 
 from loop.test_loop import LoopBase, rec
 from taskloop.app.loop.core import Core
 from tlkernel.locator import RunLocator, host_name
 from tlkernel.run import RunState
 from tlkernel.runlife import STALE_AFTER
+from tltestkit.runs import manifest
 
 NOBODY = 4_194_303  # a pid no process has
 

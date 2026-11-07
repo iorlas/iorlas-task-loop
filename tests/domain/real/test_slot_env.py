@@ -9,9 +9,11 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401
 from support import engine_case as te
-from support import fake_route, procsim
+from support import procsim
 from support.engine_case import real_git
 from support.plans import CLEAN, PLAN, WRITE
+
+from tltestkit import fake_route
 
 KEYS = ("TMPDIR", "TMP", "TEMP", "TL_SLOT")
 

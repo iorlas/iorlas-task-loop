@@ -11,7 +11,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 from support.memstores import fake_stores
-from support.narrow import must
 from support.tiers import domain
 
 from taskloop.app.asks import intake, raiser
@@ -21,6 +20,7 @@ from tlkernel.bead import Bead
 from tlkernel.dash import Stick
 from tlkernel.ids import BeadId
 from tlkernel.ledger import Adr
+from tltestkit.narrow import must
 
 T = 1000.0
 Q = "Which save format should the engine keep for old files?"

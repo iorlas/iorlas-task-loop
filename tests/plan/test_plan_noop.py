@@ -1,11 +1,11 @@
 """An untouched empty plan parks; existing work keeps the finished-work policy."""
 import pytest
-from support.checks import typed
 from support.plan_host import FakePlan
 from support.plans import PLAN
 
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
 from tlkernel.kinds import Kind
+from tltestkit.checks import typed
 
 
 @pytest.fixture
