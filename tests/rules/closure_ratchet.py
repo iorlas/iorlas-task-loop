@@ -15,13 +15,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "dev"))
 from importgraph import targets_of
 
 TREES = ("src/taskloop", "packages/kernel/src/tlkernel", "packages/gate/src/tlgate",
-         "packages/work/src/tlwork", "packages/slots/src/tlslots")
+         "packages/work/src/tlwork", "packages/slots/src/tlslots", "packages/release/src/tlrelease")
 
 
 def closures(texts: Mapping[str, str]) -> dict[str, int]:
     """Count reachable local files and distinct external module roots for each stage."""
     modules = {path.removeprefix("packages/kernel/").removeprefix("packages/gate/")
-               .removeprefix("packages/work/").removeprefix("packages/slots/").removeprefix("src/")
+               .removeprefix("packages/release/").removeprefix("packages/work/").removeprefix("packages/slots/").removeprefix("src/")
                .removesuffix(".py").replace("/", ".").removesuffix(".__init__"):
                path for path in texts if path.startswith(tuple(tree + "/" for tree in TREES)) and path.endswith(".py")}
     packages = {name for name, path in modules.items() if path.endswith("/__init__.py")}
@@ -42,10 +42,9 @@ def closures(texts: Mapping[str, str]) -> dict[str, int]:
                     break
                 candidate = candidate.rpartition(".")[0]
     stages = sorted(name for name in packages if name.startswith("taskloop.app.") and name.count(".") == 2)
-    if "tlgate" in packages:  # the gate is its package now; the shell's app/checks (step.py) is glue and keeps no budget of its own
-        stages = [name for name in stages if name != "taskloop.app.checks"] + ["tlgate"]
-    if "tlslots" in packages:
-        stages = [name for name in stages if name != "tlslots"] + ["tlslots"]
+    for package, shell in {"tlgate": "checks", "tlslots": "slots", "tlrelease": "release"}.items():
+        if package in packages:
+            stages = [name for name in stages if name != "taskloop.app." + shell] + [package]
     if "tlwork.review" in packages:
         stages = [name for name in stages if name != "taskloop.app" + ".review"] + ["tlwork.review"]
     counts = {}
@@ -58,7 +57,7 @@ def closures(texts: Mapping[str, str]) -> dict[str, int]:
             if name not in reached:
                 reached.add(name)
                 pending.extend(edges[name] - reached)
-        key = "checks" if stage == "tlgate" else ("slots" if stage == "tlslots" else stage.rsplit(".", 1)[-1])
+        key = {"tlgate": "checks", "tlslots": "slots", "tlrelease": "release"}.get(stage, stage.rsplit(".", 1)[-1])
         counts[key] = len(reached)
         counts[key + " (external modules)"] = len(set().union(*(external[name] for name in reached)))
     return counts

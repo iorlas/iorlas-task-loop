@@ -11,13 +11,12 @@ SLICE_IMPORTS: Final = {
     "doctor": frozenset(),
     "land": frozenset({"asks", "checks"}),
     "look": frozenset({"asks", "checks"}),
-    "loop": frozenset({"asks", "release", "report", "run"}),
+    "loop": frozenset({"asks", "report", "run"}),
     "parts": frozenset({"checks", "land"}),  # the one list of stage parts imports each stage that owns its tables (store.py)
     "plan": frozenset({"asks", "checks"}),
     # prune -> slots: D-PRUNE is the cross-part runner, so it reads slot_state_roots
-    "prune": frozenset({"reconcile", "release", "run", "track"}),
-    "reconcile": frozenset({"release"}),
-    "release": frozenset({"checks"}),
+    "prune": frozenset({"reconcile", "run", "track"}),
+    "reconcile": frozenset(),
     "report": frozenset({"asks", "reconcile"}),
     "review": frozenset({"asks", "checks"}),
     "track": frozenset(),

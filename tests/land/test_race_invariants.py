@@ -47,6 +47,7 @@ from support import slots as sl
 from support.args import Args
 from support.engine_locks import put_lock
 from support.rebind import rebind
+from support.release_world import release_host
 from support.spawn import port_git, real_spawner
 from support.stdout import stdout_in
 
@@ -59,7 +60,6 @@ from taskloop.adapters import (
     git as git_adapter,
 )
 from taskloop.app.land.lander import lander_over
-from taskloop.app.release import push as release_push
 from taskloop.app.run import (
     entry,
     running,
@@ -75,6 +75,7 @@ from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.lockrows import EngineLockRows
 from tlkernel.slots import Checkout, SlotGitError
+from tlrelease import push as release_push
 from tlslots import config as wslots_config
 from tlslots import engine_lock, marks, reset
 from tltestkit.cfgs import cfg_with
@@ -512,7 +513,8 @@ class Invariants(test_loop.Base):
         sh = replace(quiet_shell(), port=cast(Git, self.OriginGit(o, arrived)))
         with self.watching(watch):
             got = self.together(
-                {n: (lambda n=n: release_push.push_main(Path(n), "race release", "0.1.1", "h0", lambda: o.bump(n), sh)) for n in "AB"}
+                {n: (lambda n=n: release_push.push_main(Path(n), "race release", "0.1.1", "h0", lambda: o.bump(n), sh,
+                                                                     host=release_host())) for n in "AB"}
             )
         o.got = got
         return o

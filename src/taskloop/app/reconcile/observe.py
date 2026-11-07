@@ -16,8 +16,8 @@ from tlkernel.lockrows import EngineLockRows
 from tlkernel.paths import ConfigDir
 from tlkernel.reconcile import Lease, SlotFact, epoch
 from tlkernel.slots import SlotGitError
+from tlrelease import tidy
 
-from taskloop.app.release import tidy
 from taskloop.domain.reconcile.facts import (
     BeadFact,
     Checkout,

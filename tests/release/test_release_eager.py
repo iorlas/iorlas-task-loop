@@ -15,9 +15,9 @@ class Eager(Case):
     def test_the_release_modules_are_loaded_when_the_script_starts(self):
         before = sys.get_lazy_imports()
         self.addCleanup(sys.set_lazy_imports, before)
-        for name in [m for m in sys.modules if m.startswith("taskloop.app.release")]:
+        for name in [m for m in sys.modules if m.startswith("tlrelease")]:
             self.addCleanup(sys.modules.__setitem__, name, sys.modules.pop(name))
         spec = importlib.util.spec_from_file_location("release_script", ROOT / "dev" / "release.py")
         assert spec and spec.loader
         spec.loader.exec_module(importlib.util.module_from_spec(spec))
-        assert "taskloop.app.release.tidy" in sys.modules  # loaded at start: a lazy import is not in sys.modules until first use
+        assert "tlrelease.tidy" in sys.modules  # loaded at start: a lazy import is not in sys.modules until first use

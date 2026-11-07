@@ -8,6 +8,7 @@ from tlkernel import childenv
 from tlkernel.kinds import Kind
 from tlkernel.runlayout import repo_of
 from tlpipeline import api
+from tlrelease.closing import ReexecBook
 from tlslots.engine_lock import HeldLock
 from tlslots.shared import Shared, SharedHost
 
@@ -17,7 +18,6 @@ from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.asks.closing import ClosingTrust
 from taskloop.app.checks.step import StageChecks
 from taskloop.app.land.closing import LandHistory
-from taskloop.app.release.closing import ReexecBook
 from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.run.bead_env import bead_env
 from taskloop.app.run.plumbing import Plumbing

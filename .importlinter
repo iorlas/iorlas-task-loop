@@ -11,6 +11,7 @@ root_packages =
     tlgate
     tlwork
     tlslots
+    tlrelease
     tlpipeline
     msgspec
     re
@@ -149,17 +150,19 @@ ignore_imports =
 name = app slices form no cycle (a layers order, top may import below)
 type = layers
 containers = taskloop.app
+# The shared release builder is a root below wire/run; the other launch roots stay above them.
+# Colon keeps imports between the other launch modules allowed, as the former launch layer did.
 layers =
-    launch
+    launch.check : launch.check_host : launch.dash : launch.dash_ports : launch.factory : launch.lanes : launch.loop : launch.loop_ops : launch.loop_start : launch.push_judge : launch.reindex : launch.repos : launch.selftest : launch.setup_ports : launch.staged
     prune
     run
     wire
+    launch.release_host
     loop
     land
     write | plan | look
     report
     reconcile
-    release
     checks
     track | doctor
     asks
@@ -245,6 +248,17 @@ forbidden_modules =
     delegate
 allow_indirect_imports = True
 
+[importlinter:contract:package-release-imports-only-kernel-and-gate]
+name = tlrelease imports the kernel, gate and third parties only
+type = forbidden
+source_modules =
+    tlrelease
+forbidden_modules =
+    taskloop
+    tldash
+    delegate
+allow_indirect_imports = True
+
 [importlinter:contract:package-slots-imports-only-the-kernel]
 name = tlslots imports the kernel and third parties only
 type = forbidden
@@ -280,7 +294,7 @@ source_modules =
     taskloop.app.plan
     taskloop.app.prune
     taskloop.app.reconcile
-    taskloop.app.release
+    tlrelease
     tlwork.review
     taskloop.app.report
     tlslots
@@ -331,7 +345,7 @@ source_modules =
     taskloop.app.loop
     taskloop.app.plan
     taskloop.app.reconcile
-    taskloop.app.release
+    tlrelease
 forbidden_modules =
     taskloop.app.run
     taskloop.app.wire

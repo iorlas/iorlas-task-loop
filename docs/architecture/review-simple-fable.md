@@ -405,7 +405,7 @@ Verdict count: 29 ✅, 6 ❓, 2 ❌. Contrarian/low-confidence: 10 (10, 24-31, 3
 - **12** Move `.task/engine.lock` to `C/locks/` (Z15), then replace it by the `attempt(host,pid,start_id)` row; delete slot beads last.
 - **13** Merge `salvage`, `restart`, `recheck`, `fix_outside`, `land_rebase` into `Lander.finish` with one `Conflict -> fix round -> replan` branch.
 - **14** List every `Git` method's callers; delete the ones with one caller by inlining the git call, then re-cut the Protocol.
-- **15** Make `dev/release.py` import nothing from `taskloop.app.release`; delete that package when the suite passes.
+- **15** Make `dev/release.py` import nothing from `tlrelease`; delete that package when the suite passes.
 - **16** Delete `.importlinter:141-503` and replace with one contract: `records, ports` import nothing from `taskloop`.
 - **17** Change `dash/api/writes.py` to `subprocess.run([shim, verb, ...])` and delete the `--ports` runtime import in `cli/dash.py`.
 - **18** Delete `tl lanes`/`tl usage` and the chore; make the page call `route.py status --cheap`.

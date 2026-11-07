@@ -32,10 +32,6 @@ from taskloop.adapters import ident  # noqa: E402
 from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.launch import loop_start as wstart  # noqa: E402
 from taskloop.app.loop.run import BeadRun, Where  # noqa: E402
-from taskloop.app.release import (  # noqa: E402
-    catalog,
-    reexec,
-)
 from taskloop.app.run import (  # noqa: E402
     engine,
     entry,
@@ -46,6 +42,10 @@ from tlkernel.env import Env, snapshot  # noqa: E402
 from tlkernel.ids import BeadId  # noqa: E402
 from tlkernel.rowstores import BadVersionStore  # noqa: E402
 from tlkernel.run import Reexec, ReexecNote  # noqa: E402
+from tlrelease import (  # noqa: E402
+    catalog,
+    reexec,
+)
 from tlslots import config as wslots_config  # noqa: E402
 from tltestkit.cfgs import cfg_with  # noqa: E402
 from tltestkit.narrow import must  # noqa: E402

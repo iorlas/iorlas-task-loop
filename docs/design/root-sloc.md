@@ -18,7 +18,7 @@ Net root 4030 -> about 3650. The slots carve is the largest cut left (docs/desig
 
 ## Destination map
 
-Packages that exist: `kernel`, `gate`, `artifacts`, `pipeline`, `testkit`. Not carved yet (their rows wait on the carve in `stage-carves.md`): slots (tl-e5t0.17), asks (.18), release (.19), land (.20), work. `app/doctor`, `app/report` and `app/land` are ordinary slices that exist now.
+Packages that exist: `kernel`, `gate`, `artifacts`, `pipeline`, `testkit`, `slots`, `work`, `release`. Not carved yet (their rows wait on the carve in `stage-carves.md`): asks (.18), land (.20). Release R1 (.19) moved the code; its shell-only binding stays in `app/launch/release_host.py`. `app/doctor`, `app/report` and `app/land` are ordinary slices that exist now.
 
 | root file | sloc | br | leaves | disposition | why / blocker |
 |---|---|---|---|---|---|
@@ -69,3 +69,10 @@ Packages that exist: `kernel`, `gate`, `artifacts`, `pipeline`, `testkit`. Not c
 3. After the slots carve: slots.py 130, entry's slot take ~100, shared 70.
 4. After asks / release / land carves: ask_flow, wire/asks, loop_start, land, land_stack (about 235).
 5. dash.py 170 when the dashboard lane is quiet.
+
+Release R1 (tl-e5t0.19): code carve done in `packages/release/src/tlrelease`, flat modules with no api.py.
+`ReleaseHost` supplies shell effects, bound by `app/launch/release_host.py`; tests stay in `tests/release` until R2.
+
+R1 measured against `31d0fe53aeeb`: roots total 3476 SLOC (76 files); changed roots 1011 -> 1029 SLOC,
+with no branch or long-function rise (`Ratchet-allow: root +18`). Release closure 124 -> 76 files
+and 44 -> 34 external modules; shell closure rises total 21 (launch +3, run +5, wire +12 files and +1 external module).

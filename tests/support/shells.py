@@ -4,8 +4,8 @@ from pathlib import Path
 
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
-from taskloop.app.release.shell import Done, Shell
 from tlkernel.env import Env, snapshot
+from tlrelease.shell import Done, Shell
 
 
 def quiet_shell(calls: list[list[str]] | None = None) -> Shell:

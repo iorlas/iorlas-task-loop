@@ -101,3 +101,6 @@ S1 slots code carve: `packages/slots` (`tlslots`) owns slot orchestration, liven
 E1 slice 1: `packages/work` (`tlwork`) owns review application code and review, work and prompts domain rules. Tests remain in their original slice directories. Link checking receives the network adapter through the `Links` Protocol from run/host.py. The carve is rerunnable with `dev/carve_work.py --root DIR`.
 
 Dash is carved into `packages/dash` (`tldash`), with isolated package tests.
+
+Release R1 (tl-e5t0.19): code carve done in `packages/release/src/tlrelease`, flat modules with no api.py.
+`ReleaseHost` supplies shell effects, bound by `app/launch/release_host.py`; tests stay in `tests/release` until R2.

@@ -28,7 +28,7 @@ TOP = {"tldash": "dash", "delegate": "delegate", "hook": "hook", "cli": "cli", "
 def stage_of(path):
     """The stage a src file belongs to by its folder (app/<slice>, domain/<slice>, a top-level package), else 'kernel'."""
     parts = path.split("/")
-    if len(parts) > 2 and parts[0] == "packages" and parts[2] == "src" and parts[1] in {"dash", "kernel", "slots", "work"}:
+    if len(parts) > 2 and parts[0] == "packages" and parts[2] == "src" and parts[1] in {"dash", "kernel", "slots", "work", "release"}:
         return parts[1]
     if parts[0] != "src":
         return None

@@ -20,6 +20,7 @@ from tlkernel.lockenums import LockWhat
 from tlkernel.loop import LoopState
 from tlkernel.procport import Spawner
 from tlkernel.rowstores import ReposStore
+from tlrelease import catalog, shell
 from tlslots import config as wslots_config
 from tlslots import engine_lock
 
@@ -34,7 +35,6 @@ from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.stages import EngineAsks, EngineSlots
 from taskloop.app.prune import verb as prune_verb
-from taskloop.app.release import catalog, shell
 from taskloop.app.run.running import area_lock, running
 from taskloop.app.track import console, trail
 from taskloop.app.wire import asks as wasks

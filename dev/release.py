@@ -9,7 +9,7 @@
                            [--repo DIR] [--marketplace DIR]
     uv run --script dev/release.py --devbox-ok VERSION
 
-A thin caller of src/taskloop/app/release/, always running origin/main's release code: once the clone is on origin/main, a launching
+A thin caller of packages/release/src/tlrelease/, always running origin/main's release code: once the clone is on origin/main, a launching
 checkout whose src/ or dev/release.py differs (it lags; nothing updates it) is replaced by an exec of the clone's dev/release.py with the
 same arguments (--repo made explicit), after the lock is dropped so the exec'd release takes it. Takes an OS lock
 (<config>/locks/release-*.lock): a second release waits in line and prints who holds it. Works in a persistent clone of the repo's origin,
@@ -39,17 +39,18 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "src"))  # importing taskloop puts the vendored shelf packages on sys.path
 
-import taskloop  # noqa: E402, F401  (turns lazy imports on for our modules)
+from taskloop.app.launch.release_host import release_host  # noqa: E402  (imports taskloop and enables lazy imports)
 
 # A release rebases and bumps the very clone it runs from, so a module imported lazily mid-run comes from the new tree (0.23.178:
 # the old flow called the new tidy.drop_branch and failed). Load the whole release now, from the tree it started on.
 if hasattr(sys, "set_lazy_imports"):
     sys.set_lazy_imports("normal")  # only explicit `lazy import` statements stay lazy; we write none
-from taskloop.app.release import flow  # noqa: E402
 from taskloop.app.wire import closeguard, real  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
+from tlrelease import flow  # noqa: E402
 
 if __name__ == "__main__":
     process = snapshot()  # the one place this script takes the process environment
     doc = __doc__.split("\n\n")[0]
-    sys.exit(flow.main(None, HERE.parent, real.spawner(process), real.git(process), process, closeguard.close_released, doc))
+    sys.exit(flow.main(None, HERE.parent, real.spawner(process), real.git(process), process, closeguard.close_released, doc,
+                       host=release_host()))

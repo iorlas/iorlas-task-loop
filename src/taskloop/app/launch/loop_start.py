@@ -14,19 +14,20 @@ from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.procport import Spawner
 from tlkernel.rowstores import ReposStore
+from tlrelease import catalog, pins
 from tlslots import engine_lock
 
 from taskloop.adapters import ident
 from taskloop.app.doctor import profiles
 from taskloop.app.launch import loop as wloop
 from taskloop.app.launch.loop import HERE, live_loops
+from taskloop.app.launch.release_host import release_host
 from taskloop.app.launch.repos import repo_root
 from taskloop.app.loop import render
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.loop import parse_handover
 from taskloop.app.loop.versions import Installs
-from taskloop.app.release import catalog, pins
 from taskloop.app.track import trail
 from taskloop.app.wire import slotfx
 from taskloop.app.wire import slots as wslots
@@ -35,7 +36,8 @@ from taskloop.app.wire import slots as wslots
 def installs(cfg: paths.ConfigDir, env: Env, here: Path = HERE, now: Callable[[], float] = trail.now) -> Installs:
     """The installs of task-loop on this machine."""
     return Installs(
-        cfg, here.parents[1], lambda: catalog.installed_version(ident.claude_dir(env)), lambda: pins.read_pin(env).task_loop or "", now=now
+        cfg, here.parents[1], lambda: catalog.installed_version(ident.claude_dir(env)),
+        lambda: pins.read_pin(env, host=release_host()).task_loop or "", now=now
     )
 
 

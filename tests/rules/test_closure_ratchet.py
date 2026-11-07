@@ -77,3 +77,13 @@ def test_work_review_keeps_its_identity_and_reaches_moved_domain():
         "packages/work/src/tlwork/work/ledger.py": "import dataclasses",
     })
     assert counts == {"review": 3, "review (external modules)": 1}
+
+
+def test_release_member_keeps_its_stage_identity_and_reaches_the_gate():
+    counts = closures({
+        "packages/release/src/tlrelease/__init__.py": "",
+        "packages/release/src/tlrelease/gate.py": "from tlgate.cache import RunMemo",
+        "packages/gate/src/tlgate/__init__.py": "",
+        "packages/gate/src/tlgate/cache.py": "import dataclasses",
+    })
+    assert counts == {"checks": 2, "checks (external modules)": 1, "release": 3, "release (external modules)": 1}

@@ -14,10 +14,11 @@ PLAIN_PYTHON = {"prepush.py", "layout_migrate.py", "key_migrate.py"}  # no recor
 STAGE_PATHS = {
     ROOT / "src" / name for name in (
         "taskloop/app/land/paths.py", "taskloop/app/asks/paths.py",
-        "taskloop/app/release/paths.py", "taskloop/app/prune/paths.py",
+        "taskloop/app/prune/paths.py",
         "taskloop/adapters/layout_paths.py",
     )
-} | {ROOT / "packages/artifacts/src/tlartifacts/paths.py", ROOT / "packages/slots/src/tlslots/paths.py", DASH / "paths.py"}
+} | {ROOT / "packages/artifacts/src/tlartifacts/paths.py", ROOT / "packages/slots/src/tlslots/paths.py",
+     ROOT / "packages/release/src/tlrelease/paths.py", DASH / "paths.py"}
 MAKES_CONFIGDIR = {"env.py", "bind.py", "testing.py"}  # where the config root is made: everything else is handed a ConfigDir
 
 
