@@ -2,6 +2,7 @@
 import time
 
 from taskloop.adapters import beadtools
+from taskloop.app.asks import parks
 from taskloop.app.land.gate import Problem
 from taskloop.app.pipeline.cursor import select_step, stage_kind
 from taskloop.app.pipeline.finish import stage_answer, terminal_state
@@ -22,7 +23,6 @@ from taskloop.contracts.enums import Step
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunBundle, RunLocator
-from taskloop.contracts.parks import ParkStore
 from taskloop.domain import effects
 from taskloop.domain import outcome as oc
 from taskloop.domain.plan.matchers import AcceptanceText
@@ -131,7 +131,7 @@ def record_stage(e: RunHost) -> None:
     if done.kind is Kind.STAGE:  # the bead goes on: no park dropped, no pause, no close outcome kept for the next run
         pass
     elif done.finished and not e.dry:
-        ParkStore(e.home).drop(e.bead)
+        parks.finished(e.home, e.bead)
     else:
         e.closer.pause(done)
         if done.kind is Kind.NOOP and not e.dry:
