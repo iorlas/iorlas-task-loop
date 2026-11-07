@@ -31,6 +31,17 @@ PART_DDL = (f"CREATE TABLE IF NOT EXISTS {PART_TABLE} (name TEXT PRIMARY KEY, ve
             "ddl_fingerprint TEXT NOT NULL, record_fingerprint TEXT NOT NULL)")
 
 
+@dataclass(frozen=True)
+class Prune:
+    """How one table of a part ages: the `where` of its DELETE (`?` is the cutoff time, bound `cutoffs` times), and the tables whose
+    rows go first (`after`: a parent row goes only once its children are pruned)."""
+
+    table: str
+    where: str
+    cutoffs: int = 1
+    after: tuple[str, ...] = ()
+
+
 @dataclass(frozen=True, eq=False)
 class Part:
     """One stage's tables and records in factory.db; `read_from` is the oldest version a read-only open accepts (None: only `version`)."""
@@ -42,6 +53,7 @@ class Part:
     records: tuple[type[Rec], ...] = ()
     steps: dict[int, Step] = field(default_factory=dict)
     read_from: int | None = None
+    prune: tuple[Prune, ...] = ()
 
 
 _REGISTRY: dict[str, Part] = {}
@@ -55,6 +67,9 @@ def register(part: Part) -> Part:
         owner = next((p.name for p in _REGISTRY.values() if table in p.tables), None)
         if owner is not None:
             raise ValueError(f"table {table!r} of part {part.name!r} already belongs to part {owner!r}")
+    for rule in part.prune:
+        if rule.table not in part.tables:
+            raise ValueError(f"part {part.name!r} prunes {rule.table!r}, which is not its table")
     _REGISTRY[part.name] = part
     return part
 
@@ -62,6 +77,30 @@ def register(part: Part) -> Part:
 def registered() -> tuple[Part, ...]:
     """The registered parts, in registration order."""
     return tuple(_REGISTRY.values())
+
+
+def prune_order(parts: Iterable[Part] | None = None) -> tuple[Prune, ...]:
+    """Every part's prune rules in an order that honours `after` (the first ready rule goes first, so declaration order breaks ties)."""
+    todo = [rule for p in (registered() if parts is None else parts) for rule in p.prune]
+    names = {rule.table for rule in todo}
+    for rule in todo:
+        if missing := set(rule.after) - names:
+            raise ValueError(f"prune of {rule.table!r} waits for {sorted(missing)}, which no part prunes")
+    ordered: list[Prune] = []
+    while todo:
+        done = {rule.table for rule in ordered}
+        ready = next((rule for rule in todo if set(rule.after) <= done), None)
+        if ready is None:
+            raise ValueError(f"prune rules wait for each other: {sorted(rule.table for rule in todo)}")
+        todo.remove(ready)
+        ordered.append(ready)
+    return tuple(ordered)
+
+
+def doc_table(table: str) -> str:
+    """The DDL of a stage's own table of typed documents (`k` the key with the record's name as prefix, `v` its JSON, `t` the write time):
+    what `kv` was for every stage at once, now one per owner (read and written by docrows.RowDocs with `table=`)."""
+    return f"CREATE TABLE {table} (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL);"
 
 
 def ddl() -> str:

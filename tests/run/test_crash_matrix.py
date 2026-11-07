@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from support import stepgraph
 
-from taskloop.app.run.stages import select_step
+from taskloop.app.pipeline.cursor import select_step
 from taskloop.contracts.checkpoint import Checkpoint, EndRec
 from taskloop.contracts.enums import Step
 from taskloop.contracts.locator import RunBundle

@@ -10,7 +10,7 @@ from typing import Protocol, assert_never
 
 from taskloop.adapters import beadtools
 from taskloop.app.asks import parks, raiser
-from taskloop.app.run import ended as stored_end
+from taskloop.app.pipeline import ended as stored_end
 from taskloop.app.run.closer_branch import DONE, ReleaseSlot, SaveBranch
 from taskloop.app.run.closer_decide import Decide
 from taskloop.app.run.closer_host import CloseHost, CloserHost

@@ -12,17 +12,16 @@ from dataclasses import dataclass
 from typing import Any
 
 from taskloop.adapters import childenv, delegate_wire
-from taskloop.adapters import delegate as dg
 from taskloop.app.checks.step_env import step_env
-from taskloop.app.run import asked, strays, worker_identity, worker_recovery, worker_request
-from taskloop.app.run.blocked import refuse_over_cap
-from taskloop.app.run.call import Call
-from taskloop.app.run.calls import timing
-from taskloop.app.run.lane_acts import LaneActs
+from taskloop.app.workers import asked, strays, worker_identity, worker_recovery, worker_request
+from taskloop.app.workers.call import Call
+from taskloop.app.workers.calls import timing
+from taskloop.app.workers.lane_acts import LaneActs
 from taskloop.contracts import answers
 from taskloop.contracts import log as rec
 from taskloop.contracts.asked import Asked, Fallback, Updates
 from taskloop.contracts.delegate import REASON_OVERRUN, DelegateResult, RunRequest, StopFacts
+from taskloop.contracts.delegateport import Answer
 from taskloop.domain.lanes import policy as lp
 from taskloop.domain.lanes.denials import command_of, secret_false_positive
 from taskloop.domain.lanes.notes import FRESH_WRITER_TEXT, RESUME_AFTER_STOP
@@ -126,7 +125,7 @@ class WorkerCall:
         resume = resume_ref or (e.writer.delegate if resume_key else None)
         reset = False
         if resume and resume_key and e.writer_fallback:  # tl-bxk.10.5: a fallback writer would keep the bead off Codex for good
-            lane = dg.lane(e.fallback_lane) if e.fallback_lane else None
+            lane = e.router.lane(e.fallback_lane) if e.fallback_lane else None
             if e.fallback_lane and lane is None:  # that lane is not configured here: no fallback
                 reset = True
             elif lane is None or lane.usable is True:  # back again, or no lane known to wait for
@@ -172,7 +171,7 @@ class WorkerCall:
         decision = worker_recovery.recover(c.prepared, journal)
         if isinstance(decision, worker_recovery.Returned):
             e.log.note(f"{c.node}: compatible completed execution on disk: using answer")
-            c.finished = dg.Answer(delegate_wire.result_of(decision.raw), decision.raw)
+            c.finished = Answer(delegate_wire.result_of(decision.raw), decision.raw)
             c.state = decision.state
         elif isinstance(decision, worker_recovery.Resuming):
             e.log.note(f"{c.node}: compatible interrupted thread {decision.ref}: resuming")
@@ -211,17 +210,17 @@ class WorkerCall:
         """Only a pinned write may ask delegate to treat the engine-only guard as advisory."""
         return worker_request.request(self.e, c, live, timeout_s, idle_s)
 
-    def call_once(self, c: Call) -> dg.Answer:
+    def call_once(self, c: Call) -> Answer:
         """One `route.py run`: through the process seam, then the records a call leaves."""
         e = self.e
-        refuse_over_cap(c.node, c.role, c.text)
+        worker_request.refuse_over_cap(e, c.node, c.role, c.text)
         e.delegation.route()
         live = e.live(c.step or c.node)
         c.prepared = self.prepare(c)
         c.sha = c.prepared.execution_id
         req = c.prepared.request.replace(live_file=live, tools=[worker_request.artifact_tool(e, c)])  # per call: not in the call's identity
         c.limit_s = float(req.timeout_s)
-        brief = worker_request.brief(c, req)
+        brief = worker_request.brief(e, c, req)
         runner = e.router.runner(e.err_path, None, live)
         runner.outer = e.halt  # a stop of the run ends the call
         cid = e.calls.start(c.step or c.node, c.node, c.role, bool(c.resume), e.live_n)
@@ -231,7 +230,7 @@ class WorkerCall:
         t0, trees = time.time(), strays.worktrees(e)  # the worktrees the repo holds before the worker runs
         try:
             wenv = {**e.bead_env, **step_env(e, c.step or c.node)}
-            ans = dg.call(e.resolved, req, brief, c.schema, runner, env=childenv.delegate_call_env(e.env, wenv))
+            ans = e.router.call(e.resolved, req, brief, c.schema, runner, env=childenv.delegate_call_env(e.env, wenv))
         except BaseException as exc:  # an interruption stopped the delegate inside the process seam: record that stop here
             if runner.obs.get("kill_t") or runner.survivors():
                 self.log_kill(c, runner, exc)
@@ -258,7 +257,7 @@ class WorkerCall:
         self.note_result(c, ans, runner)
         return ans
 
-    def overrun(self, c: Call, ans: dg.Answer, runner: Any, elapsed: float) -> dg.Answer:
+    def overrun(self, c: Call, ans: Answer, runner: Any, elapsed: float) -> Answer:
         """A reviewer call that used its budget (delegate stopped its worker at --timeout, or the engine's backstop did): an Overrun record,
         and the call becomes a stop of its lane, which the policy routes past (the next reviewer rung)."""
         res = ans.res
@@ -274,9 +273,9 @@ class WorkerCall:
             reason=REASON_OVERRUN, scope="lane", permanence="transient", retry=delegate_wire.Retry(kind="none"), ref=res.ref or ""
         )
         said = f"the {c.node} call used its {int(c.limit_s // 60)} min budget"
-        return dg.Answer(res.replace(stop=stop, lane=lane or None, say=said), ans.raw, ans.argv, ans.trace)
+        return Answer(res.replace(stop=stop, lane=lane or None, say=said), ans.raw, ans.argv, ans.trace)
 
-    def note_result(self, c: Call, ans: dg.Answer, runner: Any) -> None:
+    def note_result(self, c: Call, ans: Answer, runner: Any) -> None:
         """The records a returned call leaves: the vendor error of a stop, the CallState."""
         e, res = self.e, ans.res
         assert c.state is not None
@@ -389,7 +388,7 @@ class WorkerCall:
         elif name:
             c.counts[name] += 1
 
-    def end_call(self, c: Call, ans: dg.Answer) -> Updates:
+    def end_call(self, c: Call, ans: Answer) -> Updates:
         """The call's updates to the run's threads, kept with the memo; the caller applies them to the engine."""
         e, res = self.e, ans.res
         done = asked.done_updates(c, res, c.thread)

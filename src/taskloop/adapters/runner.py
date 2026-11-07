@@ -7,7 +7,6 @@ by itself returns a `CompletedProcess`-like; one the engine ends raises `Stopped
 
 import json
 import subprocess
-import threading
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -16,43 +15,11 @@ from typing import Any, override
 from delegate import api
 from taskloop.adapters import deadline, procs
 from taskloop.adapters.agent import ApiAgent
-from taskloop.adapters.delegate import Stopped
 from taskloop.contracts.agent import Agent
-from taskloop.contracts.delegate import DelegateResult, LiveStart, WorkerStarted
+from taskloop.contracts.delegate import LiveStart, WorkerStarted
+from taskloop.contracts.delegateport import Seam, Stopped
 
 POLL_S = 0.5  # seconds between the looks at the live file while a call runs
-
-
-Completed = subprocess.CompletedProcess[str]  # what a seam call answers
-
-
-def completed(cmd: Sequence[str], code: int, out: str, err: str = "") -> Completed:
-    return subprocess.CompletedProcess(cmd, code, out, err)
-
-
-def survivors_of(stop: dict[str, Any], res: DelegateResult | None = None) -> list[int]:
-    """The pids the stop itself found alive, and the ones delegate names in the answer (`worker.end` worker_survived), without repeats."""
-    pids = [int(p) for p in stop.get("alive") or []]
-    pids += [s.pid for s in (res.worker.survivors if res and res.worker else []) if s.pid not in pids]
-    return pids
-
-
-class Seam:
-    """What the engine reads off a process seam after a call (stop, obs, secs, worker, live_start): a fake lane's defaults."""
-
-    def __init__(self) -> None:
-        self.stop: dict[str, Any] = {}
-        self.obs: dict[str, Any] = {}
-        self.secs = 0.0
-        self.worker: WorkerStarted | None = None
-        self.outer: threading.Event | None = None  # the run's stop flag: set, the call is stopped
-
-    def live_start(self) -> LiveStart | None:
-        return None
-
-    def survivors(self, res: DelegateResult | None = None) -> list[int]:
-        """The pids that outlived the stop of this call (empty: the tree is proven dead). The engine asks this and reads no pid itself."""
-        return survivors_of(self.stop, res)
 
 
 class ApiRunner(Seam):

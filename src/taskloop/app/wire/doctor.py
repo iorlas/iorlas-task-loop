@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from taskloop import contracts
-from taskloop.adapters import delegate, layout_migrate
+from taskloop.adapters import layout_migrate
 from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.ident import claude_dir, config_dir
 from taskloop.app.doctor import disk, env_checks, ops, profiles, rails
@@ -22,6 +22,7 @@ from taskloop.contracts import inputsets, runlife
 from taskloop.contracts.bd_errors import BdCommandFailure
 from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
 from taskloop.contracts.config import RepoProfile
+from taskloop.contracts.delegateport import Resolved
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
@@ -33,6 +34,7 @@ from taskloop.domain.beads import matchers as beadlint
 from taskloop.domain.checks.inputs import dead_globs
 from taskloop.domain.lanes import pin
 from taskloop.domain.layout import matchers as layout
+from taskloop.stores.delegate import real_route
 
 Source = tuple[RepoProfile, str, str]
 
@@ -213,7 +215,8 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
     warns += [] if source[0].engine.writer_exec_allow else [
         "plan check argv unrestricted: the profile lists no engine.writer_exec_allow, so a planner's own check may run any command"]
     warns += ops.clone_warnings(config_dir(env), git)
-    warns += [gap] if (gap := ops.capability_gap(delegate.resolve().contract)) else []
+    lib = real_route().resolve()
+    warns += [gap] if (gap := ops.capability_gap(lib.contract if isinstance(lib, Resolved) else {})) else []
     warns += [f"run {r} is lost: its process is gone and it recorded no end" for r in runlife.reconcile(who.config, time.time())]
     print(f"contracts: {Path(contracts.__file__).resolve().parent}")
     print(f"engine: {pin.describe(pin.families(source[0].engine.writer_family, []))}")

@@ -30,7 +30,7 @@ from taskloop.app.land.cmds import Cmds
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import MODE, Stack
 from taskloop.app.land.stackgate import StackGate
-from taskloop.app.run.finish import answer
+from taskloop.app.pipeline.finish import answer
 from taskloop.app.track import runs
 from taskloop.app.track.verbs import trace
 from taskloop.app.wire import closeguard

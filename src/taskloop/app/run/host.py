@@ -6,12 +6,13 @@ from typing import Any
 from taskloop.app.look.judge import Judge
 from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.look.shots import Pictures
-from taskloop.app.run import asked, summaries
+from taskloop.app.pipeline import summaries
 from taskloop.app.run.closer import Closer, closer_over
 from taskloop.app.run.parts_land import LandParts
 from taskloop.app.run.parts_plan import PlanParts
 from taskloop.app.run.parts_run import RunParts
-from taskloop.app.run.worker_call import Ops, WorkerCall
+from taskloop.app.workers import asked
+from taskloop.app.workers.worker_call import Ops, WorkerCall
 from taskloop.contracts import plancheck
 from taskloop.contracts.stagefacts import RunFacts
 from taskloop.domain.lanes.matchers import read_only_command

@@ -12,7 +12,7 @@ import support.paths  # noqa: F401
 from support import engine_case as te
 from support.logs import records
 
-from taskloop.app.run.worker_call import WorkerCall
+from taskloop.app.workers.worker_call import WorkerCall
 from taskloop.contracts.delegate import REASON_ENGINE_ONLY_UNENFORCED
 
 
@@ -37,7 +37,7 @@ class Request(Case):
                 host.budget.labels = []
                 host.checker.split.return_value.engine_recipes.return_value = recipes
                 call = mock.Mock(node=node, role=role, cwd="/w", title="T", resume=None, writer=None)
-                with mock.patch("taskloop.app.run.worker_request.planref.stage_commands", return_value=[]):
+                with mock.patch("taskloop.app.workers.worker_request.planref.stage_commands", return_value=[]):
                     req = WorkerCall(host, mock.Mock()).request(call, "live", 60, 30)
                 assert req.engine_only_advisory == expected
                 assert req.engine_only == (recipes if node == "write" else [])

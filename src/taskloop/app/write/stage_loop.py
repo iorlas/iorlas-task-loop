@@ -7,9 +7,12 @@ from typing import Any
 
 from taskloop.app.write.check_round import CheckRound
 from taskloop.app.write.prepare import PREPARED, Prepare
+from taskloop.app.write.progress import progress_of, restore_progress
 from taskloop.app.write.review_round import ReviewRound
 from taskloop.app.write.state import AGAIN, RoundResult, RoundStop, StageState
 from taskloop.app.write.write_round import WriteRound
+from taskloop.contracts import wire
+from taskloop.contracts.checkpoint import StageProgress
 from taskloop.contracts.plancheck import PlanData, RoundState
 
 
@@ -36,11 +39,18 @@ class StageLoop:
             e.stage_tree = e.checkout.tree_hash() if (i or s.fix or e.amended) else ""
         if not s.state:  # a resumed stage keeps its render rounds (the checkpoint's)
             e.look.done = 0
+        if s.state.get("review_from"):
+            restore_progress(s, wire.load(StageProgress, s.state["review_from"]), e.writer_family or "")
+            s.run = e.last_run
         return s
 
     def round(self, s: StageState) -> str:
         """One write, its checks and its review. -> AGAIN, or what the stage came to."""
         e = self.e
+        if s.state.get("review_from"):  # the write and the checks of this round were green when the run parked: only the review is left
+            s.state.pop("review_from")
+            e.log.note(f"{s.name}: write and checks were green when the run parked, going on at the review")
+            return self.review(s)
         if not s.fix:  # a fix runs at land: its checkpoint stays at land, and a resume lands again
             e.checkpoints.save(stage=s.i, rounds=s.rounds, n=s.n, feedback=s.feedback, step="write")
             e.reload.safe_point("write")  # the round's write, checks and review run on the code that is installed now
@@ -53,6 +63,8 @@ class StageLoop:
         while True:
             flow = self.write(s) or self.check(s)
             if flow != PREPARED:
+                if not flow and not s.fix:  # tl-q3ma: a park during the review resumes here, not at the write
+                    e.checkpoints.save(stage=s.i, rounds=s.rounds, n=s.n, feedback=s.feedback, step="review", progress=progress_of(s))
                 return flow or self.review(s)
 
     def write(self, s: StageState, *, look: bool = True) -> str:

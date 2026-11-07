@@ -8,11 +8,24 @@ from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.checks import BaseRedRecord, PassRecord
-from taskloop.contracts.dbparts import Part, ddl, register
+from taskloop.contracts.dbparts import Part, Prune, ddl, doc_table, register
 from taskloop.contracts.ledger import LedgerEntry
 from taskloop.contracts.locks import EngineLock
 from taskloop.contracts.requests import OwnerRequest
 from taskloop.contracts.run import RunManifest
+from taskloop.contracts.snapshots import Pin, ReleaseResult
+
+RELEASE_DOCS = "release_doc"  # the release stage's documents: the pin and the last release result
+
+# The runs that may age out (the pipeline's rule; the history of other parts is pruned by it too). `?` is the cutoff; the temp table
+# prune_keep_bead holds the beads the caller exempts.
+ELIGIBLE = """SELECT r.run FROM run AS r
+    WHERE r.ended < ? AND r.state NOT IN ('created','running')
+    AND NOT EXISTS (SELECT 1 FROM temp.prune_keep_bead AS k WHERE k.bead=r.bead)
+    AND NOT EXISTS (SELECT 1 FROM lease AS l WHERE l.run=r.run)
+    AND NOT EXISTS (SELECT 1 FROM wait AS w WHERE w.run=r.run)
+    AND NOT EXISTS (SELECT 1 FROM signal AS s WHERE s.run=r.run AND s.taken IS NULL)
+    AND NOT EXISTS (SELECT 1 FROM ask AS a WHERE a.bead=r.bead AND a.status IN ('open','open_soft'))"""
 
 DASH = register(Part(
     name="dash", version=1, tables=("source", "bead"),
@@ -66,7 +79,20 @@ CREATE TABLE signal (
   id INTEGER PRIMARY KEY, run TEXT, kind TEXT NOT NULL,
   payload TEXT, at REAL NOT NULL, taken REAL
 );
-"""))
+""",
+    prune=(
+        Prune("step", f"run IN ({ELIGIBLE})"),
+        Prune("attempt", f"run IN ({ELIGIBLE})"),
+        Prune("effect", f"run IN ({ELIGIBLE})"),
+        Prune("timed", f"run IN ({ELIGIBLE})"),
+        Prune("run", f"""run IN ({ELIGIBLE})
+        AND NOT EXISTS (SELECT 1 FROM step WHERE step.run=run.run)
+        AND NOT EXISTS (SELECT 1 FROM attempt WHERE attempt.run=run.run)
+        AND NOT EXISTS (SELECT 1 FROM effect WHERE effect.run=run.run)
+        AND NOT EXISTS (SELECT 1 FROM timed WHERE timed.run=run.run)
+        AND NOT EXISTS (SELECT 1 FROM check_round WHERE check_round.run=run.run)""",
+              after=("step", "attempt", "effect", "timed", "check_round")),
+    )))
 
 SLOTS = register(Part(
     name="slots", version=1, tables=("lease",),
@@ -87,7 +113,9 @@ CREATE TABLE check_pass (repo_key TEXT NOT NULL, check_id TEXT NOT NULL, digest 
   PRIMARY KEY (repo_key, check_id, digest, kind));
 CREATE INDEX check_tree ON check_pass(repo_key, tree, base);
 CREATE TABLE check_round (run TEXT NOT NULL, round INTEGER NOT NULL, ts REAL, body TEXT NOT NULL, PRIMARY KEY (run, round));
-"""))
+""",
+    prune=(Prune("check_round", f"""ts < ? AND NOT EXISTS (
+        SELECT 1 FROM run AS parent WHERE parent.run=check_round.run AND parent.run NOT IN ({ELIGIBLE}))""", cutoffs=2),)))
 
 ASKS = register(Part(
     name="asks", version=1, tables=("ask", "ask_ledger"),
@@ -98,7 +126,15 @@ CREATE TABLE ask (bead TEXT PRIMARY KEY, id TEXT NOT NULL, repo TEXT, status TEX
 CREATE INDEX ask_live ON ask(status, t);
 CREATE TABLE ask_ledger (id INTEGER PRIMARY KEY, t REAL NOT NULL, event TEXT NOT NULL, ask TEXT, bead TEXT, repo TEXT,
   body TEXT NOT NULL, origin TEXT NOT NULL UNIQUE);
-"""))
+""",
+    prune=(Prune("ask_ledger", """t < ?
+        AND NOT EXISTS (SELECT 1 FROM temp.prune_keep_bead AS k WHERE k.bead=ask_ledger.bead)
+        AND NOT EXISTS (SELECT 1 FROM ask AS a JOIN temp.prune_keep_bead AS k ON k.bead=a.bead
+            WHERE a.id=ask_ledger.ask)
+        AND NOT EXISTS (SELECT 1 FROM ask AS a
+            WHERE (a.id=ask_ledger.ask OR a.bead=ask_ledger.bead) AND a.status IN ('open','open_soft'))
+        AND NOT EXISTS (SELECT 1 FROM run AS r
+            WHERE r.bead=ask_ledger.bead AND r.state IN ('created','running'))"""),)))
 
 KV = register(Part(
     name="kv", version=1, tables=("kv",),
@@ -106,5 +142,7 @@ KV = register(Part(
     ddl="""
 CREATE TABLE kv (k TEXT PRIMARY KEY, v TEXT NOT NULL, t REAL NOT NULL, stamp TEXT);
 """))
+
+RELEASE = register(Part(name="release", version=1, tables=(RELEASE_DOCS,), records=(Pin, ReleaseResult), ddl=doc_table(RELEASE_DOCS)))
 
 DDL = ddl()

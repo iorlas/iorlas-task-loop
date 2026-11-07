@@ -5,9 +5,9 @@ import pytest
 import support.paths  # noqa: F401
 from sqlite_store import SchemaError
 
-from taskloop.contracts import dbparts
+from taskloop.contracts import dbparts, factoryparts  # noqa: F401
 from taskloop.contracts.checks import PassRecord
-from taskloop.contracts.dbparts import Part
+from taskloop.contracts.dbparts import Part, Prune
 
 
 def con():
@@ -116,3 +116,34 @@ def test_a_table_claimed_by_two_parts_is_refused(monkeypatch):
         dbparts.register(part())
     with pytest.raises(ValueError, match="already belongs to part"):
         dbparts.register(Part(name="q", version=1, tables=("t",), ddl="CREATE TABLE t (a INTEGER);"))
+
+
+def two(name, rules, table):
+    return Part(name=name, version=1, tables=(table,), ddl=f"CREATE TABLE {table} (a INTEGER);", prune=tuple(rules))
+
+
+def test_prune_order_puts_children_before_parents_across_parts():
+    parent = two("a", [Prune("parent", "1", after=("child",))], "parent")
+    child = two("b", [Prune("child", "1")], "child")
+    assert [r.table for r in dbparts.prune_order([parent, child])] == ["child", "parent"]
+    assert [r.table for r in dbparts.prune_order([child, parent])] == ["child", "parent"]
+
+
+def test_prune_order_refuses_a_cycle_and_a_rule_nobody_declares():
+    a = two("a", [Prune("x", "1", after=("y",))], "x")
+    b = two("b", [Prune("y", "1", after=("x",))], "y")
+    with pytest.raises(ValueError, match="wait for each other"):
+        dbparts.prune_order([a, b])
+    with pytest.raises(ValueError, match="which no part prunes"):
+        dbparts.prune_order([a])
+
+
+def test_a_part_prunes_only_its_own_tables(monkeypatch):
+    monkeypatch.setattr(dbparts, "_REGISTRY", {})
+    with pytest.raises(ValueError, match="which is not its table"):
+        dbparts.register(two("a", [Prune("other", "1")], "t"))
+
+
+def test_the_registered_rules_delete_children_before_the_run():
+    order = [r.table for r in dbparts.prune_order()]
+    assert order.index("run") > max(order.index(t) for t in ("step", "attempt", "effect", "timed", "check_round"))

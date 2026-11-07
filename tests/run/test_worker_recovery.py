@@ -10,9 +10,10 @@ from support.case import Case
 from support.narrow import must
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.app.run import call, done_memo, worker_call
+from taskloop.app.workers import call, done_memo, worker_call
 from taskloop.contracts import factorydb, wire
 from taskloop.contracts.delegate import RunRequest
+from taskloop.contracts.delegateport import Answer
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import DoneEntry, RunManifest
@@ -104,7 +105,7 @@ class Recovery(Case):
             c = self.call(schema={"type": "array"})
             self.worker.attach(c)
             assert c.finished is None
-            with mock.patch("taskloop.app.run.worker_recovery.PRODUCER", "future"):
+            with mock.patch("taskloop.app.workers.worker_recovery.PRODUCER", "future"):
                 c = self.call()
                 self.worker.attach(c)
                 assert c.finished is None
@@ -133,7 +134,7 @@ class Recovery(Case):
         self.host.stats = {"nodes": 1}
         self.host.clock = SimpleNamespace(now=lambda: 1.0)
         raw = {"contract": 4, "stop": None, "data": {"summary": "done"}}
-        ans = worker_call.dg.Answer(worker_call.delegate_wire.result_of(raw), raw)
+        ans = Answer(worker_call.delegate_wire.result_of(raw), raw)
         self.worker.note_result(c, ans, mock.Mock())
         again = self.call()
         self.worker.attach(again)
@@ -153,7 +154,7 @@ class Recovery(Case):
         self.host.stats = {"nodes": 1}
         self.host.clock = SimpleNamespace(now=lambda: 1.0)
         raw = {"contract": 4, "stop": None, "data": {"summary": "done"}}
-        ans = worker_call.dg.Answer(worker_call.delegate_wire.result_of(raw), raw)
+        ans = Answer(worker_call.delegate_wire.result_of(raw), raw)
         self.worker.note_result(c, ans, mock.Mock())
         assert c.sha == before
         assert c.prepared is admitted
@@ -188,7 +189,7 @@ class Recovery(Case):
         self.worker.attach(again)
         assert again.finished is None
         self.req = self.req.replace(engine_only=[])
-        with mock.patch("taskloop.app.run.worker_recovery.PRODUCER", "future"):
+        with mock.patch("taskloop.app.workers.worker_recovery.PRODUCER", "future"):
             again = self.call()
             self.worker.attach(again)
             assert again.finished is None
@@ -233,7 +234,7 @@ class Recovery(Case):
         self.worker.attach(again)
         assert again.resume is None
         self.req = self.req.replace(engine_only=[])
-        with mock.patch("taskloop.app.run.worker_recovery.PRODUCER", "future"):
+        with mock.patch("taskloop.app.workers.worker_recovery.PRODUCER", "future"):
             again = self.call()
             self.worker.attach(again)
             assert again.resume is None
@@ -259,7 +260,7 @@ class Recovery(Case):
         self.host.stats = {"nodes": 1}
         self.host.clock = SimpleNamespace(now=lambda: 1.0)
         raw = {"contract": 4, "stop": None, "data": {"summary": "done"}}
-        ans = worker_call.dg.Answer(worker_call.delegate_wire.result_of(raw), raw)
+        ans = Answer(worker_call.delegate_wire.result_of(raw), raw)
         with pytest.raises(ValueError):
             self.worker.note_result(c, ans, mock.Mock())
         st = call_state.load_for(self.host.call_dir(), "t-1", c.key)

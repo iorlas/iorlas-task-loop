@@ -3,9 +3,10 @@ import time
 
 from taskloop.adapters import beadtools
 from taskloop.app.land.gate import Problem
+from taskloop.app.pipeline.cursor import select_step, stage_kind
+from taskloop.app.pipeline.finish import stage_answer, terminal_state
 from taskloop.app.run.closer_record import RecordRun
 from taskloop.app.run.crash import parked_crash
-from taskloop.app.run.finish import stage_answer, terminal_state
 from taskloop.app.run.host import RunHost
 from taskloop.app.run.layout import repo_of
 from taskloop.app.run.run_once import RunOnce
@@ -22,24 +23,9 @@ from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.contracts.parks import ParkStore
-from taskloop.contracts.run import RunState
 from taskloop.domain import effects
 from taskloop.domain import outcome as oc
 from taskloop.domain.plan.matchers import AcceptanceText
-
-
-def parse_step(name: str) -> Step:
-    try:
-        return Step(name)
-    except ValueError:
-        raise ValueError(f"unknown stage {name!r}; choose from: {', '.join(Step)}") from None
-
-
-def stage_kind(step: Step) -> Kind:
-    """What one stage's run ends as: only a land is landed and only a close (or the reflect after it) is done."""
-    if step is Step.LAND:
-        return Kind.LANDED
-    return Kind.DONE if step in (Step.CLOSE, Step.REFLECT) else Kind.STAGE
 
 
 def run_stages(e: RunHost, requested: str | None, *, continuous: bool) -> int:
@@ -68,44 +54,10 @@ def previous_run(e: RunHost, locator: RunLocator) -> RunBundle | None:
     return previous[-1] if previous else None
 
 
-def manifest_next(last: RunBundle | None, ck: Checkpoint | None) -> Step | None:
-    if last is None:
-        return None
-    if ck is None or last.run == ck.run or last.started >= ck.t:
-        return last.manifest.next_step
-    return None
-
-
 def next_step(e: RunHost, locator: RunLocator, ck: Checkpoint | None, requested: str | None = None) -> Step:
     """The checkpoint is the cursor; the previous manifest also records life and completion."""
     last = previous_run(e, locator)
     return select_step(last, ck, e.fresh, requested)
-
-
-def select_step(last: RunBundle | None, ck: Checkpoint | None, fresh: bool, requested: str | None) -> Step:
-    """Select the cursor without opening or changing a run."""
-    if last and last.manifest.state.live:
-        raise ValueError(f"previous run {last.run} is still {last.manifest.state}")
-    if requested:
-        return parse_step(requested)
-    if fresh:
-        return Step.RESET
-    recorded = manifest_next(last, ck)
-    if recorded is not None:
-        return recorded
-    if ck is not None:
-        return checkpoint_next(ck)
-    if last and last.manifest.state is RunState.DONE:
-        raise ValueError("the last run is complete and has no next stage; name --stage or use --fresh")
-    return Step.RESET
-
-
-def checkpoint_next(ck: Checkpoint) -> Step:
-    if ck.ended is not None:
-        return Step.CLOSE
-    if ck.step in ("gate-red", "land-verify-red"):
-        return Step.REPLAN
-    return parse_step(ck.step or "plan")
 
 
 def one_stage(e: RunHost, requested: str | None, locator: RunLocator) -> int:

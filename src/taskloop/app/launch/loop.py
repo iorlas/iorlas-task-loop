@@ -9,7 +9,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 from taskloop.adapters import beadtools, childenv, ident, pidcheck
-from taskloop.adapters import delegate as dg
 from taskloop.adapters import storm as storm_file
 from taskloop.adapters.bd import BdStore
 from taskloop.adapters.locks import hold_path
@@ -43,6 +42,8 @@ from taskloop.contracts.procport import Spawner
 from taskloop.contracts.rowstores import ReposStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.beads import rules as beadlint
+from taskloop.stores.delegate import make_probe as make_net_probe
+from taskloop.stores.delegate import real_route, route_name
 from taskloop.stores.real import real_stores
 
 HERE = ident.PLUGIN_ROOT / "skills" / "task-loop"  # the install this code runs from; tl.main takes it as a parameter for a test
@@ -76,19 +77,18 @@ def live_loops(repo: str, cfg: paths.ConfigDir) -> list[LoopState]:
 
 def delegate_route(repo: str | Path, env: Env, git: Git) -> str | None:
     """What the engine's calls go through: the delegate library."""
-    return dg.resolve().route
+    return route_name()
 
 
 def roles(repo: str | Path, env: Env, git: Git) -> dict[str, bool | None] | None:
     route = delegate_route(repo, env, git)
     if not route:
         return None
-    return dg.roles_usable()
+    return real_route().roles_usable()
 
 
-def make_probe(repo: str | Path, env: Env, git: Git) -> dg.RouteProbe | None:
-    route = delegate_route(repo, env, git)
-    return dg.RouteProbe(("github.com",)) if route else None
+def make_probe(repo: str | Path, env: Env, git: Git):
+    return make_net_probe(("github.com",)) if delegate_route(repo, env, git) else None
 
 
 def storm(repo: str, cfg: paths.ConfigDir, now: Callable[[], float] = trail.now, *, git: Git) -> Storm | None:

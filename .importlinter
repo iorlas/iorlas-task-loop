@@ -195,6 +195,7 @@ source_modules =
     taskloop.app.land
     taskloop.app.look
     taskloop.app.loop
+    taskloop.app.pipeline
     taskloop.app.plan
     taskloop.app.prune
     taskloop.app.reconcile
@@ -204,14 +205,12 @@ source_modules =
     taskloop.app.review
     taskloop.app.slots
     taskloop.app.track
+    taskloop.app.workers
     taskloop.app.write
     taskloop.app.run.ask_flow
-    taskloop.app.run.asked
     taskloop.app.run.bead_env
     taskloop.app.run.blocked
-    taskloop.app.run.budget
-    taskloop.app.run.call
-    taskloop.app.run.calls
+    taskloop.app.pipeline.budget
     taskloop.app.run.closer
     taskloop.app.run.closer_branch
     taskloop.app.run.closer_decide
@@ -221,13 +220,10 @@ source_modules =
     taskloop.app.run.closer_settle
     taskloop.app.run.console
     taskloop.app.run.crash
-    taskloop.app.run.decide
-    taskloop.app.run.delegation
-    taskloop.app.run.done_memo
-    taskloop.app.run.ended
-    taskloop.app.run.finish
-    taskloop.app.run.lane_acts
-    taskloop.app.run.outcomes
+    taskloop.app.pipeline.decide
+    taskloop.app.pipeline.ended
+    taskloop.app.pipeline.finish
+    taskloop.app.pipeline.outcomes
     taskloop.app.run.preflight
     taskloop.app.run.records
     taskloop.app.run.reflect
@@ -244,18 +240,12 @@ source_modules =
     taskloop.app.run.stage_run
     taskloop.app.run.stages
     taskloop.app.run.state
-    taskloop.app.run.steps
-    taskloop.app.run.strays
+    taskloop.app.pipeline.steps
     taskloop.app.run.stuck
-    taskloop.app.run.summaries
+    taskloop.app.pipeline.summaries
     taskloop.app.run.target
-    taskloop.app.run.trace
+    taskloop.app.pipeline.trace
     taskloop.app.run.waits
-    taskloop.app.run.worker_call
-    taskloop.app.run.worker_identity
-    taskloop.app.run.worker_recovery
-    taskloop.app.run.worker_request
-    taskloop.app.run.writer_pin
     taskloop.stores
     taskloop.domain
     taskloop.adapters
@@ -301,6 +291,7 @@ source_modules =
     taskloop.app.checks
     taskloop.app.doctor
     taskloop.app.loop
+    taskloop.app.pipeline
     taskloop.app.plan
     taskloop.app.reconcile
     taskloop.app.release
@@ -309,4 +300,37 @@ forbidden_modules =
     taskloop.app.run
     taskloop.app.wire
     taskloop.app.launch
+allow_indirect_imports = True
+
+[importlinter:contract:delegate-adapter-behind-stores]
+name = only stores.delegate imports the delegate adapter (adapters.delegate, adapters.runner)
+type = forbidden
+source_modules =
+    taskloop.app
+    taskloop.cli
+    taskloop.hook
+    taskloop.domain
+    taskloop.contracts
+forbidden_modules =
+    taskloop.adapters.delegate
+    taskloop.adapters.runner
+allow_indirect_imports = True
+
+[importlinter:contract:pipeline-imports-no-stage]
+name = The pipeline node reaches a stage only through its ports (docs/design/pipeline-node.md)
+type = forbidden
+source_modules =
+    taskloop.app.pipeline
+forbidden_modules =
+    taskloop.app.asks
+    taskloop.app.land
+    taskloop.app.look
+    taskloop.app.plan
+    taskloop.app.prune
+    taskloop.app.release
+    taskloop.app.report
+    taskloop.app.review
+    taskloop.app.slots
+    taskloop.app.track
+    taskloop.app.write
 allow_indirect_imports = True

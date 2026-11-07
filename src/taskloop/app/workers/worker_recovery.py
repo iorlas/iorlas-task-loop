@@ -3,8 +3,8 @@
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from taskloop.app.run import done_memo, worker_identity
-from taskloop.app.run.worker_identity import ExecutionContext, NodeInput, PreparedCall, context
+from taskloop.app.workers import done_memo, worker_identity
+from taskloop.app.workers.worker_identity import ExecutionContext, NodeInput, PreparedCall, context
 from taskloop.contracts.gitport import Git
 from taskloop.stores import call_state
 
