@@ -35,10 +35,9 @@ from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.stages import EngineAsks, EngineSlots
 from taskloop.app.prune import verb as prune_verb
 from taskloop.app.release import catalog, shell
-from taskloop.app.run import console
 from taskloop.app.run.running import area_lock, running
 from taskloop.app.slots import engine_lock
-from taskloop.app.track import trail
+from taskloop.app.track import console, trail
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import slots as wslots
 from taskloop.domain import outcome as oc

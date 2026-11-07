@@ -12,9 +12,9 @@ from tlkernel.log import Assumed, Said
 from taskloop.adapters import beadtools
 from taskloop.adapters import halt as halting
 from taskloop.app.pipeline.blocked import Blocked, FixFailed, blocked_for
-from taskloop.app.run.console import say
 from taskloop.app.run.fields import RunFields
 from taskloop.app.track import trail
+from taskloop.app.track.console import say
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.checks import affinity
 from taskloop.domain.matchers import redact
