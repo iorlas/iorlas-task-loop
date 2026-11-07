@@ -11,7 +11,6 @@ from tltestkit.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
-from support import fake_route
 from support.spawn import port_git, real_spawner
 from support.who import who
 
@@ -25,6 +24,7 @@ from taskloop.domain.prompts import common
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind, Task, fault_of
+from tltestkit import fake_route
 
 
 class Table(Case):

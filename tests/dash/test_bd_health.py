@@ -4,7 +4,6 @@ import pytest
 from support.dashlogs import bead
 from support.factory_index import ingest, seed_beads
 from support.fakes import FakeBeadStore
-from support.repos import write_repos
 
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
@@ -13,6 +12,7 @@ from tlkernel import beadrows, factorydb
 from tlkernel.bead import BdError
 from tlkernel.beadsport import BdFailure
 from tlkernel.ids import BeadId, loop_key
+from tltestkit.repos import write_repos
 
 ERROR = "other: database locked\nretry later"
 

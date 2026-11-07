@@ -17,6 +17,7 @@ dev = ["pytest"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["../../skills/task-loop/_vendor"]
 addopts = "-p no:cacheprovider"
 
 [project.entry-points.pytest11]

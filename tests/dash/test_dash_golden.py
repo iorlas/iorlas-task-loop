@@ -16,7 +16,6 @@ import support.paths  # noqa: F401
 from support.dashlogs import RunScript, T, bead
 from support.factory_index import ingest, seed_beads
 from support.fakes import FakeBeadStore
-from support.repos import write_repos
 
 from taskloop_dash.app import Dash
 from taskloop_dash.env import Env, Ports
@@ -24,6 +23,7 @@ from taskloop_dash.views.snapshot import version_of
 from tlkernel import wire
 from tlkernel.dash import BeadDetail, Snapshot
 from tlkernel.ids import loop_key
+from tltestkit.repos import write_repos
 
 GOLDEN = Path(__file__).with_name("golden") / "closes.json"
 NOW = T + 36_000

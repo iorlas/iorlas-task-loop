@@ -7,10 +7,10 @@ from tlkernel import fence
 from tlkernel.beadsport import Beads
 from tlkernel.enums import Outcome
 from tlkernel.gitport import Git
+from tlkernel.stagefacts import RunLogPort
 
 from taskloop.app.pipeline.outcomes import DONE
 from taskloop.app.pipeline.ports import LandCleanup, Slotting
-from taskloop.stores.runlog import RunLog
 
 
 class BranchTree(Protocol):
@@ -64,7 +64,7 @@ class ReleaseSlotHost(Protocol):
     @property
     def git(self) -> Git: ...
     @property
-    def log(self) -> RunLog: ...
+    def log(self) -> RunLogPort: ...
     @property
     def wt(self) -> str: ...
 

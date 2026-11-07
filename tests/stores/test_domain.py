@@ -13,7 +13,6 @@ import support.paths  # noqa: F401
 import suites
 from contracts import samples as S
 from support.memstores import fake_stores
-from support.narrow import must
 from support.tiers import domain
 
 from taskloop.stores.runlog import RunLog
@@ -21,6 +20,7 @@ from tlkernel.ask import AskAnswer
 from tlkernel.askenums import AskStatus
 from tlkernel.ids import BeadId
 from tlkernel.lockenums import LockWhat
+from tltestkit.narrow import must
 
 
 @domain

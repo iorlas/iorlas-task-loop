@@ -13,11 +13,11 @@ import support.paths  # noqa: F401
 
 # isort: split
 from support import looptest
-from support.runs import manifest
 
 from loop.test_loop import Base, LoopBase, rec
 from taskloop.app.launch import loop as wloop
 from tlkernel.run import RunState
+from tltestkit.runs import manifest
 
 GB = 1 << 30
 

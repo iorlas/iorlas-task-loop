@@ -7,14 +7,14 @@ import json
 import os
 
 import support.paths  # noqa: F401
-from support.logs import typed
-from support.runs import manifest
 from taskloop_dash.views.runfacts import run_of
 from tlkernel import log
 from tlkernel.bead import Bead
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunManifest, RunState
 from tlkernel.runlife import liveness
+from tltestkit.logs import typed
+from tltestkit.runs import manifest
 
 T = 1_800_000_000.0
 

@@ -14,7 +14,6 @@ from tltestkit.tmpdir import TemporaryDirectory
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
-from support.narrow import must  # noqa: E402
 
 from taskloop_dash import bind  # noqa: E402
 from taskloop_dash.cli import dash as dash_cli  # noqa: E402
@@ -22,6 +21,7 @@ from tlkernel import factorydb  # noqa: E402
 from tlkernel.env import Env as ProcessEnv  # noqa: E402
 from tlkernel.paths import ConfigDir  # noqa: E402
 from tlkernel.rowstores import ReposStore  # noqa: E402
+from tltestkit.narrow import must  # noqa: E402
 
 TS = "100.64.1.2"  # tailscale-like (CGNAT) address
 
