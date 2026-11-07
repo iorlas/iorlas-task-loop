@@ -3,10 +3,10 @@ from unittest import mock
 
 from support.engine_case import EngineTest
 
-from taskloop.app.plan.sendback import SendBack
 from taskloop.app.run import engine
 from tlkernel.kinds import Kind
 from tltestkit.plans import CLEAN, PLAN, WRITE
+from tlwork.plan.sendback import SendBack
 
 
 class DraftCheckpoint(EngineTest):

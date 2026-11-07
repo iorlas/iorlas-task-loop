@@ -156,7 +156,7 @@ layers =
     wire
     loop
     land
-    write | plan | look
+    write | look
     report
     reconcile
     release
@@ -277,7 +277,7 @@ source_modules =
     taskloop.app.land
     taskloop.app.look
     taskloop.app.loop
-    taskloop.app.plan
+    tlwork.plan
     taskloop.app.prune
     taskloop.app.reconcile
     taskloop.app.release
@@ -329,7 +329,7 @@ source_modules =
     taskloop.app.checks
     taskloop.app.doctor
     taskloop.app.loop
-    taskloop.app.plan
+    tlwork.plan
     taskloop.app.reconcile
     taskloop.app.release
 forbidden_modules =
@@ -358,7 +358,7 @@ type = forbidden
 source_modules = tlwork.work
 forbidden_modules =
     taskloop.app
-    taskloop.domain.plan
+    tlwork.plan
     tlwork.review
     taskloop.domain.write
     taskloop.domain.look

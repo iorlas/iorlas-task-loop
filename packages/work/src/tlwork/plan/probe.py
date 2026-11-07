@@ -5,15 +5,15 @@ in the repo). What comes back is a planner fact: a missing program, a check that
 from pathlib import Path
 
 from tlgate.domain.specs import repo_check
+from tlkernel import beadmatchers as acnames
 from tlkernel.checks import UNVERIFIED_EXIT, CheckResult
 from tlkernel.config import CheckSpec
 from tlkernel.matchers import clip
 from tlkernel.stagefacts import RunFacts
 
-from taskloop.app.plan.amend import AmendState
-from taskloop.app.plan.host import PlanHand, PlanPorts
-from taskloop.app.plan.state import PlanState
-from taskloop.domain.beads import matchers as acnames
+from tlwork.plan.amend import AmendState
+from tlwork.plan.host import PlanHand, PlanPorts
+from tlwork.plan.state import PlanState
 
 MAX_RUNS = 3  # registered checks one probe runs
 NOT_RUNNABLE = (UNVERIFIED_EXIT, 126, 127)  # could not verify, not executable, not found: the host, not the code

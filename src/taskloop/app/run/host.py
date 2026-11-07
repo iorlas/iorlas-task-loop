@@ -7,6 +7,9 @@ from tlkernel import plancheck
 from tlkernel.asked import Asked
 from tlkernel.stagefacts import RunFacts
 from tlpipeline.api import Closer, LeftoverQueue, summaries
+from tlwork.plan.briefs import Briefs
+from tlwork.plan.cases import Cases
+from tlwork.plan.planner import Planner
 from tlwork.review.link_check import LinkCheck
 from tlwork.review.routing import Routing
 from tlwork.review.settles import Settles
@@ -16,9 +19,6 @@ from taskloop.adapters import links
 from taskloop.app.look.judge import Judge
 from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.look.shots import Pictures
-from taskloop.app.plan.briefs import Briefs
-from taskloop.app.plan.cases import Cases
-from taskloop.app.plan.planner import Planner
 from taskloop.app.run.closer_ports import closer_over
 from taskloop.app.run.parts_land import LandParts
 from taskloop.app.run.parts_plan import PlanParts

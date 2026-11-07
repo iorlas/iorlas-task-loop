@@ -36,7 +36,6 @@ from support.who import who
 from taskloop.adapters import delegate as dl
 from taskloop.app.asks import admission
 from taskloop.app.land.checkout import Checkout
-from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine, entry, running
 from taskloop.app.track import outcome_line
 from taskloop.domain.lanes.matchers import read_only_command
@@ -58,6 +57,7 @@ from tltestkit import fake_route
 from tltestkit.cfgs import cfg_with
 from tltestkit.logs import records
 from tltestkit.tmpdir import mkdtemp
+from tlwork.plan.planner import Planner
 
 
 class EngineRunTest(EngineTest):

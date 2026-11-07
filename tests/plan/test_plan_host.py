@@ -4,7 +4,7 @@ from support.engine_case import EngineTest
 from support.host_conformance import missing
 from support.plan_host import FakePlan
 
-from taskloop.app.plan.host import PlanHand, PlanPorts
+from tlwork.plan.host import PlanHand, PlanPorts
 
 
 class PlanHostConformance(EngineTest):

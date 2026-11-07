@@ -5,6 +5,7 @@ from typing import Any, Protocol
 
 from tlkernel.plancheck import PlanData
 from tlkernel.wire import Open
+
 from tlwork.work.matchers import word_set
 
 

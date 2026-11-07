@@ -4,12 +4,12 @@ from unittest import mock
 from support.engine_case import EngineTest
 from support.plan_host import FakePlan
 
-from taskloop.app.plan.planner import Planner
 from tlgate.domain import lint
 from tlkernel.plancheck import adhoc
 from tltestkit.cfgs import cfg_with
 from tltestkit.checks import typed
 from tltestkit.plans import CLEAN, HAS_F, PLAN, WRITE
+from tlwork.plan.planner import Planner
 
 
 class GateOnly(EngineTest):

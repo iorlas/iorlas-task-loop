@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Final
 
+from tlkernel import ownerkeys
 from tlkernel.adrs import AdrStore
 from tlkernel.ask import Ask, AskAction, AskAnswer, ThreadEntry
 from tlkernel.askenums import AskKind
@@ -22,11 +23,8 @@ from taskloop.app.asks import ledgercomments, looks, stick, sweeps
 from taskloop.domain import timespec
 from taskloop.domain.asks.hold import HOLD, HOLD_UNTIL
 
-HINT: Final = "owner_hint"
 WAIVERS: Final = "owner_waivers"  # JSON list of Waiver: what the owner waived, deferred or dropped, with the quoted approval
 WAIVER_KINDS: Final = ("waive", "defer", "drop")
-OVERRIDE: Final = "owner_override"
-OVERRIDES: Final = ("replan-cap",)
 CAUSE: Final = "owner_cause"  # JSON {scope, cause, t, by}: why a run stopped or an ask was asked, per the owner; scope = a run or ask id
 ACK: Final = "owner_ack"  # JSON {scope, t, by}: the owner has seen the stuck run `scope`; the key is unset when the owner takes it back
 VERBS: Final = ("answer", "hint", "hold", "override", "decision", "look", "cause", "ack", "stick", "askback")
@@ -113,7 +111,7 @@ class Intake:
         return self.asks.withdraw(bead, ask.id, why, self.now())
 
     def hint(self, bead: BeadId, text: str) -> None:
-        self.store.update(bead, BeadPatch(set_metadata={HINT: text.strip()}))
+        self.store.update(bead, BeadPatch(set_metadata={ownerkeys.HINT: text.strip()}))
         self.note(bead, receipt("hint", text.strip()))
 
     def hold(self, bead: BeadId, on: bool = True, until: float = 0.0) -> None:
@@ -140,9 +138,9 @@ class Intake:
         self.note(bead, receipt("override", f"{kind} {criterion.strip()} - approved: {approval.strip()}", what=kind))
 
     def override(self, bead: BeadId, what: str) -> None:
-        if what not in OVERRIDES:
-            raise ValueError("override what? one of: {}".format(", ".join(OVERRIDES)))
-        self.store.update(bead, BeadPatch(set_metadata={OVERRIDE: what}))
+        if what not in ownerkeys.OVERRIDES:
+            raise ValueError("override what? one of: {}".format(", ".join(ownerkeys.OVERRIDES)))
+        self.store.update(bead, BeadPatch(set_metadata={ownerkeys.OVERRIDE: what}))
         self.note(bead, receipt("override", what))
 
     def look(self, item: str, verdict: str, note: str = "", look_bead: str = "") -> tuple[str, str]:

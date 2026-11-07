@@ -10,14 +10,14 @@ from tlkernel.checks import CheckResult
 from tlkernel.plancheck import PlanCheck, PlanData
 from tlkernel.stagefacts import RunFacts
 from tlkernel.wire import Open
+
+from tlwork.plan.amend import AmendState
+from tlwork.plan.host import PlanHand, PlanPorts
+from tlwork.plan.matchers import evidence_files
+from tlwork.plan.state import PlanState
+from tlwork.plan.stored import role_view
 from tlwork.prompts.common import RULES_MAX
 from tlwork.work.matchers import word_set
-
-from taskloop.app.plan.amend import AmendState
-from taskloop.app.plan.host import PlanHand, PlanPorts
-from taskloop.app.plan.state import PlanState
-from taskloop.domain.plan.matchers import evidence_files
-from taskloop.domain.plan.stored import role_view
 
 
 class Cases:

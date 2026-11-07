@@ -8,12 +8,12 @@ from tlgate.domain import lint, planref
 from tlkernel import plancheck
 from tlkernel.plancheck import PlanData
 from tlkernel.stagefacts import RunFacts
-from tlwork.prompts.anchors import MAX_ANCHORS, unanchored
 
-from taskloop.app.plan.amend import AmendState
-from taskloop.app.plan.assume import assume
-from taskloop.app.plan.host import PlanHand, PlanPorts
-from taskloop.app.plan.prompts import (
+from tlwork.plan.amend import AmendState
+from tlwork.plan.assume import assume
+from tlwork.plan.host import PlanHand, PlanPorts
+from tlwork.plan.matchers import gate_only_criteria
+from tlwork.plan.prompts import (
     DRY_CHECK_TEXT,
     EMPTY_PLAN_TEXT,
     GATE_ONLY_ACCEPTANCE,
@@ -22,8 +22,8 @@ from taskloop.app.plan.prompts import (
     TRACKER_TEXT,
     UNANCHORED_TEXT,
 )
-from taskloop.app.plan.state import PlanState
-from taskloop.domain.plan.matchers import gate_only_criteria
+from tlwork.plan.state import PlanState
+from tlwork.prompts.anchors import MAX_ANCHORS, unanchored
 
 
 @dataclass

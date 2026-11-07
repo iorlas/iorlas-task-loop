@@ -10,10 +10,10 @@ from tltestkit.plans import CLEAN, PLAN, WRITE
 
 # isort: split
 
-from taskloop.app.plan.planner import Planner
 from tlgate import resources
 from tlkernel.config import HostResources
 from tlpipeline.api import Waits
+from tlwork.plan.planner import Planner
 
 ANSWERS = {"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}
 UNITY = {"unity": {"limit": 1}}

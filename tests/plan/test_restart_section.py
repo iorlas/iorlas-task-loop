@@ -1,9 +1,9 @@
 """The plan section's restart keep rule."""
 import pytest
 
-from taskloop.app.plan.restart import keep
 from tlkernel import wire
 from tlkernel.checkpoint import RunState
+from tlwork.plan.restart import keep
 
 
 @pytest.mark.parametrize("name", wire.names(RunState))

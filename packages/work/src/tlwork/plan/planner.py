@@ -15,21 +15,21 @@ from tlkernel.matchers import clip
 from tlkernel.planbrief import COMMENTS_ONLY
 from tlkernel.plancheck import PlanData
 from tlkernel.stagefacts import RunFacts
+
+from tlwork.plan import assume
+from tlwork.plan.amend import AmendState
+from tlwork.plan.cap import ReplanCap
+from tlwork.plan.decisions import Decisions
+from tlwork.plan.host import PlanHand, PlanPorts
+from tlwork.plan.keep import PlanKeeper
+from tlwork.plan.planned import Planned
+from tlwork.plan.prompt import PlanPrompt
+from tlwork.plan.prompts import ASSUME_TEXT, PLAN_BRIEF_KB, PLAN_DECIDED_TEXT, VISUAL_BACK
+from tlwork.plan.sendback import SendBack
+from tlwork.plan.state import PlanState
+from tlwork.plan.stored import stored
 from tlwork.prompts.common import DECIDED_TEXT
 from tlwork.work import visual
-
-from taskloop.app.plan import assume
-from taskloop.app.plan.amend import AmendState
-from taskloop.app.plan.cap import ReplanCap
-from taskloop.app.plan.decisions import Decisions
-from taskloop.app.plan.host import PlanHand, PlanPorts
-from taskloop.app.plan.keep import PlanKeeper
-from taskloop.app.plan.planned import Planned
-from taskloop.app.plan.prompt import PlanPrompt
-from taskloop.app.plan.prompts import ASSUME_TEXT, PLAN_BRIEF_KB, PLAN_DECIDED_TEXT, VISUAL_BACK
-from taskloop.app.plan.sendback import SendBack
-from taskloop.app.plan.state import PlanState
-from taskloop.domain.plan.stored import stored
 
 REPLAN_TAIL = 12500  # characters of replan.md the planner reads
 

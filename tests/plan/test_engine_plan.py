@@ -14,10 +14,6 @@ import json
 from pathlib import Path
 from unittest import mock
 
-from taskloop.app.plan import prompts as pp
-from taskloop.app.plan.planner import Planner
-from taskloop.app.plan.prompts import REPLAN_CAP
-from taskloop.app.plan.sendback import SendBack
 from taskloop.app.run import engine
 from taskloop.app.write import prompts as wp
 from taskloop.app.write import review_prompt as rp
@@ -30,6 +26,10 @@ from tlkernel.kinds import Kind
 from tltestkit import fake_route, procsim
 from tltestkit.cfgs import cfg_with
 from tltestkit.logs import records
+from tlwork.plan import prompts as pp
+from tlwork.plan.planner import Planner
+from tlwork.plan.prompts import REPLAN_CAP
+from tlwork.plan.sendback import SendBack
 from tlwork.prompts.common import RULES_MAX
 
 
