@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from support.tmpdir import mkdtemp
+
+from tltestkit.tmpdir import mkdtemp
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)

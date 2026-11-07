@@ -3,7 +3,7 @@ talks to the engine log, asks, checkpoints and locks through the interfaces."""
 import sys
 from pathlib import Path
 
-from support.case import Case
+from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))

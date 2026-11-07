@@ -6,7 +6,6 @@ from types import SimpleNamespace
 
 from support.dashlogs import RunScript, T, bead
 from support.runs import manifest
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.asks import owner_verbs
 from taskloop.app.pipeline import requests
@@ -16,6 +15,7 @@ from taskloop_dash.views.world import ProjectIn
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
 from tlkernel.runlife import Liveness, command_scope, host_name, shown
+from tltestkit.tmpdir import TemporaryDirectory
 
 NOW = 1_800_000_000.0
 BEAD, RUN, REPO = "tl-1", "tl-1-20261026-100000", "/repo"

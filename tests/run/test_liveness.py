@@ -7,7 +7,6 @@ from unittest import mock
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
 from support.fake_deadline import FakeDeadline
 from support.lifecycle import lifecycle
 from support.narrow_hosts import FakeWaitsHost
@@ -18,6 +17,7 @@ from taskloop.domain.lanes.liveness import LIVENESS
 from tlkernel import log as rec
 from tlkernel.config import EngineConfig
 from tlkernel.kinds import Kind
+from tltestkit.case import Case
 
 
 class RunDeadline(Case):

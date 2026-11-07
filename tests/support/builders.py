@@ -7,8 +7,8 @@ from support.cfgs import cfg_with
 from support.fakes import FakeBeadStore, FakeClock, FakeRouter
 from support.spawn import port_git, real_spawner
 from support.who import who
-from taskloop.app.look.state import LOOK_FIELDS
 from taskloop.app.run import engine
+from taskloop.app.run.state import state_names
 from taskloop.app.slots import config as wslots_config
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
@@ -28,6 +28,6 @@ def make_engine(wt, bead="t-1", cfg=None, script=None, attrs=None, **seams):
         if k in amend_fields:
             setattr(e.amend, amend_fields[k], v)
             continue
-        # the look stage's checkpointed fields are the run state's; the review stage's are its own
-        setattr(e.state if k in LOOK_FIELDS else e.review if k in vars(e.review) else e, k, v)
+        # checkpointed fields belong to the current run state; the review stage's fields are its own
+        setattr(e.state if k in state_names() else e.review if k in vars(e.review) else e, k, v)
     return e

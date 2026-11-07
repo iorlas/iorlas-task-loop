@@ -10,12 +10,12 @@ from unittest import mock
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
-from support.case import Case
 from support.procsim import real_proc
-from support.tmpdir import TemporaryDirectory
 from test_review_order import CFG, T, lanes
 
 from delegate.app import launch
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[3]
 DENIED_BY_OPENCODE = (

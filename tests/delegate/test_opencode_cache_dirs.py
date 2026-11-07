@@ -8,8 +8,9 @@ from pathlib import Path
 import hermetic  # noqa: F401  (a home of its own for every test)
 from any_agent.harnesses.opencode import OpenCodeHarness, Profile
 from any_agent.protocol import LaunchInputs
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
+
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 DIR_VARS = re.compile(r"^(UV_CACHE_DIR|XDG_\w+_HOME|MISE_\w*_DIR)$")
 

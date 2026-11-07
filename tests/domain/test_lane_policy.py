@@ -2,7 +2,7 @@
 import ast
 from pathlib import Path
 
-from support.case import Case
+from tltestkit.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 import support.paths  # noqa: E402, F401

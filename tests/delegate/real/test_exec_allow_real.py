@@ -9,11 +9,11 @@ import sys
 from unittest import mock
 
 import hermetic  # noqa: F401
-from support.case import Case
 from support.procsim import real_proc
 from test_route import route
 
 from delegate.app import env
+from tltestkit.case import Case
 
 ESCAPES = (
     "sed 'e id' f",

@@ -5,7 +5,7 @@ must not name a whole-suite run: bare pytest, `pytest tests`, `-n auto`, the ret
 import re
 from pathlib import Path
 
-from support.case import Case
+from tltestkit.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
 TEXTS = ("AGENTS.md", "CLAUDE.md", "README.md", "skills/task-loop/SKILL.md")

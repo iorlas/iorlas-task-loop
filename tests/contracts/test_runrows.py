@@ -7,8 +7,6 @@ from unittest.mock import patch
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
 
 from tlkernel import factorydb, wire
 from tlkernel.docstore import JsonStore
@@ -17,6 +15,8 @@ from tlkernel.ids import loop_key
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunFinish, RunManifest, RunState
 from tlkernel.runrows import RunRows, StaleRevision
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class RunRowsTest(Case):

@@ -1,7 +1,6 @@
 """Shared prose matchers retain their wording rules."""
-from support.case import Case
-
 from taskloop.domain.work.matchers import Wording, without_runner, word_set
+from tltestkit.case import Case
 
 
 class WordingTable(Case):
