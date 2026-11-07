@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 
 from taskloop.app.loop.loop import Loop
-from taskloop.app.slots import owned
+from tlslots import owned
 from tltestkit.case import Case
 
 REPO = "/w/repo"

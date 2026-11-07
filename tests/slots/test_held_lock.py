@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 from taskloop.app.run.reload_ports import locked_slot
-from taskloop.app.slots.engine_lock import EngineLock, HeldLock
+from tlslots.engine_lock import EngineLock, HeldLock
 
 
 def test_slot_reader_follows_only_its_runs_lock():

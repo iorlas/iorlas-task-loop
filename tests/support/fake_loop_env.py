@@ -4,7 +4,7 @@ from typing import Never
 import support.paths  # noqa: F401
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.stages import EngineAsks, EngineSlots
-from taskloop.app.slots.env import SlotEnv
+from tlslots.env import SlotEnv
 
 
 def unused(*args: object, **kwargs: object) -> Never:

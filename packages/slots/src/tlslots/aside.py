@@ -6,8 +6,8 @@ import contextlib
 from tlkernel.beadsport import BdFailure, BeadPatch
 from tlkernel.slots import SlotFail, SlotGitError
 
-from taskloop.app.slots.reset import setup
-from taskloop.app.slots.surface import SlotView
+from tlslots.reset import setup
+from tlslots.surface import SlotView
 
 STEPS_S = (1800.0, 3600.0, 7200.0)
 

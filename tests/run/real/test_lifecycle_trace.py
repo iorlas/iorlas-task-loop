@@ -12,10 +12,10 @@ from support import engine_case as te
 from support import homes
 
 from taskloop.app.run import engine
-from taskloop.app.slots import config as wslots_config
 from tlkernel import lifecyclematchers as lifecycle
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
+from tlslots import config as wslots_config
 
 ROOT = te.ROOT
 from support.dashes import make_dash  # noqa: E402

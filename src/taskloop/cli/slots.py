@@ -2,8 +2,8 @@
 from collections.abc import Callable
 from typing import Any, Final
 
-from taskloop.app.slots.env import SlotEnv
-from taskloop.app.slots.verbs import hold, init, listing, release, reset, run_setup, take
+from tlslots.env import SlotEnv
+from tlslots.verbs import hold, init, listing, release, reset, run_setup, take
 
 VERBS: Final[dict[str, Callable[[SlotEnv, Any], int]]] = {
     "list": listing, "hold": hold, "init": init, "take": take, "release": release, "reset": reset, "setup": run_setup,

@@ -14,12 +14,12 @@ from rules import ratchet_change
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "dev"))
 from importgraph import targets_of
 
-TREES = ("src/taskloop", "packages/kernel/src/tlkernel", "packages/gate/src/tlgate")
+TREES = ("src/taskloop", "packages/kernel/src/tlkernel", "packages/gate/src/tlgate", "packages/slots/src/tlslots")
 
 
 def closures(texts: Mapping[str, str]) -> dict[str, int]:
     """Count reachable local files and distinct external module roots for each stage."""
-    modules = {path.removeprefix("packages/kernel/").removeprefix("packages/gate/").removeprefix("src/")
+    modules = {path.removeprefix("packages/kernel/").removeprefix("packages/gate/").removeprefix("packages/slots/").removeprefix("src/")
                .removesuffix(".py").replace("/", ".").removesuffix(".__init__"):
                path for path in texts if path.startswith(tuple(tree + "/" for tree in TREES)) and path.endswith(".py")}
     packages = {name for name, path in modules.items() if path.endswith("/__init__.py")}
@@ -42,6 +42,8 @@ def closures(texts: Mapping[str, str]) -> dict[str, int]:
     stages = sorted(name for name in packages if name.startswith("taskloop.app.") and name.count(".") == 2)
     if "tlgate" in packages:  # the gate is its package now; the shell's app/checks (step.py) is glue and keeps no budget of its own
         stages = [name for name in stages if name != "taskloop.app.checks"] + ["tlgate"]
+    if "tlslots" in packages:
+        stages = [name for name in stages if name != "tlslots"] + ["tlslots"]
     counts = {}
     for stage in stages:
         # a package's testing.py is its fakes for tests (the charter's third public name): not part of the production closure
@@ -52,7 +54,7 @@ def closures(texts: Mapping[str, str]) -> dict[str, int]:
             if name not in reached:
                 reached.add(name)
                 pending.extend(edges[name] - reached)
-        key = "checks" if stage == "tlgate" else stage.rsplit(".", 1)[1]
+        key = "checks" if stage == "tlgate" else ("slots" if stage == "tlslots" else stage.rsplit(".", 1)[-1])
         counts[key] = len(reached)
         counts[key + " (external modules)"] = len(set().union(*(external[name] for name in reached)))
     return counts

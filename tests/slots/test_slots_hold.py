@@ -14,11 +14,11 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from slots.real.test_slots import NO_FCNTL, Slots
-from taskloop.app.slots import (
-    marks,
-)
 from taskloop.app.wire import slots as wslots
 from tlkernel.config import SlotsConfig
+from tlslots import (
+    marks,
+)
 
 
 class SlotListLogic(Slots):

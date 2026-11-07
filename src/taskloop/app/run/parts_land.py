@@ -13,14 +13,19 @@ from taskloop.app.land.lander import lander_over
 from taskloop.app.land.push import target
 from taskloop.app.land.rebase import Rebase
 from taskloop.app.land.record import Restart, Salvage
-from taskloop.app.land.tree import Tree
+from taskloop.app.land.tree import Tree, TreeHost
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.track import verbs
+from taskloop.app.wire import slotfx
 from taskloop.app.write.newfiles import NewFiles
 
 
+def tree_over(host: TreeHost) -> Tree:
+    return Tree(host, fx=slotfx.FX)
+
+
 class LandParts(Plumbing):
-    tree = cached_property(Tree)
+    tree = cached_property(tree_over)
     rebase = cached_property(Rebase)
     restart = cached_property(Restart)
     fixer = cached_property(Fixer)

@@ -18,16 +18,16 @@ from support.fake_beads import FakeBeads
 from support.fake_slot_git import FakeSlotGit
 
 from taskloop.adapters.git import classify
-from taskloop.app.slots.env import SlotEnv
-from taskloop.app.slots.lease import Lease
-from taskloop.app.slots.line import wait_slot, waiting_line
-from taskloop.app.slots.pool import SlotPool
 from taskloop.cli import slots as cli
 from tlkernel import paths
 from tlkernel.bead import Bead
 from tlkernel.config import SlotsConfig
 from tlkernel.ids import BeadId
 from tlkernel.slots import BranchPinned, Checkout, DirtyTree, IndexLocked, RefRace, SlotFail, SlotGitError
+from tlslots.env import SlotEnv
+from tlslots.lease import Lease
+from tlslots.line import wait_slot, waiting_line
+from tlslots.pool import SlotPool
 from tltestkit.memdoc import MemTickets
 
 ME = "tl-me"
@@ -106,7 +106,7 @@ class Classify(Case):
 class Reset(Rig):
     def test_a_missing_slot_is_recreated_before_fetch_and_checkout(self):
         Path(self.d1).rmdir()
-        with mock.patch("taskloop.app.slots.reset.setup"):
+        with mock.patch("tlslots.reset.setup"):
             self.slot().ready_for("x-1")
         assert self.git.added == [(self.d1, "origin/main")]
         ops = [call[0] for call in self.git.calls]

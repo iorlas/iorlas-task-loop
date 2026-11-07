@@ -8,15 +8,15 @@ from pathlib import Path
 from unittest.mock import patch
 
 from slots.test_slot_pool import Rig
-from taskloop.app.slots import aside, watchdog
-from taskloop.app.slots.env import stamp
-from taskloop.app.slots.line import order
-from taskloop.app.slots.pool import Slot
-from taskloop.domain.slot_liveness import LIMITS, Kind
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BeadPatch
 from tlkernel.ids import BeadId
 from tlkernel.slots import SlotFail
+from tlslots import aside, watchdog
+from tlslots.env import stamp
+from tlslots.line import order
+from tlslots.liveness import LIMITS, Kind
+from tlslots.pool import Slot
 
 STEP = 45.0
 SLACK = watchdog.EVERY + 2 * STEP  # a look every EVERY s, a step of up to STEP s before it, one more before the check

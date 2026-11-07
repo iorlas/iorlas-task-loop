@@ -5,12 +5,12 @@ from datetime import UTC, datetime
 from unittest.mock import patch
 
 from slots.test_slot_pool import Rig
-from taskloop.app.slots import aside, watchdog
-from taskloop.app.slots.line import wait_slot
-from taskloop.app.slots.pool import Slot
-from taskloop.domain.slot_liveness import Kind, Limits, SlotFact, Waiter, violations
 from tlkernel.beadsport import BeadPatch
 from tlkernel.slots import SlotFail
+from tlslots import aside, watchdog
+from tlslots.line import wait_slot
+from tlslots.liveness import Kind, Limits, SlotFact, Waiter, violations
+from tlslots.pool import Slot
 from tltestkit.case import Case
 
 L = Limits(grant_s=100, idle_s=600, aside_s=1800, orphan_s=900)

@@ -2,8 +2,8 @@
 import threading
 from unittest import mock
 
-from taskloop.app.slots.lease import Lease
 from tlkernel.ids import BeadId
+from tlslots.lease import Lease
 
 BEAD = BeadId("a")
 

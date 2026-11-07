@@ -8,11 +8,11 @@ from git_porcelain.errors import GitUnavailable
 
 from slots.test_slot_pool import Rig
 from taskloop.adapters.git import RealGit
-from taskloop.app.slots import reset
 from tlkernel.bead import Bead
 from tlkernel.env import Env
 from tlkernel.ids import BeadId
 from tlkernel.slots import Checkout, GitReadFailure
+from tlslots import reset
 
 
 class ResetOwnership(Rig):
@@ -22,7 +22,7 @@ class ResetOwnership(Rig):
         adapter = RealGit(Env(), pinned=False)
         with (mock.patch.object(adapter, "_pool", side_effect=GitUnavailable("status unavailable")),
               mock.patch.object(self.git, "dirty", side_effect=adapter.dirty),
-              mock.patch("taskloop.app.slots.reset.setup") as setup):
+              mock.patch("tlslots.reset.setup") as setup):
             assert self.code(lambda: self.slot().ready_for("x-1")) == "transient"
         setup.assert_not_called()
         assert work.read_text() == "keep me"

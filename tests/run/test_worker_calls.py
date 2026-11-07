@@ -18,11 +18,11 @@ from support.who import who
 from taskloop.adapters import delegate as dl
 from taskloop.adapters.delegate import Stopped
 from taskloop.app.run import engine
-from taskloop.app.slots import config as wslots_config
 from taskloop.domain.lanes import retry
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.paths import RunFiles
+from tlslots import config as wslots_config
 from tltestkit import fake_route
 from tltestkit.logs import records
 

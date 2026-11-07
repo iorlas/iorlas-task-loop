@@ -11,9 +11,9 @@ from support.fake_loop_env import slot_loop_env
 
 from slots.real.test_worktrees import Rig, git
 from taskloop.app.loop.take import Taker
-from taskloop.app.slots.env import SlotEnv
-from taskloop.app.slots.pool import SlotPool
 from tlkernel.config import SlotsConfig
+from tlslots.env import SlotEnv
+from tlslots.pool import SlotPool
 from tltestkit.memdoc import MemTickets
 
 

@@ -5,7 +5,7 @@ from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
 from tlkernel.slots import Hold
 
-from taskloop.app.slots.env import SlotEnv
+from tlslots.env import SlotEnv
 
 
 class SlotNames(Protocol):

@@ -6,7 +6,7 @@ from tlkernel.fence import SLOT_GEN, gen_of
 from tlkernel.ids import BeadId
 from tlkernel.slots import HELD_KEYS, Hold, SlotFail
 
-from taskloop.app.slots.env import SlotEnv, stamp
+from tlslots.env import SlotEnv, stamp
 
 
 def hold_until(b: Bead | None) -> float:

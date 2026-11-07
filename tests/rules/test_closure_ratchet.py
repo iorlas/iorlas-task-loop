@@ -55,3 +55,14 @@ def test_a_package_testing_module_is_outside_the_stage_closure():
         "packages/gate/src/tlgate/testing.py": "import json\nfrom tlgate import runner",
     })
     assert counts == {"checks": 2, "checks (external modules)": 0}
+
+
+def test_slots_member_keeps_the_slots_stage_identity_and_kernel_closure():
+    counts = closures({
+        "packages/slots/src/tlslots/__init__.py": "",
+        "packages/slots/src/tlslots/engine_lock.py": "from tlslots.effects import Effects",
+        "packages/slots/src/tlslots/effects.py": "from tlkernel.locks import LockRecord",
+        "packages/kernel/src/tlkernel/__init__.py": "",
+        "packages/kernel/src/tlkernel/locks.py": "import dataclasses",
+    })
+    assert counts == {"slots": 4, "slots (external modules)": 1}

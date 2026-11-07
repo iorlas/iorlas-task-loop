@@ -11,8 +11,8 @@ from tltestkit.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from support.spawn import port_git
 
-from taskloop.app.slots import owned
 from tlkernel.paths import ConfigDir
+from tlslots import owned
 
 ENV = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"}
 KEY = "r-1"

@@ -20,7 +20,7 @@ from taskloop.app.prune import verb
 from taskloop.app.reconcile import apply, observe
 from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.release.shell import of
-from taskloop.app.slots import engine_lock
+from taskloop.app.wire.slotfx import FX
 from tlkernel.bead import BdError, Bead
 from tlkernel.beadsport import BdFailure, Beads
 from tlkernel.config import LoopConfig
@@ -29,6 +29,7 @@ from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.landed import Landed as LandedRec
 from tlkernel.paths import ConfigDir
+from tlslots import engine_lock
 
 DAY = 86400
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"}
@@ -140,7 +141,7 @@ class Trees(Case):
 
     def test_a_tree_a_run_holds_is_kept(self):
         d = self.tree("busy")
-        assert engine_lock.EngineLock(homes.cfg(), d, "tl-1").take() == ""
+        assert engine_lock.EngineLock(homes.cfg(), d, "tl-1", fx=FX).take() == ""
         _, kept = self.prune()
         assert d.exists()
         assert "engine lock" in kept[0]

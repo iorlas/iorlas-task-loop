@@ -9,10 +9,10 @@ from tlkernel.fence import SLOT_GEN, gen_of
 from tlkernel.ids import BeadId
 from tlkernel.slots import Hold, SlotFail, slots_of
 
-from taskloop.app.slots import aside, owned
-from taskloop.app.slots.env import SlotEnv, stamp
-from taskloop.app.slots.marks import clear_marks, fresh_gen, held_by, hold_of, hold_until, mark_held
-from taskloop.app.slots.reset import check_ready, ready_for
+from tlslots import aside, owned
+from tlslots.env import SlotEnv, stamp
+from tlslots.marks import clear_marks, fresh_gen, held_by, hold_of, hold_until, mark_held
+from tlslots.reset import check_ready, ready_for
 
 
 class Slot:

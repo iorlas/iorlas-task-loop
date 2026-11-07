@@ -9,12 +9,12 @@ from support.spawn import port_git, real_spawner
 from support.who import who
 
 from taskloop.app.run import engine
-from taskloop.app.slots import config as wslots_config
 from tlkernel.checkpointrows import CheckpointDoc
 from tlkernel.docstore import ForeignVersion
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.wire import Refused
+from tlslots import config as wslots_config
 
 
 class ForeignCheckpoint(T.EngineTest):

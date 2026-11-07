@@ -19,6 +19,7 @@ from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import Stack
 from taskloop.app.land.stackgate import StackGate
+from taskloop.app.wire.slotfx import FX
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 from tlkernel.beadsport import DoltPush
@@ -106,7 +107,7 @@ class RealPush(Case):
         gate = StackGate(self.cmds, self.git, stores, str(other), "origin/main", ["tl"])
         stack = Stack(forge, self.cmds, self.log, self.git, str(other), Path(self.tmp.name) / "lock",
                       lambda b, s: 0, lambda: DoltPush(0, ""),
-                      "me", "s", gate, FakeBeads(actor="me"), cfg=ConfigDir(Path(self.tmp.name) / "cfg"))
+                      "me", "s", gate, FakeBeads(actor="me"), cfg=ConfigDir(Path(self.tmp.name) / "cfg"), fx=FX)
         branch, got, _ = stack.resolve(StackItem(branch="task/remote-only"))
         assert (branch, got) == ("task/remote-only", oid)
         assert self.git.rev_parse(str(other), oid) == oid

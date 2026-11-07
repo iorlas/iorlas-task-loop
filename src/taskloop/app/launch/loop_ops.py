@@ -14,6 +14,8 @@ from tlkernel.ids import BeadId
 from tlkernel.landed import landed_by
 from tlkernel.procport import Child, Hold, Spawner
 from tlkernel.slots import git_probe
+from tlslots import config as wslots_config
+from tlslots import engine_lock
 
 from taskloop.adapters import bdbackup, beadtools, factorybackup, ident, ram
 from taskloop.adapters.bd import BdStore
@@ -26,10 +28,9 @@ from taskloop.app.reconcile import leases
 from taskloop.app.release import reexec
 from taskloop.app.report import reflect
 from taskloop.app.run.running import running
-from taskloop.app.slots import config as wslots_config
-from taskloop.app.slots import engine_lock
 from taskloop.app.track import console, trail, verbs
 from taskloop.app.wire import asks as wasks
+from taskloop.app.wire import slotfx
 from taskloop.app.wire import slots as wslots
 from taskloop.stores.delegate import real_route
 
@@ -97,7 +98,7 @@ def exec_into(repo: str, d: Path, argv: list[str], handover: str, env: Env, who:
 
 def loop_lock(cfg: paths.ConfigDir, wt: str, slot: str, slot_bead: str | None, bead: str) -> None:
     stages.loop_lock(wt, slot, slot_bead, bead, lambda wt, slot, slot_bead, bead: engine_lock.loop_lock(
-        cfg, wt, slot, slot_bead, bead=bead))
+        cfg, wt, slot, slot_bead, bead=bead, fx=slotfx.FX))
 
 
 def available_mb(spawner: Spawner) -> int | None:

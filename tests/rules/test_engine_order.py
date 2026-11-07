@@ -74,6 +74,8 @@ def part_defs() -> dict[str, tuple[str, set[str], Path]]:
     for name in PARTS_FILES:
         _, tree = parsed(APP / "run" / name)
         known = imports(tree) | (api_homes() if "api" in imports_of_module(tree) else {})
+        known |= {n.name: known[n.returns.id] for n in tree.body  # a factory bound in the file itself reads what the class it returns reads
+                  if isinstance(n, ast.FunctionDef) and isinstance(n.returns, ast.Name)}
         for cls in (n for n in tree.body if isinstance(n, ast.ClassDef)):
             for item in cls.body:
                 if isinstance(item, ast.Assign) and isinstance(item.value, ast.Call) \

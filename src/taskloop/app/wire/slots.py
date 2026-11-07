@@ -21,19 +21,20 @@ from tlkernel.paths import TASK_EXCLUDE
 from tlkernel.procport import Spawner
 from tlkernel.slots import NotARepo, SlotFail, SlotGitError, SlotTable
 from tlkernel.slottable import LiveSlot, build_slot_table
+from tlslots import line as slots_line
+from tlslots import owned
+from tlslots.config import exclude_local, prio_of, profile_slots, slot_dir, slot_excludes, slot_source
+from tlslots.engine_lock import drop_engine_lock, engine_busy, lock_pid
+from tlslots.env import DEFAULT_PRIO, SlotEnv, stamp
+from tlslots.pool import SlotPool, machine_slots
 
 from taskloop.adapters.beadtools import bd_store, peek
 from taskloop.adapters.gitrepo import repo_root
 from taskloop.adapters.ident import hostname
 from taskloop.adapters.landlock import os_lock
-from taskloop.app.slots import line as slots_line
-from taskloop.app.slots import owned
-from taskloop.app.slots.config import exclude_local, prio_of, profile_slots, slot_dir, slot_excludes, slot_source
-from taskloop.app.slots.engine_lock import drop_engine_lock, engine_busy, lock_pid
-from taskloop.app.slots.env import DEFAULT_PRIO, SlotEnv, stamp
-from taskloop.app.slots.pool import SlotPool, machine_slots
 from taskloop.app.track import trail
 from taskloop.app.track.trail import event
+from taskloop.app.wire import slotfx
 from taskloop.stores.real import real_stores
 
 
@@ -41,7 +42,7 @@ def slot_table(repo: str, who: Identity, git: Git, now: float, live: Mapping[str
                store: Beads | None = None) -> SlotTable:
     """The one slot table of this repo on this machine (contracts/slottable): the config from the base ref, the slot beads of this host,
     `live` the runs the caller saw alive (slot name -> run)."""
-    src = slot_source(repo, git)
+    src = slot_source(repo, git, fx=slotfx.FX)
     beads = slot_beads(repo, who, store)
     store = store or bd_store(who.actor, repo)
     open_ids: list[str] = []
@@ -64,7 +65,7 @@ def slot_env(repo: str, store: Beads | None = None, cfg: SlotsConfig | None = No
         actor=who.actor,
         host=hostname(),
         take_lock=lambda: os_lock(who.config.lock_file(f"slot-take-{repo_key(repo)}.lock"), f"pid {os.getpid()}"),
-        busy=functools.partial(engine_busy, who.config), lock_pid=functools.partial(lock_pid, who.config),
+        busy=functools.partial(engine_busy, who.config, fx=slotfx.FX), lock_pid=functools.partial(lock_pid, who.config),
         drop_engine_lock=lambda wt, pid: drop_engine_lock(who.config, wt, pid) if pid is not None else None, event=functools.partial(event,
             who), say=print,
         warn=lambda m: print(m, file=sys.stderr), pid=os.getpid(),
@@ -217,7 +218,7 @@ def owned_worktrees(git: Git, who: Identity, op: str) -> int:
     cfg = profile_slots(repo, git)
     slots_dir = str(Path(slot_dir(repo, "x", cfg)).parent)
     if op == "clean":
-        busy = functools.partial(engine_busy, who.config)
+        busy = functools.partial(engine_busy, who.config, fx=slotfx.FX)
         return owned.clean(git, who.config, repo_key(repo), repo, slots_dir, cfg.base, cfg.count, busy)
     for r in owned.survey(git, who.config, repo_key(repo), repo, slots_dir):
         print("\t".join([r.state, r.path, r.branch or "-", r.note + (f" since {stamp(r.rec.created)}" if r.rec else "")]))

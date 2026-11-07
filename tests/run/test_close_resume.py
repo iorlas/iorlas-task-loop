@@ -11,7 +11,6 @@ from support.who import who
 
 from taskloop.app.run import engine
 from taskloop.app.run.closer_ports import closer_over
-from taskloop.app.slots import config as wslots_config
 from tlkernel import askspecs, wire
 from tlkernel import closeeffects as fx
 from tlkernel import runoutcome as oc
@@ -21,6 +20,7 @@ from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
 from tlpipeline.api import Closer, ended
+from tlslots import config as wslots_config
 
 
 class Killed(BaseException):

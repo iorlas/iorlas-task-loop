@@ -34,15 +34,16 @@ from taskloop.app.launch import dash as dash_server
 from taskloop.app.run import (
     entry,
 )
-from taskloop.app.slots import (
-    engine_lock,
-)
-from taskloop.app.slots.paths import engine_lock as engine_lock_path
 from taskloop.app.wire import slots as wslots
+from taskloop.app.wire.slotfx import FX
 from tlkernel.config import SlotsConfig
 from tlkernel.enums import Result
 from tlkernel.env import snapshot
 from tlkernel.run import RunReport
+from tlslots import (
+    engine_lock,
+)
+from tlslots.paths import engine_lock as engine_lock_path
 
 LIVE_PID = "a live pid that is not this process: a real sleep child (an engine lock, a second loop, a waiter)"
 
@@ -117,10 +118,10 @@ class SameActor(Slots):
                                                "slot_bead": "sl-1"})
         loop = {"TASK_LOOP_SLOT_BEAD": "sl-1", "TASK_LOOP_LOOP_PID": str(os.getppid())}
         with mock.patch.dict(os.environ, loop):
-            assert engine_lock.engine_busy(homes.cfg(), self.slot("s1"), handoff=snapshot()) == ""
-            assert engine_lock.engine_busy(homes.cfg(), self.slot("s1"))
+            assert engine_lock.engine_busy(homes.cfg(), self.slot("s1"), handoff=snapshot(), fx=FX) == ""
+            assert engine_lock.engine_busy(homes.cfg(), self.slot("s1"), fx=FX)
         with mock.patch.dict(os.environ, {**loop, "TASK_LOOP_SLOT_BEAD": "sl-2"}):
-            assert engine_lock.engine_busy(homes.cfg(), self.slot("s1"), handoff=snapshot())
+            assert engine_lock.engine_busy(homes.cfg(), self.slot("s1"), handoff=snapshot(), fx=FX)
 
     def test_the_parent_pid_alone_is_not_the_loop(self):
         """run-task runs under `uv run --script`, so its parent is uv: only the pid the loop exported counts (0.23.169-0.23.173 refused
@@ -129,7 +130,7 @@ class SameActor(Slots):
                                                "slot_bead": "sl-1"})
         with mock.patch.dict(os.environ, {"TASK_LOOP_SLOT_BEAD": "sl-1"}):
             os.environ.pop("TASK_LOOP_LOOP_PID", None)
-            assert engine_lock.engine_busy(homes.cfg(), self.slot("s1"), handoff=snapshot())
+            assert engine_lock.engine_busy(homes.cfg(), self.slot("s1"), handoff=snapshot(), fx=FX)
 
 
 class HoldRaces(Slots):
