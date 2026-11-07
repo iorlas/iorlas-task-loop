@@ -28,9 +28,7 @@ from tltestkit.runs import manifest  # noqa: E402
 # isort: split
 import tl  # noqa: E402
 
-from taskloop.adapters.delegate import DelegateRoute  # noqa: E402
 from taskloop.app.report import planner  # noqa: E402
-from taskloop.app.report.inputs import read_jsonl  # noqa: E402
 from tlkernel import lifecyclematchers as matchers  # noqa: E402
 from tltestkit.checked import run_checked  # noqa: E402
 
@@ -126,7 +124,7 @@ def session(role, family, tin, cached, out):
 
 
 class PlannerReport(Case):
-    """tl-bxk.10.13: planner calls per bead and their input tokens, from delegate's history and the engine logs."""
+    """tl-bxk.10.13: planner calls per bead and their input tokens, from the engine logs."""
 
     def setup_method(self):
         self.tmp = TemporaryDirectory()
@@ -134,27 +132,33 @@ class PlannerReport(Case):
         self.env = mock.patch.dict(os.environ, {"HOME": str(home), "XDG_CONFIG_HOME": str(home / "cfg"),
                                                 "APPDATA": str(home / "cfg")})
         self.env.start()
-        self.hist = home / "history.jsonl"
         self.eng = homes.config_dir() / "runs"
-        t = T0
-        rows = [("planner", "x-1", 1000, 9000), ("planner", "x-1", 500, 4500), ("planner", "x-1", 200, 800),
-                ("planner", "x-1", 100, 100), ("worker", "x-1", 9999, 9999), ("planner", "x-2", 300, 700),
-                ("planner", "y-9", 1, 1)]
-        self.hist.write_text("".join(json.dumps({"ts": t + k, "role": r, "task": b, "tokens": {"in": i, "cached": c, "out": 5}})
-                                     + "\n" for k, (r, b, i, c) in enumerate(rows)))
-        nodes = [("plan: plan", {}), ("plan: re-plan", {}), ("plan: rewrite checks", {}), ("plan: amend", {})]
-        manifest(homes.config_dir(), "x-1-20261021-060000", "x-1", t).log.write_text("".join(
-            json.dumps(dict({"v": 4, "t": t + k, "kind": "step_start", "id": "n1", "text": txt, "step": "plan"}, **kw)) + "\n"
-            for k, (txt, kw) in enumerate(nodes)))
-        manifest(homes.config_dir(), "x-2-20261021-060000", "x-2", t).log.write_text(json.dumps(
-            {"v": 2, "t": t, "kind": "step_start", "id": "n1", "text": "plan: plan", "step": "plan"}) + "\n")
+        calls = [("planner", "x-1", 1000, 9000), ("planner", "x-1", 500, 4500), ("planner", "x-1", 200, 800),
+                 ("planner", "x-1", 100, 100), ("worker", "x-1", 9999, 9999), ("planner", "x-2", 300, 700),
+                 ("planner", "y-9", 1, 1)]
+        texts = ["plan: plan", "plan: re-plan", "plan: rewrite checks", "plan: amend"]
+        for bead in ("x-1", "x-2", "y-9"):
+            records: list[dict[str, object]] = []
+            for k, (role, task, tin, cached) in enumerate(calls):
+                if task != bead:
+                    continue
+                if role == "planner" and bead != "y-9":
+                    records.append({"t": T0 + k, "kind": "step_start", "id": f"n{k}", "step": "plan",
+                                    "text": texts[k] if bead == "x-1" else "plan: plan"})
+                records.extend([
+                    {"t": T0 - 10, "kind": "call_start", "id": f"c{k}", "role": role, "step": "plan", "node": f"n{k}"},
+                    {"t": T0 + k, "kind": "call_end", "id": f"c{k}", "tokens": {"in": tin, "cached": cached, "out": 5}},
+                ])
+            records.append({"t": T0, "kind": "call_end", "id": "unmatched", "tokens": {"in": 9999}})
+            manifest(homes.config_dir(), f"{bead}-20261021-060000", bead, T0 - 20).log.write_text(
+                "".join(json.dumps(rec) + "\n" for rec in records))
 
     def teardown_method(self):
         self.env.stop()
         self.tmp.cleanup()
 
     def test_calls_are_split_into_first_again_amend_and_send_back_and_input_is_in_plus_cached(self):
-        p = planner.planner_stats(homes.cfg(), T0 - 1, T0 + 100, rows=read_jsonl(self.hist))
+        p = planner.planner_stats(homes.cfg(), T0 - 1, T0 + 100)
         by = {x["bead"]: x for x in p["per_bead"]}
         assert (
             {k: by["x-1"][k] for k in ("calls", "first", "again", "amend", "back", "other", "input")}
@@ -162,9 +166,21 @@ class PlannerReport(Case):
         )
         assert (by["x-2"]["calls"], by["x-2"]["first"], by["x-2"]["input"]) == (1, 1, 1000)
         assert (p["calls"], p["beads"], p["input"]) == (6, 3, 17101)  # the worker call is no planner call
-        only = planner.planner_stats(homes.cfg(), T0 - 1, T0 + 100, {"x"}, rows=read_jsonl(self.hist))
+        only = planner.planner_stats(homes.cfg(), T0 - 1, T0 + 100, {"x"})
         assert (only["calls"], only["beads"]) == (5, 2)
-        assert planner.planner_stats(homes.cfg(), T0 + 50, T0 + 100, rows=read_jsonl(self.hist))["calls"] == 0  # outside the window
+        assert planner.planner_stats(homes.cfg(), T0 + 50, T0 + 100)["calls"] == 0  # outside the window
+
+    def test_window_uses_call_end_time_inclusively_even_when_the_start_is_earlier(self):
+        p = planner.planner_stats(homes.cfg(), T0 + 1, T0 + 2)
+        assert (p["calls"], p["beads"], p["input"]) == (2, 1, 6000)
+
+    def test_call_ids_match_only_within_the_same_log(self):
+        start = manifest(homes.config_dir(), "split-start", "x-1", T0)
+        end = manifest(homes.config_dir(), "split-end", "x-1", T0)
+        start.log.write_text(json.dumps({"t": T0, "kind": "call_start", "id": "split", "role": "planner"}) + "\n")
+        end.log.write_text(json.dumps({"t": T0, "kind": "call_end", "id": "split", "tokens": {"in": 9999}}) + "\n")
+        p = planner.planner_stats(homes.cfg(), T0 - 1, T0 + 100)
+        assert (p["calls"], p["input"]) == (6, 17101)
 
     def test_input_is_in_when_in_already_holds_the_cache_else_in_plus_cached(self):
         assert planner.input_tokens({"in": 10000, "cached": 9000}) == 10000   # delegate 0.22+ and Codex
@@ -175,8 +191,7 @@ class PlannerReport(Case):
     def test_the_cli_prints_the_planner_table_read_only(self):
         before = sorted(p.name for p in self.eng.iterdir())
         out = io.StringIO()
-        rows = read_jsonl(self.hist)
-        with mock.patch.object(DelegateRoute, "history", lambda _, since=0.0: rows), redirect_stdout(out):
+        with redirect_stdout(out):
             rc = tl.main(["report", "--planner", "--prefix", "x", "--since", "2026-10-21", "--until", "2026-10-22"])
         text = out.getvalue()
         assert rc == 0

@@ -12,11 +12,11 @@ import support.paths  # noqa: F401
 from support.gate_rig import GateCase
 
 from taskloop.app.land.gate import Gate, GatePass, Problem, ProblemKind
-from taskloop.app.pipeline.blocked import Blocked
 from tlgate.domain.specs import gate_items
 from tlkernel.envvars import EnvVar
 from tlkernel.procport import Ran
 from tlkernel.slots import SlotGitError
+from tlpipeline.blocked import Blocked
 from tltestkit import procsim
 
 

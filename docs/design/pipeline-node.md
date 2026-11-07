@@ -231,6 +231,8 @@ Each PR is one bead (child of tl-e5t0.39, label `auto`), lands green, behaviour 
 
 Beads (children of tl-e5t0.39): R1 tl-e5t0.39.1, R2 .2, R3 .3, R4a .4, R4b .5, R4c .6, R4d .7, R4e .8, R4f .9, R5 .10, R6 .11.
 
+R6 done: the pipeline is packages/pipeline (tlpipeline)
+
 ## 13. R6 is not a pure move: what the package imports today (added 2026-11-07, after docs/design/workspace.md)
 
 `workspace.md` section 2 sets the rule: a stage package may import only `tlkernel` (and third parties); a stage that imports `taskloop.adapters`, `stores` or `domain` is not a leaf and its outward imports are settled first. Measured on main (AST of `src/taskloop/app/pipeline`, 41 modules): the pipeline imports **no other `app` stage** (the `pipeline-imports-no-stage` contract holds) but reaches the three layers below it:

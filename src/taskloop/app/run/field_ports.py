@@ -1,9 +1,9 @@
 """The run collaborators declared by its fields and initialized by the engine."""
 from tlgate.checklog import CheckLog
 from tlgate.runner import Checker
+from tlpipeline.budget import Budget
+from tlpipeline.steps import Steps
 
-from taskloop.app.pipeline.budget import Budget
-from taskloop.app.pipeline.steps import Steps
 from taskloop.app.workers.calls import Calls
 
 

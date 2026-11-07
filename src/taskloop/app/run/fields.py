@@ -23,6 +23,7 @@ from tlkernel.procport import Spawner
 from tlkernel.review import Unfiled
 from tlkernel.run import Reexec
 from tlkernel.wire import Open
+from tlpipeline.checkpoints import Checkpoints
 
 from taskloop.adapters import beadtools, ident, treehash
 from taskloop.adapters.check_probe import PathProbe
@@ -30,7 +31,6 @@ from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.land.state import LandState
 from taskloop.app.look.state import LookState
-from taskloop.app.pipeline.checkpoints import Checkpoints
 from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.state import PlanState
 from taskloop.app.review.state import ReviewLive
@@ -86,7 +86,7 @@ class RunFields(StateAttrs, FieldParts):
                  fresh: bool, claim: fence.Claim | None, who: Identity) -> None:
         self.bead, self.cfg, self.dry, self.verbose = bead, cfg, dry_run, verbose
         self.claim = claim or fence.offline(bead)  # the run's right to act on its bead (app/track/fence.py); offline: nothing to check
-        self.dead: Checkpoint | None = None  # a run died inside its close: its checkpoint, to finish that close (app/pipeline/ended.py)
+        self.dead: Checkpoint | None = None  # a run died inside its close: its checkpoint, to finish that close (tlpipeline/ended.py)
         self.fenced = ""  # why this run was fenced out (its bead or slot taken again), once it was
         self.wt: str = wt
         self.store, self.router = store or beadtools.bd_store(who.actor), route

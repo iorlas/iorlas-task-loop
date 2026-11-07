@@ -7,6 +7,7 @@ members = [
     "iorlas-task-loop",
     "tlartifacts",
     "tlgate",
+    "tlpipeline",
     "tlkernel",
     "tltestkit",
 ]
@@ -203,6 +204,29 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "msgspec" }]
+
+[[package]]
+name = "tlpipeline"
+version = "0"
+source = { editable = "packages/pipeline" }
+dependencies = [
+    { name = "tlkernel" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "tltestkit" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "tlkernel", editable = "packages/kernel" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest" },
+    { name = "tltestkit", editable = "packages/testkit" },
+]
 
 [[package]]
 name = "tltestkit"

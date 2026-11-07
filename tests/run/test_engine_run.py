@@ -38,7 +38,6 @@ from support.who import who
 from taskloop.adapters import delegate as dl
 from taskloop.app.asks import admission
 from taskloop.app.land.checkout import Checkout
-from taskloop.app.pipeline import outcomes
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine, entry, running
 from taskloop.app.slots import config as wslots_config
@@ -56,6 +55,7 @@ from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.run import RunReport
 from tlkernel.waitenums import WaitWhat
+from tlpipeline import outcomes
 from tltestkit import fake_route
 from tltestkit.logs import records
 from tltestkit.tmpdir import mkdtemp

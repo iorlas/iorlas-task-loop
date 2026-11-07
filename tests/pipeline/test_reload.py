@@ -3,14 +3,14 @@
 from unittest.mock import Mock, patch
 
 import pytest
-from support.pipeline_ports import FakeReexecs, FakeTrail
 
 from taskloop.adapters import ident
-from taskloop.app.pipeline.reload import Exec, Reload
 from tlkernel import childenv, rundocs
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
+from tlpipeline.reload import Exec, Reload
+from tlpipeline.testing import FakeReexecs, FakeTrail
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def setup_reload(workdir):
 
 def test_counter_round_trip(setup_reload):
     host, _, _, reload = setup_reload
-    with patch("taskloop.app.pipeline.reload.time.time", return_value=100):
+    with patch("tlpipeline.reload.time.time", return_value=100):
         counters = reload.counters()
     doc = Mock()
     doc.get.return_value = counters

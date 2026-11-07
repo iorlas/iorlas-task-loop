@@ -14,11 +14,11 @@ from taskloop.app.look.judge import Judge
 from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.look.shots import Pictures
 from taskloop.app.look.state import LookState
-from taskloop.app.pipeline.blocked import Blocked
-from taskloop.app.pipeline.leftover_queue import LeftoverQueue
 from tlkernel.asked import Asked, Updates
 from tlkernel.checkpoint import RunState
 from tlkernel.config import EngineConfig
+from tlpipeline.blocked import Blocked
+from tlpipeline.leftover_queue import LeftoverQueue
 
 
 class FakeLookPorts:

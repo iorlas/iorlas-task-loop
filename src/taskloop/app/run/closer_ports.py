@@ -4,19 +4,19 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from tlkernel.identity import Identity
+from tlpipeline.closing import CloseParts, Closer
+from tlpipeline.closing_branch import ReleaseSlot, SaveBranch
+from tlpipeline.closing_decide import Decide
+from tlpipeline.closing_host import CloseAllCheckpoints, CloserHost
+from tlpipeline.closing_notes import FileNotes, Reflect
+from tlpipeline.closing_record import RecordRun
+from tlpipeline.closing_settle import Settle
+from tlpipeline.ports import AskRules, BeadClosing, FollowUps, LandCleanup, ParkBook
 
 from taskloop.adapters import beadtools, closes
 from taskloop.app.asks.closing import ClosingAsks
 from taskloop.app.land.closing import LandCleanups, LandFollowUps
 from taskloop.app.land.followups import FollowUpCheckpoints, FollowUpHost, file_follow_ups
-from taskloop.app.pipeline.closing import CloseParts, Closer
-from taskloop.app.pipeline.closing_branch import ReleaseSlot, SaveBranch
-from taskloop.app.pipeline.closing_decide import Decide
-from taskloop.app.pipeline.closing_host import CloseAllCheckpoints, CloserHost
-from taskloop.app.pipeline.closing_notes import FileNotes, Reflect
-from taskloop.app.pipeline.closing_record import RecordRun
-from taskloop.app.pipeline.closing_settle import Settle
-from taskloop.app.pipeline.ports import AskRules, BeadClosing, FollowUps, LandCleanup, ParkBook
 from taskloop.app.slots.config import profile_slots
 from taskloop.app.track.closing import ClosingBeads
 from taskloop.app.wire import closeguard

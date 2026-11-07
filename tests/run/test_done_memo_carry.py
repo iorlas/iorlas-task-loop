@@ -5,14 +5,14 @@ from types import SimpleNamespace
 
 import pytest
 import support.paths  # noqa: F401
-from support.pipeline_ports import FakeReexecs, FakeTrail
 
 from taskloop.adapters import ident
-from taskloop.app.pipeline.reload import Reload
 from taskloop.app.workers import done_memo
 from tlkernel import childenv, factorydb
 from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
+from tlpipeline.reload import Reload
+from tlpipeline.testing import FakeReexecs, FakeTrail
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 

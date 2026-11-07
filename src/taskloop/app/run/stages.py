@@ -3,10 +3,10 @@ from functools import partial
 
 from tlkernel.checkpoint import Checkpoint
 from tlkernel.enums import Step
+from tlpipeline.stage_run import stage_run
+from tlpipeline.standalone import Standalone
 
 from taskloop.adapters import beadtools
-from taskloop.app.pipeline.stage_run import stage_run
-from taskloop.app.pipeline.standalone import Standalone
 from taskloop.app.run.host import RunHost
 from taskloop.app.run.layout import repo_of
 from taskloop.app.run.run_once import RunOnce
