@@ -1,21 +1,19 @@
 """`tl factory`: start, inspect, stop and tail a repo's detached factory."""
 import argparse
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from pathlib import Path
 
 from tlartifacts import server
 from tlkernel.artifact import ArtifactSlot
 from tlkernel.env import Env
 from tlkernel.identity import Identity
-from tlkernel.loop import LoopState
 from tlkernel.paths import ConfigDir
 from tlkernel.procport import Spawner
 
 from taskloop.app.launch import dash, loop, repos
 from taskloop.app.launch import factory as binding
 from taskloop.app.loop import factory_verbs
-from taskloop.app.loop.exits import last_by_loop
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.parts import STAGE_PARTS
 from taskloop.app.wire import real
@@ -28,33 +26,20 @@ def _positive(value: str) -> int:
     return number
 
 
-def _stop(a: argparse.Namespace, files: LoopFiles, who: Identity) -> int:
-    stopped = factory_verbs.stop(files, a.now, who.actor)
-    if stopped is None:
-        print("not running")
-        return 1
-    for st in stopped:
-        print(f"STOP {'NOW' if a.now else 'after the current bead'}: loop pid {st.pid}")
-    return 0
+def _print(result: tuple[Generator[str], int], *, end: str = "\n", flush: bool = False) -> int:
+    rows, code = result
+    for row in rows:
+        print(row, end=end, flush=flush)
+    return code
 
 
-def _status(files: LoopFiles, states: list[LoopState], repo: str, version: str, env: Env) -> int:
-    for row in factory_verbs.status_facts(files, states, repo, version):
+def _start(a: argparse.Namespace, files: LoopFiles, repo: str, version: str,
+           env: Env, spawner: Spawner, here: Path) -> int:
+    argv = [sys.executable, str(here / "tl.py"), "loop", "--repo", repo, "--wait-drained"]
+    for row in factory_verbs.start_lines(files, repo, version, argv, spawner, a.loops,
+                                         lambda: loop.profile_of(repo, real.git(env)), binding.caffeinate_argv):
         print(row)
-    wanted = factory_verbs.status_wanted(lambda: loop.profile_of(repo, real.git(env)))
-    print(f"LOOPS running={len(states)} wanted={wanted}")
-    for rec in last_by_loop(files.cfg.loop_runs(files.key)):
-        print(f"LOOP {rec.get('loop', rec['pid'])} LAST EXIT pid={rec['pid']} time={rec.get('t')} "
-              f"reason={rec['reason']} {rec.get('detail', '')}")
-    dash.url(env)
-    return 0 if states else 1
-
-
-def _logs(a: argparse.Namespace, files: LoopFiles, states: list[LoopState]) -> int:
-    _, path = factory_verbs.logs(files, states, a.loop)
-    for line in factory_verbs.lines(path, a.n, a.follow):
-        print(line, end="", flush=True)
-    return 0
+    return dash.run("ensure", env, spawner, {p.name: p.version for p in STAGE_PARTS})
 
 
 def run(a: argparse.Namespace, env: Env, spawner: Spawner, who: Identity, here: Path) -> int:
@@ -62,21 +47,14 @@ def run(a: argparse.Namespace, env: Env, spawner: Spawner, who: Identity, here: 
     files = loop.files_of(repo, who.config)
     version = binding.version()
     try:
-        if a.op == "start":
-            loops = a.loops if a.loops is not None else factory_verbs.wanted(lambda: loop.profile_of(repo, real.git(env)))
-            argv = [sys.executable, str(here / "tl.py"), "loop", "--repo", repo, "--wait-drained"]
-            states, added = factory_verbs.start(files, repo, version, argv, spawner, loops=loops,
-                                              caffeinate_argv=binding.caffeinate_argv)
-            print(f"started {added} more loop(s)" if added else f"already running ({len(states)} loops)")
-            for row in factory_verbs.facts(files, states, repo, version):
-                print(row)
-            return dash.run("ensure", env, spawner, {p.name: p.version for p in STAGE_PARTS})
-        if a.op == "stop":
-            return _stop(a, files, who)
-        states = files.live()
-        if a.op == "logs":
-            return _logs(a, files, states)
-        return _status(files, states, repo, version, env)
+        operations = {
+            "start": lambda: _start(a, files, repo, version, env, spawner, here),
+            "stop": lambda: _print(factory_verbs.stop_lines(files, a.now, who.actor)),
+            "logs": lambda: _print(factory_verbs.log_lines(files, files.live(), a.loop, a.n, a.follow), end="", flush=True),
+            "status": lambda: _print(factory_verbs.status_lines(
+                files, files.live(), repo, version, lambda: loop.profile_of(repo, real.git(env)), lambda: dash.url(env))),
+        }
+        return operations[a.op]()
     except (OSError, RuntimeError, ValueError) as error:
         print(f"tl factory: {error}", file=sys.stderr)
         return 1
