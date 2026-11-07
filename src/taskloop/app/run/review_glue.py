@@ -25,3 +25,11 @@ def apply_review(e: Any, review: ReviewState, *, unchecked: bool, late: bool = F
     e.review.unverified = [u.to_dict() for u in review.unverified]
     if unchecked:
         e.review.unchecked = [u.to_dict() for u in review.unchecked]
+
+
+class ReviewGlue:
+    def __init__(self, host: object) -> None:
+        self.host = host
+
+    def apply(self, review: ReviewState, *, unchecked: bool, late: bool = False) -> None:
+        apply_review(self.host, review, unchecked=unchecked, late=late)

@@ -2,6 +2,7 @@
 from collections.abc import Callable
 
 from taskloop.app.land import cleanup
+from taskloop.app.land.gitcall import oneline
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.paths import ConfigDir
 from taskloop.stores.runlog import RunLog
@@ -23,3 +24,11 @@ class LandCleanups:
 
     def retry(self, repo: str) -> None:
         cleanup.retry_logged(self.git, self.log, self.slot_check(repo), self.base_of(repo), cfg=self.cfg)
+
+
+class LandHistory:
+    def __init__(self, git: Git) -> None:
+        self.git = git
+
+    def since(self, wt: str, head: str, n: int) -> str:
+        return oneline(self.git, wt, ["HEAD"], [head], n)

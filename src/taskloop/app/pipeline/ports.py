@@ -9,6 +9,7 @@ from taskloop.contracts.enums import Outcome
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.parks import Park
+from taskloop.contracts.review import ReviewState
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes.pause_reasons import Producer
 
@@ -45,3 +46,11 @@ class Slotting(Protocol):
 
 class TrustRefusal(Protocol):
     def refusal(self, git: Git, wt: str, base: str, bead: Bead | None) -> str: ...
+
+
+class HeadHistory(Protocol):
+    def since(self, wt: str, head: str, n: int) -> str: ...
+
+
+class ReviewRestore(Protocol):
+    def apply(self, review: ReviewState, *, unchecked: bool, late: bool = False) -> None: ...

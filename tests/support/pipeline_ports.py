@@ -8,6 +8,7 @@ from taskloop.contracts.enums import Outcome
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.parks import Park
+from taskloop.contracts.review import ReviewState
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes.pause_reasons import Producer
 
@@ -101,3 +102,21 @@ class FakeTrustRefusal:
     def refusal(self, git: Git, wt: str, base: str, bead: Bead | None) -> str:
         self.calls.append((git, wt, base, bead))
         return self.reason
+
+
+class FakeHeadHistory:
+    def __init__(self, result: str = "") -> None:
+        self.result = result
+        self.calls: list[tuple[str, str, int]] = []
+
+    def since(self, wt: str, head: str, n: int) -> str:
+        self.calls.append((wt, head, n))
+        return self.result
+
+
+class FakeReviewRestore:
+    def __init__(self) -> None:
+        self.calls: list[tuple[ReviewState, bool, bool]] = []
+
+    def apply(self, review: ReviewState, *, unchecked: bool, late: bool = False) -> None:
+        self.calls.append((review, unchecked, late))
