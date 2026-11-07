@@ -30,12 +30,11 @@ class Call:
         self.step, self.title, self.visual = step, title, False
         self.tries = 1  # calls that came back with no valid answer, from 1: two at most (RetryPlan invalid_output)
         self.counts: dict[str, float] = {"attempt": 0, "polls": 0, "crashes": 0, "resume_refused": 0,
-                                         "waited_lane_s": 0.0, "waited_net_s": 0.0}  # Ctx's counters
+                                         "waited_lane_s": 0.0}  # Ctx's counters
         self.denied_retried = False
         self.secret_fp = False  # the last denial was a `secrets` stop on a heredoc body that merely names .env
         self.was_resumed = bool(resume)
         self.out_on = ""  # the lane that went out under this step (the writer's fallback lane)
-        self.up_now: bool | None = None  # the network probe at the last network stop
         self.finished: Answer | None = None  # an answer the last run left on disk
         self.state: callstate.CallState | None = None
         self.prepared: worker_identity.PreparedCall | None = None

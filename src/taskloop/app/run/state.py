@@ -9,7 +9,7 @@ import contextlib
 import copy
 import sqlite3
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from tlkernel import fence, wire
@@ -28,7 +28,9 @@ from tlkernel.followups import FollowupOutbox
 from tlkernel.plancheck import PlanData
 from tlkernel.review import Unfiled
 
+from taskloop.app.land import section as land
 from taskloop.app.look.state import LOOK_FIELDS
+from taskloop.app.plan import restart as plan
 from taskloop.app.run.review_glue import review_of
 from taskloop.domain.checks import trim
 from taskloop.domain.followups import FollowKey
@@ -36,6 +38,21 @@ from taskloop.stores.api import AmendDoc
 from taskloop.stores.bundle import Stores
 
 NOT_ATTRS = ("review",)  # the one field of another lane's type: reached as `engine.state.review` only
+
+
+class RestartSections(plan.Kept, land.Kept):
+    """The sum of the stage-owned restart fields."""
+
+
+def restarted(state: RunState) -> RunState:
+    """Build a fresh attempt from each stage's restart section."""
+    kept: RestartSections = {**plan.keep(state), **land.keep(state)}
+    return RunState(**kept)
+
+
+def checkpoint_hooks(state: Callable[[], RunState]) -> Sequence[Callable[[str, str], tuple[str, str]]]:
+    """Bind the stage-owned save hooks to the run's current state."""
+    return (lambda step, feedback: land.pin_validation(state(), step, feedback),)
 
 
 def read_checkpoint(stores: Stores, bead: str) -> Checkpoint | None:
@@ -105,8 +122,9 @@ class Checkpoints:
     """checkpoints/<bead>.json: the one writer. Every method is one read-modify-write of a whole record. `host` is the engine:
     its state, its bead, its run, its git."""
 
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: Any, hooks: Sequence[Callable[[str, str], tuple[str, str]]] = ()) -> None:
         self.e = host
+        self.hooks = hooks
 
     @property
     def doc(self) -> AmendDoc[Checkpoint]:
@@ -125,11 +143,10 @@ class Checkpoints:
     def save(self, *, step: str = "", stage: int = 0, rounds: int = 0, n: int = 0, feedback: str = "",
              progress: StageProgress | None = None) -> None:
         """Where the run stands. Mid-rebase (a conflict fix) HEAD is detached: the record names the task branch the close goes
-        back to. A pending land validation always parks at land-verify-red: a fix, a re-plan or an interrupted recovery must never
-        turn it into a direct-to-land checkpoint."""
+        back to. Section hooks choose the cursor before the record is written."""
         e = self.e
-        if e.pending_land_validation:
-            step, feedback = "land-verify-red", e.pending_land_validation
+        for hook in self.hooks:
+            step, feedback = hook(step, feedback)
         state = copy.deepcopy(e.state)
         state.review = review_of(e)
         self.writer().write(

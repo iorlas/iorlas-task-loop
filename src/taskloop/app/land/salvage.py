@@ -56,7 +56,7 @@ class Salvage:
         if e.git.rebasing(e.wt):
             e.git.rebase_abort(e.wt)
         if not ok:
-            e.git.reset(e.wt, e.land_state.rebase_orig, "hard")  # the work as it was, for start_again
+            e.git.reset(e.wt, e.land_state.rebase_orig, "hard")  # the work as it was, for a fresh attempt
             return "conflict"
         e.land_state.salvaged = True
         self.rebase.follow_checkpoint()

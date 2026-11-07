@@ -37,7 +37,6 @@ from tlkernel.schema import unstrict  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import engine_case as T  # noqa: E402
-from support import netgate  # noqa: E402
 from support.briefs import brief_digest  # noqa: E402
 from support.cfgs import cfg_with  # noqa: E402
 from support.checks import res  # noqa: E402
@@ -411,13 +410,6 @@ class DelegateLauncher(T.EngineTest):
         for gone in ("sandbox", "escalat", "permissions", "You have the host", "no commits", "no pushing"):
             assert gone not in w, gone
         assert "Never run the gate" in w
-
-    def test_network_down_waits_and_retries(self):
-        down = stop("network", "ref-review", say="ENOTFOUND api.anthropic.com")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [down, CLEAN]}, probe=netgate.FakeProbe([False, True]))
-        assert rc == 0
-        assert [c[0] for c in s.calls].count("reviewer") == 2
-        assert "network" in self.eng.log_path.read_text()
 
     # lifesim 2026-10-20: woken from sleep, Codex ended its turn after 12 s with a vendor error and no tokens; delegate
     # 0.26 answered failed and the engine closed two beads as failed
