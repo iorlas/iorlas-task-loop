@@ -9,7 +9,7 @@ ID_NAMES = {"bead", "bead_id", "task_id", "bid", "parent_id"}
 SHAPE_METHODS = {"split", "rsplit", "partition", "rpartition", "startswith", "endswith", "removeprefix", "removesuffix"}
 ID_READERS = {"bead_ids", "prefix_of", "mentioned_ids", "_bead_token"}
 ID_PATTERNS = ("(?:[.-][a-z0-9]+)", "-[A-Za-z0-9]+(?:\\.[0-9]+)")
-# This normalizer is shared by domain outcome/storm policy; moving it requires changing that dependency boundary.
+# This normalizer is shared by domain outcome policy; moving it requires changing that dependency boundary.
 ENTANGLED = {"taskloop/domain/lifecycle/matchers.py": {"BEAD"}}
 
 

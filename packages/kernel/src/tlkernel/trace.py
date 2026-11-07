@@ -162,5 +162,5 @@ class RunTrace(Rec):
     prev_run: str = ""
     started_because: str = ""
     faults: list[Fault] = msgspec.field(default_factory=list)
-    kind: str = ""  # the run's outcome.Kind value, and its fingerprint: what the storm detector counts
+    kind: str = ""  # the run's outcome.Kind value, and its fingerprint: used by retry escalation
     kfp: str = ""

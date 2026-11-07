@@ -98,8 +98,7 @@ Tailnet reachability remains an owner access grant; these checks prevent browser
   (network); a lane that is out and delegate's `needs_input`; held and set-aside slots (slot bead metadata, `slot_hold`/`slot_aside`
   events) and failed `slot_setup`; reconcile strays; a stalled loop. Beads with an open ask are not rows (Decisions). `ServerInfo.loops[]`
   carries the strip: `health` ok, `stalled` (a loop beats, holds no bead, `ready` beads wait and the repo logged no event for
-  `LOOP_STALL_S`, `contracts/reconcile.py`) or `absent` (the reconcile NoLoop rule, `LOOP_ABSENT_S`). Not shown: the storm stop (its file
-  is read by an adapter) and a loop's in-memory network wait. events.jsonl rows are the typed `Event` records
+  `LOOP_STALL_S`, `contracts/reconcile.py`) or `absent` (the reconcile NoLoop rule, `LOOP_ABSENT_S`). Not shown: a loop's in-memory network wait. events.jsonl rows are the typed `Event` records
   (`trail.event` is the one writer); the dashboard reads them with `events.decode` and skips a row that does not decode.
 - **park, stop, note** (built, backend item 7) write the observed run's request file `runs/<run>/owner-request.json`
   (`contracts/requests.py` `OwnerRequest {park, stop, notes[], by, t}`, merged under `owner-request.lock`, `app/run/requests.py`).

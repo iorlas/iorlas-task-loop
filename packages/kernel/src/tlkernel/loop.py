@@ -40,7 +40,7 @@ class QueueRow(Rec):
 class LoopWait(Rec):
     """A live loop's wait and the condition checked at its next probe."""
 
-    reason: Literal["storm", "low_disk", "low_ram", "no_lane"]
+    reason: Literal["low_disk", "low_ram", "no_lane"]
     wake: str
     probe_at: float
     fingerprint: str = ""

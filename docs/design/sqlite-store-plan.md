@@ -39,7 +39,6 @@ revision, so the last writer wins (`JsonStore`/`Doc`, vendored `any_json_doc`). 
 | 13 | Check durations, per-round checks | `check-durations/<repo>.json`, `runs/<run>/engine-checks*.json` | engine | RMW | W |
 | 14 | Shared flakes | `shared/<sha1>.json` | engine | RMW | C |
 | 15 | Repos index, pin, bad versions, release result | `repos.json`, `pinned.json`, `bad-versions.json`, `releases/last.json` | every tl process / release | locked or atomic RMW | C |
-| 16 | Storm | `storm/<sha1>.json` | adapters/storm.py -> loop | atomic | C |
 | 17 | Snapshots | `snapshots/delegate.status.json`, `delegate.tried.json` | `tl lanes` chore -> dashboard | atomic | W |
 | 18 | Dash/reflect state | `dash.json`, `reflect-*.json`, `dash.pid` | dashboard | atomic | W |
 | 19 | ADRs | `decisions/<repo>/ADR-n.json`, `uses.jsonl` | owner verbs -> engine, dashboard | atomic + append | C |
@@ -60,7 +59,7 @@ Moving a fact into `factory.db` must not make the DB its only record when the fa
 
 | family | class | record |
 |---|---|---|
-| rows 1-8, 10-18, 20, 21 (checkpoint, loop, parks, call state, tickets, locks, worktrees, checks, flakes, repos, storm, snapshots, dash, run-dir state, host) | D | none: the run or the loop recomputes them |
+| rows 1-8, 10-18, 20, 21 (checkpoint, loop, parks, call state, tickets, locks, worktrees, checks, flakes, repos, snapshots, dash, run-dir state, host) | D | none: the run or the loop recomputes them |
 | 9 landed | O | **no `landed` table.** git and the receipts are the record of what landed; `effect` (`land:<bead>`) stays only as a "started merging X" outbox, reconciled against git on DB loss (merged on origin/main: done; else retry or stop) |
 | 19 ADRs | R | `docs/adr/NNNN-title.md` in the repo; the DB keeps a read cache for the dashboard and `uses.jsonl` stays a log |
 | `ask` (operational: stuck, timeout, budget) | D | none; they expire |
@@ -94,7 +93,7 @@ it implies.
 | 2 loop state, 11 engine lock (a `lease` row `run` named `engine:<worktree key>`; the take stays under its kernel lock), 12 worktree records (kv rows `worktree:<repo key>:<key>`: an ownership record is evidence, not a lease), 10 slot tickets | `lease` (kinds `loop`, `slot`, `run`) (slot tickets are `lease` rows `slot` named `<repo_key>/<seq>`, the counter a `kv` row: no `slot_ticket` table, no schema bump, so an older tl is not parked as behind) | `lease` already has host, pid, start_id (the pid-reuse fix of tl-br2.13), beat, until |
 | 3 loop command, 6 owner request | `signal` | taken once (`taken`), written by the owner, read by the loop or engine |
 | 4 parks | `park` (bead, t, body) | asks-owned; written through ParkStore |
-| 5 pauses, reexec, 16 storm | `wait` (kind, wake_at, wake_on, facts, cleared) | pipeline waits |
+| 5 pauses, reexec | `wait` (kind, wake_at, wake_on, facts, cleared) | pipeline waits |
 | 7 call state | `effect` (key = bead+call key, state intent/returned/consumed, receipt) | this is exactly the outbox the review asks for |
 | 9 landed | `effect` (`land:<bead>`), outbox only | class O (2a): git and receipts are the record; no `landed` table |
 | 14, 15 (pin, bad versions, release result), 17, 18 (dash and reflect state) | `kv` (key, value JSON, stamp) | cold singleton documents: no schema of their own (`docrows.singleton`) |
