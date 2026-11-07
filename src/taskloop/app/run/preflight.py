@@ -1,74 +1,29 @@
 """Read-only admission and plans, before an engine opens files or takes a bead."""
-from pathlib import Path
 
 from tlgate import gateplan
 from tlgate.runner import cached_gate
-from tlkernel.branches import task_branch
 from tlkernel.config import EngineConfig
-from tlkernel.enums import Step
 from tlkernel.env import Env
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
-from tlkernel.ids import BeadId, TreeSha
-from tlkernel.locator import RunBundle, RunLocator
+from tlkernel.ids import BeadId
+from tlkernel.locator import RunLocator
 from tlkernel.runlayout import repo_of
-from tlkernel.slots import NotARepo
-from tlpipeline.api import read_checkpoint, select_step
+from tlpipeline.api import admission, read_checkpoint
 
-from taskloop.app.track.console import say
+from taskloop.app.track import console
 from taskloop.app.wire.closeguard import has_land
 from taskloop.stores.real import real_stores
-
-
-def _inspect_uncommitted(wt: str, paths: list[str], last: RunBundle | None, *, force: bool, continuous: bool) -> None:
-    if paths and not continuous:
-        state = str(last.manifest.state) if last else "unrecorded"
-        say(f"uncommitted work in {wt} (previous run: {state}); a WIP commit would include {len(paths)} files:")
-        for path in paths:
-            say(f"  {path}")
-        if not force:
-            raise ValueError("uncommitted work refused: use --force to allow a WIP commit")
 
 
 def inspect(bead: BeadId, wt: str, repo: str, cfg: EngineConfig, *, git: Git, who: Identity, env: Env,
             requested: str | None, fresh: bool, force: bool, continuous: bool, dry: bool, slot: str = "") -> str:
     """Return the refusal, if any. No claims, layouts, manifests, plan commands or index writes."""
-    if not dry and (continuous or not requested):
-        return ""
     stores = real_stores(who.config)
     locator = RunLocator(who.config)
-    last = locator.newest(bead, repo_of(git, wt) if wt else repo)
-    ck = None if fresh else read_checkpoint(stores, bead)
-    try:
-        branch = git.branch(wt) if wt else ""
-    except NotARepo:
-        branch = ""  # a new checkout has no branch to inspect yet
-    top = git.toplevel(wt) if branch == task_branch(bead) else ""
-    checkout = bool(top) and Path(top).resolve() == Path(wt).resolve()
-    if dry:
-        say(f"plan: bead {bead}; stage {requested or ('loop' if continuous else 'auto-next')}")
-        say(f"worktree: {wt or '(new worktree)'}; slot: {slot or '(none)'}; lease: would acquire")
-        say(f"branch: {branch or '(new task branch)'}")
-    try:
-        step = select_step(last, ck, fresh, requested)
-        if dry:
-            say(f"next stage: {step}")
-        paths = (sorted({row.path for row in git.status(wt, all_untracked=True)})
-                 if not continuous and checkout else [])
-        _inspect_uncommitted(wt, paths, last, force=force, continuous=continuous)
-        if dry and not continuous:
-            if step is Step.CLOSE and not has_land(who, bead):
-                raise ValueError("close refused: no land on record; run --stage land")
-            if step is Step.LAND:
-                tree = TreeSha(git.rev_parse(wt, "HEAD^{tree}")) if checkout and not paths else TreeSha("")
-                # A preview never executes plan_cmd. Without its answer every gate step is required.
-                planned = gateplan.PlanDecision({}) if cfg.plan_cmd is not None else None
-                if planned is not None:
-                    say("gate plan: producer deferred; requiring cached passes for every gate step")
-                if not cached_gate(cfg, git, wt, stores, env, tree, planned, clean=True):
-                    raise ValueError("land refused: no green gate for the current tree and base; run --stage gate")
-        if dry:
-            say("refusals: none")
-    except ValueError as err:
-        return str(err)
-    return ""
+    return admission.inspect(bead, wt, repo, git=git, printer=console,
+        newest=lambda bead, repo: locator.newest(bead, repo_of(git, wt) if wt else repo),
+        checkpoint=lambda: read_checkpoint(stores, bead), has_land=lambda: has_land(who, bead),
+        green_gate=lambda tree, planned: cached_gate(cfg, git, wt, stores, env, tree,
+            gateplan.PlanDecision({}) if planned else None, clean=True), plan_deferred=cfg.plan_cmd is not None,
+        requested=requested, fresh=fresh, force=force, continuous=continuous, dry=dry, slot=slot)

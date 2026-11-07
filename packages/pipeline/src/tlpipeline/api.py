@@ -1,6 +1,20 @@
 """Public functions, protocols and modules offered by the pipeline stage."""
 
-from tlpipeline import ended, outcomes, reflect_prompt, requests, run, run_roles, standalone, standalone_roles, summaries, target, trace
+from tlpipeline import (
+    admission,
+    closeguard,
+    ended,
+    outcomes,
+    reflect_prompt,
+    requests,
+    run,
+    run_roles,
+    standalone,
+    standalone_roles,
+    summaries,
+    target,
+    trace,
+)
 from tlpipeline.blocked import Blocked, FixFailed, blocked_for
 from tlpipeline.budget import Budget
 from tlpipeline.checkpoints import Checkpoints, read_checkpoint
@@ -110,9 +124,11 @@ __all__ = [
     "Waits",
     "WaitsHost",
     "World",
+    "admission",
     "ai_call",
     "answer",
     "blocked_for",
+    "closeguard",
     "ended",
     "land_answer",
     "outcome",

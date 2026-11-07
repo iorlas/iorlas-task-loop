@@ -7,26 +7,29 @@ from pathlib import Path
 from typing import Protocol
 
 from tlkernel.config import HostResources
+from tlkernel.delegateport import Route
 from tlkernel.env import Env
-from tlkernel.paths import ConfigDir
 from tlkernel.procport import Ran
 
-from taskloop.adapters.ident import config_dir
-from taskloop.app.doctor import install
-from taskloop.app.wire import setup
-from taskloop.stores.real import real_stores
+from taskloop.app.doctor import install, setup
 
 BRANCH = "tl-setup-profile"
 REF = "repos/{owner}/{repo}/git/ref/heads/"  # gh fills {owner} and {repo} from the repo it runs in
+
+
+class HostStore(Protocol):
+    def get(self) -> HostResources | None: ...
+
+    def write(self, rec: HostResources, /) -> None: ...
 
 
 class Runs(Protocol):
     def run(self, argv: list[str], *, cwd: str | None = None) -> Ran: ...
 
 
-def machine_fixes(plugin_root: Path, env: Env) -> list[str]:
+def machine_fixes(plugin_root: Path, env: Env, route: Route) -> list[str]:
     """The idempotent per-user fixes (what SessionStart makes too); -> the ids of those that were to do."""
-    todo = [f.id for f in setup.machine(plugin_root, env).fixes]
+    todo = [f.id for f in setup.machine(plugin_root, env, route).fixes]
     install.ensure_machine(plugin_root, env)
     return todo
 
@@ -42,11 +45,10 @@ def profile_of(answers: Mapping[str, str]) -> dict[str, object]:
     return {"engine": engine}
 
 
-def host_fix(answers: Mapping[str, str], env: Env) -> list[str]:
+def host_fix(answers: Mapping[str, str], store: HostStore) -> list[str]:
     """host.json from the unity-lease answer: a host that answered yes has the unity resource. An existing file is the person's: kept."""
     if answers.get("unity-lease") != "yes":
         return []
-    store = real_stores(ConfigDir(config_dir(env))).host
     if store.get() is not None:
         return []
     store.write(HostResources(resources=["unity"]))
@@ -82,17 +84,20 @@ def open_pr(repo: Path, profile: dict[str, object], sh: Runs) -> tuple[bool, str
     return (True, pr.out.strip()) if pr.exit == 0 else failed("pr create", pr)
 
 
-def apply(plugin_root: Path, env: Env, repo: Path | None, answers: Mapping[str, str], sh: Runs) -> tuple[int, list[str]]:
+def apply(
+    plugin_root: Path, env: Env, repo: Path | None, answers: Mapping[str, str], sh: Runs, facts: setup.ProfileFacts,
+    route: Route, host: HostStore,
+) -> tuple[int, list[str]]:
     """-> (exit code, report lines). A question left unanswered opens no PR."""
-    lines = [f"fixed {fix}" for fix in machine_fixes(plugin_root, env)] or ["machine: nothing to fix"]
+    lines = [f"fixed {fix}" for fix in machine_fixes(plugin_root, env, route)] or ["machine: nothing to fix"]
     if repo is None:
         return 0, lines
-    asks = setup.repo_part(repo).questions
+    asks = setup.repo_part(repo, facts).questions
     if not asks:
         return 0, lines
     missing = [q.id for q in asks if q.id not in answers]
     if missing:
         return 1, [*lines, "profile: no answer for " + ", ".join(missing) + " (--answers FILE or --yes)"]
-    lines += host_fix(answers, env)
+    lines += host_fix(answers, host)
     ok, detail = open_pr(repo, profile_of(answers), sh)
     return (0, [*lines, f"profile: PR {detail}"]) if ok else (1, [*lines, f"profile: {detail}"])
