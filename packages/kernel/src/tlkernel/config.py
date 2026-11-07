@@ -197,7 +197,8 @@ class EngineConfig(Rec):
         ".venv/**", "node_modules/**", "**/__pycache__/**", "Library/**", "Temp/**", "obj/**", "bin/**", "**/.*cache*/**"])
     land_mode: Literal["push", "pr"] = "push"  # pr: the land opens a PR and waits for the owner to merge it; the engine never merges
     land_queue: Literal["off", "shadow", "on"] = "off"  # the speculative merge queue (merge-queue.md); off: as before
-    land_queue_max_in_flight: int = 4  # the queue's cap: most gates in flight at once (floor 1); read by the rollout wiring (tl-7s2f.13), unread until then
+    # the queue cap: most gates in flight at once (floor 1); unread until the rollout wiring (tl-7s2f.13) reads it
+    land_queue_max_in_flight: int = 4
     base: str = "origin/main"
     check_links: bool = True
     owner_author: str = ""  # exact bd comment author; unset means no comment is an owner instruction
