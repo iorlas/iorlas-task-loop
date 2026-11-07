@@ -13,7 +13,7 @@ WRITERS: Final = {
     'ReposStore': {'taskloop.app.track.trail', 'taskloop.contracts.rowstores'},
     'ReleaseResultStore': {'taskloop.app.release.flow'},
     'ReflectStateStore': {'taskloop.app.report.reflect'},
-    'ParkStore': {'taskloop.app.asks.parks', 'taskloop.app.loop.take', 'taskloop.app.run.stages', 'taskloop.contracts.parks'},
+    'ParkStore': {'taskloop.app.asks.parks', 'taskloop.contracts.parks'},
     'TraceStore': {'taskloop.app.run.records', 'taskloop.contracts.finish_projection'},
     'BadVersionStore': {'taskloop.app.loop.versions'},
     'HandoffMirrorStore': {'taskloop.app.write.handoff'},

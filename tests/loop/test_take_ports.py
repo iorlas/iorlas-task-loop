@@ -38,6 +38,9 @@ class FakeParks:
     def held(self, b: Bead) -> bool:
         return b.id in self.parked
 
+    def profile_ahead(self, b: Bead, run: str, why: str) -> None:
+        self.parked.add(b.id)
+
 
 def parts(slots: FakeSlots, parks: FakeParks | None = None) -> tuple[Taker, mock.Mock, mock.Mock]:
     env, run = mock.Mock(pid=7, slots=slots, asks=parks or FakeParks()), mock.Mock()
