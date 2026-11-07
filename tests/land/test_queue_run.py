@@ -30,7 +30,7 @@ class Refs:
 
 
 class World:
-    def __init__(self, in_flight: int, red: set[str] = frozenset(), conflict: frozenset[str] = frozenset()) -> None:
+    def __init__(self, in_flight: int, red: frozenset[str] = frozenset(), conflict: frozenset[str] = frozenset()) -> None:
         self.refs, self.red, self.order, self.gated = Refs(conflict), red, [], []
         self.live = self.most = 0
         self.lock = threading.Lock()
