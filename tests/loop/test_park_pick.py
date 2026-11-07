@@ -148,4 +148,5 @@ class Pick(Case):
         files.rest_bead.assert_not_called()
         gate.hold.assert_not_called()
         rec = ParkStore(self.cfg).get(bead().id)
+        assert rec is not None
         assert c.later == ({"t-1": rec.retry_at} if permanence == "transient" else {})
