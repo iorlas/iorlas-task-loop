@@ -6,7 +6,7 @@ from typing import Any, Protocol
 from tlkernel.plancheck import PlanData
 from tlkernel.wire import Open
 
-from taskloop.domain.plan.matchers import word_set
+from taskloop.domain.work.matchers import word_set
 
 
 class Noter(Protocol):

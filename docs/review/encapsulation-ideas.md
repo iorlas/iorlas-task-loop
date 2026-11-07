@@ -36,7 +36,7 @@ upgrade_factory(bundle) -> next_job_default
 
 ## I.F02 — P1 — Refuse-and-redo: naming an acceptance item is not proving it
 
-**Evidence.** `src/taskloop/domain/review/switch.py:15` lets `review-off` override the profile. Lines 25–32 decide coverage by shared words: at least two, and half of the shorter side. `src/taskloop/app/write/review_round.py:51`–64 uses that coverage to permit the last stage to skip its reviewer. `tests/review/test_review_switch.py:56` explicitly expects landing with zero reviewer calls. The test at line 31 checks missing vocabulary, not contradictory behavior.
+**Evidence.** `src/taskloop/domain/work/switch.py:15` lets `review-off` override the profile. Lines 25–32 decide coverage by shared words: at least two, and half of the shorter side. `src/taskloop/app/write/review_round.py:51`–64 uses that coverage to permit the last stage to skip its reviewer. `tests/review/test_review_switch.py:56` explicitly expects landing with zero reviewer calls. The test at line 31 checks missing vocabulary, not contradictory behavior.
 
 **Why the idea fails.** The same generative pipeline can write a criterion and supply a command whose output does not establish it. Shared words do not make the command an independent oracle. “Account deletion preserves audit history” and “account deletion removes audit history” can share enough words to pass this coverage test. A green command named with either sentence proves only what the command actually asserts. The product promised reviewed code; it quietly substitutes a lexical match.
 

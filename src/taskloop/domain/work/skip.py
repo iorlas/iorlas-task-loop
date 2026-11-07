@@ -1,6 +1,9 @@
 """When a stage's review is skipped: a pure rule over the stage's diff, never a model call. Every changed path must be mechanical (a
 100% rename, a formatter-only change, or a path the profile allow-lists as config, generated, tools or tests); one other path, an empty
-diff or any doubt means the review runs. Docs and markdown and the profile itself are never skipped."""
+diff or any doubt means the review runs. Docs and markdown and the profile itself are never skipped.
+
+Used by: look, review, write.
+"""
 from collections.abc import Collection, Sequence
 from enum import StrEnum
 from typing import Final

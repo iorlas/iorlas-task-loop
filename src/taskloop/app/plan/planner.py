@@ -30,7 +30,7 @@ from taskloop.domain.matchers import clip
 from taskloop.domain.plan.brief import COMMENTS_ONLY
 from taskloop.domain.plan.stored import stored
 from taskloop.domain.prompts.common import DECIDED_TEXT
-from taskloop.domain.review import visual
+from taskloop.domain.work import visual
 
 REPLAN_TAIL = 12500  # characters of replan.md the planner reads
 

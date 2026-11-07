@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
 from taskloop.domain.review import kinds
-from taskloop.domain.review.matchers import AcceptanceItems, BdDemand, CodeNames, EngineActions, GateProof, Tools, Wording, word_in
+from taskloop.domain.review.matchers import AcceptanceItems, BdDemand, CodeNames, EngineActions, GateProof, Tools, word_in
 
 
 class Table(Case):
@@ -80,14 +80,6 @@ class BdDemandTable(Table):
              "work is done; the coordinator does it with bd.", "bd"),
             ("The route difference from the +2 shift (bed at 7,6 instead of 5,4) is not written into bead lifesim-d5f.33 yet. The plan "
              "leaves that to the final report and the bead note.", "bd")])
-
-
-class WordingTable(Table):
-    def test_wording(self):
-        self.rows(Wording.about_filing, [("a follow-up bead", True), ("the parser", False)])
-        self.rows(Wording.ownerish, [("Owner review of the knob values", True), ("Tune the knob values", False)])
-        self.rows(Wording.is_look, [("Only the owner can judge the look.", True), ("the owner decides the price", False)])
-        self.rows(Wording.marked_unverified, [("see https://x unverified", True), ("see https://x", False)])
 
 
 class GateProofTable(Table):
