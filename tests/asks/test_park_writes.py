@@ -2,7 +2,6 @@
 from pathlib import Path
 
 import pytest
-
 import support.paths  # noqa: F401
 from support.tmpdir import TemporaryDirectory
 

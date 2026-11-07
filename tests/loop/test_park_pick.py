@@ -5,7 +5,6 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
@@ -17,9 +16,9 @@ from taskloop.app.asks import parks
 from taskloop.app.loop.loop import Loop
 from taskloop.app.loop.queue import QueueRule
 from taskloop.app.loop.run import Where
+from taskloop.app.loop.settle import Counters, Settle
 from taskloop.app.loop.stages import EngineAsks
 from taskloop.app.loop.take import Taker
-from taskloop.app.loop.settle import Counters, Settle
 from taskloop.app.loop.verdict import Verdict
 from tlkernel.bead import Bead
 from tlkernel.config import EngineConfig, LoopConfig

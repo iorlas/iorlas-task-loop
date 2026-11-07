@@ -2,7 +2,6 @@
 from unittest.mock import Mock
 
 import pytest
-
 from support.narrow_hosts import CloseKit
 from support.pipeline_ports import FakeAskRules, FakeParkBook
 
