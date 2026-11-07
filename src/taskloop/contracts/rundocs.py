@@ -1,6 +1,6 @@
 """The small documents of one run that were files in its folder (pause, reexec, handoff, the prepare stamp, the once-per-run notes)
-as `kv` rows `run:<run>:<name>` in factory.db, and the check durations of a repo as `kv` rows `durations:<repo key>`. An older tl's file
-is adopted on first read (dual-read, never dual-write). What stays in the run folder is evidence that people and tools read as files:
+as `kv` rows `run:<run>:<name>` in factory.db, and the check durations of a repo as `kv` rows `durations:<repo key>`.
+What stays in the run folder is evidence that people and tools read as files:
 the engine log, `plan.json`, `engine-checks*.json`, the live folder, the push logs."""
 import time
 from typing import ClassVar, final
