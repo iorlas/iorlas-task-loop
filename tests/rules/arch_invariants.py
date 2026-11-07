@@ -13,7 +13,7 @@ SLICE_IMPORTS: Final = {
     "land": frozenset({"asks", "checks", "slots"}),
     "look": frozenset({"artifacts", "asks", "checks"}),
     "loop": frozenset({"asks", "release", "report", "run", "slots"}),
-    "parts": frozenset({"checks"}),
+    "parts": frozenset({"checks", "slots"}),
     "pipeline": frozenset(),
     "plan": frozenset({"asks", "checks"}),
     "prune": frozenset({"reconcile", "release", "run", "track"}),
