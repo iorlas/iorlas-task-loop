@@ -163,12 +163,8 @@ def rule(reason: str | Unknown, producer: Producer | None = None, permanence: Pe
 
 
 def history(rec: Park | None) -> dict[str, int]:
-    """Qualify legacy counters without resetting their retry budgets on upgrade."""
-    counts: dict[str, int] = {}
-    for key, count in (rec.attempts if rec is not None else {}).items():
-        qualified = key if ":" in key else attempt_key(key)
-        counts[qualified] = max(counts.get(qualified, 0), count)
-    return counts
+    """The attempts counted so far, by producer:reason."""
+    return dict(rec.attempts) if rec is not None else {}
 
 
 def delay(policy: PauseRule, attempt: int, random: Callable[[], float]) -> float:
