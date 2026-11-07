@@ -1,20 +1,21 @@
 """`QueueLand` on fakes: open PRs go through the queue (gated on Q(N), merged in order, refs dropped), a red gate ejects its entry and
 stops the run naming it, and anything the queue cannot judge takes the serial path. `Stack(queue=False)` never comes here."""
 from types import SimpleNamespace
+from typing import ClassVar
 from unittest import mock
 
 import pytest
 
 from taskloop.app.land import queue_land
 from taskloop.app.land.cmds import Stop
-from taskloop.app.land.queue_land import QueueLand, Queued
+from taskloop.app.land.queue_land import Queued, QueueLand
 from taskloop.app.land.queue_refs import Made
 from taskloop.app.land.stack import HeadMoved, Stack
 from taskloop.contracts.forge import CLOSED, OPEN, StackItem
 
 
 class FakeRefs:
-    kept: set[str] = set()
+    kept: ClassVar[set[str]] = set()
 
     def __init__(self, cmds, repo) -> None:
         self.n = 0
@@ -37,7 +38,8 @@ class World:
         self.stack = SimpleNamespace(
             profile_change=profile_change, jobs=1, repo="/r", cmds=None, last="", trees=SimpleNamespace(main_ref="origin/main"),
             resolve=lambda item: (item.branch, "h" + item.branch, pr[item.branch]), item=lambda item: self.serial.append(item.branch),
-            forge=SimpleNamespace(fetch=lambda: None), git=SimpleNamespace(rev_parse=lambda d, rev: "main0" if rev == "origin/main" else rev),
+            forge=SimpleNamespace(fetch=lambda: None),
+            git=SimpleNamespace(rev_parse=lambda d, rev: "main0" if rev == "origin/main" else rev),
             gate=SimpleNamespace(judge_queue=lambda q, parent, lock: self.judged.append((q, parent)) or q not in red),
             deliver=self.deliver)
 
@@ -67,7 +69,8 @@ def test_a_red_gate_ejects_its_entry_merges_those_ahead_and_names_it():
     assert FakeRefs.kept == set()
 
 
-@pytest.mark.parametrize("world", [{"states": (OPEN, CLOSED, OPEN)}, {"profile_change": "owner says so"}], ids=["not open", "profile change"])
+@pytest.mark.parametrize("world", [{"states": (OPEN, CLOSED, OPEN)}, {"profile_change": "owner says so"}],
+                         ids=["not open", "profile change"])
 def test_what_the_queue_cannot_judge_takes_the_serial_path(world):
     w = World(**world)
     w.run()
@@ -81,6 +84,6 @@ def test_one_item_takes_the_serial_path():
 
 
 def test_a_head_that_moved_while_queued_is_never_merged():
-    stack = SimpleNamespace(git=None)
+    stack = mock.create_autospec(Stack, instance=True)
     with pytest.raises(HeadMoved):
         Stack.crossing(stack, "task/a", "new" * 13, Queued(head="old" * 13, q="q1", tree="t1"))

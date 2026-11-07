@@ -3,17 +3,18 @@ Q(N-1) up to `jobs` at once, and merged in order through `Stack.deliver`, which 
 `Stack(queue=True)` comes here, and anything the queue cannot judge (a PR already merged or closed, a profile change, one item) takes the
 serial path unchanged."""
 import threading
-from typing import TYPE_CHECKING, final
+from typing import Protocol, final
 
-from taskloop.app.land.cmds import Stop
+from taskloop.app.land.cmds import Cmds, Stop
+from taskloop.app.land.forge import Forge
 from taskloop.app.land.queue_refs import QueueRefs
 from taskloop.app.land.queue_run import QueueRun
-from taskloop.contracts.forge import OPEN, StackItem
+from taskloop.app.land.stackgate import StackGate
+from taskloop.app.land.treecheck import TreeGuard
+from taskloop.contracts.forge import OPEN, Pr, StackItem
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.wire import Rec
 from taskloop.domain.land.queue_model import Entry, Phase
-
-if TYPE_CHECKING:
-    from taskloop.app.land.stack import Stack
 
 
 @final
@@ -25,7 +26,25 @@ class Queued(Rec):
     tree: str
 
 
-def queueable(stack: Stack, items: list[StackItem]) -> bool:
+class Host(Protocol):
+    """What the queue asks of the `Stack` that runs it (Stack imports this module, so it cannot be named here)."""
+
+    profile_change: str | None
+    jobs: int
+    repo: str
+    last: str
+    cmds: Cmds
+    git: Git
+    forge: Forge
+    gate: StackGate
+    trees: TreeGuard
+
+    def resolve(self, item: StackItem) -> tuple[str, str, Pr | None]: ...
+    def item(self, item: StackItem) -> None: ...
+    def deliver(self, item: StackItem, queued: Queued | None = None) -> None: ...
+
+
+def queueable(stack: Host, items: list[StackItem]) -> bool:
     """True when every item is an open PR (or a branch with none yet), nothing is a profile change, and there is a queue to speak of."""
     if len(items) < 2 or stack.profile_change is not None:
         return False
@@ -36,7 +55,7 @@ def queueable(stack: Stack, items: list[StackItem]) -> bool:
 
 
 class QueueLand:
-    def __init__(self, stack: Stack) -> None:
+    def __init__(self, stack: Host) -> None:
         self.stack = stack
         self.items: dict[str, StackItem] = {}
         self.git_lock = threading.Lock()
