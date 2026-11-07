@@ -165,5 +165,3 @@ class Pause(NetBase):
         self.run_engine({"plan": [PLAN], "write": [out]})
         r = self.eng.result()
         assert (r.outcome, r.kind) == ("paused", "pause_lane")
-
-
