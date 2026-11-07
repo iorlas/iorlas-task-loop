@@ -3,12 +3,12 @@ one, what landed on the base since this branch left it."""
 import json
 import os
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Protocol
 
 from atomic_io import atomic_write_json
 from tlkernel.check_files import repo_key
-from tlkernel.checkpoint import Checkpoint
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
@@ -29,8 +29,18 @@ class SharedConfig(Protocol):
     def base(self) -> str: ...
 
 
+class SharedRunState(Protocol):
+    @property
+    def plan_data(self) -> Mapping[str, Any] | None: ...
+
+
+class SharedCheckpointBody(Protocol):
+    @property
+    def state(self) -> SharedRunState: ...
+
+
 class SharedCheckpoint(Protocol):
-    def get(self) -> Checkpoint | None: ...
+    def get(self) -> SharedCheckpointBody | None: ...
 
 
 class SharedCheckpoints(Protocol):
