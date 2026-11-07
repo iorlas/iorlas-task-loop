@@ -10,8 +10,6 @@ from taskloop.app.loop.env import LoopEnv, Probe
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.loop.gate import GateRole
 from taskloop.app.loop.net import NetState
-from taskloop.app.slots import aside
-from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.beadsport import BdFailure
 from taskloop.contracts.config import LoopConfig
@@ -48,7 +46,7 @@ class Settle:
         quick = self.c.slot_quick.setdefault(name, [])
         why = f"{len(quick)} runs failed within {t.quick_fail_min:g} min each ({', '.join(quick)}): last: {v.why[:160]}"
         self.c.slot_blocked[name] = bid
-        aside.mark(SlotPool(self.env.slot_env()).named(name))
+        self.env.slots.mark_aside(name)
         self.say(f"SLOT {name}: {bid} waits for a successful reset probe or a different eligible bead: {why}")
         self.env.event("slot_aside", bid, slot=name, why=why, held=False, repo=self.env.repo)
         self.c.fails = [f for f in self.c.fails if f not in quick]
@@ -68,11 +66,7 @@ class Settle:
 
     def recovered(self, source: str, claimed: str) -> bool:
         """A loop cannot evade the bead's recovery condition by taking another slot."""
-        pool = SlotPool(self.env.slot_env())
-        if source == claimed:
-            return aside.check(pool.slot(source))
-        with pool.env.take_lock():
-            return aside.probe(pool.slot(source), required=True)
+        return self.env.slots.aside_recovered(source, claimed)
 
     def count_slot(self, v: vd.Verdict, bid: str, name: str) -> bool:
         """True when the slot was set aside for this failure: the bead's turn is over, nothing else is counted."""
@@ -83,7 +77,7 @@ class Settle:
                         and v.why.endswith(" has uncommitted work of another branch"))
         if quick and not v.pre_engine and not dirty_branch:
             try:
-                SlotPool(self.env.slot_env()).named(name).check_ready()
+                self.env.slots.check_ready(name)
                 quick = False
             except SlotFail as err:
                 quick = err.code == "slot_broken"

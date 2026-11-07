@@ -1,4 +1,4 @@
-"""The loop's take on fake slot and park ports (app/loop/takeports.py): no slot, no worktree, no park store."""
+"""The loop's take on fake slot and park ports (app/loop/ports.py): no slot, no worktree, no park store."""
 import ast
 from pathlib import Path
 from unittest import mock
@@ -40,9 +40,9 @@ class FakeParks:
 
 
 def parts(slots: FakeSlots, parks: FakeParks | None = None) -> tuple[Taker, mock.Mock, mock.Mock]:
-    env, run = mock.Mock(pid=7), mock.Mock()
+    env, run = mock.Mock(pid=7, slots=slots, asks=parks or FakeParks()), mock.Mock()
     env.now.return_value = 1.0
-    return Taker(env, run, lambda: mock.Mock(pause_retry=60), lambda text: None, mock.Mock(), {}, slots, parks or FakeParks()), env, run
+    return Taker(env, run, lambda: mock.Mock(pause_retry=60), lambda text: None, mock.Mock(), {}), env, run
 
 
 def taker(slots: FakeSlots) -> Taker:
@@ -88,3 +88,14 @@ def test_take_imports_no_stage_package():
     named = {n.module.split(".")[2] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module
              and n.module.startswith("taskloop.app.") and n.module.split(".")[2] in stages}
     assert named == set()
+
+
+def test_no_loop_module_imports_a_stage_package_but_its_adapters():
+    stages = {"asks", "slots", "release", "land", "checks", "plan", "write", "review", "look", "run", "report", "doctor"}
+    for path in Path(take.__file__).parent.glob("*.py"):
+        if path.name == "stages.py":
+            continue
+        tree = ast.parse(path.read_text())
+        named = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module
+                 and n.module.startswith("taskloop.app.") and n.module.split(".")[2] in stages}
+        assert named == set(), path.name

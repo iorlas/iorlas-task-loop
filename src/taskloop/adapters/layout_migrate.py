@@ -15,7 +15,7 @@ from pathlib import Path
 from taskloop.adapters import key_migrate, locks
 from taskloop.contracts import factorydb
 from taskloop.contracts.gitport import Git
-from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.paths import ConfigDir, RunFiles
 from taskloop.contracts.rowstores import ReposStore
 
 COMMAND = "tl layout migrate"
@@ -59,6 +59,8 @@ def plan(cfg: ConfigDir, keys: dict[str, str] | None = None) -> list[Move]:
     for old in ("slots", "slot-state", "decisions"):
         out += [Move(d, key_migrate.home(cfg, d.name, keys) / old) for d in _dirs(root / old)]
     out += [Move(f, key_migrate.home(cfg, f.stem, keys) / "durations.json") for f in sorted((root / "check-durations").glob("*.json"))]
+    # a run's old artifacts/ is one run attempt: its step tries are numbered apart
+    out += [Move(a, RunFiles(a.parent).artifacts(1)) for a in sorted((root / "runs").glob("*/artifacts"))]
     out += [Move(a, b) for a, b in key_migrate.moves(cfg, keys)]
     return out
 

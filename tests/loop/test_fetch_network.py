@@ -7,13 +7,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from slots.test_slot_pool import Rig
 from support.fake_loop_env import slot_loop_env
-from support.taker import real_taker
 
 from taskloop.app.asks import parks
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.gate import GateRole
 from taskloop.app.loop.net import NetState
 from taskloop.app.loop.settle import Counters, Settle
+from taskloop.app.loop.take import Taker
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.enums import Result
@@ -30,7 +30,7 @@ class FetchNetwork(Rig):
         env = slot_loop_env(self.env)
         bid = BeadId("x-1")
         self.bd.beads[bid] = Bead(id=bid, title="work", status="in_progress", assignee=self.env.actor)
-        taker = real_taker(env, mock.Mock(), LoopConfig, self.out.append, mock.Mock(), {})
+        taker = Taker(env, mock.Mock(), LoopConfig, self.out.append, mock.Mock(), {})
         with mock.patch.object(self.git, "fetch", side_effect=SlotGitError(DNS)):
             verdict = taker.prepare("s1", bid)
         assert verdict is not None

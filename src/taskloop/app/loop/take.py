@@ -6,9 +6,9 @@ from os import EX_CONFIG
 
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.env import LoopEnv
+from taskloop.app.loop.ports import LeaseHandle
 from taskloop.app.loop.queue import QueueRule, has_areas
 from taskloop.app.loop.run import BeadRun, Where
-from taskloop.app.loop.takeports import LeaseView, TakeParks, TakeSlots
 from taskloop.contracts.bdsafe import attempt
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.beadsport import BdFailure, BeadPatch
@@ -30,19 +30,18 @@ class Taken:
 
 class Taker:
     def __init__(self, env: LoopEnv, run: BeadRun, tune: Callable[[], LoopConfig], say: Callable[[str], None],
-                 record: Callable[[str, str, vd.Verdict], None], later: dict[str, float], slots: TakeSlots, parks: TakeParks) -> None:
+                 record: Callable[[str, str, vd.Verdict], None], later: dict[str, float]) -> None:
         self.env, self.run, self.tune, self.say, self.record, self.later = env, run, tune, say, record, later
-        self.slots, self.parks = slots, parks
 
     def prepare(self, slot: str, bead: str) -> vd.Verdict | None:
         """A slot gets a clean tree on the bead's branch (leftover work committed, never wiped). None when it did."""
         try:
             try:
-                self.slots.ready_for(slot, bead)
+                self.env.slots.ready_for(slot, bead)
             except SlotFail as e:
                 if e.code != "slot_broken":
                     raise
-                self.slots.ready_for(slot, bead)  # retry preservation/reset/setup before counting a slot fault
+                self.env.slots.ready_for(slot, bead)  # retry preservation/reset/setup before counting a slot fault
             return None
         except (BdFailure, SlotGitError, OSError) as e:
             attempt(self.env.store.unclaim, BeadId(bead))
@@ -53,7 +52,7 @@ class Taker:
                 return vd.taken(e.why)
             if e.code == "busy":
                 return vd.pre_engine(f"tl slot reset {slot} for {bead} found the slot busy (a live engine or a hold)")
-            if e.setup and self.slots.sets_up_at_base(slot):  # the slot is fine and clean at the base: the bead's tree breaks the setup
+            if e.setup and self.env.slots.sets_up_at_base(slot):  # the slot is fine and clean at the base: the bead's tree breaks the setup
                 return vd.setup_own_tree(e.why, f"setup-{self.env.pid}-{self.env.now()}")
             return vd.pre_engine(f"tl slot reset {slot} for {bead} did not give a clean tree: {e.why}", e.code,
                                  recovery_failed=e.code == "slot_broken")
@@ -95,12 +94,12 @@ class Taker:
         return Taken(held, bid) if held.pre_engine else None
 
     def attempt_all(self, cands: list[Bead], at: Where, slots: bool, ecfg: EngineConfig, rule: QueueRule,
-                    lease: LeaseView) -> Taken:
+                    lease: LeaseHandle) -> Taken:
         env, bid = self.env, ""
         v: vd.Verdict | None = None
         for b in cands:
             bid = b.id
-            if self.parks.held(b):
+            if env.asks.held(b):
                 continue
             try:
                 held = self.claimed(b, at, ecfg, rule)
