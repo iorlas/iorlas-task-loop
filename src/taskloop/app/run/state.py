@@ -30,8 +30,8 @@ from tlkernel.review import Unfiled
 
 from taskloop.app.land import section as land
 from taskloop.app.look.state import LOOK_FIELDS
+from taskloop.app.pipeline.review_glue import review_of
 from taskloop.app.plan import restart as plan
-from taskloop.app.run.review_glue import review_of
 from taskloop.domain.checks import trim
 from taskloop.domain.followups import FollowKey
 from taskloop.stores.api import AmendDoc

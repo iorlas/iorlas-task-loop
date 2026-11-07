@@ -53,7 +53,7 @@ def test_the_launch_wire_and_composition_files_are_roots_through_the_contract():
     assert root_ratchet.is_root("src/taskloop/app/wire/doctor.py")
     assert not root_ratchet.is_root("src/taskloop/app/doctor/install.py")
     assert root_ratchet.is_root("src/taskloop/app/run/entry.py")
-    assert not root_ratchet.is_root("src/taskloop/app/run/stages.py")
+    assert root_ratchet.is_root("src/taskloop/app/run/stages.py")
 
 
 def test_the_offenders_are_listed_worst_first():
