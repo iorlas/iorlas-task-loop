@@ -21,7 +21,7 @@ from tltestkit.narrow import must
 from support.memstores import fake_stores
 from support.spawn import port_git
 
-from taskloop.app.land import verified
+from taskloop.app.land import gate
 from tlgate import evidence
 from tlgate.cache import InputKeys, RunMemo, key_digest
 from tlkernel.bead import Bead
@@ -101,5 +101,5 @@ class Land(Case):
         assert cm.value.kind == "FAULT_LAND"
 
     def test_nothing_unverified_is_no_refusal(self):
-        assert verified.refusal(CheckRun(round=1, results=[res("ok", 0)])) == ""
-        assert not verified.deferred(unverified())
+        assert gate.refusal(CheckRun(round=1, results=[res("ok", 0)])) == ""
+        assert not gate.deferred(unverified())
