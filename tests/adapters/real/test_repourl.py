@@ -1,5 +1,5 @@
 """repo_url names a repo the same from its main checkout and from a slot, with or without an origin remote (tl-6bv: the loop read the
-storm record by the main checkout's path, the engine wrote it by its slot's path)."""
+repository identity by the main checkout's path, the engine wrote it by its slot's path)."""
 import subprocess
 from pathlib import Path
 

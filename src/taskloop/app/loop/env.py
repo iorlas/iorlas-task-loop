@@ -25,15 +25,6 @@ class Probe(Protocol):
 
 
 @dataclass(frozen=True)
-class Storm:
-    """A live storm record: nothing is claimed until it expires."""
-
-    fingerprint: str
-    banner: str
-    expires: float | None = None
-
-
-@dataclass(frozen=True)
 class ReloadNote:
     """The note an engine leaves just before it execs into a newer install."""
 
@@ -71,7 +62,6 @@ class LoopEnv:
     chores: Callable[[], None]  # stale asks, the daily reflection
     release_dead: Callable[[], list[str]]  # the claims and slots of dead runs given back (the reconcile lease rules); a line each
     ask_lines: Callable[[], list[str]]  # `tl status`: the beads parked on a dropped ask
-    storm: Callable[[], Storm | None]
     probe: Callable[[], Probe | None]  # None: no delegate to ask about the network
     event: Callable[..., Any]
     pid_alive: Callable[[int], bool]

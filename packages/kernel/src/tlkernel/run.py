@@ -31,7 +31,6 @@ class RunReport(Rec):
     cost: float = 0.0
     kind: str = ""
     fingerprint: str = ""
-    storm: str = ""
 
 
 @final
