@@ -12,10 +12,9 @@ from tlkernel.paths import ConfigDir
 from tlkernel.procport import Spawner
 from tlkernel.slots import SlotGitError
 
-from taskloop.adapters import factory as platform_factory
-from taskloop.adapters.ident import plugin_version
 from taskloop.app.artifacts import server
 from taskloop.app.launch import dash, loop, repos
+from taskloop.app.launch import factory as binding
 from taskloop.app.loop import factory
 from taskloop.app.loop.exits import last_by_lane
 from taskloop.app.loop.files import LoopFiles
@@ -71,13 +70,13 @@ def _logs(a: argparse.Namespace, files: LoopFiles, states: list[LoopState]) -> i
 def run(a: argparse.Namespace, env: Env, spawner: Spawner, who: Identity, here: Path) -> int:
     repo = repos.repo_root(a.repo)
     files = loop.files_of(repo, who.config)
-    version = plugin_version() or "unknown"
+    version = binding.version()
     try:
         if a.op == "start":
             lanes = a.lanes if a.lanes is not None else _wanted(repo, env)
             argv = [sys.executable, str(here / "tl.py"), "loop", "--repo", repo, "--wait-drained"]
             states, added = factory.start(files, repo, version, argv, spawner, lanes=lanes,
-                                          caffeinate_argv=platform_factory.caffeinate_argv)
+                                          caffeinate_argv=binding.caffeinate_argv)
             print(f"started {added} more lane(s)" if added else f"already running ({len(states)} lanes)")
             facts(files, states, repo, version)
             return dash.run("ensure", env, spawner)

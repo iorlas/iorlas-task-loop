@@ -106,7 +106,7 @@ class Factory(Case):
             args = argparse.Namespace(op="stop", repo=None, now=now)
             with (patch.object(cli.repos, "repo_root", return_value="/repo"),
                   patch.object(cli.loop, "files_of", return_value=self.files),
-                  patch.object(cli, "plugin_version", return_value="1"),
+                  patch.object(cli.binding, "version", return_value="1"),
                   patch.object(self.files, "request_stop", wraps=self.files.request_stop) as stop,
                   redirect_stdout(io.StringIO())):
                 assert cli.run(args, Env({}), self.spawn, who, Path("/code")) == 0
@@ -145,7 +145,7 @@ class Factory(Case):
             output = io.StringIO()
             with (patch.object(cli.repos, "repo_root", return_value="/repo"),
                   patch.object(cli.loop, "files_of", return_value=self.files),
-                  patch.object(cli, "plugin_version", return_value="1"),
+                  patch.object(cli.binding, "version", return_value="1"),
                   patch.object(cli.dash, "url", side_effect=lambda _: print("DASHBOARD http://localhost:7878")),
                   patch.object(cli.loop, "profile_of", return_value=RepoProfile()),
                   redirect_stdout(output)):
@@ -178,7 +178,7 @@ class Factory(Case):
             output = io.StringIO()
             with (patch.object(cli.repos, "repo_root", return_value="/repo"),
                   patch.object(cli.loop, "files_of", return_value=self.files),
-                  patch.object(cli, "plugin_version", return_value="1"),
+                  patch.object(cli.binding, "version", return_value="1"),
                   patch.object(cli.loop, "profile_of", return_value=RepoProfile()),
                   patch.object(factory, "start", return_value=([self.state], 0 if already else 1)) as start,
                   patch.object(cli.dash, "run", return_value=0) as dash,
