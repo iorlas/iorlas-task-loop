@@ -1,0 +1,87 @@
+"""The dashboard's static assets (dash-spec §12), checked by shelf's static_page_check: every JS import resolves to a file that
+exports the imported names, the vendored runtime is pinned by hash, no colour value is written outside tokens.css, JS and CSS
+together stay within 100 KB gzip; and the fixture dev server (dev/dash_fixtures.py) answers every route the page uses."""
+import importlib.util
+import json
+import threading
+import urllib.error
+import urllib.request
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+
+from tltestkit.case import Case
+
+ROOT = Path(__file__).resolve().parents[4]
+STATIC = ROOT / "packages" / "dash" / "src" / "tldash" / "static"
+FIX = ROOT / "tests" / "fixtures" / "dash"
+
+
+def load_dev_server():
+    spec = importlib.util.spec_from_file_location("dash_fixtures_dev", ROOT / "dev" / "dash_fixtures.py")
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class DevServer(Case):
+    @classmethod
+    def setup_class(cls):
+        mod = load_dev_server()
+        cls.srv = ThreadingHTTPServer(("127.0.0.1", 0), mod.make_handler("ok"))
+        threading.Thread(target=cls.srv.serve_forever, args=(0.01,), daemon=True).start()
+        cls.base = f"http://127.0.0.1:{cls.srv.server_address[1]}"
+
+    @classmethod
+    def teardown_class(cls):
+        cls.srv.shutdown()
+        cls.srv.server_close()
+
+    def get(self, path: str) -> tuple[int, bytes]:
+        try:
+            with urllib.request.urlopen(self.base + path, timeout=10) as r:
+                return r.status, r.read()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read()
+
+    def post(self, path: str, body: bytes) -> int:
+        req = urllib.request.Request(self.base + path, data=body, headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return r.status
+        except urllib.error.HTTPError as e:
+            return e.code
+
+    def test_pages_and_assets(self):
+        for path in ("/", "/components.html", "/check.html"):
+            with self.subTest(path=path):
+                assert self.get(path)[0] == 200
+        for p in STATIC.rglob("*"):
+            if p.is_file() and p.suffix in (".js", ".css", ".html"):
+                with self.subTest(asset=p.name):
+                    assert self.get("/" + p.relative_to(STATIC).as_posix())[0] == 200
+        assert self.get("/../dev/dash_fixtures.py")[0] == 404
+
+    def test_snapshot_and_its_304(self):
+        code, body = self.get("/api/snapshot")
+        assert code == 200
+        version = json.loads(body)["version"]
+        assert self.get(f"/api/snapshot?since={version}")[0] == 304
+
+    def test_every_bead_and_live_fixture(self):
+        snap = json.loads((FIX / "snapshot.json").read_text(encoding="utf-8"))
+        project = {b["id"]: b["project"] for b in snap["beads"]}
+        for kind in ("bead", "live"):
+            for f in sorted((FIX / kind).glob("*.json")):
+                with self.subTest(kind=kind, id=f.stem):
+                    code, body = self.get(f"/api/{kind}?project={project[f.stem]}&id={f.stem}")
+                    assert code == 200
+                    assert json.loads(body) == json.loads(f.read_text(encoding="utf-8"))
+        assert self.get("/api/bead?project=x&id=nope")[0] == 404
+
+    def test_every_write_and_a_bad_body(self):
+        for verb, body in json.loads((FIX / "writes.json").read_text(encoding="utf-8")).items():
+            with self.subTest(verb=verb):
+                assert self.post(f"/api/{verb}", json.dumps(body).encode()) == 200
+        assert self.post("/api/answer", b'{"project": "x", "unknown": 1}') == 400
+        assert self.post("/api/nope", b"{}") == 404

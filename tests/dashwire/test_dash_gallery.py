@@ -13,9 +13,9 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from asks.dash_ports import answering  # noqa: E402
 from support.dashes import make_dash  # noqa: E402
-from support.factory_index import seed_beads  # noqa: E402
 from support.look_world import looks, world  # noqa: E402
 
+from tldash.testing import seed_beads  # noqa: E402
 from tlkernel import gallery  # noqa: E402
 from tlkernel.ids import loop_key  # noqa: E402
 from tltestkit.narrow import must  # noqa: E402

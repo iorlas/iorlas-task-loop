@@ -40,7 +40,7 @@ EDITS = (  # (file, old, new)
         'import tlkernel as contracts\n',
     ),
     (
-        'src/taskloop_dash/cli/dash.py',
+        'packages/dash/src/tldash/cli/dash.py',
         'from taskloop import contracts\n',
         'import tlkernel as contracts\n',
     ),
@@ -61,21 +61,21 @@ EDITS = (  # (file, old, new)
         'src/taskloop/__init__.py',
         (
             '    sys.set_lazy_imports_filter(lambda importer, name, fromlist=None: name.partition(".")[0] in '
-            '("taskloop", "taskloop_dash", "tl"))'
+            '("taskloop", "tldash", "tl"))'
         ),
         (
-            '    ours = ("taskloop", "taskloop_dash", "tlkernel", "tl")\n'
+            '    ours = ("taskloop", "tldash", "tlkernel", "tl")\n'
             '    sys.set_lazy_imports_filter(lambda importer, name, fromlist=None: name.partition(".")[0] in ours)'
         ),
     ),
     (
         '.importlinter',
         (
-            '    taskloop_dash\n'
+            '    tldash\n'
             '    msgspec\n'
         ),
         (
-            '    taskloop_dash\n'
+            '    tldash\n'
             '    tlkernel\n'
             '    msgspec\n'
         ),
@@ -230,13 +230,13 @@ EDITS = (  # (file, old, new)
         (
             '    src = Path(__file__).resolve().parents[2] / "src"\n'
             '    names = set()\n'
-            '    for package in ("taskloop", "taskloop_dash"):\n'
+            '    for package in ("taskloop", "tldash"):\n'
             '        for path in (src / package).rglob("*.py"):'
         ),
         (
             '    src = Path(__file__).resolve().parents[2] / "src"\n'
             '    names = set()\n'
-            '    for root in (src / "taskloop", src / "taskloop_dash", src.parent / "packages/kernel/src/tlkernel"):\n'
+            '    for root in (src / "taskloop", src / "tldash", src.parent / "packages/kernel/src/tlkernel"):\n'
             '        for path in root.rglob("*.py"):'
         ),
     ),
@@ -316,7 +316,7 @@ def shorten(root: Path) -> list[str]:
 
 def edit(root: Path) -> int:
     n = 0
-    dash = root / "src/taskloop_dash/__init__.py"
+    dash = root / "packages/dash/src/tldash/__init__.py"
     text = dash.read_text(encoding="utf-8") if dash.exists() else ""
     if text and PATHS_IMPORT not in text:
         i = text.index('"""', 3) + 3

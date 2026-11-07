@@ -5,9 +5,9 @@ import json
 import pytest
 
 from taskloop.app.doctor import lanes
-from taskloop_dash.views import snapshot
-from taskloop_dash.views.lanecards import STATUS_MAX_AGE, lane_cards
-from taskloop_dash.views.world import World
+from tldash.views import snapshot
+from tldash.views.lanecards import STATUS_MAX_AGE, lane_cards
+from tldash.views.world import World
 from tlkernel import wire
 from tlkernel.dash import Snapshot
 from tlkernel.delegate_status import snapshot_of

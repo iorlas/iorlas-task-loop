@@ -4,10 +4,10 @@ import ast
 from pathlib import Path
 
 import pytest
-from support.dashlogs import bead
 from support.fakes import FakeBeadStore
 from support.who import who
 
+from tldash.testing import bead
 from tlkernel.bd_errors import BdCommandFailure
 from tlkernel.ids import BeadId
 from tlslots import machine

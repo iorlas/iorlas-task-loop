@@ -5,7 +5,7 @@
 root_packages =
     taskloop
     delegate
-    taskloop_dash
+    tldash
     tlkernel
     tlartifacts
     tlgate
@@ -35,7 +35,7 @@ name = import re only in adapters and domain matchers
 type = forbidden
 source_modules =
     taskloop
-    taskloop_dash
+    tldash
     delegate
 forbidden_modules = re
 allow_indirect_imports = True
@@ -56,12 +56,12 @@ allow_indirect_imports = True
 
 # Workspace tests enforce their declared dependencies in tests/rules/test_package_tests.py (TESTISO).
 [importlinter:contract:kernel-imports-nothing-of-ours]
-name = the kernel (tlkernel) imports nothing of ours: no taskloop, no taskloop_dash, no delegate
+name = the kernel (tlkernel) imports nothing of ours: no taskloop, no tldash, no delegate
 type = forbidden
 source_modules = tlkernel
 forbidden_modules =
     taskloop
-    taskloop_dash
+    tldash
     delegate
 allow_indirect_imports = True
 
@@ -112,7 +112,7 @@ name = only tlkernel imports msgspec
 type = forbidden
 source_modules =
     taskloop
-    taskloop_dash
+    tldash
 forbidden_modules = msgspec
 allow_indirect_imports = True
 ignore_imports =
@@ -136,27 +136,14 @@ source_modules = taskloop.stores
 forbidden_modules = taskloop.domain
 allow_indirect_imports = True
 
-[importlinter:contract:dash-imports-contracts-only]
-name = the dashboard imports tlkernel only
-type = forbidden
-source_modules = taskloop_dash
-forbidden_modules =
-    taskloop.domain
-    taskloop.adapters
-    taskloop.stores
-    taskloop.app
-    taskloop.cli
-    taskloop.hook
-allow_indirect_imports = True
-
 [importlinter:contract:only-launch-imports-dash]
-name = only app/launch (the verbs that start the dashboard) imports taskloop_dash
+name = only app/launch (the verbs that start the dashboard) imports tldash
 type = forbidden
 source_modules = taskloop
-forbidden_modules = taskloop_dash
+forbidden_modules = tldash
 allow_indirect_imports = True
 ignore_imports =
-    taskloop.app.launch.** -> taskloop_dash.**
+    taskloop.app.launch.** -> tldash.**
 
 [importlinter:contract:app-slices-acyclic]
 name = app slices form no cycle (a layers order, top may import below)
@@ -207,15 +194,15 @@ type = forbidden
 source_modules = delegate
 forbidden_modules =
     taskloop
-    taskloop_dash
+    tldash
 allow_indirect_imports = True
 
 [importlinter:contract:taskloop-does-not-import-delegate]
-name = taskloop and taskloop_dash import only delegate.api of delegate
+name = taskloop and tldash import only delegate.api of delegate
 type = forbidden
 source_modules =
     taskloop
-    taskloop_dash
+    tldash
 forbidden_modules =
     delegate.app
     delegate.cli
@@ -232,7 +219,7 @@ source_modules =
     tlartifacts
 forbidden_modules =
     taskloop
-    taskloop_dash
+    tldash
     delegate
 allow_indirect_imports = True
 
@@ -243,7 +230,7 @@ source_modules =
     tlgate
 forbidden_modules =
     taskloop
-    taskloop_dash
+    tldash
     delegate
 allow_indirect_imports = True
 
@@ -254,7 +241,7 @@ source_modules =
     tlwork
 forbidden_modules =
     taskloop
-    taskloop_dash
+    tldash
     delegate
 allow_indirect_imports = True
 
@@ -265,7 +252,7 @@ source_modules =
     tlslots
 forbidden_modules =
     taskloop
-    taskloop_dash
+    tldash
     delegate
 allow_indirect_imports = True
 
@@ -276,7 +263,7 @@ source_modules =
     tlpipeline
 forbidden_modules =
     taskloop
-    taskloop_dash
+    tldash
     delegate
 allow_indirect_imports = True
 
@@ -378,3 +365,18 @@ forbidden_modules =
     taskloop.domain.asks
     taskloop.domain.land
 allow_indirect_imports = True
+
+[importlinter:contract:package-dash-imports-only-the-kernel]
+name = The dash package imports the kernel, third parties and delegate.api (its console reader), never the tree or a package
+type = forbidden
+source_modules = tldash
+forbidden_modules =
+    taskloop
+    delegate
+    tlartifacts
+    tlgate
+    tlpipeline
+    tlslots
+allow_indirect_imports = True
+ignore_imports =
+    tldash.readers.logs -> delegate.api

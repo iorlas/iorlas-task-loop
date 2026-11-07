@@ -29,7 +29,6 @@ from support.checkpoints import flat_ck, stored_ck
 from support.fakes import FakeBeadStore
 from support.push_race import PushRace
 from support.spawn import port_git, real_spawner
-from support.waits import until  # noqa: F401
 from support.who import who
 from taskloop.adapters import delegate as dl
 from taskloop.adapters import delegate as lroute  # noqa: F401
@@ -75,6 +74,7 @@ from tltestkit.plans import (  # noqa: F401  (the tests' old import point)
 )
 from tltestkit.procsim import real_proc  # noqa: F401
 from tltestkit.shellkit import sh
+from tltestkit.waits import until  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[2]
 

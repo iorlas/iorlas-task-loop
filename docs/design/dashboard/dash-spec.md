@@ -428,7 +428,7 @@ The dashboard backend needs were sent to the refactor session as a heads-up on 2
 | `/api/note` | note to the worker (bead comment) | new |
 
 ### 11.3 Derived in Python (pure, tested)
-These live in pure Python functions under `taskloop_dash/views/`, each with fixture tests:
+These live in pure Python functions under `tldash/views/`, each with fixture tests:
 - the Kanban column;
 - the marker;
 - the status line;

@@ -11,10 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 # isort: split
 from support import engine_case as te
-from support.waits import until_marker
 
 from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
+from tltestkit.waits import until_marker
 
 CHILD = Path(te.ROOT, "tests", "support", "close_child.py")
 WAIT = 120

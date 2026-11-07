@@ -1,5 +1,5 @@
 """tl-bxk.10.32: the Grok lane (delegate family xai, OpenCode): its display name."""
-from taskloop_dash.views import names
+from tldash.views import names
 
 
 def test_a_lane_uses_the_reported_family():

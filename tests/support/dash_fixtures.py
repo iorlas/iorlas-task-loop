@@ -13,7 +13,7 @@ from typing import Any, Literal
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support.dash_stage_fixtures import stage_passes
-from taskloop_dash.views.snapshot import version_of
+from tldash.views.snapshot import version_of
 from tlkernel import dash as D
 from tlkernel import dashcost as DC
 from tlkernel import wire

@@ -1,12 +1,12 @@
 """The overnight scorecard strip: the project carries the numbers `tl report` computes for the loop's window, from one port."""
 
 from support.dashes import make_dash
-from support.dashlogs import T, bead
 
 from taskloop.app.report.card import score_of
-from taskloop_dash.env import Ports
-from taskloop_dash.views.snapshot import build
-from taskloop_dash.views.world import ProjectIn, World
+from tldash.env import Ports
+from tldash.testing import T, bead
+from tldash.views.snapshot import build
+from tldash.views.world import ProjectIn, World
 from tlkernel.dashhealth import Score
 from tlkernel.loop import LoopState
 

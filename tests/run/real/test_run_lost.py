@@ -14,19 +14,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from support import engine_case as te
 from support import homes
 from support.dashes import make_dash
-from support.factory_index import ingest
-from support.waits import until_marker
 
 from taskloop.app.asks import owner_verbs as requests
 from taskloop.app.loop.loop import Loop
 from taskloop.app.report import card
 from taskloop.cli import wait
+from tldash.testing import ingest
 from tlkernel import runlife
 from tlkernel.ids import loop_key
 from tlkernel.locator import RunLocator
 from tlkernel.run import RunState
 from tlkernel.runlife import STALE_AFTER, Liveness
 from tltestkit.narrow import must
+from tltestkit.waits import until_marker
 
 CHILD = Path(te.ROOT, "tests", "support", "state_child.py")
 WAIT = 120

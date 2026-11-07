@@ -35,7 +35,7 @@ def engine_sql(tree: ast.AST, *, run_projection: bool = False) -> list[int]:
 
 
 def test_dashboard_has_no_engine_table_sql() -> None:
-    root = Path(__file__).resolve().parents[2] / "src" / "taskloop_dash"
+    root = Path(__file__).resolve().parents[2] / "packages" / "dash" / "src" / "tldash"
     bad = []
     for path in sorted(root.rglob("*.py")):
         bad.extend(f"{path.relative_to(root)}:{line}" for line in engine_sql(

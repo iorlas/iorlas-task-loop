@@ -14,7 +14,9 @@ def wanted(*args: str) -> bool:
 class TestDelegateScope:
     def test_a_taskloop_or_dashboard_change_skips_delegate(self, monkeypatch):
         monkeypatch.delenv("TL_DELEGATE_TESTS", raising=False)
-        monkeypatch.setattr(scope, "changed_paths", lambda: {"src/taskloop/app/run/x.py", "src/taskloop_dash/y.py", "tests/land/test_z.py"})
+        monkeypatch.setattr(scope, "changed_paths", lambda: {
+            "src/taskloop/app/run/x.py", "packages/dash/src/tldash/y.py", "tests/land/test_z.py",
+        })
         assert not wanted("tests")
 
     @pytest.mark.parametrize(

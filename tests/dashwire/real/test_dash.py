@@ -19,7 +19,7 @@ from support import tlbd  # noqa: E402
 from support.dashes import serving  # noqa: E402
 
 from taskloop.app.launch import dash_ports  # noqa: E402
-from taskloop_dash.needs import NEEDS  # noqa: E402
+from tldash.needs import NEEDS  # noqa: E402
 from tlkernel.askstore import AskStore  # noqa: E402
 from tlkernel.dash import READ_PROTOCOL  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402

@@ -1,6 +1,6 @@
 """The dashboard's wire contract: what the page reads (GET) and sends (POST). docs/contracts/dash-api.md is its prose half.
 
-View records, never storage: a builder in taskloop_dash/views/ fills them from the stores, the page lays them out and derives nothing
+View records, never storage: a builder in tldash/views/ fills them from the stores, the page lays them out and derives nothing
 the engine decides. Times are Unix seconds; `Snapshot.t` is the server's now at build time, and the page ages from it plus the
 browser time elapsed since the fetch (a 304 keeps the old `t`). Ids are bd ids as bd prints them, paired with their project
 wherever a row can come from more than one. A field with no source yet keeps its default and the doc names the

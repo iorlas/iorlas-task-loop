@@ -1,5 +1,5 @@
 """tlpaths: put every workspace package's src/ on sys.path. Stdlib only, idempotent. The plugin runs from a checkout with `src/` on the path
-and nothing else (no installed packages), so each entry point imports this once, and `taskloop` and `taskloop_dash` import it first."""
+and nothing else (no installed packages), so each entry point imports this once, and `taskloop` and `tldash` import it first."""
 import sys
 from pathlib import Path
 

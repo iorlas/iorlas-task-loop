@@ -5,7 +5,8 @@ import subprocess
 import time
 
 import pytest
-from support.waits import until_marker
+
+from tltestkit.waits import until_marker
 
 
 def test_until_marker_bounds_stderr_read_when_a_grandchild_holds_the_pipe(tmp_path):

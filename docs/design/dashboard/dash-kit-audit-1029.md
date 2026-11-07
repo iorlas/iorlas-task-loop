@@ -1,6 +1,6 @@
 # UX consistency and UI kit audit, 2026-10-29
 
-Reviewers: Fable (UX consistency across 1k, 2b, 3b, 4c), ChatGPT/Codex (frontend architecture), Sonnet (inventory of installed taskloop_dash 0.23.127). Merged by Opus.
+Reviewers: Fable (UX consistency across 1k, 2b, 3b, 4c), ChatGPT/Codex (frontend architecture), Sonnet (inventory of installed tldash 0.23.127). Merged by Opus.
 
 ## Rule of authority
 Colour/emoji contract (review 1029) > 4c > older settled mocks. 1k/2b/3b predate the contract and drift from it.

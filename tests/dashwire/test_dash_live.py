@@ -15,14 +15,20 @@ SKILL = ROOT / "skills" / "task-loop"
 for sub in ("dash", "", "tests"):
     sys.path.insert(0, str(SKILL / sub) if sub != "tests" else str(ROOT / "tests"))
 from support import dlcall  # noqa: E402
-from support.dashlive import BEAD, STAMP, T, make_run, put  # noqa: E402
-from support.factory_index import ingest  # noqa: E402
 
 from taskloop.adapters import agent as live_agent  # noqa: E402
 from taskloop.adapters import delegate as dl  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
 from taskloop.app.workers import worker_call  # noqa: E402
-from taskloop_dash.api import live  # noqa: E402
+from tldash.api import live  # noqa: E402
+from tldash.testing import (  # noqa: E402
+    BEAD,
+    STAMP,
+    ingest,
+    make_run,
+    put,
+)
+from tldash.testing import LIVE_T as T  # noqa: E402
 from tlkernel.paths import ConfigDir  # noqa: E402
 from tltestkit.logs import typed  # noqa: E402
 from tltestkit.narrow import must  # noqa: E402

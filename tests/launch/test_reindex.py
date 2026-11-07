@@ -4,7 +4,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from support.dashlogs import RunScript
 from support.spawn import port_git, real_spawner
 from support.tlmain import tl
 
@@ -12,6 +11,7 @@ from taskloop.adapters import factorybackup
 from taskloop.app.launch import reindex
 from taskloop.app.wire import doctor
 from taskloop.cli import doctor as cli_doctor
+from tldash.testing import RunScript
 from tlkernel import factorydb
 from tlkernel.env import Env
 from tlkernel.identity import Identity
