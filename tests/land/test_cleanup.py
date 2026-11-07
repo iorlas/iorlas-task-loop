@@ -15,7 +15,8 @@ from support.fakegit import ScriptedGit
 from support.memstores import fake_stores
 
 from taskloop.app.land import cleanup
-from taskloop.app.run.closer_branch import ReleaseSlot
+from taskloop.app.land.closing import LandCleanups
+from taskloop.app.pipeline.closing_branch import ReleaseSlot
 from taskloop.contracts import fence
 from taskloop.contracts import log as rec
 from taskloop.contracts.enums import Outcome
@@ -162,8 +163,8 @@ class Cleanup(Case):
         def leave_slot(*args):
             assert self.git.local == "head"
         tree.leave_slot.side_effect = leave_slot
-        with mock.patch("taskloop.app.run.closer_branch.slot_of", return_value=""):
-            ReleaseSlot(host).run("task/a", Outcome.LANDED)
+        cleanups = LandCleanups(self.git, self.log, homes.cfg(), lambda repo: (lambda path: False), lambda repo: "main")
+        ReleaseSlot(host, tree, cleanups).run("task/a", Outcome.LANDED)
         tree.leave_slot.assert_called_once()
         assert self.git.local == ""
         cleanup.retry_logged(self.git, self.log, cfg=homes.cfg())

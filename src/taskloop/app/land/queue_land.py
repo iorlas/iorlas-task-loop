@@ -7,10 +7,12 @@ from typing import Protocol, final
 
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
+from taskloop.app.land.queue_enqueue import enqueue
 from taskloop.app.land.queue_refs import QueueRefs
 from taskloop.app.land.queue_run import QueueRun
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.land.treecheck import TreeGuard
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.forge import OPEN, Pr, StackItem
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.wire import Rec
@@ -35,6 +37,7 @@ class Host(Protocol):
     last: str
     cmds: Cmds
     git: Git
+    beads: Beads
     forge: Forge
     gate: StackGate
     trees: TreeGuard
@@ -71,10 +74,13 @@ class QueueLand:
             branch, oid, _pr = stack.resolve(item)
             self.items[branch] = item
             heads.append((branch, oid))
+        beads_of = {branch: item.bead or (branch.removeprefix("task/") if branch.startswith("task/") else "")
+                    for branch, item in self.items.items()}
+        in_flight = enqueue(stack, heads, beads_of)
         stack.forge.fetch()
         main = stack.git.rev_parse(stack.repo, stack.trees.main_ref)
         refs = QueueRefs(stack.cmds, stack.repo)
-        queue = QueueRun(refs, self.gate, self.merge, in_flight=stack.jobs, main=main)
+        queue = QueueRun(refs, self.gate, self.merge, in_flight=in_flight, main=main)
         try:
             entries = queue.run(heads)
         finally:

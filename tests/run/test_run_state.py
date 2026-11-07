@@ -18,10 +18,10 @@ from support.engine_case import EngineTest
 from support.plans import CLEAN, PLAN, WRITE
 
 # isort: split
+from taskloop.app.pipeline.closing import Closer
 from taskloop.app.pipeline.finish import terminal_state
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
-from taskloop.app.run.closer import Closer
 from taskloop.app.run.run_once import Ended, RunOnce
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunLocator

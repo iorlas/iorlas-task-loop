@@ -17,8 +17,8 @@ import support.paths  # noqa: F401
 from support.fakes import FakeBeadStore
 from support.spawn import port_git, real_spawner
 from support.who import who
+from taskloop.app.pipeline.closing import Closer
 from taskloop.app.run import engine
-from taskloop.app.run.closer import Closer
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
