@@ -4,7 +4,8 @@ from unittest import mock
 import pytest
 from support.fake_deadline import FakeDeadline
 from support.fakegit import FakeGit
-from support.narrow_hosts import Stopped, table_kit
+from support.narrow_hosts import Stopped
+from support.narrow_land import table_kit
 
 from taskloop.app.land.gate import Problem, ProblemKind
 from taskloop.app.land.host import Placing

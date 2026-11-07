@@ -222,7 +222,7 @@ class StagePreflight(Case):
         opened = self.locator.get(e.run_id)
         assert opened is not None
         assert (opened.manifest.mode, opened.manifest.owner, opened.manifest.session) == ("stage:gate", "mac-owner", "mac-session")
-        with mock.patch("taskloop.app.run.run_once.Lease"), mock.patch.object(e.ask_flow, "check"), \
+        with mock.patch("taskloop.app.run.run_once.Lease"), mock.patch.object(type(e.ask_flow), "check"), \
                 mock.patch.object(e.briefs, "export"), mock.patch.object(e.lander.gate, "run", return_value=object()):
             assert e.run(stage="gate", continuous=False) == 0
         completed = self.locator.get(e.run_id)

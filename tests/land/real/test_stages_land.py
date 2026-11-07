@@ -7,6 +7,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from run.test_stages import StagesTest
 from support.engine_case import engine, real_git
+from support.push_retry import online_push_retries
 from support.pushsim import pusher
 from support.spawn import port_git, real_spawner
 from support.who import who
@@ -63,7 +64,11 @@ class Contracts(StagesTest):
 
     @real_git("the land script is a child process that runs git push itself")
     def test_a_network_failure_on_the_push_is_retried_with_a_rest_and_lands(self):
-        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(2))
+        with online_push_retries() as (probe, clock):
+            start = clock.now()
+            rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, land=self.land_with(2), probe=probe)
+        assert clock.now() - start == 10  # two five-second rests before the successful push
+        assert probe.calls == 4  # each failed push, plus each rest
         assert rc == 0, self.blocked
         text = self.eng.log_path.read_text()
         assert text.count("the push failed with a network error") == 2

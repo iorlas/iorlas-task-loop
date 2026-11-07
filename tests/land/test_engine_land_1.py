@@ -10,6 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import gitq, homes
 from support.engine_case import EngineTest, _cells, no_repo, stop
+from support.engine_land import EngineLandMixin
 from support.gitsim import verbs
 
 from tltestkit.checks import typed
@@ -41,7 +42,7 @@ from tlwork.plan.matchers import gate_only_criteria
 from tlwork.plan.planner import Planner
 
 
-class EngineLand1Test(EngineTest):
+class EngineLand1Test(EngineLandMixin, EngineTest):
     def test_happy_path_lands_and_closes(self):
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         assert rc == 0

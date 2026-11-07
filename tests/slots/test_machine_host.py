@@ -4,16 +4,15 @@ import ast
 from pathlib import Path
 
 import pytest
-from support.fakes import FakeBeadStore
 from support.who import who
 
 from tldash.testing import bead
 from tlkernel.bd_errors import BdCommandFailure
 from tlkernel.ids import BeadId
 from tlslots import machine
-from tlslots.effects import Effects
 from tlslots.env import DEFAULT_PRIO
-from tlslots.host import SlotsHost
+from tlslots.testing import FakeSlotsHost
+from tltestkit.membeads import MemBeads as FakeBeadStore
 from tltestkit.narrow import must
 
 HOST = "fakehost"
@@ -21,13 +20,7 @@ PACKAGE = Path(machine.__file__).parent
 
 
 def fake_host(store, *, peek=None):
-    def refused(*args, **kwargs):
-        raise AssertionError("the test did not expect this machine question")
-
-    return SlotsHost(
-        bd=lambda actor, repo: store, peek=peek or (lambda s, bead_id: s.show(bead_id)), repo_root=lambda: "/repo",
-        hostname=lambda: HOST, os_lock=refused, event=refused, tickets=refused, now=lambda: 1.0,
-        fx=Effects(hostname=refused, proc_alive=refused, proc_start=refused, hold_path=refused, running_for=refused))
+    return FakeSlotsHost(store, peek=peek).host
 
 
 def slot(name, host=HOST, status="open"):

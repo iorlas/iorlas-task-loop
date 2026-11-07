@@ -15,7 +15,8 @@ from tltestkit.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support.fakegit import FakeGit
 from support.memstores import fake_stores
-from support.narrow_hosts import FakePushHost, Stopped
+from support.narrow_hosts import Stopped
+from support.narrow_land import FakePushHost
 
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.gate import mint, owner_refusal

@@ -64,7 +64,7 @@ Option judgments:
     a namespace package has no `__init__`.
 - **Mechanics checklist** (review, all hard-code `src` or the package names today): `tl.py:77`, `hooks/hook.py:15`, `dev/release.py:40`, `dev/{dash_fixtures,dash_profile,race}.py`,
   `tests/delegate/hermetic.py:13`, `tests/support/paths.py:14-26`; runtime `app/launch/dash.py:23,160` (dash child PYTHONPATH), `app/loop/versions.py:34` (install_key sees only `src`:
-  a change under `packages/` would go unnoticed), `app/release/selfupdate.py:14`; tests `tests/conftest.py:44-90,140-143` (preload walks `taskloop` only; the test kind is
+  a change under `packages/` would go unnoticed), `app/release/selfupdate.py:14` (now compares all of `src`, `packages`, and `dev/release.py`); tests `tests/conftest.py:44-90,140-143` (preload walks `taskloop` only; the test kind is
   decided from the path under TESTS_DIR), `pyproject testpaths=["tests"]` (so `packages/*/tests` are not collected and get no guards); selection `dev/affected.py:48-50,171-195`,
   `dev/runtests.py:155`, `tests/support/scope.py:13`; `pyrefly.toml:3,7,20`, `ruff.toml:5` + nested ruff.toml, `justfile:70`, `.importlinter` (root_packages, `msgspec-in-contracts-only`, `hot-hook`); `tests/rules/gate_rules.py:45,132,155,278,301,310`
   (SCAN has no `packages`: **the 400/80/800 caps silently stop applying there**), `arch_rules.py:16`, `temp_ratchet.py:12`, `layer_ratchet.py:28`; ~20 tests build `ROOT/"src"/"delegate"` or `"tldash"`.
@@ -324,6 +324,8 @@ Not done, by design of the slices: slice 2 (hand-offs by value for `accepted_new
 ## 11. Per-slice trackers for the selection median (tl-e5t0.81, 2026-11-08)
 
 The median is 226 of 752 tests in total and 143 beyond the 83 always-run `tests/rules` files (`dev/reach.py --commits 40` on main, 2026-11-08, 37 commits measured; it prints both numbers). Of a typical engine-touching commit's ~190–205 selected tests, 83 are the always-run rules. The target in the acceptance text is unchanged. The slices below are as seen by a typical engine-touching change: `src/taskloop/app/land/lander.py` selects 205.
+
+With tl-e5t0.82, the original 83 rules split into 41 whole-tree/change-based rules that always run and 42 scoped/SELF rules selected by input paths or import closure; the new classification pin also always runs. On the same 40-commit probe (37 measured), the total median falls from 221 to 196; the reported median beyond always-run rules changes from 138 (excluding 83) to 154 (excluding 42, now counting selected scoped rules). A lander.py edit falls from 205 to 168 files: four scoped rules remain reachable through gate_rules.py's discovery/import closure. Config edits still select every rule.
 
 | slice | selected now | owner bead | what moves it | target |
 |---|---|---|---|---|
