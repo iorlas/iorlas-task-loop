@@ -15,6 +15,8 @@ from tltestkit.tmpdir import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
+from taskloop_dash.needs import NEEDS
+from taskloop_dash.parts import DASH_PARTS
 from tlkernel import factorydb, tableowners
 from tlkernel.factoryparts import LOOK
 from tlkernel.looprows import LoopRows
@@ -359,4 +361,22 @@ def test_declared_versions_and_reader_needs(tmp_path, monkeypatch):
         factorydb.declare_needs({"look": 2})
     for opener in (factorydb.open_ro, factorydb.open_watch):
         with pytest.raises(factorydb.SchemaError, match="part look is v0, this process needs v1"):
+            opener(path)
+
+
+def test_dashboard_reader_refuses_slots_below_required_version(tmp_path, monkeypatch):
+
+    monkeypatch.setattr(factorydb._STORE, "parts", None)
+    monkeypatch.setattr(factorydb._STORE, "complete", False)
+    monkeypatch.setattr(factorydb._STORE, "needs", None)
+    monkeypatch.setattr(factorydb._STORE, "schema", factorydb.SCHEMA)
+    factorydb.declare_parts(DASH_PARTS)
+    path = tmp_path / "factory.db"
+    con = factorydb.open_rw(path)
+    assert con is not None
+    con.execute("UPDATE schema_part SET version=0 WHERE name='slots'")
+    con.close()
+    factorydb.declare_needs(NEEDS)
+    for opener in (factorydb.open_ro, factorydb.open_watch):
+        with pytest.raises(factorydb.SchemaError, match="part slots is v0, this process needs v1"):
             opener(path)
