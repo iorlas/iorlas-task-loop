@@ -3,8 +3,8 @@ from collections.abc import Sequence
 from types import MappingProxyType
 from typing import ClassVar, Final, Protocol
 
-from tlgate import evidence as check_evidence
-from tlgate.domain import planref
+from tlgate.api import evidence as check_evidence
+from tlgate.api import planref
 from tlkernel import askspecs, plancheck
 from tlkernel import checktrim as trim
 from tlkernel.askspec import AskSpec

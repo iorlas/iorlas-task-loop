@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from enum import IntEnum
 
-from tlgate import authorization
+from tlgate.api import authorization
 from tlkernel import profile_at
 from tlkernel.config import EngineConfig
 from tlkernel.env import Env

@@ -3,7 +3,7 @@ from collections.abc import Callable
 
 from tlkernel.gitport import Git
 from tlkernel.paths import ConfigDir
-from tlslots.effects import Effects
+from tlslots.api import Effects
 
 from taskloop.app.land import cleanup
 from taskloop.app.land.rebase import oneline
