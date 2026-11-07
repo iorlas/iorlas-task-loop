@@ -10,8 +10,6 @@ from tlkernel.plancheck import StageData
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.checks.host import CheckFault, CheckStuck
 from taskloop.app.checks.runner import Checker
-from taskloop.domain.asks import specs as askspecs
-from taskloop.domain.asks.spec import AskSpec
 
 
 class CheckStepHost(Protocol):
@@ -25,7 +23,8 @@ class CheckStepHost(Protocol):
     def run_checks(self, st: StageData, name: str, acceptance_first: bool = ..., groups: Sequence[str] | None = ...,
                    conflict_fix: Sequence[str] | None = ..., **meta: object) -> CheckRun: ...
     def halt_point(self, when: bool = ..., wait: float = ...) -> None: ...
-    def blocked_for(self, why: str, kind: str, stop: object = ..., spec: AskSpec | None = ...) -> Exception: ...
+    def blocked_for(self, why: str, kind: str) -> Exception: ...
+    def blocked_stuck(self, why: str, what: str, rounds: int, signature: str) -> Exception: ...
     def assert_tree(self, step: str, when: str = ...) -> None: ...
 
 
@@ -56,9 +55,9 @@ class StageChecks:
         except CheckStuck as stuck:
             self.host.assert_tree("checks", "after")
             brief = check_evidence.failure_brief(self.host.checker.reds(), self.host.run_dir)
-            raise self.host.blocked_for(f"the same checks failed with the same output in {stuck.rounds} rounds in a row: "
+            raise self.host.blocked_stuck(f"the same checks failed with the same output in {stuck.rounds} rounds in a row: "
                           "more writes will not fix them; "
                           f"it needs the owner's hint\nsignature: {stuck.signature[:400]}\n{brief}",
-                          Kind.ASK_STUCK.name, spec=askspecs.no_progress("the same red checks", stuck.rounds, stuck.signature)) from stuck
+                          "the same red checks", stuck.rounds, stuck.signature) from stuck
         self.host.assert_tree("checks", "after")
         return run
