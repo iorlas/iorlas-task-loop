@@ -56,6 +56,8 @@ def test_standard_library_own_pytest_and_normalized_third_party_imports_pass(tmp
 ])
 @pytest.mark.parametrize("folder,package,integration", [
     ("gate", "tlgate", "checks"), ("asks", "tlasks", "asks"), ("slots", "tlslots", "slots"),
+    ("work", "tlwork", "plan"), ("work", "tlwork", "review"),
+    ("work", "tlwork", "look"), ("work", "tlwork", "write"),
 ])
 def test_package_pure_integration_tests_must_move_to_the_member(tmp_path, source, folder, package, integration):
     member(tmp_path, "kernel", "tlkernel", "kernel")

@@ -1,8 +1,8 @@
 """The plan section's restart keep rule."""
 import pytest
-
 from tlkernel import wire
 from tlkernel.checkpoint import RunState
+
 from tlwork.plan.restart import keep
 
 

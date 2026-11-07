@@ -4,8 +4,6 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from support.plan_host import FakePlan
-
 from tlkernel import adrfiles
 from tlkernel.bead import Bead
 from tlkernel.ledger import Adr
@@ -15,9 +13,11 @@ from tlkernel.stop import Stop
 from tltestkit.cfgs import cfg_with
 from tltestkit.checks import typed
 from tltestkit.plans import HAS_F, PLAN
+
 from tlwork.plan import adrsync
 from tlwork.plan.planned import Planned
 from tlwork.prompts.common import RULES_MAX
+from tlwork.testing import FakePlan
 
 
 def test_outside_scope_is_filed_once_and_taste_stays(workdir):
@@ -100,7 +100,6 @@ def test_only_known_citations_are_counted_once(workdir, monkeypatch):
 def test_worker_rules_are_clipped_at_a_line_and_missing_ones_say_nothing(workdir):
     plan = FakePlan(workdir, cfg_with(worker_rules="r.md"))
     wt = Path(plan.facts.wt)
-    wt.mkdir()
     (wt / "r.md").write_text("line\n" * 1000)
     text = plan.cases.rules_text()
     assert len(text.encode("utf-8")) <= RULES_MAX

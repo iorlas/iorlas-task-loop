@@ -2,13 +2,10 @@
 of the 50 labelled send-backs of study 81 (a report, not a gate)."""
 import itertools
 import json
-import sys
 from pathlib import Path
 from typing import Any, ClassVar
 
 from tltestkit.case import Case
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tlwork.review import findings as fnd
 from tlwork.work.ledger import Ledger

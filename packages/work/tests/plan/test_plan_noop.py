@@ -1,17 +1,16 @@
 """An untouched empty plan parks; existing work keeps the finished-work policy."""
 import pytest
-from support.plan_host import FakePlan
-
 from tlkernel.kinds import Kind
-from tlpipeline.api import Blocked, blocked_for
 from tltestkit.checks import typed
 from tltestkit.plans import PLAN
+
+from tlwork.testing import FakePlan
+from tlwork.testing_parts import WorkStop as Blocked
 
 
 @pytest.fixture
 def plan(workdir):
     plan = FakePlan(workdir)
-    plan.ports.blocked_for = blocked_for
     return plan
 
 

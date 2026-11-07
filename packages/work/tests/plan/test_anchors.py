@@ -4,6 +4,7 @@ from typing import Any, ClassVar
 from tlkernel import answers
 from tlkernel.plancheck import PlanData, adhoc
 from tltestkit.case import Case
+
 from tlwork.plan.stored import role_view, stored
 from tlwork.prompts.anchors import anchors_text, unanchored
 

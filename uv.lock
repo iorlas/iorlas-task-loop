@@ -264,13 +264,17 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
+    { name = "tltestkit" },
 ]
 
 [package.metadata]
 requires-dist = [{ name = "msgspec" }]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest" }]
+dev = [
+    { name = "pytest" },
+    { name = "tltestkit", editable = "packages/testkit" },
+]
 
 [[package]]
 name = "tlpipeline"
