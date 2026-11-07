@@ -12,7 +12,7 @@ from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
 from tlkernel.planbrief import owner_written
 
-from tlasks import hold, intake, parks
+from tlasks import hold, parks
 from tlasks.host import AsksHost
 
 
@@ -48,7 +48,7 @@ def _blocked_by_engine(h: AsksHost, b: Bead, store: Beads, home: ConfigDir, owne
     if held:
         return "blocked by {}".format(", ".join(held))
     cs = store.comments(bead_id)
-    blocks = [c for c in cs if intake.engine_written(c) and c.text.startswith("Blocked:")]
+    blocks = [c for c in cs if hold.engine_written(c) and c.text.startswith("Blocked:")]
     if not blocks:
         return "blocked by a person, not by the engine"
     after = [c for c in cs if c.created_at > blocks[-1].created_at and owner_written(c, owner_author)]
@@ -75,7 +75,7 @@ def admit(h: AsksHost, bead_id: BeadId, repo: str, git: Git, who: Identity, stor
     b = h.peek(store, bead_id) or Bead(id=bead_id, title="", status="")
     holder, me = b.assignee, who.actor
     if hold.held(b.metadata, at or time.time()):
-        return False, f"held by the owner ({b.metadata[intake.HOLD]}): `tl hold {bead_id} --release` lets it go"
+        return False, f"held by the owner ({b.metadata[hold.HOLD]}): `tl hold {bead_id} --release` lets it go"
     if holder and holder != me:
         why = _foreign_claim(b, repo, git, who, store, fresh, running_now=running_now)
         if why:
