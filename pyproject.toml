@@ -8,10 +8,16 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest", "pytest-xdist"]
+dev = ["pytest", "pytest-xdist", "tltestkit"]
 
 [tool.uv]
 package = false
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+tltestkit = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
