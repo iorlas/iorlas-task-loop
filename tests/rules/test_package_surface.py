@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SURFACE = {"tlpipeline": ("api", "testing", "contracts")}
+SURFACE = {"tlareas": ("policy",), "tlpipeline": ("api", "testing", "contracts")}
 PACKAGE_ONLY = {
     "tlslots": ("api", "testing"),
     "tlasks": ("api", "testing", "contracts"),

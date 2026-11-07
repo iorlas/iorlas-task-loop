@@ -13,6 +13,7 @@ root_packages =
     tlslots
     tlasks
     tlrelease
+    tlareas
     tlpipeline
     msgspec
     re
@@ -259,6 +260,17 @@ forbidden_modules =
     delegate
 allow_indirect_imports = True
 
+[importlinter:contract:package-areas-imports-only-the-kernel]
+name = tlareas imports the kernel and third parties only
+type = forbidden
+source_modules =
+    tlareas
+forbidden_modules =
+    taskloop
+    tldash
+    delegate
+allow_indirect_imports = True
+
 [importlinter:contract:package-slots-imports-only-the-kernel]
 name = tlslots imports the kernel and third parties only
 type = forbidden
@@ -355,6 +367,7 @@ source_modules =
     tlwork.plan
     taskloop.app.reconcile
     tlrelease
+    tlareas
 forbidden_modules =
     taskloop.app.run
     taskloop.app.wire

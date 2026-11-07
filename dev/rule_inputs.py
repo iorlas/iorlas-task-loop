@@ -103,6 +103,7 @@ RULES_BY_PATH = {
         "src/taskloop/app/loop/ruff.toml",
         "src/taskloop/app/reconcile/**/*.py",
         "src/taskloop/app/reconcile/ruff.toml",
+        "packages/areas/**",
         "packages/release/src/**/*.py",
         "packages/release/ruff.toml",
     ),
