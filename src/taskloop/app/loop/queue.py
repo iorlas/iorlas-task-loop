@@ -8,9 +8,9 @@ from dataclasses import dataclass, field
 
 from tlkernel import pickset
 from tlkernel.bead import Bead
-from tlkernel.beadsport import BdFailure, BeadQuery, Beads
+from tlkernel.beadsport import BdFailure, BeadPatch, BeadQuery, Beads
 from tlkernel.config import EngineConfig
-from tlkernel.ids import BeadId, is_bead_id
+from tlkernel.ids import BeadId, is_bead_id, parse_bead_id
 from tlkernel.loop import Skip
 
 from taskloop.app.loop import hosts
@@ -265,3 +265,34 @@ def rank_ready(env: LoopEnv, cfg: EngineConfig, say: Callable[[str], None] = pri
                     lambda b: hosts.skip_of(cfg, env.host(), b))
     rule.chosen, rule.only = chosen, bool(only)
     return rule.rank(ready, env.repo, open_beads), rule
+
+
+def owner_queue(op: str, ids: list[str], store: Beads, now: Callable[[], float]) -> tuple[int, list[str]]:
+    """Apply the owner's queue operation and return its exit code and display lines."""
+    if op in ("add", "remove") and not ids:
+        return 2, [f"tl: queue {op}: name at least one bead"]
+    try:
+        if op == "add":
+            t = int(now() * 1000)
+            for n, raw in enumerate(ids):
+                bid = parse_bead_id(raw)
+                if store.show(bid) is None:
+                    return 1, [f"tl: no such bead {raw}"]
+                store.add_label(bid, pickset.LABEL)
+                store.update(bid, BeadPatch(set_metadata={pickset.AT: str(t + n)}))
+        elif op == "remove":
+            for raw in ids:
+                bid = parse_bead_id(raw)
+                store.remove_label(bid, pickset.LABEL)
+                store.update(bid, BeadPatch(unset_metadata=[pickset.AT]))
+        beads = store.find(BeadQuery(label=pickset.LABEL))
+    except (BdFailure, ValueError) as e:
+        return 1, [f"tl: {e}"]
+    chosen = pickset.members(beads)
+    by_id = {b.id: b for b in beads}
+    lines = []
+    if not chosen:
+        lines.append("queue empty: the loop takes any ready bead")
+    for n, i in enumerate(chosen, 1):
+        lines.append(f"{n}. {i}  {by_id[i].status}  {by_id[i].title[:70]}")
+    return 0, lines
