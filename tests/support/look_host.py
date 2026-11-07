@@ -87,4 +87,3 @@ class FakeLook:
         self.pictures = self.ports.pictures = Pictures(self.facts, self.ports, self.state, self.hand, git)
         self.owner_look = OwnerLook(self.facts, self.ports, self.state, self.hand, git)
         self.judge = Judge(self.facts, self.ports, self.state, self.hand)
-
