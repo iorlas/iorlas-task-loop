@@ -1,8 +1,8 @@
 """WriteRound: the writer's half of a round. The prompt (the whole one, or the delta of a resumed writer), the call, what the answer
 means (a question, an accepted requirement that decides it, shots a visual stage owes) and the cases it adds."""
-from typing import Any
 
 from taskloop.app.write import show_check
+from taskloop.app.write.host import WriteHost
 from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.prompts import SHOTS_FIX, write_prompt
 from taskloop.app.write.state import AGAIN, REPLAN, RoundResult, StageState, carrying
@@ -18,7 +18,7 @@ CASES_NOW = ("\nThe plan's acceptance cases run on this last stage. If you find 
 
 
 class WriteRound:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: WriteHost) -> None:
         self.e = host
 
     def run(self, s: StageState, *, look: bool = True) -> RoundResult:
@@ -108,7 +108,7 @@ class WriteRound:
         out.rounds += 1
         stuck = out.stuck_why = f"the writer asked what an accepted requirement decides: {w['decided']}"
         e.warn(f"{s.name}: {stuck[:300]}")
-        if s.rounds >= int(e.cfg.max_rounds):
+        if s.rounds >= e.cfg.max_rounds:
             (e.run_dir / "replan.md").write_text(stuck + "\n\nThe question: " + w["question"])
             e.steps.move("replan", "rounds_used", f"{s.rounds} rounds used: {stuck}")
             return REPLAN

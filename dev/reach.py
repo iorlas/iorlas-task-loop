@@ -19,7 +19,7 @@ from affected import Repo, is_test, select
 STAGES = {
     "run": "shell", "launch": "shell", "prune": "shell", "wire": "shell", "loop": "shell",
     "plan": "work", "write": "work", "review": "work", "look": "work", "artifacts": "work", "prompts": "work",
-    "checks": "gate", "land": "land", "release": "release", "reconcile": "release", "slots": "slots", "asks": "asks",
+    "workers": "workers", "checks": "gate", "land": "land", "release": "release", "reconcile": "release", "slots": "slots", "asks": "asks",
     "report": "report", "track": "track", "doctor": "doctor", "lanes": "delegate-glue", "beads": "beads", "layout": "store",
 }
 TOP = {"taskloop_dash": "dash", "delegate": "delegate", "hook": "hook", "cli": "cli", "stores": "store"}

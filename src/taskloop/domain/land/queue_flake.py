@@ -40,6 +40,7 @@ class FlakeRow(Rec):
     t: float
     how: str
     run: str = ""
+    bead: str = ""
 
 
 def row(test: str, t: float, verdict: Verdict, retry: Attempt | None) -> FlakeRow | None:
