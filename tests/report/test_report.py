@@ -27,6 +27,7 @@ from support.runs import manifest  # noqa: E402
 import tl  # noqa: E402
 from support.checked import run_checked  # noqa: E402
 
+from taskloop.adapters.delegate import DelegateRoute  # noqa: E402
 from taskloop.app.report import planner  # noqa: E402
 from taskloop.app.report.inputs import read_jsonl  # noqa: E402
 from taskloop.domain.lifecycle import matchers  # noqa: E402
@@ -172,7 +173,8 @@ class PlannerReport(Case):
     def test_the_cli_prints_the_planner_table_read_only(self):
         before = sorted(p.name for p in self.eng.iterdir())
         out = io.StringIO()
-        with mock.patch.object(planner, "run_history", lambda since: read_jsonl(self.hist)), redirect_stdout(out):
+        rows = read_jsonl(self.hist)
+        with mock.patch.object(DelegateRoute, "history", lambda _, since=0.0: rows), redirect_stdout(out):
             rc = tl.main(["report", "--planner", "--prefix", "x", "--since", "2026-10-21", "--until", "2026-10-22"])
         text = out.getvalue()
         assert rc == 0
