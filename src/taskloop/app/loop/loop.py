@@ -21,6 +21,7 @@ from taskloop.app.loop.refuse import Refuser
 from taskloop.app.loop.run import BeadRun, Where
 from taskloop.app.loop.settle import Settle
 from taskloop.app.loop.take import Taker
+from taskloop.app.loop.takeports import EngineSlots, ParkGate
 from taskloop.app.loop.versions import Installs
 from taskloop.app.slots import line as slots_line
 from taskloop.app.slots import owned, watchdog
@@ -80,7 +81,7 @@ class Loop(Core):
         self.until = self.until if inherited else end_time(args.until, env.now())
         self.settle = Settle(env, files, self.tune, self.say, self.c, self.gate, self.net, self.left)
         self.runner = BeadRun(env, files, installs, self.tune, self.stop_mode, self.running, self.beat, self.say)
-        self.taker = Taker(env, self.runner, self.tune, self.say, self.record, self.c.later)
+        self.taker = Taker(env, self.runner, self.tune, self.say, self.record, self.c.later, EngineSlots(env), ParkGate(env))
         self.refuser = Refuser(env.store, self.say)  # lint refusals: one label and comment per bead, one line per loop
         self.watch = watchdog.Watch()  # the slot liveness look (tl-bxk.10.33.12)
         self.area_wait = [0.0, 0.0]  # when every ready bead began waiting for an area, and when that was last said
