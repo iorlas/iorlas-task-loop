@@ -6,13 +6,13 @@ from unittest import mock
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
 from support.checked import run_checked
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters.git import RealGit
 from tlkernel.env import Env, snapshot
 from tlkernel.slots import BranchPinned
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class RealGitCheckoutRebaseTest(Case):

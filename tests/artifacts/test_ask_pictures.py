@@ -1,12 +1,11 @@
 """A stuck or decision ask carries the pictures the failing check left (tl-3qz): registered in the store, named on the ask."""
 from pathlib import Path
 
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
-
 from taskloop.app.artifacts import ask_pictures, store
 from tlkernel.artifact import ArtifactSlot
 from tlkernel.paths import RunFiles
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 32
 

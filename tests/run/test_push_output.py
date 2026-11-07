@@ -4,12 +4,12 @@ from types import SimpleNamespace
 from unittest import mock
 
 import support.paths  # noqa: F401
-from support.case import Case
 from support.memstores import fake_stores
 
 from taskloop.app.run.shell import Shell
 from taskloop.stores.runlog import RunLog
 from tlkernel.log import CmdEnd
+from tltestkit.case import Case
 
 
 class PushOutput(Case):

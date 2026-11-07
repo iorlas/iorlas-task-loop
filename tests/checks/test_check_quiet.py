@@ -7,16 +7,17 @@ import sys
 from pathlib import Path
 
 import pytest
-from support.case import Case
+
+from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import procsim
-from support.tmpdir import TemporaryDirectory
 
 from checks.test_checks_speed import SpeedTest
 from taskloop.app.slots import config as wslots_config
 from tlkernel import config
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class Quiet(SpeedTest):

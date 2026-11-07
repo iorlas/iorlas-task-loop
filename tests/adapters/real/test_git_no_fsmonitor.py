@@ -4,10 +4,9 @@ import os
 import subprocess
 from pathlib import Path
 
-from support.tmpdir import TemporaryDirectory
-
 from taskloop.adapters.git import RealGit
 from tlkernel.env import Env, snapshot
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 def sh(*a, cwd):

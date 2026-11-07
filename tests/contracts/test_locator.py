@@ -6,13 +6,13 @@ from threading import Barrier
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
 
 from tlkernel.ids import RunId
 from tlkernel.locator import RunLocator, host_name
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 T0 = 1793050200.0
 

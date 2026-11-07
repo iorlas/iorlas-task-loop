@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import Any, ClassVar
 from unittest import mock
 
-from support.case import Case  # noqa: F401
 from support.world import NO_GC, SlotWorld, copy_origin_and_clone, no_repo, pid_gone, real_git  # noqa: F401
+from tltestkit.case import Case  # noqa: F401
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)

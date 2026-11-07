@@ -3,14 +3,12 @@
 from pathlib import Path
 
 import support.paths  # noqa: F401
-from support.case import Case
 from support.dashlogs import RunScript, T, bead
 from support.factory_index import ingest, seed_beads
 from support.fakes import FakeBeadStore
 from support.narrow import must
 from support.repos import write_repos
 from support.runs import manifest
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.launch.dash_ports import owner_intake, owner_writes
 from taskloop.app.pipeline import requests
@@ -21,6 +19,8 @@ from tlkernel.ids import loop_key
 from tlkernel.lookrows import LookRows
 from tlkernel.run import RunState
 from tlkernel.runrows import RunRows
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class RepoIdentity(Case):

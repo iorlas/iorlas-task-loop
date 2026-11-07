@@ -160,6 +160,9 @@ requires-dist = [{ name = "msgspec" }]
 name = "tltestkit"
 version = "0"
 source = { editable = "packages/testkit" }
+dependencies = [
+    { name = "tlkernel" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -167,6 +170,7 @@ dev = [
 ]
 
 [package.metadata]
+requires-dist = [{ name = "tlkernel", editable = "packages/kernel" }]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest" }]
