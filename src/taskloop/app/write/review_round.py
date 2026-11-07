@@ -66,7 +66,7 @@ class ReviewRound:
         note = f"{s.name}: review unavailable after bounded delegate retries (schema_invalid); stage continues"
         e.steps.outcome("unavailable", "schema_invalid: delegate retries exhausted")
         e.steps.move("next", "review_unavailable", note)
-        e.lane_notes.append(note)
+        e.write.lane_notes.append(note)
         e.warn(note)
         e.comment("Review (engine): " + note)
         e.checkpoints.keep_pending("review")

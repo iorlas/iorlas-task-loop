@@ -43,7 +43,7 @@ class ReviewInvalid(EngineTest):
         assert rc == 0
         assert script.nodes == ["plan", "write", "review", "review"]
         assert [r["outcome"] for r in self.review_ends()] == ["clean"]
-        assert not self.eng.lane_notes
+        assert not self.eng.write.lane_notes
         assert self.eng.stats["rounds"] == 0
         retries = records(self.eng, "retry_decision")
         assert [(r["action"], r["reason"]) for r in retries] == [("new_thread", "schema_invalid")]
@@ -71,14 +71,14 @@ class ReviewInvalid(EngineTest):
         rc, _ = self.go([stop("worker_failed"), stop("worker_failed")])
         assert rc == 2
         assert self.eng.kind == Kind.FAULT_INFRA
-        assert not self.eng.lane_notes
+        assert not self.eng.write.lane_notes
         assert not any(r["outcome"] == "unavailable" for r in self.review_ends())
 
     def test_invalid_writer_still_fails_the_run(self):
         rc, _ = self.go([stop("schema_invalid"), stop("schema_invalid")], node="write")
         assert rc == 2
         assert self.eng.kind == Kind.FAULT_INFRA
-        assert not self.eng.lane_notes
+        assert not self.eng.write.lane_notes
 
     def test_unavailable_review_keeps_existing_and_writer_unchecked_items(self):
         earlier = {"what": "earlier stage needs verification", "kind": "requirement"}
