@@ -93,6 +93,9 @@ class RunRequest:
     resume: str | None = None
     thread: str = ""  # opaque caller key; delegate owns resume when set
     delta_file: str | None = None  # resumed prompt; brief_file is always the whole prompt
+    prefer: str = ""
+    writer_exec: bool = False
+    reviewer_other_family: bool = False
     authored_by: str | None = None
     timeout_s: int | None = None  # wall limit for the call; delegate stops the worker's process group at it
     idle_s: int | None = None  # no output this long: the worker is hung (delegate's own watchdog; unset = the CLI's default)

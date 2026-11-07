@@ -4,9 +4,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import assert_never
 
+from tlkernel import checkmatchers as matchers
+from tlkernel import checktrim as trim
 from tlkernel.checks import UNVERIFIED_EXIT, CheckResult, CheckRun
 
-from taskloop.domain.checks import diagnostics, matchers, trim
+from taskloop.domain.checks import diagnostics
 from taskloop.domain.checks.diagnostics import CheckDiagnostics
 from taskloop.domain.checks.names import norm
 

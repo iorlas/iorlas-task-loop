@@ -18,9 +18,9 @@ from taskloop.app.run import engine
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.write import prompts as write
 from taskloop.app.write import review_prompt as review
-from taskloop.domain.lanes import caps
 from taskloop.domain.lanes.roles import ROLES
 from taskloop.domain.prompts import common
+from tlkernel import lanecaps as caps
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind, Task, fault_of

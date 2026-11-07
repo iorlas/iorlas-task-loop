@@ -8,7 +8,6 @@ Part of ARCHVERT (`stage-isolation.md` section 7, finding 6). Docs only; the sli
 
 | write | where | what it is |
 |---|---|---|
-| `e.writer_fallback`, `e.fallback_lane` | `take_answer` | the writer's thread ran on a fallback lane (only when the call resumes the writer) |
 | `e.writer.seen` | `take_answer` | the brief and plan hashes the writer has seen |
 | `e.planner_ref` | `end_call` | the planner's session ref |
 | `e.last_flag` | `end_call` | `same_family` / `degraded` of the last call, read by look, verify and review |
@@ -25,8 +24,7 @@ reuses the answer and starts the next call with a stale thread.
    `data`, `family`, and `updates: Updates`. The call never touches the engine.
 2. **`Updates`** (frozen, one per call; contracts layer, no delegate import):
    - `session: SessionUpdate | None`: `seen` for the writer's brief and plan hashes; delegate owns the thread ref and context;
-   - `fallback: Fallback | None`: `on: bool`, `lane: str`, set only when delegate said it on this answer (as `take_answer` does now);
-   - `flag: str`: `same_family` / `degraded` / `""`, with the read-only same-family override folded in by `ask` (it has the writer family in the request);
+   - `flag: str`: `same_family` / `degraded` / `""`, reported by delegate; the engine never infers it from family names;
    - `note: str`: the lane note, or `""`.
 3. **`settle(asked)`** is the caller's one function (kernel, next to `done_memo`): it applies `updates` to a `RunState` copy and writes
    the done-memo row and the checkpoint row **in one `factory.db` transaction**. `done_memo.keep` gets a variant that takes the open
@@ -37,7 +35,7 @@ reuses the answer and starts the next call with a stale thread.
    transaction (an effect that is repeated after a crash is only a duplicate line; the dedupe on `lane_notes` stays).
 5. **`last_flag` is not persisted.** It is a plain engine attribute today, not in the checkpoint; putting it there is an on-disk change that
    `Rec` refuses on a rollback. It stays in memory: `Updates.flag` is applied to the engine by the host, per call. It is not in `RunFacts` (frozen).
-6. **`settle` amends only** the session (`writer.*`), `writer_fallback`/`fallback_lane` and `planner_ref` fields of the checkpoint state. It never
+6. **`settle` amends only** the session (`writer.*`), `planner_ref` fields of the checkpoint state. It never
    writes `step`, `applied`, `ended` or any other field.
 7. **Pause stays where it is** (the `retry_after` engine field) in slices 1-2. Moving it into the close intent is the
    last step of the close-intent work (stage-isolation.md section 7), not this bead's.

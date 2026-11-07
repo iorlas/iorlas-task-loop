@@ -40,7 +40,7 @@ class PauseProducers(Case):
                 stop = policy.stop_of(result)
                 assert stop is not None
                 host = mock.Mock()
-                host.cfg.writer_family, host.cfg.second_writer_family, host.plan_data, host.budget.labels = [], "", None, []
+                host.plan_data, host.budget.labels = None, []
                 host.clock.now.return_value = 100
                 call = mock.Mock(role="worker", node="write", counts={"crashes": 0})
                 worker = mock.Mock()

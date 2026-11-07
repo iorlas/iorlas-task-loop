@@ -25,7 +25,7 @@ def test_network_stop_pauses_immediately(monkeypatch):
         thread="writer", denied_retried=False, secret_fp=False, node="write", step="write",
         limit_s=100, role="worker",
     )
-    monkeypatch.setattr(lane_acts.writer_pin, "pinned", lambda *args: None)
+    monkeypatch.setattr(lane_acts.writer_pin, "prefer", lambda *args: "")
     acts = lane_acts.LaneActs(host, worker)
     stop = lp.Stop("machine", "transient", "poll", reason="network")
     result = DelegateResult()

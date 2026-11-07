@@ -42,7 +42,7 @@ class Retry(te.EngineTest):
 
     def test_transient_retry_reuses_the_completed_plan_when_inputs_are_unchanged(self):
         later = te.stop("rate_limited", at=10**12)
-        rc, first = self.run_engine({"plan": [te.PLAN], "write": [later]}, writer_family=["openai"])
+        rc, first = self.run_engine({"plan": [te.PLAN], "write": [later]})
         assert rc == 2
         assert first.nodes.count("plan") == 1
         paused = ParkStore(self.eng.home).get(self.eng.bead)
@@ -53,7 +53,7 @@ class Retry(te.EngineTest):
         closes = [row.rec for row in self.eng.stores.run_log(self.eng.run_id).read_from(0).items if isinstance(row.rec, Close)]
         assert [row.retry_at for row in closes] == [paused.retry_at]
         with mock.patch.object(parks, "time", mock.Mock(time=lambda: paused.retry_at)):
-            rc, second = self.run_engine({"write": [te.WRITE], "review": [te.CLEAN]}, writer_family=["openai"])
+            rc, second = self.run_engine({"write": [te.WRITE], "review": [te.CLEAN]})
         assert rc == 0
         assert "plan" not in second.nodes
         assert second.nodes[0] == "write"

@@ -31,14 +31,14 @@ from taskloop.app.asks import admission
 from taskloop.app.run import running as wrunning
 from taskloop.app.slots import config as wslots_config
 from taskloop.app.wire import asks as wasks
-from taskloop.domain.checks import matchers
 from taskloop.domain.checks.cmd import matchers as sh_matchers
-from taskloop.domain.land.matchers import _TRANSIENT as TRANSIENT_PUSH
+from tlkernel import checkmatchers as matchers
 from tlkernel import wire
 from tlkernel.ask import Ask
 from tlkernel.env import snapshot
 from tlkernel.gitfacts import GitOutcome
 from tlkernel.ids import BeadId
+from tlkernel.landmatchers import _TRANSIENT as TRANSIENT_PUSH
 from tltestkit import fake_route
 from tltestkit.checks import typed
 
@@ -300,14 +300,18 @@ class DeadLane(StagesTest):
         assert rc == 0, self.blocked
         reviews = [c for c in s.calls if c[0] == "reviewer"]
         assert len(reviews) == 5  # three polls of the lane, then the route is asked again
-        assert {c[2] for c in reviews} == {"openai"}  # authored-by the writer's family on every try
+        assert all(r.reviewer_other_family for r in s.requests if r.role == "reviewer")
+        assert s.results[1]["family"] == "openai"
+        assert s.results[-1]["family"] != "openai"
 
     def test_a_reviewer_retry_after_a_writer_reroute_avoids_the_family_that_wrote(self):
         fallback = te.full(WRITE, "w2", family="xai")  # the write was routed to xai
         plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[])])  # the fallback write leaves no f.txt
         rc, s = self.run_engine({"plan": [plan], "write": [fallback], "review": [*self.blips(4, "OTHER"), CLEAN]})
         assert rc == 0, self.blocked
-        assert {c[2] for c in s.calls if c[0] == "reviewer"} == {"xai"}
+        assert all(r.reviewer_other_family for r in s.requests if r.role == "reviewer")
+        assert s.results[1]["family"] == "xai"
+        assert s.results[-1]["family"] != "xai"
 
     def test_a_review_that_only_the_writers_family_could_give_pauses_the_step(self):
         rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [*self.blips(4), te.full(CLEAN, "r", family="openai")]})

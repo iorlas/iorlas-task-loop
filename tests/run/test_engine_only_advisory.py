@@ -29,19 +29,17 @@ class Request(Case):
             with self.subTest(node=node, pinned=pinned, recipes=recipes):
                 host = mock.Mock(session="s", bead="t-1")
                 host.git.diff_entries.return_value = []
-                host.cfg.writer_family = pinned
-                host.cfg.second_writer_family = ""
                 host.plan_data = None
-                host.cfg.writer_exec_allow = []
-                host.cfg.writer_read_roots = []
-                host.budget.labels = []
+                host.cfg.writer_exec = False
+                host.cfg.reviewer_other_family = True
+                host.budget.labels = ["writer-family:" + f for f in pinned]
                 host.checker.split.return_value.engine_recipes.return_value = recipes
                 call = mock.Mock(node=node, role=role, cwd="/w", title="T", thread="writer", writer=None)
                 with mock.patch("taskloop.app.workers.worker_request.planref.stage_commands", return_value=[]):
                     req = WorkerCall(host, mock.Mock()).request(call, "live", 60, 30)
                 assert req.engine_only_advisory == expected
                 assert req.engine_only == (recipes if node == "write" else [])
-                assert req.only_family == (pinned if role == "worker" else [])
+                assert req.prefer == (pinned[0] if pinned and role == "worker" else "")
 
 
 class Advisory(te.EngineTest):
@@ -53,10 +51,8 @@ class Advisory(te.EngineTest):
         steps = {"plan": [te.PLAN], "write": [te.WRITE, stopped] if resumed else [stopped]}
         if resumed:
             steps["review"] = [te.review(unmet=["more"])]
-        rc, script = self.run_engine(
-            steps, writer_family=["openai"] if pinned else [],
-            gate="just check" if recipes else "",
-        )
+        with self.store.stub(show=dict(te.BEAD, labels=["writer-family:openai"] if pinned else [])):
+            rc, script = self.run_engine(steps, gate="just check" if recipes else "")
         assert rc == 2
         assert self.blocked == []
         return script, stopped
