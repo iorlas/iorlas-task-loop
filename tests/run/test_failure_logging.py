@@ -1,8 +1,10 @@
 """Best-effort run operations leave tracebacks when they fail instead of hiding missing evidence."""
+
 import sys
 from pathlib import Path
 from unittest import mock
 
+from taskloop.adapters import childenv, ident
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -47,7 +49,7 @@ class FailureLogging(Case):
     def test_reflection_catch_all_logs_traceback(self):
         host = mock.Mock()
         host.git.diff_entries.return_value = []
-        reflector = Reflector(host, ClosingTrust())
+        reflector = Reflector(host, ClosingTrust(), childenv.delegate_call_env)
         with mock.patch.object(reflector, "worth_asking", return_value=True), \
                 mock.patch.object(reflector, "reflect_prompt", side_effect=RuntimeError("prompt")):
             assert reflector.reflect_run("done", "finished") is None
@@ -63,5 +65,5 @@ class FailureLogging(Case):
     def test_reload_lookup_catch_all_logs_traceback(self):
         host = mock.Mock(dry=False, argv=["run-task", "t-1"])
         host.newer_fn.side_effect = RuntimeError("lookup")
-        Reload(host, FakeReexecs(), FakeTrail(), lambda: None, lambda: "").safe_point("land")
+        Reload(host, FakeReexecs(), FakeTrail(), lambda: None, lambda: "", childenv, ident).safe_point("land")
         self.assert_traceback(host.warn.call_args.args[0], "RuntimeError: lookup")

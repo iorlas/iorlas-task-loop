@@ -3,8 +3,7 @@
 from collections.abc import Callable
 
 from tlkernel.log import StepEnd, StepStart, Transition
-
-from taskloop.stores.runlog import RunLog
+from tlkernel.stagefacts import RunLogPort
 
 
 def _count(v: object) -> int | None:
@@ -25,7 +24,7 @@ class Open:
 class Steps:
     def __init__(
         self,
-        log: RunLog,
+        log: RunLogPort,
         clock: Callable[[], float],
         guard: Callable[[str], None] | None = None,
         on_begin: Callable[[str], None] | None = None,

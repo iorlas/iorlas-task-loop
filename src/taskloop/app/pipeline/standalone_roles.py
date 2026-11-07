@@ -15,15 +15,15 @@ from tlkernel.kinds import Kind
 from tlkernel.locator import RunBundle
 from tlkernel.plancheck import PlanData, RoundState
 from tlkernel.run import RunFinish, RunState
+from tlkernel.stagefacts import RunLogPort
 from tlkernel.wire import Open
 
 from taskloop.app.pipeline.closing_record import RecordHost, RecordSteps
 from taskloop.app.pipeline.crash import CrashHost
+from taskloop.app.pipeline.store_ports import StandaloneStores
 from taskloop.domain import effects
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks.spec import AskSpec
-from taskloop.stores.bundle import Stores
-from taskloop.stores.runlog import RunLog
 
 
 @runtime_checkable
@@ -59,7 +59,7 @@ class StageResult(Protocol):
 
 class StageLifecycle(Protocol):
     def __call__(self, who: Identity, repo: str, mode: str, *, bundle: RunBundle,
-                 events: bool, stores: Stores, log: RunLog) -> AbstractContextManager[StageResult]: ...
+                 events: bool, stores: StandaloneStores, log: RunLogPort) -> AbstractContextManager[StageResult]: ...
 
 
 class Checkpoints(Protocol):
@@ -121,7 +121,7 @@ class Context(Protocol):
     @property
     def who(self) -> Identity: ...
     @property
-    def stores(self) -> Stores: ...
+    def stores(self) -> StandaloneStores: ...
     @property
     def git(self) -> Git: ...
     @property

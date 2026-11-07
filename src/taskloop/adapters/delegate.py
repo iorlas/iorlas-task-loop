@@ -100,7 +100,7 @@ class RouteProbe:
             return None
 
 
-def synth_for(contract: Mapping[str, Any], reason: str, default: tuple[Scope, Permanence], text: str, ref: str = "") -> DelegateResult:
+def synth_for(contract: Mapping[str, Any], reason: str, default: tuple[Scope, Permanence], text: str) -> DelegateResult:
     """A stop with no answer to read: the facts are the contract's row for `reason`, else `default` (scope, permanence)."""
     row = (contract.get("reasons") or {}).get(reason)
     if isinstance(row, dict) and "scope" in row:
@@ -108,13 +108,14 @@ def synth_for(contract: Mapping[str, Any], reason: str, default: tuple[Scope, Pe
         perm = delegate_wire.pick(row.get("permanence"), delegate_wire.PERMANENCE, default[1])
     else:
         scope, perm = default
-    return delegate_wire.synth(reason, scope, perm, text, ref, producer="engine" if reason == "no_answer" else "delegate")
+    return delegate_wire.synth(reason, scope, perm, text, "", producer="engine" if reason == "no_answer" else "delegate")
 
 
 def api_request(req: RunRequest, env: Mapping[str, str]) -> api.RunRequest:
     """The delegate.api form of the engine's request. `env`: the worker's per-call variables ."""
     return api.RunRequest(
-        role=req.role, brief_file=req.brief_path, cwd=req.cwd, schema_file=req.schema_path, resume=req.resume or None,
+        role=req.role, brief_file=req.brief_path, cwd=req.cwd, schema_file=req.schema_path,
+        thread=req.thread, delta_file=req.delta_path or None,
         authored_by=req.authored_by or None, timeout_s=req.timeout_s or None, idle_s=req.idle_s or None, unattended=req.unattended,
         parent=req.parent, task=req.task, title=req.title[:120], call_id=req.call_id or None, live_file=req.live_file or None,
         engine_only=list(req.engine_only), engine_only_advisory=req.engine_only_advisory, only_family=list(req.only_family),
@@ -128,7 +129,8 @@ def api_request(req: RunRequest, env: Mapping[str, str]) -> api.RunRequest:
 
 
 def call(
-    resolved: Resolved, req: RunRequest, brief: str, schema: dict[str, Any], runner: Runner, env: Mapping[str, str]
+    resolved: Resolved, req: RunRequest, brief: str, schema: dict[str, Any], runner: Runner,
+    env: Mapping[str, str], delta: str | None = None
 ) -> Answer:
     """One delegate call. Never raises (but an interruption: BaseException goes on). `runner(argv, cwd=, env=, timeout=)` -> an object
     with `.returncode`, `.stdout`, `.stderr`; it raises Stopped when the engine had to end the call."""
@@ -139,7 +141,10 @@ def call(
             bf, sf = os.path.join(d, "brief.md"), os.path.join(d, "schema.json")
             Path(bf).write_text(brief, encoding="utf-8")
             Path(sf).write_text(json.dumps(schema), encoding="utf-8")
-            req = req.replace(brief_path=bf, schema_path=sf)
+            df = os.path.join(d, "delta.md") if delta is not None else req.delta_path
+            if delta is not None:
+                Path(df).write_text(delta, encoding="utf-8")
+            req = req.replace(brief_path=bf, schema_path=sf, delta_path=df)
             wire_req = api_request(req, env)
             with contextlib.suppress(ValueError):  # for the trace only (the runner takes `request`); a refused request has none
                 argv = wire_req.to_argv(resolved.route, contract=dict(c))
@@ -148,12 +153,12 @@ def call(
     except (Stopped, subprocess.TimeoutExpired) as e:
         why = e.why if isinstance(e, Stopped) else "its wall limit ran out"
         return Answer(
-            synth_for(c, REASON_TIMEOUT, ("bead", "transient"), "the engine ended the call: %s" % (why or "its time ran out"), req.resume),
+            synth_for(c, REASON_TIMEOUT, ("bead", "transient"), "the engine ended the call: %s" % (why or "its time ran out")),
             {},
             tuple(argv), str(e),
         )
     except (OSError, ValueError) as e:
-        return Answer(synth_for(c, "no_answer", ("machine", "transient"), f"delegate could not run: {e}", req.resume), {},
+        return Answer(synth_for(c, "no_answer", ("machine", "transient"), f"delegate could not run: {e}"), {},
                       tuple(argv), str(e))
     out = (p.stdout or "").strip()
     trace = "\n".join(x for x in (p.stdout, p.stderr) if x)
@@ -165,7 +170,6 @@ def call(
                 "no_answer",
                 ("machine", "transient"),
                 "delegate exit {}, no answer object: {}".format(p.returncode, out or p.stderr or ""),
-                req.resume,
             ),
             {},
             tuple(argv), trace,
@@ -187,8 +191,8 @@ class DelegateRoute:
         return ApiRunner(log_path, wall, live, on_worker)
 
     def call(self, resolved: Resolved, req: RunRequest, brief: str, schema: dict[str, Any], runner: Runner,
-             env: Mapping[str, str]) -> Answer:
-        return call(resolved, req, brief, schema, runner, env=env)
+             env: Mapping[str, str], delta: str | None = None) -> Answer:
+        return call(resolved, req, brief, schema, runner, env=env, delta=delta)
 
     def probe(self, hosts: tuple[str, ...] = ()) -> RouteProbe:
         return RouteProbe(hosts)
