@@ -1,4 +1,4 @@
-"""Ownership records of tl's worktrees as kv rows: written and read back, an unknown key refused."""
+"""Ownership records of tl's worktrees as worktree_doc rows: written and read back, an unknown key refused."""
 import json
 import uuid
 
@@ -36,6 +36,14 @@ def test_an_unknown_key_is_refused_and_repos_do_not_mix(repo):
     docs.of("a-1").write(owned())
     with docs.of("a-1").rows.transaction() as con:
         body = dict(wire.dump(owned()), future=1)
-        con.execute("UPDATE kv SET v=? WHERE k=?", (json.dumps(body), docs.of("a-1").k))
+        con.execute("UPDATE worktree_doc SET v=? WHERE k=?", (json.dumps(body), docs.of("a-1").k))
     assert docs.of("a-1").get() is None
     assert WorktreeDocs(cfg, repo + "x").keys() == []
+
+
+def test_ownership_lives_in_worktree_doc_only(repo):
+    doc = WorktreeDocs(homes.cfg(), repo).of("a-1")
+    doc.write(owned())
+    assert doc.rows.select("SELECT k FROM worktree_doc WHERE k=?", (doc.k,)) == [(doc.k,)]
+    assert doc.rows.select("SELECT k FROM kv WHERE k=?", (doc.k,)) == []
+    assert doc.get() == owned()

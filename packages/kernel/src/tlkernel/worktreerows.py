@@ -1,9 +1,11 @@
-"""The ownership records of the worktrees tl made, as `kv` rows in factory.db (key `worktree:<repo key>:<worktree key>`, the Owned in `v`).
+"""The ownership records of the worktrees tl made, as `worktree_doc` rows in factory.db
+(key `worktree:<repo key>:<worktree key>`, the Owned in `v`).
 A record says who made a worktree and is kept until the worktree is removed: evidence, not a lease."""
 import json
 import time
 
 from tlkernel import wire
+from tlkernel.docrows import WORKTREE_DOCS
 from tlkernel.looprows import LoopRows
 from tlkernel.paths import ConfigDir
 from tlkernel.worktrees import Owned
@@ -14,7 +16,7 @@ class WorktreeDoc:
         self.rows, self.k = LoopRows(cfg, ""), f"worktree:{repo_key}:{key}"
 
     def get(self) -> Owned | None:
-        found = self.rows.select("SELECT v FROM kv WHERE k=?", (self.k,))
+        found = self.rows.select(f"SELECT v FROM {WORKTREE_DOCS} WHERE k=?", (self.k,))
         if found:
             try:
                 body = json.loads(found[0][0])
@@ -25,12 +27,12 @@ class WorktreeDoc:
 
     def write(self, rec: Owned) -> None:
         with self.rows.transaction() as con:
-            con.execute("INSERT INTO kv (k, v, t) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, t=excluded.t",
+            con.execute(f"INSERT INTO {WORKTREE_DOCS} (k, v, t) VALUES (?, ?, ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v, t=excluded.t",
                         (self.k, json.dumps(wire.dump(rec), ensure_ascii=False), time.time()))
 
     def delete(self) -> None:
         with self.rows.transaction() as con:
-            con.execute("DELETE FROM kv WHERE k=?", (self.k,))
+            con.execute(f"DELETE FROM {WORKTREE_DOCS} WHERE k=?", (self.k,))
 
 
 class WorktreeDocs:
@@ -44,5 +46,5 @@ class WorktreeDocs:
 
     def keys(self) -> list[str]:
         prefix = f"worktree:{self.repo_key}:"
-        rows = LoopRows(self.cfg, "").select("SELECT k FROM kv WHERE k >= ? AND k < ?", (prefix, prefix[:-1] + ";"))
+        rows = LoopRows(self.cfg, "").select(f"SELECT k FROM {WORKTREE_DOCS} WHERE k >= ? AND k < ?", (prefix, prefix[:-1] + ";"))
         return sorted({r[0][len(prefix):] for r in rows})
