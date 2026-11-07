@@ -54,7 +54,7 @@ class OwnerText(Case):
             with self.subTest(text=text):
                 args = parser.parse_args(["land-stack", "topic", "--profile-change", text])
                 out = io.StringIO()
-                with redirect_stdout(out), mock.patch("taskloop.cli.land_stack.RunLocator") as locator:
+                with redirect_stdout(out), mock.patch("taskloop.app.land.stack.RunLocator") as locator:
                     rc = cmd_land_stack(args, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), ["tl"], env=Env())
                 assert rc == 2
                 assert len(out.getvalue().splitlines()) == 1
@@ -72,7 +72,7 @@ class OwnerText(Case):
     def test_cli_engine_context_refuses_before_any_write(self):
         args = argparse.Namespace(profile_change=TEXT)
         out = io.StringIO()
-        with redirect_stdout(out), mock.patch("taskloop.cli.land_stack.RunLocator") as locator:
+        with redirect_stdout(out), mock.patch("taskloop.app.land.stack.RunLocator") as locator:
             rc = cmd_land_stack(args, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), ["tl"],
                                 env=Env({EnvVar.TL_RUN_ID: "run"}))
         assert rc == 2
