@@ -27,7 +27,7 @@ LEFT = {  # (file, class): constructions; delete a line when the site takes its 
     ("src/taskloop/app/loop/files.py", "LoopRows"): 1,
     ("src/taskloop/app/prune/traces.py", "TraceStore"): 1,
     ("src/taskloop/app/run/context.py", "RunLog"): 1,
-    ("src/taskloop/app/run/done_memo.py", "RunRows"): 1,
+    ("src/taskloop/app/workers/done_memo.py", "RunRows"): 1,
     ("src/taskloop/app/run/outcomes.py", "JsonlStore"): 1,
     ("src/taskloop/app/run/reflect.py", "JsonlStore"): 1,
     ("src/taskloop/app/run/reload.py", "RunRows"): 1,

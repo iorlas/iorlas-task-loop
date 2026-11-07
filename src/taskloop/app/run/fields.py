@@ -13,10 +13,10 @@ from taskloop.app.look.state import LookState
 from taskloop.app.plan.state import PlanState
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.budget import Budget
-from taskloop.app.run.calls import Calls
 from taskloop.app.run.context import RunContext
 from taskloop.app.run.state import Checkpoints, StateAttrs
 from taskloop.app.run.steps import Steps
+from taskloop.app.workers.calls import Calls
 from taskloop.contracts import fence
 from taskloop.contracts.argv import text_of
 from taskloop.contracts.checkpoint import Checkpoint, RunState

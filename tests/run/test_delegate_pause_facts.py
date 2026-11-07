@@ -13,7 +13,7 @@ import support.paths  # noqa: F401
 from taskloop.app.asks import parks
 from taskloop.app.run.blocked import Blocked, blocked_for
 from taskloop.app.run.closer import Closer
-from taskloop.app.run.lane_acts import LaneActs
+from taskloop.app.workers.lane_acts import LaneActs
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.delegate import DelegateResult, Retry, StopFacts
 from taskloop.contracts.ids import BeadId
