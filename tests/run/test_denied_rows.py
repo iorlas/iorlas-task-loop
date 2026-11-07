@@ -17,4 +17,3 @@ def test_a_denied_row_keeps_kind_and_reason_from_the_wire_to_the_trace():
 def test_a_wire_denial_without_a_reason_reads_as_none():
     (d,) = denied_of([{"kind": "secret", "tool": "Bash", "input": {}}])
     assert d.reason is None
-
