@@ -26,10 +26,25 @@ LAYERS = {
 }
 
 
+PIPELINE_SRC = ROOT / "packages/pipeline/src"
+
+
+def api_homes() -> dict[str, Path]:
+    """{name: the file of the tlpipeline module api.py re-exports it from}."""
+    tree = ast.parse((PIPELINE_SRC / "tlpipeline/api.py").read_text(encoding="utf-8"))
+    return {a.asname or a.name: PIPELINE_SRC / (n.module.replace(".", "/") + ".py")
+            for n in tree.body if isinstance(n, ast.ImportFrom) and n.module and n.module.startswith("tlpipeline.")
+            for a in n.names if (PIPELINE_SRC / (n.module.replace(".", "/") + ".py")).is_file()}
+
+
 def imports(tree: ast.Module) -> dict[str, Path]:
     """{imported name: the file of its module} for the app and pipeline imports of one file."""
     found = {}
+    homes = api_homes()
     for n in ast.walk(tree):
+        if isinstance(n, ast.ImportFrom) and n.module == "tlpipeline.api":
+            found.update({a.asname or a.name: homes[a.name] for a in n.names if a.name in homes})
+            continue
         if isinstance(n, ast.ImportFrom) and n.module and n.module.startswith(("taskloop.app.", "tlpipeline.")):
             base, module = ((ROOT / "packages/pipeline/src", n.module) if n.module.startswith("tlpipeline.")
                             else (APP, n.module.removeprefix("taskloop.app.")))
@@ -38,23 +53,39 @@ def imports(tree: ast.Module) -> dict[str, Path]:
     return found
 
 
+def imports_of_module(tree: ast.Module) -> set[str]:
+    """The names a file binds with `from tlpipeline import ...` (so `api` when it calls `api.X(...)`)."""
+    return {a.asname or a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module == "tlpipeline" for a in n.names}
+
+
+def callee(call: ast.Call, known: dict[str, Path]) -> str:
+    """The name of the class or factory a call builds: `X(...)` or `api.X(...)` with X a known part class."""
+    f = call.func
+    if isinstance(f, ast.Name) and f.id in known:
+        return f.id
+    if isinstance(f, ast.Attribute) and isinstance(f.value, ast.Name) and f.value.id == "api" and f.attr in known:
+        return f.attr
+    return ""
+
+
 def part_defs() -> dict[str, tuple[str, set[str], Path]]:
     """{part: (the class or factory that builds it, parts its property body names, the file of that class)}."""
     out = {}
     for name in PARTS_FILES:
         _, tree = parsed(APP / "run" / name)
-        known = imports(tree)
+        known = imports(tree) | (api_homes() if "api" in imports_of_module(tree) else {})
         for cls in (n for n in tree.body if isinstance(n, ast.ClassDef)):
             for item in cls.body:
                 if isinstance(item, ast.Assign) and isinstance(item.value, ast.Call) \
                         and getattr(item.value.func, "id", "") == "cached_property":
                     arg = item.value.args[0]
                     target = item.targets[0]
+                    if isinstance(arg, ast.Attribute) and isinstance(arg.value, ast.Name) and arg.value.id == "api":
+                        arg = ast.Name(id=arg.attr)  # `cached_property(api.X)` builds X as `cached_property(X)` does
                     assert isinstance(arg, ast.Name) and isinstance(target, ast.Name)
                     out[target.id] = (arg.id, set(), known[arg.id])
                 elif isinstance(item, ast.FunctionDef) and any(getattr(d, "id", "") == "cached_property" for d in item.decorator_list):
-                    built = next(c.func.id for c in ast.walk(item)
-                                 if isinstance(c, ast.Call) and isinstance(c.func, ast.Name) and c.func.id in known)
+                    built = next(callee(c, known) for c in ast.walk(item) if isinstance(c, ast.Call) and callee(c, known))
                     own = {a.attr for a in ast.walk(item) if isinstance(a, ast.Attribute) and getattr(a.value, "id", "") == "self"}
                     out[item.name] = (built, own, known[built])
     return out

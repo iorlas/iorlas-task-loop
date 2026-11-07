@@ -17,7 +17,7 @@ from taskloop_dash.views.world import ProjectIn
 from tlkernel.paths import ConfigDir
 from tlkernel.run import RunState
 from tlkernel.runlife import Liveness, command_scope, host_name, shown
-from tlpipeline import requests
+from tlpipeline.api import requests
 from tltestkit.runs import manifest
 from tltestkit.tmpdir import TemporaryDirectory
 

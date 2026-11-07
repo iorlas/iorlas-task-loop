@@ -13,7 +13,7 @@ from tlkernel.checks import Check
 from tlkernel.config import CheckSpec, ConfigError, EngineConfig, load
 from tlkernel.ids import CheckId
 from tlkernel.kinds import Kind
-from tlpipeline.blocked import Blocked
+from tlpipeline.api import Blocked
 
 
 def found(*names):

@@ -22,7 +22,7 @@ from tlkernel.artifact import ArtifactMeta
 from tlkernel.config import RepoProfile, VisualConfig
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
-from tlpipeline.closing import Closer
+from tlpipeline.api import Closer
 from tltestkit import fake_route
 from tltestkit.plans import BEAD, CLEAN, PLAN, WRITE, verdict
 

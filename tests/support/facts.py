@@ -24,7 +24,7 @@ from tlkernel.paths import ConfigDir
 from tlkernel.plancheck import PlanCheck
 from tlkernel.ports import Clock
 from tlkernel.stagefacts import RunFacts
-from tlpipeline.steps import Steps
+from tlpipeline.api import Steps
 from tltestkit.cfgs import cfg_with
 from tltestkit.fake_clock import FakeClock
 

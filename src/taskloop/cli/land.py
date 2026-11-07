@@ -9,7 +9,7 @@ from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.locator import RunLocator
 from tlkernel.log import RunStart
-from tlpipeline.finish import land_answer
+from tlpipeline.api import land_answer
 
 from taskloop.app.land import cleanup
 from taskloop.app.slots.config import load_cfg, profile_slots

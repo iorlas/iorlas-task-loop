@@ -43,9 +43,7 @@ from tlkernel.pausereasons import Producer
 from tlkernel.plancheck import PlanCheck, PlanData, StageData
 from tlkernel.ports import Clock
 from tlkernel.run import RunFinish
-from tlpipeline.budget import Budget
-from tlpipeline.closing import CloseParts, Closer
-from tlpipeline.steps import Steps
+from tlpipeline.api import Budget, CloseParts, Closer, Steps
 from tlpipeline.testing import FakeAskRules, FakeParkBook
 from tltestkit.fake_clock import FakeClock
 

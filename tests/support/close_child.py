@@ -24,7 +24,7 @@ from tlkernel import runoutcome as oc
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
-from tlpipeline.closing import Closer
+from tlpipeline.api import Closer
 
 
 class Journal(list):

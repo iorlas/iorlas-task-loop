@@ -12,8 +12,7 @@ from tlkernel.identity import Identity
 from tlkernel.ids import BeadId, TreeSha
 from tlkernel.locator import RunBundle, RunLocator
 from tlkernel.slots import NotARepo
-from tlpipeline.checkpoints import read_checkpoint
-from tlpipeline.cursor import select_step
+from tlpipeline.api import read_checkpoint, select_step
 
 from taskloop.app.run.layout import repo_of
 from taskloop.app.track.console import say

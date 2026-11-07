@@ -19,8 +19,7 @@ from tlkernel.dash import Marker
 from tlkernel.ids import CheckId
 from tlkernel.runlife import SAME_RED, silent_limit
 from tlkernel.waitenums import WaitWhat
-from tlpipeline.stuck import StuckTick
-from tlpipeline.stuck_rule import StuckWatch
+from tlpipeline.api import StuckTick, StuckWatch
 from tltestkit.case import Case
 from tltestkit.memdoc import MemLog
 from tltestkit.narrow import must

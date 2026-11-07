@@ -280,4 +280,6 @@ R1–R6 are done: the pipeline lives in `packages/pipeline` (`tlpipeline`), `run
 
 The 16-member ceiling ratchet in `packages/pipeline/tests/test_role_ceiling.py` scans every pipeline Protocol’s own members. Its `OVER` table records existing exceptions and only shrinks as roles narrow.
 
-Remaining: `tl-e5t0.39.21` (`api.py`) and narrowing `CheckpointHost` (18 own members).
+API done (`tl-e5t0.39.21`): `tlpipeline.api` is the public surface; the rule `tests/rules/test_package_surface.py` fails on any outside import of another tlpipeline module.
+
+Remaining: narrowing `CheckpointHost` (18 own members).

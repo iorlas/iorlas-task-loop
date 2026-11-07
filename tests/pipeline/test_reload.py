@@ -9,7 +9,7 @@ from tlkernel import childenv, rundocs
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
-from tlpipeline.reload import Exec, Reload
+from tlpipeline.api import Exec, Reload
 from tlpipeline.testing import FakeReexecs, FakeTrail
 
 

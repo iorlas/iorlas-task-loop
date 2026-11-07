@@ -16,7 +16,7 @@ from tlgate.domain.specs import gate_items
 from tlkernel.envvars import EnvVar
 from tlkernel.procport import Ran
 from tlkernel.slots import SlotGitError
-from tlpipeline.blocked import Blocked
+from tlpipeline.api import Blocked
 from tltestkit import procsim
 
 

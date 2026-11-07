@@ -7,7 +7,7 @@ from tlkernel import askspecs, asktext
 from tlkernel.artifact import ArtifactSlot
 from tlkernel.check_files import repo_key
 from tlkernel.kinds import Kind
-from tlpipeline.blocked import Blocked
+from tlpipeline.api import Blocked
 
 from taskloop.adapters import ident
 from taskloop.app.asks import raiser, setup_retry

@@ -11,7 +11,7 @@ from taskloop.app.write.state import StageState
 from tlkernel import rundocs
 from tlkernel.kinds import Kind
 from tlkernel.procport import Ran
-from tlpipeline.blocked import Blocked
+from tlpipeline.api import Blocked
 from tltestkit import procsim
 from tltestkit.cfgs import plan_of
 from tltestkit.logs import records
