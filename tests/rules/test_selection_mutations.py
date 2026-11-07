@@ -22,6 +22,7 @@ MUTATIONS = {
     "a constant in a vendored package": ("skills/task-loop/_vendor/any_clock/clock.py", "tests/land/test_push_timing.py"),
     "a script that tests run by path": ("skills/task-loop/tl.py", "tests/cli/test_tl.py"),
     "a contracts golden file": ("tests/contracts/golden/engine_log.jsonl", "tests/contracts/test_wire.py"),
+    "a scoped HTML sink": ("packages/dash/src/tldash/static/index.html", "tests/rules/test_dash_xss.py"),
     "a changed test file": ("tests/loop/test_lint.py", "tests/loop/test_lint.py"),
     "pyproject.toml": ("pyproject.toml", "tests/release/test_manifest.py"),
 }
@@ -61,3 +62,33 @@ def test_main_prints_the_selection_of_the_given_paths(tmp_path):
     with contextlib.redirect_stdout(out):
         assert affected.main(["--root", str(tmp_path), "--changed", "tests/test_a.py"]) == 0
     assert out.getvalue().split() == ["tests/test_a.py"]
+
+
+@pytest.mark.parametrize("path, policy", [
+    ("unrelated.txt", "unrelated"),
+    ("NOTES.md", "whole-tree"),
+    ("justfile", "config"),
+])
+def test_rule_selection_policy(repo, path, policy):
+    chosen = set(affected.select(repo, {path}))
+    assert chosen >= affected.ALWAYS_RULES
+    if policy == "unrelated":
+        assert not chosen & affected.RULES_BY_PATH.keys()
+    if policy == "config":
+        assert affected.under(repo, "tests/rules") <= chosen
+
+
+def test_unclassified_rule_defaults_to_always(tmp_path):
+    rules = tmp_path / "tests/rules"
+    rules.mkdir(parents=True)
+    (rules / "test_new.py").write_text("def test_new(): pass\n")
+    assert "tests/rules/test_new.py" in affected.select(affected.Repo(tmp_path), {"unrelated.txt"})
+
+
+def test_lander_keeps_rules_reached_through_the_gate_helper(repo):
+    # gate_rules discovers taskloop modules and is imported by these bounded checks.
+    chosen = set(affected.select(repo, {"src/taskloop/app/land/lander.py"}))
+    assert chosen & affected.RULES_BY_PATH.keys() == {
+        "tests/rules/test_dash_engine_sql.py", "tests/rules/test_kernel_has_no_effects.py",
+        "tests/rules/test_ratchets.py", "tests/rules/test_round_handoffs.py",
+    }

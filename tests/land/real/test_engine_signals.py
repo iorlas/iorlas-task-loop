@@ -14,6 +14,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from support import gitq
 from support.engine_case import EngineTest, real_git, real_proc
+from support.engine_land import EngineLandMixin
 
 from tltestkit.plans import CLEAN, PLAN, WRITE
 from tltestkit.waits import until
@@ -23,7 +24,7 @@ from taskloop.app.run import engine
 from tlkernel.kinds import Kind
 
 
-class EngineLandSignals(EngineTest):
+class EngineLandSignals(EngineLandMixin, EngineTest):
     @real_proc("a SIGTERM landing in Popen still stops the new child's whole tree")
     def test_sigterm_landing_inside_popen_still_stops_the_new_child(self):
         # tl-10s: the stop arrived before Popen() returned (a loaded machine runs the check ahead of the engine). TermHold notes the

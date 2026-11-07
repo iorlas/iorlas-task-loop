@@ -325,6 +325,8 @@ Not done, by design of the slices: slice 2 (hand-offs by value for `accepted_new
 
 The median is 226 of 752 tests in total and 143 beyond the 83 always-run `tests/rules` files (`dev/reach.py --commits 40` on main, 2026-11-08, 37 commits measured; it prints both numbers). Of a typical engine-touching commit's ~190–205 selected tests, 83 are the always-run rules. The target in the acceptance text is unchanged. The slices below are as seen by a typical engine-touching change: `src/taskloop/app/land/lander.py` selects 205.
 
+With tl-e5t0.82, the original 83 rules split into 41 whole-tree/change-based rules that always run and 42 scoped/SELF rules selected by input paths or import closure; the new classification pin also always runs. On the same 40-commit probe (37 measured), the total median falls from 221 to 196; the reported median beyond always-run rules changes from 138 (excluding 83) to 154 (excluding 42, now counting selected scoped rules). A lander.py edit falls from 205 to 168 files: four scoped rules remain reachable through gate_rules.py's discovery/import closure. Config edits still select every rule.
+
 | slice | selected now | owner bead | what moves it | target |
 |---|---|---|---|---|
 | tests/rules | 83 (always) | tl-e5t0.81 probe | the rules probe; see the bead | set by the owning bead; none invented here |
