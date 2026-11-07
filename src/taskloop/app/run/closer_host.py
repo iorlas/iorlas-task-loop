@@ -6,10 +6,10 @@ import threading
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
+from taskloop.app.pipeline.closing_record import RecordHost, RecordRecords
 from taskloop.app.run.closer_branch import BranchCheckpoints, BranchTree, LeaveTree, ReleaseSlotHost, SaveBranchHost
 from taskloop.app.run.closer_decide import DecideHost
 from taskloop.app.run.closer_notes import FileNotesHost, NotesCheckpoints, ReflectCheckpoints, ReflectHost
-from taskloop.app.run.closer_record import RecordHost, RecordRecords
 from taskloop.app.run.closer_settle import SettleHost
 from taskloop.contracts import fence
 from taskloop.contracts.beadsport import Beads
