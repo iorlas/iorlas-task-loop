@@ -5,11 +5,11 @@ import os
 from pathlib import Path
 
 import pytest
-from support.case import Case
 
 from ports.git_contract import sh
 from tlkernel.gitport import Git
 from tlkernel.slots import DirtyTree, SlotGitError
+from tltestkit.case import Case
 
 _Base = Case
 

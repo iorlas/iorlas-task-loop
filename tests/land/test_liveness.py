@@ -3,7 +3,6 @@ from unittest import mock
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
 from support.fake_deadline import FakeDeadline
 from support.fakegit import FakeGit
 from support.narrow_hosts import Stopped, table_kit
@@ -11,6 +10,7 @@ from support.narrow_hosts import Stopped, table_kit
 from taskloop.app.land.gate import Problem, ProblemKind
 from taskloop.app.land.state import Placing
 from taskloop.domain.lanes.liveness import LIVENESS, LivenessCaps
+from tltestkit.case import Case
 
 
 class Liveness(Case):

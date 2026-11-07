@@ -5,7 +5,6 @@ from unittest import mock
 
 import pytest
 from support.memstores import fake_stores
-from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import check_files, childenv
 from taskloop.app.checks.cache import InputKeys, RunMemo
@@ -21,6 +20,7 @@ from tlkernel.gitfacts import TreeEntry
 from tlkernel.gitport import Git
 from tlkernel.ids import CheckId, TreeSha
 from tlkernel.runkey import BaseSha
+from tltestkit.tmpdir import TemporaryDirectory
 
 TREE, PARENT, MAIN = TreeSha("tree-n"), "q-parent", "main-sha"
 SUITE = CheckId("suite")

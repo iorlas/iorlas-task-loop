@@ -10,10 +10,10 @@ import support.paths  # noqa: F401
 
 # isort: split
 from support import procsim
-from support.case import Case
 
 from taskloop.adapters.spawner import RealSpawner
 from tlkernel.env import snapshot
+from tltestkit.case import Case
 
 SRC = Path(__file__).resolve().parents[2] / "src" / "taskloop"
 

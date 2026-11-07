@@ -5,11 +5,11 @@ from threading import Barrier
 
 import pytest
 import support.paths  # noqa: F401
-from support.tmpdir import TemporaryDirectory
 
 from tlkernel.ids import BeadId
 from tlkernel.parks import Park, ParkStore
 from tlkernel.paths import ConfigDir
+from tltestkit.tmpdir import TemporaryDirectory
 
 BEAD = BeadId("tl-1")
 

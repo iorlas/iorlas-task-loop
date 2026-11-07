@@ -62,7 +62,7 @@ Today's shell is fat: `run` + `loop` + `launch` + `wire` + `prune` = 113 files /
 - **node `loop`**, **node `prune`**: stay, each with its own ports (`Claim`, `Take`, ...). `loop/take.py` imports 3 stages today and is a root-shaped file inside a node: it moves to the root or takes ports.
 - **roots**: `engine` (construct pipeline + stages + states, bind ports), `entry`, `run_once`, `launch/*`, `wire/*`, `cli`, `hook`, `tl.py`.
 
-C-THIN (a), tl-e5t0.40.1: `run/ask_flow`, `bead_env`, `closer_ports`, `preflight`, `reload_ports`, `running`, `shared`, `shell` and `stage_checks` are composition files: they bind ports across slices and stay in `run/`. `stages`, `state` and `target` keep their existing classification. `stage_rounds` moved to `write/rounds`, with `run/stages` retaining the binder. No import exceptions are widened.
+C-THIN (a), tl-e5t0.40.1: `run/ask_flow`, `bead_env`, `closer_ports`, `preflight`, `reload_ports`, `running`, `shared` and `shell` are composition files: they bind ports across slices and stay in `run/`. `stages`, `state` and `target` keep their existing classification. `stage_rounds` moved to `write/rounds`, with `run/stages` retaining the binder. No import exceptions are widened. `stage_checks` moved to `checks/step`; `run/parts_run` binds it.
 
 Keeping them thin, mechanically:
 
@@ -129,7 +129,7 @@ A read model that crosses stages (the dashboard's run list; `run_rows` today sit
 - Each stage has `tests/<stage>/` plus a `testing.py` shipped by the stage with fakes of **its own ports** (FakeCheckHost is the first). Other stages' tests import `testing.py` of a dependency, never its internals.
 - Contract, then consumers (already the rule): one conformance test per port runs the Engine's adapter and the stage's fake through the same probes; a mutation of the fake must fail it (the #285 gate).
 - `just test-pkg <stage>`: the stage's tests plus its declared dependencies' contract tests, nothing else. `dev/affected.py` stops being the only gate for stage changes: a stage change runs its own base and its dependents' contract tests. The engine/e2e base stays small (10 tests max by the existing rule).
-- Per-stage budgets: closure size and import time ratcheted; a stage whose closure grows fails with a name.
+- Per-stage budgets live in `tests/rules/closure_ratchet.py`, counting reachable local files (including the kernel) and distinct external top-level modules as a deterministic import-time budget against the merge base, with deliberate increases requiring `Ratchet-allow: closure +N reason`.
 
 ## 5. Order of work (each PR small, measured, reversible; none moves `paths.py`, ids or the run layout before #219/#232 land)
 

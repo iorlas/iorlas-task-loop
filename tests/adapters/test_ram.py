@@ -1,9 +1,9 @@
 """macOS memory probes count reclaimable pages and fail open on unknown output."""
 
 import support.paths  # noqa: F401
-from support.case import Case
 
 from taskloop.adapters import ram
+from tltestkit.case import Case
 
 
 class Ram(Case):

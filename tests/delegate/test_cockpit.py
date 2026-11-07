@@ -11,12 +11,12 @@ from unittest.mock import patch
 
 import routing_support as support
 from any_agent.harnesses.opencode import OpenCodeHarness
-from support.tmpdir import TemporaryDirectory
 from test_route import CFG, T, route
 
 from delegate.app import cockpit, env, harnesses, onboard, usage
 from delegate.domain.lanes.lane import Lane
 from delegate.domain.time import spec
+from tltestkit.tmpdir import TemporaryDirectory
 
 HOUR = 3600
 

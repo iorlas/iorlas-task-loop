@@ -258,6 +258,8 @@ source_modules =
     taskloop.app.pipeline.crash
     taskloop.app.pipeline.lifecycle
     taskloop.app.pipeline.run
+    taskloop.app.pipeline.run_roles
+    taskloop.app.pipeline.standalone_roles
     taskloop.app.pipeline.standalone
     taskloop.app.pipeline.decide
     taskloop.app.pipeline.ended
@@ -301,7 +303,6 @@ forbidden_modules =
     taskloop.app.run.sections
     taskloop.app.run.shared
     taskloop.app.run.shell
-    taskloop.app.run.stage_checks
     taskloop.app.run.stages
     taskloop.app.run.state
     taskloop.app.wire

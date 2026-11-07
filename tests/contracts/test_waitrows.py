@@ -4,7 +4,6 @@ import shutil
 
 import pytest
 import support.paths  # noqa: F401
-from support.case import Case
 from support.narrow import must
 
 from tlkernel import factorydb, scratch
@@ -12,6 +11,7 @@ from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
 from tlkernel.run import NetPause, ReexecNote
 from tlkernel.waitrows import NET_PAUSE, WaitDoc, open_records
+from tltestkit.case import Case
 
 B = BeadId("t-1")
 

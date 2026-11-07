@@ -1,7 +1,7 @@
 """The factory runs detached processes; source must never install OS service definitions."""
 from pathlib import Path
 
-from support.case import Case
+from tltestkit.case import Case
 
 
 class NoOsServices(Case):

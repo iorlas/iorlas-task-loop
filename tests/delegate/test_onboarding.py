@@ -9,13 +9,13 @@ from typing import Any
 from unittest import mock
 
 import hermetic  # noqa: F401  (a home of its own for every test)
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
 from test_route import T, argparse_ns, route
 
 from delegate.app import cockpit, doctor, env, fleet, usage
 from delegate.app import decide as dec
 from delegate.contracts.state import StateDoc
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 def doctor_lanes(cfg: Any) -> list[Any]:

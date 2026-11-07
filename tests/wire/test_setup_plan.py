@@ -3,12 +3,11 @@ import argparse
 import json
 from pathlib import Path
 
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
-
 from taskloop.app.wire import setup
 from taskloop.cli import setup as cli_setup
 from tlkernel.env import Env
+from tltestkit.case import Case
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 def tree(root: Path) -> list[str]:
