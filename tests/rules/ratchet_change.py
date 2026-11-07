@@ -8,6 +8,7 @@ needs no `--write`; two PRs that touch different files share no file. No origin/
 A deliberate rise is a line in a commit message of the change: `Ratchet-allow: <temp|layer|needs> +N <a reason in words>`.
 """
 import ast
+import functools
 import re
 import subprocess
 from collections.abc import Callable
@@ -46,15 +47,36 @@ def counted(counter: Counter, rel: str, text: str | None) -> dict[str, int]:
     return counter(rel, tree) if tree is not None else {}
 
 
+@functools.cache
+def texts_at(root: Path, base: str, paths: tuple[str, ...]) -> dict[str, str | None]:
+    """{path: its text at `base`, or None if it did not exist}: one `git cat-file --batch` for all of them, not a `git show` each (a change
+    that moves a thousand files costs one process, not five thousand: every ratchet reads the same texts)."""
+    ran = subprocess.run(["git", "-C", str(root), "cat-file", "--batch"], input="".join(f"{base}:{p}\n" for p in paths).encode(),
+                         capture_output=True, check=False)
+    out: dict[str, str | None] = {}
+    data, at = ran.stdout, 0
+    for rel in paths:
+        end = data.index(b"\n", at)
+        head = data[at:end].split()
+        at = end + 1
+        if len(head) == 3 and head[1] == b"blob":
+            size = int(head[2])
+            out[rel] = data[at:at + size].decode("utf-8", errors="replace")
+            at += size + 1
+        else:
+            out[rel] = None
+    return out
+
+
 def net(counter: Counter, root: Path, base: str, paths: list[str]) -> tuple[dict[str, int], dict[str, int]]:
     """(before, after): the counter's totals per key over `paths` at `base` and in the working tree."""
     before: dict[str, int] = {}
     after: dict[str, int] = {}
+    olds = texts_at(root, base, tuple(paths))
     for rel in paths:
-        old = git(root, "show", f"{base}:{rel}")
         mine = root / rel
         now = mine.read_text(encoding="utf-8") if mine.is_file() else None
-        for out, text in ((before, old.stdout if old.returncode == 0 else None), (after, now)):
+        for out, text in ((before, olds[rel]), (after, now)):
             for key, n in counted(counter, rel, text).items():
                 out[key] = out.get(key, 0) + n
     return before, after
