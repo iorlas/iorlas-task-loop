@@ -226,7 +226,7 @@ class Script:
         return self.started
 
     def survivors(self, res=None):
-        from taskloop.adapters.runner import survivors_of  # noqa: PLC0415  (this file also runs as route.py in a child: src/ is not on its path)
+        from taskloop.contracts.delegateport import survivors_of  # noqa: PLC0415  (this file also runs as route.py in a child: src/ is not on its path)
         return survivors_of(self.stop, res)
 
     def node_of(self, schema):

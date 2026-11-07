@@ -11,14 +11,15 @@ import os
 import subprocess
 import tempfile
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 from delegate import api
 from taskloop.adapters import delegate_wire
-from taskloop.contracts.delegate import REASON_TIMEOUT, DelegateResult, Permanence, RunRequest, Scope
+from taskloop.adapters.runner import ApiRunner
+from taskloop.contracts.delegate import REASON_TIMEOUT, DelegateResult, Permanence, RunRequest, Scope, WorkerStarted
 from taskloop.contracts.delegate_status import snapshot_of
+from taskloop.contracts.delegateport import Account, Answer, Lane, Refusal, Resolved, RunRecord, Seam, Stopped
 from taskloop.contracts.snapshots import StatusSnapshot
 
 CONTRACT = delegate_wire.CONTRACT  # the contract number this engine speaks
@@ -26,39 +27,6 @@ BACKSTOP_S = 120  # the engine stops the child at the node's limit plus this
 LIBRARY = "delegate.api"  # what the engine logs as the route of a call
 
 Runner = Callable[..., Any]
-RunRecord = dict[str, Any]  # one finished run of `api.history`
-
-
-@dataclass(frozen=True)
-class Resolved:
-    dir: Path
-    route: str
-    contract: dict[str, Any]
-    source: str  # explicit | pinned | installed
-
-
-@dataclass(frozen=True)
-class Refusal:
-    kind: str  # not_installed | pin_unreadable | pin_missing_dir | skew_delegate_newer_no_match | skew_delegate_older
-    detail: str = ""
-
-
-@dataclass(frozen=True)
-class Answer:
-    """A parsed answer, its checkpoint wire object ({} for a synthesized stop), and the exact call argv and output for diagnostics."""
-
-    res: DelegateResult
-    raw: dict[str, Any]
-    argv: tuple[str, ...] = ()
-    trace: str = ""
-
-
-class Stopped(Exception):
-    """The engine ended the call (its wall limit, its silence watcher). `why` is the engine's own word for it."""
-
-    def __init__(self, why: str) -> None:
-        super().__init__(why)
-        self.why = why
 
 
 def resolve() -> Resolved:
@@ -89,16 +57,6 @@ def status_snapshot(claude_usage: object = None) -> StatusSnapshot:
     return snapshot_of(status)
 
 
-@dataclass(frozen=True)
-class Lane:
-    """One lane of delegate's fleet as the engine may ask it: usable now (None: delegate does not know the lane), why not, until when."""
-
-    name: str
-    usable: bool | None
-    why: str = ""
-    until: float = 0.0
-
-
 def lanes() -> list[Lane]:
     """Every lane delegate knows, in its order. [] when the status cannot be read."""
     raw = status_json().get("lanes")
@@ -127,9 +85,9 @@ def run_history(since: float = 0.0) -> list[RunRecord]:
     return [dict(r) for r in api.history(since)]
 
 
-def accounts() -> list[api.Account]:
+def accounts() -> list[Account]:
     """Every lane with its state (enabled, ready, the fix). Raises what delegate raises when it has no config dir."""
-    return api.accounts()
+    return [Account(a.lane, a.enabled, a.ready, a.fix) for a in api.accounts()]
 
 
 def set_account(lane: str, enabled: bool) -> None:
@@ -220,3 +178,58 @@ def call(
             tuple(argv), trace,
         )
     return Answer(delegate_wire.result_of(j), j, tuple(argv), trace)
+
+
+class DelegateRoute:
+    """The real `Route`: delegate.api through the module's functions (looked up at call time, so a test may replace one)."""
+
+    contract_no = CONTRACT
+    library = LIBRARY
+
+    def resolve(self) -> Resolved | Refusal:
+        return resolve()
+
+    def runner(self, log_path: str | Path, wall: float | None = None, live: str = "",
+               on_worker: Callable[[WorkerStarted], None] | None = None) -> Seam | None:
+        return ApiRunner(log_path, wall, live, on_worker)
+
+    def call(self, resolved: Resolved, req: RunRequest, brief: str, schema: dict[str, Any], runner: Runner,
+             env: Mapping[str, str]) -> Answer:
+        return call(resolved, req, brief, schema, runner, env=env)
+
+    def probe(self, hosts: tuple[str, ...] = ()) -> RouteProbe:
+        return RouteProbe(hosts)
+
+    def lane(self, name: str) -> Lane | None:
+        return lane(name)
+
+    def roles_usable(self) -> dict[str, bool | None]:
+        return roles_usable()
+
+    def status_snapshot(self, claude_usage: object = None) -> StatusSnapshot:
+        return status_snapshot(claude_usage)
+
+    def history(self, since: float = 0.0) -> list[RunRecord]:
+        return run_history(since)
+
+    def accounts(self) -> list[Account]:
+        return accounts()
+
+    def set_account(self, lane: str, enabled: bool) -> None:
+        set_account(lane, enabled)
+
+
+class FixedRoute(DelegateRoute):
+    """A delegate that is already chosen: `resolve` answers `resolved`, `runner` hands out `process` (the selftest and the tests)."""
+
+    def __init__(self, resolved: Resolved | Refusal, process: Seam | None = None) -> None:
+        self.resolved, self.process = resolved, process
+
+    @override
+    def resolve(self) -> Resolved | Refusal:
+        return self.resolved
+
+    @override
+    def runner(self, log_path: str | Path, wall: float | None = None, live: str = "",
+               on_worker: Callable[[WorkerStarted], None] | None = None) -> Seam | None:
+        return self.process
