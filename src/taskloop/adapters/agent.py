@@ -42,21 +42,21 @@ def live_lines(path: str | Path) -> list[dict[str, Any]]:
 def worker_started(path: str | Path) -> WorkerStarted | None:
     """The first line of the live file, when it is a `WorkerStarted`."""
     lines = live_lines(path)[:1]
-    if lines and "k" not in lines[0]:
+    if lines and "kind" not in lines[0]:
         with contextlib.suppress(ValueError):
             return wire.load(WorkerStarted, lines[0])
     return None
 
 
 def live_event(j: dict[str, Any]) -> Any:
-    """The typed event of a live-file line (`k` names the kind; the file carries no `v`). ValueError for a kind we do not know."""
-    return wire.load(LiveEvent, dict({a: b for a, b in j.items() if a != "k"}, kind=j.get("k"), v=1))
+    """The typed event of a live-file line (`kind` names the kind; the file carries no `v`). ValueError for a kind we do not know."""
+    return wire.load(LiveEvent, dict(j, v=1))
 
 
 def worker_start(path: str | Path) -> LiveStart | None:
     """The first `start` event of the live file: the harness, lane, model and effort the call ran on."""
     for j in live_lines(path):
-        if j.get("k") == "start":
+        if j.get("kind") == "start":
             with contextlib.suppress(ValueError):
                 return live_event(j)
     return None
@@ -133,7 +133,7 @@ class ApiAgent:
         """The worker's events so far, in order (kinds this engine does not know are passed over)."""
         out: list[LiveEvent] = []
         for j in live_lines(self.live) if self.live else []:
-            if "k" in j:
+            if "kind" in j:
                 with contextlib.suppress(ValueError):
                     out.append(live_event(j))
         return out

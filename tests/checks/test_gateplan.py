@@ -9,10 +9,10 @@ import pytest
 from support.check_host import CheckHostCase
 from support.plans import FALSE
 
-from taskloop.adapters.childenv import CHECK_SECRETS
 from taskloop.app.checks.cache import is_green, plan_digest
 from taskloop.app.checks.gateplan import PlanDecision, parse, skipped
 from taskloop.domain.checks.specs import gate_items
+from tlkernel.childenv import CHECK_SECRETS
 from tlkernel.config import ConfigError
 from tlkernel.env import Env
 from tlkernel.ids import CheckId, TreeSha

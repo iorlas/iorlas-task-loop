@@ -15,6 +15,7 @@ from taskloop.domain.beads.park import text_hash
 from taskloop.domain.lanes.pause_reasons import Producer, Reason, Unknown
 from tlkernel.bead import Bead
 from tlkernel.delegate import Permanence
+from tlkernel.kinds import Kind
 from tlkernel.parks import Park
 
 
@@ -174,7 +175,7 @@ def delay(policy: PauseRule, attempt: int, random: Callable[[], float]) -> float
 def exhausted(policy: PauseRule, rec: Park | None, reason: str, attempt: int, fingerprint: str) -> bool:
     if policy.max_attempts and attempt >= policy.max_attempts:
         return True
-    return (reason == "engine_crash" and rec is not None and rec.reason == reason
+    return (reason == Kind.ENGINE_CRASH.value and rec is not None and rec.reason == reason
             and bool(fingerprint) and rec.fingerprint == fingerprint)
 
 
@@ -188,7 +189,7 @@ def after_pause(rec: Park | None, b: Bead, run: str, now: float, reason: str,
     counts = history(rec)
     key = attempt_key(reason, producer)
     attempt = counts.get(key, 0)
-    if (producer, reason) in (("delegate", "network"), ("engine", "pause_network")):
+    if (producer, reason) in (("delegate", "network"), ("engine", Kind.PAUSE_NETWORK.value)):
         attempt = 0  # outages never consume a bead's attempts; only the loop's probe gates recovery
     else:
         counts[key] = attempt + 1

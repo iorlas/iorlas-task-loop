@@ -38,7 +38,7 @@ class FakeApi:
                 f.write(json.dumps({"v": 1, "pid": worker.pid, "pgid": worker.pid, "run_id": "run1"}) + "\n")
                 f.flush()
                 while time.time() < self.chat_until:
-                    f.write(json.dumps({"t": time.time(), "k": "msg", "text": "still here"}) + "\n")
+                    f.write(json.dumps({"t": time.time(), "kind": "msg", "text": "still here"}) + "\n")
                     f.flush()
                     time.sleep(0.1)
         if started:

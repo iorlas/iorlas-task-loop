@@ -1,5 +1,5 @@
 """The process environment, owned here: the one module of the package (with the edge modules named in tests/rules/test_env_edge.py)
-that touches os.environ. Reads go through `ambient`/`snapshot`; a hand-over to a new process is written by adapters/childenv.py only."""
+that touches os.environ. Reads go through `ambient`/`snapshot`; a hand-over to a new process is written by tlkernel/childenv.py only."""
 import os
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
