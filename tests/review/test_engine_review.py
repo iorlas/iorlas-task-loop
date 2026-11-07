@@ -10,8 +10,10 @@ from contextlib import contextmanager
 from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support.engine_case import EXIT_127, EngineTest, sh, stop, without_shims
+from support.engine_case import EngineTest, stop
 from support.plans import BEAD, CLEAN, FALSE, PLAN, STILL_OPEN, WRITE, finding, review, verdict
+
+from tltestkit.shellkit import EXIT_127, sh, without_shims
 
 # isort: split
 from support.cfgs import cfg_with

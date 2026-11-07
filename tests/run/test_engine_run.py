@@ -12,10 +12,11 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes, procsim
 from support.aging import age
 from support.cfgs import PROFILE_PATTERNS
-from support.engine_case import CAP_PARKS, EngineTest, full, no_repo, sh, stop
+from support.engine_case import CAP_PARKS, EngineTest, full, no_repo, stop
 from support.plans import BEAD, CAT_ENV, CLEAN, FALSE, PLAN, WRITE, review, verdict
 
 from tltestkit.checks import ck
+from tltestkit.shellkit import sh
 
 # isort: split
 import hashlib

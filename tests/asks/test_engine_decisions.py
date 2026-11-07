@@ -7,7 +7,6 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import homes
-from support.checked import run_checked
 from support.engine_case import EngineTest
 from support.plans import CLEAN, PLAN, WRITE
 
@@ -22,6 +21,7 @@ from tlkernel.askenums import AskStatus
 from tlkernel.dash import OwnerCause
 from tlkernel.ids import BeadId
 from tlkernel.ledger import Adr
+from tltestkit.checked import run_checked
 from tltestkit.narrow import must
 
 OPTS = [{"label": "Push", "cost": "shared", "answer": "push", "recommended": True},

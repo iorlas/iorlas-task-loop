@@ -10,11 +10,12 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, homes
-from support.engine_case import ENGINE_BASH, POSIX_CHECK, EngineTest, _cells, no_repo, sh, stop
+from support.engine_case import EngineTest, _cells, no_repo, stop
 from support.gitsim import verbs
 from support.plans import CLEAN, FALSE, HAS_F, PLAN, WRITE, finding, review
 
 from tltestkit.checks import typed
+from tltestkit.shellkit import ENGINE_BASH, POSIX_CHECK, sh
 
 # isort: split
 import contextlib

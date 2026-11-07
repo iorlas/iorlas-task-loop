@@ -7,13 +7,13 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from run.test_stages import StagesTest
-from support import engine_case as te
 from support.engine_case import engine, real_git
 from support.plans import CLEAN, PLAN, WRITE
 from support.pushsim import pusher
 from support.spawn import port_git, real_spawner
 from support.who import who
 
+import tltestkit.shellkit
 from taskloop.app.slots import config as wslots_config
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
@@ -25,15 +25,15 @@ class SlotHygiene(StagesTest):
     def put_ignore_on_main(self, text, name=".gitignore", sub=""):
         base = Path(self.tmp.name, "base-ignore")
         if not base.exists():
-            te.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
-        te.sh("git", "pull", "-q", "origin", "main", cwd=base)
+            tltestkit.shellkit.sh("git", "clone", "-q", str(Path(self.tmp.name, "o.git")), str(base), cwd=self.tmp.name)
+        tltestkit.shellkit.sh("git", "pull", "-q", "origin", "main", cwd=base)
         d = base / sub
         d.mkdir(parents=True, exist_ok=True)
         (d / name).write_text(text)
-        te.sh("git", "add", "-A", cwd=base)
-        te.sh("git", "commit", "-qm", "gitignore", cwd=base)
-        te.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
-        te.sh("git", "fetch", "-q", "origin", cwd=self.wt)
+        tltestkit.shellkit.sh("git", "add", "-A", cwd=base)
+        tltestkit.shellkit.sh("git", "commit", "-qm", "gitignore", cwd=base)
+        tltestkit.shellkit.sh("git", "push", "-q", "origin", "HEAD:main", cwd=base)
+        tltestkit.shellkit.sh("git", "fetch", "-q", "origin", cwd=self.wt)
 
 
     @real_git("reads the user's own global git excludes file, which only a real git does")
@@ -41,7 +41,7 @@ class SlotHygiene(StagesTest):
         self.put_ignore_on_main("client/log.txt\n")
         glob = Path(self.tmp.name, "global-ignore")
         glob.write_text("*.swp\n")
-        te.sh("git", "config", "core.excludesFile", str(glob), cwd=self.wt)
+        tltestkit.shellkit.sh("git", "config", "core.excludesFile", str(glob), cwd=self.wt)
         (self.wt / "notes.swp").write_text("editor\n")
         (self.wt / "client").mkdir()
         (self.wt / "client" / "log.txt").write_text("unity\n")

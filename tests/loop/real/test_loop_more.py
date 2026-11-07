@@ -28,7 +28,6 @@ from support import (  # noqa: E402
     looptest,
     netgate,
 )
-from support.checked import run_checked  # noqa: E402
 
 from loop.test_loop import Base, LoopBase, bead, rec  # noqa: E402
 from taskloop.adapters import beadtools  # noqa: E402
@@ -41,6 +40,7 @@ from tlkernel.ids import BeadId  # noqa: E402
 from tlkernel.loop import LoopCommand, LoopState, LoopTarget  # noqa: E402
 from tlkernel.rowstores import PinStore  # noqa: E402
 from tlkernel.snapshots import Pin  # noqa: E402
+from tltestkit.checked import run_checked  # noqa: E402
 
 
 class UpAt:

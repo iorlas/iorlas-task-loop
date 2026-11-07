@@ -27,7 +27,6 @@ from support import (  # noqa: E402
     looptest,
     tlbd,
 )
-from support.checked import run_checked  # noqa: E402
 from support.fakes import FakeBeadStore, as_comment  # noqa: E402
 from support.who import who  # noqa: E402
 
@@ -45,6 +44,7 @@ from tlkernel.ids import BeadId, RunId  # noqa: E402
 from tlkernel.landed import Landed  # noqa: E402
 from tlkernel.run import RunState  # noqa: E402
 from tlkernel.trace import RunTrace  # noqa: E402
+from tltestkit.checked import run_checked  # noqa: E402
 from tltestkit.logs import typed  # noqa: E402
 from tltestkit.runs import manifest  # noqa: E402
 

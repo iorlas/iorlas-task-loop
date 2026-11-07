@@ -20,12 +20,12 @@ sys.path.insert(0, str(ROOT / "skills" / "task-loop"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
 import tl  # noqa: E402
-from support.checked import run_checked  # noqa: E402
 from support.spawn import port_git  # noqa: E402
 
 from taskloop.domain.brief import HANDOFF_BYTES, RULES  # noqa: E402
 from taskloop.hook import pretool, session  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
+from tltestkit.checked import run_checked  # noqa: E402
 
 
 def call(tool, **args):
