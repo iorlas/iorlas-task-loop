@@ -37,7 +37,8 @@ class CloseKill(te.EngineTest):
         marker = Path(self.tmp.name, "pid")
         dying = self.child("die", effect, str(marker), journal=first)
         try:
-            until(marker.exists, WAIT)
+            until(lambda: marker.exists() or dying.poll() is not None, WAIT)
+            assert marker.exists(), dying.stderr.read().decode() if dying.poll() is not None and dying.stderr else "child did not write pid marker"
             pid = int(marker.read_text())
             assert pid == dying.pid
             os.kill(pid, signal.SIGKILL)  # the pid of the child this test started
