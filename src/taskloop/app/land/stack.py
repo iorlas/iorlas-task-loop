@@ -34,8 +34,8 @@ from taskloop.adapters import landlock
 from taskloop.app.land import cleanup
 from taskloop.app.land.cmds import Cmds, Runs, Stop
 from taskloop.app.land.forge import Forge
+from taskloop.app.land.gate import diff_sha, owner_refusal
 from taskloop.app.land.host import phase
-from taskloop.app.land.profile_change import diff_sha, owner_refusal
 from taskloop.app.land.queue_land import Queued, QueueLand
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.land.treecheck import Tested, TreeGuard

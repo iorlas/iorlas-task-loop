@@ -17,7 +17,7 @@ from tlkernel.slots import MissingRemote
 
 from taskloop.adapters import landlock, locks
 from taskloop.adapters.clock import SystemClock
-from taskloop.app.land.profile_change import diff_sha
+from taskloop.app.land.gate import diff_sha
 from taskloop.stores.bundle import Stores
 
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"

@@ -19,9 +19,8 @@ from support.memstores import fake_stores
 from support.narrow_hosts import FakePushHost, Stopped
 
 from taskloop.app.land.cmds import Cmds, Stop
-from taskloop.app.land.gate import mint
+from taskloop.app.land.gate import mint, owner_refusal
 from taskloop.app.land.host import Land
-from taskloop.app.land.profile_change import owner_refusal
 from taskloop.app.land.push import Pusher
 from taskloop.app.land.push_judge import PushStatus, judge_push
 from taskloop.app.land.stack import Stack

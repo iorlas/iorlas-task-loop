@@ -18,7 +18,7 @@ from tlkernel.slots import NotARepo
 
 from taskloop.app.land.carry import Carry
 from taskloop.app.land.cmds import Cmds, Stop
-from taskloop.app.land.profile_change import owner_refusal
+from taskloop.app.land.gate import owner_refusal
 from taskloop.stores.bundle import Stores
 
 

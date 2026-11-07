@@ -50,7 +50,7 @@ class CheckRound:
         if failed:
             return self.red(s, run, failed, prev_red, out)
         s.red = 0
-        if run.unverified:  # not green, and not the writer's to fix: review goes on, the land refuses (app/land/verified.py)
+        if run.unverified:  # not green, and not the writer's to fix: review goes on, the land refuses (app/land/gate.py)
             e.steps.move("review", "checks_unverified", check_evidence.round_outcome(run))
             return ""
         e.steps.move("review", "checks_green", f"{len(run.passed)} passed")
