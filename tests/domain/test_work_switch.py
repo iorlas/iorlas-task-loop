@@ -20,5 +20,3 @@ class Switch(Case):
         for mode in ("on", "off", "sampled"):
             with self.subTest(mode=mode):
                 assert switch.reviews(mode, stage=0, last=True, every=5)
-
-
