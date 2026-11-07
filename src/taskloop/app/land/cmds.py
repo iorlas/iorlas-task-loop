@@ -9,9 +9,9 @@ from tlkernel.argv import text_of
 from tlkernel.paths import ConfigDir
 from tlkernel.procport import Ran
 from tlkernel.slots import SlotGitError
+from tlkernel.stagefacts import RunLogPort
 
 from taskloop.app.land.push_evidence import failure
-from taskloop.stores.runlog import RunLog
 
 T = TypeVar("T")
 NOT_FOUND = 127  # the program is not there
@@ -33,7 +33,7 @@ class Stop(Exception):
 
 
 class Cmds:
-    def __init__(self, spawner: Runs, log: RunLog, cwd: str, run_dir: Path | None = None, *, config: ConfigDir | None = None) -> None:
+    def __init__(self, spawner: Runs, log: RunLogPort, cwd: str, run_dir: Path | None = None, *, config: ConfigDir | None = None) -> None:
         self.spawner, self.log, self.cwd = spawner, log, cwd
         self.run_dir = run_dir
         self.config = config

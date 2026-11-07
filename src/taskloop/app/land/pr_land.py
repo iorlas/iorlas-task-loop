@@ -12,6 +12,7 @@ from tlkernel.forge import CLOSED, MERGED, PR_NUMBER, PR_URL, Pr, pr_waited_on
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
 from tlkernel.landmatchers import Push
+from tlkernel.stagefacts import RunLogPort
 
 from taskloop.app.land.cmds import Cmds, Runs, Stop
 from taskloop.app.land.forge import Forge
@@ -19,7 +20,6 @@ from taskloop.app.land.gate import GatePass, Problem
 from taskloop.app.land.host import FetchCheckout, Land, Next, OutcomeSteps
 from taskloop.app.land.push import last_fetched, stale, target
 from taskloop.app.land.push_evidence import failure
-from taskloop.stores.runlog import RunLog
 
 
 class PrConfig(Protocol):
@@ -42,7 +42,7 @@ class PrHost(Protocol):
     @property
     def spawner(self) -> Runs: ...
     @property
-    def log(self) -> RunLog: ...
+    def log(self) -> RunLogPort: ...
     @property
     def run_dir(self) -> Path: ...
     @property

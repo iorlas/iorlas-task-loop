@@ -5,6 +5,7 @@ from typing import Protocol
 from tlkernel.branches import bead_of
 from tlkernel.gitport import Git
 from tlkernel.queue_doc import QueueDoc
+from tlkernel.stagefacts import Narrate
 
 from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
@@ -25,7 +26,6 @@ from taskloop.domain.land.queue_reconcile import (
     reconcile,
 )
 from taskloop.domain.land.queue_world import world
-from taskloop.stores.runlog import RunLog
 
 
 class Host(Protocol):
@@ -37,7 +37,8 @@ class Host(Protocol):
     trees: TreeGuard
     repo: str
     record: Callable[[str, str], int]
-    log: RunLog
+    @property
+    def log(self) -> Narrate: ...
 
 
 def facts(host: Host, doc_entries: QueueDoc, now: Callable[[], float]) -> Facts:

@@ -13,7 +13,7 @@ PARTS_FILES = ("parts_run.py", "parts_land.py", "parts_plan.py", "host.py", "eng
 HOST_NAMES = {"e", "host", "h", "hand", "ports"}
 
 # Resume and reflector take collaborators as role arguments.
-# Construction layers include run composition roots (ask_flow, bead_env, shared, shell, stage_checks).
+# Construction layers include run composition roots (bead_env, shell, stage_checks) and package nodes (ask_flow, shared).
 # This is a build-order table, independent of the node/root import classification.
 LAYERS = {
     "bead_env": 0, "briefing": 0, "briefs": 0, "checkout": 0, "delegation": 0, "leftover_sink": 0, "records": 0, "reload": 0,

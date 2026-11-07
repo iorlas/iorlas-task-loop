@@ -4,8 +4,12 @@ import threading
 from functools import cached_property
 from typing import Any, Protocol
 
+from tlartifacts import ask_pictures
 from tlasks.closing import ClosingTrust
-from tlkernel import childenv
+from tlasks.flow import AskFlow, AskFlowHost
+from tlkernel import askspecs, asktext, childenv
+from tlkernel.askspec import AskSpec
+from tlkernel.check_files import repo_key
 from tlkernel.kinds import Kind
 from tlkernel.runlayout import repo_of
 from tlpipeline import api
@@ -18,7 +22,6 @@ from taskloop.adapters.agent import last_event_t, new_live
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.checks.step import StageChecks
 from taskloop.app.land.closing import LandHistory
-from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.run.bead_env import bead_env
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.run.reload_ports import installed_newer, locked_slot
@@ -31,6 +34,14 @@ from taskloop.app.workers.delegation import Delegation
 
 def shared_over(host: SharedHost) -> Shared:
     return Shared(host, fx=slotfx.FX)
+
+
+def ask_blocked(why: str, spec: AskSpec | None = None, *, kind: Kind) -> api.Blocked:
+    return api.Blocked(why, spec, kind=kind)
+
+
+def ask_flow_over(host: AskFlowHost) -> AskFlow:
+    return AskFlow(host, ident.plugin_version, ask_blocked, ask_pictures.attach, repo_of, repo_key, askspecs.open_question, asktext.comment)
 
 
 class ResumeBinding[T](api.ResumeProgress, api.ResumePlanning[T], api.ResumeRecords, api.ReviewOwner, Protocol):
@@ -56,7 +67,7 @@ class RunParts(Plumbing):
     @cached_property
     def waits(self: api.WaitsHost) -> api.Waits: return api.Waits(self, deadline)
     delegation = cached_property(Delegation)
-    ask_flow = cached_property(AskFlow)
+    ask_flow = cached_property(ask_flow_over)
     stage_checks = cached_property(StageChecks)
     shell = cached_property(Shell)
     @cached_property

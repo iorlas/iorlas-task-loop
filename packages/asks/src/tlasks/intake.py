@@ -13,7 +13,6 @@ from tlkernel.adrs import AdrStore
 from tlkernel.ask import Ask, AskAction, AskAnswer, ThreadEntry
 from tlkernel.askenums import AskKind
 from tlkernel.askstore import AskStore
-from tlkernel.bead import Comment
 from tlkernel.beadsport import BdFailure, BeadPatch, Beads
 from tlkernel.dash import OwnerCause, Stick
 from tlkernel.ids import BeadId
@@ -43,11 +42,6 @@ class Parsed:
     kind: str  # answer, hint, hold, override, decision (a receipt of that verb), note (everything else)
     fields: dict[str, str] = field(default_factory=dict)
     body: str = ""
-
-
-def engine_written(comment: Comment) -> bool:
-    """The bd actor convention identifies engine comments, irrespective of their prose."""
-    return comment.author.startswith("tl-")
 
 
 def receipt(verb: str, body: str = "", **fields: str) -> str:
