@@ -4,7 +4,6 @@ import time
 from collections.abc import Callable
 from random import random
 
-from taskloop.app.asks import intake
 from taskloop.contracts.ask import Ask
 from taskloop.contracts.bead import Bead
 from taskloop.contracts.delegate import Permanence
@@ -12,6 +11,7 @@ from taskloop.contracts.kinds import ASKS, FINISH, PAUSES, Kind
 from taskloop.contracts.loop import Skip
 from taskloop.contracts.parks import Park, ParkStore
 from taskloop.contracts.paths import ConfigDir
+from taskloop.domain.asks import hold
 from taskloop.domain.beads import park
 from taskloop.domain.lanes import pauses
 from taskloop.domain.lanes.pause_reasons import Producer
@@ -26,7 +26,7 @@ def gate(cfg: ConfigDir, b: Bead, *, fresh: bool = False, now: float | None = No
     """Why the bead is not taken now, None when it may be."""
     stamp = time.time() if now is None else now
     rec = ParkStore(cfg).get(b.id)
-    if rec and rec.reason == Kind.OWNER_PARK.value and not intake.held(b.metadata, stamp):
+    if rec and rec.reason == Kind.OWNER_PARK.value and not hold.held(b.metadata, stamp):
         return None  # releasing the owner's hold is this park's explicit wake rule
     return park.verdict(rec, b, fresh=fresh, answered=answered(real_stores(cfg).asks.get(b.id)), now=stamp)
 
