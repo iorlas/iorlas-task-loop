@@ -9,9 +9,8 @@ from support.engine_case import EngineTest  # noqa: E402
 from support.plans import CLEAN, PLAN, WRITE  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "tests"))
-from support import procsim  # noqa: E402
-
 from taskloop.domain.checks import trim  # noqa: E402
+from tltestkit import procsim  # noqa: E402
 
 FIX = Path(__file__).parents[1] / "fixtures" / "checklogs"
 

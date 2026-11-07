@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import gitq, homes, procsim
+from support import gitq, homes
 from support.engine_case import POSIX_CHECK, EngineTest
 from support.plans import CLEAN, HAS_F, PLAN, STILL_OPEN, WRITE, verdict
 from support.waits import until
@@ -22,6 +22,7 @@ from taskloop.adapters import (
 )
 from tlkernel.locator import RunLocator
 from tlkernel.paths import ConfigDir
+from tltestkit import procsim
 from tltestkit.logs import records
 
 

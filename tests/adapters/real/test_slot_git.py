@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
 
 sys.path.insert(0, str(ROOT / "tests"))
-from support import dlcall, procsim  # noqa: E402
+from support import dlcall  # noqa: E402
 from support import engine_case as te  # noqa: E402
 from support.builders import make_engine  # noqa: E402
 from support.checked import run_checked  # noqa: E402
@@ -38,6 +38,7 @@ from taskloop.app.slots import config as wslots_config  # noqa: E402
 from taskloop.app.slots.config import cfg_source  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlkernel.ids import BeadId  # noqa: E402
+from tltestkit import procsim  # noqa: E402
 
 GIT_KEYS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")
 

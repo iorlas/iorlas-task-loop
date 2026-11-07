@@ -3,12 +3,12 @@ the same environment in the check's process. A checks test that runs on the fake
 import json
 from pathlib import Path
 
-from support import procsim
 from support.check_host import FakeCheckHost
 from support.engine_case import EngineTest
 from support.who import who
 
 from taskloop.app.run.engine import Engine
+from tltestkit import procsim
 
 ST = {"checks": [], "files": []}
 

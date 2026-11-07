@@ -5,7 +5,8 @@ import sys
 from pathlib import Path
 
 import pytest
-from support.procsim import CAPABILITIES
+
+from tltestkit.procsim import CAPABILITIES
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)

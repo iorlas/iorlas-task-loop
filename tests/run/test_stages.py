@@ -10,10 +10,7 @@ from typing import Any, ClassVar, cast
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as te
-from support import (
-    gitq,
-    procsim,
-)
+from support import gitq
 from support.builders import make_engine
 from support.cfgs import plan_of
 from support.checkpoints import put_ck, read_ck
@@ -37,6 +34,7 @@ from tlkernel.argv import argv_of
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId, CheckId
 from tlkernel.plancheck import PlanData, adhoc
+from tltestkit import procsim
 from tltestkit.checks import ck, res, typed
 from tltestkit.narrow import must
 

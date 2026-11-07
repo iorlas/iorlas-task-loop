@@ -11,11 +11,11 @@ import hermetic  # noqa: F401  (a home of its own for every test)
 import pytest
 from any_agent.harnesses import opencode_sandbox as box
 from run_support import RunBase, short_limits
-from support.procsim import real_proc
 from test_route import why
 
 from delegate.app import env, harnesses
 from delegate.app.env import PUSH_REFUSED
+from tltestkit.procsim import real_proc
 
 
 class RunOpenCode(RunBase):

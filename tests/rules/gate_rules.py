@@ -41,7 +41,8 @@ import taskloop  # noqa: E402, F401  (puts the vendored shelf packages on sys.pa
 from git_porcelain import GitUnavailable, Identity, RealRepo  # noqa: E402
 from git_porcelain.testing import FakeRepo, git, hermetic_env  # noqa: E402
 from shelf_vendor import Vendor, dir_files, tree_hash  # noqa: E402
-from support.procsim import real_proc  # noqa: E402
+
+from tltestkit.procsim import real_proc  # noqa: E402
 
 SCAN = ("src", "skills", "dev", "tests")
 SKIP_DIRS = frozenset({".git", ".worktrees", ".slots", ".task", "__pycache__", "fixtures", "node_modules", ".venv"})

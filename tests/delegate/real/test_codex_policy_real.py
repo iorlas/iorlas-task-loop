@@ -3,8 +3,9 @@
 import copy
 
 import routing_support as support
-from support.procsim import real_proc
 from test_route import CFG, T, lanes
+
+from tltestkit.procsim import real_proc
 
 
 class CodexPolicy:

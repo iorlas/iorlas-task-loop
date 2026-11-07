@@ -25,12 +25,7 @@ from support import homes  # noqa: E402
 import contextlib  # noqa: E402
 
 import tl  # noqa: E402
-from support import (  # noqa: E402
-    gitq,
-    looptest,
-    procsim,
-    tlbd,
-)
+from support import gitq, looptest, tlbd  # noqa: E402
 from support.checked import run_checked  # noqa: E402
 from support.engine_locks import put_lock  # noqa: E402
 from support.spawn import port_git  # noqa: E402
@@ -46,6 +41,7 @@ from tlkernel import wire  # noqa: E402
 from tlkernel.paths import ConfigDir  # noqa: E402
 from tlkernel.rowstores import ReposStore  # noqa: E402
 from tlkernel.snapshots import RepoEntry, ReposIndex  # noqa: E402
+from tltestkit import procsim  # noqa: E402
 
 
 def sh(*args, cwd):
