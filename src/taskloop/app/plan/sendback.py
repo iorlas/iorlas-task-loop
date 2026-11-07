@@ -3,15 +3,10 @@ commands or cannot run go back once, on the same planner thread, with the exact 
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from taskloop.app.plan.assume import assume
-from taskloop.contracts import plancheck
-from taskloop.contracts.plancheck import PlanData
-from taskloop.domain.checks import lint, planref
-from taskloop.domain.plan.matchers import gate_only_criteria
-from taskloop.domain.prompts.anchors import MAX_ANCHORS, unanchored
-from taskloop.domain.prompts.plan import (
+from taskloop.app.plan.host import PlanHost
+from taskloop.app.plan.prompts import (
     DRY_CHECK_TEXT,
     EMPTY_PLAN_TEXT,
     GATE_ONLY_ACCEPTANCE,
@@ -20,6 +15,11 @@ from taskloop.domain.prompts.plan import (
     TRACKER_TEXT,
     UNANCHORED_TEXT,
 )
+from taskloop.contracts import plancheck
+from taskloop.contracts.plancheck import PlanData
+from taskloop.domain.checks import lint, planref
+from taskloop.domain.plan.matchers import gate_only_criteria
+from taskloop.domain.prompts.anchors import MAX_ANCHORS, unanchored
 
 
 @dataclass
@@ -44,7 +44,7 @@ class Problems:
 
 
 class SendBack:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: PlanHost) -> None:
         self.e = host
 
     def find(self, data: PlanData) -> Problems:
@@ -101,8 +101,8 @@ class SendBack:
         ref = e.planner_ref
         wire = json.dumps(plancheck.to_wire(data), indent=1)
         back = (why.lstrip() + "\n\nYour plan, to correct (same output schema):\n" + wire) if ref else prompt + why
-        again, _ = e.ai("plan", "rewrite checks", back, step=step, mode="checks_back", resume_ref=ref or None, at=(e.planned, 1, 0))
-        return again
+        return plancheck.plan_of(e.ai("plan", "rewrite checks", back, step=step, mode="checks_back", resume_ref=ref or None,
+                                      at=(e.planned, 1, 0)).data)
 
     def after_rewrite(self, data: PlanData) -> None:
         """What the rewrite still gets wrong: a stop, or (the heuristics) a warning; there is no second send-back."""

@@ -2,12 +2,13 @@
 (the stage is accepted) or the rounds are used up (the stage asks for a re-plan). A red check goes straight back to the writer: it never
 reaches the reviewer. The writer's or the reviewer's question is the owner's. The rounds themselves are WriteRound, CheckRound and
 ReviewRound; the host (the engine) lends the run's state."""
+from collections.abc import Callable
 from typing import Any
 
 from taskloop.app.write.check_round import CheckRound
 from taskloop.app.write.prepare import PREPARED, Prepare
 from taskloop.app.write.review_round import ReviewRound
-from taskloop.app.write.state import AGAIN, StageState
+from taskloop.app.write.state import AGAIN, RoundResult, RoundStop, StageState
 from taskloop.app.write.write_round import WriteRound
 from taskloop.contracts.plancheck import PlanData, RoundState
 
@@ -34,7 +35,7 @@ class StageLoop:
         if not s.state or s.fix:  # a resumed stage keeps the checkpoint's start; the first stage starts at the task's base
             e.stage_tree = e.checkout.tree_hash() if (i or s.fix or e.amended) else ""
         if not s.state:  # a resumed stage keeps its render rounds (the checkpoint's)
-            e.look_done = 0
+            e.look.done = 0
         return s
 
     def round(self, s: StageState) -> str:
@@ -50,6 +51,45 @@ class StageLoop:
             e.warn(f"{s.name}: write {s.n} (round {s.rounds + 1})")
         s.prepare_retried = False
         while True:
-            flow = self.writing.run(s) or self.checking.run(s)
+            flow = self.write(s) or self.check(s)
             if flow != PREPARED:
-                return flow or self.reviewing.run(s)
+                return flow or self.review(s)
+
+    def write(self, s: StageState, *, look: bool = True) -> str:
+        return self.play(self.writing.run, s, look=look)
+
+    def check(self, s: StageState) -> str:
+        return self.play(self.checking.run, s)
+
+    def review(self, s: StageState) -> str:
+        return self.play(self.reviewing.run, s)
+
+    def play(self, step: Callable[..., RoundResult], s: StageState, **kw: bool) -> str:
+        """Run one round and put its result on the engine once. A round that raises (a question parks the bead, a check hit its wall
+        limit) still hands on what it had come to: the closer reads the run and why. -> the round's flow."""
+        try:
+            out = step(s, **kw)
+        except RoundStop as stop:
+            self.apply(stop.result)
+            raise stop.cause from None
+        self.apply(out)
+        return out.flow
+
+    def apply(self, out: RoundResult) -> None:
+        e = self.e
+        if out.run is not None:
+            e.last_run = out.run
+        if out.tests is not None:
+            e.stats["tests_added"], e.stats["tests_removed"] = out.tests
+        if out.stuck_why is not None:
+            e.stuck_why = out.stuck_why
+        if out.summary is not None:
+            e.last_summary = out.summary
+        if out.family is not None:
+            e.writer_family = out.family
+        if out.last_stage is not None:
+            e.writer.last_stage = out.last_stage
+        e.write_rounds.extend(out.write_rows)
+        e.stats["reviews"] += out.reviews
+        e.stats["rounds"] += out.rounds
+        e.stats["writes"] += out.writes

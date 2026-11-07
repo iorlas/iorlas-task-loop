@@ -9,8 +9,8 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import procsim
+from support.check_host import CheckHostCase
 from support.checks import res
-from support.engine_case import EngineTest
 from support.fakegit import FakeGit
 from support.narrow import must
 from support.narrow_hosts import Stopped, table_kit
@@ -33,7 +33,7 @@ def unverified(id="render") -> CheckResult:
     return CheckResult(id=CheckId(id), cmd=id, group="tests", exit=UNVERIFIED_EXIT, status="unverified")
 
 
-class Recorded(EngineTest):
+class Recorded(CheckHostCase):
     def test_a_check_exiting_with_the_code_is_unverified_not_passed(self):
         count = Path(self.tmp.name) / "count"
 

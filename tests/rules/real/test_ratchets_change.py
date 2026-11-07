@@ -10,10 +10,11 @@ from support.procsim import CAPABILITIES
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
-from rules import layer_ratchet, needs_ratchet, ratchet_change, temp_ratchet
+from rules import layer_ratchet, needs_ratchet, ratchet_change, root_ratchet, temp_ratchet
 from rules.gate_rules import ROOT
 
-RATCHETS = {"layer": layer_ratchet.file_counts, "temp": temp_ratchet.file_counts, "needs": needs_ratchet.file_counts}
+RATCHETS = {"layer": layer_ratchet.file_counts, "temp": temp_ratchet.file_counts, "needs": needs_ratchet.file_counts,
+            "root": root_ratchet.file_counts}
 
 
 def git(root, *argv):

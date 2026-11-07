@@ -1,14 +1,15 @@
 """Standalone write and check steps honor the coordinator's prerequisite retry without charging a write."""
 from unittest import mock
 
-from support.builders import plan_of
-from support.engine_case import PLAN, EngineTest
+from support.cfgs import plan_of
+from support.engine_case import EngineTest
+from support.plans import PLAN
 
 from taskloop.app.run.stage_rounds import run_round_step
 from taskloop.app.write.prepare import PREPARED, Prepare
-from taskloop.app.write.state import StageState
+from taskloop.app.write.state import RoundResult, StageState
 from taskloop.contracts.enums import Step
-from taskloop.contracts.ports import Ran
+from taskloop.contracts.procport import Ran
 
 
 class StagePrepare(EngineTest):
@@ -17,7 +18,7 @@ class StagePrepare(EngineTest):
         state = StageState(plan_of(PLAN), 0, None)
 
         def write(s, *, look):
-            return PREPARED if Prepare(eng).retry(s, "restore") else ""
+            return RoundResult(flow=PREPARED if Prepare(eng).retry(s, "restore") else "")
 
         with mock.patch.object(eng.spawner, "run", return_value=Ran(exit=0)) as run, \
                 mock.patch.object(eng.stage_loop.writing, "run", side_effect=write) as writer:
@@ -31,11 +32,11 @@ class StagePrepare(EngineTest):
         state.n = 1
 
         def check(s):
-            return PREPARED if Prepare(eng).retry(s, "project.assets.json") else ""
+            return RoundResult(flow=PREPARED if Prepare(eng).retry(s, "project.assets.json") else "")
 
         with mock.patch.object(eng.spawner, "run", return_value=Ran(exit=0)) as run, \
                 mock.patch.object(eng.stage_loop.checking, "run", side_effect=check), \
-                mock.patch.object(eng.stage_loop.writing, "run", return_value="") as writer:
+                mock.patch.object(eng.stage_loop.writing, "run", return_value=RoundResult()) as writer:
             assert run_round_step(eng, Step.CHECKS, state) == (Step.LOOK, False)
         run.assert_called_once()
         writer.assert_called_once_with(state, look=False)

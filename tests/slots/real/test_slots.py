@@ -23,8 +23,10 @@ from support import homes
 
 # isort: split
 from loop.test_loop import LoopBase, rec
+from support.args import Args
 from support.engine_locks import put_lock
 from support.spawn import port_git, real_spawner
+from support.taker import real_taker
 from support.who import who
 
 from taskloop.adapters import pidcheck
@@ -99,7 +101,7 @@ class Slots(LoopBase):
         """entry.main as `tl run-task` calls it, with the engine itself stubbed: engine_run(eng) is its run(). flags:
         more run-task options (wait, exclusive_area)."""
         f = Path(self.home, f"out-{bead_id}.json")
-        a = entry.Args(id=bead_id, worktree=worktree, slot=slot, dry_run=False, fresh=False, quiet=True,
+        a = Args(id=bead_id, worktree=worktree, slot=slot, dry_run=False, fresh=False, quiet=True,
                         outcome_file=str(f), **(flags or {}))
         made = mock.Mock()
         made.return_value.run.side_effect = lambda **_: (engine_run or (lambda: 0))()
@@ -172,7 +174,7 @@ class RunTaskTakesItsSlot(Slots):
             raise engine.Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED)
         with mock.patch.object(entry, "admit", side_effect=stopped):
             f = Path(self.home, "o.json")
-            a = entry.Args(id="x-1", worktree=None, slot="s1", dry_run=False, fresh=False, quiet=True,
+            a = Args(id="x-1", worktree=None, slot="s1", dry_run=False, fresh=False, quiet=True,
                             outcome_file=str(f))
             with mock.patch.object(signal, "signal"), redirect_stdout(io.StringIO()):
                 rc = entry.main(a, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
@@ -232,7 +234,7 @@ class LiveEngineBackstop(Slots):
         env = dataclasses.replace(wloop.build(str(self.repo), env=snapshot(), spawner=real_spawner(),
             git=port_git(), who=who()), slot_env=lambda: senv)
         with redirect_stdout(io.StringIO()):
-            assert REAL_PREPARE(Taker(env, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), {}), "s1", "x-1") is not None
+            assert REAL_PREPARE(real_taker(env, mock.Mock(), mock.Mock(), mock.Mock(), mock.Mock(), {}), "s1", "x-1") is not None
     def test_slot_list_shows_the_live_engine(self):
         self.beads({})
         k = self.live_lock("s1", bead="x-7")

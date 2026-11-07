@@ -5,13 +5,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 from support import procsim
-from support.engine_case import EngineTest
+from support.check_host import CheckHostCase
 
 from taskloop.contracts.checks import Check
 from taskloop.contracts.ids import CheckId
 
 
-class AcceptanceLogs(EngineTest):
+class AcceptanceLogs(CheckHostCase):
     def test_acceptance_log_is_published_and_survives_separate_check_blocks(self):
         seen = []
 

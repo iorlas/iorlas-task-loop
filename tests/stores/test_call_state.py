@@ -43,45 +43,26 @@ class Calls(Case):
         again = cs.load_for(self.dir, "t-1", KEY)
         assert (must(again).ref, must(again).t_ref) == ("sess-1", 11.0)
 
-    def keep(self, text, legacy):
-        """Replace the bead's record by `text`: in the effect row, or as an older tl's file."""
-        if legacy:
-            cs.effectrows.delete(cs.cfg_of(self.dir), "t-1")
-            self.dir.mkdir(parents=True, exist_ok=True)
-            cs.path_for(self.dir, "t-1").write_text(text)
-        else:
-            cs.effectrows.put(cs.cfg_of(self.dir), "t-1", "run-1", "[]", "calling", 10.0, text)
+    def keep(self, text):
+        cs.effectrows.put(cs.cfg_of(self.dir), "t-1", "run-1", "[]", "calling", 10.0, text)
 
     def record(self):
         return json.loads(must(cs.effectrows.receipt(cs.cfg_of(self.dir), "t-1")))
 
-    def test_another_key_a_newer_version_or_a_damaged_record_loads_as_none(self):
+    def test_another_key_another_version_or_a_damaged_record_loads_as_none(self):
         self.begin()
         assert cs.load_for(self.dir, "t-1", ("write", 1, 0, 3)) is None
         assert cs.load_for(self.dir, "t-9", KEY) is None
         d = self.record()
-        for legacy in (False, True):
-            self.keep(json.dumps(dict(d, v=cs.V + 1)), legacy)
-            assert cs.load_for(self.dir, "t-1", KEY) is None
-            self.keep("{not json", legacy)
+        for text in (json.dumps(dict(d, v=cs.V + 1)), json.dumps(dict(d, v=cs.V - 1)), json.dumps(dict(d, future_field=1)), "{not json"):
+            self.keep(text)
             assert cs.load_for(self.dir, "t-1", KEY) is None
 
-    def test_a_newer_record_with_unknown_fields_still_loads_at_our_version(self):
-        self.begin()
-        d = dict(self.record(), future_field=1)
-        for legacy in (False, True):
-            self.keep(json.dumps(d), legacy)
-            assert must(cs.load_for(self.dir, "t-1", KEY)).phase == "calling"
-
-    def test_the_call_is_an_effect_row_and_an_older_file_moves_into_it_on_the_next_save(self):
+    def test_the_call_is_an_effect_row(self):
         st = self.begin()
         cfg = cs.cfg_of(self.dir)
         assert LoopRows(cfg, "").select("SELECT key, state, name FROM effect") == [("call:t-1", "calling", json.dumps(list(KEY)))]
-        assert not cs.path_for(self.dir, "t-1").exists()
-        self.keep(json.dumps(dict(self.record(), ref="old")), True)
-        assert must(cs.load_for(self.dir, "t-1", KEY)).ref == "old"
         st.consumed()
-        assert not cs.path_for(self.dir, "t-1").exists()
         assert LoopRows(cfg, "").select("SELECT state, done_at IS NOT NULL FROM effect") == [("consumed", 1)]
 
     def test_a_returned_answer_is_on_disk_and_a_restart_uses_it_without_a_call(self):

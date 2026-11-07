@@ -24,14 +24,14 @@ from taskloop.app.prune import runs, verb
 from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.run import layout
 from taskloop.app.run.layout import RunLayout
-from taskloop.contracts.bead import Bead
+from taskloop.contracts.bead import BdError, Bead
+from taskloop.contracts.beadsport import BdFailure, Beads
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.checkpoint import RunState as CheckpointState
 from taskloop.contracts.config import LoopConfig
 from taskloop.contracts.env import snapshot
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir, RunFiles
-from taskloop.contracts.ports import BdError, BdFailure, Beads
 from taskloop.contracts.run import RunState
 from taskloop.stores.real import real_stores
 

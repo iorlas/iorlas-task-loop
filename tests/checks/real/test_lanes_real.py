@@ -9,8 +9,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
-from support import engine_case as te
-from support.engine_case import PY, EngineTest
+from support.check_host import CheckHostCase
+from support.procsim import real_proc
+from support.shellkit import POSIX_CHECK, PY, shq
 from support.waits import until
 
 # isort: split
@@ -25,14 +26,14 @@ def alive(pid: int) -> bool:
     return True
 
 
-class RealLanes(EngineTest):
+class RealLanes(CheckHostCase):
     def script(self, name: str, body: str) -> str:
         path = Path(self.tmp.name) / name
         path.write_text(body)
         return shlex.join(["sh", str(path)])
 
-    @te.POSIX_CHECK
-    @te.real_proc("a lane's cancel must end its real process tree and touch no other process")
+    @POSIX_CHECK
+    @real_proc("a lane's cancel must end its real process tree and touch no other process")
     def test_a_red_lane_stops_the_other_lanes_tree_and_nothing_else(self):
         pids = Path(self.tmp.name) / "child.pid"
         bystander = subprocess.Popen(["sleep", "61"], start_new_session=True)  # not the gate's: a kill by pattern would take it
@@ -50,13 +51,13 @@ class RealLanes(EngineTest):
         done = {str(c.id): c for c in run.results}
         assert (done["red"].status, done["slow"].status, done["slow"].cancelled) == ("failed", "skipped", True)
 
-    @te.POSIX_CHECK
-    @te.real_proc("two real lanes write at once: each log must hold only its own lines, whole")
+    @POSIX_CHECK
+    @real_proc("two real lanes write at once: each log must hold only its own lines, whole")
     def test_each_lanes_output_is_whole_in_its_own_log(self):
         lines = 400
         def printer(tag: str) -> str:
             code = f"import time\nfor i in range({lines}):\n    print('{tag}-%d' % i, flush=True)\n    time.sleep(0.001)\n"
-            return PY + " -c " + te.shq(code)
+            return PY + " -c " + shq(code)
 
         eng = self.checks_engine(checks=[{"id": "a", "cmd": printer("A"), "run": "gate", "lane": "one"},
                                          {"id": "b", "cmd": printer("B"), "run": "gate", "lane": "two"}])

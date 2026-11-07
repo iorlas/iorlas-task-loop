@@ -6,10 +6,11 @@ from pathlib import Path
 from typing import final
 
 from taskloop.contracts import paths, wire
+from taskloop.contracts.askstore import AskDocs
 from taskloop.contracts.docrows import RowDocs
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.ledger import Adr, AdrUse
-from taskloop.contracts.stores import AskDocs, JsonlStore
+from taskloop.contracts.stores import JsonlStore
 
 
 def is_adr_id(text: str) -> bool:
@@ -22,7 +23,7 @@ def decode_use(data: object) -> AdrUse:
 
 
 def rows(cfg: paths.ConfigDir, repo: str, quiet: bool = False) -> RowDocs[Adr]:
-    """The cache rows of one repo's ADRs; an older tl's `decisions/<repo key>/ADR-n.json` is adopted on first read."""
+    """The cache rows of one repo's ADRs."""
     key = loop_key(repo)
     return RowDocs(cfg, Adr, table="kv", key_col="k", body_col="v", prefix=f"adr:{key}:", quiet=quiet)
 

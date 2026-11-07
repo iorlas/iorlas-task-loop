@@ -11,7 +11,7 @@ from slots.test_slot_pool import Rig
 from taskloop.app.slots import aside, watchdog
 from taskloop.app.slots.line import wait_slot
 from taskloop.app.slots.pool import Slot
-from taskloop.contracts.ports import BeadPatch
+from taskloop.contracts.beadsport import BeadPatch
 from taskloop.contracts.slots import SlotFail
 from taskloop.domain.slot_liveness import Kind, Limits, SlotFact, Waiter, violations
 

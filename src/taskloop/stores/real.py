@@ -4,13 +4,15 @@ from any_lease import Leases
 from taskloop.adapters.locks import ProcessLockTable
 from taskloop.contracts import paths, rundocs, stores
 from taskloop.contracts.adrs import AdrStore
+from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.checks import BaseRedRecord, CheckRun, PassRecord
 from taskloop.contracts.config import HostResources
 from taskloop.contracts.docrows import RowDocs
+from taskloop.contracts.docstore import JsonStore
 from taskloop.contracts.followups import FollowupOutbox
+from taskloop.contracts.queue_state import QueueState
 from taskloop.contracts.receiptrows import DbDocSet
-from taskloop.contracts.stores import AskStore, JsonStore
 from taskloop.stores.books import CheckpointBook
 from taskloop.stores.bundle import Stores
 from taskloop.stores.profile_changes import profile_changes
@@ -25,6 +27,7 @@ def real_stores(cfg: paths.ConfigDir) -> Stores:
         checkpoints=CheckpointBook(RowDocs(cfg, Checkpoint, table="checkpoint", key_col="bead", body_col="body",
                                            revisioned=True)),
         followups=RowDocs(cfg, FollowupOutbox, table="kv", key_col="k", body_col="v", prefix="followup:"),
+        queue_state=RowDocs(cfg, QueueState, table="kv", key_col="k", body_col="v", prefix="queue-state:"),
         results=lambda repo, check: DbDocSet(cfg, repo, check, "pass", PassRecord),
         base_red=lambda repo: DbDocSet(cfg, repo, None, "base_red", BaseRedRecord),
         durations=rundocs.durations(cfg),

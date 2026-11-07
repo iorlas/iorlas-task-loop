@@ -11,12 +11,12 @@ from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.contracts import factorydb, wire
+from taskloop.contracts.docstore import JsonStore
 from taskloop.contracts.enums import Outcome, Result, Step, WhyCode
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.paths import ConfigDir
 from taskloop.contracts.run import RunFinish, RunManifest, RunState
 from taskloop.contracts.runrows import RunRows, StaleRevision
-from taskloop.contracts.stores import JsonStore
 
 
 class RunRowsTest(Case):
@@ -103,8 +103,9 @@ class RunRowsTest(Case):
                 self.rows.all()
 
 
-class ForwardReadable(RunRowsTest):
-    """A manifest row a newer tl wrote (an extra key) reads in this one; a row that does not validate says so, not 'sqlite' (tl-x3m0)."""
+class RefusedRows(RunRowsTest):
+    """A manifest row with an extra key is refused, naming the key and that the row is from another
+    version; a row that does not validate says so, not 'sqlite' (tl-x3m0)."""
 
     def put_raw(self, edit):
         m = RunManifest(run="r", repo="/repo", bead="b", started=10.0, loop="loop", state=RunState.RUNNING)
@@ -115,10 +116,11 @@ class ForwardReadable(RunRowsTest):
             con.execute("UPDATE run SET manifest=? WHERE run='r'", (json.dumps(body),))
         return m
 
-    def test_an_extra_key_from_a_newer_writer_is_read_past(self):
-        m = self.put_raw(lambda body: body.update(pid_start_from_the_future=1.5))
-        assert self.rows.get("r") == m
-        assert self.rows.all() == [m]
+    def test_an_extra_key_is_refused_naming_the_key_and_the_other_version(self):
+        self.put_raw(lambda body: body.update(pid_start_from_the_future=1.5))
+        for read in (lambda: self.rows.get("r"), self.rows.all):
+            with pytest.raises(factorydb.DatabaseError, match=r"pid_start_from_the_future.*another version, delete it"):
+                read()
 
     def test_a_row_that_does_not_validate_names_validation_the_run_and_the_field(self):
         self.put_raw(lambda body: body.update(started="not a number"))

@@ -14,10 +14,10 @@ from taskloop.adapters import locks
 from taskloop.contracts import factorydb, rundocs
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import loop_key
 from taskloop.contracts.locator import RunBundle, RunLocator
 from taskloop.contracts.paths import TASK_EXCLUDE, ConfigDir
-from taskloop.contracts.ports import Git
 from taskloop.contracts.run import RunFinish
 from taskloop.contracts.signalrows import SignalRows
 from taskloop.contracts.slots import git_probe

@@ -11,8 +11,8 @@ import support.paths  # noqa: F401
 from support.fake_beads import FakeBeads
 
 from taskloop.app.reconcile.leases import release_dead
+from taskloop.contracts.beadsport import BeadPatch, NewBead
 from taskloop.contracts.ids import BeadId
-from taskloop.contracts.ports import BeadPatch, NewBead
 
 ENDED, RUNNING = "2000-01-01T00:00:00Z", "2999-01-01T00:00:00Z"
 

@@ -8,6 +8,7 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
+from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.decide import Decision
 from taskloop.app.run.resume import Resume
 from taskloop.contracts.checkpoint import Checkpoint, RunState
@@ -20,6 +21,7 @@ class Host:
     def __init__(self) -> None:
         self.notes: list[str] = []
         self.log = SimpleNamespace(note=self.notes.append)
+        self.review = ReviewLive()
         self.plan_data, self.plan_summary, self.accepted, self.published = None, "", [], 0
 
     def publish_plan(self) -> None:

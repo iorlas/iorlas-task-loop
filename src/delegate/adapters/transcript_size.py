@@ -1,9 +1,8 @@
-"""How big a worker's context was at its last turn, read from its transcript."""
-import json
-from typing import Any
+"""How big a worker's context was at its last turn, read from its transcript (Claude and Codex JSONL). The call's own `tokens` add up
+every turn, so they say nothing of the size; the last turn does."""
 
-from taskloop.adapters import opencode
-from taskloop.contracts.env import Env
+import json
+from pathlib import Path
 
 
 def last_turn_tokens(line: str) -> int | None:
@@ -20,13 +19,10 @@ def last_turn_tokens(line: str) -> int | None:
     return None
 
 
-def context_tokens(path: Any, env: Env, tail: int = 1 << 20) -> int | None:
-    """-> the input tokens (cache included) of the last turn in a worker's transcript, or None: Claude's last assistant message
-    usage, Codex's last token_count, OpenCode's last assistant message tokens (`opencode:ses_...`, read from its DB). The
-    answer's own `tokens` add up every turn of the call, so they say nothing of the size."""
-    session = opencode.opencode_id(path)
-    if session:
-        return opencode.opencode_context(env, session)
+def context_k(path: str | Path | None, tail: int = 1 << 20) -> float | None:
+    """The size in thousands of tokens of the last turn in a transcript, or None (no file, no usage line)."""
+    if not path:
+        return None
     try:
         with open(path, "rb") as f:
             f.seek(0, 2)
@@ -39,5 +35,5 @@ def context_tokens(path: Any, env: Env, tail: int = 1 << 20) -> int | None:
             continue
         tokens = last_turn_tokens(line)
         if tokens is not None:
-            return tokens
+            return round(tokens / 1000, 1)
     return None

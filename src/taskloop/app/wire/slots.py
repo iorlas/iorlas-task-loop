@@ -24,15 +24,17 @@ from taskloop.app.track.trail import event
 from taskloop.contracts import config
 from taskloop.contracts.bd_errors import BdCommandFailure
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
 from taskloop.contracts.config import EngineConfig, RepoProfile, SlotsConfig
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.ids import loop_key as repo_key
 from taskloop.contracts.paths import TASK_EXCLUDE
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git, Spawner
+from taskloop.contracts.procport import Spawner
 from taskloop.contracts.slots import NotARepo, SlotFail, SlotGitError, SlotTable
 from taskloop.contracts.slottable import WORKTREE, LiveSlot, SlotSource, build_slot_table
-from taskloop.stores.ticketrows import TicketRows
+from taskloop.stores.real import real_stores
 
 
 def profile(repo: str, base: str | None, git: Git) -> dict[str, Any]:
@@ -164,7 +166,7 @@ def slot_env(repo: str, store: Beads | None = None, cfg: SlotsConfig | None = No
         cfg=cfg or profile_slots(repo),
         store=store or bd_store(who.actor, repo),
         git=git,
-        tickets=TicketRows(who.config),
+        tickets=real_stores(who.config).tickets,
         cfgdir=who.config,
         actor=who.actor,
         host=hostname(),
@@ -201,7 +203,7 @@ def slot_of(repo: str, wt: str, who: Identity, store: Beads | None = None, *, st
 
 def waiting_line(repo: str, who: Identity) -> list[Any]:
     """The live tickets (Ticket), first in line first; a dead waiter's ticket is removed."""
-    return list(TicketRows(who.config).line(repo_key(repo)))
+    return list(real_stores(who.config).tickets.line(repo_key(repo)))
 
 
 def wait_slot(repo: str, cfg: SlotsConfig, why: str, bead: str = "", stop: Callable[[], bool] | None = None,

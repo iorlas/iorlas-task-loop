@@ -68,13 +68,13 @@ class AskFlow:
             return None
         return self.raise_ask(askspecs.open_question(question, options, cause, default), "", None)
 
-    def review_cap(self) -> None:
-        """A run's reviews are counted once for the whole run, a replan does not start them again (engine.max_total_reviews)."""
+    def review_cap(self, n: int) -> None:
+        """A run's reviews are counted once for the whole run, a replan does not start them again (engine.max_total_reviews).
+        `n`: the reviews of the run so far, the one about to start included."""
         e = self.e
         cap = int(e.cfg.max_total_reviews)
-        if cap and e.stats["reviews"] > cap:
+        if cap and n > cap:
             hint = e.stuck_why[:600]
-            n = e.stats["reviews"]
             raise Blocked(f"{n} reviews in this run (the limit is {cap}, replans included): it needs the owner's hint\n{hint}",
                           askspecs.open_question(f"{n} reviews ran in this run (the limit is {cap}, replans included). {hint}", None),
                           kind=Kind.ASK_STUCK)

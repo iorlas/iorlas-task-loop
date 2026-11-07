@@ -2,7 +2,6 @@
 (never in the repo) and files an owner-look bead for the owner's later round."""
 import sys
 from pathlib import Path
-from typing import Any, cast
 from unittest import mock
 
 import pytest
@@ -12,8 +11,9 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import engine_case as T
 from support import fake_route, gitq
 from support.builders import make_engine
-from support.engine_case import BEAD, CLEAN, PLAN, WRITE, engine, verdict
+from support.engine_case import engine
 from support.fakes import must_bead
+from support.plans import BEAD, CLEAN, PLAN, WRITE, verdict
 from support.spawn import port_git, real_spawner
 from support.who import who
 
@@ -222,7 +222,7 @@ class LookTest(T.EngineTest):
                             visual_paths=VISUAL)
             assert rc == 0, self.blocked
             self.bd_calls.clear()
-            cast(Any, self.eng).look_notes, self.eng.look_filed = ["second look"], False  # a later run
+            self.eng.look.notes, self.eng.look.filed = ["second look"], False  # a later run
             self.store.put({"id": "t-9", "labels": ["owner-look"], "dependencies": [{"id": "t-1", "type": "related"}]})
             self.eng.owner_look.file_owner_look()
         assert self.creates() == []
@@ -242,7 +242,7 @@ class LookTest(T.EngineTest):
         eng2.tree.reset(must_bead(BEAD))
         eng2.bead_title = "Add f"
         eng2.resume.point()
-        assert eng2.look_notes == ["matches"]
+        assert eng2.look.notes == ["matches"]
         with kept_one(), self.store.stub(show=BEAD):  # the pictures are the store's, so a restart finds them where they were
             eng2.owner_look.file_owner_look()
         assert len(self.creates()) == 1

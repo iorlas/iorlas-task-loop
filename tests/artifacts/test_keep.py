@@ -102,15 +102,17 @@ class Keeping(Case):
         assert keep.CAP_BYTES == 200 * 1024 * 1024
 
 
-class Host:
-    """The engine as Pictures sees it: a worktree evidence dir, a run folder, the cap and a log."""
+class Host(mock.NonCallableMock):
+    """The engine as Pictures sees it: a worktree evidence dir, a run folder, the cap and a log (the rest of LookHost is a mock's)."""
 
     def __init__(self, root, run, cap_mb=200):
+        super().__init__()
         self.bead, self.evidence_dir, self.run_dir = "x-1", root / "wt" / "evidence", root / "runs" / run
         self.cfg, self.notes, self.warned = mock.Mock(evidence_cap_mb=cap_mb, look_max_px=1280), [], []
         self.log = mock.Mock(note=self.notes.append)
         self.home = mock.Mock(artifact_store=lambda: root / "store")
         self.run_id, self.wt, self.artifact_repo = run, root / "wt", "r-1"
+        self.ports = mock.Mock(repo=mock.Mock(key=lambda: "r-1"))
 
     def warn(self, text):
         self.warned.append(text)

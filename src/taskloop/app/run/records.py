@@ -163,7 +163,7 @@ class Records:
                         log=str(e.log_path),
                         stderr=str(e.err_path),
                         sessions=e.sessions,
-                        verified=e.verified,
+                        verified=e.review.verified,
                         write_rounds=e.write_rounds,
                         strays=e.strays,
                         reflection=e.reflection,

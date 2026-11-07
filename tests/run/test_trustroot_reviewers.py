@@ -5,7 +5,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 from support.case import Case
-from support.engine_case import BEAD, CLEAN, PLAN, WRITE, EngineTest
+from support.engine_case import EngineTest
+from support.plans import BEAD, CLEAN, PLAN, WRITE
 
 from taskloop.app.run.blocked import Blocked, blocked_for
 from taskloop.app.run.entry import _blocked_by_engine
@@ -56,8 +57,8 @@ class AdmissionAuthors(Case):
                 note = Comment(author=author, text="Blocked: leave it parked", created_at="2")
                 store = Mock()
                 store.comments.return_value = [block, note]
-                with patch("taskloop.app.run.entry.AskStore.at") as asks:
-                    asks.return_value.get.return_value = None
+                with patch("taskloop.app.run.entry.real_stores") as stores:
+                    stores.return_value.asks.get.return_value = None
                     why = _blocked_by_engine(bead, store, ConfigDir("/unused"), "owner")
                 assert bool(why) == expected
 

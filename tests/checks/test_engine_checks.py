@@ -2,52 +2,37 @@
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, procsim
-from support.aging import age
-from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, EngineTest, no_repo, sh
+from support.check_host import CheckHostCase
+from support.plans import BEAD, FALSE, HAS_F, PLAN
+from support.world import no_repo
 
 # isort: split
-import contextlib
 import os
 import shlex
-import time
 from pathlib import Path
 from unittest import mock
 
 from support.briefs import brief_digest, linked_text
-from support.builders import cfg_with
+from support.cfgs import cfg_with
 from support.checks import ck, res, typed
 from support.fakes import as_bead, must_bead
-from support.narrow import must
-from support.spawn import port_git, real_spawner
-from support.who import who
 
 from taskloop.adapters import childenv
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.checks import evidence as check_evidence
-from taskloop.app.run import (
-    engine,
-    entry,
-)
-from taskloop.app.wire import slots as wslots
 from taskloop.contracts import answers, plancheck
 from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId, CheckId
-from taskloop.contracts.plancheck import Adhoc, adhoc
 from taskloop.domain.checks import lint
-from taskloop.domain.checks import matchers as check_matchers
 from taskloop.domain.checks.writer_split import WriterSplit
 from taskloop.domain.review.matchers import Tools
 from taskloop.domain.write.matchers import count_tests
 
 
-class EngineChecksTest(EngineTest):
+class EngineChecksTest(CheckHostCase):
     def test_repo_checks_on_an_equal_tree_and_base_are_reused(self):
         count = Path(self.tmp.name) / "count"
         bump = procsim.fake("bump", procsim.appends(count))
@@ -62,14 +47,6 @@ class EngineChecksTest(EngineTest):
         assert count.read_text() == "11"
         assert first[0].exit == 0
 
-    def test_checks_run_without_the_launchers_claude_session(self):
-        c = wslots.load_cfg(str(self.wt), port_git())
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
-            git=port_git(), who=who())
-        with mock.patch.dict(os.environ, {"CLAUDE_CODE_ENTRYPOINT": "cli"}):
-            session_env = procsim.fake("session-env", lambda cwd, env: (1 if env.get("CLAUDE_CODE_ENTRYPOINT") else 0, ""))
-            res = eng.run_checks({"checks": ck([session_env]), "files": []}, "s")
-        assert res[0].exit == 0
 
     def test_checks_run_in_groups_fastest_first_and_stop_at_a_red_group(self):
         eng = self.checks_engine(checks=[{"id": "unit", "cmd": "true", "group": "tests"},
@@ -128,62 +105,12 @@ class EngineChecksTest(EngineTest):
                                   check_wall_min=0.01)
         assert eng2.run_checks({"checks": [], "files": []}, "s")[0].exit == 0
 
-    def test_a_configured_checks_log_and_exit_reach_the_checks_after_it(self):
-        cmd, n = self.counting_check("Passed: 12", ok_after=1)
-        eng = self.checks_engine(checks=[{"id": "unity-tests", "cmd": cmd, "group": "tests"}])
-        def reads(cwd, env):
-            ok = "Passed: 12" in Path(env["TL_CHECK_LOG_UNITY_TESTS"]).read_text() and env["TL_CHECK_RC_UNITY_TESTS"] == "0"
-            return (0 if ok else 1), ""
-        read = procsim.fake("reads-the-log TL_CHECK_LOG_UNITY_TESTS TL_CHECK_RC_UNITY_TESTS", reads)
-        res = eng.run_checks({"checks": ck([adhoc(read, (CheckId("unity-tests"),))]), "files": []}, "s")
-        assert [c.exit for c in res] == [0, 0]  # the plan check ran after the repo check and read its log
-        assert n.read_text() == "1"
 
-    def test_the_same_command_under_distinct_registry_ids_runs_each_requirement(self):
-        cmd, n = self.counting_check("ok", ok_after=1)
-        eng = self.checks_engine(checks=[{"id": "a", "cmd": cmd, "group": "static", "wall_min": 1, "cache": False},
-                                         {"id": "b", "cmd": cmd, "group": "tests", "wall_min": 2, "cache": False}])
-        res = eng.run_checks({"checks": [], "files": []}, "s")
-        assert (n.read_text(), [bool(c.reused) for c in res]) == ("2", [False, False])
 
-    def test_a_slot_wait_in_a_check_is_read_and_capped_at_its_wall_time(self):
-        cmd, _n = self.counting_check("unity-slot: x got slot 0 after 99999999s", ok_after=1)
-        eng = self.checks_engine(checks=[{"id": "u", "cmd": cmd, "group": "tests"}])
-        eng.run_checks({"checks": [], "files": []}, "s")
-        assert 0 < eng.waited < 60
-        eng.waits.add(99999999, WaitWhat.SLOT)
-        assert eng.waited <= time.time() - eng.t0
 
-    def test_budget_min_by_label_raises_the_budget_for_a_labelled_bead(self):
-        eng = self.checks_engine(budget_min=5, budget_min_by_label={"unity": 300})
-        age(eng, 8 * 60)
-        with pytest.raises(engine.Blocked):
-            eng.waits.budget_check()
-        labelled = self.checks_engine(attrs={"labels": ["unity"]}, budget_min=5, budget_min_by_label={"unity": 300})
-        age(labelled, 8 * 60)
-        labelled.waits.budget_check()
 
-    def test_a_compile_error_amid_library_or_asset_import_lines_is_retried_once(self):
-        for ctx in ("Refreshing asset database", "Library/Bee/x.dll locked", "Temp/y missing"):
-            assert check_matchers.failure_kind(ctx + "\nA.cs(1,1): error CS1002: ; expected") == "import", ctx
-        cmd, _n = self.counting_check("Library/x\nA.cs(1,1): error CS1002: ; expected")
-        eng = self.checks_engine(checks=[{"id": "imp", "cmd": cmd, "group": "tests", "retry": 0}])
-        assert eng.run_checks({"checks": [], "files": []}, "s")[0].tries == 2
 
-    def test_a_locked_editor_is_waited_for_with_backoff_then_passes(self):
-        cmd, n = self.counting_check(self.LOCK[0], ok_after=3)
-        eng = self.checks_engine(checks=[{"id": "unity", "cmd": cmd, "group": "tests", "retry": 1}])
-        with mock.patch.object(eng.checker, "sleep") as sleep:
-            res = eng.run_checks({"checks": [], "files": []}, "s")
-        assert (res[0].exit, res[0].status, n.read_text()) == (0, "passed", "3")
-        assert [c[0][0] for c in sleep.call_args_list if c[0][0] >= 15] == [15, 30]  # other threads may sleep too
 
-    def test_a_lock_is_waited_for_even_on_a_check_with_no_retry(self):
-        cmd, n = self.counting_check(self.LOCK[0], ok_after=2)
-        eng = self.checks_engine(checks=[{"id": "unity", "cmd": cmd, "group": "tests", "retry": 0}])
-        with mock.patch.object(eng.checker, "sleep"):
-            res = eng.run_checks({"checks": [], "files": []}, "s")
-        assert (res[0].exit, n.read_text()) == (0, "2")
 
     @no_repo
     def test_a_passing_check_still_shows_its_notable_lines(self):
@@ -191,23 +118,6 @@ class EngineChecksTest(EngineTest):
         assert "unity steps run" in out
         assert "439 passed" in out
 
-    def test_a_stage_check_always_reruns_it_can_read_state_outside_the_tree(self):
-        state = Path(self.tmp.name) / "editor-open"  # a running editor, a log, a bead comment: git cannot see them
-        eng = engine.Engine(
-            BeadId("t-1"),
-            str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
-            store=self.store,
-            env=snapshot(),
-            spawner=real_spawner(),
-            git=port_git(), who=who())
-        gone = procsim.fake(f"editor-closed {state}", lambda cwd, env: (1 if state.exists() else 0, ""))
-        st = {"checks": ck([gone]), "files": []}
-        assert eng.run_checks(st, "s")[0].exit == 0
-        state.write_text("x")
-        again = eng.run_checks(st, "s")
-        assert again[0].exit == 1
-        assert not again[0].cached
 
     def test_a_repo_check_marked_cache_false_always_reruns(self):
         count = Path(self.tmp.name) / "count"
@@ -217,35 +127,7 @@ class EngineChecksTest(EngineTest):
         eng.run_checks({"checks": [], "files": []}, "s")
         assert count.read_text() == "11"
 
-    def test_a_failed_check_is_never_reused(self):
-        count = Path(self.tmp.name) / "count"
-        fails = procsim.fake("fails", procsim.appends(count, code=1))
-        eng = engine.Engine(
-            BeadId("t-1"),
-            str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
-            store=self.store,
-            env=snapshot(),
-            spawner=real_spawner(),
-            git=port_git(), who=who())
-        st = {"checks": ck([fails]), "files": []}
-        eng.run_checks(st, "s")
-        again = eng.run_checks(st, "s")
-        assert count.read_text() == "11"
-        assert not again[0].cached
 
-    def test_checks_run_without_a_shell(self):
-        eng = engine.Engine(
-            BeadId("t-1"),
-            str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
-            store=self.store,
-            env=snapshot(),
-            spawner=real_spawner(),
-            git=port_git(), who=who())
-        res = eng.run_checks({"checks": [Adhoc(argv=("echo", "$HOME", "&&", "x;", "(y)"), reads=())], "files": []}, "s")
-        assert res[0].exit == 0, res[0].tail
-        assert "$HOME && x; (y)" in res[0].tail  # no expansion, no operator: every word reached the program as written
 
     def test_a_check_that_is_not_an_argv_list_is_refused_with_the_allowed_form(self):
         wire = plancheck.to_wire(PLAN)
@@ -268,19 +150,6 @@ class EngineChecksTest(EngineTest):
         for ok in (HAS_F, "grep -rn 'bd list' src", "pytest tests/test_bd.py", "test -f abd"):
             assert lint.tracker_checks(typed(dict(PLAN, risks=[{"what": "x", "check": ok}]))) == [], ok
 
-    def test_a_write_prompt_names_each_check_command_once_in_its_may_run_lists(self):
-        # tl-7y6.6.12: the stage's checks and the where() text both listed "You may run these"
-        cmd = procsim.fake("print-1", procsim.exits(0, "1"))
-        plan = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[cmd, HAS_F])])
-        rc, s = self.run_engine({"plan": [plan], "write": [WRITE], "review": [CLEAN]},
-                                raw={"checks": [{"id": "x", "cmd": procsim.fake("print-2", procsim.exits(0, "2")), "group": "static"},
-                                                {"id": "y", "cmd": "echo only-repo"}]})
-        assert rc == 0, self.blocked
-        w = next(p for (c, p) in zip(s.calls, s.prompts, strict=False) if c[0] == "worker")
-        may = w[w.index("The stage's checks"):w.index("A check that mentions")]
-        assert may.count(cmd) == 1
-        assert may.count(HAS_F) == 1
-        assert may.count("only-repo") == 1
 
     def test_a_sleeping_check_is_cut_at_check_wall_min_not_node_timeout_min(self):
         eng = self.checks_engine(check_wall_min=0.01, node_timeout_min=45)
@@ -289,40 +158,8 @@ class EngineChecksTest(EngineTest):
         assert "timed out after 0.01 min" in res[0].tail
 
 
-    def test_fresh_drops_the_checkpoint(self):
-        with self.stop_at("reviewer", 2):
-            self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN]})
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]}, fresh=True)
-        assert rc == 0
-        assert s.calls[0][0] == "planner"
-        assert "already accepted" not in s.prompts[0]
 
-    def test_a_tree_changed_since_the_checkpoint_starts_over(self):
-        with self.stop_at("reviewer", 2):
-            self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN]})
-        sh("git", "checkout", "-q", "task/t-1", cwd=self.wt)  # a parked slot is left detached at the base
-        (self.wt / "f.txt").write_text("someone edited it\n")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
-        assert rc == 0
-        assert s.calls[0][0] == "planner"
-        assert "changed since" in self.eng.log_path.read_text()
 
-    def test_a_slow_check_is_the_engines_and_a_fast_failed_check_is_the_writers_to_rerun(self):
-        slow = "true unity-tests"
-        fast = procsim.fake("red-on-d2 fast-one", lambda cwd, env: (1 if procsim.f_txt(cwd) == "d2" else 0, ""))
-        rc, s = self.run_engine({"plan": [self.plan_with(slow, fast)], "write": [WRITE, WRITE], "review": [CLEAN]})
-        assert rc == 0, self.blocked
-        first, again = s.prompts[1], s.prompts[2]
-        assert "The engine runs these, do not run them:\n- " + slow in first
-        assert "You may run these:\n- " + fast in first
-        assert (
-            "never start a command you expect to take over a minute; never poll a running command more than 3 times"
-            in first.replace("Never", "never")
-        )
-        you_may = again[again.index("Only the failed checks"):]
-        assert "You may run these:\n- " + fast in you_may
-        assert "- " + slow not in you_may.split("You may run these:")[1].split("If a command")[0]
-        assert "do not run them:\n- " + slow not in again
 
     @no_repo
     def test_a_check_is_engine_only_by_its_last_duration_else_by_its_name(self):
@@ -334,15 +171,6 @@ class EngineChecksTest(EngineTest):
         assert only("just test-all", {})
         assert not only("just display", {})
 
-    def test_a_brief_the_owner_changed_or_a_checkpoint_without_writer_seen_gets_the_full_prompt(self):
-        _rc, _s = self.two_writes(ctx_k=40)
-        args = (1, "g", "f.txt", "", "checks", "where", "fb", "")
-        assert "The brief is unchanged" in must(self.eng.hand.delta(*args))
-        (self.eng.run_dir / "brief.md").write_text("the owner answered: use X\n")  # an answer came in
-        assert self.eng.hand.delta(*args) is None
-        (self.eng.run_dir / "brief.md").write_text(self.eng.brief_file.read_text())
-        self.eng.writer.seen = []  # a checkpoint of before this existed
-        assert self.eng.hand.delta(*args) is None
 
     @no_repo
     def test_a_tool_counts_only_backticked_or_after_a_run_verb(self):
@@ -351,13 +179,6 @@ class EngineChecksTest(EngineTest):
         assert Tools.named("the biome transition fades in; no black screen between lots") == []
         assert Tools.named("`mypy` was not run; nobody checked with eslint") == ["mypy", "eslint"]
 
-    def test_run_task_refuses_the_main_checkout(self):
-        a = mock.Mock(id="t-1", branch=None, pr=None, worktree=str(self.wt), slot=None, dry_run=True, fresh=False, quiet=True,
-                      outcome_file=None)
-        with mock.patch.object(entry, "Engine") as made, contextlib.chdir(self.wt):
-            rc = entry.main(a, self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
-        assert rc == 1
-        made.assert_not_called()
 
     def test_dry_check_reads_the_argv_not_a_shell_string(self):
         def plan(*checks, files=("new.txt",)):

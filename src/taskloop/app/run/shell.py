@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from taskloop.adapters import childenv
+from taskloop.adapters import check_net, childenv
 from taskloop.adapters.gitrepo import pinned_env
 from taskloop.app.run.blocked import Blocked
 from taskloop.contracts import log as rec
@@ -69,7 +69,7 @@ class Shell:
         try:
             if what in {"check", "check fix"}:
                 with childenv.check_environment(e.env.vars, extra, scratch_home=e.cfg.check_scratch_home) as clean:
-                    argv = [*check_nice(e.env.vars.get("PATH", "")), *cmd]
+                    argv = [*check_nice(e.env.vars.get("PATH", "")), *self.no_network(), *cmd]
                     return e.spawner.stream(argv, cwd=None if cwd is None else str(cwd), env={}, extra=clean,
                                             on_output=chunks.append, timeout_s=timeout, stop=stop)
             return e.spawner.stream(list(cmd), cwd=None if cwd is None else str(cwd), extra=extra, on_output=chunks.append,
@@ -80,6 +80,16 @@ class Shell:
             e.log.emit(rec.Kill(what=what, why="interrupted", secs=round(now - started), started_t=started, kill_t=now, observed_t=now))
             e.log.emit(rec.CmdEnd(id=cid, exit=-1, exec_seconds=round(now - started, 1)))
             raise
+
+    def no_network(self) -> tuple[str, ...]:
+        """engine.check_net_isolate: the prefix that takes a check's network away. A host that cannot says so once and runs the check."""
+        if not self.e.cfg.check_net_isolate:
+            return ()
+        found = check_net.current()
+        if found.warning and found.warning not in check_net.said:
+            check_net.said.add(found.warning)
+            self.e.log.note(found.warning)
+        return found.prefix
 
     def killed(self, res: Any, rc: int, what: str, timeout: float, started: float) -> str:
         """The engine stopped the command (its wall limit, or a stop): recorded; the words added to its output."""

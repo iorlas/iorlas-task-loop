@@ -28,28 +28,25 @@ from taskloop.app.track import verbs
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import fence, wire
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BdFailure, BeadPatch, Beads
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import AskStatus, Result
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
 from taskloop.contracts.fence import SLOT_GEN
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.kinds import Kind
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadPatch, Beads, Git, Spawner
+from taskloop.contracts.procport import Spawner
 from taskloop.contracts.run import Reexec, RunReport
-from taskloop.contracts.stores import AskStore
 from taskloop.domain.plan.brief import owner_written
+from taskloop.stores.real import real_stores
 
 say = console.say
 TL_PY = Path(__file__).resolve().parents[4] / "skills" / "task-loop" / "tl.py"
-
-
-class Args:
-    def __init__(self, **kw: Any) -> None:
-        self.__dict__.update(kw)
 
 
 def release_dead(repo: Any, git: Git, who: Identity, store: Any = None) -> None:
@@ -84,7 +81,7 @@ def _blocked_by_engine(b: Any, store: Any, home: ConfigDir, owner_author: str) -
     if not blocks:
         return "blocked by a person, not by the engine"
     after = [c for c in cs if c.created_at > blocks[-1].created_at and owner_written(c, owner_author)]
-    ask = AskStore.at(home).get(bead_id)
+    ask = real_stores(home).asks.get(bead_id)
     asking = ask is not None and ask.consumed is None and ask.status in (AskStatus.OPEN, AskStatus.PARKED, AskStatus.ANSWERED)
     if ask is not None and asking and ask.answer is not None:  # tl-gy4: an answer filed on the ask (dashboard, tl ask answer) is an answer
         after, asking = after[:0], False  # whether or not a comment followed the block; the run's check_ask consumes it
@@ -201,7 +198,7 @@ def run_main_stoppable(a: Any, store: Any = None, *, env: Env, spawner: Spawner,
     repo = gitrepo.repo_root()
     cfg = wslots.load_cfg(repo, git)
     if not a.dry_run:
-        setup_retry.retry_setup(AskStore.at(who.config), store or beadtools.bd_store(who.actor, repo),
+        setup_retry.retry_setup(real_stores(who.config).asks, store or beadtools.bd_store(who.actor, repo),
                                 a.id, ident.plugin_version(), time.time(), cfg, starting=True)
     if a.slot == "any":
         return run_any_slot(a, repo, cfg, store, env=env, spawner=spawner, git=git, who=who)

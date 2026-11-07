@@ -3,6 +3,7 @@ from typing import Any
 
 from taskloop.adapters import delegate as dg
 from taskloop.app.run import worker_identity
+from taskloop.contracts.asked import Updates
 from taskloop.stores import call_state as callstate
 
 
@@ -38,4 +39,5 @@ class Call:
         self.state: callstate.CallState | None = None
         self.prepared: worker_identity.PreparedCall | None = None
         self.sha = ""
+        self.thread = Updates()  # what the last valid answer said about the writer's thread (asked.thread_updates)
         self.limit_s: float | None = None  # the --timeout the last call was given

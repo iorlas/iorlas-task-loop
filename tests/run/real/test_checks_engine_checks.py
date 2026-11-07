@@ -1,4 +1,4 @@
-"""Engine tests: the checks round."""
+"""Whole beads through the Engine, moved out of tests/checks/test_engine_checks.py (they run the pipeline, not only the checks stage)."""
 import sys
 from pathlib import Path
 
@@ -7,7 +7,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 from support import gitq, procsim
-from support.engine_case import CLEAN, PLAN, WRITE, EngineTest, pid_gone
+from support.engine_case import EngineTest
+from support.plans import CLEAN, PLAN, WRITE
+from support.world import pid_gone
 
 # isort: split
 import os
@@ -29,11 +31,10 @@ from taskloop.contracts.ids import BeadId
 
 
 class EngineChecksTest(EngineTest):
-
-
     def sleeping_check(self, secs, counter):
         """A check that counts its runs in `counter` and would take `secs` seconds (the sim stops it at the wall limit, nothing sleeps)."""
         return procsim.fake(f"sleep-{secs}", procsim.takes(secs, then=procsim.appends(counter)))
+
     def test_a_stop_during_a_check_stops_the_check_and_everything_it_started(self):
         if os.name == "nt":
             pytest.skip("POSIX process groups")
@@ -62,6 +63,7 @@ class EngineChecksTest(EngineTest):
         if not until(lambda: pid_gone(child), 2.5):
             os.kill(child, 9)
             pytest.fail("the check's child outlived the stop")
+
     def test_sigterm_during_a_stage_check_stops_its_tree_and_still_closes(self):
         pidfile = Path(self.tmp.name, "child.pid")
         check = self.spawn(pidfile, term=True)

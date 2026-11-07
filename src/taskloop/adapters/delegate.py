@@ -5,6 +5,7 @@ runner seam, and returns a `DelegateResult`. It never raises (but an interruptio
 `no_answer`, an answer that breaks the shape a `contract_violation`, a call the engine had to stop a `timeout`. Facts of a synthesized
 stop come from delegate's contract.json (`api.contract()`). Nothing here reads prose."""
 
+import contextlib
 import json
 import os
 import subprocess
@@ -17,7 +18,8 @@ from typing import Any
 from delegate import api
 from taskloop.adapters import delegate_wire
 from taskloop.contracts.delegate import REASON_TIMEOUT, DelegateResult, Permanence, RunRequest, Scope
-from taskloop.contracts.env import Env
+from taskloop.contracts.delegate_status import snapshot_of
+from taskloop.contracts.snapshots import StatusSnapshot
 
 CONTRACT = delegate_wire.CONTRACT  # the contract number this engine speaks
 BACKSTOP_S = 120  # the engine stops the child at the node's limit plus this
@@ -79,16 +81,45 @@ def status_json(claude_usage: Any = None) -> dict[str, Any]:
         return {}
 
 
-def lane_status(env: Env | None = None) -> dict[str, Any]:
-    """Status `lanes` (name -> {out, out_until, ...}); {} when it cannot be read."""
-    lanes = status_json().get("lanes")
-    return lanes if isinstance(lanes, dict) else {}
+def status_snapshot(claude_usage: object = None) -> StatusSnapshot:
+    """delegate's status read into the StatusSnapshot the dashboard files. ValueError when there is none or its shape is unreadable."""
+    status = status_json(claude_usage)
+    if not status:
+        raise ValueError("delegate status could not be built")
+    return snapshot_of(status)
 
 
-def role_status(env: Env | None = None) -> dict[str, Any]:
-    """Status `roles`: {role: {"usable": True | False | None, "lane", "why", "until", ...}}; {} when unreadable."""
-    roles = status_json().get("roles")
-    return roles if isinstance(roles, dict) else {}
+@dataclass(frozen=True)
+class Lane:
+    """One lane of delegate's fleet as the engine may ask it: usable now (None: delegate does not know the lane), why not, until when."""
+
+    name: str
+    usable: bool | None
+    why: str = ""
+    until: float = 0.0
+
+
+def lanes() -> list[Lane]:
+    """Every lane delegate knows, in its order. [] when the status cannot be read."""
+    raw = status_json().get("lanes")
+    out: list[Lane] = []
+    for name, row in (raw.items() if isinstance(raw, dict) else []):
+        v = row if isinstance(row, dict) else {}
+        usable = None if v.get("out") is None else not v["out"]
+        out.append(Lane(str(name), usable, str(v.get("reason") or ""), float(v.get("out_until") or 0.0)))
+    return out
+
+
+def lane(name: str) -> Lane | None:
+    """The lane `name`, or None when delegate has no such lane here."""
+    return next((x for x in lanes() if x.name == name), None)
+
+
+def roles_usable() -> dict[str, bool | None]:
+    """Per role: usable now (True | False), or None when delegate cannot say."""
+    raw = status_json().get("roles")
+    return {str(r): (v.get("usable") if isinstance(v, dict) and isinstance(v.get("usable"), bool) else None)
+            for r, v in (raw.items() if isinstance(raw, dict) else [])}
 
 
 def run_history(since: float = 0.0) -> list[RunRecord]:
@@ -158,9 +189,11 @@ def call(
             Path(bf).write_text(brief, encoding="utf-8")
             Path(sf).write_text(json.dumps(schema), encoding="utf-8")
             req = req.replace(brief_path=bf, schema_path=sf)
-            argv = req.to_argv("python", resolved.route)  # for the trace only: the runner takes `request`
+            wire_req = api_request(req, env)
+            with contextlib.suppress(ValueError):  # for the trace only (the runner takes `request`); a refused request has none
+                argv = wire_req.to_argv(resolved.route, contract=dict(c))
             wall = (req.timeout_s + BACKSTOP_S) if req.timeout_s else None
-            p = runner(argv, cwd=req.cwd or None, env=dict(env, **req.env()), timeout=wall, request=api_request(req, env))
+            p = runner(argv, cwd=req.cwd or None, env=dict(env, **req.env()), timeout=wall, request=wire_req)
     except (Stopped, subprocess.TimeoutExpired) as e:
         why = e.why if isinstance(e, Stopped) else "its wall limit ran out"
         return Answer(

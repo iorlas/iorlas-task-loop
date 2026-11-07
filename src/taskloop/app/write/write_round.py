@@ -2,15 +2,14 @@
 means (a question, an accepted requirement that decides it, shots a visual stage owes) and the cases it adds."""
 from typing import Any
 
-from taskloop.adapters.check_files import repo_key
 from taskloop.app.write import show_check
 from taskloop.app.write.prepare import PREPARED, Prepare
-from taskloop.app.write.state import AGAIN, REPLAN, StageState
+from taskloop.app.write.prompts import SHOTS_FIX, write_prompt
+from taskloop.app.write.state import AGAIN, REPLAN, RoundResult, StageState, carrying
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.checks import planref
 from taskloop.domain.prompts.anchors import anchors_text
 from taskloop.domain.prompts.common import DECIDED_TEXT, LATER_CASES, UNCHECKED_TEXT
-from taskloop.domain.prompts.write import SHOTS_FIX, write_prompt
 
 CASES_TAIL = ("\nThe plan's acceptance cases run on the last stage. If you find a case they miss, add it to new_cases (the "
               "criterion it proves, the check, why); never remove or weaken one.")
@@ -22,30 +21,37 @@ class WriteRound:
     def __init__(self, host: Any) -> None:
         self.e = host
 
-    def run(self, s: StageState, *, look: bool = True) -> str:
-        """The round's write. -> "" when the checks go on, else AGAIN or REPLAN."""
+    def run(self, s: StageState, *, look: bool = True) -> RoundResult:
+        """The round's write. -> a result whose flow is "" when the checks go on, else AGAIN or REPLAN."""
+        out = RoundResult()
+        with carrying(out):
+            out.flow = self.go(s, out, look)
+        return out
+
+    def go(self, s: StageState, out: RoundResult, look: bool) -> str:
         e = self.e
         boundary = s.n == 1 and s.i > 0 and not s.state  # the first write of a later stage
         fresh = e.hand.drop_big(boundary)
         prompt, delta = self.prompts(s, boundary, fresh)
-        s.w, s.wfam = e.ai("write", f"{s.name} write {s.n}", prompt, delta=delta, resume_key="writer", write=s.n,
+        got = e.ai("write", f"{s.name} write {s.n}", prompt, delta=delta, resume_key="writer", write=s.n,
                            visual=e.pictures.stage_visual(s.st), round=s.rounds + 1,
                            at=(s.sk, s.rounds, s.n + (10000 if s.prepare_retried else 0)), **s.meta)
-        self.record(s, fresh)
+        s.w, s.wfam = got.data, got.family
+        self.record(s, fresh, out)
         if Prepare(e).retry(s, str(s.w.get("bad_checks", [])) + str(s.w.get("problem", ""))):
             return PREPARED
         s.wrote_unchecked = s.w.get("unchecked") or []  # the review decides what is still unproven after the checks
-        flow = self.question(s)
+        flow = self.question(s, out)
         if flow:
             return flow
-        self.shots_contract(s, prompt)
+        self.shots_contract(s, prompt, out)
         e.cases.add_cases(s.w.get("new_cases") or [])
         if e.pictures.shot_methods() and e.pictures.stage_visual(s.st):
-            e.render_stale = True  # a write after the last render: its pictures show an older tree
+            e.pictures.mark_stale()  # a write after the last render: its pictures show an older tree
         back = self.show_contract(s)
         if back:  # a show item lacks its artifacts: the writer registers them before any check runs
             return back
-        back = e.judge.look_step(s.st, s.w, s.name, s.last) if look else ""
+        back = e.judge.look_step(s.st, s.w, s.name, s.last, family=s.wfam) if look else ""
         if back:  # the look judge found defects: the writer fixes them before the full checks run once
             s.feedback = back
             return AGAIN
@@ -67,7 +73,7 @@ class WriteRound:
         dtail = ""  # what a resumed writer still needs that its first prompt did not say for this stage
         if s.last and not e.writer.last_stage:  # the acceptance cases run now: it has not been told
             dtail += CASES_NOW
-        if e.unchecked:
+        if e.review.unchecked:
             dtail += UNCHECKED_TEXT
         delta = None if fresh else e.hand.delta(s.i + 1, st["goal"], ", ".join(st["files"]), anchors_text(st), stage_checks,
                                                 where_text, s.feedback, dtail + e.judge.look_write(st))
@@ -77,20 +83,19 @@ class WriteRound:
             prompt += e.shared.shared_text() + e.routing.ledger().text()
         return prompt, delta
 
-    def record(self, s: StageState, fresh: str) -> None:
+    def record(self, s: StageState, fresh: str, out: RoundResult) -> None:
         """The writer's thread, its summary and its flakes, as the later rounds read them."""
         e, w = self.e, s.w
-        e.writer_family = s.wfam
-        e.writer.last_stage = s.last
+        out.family, out.last_stage = s.wfam, s.last
         wr = e.sessions[-1] if e.sessions else {}
-        e.write_rounds.append({"write": s.n, "round": s.rounds + 1, "node_id": wr.get("node_id"), "ref": wr.get("ref"),
-                               "resumed": "yes" if wr.get("resume") else "no", "input_tokens": (wr.get("tokens") or {}).get("in"),
-                               "turns": wr.get("turns"), "prompt_chars": wr.get("prompt_chars"), "context_k": wr.get("context_k"),
-                               "fresh": fresh})
+        out.write_rows += ({"write": s.n, "round": s.rounds + 1, "node_id": wr.get("node_id"), "ref": wr.get("ref"),
+                            "resumed": "yes" if wr.get("resume") else "no", "input_tokens": (wr.get("tokens") or {}).get("in"),
+                            "turns": wr.get("turns"), "prompt_chars": wr.get("prompt_chars"), "context_k": wr.get("context_k"),
+                            "fresh": fresh},)
         e.shared.add_flakes(w.get("flakes") or [])
-        e.last_summary = w["summary"]
+        out.summary = w["summary"]
 
-    def question(self, s: StageState) -> str:
+    def question(self, s: StageState, out: RoundResult) -> str:
         """A question an accepted requirement decides is a fix round, not an ask; any other is the owner's."""
         e, w = self.e, s.w
         if not w["question"].strip():
@@ -100,12 +105,12 @@ class WriteRound:
             spec = askspecs.open_question(w["question"], w.get("options"), w.get("owner_cause"))
             raise e.blocked_for("owner decision needed", "ASK_DECISION", spec=spec)
         s.rounds += 1
-        e.stats["rounds"] += 1
-        e.stuck_why = f"the writer asked what an accepted requirement decides: {w['decided']}"
-        e.warn(f"{s.name}: {e.stuck_why[:300]}")
+        out.rounds += 1
+        stuck = out.stuck_why = f"the writer asked what an accepted requirement decides: {w['decided']}"
+        e.warn(f"{s.name}: {stuck[:300]}")
         if s.rounds >= int(e.cfg.max_rounds):
-            (e.run_dir / "replan.md").write_text(e.stuck_why + "\n\nThe question: " + w["question"])
-            e.steps.move("replan", "rounds_used", f"{s.rounds} rounds used: {e.stuck_why}")
+            (e.run_dir / "replan.md").write_text(stuck + "\n\nThe question: " + w["question"])
+            e.steps.move("replan", "rounds_used", f"{s.rounds} rounds used: {stuck}")
             return REPLAN
         e.steps.move("write", "writer_decided", f"an accepted requirement decides it: {w['decided']}")
         s.feedback = DECIDED_TEXT % (w["question"], w["decided"])
@@ -117,9 +122,8 @@ class WriteRound:
         e = self.e
         if not s.last or s.fix:
             return ""
-        e.artifact_repo = e.artifact_repo or repo_key(e.git, e.wt)
         miss = show_check.missing((e.plan_data or {}).get("cases") or [], e.home.artifact_store(),
-                                  show_check.slot_of(e.artifact_repo, e.bead, e.run_id, s.n))
+                                  show_check.slot_of(e.ports.repo.key(), e.bead, e.run_id, s.n))
         if not miss:
             return ""
         if s.show_fixed:
@@ -130,7 +134,7 @@ class WriteRound:
         s.feedback = show_check.SHOW_BACK % "\n".join("- " + m for m in miss)
         return AGAIN
 
-    def shots_contract(self, s: StageState, prompt: str) -> None:
+    def shots_contract(self, s: StageState, prompt: str, out: RoundResult) -> None:
         """tl-tno: a visual write that named no shots and gave no reason is asked once more, with the table, before any check or review
         runs (the review's 'asked for no shots' finding burned a bead's re-plan cap)."""
         e, w = self.e, s.w
@@ -140,12 +144,13 @@ class WriteRound:
         s.shots_fixed = True
         tip = SHOTS_FIX % e.pictures.shot_table()
         e.steps.move("write", "shots_contract", "a visual write named no shots and gave no reason: asked once more")
-        w2, wfam = e.ai("write", f"{s.name} shots contract", prompt + tip, delta=tip, resume_key="writer", write=s.n, visual=True,
+        got = e.ai("write", f"{s.name} shots contract", prompt + tip, delta=tip, resume_key="writer", write=s.n, visual=True,
                         round=s.rounds + 1, at=(s.sk, s.rounds, s.n + 500), **s.meta)
-        e.stats["writes"] += 1
-        s.wfam = e.writer_family = wfam
-        e.writer.last_stage = s.last
-        e.last_summary = w2["summary"]
+        w2 = got.data
+        out.writes += 1
+        s.wfam = out.family = got.family
+        out.last_stage = s.last
+        out.summary = w2["summary"]
         if w2["question"].strip():
             e.steps.outcome("asks", w2["question"][:200])
             spec = askspecs.open_question(w2["question"], w2.get("options"), w2.get("owner_cause"))

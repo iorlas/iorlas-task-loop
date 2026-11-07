@@ -31,6 +31,7 @@ from taskloop.contracts import (
     pickset,
     plancheck,
     profile_changes,
+    queue_state,
     requests,
     review,
     run,
@@ -328,6 +329,11 @@ OTHERS = {
     "StageProgress": checkpoint.StageProgress(red=1, red_now=["a"], failed=["b"], acceptance_only=True, shots_fixed=True),
     "ArtifactSlot": artifact.ArtifactSlot(repo="r-1", bead="tl-1", run="tl-1-1", stage="write", attempt=2),
     "ArtifactMeta": artifact.ArtifactMeta(name="home.png", caption="home", role="after", kind="png", size=9, sha256="ab" * 32, created=T),
+    "Incident": queue_state.Incident(t=T, kind="corrupt", pr=7, bead="tl-1", main_before="m" * 40, merge_sha="s" * 40, parent="m" * 40,
+                                     expected_tree="t1", landed_tree="t2"),
+    "QueueState": queue_state.QueueState(frozen=True, incidents=[queue_state.Incident(
+        t=T, kind="raced", pr=7, bead="tl-1", main_before="m" * 40, merge_sha="s" * 40, parent="x" * 40,
+        expected_tree="t1", landed_tree="t2")]),
     "FollowupOutbox": followups.FollowupOutbox(
         pending=[{"title": "later", "why": "w", "key": "tl-1|leftover|later", "origin": "plan"}]),
     "Checkpoint": checkpoint.Checkpoint(

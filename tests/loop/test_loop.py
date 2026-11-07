@@ -41,7 +41,7 @@ from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import real  # noqa: E402
 from taskloop.contracts import wire  # noqa: E402
 from taskloop.contracts.loop import Carry, LoopState  # noqa: E402
-from taskloop.contracts.ports import WaitTimeout  # noqa: E402
+from taskloop.contracts.procport import WaitTimeout  # noqa: E402
 
 
 def bead(id, priority=2, parent=None, labels=(), type="task"):
@@ -256,9 +256,9 @@ class LoopBase(Base):
         }  # delegate's `status --json` roles{}: a test makes it a function of the clock
         self.script, self.hold, self.started, self.during = {}, {}, [], []
         for p in (mock.patch.object(Core, "nap", self.clock.nap),
-                  mock.patch.object(wloop, "available_mb", return_value=None),
+                  mock.patch.object(wloop.ops, "available_mb", return_value=None),
                   mock.patch.object(wloop, "delegate_route", return_value="/fake/route.py"),
-                  mock.patch.object(wloop.dg, "role_status", side_effect=lambda env: self.roles()),
+                  mock.patch.object(wloop.dg, "status_json", side_effect=lambda *a: {"roles": self.roles()}),
                   mock.patch.object(real, "spawner", return_value=mock.Mock(
                       start_held=lambda cmd, out=None, extra=None, **kw: (FakeChild(self, cmd, extra), mock.Mock()))),
                   mock.patch.object(Taker, "prepare", return_value=None)):

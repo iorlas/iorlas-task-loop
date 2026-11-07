@@ -5,7 +5,7 @@ from unittest import mock
 
 from support import procsim
 from support.case import Case
-from support.engine_case import EngineTest
+from support.check_host import CheckHostCase
 from support.memstores import fake_stores
 from support.spawn import port_git
 from support.tmpdir import TemporaryDirectory
@@ -22,9 +22,9 @@ from taskloop.contracts.checks import Check, CheckResult, PassRecord
 from taskloop.contracts.config import load
 from taskloop.contracts.env import Env
 from taskloop.contracts.gitfacts import TreeEntry
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import CheckId, TreeSha
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha, Digest
 from taskloop.domain.checks.specs import diff_check, gate_items
 from taskloop.stores.real import real_stores
@@ -184,7 +184,7 @@ class DatabaseDeliveryIdentity(DeliveryIdentity):
         return real_stores(ConfigDir(Path(tmp.name)))
 
 
-class StepIdentity(EngineTest):
+class StepIdentity(CheckHostCase):
     def test_distinct_ids_receive_their_own_injected_step_identity(self):
         seen = []
         cmd = procsim.fake("record-step", lambda cwd, env: (seen.append(env["TL_ARTIFACT_STEP"]) or 0, ""))

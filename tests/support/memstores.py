@@ -4,6 +4,7 @@ the same. The contract suite runs these and the file-backed stores through one s
 import contextlib
 import json
 import os
+import sqlite3
 import threading
 import time
 from collections.abc import Callable, Generator
@@ -16,16 +17,19 @@ from jsonl_log.cursor import _parse  # shelf lacks: a public parse of in-memory 
 from taskloop.contracts import events, log, wire
 from taskloop.contracts.adrs import AdrStore
 from taskloop.contracts.ask import Ask
+from taskloop.contracts.askstore import AskStore
 from taskloop.contracts.checkpoint import Checkpoint
 from taskloop.contracts.checks import BaseRedRecord, CheckRun, Durations, PassRecord
 from taskloop.contracts.config import HostResources
+from taskloop.contracts.docstore import Absent, ForeignVersion, Present, Read, Torn, refusal
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.followups import FollowupOutbox
 from taskloop.contracts.ledger import Adr, AdrUse, LedgerEntry
 from taskloop.contracts.locks import LockRecord, LockTimeout, Ticket, pid_alive
 from taskloop.contracts.profile_changes import ProfileChange
+from taskloop.contracts.queue_state import QueueState
 from taskloop.contracts.rotating import RotatingJsonl
-from taskloop.contracts.stores import Absent, AskStore, ForeignVersion, JsonlStore, Present, Read, Torn, refusal
+from taskloop.contracts.stores import JsonlStore
 from taskloop.contracts.trace import RunTrace
 from taskloop.contracts.wire import Refused
 from taskloop.stores.api import AmendDoc, DocSet
@@ -69,6 +73,10 @@ class MemDoc[T](AmendDoc[T]):
             return False
         self.write(fn(rec))
         return True
+
+    def modify_with(self, fn: Callable[[T], T], also: Callable[[sqlite3.Connection | None], None]) -> bool:
+        also(None)
+        return self.modify(fn)
 
     def delete(self) -> None:
         self.data = None
@@ -226,7 +234,7 @@ def fake_stores(pid: int | None = None) -> Stores:
         asks=AskStore(MemDocSet(Ask), MemLog(_decode(LedgerEntry))),
         adrs=lambda repo: adrs.setdefault(repo, AdrStore(MemDocSet(Adr), MemLog(_decode(AdrUse)))),
         checkpoints=CheckpointBook(MemDocSet(Checkpoint)),
-        followups=MemDocSet(FollowupOutbox),
+        followups=MemDocSet(FollowupOutbox), queue_state=MemDocSet(QueueState),
         results=lambda repo, check: passes.setdefault((repo, check), MemDocSet(PassRecord)),
         base_red=lambda repo: reds.setdefault(repo, MemDocSet(BaseRedRecord)),
         durations=MemDocSet(Durations),

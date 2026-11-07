@@ -1,7 +1,6 @@
 """Checker: one round of checks, from the plan to the CheckRun every reader shares."""
 import time
 from collections.abc import Callable, Sequence
-from typing import Any
 
 from taskloop.adapters import check_files
 from taskloop.app.checks import evidence, gateplan
@@ -17,9 +16,9 @@ from taskloop.app.checks.round import Round
 from taskloop.contracts.checks import Check, CheckResult, CheckRun, Durations
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.plancheck import PlanCheck
-from taskloop.contracts.ports import Git
 from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.durations import merged, seconds
 from taskloop.domain.checks.plan import CheckPlan
@@ -65,7 +64,7 @@ class Checker:
 
     def run(self, stage_checks: Sequence[PlanCheck], name: str, markers: str = "", acceptance_first: bool = False,
             groups: Sequence[str] | None = None,
-            conflict_fix: Sequence[str] | None = None, **meta: Any) -> CheckRun:
+            conflict_fix: Sequence[str] | None = None, **meta: object) -> CheckRun:
         """One engine step, no AI: the repo's checks (engine.checks) and the stage's acceptance checks, grouped static, tests,
         acceptance; a red group skips the groups after it. A repo check with `when` runs only when the task changed a matching path;
         `retry` reruns a red one (known flaky). A repo check that passed on the same tree and base is not run again, unless it says

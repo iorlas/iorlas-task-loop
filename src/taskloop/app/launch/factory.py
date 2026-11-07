@@ -9,7 +9,7 @@ from taskloop.adapters import factory as platform_factory
 from taskloop.adapters.ident import plugin_version
 from taskloop.app.loop.files import LoopFiles
 from taskloop.contracts.loop import LoopState
-from taskloop.contracts.ports import Child, Spawner
+from taskloop.contracts.procport import Child, Spawner
 
 
 def version() -> str:

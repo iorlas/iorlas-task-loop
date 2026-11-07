@@ -5,7 +5,7 @@ port was built with at the edge; nothing here reads the process."""
 import re
 import subprocess
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from taskloop.adapters import gitmemo, procs
@@ -82,6 +82,16 @@ def read_failure(args: tuple[str, ...], r: subprocess.CompletedProcess[str]) -> 
     return kind(f"git {args[0]} exited {r.returncode}: {tail}")
 
 
+def no_fsmonitor(env: Mapping[str, str]) -> dict[str, str]:
+    """`env` with core.fsmonitor=false added through git's env config: a repo's own fsmonitor setting is a program git runs on every
+    status, and the engine's git never runs it (tl-7i9k.53, M-066). A count the caller already set is extended, never replaced."""
+    try:
+        n = max(int(env.get("GIT_CONFIG_COUNT") or 0), 0)
+    except ValueError:
+        n = 0
+    return {**env, "GIT_CONFIG_COUNT": str(n + 1), f"GIT_CONFIG_KEY_{n}": "core.fsmonitor", f"GIT_CONFIG_VALUE_{n}": "false"}
+
+
 class GitBase:
     """`pinned=False` reads git as the environment has it (no GIT_DIR/GIT_WORK_TREE/GIT_COMMON_DIR), as a worker's or a check's git
     would see the folder: for the questions whether the pin itself is right (core.worktree, core.bare in the shared config)."""
@@ -94,8 +104,8 @@ class GitBase:
     def git_env(self, d: str | Path) -> dict[str, str]:
         """The environment of a git command on the checkout at `d`: the port's, cleaned, pinned to that checkout."""
         if not self.pinned:
-            return without(self.env.vars, "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR")
-        return tool_env(self.env.vars, pinned_env(d))
+            return no_fsmonitor(without(self.env.vars, "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"))
+        return tool_env(no_fsmonitor(self.env.vars), pinned_env(d))  # tool_env then appends core.hooksPath last, where readers look
 
     def _run(self, d: str, *args: str, stdin: str | None = None, timeout: float | None = None,
              extra: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:

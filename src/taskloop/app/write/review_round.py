@@ -7,12 +7,12 @@ from typing import Any
 from taskloop.app.asks import trustroots
 from taskloop.app.checks.evidence import compact
 from taskloop.app.write import review_skip
-from taskloop.app.write.state import ACCEPT, AGAIN, REPLAN, StageState
+from taskloop.app.write.review_prompt import acceptance_text, review_prompt
+from taskloop.app.write.state import ACCEPT, AGAIN, REPLAN, RoundResult, StageState, carrying
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.followups import FollowKey
 from taskloop.domain.lanes import caps
 from taskloop.domain.prompts.common import LATER_CASES, UNCHECKED_TEXT
-from taskloop.domain.prompts.review import acceptance_text, review_prompt
 from taskloop.domain.review import findings as fnd
 from taskloop.domain.review import switch
 from taskloop.domain.review.availability import ReviewUnavailable
@@ -27,28 +27,34 @@ class ReviewRound:
     def __init__(self, host: Any) -> None:
         self.e = host
 
-    def run(self, s: StageState) -> str:
-        """-> ACCEPT, AGAIN (sent back) or REPLAN."""
+    def run(self, s: StageState) -> RoundResult:
+        """-> a result whose flow is ACCEPT, AGAIN (sent back) or REPLAN."""
+        out = RoundResult()
+        with carrying(out):
+            out.flow = self.go(s, out)
+        return out
+
+    def go(self, s: StageState, out: RoundResult) -> str:
         e = self.e
         why = trustroots.refusal(e.git, str(e.wt), e.cfg.base, e.store.show(e.bead))
         if why:
             raise e.blocked_for(why, "ASK_DECISION", spec=askspecs.open_question(why, None, "decision"))
         if self.switched_off(s) or self.skipped(s):
             return ACCEPT
-        e.stats["reviews"] += 1
-        e.ask_flow.review_cap()
+        out.reviews = 1
+        e.ask_flow.review_cap(e.stats["reviews"] + 1)
         kinds = e.newfiles.new_by_kind()
         try:
-            review, _ = e.ai("review", s.name, self.prompt(s, kinds), writer_family=s.wfam,
+            review = e.ai("review", s.name, self.prompt(s, kinds), writer_family=s.wfam,
                              visual=not s.fix and e.pictures.stage_visual(s.st),
-                             round=s.rounds + 1, at=(s.sk, s.rounds, s.n), **s.meta)
+                             round=s.rounds + 1, at=(s.sk, s.rounds, s.n), **s.meta).data
         except ReviewUnavailable:
             self.unavailable(s)
             return ACCEPT
         e.accepted_new += [p for p in review.get("accept_files") or [] if p in kinds["unexplained"] and p not in e.accepted_new]
         review = self.triage(s, review, kinds)
         self.settle(s, review)
-        return self.verdict(s, review)
+        return self.verdict(s, review, out)
 
     def unavailable(self, s: StageState) -> None:
         """Delegate exhausted the worker retry policy on an invalid review: continue with an explicit missing review.
@@ -56,7 +62,7 @@ class ReviewRound:
         Keep unchecked work for verification; an unavailable reviewer has settled none of it. Other faults still stop the run.
         """
         e = self.e
-        e.unchecked = list({u["what"]: u for u in e.unchecked + s.wrote_unchecked}.values())
+        e.review.unchecked = list({u["what"]: u for u in e.review.unchecked + s.wrote_unchecked}.values())
         note = f"{s.name}: review unavailable after bounded delegate retries (schema_invalid); stage continues"
         e.steps.outcome("unavailable", "schema_invalid: delegate retries exhausted")
         e.steps.move("next", "review_unavailable", note)
@@ -74,7 +80,7 @@ class ReviewRound:
             return False
         said = SkipKind.REVIEW_OFF if m == "off" else SkipKind.REVIEW_SAMPLED
         if not s.fix:  # nobody judges the writer's unchecked items now: they stay open for verify at land, never dropped
-            e.unchecked = list({u["what"]: u for u in e.unchecked + s.wrote_unchecked}.values())
+            e.review.unchecked = list({u["what"]: u for u in e.review.unchecked + s.wrote_unchecked}.values())
         e.steps.begin("review", f"{s.name}: review skipped ({said})")
         e.steps.outcome("skipped", said)
         e.log.note(f"{s.name}: review skipped, engine.review is {m}")
@@ -86,7 +92,7 @@ class ReviewRound:
         has checked or a diff git cannot read is reviewed.
         The skip is the review step's own end: outcome `skipped`, the reasons its detail."""
         e = self.e
-        if s.fix or s.wrote_unchecked or e.unchecked:
+        if s.fix or s.wrote_unchecked or e.review.unchecked:
             return False
         why = review_skip.why(e.git, str(e.wt), e.stage_tree or e.checkout.base_sha(), e.checkout.tree_hash(), e.cfg,
                           maps_acceptance=s.last)
@@ -123,7 +129,7 @@ class ReviewRound:
 
     def open_items(self, s: StageState) -> str:
         """What nobody has checked yet: earlier stages' items and this write's; the review says what is still unproven."""
-        items = list({u["what"]: u for u in ([] if s.fix else self.e.unchecked) + s.wrote_unchecked}.values())
+        items = list({u["what"]: u for u in ([] if s.fix else self.e.review.unchecked) + s.wrote_unchecked}.values())
         if not items:
             return ""
         return ("\nNobody has checked these yet (earlier stages or the writer could not; the engine's checks above ran "
@@ -158,7 +164,7 @@ class ReviewRound:
         e = self.e
         checks = s.run.results
         judged = e.cases.out_of_scope(e.cases.engine_unproven(review.get("unchecked") or [], checks))
-        e.unchecked = e.unchecked + judged if s.fix else judged
+        e.review.unchecked = e.review.unchecked + judged if s.fix else judged
         e.judge.look_judged(review, s.st, s.w, s.fix)
         e.link_check.link_judged(review)
         same = e.last_flag == "same_family"
@@ -172,7 +178,7 @@ class ReviewRound:
         e.checkpoints.keep_pending("review")
         e.hand.note_lows(review["findings"])
 
-    def verdict(self, s: StageState, review: dict[str, Any]) -> str:
+    def verdict(self, s: StageState, review: dict[str, Any], out: RoundResult) -> str:
         e = self.e
         if review["question"].strip() and review["decided"].strip():  # a fix round, not an ask
             e.log.note(f"{s.name}: the review asked what an accepted requirement decides ({review['decided'][:200]}): sending it back")
@@ -190,18 +196,19 @@ class ReviewRound:
             e.steps.outcome("clean", f"{low} note{'' if low == 1 else 's'}" if low else "")
             e.steps.move("next", "accepted", f"{s.name} accepted")
             return ACCEPT
-        return self.send_back(s, review, blocking, said)
+        return self.send_back(s, review, blocking, said, out)
 
-    def send_back(self, s: StageState, review: dict[str, Any], blocking: Sequence[Mapping[str, Any]], said: str) -> str:
+    def send_back(self, s: StageState, review: dict[str, Any], blocking: Sequence[Mapping[str, Any]], said: str,
+                  out: RoundResult) -> str:
         e = self.e
         e.steps.outcome("sent back", said)
         open_ = review["unmet"] + [f"{f['file']}:{f['line']} {f['fix']}" for f in blocking]
         e.hand.note_round(s.name, s.rounds + 1, "review", s.w["summary"], open_)
         s.rounds += 1
-        e.stats["rounds"] += 1
-        e.stuck_why = "the review still sends it back: " + "; ".join(open_)
+        out.rounds += 1
+        stuck = out.stuck_why = "the review still sends it back: " + "; ".join(open_)
         if s.rounds >= int(e.cfg.max_rounds):
-            (e.run_dir / "replan.md").write_text(e.stuck_why)
+            (e.run_dir / "replan.md").write_text(stuck)
             e.steps.move("replan", "rounds_used", f"review sent it back: {said}; {s.rounds} rounds used")
             return REPLAN
         s.failed_cmds = None

@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import Any
 
 from taskloop.contracts import paths
+from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.config import SlotsConfig
-from taskloop.contracts.ports import Beads, SlotGit
+from taskloop.contracts.gitport import SlotGit
 from taskloop.stores.api import Tickets
 
 DEFAULT_PRIO = 2

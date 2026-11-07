@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 from taskloop.contracts import config
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.slots import SlotGitError
 
 FILE = ".task-loop.json"

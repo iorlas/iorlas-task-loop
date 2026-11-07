@@ -24,7 +24,8 @@ from support import (
 )
 from support.checkpoints import put_ck, read_ck
 from support.checks import typed
-from support.engine_case import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE, engine, lint, real_git, real_proc  # noqa: F401
+from support.engine_case import engine, lint
+from support.plans import CLEAN, FALSE, HAS_F, PLAN, WRITE
 from support.pushsim import pusher
 from support.spawn import port_git, real_spawner
 from support.who import who

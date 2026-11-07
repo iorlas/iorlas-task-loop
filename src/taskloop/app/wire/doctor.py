@@ -3,28 +3,32 @@ import contextlib
 import os
 import shlex
 import shutil
+import sys
 import time
 from pathlib import Path
 
 from taskloop import contracts
-from taskloop.adapters import layout_migrate
+from taskloop.adapters import delegate, layout_migrate
 from taskloop.adapters.beadtools import bd_store
 from taskloop.adapters.ident import claude_dir, config_dir
-from taskloop.app.doctor import disk, profiles
+from taskloop.app.doctor import disk, env_checks, ops, profiles
 from taskloop.app.release import catalog, manifest
+from taskloop.app.report.inputs import repo_traces
 from taskloop.app.slots import watchdog
 from taskloop.app.wire import hook
 from taskloop.app.wire import slots as wslots
 from taskloop.app.wire.slots import cfg_source
 from taskloop.contracts import inputsets, runlife
 from taskloop.contracts.bd_errors import BdCommandFailure
+from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads
 from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, BeadQuery, Beads, Git, Spawner
+from taskloop.contracts.procport import Spawner
+from taskloop.contracts.rowstores import ReposStore
 from taskloop.contracts.slots import SlotGitError
-from taskloop.contracts.stores import ReposStore
 from taskloop.domain.beads import matchers as beadlint
 from taskloop.domain.checks.inputs import dead_globs
 from taskloop.domain.lanes import pin
@@ -186,7 +190,7 @@ def install_problems(plugin_root: Path, env: Env) -> list[str]:
 def disk_run(config: ConfigDir) -> int:
     """`tl doctor --disk`: the config folder's bytes by area and the free space of its volume. 1 when the volume runs low."""
     root = config.root
-    lines = disk.report(root, shutil.disk_usage(root if root.is_dir() else root.parent).free)
+    lines = disk.report(root, shutil.disk_usage(root if root.is_dir() else root.parent).free, disk.read_samples(config))
     print("\n".join(lines))
     return 1 if any(ln.startswith("WARN") for ln in lines) else 0
 
@@ -208,9 +212,14 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
     warns += [link_line] if foreign else []
     warns += [] if source[0].engine.writer_exec_allow else [
         "plan check argv unrestricted: the profile lists no engine.writer_exec_allow, so a planner's own check may run any command"]
+    warns += ops.clone_warnings(config_dir(env), git)
+    warns += [gap] if (gap := ops.capability_gap(delegate.resolve().contract)) else []
     warns += [f"run {r} is lost: its process is gone and it recorded no end" for r in runlife.reconcile(who.config, time.time())]
     print(f"contracts: {Path(contracts.__file__).resolve().parent}")
     print(f"engine: {pin.describe(pin.families(source[0].engine.writer_family, []))}")
+    print(f"engine: {pin.describe_second(source[0].engine.second_writer_family)}")
+    if second := source[0].engine.second_writer_family:
+        print(ops.second_share_line(second, *ops.second_share(repo_traces(repo, git, ConfigDir(config_dir(env))).runs, second)))
     for w in warns:
         print("WARN " + w)
     if legacy := legacy_line(env):
@@ -221,7 +230,12 @@ def run(plugin_root: Path, env: Env, git: Git, who: Identity, spawner: Spawner |
     fails = install_problems(plugin_root, env)
     for p in fails:
         print("FAIL " + p)
-    if not warns and not fails:
+    found: list[env_checks.Finding] = [] if spawner is None else env_checks.all_findings(  # no spawner: a test that runs no process
+        env.get("PATH"), env.get("TMPDIR"), config_dir(env), tuple(sys.version_info[:3]), spawner, git,
+        lambda: bd_store(who.actor, repo).find(BeadQuery(status="open")), repo)
+    sys.stdout.write("".join(f.line() + "\n" for f in found))
+    fails += [f.text for f in found if f.level == "FAIL"]
+    if not warns and not found and not fails:
         print("ok: no setup problems found in " + repo)
     return 1 if fails else 0
 

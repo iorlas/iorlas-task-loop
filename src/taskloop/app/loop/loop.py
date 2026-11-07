@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from os import EX_CONFIG
 from pathlib import Path
 
+from taskloop.app.asks import deferral as intake
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop import waits
 from taskloop.app.loop.core import Core, prio_of
@@ -20,6 +21,7 @@ from taskloop.app.loop.refuse import Refuser
 from taskloop.app.loop.run import BeadRun, Where
 from taskloop.app.loop.settle import Settle
 from taskloop.app.loop.take import Taker
+from taskloop.app.loop.takeports import EngineSlots, ParkGate
 from taskloop.app.loop.versions import Installs
 from taskloop.app.slots import line as slots_line
 from taskloop.app.slots import owned, watchdog
@@ -27,12 +29,12 @@ from taskloop.app.slots.lease import Lease
 from taskloop.app.slots.pool import SlotPool
 from taskloop.contracts import runlife, wire
 from taskloop.contracts.bead import Bead
+from taskloop.contracts.beadsport import BdFailure
 from taskloop.contracts.config import ConfigError
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.loop import LoopState, LoopWait, QueueRow
 from taskloop.contracts.parks import ParkStore
-from taskloop.contracts.ports import BdFailure
 from taskloop.contracts.run import LoopLogLine
 from taskloop.contracts.slots import SlotFail
 
@@ -79,7 +81,7 @@ class Loop(Core):
         self.until = self.until if inherited else end_time(args.until, env.now())
         self.settle = Settle(env, files, self.tune, self.say, self.c, self.gate, self.net, self.left)
         self.runner = BeadRun(env, files, installs, self.tune, self.stop_mode, self.running, self.beat, self.say)
-        self.taker = Taker(env, self.runner, self.tune, self.say, self.record, self.c.later)
+        self.taker = Taker(env, self.runner, self.tune, self.say, self.record, self.c.later, EngineSlots(env), ParkGate(env))
         self.refuser = Refuser(env.store, self.say)  # lint refusals: one label and comment per bead, one line per loop
         self.watch = watchdog.Watch()  # the slot liveness look (tl-bxk.10.33.12)
         self.area_wait = [0.0, 0.0]  # when every ready bead began waiting for an area, and when that was last said
@@ -235,6 +237,7 @@ class Loop(Core):
         for line in self.env.release_dead():  # a dead run's claims and slots back to ready before the next pick
             self.say(line)
         self.env.chores()
+        self.promote_intake()
         q, rule = self.queue()
         cands = self.candidates(q)
         if self.prof.slots.count > 0:  # tl-bxk.10.33.12: the slot liveness invariants, once per EVERY s
@@ -244,6 +247,10 @@ class Loop(Core):
             self.area_wait[0] = 0.0
             return self.work(cands, rule)
         return self.idle(q)
+
+    def promote_intake(self) -> None:
+        """The deferred follow-ups the day's budget allows become open (engine.intake_per_day; off at 0)."""
+        self.intake_at = intake.promote_if_due(self.env.store, self.prof.engine.intake_per_day, self.env.now(), self.intake_at, self.say)
 
     def start_worktree(self) -> None:
         """Slots off: the loop works in its session's worktree. The pick and the state that names it, under a lock: two loops

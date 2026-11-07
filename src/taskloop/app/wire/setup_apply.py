@@ -11,8 +11,8 @@ from taskloop.app.wire import hook, setup
 from taskloop.contracts.config import HostResources
 from taskloop.contracts.env import Env
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Ran
-from taskloop.contracts.stores import JsonStore
+from taskloop.contracts.procport import Ran
+from taskloop.stores.real import real_stores
 
 BRANCH = "tl-setup-profile"
 REF = "repos/{owner}/{repo}/git/ref/heads/"  # gh fills {owner} and {repo} from the repo it runs in
@@ -44,7 +44,7 @@ def host_fix(answers: Mapping[str, str], env: Env) -> list[str]:
     """host.json from the unity-lease answer: a host that answered yes has the unity resource. An existing file is the person's: kept."""
     if answers.get("unity-lease") != "yes":
         return []
-    store = JsonStore(ConfigDir(config_dir(env)).host(), HostResources)
+    store = real_stores(ConfigDir(config_dir(env))).host
     if store.get() is not None:
         return []
     store.write(HostResources(resources=["unity"]))

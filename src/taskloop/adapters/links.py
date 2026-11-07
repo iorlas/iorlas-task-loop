@@ -102,8 +102,31 @@ def reason_text(reason: object) -> str:
     return "timeout" if isinstance(reason, TimeoutError) else str(reason)[:80]
 
 
+BLOB = re.compile(r"[A-Za-z0-9+/=_]{24,}")
+QUERY_CAP = 120  # a citation's query is a page or a search; more is a payload
+CARRIES = "the address carries data (a credential, a long or encoded value); cite the page without it"
+
+
+def carries_data(url: str) -> bool:
+    """A web address that could smuggle text out of the writer's reach when the engine opens it (tl-7i9k.53, M-036): a login in it, a
+    query past QUERY_CAP bytes, or a long mixed run of letters and digits (base64, hex, a token) in the path or query. A heuristic: what
+    it misses is a short value, and the word `unverified` on the line still lets a writer cite a page the engine will not open."""
+    try:
+        p = urlparse(url)
+    except ValueError:
+        return True
+    if p.username or p.password or len(p.query) > QUERY_CAP or len(p.fragment) > QUERY_CAP:
+        return True
+    return any(any(c.isdigit() for c in b) and any(c.isalpha() for c in b) and any(c.isupper() for c in b)
+               for b in BLOB.findall(p.path + "?" + p.query + "#" + p.fragment))
+
+
 def check(url: str, timeout: float = 15) -> tuple[bool, str]:
     """(True, '') when the link opens, else (False, why). HEAD first, GET when a server will not answer a HEAD."""
+    return (False, CARRIES) if carries_data(url) else fetch(url, timeout)
+
+
+def fetch(url: str, timeout: float) -> tuple[bool, str]:
     last = "no answer"
     for method in ("HEAD", "GET"):
         req = urllib.request.Request(url, method=method, headers={"User-Agent": AGENT, "Accept": "*/*"})

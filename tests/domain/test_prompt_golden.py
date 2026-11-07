@@ -12,18 +12,18 @@ from support.case import Case
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402,F401  (ROOT/src on sys.path)
-from support.builders import cfg_with  # noqa: E402
+from support.cfgs import cfg_with  # noqa: E402
 
+from taskloop.app.plan import prompts as pp  # noqa: E402
+from taskloop.app.review import verify_prompt as vp  # noqa: E402
 from taskloop.app.run import engine  # noqa: E402
+from taskloop.app.run import reflect_prompt as fp  # noqa: E402
+from taskloop.app.write import prompts as wp  # noqa: E402
+from taskloop.app.write import review_prompt as rp  # noqa: E402
+from taskloop.app.write.review_prompt import acceptance_text  # noqa: E402
 from taskloop.domain.checks.writer_split import WriterSplit  # noqa: E402
 from taskloop.domain.land.fix_text import FIX_GOAL as _FIX_GOALS  # noqa: E402
 from taskloop.domain.prompts import common as cp  # noqa: E402
-from taskloop.domain.prompts import plan as pp  # noqa: E402
-from taskloop.domain.prompts import reflect as fp  # noqa: E402
-from taskloop.domain.prompts import review as rp  # noqa: E402
-from taskloop.domain.prompts import verify as vp  # noqa: E402
-from taskloop.domain.prompts import write as wp  # noqa: E402
-from taskloop.domain.prompts.review import acceptance_text  # noqa: E402
 
 TEMPLATES = {"PLAN_PROMPT": pp, "WRITE_PROMPT": wp, "WRITE_RESUME_PROMPT": wp, "REVIEW_PROMPT": rp, "VERIFY_PROMPT": vp,
              "REFLECT_PROMPT": fp}

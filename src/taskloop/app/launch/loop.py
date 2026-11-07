@@ -2,17 +2,16 @@
 `tl loop`. The verbs that print and run are src/taskloop/cli/loop_cmd.py; the loop itself is src/taskloop/app/loop; nothing here decides
 anything."""
 
-import contextlib
 import functools
 import os
-import platform
 import shutil
 from collections.abc import Callable
 from pathlib import Path
 
-from taskloop.adapters import beadtools, childenv, ident, pidcheck, ram
+from taskloop.adapters import beadtools, childenv, ident, pidcheck
 from taskloop.adapters import delegate as dg
 from taskloop.adapters import storm as storm_file
+from taskloop.adapters.bd import BdStore
 from taskloop.adapters.locks import hold_path
 from taskloop.adapters.repourl import repo_url
 from taskloop.app.asks import sweeps as ask_sweeps
@@ -30,19 +29,20 @@ from taskloop.app.track import trail
 from taskloop.app.wire import asks as wasks
 from taskloop.app.wire import slots as wslots
 from taskloop.contracts import paths
-from taskloop.contracts.config import HostResources, RepoProfile
+from taskloop.contracts.beadsport import Beads
+from taskloop.contracts.config import RepoProfile
 from taskloop.contracts.enums import LockWhat
 from taskloop.contracts.env import Env
 from taskloop.contracts.envvars import EnvVar
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId, new_loop_id
-from taskloop.contracts.landed import landed_by
+from taskloop.contracts.ids import new_loop_id
 from taskloop.contracts.loop import LoopState
-from taskloop.contracts.ports import Beads, Git, Spawner
-from taskloop.contracts.slots import SlotGitError, git_probe
-from taskloop.contracts.stores import JsonStore, ReposStore
+from taskloop.contracts.procport import Spawner
+from taskloop.contracts.rowstores import ReposStore
 from taskloop.domain import outcome as oc
 from taskloop.domain.beads import rules as beadlint
+from taskloop.stores.real import real_stores
 
 HERE = ident.PLUGIN_ROOT / "skills" / "task-loop"  # the install this code runs from; tl.main takes it as a parameter for a test
 
@@ -65,16 +65,6 @@ def free_bytes(cfg: paths.ConfigDir) -> int:
     return shutil.disk_usage(cfg.root).free
 
 
-def available_mb(spawner: Spawner) -> int | None:
-    if platform.system() != "Darwin":
-        return None  # macOS only: vm_stat is the one reader
-    try:
-        result = spawner.run(["/usr/bin/vm_stat"], timeout_s=2)
-        return ram.available_mb(result.out) if result.exit == 0 else None
-    except OSError:
-        return None
-
-
 def files_of(repo: str, cfg: paths.ConfigDir, now: Callable[[], float] = trail.now) -> LoopFiles:
     return LoopFiles(cfg, wslots.repo_key(repo), pidcheck.pid_alive, now)
 
@@ -92,7 +82,7 @@ def roles(repo: str | Path, env: Env, git: Git) -> dict[str, bool | None] | None
     route = delegate_route(repo, env, git)
     if not route:
         return None
-    return {role: v.get("usable") if isinstance((v or {}).get("usable"), bool) else None for role, v in dg.role_status(env).items()}
+    return dg.roles_usable()
 
 
 def make_probe(repo: str | Path, env: Env, git: Git) -> dg.RouteProbe | None:
@@ -110,30 +100,6 @@ def storm(repo: str, cfg: paths.ConfigDir, now: Callable[[], float] = trail.now,
         "clear it to wake sooner"
     ).format(rec.get("fingerprint"), ",".join(rec.get("beads") or []), path, (oc.KNOBS["storm_window_s"] // 60))
     return Storm(rec.get("fingerprint") or "", banner, float(rec["t"]) + oc.KNOBS["storm_window_s"])
-
-
-def landed_on_base(repo: str, cfg: paths.ConfigDir, store: Beads, wt: str, bead_id: BeadId, git: Git) -> bool:
-    """True when the bead's landed record names a sha that is on the base. LEGACY, only for a bead with no record (landed before
-    0.23.179): its land commit (titled `... (<id>)`) is the tip of its branch and already on the base; this can go with them."""
-    return git_probe(lambda: _landed_on_base(repo, cfg, store, wt, bead_id, git), False)
-
-
-def _landed_on_base(repo: str, cfg: paths.ConfigDir, store: Beads, wt: str, bead_id: BeadId, git: Git) -> bool:
-    """Only positive evidence lets the loop treat a bead as landed; an unknown probe stays not ready."""
-    if not os.path.isdir(wt):
-        return False
-    base = wslots.load_cfg(repo, git).base
-    rec = landed_by(store)(bead_id)
-    if rec is not None:
-        return git.is_ancestor(wt, rec.sha, base)
-    branch = getattr(beadtools.peek(store, bead_id), "metadata", {}).get("branch") or "task/" + bead_id
-    with contextlib.suppress(SlotGitError):
-        git.fetch(wt)
-    tip = git.rev_parse(wt, "refs/heads/" + branch)
-    last = git.log(wt, [tip], limit=1) if tip else []
-    if not last or not last[0].subject.endswith(f"({bead_id})"):
-        return False
-    return git.is_ancestor(wt, tip, base)
 
 
 def build(repo: str, store: Beads | None = None, session_actor: str = "", here: Path = HERE, now: Callable[[], float] = trail.now,
@@ -171,9 +137,9 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
             [*childenv.script_argv((code or here) / "tl.py", env), "run-task", bead, "--loop", "--worktree", wt, "--outcome-file", out]
             + (["--slot", slot] if slot else [])
         ),
-        landed_on_base=lambda wt, bead: landed_on_base(repo, cfg, store, wt, bead, git),
+        landed_on_base=lambda wt, bead: ops.landed_on_base(repo, cfg, store, wt, bead, git),
         reload_note=lambda bead: ops.reload_note(cfg, bead),
-        chores=lambda: ops.chores(repo, spawner, env, git, who),
+        chores=lambda: ops.chores(repo, spawner, env, git, who, store if isinstance(store, BdStore) else None),
         release_dead=lambda: ops.release_dead(repo, store, now(), git, who),
         ask_lines=lambda: ask_sweeps.orphan_lines(wasks.store(cfg)),
         storm=lambda: storm(repo, cfg, now, git=git),
@@ -189,7 +155,7 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
         actor=lambda: who.actor,
         exec_into=lambda d, argv, handover: ops.exec_into(repo, d, argv, handover, env, who, start_cwd),
         take_handover=lambda: env.get(EnvVar.TL_LOOP_STATE),
-        host=lambda: JsonStore(cfg.host(), HostResources).need(),
+        host=real_stores(cfg).host.need,
         say=console.say,
         now=now,
         pid=os.getpid(),
@@ -205,5 +171,5 @@ def build(repo: str, store: Beads | None = None, session_actor: str = "", here: 
             who=who,
         ),
         free_bytes=lambda: free_bytes(cfg),
-        available_mb=lambda: available_mb(spawner),
+        available_mb=lambda: ops.available_mb(spawner),
     )

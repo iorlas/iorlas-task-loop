@@ -6,11 +6,11 @@ import hashlib
 from collections.abc import Sequence
 from typing import Any
 
+from taskloop.app.write.prompts import DONE_SO_FAR, STAGES_DONE, WRITE_RESUME_PROMPT
 from taskloop.contracts import rundocs
 from taskloop.contracts.config import FRESH_ABOVE_K
-from taskloop.contracts.ports import Git
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.run import HandoffMirror, Round
-from taskloop.domain.prompts.write import DONE_SO_FAR, STAGES_DONE, WRITE_RESUME_PROMPT
 from taskloop.domain.review.findings import blocks
 
 HANDOFF_CAP = 1500  # characters of round history one prompt carries (tl-bxk.13.6)

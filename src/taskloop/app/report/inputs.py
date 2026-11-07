@@ -7,14 +7,15 @@ from typing import Any
 
 from taskloop.adapters import beadtools
 from taskloop.adapters.bdids import prefix_of
+from taskloop.contracts.beadsport import BdFailure, Beads
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.landed import Landed, landed_by
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, Beads, Git
 from taskloop.contracts.slots import git_probe
-from taskloop.contracts.stores import TraceStore
 from taskloop.contracts.trace import RunTrace
+from taskloop.stores.real import real_stores
 
 
 def read_jsonl(path: str | Path) -> list[dict[str, Any]]:
@@ -44,7 +45,7 @@ def repo_traces(repo: str, git: Git, cfg: ConfigDir) -> Traces:
     """Every engine run of this repo: its worktree is inside the repo, or its origin is the repo's origin."""
     root = str(Path(repo).resolve())
     url = git_probe(lambda: git.remote_url(repo, "origin"), "")
-    page = TraceStore(cfg).read_from(0)
+    page = real_stores(cfg).traces.read_from(0)
     out: list[RunTrace] = []
     for item in page.items:
         t = item.rec

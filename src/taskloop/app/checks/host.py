@@ -4,16 +4,16 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 
-from taskloop.app.checks.checklog import CheckLog
 from taskloop.contracts.checks import CheckFaultKind
 from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.enums import WaitWhat
 from taskloop.contracts.env import Env
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Git, Spawner
+from taskloop.contracts.procport import Spawner
+from taskloop.contracts.stagefacts import CheckLogPort, RunLogPort
 from taskloop.stores.bundle import Stores
-from taskloop.stores.runlog import RunLog
 
 
 class CheckFault(Exception):
@@ -80,11 +80,11 @@ class CheckHost(Protocol):
     @property
     def cfg(self) -> EngineConfig: ...
     @property
-    def log(self) -> RunLog: ...
+    def log(self) -> RunLogPort: ...
     @property
     def steps(self) -> CheckSteps: ...
     @property
-    def checklog(self) -> CheckLog: ...
+    def checklog(self) -> CheckLogPort: ...
     @property
     def stores(self) -> Stores: ...
     @property
@@ -129,8 +129,8 @@ class CleanHost:
 
     def __init__(self, host: CheckHost, wt: Path, checkout: CheckoutView) -> None:
         self.original, self.wt, self.checkout = host, wt, checkout
-        self.bead, self.run_id, self.run_dir = host.bead, host.run_id, host.run_dir
-        self.cfg, self.log, self.steps, self.home = host.cfg, host.log, host.steps, host.home
+        self.bead, self.run_id, self.run_dir, self.home = host.bead, host.run_id, host.run_dir, host.home
+        self.cfg, self.log, self.steps = host.cfg, host.log, host.steps
         self.checklog, self.stores = host.checklog, host.stores
         self.spawner, self.env, self.bead_env = host.spawner, host.env, host.bead_env
         self.git, self.waits = host.git, host.waits

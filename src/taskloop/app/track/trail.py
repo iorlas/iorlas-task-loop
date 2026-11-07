@@ -12,15 +12,16 @@ from jsonl_log import JsonlLog, held
 
 from taskloop.adapters.gitrepo import repo_root
 from taskloop.contracts import events, wire
+from taskloop.contracts.beadsport import BdFailure, Beads
 from taskloop.contracts.events import Event, EventRec
 from taskloop.contracts.guard import guard
 from taskloop.contracts.identity import Identity
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.locator import RunLocator
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import BdFailure, Beads
 from taskloop.contracts.rotating import NO_ROTATION
-from taskloop.contracts.stores import EventLog, ReposStore
+from taskloop.contracts.rowstores import ReposStore
+from taskloop.stores.real import real_stores
 
 SOURCE: Final = "task-loop"
 RETAIN_DAYS: Final = 7
@@ -44,7 +45,7 @@ def event(by: Identity, kind: str, bead: str = "", **fields: Any) -> Event:
     cfg = by.config
     with guard(events_lock(cfg)):  # prune_events rewrites the file under this lock
         if kind == "stage" and rec.step == "close" and rec.run_id:
-            existing = next((i.rec for i in EventLog(cfg).read_from().items
+            existing = next((i.rec for i in real_stores(cfg).events.read_from().items
                              if i.rec.run_id == rec.run_id and i.rec.step == "close"), None)
             if existing is not None:
                 return existing

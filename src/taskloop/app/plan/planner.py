@@ -9,7 +9,9 @@ from typing import Any
 from taskloop.app.plan import assume
 from taskloop.app.plan.cap import ReplanCap
 from taskloop.app.plan.decisions import Decisions
+from taskloop.app.plan.host import PlanHost
 from taskloop.app.plan.prompt import PlanPrompt
+from taskloop.app.plan.prompts import ASSUME_TEXT, PLAN_BRIEF_KB, PLAN_DECIDED_TEXT, VISUAL_BACK
 from taskloop.app.plan.sendback import SendBack
 from taskloop.contracts import plancheck
 from taskloop.contracts.answers import ASSUMPTION, IRREVERSIBLE
@@ -23,14 +25,13 @@ from taskloop.domain.matchers import clip
 from taskloop.domain.plan.brief import COMMENTS_ONLY
 from taskloop.domain.plan.stored import stored
 from taskloop.domain.prompts.common import DECIDED_TEXT
-from taskloop.domain.prompts.plan import ASSUME_TEXT, PLAN_BRIEF_KB, PLAN_DECIDED_TEXT, VISUAL_BACK
 from taskloop.domain.review import visual
 
 REPLAN_TAIL = 12500  # characters of replan.md the planner reads
 
 
 class Planner:
-    def __init__(self, host: Any) -> None:
+    def __init__(self, host: PlanHost) -> None:
         self.e = host
         self.cap = ReplanCap(host)
         self.prompts = PlanPrompt(host, host.git)
@@ -41,7 +42,7 @@ class Planner:
     def ask(self, prompt: str, step: str, title: str, mode: str = "plan") -> PlanData:
         """One planner answer, its checks validated before any write; the bad ones go back once."""
         e = self.e
-        data, _ = e.ai("plan", title, prompt, step=step, mode=mode, at=(e.planned, 0, 0))
+        data = plancheck.plan_of(e.ai("plan", title, prompt, step=step, mode=mode, at=(e.planned, 0, 0)).data)
         if self.fits(data):  # keep the answer through a stop, but revalidate it before any write
             e.plan_data = copy.deepcopy(data)
             e.checkpoints.save(stage=0, rounds=0, n=0, feedback="", step="plan")
@@ -69,7 +70,7 @@ class Planner:
     def fits(self, data: PlanData) -> bool:
         """A plan worth keeping through a stop: it has stages, asks nothing, and is not a split ask."""
         return bool(data["stages"] and not data["question"].strip() and (
-            len(data["stages"]) <= int(self.e.cfg.max_stages) or self.cap.kept_whole()))
+            len(data["stages"]) <= self.e.cfg.max_stages or self.cap.kept_whole()))
 
     def add_leftovers(self, data: PlanData) -> None:
         """The follow-up work the plan wants filed: filed at the close with the reviews' leftovers. Only a plan the run goes on with
@@ -86,7 +87,7 @@ class Planner:
         owner = (bool(old) and not again and why_amend.startswith("bead changed: the owner answered")
                  and not (e.answered and e.answered.ask_class == AskClass.CAP_REACHED))  # a cap ask answered 'split' stays blocked
         owner = owner or (bool(old) and not again and why_amend.startswith(f"bead changed ({COMMENTS_ONLY})"))  # tl-9un.12
-        if not owner and e.planned >= 1 + int(e.cfg.max_replans) + e.extra:
+        if not owner and e.planned >= 1 + e.cfg.max_replans + e.extra:
             raise self.cap.blocked()
         if not owner:
             e.planned += 1
@@ -116,12 +117,12 @@ class Planner:
         taste or show case goes back once (not a counted re-plan); the second answer stands."""
         e = self.e
         vp = e.cfg.visual_paths
-        if e.plan_visual_back or not (vp and vp.include) or not data["stages"] or visual.is_visual(data.get("cases") or []):
+        if e.plan_state.visual_back or not (vp and vp.include) or not data["stages"] or visual.is_visual(data.get("cases") or []):
             return data
         files = [f for st in data["stages"] for f in st["files"]]
         if not visual.touches_visual_path(files, vp.include, vp.exclude):
             return data
-        e.plan_visual_back = True
+        e.plan_state.visual_back = True
         e.warn("the plan touches a visual path and has no look-objective, taste or show case: sent back once")
         e.steps.outcome("sent back", "a visual path is touched and no case is look-objective, taste or show")
         e.steps.move(step, "plan_visual_back", "a visual path is touched and no case is look-objective, taste or show")
@@ -132,8 +133,8 @@ class Planner:
         e = self.e
         q = data["question"].strip()
         decided = data["decided"].strip() if q else ""
-        if decided and not e.plan_decided:  # tl-bxk.10.3: no owner ask, the planner plans again
-            e.plan_decided = True
+        if decided and not e.plan_state.decided:  # tl-bxk.10.3: no owner ask, the planner plans again
+            e.plan_state.decided = True
             e.warn(f"the planner asked what an accepted requirement decides: {decided[:300]}")
             e.steps.outcome("sent back", "an accepted requirement decides its question")
             e.steps.move(step, "planner_decided", f"an accepted requirement decides it: {decided}")
@@ -150,8 +151,8 @@ class Planner:
         e = self.e
         asked = data["question"].strip()
         data = assume.assume_question(data, e.assumed, e.ask_flow.raise_soft)
-        if not data["stages"] and not data.get("leftovers") and not e.leftovers and not e.plan_assumed:
-            e.plan_assumed = True
+        if not data["stages"] and not data.get("leftovers") and not e.leftovers and not e.plan_state.assumed:
+            e.plan_state.assumed = True
             e.warn(f"the planner asked a question about a step that can be undone, sent back: {asked[:300]}")
             e.steps.outcome("sent back", "its question is about a step that can be undone")
             e.steps.move(step, "planner_assumed", f"a question about a reversible step is an assumption: {asked[:200]}")
@@ -222,7 +223,7 @@ class Planner:
     def finish(self, data: PlanData) -> PlanData:
         e = self.e
         self.move_if_lacking(data)
-        big = int(e.cfg.max_stages)
+        big = e.cfg.max_stages
         if len(data["stages"]) > big and not self.cap.kept_whole():
             why = f"ticket: the plan has {len(data['stages'])} stages (more than {big}): the bead may be too big for one task"
             raise e.blocked_for(why, "ASK_TICKET", spec=askspecs.too_big([st["goal"] for st in data["stages"]], big))

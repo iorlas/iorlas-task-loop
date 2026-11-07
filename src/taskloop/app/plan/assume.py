@@ -6,7 +6,7 @@ from typing import Any
 from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.plan.matchers import word_set
 
-Assumer = Callable[[str], None]  # Engine.assumed: the run's Assumed record
+Assumer = Callable[[str], object]  # Engine.assumed: the run's Assumed record
 
 
 def assume(data: PlanData, text: str, said: Assumer) -> None:

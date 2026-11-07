@@ -1,10 +1,12 @@
 """tl-auky: contract-4 writer grants are explicit, admitted, scoped and part of recovery identity."""
+import json
 from unittest import mock
 
 import pytest
 import support.paths  # noqa: F401
 from support import engine_case as te
 from support import fake_route
+from support.argv_of import argv_of
 from support.case import Case
 
 from taskloop.adapters import delegate_wire
@@ -37,15 +39,15 @@ class WriterGrant(Case):
                 with self.subTest(node=node, grant=grant):
                     host = mock.Mock(session="s", bead="t-1")
                     host.cfg = config.EngineConfig(writer_family=["openai"], writer_exec_allow=grant)
-                    host.budget.labels = []
+                    host.budget.labels, host.plan_data = [], None
                     host.git.diff_entries.return_value = []
                     host.checker.split.return_value.engine_recipes.return_value = []
                     call = mock.Mock(node=node, role=role, cwd="/w", title="T", resume=None, writer=None)
                     with mock.patch.object(worker_request.planref, "stage_commands", return_value=[]):
                         req = worker_request.request(host, call, "live", 60, 30)
-                    argv = req.to_argv("py", "route")
+                    argv = argv_of(req)
                     if role == "worker" and grant:
-                        assert argv[argv.index("--writer-exec-allow") + 1] == '[["just","unity-shot"],["tool","an argument"]]'
+                        assert json.loads(argv[argv.index("--writer-exec-allow") + 1]) == [["just", "unity-shot"], ["tool", "an argument"]]
                     else:
                         assert "--writer-exec-allow" not in argv
 
@@ -77,7 +79,8 @@ class Admission(te.EngineTest):
         assert "capability" in self.said()
 
     def test_empty_grant_does_not_require_capability(self):
-        with mock.patch.dict(fake_route.CONTRACT, {**fake_route.CONTRACT, "capabilities": []}, clear=True):
+        only_reviewers_cap = {**fake_route.CONTRACT, "capabilities": ["instructions_ref"]}  # reviewer calls need it
+        with mock.patch.dict(fake_route.CONTRACT, only_reviewers_cap, clear=True):
             rc, script = self.run_engine({"plan": [te.PLAN], "write": [te.WRITE], "review": [te.CLEAN]})
         assert rc == 0
         assert "write" in script.nodes

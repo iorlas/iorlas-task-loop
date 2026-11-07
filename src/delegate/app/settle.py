@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from any_agent import reset_parse
-from any_agent.classify import Outcome, with_network
+from any_agent.classify import Outcome, classify, with_network
 
 from delegate.app import answer
 from delegate.app.env import Args
@@ -26,6 +26,22 @@ LOGOUT_OUT = 900  # a lane whose worker found it logged out is skipped this long
 HUNG_OUT_SECS = 1800  # a lane whose worker printed nothing at all rests this long
 CREDIT_PROBE = 6 * 3600  # a lane out of credits with no stated end is looked at again after this long
 GUESS_WINDOW = 6 * 3600
+
+
+def stop(fact: str, words: str) -> dict[str, Json]:
+    """The answer of a stop this process measured itself (`setup_failed`, `crashed`, `signal`): the ladder names the reason, `words` is
+    what it says. No lane state changes."""
+    o = classify(None, structured={fact: words})
+    assert o is not None  # a caller fact always names a reason
+    return {"outcome": o.reason, "say": o.detail}
+
+
+def probe_hung(lane: str, model: str, secs: float, t: float) -> dict[str, Json]:
+    """A canary probe that did not answer in time: `timeout` is never counted, `hung` is, and the ladder names it from the watchdog fact.
+    Nothing is marked out here; the pair tries again in a minute."""
+    o = classify(None, structured={"watchdog": "hung"})
+    assert o is not None
+    return {"outcome": o.reason, "retry_after": t + 60, "say": f"canary: {lane}/{model} did not answer within {secs}s"}
 
 
 @dataclass(frozen=True)
@@ -200,6 +216,9 @@ class Settler:
             )
 
     def _killed(self, c: Case) -> None:
+        if c.o.source == "ours":  # route.py's own signal: its words are the whole answer
+            c.res.update(say=c.why)
+            return
         c.res.update(
             resumable=bool(c.res.get("ref") and c.res.get("started")),
             partial=bool(c.res.get("partial")),

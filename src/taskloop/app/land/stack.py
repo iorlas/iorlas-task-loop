@@ -19,11 +19,13 @@ from taskloop.app.land.forge import Forge
 from taskloop.app.land.phases import phase
 from taskloop.app.land.profile_change import diff_sha
 from taskloop.app.land.stackgate import StackGate
+from taskloop.app.land.treecheck import Tested, TreeGuard
 from taskloop.contracts import log as rec
+from taskloop.contracts.beadsport import Beads, DoltPush
 from taskloop.contracts.forge import CLOSED, MERGED, OPEN, Pr, StackItem
+from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import BeadId
 from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Beads, DoltPush, Git
 from taskloop.contracts.profile_changes import ProfileChange
 from taskloop.contracts.slots import MissingRemote
 from taskloop.domain.land.matchers import no_dolt_remote
@@ -53,7 +55,7 @@ class Stack:
                  sync: Callable[[], DoltPush], owner: str, session: str, gate: StackGate, beads: Beads, wait_min: float | None = None,
                  named: Callable[[str], None] = lambda _bead: None,
                  is_slot: Callable[[str], bool] = lambda _path: False, slot_base: str = "", *, cfg: ConfigDir,
-                 profile_change: str | None = None, jobs: int = 1) -> None:
+                 profile_change: str | None = None, jobs: int = 1, assert_trees: bool = False) -> None:
         self.forge, self.cmds, self.log, self.git, self.repo, self.lock = forge, cmds, log, git, repo, lock
         self.record, self.sync, self.owner, self.session, self.wait_min = record, sync, owner, session, wait_min
         self.gate, self.named = gate, named  # named(bead): the run's manifest learns each bead
@@ -62,6 +64,8 @@ class Stack:
         self.slot_base = slot_base or f"origin/{forge.base}"
         self.profile_change = profile_change
         self.jobs = jobs  # gates run at once before the serial merges
+        self.assert_trees = assert_trees  # dark: judge the tested tree against the landed one (treecheck.py); off until the queue rolls out
+        self.trees = TreeGuard(cmds, git, gate.stores, repo, f"{forge.remote}/{forge.base}")
         self.recorded = 0
         self.synced = False  # bd sync was tried
         self.last = ""  # the merge commit of the last item delivered
@@ -144,17 +148,20 @@ class Stack:
         sid = self.log.next_id("s")
         name = f"land:{branch}"
         self.log.emit(rec.StepStart(id=sid, step=name, text=f"land {branch}"))
+        tested = None
         try:
             if pr is None or pr.state == OPEN:  # a PR already merged or closed is prepare's to judge
                 with phase(self.log, "fetch"):
                     self.forge.fetch()  # the judged commit's profile, and the base as origin has it now
                 with phase(self.log, "gate"):
                     base = self.gate.require(branch, oid, profile_change=self.profile_change)
+                if self.assert_trees:
+                    tested = Tested(parent=base, parent_tree=self.trees.tree(base), tree=self.trees.tree(oid))
                 if self.profile_change is not None:
                     self.audit_profile(branch, oid, base)
             pr = self.prepare(item, branch, oid, pr)
             head = pr.head_oid
-            sha = self.merged(item, pr, head)
+            sha = self.merged(item, pr, head, tested)
         except Stop as stop:
             self.log.emit(rec.StepEnd(id=sid, step=name, outcome="failed", detail=stop.why))
             raise
@@ -222,9 +229,16 @@ class Stack:
     def bead_note(item: StackItem) -> str:
         return f" for {item.bead}" if item.bead else ""
 
-    def merged(self, item: StackItem, pr: Pr, head: str) -> str:
-        """Under the land lock: merge the head we saw, see MERGED, record the PR's own merge commit. -> that commit."""
+    def merged(self, item: StackItem, pr: Pr, head: str, tested: Tested | None = None) -> str:
+        """Under the land lock: merge the head we saw, see MERGED, record the PR's own merge commit. -> that commit. With `tested`, the
+        merge is refused unless it lands the tested tree, and a merge that did not is an incident (treecheck.py)."""
         with self.locked():
+            main_before = ""
+            if pr.state == OPEN and tested is not None:
+                self.forge.fetch()
+                main_before = self.git.rev_parse(self.repo, self.trees.main_ref)
+                if why := self.trees.refuse(head, tested):
+                    raise Stop(1, f"PR #{pr.number} not merged: {why}")
             if pr.state == OPEN:
                 now = self.forge.view(pr.number)
                 if now.state == OPEN and now.head_oid != head:  # the gate judged `head`: the forge would refuse this later
@@ -234,6 +248,9 @@ class Stack:
                     pr = self.forge.view(pr.number)
             if pr.state != MERGED or not pr.merge_sha:
                 raise Stop(1, f"PR #{pr.number} is {pr.state} after the merge (merge commit {pr.merge_sha or 'none'}): not recorded")
+            if tested is not None and main_before:
+                self.forge.fetch()
+                self.trees.verify(tested, main_before, pr.merge_sha, pr.number, item.bead)
             if item.bead:
                 with phase(self.log, "record"):
                     self.forge.fetch()
