@@ -21,7 +21,7 @@ def setup_reload(workdir):
     host.write.write_rounds = []
     host.steps.n = 5
     reexecs, trail = FakeReexecs(), FakeTrail()
-    reload = Reload(host, reexecs, trail, lambda: ("2.0", workdir / "install"), lambda: "slot", childenv, ident)
+    reload = Reload(host, host, host, reexecs, trail, lambda: ("2.0", workdir / "install"), lambda: "slot", childenv, ident)
     return host, reexecs, trail, reload
 
 
