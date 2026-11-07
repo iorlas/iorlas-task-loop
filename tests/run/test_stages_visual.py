@@ -36,8 +36,8 @@ from taskloop.app.land.rebase import MAX_REBASE_RESETS
 from taskloop.app.pipeline import outcomes
 from taskloop.app.plan.prompts import REPLAN_CAP
 from taskloop.app.run import running as wrunning
+from taskloop.app.slots import config as wslots_config
 from taskloop.app.track import verbs
-from taskloop.app.wire import slots as wslots
 from tlkernel.artifact import ArtifactSlot
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
@@ -219,13 +219,13 @@ class VisualWork(StagesTest):
 
     def test_the_table_is_read_from_the_base_branch_not_the_working_copy(self):
         (self.wt / "shots.json").write_text(json.dumps({"v": 1, "methods": [{"method": "Evil", "argv": ["touch", "pwned"]}]}))
-        cfg = cfg_with(wslots.load_cfg(str(self.wt), port_git()), shot_table="shots.json")
+        cfg = cfg_with(wslots_config.load_cfg(str(self.wt), port_git()), shot_table="shots.json")
         e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner(),
             git=port_git(), who=who())
         assert list(e.pictures.shot_methods()) == ["ScreenShots"]
 
     def test_a_missing_table_is_warned_once_and_the_old_way_stands(self):
-        cfg = cfg_with(wslots.load_cfg(str(self.wt), port_git()), shot_table="nowhere.json")
+        cfg = cfg_with(wslots_config.load_cfg(str(self.wt), port_git()), shot_table="nowhere.json")
         e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner(),
             git=port_git(), who=who())
         assert e.pictures.shot_methods() == {}
@@ -321,7 +321,7 @@ class VisualWork(StagesTest):
         again = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
@@ -467,7 +467,7 @@ class ResumeCount(StagesTest):
         e = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),

@@ -14,7 +14,7 @@ from support.pushsim import pusher
 from support.spawn import port_git, real_spawner
 from support.who import who
 
-from taskloop.app.wire import slots as wslots
+from taskloop.app.slots import config as wslots_config
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 
@@ -48,7 +48,7 @@ class SlotHygiene(StagesTest):
         e = engine.Engine(
             BeadId("t-1"),
             str(self.wt),
-            wslots.load_cfg(str(self.wt), port_git()),
+            wslots_config.load_cfg(str(self.wt), port_git()),
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),

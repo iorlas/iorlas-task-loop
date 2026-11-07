@@ -38,6 +38,7 @@ from support.tlmain import tl_main  # noqa: E402
 from taskloop.adapters import (  # noqa: E402
     pidcheck,
 )
+from taskloop.app.slots import config as wslots_config  # noqa: E402
 from taskloop.app.track import trail  # noqa: E402
 from taskloop.app.wire import slots as wslots  # noqa: E402
 from tlkernel import wire  # noqa: E402
@@ -241,8 +242,8 @@ class SlotReset(Base):
         assert (self.slot / "work.txt").read_text() == "reviewed work\n"
 
     def test_loop_folders_are_excluded_from_git_add(self):
-        wslots.exclude_local(port_git(),str(self.repo), ".slots/", ".task/")
-        wslots.exclude_local(port_git(),str(self.repo), ".slots/")
+        wslots_config.exclude_local(port_git(),str(self.repo), ".slots/", ".task/")
+        wslots_config.exclude_local(port_git(),str(self.repo), ".slots/")
         exclude = (self.repo / ".git" / "info" / "exclude").read_text()
         assert exclude.split().count(".slots/") == 1
         assert ".slots" not in gitq.git("status", "--porcelain", "--untracked-files=all", cwd=str(self.repo))

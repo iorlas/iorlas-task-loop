@@ -22,7 +22,7 @@ from taskloop.adapters import (
 )
 from taskloop.app.checks.cache import InputKeys
 from taskloop.app.doctor import setup_checks
-from taskloop.app.wire.slots import cfg_source
+from taskloop.app.slots.config import cfg_source
 from taskloop.domain.checks import durations, inputs, lint, planref
 from taskloop.domain.checks.names import norm
 from taskloop.domain.checks.order import CheckOrder

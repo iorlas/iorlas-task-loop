@@ -22,7 +22,7 @@ from taskloop.app.checks.runner import Checker
 from taskloop.app.launch.check_host import CliHost
 from taskloop.app.launch.staged import staged_tree
 from taskloop.app.pipeline.stage_run import StageRun, stage_run
-from taskloop.app.wire import slots as wslots
+from taskloop.app.slots import config as wslots_config
 from taskloop.domain.checks.specs import gate_items, repo_check
 
 TAIL_LINES = 15
@@ -65,7 +65,7 @@ def profile_of(repo: str) -> EngineConfig:
         raise SystemExit(f"tl check: cannot read {path}: {e}") from None
     if data is None:
         raise SystemExit(f"tl check: cannot read {path}: no such file")
-    return wslots.load_profile(data).engine
+    return wslots_config.load_profile(data).engine
 
 
 def policy_of(repo: str, git: Git, commit: str) -> EngineConfig:

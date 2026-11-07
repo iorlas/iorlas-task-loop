@@ -11,8 +11,9 @@ from tlkernel.log import RunStart
 
 from taskloop.app.land import cleanup
 from taskloop.app.pipeline.finish import land_answer
+from taskloop.app.slots.config import load_cfg, profile_slots
 from taskloop.app.wire import closeguard
-from taskloop.app.wire.slots import load_cfg, profile_slots, slot_of
+from taskloop.app.wire.slots import slot_of
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
 

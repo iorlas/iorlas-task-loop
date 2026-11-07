@@ -158,8 +158,10 @@ def schema_hash(cls: type[Rec]) -> str:
 
 
 def golden(parts: Iterable[Part]) -> dict[str, dict[str, object]]:
-    """What the golden file holds per part: its version, DDL fingerprint and each record's `V` and schema hash."""
-    return {p.name: {"version": p.version, "ddl": ddl_fingerprint(p), "records": _shapes(p)}
+    """What the golden file holds per part: its version, DDL fingerprint, each record's `V` and schema hash, and the `history`
+    entry of the current version (the DDL and record fingerprints a db stores for it)."""
+    return {p.name: {"version": p.version, "ddl": ddl_fingerprint(p), "records": _shapes(p),
+                     "history": {str(p.version): {"ddl": ddl_fingerprint(p), "record": record_fingerprint(p)}}}
             for p in parts}
 
 

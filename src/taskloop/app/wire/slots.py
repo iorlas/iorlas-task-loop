@@ -9,11 +9,10 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from tlkernel import config
 from tlkernel.bd_errors import BdCommandFailure
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, BeadQuery, Beads
-from tlkernel.config import EngineConfig, RepoProfile, SlotsConfig
+from tlkernel.config import SlotsConfig
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
@@ -21,103 +20,21 @@ from tlkernel.ids import loop_key as repo_key
 from tlkernel.paths import TASK_EXCLUDE
 from tlkernel.procport import Spawner
 from tlkernel.slots import NotARepo, SlotFail, SlotGitError, SlotTable
-from tlkernel.slottable import WORKTREE, LiveSlot, SlotSource, build_slot_table
+from tlkernel.slottable import LiveSlot, build_slot_table
 
-from taskloop.adapters import profile_at
 from taskloop.adapters.beadtools import bd_store, peek
 from taskloop.adapters.gitrepo import repo_root
 from taskloop.adapters.ident import hostname
 from taskloop.adapters.landlock import os_lock
 from taskloop.app.slots import line as slots_line
 from taskloop.app.slots import owned
+from taskloop.app.slots.config import exclude_local, prio_of, profile_slots, slot_dir, slot_excludes, slot_source
 from taskloop.app.slots.engine_lock import drop_engine_lock, engine_busy, lock_pid
 from taskloop.app.slots.env import DEFAULT_PRIO, SlotEnv, stamp
 from taskloop.app.slots.pool import SlotPool, machine_slots
 from taskloop.app.track import trail
 from taskloop.app.track.trail import event
 from taskloop.stores.real import real_stores
-
-
-def profile(repo: str, base: str | None, git: Git) -> dict[str, Any]:
-    """The repo's loop profile (.task-loop.json, parsed). With `base` (a ref such as origin/main), the copy committed there, so a pushed
-    rule counts after a fetch even when nobody pulled the checkout; the working tree only when `base` does not resolve here (no remote).
-    A file missing on the base is {}: committed wins."""
-    return profile_source(repo, base, git)[0]
-
-
-def profile_source(repo: str, base: str | None, git: Git) -> tuple[dict[str, Any], str]:
-    """The profile and its exact commit, or an empty commit for the working-tree fallback."""
-    try:
-        commit = git.rev_parse(repo, base + "^{commit}") if base else ""
-    except NotARepo:
-        commit = ""  # a folder not yet initialized has only its local profile
-    path = Path(repo) / profile_at.FILE
-    if commit:
-        try:
-            return profile_at.raw_at(git, repo, commit) or {}, commit
-        except (SlotGitError, ValueError) as err:
-            raise config.ProfileReadError(str(path), commit, err) from err
-    try:
-        return profile_at.raw_in(repo) or {}, ""
-    except (OSError, ValueError) as err:
-        raise config.ProfileReadError(str(path), "", err) from err
-
-
-def load_profile(data: Any) -> RepoProfile:
-    """A parsed .task-loop.json as a RepoProfile; an unknown key or a wrong type exits, naming it. A retired key is said once."""
-    try:
-        return config.load(data, say_to=sys.stderr)
-    except config.ConfigError as e:
-        print(f"task-loop: {e}", file=sys.stderr)
-        raise SystemExit(os.EX_CONFIG) from e
-
-
-def cfg_source(repo: str, git: Git) -> tuple[RepoProfile, str, str]:
-    """(the RepoProfile, the base hint, the pinned commit: empty for a local fallback). A bad .task-loop.json exits loudly."""
-    try:
-        local = profile(repo, None, git)
-        engine = local.get("engine") if isinstance(local, dict) else None
-        hint = engine.get("base") if isinstance(engine, dict) else None
-        base = hint if isinstance(hint, str) else EngineConfig().base
-        data, commit = profile_source(repo, base, git)
-        return load_profile(data), base, commit
-    except config.ConfigError as err:
-        print(f"task-loop: {err}", file=sys.stderr)
-        raise SystemExit(os.EX_CONFIG) from err
-
-
-def load_cfg(repo: str, git: Git) -> EngineConfig:
-    """The `engine` block of the repo's .task-loop.json as committed on the base branch, defaults for what it leaves out. The base is
-    itself a key: the working tree names it, then the base's copy is read. A caller fetches first."""
-    return cfg_source(repo, git)[0].engine
-
-
-def profile_slots(repo: str, git: Git | None = None) -> SlotsConfig:
-    """The `slots` block of the repo's loop profile. With `git`, as committed on the base ref (what the loops read, `cfg_source`: a stale
-    checkout does not change the count); without, the working tree's copy (no git to ask; prefer passing one)."""
-    if git is not None:
-        return cfg_source(repo, git)[0].slots
-    try:
-        return load_profile(profile_at.raw_in(repo) or {}).slots
-    except (OSError, ValueError):
-        return SlotsConfig()
-
-
-def slot_source(repo: str, git: Git) -> SlotSource:
-    """The slot count the loops use (the profile on the base ref, as `cfg_source` reads it), this machine's host and the slot folders on
-    disk. A bad profile exits (cfg_source says so); a caller that must not exit answers for it."""
-    profile_, base, commit = cfg_source(repo, git)
-    cfg = profile_.slots
-    root = str(Path(slot_dir(repo, "x", cfg)).parent)
-    return SlotSource(host=hostname(), count=cfg.count, source=base if commit else WORKTREE, sha=commit, dirs=slot_dirs(root), root=root)
-
-
-def slot_dirs(root: str) -> frozenset[str]:
-    """The names of the slot folders in `root` (no process: a directory listing)."""
-    try:
-        return frozenset(d.name for d in Path(root).iterdir() if d.is_dir())
-    except OSError:
-        return frozenset()
 
 
 def slot_table(repo: str, who: Identity, git: Git, now: float, live: Mapping[str, LiveSlot] | None = None,
@@ -131,31 +48,6 @@ def slot_table(repo: str, who: Identity, git: Git, now: float, live: Mapping[str
     with contextlib.suppress(BdFailure):  # no bd answer: no claim is shown as starting work
         open_ids = [b.id for b in store.find(BeadQuery()) if b.status in ("open", "in_progress")]
     return build_slot_table(beads, src.count, live or {}, src.dirs, now, src.source, src.sha, open_ids)
-
-
-def slot_dir(repo: str, name: str, cfg: SlotsConfig) -> str:
-    root = cfg.dir
-    return str(Path(root if os.path.isabs(root) else os.path.join(repo, root)) / name)
-
-
-def slot_excludes(repo: str, cfg: SlotsConfig) -> tuple[str, ...]:
-    """The exclude lines for the slot folder (a path under the repo; one outside it needs none) and the scratch folder."""
-    d = Path(slot_dir(repo, "x", cfg)).parent
-    return (str(d.relative_to(repo)) + "/", TASK_EXCLUDE) if d.is_relative_to(repo) else (TASK_EXCLUDE,)
-
-
-def exclude_local(git: Git, repo: str, *patterns: str) -> None:
-    """Keep the loop's own folders out of `git add -A` in every repo, without touching its tracked .gitignore."""
-    common = git.common_dir(repo)
-    if not common:
-        return
-    f = Path(common) / "info" / "exclude"
-    f.parent.mkdir(parents=True, exist_ok=True)
-    have = f.read_text(encoding="utf-8") if f.exists() else ""
-    add = [p for p in patterns if p not in have.split()]
-    if add:
-        with open(f, "a", encoding="utf-8") as fh:
-            fh.write(("\n" if have and not have.endswith("\n") else "") + "\n".join(add) + "\n")
 
 
 def slot_env(repo: str, store: Beads | None = None, cfg: SlotsConfig | None = None, now: Callable[[], float] | None = None,
@@ -238,11 +130,6 @@ def release_slot(repo: str, name: str, bead: str | None = None, mine: bool = Fal
         return SlotPool(slot_env(repo, store, spawner=spawner, git=git, who=who)).slot(name).release(bead, mine=mine, force=force, gen=gen)
     except SlotFail:
         return False
-
-
-def prio_of(bead: Bead | None) -> int:
-    """The priority number of a bead (0 = P0), DEFAULT_PRIO when it has none."""
-    return bead.priority if bead and bead.priority is not None else DEFAULT_PRIO
 
 
 def bead_priority(repo: str, bead_id: BeadId, who: Identity, store: Beads | None = None) -> int:

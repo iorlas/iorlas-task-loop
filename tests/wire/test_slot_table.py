@@ -13,8 +13,9 @@ from support.fakes import FakeBeadStore
 from support.who import who
 
 from taskloop.adapters.ident import hostname
+from taskloop.app.slots.config import slot_source
 from taskloop.app.wire import brief
-from taskloop.app.wire.slots import slot_source, slot_table
+from taskloop.app.wire.slots import slot_table
 from taskloop_dash.views import floor
 from taskloop_dash.views.world import ProjectIn
 from tlkernel.gitport import Git

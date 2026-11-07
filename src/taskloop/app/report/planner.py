@@ -1,4 +1,6 @@
 """What the planner costs per bead: delegate's history rows split by the engine logs' plan nodes. Reads only."""
+
+import json
 import statistics
 from collections.abc import Collection, Iterable
 from typing import Any
@@ -26,8 +28,9 @@ def input_tokens(tk: dict[str, Any] | None) -> int:
     return i if i >= c else i + c
 
 
-def planner_stats(cfg: ConfigDir, since: float, until: float, prefixes: Collection[str] = (),
-                  rows: Iterable[RunRecord] | None = None) -> dict[str, Any]:
+def planner_stats(
+    cfg: ConfigDir, since: float, until: float, prefixes: Collection[str] = (), rows: Iterable[RunRecord] | None = None
+) -> dict[str, Any]:
     """Planner calls per bead from delegate's run rows (`rows`, default delegate's history; input: `in`, plus cached on rows from
     before delegate 0.22), split by the engine logs' plan nodes:
     first plan, full plans again (a new thread from scratch), amends, check send-backs. Reads only."""
@@ -53,10 +56,73 @@ def planner_stats(cfg: ConfigDir, since: float, until: float, prefixes: Collecti
         first = min(1, kinds["full"] or n)
         again = max(kinds["full"] - first, 0)
         other = max(n - first - again - kinds["amend"] - kinds["back"], 0)  # retries of an invalid answer, missing logs
-        rows.append({"bead": bead, "calls": n, "first": first, "again": again, "amend": kinds["amend"],
-                     "back": kinds["back"], "other": other, "input": sum(ins)})
+        rows.append(
+            {
+                "bead": bead,
+                "calls": n,
+                "first": first,
+                "again": again,
+                "amend": kinds["amend"],
+                "back": kinds["back"],
+                "other": other,
+                "input": sum(ins),
+            }
+        )
     allin = [x for ins in calls.values() for x in ins]
-    return {"calls": len(allin), "beads": len(rows), "input": sum(allin),
-            "median_input": int(statistics.median(allin)) if allin else 0,
-            **{k: sum(x[k] for x in rows) for k in ("first", "again", "amend", "back", "other")}, "per_bead": rows}
+    return {
+        "calls": len(allin),
+        "beads": len(rows),
+        "input": sum(allin),
+        "median_input": int(statistics.median(allin)) if allin else 0,
+        **{k: sum(x[k] for x in rows) for k in ("first", "again", "amend", "back", "other")},
+        "per_bead": rows,
+    }
 
+
+def report_planner(config: ConfigDir, since: float, until: float, prefixes: str, *, as_json: bool) -> int:
+    pre = {x.strip() for x in prefixes.split(",") if x.strip()}
+    p = planner_stats(config, since, until, pre)
+    if as_json:
+        print(json.dumps(p, indent=1, ensure_ascii=False))
+    else:
+        print_planner(p)
+    return 0
+
+
+def planner_line(p: dict[str, Any]) -> str:
+    return (
+        "planner: {:d} calls on {:d} beads: {:d} first plans, {:d} full plans again, {:d} amends, {:d} check send-backs, {:d} other; "
+        "input {:.1f}M, median {:d}k per call"
+    ).format(
+        int(p["calls"]),
+        int(p["beads"]),
+        int(p["first"]),
+        int(p["again"]),
+        int(p["amend"]),
+        int(p["back"]),
+        int(p["other"]),
+        p["input"] / 1e6,
+        int(p["median_input"] // 1000),
+    )
+
+
+def print_planner(p: dict[str, Any]) -> None:
+    print(planner_line(p))
+    print(
+        "  {!s:<26} {!s:>5} {!s:>5} {!s:>5} {!s:>5} {!s:>5} {!s:>5} {!s:>9}".format(
+            "bead", "calls", "first", "again", "amend", "back", "other", "input M"
+        )
+    )
+    for x in sorted(p["per_bead"], key=lambda x: -x["input"]):
+        print(
+            "  {!s:<26} {:5d} {:5d} {:5d} {:5d} {:5d} {:5d} {:9.2f}".format(
+                x["bead"],
+                int(x["calls"]),
+                int(x["first"]),
+                int(x["again"]),
+                int(x["amend"]),
+                int(x["back"]),
+                int(x["other"]),
+                x["input"] / 1e6,
+            )
+        )

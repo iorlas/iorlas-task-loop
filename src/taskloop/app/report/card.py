@@ -1,5 +1,7 @@
 """`tl report`: the M2 scorecard over a time window. Reads only: traces.jsonl, the loop's log, engine/*.jsonl, the repo's git refs, bd."""
+
 import contextlib
+import json
 import statistics
 import time
 from collections import Counter
@@ -26,13 +28,14 @@ from tlkernel.trace import RunTrace
 from taskloop.adapters import beadtools, gitrepo
 from taskloop.app.asks import intake
 from taskloop.app.reconcile.lost import lost_work
-from taskloop.app.report.inputs import bead_status, landed_of, read_jsonl, repo_traces
+from taskloop.app.report.inputs import bead_status, landed_of, prefix, read_jsonl, repo_traces
 from taskloop.app.report.landphases import land_stats, tries_of
 from taskloop.app.report.mainstate import main_state
-from taskloop.app.report.planner import input_tokens
+from taskloop.app.report.planner import input_tokens, planner_line, planner_stats
 from taskloop.domain.lifecycle import matchers
 
 M2: Final = {"beads": 10, "landed_no_ask": 7}  # at least; lost and crashes must be 0 (docs/roadmap.md)
+
 
 def typed_log(path: Path) -> list[EngineLog]:
     """The engine log's records; a line that is not one is skipped."""
@@ -43,8 +46,9 @@ def typed_log(path: Path) -> list[EngineLog]:
     return out
 
 
-def crashes(repo: str, since: float, until: float, traces: Sequence[RunTrace], cfg: paths.ConfigDir,
-            now: float | None = None) -> list[dict[str, Any]]:
+def crashes(
+    repo: str, since: float, until: float, traces: Sequence[RunTrace], cfg: paths.ConfigDir, now: float | None = None
+) -> list[dict[str, Any]]:
     """Engine crashes: the loop saw run-task exit with no outcome; a run in the window with no trace whose manifest says `lost`
     (the reconciler: its heartbeat went stale and its process is gone); or a trace closed as an engine fault (an exception the engine
     caught). A run's .stderr is route.py's, where a worker's test tracebacks land too: never read."""
@@ -77,6 +81,7 @@ def overlaps(r: RunTrace, since: float, until: float) -> bool:
 @dataclass(frozen=True)
 class Last:
     """How a bead's newest run (or crash) ended: the Kind it recorded, None when it recorded none, and its words."""
+
     kind: Kind | None
     why: str
 
@@ -112,7 +117,7 @@ def who_answered(comments: Sequence[Comment], n: int) -> list[str]:
     out = []
     asks = [i for i, c in enumerate(comments) if intake.engine_written(c) and c.text.startswith("Ask (engine) ")]
     for i in asks[-n:] if n else []:
-        reply = next((c for c in comments[i + 1:] if not intake.engine_written(c)), None)
+        reply = next((c for c in comments[i + 1 :] if not intake.engine_written(c)), None)
         out.append("open" if reply is None else "supervisor" if matchers.supervised(reply.text) else "owner")
     return out + ["unknown"] * (n - len(out))
 
@@ -125,8 +130,9 @@ def pctl(xs: Sequence[float], p: int) -> float:
     return xs[k]
 
 
-def _bead_rows(beads: dict[str, dict[str, list[Any]]],
-               comments_of: Callable[[BeadId], Sequence[Comment]]) -> tuple[list[dict[str, Any]], dict[str, int]]:
+def _bead_rows(
+    beads: dict[str, dict[str, list[Any]]], comments_of: Callable[[BeadId], Sequence[Comment]]
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """(per-bead rows sorted by bead, the ask counts) of {bead: {runs, crashes}}."""
     rows: list[dict[str, Any]] = []
     asks = {"count": 0, "beads": 0, "supervisor": 0, "owner": 0, "open": 0, "unknown": 0}
@@ -136,7 +142,8 @@ def _bead_rows(beads: dict[str, dict[str, list[Any]]],
         if not n_ask and any(answered_asks(r) for r in rs):
             n_ask = 1  # it went on from an ask raised before the window
         events = [(r.ended or 0, Last(kind_named(r.kind), r.why)) for r in rs] + [
-            (c["t"], Last(Kind.FAULT_CRASHED, c["why"])) for c in b["crashes"]]
+            (c["t"], Last(Kind.FAULT_CRASHED, c["why"])) for c in b["crashes"]
+        ]
         last = max(events, key=lambda e: e[0])[1]
         why = last.why
         state = "landed" if any(r.outcome in (Outcome.LANDED, Outcome.DONE) for r in rs) else parked_state(last)
@@ -146,12 +153,20 @@ def _bead_rows(beads: dict[str, dict[str, list[Any]]],
             asks["beads"] += 1
             for a in answers:
                 asks[a] += 1
-        rows.append({"bead": bead, "state": state, "asks": n_ask, "answers": answers, "runs": len(rs),
-                     "crashes": len(b["crashes"]),
-                     "minutes": round(sum((r.ended - r.started) / 60 for r in rs), 1),
-                     "rounds": sum(r.stats.rounds for r in rs),
-                     "replans": sum(r.stats.replans for r in rs),
-                     "why": why[:160] if state != "landed" else ""})
+        rows.append(
+            {
+                "bead": bead,
+                "state": state,
+                "asks": n_ask,
+                "answers": answers,
+                "runs": len(rs),
+                "crashes": len(b["crashes"]),
+                "minutes": round(sum((r.ended - r.started) / 60 for r in rs), 1),
+                "rounds": sum(r.stats.rounds for r in rs),
+                "replans": sum(r.stats.replans for r in rs),
+                "why": why[:160] if state != "landed" else "",
+            }
+        )
     rows.sort(key=lambda x: x["bead"])
     return rows, asks
 
@@ -202,15 +217,34 @@ class _Card(TypedDict):
 def score_of(card: Mapping[str, object]) -> Score:
     """The dashboard strip's numbers of a scorecard: nothing is recounted, so the strip and `tl report` cannot disagree."""
     c: _Card = wire.load(_Card, card)
-    return Score(since=c["since"], until=c["until"], beads=c["beads"], landed=c["landed"], landed_no_ask=c["landed_no_ask"],
-                 asks=c["asks"]["count"], lost=c["lost"], crashes=c["crashes"], m2_pass=c["m2"]["pass"],
-                 main_red=c.get("main", {"red": False})["red"], retries=max(0, c.get("runs", c["beads"]) - c["beads"]),
-                 kinds=c.get("kinds", {}))
+    return Score(
+        since=c["since"],
+        until=c["until"],
+        beads=c["beads"],
+        landed=c["landed"],
+        landed_no_ask=c["landed_no_ask"],
+        asks=c["asks"]["count"],
+        lost=c["lost"],
+        crashes=c["crashes"],
+        m2_pass=c["m2"]["pass"],
+        main_red=c.get("main", {"red": False})["red"],
+        retries=max(0, c.get("runs", c["beads"]) - c["beads"]),
+        kinds=c.get("kinds", {}),
+    )
 
 
-def scorecard(repo: str, since: float, until: float, base: str, comments_of: Callable[[BeadId], Sequence[Comment]] | None = None,
-              status_of: Callable[[BeadId],
-                  str | None] | None = None, now: float | None = None, *, git: Git, who: Identity) -> dict[str, Any]:
+def scorecard(
+    repo: str,
+    since: float,
+    until: float,
+    base: str,
+    comments_of: Callable[[BeadId], Sequence[Comment]] | None = None,
+    status_of: Callable[[BeadId], str | None] | None = None,
+    now: float | None = None,
+    *,
+    git: Git,
+    who: Identity,
+) -> dict[str, Any]:
     repo = gitrepo.repo_root(repo)  # the loop keys its log by this path
     comments_of = comments_of or beadtools.bd_store(who.actor, repo).comments
     book = repo_traces(repo, git, who.config)
@@ -224,29 +258,147 @@ def scorecard(repo: str, since: float, until: float, base: str, comments_of: Cal
         beads.setdefault(c["bead"], {"runs": [], "crashes": []})["crashes"].append(c)
     rows, asks = _bead_rows(beads, comments_of)
     tokens = _tokens(runs)
-    lost = [x for x in lost_work(repo, base, status_of or (lambda b: bead_status(b, repo, who)), traces, git,
-                                 lambda b: landed_of(b, repo, who), since=since)
-            if x["class"] in ("lost", "pending", "unknown")]
+    lost = [
+        x
+        for x in lost_work(
+            repo, base, status_of or (lambda b: bead_status(b, repo, who)), traces, git, lambda b: landed_of(b, repo, who), since=since
+        )
+        if x["class"] in ("lost", "pending", "unknown")
+    ]
     mins = [x["minutes"] for x in rows if x["runs"]]
-    c: dict[str, Any] = {"repo": repo, "since": since, "until": until, "beads": len(rows),
-         "landed": sum(x["state"] == "landed" for x in rows),
-         "landed_no_ask": sum(x["state"] == "landed" and not x["asks"] for x in rows),
-         "parked": sum(x["state"] == "parked" for x in rows), "paused": sum(x["state"] == "paused" for x in rows),
-         "failed": sum(x["state"] == "failed" for x in rows), "asks": asks,
-         "crashes": len(crash), "crash_list": crash,
-         "lost": sum(x["class"] == "lost" for x in lost), "lost_list": [x for x in lost if x["class"] == "lost"],
-         "pending_list": [x for x in lost if x["class"] in ("pending", "unknown")],
-         "minutes": {"median": round(statistics.median(mins), 1) if mins else 0, "p90": pctl(mins, 90)},
-         "rounds": sum(x["rounds"] for x in rows), "replans": sum(x["replans"] for x in rows),
-         "land": land_stats([t for r in runs if r.log for t in tries_of(typed_log(Path(r.log)))]),
-         "main": main_state(git, repo, base, since, ReleaseResultStore(who.config).get()),
-         "tokens": tokens, "runs": len(runs),
-         "kinds": dict(Counter(r.kind for r in runs if r.kind)), "per_bead": rows, "skipped_traces": book.skipped}
-    checks = {"beads": {"value": c["beads"], "want": ">={:d}".format(M2["beads"]), "ok": c["beads"] >= M2["beads"]},
-              "landed_no_ask": {"value": c["landed_no_ask"], "want": ">={:d}".format(M2["landed_no_ask"]),
-                                "ok": c["landed_no_ask"] >= M2["landed_no_ask"]},
-              "lost": {"value": c["lost"], "want": "0", "ok": c["lost"] == 0},
-              "crashes": {"value": c["crashes"], "want": "0", "ok": c["crashes"] == 0}}
+    c: dict[str, Any] = {
+        "repo": repo,
+        "since": since,
+        "until": until,
+        "beads": len(rows),
+        "landed": sum(x["state"] == "landed" for x in rows),
+        "landed_no_ask": sum(x["state"] == "landed" and not x["asks"] for x in rows),
+        "parked": sum(x["state"] == "parked" for x in rows),
+        "paused": sum(x["state"] == "paused" for x in rows),
+        "failed": sum(x["state"] == "failed" for x in rows),
+        "asks": asks,
+        "crashes": len(crash),
+        "crash_list": crash,
+        "lost": sum(x["class"] == "lost" for x in lost),
+        "lost_list": [x for x in lost if x["class"] == "lost"],
+        "pending_list": [x for x in lost if x["class"] in ("pending", "unknown")],
+        "minutes": {"median": round(statistics.median(mins), 1) if mins else 0, "p90": pctl(mins, 90)},
+        "rounds": sum(x["rounds"] for x in rows),
+        "replans": sum(x["replans"] for x in rows),
+        "land": land_stats([t for r in runs if r.log for t in tries_of(typed_log(Path(r.log)))]),
+        "main": main_state(git, repo, base, since, ReleaseResultStore(who.config).get()),
+        "tokens": tokens,
+        "runs": len(runs),
+        "kinds": dict(Counter(r.kind for r in runs if r.kind)),
+        "per_bead": rows,
+        "skipped_traces": book.skipped,
+    }
+    checks = {
+        "beads": {"value": c["beads"], "want": ">={:d}".format(M2["beads"]), "ok": c["beads"] >= M2["beads"]},
+        "landed_no_ask": {
+            "value": c["landed_no_ask"],
+            "want": ">={:d}".format(M2["landed_no_ask"]),
+            "ok": c["landed_no_ask"] >= M2["landed_no_ask"],
+        },
+        "lost": {"value": c["lost"], "want": "0", "ok": c["lost"] == 0},
+        "crashes": {"value": c["crashes"], "want": "0", "ok": c["crashes"] == 0},
+    }
     c["m2"] = {"pass": all(v["ok"] for v in checks.values()), "checks": checks}
     return c
 
+
+def report(repo: str, base: str, since: float, until: float, *, as_json: bool, git: Git, who: Identity) -> int:
+    c = scorecard(repo, since, until, base=base, git=git, who=who)
+    c["planner"] = planner_stats(who.config, since, until, {prefix(x["bead"]) for x in c["per_bead"]})
+    if as_json:
+        print(json.dumps(c, indent=1, ensure_ascii=False))
+    else:
+        print_card(c)
+    return 0 if c["m2"]["pass"] else 1
+
+
+def stamp(t: float) -> str:
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(t))
+
+
+def mtok(d: dict[str, float]) -> str:
+    return "{:.1f}M in ({:.1f}M cached), {:d}k out".format(d["in"] / 1e6, d["cached"] / 1e6, int(d["out"] // 1000))
+
+
+def print_card(c: dict[str, Any]) -> None:
+    a = c["asks"]
+    print(
+        "tl report {}  {} -> {}  (runs overlapping the window: {:d})".format(
+            Path(c["repo"]).name, stamp(c["since"]), stamp(c["until"]), int(c["runs"])
+        )
+    )
+    print(
+        "  beads {:d}   landed {:d}   landed with no ask {:d}   parked {:d}   paused {:d}   failed {:d}".format(
+            int(c["beads"]), int(c["landed"]), int(c["landed_no_ask"]), int(c["parked"]), int(c["paused"]), int(c["failed"])
+        )
+    )
+    print(
+        "  asks {:d} on {:d} beads: owner {:d}, supervisor {:d}, open {:d}{}".format(
+            int(a["count"]),
+            int(a["beads"]),
+            int(a["owner"]),
+            int(a["supervisor"]),
+            int(a["open"]),
+            ", unknown {:d}".format(int(a["unknown"])) if a["unknown"] else "",
+        )
+    )
+    print("  crashes {:d}   lost {:d}   pending branches {:d}".format(int(c["crashes"]), int(c["lost"]), len(c["pending_list"])))
+    if c["land"]["tries"]:
+        land = c["land"]
+        med = "  ".join(f"{k} {v:.0f}s" for k, v in land["median_s"].items())
+        why = ", ".join(f"{k} {n}" for k, n in land["causes"].items()) or "-"
+        print(f"  land    {land['tries']} tries, {land['retried']} retried ({why})  median {med}")
+    print(
+        "  minutes per bead: median {}, p90 {}   fix rounds {:d}   replans {:d}".format(
+            c["minutes"]["median"], c["minutes"]["p90"], int(c["rounds"]), int(c["replans"])
+        )
+    )
+    for key in ("lane", "role"):
+        for name, d in sorted(c["tokens"][key].items()):
+            print(f"  tokens {key!s:<5} {name!s:<9} {mtok(d)}")
+    if c.get("planner") and c["planner"]["calls"]:
+        print("  " + planner_line(c["planner"]))
+    for x in c["crash_list"]:
+        print("  crash   {} {}  {}".format(stamp(x["t"])[11:], x["bead"], x["why"]))
+    for x in c["lost_list"]:
+        print("  lost    {} {} {}  {}".format(x["branch"], x["sha"][:8], x["subject"][:50], x["why"]))
+    for x in c["per_bead"]:
+        if x["state"] != "landed" or x["asks"]:
+            print(
+                "  {!s:<7} {}{}{}".format(
+                    x["state"],
+                    x["bead"],
+                    "  asks: " + ",".join(x["answers"]) if x["asks"] else "",
+                    "  " + x["why"][:100] if x["why"] else "",
+                )
+            )
+    if c.get("kinds"):
+        print("  outcomes " + ", ".join(f"{k} {n}" for k, n in sorted(c["kinds"].items(), key=lambda kv: -kv[1])))
+    main = c.get("main", {"red": False, "reverts": []})
+    reverted = ", ".join(f"{x['sha'][:8]} {x['subject'][:50]}" for x in main["reverts"])
+    why = [x for x in (f"reverted {reverted}" if reverted else "", "the last release gate failed" if main.get("gate_red") else "") if x]
+    print("  main    {}".format("RED: " + "; ".join(why) if main["red"] else "green"))
+    bad = ["{} {} (want {})".format(k, v["value"], v["want"]) for k, v in c["m2"]["checks"].items() if not v["ok"]]
+    print("M2 {}{}".format("PASS" if c["m2"]["pass"] else "FAIL", ": " + "; ".join(bad) if bad else ""))
+
+
+def print_lost(rows: list[dict[str, Any]], *, as_json: bool) -> int:
+    if as_json:
+        print(json.dumps(rows, indent=1, ensure_ascii=False))
+    else:
+        for x in rows:
+            if x["class"] != "landed":
+                print("{!s:<9} {!s:<28} {} {}  {}".format(x["class"], x["branch"], x["sha"][:8], stamp(x["time"]), x["why"]))
+        n = {k: sum(x["class"] == k for x in rows) for k in ("landed", "reclaimed", "superseded", "pending", "unknown", "lost")}
+        print(
+            (
+                "{:d} lost, {:d} pending, {:d} unknown, {:d} reclaimed, {:d} superseded, {:d} landed"
+                " (commits on task/* and wip/* not on the base)"
+            ).format(int(n["lost"]), int(n["pending"]), int(n["unknown"]), int(n["reclaimed"]), int(n["superseded"]), int(n["landed"]))
+        )
+    return 1 if any(x["class"] == "lost" for x in rows) else 0

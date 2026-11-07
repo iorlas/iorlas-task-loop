@@ -69,7 +69,7 @@ proposal, verdict, effort, order.
 - **Evidence:** every `RunLocator` method is get-then-put with no lock (`tl/contracts/locator.py:104-177`), written by the engine and by
   `mark_lost` from loop start, `tl wait`, `tl doctor`, `tl report` and the owner-request gate reachable from the dashboard (c4-task-loop
   item 4). Parks: engine close and loop profile-ahead read-modify-write through an unlocked `JsonStore` (`tl/app/loop/take.py:81-86`,
-  `tl/contracts/parks.py:42-46`). Loop state: factory placeholder plus child plus a renaming reader (`tl/app/launch/factory.py:67-70`,
+  `tl/contracts/parks.py:42-46`). Loop state: factory placeholder plus child plus a renaming reader (`tl/app/loop/factory.py:67-70`,
   `tl/app/loop/files.py:59-61`). Landed: engine and `tl land` (`tl/cli/land.py:31`). Agreed by c4-task-loop items 4, 5, 9; A state table;
   A.F11; D "Lost run"; I "Storage".
 - **Kind:** state with several writers. **Severity: P1** (a `beat` racing `mark_lost` buries a live run; a stale park wake wins).
@@ -270,8 +270,8 @@ proposal, verdict, effort, order.
 
 ### Z22. "Lane" means three things, and the Mac keeps only lane 1 awake
 
-- **Evidence:** loop lanes (`tl/app/launch/factory.py:58-66`), delegate subscription lanes (`dg:domain/lanes/lane.py:85-91`), check lanes
-  (`tl/contracts/config.py:340`); `caffeinate -i -w` watches `children[0]` only (`tl/app/launch/factory.py:116-119`, c4-task-loop item 16).
+- **Evidence:** loop lanes (`tl/app/loop/factory.py:58-66`), delegate subscription lanes (`dg:domain/lanes/lane.py:85-91`), check lanes
+  (`tl/contracts/config.py:340`); `caffeinate -i -w` watches `children[0]` only (`tl/app/loop/factory.py:116-119`, c4-task-loop item 16).
 - **Kind:** hard-to-draw smell; bug. **Severity: P2** (macOS idle sleep pauses the other lanes' Unity builds).
 - **Proposal:** one `caffeinate -w` per child; rename factory lanes "loops" in logs, CLI and dashboard.
 - **Verdict:** ✅ do. **Effort:** S. **Order:** wave 1.
