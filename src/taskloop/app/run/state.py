@@ -66,5 +66,3 @@ def carries_state[T](cls: type[T]) -> type[T]:
     for name in attr_names():
         setattr(cls, name, StateField(name))
     return cls
-
-

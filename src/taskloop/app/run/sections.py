@@ -20,5 +20,3 @@ def restarted(state: RunState) -> RunState:
 def checkpoint_hooks(state: Callable[[], RunState]) -> Sequence[Callable[[str, str], tuple[str, str]]]:
     """Bind the stage-owned save hooks to the run's current state."""
     return (lambda step, feedback: land.pin_validation(state(), step, feedback),)
-
-
