@@ -1,6 +1,7 @@
 """Read-only admission and plans, before an engine opens files or takes a bead."""
 from pathlib import Path
 
+from tlkernel.branches import task_branch
 from tlkernel.config import EngineConfig
 from tlkernel.enums import Step
 from tlkernel.env import Env
@@ -43,7 +44,7 @@ def inspect(bead: BeadId, wt: str, repo: str, cfg: EngineConfig, *, git: Git, wh
         branch = git.branch(wt) if wt else ""
     except NotARepo:
         branch = ""  # a new checkout has no branch to inspect yet
-    top = git.toplevel(wt) if branch == f"task/{bead}" else ""
+    top = git.toplevel(wt) if branch == task_branch(bead) else ""
     checkout = bool(top) and Path(top).resolve() == Path(wt).resolve()
     if dry:
         say(f"plan: bead {bead}; stage {requested or ('loop' if continuous else 'auto-next')}")
