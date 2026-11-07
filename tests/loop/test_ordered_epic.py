@@ -5,10 +5,10 @@ from unittest import mock
 import pytest
 
 from taskloop.app.loop.queue import QueueRule
-from taskloop.contracts.bead import BdError, Bead, Dep
-from taskloop.contracts.beadsport import BdFailure
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.ids import BeadId
+from tlkernel.bead import BdError, Bead, Dep
+from tlkernel.beadsport import BdFailure
+from tlkernel.config import EngineConfig
+from tlkernel.ids import BeadId
 
 
 def bead(name: str, parent: str = "", labels: list[str] | None = None, deps: list[Dep] | None = None) -> Bead:

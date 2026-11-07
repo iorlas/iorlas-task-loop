@@ -10,10 +10,10 @@ import msgspec
 import pytest
 
 from taskloop.app.checks.linux import EXECUTOR_DOWN_RC, LinuxRun, Remote
-from taskloop.contracts.config import CheckSpec, ExecutorConfig
-from taskloop.contracts.ids import CheckId
-from taskloop.contracts.procport import Ran, RanBytes, Streamed
-from taskloop.contracts.slots import SlotGitError
+from tlkernel.config import CheckSpec, ExecutorConfig
+from tlkernel.ids import CheckId
+from tlkernel.procport import Ran, RanBytes, Streamed
+from tlkernel.slots import SlotGitError
 
 CFG = ExecutorConfig(host="pix", root="tl")
 

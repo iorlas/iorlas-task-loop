@@ -4,13 +4,14 @@ import contextlib
 import time
 from typing import Protocol
 
+from tlkernel import factorydb
+from tlkernel import log as rec
+from tlkernel.kinds import Kind
+from tlkernel.paths import ConfigDir
+from tlkernel.requests import OwnerNote, OwnerRequest
+from tlkernel.signalrows import SignalRows
+
 from taskloop.app.pipeline.blocked import Blocked
-from taskloop.contracts import factorydb
-from taskloop.contracts import log as rec
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.requests import OwnerNote, OwnerRequest
-from taskloop.contracts.signalrows import SignalRows
 
 PARKED_WHY = "parked: by the owner (the branch and the checkpoint are kept; release the hold to go on)"
 STOPPED_WHY = "failed: stopped by the owner"

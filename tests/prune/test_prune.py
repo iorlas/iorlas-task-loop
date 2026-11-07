@@ -24,16 +24,16 @@ from taskloop.app.prune import runs, verb
 from taskloop.app.reconcile.sweep import sweep
 from taskloop.app.run import layout
 from taskloop.app.run.layout import RunLayout
-from taskloop.contracts.bead import BdError, Bead
-from taskloop.contracts.beadsport import BdFailure, Beads
-from taskloop.contracts.checkpoint import Checkpoint
-from taskloop.contracts.checkpoint import RunState as CheckpointState
-from taskloop.contracts.config import LoopConfig
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir, RunFiles
-from taskloop.contracts.run import RunState
 from taskloop.stores.real import real_stores
+from tlkernel.bead import BdError, Bead
+from tlkernel.beadsport import BdFailure, Beads
+from tlkernel.checkpoint import Checkpoint
+from tlkernel.checkpoint import RunState as CheckpointState
+from tlkernel.config import LoopConfig
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId
+from tlkernel.paths import ConfigDir, RunFiles
+from tlkernel.run import RunState
 
 DAY = 86400
 GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x"}

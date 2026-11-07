@@ -13,7 +13,7 @@ from support import engine_case as te
 from support.logs import records
 
 from taskloop.app.workers.worker_call import WorkerCall
-from taskloop.contracts.delegate import REASON_ENGINE_ONLY_UNENFORCED
+from tlkernel.delegate import REASON_ENGINE_ONLY_UNENFORCED
 
 
 class Request(Case):

@@ -12,8 +12,8 @@ from support.case import Case
 from support.tags import contract  # noqa: F401  (re-exported for the subclasses)
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.slots import BranchPinned, DirtyTree, GitReadFailure, SlotGitError
+from tlkernel.gitport import Git
+from tlkernel.slots import BranchPinned, DirtyTree, GitReadFailure, SlotGitError
 
 _Base = Case
 IDENT = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",

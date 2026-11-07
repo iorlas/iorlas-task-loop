@@ -8,7 +8,7 @@ The run goes down to nice 10 first, so a box shared by many lanes keeps its edit
 TL_GREEN_LEDGER=1 (off by default): tests whose own files are unchanged since a green run are left out (dev/affected.py, the ledger), and
 a fully green run records the tests that ran. The worker count is NOT reduced by the load: fewer workers expose test
 pollution (tests/slots/real fail with `git rev-parse exited 128` at 2 workers, pass at 4 and alone).
-Isolation: the run has its own HOME, config and temp dirs (under the scratch root, src/taskloop/contracts/scratch.py; the test
+Isolation: the run has its own HOME, config and temp dirs (under the scratch root, packages/kernel/src/tlkernel/scratch.py; the test
 git identity, not the host's); xdist workers take one each on top
 (tests/conftest.py). The tests marked `serial` run alone, after the parallel ones, and only those the selection holds.
 Whole-suite runs are `just test-full`, started by a person; this script has no such mode. Standard library only.
@@ -29,8 +29,8 @@ import testtimes_report
 
 
 def load_scratch():
-    """src/taskloop/contracts/scratch.py by path: the owner of scratch paths and the test git identity, without the package."""
-    path = Path(__file__).resolve().parent.parent / "src" / "taskloop" / "contracts" / "scratch.py"
+    """packages/kernel/src/tlkernel/scratch.py by path: the owner of scratch paths and the test git identity, without the package."""
+    path = Path(__file__).resolve().parent.parent / "packages" / "kernel" / "src" / "tlkernel" / "scratch.py"
     spec = importlib.util.spec_from_file_location("scratch", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

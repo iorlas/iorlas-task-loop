@@ -2,11 +2,12 @@
 import time
 from typing import Protocol
 
+from tlkernel.checkpoint import RunState
+from tlkernel.gitport import Git
+from tlkernel.slots import SlotGitError
+
 from taskloop.app.land.gitcall import must
 from taskloop.app.land.parts import MoveSteps
-from taskloop.contracts.checkpoint import RunState
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.slots import SlotGitError
 from taskloop.stores.runlog import RunLog
 
 

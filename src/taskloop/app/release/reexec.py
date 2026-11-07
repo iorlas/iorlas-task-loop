@@ -5,14 +5,14 @@ import time
 from collections.abc import Sequence
 
 from jsonl_log import close_held
+from tlkernel import rundocs
+from tlkernel.env import Env
+from tlkernel.envvars import EnvVar
+from tlkernel.ids import BeadId
+from tlkernel.paths import ConfigDir
+from tlkernel.run import NetPause, Reexec, ReexecNote
+from tlkernel.waitrows import NET_PAUSE, REEXEC, WaitDoc
 
-from taskloop.contracts import rundocs
-from taskloop.contracts.env import Env
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import NetPause, Reexec, ReexecNote
-from taskloop.contracts.waitrows import NET_PAUSE, REEXEC, WaitDoc
 from taskloop.domain.lanes import policy as lp
 
 NET_PAUSE_ADOPT_S = lp.KNOBS["net_pause_max_s"]  # a run paused for the network is taken up again by the next run-task within this long

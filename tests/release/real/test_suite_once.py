@@ -18,11 +18,11 @@ from taskloop.adapters.spawner import RealSpawner
 from taskloop.app.checks import authorization
 from taskloop.app.release import gate, shell
 from taskloop.app.release.shell import Abort, Shell
-from taskloop.contracts.env import Env
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.runkey import BaseSha
 from taskloop.stores.real import real_stores
+from tlkernel.env import Env
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.paths import ConfigDir
+from tlkernel.runkey import BaseSha
 
 
 class Verify(Case):

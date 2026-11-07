@@ -3,12 +3,13 @@ import traceback
 from collections.abc import Callable
 from typing import Protocol
 
+from tlkernel import fence
+from tlkernel.beadsport import Beads
+from tlkernel.enums import Outcome
+from tlkernel.gitport import Git
+
 from taskloop.app.pipeline.outcomes import DONE
 from taskloop.app.pipeline.ports import LandCleanup, Slotting
-from taskloop.contracts import fence
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.gitport import Git
 from taskloop.stores.runlog import RunLog
 
 

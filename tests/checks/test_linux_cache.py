@@ -3,9 +3,9 @@ from support.memstores import fake_stores
 from support.spawn import port_git
 
 from taskloop.app.checks.cache import InputKeys, RunMemo
-from taskloop.contracts.checks import Check, CheckResult
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.runkey import BaseSha
+from tlkernel.checks import Check, CheckResult
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.runkey import BaseSha
 
 
 def memo(stores, executor: str) -> RunMemo:

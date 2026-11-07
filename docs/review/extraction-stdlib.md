@@ -55,9 +55,9 @@ The interface blocks are **proposed shelf surfaces**, unless explicitly identifi
 
 | File:lines | Count | Ownership |
 | --- | ---: | --- |
-| src/taskloop/contracts/wire.py:1-101 | 101 | application/launcher |
+| packages/kernel/src/tlkernel/wire.py:1-101 | 101 | application/launcher |
 | _delegate/src/delegate/contracts/codec.py:1-229 | 229 | application/launcher |
-| src/taskloop/contracts/schema.py:1-147 | 147 | application/launcher |
+| packages/kernel/src/tlkernel/schema.py:1-147 | 147 | application/launcher |
 | _delegate/src/delegate/contracts/schema.py:1-104 | 104 | application/launcher |
 | tests/contracts/test_wire.py:121-198 | 78 | test/support |
 | tests/contracts/test_schema.py:83-117 | 35 | test/support |
@@ -96,7 +96,7 @@ The interface blocks are **proposed shelf surfaces**, unless explicitly identifi
 
 | File:lines | Count | Ownership |
 | --- | ---: | --- |
-| src/taskloop/contracts/stores.py:44-121 | 78 | application/launcher |
+| packages/kernel/src/tlkernel/stores.py:44-121 | 78 | application/launcher |
 | src/taskloop/stores/files.py:20-38 | 19 | application/launcher |
 | src/taskloop/stores/memory.py:36-79 | 44 | application/launcher |
 | tests/contracts/test_sealed_read.py:15-42 | 28 | test/support |
@@ -137,8 +137,8 @@ The interface blocks are **proposed shelf surfaces**, unless explicitly identifi
 
 | File:lines | Count | Ownership |
 | --- | ---: | --- |
-| src/taskloop/contracts/stores.py:122-161 | 40 | application/launcher |
-| src/taskloop/contracts/rotating.py:1-21 | 21 | application/launcher |
+| packages/kernel/src/tlkernel/stores.py:122-161 | 40 | application/launcher |
+| packages/kernel/src/tlkernel/rotating.py:1-21 | 21 | application/launcher |
 | src/taskloop/stores/memory.py:81-122 | 42 | application/launcher |
 | src/taskloop_dash/jsonl.py:14-19 | 6 | application/launcher |
 | src/taskloop_dash/jsonl.py:32-62 | 31 | application/launcher |
@@ -411,8 +411,8 @@ The interface blocks are **proposed shelf surfaces**, unless explicitly identifi
 
 | File:lines | Count | Ownership |
 | --- | ---: | --- |
-| src/taskloop/contracts/ids.py:31-84 | 54 | application/launcher |
-| src/taskloop/contracts/ids.py:87-106 | 20 | application/launcher |
+| packages/kernel/src/tlkernel/ids.py:31-84 | 54 | application/launcher |
+| packages/kernel/src/tlkernel/ids.py:87-106 | 20 | application/launcher |
 | tests/contracts/test_wire.py:202-209 | 8 | test/support |
 | tests/contracts/test_wire.py:218-224 | 7 | test/support |
 
@@ -1067,9 +1067,9 @@ The interface blocks are **proposed shelf surfaces**, unless explicitly identifi
 | src/taskloop/adapters/bd.py:1-276 | 276 | bd CLI normalization, claim/close fencing, actor propagation and Dolt rejection interpretation are the Beads protocol, not generic JSON subprocess policy |
 | src/taskloop/adapters/bdcreate.py:1-36 | 36 | follow-up descriptions, required lint sections and the one retry after bd lint refusal |
 | src/taskloop/adapters/bdsafe.py:1-22 | 22 | which failed Beads reads/writes may be treated as missing or an attempted operation |
-| src/taskloop/contracts/config.py:1-411 | 411 | stage/gate registration, cross-lane read restrictions, resources, worker budgets, retired profile keys and slot preparation |
-| src/taskloop/contracts/paths.py:1-288 | 288 | the engine's run/slot/lock/ask/checkpoint directory layout; generic root resolution is A07 |
-| src/taskloop/contracts/stores.py:1-559 excluding accepted ranges above | 441 | AskStore answer/amend/consume/park lifecycle and concrete run/status/repo store families; A02/A03 move the document/log mechanisms |
+| packages/kernel/src/tlkernel/config.py:1-411 | 411 | stage/gate registration, cross-lane read restrictions, resources, worker budgets, retired profile keys and slot preparation |
+| packages/kernel/src/tlkernel/paths.py:1-288 | 288 | the engine's run/slot/lock/ask/checkpoint directory layout; generic root resolution is A07 |
+| packages/kernel/src/tlkernel/stores.py:1-559 excluding accepted ranges above | 441 | AskStore answer/amend/consume/park lifecycle and concrete run/status/repo store families; A02/A03 move the document/log mechanisms |
 | src/taskloop/domain/lanes/retry.py:1-58 excluding accepted ranges above | 43 | which worker failure kinds retry and whether exhaustion asks, faults or reroutes; A20 moves the evaluator |
 | src/taskloop/domain/lanes/pauses.py:1-103 excluding accepted ranges above | 100 | unknown reasons require an owner; durable Park attempts, hashes and retry-at decisions; A20 moves only delay arithmetic |
 | src/taskloop/domain/checks/retry.py:1-27 excluding accepted ranges above | 18 | deterministic failures do not retry; imports and lock failures receive different eligibility |
@@ -1130,7 +1130,7 @@ Sizes are remaining old lines after accepted ranges, sorted descending. Original
 | 18 | tests/rules/gate_rules.py:1-726 | 587 | ❓ untested — 139 portable analysis lines are already A21; remaining 587 include app signal/shell/probe/layer rules and vendor tests; an AST-rule/config split needs identical planted-rule diagnostics before counting more |
 | 19 | dev/dash_check.html:1-582 | 582 | ❓ untested — U03 separates iframe/probe mechanics from dashboard DOM/scenario requirements; browser parity decides, 0 extra savings booked |
 | 20 | tests/e2e/test_release.py:1-570 | 570 | ❌ refuse — complete release/install/manifest/marketplace behavior is a product flow; package contracts do not replace this holdout |
-| 21 | src/taskloop/contracts/dash.py:1-562 | 562 | ❌ refuse — bead columns, markers, owner causes, phase mapping and app POST/view records are dashboard protocol |
+| 21 | packages/kernel/src/tlkernel/dash.py:1-562 | 562 | ❌ refuse — bead columns, markers, owner causes, phase mapping and app POST/view records are dashboard protocol |
 | 22 | tests/land/test_stack.py:1-549 | 549 | ❌ refuse — land-stack PR ordering, gates and delivery invariants remain factory policy |
 | 23 | tests/plan/test_engine_plan.py:1-546 | 546 | ❌ refuse — planner judgments, selected checks and stage acceptance define planning behavior |
 | 24 | tests/support/dash_fixtures.py:1-527 | 527 | ❌ refuse — builder maps mock bead/stage/cause data into app contract records, so fixtures must remain with that contract |

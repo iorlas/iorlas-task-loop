@@ -5,10 +5,10 @@ import support.paths  # noqa: F401
 from support.case import Case
 
 from taskloop.app.wire import asks, brief, doctor, slots
-from taskloop.contracts.bd_errors import BdCommandFailure
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.bd_errors import BdCommandFailure
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId
+from tlkernel.paths import ConfigDir
 
 
 class BdFallbacks(Case):

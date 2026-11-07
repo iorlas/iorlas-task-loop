@@ -44,10 +44,10 @@ pytest.register_assert_rewrite("support")  # the helpers of tests/support assert
 import support.paths  # noqa: E402, F401  (ROOT/src on sys.path; after the bytecode setup above)
 from support import procsim, work  # noqa: E402
 from support.scope import delegate_wanted  # noqa: E402
-from tltestkit.limits import hang_s, kind_of_parts, limit_for  # noqa: E402
 
 from taskloop.app.parts import STAGE_PARTS  # noqa: E402
-from taskloop.contracts import factorydb, scratch  # noqa: E402
+from tlkernel import factorydb, scratch  # noqa: E402
+from tltestkit.limits import hang_s, kind_of_parts, limit_for  # noqa: E402
 
 factorydb.declare_parts(STAGE_PARTS)
 

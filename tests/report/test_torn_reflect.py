@@ -13,8 +13,8 @@ import support.paths  # noqa: F401
 from support import homes
 
 from taskloop.app.report import reflect as rd
-from taskloop.contracts.looprows import LoopRows
-from taskloop.contracts.wire import Refused
+from tlkernel.looprows import LoopRows
+from tlkernel.wire import Refused
 
 
 class TornReflect(Case):

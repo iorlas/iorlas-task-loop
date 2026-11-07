@@ -20,7 +20,7 @@ from support.checked import run_checked
 from taskloop.adapters import slotcheck, treehash
 from taskloop.adapters.git import RealGit
 from taskloop.app.run import engine
-from taskloop.contracts.env import snapshot
+from tlkernel.env import snapshot
 
 
 def sh(*a, cwd):

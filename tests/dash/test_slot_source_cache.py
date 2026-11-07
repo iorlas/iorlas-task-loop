@@ -3,9 +3,9 @@ from typing import Any, cast
 
 from support.case import Case
 
-from taskloop.contracts.slottable import SlotSource
 from taskloop_dash.env import Env, Ports
 from taskloop_dash.readers.world import Worlds
+from tlkernel.slottable import SlotSource
 
 
 class SlotSourceCache(Case):

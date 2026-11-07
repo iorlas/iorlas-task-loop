@@ -3,6 +3,7 @@ import json
 import sqlite3
 
 import pytest
+
 from delegate.adapters import opencode_size
 
 SID = "ses_abc123"

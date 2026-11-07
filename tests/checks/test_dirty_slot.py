@@ -9,7 +9,7 @@ from support.case import Case
 from taskloop.app.checks.clean import isolated
 from taskloop.app.checks.host import CheckFault
 from taskloop.app.land.gate import FAULTS
-from taskloop.contracts.checks import CheckFaultKind
+from tlkernel.checks import CheckFaultKind
 
 
 class DirtySlot(Case):

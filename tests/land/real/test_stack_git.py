@@ -19,12 +19,12 @@ from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.stack import Stack
 from taskloop.app.land.stackgate import StackGate
-from taskloop.contracts.beadsport import DoltPush
-from taskloop.contracts.env import Env, snapshot
-from taskloop.contracts.forge import StackItem
-from taskloop.contracts.paths import ConfigDir
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog
+from tlkernel.beadsport import DoltPush
+from tlkernel.env import Env, snapshot
+from tlkernel.forge import StackItem
+from tlkernel.paths import ConfigDir
 
 
 class RealPush(Case):

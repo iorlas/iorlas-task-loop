@@ -6,11 +6,6 @@ open Stuck episode. Left at its default: the live box's `subtasks` (no source)."
 from collections.abc import Sequence
 from typing import Final
 
-from taskloop.contracts.bead import Bead, Comment
-from taskloop.contracts.dash import Artifact, AskCard, BeadDetail, CheckCount, LiveBox, Marker, Msg, Phase
-from taskloop.contracts.delegate import LiveCmdEnd, LiveCmdStart, LiveEvent, LiveTokens
-from taskloop.contracts.log import LandTry, Overrun, RetryDecision, VendorError
-from taskloop.contracts.runlife import GONE, Liveness
 from taskloop_dash.tails import parse_ts
 from taskloop_dash.views import ledger, passes, phases, stage_logs
 from taskloop_dash.views.artifact_files import Item, url_of
@@ -19,6 +14,11 @@ from taskloop_dash.views.board import Board, blockers, is_work
 from taskloop_dash.views.names import hhmm
 from taskloop_dash.views.runfacts import Run
 from taskloop_dash.views.world import ProjectIn
+from tlkernel.bead import Bead, Comment
+from tlkernel.dash import Artifact, AskCard, BeadDetail, CheckCount, LiveBox, Marker, Msg, Phase
+from tlkernel.delegate import LiveCmdEnd, LiveCmdStart, LiveEvent, LiveTokens
+from tlkernel.log import LandTry, Overrun, RetryDecision, VendorError
+from tlkernel.runlife import GONE, Liveness
 
 COMMENT_ICON = "💬"
 EXITED_WHY = "the run is lost: its process is gone and it recorded no end"

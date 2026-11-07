@@ -101,9 +101,9 @@ from taskloop.cli import slots as slots_cli
 from taskloop.cli import status
 from taskloop.cli import wait as cli_wait
 from taskloop.cli.ctx import Ctx, declare_stage_parts
-from taskloop.contracts.enums import Step
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.slots import MissingRemote
+from tlkernel.enums import Step
+from tlkernel.env import snapshot
+from tlkernel.slots import MissingRemote
 
 HERE = Path(__file__).resolve().parent
 

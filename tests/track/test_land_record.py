@@ -10,10 +10,10 @@ from support.case import Case
 from support.who import who
 
 from taskloop.app.track import verbs
-from taskloop.contracts.bead import BdError, Bead
-from taskloop.contracts.beadsport import BdFailure, BeadPatch
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.landed import LANDED_SHA, landed_by, landed_in, landed_meta
+from tlkernel.bead import BdError, Bead
+from tlkernel.beadsport import BdFailure, BeadPatch
+from tlkernel.ids import BeadId
+from tlkernel.landed import LANDED_SHA, landed_by, landed_in, landed_meta
 
 BEAD = BeadId("x-1")
 

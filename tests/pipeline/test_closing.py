@@ -4,12 +4,12 @@ from unittest.mock import Mock
 from support.narrow_hosts import CloseKit
 from support.pipeline_ports import FakeAskRules, FakeParkBook
 
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.parks import Park
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs
+from tlkernel.bead import Bead
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
+from tlkernel.parks import Park
 
 
 def test_ask_lint_converts_invalid_ask_to_engine_fault(monkeypatch):

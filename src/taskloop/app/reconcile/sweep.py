@@ -2,11 +2,12 @@
 from collections.abc import Callable
 from pathlib import Path
 
+from tlkernel.beadsport import Beads
+from tlkernel.gitport import Git
+from tlkernel.paths import ConfigDir
+
 from taskloop.app.reconcile.apply import apply
 from taskloop.app.reconcile.observe import Live, observe
-from taskloop.contracts.beadsport import Beads
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.paths import ConfigDir
 from taskloop.domain.reconcile.diff import diff
 
 

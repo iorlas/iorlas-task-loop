@@ -2,15 +2,16 @@
 from collections.abc import Callable
 from typing import Any
 
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+
 from taskloop.app.launch import loop as wloop
 from taskloop.app.launch import repos
 from taskloop.app.prune import verb
 from taskloop.app.release import shell
 from taskloop.app.track import trail
 from taskloop.app.wire import real
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
 
 
 def cmd_prune(a: Any, env: Env, git: Git, who: Identity, now: Callable[[], float] = trail.now) -> int:

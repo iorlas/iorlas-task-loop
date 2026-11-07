@@ -4,10 +4,10 @@ repeats across an empty line."""
 import json
 import time
 
-from taskloop.contracts import wire
-from taskloop.contracts.locks import Ticket
-from taskloop.contracts.looprows import LoopRows
-from taskloop.contracts.paths import ConfigDir
+from tlkernel import wire
+from tlkernel.locks import Ticket
+from tlkernel.looprows import LoopRows
+from tlkernel.paths import ConfigDir
 
 KIND = "slot"
 

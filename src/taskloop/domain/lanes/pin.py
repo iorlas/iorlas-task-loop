@@ -9,7 +9,7 @@ from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from taskloop.contracts.delegate import REASON_ENGINE_ONLY_UNENFORCED, REASON_NO_LANE, REASON_ONLY_FAMILY
+from tlkernel.delegate import REASON_ENGINE_ONLY_UNENFORCED, REASON_NO_LANE, REASON_ONLY_FAMILY
 
 LABEL_PREFIX: Final = "writer-family:"
 PINNED_ROLE: Final = "worker"

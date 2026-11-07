@@ -1,16 +1,16 @@
 """Recording structural fakes for the pipeline close capabilities."""
 from collections.abc import Callable
 
-from taskloop.contracts import fence
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.delegate import Permanence
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.parks import Park
-from taskloop.contracts.review import ReviewState
 from taskloop.domain.asks.spec import AskSpec
 from taskloop.domain.lanes.pause_reasons import Producer
+from tlkernel import fence
+from tlkernel.bead import Bead
+from tlkernel.delegate import Permanence
+from tlkernel.enums import Outcome
+from tlkernel.gitport import Git
+from tlkernel.kinds import Kind
+from tlkernel.parks import Park
+from tlkernel.review import ReviewState
 
 
 class FakeAskRules:

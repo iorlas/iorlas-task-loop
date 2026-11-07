@@ -11,9 +11,9 @@ from support.case import Case
 
 from taskloop.adapters import delegate_wire
 from taskloop.app.workers import worker_identity, worker_request
-from taskloop.contracts import config
-from taskloop.contracts.delegate import RunRequest
 from taskloop.domain.lanes import pin
+from tlkernel import config
+from tlkernel.delegate import RunRequest
 
 GRANT = [["just", "unity-shot"], ["tool", "an argument"]]
 

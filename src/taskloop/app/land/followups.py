@@ -3,10 +3,11 @@ at most FOLLOW_UP_CAP, the rest in one comment on the source bead."""
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
+from tlkernel.beadsport import BdFailure, BeadQuery, Beads, NewBead
+from tlkernel.ids import BeadId
+
 from taskloop.adapters import bdcreate
 from taskloop.app.asks import deferral as intake
-from taskloop.contracts.beadsport import BdFailure, BeadQuery, Beads, NewBead
-from taskloop.contracts.ids import BeadId
 from taskloop.domain import followups as fu
 from taskloop.stores.runlog import RunLog
 

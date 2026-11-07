@@ -2,8 +2,8 @@
 from collections.abc import Mapping, Sequence
 from typing import Final, final
 
-from taskloop.contracts.wire import Rec
 from taskloop.domain.land.queue_flake import WEEK_S, FlakeRow, score
+from tlkernel.wire import Rec
 
 THRESHOLD: Final = 3
 

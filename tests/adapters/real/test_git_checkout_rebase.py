@@ -11,8 +11,8 @@ from support.checked import run_checked
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters.git import RealGit
-from taskloop.contracts.env import Env, snapshot
-from taskloop.contracts.slots import BranchPinned
+from tlkernel.env import Env, snapshot
+from tlkernel.slots import BranchPinned
 
 
 class RealGitCheckoutRebaseTest(Case):

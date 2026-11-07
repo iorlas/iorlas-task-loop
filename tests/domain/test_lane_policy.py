@@ -10,9 +10,9 @@ import support.paths  # noqa: E402, F401
 # isort: split
 from support.narrow import must, only  # noqa: E402
 
-from taskloop.contracts.kinds import PAUSES, Kind  # noqa: E402
 from taskloop.domain import outcome as oc  # noqa: E402
 from taskloop.domain.lanes import policy as lp  # noqa: E402
+from tlkernel.kinds import PAUSES, Kind  # noqa: E402
 
 NOW = 1_000_000.0
 
@@ -76,7 +76,7 @@ class Exhaustive(Case):
         tree = ast.parse((ROOT / "src" / "taskloop" / "domain" / "lanes" / "policy.py").read_text(encoding="utf-8"))
         tops = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
         tops |= {must(n.module).split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
-        assert tops <= {"dataclasses", "typing", "taskloop", "__future__", "collections"}
+        assert tops <= {"dataclasses", "typing", "taskloop", "tlkernel", "__future__", "collections"}
         assert "outcome" not in tops
 
 

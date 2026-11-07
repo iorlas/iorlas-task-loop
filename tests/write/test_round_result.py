@@ -15,8 +15,8 @@ from support.plans import PLAN
 from taskloop.app.run.stage_rounds import run_round_step
 from taskloop.app.write.stage_loop import StageLoop
 from taskloop.app.write.state import REPLAN, RoundResult, RoundStop, StageState, WriteState, carrying
-from taskloop.contracts.checks import CheckRun
-from taskloop.contracts.enums import Step
+from tlkernel.checks import CheckRun
+from tlkernel.enums import Step
 
 OLD = {"tests_added": 1, "tests_removed": 2, "rounds": 5, "writes": 7, "reviews": 3}
 

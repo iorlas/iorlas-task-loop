@@ -24,10 +24,10 @@ from taskloop.app.run.run_once import Ended, RunOnce
 from taskloop.app.run.state import Checkpoints
 from taskloop.app.track import verbs
 from taskloop.app.wire import closeguard
-from taskloop.contracts import fence
-from taskloop.contracts.bead import BdError, Bead
-from taskloop.contracts.beadsport import BdFailure, BeadPatch
-from taskloop.contracts.ids import BeadId
+from tlkernel import fence
+from tlkernel.bead import BdError, Bead
+from tlkernel.beadsport import BdFailure, BeadPatch
+from tlkernel.ids import BeadId
 
 ME = "tl-run00001"
 LOCKED = BdFailure(BdError(kind="other", text="locked"))

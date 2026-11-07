@@ -13,9 +13,9 @@ from support.plans import CLEAN, PLAN, WRITE
 
 from taskloop.app.run.crash import parked_crash
 from taskloop.app.run.stages import one_stage
-from taskloop.contracts.fence import Fenced
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.parks import ParkStore
+from tlkernel.fence import Fenced
+from tlkernel.kinds import Kind
+from tlkernel.parks import ParkStore
 
 
 def fail_land(bead):

@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from tlkernel.paths import ConfigDir
+
 from taskloop.app.prune.runs import Gone, size_of
-from taskloop.contracts.paths import ConfigDir
 
 
 @dataclass(frozen=True)

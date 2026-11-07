@@ -1,10 +1,11 @@
 """The verb `tl lint [BEAD | --ready [--fix]]`: the bead rules (domain/beads/rules.py) over one bead or the repo's ready beads."""
 from typing import Any
 
+from tlkernel.identity import Identity
+
 from taskloop.app.launch import loop as wloop
 from taskloop.app.launch import repos
 from taskloop.app.loop import lintrun
-from taskloop.contracts.identity import Identity
 
 
 def cmd_lint(a: Any, who: Identity) -> int:

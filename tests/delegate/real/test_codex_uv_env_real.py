@@ -5,12 +5,12 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import hermetic  # noqa: F401  (a home of its own for every test)
 import pytest
-from delegate.app import decide
 from support.procsim import real_proc
 from support.tmpdir import TemporaryDirectory
 
-import hermetic  # noqa: F401  (a home of its own for every test)
+from delegate.app import decide
 
 
 class CodexUvEnv:

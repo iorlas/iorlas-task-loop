@@ -9,8 +9,8 @@ from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.wire import setup, setup_apply, slots
 from taskloop.cli import setup as cli_setup
-from taskloop.contracts.env import Env
-from taskloop.contracts.procport import Ran
+from tlkernel.env import Env
+from tlkernel.procport import Ran
 
 ROOT = Path(__file__).resolve().parents[2]
 

@@ -1,6 +1,5 @@
 """dev/packages.py: a change reaches the packages under it and those that declare them; a file outside every package reaches all."""
 import support.paths  # noqa: F401
-
 from packages import reached
 
 

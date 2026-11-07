@@ -10,8 +10,8 @@ from support.dashlogs import RunScript, bead
 from support.fakes import FakeBeadStore
 from support.repos import write_repos
 
-from taskloop.contracts.paths import ConfigDir
 from taskloop_dash.env import Ports
+from tlkernel.paths import ConfigDir
 
 RUNS = 171
 

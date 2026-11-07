@@ -3,10 +3,11 @@ the slot was set aside, then 60 and 120 minutes after each failed one (120 repea
 a mended one is back within two hours. The bead's metadata keeps `aside_level` (failed probes so far) and `aside_until` (epoch)."""
 import contextlib
 
+from tlkernel.beadsport import BdFailure, BeadPatch
+from tlkernel.slots import SlotFail, SlotGitError
+
 from taskloop.app.slots.reset import setup
 from taskloop.app.slots.surface import SlotView
-from taskloop.contracts.beadsport import BdFailure, BeadPatch
-from taskloop.contracts.slots import SlotFail, SlotGitError
 
 STEPS_S = (1800.0, 3600.0, 7200.0)
 

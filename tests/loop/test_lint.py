@@ -14,8 +14,8 @@ from support.fakes import FakeBeadStore, as_bead
 from support.narrow import must
 
 from taskloop.app.loop import lintrun
-from taskloop.contracts.ids import BeadId
 from taskloop.domain.beads import rules
+from tlkernel.ids import BeadId
 
 T1 = BeadId("t-1")
 GOOD = {"id": "t-1", "title": "t", "status": "open", "issue_type": "task", "description": "do it", "acceptance_criteria": "- it works"}

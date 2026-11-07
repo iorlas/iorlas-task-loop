@@ -23,13 +23,13 @@ from support.fakes import as_bead, must_bead
 from taskloop.adapters import childenv
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.checks import evidence as check_evidence
-from taskloop.contracts import answers, plancheck
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.env import snapshot
 from taskloop.domain.checks import lint
 from taskloop.domain.checks.writer_split import WriterSplit
 from taskloop.domain.review.matchers import Tools
 from taskloop.domain.write.matchers import count_tests
+from tlkernel import answers, plancheck
+from tlkernel.config import EngineConfig
+from tlkernel.env import snapshot
 
 
 class EngineChecksTest(CheckHostCase):

@@ -16,17 +16,17 @@ from typing import Any, Final
 
 from any_failure_fp import Event, seen_within, streak
 
-from taskloop.contracts.enums import Outcome, Result
-from taskloop.contracts.kinds import (
+from taskloop.domain.asks.spec import AskSpec
+from taskloop.domain.lifecycle import matchers as lifecycle
+from tlkernel.enums import Outcome, Result
+from tlkernel.kinds import (
     ASKS,
     FINISH,
     Fault,
     Kind,
     fault_of,
 )
-from taskloop.contracts.reconcile import LOOP_ABSENT_S
-from taskloop.domain.asks.spec import AskSpec
-from taskloop.domain.lifecycle import matchers as lifecycle
+from tlkernel.reconcile import LOOP_ABSENT_S
 
 # The tunables, in one place. Cells are values: a predicate goes to code.
 KNOBS: Final = {

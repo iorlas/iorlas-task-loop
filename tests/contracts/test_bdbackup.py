@@ -3,8 +3,8 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from taskloop.contracts import bdbackup
-from taskloop.contracts.paths import ConfigDir
+from tlkernel import bdbackup
+from tlkernel.paths import ConfigDir
 
 DAY = 86400.0
 T0 = datetime(2026, 11, 1, 12, tzinfo=UTC).timestamp()

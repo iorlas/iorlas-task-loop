@@ -8,15 +8,16 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
+from tlkernel import paths
+from tlkernel.docstore import Page
+from tlkernel.enums import LockWhat
+from tlkernel.loop import LoopCommand, LoopState, LoopTarget, Rest, StopRequest
+from tlkernel.looprows import DIED, KvDoc, LoopRows
+from tlkernel.run import LoopLogLine
+from tlkernel.stores import LoopLog
+
 from taskloop.adapters.locks import hold_path
 from taskloop.app.loop import exits
-from taskloop.contracts import paths
-from taskloop.contracts.docstore import Page
-from taskloop.contracts.enums import LockWhat
-from taskloop.contracts.loop import LoopCommand, LoopState, LoopTarget, Rest, StopRequest
-from taskloop.contracts.looprows import DIED, KvDoc, LoopRows
-from taskloop.contracts.run import LoopLogLine
-from taskloop.contracts.stores import LoopLog
 
 StopMode = Literal["now", "after", ""]
 EXIT_REASONS = (

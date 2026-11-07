@@ -4,12 +4,12 @@ from support.case import Case
 from support.memstores import fake_stores
 
 from taskloop.app.checks.checklog import CheckLog
-from taskloop.contracts import log
-from taskloop.contracts.checks import Check
-from taskloop.contracts.ids import CheckId
-from taskloop.contracts.runlife import Liveness
 from taskloop.stores.runlog import RunLog
 from taskloop_dash.views import live_events, live_lines
+from tlkernel import log
+from tlkernel.checks import Check
+from tlkernel.ids import CheckId
+from tlkernel.runlife import Liveness
 
 
 class SlotCheckLocation(Case):

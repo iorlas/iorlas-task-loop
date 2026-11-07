@@ -19,11 +19,11 @@ from support.who import who
 from taskloop.app.look import shots
 from taskloop.app.look.owner_look import OwnerLook
 from taskloop.app.pipeline.closing import Closer
-from taskloop.contracts import answers, wire
-from taskloop.contracts.artifact import ArtifactMeta
-from taskloop.contracts.config import RepoProfile, VisualConfig
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId
+from tlkernel import answers, wire
+from tlkernel.artifact import ArtifactMeta
+from tlkernel.config import RepoProfile, VisualConfig
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId
 
 VISUAL = {"include": ["*.txt"], "exclude": ["docs/**"]}
 LOOK_ASK = "Whether smiles-front.png matches the rung B ladder image. Only the owner can judge the look."

@@ -20,12 +20,12 @@ from support import tlbd  # noqa: E402
 from support.dashes import serving  # noqa: E402
 
 from taskloop.app.launch import dash_ports  # noqa: E402
-from taskloop.contracts.askstore import AskStore  # noqa: E402
-from taskloop.contracts.dash import READ_PROTOCOL  # noqa: E402
-from taskloop.contracts.env import snapshot  # noqa: E402
-from taskloop.contracts.factorydb import SCHEMA_READ_FROM, SCHEMA_VERSION  # noqa: E402
-from taskloop.contracts.ids import BeadId  # noqa: E402
-from taskloop.contracts.paths import ConfigDir  # noqa: E402
+from tlkernel.askstore import AskStore  # noqa: E402
+from tlkernel.dash import READ_PROTOCOL  # noqa: E402
+from tlkernel.env import snapshot  # noqa: E402
+from tlkernel.factorydb import SCHEMA_READ_FROM, SCHEMA_VERSION  # noqa: E402
+from tlkernel.ids import BeadId  # noqa: E402
+from tlkernel.paths import ConfigDir  # noqa: E402
 
 
 def line(**kw):

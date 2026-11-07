@@ -2,6 +2,14 @@
 import time
 from collections.abc import Callable, Sequence
 
+from tlkernel.checks import Check, CheckResult, CheckRun, Durations
+from tlkernel.config import EngineConfig
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.ids import TreeSha
+from tlkernel.plancheck import PlanCheck
+from tlkernel.runkey import BaseSha
+
 from taskloop.adapters import check_files
 from taskloop.app.checks import evidence, gateplan
 from taskloop.app.checks.attempts import Attempts
@@ -13,13 +21,6 @@ from taskloop.app.checks.executor import CheckExecutor
 from taskloop.app.checks.fixer import Fixer
 from taskloop.app.checks.host import CheckFault, CheckHost, CheckStuck
 from taskloop.app.checks.round import Round
-from taskloop.contracts.checks import Check, CheckResult, CheckRun, Durations
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.plancheck import PlanCheck
-from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.durations import merged, seconds
 from taskloop.domain.checks.plan import CheckPlan
 from taskloop.domain.checks.specs import diff_check, due, engine_digest, gate_items, items_of, repo_check

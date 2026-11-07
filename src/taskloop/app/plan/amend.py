@@ -1,6 +1,6 @@
 """The plan stage's amendment context, kept for a resumed plan or cleared on restart."""
 
-from taskloop.contracts.plancheck import PlanData
+from tlkernel.plancheck import PlanData
 
 
 class AmendState:

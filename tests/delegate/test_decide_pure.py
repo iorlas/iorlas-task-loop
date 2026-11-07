@@ -4,12 +4,12 @@ import contextlib
 import copy
 from unittest import mock
 
-from delegate.app import decide as dec
-from delegate.app import env
-
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
 from test_route import CFG, T, argparse_ns, lanes
+
+from delegate.app import decide as dec
+from delegate.app import env
 
 
 def fleet():

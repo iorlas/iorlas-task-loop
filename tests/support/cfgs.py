@@ -3,9 +3,9 @@ import shlex
 from collections.abc import Mapping
 from typing import Any
 
-from taskloop.contracts import wire
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.plancheck import PlanData
+from tlkernel import wire
+from tlkernel.config import EngineConfig
+from tlkernel.plancheck import PlanData
 
 # the patterns a Unity consumer's profile sets; the engine has none of its own
 # the patterns a Unity consumer's profile sets; the engine has none of its own

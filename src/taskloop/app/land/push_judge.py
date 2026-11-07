@@ -2,19 +2,20 @@
 from dataclasses import dataclass
 from enum import IntEnum
 
+from tlkernel.config import EngineConfig
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.locks import LockTimeout
+from tlkernel.paths import ConfigDir
+from tlkernel.ports import Clock
+from tlkernel.runkey import BaseSha
+from tlkernel.slots import MissingRemote
+
 from taskloop.adapters import landlock, locks, profile_at
 from taskloop.adapters.clock import SystemClock
 from taskloop.app.checks import authorization
 from taskloop.app.land.profile_change import diff_sha
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.locks import LockTimeout
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.ports import Clock
-from taskloop.contracts.runkey import BaseSha
-from taskloop.contracts.slots import MissingRemote
 from taskloop.domain.matchers import secrets_added
 from taskloop.stores.bundle import Stores
 

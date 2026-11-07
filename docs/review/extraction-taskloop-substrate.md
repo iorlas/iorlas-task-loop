@@ -102,7 +102,7 @@ Public interfaces below are **target surfaces**, at most six lines each. Existin
 | `src/taskloop/adapters/gitmemo.py:1–100` | 100 | M |
 | `src/taskloop/adapters/gitrepo.py:1–91` | 91 | M |
 | `src/taskloop/adapters/treehash.py:1–104` | 104 | M |
-| `src/taskloop/contracts/gitfacts.py:1–91` | 91 | M |
+| `packages/kernel/src/tlkernel/gitfacts.py:1–91` | 91 | M |
 | `src/taskloop/adapters/landlock.py:34–46` | 13 | M |
 | `tests/support/gitsim/diffs.py:1–142` | 142 | M |
 | `tests/support/gitsim/write.py:1–245` | 245 | M |
@@ -127,7 +127,7 @@ Public interfaces below are **target surfaces**, at most six lines each. Existin
 | `tests/support/fakegit.py:1–101` | 101 | D |
 | `tests/support/fake_slot_git.py:1–109` | 109 | D |
 | `tests/support/gitq.py:1–23` | 23 | D |
-| `src/taskloop/contracts/ports.py:141–374` | 234 | M |
+| `packages/kernel/src/tlkernel/ports.py:141–374` | 234 | M |
 
 **Volume:** 4,033 M; 233 D; 0 proved third-party replacement lines.
 
@@ -163,8 +163,8 @@ wt.record(message, paths='own'); wt.rebase_onto(base)
 
 | Donor span | Lines | Operation |
 |---|---:|---|
-| `src/taskloop/contracts/wire.py:1–101` | 101 | M |
-| `src/taskloop/contracts/schema.py:1–147` | 147 | M |
+| `packages/kernel/src/tlkernel/wire.py:1–101` | 101 | M |
+| `packages/kernel/src/tlkernel/schema.py:1–147` | 147 | M |
 | `_delegate/src/delegate/contracts/codec.py:1–229` | 229 | M |
 | `_delegate/src/delegate/contracts/schema.py:1–104` | 104 | M |
 | `tests/contracts/test_wire.py:28–52` | 25 | M |
@@ -206,7 +206,7 @@ testing.golden(path, produced, *, update=False) -> None
 
 | Donor span | Lines | Operation |
 |---|---:|---|
-| `src/taskloop/contracts/stores.py:44–160` | 117 | M |
+| `packages/kernel/src/tlkernel/stores.py:44–160` | 117 | M |
 | `src/taskloop/stores/files.py:20–38` | 19 | M |
 | `src/taskloop/stores/memory.py:36–123` | 88 | M |
 | `src/taskloop/stores/api.py:15–38` | 24 | M |
@@ -249,7 +249,7 @@ transaction(document, lock) -> ContextManager[T]
 | Donor span | Lines | Operation |
 |---|---:|---|
 | `src/taskloop/adapters/applog.py:1–91` | 91 | M |
-| `src/taskloop/contracts/rotating.py:1–21` | 21 | M |
+| `packages/kernel/src/tlkernel/rotating.py:1–21` | 21 | M |
 | `src/taskloop_dash/jsonl.py:1–62` | 62 | M |
 | `src/taskloop_dash/tails.py:36–52` | 17 | M |
 | `src/taskloop/adapters/runner.py:28–41` | 14 | M |
@@ -371,8 +371,8 @@ Queue.drop(sequence) -> None
 | `_delegate/src/delegate/adapters/procs.py:82–91` | 10 | M |
 | `_delegate/src/delegate/app/watch.py:94–138` | 45 | M |
 | `tests/adapters/real/test_procs.py:39–108` | 70 | M |
-| `src/taskloop/contracts/ports.py:376–398` | 23 | M |
-| `src/taskloop/contracts/ports.py:421–511` | 91 | M |
+| `packages/kernel/src/tlkernel/ports.py:376–398` | 23 | M |
+| `packages/kernel/src/tlkernel/ports.py:421–511` | 91 | M |
 
 **Volume:** 403 M; 0 D; 0 proved third-party replacement lines.
 
@@ -645,7 +645,7 @@ parse_reset(text, *, now) -> Reset | None
 
 | Donor span | Lines | Operation |
 |---|---:|---|
-| `src/taskloop/contracts/ids.py:31–106` | 76 | M |
+| `packages/kernel/src/tlkernel/ids.py:31–106` | 76 | M |
 | `tests/contracts/test_wire.py:202–208` | 7 | M |
 | `tests/contracts/test_wire.py:218–224` | 7 | M |
 
@@ -950,11 +950,11 @@ from_namespace(fn, *attributes) -> Handler
 
 | Donor span | Lines | Operation |
 |---|---:|---|
-| `src/taskloop/contracts/paths.py:10–12` | 3 | M |
+| `packages/kernel/src/tlkernel/paths.py:10–12` | 3 | M |
 | `src/taskloop/adapters/ident.py:14–19` | 6 | M |
 | `_delegate/src/delegate/app/env.py:33–41` | 9 | M |
 | `_delegate/src/delegate/app/env.py:57–63` | 7 | M |
-| `src/taskloop/contracts/config.py:279–320` | 42 | M |
+| `packages/kernel/src/tlkernel/config.py:279–320` | 42 | M |
 
 **Volume:** 67 M; 0 D; 0 proved third-party replacement lines.
 
@@ -1158,10 +1158,10 @@ read_lines(path, *, limit, errors='replace') -> tuple[str, ...]
 | `src/taskloop/adapters/bd.py:1–202` | 202 | M |
 | `src/taskloop/adapters/bd.py:213–253` | 41 | M |
 | `src/taskloop/adapters/bd.py:262–276` | 15 | M |
-| `src/taskloop/contracts/bead.py:1–55` | 55 | M |
+| `packages/kernel/src/tlkernel/bead.py:1–55` | 55 | M |
 | `src/taskloop/app/launch/selftest_beads.py:1–106` | 106 | M |
 | `tests/ports/beads_contract.py:1–129` | 129 | M |
-| `src/taskloop/contracts/ports.py:58–139` | 82 | M |
+| `packages/kernel/src/tlkernel/ports.py:58–139` | 82 | M |
 
 **Volume:** 630 M; 0 D; 0 proved third-party replacement lines.
 
@@ -1271,8 +1271,8 @@ The extraction decisions above are positive even when a drop-in third-party repl
 
 | Alternative / measured overlap | Verdict, public call and missing proof | Consumers, factory risk and release sequence |
 |---|---|---|
-| msgspec schema generation; `src/taskloop/contracts/schema.py:1–147` + `_delegate/src/delegate/contracts/schema.py:1–104` = 251 | ❓ `msgspec.json.schema(Type)` can replace reflection only after comparing required fields, metadata, tags and custom scalar hooks; compare `$ref`/definition layout and strict optional-null rewriting; preserve app schema goldens. | Task-loop/delegate. Risk: invalid structured answers. Put behind C02's schema API, run equality/acceptance matrix, tag, then adopt one app. |
-| python-ulid; `src/taskloop/contracts/ids.py:31–84` = 54 | ❓ `ULID.from_str(text)` / library generation must demonstrate exact alphabet rejection, timestamp/entropy injection and lexical/equality behavior; future-time and malformed-ID probes are required. | Task-loop/shelf IDs. Risk: unreadable run folders. Trial behind C14, retain alias and old data, then tag/adopt. |
+| msgspec schema generation; `packages/kernel/src/tlkernel/schema.py:1–147` + `_delegate/src/delegate/contracts/schema.py:1–104` = 251 | ❓ `msgspec.json.schema(Type)` can replace reflection only after comparing required fields, metadata, tags and custom scalar hooks; compare `$ref`/definition layout and strict optional-null rewriting; preserve app schema goldens. | Task-loop/delegate. Risk: invalid structured answers. Put behind C02's schema API, run equality/acceptance matrix, tag, then adopt one app. |
+| python-ulid; `packages/kernel/src/tlkernel/ids.py:31–84` = 54 | ❓ `ULID.from_str(text)` / library generation must demonstrate exact alphabet rejection, timestamp/entropy injection and lexical/equality behavior; future-time and malformed-ID probes are required. | Task-loop/shelf IDs. Risk: unreadable run folders. Trial behind C14, retain alias and old data, then tag/adopt. |
 | wcmatch vs fnmatch; `src/taskloop/domain/checks/matchers.py:11–46` = 36 | ❓ `wcmatch.glob.globmatch(path, pattern, flags=...)`; prove **/, nested braces and slash boundaries, prefix derivation and no unexpected path normalization. Stdlib fnmatch alone does not promise the donor language. | Task-loop/lifesim/shelf walkers. Risk: wrong check cache inputs. Compare corpus through C27 API before replacing its engine. |
 | platformdirs/pydantic-settings; C23's 67 lines | ❓ `platformdirs.user_config_path(app)` and `BaseSettings(...)` need legacy XDG/macOS/plugin-layout, unknown/retired-key, override precedence and diagnostic parity tests; they cannot replace application schemas or validation rules. | Task-loop/delegate. Risk: split state or changed gate settings. Prototype behind C23, preserve old roots and holdouts, tag/adopt only on parity. |
 | Web framework substitution; C10's 153 lines | ❓ a Starlette/FastAPI static/router adapter must prove identical route/error/header/body behavior, all-or-none bind and no process starts; test dev/install/Tailscale refusal in the app. | Dashboard/shelf pages. Risk: changed server exposure/startup. Retain callback API; prove and pin framework/deps before a separately released transport swap. |
@@ -1288,8 +1288,8 @@ These refusals concern **application rules**, not coupling or migration difficul
 | Bead close/land authority and ordered effects | `src/taskloop/app/run/closer.py:1–184`, `app/land/gate.py:1–177`, `contracts/runkey.py:1–32` | Decide outcome, authorize a receipt and invoke requested primitive effects. Git/JSON/process libraries do not decide close. |
 | Routing and durable owner/clock wake | `src/taskloop/domain/lanes/pauses.py:23–84,91–103`, `retry.py:29–38`; `_delegate/src/delegate/domain/routing/router.py:1–164` | Supply reason/action/rest tables, requested model/lane and wake decisions. C16 only calculates numbers. |
 | Worker launch, sandbox and permission contract | `_delegate/src/delegate/domain/policy/worker.py:1–65`, `shell.py:8–18,29–87,96–109`; `adapters/harness/base.py:16–35` | Supply permission/secret/engine-only rules and launch flags. C12/C29 report syntax/vendor facts. |
-| Profile semantics | `src/taskloop/contracts/config.py:88–253,322–411` | Define check/container/resource/slot schemas, cross-lane read restrictions, graph cycles and retired/renamed-key tables. C02/C23 load/traverse, not decide. |
-| Configuration path vocabulary | `src/taskloop/contracts/paths.py:16–288` | ConfigDir/RunFiles/RepoDirs continue to name runs, asks, slots, receipts and app ownership. C23 chooses only generic roots. |
+| Profile semantics | `packages/kernel/src/tlkernel/config.py:88–253,322–411` | Define check/container/resource/slot schemas, cross-lane read restrictions, graph cycles and retired/renamed-key tables. C02/C23 load/traverse, not decide. |
+| Configuration path vocabulary | `packages/kernel/src/tlkernel/paths.py:16–288` | ConfigDir/RunFiles/RepoDirs continue to name runs, asks, slots, receipts and app ownership. C23 chooses only generic roots. |
 | Install/pin/fallback/reexec continuation | `src/taskloop/app/loop/versions.py:45–100`; `app/release/reexec.py:21–69`; `selfupdate.py:20–37` | Owner pin precedence, rollback/bad-version duration, checkpoint argv and network-pause adoption remain app decisions. |
 | Retention eligibility | `src/taskloop/app/prune/runs.py:1–73`, `contracts/stores.py:191–224` | Select eligible run/evidence/usage rows and retention ages. C04 compacts/ages exactly the supplied objects. |
 | Dashboard behavior, not transport | `src/taskloop_dash/http.py:28–43`, `bind.py:21–94`, `static/js/ui/kit.js:32–41,71–119` | App routes, access boundaries, bead cards/markers, lane totals, loop warnings and owner actions remain local. |
@@ -1319,7 +1319,7 @@ These **23,001 lines** remain because of the named domain/contract rules. The ta
 | `tests/land/test_race_invariants.py:5` | 640 → 640 | ❌ No double claim/run/close and correct push/engine-lock authority. |
 | `tests/contracts/samples.py:1` | 600 → 600 | ❌ Filled samples of app records; keep coverage of domain wire shapes. |
 | `tests/e2e/test_release.py:1` | 570 → 570 | ❌ Release-clone, publication and factory gate ordering. |
-| `src/taskloop/contracts/dash.py:21` | 562 → 562 | ❌ Columns/phases/owner actions and exact dashboard request/response contract. |
+| `packages/kernel/src/tlkernel/dash.py:21` | 562 → 562 | ❌ Columns/phases/owner actions and exact dashboard request/response contract. |
 | `tests/land/test_stack.py:1` | 549 → 549 | ❌ Ordered stack delivery and each PR's recorded merge result. |
 | `tests/plan/test_engine_plan.py:1` | 546 → 546 | ❌ Plan acceptance, replan and app stage construction. |
 | `tests/support/dash_fixtures.py:37` | 527 → 527 | ❌ App phases, epics, causes, project ID rendering and fixture records. |

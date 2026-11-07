@@ -11,14 +11,14 @@ from support.case import Case
 from support.memstores import MemDocSet
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.contracts import factorydb, wire
-from taskloop.contracts.checks import BaseRedRecord, CheckResult, PassRecord
-from taskloop.contracts.docstore import Absent, Present
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.receiptrows import DbDocSet
-from taskloop.contracts.runkey import BaseSha, Digest, RunKey
 from taskloop.stores.real import real_stores
+from tlkernel import factorydb, wire
+from tlkernel.checks import BaseRedRecord, CheckResult, PassRecord
+from tlkernel.docstore import Absent, Present
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.paths import ConfigDir
+from tlkernel.receiptrows import DbDocSet
+from tlkernel.runkey import BaseSha, Digest, RunKey
 
 
 class ReceiptRowsTest(Case):

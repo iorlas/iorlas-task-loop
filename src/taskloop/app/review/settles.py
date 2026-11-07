@@ -4,12 +4,13 @@ whether the engine ran a check is settled by the engine's own results; one that 
 import shlex
 from typing import Any, Final, NewType
 
+from tlkernel.checks import CheckResult
+from tlkernel.gitport import Git
+from tlkernel.slots import SlotGitError
+from tlkernel.stagefacts import RunFacts
+
 from taskloop.app.review.host import ReviewHand, ReviewPorts
 from taskloop.app.review.state import ReviewLive
-from taskloop.contracts.checks import CheckResult
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.slots import SlotGitError
-from taskloop.contracts.stagefacts import RunFacts
 from taskloop.domain.checks import planref
 from taskloop.domain.plan.matchers import without_runner
 from taskloop.domain.review.matchers import KNOWN_TOOLS, GateProof, Tools, word_in

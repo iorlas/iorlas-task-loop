@@ -13,7 +13,7 @@ from support.tmpdir import TemporaryDirectory
 
 from taskloop.adapters import procs
 from taskloop.adapters.spawner import RealSpawner
-from taskloop.contracts.env import snapshot
+from tlkernel.env import snapshot
 
 
 class CapturedProcesses(Case):
@@ -50,7 +50,7 @@ class CapturedProcesses(Case):
     def test_capture_false_inherits_output_and_still_supplies_input(self):
         with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
             code = ("import os, sys; from taskloop.adapters.spawner import RealSpawner; "
-                    "from taskloop.contracts.env import snapshot; "
+                    "from tlkernel.env import snapshot; "
                     "r = RealSpawner(snapshot()).run([sys.executable, '-c', "
                     "\"import sys; print(sys.stdin.read()); print('err', file=sys.stderr)\"], "
                     "input='in', capture=False, timeout_s=3); "

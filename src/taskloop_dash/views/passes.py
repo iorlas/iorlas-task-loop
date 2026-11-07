@@ -8,14 +8,14 @@ one piece, a run on another slot starts the next, and `from_slot`/`to_slot` link
 from collections.abc import Sequence
 from typing import Final
 
-from taskloop.contracts.dash import Cell, CellState, Msg, PassEnd, Phase, Piece, Resumed, Seg, SegKind
-from taskloop.contracts.dash import Pass as PassRec
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.log import Said, Stuck, Transition
-from taskloop.contracts.runlife import Liveness
 from taskloop_dash.views import phases, stage_logs
 from taskloop_dash.views.passview import PassView
 from taskloop_dash.views.runfacts import Run, Span
+from tlkernel.dash import Cell, CellState, Msg, PassEnd, Phase, Piece, Resumed, Seg, SegKind
+from tlkernel.dash import Pass as PassRec
+from tlkernel.enums import Outcome
+from tlkernel.log import Said, Stuck, Transition
+from tlkernel.runlife import Liveness
 
 SAID_ICON: Final = {"engine": "⚙️", "owner": "✉️"}  # who said it -> the message's icon (dash-spec 2.4: ✉️ is a note to the worker)
 STUCK_ICON: Final = "🛑"

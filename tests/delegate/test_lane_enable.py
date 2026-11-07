@@ -9,19 +9,19 @@ from pathlib import Path
 from typing import Any
 from unittest import mock
 
+import hermetic  # noqa: F401  (a home of its own for every test)
 import pytest
 from any_agent.harnesses.opencode import OpenCodeHarness
+from support.case import Case
+from support.tmpdir import TemporaryDirectory
+from test_route import route
+
 from delegate.app import cockpit, doctor, env, onboard, usage
 from delegate.app import decide as dec
 from delegate.contracts.routing import CallArgs
 from delegate.contracts.state import StateDoc
 from delegate.domain.holds.book import HoldBook
 from delegate.domain.routing.router import Router
-from support.case import Case
-from support.tmpdir import TemporaryDirectory
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-from test_route import route
 
 T = 1_000_000_000.0
 LANE = "DEEPSEEK_FREE"

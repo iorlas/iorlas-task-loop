@@ -7,20 +7,20 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import hermetic  # noqa: F401  (a home of its own for every test)
+import routing_support as support
 from any_agent.harnesses import opencode_sandbox
 from any_agent.harnesses.opencode import OpenCodeHarness
 from any_agent.supervisor import RunHooks
-from delegate.app import env, harnesses, launch
-from delegate.contracts.json_types import Json
-from delegate.domain.lanes.lane import Lane
+from delegate_fakes.fake_run import replay
 from support.case import Case
 from support.procsim import real_proc
 from support.tmpdir import TemporaryDirectory
-
-import hermetic  # noqa: F401  (a home of its own for every test)
-import routing_support as support
-from delegate_fakes.fake_run import replay
 from test_route import CFG, T, lanes, obj
+
+from delegate.app import env, harnesses, launch
+from delegate.contracts.json_types import Json
+from delegate.domain.lanes.lane import Lane
 
 
 class ZaiTests(Case):

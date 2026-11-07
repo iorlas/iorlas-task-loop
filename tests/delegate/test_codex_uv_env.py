@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-from delegate.app import decide
-
 import hermetic  # noqa: F401  (a home of its own for every test)
+
+from delegate.app import decide
 
 
 class CodexUvEnv:

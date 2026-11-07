@@ -8,11 +8,11 @@ moves no column: the bead goes on."""
 from dataclasses import dataclass
 from typing import Final
 
-from taskloop.contracts.dash import Column, DotState, Marker, Phase, PhaseDot, Tone
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.log import Close, WaitStart
-from taskloop.contracts.runlife import GONE, Liveness
 from taskloop_dash.views import names, phases
+from tlkernel.dash import Column, DotState, Marker, Phase, PhaseDot, Tone
+from tlkernel.enums import Outcome
+from tlkernel.log import Close, WaitStart
+from tlkernel.runlife import GONE, Liveness
 
 PARKING = (Outcome.PARKED, Outcome.BLOCKED, Outcome.NOOP)
 CURRENT_DOT: Final[dict[Marker, DotState | None]] = {

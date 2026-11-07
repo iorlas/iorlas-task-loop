@@ -19,9 +19,9 @@ from support.tags import contract, domain
 
 from taskloop.adapters import bd
 from taskloop.adapters.bd import BdRun, BdStore
-from taskloop.contracts.bead import BdError
-from taskloop.contracts.beadsport import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
-from taskloop.contracts.ids import BeadId
+from tlkernel.bead import BdError
+from tlkernel.beadsport import BdFailure, BeadPatch, BeadQuery, DoltPush, NewBead
+from tlkernel.ids import BeadId
 
 GOLD = Path(__file__).parent / "golden" / "bd_1_3_1"
 

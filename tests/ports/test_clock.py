@@ -3,7 +3,7 @@ from support.fake_clock import FakeClock
 from support.tags import contract
 
 from taskloop.adapters.clock import SystemClock
-from taskloop.contracts.ports import Clock
+from tlkernel.ports import Clock
 
 
 class ClockContract:

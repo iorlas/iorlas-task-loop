@@ -2,7 +2,8 @@
 
 from collections.abc import Callable
 
-from taskloop.contracts.log import StepEnd, StepStart, Transition
+from tlkernel.log import StepEnd, StepStart, Transition
+
 from taskloop.stores.runlog import RunLog
 
 

@@ -1,17 +1,17 @@
 """The store interfaces. Logic depends on these; `real.py` backs them with files, `memory.py` with dicts and lists.
 
 A store is a typed document, a typed append-only log, a keyed set of documents, a lock table or a ticket line. Nothing here
-names a file or a folder: where a thing lives is the real implementation's business (`taskloop.contracts.paths`).
+names a file or a folder: where a thing lives is the real implementation's business (`tlkernel.paths`).
 """
 import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from typing import Protocol
 
-from taskloop.contracts.checks import PassRecord
-from taskloop.contracts.docstore import Page, Read
-from taskloop.contracts.enums import LockWhat
-from taskloop.contracts.locks import LockRecord, Ticket
+from tlkernel.checks import PassRecord
+from tlkernel.docstore import Page, Read
+from tlkernel.enums import LockWhat
+from tlkernel.locks import LockRecord, Ticket
 
 
 class Doc[T](Protocol):

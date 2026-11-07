@@ -4,10 +4,11 @@ import shutil
 from pathlib import Path
 from typing import Final, Protocol
 
+from tlkernel.ids import loop_key
+from tlkernel.paths import ConfigDir
+from tlkernel.slots import Checkout, SlotGitError
+
 from taskloop.app.prune.runs import Gone, size_of
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.slots import Checkout, SlotGitError
 
 MIN_AGE_DAYS: Final = 14
 

@@ -19,14 +19,14 @@ from support.narrow import must
 from support.who import who
 
 from taskloop.app.track import trail
-from taskloop.contracts.ask import AskAnswer
-from taskloop.contracts.askstore import AskStore
-from taskloop.contracts.enums import AskStatus
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.snapshots import LaneStatus, StatusSnapshot, WindowStatus
-from taskloop.contracts.stores import UsageHistory
-from taskloop.contracts.usage import USAGE_KEEP_S
+from tlkernel.ask import AskAnswer
+from tlkernel.askstore import AskStore
+from tlkernel.enums import AskStatus
+from tlkernel.ids import BeadId
+from tlkernel.paths import ConfigDir
+from tlkernel.snapshots import LaneStatus, StatusSnapshot, WindowStatus
+from tlkernel.stores import UsageHistory
+from tlkernel.usage import USAGE_KEEP_S
 
 T = S.T
 

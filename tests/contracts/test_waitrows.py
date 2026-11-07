@@ -7,11 +7,11 @@ import support.paths  # noqa: F401
 from support.case import Case
 from support.narrow import must
 
-from taskloop.contracts import factorydb, scratch
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import NetPause, ReexecNote
-from taskloop.contracts.waitrows import NET_PAUSE, WaitDoc, open_records
+from tlkernel import factorydb, scratch
+from tlkernel.ids import BeadId
+from tlkernel.paths import ConfigDir
+from tlkernel.run import NetPause, ReexecNote
+from tlkernel.waitrows import NET_PAUSE, WaitDoc, open_records
 
 B = BeadId("t-1")
 

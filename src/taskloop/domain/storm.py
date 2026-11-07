@@ -10,8 +10,8 @@ from typing import Any
 
 from any_failure_fp import Event, trip
 
-from taskloop.contracts.kinds import Kind
 from taskloop.domain import outcome as oc
+from tlkernel.kinds import Kind
 
 
 @dataclass(frozen=True)

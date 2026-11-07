@@ -31,15 +31,15 @@ from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.wire import slots as wslots
 from taskloop.app.write.handoff import HANDOFF_CAP
-from taskloop.contracts import rundocs
-from taskloop.contracts.answers import IRREVERSIBLE
-from taskloop.contracts.argv import argv_of
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId, CheckId
-from taskloop.contracts.plancheck import PlanData, adhoc
 from taskloop.domain.checks import planref
 from taskloop.domain.plan.matchers import AcceptanceText
+from tlkernel import rundocs
+from tlkernel.answers import IRREVERSIBLE
+from tlkernel.argv import argv_of
+from tlkernel.config import EngineConfig
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId, CheckId
+from tlkernel.plancheck import PlanData, adhoc
 
 
 class StagesTest(te.EngineTest):

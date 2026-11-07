@@ -1,11 +1,12 @@
 """Who holds a slot, since when and why: the marks on the slot's bead, read as typed values and written in one place."""
+from tlkernel.bdsafe import attempt
+from tlkernel.bead import Bead
+from tlkernel.beadsport import BeadPatch
+from tlkernel.fence import SLOT_GEN, gen_of
+from tlkernel.ids import BeadId
+from tlkernel.slots import HELD_KEYS, Hold
+
 from taskloop.app.slots.env import SlotEnv, stamp
-from taskloop.contracts.bdsafe import attempt
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.beadsport import BeadPatch
-from taskloop.contracts.fence import SLOT_GEN, gen_of
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.slots import HELD_KEYS, Hold
 
 
 def hold_until(b: Bead | None) -> float:

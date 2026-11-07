@@ -9,13 +9,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from taskloop.contracts import log as rec
-from taskloop.contracts.dash import Phase
-from taskloop.contracts.log import CallTokens
-from taskloop.contracts.runlife import Liveness
-from taskloop.contracts.trace import Tokens
-from taskloop.contracts.wire import Rec
 from taskloop_dash.views import phases
+from tlkernel import log as rec
+from tlkernel.dash import Phase
+from tlkernel.log import CallTokens
+from tlkernel.runlife import Liveness
+from tlkernel.trace import Tokens
+from tlkernel.wire import Rec
 
 
 def fresh(t: Tokens | CallTokens) -> int:

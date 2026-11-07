@@ -1,11 +1,12 @@
 """Origin-backed canary acknowledgements authorize the Mac standing pin."""
 from pathlib import Path
 
+from tlkernel.gitport import Git
+from tlkernel.slots import SlotGitError
+
 from taskloop.app.release import clone, publish
 from taskloop.app.release.catalog import version_tuple
 from taskloop.app.release.shell import Abort, Shell
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.slots import SlotGitError
 
 
 def devbox_ok(config: Path, url: str, version: str, sh: Shell) -> None:

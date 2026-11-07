@@ -7,7 +7,7 @@ import msgspec
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 from taskloop.app.write.state import WriteState
-from taskloop.contracts.checkpoint import RunState
+from tlkernel.checkpoint import RunState
 
 OWNED = {"write_rounds", "last_summary", "lane_notes", "strays"}
 

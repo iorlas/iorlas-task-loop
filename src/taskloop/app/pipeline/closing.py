@@ -8,16 +8,17 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Protocol, assert_never
 
+from tlkernel.checkpoint import Checkpoint, Notes
+from tlkernel.enums import Outcome
+from tlkernel.kinds import ASKS, Kind
+from tlkernel.parks import Park
+from tlkernel.run import RunFinish
+
 from taskloop.adapters import beadtools
 from taskloop.app.pipeline import ended as stored_end
 from taskloop.app.pipeline.closing_host import CloseHost
 from taskloop.app.pipeline.outcomes import DONE
 from taskloop.app.pipeline.ports import AskRules, ParkBook
-from taskloop.contracts.checkpoint import Checkpoint, Notes
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.kinds import ASKS, Kind
-from taskloop.contracts.parks import Park
-from taskloop.contracts.run import RunFinish
 from taskloop.domain import effects
 from taskloop.domain import outcome as oc
 from taskloop.domain.asks import specs as askspecs

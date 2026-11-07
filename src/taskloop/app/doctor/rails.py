@@ -5,12 +5,13 @@ import shlex
 import sys
 from pathlib import Path
 
+from tlkernel.gitport import Git
+from tlkernel.paths import ConfigDir
+from tlkernel.procport import Spawner
+from tlkernel.slots import MissingRemote
+
 from taskloop.adapters import landlock
 from taskloop.app.doctor import guard_rails
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.procport import Spawner
-from taskloop.contracts.slots import MissingRemote
 
 
 def github_slug(git: Git, repo: str) -> str:

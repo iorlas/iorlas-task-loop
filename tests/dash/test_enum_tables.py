@@ -2,9 +2,9 @@
 
 from support.case import Case
 
-from taskloop.contracts.dashenums import Marker, Phase
-from taskloop.contracts.enums import Cause, Step, WhyCode
 from taskloop_dash.views import columns, phases
+from tlkernel.dashenums import Marker, Phase
+from tlkernel.enums import Cause, Step, WhyCode
 
 
 class DisplayTables(Case):

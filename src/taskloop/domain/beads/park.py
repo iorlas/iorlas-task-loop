@@ -6,8 +6,8 @@ import hashlib
 from dataclasses import dataclass
 from typing import Final, Literal
 
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.parks import Park
+from tlkernel.bead import Bead
+from tlkernel.parks import Park
 
 HARD_AT: Final = 2  # runs on one text after which nothing takes the bead again, --fresh included: the next would be the 3rd
 

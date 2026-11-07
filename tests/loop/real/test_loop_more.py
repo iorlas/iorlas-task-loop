@@ -36,13 +36,13 @@ from taskloop.adapters import (  # noqa: E402
 )
 from taskloop.app.launch import loop as wloop  # noqa: E402
 from taskloop.app.loop.core import Core  # noqa: E402
-from taskloop.contracts import wire  # noqa: E402
-from taskloop.contracts.config import LoopConfig  # noqa: E402
-from taskloop.contracts.env import snapshot  # noqa: E402
-from taskloop.contracts.ids import BeadId  # noqa: E402
-from taskloop.contracts.loop import LoopCommand, LoopState, LoopTarget  # noqa: E402
-from taskloop.contracts.rowstores import PinStore  # noqa: E402
-from taskloop.contracts.snapshots import Pin  # noqa: E402
+from tlkernel import wire  # noqa: E402
+from tlkernel.config import LoopConfig  # noqa: E402
+from tlkernel.env import snapshot  # noqa: E402
+from tlkernel.ids import BeadId  # noqa: E402
+from tlkernel.loop import LoopCommand, LoopState, LoopTarget  # noqa: E402
+from tlkernel.rowstores import PinStore  # noqa: E402
+from tlkernel.snapshots import Pin  # noqa: E402
 
 
 class UpAt:

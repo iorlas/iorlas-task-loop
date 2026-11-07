@@ -14,12 +14,12 @@ import zlib
 from collections.abc import Callable
 from pathlib import Path
 
-from taskloop.contracts import factorydb, log, wire
-from taskloop.contracts.delegate import LiveEvent
-from taskloop.contracts.paths import ConfigDir
 from taskloop_dash import jsonl
 from taskloop_dash.jsonrec import Json
 from taskloop_dash.views import live_events as ev
+from tlkernel import factorydb, log, wire
+from tlkernel.delegate import LiveEvent
+from tlkernel.paths import ConfigDir
 
 PAGE = 300  # events on a first load
 MAX_PAGE = 2000  # the most one answer carries

@@ -2,8 +2,8 @@
 
 The part is a plain value; app/parts.py lists it (tests/rules/test_stage_parts.py fails until it does).
 docs/design/stage-isolation.md 3.1."""
-from taskloop.contracts.dbparts import Part
-from taskloop.contracts.locks import EngineLock
+from tlkernel.dbparts import Part
+from tlkernel.locks import EngineLock
 
 SLOTS = Part(
     name="slots", version=1, tables=("lease",),

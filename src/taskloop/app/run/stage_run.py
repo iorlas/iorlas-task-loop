@@ -6,14 +6,15 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
+from tlkernel import log as rec
+from tlkernel.finish import finish_run, previous_finish
+from tlkernel.finish_projection import history
+from tlkernel.identity import Identity
+from tlkernel.locator import RunBundle, RunLocator, host_name
+from tlkernel.run import RunFinish, RunManifest, RunState
+from tlkernel.runlife import BEAT_EVERY
+
 from taskloop.app.slots.lease import JOIN_WAIT
-from taskloop.contracts import log as rec
-from taskloop.contracts.finish import finish_run, previous_finish
-from taskloop.contracts.finish_projection import history
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.locator import RunBundle, RunLocator, host_name
-from taskloop.contracts.run import RunFinish, RunManifest, RunState
-from taskloop.contracts.runlife import BEAT_EVERY
 from taskloop.stores.bundle import Stores
 from taskloop.stores.real import real_stores
 from taskloop.stores.runlog import RunLog

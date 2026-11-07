@@ -16,9 +16,9 @@ from taskloop.app.land.lander import Lander
 from taskloop.app.land.outbound import pin_head
 from taskloop.app.pipeline.waits import Waits
 from taskloop.app.run import engine
-from taskloop.contracts.checks import CheckRun
-from taskloop.contracts.enums import WaitWhat
-from taskloop.contracts.kinds import Kind
+from tlkernel.checks import CheckRun
+from tlkernel.enums import WaitWhat
+from tlkernel.kinds import Kind
 
 RETRY_RED = ("checks", "checks_fixed", "checks_exhausted", "review_exhausted")
 

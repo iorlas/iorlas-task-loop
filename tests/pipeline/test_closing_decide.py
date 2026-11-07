@@ -5,8 +5,8 @@ from unittest.mock import Mock
 from support.pipeline_ports import FakeNarrate
 
 from taskloop.app.pipeline.closing_decide import Decide
-from taskloop.contracts.kinds import Kind
 from taskloop.domain import outcome as oc
+from tlkernel.kinds import Kind
 
 
 def test_storm_narrates_banner_through_port(monkeypatch):

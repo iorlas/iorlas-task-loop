@@ -17,7 +17,7 @@ from support.runs import manifest
 
 from loop.test_loop import Base, LoopBase, rec
 from taskloop.app.launch import loop as wloop
-from taskloop.contracts.run import RunState
+from tlkernel.run import RunState
 
 GB = 1 << 30
 

@@ -13,10 +13,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from taskloop.adapters import key_migrate, locks
-from taskloop.contracts import factorydb
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.paths import ConfigDir, RunFiles
-from taskloop.contracts.rowstores import ReposStore
+from tlkernel import factorydb
+from tlkernel.gitport import Git
+from tlkernel.paths import ConfigDir, RunFiles
+from tlkernel.rowstores import ReposStore
 
 COMMAND = "tl layout migrate"
 RUN_FILE = re.compile(r"(?P<run>.+?)(?P<tail>\.jsonl(?:\.\d+)?|\.stderr|\.live)")

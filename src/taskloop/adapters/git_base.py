@@ -11,9 +11,9 @@ from pathlib import Path
 from taskloop.adapters import gitmemo, procs
 from taskloop.adapters.childenv import tool_env, without
 from taskloop.adapters.gitrepo import pinned_env
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitfacts import GitOutcome
-from taskloop.contracts.slots import (
+from tlkernel.env import Env
+from tlkernel.gitfacts import GitOutcome
+from tlkernel.slots import (
     BranchPinned,
     DirtyTree,
     GitReadFailure,

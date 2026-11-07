@@ -12,8 +12,8 @@ from support.plans import CLEAN, HAS_F, PLAN, WRITE
 
 from taskloop.app.plan.planner import Planner
 from taskloop.app.plan.sendback import SendBack
-from taskloop.contracts.plancheck import adhoc
 from taskloop.domain.checks import lint
+from tlkernel.plancheck import adhoc
 
 
 class GateOnly(EngineTest):

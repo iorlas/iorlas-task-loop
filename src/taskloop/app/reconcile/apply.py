@@ -2,13 +2,14 @@
 lease that was retaken, since stays, with the reason."""
 from collections.abc import Callable
 
+from tlkernel import fence
+from tlkernel.bdsafe import peek
+from tlkernel.beadsport import BdFailure, BeadPatch, Beads
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId
+from tlkernel.slots import HELD_KEYS
+
 from taskloop.app.release import tidy
-from taskloop.contracts import fence
-from taskloop.contracts.bdsafe import peek
-from taskloop.contracts.beadsport import BdFailure, BeadPatch, Beads
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.slots import HELD_KEYS
 from taskloop.domain.reconcile.facts import (
     Action,
     DeleteBranch,

@@ -4,14 +4,15 @@ import time
 from collections.abc import Callable
 from random import random
 
-from taskloop.contracts.ask import Ask
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.delegate import Permanence
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import ASKS, FINISH, PAUSES, Kind
-from taskloop.contracts.loop import Skip
-from taskloop.contracts.parks import Park, ParkStore
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.ask import Ask
+from tlkernel.bead import Bead
+from tlkernel.delegate import Permanence
+from tlkernel.ids import BeadId
+from tlkernel.kinds import ASKS, FINISH, PAUSES, Kind
+from tlkernel.loop import Skip
+from tlkernel.parks import Park, ParkStore
+from tlkernel.paths import ConfigDir
+
 from taskloop.domain.asks import hold
 from taskloop.domain.beads import park
 from taskloop.domain.lanes import pauses

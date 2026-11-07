@@ -25,10 +25,10 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from taskloop.contracts import dash as D  # noqa: E402
-from taskloop.contracts import wire  # noqa: E402
-from taskloop.contracts.dashcost import CostPage  # noqa: E402
 from taskloop_dash.views.snapshot import version_of  # noqa: E402
+from tlkernel import dash as D  # noqa: E402
+from tlkernel import wire  # noqa: E402
+from tlkernel.dashcost import CostPage  # noqa: E402
 
 STATIC = ROOT / "src" / "taskloop_dash" / "static"
 FIX = ROOT / "tests" / "fixtures" / "dash"

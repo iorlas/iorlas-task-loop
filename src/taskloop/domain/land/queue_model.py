@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import final
 
-from taskloop.contracts.wire import Rec
+from tlkernel.wire import Rec
 
 CONFLICT = "conflict"  # the head does not merge into the queue ahead of it
 

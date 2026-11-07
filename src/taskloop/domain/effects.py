@@ -9,8 +9,8 @@ unapplied one and repeats none. Stdlib only; imports outcome, never app.
 from dataclasses import dataclass
 from typing import Final, assert_never, final
 
-from taskloop.contracts.kinds import ASKS, Infra, Kind, Owner, Task
 from taskloop.domain import outcome as oc
+from tlkernel.kinds import ASKS, Infra, Kind, Owner, Task
 
 
 @final

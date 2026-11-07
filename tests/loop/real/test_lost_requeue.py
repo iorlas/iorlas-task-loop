@@ -7,9 +7,9 @@ from support.runs import manifest
 
 from loop.test_loop import LoopBase, rec
 from taskloop.app.loop.core import Core
-from taskloop.contracts.locator import RunLocator, host_name
-from taskloop.contracts.run import RunState
-from taskloop.contracts.runlife import STALE_AFTER
+from tlkernel.locator import RunLocator, host_name
+from tlkernel.run import RunState
+from tlkernel.runlife import STALE_AFTER
 
 NOBODY = 4_194_303  # a pid no process has
 

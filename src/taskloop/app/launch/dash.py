@@ -11,12 +11,13 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Final
 
+from tlkernel.dash import READ_PROTOCOL
+from tlkernel.env import Env
+from tlkernel.envvars import EnvVar
+from tlkernel.factorydb import SCHEMA_VERSION
+from tlkernel.procport import Spawner
+
 from taskloop.adapters.ident import PLUGIN_ROOT, config_dir
-from taskloop.contracts.dash import READ_PROTOCOL
-from taskloop.contracts.env import Env
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.factorydb import SCHEMA_VERSION
-from taskloop.contracts.procport import Spawner
 from taskloop_dash import bind as dash_bind
 from taskloop_dash.cli import dash as dash_cli
 
@@ -157,9 +158,9 @@ def start_server(port: int, env: Env, spawner: Spawner, bind: str | None = None)
     home = config_dir(env)
     log = open(home / "dash.log", "ab")  # noqa: SIM115  the detached child keeps it
     more = [env.get("PYTHONPATH")] if env.get("PYTHONPATH") else []
-    path = {"PYTHONPATH": os.pathsep.join([str(SRC), str(VENDOR), *more])}  # the server imports taskloop.contracts: not in the allowlist
+    path = {"PYTHONPATH": os.pathsep.join([str(SRC), str(VENDOR), *more])}  # the server imports tlkernel: not in the allowlist
     bind = bind or ",".join(default_binds(env, spawner))
-    # sys.executable, not uv: the server imports taskloop.contracts (msgspec), and tl.py, which starts it, runs under `uv run --script`
+    # sys.executable, not uv: the server imports tlkernel (msgspec), and tl.py, which starts it, runs under `uv run --script`
     cmd = [sys.executable, "-m", "taskloop_dash", "--ports", "taskloop.app.launch.dash_ports:ports", "--port", str(port), "--bind", bind]
     proc = spawner.start(cmd, extra=path, cwd=str(home), out=log)
     for _ in range(40):

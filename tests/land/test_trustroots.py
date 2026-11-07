@@ -6,10 +6,10 @@ from support.case import Case
 
 from taskloop.app.land.lander import Lander
 from taskloop.app.pipeline.blocked import Blocked, blocked_for
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.gitfacts import DiffEntry
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
+from tlkernel.bead import Bead
+from tlkernel.gitfacts import DiffEntry
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
 
 
 class LandTrustRoots(Case):

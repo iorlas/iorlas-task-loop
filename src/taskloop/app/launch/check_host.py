@@ -4,6 +4,15 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from tlkernel.config import EngineConfig
+from tlkernel.enums import WaitWhat
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.ids import TreeSha
+from tlkernel.locator import RunBundle
+from tlkernel.paths import ConfigDir
+from tlkernel.procport import Spawner
+
 from taskloop.adapters import check_files, ident, treehash
 from taskloop.adapters.threadflag import ThreadFlag
 from taskloop.app.checks.checklog import CheckLog
@@ -12,14 +21,6 @@ from taskloop.app.checks.host import CheckoutView
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.launch.staged import StagedCheckout
 from taskloop.app.run.shell import Shell
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.enums import WaitWhat
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import TreeSha
-from taskloop.contracts.locator import RunBundle
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.procport import Spawner
 from taskloop.stores.bundle import Stores
 from taskloop.stores.runlog import RunLog
 

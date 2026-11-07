@@ -6,8 +6,8 @@ import pytest
 from support.memstores import fake_stores
 
 from taskloop.app.land.push_judge import PushStatus, judge_push
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
+from tlkernel.env import Env
+from tlkernel.gitport import Git
 
 SHA = "a" * 40
 

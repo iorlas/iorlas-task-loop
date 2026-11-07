@@ -15,9 +15,9 @@ from git_porcelain.testing import FakeRepo
 from support.case import Case
 
 from taskloop.adapters.git import RealGit
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitfacts import GitOutcome
-from taskloop.contracts.slots import BranchPinned, DirtyTree, GitReadFailure, IndexLocked, NotAWorktree, RefRace, SlotGitError
+from tlkernel.env import Env
+from tlkernel.gitfacts import GitOutcome
+from tlkernel.slots import BranchPinned, DirtyTree, GitReadFailure, IndexLocked, NotAWorktree, RefRace, SlotGitError
 
 
 class GitCheckoutRebaseTest(Case):

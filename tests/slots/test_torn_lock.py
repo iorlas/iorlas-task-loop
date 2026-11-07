@@ -12,8 +12,8 @@ from support import homes
 from support.narrow import must
 
 from taskloop.app.slots import engine_lock
-from taskloop.contracts.lockrows import EngineLockRows
-from taskloop.contracts.wire import Refused
+from tlkernel.lockrows import EngineLockRows
+from tlkernel.wire import Refused
 
 TORN = '{"v": 1, "pid": 12'
 

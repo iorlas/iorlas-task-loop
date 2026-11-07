@@ -1,12 +1,13 @@
 """A push that went through before the network cut its answer: the task branch's tip is the land commit and it is on the base."""
 from typing import Protocol
 
+from tlkernel.gitport import Git
+from tlkernel.ids import BeadId
+
 from taskloop.app.land import cleanup
 from taskloop.app.land.outbound import target
 from taskloop.app.land.parts import FetchCheckout, OutcomeSteps
 from taskloop.app.land.state import LandState
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import BeadId
 
 
 class LandedConfig(Protocol):

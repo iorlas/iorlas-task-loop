@@ -3,9 +3,9 @@ procsim's fakes and its git the gitsim, a real test's are real)."""
 
 from taskloop.adapters.git import RealGit
 from taskloop.adapters.spawner import RealSpawner
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.procport import Spawner
+from tlkernel.env import snapshot
+from tlkernel.gitport import Git
+from tlkernel.procport import Spawner
 
 
 def real_spawner() -> Spawner:

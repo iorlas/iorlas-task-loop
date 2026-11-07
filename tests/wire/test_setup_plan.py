@@ -8,7 +8,7 @@ from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.wire import setup
 from taskloop.cli import setup as cli_setup
-from taskloop.contracts.env import Env
+from tlkernel.env import Env
 
 
 def tree(root: Path) -> list[str]:

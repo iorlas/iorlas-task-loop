@@ -21,10 +21,10 @@ from taskloop.app.pipeline.closing import Closer
 from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
 from taskloop.cli.ctx import declare_stage_parts
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind
 from taskloop.domain import outcome as oc
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind
 
 
 class Journal(list):

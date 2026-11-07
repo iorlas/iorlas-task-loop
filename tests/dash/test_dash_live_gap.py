@@ -8,8 +8,8 @@ from support.factory_index import ingest
 from support.narrow import must
 
 from dash.test_dash_live import make_run
-from taskloop.contracts.paths import ConfigDir
 from taskloop_dash.api import live
+from tlkernel.paths import ConfigDir
 
 
 def test_a_removed_worker_file_is_a_gap_for_a_cursor_that_had_read_it(tmp_path: Path) -> None:

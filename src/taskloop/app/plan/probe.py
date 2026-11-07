@@ -5,10 +5,11 @@ in the repo). What comes back is a planner fact: a missing program, a check that
 from pathlib import Path
 from typing import Protocol
 
+from tlkernel.checks import UNVERIFIED_EXIT, CheckResult
+from tlkernel.config import CheckSpec, EngineConfig
+
 from taskloop.adapters.check_probe import PathProbe
 from taskloop.app.plan.host import PlanLog, ProbeChecker
-from taskloop.contracts.checks import UNVERIFIED_EXIT, CheckResult
-from taskloop.contracts.config import CheckSpec, EngineConfig
 from taskloop.domain.beads import matchers as acnames
 from taskloop.domain.checks.specs import repo_check
 from taskloop.domain.matchers import clip

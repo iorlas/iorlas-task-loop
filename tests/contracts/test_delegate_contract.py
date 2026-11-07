@@ -14,8 +14,8 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts import delegate, schema
-from taskloop.contracts.snapshots import StatusSnapshot
+from tlkernel import delegate, schema
+from tlkernel.snapshots import StatusSnapshot
 
 CONTRACT = json.loads((Path(__file__).resolve().parents[2] / "src/delegate/data/contract.json").read_text(
     encoding="utf-8"))

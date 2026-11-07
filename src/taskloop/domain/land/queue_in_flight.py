@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from enum import StrEnum
 from typing import Final, final
 
-from taskloop.contracts.wire import Rec
+from tlkernel.wire import Rec
 
 FLOOR: Final = 1
 DEFAULT_CAP: Final = 4  # land-stack's --jobs default; the config key `land.queue.max_in_flight` will carry it

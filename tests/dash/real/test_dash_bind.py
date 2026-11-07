@@ -14,9 +14,9 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import support.paths  # noqa: E402, F401
 
-from taskloop.contracts.env import Env as ProcessEnv  # noqa: E402
 from taskloop_dash import bind  # noqa: E402
 from taskloop_dash.cli import dash as dash_cli  # noqa: E402
+from tlkernel.env import Env as ProcessEnv  # noqa: E402
 
 
 class Env(Case):

@@ -15,16 +15,16 @@ from taskloop.app.checks.cache import InputKeys, RunMemo
 from taskloop.app.checks.execution import check_env
 from taskloop.app.land.carry import MERGE, Carry
 from taskloop.app.land.cmds import Cmds
-from taskloop.contracts.checks import CheckResult
-from taskloop.contracts.config import load
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitfacts import TreeEntry
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.procport import Ran
-from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.specs import repo_check
 from taskloop.stores.runlog import RunLog
+from tlkernel.checks import CheckResult
+from tlkernel.config import load
+from tlkernel.env import Env
+from tlkernel.gitfacts import TreeEntry
+from tlkernel.gitport import Git
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.procport import Ran
+from tlkernel.runkey import BaseSha
 
 OID, TREE, B1, B2 = "1550b77c" + "0" * 32, TreeSha("tree-1"), "base-1", "base-2"
 SUITE = CheckId("suite")

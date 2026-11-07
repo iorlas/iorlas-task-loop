@@ -5,7 +5,7 @@ import json
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
-from taskloop.contracts.procport import Ran
+from tlkernel.procport import Ran
 
 Read = Callable[[str], Ran]  # `gh api PATH`
 RULES = frozenset({"deletion", "non_fast_forward"})

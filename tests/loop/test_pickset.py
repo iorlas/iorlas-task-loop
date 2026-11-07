@@ -13,13 +13,13 @@ from support.dashlogs import T
 # isort: split
 from taskloop.app.loop.queue import QueueRule
 from taskloop.cli import queue as cli_queue
-from taskloop.contracts import pickset
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.loop import LoopState, QueueRow
 from taskloop_dash.views import snapshot
 from taskloop_dash.views.world import ProjectIn, World
+from tlkernel import pickset
+from tlkernel.bead import Bead
+from tlkernel.config import EngineConfig
+from tlkernel.ids import BeadId
+from tlkernel.loop import LoopState, QueueRow
 
 
 def bead(i, queued=0, prio=2, status="open", assignee=""):

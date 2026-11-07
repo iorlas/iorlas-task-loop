@@ -4,18 +4,19 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from tlkernel.artifact import ArtifactSlot
+from tlkernel.env import Env
+from tlkernel.identity import Identity
+from tlkernel.loop import LoopState
+from tlkernel.paths import ConfigDir
+from tlkernel.procport import Spawner
+from tlkernel.slots import SlotGitError
+
 from taskloop.app.artifacts import server
 from taskloop.app.launch import dash, factory, loop, repos
 from taskloop.app.loop.exits import last_by_lane
 from taskloop.app.loop.files import LoopFiles
 from taskloop.app.wire import real
-from taskloop.contracts.artifact import ArtifactSlot
-from taskloop.contracts.env import Env
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.loop import LoopState
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.procport import Spawner
-from taskloop.contracts.slots import SlotGitError
 
 
 def facts(files: LoopFiles, states: list[LoopState], repo: str, version: str) -> None:

@@ -9,8 +9,8 @@ import contextlib
 from collections.abc import Callable
 from typing import Protocol
 
-from taskloop.contracts import fence
 from taskloop.domain import effects as fx
+from tlkernel import fence
 
 
 class Ledger(Protocol):

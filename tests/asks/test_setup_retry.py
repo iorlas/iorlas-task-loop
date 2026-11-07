@@ -15,14 +15,14 @@ from support.narrow import must
 from taskloop.app.asks import raiser, setup_retry
 from taskloop.app.run.ask_flow import AskFlow
 from taskloop.app.wire import asks as wire_asks
-from taskloop.contracts.ask import AskAnswer
-from taskloop.contracts.askstore import HAD_PICK
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.config import load
-from taskloop.contracts.enums import AskKind, AskStatus
-from taskloop.contracts.identity import Identity
-from taskloop.contracts.ids import BeadId
 from taskloop.domain.asks import specs
+from tlkernel.ask import AskAnswer
+from tlkernel.askstore import HAD_PICK
+from tlkernel.bead import Bead
+from tlkernel.config import load
+from tlkernel.enums import AskKind, AskStatus
+from tlkernel.identity import Identity
+from tlkernel.ids import BeadId
 
 BEAD = BeadId("t-1")
 WHY = "failed: the configured check `unity` needs something this tree lacks: client/ is not set up"

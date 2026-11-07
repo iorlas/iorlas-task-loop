@@ -2,14 +2,15 @@
 exit code. A SlotFail becomes a code by `fail_code`: busy 4, bead_pinned 5, slot_broken 3 (0 is done, 1 a refusal, 2 a misuse)."""
 from typing import Any, Final
 
+from tlkernel.beadsport import NewBead
+from tlkernel.slots import SlotFail, SlotGitError
+
 from taskloop.app.slots import owned
 from taskloop.app.slots.env import SlotEnv, stamp
 from taskloop.app.slots.line import order, wait_slot, waiting_line
 from taskloop.app.slots.marks import held_by, mark_held, next_gen
 from taskloop.app.slots.pool import Slot, SlotPool
 from taskloop.app.slots.reset import setup
-from taskloop.contracts.beadsport import NewBead
-from taskloop.contracts.slots import SlotFail, SlotGitError
 
 CODES: Final = {"busy": 4, "bead_pinned": 5, "slot_broken": 3, "transient": 3}
 

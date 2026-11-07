@@ -5,17 +5,18 @@ import os
 from pathlib import Path
 from typing import Any
 
+from tlkernel.artifact import ArtifactMeta, ArtifactSlot
+from tlkernel.gitport import Git
+from tlkernel.plancheck import StageData
+from tlkernel.slots import SlotGitError
+from tlkernel.stagefacts import RunFacts
+from tlkernel.wire import Refused
+
 from taskloop.adapters import looks
 from taskloop.app.artifacts import store
 from taskloop.app.artifacts.keep import Keeper
 from taskloop.app.look.host import LookHost, LookPorts
 from taskloop.app.look.state import LookState
-from taskloop.contracts.artifact import ArtifactMeta, ArtifactSlot
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.plancheck import StageData
-from taskloop.contracts.slots import SlotGitError
-from taskloop.contracts.stagefacts import RunFacts
-from taskloop.contracts.wire import Refused
 from taskloop.domain.checks.matchers import glob_re
 from taskloop.domain.look.matchers import safe_name
 

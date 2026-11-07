@@ -2,7 +2,7 @@
 
 Status: built; the only API the dashboard has. The page (`src/taskloop_dash/static/index.html`) is served at `/`, its modules
 beside it, and talks to nothing else.
-Source of truth: `src/taskloop/contracts/dash.py` (records, enums, `WRITES`). Sample data: `tests/fixtures/dash/` (built by
+Source of truth: `packages/kernel/src/tlkernel/dash.py` (records, enums, `WRITES`). Sample data: `tests/fixtures/dash/` (built by
 `tests/support/dash_fixtures.py` from the round-8b mock; `UPDATE_GOLDEN=1` rewrites it). Test: `tests/contracts/test_dash.py`.
 Design: `docs/design/dashboard/dash-spec.md` §11.
 

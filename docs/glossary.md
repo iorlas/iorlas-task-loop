@@ -48,7 +48,7 @@ Each entry: one plain sentence, an example, and what it is not. Last audited aga
 | host | The typed Protocol a stage takes of its caller, naming only what it needs, instead of the engine. | `CheckHost`, `LandHost`. | the machine (that is the factory or the executor) |
 | node | A stage's logic: imports only the kernel, lower layers and its declared neighbours; never the engine. | `app/land`, `app/checks`. | module |
 | composition root | Code that only builds nodes and hands them to each other (`launch`, `wire`, the engine's construction). Nothing imports a root. | `app/wire`. | main (it holds no rules) |
-| kernel | The contracts every node shares (`src/taskloop/contracts/`). Also, in lock talk, the OS: a kernel flock is dropped when its process dies. | `RunKey` is in the kernel. | core |
+| kernel | The contracts every node shares (`packages/kernel/src/tlkernel/`). Also, in lock talk, the OS: a kernel flock is dropped when its process dies. | `RunKey` is in the kernel. | core |
 | part | One small class of a stage with one job, built by the engine and handed what it needs. | The review stage has four parts (docs/design/b-review.md). | stage |
 | ratchet | A rule test that counts offenders on the files a change touches and fails if the count rises. No stored baseline; the way down is free. | A new `time.sleep` in a unit test trips the layer ratchet. | threshold |
 | Ratchet-allow | The commit-message line that lets a deliberate rise through: `Ratchet-allow: <layer\|temp\|needs\|root> +N <reason in words>`. | `Ratchet-allow: needs +1 uses a real git`. | `--no-verify` (forbidden) |

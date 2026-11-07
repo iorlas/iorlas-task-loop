@@ -5,8 +5,8 @@ from support.case import Case
 from support.tags import contract  # noqa: F401  (re-exported for the subclasses)
 
 from taskloop.adapters.spawner import RealSpawner
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.procport import Spawner
+from tlkernel.env import snapshot
+from tlkernel.procport import Spawner
 
 _Base = Case
 

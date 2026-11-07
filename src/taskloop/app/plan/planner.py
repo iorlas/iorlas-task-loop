@@ -5,6 +5,12 @@ import contextlib
 import copy
 from pathlib import Path
 
+from tlkernel import plancheck
+from tlkernel.answers import ASSUMPTION, IRREVERSIBLE
+from tlkernel.checkpoint import PlanStep
+from tlkernel.enums import AskClass
+from tlkernel.plancheck import PlanData
+
 from taskloop.app.plan import assume
 from taskloop.app.plan.cap import ReplanCap
 from taskloop.app.plan.decisions import Decisions
@@ -14,11 +20,6 @@ from taskloop.app.plan.planned import Planned
 from taskloop.app.plan.prompt import PlanPrompt
 from taskloop.app.plan.prompts import ASSUME_TEXT, PLAN_BRIEF_KB, PLAN_DECIDED_TEXT, VISUAL_BACK
 from taskloop.app.plan.sendback import SendBack
-from taskloop.contracts import plancheck
-from taskloop.contracts.answers import ASSUMPTION, IRREVERSIBLE
-from taskloop.contracts.checkpoint import PlanStep
-from taskloop.contracts.enums import AskClass
-from taskloop.contracts.plancheck import PlanData
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.checks import affinity
 from taskloop.domain.checks.specs import repo_check

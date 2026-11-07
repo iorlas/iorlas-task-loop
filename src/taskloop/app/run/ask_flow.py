@@ -2,14 +2,15 @@
 import time
 from typing import Any
 
+from tlkernel.artifact import ArtifactSlot
+from tlkernel.kinds import Kind
+
 from taskloop.adapters import ident
 from taskloop.adapters.check_files import repo_key
 from taskloop.app.artifacts import ask_pictures
 from taskloop.app.asks import raiser, setup_retry
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.run.layout import repo_of
-from taskloop.contracts.artifact import ArtifactSlot
-from taskloop.contracts.kinds import Kind
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.asks import text as asktext
 

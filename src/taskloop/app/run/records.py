@@ -5,6 +5,16 @@ import traceback
 from collections.abc import Callable
 from typing import Any
 
+from tlkernel import log as rec
+from tlkernel import plancheck, wire
+from tlkernel.checkpoint import EndRec
+from tlkernel.envvars import EnvVar
+from tlkernel.finish import finish_run, previous_finish
+from tlkernel.finish_projection import indexes
+from tlkernel.locator import RunLocator
+from tlkernel.run import LoopLogLine, RunFinish, RunManifest, RunState
+from tlkernel.slots import git_probe
+
 from taskloop.adapters import ident
 from taskloop.adapters.repourl import repo_url
 from taskloop.app.pipeline import ended, summaries
@@ -14,15 +24,6 @@ from taskloop.app.pipeline.finish import answer
 from taskloop.app.pipeline.finish import outcome as finished_outcome
 from taskloop.app.run.layout import repo_of
 from taskloop.app.slots import engine_lock
-from taskloop.contracts import log as rec
-from taskloop.contracts import plancheck, wire
-from taskloop.contracts.checkpoint import EndRec
-from taskloop.contracts.envvars import EnvVar
-from taskloop.contracts.finish import finish_run, previous_finish
-from taskloop.contracts.finish_projection import indexes
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.run import LoopLogLine, RunFinish, RunManifest, RunState
-from taskloop.contracts.slots import git_probe
 from taskloop.domain import outcome as oc
 from taskloop.domain.lifecycle import matchers as lifecycle
 from taskloop.domain.review import switch

@@ -10,14 +10,14 @@ from taskloop.adapters import check_files, childenv
 from taskloop.app.checks.cache import InputKeys, RunMemo
 from taskloop.app.checks.execution import check_env
 from taskloop.app.launch.check import with_base
-from taskloop.contracts.checks import CheckResult
-from taskloop.contracts.config import load
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitfacts import TreeEntry
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.ids import CheckId, TreeSha
-from taskloop.contracts.runkey import BaseSha
 from taskloop.domain.checks.specs import repo_check
+from tlkernel.checks import CheckResult
+from tlkernel.config import load
+from tlkernel.env import Env
+from tlkernel.gitfacts import TreeEntry
+from tlkernel.gitport import Git
+from tlkernel.ids import CheckId, TreeSha
+from tlkernel.runkey import BaseSha
 
 PROFILE = {"engine": {"checks": [{"id": "suite", "argv": ["true"], "run": "gate"}]}}
 TREE = TreeSha("tree-n")

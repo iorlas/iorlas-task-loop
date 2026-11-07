@@ -4,7 +4,7 @@ import support.paths  # noqa: F401
 from support import looptest
 
 from loop.test_loop import LoopBase
-from taskloop.contracts.loop import LoopCommand, LoopState, LoopTarget, Rest
+from tlkernel.loop import LoopCommand, LoopState, LoopTarget, Rest
 
 
 class LoopRowsTest(LoopBase):

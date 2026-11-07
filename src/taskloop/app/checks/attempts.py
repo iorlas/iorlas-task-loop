@@ -5,16 +5,17 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from tlkernel.argv import argv_of
+from tlkernel.checks import UNVERIFIED_EXIT, Check
+from tlkernel.enums import WaitWhat
+from tlkernel.envvars import EnvVar
+
 from taskloop.adapters import check_files
 from taskloop.app.checks.base import BaseCheck
 from taskloop.app.checks.host import CheckHost
 from taskloop.app.checks.keep import keep
 from taskloop.app.checks.linux import LinuxRun
 from taskloop.app.checks.step_env import step_env
-from taskloop.contracts.argv import argv_of
-from taskloop.contracts.checks import UNVERIFIED_EXIT, Check
-from taskloop.contracts.enums import WaitWhat
-from taskloop.contracts.envvars import EnvVar
 from taskloop.domain.checks import matchers, retry
 
 # the run's names that mean the same on the executor

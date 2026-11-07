@@ -10,13 +10,13 @@ import support.paths  # noqa: F401
 from support.case import Case
 from support.tmpdir import TemporaryDirectory
 
-from taskloop.contracts import factorydb, wire
-from taskloop.contracts.docstore import JsonStore
-from taskloop.contracts.enums import Outcome, Result, Step, WhyCode
-from taskloop.contracts.ids import loop_key
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.run import RunFinish, RunManifest, RunState
-from taskloop.contracts.runrows import RunRows, StaleRevision
+from tlkernel import factorydb, wire
+from tlkernel.docstore import JsonStore
+from tlkernel.enums import Outcome, Result, Step, WhyCode
+from tlkernel.ids import loop_key
+from tlkernel.paths import ConfigDir
+from tlkernel.run import RunFinish, RunManifest, RunState
+from tlkernel.runrows import RunRows, StaleRevision
 
 
 class RunRowsTest(Case):

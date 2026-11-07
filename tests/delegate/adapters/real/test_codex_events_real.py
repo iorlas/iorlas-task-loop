@@ -12,9 +12,10 @@ from pathlib import Path
 from unittest import mock
 
 from any_agent.harnesses.codex import CodexHarness
-from delegate.app.publish import LiveSink
 from support.procsim import real_proc
 from support.tmpdir import TemporaryDirectory
+
+from delegate.app.publish import LiveSink
 
 HERE = Path(__file__).resolve().parent.parent
 

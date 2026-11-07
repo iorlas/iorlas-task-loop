@@ -11,8 +11,8 @@ from support.facts import FakeRepoKey, fake_facts
 from support.host_conformance import missing
 from support.who import who
 
-from taskloop.contracts import stagefacts as sf
 from taskloop.stores.runports import RunPorts
+from tlkernel import stagefacts as sf
 
 PROTOCOLS = {"steps": sf.StepBook, "log": sf.Narrate, "checklog": sf.CheckLogPort, "checkpoints": sf.CheckpointsPort,
              "checker": sf.CheckerPort, "repo": sf.RepoKey}

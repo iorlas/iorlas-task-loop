@@ -6,7 +6,7 @@ migration needs, the order, the kill test and the rollback.
 
 ## 1. What is already in `factory.db`
 
-Schema v3 (`src/taskloop/contracts/factorydb.py`, WAL, `begin_immediate`, `cas_update` on the revisioned tables `run`, `ask`, `bead`;
+Schema v3 (`packages/kernel/src/tlkernel/factorydb.py`, WAL, `begin_immediate`, `cas_update` on the revisioned tables `run`, `ask`, `bead`;
 vendored `sqlite_store` does the open, quarantine and `user_version` upgrades).
 
 | table | state |

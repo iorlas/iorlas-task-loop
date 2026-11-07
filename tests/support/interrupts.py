@@ -21,9 +21,9 @@ from taskloop.app.pipeline.steps import Steps
 from taskloop.app.run import engine
 from taskloop.app.run.state import Checkpoints
 from taskloop.app.write.stage_loop import StageLoop
-from taskloop.contracts.kinds import Kind
-from taskloop.contracts.paths import ConfigDir
 from taskloop.stores.bundle import Stores
+from tlkernel.kinds import Kind
+from tlkernel.paths import ConfigDir
 
 
 class IdleHeartbeat:

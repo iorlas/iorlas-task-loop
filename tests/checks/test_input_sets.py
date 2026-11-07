@@ -8,10 +8,10 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
-from taskloop.contracts import inputsets
-from taskloop.contracts.config import ConfigError, load
 from taskloop.domain.checks.inputs import reads_digest, touched
 from taskloop.domain.checks.specs import due, repo_check
+from tlkernel import inputsets
+from tlkernel.config import ConfigError, load
 
 SRC = ["src/**", "lib/**"]
 

@@ -9,10 +9,10 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.ids import BeadId
 from taskloop.domain.lanes import pauses
 from taskloop.domain.lanes.pause_reasons import Reason, Unknown, parse
+from tlkernel.bead import Bead
+from tlkernel.ids import BeadId
 
 
 class Backoff(Case):

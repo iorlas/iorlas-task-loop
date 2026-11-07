@@ -2,16 +2,16 @@
 
 from collections.abc import Mapping, Sequence
 
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.dash import Phase, Piece, Slot
-from taskloop.contracts.events import Claim, SlotSetup, SlotTake, Stage
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.runlife import Liveness
-from taskloop.contracts.slots import SlotTable
-from taskloop.contracts.slottable import LiveSlot, build_slot_table, slot_view
 from taskloop_dash.tails import parse_ts
 from taskloop_dash.views.runfacts import Run
 from taskloop_dash.views.world import ProjectIn
+from tlkernel.bead import Bead
+from tlkernel.dash import Phase, Piece, Slot
+from tlkernel.events import Claim, SlotSetup, SlotTake, Stage
+from tlkernel.ids import BeadId
+from tlkernel.runlife import Liveness
+from tlkernel.slots import SlotTable
+from tlkernel.slottable import LiveSlot, build_slot_table, slot_view
 
 BACK, AHEAD = 8 * 3600.0, 2 * 3600.0  # the Floor shows 8 h back to 2 h ahead
 
@@ -32,7 +32,7 @@ def slot_name(b: Bead) -> str:
 
 
 def table_of(p: ProjectIn, runs: Mapping[str, Sequence[Run]], now: float) -> SlotTable:
-    """The project's slot table (taskloop.contracts.slottable): configured lanes exist even before a slot bead or its first run does."""
+    """The project's slot table (tlkernel.slottable): configured lanes exist even before a slot bead or its first run does."""
     src = p.slot_source
     live = {}
     for b in p.beads:

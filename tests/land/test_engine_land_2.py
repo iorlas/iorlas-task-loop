@@ -21,8 +21,8 @@ from support.waits import until
 from taskloop.adapters import (
     landlock,
 )
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.paths import ConfigDir
+from tlkernel.locator import RunLocator
+from tlkernel.paths import ConfigDir
 
 
 class EngineLand2Test(EngineTest):

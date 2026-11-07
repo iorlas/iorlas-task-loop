@@ -16,12 +16,12 @@ from support.fakegit import ScriptedGit
 
 from taskloop.app.track import verbs
 from taskloop.app.wire import closeguard
-from taskloop.contracts.bead import Bead
-from taskloop.contracts.enums import Outcome
-from taskloop.contracts.gitfacts import Ref
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.locator import RunLocator
-from taskloop.contracts.stores import TraceStore
+from tlkernel.bead import Bead
+from tlkernel.enums import Outcome
+from tlkernel.gitfacts import Ref
+from tlkernel.ids import BeadId
+from tlkernel.locator import RunLocator
+from tlkernel.stores import TraceStore
 
 SHA = "a" * 40
 

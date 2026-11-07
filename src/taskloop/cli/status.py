@@ -1,10 +1,11 @@
 """`tl status [--brief] [--json]` and `tl handoff write|show`: print what the stores say (src/taskloop/domain/brief.py makes the text)."""
 from pathlib import Path
 
+from tlkernel.env import Env
+from tlkernel.gitport import Git
+from tlkernel.identity import Identity
+
 from taskloop.app.wire import brief, handoff
-from taskloop.contracts.env import Env
-from taskloop.contracts.gitport import Git
-from taskloop.contracts.identity import Identity
 
 
 def run_status(repo: str, plugin_root: Path, now: float, as_json: bool, env: Env, who: Identity, git: Git) -> int:

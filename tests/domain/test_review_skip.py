@@ -8,10 +8,10 @@ from support.case import Case
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: F401
 
-from taskloop.contracts import config
-from taskloop.contracts.config import ReviewSkipConfig
-from taskloop.contracts.gitfacts import DiffEntry
 from taskloop.domain.review.skip import SkipKind, decide
+from tlkernel import config
+from tlkernel.config import ReviewSkipConfig
+from tlkernel.gitfacts import DiffEntry
 
 RULES = ReviewSkipConfig(config=["config/*.json"], generated=["gen/**"], tools=["tools/**"], tests=["tests/**"])
 

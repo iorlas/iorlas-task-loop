@@ -35,9 +35,9 @@ from taskloop.adapters import (
 )
 from taskloop.app.plan.planner import Planner
 from taskloop.app.run import engine
-from taskloop.contracts.config import EngineConfig
 from taskloop.domain.checks import lint
 from taskloop.domain.plan.matchers import gate_only_criteria
+from tlkernel.config import EngineConfig
 
 
 class EngineLand1Test(EngineTest):

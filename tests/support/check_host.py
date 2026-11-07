@@ -16,14 +16,14 @@ from taskloop.app.checks.runner import Checker
 from taskloop.app.land.checkout import Checkout
 from taskloop.app.run import bead_env
 from taskloop.app.run.shell import Shell
-from taskloop.contracts import wire
-from taskloop.contracts.checks import CheckRun
-from taskloop.contracts.config import EngineConfig
-from taskloop.contracts.enums import WaitWhat
-from taskloop.contracts.paths import ConfigDir
-from taskloop.contracts.plancheck import StageData
-from taskloop.contracts.ports import Clock
 from taskloop.stores.bundle import Stores
+from tlkernel import wire
+from tlkernel.checks import CheckRun
+from tlkernel.config import EngineConfig
+from tlkernel.enums import WaitWhat
+from tlkernel.paths import ConfigDir
+from tlkernel.plancheck import StageData
+from tlkernel.ports import Clock
 
 
 class RecordedWaits:

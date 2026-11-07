@@ -44,7 +44,7 @@ with review, not review. They go to `compose` (the wiring test) or are rewritten
 
 1. WORKSPACE-1: root `pyproject` becomes a workspace (`members = ["packages/*"]`), `packages/testkit` (the layer guards from tests/conftest.py as a
    pytest plugin) and `packages/rules` (ruff base files, the generated import-linter contracts). Nothing else moves. Proof: `just test` unchanged.
-2. WORKSPACE-2: `packages/kernel` = the contracts above plus `ids`, `wire`; the old `taskloop.contracts` stays a thin re-export for one release.
+2. WORKSPACE-2: `packages/kernel` = the contracts above plus `ids`, `wire`; the old `tlkernel` stays a thin re-export for one release.
 3. WORKSPACE-3: `packages/review` = `app/review` + `domain/review` + its prompts and tests; its `pyproject` declares kernel and testkit only;
    `uv run --isolated --package review pytest packages/review` must pass alone.
 4. Then in order: asks, artifacts, checks, slots (leaves), look, plan, write, land; `compose` is what remains in `run`.

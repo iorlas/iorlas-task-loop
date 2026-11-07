@@ -5,8 +5,8 @@ import re
 from collections.abc import Callable, Sequence
 from pathlib import PurePosixPath
 
-from taskloop.contracts.config import CheckSpec, RepoProfile
-from taskloop.contracts.paths import TASK_EXCLUDE
+from tlkernel.config import CheckSpec, RepoProfile
+from tlkernel.paths import TASK_EXCLUDE
 
 ARTIFACT = "TL_ARTIFACT_DIR"
 OUTPUT_FLAG = re.compile(r"^-{1,2}[A-Za-z-]*(log|out|report|result|xml)[A-Za-z-]*$", re.IGNORECASE)

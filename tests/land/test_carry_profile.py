@@ -5,7 +5,7 @@ from pathlib import Path
 
 import support.paths  # noqa: F401
 
-from taskloop.contracts.config import load
+from tlkernel.config import load
 
 ROOT = Path(__file__).resolve().parents[2]
 

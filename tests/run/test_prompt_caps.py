@@ -19,12 +19,12 @@ from taskloop.app.run import engine
 from taskloop.app.wire import slots as wslots
 from taskloop.app.write import prompts as write
 from taskloop.app.write import review_prompt as review
-from taskloop.contracts.env import snapshot
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.kinds import Kind, Task, fault_of
 from taskloop.domain.lanes import caps
 from taskloop.domain.lanes.roles import ROLES
 from taskloop.domain.prompts import common
+from tlkernel.env import snapshot
+from tlkernel.ids import BeadId
+from tlkernel.kinds import Kind, Task, fault_of
 
 
 class Table(Case):

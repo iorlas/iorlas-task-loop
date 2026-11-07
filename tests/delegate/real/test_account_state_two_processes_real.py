@@ -6,11 +6,11 @@ import sys
 import time
 from pathlib import Path
 
-from delegate.app import env
-from support.procsim import real_proc
-
 from run_support import RunBase
+from support.procsim import real_proc
 from test_route import ROOT
+
+from delegate.app import env
 
 LIMIT_S = 60  # two interpreters, each makes 20 locked state writes
 N = 20

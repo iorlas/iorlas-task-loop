@@ -3,9 +3,9 @@
 
 from typing import Final
 
-from taskloop.contracts.dash import Column, PassEnd, Phase
-from taskloop.contracts.enums import Cause, Outcome, Step, WhyCode
-from taskloop.contracts.log import Close
+from tlkernel.dash import Column, PassEnd, Phase
+from tlkernel.enums import Cause, Outcome, Step, WhyCode
+from tlkernel.log import Close
 
 ORDER: Final = {p: i for i, p in enumerate(Phase)}
 STEP_PHASE: Final[dict[Step, Phase | None]] = {
