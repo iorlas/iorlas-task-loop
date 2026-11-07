@@ -4,7 +4,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from os import EX_CONFIG
 
-from taskloop.app.asks import parks
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.ports import LeaseHandle
@@ -80,7 +79,7 @@ class Taker:
         if v.kind in (vd.PROFILE_AHEAD, vd.SETUP_OWN_TREE):
             env = self.env
             run = v.run or f"profile-ahead-{env.pid}-{env.now()}"
-            parks.profile_ahead(env.cfgdir, b, run, env.now(), v.kind)
+            env.asks.profile_ahead(b, run, v.kind)
 
     def _held(self, bid: str, at: Where, held: vd.Verdict) -> Taken | None:
         """A bead that is not to be run now: recorded and cooled (a network pause is neither), and a pre-engine failure ends the pass."""
