@@ -5,7 +5,7 @@ from typing import Any
 
 from taskloop.app.checks import evidence as check_evidence
 from taskloop.app.write.prepare import PREPARED, Prepare
-from taskloop.app.write.state import AGAIN, REPLAN, StageState
+from taskloop.app.write.state import AGAIN, REPLAN, RoundResult, StageState, carrying
 from taskloop.domain.asks import specs as askspecs
 from taskloop.domain.prompts.write import REPEAT_RED
 from taskloop.domain.write.matchers import count_tests
@@ -15,16 +15,22 @@ class CheckRound:
     def __init__(self, host: Any) -> None:
         self.e = host
 
-    def run(self, s: StageState) -> str:
-        """The round's checks. -> "" when they are green, else AGAIN or REPLAN."""
+    def run(self, s: StageState) -> RoundResult:
+        """The round's checks. -> a result whose flow is "" when they are green, else AGAIN or REPLAN."""
+        out = RoundResult()
+        with carrying(out):
+            out.flow = self.go(s, out)
+        return out
+
+    def go(self, s: StageState, out: RoundResult) -> str:
         e = self.e
         s.acc_first = s.acc_only and not s.acc_first  # once, then the normal order: a check may read what a tests-group check writes
         stage = dict(s.st, checks=s.st["checks"] + (e.cases.case_checks() if s.last else []))
         run = e.stage_checks.stoppable(stage, s.name, acceptance_first=s.acc_first,
                                        conflict_fix=s.state.get("conflict_fix"), round=s.rounds + 1, **s.meta)
-        s.run = s.out.run = run
+        s.run = out.run = run
         e.stores.check_run(e.run_dir.name, None).write(run)
-        _added, removed = s.out.tests = count_tests(e.checkout.task_diff(), e.cfg.test_pattern)
+        _added, removed = out.tests = count_tests(e.checkout.task_diff(), e.cfg.test_pattern)
         if removed:
             e.warn(f"the task's diff removes {removed} tests")
         failed = run.failed
@@ -37,9 +43,9 @@ class CheckRound:
             raise e.blocked_for(check_evidence.timeout_why(slow), "ASK_STUCK", spec=askspecs.check_timeout(slow.id, slow.wall_min))
         wrong = self.flagged(s, failed)
         if wrong:  # a check no code change can satisfy: retrying it is waste, the plan must change
-            return self.impossible(s, wrong)
+            return self.impossible(s, wrong, out)
         if failed:
-            return self.red(s, run, failed, prev_red)
+            return self.red(s, run, failed, prev_red, out)
         s.red = 0
         if run.unverified:  # not green, and not the writer's to fix: review goes on, the land refuses (app/land/verified.py)
             e.steps.move("review", "checks_unverified", check_evidence.round_outcome(run))
@@ -56,9 +62,9 @@ class CheckRound:
                 out.append((c, why))
         return out
 
-    def impossible(self, s: StageState, wrong: list[tuple[Any, str]]) -> str:
+    def impossible(self, s: StageState, wrong: list[tuple[Any, str]], out: RoundResult) -> str:
         e = self.e
-        stuck = s.out.stuck_why = "the writer says these stage checks are wrong: " + "; ".join(
+        stuck = out.stuck_why = "the writer says these stage checks are wrong: " + "; ".join(
             f"`{c.cmd}` (exit {c.exit}): {why}" for c, why in wrong)
         e.warn(f"{s.name}: {stuck[:300]}")
         e.hand.note_round(s.name, s.rounds + 1, "bad_checks", s.w["summary"], [why for _, why in wrong])
@@ -69,7 +75,7 @@ class CheckRound:
                      f"the writer says {n} check{'' if n == 1 else 's'} cannot pass: " + "; ".join(why for _, why in wrong))
         return REPLAN
 
-    def red(self, s: StageState, run: Any, failed: list[Any], prev_red: set[str]) -> str:
+    def red(self, s: StageState, run: Any, failed: list[Any], prev_red: set[str], out: RoundResult) -> str:
         e = self.e
         s.red += 1
         s.failed_cmds = [c.cmd for c in failed]
@@ -85,8 +91,8 @@ class CheckRound:
             e.steps.move("write", "checks_red", red_text)
             return AGAIN
         s.red, s.rounds = 0, s.rounds + 1
-        s.out.rounds += 1
-        stuck = s.out.stuck_why = f"checks still red after {e.cfg.max_check_tries} tries: {check_evidence.compact(failed)}"
+        out.rounds += 1
+        stuck = out.stuck_why = f"checks still red after {e.cfg.max_check_tries} tries: {check_evidence.compact(failed)}"
         if s.rounds >= int(e.cfg.max_rounds):
             brief = check_evidence.failure_brief(failed, e.run_dir)
             (e.run_dir / "replan.md").write_text(stuck + "\n\nTheir output:\n" + brief)
