@@ -24,11 +24,7 @@ from tlkernel.review import Unfiled
 from tlkernel.run import Reexec
 from tlkernel.wire import Open
 from tlpipeline.api import Checkpoints
-from tlwork.look.state import LookState
-from tlwork.plan.amend import AmendState
-from tlwork.plan.state import PlanState
-from tlwork.review.state import ReviewLive
-from tlwork.write.state import WriteState
+from tlwork.api import AmendState, LookState, PlanState, ReviewLive, WriteState
 
 from taskloop.adapters import beadtools, ident
 from taskloop.adapters.check_probe import PathProbe

@@ -4,7 +4,7 @@ from typing import Any
 from tlkernel import wire
 from tlkernel.checkpoint import BriefSnap, Handoff, PlanStep, RunState, WriterSession
 from tlkernel.plancheck import PlanData
-from tlwork.look.state import LOOK_FIELDS
+from tlwork.api import LOOK_FIELDS
 
 STATE_ONLY = ("replans",)
 
