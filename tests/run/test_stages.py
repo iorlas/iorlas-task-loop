@@ -17,11 +17,9 @@ from support import (
 from support.builders import make_engine
 from support.cfgs import plan_of
 from support.checkpoints import put_ck, read_ck
-from support.checks import ck, res, typed
 from support.engine_case import engine, lint
 from support.engine_locks import put_lock
 from support.fakes import must_bead
-from support.narrow import must
 from support.plans import BEAD, CLEAN, FALSE, HAS_F, PLAN, WRITE
 from support.spawn import port_git, real_spawner
 from support.who import who
@@ -40,6 +38,8 @@ from tlkernel.config import EngineConfig
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId, CheckId
 from tlkernel.plancheck import PlanData, adhoc
+from tltestkit.checks import ck, res, typed
+from tltestkit.narrow import must
 
 
 class StagesTest(te.EngineTest):
@@ -270,11 +270,7 @@ class Handoff(StagesTest):
     TWO: ClassVar[Any] = dict(PLAN, stages=[PLAN["stages"][0], dict(PLAN["stages"][0], goal="add g")])
 
     def boundary(self, ctx_k, **cfg):
-        path = Path(self.tmp.name, "session.jsonl")
-        n = int(ctx_k * 1000) - 100
-        path.write_text(json.dumps({"type": "user"}) + "\n" + json.dumps({"type": "assistant", "message": {"usage": {
-            "input_tokens": 3, "cache_read_input_tokens": n, "cache_creation_input_tokens": 97}}}) + "\n")
-        extra = {"family": "claude", "transcript": str(path)}
+        extra = {"family": "claude", "usage": {"context_k": ctx_k}}
         return self.run_engine({"plan": [self.TWO], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]},
                                j_extra={"write": [extra, extra]}, **cfg)
 

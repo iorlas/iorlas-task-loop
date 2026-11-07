@@ -223,3 +223,4 @@ class TraceRecords(te.EngineTest):
             rc = verbs.trace(BeadId("t-1"), 0, False, snapshot())
         assert rc == 0
         assert "landed" in out.getvalue()
+        assert "transcript" not in out.getvalue()

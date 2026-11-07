@@ -11,7 +11,7 @@ from tlkernel.kinds import Kind
 from tlkernel.locator import RunBundle, RunLocator
 from tlkernel.parks import ParkStore
 
-from taskloop.adapters import beadtools
+from taskloop.app.pipeline.adapter_ports import PeekBead
 from taskloop.app.pipeline.blocked import Blocked
 from taskloop.app.pipeline.closing_record import RecordRun
 from taskloop.app.pipeline.crash import parked_crash
@@ -39,9 +39,10 @@ class Standalone[T]:
                  rounds: RoundSteps, once: Callable[[], OnceRun],
                  lease: Callable[[Callable[[], None], Callable[[BaseException], None]], LeaseLike],
                  closing: BeadClosing, has_land: Callable[[], bool], repo_of: Callable[[Git, str], str],
-                 stage_run: StageLifecycle) -> None:
+                 stage_run: StageLifecycle, peek_bead: PeekBead) -> None:
         self.context, self.cursor, self.operations = context, cursor, operations
         self.values, self.journalling = values, journalling
+        self.peek_bead = peek_bead
         self.rounds, self.once, self.lease = rounds, once, lease
         self.closing, self.has_land, self.repo_of, self.stage_run = closing, has_land, repo_of, stage_run
 
@@ -87,7 +88,7 @@ class Standalone[T]:
             locator.advance(self.journalling.run_id, step)  # failures retry the same step
             self.cursor.prev_ck = ck.run if ck else ""
             self.journalling.records.log_run()
-            bead = beadtools.peek(self.context.store, self.journalling.bead)
+            bead = self.peek_bead(self.context.store, self.journalling.bead)
             if bead is None:
                 raise ValueError(f"bead {self.journalling.bead} not found")
             lease.start()

@@ -11,11 +11,11 @@ import support.paths  # noqa: F401  (ROOT/src on sys.path)
 
 # isort: split
 from support.fakes import FakeBeadStore, as_bead
-from support.narrow import must
 
 from taskloop.app.loop import lintrun
 from taskloop.domain.beads import rules
 from tlkernel.ids import BeadId
+from tltestkit.narrow import must
 
 T1 = BeadId("t-1")
 GOOD = {"id": "t-1", "title": "t", "status": "open", "issue_type": "task", "description": "do it", "acceptance_criteria": "- it works"}

@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import support.paths  # noqa: E402, F401
 
 # isort: split
-from support.narrow import must  # noqa: E402
 from support.spawn import real_spawner  # noqa: E402
 
 from taskloop.adapters import procs  # noqa: E402
@@ -25,6 +24,7 @@ from tlkernel.dash import READ_PROTOCOL  # noqa: E402
 from tlkernel.env import Env as ProcessEnv  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlkernel.factoryparts import PIPELINE  # noqa: E402
+from tltestkit.narrow import must  # noqa: E402
 
 INSTALLED = {p.name: p.version for p in STAGE_PARTS}
 
