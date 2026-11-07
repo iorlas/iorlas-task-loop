@@ -35,7 +35,7 @@ from taskloop.app.plan.amend import AmendState
 from taskloop.app.plan.state import PlanState
 from taskloop.app.review.state import ReviewLive
 from taskloop.app.run.context import RunContext
-from taskloop.app.run.state import Checkpoints, StateAttrs
+from taskloop.app.run.state import Checkpoints, StateAttrs, checkpoint_hooks, restarted
 from taskloop.app.workers.calls import Calls
 from taskloop.app.write.state import WriteState
 from taskloop.domain import outcome as oc
@@ -116,8 +116,13 @@ class RunFields(StateAttrs):
         self.plan_state = PlanState()  # the plan stage's flags: the send-backs used, the cap raised
         self.land_fields()
 
+    def restarted(self) -> RunState:
+        """Combine the stage sections for a task started again on the base."""
+        return restarted(self.state)
+
     def land_fields(self) -> None:
-        self.state, self.checkpoints = RunState(), Checkpoints(self)  # what survives a park (contracts/checkpoint.py), and its one writer
+        self.state = RunState()  # what survives a park, and its one writer
+        self.checkpoints = Checkpoints(self, checkpoint_hooks(lambda: self.state))
         self.look = LookState(lambda: self.state)  # the look stage's state (its checkpointed part views `self.state`)
         self.write = WriteState()  # the write stage's own state (write_rounds, last_summary, lane_notes, strays): not checkpointed
         self.plan_summary, self.bead_title = "", ""

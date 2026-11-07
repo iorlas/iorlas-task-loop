@@ -52,7 +52,7 @@ class LandState:
     def __init__(self) -> None:
         self.gate_log: Path | None = None  # the log of the first red step, for the fix round
         self.salvage_tail = ""  # the conflict's words for the fix round
-        self.rebase_orig = ""  # the branch's head before the rebase, for start_again
+        self.rebase_orig = ""  # the branch's head before the rebase, for a fresh attempt
         self.rebase_pre: list[str] = []  # the heads the checkpoint may name before the rebase
         self.salvaged = False  # a resume conflict was fixed in place, not by starting again (tl-7y6.2.19)
         self.remote_oid = ""  # the task ref checked before the push; cleanup retains this lease
