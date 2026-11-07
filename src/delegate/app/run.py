@@ -47,10 +47,11 @@ class Run:
         log: Callable[[str], None] | None = None,
         now: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], object] = time.sleep,
+        wall: Callable[[], float] = time.time,
     ):
         """`brief` given: the call reads no file and no stdin. `log` receives the lines the CLI prints on stderr (default: stderr)."""
         self.a, self.cfg, self.unattended, self.idle_s, self.given_brief = a, cfg, unattended, idle_s, brief
-        self.now, self.sleep = now, sleep
+        self.now, self.sleep, self.wall = now, sleep, wall
         self.log = log or (lambda line: print(line, file=sys.stderr, flush=True))
         self.out: dict[str, Json] = {}  # the answer, set by emit
         self.on_started: Callable[[str, procs.Worker], None] | None = None  # (run_id, worker): the worker exists
@@ -324,9 +325,10 @@ class Run:
             return leg
 
         res = self._canary(launch_one, d, a) if canary_due else None  # the one probe before full traffic; None = it passed
-        if res is None:  # a failed canary is the answer (the next rung starts from it): the wait is for the real leg only
+        if res is None:  # a failed canary is the answer (the next rung starts from it): the waits are for the real leg only
             res = launch_one(brief, a, "reroute" if self.rerouted else "first")
             res = run_legs.network(res, launch_one, brief, a, as_str(d["lane"]), self.now, self.sleep)
+            res = run_legs.lane_wait(res, launch_one, brief, a, self.now, self.sleep, self.wall)
         if res.get("outcome") is None and a.schema:
             res = self._schema(res, launch_one)
         res.pop("started", None)  # the launcher's own bookkeeping, whichever launch (first, re-ask) produced `res`

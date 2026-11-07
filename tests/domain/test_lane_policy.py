@@ -38,9 +38,9 @@ class Exhaustive(Case):
         assert len(lp.LEGAL) == 20
         assert len(set(lp.LEGAL)) == 20
         assert set(lp.TABLE) == set(lp.LEGAL)
-        actions = (lp.Retry, lp.Wait, lp.NewThread, lp.Reroute, lp.Yield, lp.Fail)
+        actions = (lp.Retry, lp.NewThread, lp.Reroute, lp.Yield, lp.Fail)
         for scope, perm, retry in lp.LEGAL:
-            for c in (ctx(), ctx(resumed=True, attempt=2, polls=9, crashes=9, denied_retried=True)):
+            for c in (ctx(), ctx(resumed=True, attempt=2, crashes=9, denied_retried=True)):
                 a = lp.decide(stop(scope, perm, retry, ref="r1", resumable=True, retry_at=NOW + 60), c)
                 assert isinstance(a, actions), (scope, perm, retry)
 
@@ -54,7 +54,7 @@ class Exhaustive(Case):
     def test_no_action_asks_the_owner_and_no_yield_is_a_fault(self):
         for scope, perm, retry in lp.LEGAL:
             a = lp.decide(
-                stop(scope, perm, retry, retry_at=NOW + 9999), ctx(attempt=5, polls=5, crashes=5, denied_retried=True)
+                stop(scope, perm, retry, retry_at=NOW + 9999), ctx(attempt=5, crashes=5, denied_retried=True)
             )
             if isinstance(a, lp.Yield):
                 assert kind_of(a) in PAUSES
@@ -98,28 +98,6 @@ class Incidents(Case):
             a = lp.decide(stop(*facts, signal=15, reason="killed"), ctx(crashes=9))
             assert kind_of(a) == Kind.PAUSE_KILLED, facts
 
-    def test_busy_polls_three_times_then_moves_on(self):
-        s = stop("lane", "transient", "poll", lane="OPENAI", retry_at=NOW + 20)
-        a = lp.decide(s, ctx(polls=2))
-        w = only(lp.Wait, a)
-        assert (type(a), w.until, w.charges) == (lp.Wait, NOW + 20, "polls")
-        assert lp.decide(s, ctx(polls=3)) == lp.Reroute("OPENAI")
-        assert lp.decide(s, ctx(polls=3, resumed=True)) == lp.NewThread("lane_out")
-
-    def test_busy_with_resume_keeps_the_thread_while_polling(self):
-        a = lp.decide(stop("lane", "transient", "poll", ref="r9", resumable=True), ctx(polls=0, resumed=True))
-        assert (type(a), only(lp.Wait, a).resume) == (lp.Wait, "r9")
-
-    def test_a_rate_limit_inside_the_cap_waits_and_beyond_it_pauses_with_the_time(self):
-        s = stop("lane", "transient", "predicted", retry_at=NOW + 120)
-        assert lp.decide(s, ctx()) == lp.Wait(NOW + 120)
-        far = lp.decide(stop("lane", "transient", "predicted", retry_at=NOW + 5000), ctx())
-        assert (kind_of(far), only(lp.Yield, far).retry_after) == (Kind.PAUSE_LANE, NOW + 5000)
-        assert lp.decide(s, ctx(resumed=True)) == lp.NewThread("lane_out")
-
-    def test_the_wait_cap_is_shared_across_a_steps_waits(self):
-        s = stop("lane", "transient", "predicted", retry_at=NOW + 100)
-        assert kind_of(lp.decide(s, ctx(waited_lane_s=100))) == Kind.PAUSE_LANE
 
     def test_spending_limit_pauses_the_lane_and_does_not_ask(self):
         a = lp.decide(stop("lane", "needs_owner", "none", reason="credit_exhausted"), ctx())
@@ -165,7 +143,17 @@ class Incidents(Case):
         assert kind_of(lp.decide(stop("machine", "transient", "predicted", retry_at=NOW + 900), ctx())) == Kind.PAUSE_LANE
         assert kind_of(lp.decide(stop("machine", "needs_owner", "none", fix="tl doctor"), ctx())) == Kind.PAUSE_LANE
 
-    def test_duplicate_task_polls_then_pauses(self):
-        s = stop("bead", "transient", "poll")
-        assert type(lp.decide(s, ctx(polls=2))) is lp.Wait
-        assert kind_of(lp.decide(s, ctx(polls=3))) == Kind.PAUSE_LANE
+
+def test_lane_poll_moves_on_and_bead_poll_pauses():
+    s = stop("lane", "transient", "poll", lane="OPENAI")
+    assert lp.decide(s, ctx()) == lp.Reroute("OPENAI")
+    assert lp.decide(s, ctx(resumed=True)) == lp.NewThread("lane_out")
+    assert kind_of(lp.decide(stop("bead", "transient", "poll"), ctx())) == Kind.PAUSE_LANE
+
+
+def test_predicted_lane_always_parks_or_starts_fresh():
+    for gap in (120, 5000):
+        s = stop("lane", "transient", "predicted", retry_at=NOW + gap)
+        a = only(lp.Yield, lp.decide(s, ctx()))
+        assert (a.kind, a.retry_after) == ("PAUSE_LANE", NOW + gap)
+        assert lp.decide(s, ctx(resumed=True)) == lp.NewThread("lane_out")
