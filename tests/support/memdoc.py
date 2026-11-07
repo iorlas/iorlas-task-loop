@@ -52,4 +52,3 @@ class MemDoc[T](AmendDoc[T]):
 
     def delete(self) -> None:
         self.data = None
-
