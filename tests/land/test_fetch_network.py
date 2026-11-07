@@ -65,14 +65,14 @@ class Connectivity(Case):
                 blocked = RuntimeError("blocked")
                 host.blocked_for.return_value = blocked
                 with pytest.raises(RuntimeError) as caught:
-                    Checkout(host).fetch(check=True)
+                    Checkout(host, ignore_rules=lambda rules, paths: set()).fetch(check=True)
                 assert caught.value is blocked
                 host.blocked_for.assert_called_once_with(f"{prefix}: `git fetch -q origin`: {text}", kind)
 
     def test_unchecked_fetch_keeps_its_return_contract(self):
         host = mock.Mock(wt="/slot")
         host.git.fetch.side_effect = SlotGitError(DNS)
-        assert Checkout(host).fetch() == (1, DNS)
+        assert Checkout(host, ignore_rules=lambda rules, paths: set()).fetch() == (1, DNS)
         host.blocked_for.assert_not_called()
 
     def test_required_git_calls_classify_network_failures_before_work(self):

@@ -5,8 +5,7 @@ import os
 from collections.abc import Sequence
 from pathlib import Path
 
-from tlartifacts import store
-from tlartifacts.keep import Keeper
+from tlartifacts.api import Keeper, add, run_listing
 from tlkernel.artifact import ArtifactMeta, ArtifactSlot
 from tlkernel.checkmatchers import glob_re
 from tlkernel.config import VisualConfig
@@ -126,7 +125,7 @@ class Pictures:
         repo = ports.ports.repo.key()
         slot = ArtifactSlot(repo=repo, bead=facts.bead, run=facts.run_id, stage="", attempt=0)
         return [(f"artifact:{repo}/{facts.bead}/{facts.run_id}/{f.parent.name}/{m.name}", m)
-                for f, m in store.run_listing(facts.home.artifact_store(), slot) if m.kind in IMAGE_KINDS and m.role != "progress"]
+                for f, m in run_listing(facts.home.artifact_store(), slot) if m.kind in IMAGE_KINDS and m.role != "progress"]
 
     def before_pictures(self) -> list[tuple[Path, ArtifactMeta]]:
         """The pictures the worker registered with role `before` in this run: the worker says what is a before, nothing is matched."""
@@ -134,7 +133,7 @@ class Pictures:
         if not hand.artifact_repo:
             return []
         slot = ArtifactSlot(repo=hand.artifact_repo, bead=facts.bead, run=facts.run_id, stage="", attempt=0)
-        return [(f, m) for f, m in store.run_listing(facts.home.artifact_store(), slot) if m.role == "before" and m.kind in IMAGE_KINDS]
+        return [(f, m) for f, m in run_listing(facts.home.artifact_store(), slot) if m.role == "before" and m.kind in IMAGE_KINDS]
 
     def render_shots(self, reqs: Sequence[Open], rnd: int) -> tuple[list[str], list[str]]:
         """([picture names under the evidence dir], [errors]): the requested shot methods run by the engine, outside any lane's
@@ -205,7 +204,7 @@ class Pictures:
         facts, ports = self.facts, self.ports
         try:
             slot = ArtifactSlot(repo=ports.ports.repo.key(), bead=facts.bead, run=facts.run_id, stage="look", attempt=rnd)
-            store.add(facts.home.artifact_store(), slot, f, name=name, caption=f"engine render, round {rnd}",
+            add(facts.home.artifact_store(), slot, f, name=name, caption=f"engine render, round {rnd}",
                       role="result", now=ports.now(), cap=int(facts.cfg.evidence_cap_mb) << 20)
         except (Refused, OSError) as err:
             ports.warn(f"render {name} not registered as an artifact: {err}")
