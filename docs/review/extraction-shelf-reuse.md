@@ -289,7 +289,7 @@ queue.live() -> list[Ticket]; queue.drop(sequence)
 
 **Job:** parse compiler/linter findings, summarize failing test output and render a byte-budgeted diagnostic excerpt.
 
-**Donors:** src/taskloop/domain/checks/diagnostics.py:1-119; diag/matchers.py:1-81; trim.py:1-135; matchers.py:131-168 (38); src/taskloop/adapters/suiteout.py:1-43: **416 runtime**. Tests/domain/test_diagnostics.py:1-65 and tests/checks/test_check_trim.py:1-147: **212 tests**, **628 total**.
+**Donors:** src/taskloop/domain/checks/diagnostics.py:1-119; diag/matchers.py:1-81; trim.py:1-135; matchers.py:131-168 (38); src/taskloop/adapters/suiteout.py:1-43: **416 runtime**. Tests/domain/test_diagnostics.py:1-65 and packages/gate/tests/test_check_trim.py:1-147: **212 tests**, **628 total**.
 
 **Public interface:**
 
