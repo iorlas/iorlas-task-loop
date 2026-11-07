@@ -11,14 +11,15 @@ class ArchitectureInvariants(Case):
         assert slice_problems(graph_of(production_trees())) == []
 
     def test_sideways_imports_and_new_slices_cannot_evade_the_allow_table(self):
-        for source, target in (("taskloop.app.asks.x", "tlgate.x"),
-                               ("taskloop.app.new.x", "taskloop.app.asks.x")):
+        for source, target in (("taskloop.app.track.x", "tlgate.x"),
+                               ("taskloop.app.new.x", "tlasks.x")):
             assert slice_problems({source: {target}})
         assert slice_problems({"taskloop.app.land.x": {"tlgate.x"}}) == []
 
     def test_domain_touches_no_world(self):
         bad = [problem for module, tree in production_trees().items() if module.startswith(
             ('taskloop.domain.', 'tlgate.domain.', 'tlslots.liveness', 'tlslots.slot_env',
+             'tlasks.hold', 'tlasks.similar', 'tlasks.matchers', 'tlasks.timespec',
              'tlwork.write.matchers', 'tlwork.look.matchers', 'tlwork.plan.matchers', 'tlwork.plan.stored',
              'tlwork.work.', 'tlwork.prompts.', 'tlwork.review.availability', 'tlwork.review.findings'))
                for problem in domain_world_problems(module, tree)]

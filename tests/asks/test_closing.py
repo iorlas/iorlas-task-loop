@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from taskloop.app.asks import raiser
-from taskloop.app.asks.closing import ClosingAsks
+from tlasks import raiser
+from tlasks.closing import ClosingAsks
 from tlkernel.ask import AskOption
 from tlkernel.askenums import AskClass
 from tlkernel.askspec import AskSpec

@@ -9,7 +9,7 @@ MOVES = (
     ('taskloop.domain.beads.matchers', 'tlkernel.beadmatchers'),
 )
 KEYS = {'HINT', 'OVERRIDE', 'OVERRIDES'}
-INTAKE = 'taskloop.app.asks.intake'
+INTAKE = 'tlasks.intake'
 
 
 def import_groups(node):

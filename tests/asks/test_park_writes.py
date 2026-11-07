@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from taskloop.app.asks import parks
+from tlasks import parks
 from tlkernel.bead import Bead
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind

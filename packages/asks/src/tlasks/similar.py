@@ -3,10 +3,11 @@ they have the same class and the same set of significant words, so a hit is expl
 from collections.abc import Iterable
 from typing import Final
 
-from taskloop.domain.asks.matchers import words
 from tlkernel.ask import SimilarRef
 from tlkernel.askenums import AskClass
 from tlkernel.ledger import Adr, LedgerEntry
+
+from tlasks.matchers import words
 
 STOP: Final = frozenset({
     "the", "and", "for", "how", "can", "this", "that", "with", "are", "was", "were", "what", "which", "should", "would", "could", "does",

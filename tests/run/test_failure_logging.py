@@ -2,7 +2,7 @@
 from unittest import mock
 
 from taskloop.adapters import closes, ident
-from taskloop.app.asks.closing import ClosingTrust
+from tlasks.closing import ClosingTrust
 from tlkernel import childenv
 from tlkernel import runoutcome as oc
 from tlkernel.enums import Outcome

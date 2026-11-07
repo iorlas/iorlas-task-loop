@@ -10,7 +10,7 @@ from tlkernel.config import EngineConfig
 from tlkernel.forge import OPEN, Pr, pr_waited_on
 from tlkernel.ids import BeadId
 
-from taskloop.app.asks import release
+from tlasks import release
 
 
 def wake_decided(asks: AskStore, store: Beads, view: Callable[[int], Pr | None], repo: str, now: float, cfg: EngineConfig) -> list[BeadId]:

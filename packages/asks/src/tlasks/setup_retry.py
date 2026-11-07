@@ -8,7 +8,7 @@ from tlkernel.beadsport import BeadPatch, Beads
 from tlkernel.config import EngineConfig
 from tlkernel.ids import BeadId
 
-from taskloop.app.asks import release
+from tlasks import release
 
 RETRIED = "setup_retry_versions"
 
