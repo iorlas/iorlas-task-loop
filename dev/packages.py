@@ -2,7 +2,8 @@
 
     python3 dev/packages.py [--base REV] [--changed PATH ...]    prints the package directory names to test, one per line
 
-A package is reached when a changed file is under it, or when a package it declares as a dependency is reached. A changed file outside every
+A changed file always reaches its own package; only public changes reach dependents transitively. With src/*/api.py, public surface is that
+api.py, contracts/ contents and top-level src package testing.py; without api.py every file is public. A changed file outside every
 package (the root pyproject, uv.lock, the justfile, dev/) reaches all of them. The graph is the manifests' (what a package declares is what
 its isolated environment contains), never an import scan. Standard library only (docs/design/stage-packages.md section 5)."""
 import argparse
@@ -26,6 +27,17 @@ def members(root: Path) -> dict[str, tuple[str, set[str]]]:
     return {name: (folder, deps & found.keys()) for name, (folder, deps) in found.items()}
 
 
+def public(root: Path, folder: str, path: str) -> bool:
+    """Whether a changed path is public surface for its workspace package."""
+    package = root / "packages" / folder
+    apis = list(package.glob("src/*/api.py"))
+    if not apis:
+        return True
+    relative = Path(path).relative_to(Path("packages") / folder)
+    return ("contracts" in relative.parts[:-1]
+            or any(root / path in (api, api.parent / "testing.py") for api in apis))
+
+
 def reached(root: Path, changed: set[str]) -> list[str]:
     """The directory names of the packages the changed paths reach."""
     graph = members(root)
@@ -33,14 +45,15 @@ def reached(root: Path, changed: set[str]) -> list[str]:
     if any(not path.startswith("packages/") or path.split("/")[1] not in folders for path in changed):
         return sorted(folders)  # a file outside every package: the root config, the lock, the tooling
     out = {path.split("/")[1] for path in changed}
+    propagated = {path.split("/")[1] for path in changed if public(root, path.split("/")[1], path)}
     grew = True
     while grew:
         grew = False
         for folder, deps in graph.values():
-            if folder not in out and any(graph[d][0] in out for d in deps):
-                out.add(folder)
+            if folder not in propagated and any(graph[d][0] in propagated for d in deps):
+                propagated.add(folder)
                 grew = True
-    return sorted(out)
+    return sorted(out | propagated)
 
 
 def changed_since(root: Path, base: str) -> set[str]:

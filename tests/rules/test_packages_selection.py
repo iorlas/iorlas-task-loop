@@ -18,6 +18,30 @@ def test_a_kernel_change_reaches_every_package(tmp_path):
     assert reached(workspace(tmp_path), {"packages/kernel/src/kernel/ids.py"}) == ["compose", "kernel", "plan", "review"]
 
 
+def test_an_internal_change_reaches_only_its_package(tmp_path):
+    root = workspace(tmp_path)
+    api = root / "packages/kernel/src/kernel/api.py"
+    api.parent.mkdir(parents=True)
+    api.touch()
+    for path in ("ids.py", "nested/testing.py", "nested/api.py"):
+        assert reached(root, {f"packages/kernel/src/kernel/{path}"}) == ["kernel"]
+
+
+def test_public_surface_changes_reach_dependents(tmp_path):
+    root = workspace(tmp_path)
+    api = root / "packages/kernel/src/kernel/api.py"
+    api.parent.mkdir(parents=True)
+    api.touch()
+    for path in ("api.py", "contracts/x.py", "testing.py"):
+        assert reached(root, {f"packages/kernel/src/kernel/{path}"}) == ["compose", "kernel", "plan", "review"]
+
+
+def test_without_an_api_every_file_is_public(tmp_path):
+    root = workspace(tmp_path)
+    for path in ("src/kernel/ids.py", "pyproject.toml", "tests/test_ids.py"):
+        assert reached(root, {f"packages/kernel/{path}"}) == ["compose", "kernel", "plan", "review"]
+
+
 def test_a_file_outside_every_package_reaches_all(tmp_path):
     root = workspace(tmp_path)
     assert reached(root, {"pyproject.toml"}) == ["compose", "kernel", "plan", "review"]
