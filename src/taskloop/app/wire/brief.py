@@ -86,7 +86,7 @@ def build(repo: str, plugin_root: Path, now: float, env: Env, who: Identity | No
         loops=tuple(LoopLine(st.pid, st.started, st.bead or "", st.slot or "", st.version) for st in loops),
         last_beat=last_beat, last_exit=str(last.get("reason") or ""), asks=asks,
         slots=slot_lines(repo, who, now, git) if who and git else (), resources=held_resources(cfg), recent=recent,
-        version=running_version(plugin_root), installed=catalog.installed_version("task-loop", claude_dir(env)), pinned=(pin or ""),
+        version=running_version(plugin_root), installed=catalog.installed_version(claude_dir(env)), pinned=(pin or ""),
         shim_sha256=shim_sha256(cfg.root))
 
 

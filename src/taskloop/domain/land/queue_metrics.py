@@ -4,7 +4,8 @@ from collections.abc import Sequence
 from math import ceil
 from typing import Final, final
 
-from taskloop.domain.land.queue_flake import FlakeRow, score
+from taskloop.domain.land.queue_flake import score
+from tlkernel.flakes import FlakeRow
 from tlkernel.wire import Rec
 
 P50: Final = 0.5

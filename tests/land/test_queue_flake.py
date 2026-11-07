@@ -3,7 +3,8 @@ import random
 
 import pytest
 
-from taskloop.domain.land.queue_flake import Attempt, FlakeRow, Verdict, decide, row, score
+from taskloop.domain.land.queue_flake import Attempt, Verdict, decide, row, score
+from tlkernel.flakes import FlakeRow
 
 RED = Attempt(rc=1, out="assertion failed")
 GREEN = Attempt(rc=0, out="passed")

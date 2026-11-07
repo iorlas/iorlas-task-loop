@@ -384,6 +384,18 @@
   "expected_tree": "t1",
   "landed_tree": "t2"
  },
+ "FlakeLog": {
+  "v": 1,
+  "rows": [
+   {
+    "test": "test_a",
+    "t": 1793050200.5,
+    "how": "retry",
+    "run": "run-1",
+    "bead": "tl-1"
+   }
+  ]
+ },
  "QueueDoc": {
   "v": 1,
   "entries": [
@@ -1341,9 +1353,8 @@
   ]
  },
  "Pin": {
-  "v": 1,
+  "v": 2,
   "task-loop": "0.23.38",
-  "delegate": null,
   "pinned_at": 1793050200.5
  },
  "ReleaseResult": {
