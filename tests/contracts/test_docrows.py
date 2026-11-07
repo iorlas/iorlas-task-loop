@@ -1,5 +1,5 @@
-"""Checkpoints and follow-up outboxes as database rows (tl-sqd3.26.3, read path): the Doc face of the file store, an older loop's file
-adopted once, forward- and backward-readable bodies, a torn or foreign body named as such, and a revision that refuses a stale write."""
+"""Checkpoints and follow-up outboxes as database rows (tl-sqd3.26.3, read path): the Doc face of the file store, a torn
+or foreign body named as such, and a revision that refuses a stale write."""
 import json
 import os
 import shutil
@@ -80,13 +80,13 @@ class CheckpointRows(Case):
         self.stores.checkpoints.of("t-2").write(ck(bead="t-2", closed=True))
         assert self.stores.checkpoints.open_beads() == ["t-1"]
 
-    def test_a_newer_writers_extra_key_is_read_past_and_an_older_writers_missing_field_takes_its_default(self):
+    def test_an_unknown_key_is_refused_not_read_past(self):
         self.doc.write(ck())
         body = json.loads(self.doc.raw() or "{}")
         self.set_body(json.dumps({**body, "from_the_future": 1}))
-        assert self.doc.get() == ck()
-        self.set_body(json.dumps({k: v for k, v in body.items() if k not in ("step", "stage", "rounds", "feedback")}))
-        assert self.doc.get() == ck()
+        assert isinstance(self.doc.read(), Torn)
+        with pytest.raises(Refused):
+            self.doc.need()
 
     def test_a_torn_body_and_another_version_are_named_not_read_as_absent(self):
         self.doc.write(ck())
