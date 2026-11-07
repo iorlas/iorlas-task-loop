@@ -21,8 +21,8 @@ from taskloop.contracts.config import EngineConfig
 from taskloop.contracts.gitport import Git
 from taskloop.contracts.ids import TreeSha
 from taskloop.contracts.runkey import BaseSha, Digest
+from taskloop.contracts.stagefacts import RunLogPort
 from taskloop.domain.checks.specs import engine_digest, gate_items
-from taskloop.stores.runlog import RunLog
 
 FAULTS = MappingProxyType({CheckFaultKind.STALE_BASE: "FAULT_STALE_BASE", CheckFaultKind.KILLED: "PAUSE_KILLED",
                          CheckFaultKind.DIRTY_SLOT: "FAULT_SLOT",})
@@ -94,7 +94,7 @@ class GateHost(Protocol):
     @property
     def run_dir(self) -> Path: ...
     @property
-    def log(self) -> RunLog: ...
+    def log(self) -> RunLogPort: ...
     @property
     def steps(self) -> GateSteps: ...
     @property

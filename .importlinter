@@ -199,6 +199,7 @@ source_modules =
     taskloop.app.prune
     taskloop.app.reconcile
     taskloop.app.release
+    taskloop.app.review
     taskloop.app.report
     taskloop.app.review
     taskloop.app.slots
@@ -302,6 +303,7 @@ source_modules =
     taskloop.app.loop
     taskloop.app.reconcile
     taskloop.app.release
+    taskloop.app.review
 forbidden_modules =
     taskloop.app.run
     taskloop.app.wire

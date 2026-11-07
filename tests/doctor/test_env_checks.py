@@ -83,7 +83,15 @@ def test_a_database_bd_cannot_open_is_red_and_says_the_build(workdir):
 def test_a_bd_that_does_not_run_is_red(workdir):
     bd = tool(workdir / "a")
     got = ec.bd_findings(str(workdir / "a"), Runs({str(bd): Ran(exit=2, err="boom")}), opens, "/repo")
-    assert "does not run (exit 2)" in got[0].text
+    assert "does not run (exit 2): boom" in got[0].text
+
+
+def test_a_mise_shim_under_an_untrusted_config_says_to_trust_it(workdir):
+    bd = tool(workdir / "a")
+    said = "mise ERROR Config files in /repo/mise.toml are not trusted.\nTrust them with `mise trust`."
+    got = ec.bd_findings(str(workdir / "a"), Runs({str(bd): Ran(exit=1, err=said)}), opens, "/repo")
+    assert "mise ERROR Config files in /repo/mise.toml are not trusted." in got[0].text
+    assert "mise trust" in got[0].fix
 
 
 @pytest.mark.parametrize(("text", "want"), [("bd version 1.3.1 (abc)", "1.3.1"), ("v2.0", "2.0"), ("no number", "")])

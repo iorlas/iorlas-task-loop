@@ -1,0 +1,73 @@
+{
+ "asks": {
+  "ddl": "88dbb93d6271ff65f985b226790e4d8e49bf8228f3f73471f7ffaa206dffb62e",
+  "records": {
+   "Ask": {
+    "schema": "05a01449061d31c9449135bdbeb373517578c7fcba58252110943b504449fd72",
+    "v": 3
+   },
+   "LedgerEntry": {
+    "schema": "c81fa7b9354ff43adbbf498322e8ac9effd97c30301d5c5a17afcb3f93ef13e9",
+    "v": 1
+   }
+  },
+  "version": 1
+ },
+ "dash": {
+  "ddl": "bbe9b90d2ab1092cc3ad3229571a4effa2605bcf0cd67ee9497e804c44ec4263",
+  "records": {
+   "Bead": {
+    "schema": "639538e3e7c6a0b9a5435509d91763cbb5362084050882c98df9cc27b810954e",
+    "v": null
+   }
+  },
+  "version": 1
+ },
+ "gate": {
+  "ddl": "58123ec3b52045d7fd0b1b9d88e43ee98422c4a75ce51537ffa9314b640c2110",
+  "records": {
+   "BaseRedRecord": {
+    "schema": "96f3dca8875924ae7788c84aad8a52e2c64f6a164c1eb70627708764cfb52683",
+    "v": 1
+   },
+   "PassRecord": {
+    "schema": "c3801950c3bbfe22959a110e641b4b3199e42ef4764329757f72c1cbc2d149f2",
+    "v": 1
+   }
+  },
+  "version": 1
+ },
+ "kv": {
+  "ddl": "0489a9a3ad9f67969d2033bf939459934fd473fea461e52da858833dd0a4cdd1",
+  "records": {},
+  "version": 1
+ },
+ "pipeline": {
+  "ddl": "1d77451b0e5719cc5b77970482b15ee6770f5f4007f482f4789911fe17a5cb08",
+  "records": {
+   "Checkpoint": {
+    "schema": "7da27de5e525b460a84e297d6f37d613f308bb2423bc91975aca119c5bfc7b64",
+    "v": 3
+   },
+   "OwnerRequest": {
+    "schema": "5368cdd38d8eb9858487c9816b751604f592b05f5e336e050a636ac42d60b420",
+    "v": 1
+   },
+   "RunManifest": {
+    "schema": "d2a529b8b3e21afce4fec6c75ff28874979d2cb64edfea685cd5eba0f382895a",
+    "v": 2
+   }
+  },
+  "version": 1
+ },
+ "slots": {
+  "ddl": "1b8c6bdb1ac8d6d0ffa3e96f93ce71dc020a159d02051aa30fc4b8e3b661be89",
+  "records": {
+   "EngineLock": {
+    "schema": "eadf0da55caf4ba05e720ee1b24397e27ad1d181f1c15e065e131556bcb39fb6",
+    "v": 4
+   }
+  },
+  "version": 1
+ }
+}

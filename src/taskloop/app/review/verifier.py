@@ -22,11 +22,11 @@ def plural(n: int) -> str:
 
 class Verifier:
     def __init__(self, host: ReviewHost) -> None:
-        self.e = host
+        self.host = host
 
     def run(self, gaps: list[Item]) -> list[Item]:
         """The items that still go to the owner."""
-        e = self.e
+        e = self.host
         if not gaps:
             return gaps
         gaps = self.drop_unused(gaps)
@@ -48,14 +48,14 @@ class Verifier:
 
     def visual(self) -> bool:
         """Verify runs only on a visual bead: some plan case is look-objective, taste or show (domain/review/visual.py)."""
-        return visual.is_visual((self.e.plan_data or {}).get("cases") or [])
+        return visual.is_visual((self.host.plan_data or {}).get("cases") or [])
 
     def defer(self, gaps: list[Item], review_off: bool = False) -> list[Item]:
         """The items to ask. A bead that is not visual does not run verify: an item about one of its acceptance lines
         is asked, the others land with the bead and go in one follow-up bead tagged `follow-up` (filed at the close). A visual bead with
         engine.review off is deferred the same way (`review_off`): no verifier call, the skip is the step's typed reason and the
         bead's comment names the skipped check."""
-        e = self.e
+        e = self.host
         asked = [dict(u, why=u.get("why") or "it names an acceptance criterion")
                  for u in gaps if visual.names_criterion(u["what"], e.scope or "")]
         rest = [u for u in gaps if u not in asked]
@@ -74,11 +74,11 @@ class Verifier:
         return asked
 
     def counts(self) -> str:
-        return ", ".join(f"{sum(x['verdict'] == k for x in self.e.review.verified)} {k}" for k in VERDICTS)
+        return ", ".join(f"{sum(x['verdict'] == k for x in self.host.review.verified)} {k}" for k in VERDICTS)
 
     def drop_unused(self, gaps: list[Item]) -> list[Item]:
         """Items that name a tool the repo does not use are settled as 'not a check here'."""
-        e = self.e
+        e = self.host
         unused = [(u, e.settles.unused_tool(u["what"])) for u in gaps]
         for u, ev in unused:
             if ev:
@@ -93,7 +93,7 @@ class Verifier:
         return left
 
     def note(self, counts: str, before: bool = False) -> None:
-        e = self.e
+        e = self.host
         e.log.note(f"verify: before land: {counts}")
         if before:
             e.comment("Verify (engine): what the workers could not check, before land: " + "; ".join(
@@ -101,7 +101,7 @@ class Verifier:
 
     def ask(self, gaps: list[Item]) -> dict[str, Any] | None:
         """The verifier's answer ({"items": []} when there is nothing to ask); None when no verifier could be had."""
-        e = self.e
+        e = self.host
         if not gaps:
             return {"items": []}
         items = "".join(f"{n}. {u['what']} ({u['kind']})\n" for n, u in enumerate(gaps, 1)) + e.judge.look_verify(gaps)
@@ -122,7 +122,7 @@ class Verifier:
 
     def judge(self, gaps: list[Item], d: dict[str, Any], failed: list[Item]) -> tuple[list[Item], list[Item]]:
         """(items still open for the owner, items found wrong), the verifier's verdict applied to each gap."""
-        e = self.e
+        e = self.host
         said: dict[int, Item] = {}
         for a in d["items"]:
             said.setdefault(a["n"], a)
@@ -154,7 +154,7 @@ class Verifier:
         return still, wrong
 
     def after_clean(self, still: list[Item], counts: str) -> list[Item]:
-        e = self.e
+        e = self.host
         if still:
             e.steps.move("ask", "verify_open", f"{len(still)} item{plural(len(still))} only the owner can decide")
         elif e.review.unverified:
@@ -166,7 +166,7 @@ class Verifier:
 
     def settle_wrong(self, still: list[Item], wrong: list[Item]) -> list[Item]:
         """Items found wrong go to a fix round; what the fix leaves unproven is routed again, until no fix round is left."""
-        e = self.e
+        e = self.host
         if e.fixes >= e.cfg.max_fix_rounds:
             e.steps.move("ask", "verify_wrong", f"{len(wrong)} found wrong, no fix round left")
             return still + [dict(u, why="found wrong: {}; no fix round left".format(u["why"])) for u in wrong]
@@ -186,7 +186,7 @@ class Verifier:
         """One fix round for the pending items; -> the items still unchecked after it, routed. The pending items stay unchecked in the
         fix's checkpoint: a fix round that pauses resumes at land and verifies them again, never lands them; the fix's review adds
         what it leaves unproven."""
-        e = self.e
+        e = self.host
         e.review.unchecked = [u for u in e.review.unchecked if u["kind"] not in UNCHECKED_KINDS] + still + pending
         before = len(e.review.unchecked)
         pending = [dict(u, why=u.get("why") or "add a test or check that proves: {}".format(u["what"])) for u in pending]

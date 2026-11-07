@@ -62,7 +62,7 @@ class NewFiles:
             shutil.move(str(Path(e.wt) / p), str(dst))
             moved.append(p)
         if moved:
-            e.strays += [p for p in moved if p not in e.strays]
+            e.write.strays += [p for p in moved if p not in e.write.strays]
             kept = e.evidence_dir / "strays"
             e.log.note(f"stray untracked files moved out of the tree to {kept}: {', '.join(moved)}")
             e.comment("Land (engine): untracked files no stage or review accepted were left out of the commit and the gate, "
