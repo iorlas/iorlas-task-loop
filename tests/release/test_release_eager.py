@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from taskloop.app.launch.release_host import release_host
 from tltestkit.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,5 +20,7 @@ class Eager(Case):
             self.addCleanup(sys.modules.__setitem__, name, sys.modules.pop(name))
         spec = importlib.util.spec_from_file_location("release_script", ROOT / "dev" / "release.py")
         assert spec and spec.loader
-        spec.loader.exec_module(importlib.util.module_from_spec(spec))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        assert module.release_host is release_host
         assert "tlrelease.tidy" in sys.modules  # loaded at start: a lazy import is not in sys.modules until first use

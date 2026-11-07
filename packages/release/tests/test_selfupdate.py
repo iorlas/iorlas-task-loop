@@ -4,10 +4,10 @@ from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
-from support.shells import quiet_shell
-
 from tlkernel.env import Env
+
 from tlrelease import selfupdate
+from tlrelease.testing import quiet_shell
 
 
 def test_workspace_package_change_selects_the_clones_release_script(tmp_path: Path):
