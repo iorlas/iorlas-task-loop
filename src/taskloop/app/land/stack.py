@@ -18,6 +18,7 @@ from taskloop.app.land.cmds import Cmds, Stop
 from taskloop.app.land.forge import Forge
 from taskloop.app.land.phases import phase
 from taskloop.app.land.profile_change import diff_sha
+from taskloop.app.land.queue_land import Queued, QueueLand
 from taskloop.app.land.stackgate import StackGate
 from taskloop.app.land.treecheck import Tested, TreeGuard
 from taskloop.contracts import log as rec
@@ -55,7 +56,7 @@ class Stack:
                  sync: Callable[[], DoltPush], owner: str, session: str, gate: StackGate, beads: Beads, wait_min: float | None = None,
                  named: Callable[[str], None] = lambda _bead: None,
                  is_slot: Callable[[str], bool] = lambda _path: False, slot_base: str = "", *, cfg: ConfigDir,
-                 profile_change: str | None = None, jobs: int = 1, assert_trees: bool = False) -> None:
+                 profile_change: str | None = None, jobs: int = 1, assert_trees: bool = False, queue: bool = False) -> None:
         self.forge, self.cmds, self.log, self.git, self.repo, self.lock = forge, cmds, log, git, repo, lock
         self.record, self.sync, self.owner, self.session, self.wait_min = record, sync, owner, session, wait_min
         self.gate, self.named = gate, named  # named(bead): the run's manifest learns each bead
@@ -65,6 +66,7 @@ class Stack:
         self.profile_change = profile_change
         self.jobs = jobs  # gates run at once before the serial merges
         self.assert_trees = assert_trees  # dark: judge the tested tree against the landed one (treecheck.py); off until the queue rolls out
+        self.queue = queue  # dark: land through the merge queue (queue_land.py); the CLI turns it on only at the rollout
         self.trees = TreeGuard(cmds, git, gate.stores, repo, f"{forge.remote}/{forge.base}")
         self.recorded = 0
         self.synced = False  # bd sync was tried
@@ -79,8 +81,11 @@ class Stack:
         try:
             self.validate_beads(items)
             self.prewarm(items)
-            for item in items:
-                self.item(item)
+            if self.queue:
+                QueueLand(self).run(items)
+            else:
+                for item in items:
+                    self.item(item)
             self.sync_bd()
         except Stop as stop:
             rc = stop.rc
@@ -139,7 +144,7 @@ class Stack:
                     raise
                 self.log.note(f"{moved.why}: judging the new head")
 
-    def deliver(self, item: StackItem) -> None:
+    def deliver(self, item: StackItem, queued: Queued | None = None) -> None:
         branch, oid, pr = self.resolve(item)
         if not item.bead and branch.startswith(TASK):  # a task branch names its bead
             item = item.replace(bead=branch.removeprefix(TASK))
@@ -153,12 +158,15 @@ class Stack:
             if pr is None or pr.state == OPEN:  # a PR already merged or closed is prepare's to judge
                 with phase(self.log, "fetch"):
                     self.forge.fetch()  # the judged commit's profile, and the base as origin has it now
-                with phase(self.log, "gate"):
-                    base = self.gate.require(branch, oid, profile_change=self.profile_change)
-                if self.assert_trees:
-                    tested = Tested(parent=base, parent_tree=self.trees.tree(base), tree=self.trees.tree(oid))
-                if self.profile_change is not None:
-                    self.audit_profile(branch, oid, base)
+                if queued is not None:
+                    tested = self.crossing(branch, oid, queued)
+                else:
+                    with phase(self.log, "gate"):
+                        base = self.gate.require(branch, oid, profile_change=self.profile_change)
+                    if self.assert_trees:
+                        tested = Tested(parent=base, parent_tree=self.trees.tree(base), tree=self.trees.tree(oid))
+                    if self.profile_change is not None:
+                        self.audit_profile(branch, oid, base)
             pr = self.prepare(item, branch, oid, pr)
             head = pr.head_oid
             sha = self.merged(item, pr, head, tested)
@@ -168,6 +176,16 @@ class Stack:
         self.log.emit(rec.StepEnd(id=sid, step=name, outcome="landed", detail=sha[:12]))
         self.last = sha
         self.after(item, pr, branch, head, sha)
+
+    def crossing(self, branch: str, oid: str, queued: Queued) -> Tested:
+        """The queue gated Q(N) at Q(N-1): the head must still be the one it judged; its passes cross to main (`Carry.queue_carried`) and
+        the merge is asserted against that tree (merged -> TreeGuard)."""
+        if oid != queued.head:
+            raise HeadMoved(1, f"{branch}: head moved from {queued.head[:12]} to {oid[:12]} while it was queued")
+        parent = self.git.rev_parse(self.repo, f"{queued.q}^")
+        with phase(self.log, "carry"):
+            self.gate.carry_queue(queued.q, parent)
+        return Tested(parent=parent, parent_tree=self.trees.tree(parent), tree=queued.tree)
 
     def audit_profile(self, branch: str, tip: str, base: str) -> None:
         """One atomic row per explicitly authorized item, after evidence and before its push or merge."""

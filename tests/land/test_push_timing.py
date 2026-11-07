@@ -12,9 +12,9 @@ from support.narrow_hosts import FakeOutboundHost
 from support.tmpdir import TemporaryDirectory
 
 from taskloop.app.land.outbound import Outbound
-from taskloop.app.run.budget import Budget
-from taskloop.app.run.outcomes import run_breakdown
-from taskloop.app.run.steps import Steps
+from taskloop.app.pipeline.budget import Budget
+from taskloop.app.pipeline.outcomes import run_breakdown
+from taskloop.app.pipeline.steps import Steps
 from taskloop.app.run.stuck import StuckTick
 from taskloop.contracts import log as rec
 from taskloop.contracts.gitfacts import GitOutcome

@@ -3,7 +3,7 @@
 from support.argv_of import argv_of
 
 from taskloop.adapters.delegate_wire import denied_of
-from taskloop.app.run.trace import ai_call
+from taskloop.app.pipeline.trace import ai_call
 from taskloop.contracts.delegate import RunRequest
 
 

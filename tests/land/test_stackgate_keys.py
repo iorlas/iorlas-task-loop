@@ -65,11 +65,11 @@ class Checkouts:
                 TreeEntry(mode="100644", kind="blob", oid="p1", path=".task-loop.json")]
 
 
-def write_receipts(stores, git: Git, wt: str) -> RunMemo:
+def write_receipts(stores, git: Git, wt: str, base: str = BASE) -> RunMemo:
     """What `tl check --repo wt` leaves: a pass of every gate step under the key the runner's memo gives it."""
     engine = load(PROFILE).engine
     env = {**childenv.reaching(childenv.current_env(Env())), **check_env()}
-    memo = RunMemo(stores, check_files.repo_key(git, wt), InputKeys(git, wt, TREE), BASE, env, "check-run")
+    memo = RunMemo(stores, check_files.repo_key(git, wt), InputKeys(git, wt, TREE), BaseSha(base), env, "check-run")
     memo.checks = {c.id: repo_check(c, engine) for c in engine.checks}
     for c in memo.checks.values():
         key = memo.key(c)

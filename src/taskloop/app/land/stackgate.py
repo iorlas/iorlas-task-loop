@@ -67,10 +67,13 @@ class StackGate:
                 continue
         return ""
 
-    def require(self, branch: str, oid: str, *, profile_change: str | None = None, regate: bool = True) -> str:
+    def require(self, branch: str, oid: str, *, profile_change: str | None = None, regate: bool = True, base_override: str = "") -> str:
+        """`base_override`: the merge queue gates Q(N) at Q(N-1) (merge-queue.md 3.5), not at the base branch; main moving is then the
+        queue's business, so no closure carry and no regate."""
         if why := owner_refusal(profile_change, self.env):
             raise Stop(2, why)
-        base = self.cmds.port(f"git rev-parse --verify {self.base_ref}", lambda: self.git.rev_parse(self.repo, self.base_ref))
+        base = base_override or self.cmds.port(f"git rev-parse --verify {self.base_ref}",
+                                               lambda: self.git.rev_parse(self.repo, self.base_ref))
         if not base:
             raise Stop(1, f"cannot name the base {self.base_ref}")
         path = profile_at.FILE
@@ -92,16 +95,15 @@ class StackGate:
             return base
         made = "" if wt else self.fresh(oid)
         wt = wt or made
-        argv = [*self.tl, "check", "--repo", wt]
-        if profile_change is not None:
-            argv.extend(["--policy-commit", base])
+        argv = [*self.tl, "check", "--repo", wt, *(["--policy-commit", base] if profile_change is not None else []),
+                *(["--base-commit", base] if base_override else [])]
         try:
             carry = Carry(self.cmds, self.git, self.stores, self.repo, self.env)
-            if sum(carry.carried(engine, step, oid, tree, base, wt) for step in red):  # a pass on an earlier base that still holds
+            if not base_override and sum(carry.carried(engine, step, oid, tree, base, wt) for step in red):  # a pass on an earlier base
                 red = self.unproven(engine, tree, base, wt)
             ran = self.cmds.run(argv, extra=self.ledger) if red else None
             red = self.unproven(engine, tree, base, wt) if ran else red
-            now = self.moved_during(branch, oid, wt, base) if red else ""  # while the gate's own checkout still exists
+            now = self.moved_during(branch, oid, wt, base, queued=bool(base_override)) if red else ""  # while the checkout still exists
         finally:
             if made:
                 self.cmds.row(f"git worktree remove {made}", lambda: self.git.remove_worktree_force(self.repo, made))
@@ -134,14 +136,16 @@ class StackGate:
             with git_lock:
                 self.cmds.row(f"git worktree remove {path}", lambda: self.git.remove_worktree_force(self.repo, path))
 
-    def moved_during(self, branch: str, oid: str, wt: str, base: str) -> str:
+    def moved_during(self, branch: str, oid: str, wt: str, base: str, *, queued: bool = False) -> str:
         """After a red run: the worktree's HEAD or the base moved while `tl check` ran (a merge of main into the worktree, another
         lander), so the run judged inputs other than the key read before it. A moved HEAD is another tree: nothing was judged, Stop.
-        -> the new base when it moved, else ''."""
+        -> the new base when it moved, else ''. A queued gate has no moving base: only the HEAD is compared."""
         head = self.cmds.port(f"git rev-parse HEAD in {wt}", lambda: self.git.rev_parse(wt, "HEAD")) if wt else oid
         if head != oid:
             raise Stop(1, f"{branch}: the worktree {wt} moved from {oid[:12]} to {head[:12]} while the gate ran; nothing is judged. "
                           "Run it again once nothing else changes that worktree")
+        if queued:
+            return ""
         now = self.cmds.port(f"git rev-parse --verify {self.base_ref}", lambda: self.git.rev_parse(self.repo, self.base_ref))
         return now if now and now != base else ""
 
@@ -150,3 +154,40 @@ class StackGate:
         path = str(scratch.scratch_dir(self.env.vars, "tl-land-gate-"))  # an empty directory: git adds a worktree into it
         self.cmds.port(f"git worktree add --detach {path} {oid[:12]}", lambda: self.git.add_worktree(self.repo, path, oid))
         return path
+
+    def judge_queue(self, q: str, parent: str, git_lock: threading.Lock) -> bool:
+        """The gate of one queue entry (a worker thread, like `warm`): `tl check --base-commit parent` on a fresh worktree at Q(N), then
+        whether every gate step has its receipt at that tree and base. A profile change does not ride the queue: it needs the owner."""
+        with git_lock:
+            engine = self.profile(parent)
+            if engine is None or not engine.gate_checks:
+                return True
+            path = profile_at.FILE
+            if self.git.ls_tree(self.repo, parent, path) != self.git.ls_tree(self.repo, q, path):
+                self.cmds.log.note(f"queue: {q[:12]} changes {path}; only the owner may land a profile change")
+                return False
+            tree = self.git.rev_parse(self.repo, f"{q}^{{tree}}")
+            wt = self.fresh(q)
+        try:
+            self.cmds.spawner.run([*self.tl, "check", "--repo", wt, "--base-commit", parent], cwd=wt, extra=self.ledger)
+            with git_lock:
+                return not self.unproven(engine, tree, parent, wt)
+        finally:
+            with git_lock:
+                self.cmds.row(f"git worktree remove {wt}", lambda: self.git.remove_worktree_force(self.repo, wt))
+
+    def carry_queue(self, q: str, parent: str) -> None:
+        """Entries ahead landed: main has the tree of `parent`. Each gate step green at Q(N)'s base `parent` now counts at main too
+        (`Carry.queue_carried`); what does not carry is run again by the land's own gate."""
+        engine = self.profile(parent)
+        if engine is None or not engine.gate_checks:
+            return
+        main = self.cmds.port(f"git rev-parse --verify {self.base_ref}", lambda: self.git.rev_parse(self.repo, self.base_ref))
+        tree = self.git.rev_parse(self.repo, f"{q}^{{tree}}")
+        wt = self.fresh(q)
+        try:
+            carry = Carry(self.cmds, self.git, self.stores, self.repo, self.env)
+            for step in self.unproven(engine, tree, main, wt):
+                carry.queue_carried(engine, step, tree, main, parent, wt)
+        finally:
+            self.cmds.row(f"git worktree remove {wt}", lambda: self.git.remove_worktree_force(self.repo, wt))
