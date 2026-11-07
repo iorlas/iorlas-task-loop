@@ -1,7 +1,8 @@
 """What the land keeps in factory.db: the follow-up outbox, one row per bead (the follow-ups its close has not filed yet).
 
-The land is the one writer (app/land/followups.py files them and drops the row); the part registers when this module is imported, which
-the writer does, so a process that never files a follow-up never creates the table. docs/design/stage-isolation.md 3.1."""
+The part registers when this module is imported, and the engine's run/state.py (the reader and writer of the outbox) uses LAND at import:
+Python here loads an unused import lazily, so an import alone registers nothing, and a part must be registered before the first open of
+factory.db. docs/design/stage-isolation.md 3.1."""
 from taskloop.contracts.dbparts import Part, register
 from taskloop.contracts.followups import FollowupOutbox
 
