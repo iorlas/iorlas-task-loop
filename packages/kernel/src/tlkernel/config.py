@@ -197,6 +197,7 @@ class EngineConfig(Rec):
         ".venv/**", "node_modules/**", "**/__pycache__/**", "Library/**", "Temp/**", "obj/**", "bin/**", "**/.*cache*/**"])
     land_mode: Literal["push", "pr"] = "push"  # pr: the land opens a PR and waits for the owner to merge it; the engine never merges
     land_queue: Literal["off", "shadow", "on"] = "off"  # the speculative merge queue (merge-queue.md); off: as before
+    land_queue_max_in_flight: int = 4  # the queue's cap: most gates in flight at once (floor 1)
     base: str = "origin/main"
     check_links: bool = True
     owner_author: str = ""  # exact bd comment author; unset means no comment is an owner instruction
@@ -392,6 +393,8 @@ def graph_problem(checks: list[CheckSpec]) -> str:
 
 def resource_problem(eng: EngineConfig) -> str:
     """Why engine.resources and the checks' `needs` do not fit ('' when they do): a limit under 1, or a need nobody declared."""
+    if eng.land_queue_max_in_flight < 1:
+        return "engine.land_queue_max_in_flight must be at least 1"
     for name, r in eng.resources.items():
         if r.limit < 1:
             return f"engine.resources.{name}.limit must be at least 1"
