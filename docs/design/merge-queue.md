@@ -169,6 +169,43 @@ Result and its limit:
 - Still unverified: GitHub's server-side squash. The real PR pair was not run: the `gh` token has no `delete_repo` scope, so a throwaway
   repo could not be removed afterwards. Layer 1 and the post-land assertion of section 2 (bead l) stay the guard for it.
 
+### 3.5 How a queue commit is gated and keyed, and what `queue_carried` promises (bead tl-7s2f.4, part 3)
+Written before the wiring so the review is of the rule, not of the diff. Code: `domain/land/queue_model.py` (planner), `app/land/queue_refs.py`
+(Q(N)), `app/land/queue_run.py` (runner), `Carry.queue_carried` (carry.py), `QueueKey` (domain/land/queue_key.py), `TreeGuard` (treecheck.py).
+
+**Keying of the gate run on Q(N).** The gate for entry N judges a detached worktree at `Q(N)`:
+- `RunKey.tree` = `tree(Q(N))` = `T(N)`, the merge-tree result; this is the tree that will land.
+- `RunKey.base` = `Q(N-1)`, the commit of the queue ahead (main itself for the first entry). A receipt is therefore made at a base that
+  contains exactly the PRs it was tested with. All other fields (cmd, config, toolchain, env, inputs, selected, execution) are read as
+  `tl check` reads them today, from the profile **at `Q(N-1)`** (not at origin/main): a profile change by an earlier PR in the queue is
+  in force for the PRs behind it, as it will be on main once that PR lands.
+- The profile-change rule of `StackGate.require` compares `.task-loop.json` of `Q(N-1)` with that of `Q(N)`: only the entry that changes
+  the profile needs the owner's authorisation, and an entry behind it is not blamed for it.
+- `StackGate.require` therefore gains one parameter, `base_override: str` (the parent queue commit). Without it nothing changes. With
+  it, `moved_during` must not compare the override with origin/main (main moves under the queue by design); it compares the worktree HEAD
+  only. A move of origin/main is the queue's own reconcile (section 9), not the gate's regate.
+- The head entry has `Q(N-1) == main`, so its gate equals today's gate on the merge result (`merge-tree(main, head)`), plus the assertion.
+
+**Crossing to main (`Carry.queue_carried`).** After the entries ahead landed, main is `S` with `tree(S) == T(N-1)` (the assertion of
+section 2 guarantees it, or the queue is frozen). The receipt of entry N is at `base = Q(N-1)`; the land needs one at `base = S`. The
+function promises exactly this and nothing more:
+1. It stores a receipt under `base = main` **only if** `tree(main) == tree(Q(N-1))` (compared by tree id, not by commit) and an existing
+   *passed*, *satisfied* receipt at `base = Q(N-1)` equals the key expected at `base = main` in **every other field** (`replace(base=...)`),
+   including `tree = T(N)`. Any difference in any field is a miss and the step runs again.
+2. The stored record keeps `origin` = the run that made the pass, so the log says where the green came from; the new row is the carry's.
+3. It needs no `closure_cmd`: a check without one stops missing on a moved base. The closure mode (`Carry.carried`) is unchanged and is
+   not used in the queue path.
+4. It does **not** promise that `T(N)` is what will land. That is `TreeGuard` (refuse before the merge: `tree(main)` equals the tested
+   parent tree and `merge-tree(main, head)` equals `T(N)`; verify after it). Carry proves the check result applies to a base; the
+   guard proves the tree; neither replaces the other.
+5. It does not carry a failure, a skip, or a flake verdict, and it never writes under a base other than the one asked for.
+If main moved by a third party (tree differs from `T(N-1)`), the carry misses, the queue is rebuilt from the new main (section 5), and
+the gate runs on a new `Q(N)`; nothing is merged on the old receipt.
+
+**Open for review before the wiring.** (a) `base_override` and `RunKey.base` semantics for a check with `inputs_only` (base is `""` for
+those, so the override is irrelevant to their key); (b) whether the gate's `named()` message should name the queue ahead; (c) the
+profile read at `Q(N-1)` makes the very first run after a profile-changing PR depend on that PR having landed in the queue ref only.
+
 ## 4. Result key
 
 ```

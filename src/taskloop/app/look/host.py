@@ -6,18 +6,14 @@ from pathlib import Path
 from typing import Protocol
 
 from taskloop.adapters.looks import Methods
-from taskloop.app.look.state import LookState
 from taskloop.contracts.artifact import ArtifactMeta
 from taskloop.contracts.asked import Asked
 from taskloop.contracts.beadsport import Beads
 from taskloop.contracts.checks import CheckRun
-from taskloop.contracts.config import EngineConfig, VisualConfig
-from taskloop.contracts.ids import BeadId
-from taskloop.contracts.paths import ConfigDir
+from taskloop.contracts.config import VisualConfig
 from taskloop.contracts.plancheck import StageData
-from taskloop.contracts.stagefacts import RepoKey
+from taskloop.contracts.stagefacts import Narrate, RepoKey
 from taskloop.contracts.wire import Open
-from taskloop.stores.runlog import RunLog
 
 
 class OwnerItems(Protocol):
@@ -72,48 +68,36 @@ class LockWaits(Protocol):
     def locked(self, what: str, path: Path | str, holder: str | None = ...) -> AbstractContextManager[Path | str]: ...
 
 
-class LookPorts(Protocol):
+class RepoHolder(Protocol):
     @property
     def repo(self) -> RepoKey: ...
 
 
-class LookHost(Protocol):
-    """The engine, as the look stage sees it. The look-owned state is `look` (LookState); artifact_repo and render_stale stay on the engine
-    (a run fact and a hand-off from write)."""
+class LookPorts(Protocol):
+    """What the look stage calls, as the engine's own handles (the run facts are `RunFacts`, the stage's own state `LookState`)."""
 
-    Blocked: type[Exception]
-    bead: BeadId
-    bead_parent: str
-    bead_title: str
-    wt: str
-    run_id: str
-    run_dir: Path
-    evidence_dir: Path
-    home: ConfigDir
-    cfg: EngineConfig
-    dry: bool
-    log: RunLog
-    steps: LookSteps
-    budget: LookBudget
-    store: Beads
-    pictures: PictureBook
-    cases: CaseBook
-    stage_checks: StageChecksView
-    checkout: CheckoutPaths
-    checkpoints: PendingKeeper
-    waits: LockWaits
-    at_stage: int
-    last_flag: str
-    writer_family: str
-    retry_after: float
-    pause_role: str
-    pause_lane: str
-    leftovers: list[dict[str, str]]
-    review: OwnerItems
-    artifact_repo: str
-    render_stale: bool
-    look: LookState
-    ports: LookPorts
+    @property
+    def steps(self) -> LookSteps: ...
+    @property
+    def budget(self) -> LookBudget: ...
+    @property
+    def store(self) -> Beads: ...
+    @property
+    def pictures(self) -> PictureBook: ...
+    @property
+    def cases(self) -> CaseBook: ...
+    @property
+    def stage_checks(self) -> StageChecksView: ...
+    @property
+    def checkout(self) -> CheckoutPaths: ...
+    @property
+    def checkpoints(self) -> PendingKeeper: ...
+    @property
+    def waits(self) -> LockWaits: ...
+    @property
+    def log(self) -> Narrate: ...
+    @property
+    def ports(self) -> RepoHolder: ...
 
     def ai(self, node: str, title: str, prompt: str, *a: object, **kw: object) -> Asked: ...
     def comment(self, text: str) -> None: ...
@@ -121,3 +105,25 @@ class LookHost(Protocol):
     def now(self) -> float: ...
     def sh(self, cmd: Sequence[str], timeout: float = ..., check: bool = ..., save: Path | None = ..., env: Mapping[str, str] | None = ...,
            pin: bool = ..., what: str = ..., cwd: Path | None = ..., stop: threading.Event | None = ...) -> tuple[int, str]: ...
+
+
+class LookHost(Protocol):
+    """The hand-offs the look stage still shares with the engine: what bd said of the bead, the review's and the write's leftovers, the
+    pause the judge asks for, and the two run facts that are not frozen (artifact_repo, render_stale). Deleted with RunFacts' last users."""
+
+    @property
+    def Blocked(self) -> type[Exception]: ...
+    bead_parent: str
+    bead_title: str
+    at_stage: int
+    last_flag: str
+    @property
+    def writer_family(self) -> str | None: ...
+    retry_after: float
+    pause_role: str
+    pause_lane: str
+    leftovers: list[dict[str, str]]
+    @property
+    def review(self) -> OwnerItems: ...
+    artifact_repo: str
+    render_stale: bool

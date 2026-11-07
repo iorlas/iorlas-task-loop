@@ -8,8 +8,9 @@ from rules.gate_rules import parsed
 
 ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / "src/taskloop/app"
-PARTS_FILES = ("parts_run.py", "parts_land.py", "parts_plan.py", "host.py")
-HOST_NAMES = {"e", "host", "h"}   # how a part holds the engine: `self.e`, `self.host`, `self.h` or a local alias
+PARTS_FILES = ("parts_run.py", "parts_land.py", "parts_plan.py", "host.py", "engine.py")
+# how a part holds the engine: `self.e`, `self.host`, `self.h`, a local alias, or the look stage's two views of it (`hand`, `ports`)
+HOST_NAMES = {"e", "host", "h", "hand", "ports"}
 
 LAYERS = {
     "bead_env": 0, "briefing": 0, "briefs": 0, "cases": 0, "checkout": 0, "delegation": 0, "records": 0, "reload": 0,
