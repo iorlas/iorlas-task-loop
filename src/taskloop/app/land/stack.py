@@ -29,7 +29,7 @@ from tlkernel.profile_changes import ProfileChange
 from tlkernel.queue_doc import QueueDoc
 from tlkernel.slots import MissingRemote
 from tlkernel.storeapi import Doc
-from tlslots.effects import Effects
+from tlslots.api import Effects
 
 from taskloop.adapters import landlock
 from taskloop.app.land import cleanup

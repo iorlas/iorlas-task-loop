@@ -4,15 +4,16 @@ what to stage."""
 from collections.abc import Mapping
 from typing import Protocol
 
+from tlkernel import treehash
 from tlkernel.gitfacts import StatusRow
 from tlkernel.gitport import Git
 from tlkernel.ids import TreeSha
 from tlkernel.matchers import NetText
+from tlkernel.newfiles import new_file_kind
 from tlkernel.slots import SlotGitError
 from tlkernel.stagefacts import RunLogPort
 
-from taskloop.adapters import treehash
-from taskloop.domain.write.newfiles import new_file_kind
+from taskloop.adapters.ignored import ignored_by
 
 
 class CheckoutConfig(Protocol):
@@ -103,7 +104,7 @@ class Checkout:
             if t.path.split("/")[-1] == ".gitignore"
         }
         rules = treehash.ignore_rules(base, files)
-        return treehash.ignored_by(e.git, e.wt, rules, paths) if rules else set()
+        return ignored_by(e.git, e.wt, rules, paths) if rules else set()
 
     def read_base(self, base: str, path: str) -> str:
         try:

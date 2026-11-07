@@ -7,9 +7,7 @@ fails: no carry, the check runs. The caller owns the worktree at the judged oid;
 import hashlib
 from pathlib import Path
 
-from tlgate import authorization
-from tlgate.cache import satisfied
-from tlgate.domain.specs import repo_check
+from tlgate.api import authorization, repo_check, satisfied
 from tlkernel import config, scratch
 from tlkernel.checks import PassRecord
 from tlkernel.env import Env

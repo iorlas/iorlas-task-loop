@@ -5,10 +5,10 @@ from pathlib import Path
 from typing import Any
 
 from tlkernel.gitport import Git
+from tlkernel.newfiles import new_file_kind
 
 from taskloop.app.write.host import NewFilesHost
 from taskloop.app.write.review_prompt import NEW_FILES_TEXT
-from taskloop.domain.write.newfiles import new_file_kind
 
 
 class NewFiles:

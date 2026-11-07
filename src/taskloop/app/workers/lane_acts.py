@@ -7,13 +7,14 @@ from typing import Any, Final
 
 from tlkernel import log as rec
 from tlkernel.delegate import DelegateResult
+from tlkernel.netretry import NET_BACKOFF
 from tlkernel.waitenums import WaitWhat
 from tlwork.review.availability import ReviewUnavailable
 
 from taskloop.app.workers import writer_pin
 from taskloop.domain.lanes import pin
 from taskloop.domain.lanes import policy as lp
-from taskloop.domain.lanes.notes import NET_BACKOFF, NOTES
+from taskloop.domain.lanes.notes import NOTES
 from taskloop.domain.lanes.roles import READ_ONLY_NODES
 
 ASK_KINDS: Final = ("ASK_STUCK",)

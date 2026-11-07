@@ -14,9 +14,10 @@ import pytest
 from git_porcelain.errors import GitUnavailable
 from git_porcelain.real import RealWorktree
 
-from taskloop.adapters import slotcheck, treehash
+from taskloop.adapters import slotcheck
 from taskloop.adapters.git import RealGit
 from taskloop.app.run import engine
+from tlkernel import treehash
 from tlkernel.env import snapshot
 from tltestkit.case import Case
 from tltestkit.checked import run_checked

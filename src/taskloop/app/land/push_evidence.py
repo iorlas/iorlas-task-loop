@@ -2,9 +2,9 @@
 from pathlib import Path
 from time import time_ns
 
+from tlkernel.gitfacts import push_error_line
 from tlkernel.paths import ConfigDir
 
-from taskloop.adapters.git_base import push_error_line
 from taskloop.app.land.paths import land_push, push_log
 
 
