@@ -247,7 +247,8 @@ class WorkerCall:
         e.cost += res.cost
         stopped = runner.stop.get("why") or ""
         survivors = runner.survivors(res)
-        e.calls.end(cid, c.node, c.role, c.tries, res, stopped, bool(c.delta), len(delta if delta is not None else brief), runner.worker, runner.live_start())
+        sent = len(delta if delta is not None else brief)
+        e.calls.end(cid, c.node, c.role, c.tries, res, stopped, bool(c.delta), sent, runner.worker, runner.live_start())
         if stopped or survivors:  # the actual stop path, including a worker that outlived every signal
             self.log_kill(c, runner, survivors=survivors)
         if survivors:  # a retry would write into the tree the old worker still writes in
