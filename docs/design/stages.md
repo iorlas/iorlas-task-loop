@@ -76,7 +76,7 @@ rounds fixed. Re-plan prompts are 17-24 KB (over the 12 KB warning), planners re
 **F7 writer context grows across stages (2 beads, 92% of all writer+review tokens are writer).** [G1]
 Writer input is 58.2M of 9 landed runs, 92% writer, ~97% of that cache reads: cost = turns x context. yxbb.1 resumed a
 187K-context writer from earlier blocked runs: 5.63M tokens in round 1 (~1.5M estimated fresh). yxbb.9: 276K context, stages
-11.7M and 5.6M. d5f.44: one Codex session, 3 stages, 13 writes, 50K -> 203K. `write_fresh_above_k` exists (150K/200K) but
+11.7M and 5.6M. d5f.44: one Codex session, 3 stages, 13 writes, 50K -> 203K. delegate owns `fresh_above_k` (150K Claude, 100K OpenAI/xAI) but
 nothing resets at a stage boundary. No-change send-backs are ~7% of writer tokens (d5f.44 stage 1: writes 3-4 changed nothing,
 identical review diffs; 40jy stage 1: 4 no-change writes, 5 reviews).
 
@@ -194,7 +194,7 @@ Ranks 1-5 first: ~22 bead-instances out of the 34 that ran, mostly one-file engi
 | 13.4 | `repeated_slow()`: one send-back of a plan that runs a slow command in two checks or around a repo check | |
 | 13.5 | `out_of_scope()`: a checkable review note sharing no word pair with done-when, goals, cases, risks becomes a leftover | |
 | 13.6 | `handoff` (rounds, seen lows) in the checkpoint and `runs/<run>/handoff.json`; the amend planner gets `<rounds>` (<= 1.5 KB) | `HANDOFF_CAP` |
-| 13.7 | fresh writer at a stage boundary above 100K; reviewers get the lows already noted; verify evidence carries each passing check's last output | `write_fresh_stage_k` (0 = off) |
+| 13.7 | fresh writer at a stage boundary above 100K; reviewers get the lows already noted; verify evidence carries each passing check's last output | delegate `fresh_stage_k` (0 = off) |
 | 13.8 | `~/.config/task-loop/shared/<repo>.json` (flakes, reported by writers via `flakes`, editable by hand); running siblings and landings in the planner and a writer's whole prompt; `rebase_onto_base()` before a plan or amend | |
 | 13.9 | handed to the ask-input session (it owns ask phrasing) | |
 | 13.10 | deferred by the owner: no evidence yet | |
@@ -204,7 +204,7 @@ From the lifesim-fdyo forensic (15.7M tokens, ~2M lean), built the same day:
 | bead | what | config |
 |---|---|---|
 | 13.11 | PLAN_PROMPT: an owner-judged criterion gets no invented threshold check (evidence exists + leftover); a check red two rounds running tells the writer it may list it in `bad_checks` (`REPEAT_RED`) | |
-| 13.12 | `write_fresh_above_k` codex default 200 -> 100 (inside a stage, fix rounds too) | `write_fresh_above_k` |
+| 13.12 | delegate `fresh_above_k` codex default 200 -> 100 (inside a stage, fix rounds too) | delegate `fresh_above_k` |
 | 13.13 | `dry_check`: `python -I -m <repo module>` can never import it: the plan goes back before a write | |
 | 13.14 | `_run_checks(acceptance_first=True)` after a round red only in acceptance: static, acceptance, then tests (a red acceptance skips them); off when an acceptance check reads `$TL_CHECK_*` | |
 

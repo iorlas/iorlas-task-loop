@@ -106,7 +106,7 @@ OUTCOME = run.RunReport(outcome=Result.PARKED, bead=BeadId("tl-1"), run=str(RUN)
 LOCK = locks.EngineLock(pid=1789, bead="tl-1", started=T, by="tl-abc", start="99", slot="s1", slot_bead="slot-1")
 CMD = {"pick_label": "auto", "skip_review": config.ReviewSkipConfig(tests=["t/**"]),
        "prepare": config.PrepareConfig(cmd=["dotnet", "restore"], inputs=["**/*.csproj"]),
-       "visual_paths": config.VisualConfig(include=["a/**"]), "write_fresh_above_k": 150.0, "max_rounds": 4,
+       "visual_paths": config.VisualConfig(include=["a/**"]), "max_rounds": 4,
        "checks": [config.CheckSpec(id=CheckId("fmt"), argv=["just", "fmt"], group="static", network=True, when=["x/**"], inputs="a/**"),
                   config.CheckSpec(id=CheckId("unity"), argv=["just", "check-unity"], run="gate", run_in="slot", needs=["unity"])],
        "resources": {"unity": config.ResourceSpec(limit=2)}}
@@ -371,7 +371,7 @@ OTHERS: dict[str, Rec] = {
             plan_log=[checkpoint.PlanStep(mode="plan", counted=True, why="first")],
             done=["g1"],
             accepted=[0],
-            writer=checkpoint.WriterSession(delegate="codex", seen=["abc"], ctx=35),
+            writer=checkpoint.WriterSession(seen=["abc"]),
             rendered_names=["r"],
             last_reqs=[{"method": "Shots", "names": ["n"]}],
             handoff=checkpoint.Handoff(rounds=[run.Round(stage="1/1", round=1, kind="bad_checks")], seen_lows=[]),

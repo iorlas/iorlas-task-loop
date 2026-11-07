@@ -81,7 +81,6 @@ class EngineReviewTest(EngineTest):
         assert rc == 2
         ck = self.checkpoint()
         assert (ck["stage"], ck["rounds"], ck["accepted"]) == (1, 1, [0])
-        assert ck["writer"] == "ref-write"
         rc, s = self.run_engine({"write": [WRITE], "review": [CLEAN]})
         assert rc == 0
         assert [c[0] for c in s.calls] == ["reviewer"]  # no plan, no stage 1, no write: its checks were green (tl-q3ma)
