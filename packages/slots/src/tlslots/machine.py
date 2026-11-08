@@ -7,7 +7,7 @@ import os
 import sys
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
@@ -165,6 +165,35 @@ def worktrees(h: SlotsHost, repo: str, git: Git, who: Identity, slots: list[Bead
             seen.add(k)
             keep.append(d)
     return keep
+
+
+@dataclass(frozen=True)
+class Worktree:
+    path: str
+    failed: str = ""
+
+
+def run_worktree(h: SlotsHost, worktree: str, slot: str, bead_id: BeadId, repo: str,
+                 script: Sequence[str], spawner: Spawner, who: Identity) -> Worktree:
+    """The run's slot, named or newly started worktree, with the main checkout refused."""
+    wt = worktree
+    if not wt and slot:  # the slot is the worktree
+        wt = slot_dir(repo, slot, profile_slots(repo))
+    if not wt:
+        extra = {EnvVar.TASK_LOOP_ACTOR.value: who.actor}
+        if who.session:
+            extra[EnvVar.TASK_LOOP_SESSION.value] = who.session
+        r = spawner.run([*script, "worktree", "start"], extra=extra)
+        wt = r.out.strip().splitlines()[-1] if r.exit == 0 and r.out.strip() else ""
+        if not wt:
+            print("tl: no worktree: " + r.err, file=sys.stderr)
+            return Worktree("", "failed: no worktree: " + r.err[-300:])
+    wt = str(Path(wt).resolve())
+    if (Path(wt) / ".git").is_dir():  # the main checkout holds the bead database and config
+        print(f"tl: {wt} is the main checkout; run a task in a slot or a worktree (tl slot / tl worktree start)",
+              file=sys.stderr)
+        return Worktree("", f"failed: {wt} is the main checkout")
+    return Worktree(wt)
 
 
 def start_worktree(h: SlotsHost, repo: str, git: Git, who: Identity, name: str | None = None) -> str:
