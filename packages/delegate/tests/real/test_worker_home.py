@@ -1,4 +1,5 @@
-"""A plain `pytest -n N` that includes packages/delegate/tests starts its workers: the worker home is not under the real ~/.config, which the
+"""A plain `pytest -n N` that includes packages/delegate/tests starts its workers: the worker home is not under the real ~/.config, which
+the
 delegate hermetic audit (packages/delegate/tests/hermetic.py) refuses to open anything in."""
 import os
 import subprocess

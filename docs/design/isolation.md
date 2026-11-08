@@ -9,7 +9,7 @@ Status: accepted by Denis, 2026-11-07. Epic tl-hwv5; children tl-hwv5.2 (A, proc
 
 The epic was written before two things landed; the design starts from the tree, not from the bead text.
 
-- delegate is a library in this repo (`src/delegate`); the engine imports `delegate.api` only (`docs/contracts/delegate-api.md`).
+- delegate is a library in this repo (`src/delegate`); the engine imports `delegate.api` only (`packages/delegate/docs/contracts/delegate-api.md`).
   `route.py` as a subprocess, `RouteDelegate` and `delegate_route.py` are gone. **Migration step 1 of the bead ("collapse the two
   launchers") is already done**: `adapters/runner.py` `ApiRunner` is the one launcher (a thread running `api.run`, `api.cancel` on a
   Handle).

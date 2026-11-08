@@ -80,7 +80,7 @@ RULES_BY_PATH = {
     "tests/rules/test_doc_contract_version.py": (
         "packages/delegate/src/delegate/contracts/wire.py",
         "docs/dev/integrations.md",
-        "docs/contracts/delegate-api.md",
+        "packages/delegate/docs/contracts/delegate-api.md",
         "README.md",
         "CLAUDE.md",
     ),

@@ -1,6 +1,7 @@
 """CodexHarness: golden event streams (real `codex exec --json` lines from the delegate fixtures) -> HarnessEvents + Evidence -> live lines.
 Regenerate a golden with
-`PYTHONPATH=src:tests:packages/delegate/tests uv run python packages/delegate/tests/adapters/test_codex_events.py --regen` after reading the diff."""
+`PYTHONPATH=src:tests:packages/delegate/tests uv run python packages/delegate/tests/adapters/test_codex_events.py --regen` after reading
+the diff."""
 
 import dataclasses
 import itertools

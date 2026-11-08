@@ -137,7 +137,7 @@ reader, and how delegate connects (`delegate.api`, one table in SKILL.md).
   PreToolUse hook (every Bash call) stays on plain `python3` and imports no msgspec and no record (.importlinter, tests/hook/test_hook.py).
 - The page is one HTML file, no build, no CDN.
 - delegate is a library in this repo (`packages/delegate/src/delegate`). The engine imports `delegate.api` and nothing else of it, and has no launcher of
-  its own; never add one back. Never read delegate's state files: ask the API (`docs/contracts/delegate-api.md`).
+  its own; never add one back. Never read delegate's state files: ask the API (`packages/delegate/docs/contracts/delegate-api.md`).
 - Never touch a transcript or another tool's state: the dashboard reads, `tl.py` writes only `~/.config/task-loop` and bd.
 - Release only through `uv run --script dev/release.py "message" [--bead ID --reason R] [--from-branch B]`: it takes the
   release lock, works in its own persistent clone (`<config>/release/`; the main checkout is never touched), bumps `.claude-plugin/plugin.json` from origin/main and the iorlas-marketplace entry, runs the suite,
