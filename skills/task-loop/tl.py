@@ -43,6 +43,7 @@
   tl.py stop [--repo DIR] [--now]               stop the loop after its current bead, or now (SIGTERM)
   tl.py check [--repo DIR] [--all] [--list] [ID ...]
                                                 run the repo's registry of checks (engine.checks): the gate's steps, or the named checks
+  tl.py match GLOB... -- PATH...               print paths matching the engine glob dialect; exit 1 when none
   tl.py gate [--repo DIR] [--all] [--list] [ID ...]  the same runner, recorded as a stage:gate run
   tl.py report [--repo DIR] [--since T] [--until T] [--json]
                                                  the M2 scorecard of a window (see SKILL.md, Report)
@@ -304,6 +305,11 @@ def artifact_parser(sp):
     p.add_argument("--cwd", required=True, metavar="DIR", help="the worker's working folder: files outside it are refused")
 
 
+def match_parser(sp):
+    p = sp.add_parser("match", help="print paths matching globs (**, {a,b}); exit 1 when none")
+    p.add_argument("args", nargs=argparse.REMAINDER, metavar="GLOB... -- PATH...")
+
+
 def build_parser():
     ap = argparse.ArgumentParser(prog="tl.py", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
@@ -315,6 +321,7 @@ def build_parser():
     check_parser(sp)
     cli_green.add_parser(sp)
     artifact_parser(sp)
+    match_parser(sp)
     p = sp.add_parser("judge-push", help="judge the complete Git pre-push request on stdin; unavailable refuses")
     p.add_argument("--repo", default=".", metavar="DIR")
     cli_land_stack.add_parser(sp)
@@ -327,6 +334,11 @@ def lazy_env(module: str, name: str) -> Handler:
     def call(a: Any, c: Ctx) -> int:
         return int(getattr(importlib.import_module(module), name)(a, env=c.env, git=c.git, who=c.who))
     return call
+
+
+def lazy_args(module: str, name: str) -> Handler:
+    """A lazy verb that takes only its remaining argv."""
+    return lambda a, c: int(getattr(importlib.import_module(module), name)(a.args))
 
 
 def v_task(a: Any, c: Ctx) -> int:
@@ -429,6 +441,7 @@ VERBS: Final[dict[str, Handler]] = {
     "status": v_status,
     "handoff": v_handoff,
     "wait": v_wait,
+    "match": lazy_args("tlkernel.checkmatchers", "cmd_match"),
     "artifact-server": lambda a, c: cli_factory.serve_artifacts(a, c.who.config, c.now),
     "setup": lambda a, c: cli_setup.cmd_setup(a, c.env, c.here.parents[1], sh=c.spawner),
     "green": lambda a, c: cli_green.cmd_green(a, c.who.config, c.git, env=c.env),

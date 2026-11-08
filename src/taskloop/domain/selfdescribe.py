@@ -1,9 +1,12 @@
 """The compact task-loop introduction injected into sessions in profile repositories."""
 
+from tlkernel import envvars
+
 
 def text() -> str:
     """Describe task-loop itself; SKILL.md owns the orchestrator procedure."""
-    return """task-loop runs a beads backlog through plan, workers, checks, land and close.
+    consumer = ", ".join(name for name, _ in envvars.CONSUMER)
+    return f"""task-loop runs a beads backlog through plan, workers, checks, land and close.
 Sessions coordinate in worktrees or slots; the loop and dashboard track their work.
 `tl` is ~/.config/task-loop/bin/tl, the shim maintained by SessionStart.
 
@@ -31,6 +34,10 @@ tl doctor, tl selftest, tl cutover: diagnostics.
 tl setup --plan|--apply: what this machine and repo still need; make it so.
 tl pin, tl rollback: owner overrides for the installed version.
 tl prune: reconcile expired leases and remove old owned data.
+
+For repos tl runs (stable names; everything else is private):
+{consumer}
+tl match GLOB... -- PATH...: the paths that match the globs (the engine's own glob dialect: ** and {{a,b}}), exit 1 when none
 
 Standing rules:
 Work in a worktree or slot. Never edit the main checkout or a plugin cache directory.

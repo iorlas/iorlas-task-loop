@@ -174,3 +174,15 @@ def diff_check_text(text: str, cap: int = DIFF_CHECK_LINES) -> str:
     rest = [m.group(1) for m in map(_DIFF_HIT.match, lines[cap:]) if m]
     more = f"and {len(rest)} more in {len(set(rest))} file{'s' if len(set(rest)) != 1 else ''}" if rest else ""
     return "\n".join([*lines[:cap], *([more] if more else [])])
+
+
+def cmd_match(args: list[str]) -> int:
+    """Print paths matching any glob before the required `--` separator."""
+    if "--" not in args:
+        raise SystemExit("usage: tl match GLOB... -- PATH...")
+    split = args.index("--")
+    patterns = [glob_re(alt) for glob in args[:split] for alt in expand_braces(glob)]
+    matched = [path for path in args[split + 1:] if any(pattern.match(path) for pattern in patterns)]
+    for path in matched:
+        print(path)
+    return int(not matched)

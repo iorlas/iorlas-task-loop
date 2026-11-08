@@ -1,4 +1,4 @@
-"""The registry: every TL_* and TASK_LOOP_* name the engine exports, hands over or reads. A name appears here once; the code, SKILL.md,
+"""The registry: every TL_* and TASK_LOOP_* name the engine exports, hands over or reads. The code, SKILL.md,
 the docs and the prompts say it by this table (tests/rules/test_envvars.py holds the three equal)."""
 from enum import StrEnum
 from typing import Final
@@ -41,6 +41,21 @@ class EnvVar(StrEnum):
 CHECK_LOG_PREFIX: Final = "TL_CHECK_LOG_"
 CHECK_RC_PREFIX: Final = "TL_CHECK_RC_"
 PREFIXES: Final = (CHECK_LOG_PREFIX, CHECK_RC_PREFIX)
+# Stable names for repositories whose commands task-loop runs.
+CONSUMER: Final = (
+    (EnvVar.TL_ARTIFACT_DIR.value, "Where this attempt writes evidence"),
+    (EnvVar.TL_ARTIFACT_STEP.value, "The id of the running check"),
+    (EnvVar.TL_RUN_ID.value, "The id of the run this command belongs to"),
+    (EnvVar.TL_RUN_DIR.value, "The run's folder"),
+    (EnvVar.TL_ATTEMPT.value, "The number of this attempt"),
+    (EnvVar.TL_WORKTREE.value, "The worktree the run works in"),
+    (EnvVar.TL_BRANCH.value, "The branch checked out in the worktree"),
+    (EnvVar.TL_SLOT.value, "The slot's name"),
+    (CHECK_LOG_PREFIX + "<ID>", "The log file of earlier check <ID>; upper-case id with each non-word run replaced by _"),
+    (CHECK_RC_PREFIX + "<ID>", "The exit code of earlier check <ID>; upper-case id with each non-word run replaced by _"),
+)
+# The receipt layout (runtime.json and the run folder) is private to task-loop: consumers must use CONSUMER and tl check match only.
+PRIVATE: Final = ("runtime.json",)
 # Names a text may mention that are no variable: Python constants, and a name SKILL.md says is gone.
 NOT_VARIABLES: Final = frozenset({"TL_PY", "TASK_LOOP_SUITE_HOST", "TASK_LOOP_SUITE_WORKERS", "TL_BOX_CWD", "TL_CHECKS_GREEN", "TL_LAND"})
 
