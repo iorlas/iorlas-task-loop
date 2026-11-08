@@ -36,7 +36,7 @@ returning a changed copy. This is the one place where a stage needs another stag
 `claim`, `now`, `clock`, `env`, `git`, `spawner`, `steps`, `log`, `checklog`, `store`, `stores`, `checkpoints`, `checker`. These are the `RunFacts`
 fields (16 data fields up to `now`) plus 11 ports (`clock`, `env`, `git`, `spawner`, `steps`, `log`, `checklog`, `store`, `stores`, `checkpoints`, `checker`). The other run facts are per-step counters the
 shell updates and work reads (`write_rounds`, `look_retried`, `link_*`, `budget`, `shots_skipped`, `verify_answer`, `verified`, `answered`,
-`lane_notes`, `last_flag`, `sessions`, `writer`, `stats`, `filed`, `scope`, `detail`): they belong in work's `State`, written by the shell only
+`account_notes`, `last_flag`, `sessions`, `writer`, `stats`, `filed`, `scope`, `detail`): they belong in work's `State`, written by the shell only
 because the shell runs the loop; B-WRITE and B-REVIEW move them.
 
 ## What this changes in the plan

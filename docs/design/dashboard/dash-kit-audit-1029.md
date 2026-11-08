@@ -8,7 +8,7 @@ Colour/emoji contract (review 1029) > 4c > older settled mocks. 1k/2b/3b predate
 ## Today's code (0.23.127, Sonnet)
 - `static/index.html` 960 lines, ~500 CSS rules inline, JS inline; `live.html` 225 lines, own dark-only palette, shares nothing.
 - Render: string templates, `paint()` swaps a subtree when its HTML changes; polling 2.5 s; live page long-polls.
-- Duplicates: `.chip` x3, `.tag` x3, `.btn` x3, `.badge` x2, `.drawer` x2, `.lane` x7, `.askbox` x25 rules; two side panels (`#drawer`, `#bpanel`); dark token block copy-pasted twice.
+- Duplicates: `.chip` x3, `.tag` x3, `.btn` x3, `.badge` x2, `.drawer` x2, `.account` x7, `.askbox` x25 rules; two side panels (`#drawer`, `#bpanel`); dark token block copy-pasted twice.
 - Python: JSON endpoints only (13 GET, 3 POST); views/ builders are pure. Hotspots: `poll()`, `renderTask`, `lkSend`; `views/timeline.py`, `views/roadmap.py`.
 
 ## Inconsistencies to fix (Fable)
@@ -22,7 +22,7 @@ Colour/emoji contract (review 1029) > 4c > older settled mocks. 1k/2b/3b predate
 - 1k replan 🧭; 3b ✏️ edit tool, 💬 note, ⚙️. Fix: 🔁, 📝, ✉️; ⚙️ dropped.
 - Token warning thresholds differ per mock. Fix: one Totals component, thresholds in one place.
 - Green dot = data fresh (1k/2b) and machine online (4c). Fix: freshness as text only.
-- Lane bars green/amber/red, epic bar green. Fix: meters neutral ink; state shown by Tag or emoji.
+- Account bars green/amber/red, epic bar green. Fix: meters neutral ink; state shown by Tag or emoji.
 - Four meter sizes, four row styles, six section header sizes, three drawer shells, button radii 6/8/99. Fix: one each.
 - Hardcoded colours (ring rgba, #2563eb) break dark mode. Fix: tokens only.
 - Empty states differ; no first-run state. Fix: one EmptyState.

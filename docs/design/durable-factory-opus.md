@@ -24,7 +24,7 @@ cited as `dg/...` for `src/delegate/...`. Every file:line below was opened for t
 6. **The journal records claims; git and bd confirm them.** Every memoized result that names world state (a sha, a bead id, a pushed ref) is
    checked against git or bd on resume. bd and git win every disagreement, and the journal is repaired to match.
 7. **Exactly once = write-ahead intent + probe + natural idempotency key**, for push, PR merge, bd create/close/comment, Dolt push.
-8. **One layer owns each failure class.** Today seven layers retry and multiply each other. Delegate owns lane, vendor and quota failures; the step
+8. **One layer owns each failure class.** Today seven layers retry and multiply each other. Delegate owns account, vendor and quota failures; the step
    policy owns engine-visible failures; the loop only schedules `wake_at`. The loop's own counters are deleted.
 9. **Human waits end the attempt.** A run never sits as a pending workflow while an ask is open; the answer starts a new attempt that resumes from
    the journal.
@@ -43,16 +43,16 @@ Most of the incidents in the brief happened on the Mac. The devbox `~/.config/ta
 |---|---|---|
 | `~/.config/task-loop/traces.jsonl` | 26 rows, all `landed`, bead ids `cg-1`.., worktree `/r` | test fixtures written into the live config (the R9-25 TESTHOME defect); **zero real runs** |
 | `~/.config/task-loop/runs/*/manifest.json` | 26: 16 done, 2 failed, 8 `created` for `cg-*` | `tl check` standalone runs and fixtures |
-| `~/.config/task-loop/loop/*/` | three empty folders; no `exits.jsonl`, no `died-*.json` | the devbox runs no factory lanes (agrees with review-pipe-opus.md:121) |
+| `~/.config/task-loop/loop/*/` | three empty folders; no `exits.jsonl`, no `died-*.json` | the devbox runs no factory loops (agrees with review-pipe-opus.md:121) |
 | `parks/`, `pauses/`, `reexec/`, `checkpoints/` | absent | nothing paused or parked here |
 | `~/.config/task-loop/events.jsonl` | 155 rows: 75 close, 51 land, 29 claim | session-driven work, not the loop |
-| delegate `~/.claude/plugins/data/iorlas-delegate-iorlas-marketplace/history.jsonl` | 243 rows, 2026-10-29 23:17 to 11-02 21:48 | **159 runs: 158 ok, 1 `secrets`; 84 refusals: 55 `busy`, 29 `no_lane`; 0 `network`** |
+| delegate `~/.claude/plugins/data/iorlas-delegate-iorlas-marketplace/history.jsonl` | 243 rows, 2026-10-29 23:17 to 11-02 21:48 | **159 runs: 158 ok, 1 `secrets`; 84 refusals: 55 `busy`, 29 `no_account`; 0 `network`** |
 | `~/.config/agent-runs/runs/*.json` | 159 runs: 158 completed, 1 failed | matches delegate history |
 | releases (git log of `0.x.y:` subjects) | 10-26: 20, 10-27: 14, 10-28: 59, 10-29: 40, **10-30: 69**, 10-31: 33, 11-01: 22 | **257 releases in 7 days** |
 | `~/.config/task-loop/releases/suite-*.log` | 356 suite logs, 119 on 10-28 alone | the suite runs about 1.4 times per release |
 | `bd list --all` (task-loop repo) | 722 beads; **112 (15.5 %) have a retry/pause/crash/resume/stale/lease/fence/park/timeout word in the title** (75 closed, 37 open) | retry handling is a sixth of all filed work |
 
-Mac incidents, as reported in the brief and the reviews (not re-counted here): NETPAUSE (4 beads, 4 lanes exited), the schema outage
+Mac incidents, as reported in the brief and the reviews (not re-counted here): NETPAUSE (4 beads, 4 loops exited), the schema outage
 (review-ops-opus.md:17, :46), the STALE KeyError (review-pipe-fable.md:8-20), CRASHPARK's retry that never stops (review-pipe-opus.md:20, :37), and the hop
 that has no cap (review-ops-opus.md:59). **Gap to close first:** nothing collects the Mac's incidents onto the devbox. The journal's `failures` table (section 2.3) is
 designed to be shipped (`tl journal export --since`), so the next taxonomy can be counted rather than reconstructed.
@@ -74,9 +74,9 @@ The network path (`PAUSE_NETWORK`, `NetState` probe, `tl/app/loop/net.py:1-37`, 
 |---|---|---|---|---|
 | L1 | git port | `tl/adapters/git.py:19-26` | fetch on ref race | 5 tries, 0.1 s steps |
 | L2 | delegate launch ladder | `dg/app/run.py:166-179`, `:194-212` | network drop before a session (once), schema re-ask (once), canary | per call |
-| L3 | engine RetryPlan | `tl/domain/lanes/retry.py:31-39` | 7 rows: invalid_output 1, denied_read 1, denied_secret 1, lane_poll 3 (20 s), crash 2 (30/120 s), resume_refused 1, worker_failed 1 then ask | per step, in process |
+| L3 | engine RetryPlan | `tl/domain/accounts/retry.py:31-39` | 7 rows: invalid_output 1, denied_read 1, denied_secret 1, account_poll 3 (20 s), crash 2 (30/120 s), resume_refused 1, worker_failed 1 then ask | per step, in process |
 | L4 | Kind POLICY | `tl/domain/outcome.py:29-36`, `:55-57` | same fingerprint on one bead, 3 times, escalates to ASK_STUCK | across runs |
-| L5 | pause table | `tl/domain/lanes/pauses.py:24-81`, `:88-113` | backoff 30-60 s doubling to a cap of 1,800-3,600 s; **only `engine_crash` has `max_attempts` (3)** (`:31`) | `Park.attempts` per reason |
+| L5 | pause table | `tl/domain/accounts/pauses.py:24-81`, `:88-113` | backoff 30-60 s doubling to a cap of 1,800-3,600 s; **only `engine_crash` has `max_attempts` (3)** (`:31`) | `Park.attempts` per reason |
 | L6 | loop settle | `tl/app/loop/settle.py:94-121`; knobs `tl/contracts/config.py:136-150` | `pauses_to_rest` 3 then 1 h rest; `fault_cooldown` 1,800 s; `fails_to_stop` 2 then **exit** | in the loop's memory (lost on exit) |
 | L7 | land | `config.py:173` `land_optimistic_tries` 2; in-lock STALE has no counter (PIPE-O-01) | gate re-runs | `Land.moved` |
 
@@ -97,7 +97,7 @@ Rules for every row:
 | Class | Examples (where raised today) | Retryable | Backoff | Max tries | Who decides | Persisted | Escalates to owner when | Dashboard |
 |---|---|---|---|---|---|---|---|---|
 | **net**: network/DNS | `git fetch` DNS (`checkout.py:66`), push drop, delegate `network` (`pauses.py:30`) | yes | none per bead; a **host gate** probes every 60 s (`net.py`, kept) | ∞ (does not count) | engine classifies, loop's host gate wakes | `failures` row + run `waiting(net)`; host row `net_down_since` | down for more than 6 h: one page ("offline 6 h") | one host banner "offline since 03:12, N runs waiting", no per-bead red |
-| **quota**: rate or plan window (Codex 5 h / weekly) | delegate `rate_limited`, `no_lane`, `busy`, `credit_exhausted` | yes, except `credit_exhausted`/`logged_out` | **delegate's `retry_at`**, never our own formula | ∞ (does not count) | **delegate** (lane health, window); engine copies `retry_at` | run `waiting(lane, wake_at)` | `needs_owner` permanence from delegate (logged out, credit), or week-out (R9-19) | lane card from `status --json`; run shows "waits for writer lane until 14:05" |
+| **quota**: rate or plan window (Codex 5 h / weekly) | delegate `rate_limited`, `no_account`, `busy`, `credit_exhausted` | yes, except `credit_exhausted`/`logged_out` | **delegate's `retry_at`**, never our own formula | ∞ (does not count) | **delegate** (account health, window); engine copies `retry_at` | run `waiting(account, wake_at)` | `needs_owner` permanence from delegate (logged out, credit), or week-out (R9-19) | account card from `status --json`; run shows "waits for writer account until 14:05" |
 | **crash**: process crash, kill, reboot | SIGKILL, OOM, reboot, lost run (`lost_run`, `pause_killed`) | yes | resume at once after lease expiry (≤ 2 min); on boot, at loop start | 3 *unexplained* crashes of one step id | reconciler (lease + boot_id) | lease row expires; attempt `crashed` | 3 crashes of the same step: page with the step id and the last log row | run tile "resumed after crash ×2 at write[2]" |
 | **bug**: engine exception (deterministic) | catch-all `run_once.py:59-60`, `parked_crash` (`tl/app/run/crash.py:14-24`) | **once** (the cause may be environmental) | 60 s | 2 total; the same fingerprint twice parks at once (keeps CRASHCAP's rule, `pauses.py:93-97`) | step policy | `failures` row with traceback | at the 2nd attempt; **breaker**: the same fingerprint on 2 beads quarantines that fingerprint | red "engine bug" with fingerprint and traceback link |
 | **stale**: base moved | rebase conflict, gate STALE (`run_once.py:188-202`, PIPE-O-01) | yes | 0 (it is progress, not failure) | 3 STALE per land step, then `FAULT_LAND` (R9-13) | land phase | step attempt rows (`moved` counter) | conflict that the fix round could not solve | "land: main moved 2×" amber |
@@ -329,8 +329,8 @@ This is DQ-04 (delete the hop) done the durable way. The journal makes it safe, 
 
 | Concern | Owner | Rule |
 |---|---|---|
-| lane choice, vendor network relaunch, schema re-ask, canary | delegate (`dg/app/run.py:166-212`) | stays; **reported** as `attempts: [{outcome, t}]` in the answer (contract 3 → 4 additive field; this is R9-50's `RunResult.attempts`) |
-| quota/window, lane permanence, `retry_at` | delegate | the engine copies `permanence`/`retry_at` into `Wait(quota, retry_at)` and **never** computes its own backoff for these (delete the delegate-reason rows of `pauses.TABLE`, `pauses.py:25-53`) |
+| account choice, vendor network relaunch, schema re-ask, canary | delegate (`dg/app/run.py:166-212`) | stays; **reported** as `attempts: [{outcome, t}]` in the answer (contract 3 → 4 additive field; this is R9-50's `RunResult.attempts`) |
+| quota/window, account permanence, `retry_at` | delegate | the engine copies `permanence`/`retry_at` into `Wait(quota, retry_at)` and **never** computes its own backoff for these (delete the delegate-reason rows of `pauses.TABLE`, `pauses.py:25-53`) |
 | delegate process died (`crash`) | engine step policy | counts once per launch toward the step budget; L3's `crash` row (2 retries) is removed. The step budget (3) is the one counter |
 | schema invalid after delegate's re-ask | engine | one new-thread retry (L3 `invalid_output`) stays, inside the same step budget |
 | resume after our own crash | engine | `call_ref` in the step row → `--resume ref`; delegate keeps refs for every outcome |
@@ -346,7 +346,7 @@ retries an engine-visible schema failure more than its one re-ask.
 | who may work on a bead across hosts | bd claim + fence generation | nothing (the lease is host-local) |
 | the work itself (commits, branches, base) | **git** (local + origin) | shas as claims, re-probed on resume |
 | ask text, answers, ADRs | asks store / bd | a `signals` row pointing at the answer |
-| lane health, quota, sessions | delegate | the `retry_at` it said |
+| account health, quota, sessions | delegate | the `retry_at` it said |
 | check pass evidence | results cache keyed by full identity (content-addressed) | check keys |
 | profile (`.task-loop.json`) | git at base (R9-32) | the profile digest the run started with |
 | transcripts, worker output | vendors / `engine/<run>.jsonl` | nothing |
@@ -455,8 +455,8 @@ needs resume from data). S5 and S6 last. Each slice is one announced release.
 
 | Code | Lines (wc) | After | Why |
 |---|---|---|---|
-| `domain/lanes/pauses.py` | 113 | ~40 | delegate rows go (delegate's `retry_at`); engine rows generated from the class table |
-| `domain/lanes/retry.py` | 58 | ~30 | `crash`, `lane_poll` rows go (step budget, delegate owns lanes) |
+| `domain/accounts/pauses.py` | 113 | ~40 | delegate rows go (delegate's `retry_at`); engine rows generated from the class table |
+| `domain/accounts/retry.py` | 58 | ~30 | `crash`, `account_poll` rows go (step budget, delegate owns accounts) |
 | `app/loop/settle.py` + `verdict.py` | 166 + 101 | ~90 | counters, rest, fails_to_stop gone; slot set-aside stays |
 | `app/run/reload.py` + `app/release/reexec.py` + reexec in `app/loop/run.py` | 124 + 76 + ~20 | 0 | pin per run |
 | `contracts/parks.py` + `domain/beads/park.py` + `app/asks/parks.py` | 47 + 50 + 66 | ~40 (question count only) | wake and attempts → journal |
@@ -503,7 +503,7 @@ loop lose nothing), REWRITE-CORE's removal of the service locator. The journal m
 | U-05 | Pin the code version per run and delete the mid-run hop (repin only by owner signal at a step boundary, never in land)? | The journal lets an attempt restart from data, so a new version can wait for the next bead. It removes `reload`, `reexec` and the crash-after-exec fallback. | a fix released at 10:00 reaches a bead started at 09:00 only after that bead ends | S-M | low after the release train | **Yes** (= DQ-04) |
 | U-06 | An ask always ends the attempt (no durable in-process wait for a human)? | bd's "blocked" is the truth, and answers arrive from other hosts and after code changes. A new attempt resumes from the journal. | as today; written down as a rule | – | low | **Yes** |
 | U-07 | Network outages never count toward caps, with one page after 6 h offline? | A network failure classified by probe is no bead's fault, and counting it is how NETPAUSE killed the factory. A page after 6 h covers the "box is really cut off" case. | `failures` rows of class net are excluded from every budget | S | low | **Yes** |
-| U-08 | Delegate owns quota/lane backoff entirely (engine copies `retry_at`, deletes its own delegate-reason rows and L3's `crash`/`lane_poll` rows)? | Today two layers back off on the same lane reasons with different numbers. One owner, one number. | `pauses.TABLE` loses 29 rows; `retry.py` loses 2 | S | medium: depends on delegate's `retry_at` being present (it is for `busy`, `dg/app/run.py:92-99`) | **Yes** (= DQ-10) |
+| U-08 | Delegate owns quota/account backoff entirely (engine copies `retry_at`, deletes its own delegate-reason rows and L3's `crash`/`account_poll` rows)? | Today two layers back off on the same account reasons with different numbers. One owner, one number. | `pauses.TABLE` loses 29 rows; `retry.py` loses 2 | S | medium: depends on delegate's `retry_at` being present (it is for `busy`, `dg/app/run.py:92-99`) | **Yes** (= DQ-10) |
 | U-09 | Embed idempotency markers (`<!-- tl:key -->`) in engine bd comments and probe for them? | Today's dedupe is "same text within an hour" (`outcome.py:35`), which repeats after an hour and drops legitimate repeats. A marker makes "did I already say it" exact. | comments get one hidden line | S | low; markers are visible in raw bd text | **Yes** |
 | U-10 | The kill matrix runs on every release (fakes, ~40 cells) and the real-git land subset nightly? | The fake matrix is fast enough to gate a release; real git for land catches the push probe. | `dev/suite.py` gains one test module; a nightly job | S | low | **Yes** |
 | U-11 | Per-run hard ceiling: more than 6 counted failures (any class but wait classes) or more than 24 h of active time → owner? | Step budgets bound each step; nothing bounds a run that fails a little everywhere. The ceiling is the last line against an overnight burn. | one check in the step runner | S | low; may park a few long Unity beads | **Yes** |

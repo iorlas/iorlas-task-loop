@@ -1,7 +1,7 @@
 # Visual work in task-loop: design (2026-10-23)
 
 ## Facts
-- Writers cannot render Unity on any lane. The lane sandbox blocks Unity (listen EPERM, licensing IPC) and is offline
+- Writers cannot render Unity on any account. The account sandbox blocks Unity (listen EPERM, licensing IPC) and is offline
   (lifesim `docs/agents/codex.md`). Grok's sandbox has no network or localhost sockets either. The engine runs Unity
   outside the sandbox after each write: tests, play tests, the screenshot methods (`docs/agents/task-loop.md`).
 - Despite that, `look_write` (engine.py ~3330) tells the writer to "save a screenshot of every changed screen" in the
@@ -113,7 +113,7 @@ Factory-wide artifact pipeline: a picture, PDF, video or audio made by the work 
 | tl-jvpm.6 | The bead page shows a scroller of all the bead's artifacts on top; on the timeline each stage attempt shows its own artifacts (zero included). Nice to have: on the Slots timeline a new picture pops up as an image and opens on click. | 2026-11-05 |
 | tl-jvpm.7 | Asks carry visuals when a decision needs them: an ask references artifacts and the ask card shows them. The card field `shots` is renamed `artifacts`. | 2026-11-05 |
 | tl-jvpm.8 | A ticket may demand visuals in its acceptance criteria. Items of a show class are checked mechanically (the named artifacts exist); taste stays with the owner. The class lives in the shared task schema and template. The capability belongs to the factory, not to lifesim. | 2026-11-05 |
-| tl-jvpm.9 | Anyone may take pictures. Capture is a capability every worker environment must provide (Unity shot methods via the whitelisted table, a browser for web, or self-made files registered through the tool). A host or lane without it is not given such a ticket. | 2026-11-05 |
+| tl-jvpm.9 | Anyone may take pictures. Capture is a capability every worker environment must provide (Unity shot methods via the whitelisted table, a browser for web, or self-made files registered through the tool). A host or account without it is not given such a ticket. | 2026-11-05 |
 | tl-jvpm.10 | Artifacts are registered by the injected tool `artifact_add(path, caption, role, name)`, served by a per-call tool server bound to bead/run/stage/attempt. delegate.api's request gets a typed optional `tools` field. A spike proves it on claude, codex and opencode first. No capture tool: shots stay request-in-answer plus engine render. | 2026-11-05 |
 | tl-jvpm.11 | Gallery and timeline list known directories (run, stage-attempt levels), never a tree-wide wildcard. The Slots timeline lists only the folder of each visible stage pass. Sort by sidecar time. | 2026-11-05 |
 | tl-jvpm.12 | `<config>/runs` keeps its layout; the artifact path carries the same run id (no merge now). The ask-card field `shots` is renamed `artifacts`; "artifact" means any registered file; "shot" survives only as lifesim's own shot method. Old flat `<config>/artifacts/<bead>/` folders are not migrated (hard cut). | 2026-11-05 |

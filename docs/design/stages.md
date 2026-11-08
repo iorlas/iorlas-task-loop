@@ -22,17 +22,17 @@ the design must work for both.
 
 ## 1. Role map
 
-| role | exists | model / lane (night 1 sessions) | input | output contract | permissions |
+| role | exists | model / account (night 1 sessions) | input | output contract | permissions |
 |---|---|---|---|---|---|
 | planner | yes, fresh session per plan/amend | claude opus-5.5 (120 of 120) | brief + PLAN_PROMPT; amend: old plan JSON + `replan.md` (last round only) | `plan`: stages[goal, files, checks, hard], cases, risks, question, options, decided, leftovers | read-only; ~12 tool calls budget |
 | writer | yes, ONE session resumed across rounds | claude sonnet-5.5 173, codex gpt-6.1-sol 118 | first: brief + plan + stage; later: delta (feedback, checks) | `write`: summary, checks_run, question, bad_checks, new_cases, unchecked | workspace-write; no `bd`, no gate, often no Unity |
 | reader | **no** | - | - | - | - |
-| reviewer | yes, **fresh session per round**, other family when a lane is free | claude sonnet 117, codex 4 | brief + plan + stage diff + engine check results + writer summary | `review`: findings[file,line,severity,fix], unmet, unchecked, leftovers, question | read-only |
+| reviewer | yes, **fresh session per round**, other family when an account is free | claude sonnet 117, codex 4 | brief + plan + stage diff + engine check results + writer summary | `review`: findings[file,line,severity,fix], unmet, unchecked, leftovers, question | read-only |
 | verify | yes, fresh, once before land | claude sonnet 19 | brief + work summary + evidence + unchecked items | `verify`: per item settled/wrong/open + kind | read-only, Bash for reading commands only; denied: builds, `just soak` |
 | judge | removed in 0.6.0 (10 old traces) | - | - | - | - |
 | engine | code | - | runs plan checks, gate, land, files leftovers | - | - |
 
-Lane limits (trace `lanes`): both lanes see only the brief, delegate rules and the repo's AGENTS.md/CLAUDE.md. Hidden: user
+Account limits (trace `accounts`): both accounts see only the brief, delegate rules and the repo's AGENTS.md/CLAUDE.md. Hidden: user
 config, **every skill**, plugins, MCP servers, hooks.
 
 ## 2. Findings (evidence; beads moved)
@@ -145,7 +145,7 @@ Consumers: reviewer (`deferred`, `seen_lows`, `scope`), verify (`scope`, `engine
 
 Facts: 104 runs on 3 slots; for runs of 5+ min, 2-3 concurrent for 89% of busy time; 73 overlapping pairs of different beads,
 5 sharing a planned file, 11 landed pairs sharing 0; 21 rebases all clean, 20 pushes none rejected; 1 red gate after
-rebase (flake, not the base). `take_area` (lane label) produced 106 skips, 100 in lane `sim`.
+rebase (flake, not the base). `take_area` (area label) produced 106 skips, 100 in area `sim`.
 
 Rules (file locks are not needed):
 1. **Shared notes, not locks**: `~/.config/task-loop/<repo>/shared.md`, engine-maintained, <= 1 KB, in planner and writer

@@ -61,8 +61,8 @@ Each entry: one plain sentence, an example, and what it is not. Last audited aga
 | Term | Means | Example | Not |
 |---|---|---|---|
 | account | A metered connection to a model vendor: a subscription or API key with usage windows, reset times and models. Delegate owns it. Dashboard panel: Accounts. | A Codex subscription and a Claude subscription are two accounts. | lane, license, supplier, provider, token source |
-| track | Within one gate block, a parallel sequence of checks; the first red cancels the other tracks. Replaces the `lane` key on checks. | A `build` track and a `test` track run side by side. | lane |
-| lane | Purged word (hard cut: the code purge is done; docs/design prose is the next step, docs/design/lanepurge.md). It names no concept; use account, track or loop. | | everything |
+| track | Within one gate block, a parallel sequence of checks; the first red cancels the other tracks. The profile key is `checks[].track`. | A `build` track and a `test` track run side by side. | lane |
+| lane | Purged word (hard cut: purged from code in steps 1–4; docs/design prose is purged in step 5; this row stays as the record, docs/design/lanepurge.md). It names no concept; use account, track or loop. | | everything |
 
 ## Merge queue (design: docs/design/merge-queue.md)
 
@@ -73,7 +73,7 @@ All `planned`. Running example: five PRs A, B, C, D, E wait to land on main (cal
 | merge queue | The ordered list of PRs waiting to land, tested ahead of time and landed in order, each on exactly the main it was tested on. | A, B, C, D, E in that order. | `land-stack` (one call, no memory) |
 | queue depth | How many PRs are waiting. In code: `queue_depth`. | A to E waiting: depth 5. After A lands: depth 4. | gates in flight |
 | gates in flight | How many PRs are being tested at the same time, each on main plus the PRs ahead of it. 1 is today's serial landing. It starts at 1, grows by 1 after each success, halves after a failure, and stays between the floor and the cap. In code and config: `in_flight`, `in_flight_floor`, `max_in_flight` (key `engine.land_queue_max_in_flight`); tests/rules/test_queue_terms.py fails on `window` or `lookahead` in the queue modules. | At 1: A is tested on M0; B waits; when A lands, B is tested on the new main. At 3: A on M0+A, B on M0+A+B, C on M0+A+B+C all at once; D and E wait. If A fails: A is thrown out, the tests of B and C (which contained A) are dropped and redone without A, D and E keep waiting, and the number halves. | window, lookahead, depth, `--jobs` |
-| floor | The fewest gates in flight: 1. | After a failure at 1, it stays 1. | the dashboard's Floor tab (becomes Slots) |
+| floor | The fewest gates in flight: 1. | After a failure at 1, it stays 1. | the dashboard's Slots tab |
 | cap | The most gates in flight. Default 4; 3 if over half of gate time was wasted in shadow mode. Config key `engine.land_queue_max_in_flight`. | At cap 4, E waits until A lands. | slot count |
 | speculative build | A PR tested on a local queue ref made of main plus the PRs ahead of it, assuming they pass. | C's build is main+A+B+C. | a PR, a branch |
 | eject | Removing a PR from the queue because its own gate failed or it conflicts; only the PRs behind it are rebuilt. | B fails: A keeps its build, C and D are rebuilt without B. | revert |
@@ -107,10 +107,10 @@ All `planned`. Running example: five PRs A, B, C, D, E wait to land on main (cal
 
 ## Rename plan (hard cut, one bead each)
 
-0. Purge: the word "lane" leaves code, docs, tests, dashboard and the delegate copy in one cut (no alias). Three meanings, three names: delegate lane -> account; check lane -> track; factory lane (a loop process) -> loop. Occurrence counts come from the naming audit (docs/design/naming-audit.md: about 1,760 lines in task-loop and 2,019 in delegate).
-1. Delegate: `lane` becomes `account` in routing.json, `route.py status`/`run` output, docs, skills. The interface is the typed `delegate.api` (docs/design/topology.md), so there is no wire contract to version. 122 files in task-loop mention "lane" today, so the task-loop side is the larger edit.
-2. Dashboard: the "Lanes" panel becomes "Accounts"; the "Floor" tab becomes "Slots".
-3. `tl lanes` becomes `tl accounts`; `tl setup` stops asking about lanes; `checks[].track` names a check track (hard cut: the former key is refused as unknown, per CLAUDE.md); `tl factory status` prints loops.
+0. Purge: three meanings have three names, with no alias: delegate account; check track; factory loop process. Historical occurrence counts are in the naming audit (docs/design/naming-audit.md: about 1,760 lines in task-loop and 2,019 in delegate).
+1. Delegate: `account` is the name in routing.json, status/run output, docs and skills. The interface is the typed `delegate.api` (docs/design/topology.md), so there is no wire contract to version. The task-loop side was the larger edit, spanning 122 files at the audit.
+2. Dashboard: the panel is "Accounts"; the tab is "Slots".
+3. `tl accounts` shows the status snapshot; `tl setup` stops asking about accounts; `checks[].track` names a check track (hard cut: the former key is refused as unknown, per CLAUDE.md); `tl factory status` prints loops.
 
 ## Visuals rename (with the visuals epic, hard cut)
 

@@ -12,7 +12,7 @@ An attribute-read scan of the whole directory finds 62 engine attributes that wr
 
 | engine attribute | assigned in | read by | class |
 |---|---|---|---|
-| `write_rounds`, `last_summary`, `lane_notes`, `strays` | write_round, review_round, newfiles | the shell (`run`), land (`last_summary`) | **write-owned state** (`WriteState`) |
+| `write_rounds`, `last_summary`, `account_notes`, `strays` | write_round, review_round, newfiles | the shell (`run`), land (`last_summary`) | **write-owned state** (`WriteState`) |
 | `stats[...]` (writes, rounds, reviews, tests_added/removed) | stage_loop, write_round, check_round, review_round | land, run (trace) | **counters**: returned as a `StageCounts` value, summed by the pipeline |
 | `stuck_why`, `last_run` | check_round, write_round, review_round | land, review | **hand-off** write -> land/close: returned in the stage result |
 | `accepted_new`, `unchecked`, `leftovers` | review_round | land, run, plan | **hand-off** (checkpointed `RunState` fields); the stage returns them, the pipeline appends |
@@ -42,14 +42,14 @@ Counts are from a grep for `e.X = / += / .append / .add` in `app/write`; the tab
 
 ## Slices (each a PR that passes `just test` alone; behavior the same after each)
 
-1. **WriteState.** `engine.write` (plain field) with `write_rounds`, `last_summary`, `lane_notes`, `strays`; the reads in `run`/`land` go through it; no checkpoint change (a test over the fixture used for LookState round-trips, since none of the four is checkpointed it is a negative test: the dumped record's field set is unchanged).
+1. **WriteState.** `engine.write` (plain field) with `write_rounds`, `last_summary`, `account_notes`, `strays`; the reads in `run`/`land` go through it; no checkpoint change (a test over the fixture used for LookState round-trips, since none of the four is checkpointed it is a negative test: the dumped record's field set is unchanged).
 2. **Hand-offs by value** (after ASKAI slice 2 and B-LOOK slice 2): `stuck_why`, `last_run`, `accepted_new`, `unchecked`, `leftovers`, counters returned by `ReviewRound`/`CheckRound`/`WriteRound`; the pipeline applies them. One round per PR, `CheckRound` first (smallest, 96 lines).
 3. **Ports.** Each class takes `facts` and its ports; write tests build the stage from fakes (as `FakeCheckHost` did); `Any` hosts go.
 4. **Report.** Closure of `app/write` and the engine attribute count before and after, in architecture-vertical.md; T-BUDGET (tl-e5t0.55) then ratchets it.
 
 ## Acceptance criteria (replacing "as B-LOOK for write")
 
-- `app/write` classes take no `host: Any`; no write-owned attribute is left on the engine (`write_rounds`, `last_summary`, `lane_notes`, `strays`).
+- `app/write` classes take no `host: Any`; no write-owned attribute is left on the engine (`write_rounds`, `last_summary`, `account_notes`, `strays`).
 - No `e.<field> = ...` assignment of a hand-off remains in `app/write` (a grep test in `tests/rules` lists the allowed names and fails on a new one).
 - Write tests build the stage from its own fakes; the checkpoint record's field set is unchanged (golden); engine attribute count and `app/write` closure are reported.
 - `just test` green after each slice; none touches `paths.py`, ids or the run layout.

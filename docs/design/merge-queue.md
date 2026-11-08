@@ -42,7 +42,7 @@ Goals, in order:
 2. Test PR N against main plus PRs 1..N-1 in parallel with the others, so a merge does not invalidate what is waiting.
 3. Retest, never rework: a failure of an earlier PR costs CI, not agent tokens (section 5).
 4. One config key falls back to today's path (section 14).
-5. Landing lag and queue state are visible on Floor and Board (section 9).
+5. Landing lag and queue state are visible on Slots and Board (section 9).
 
 Non-goals: batching in v1, probabilistic speculation, multiple queues per repo, replacing `tl land` (land_mode push) in v1.
 
@@ -321,7 +321,7 @@ the human-readable projection of the flake score log. Neither has a registry in 
      retry is *not blamed on the PR*; it is not hidden either: every such event is a row in the flake score.
   2. When one test has more than 3 flake rows in a week, the engine files a **fix bead** for it automatically (owner: the next free
      slot, normal priority). The test stays in the gate.
-  3. v2 only: the owner may approve a **skip** for one test, with a hard expiry of 7 days. It shows on Board and Floor as a hole. It
+  3. v2 only: the owner may approve a **skip** for one test, with a hard expiry of 7 days. It shows on Board and Slots as a hole. It
      cannot be renewed silently: at expiry the test is back in the gate, and a new skip is a new owner approval with the fix bead still open.
   Cost accepted: a flaky test can still delay the queue (retry plus main check, minutes). Gain: no unseen coverage loss.
 - ❌ Rejected: unlimited retry (hides real failures; OpenStack's recheck-spamming, fixed by a "clean check" policy [S]). Retry cap is 1.
@@ -334,7 +334,7 @@ the human-readable projection of the flake score log. Neither has a registry in 
   queue's `base_sha`, and always at pre-merge. Action: reset all builds (section 4 invalidation), rebuild from new main. Items keep order.
   Cost: full re-speculation; accepted, it is how every system does it (GitHub jump-to-top, GitLab merge-immediately, Mergify priority
   [V]).
-- **Hotfix lane.** A PR labelled hotfix jumps to position 1, cancels in-flight builds, and rebuilds the rest behind it. It gets the same
+- **Hotfix stream.** A PR labelled hotfix jumps to position 1, cancels in-flight builds, and rebuilds the rest behind it. It gets the same
   gates and the same assertion; "without restarting" merges [V GitLab] are ❌ refused: untested relative to the queue. The owner can
   push directly; that is just the case above.
 - **Owner freeze.** One switch in config/dash: no new gate starts, no merge; in-flight gates finish and keep results; unfreeze runs
@@ -428,11 +428,11 @@ Zuul's 2024 orphaned-changes report [S] and Tide's partial-merge TODO [V] are th
    repeated. Dark: nothing runs unless `engine.land_queue` is on.
 Files are out: the interim JSON file of the first paragraph is dropped, because factory.db is available now and a file repeats the slot-grant races.
 
-**Visibility** (extends dash-spec.md section 4 Floor; names are suggestions):
-- Floor: a **land lock** segment on the bead line while the item holds the lock (gate runs outside it, so the segment is short and
+**Visibility** (extends dash-spec.md section 4 Slots; names are suggestions):
+- Slots: a **land lock** segment on the bead line while the item holds the lock (gate runs outside it, so the segment is short and
   honest); a new row group "Queue" with one row per gate in flight (gate running, waiting on culprit, green waiting for merge).
   Colours follow the colour contract: red tint for a failed gate, grey hatch for waiting behind an item, teal live.
-- Landing strip: one strip under the Floor, queue order left to right, each PR as a chip: gate state, wait so far, a marker for ejected.
+- Landing strip: one strip under Slots, queue order left to right, each PR as a chip: gate state, wait so far, a marker for ejected.
 - Board: card badge `queued #n`, `ejected: reason`; Decisions tab lists asks from section 7 and 8.
 - Numbers: queue depth, wait per PR (enter to merged), ejections by reason, **landing lag** = bead `done` timestamp to
   `merged to main` timestamp, per bead and p50/p90.
@@ -473,7 +473,7 @@ deps-topology research]. Tracker edges are intent, not code fact. Beads' own dep
    Overlap without edge: for every open PR pair, compute touched paths from the diff and `git merge-tree` the pair; any overlap (path or
    textual conflict) makes the later PR **not speculated past** the earlier one: it waits for the earlier to merge before its gate
    starts (cost: less parallelism; gain: no certain-to-be-wasted build). Plus **path claims on the bead**: the bead's `## Touches` (in all
-   211 briefs, read by nobody: stages.md) is recorded as a claim and shown on Board/Floor; in v1 the claim only feeds the queue overlap
+   211 briefs, read by nobody: stages.md) is recorded as a claim and shown on Board/Slots; in v1 the claim only feeds the queue overlap
    rule and the display, never delays dispatch. stages.md rule 3 said drop Touches (5 of 73 overlapping pairs shared a planned file); that
    argues against a dispatch scheduler, not against using it as a predictor here. Open question 3 (section 15).
 5. **Parent changes an interface after child started.** Child merges clean but breaks on main. After the parent merges, the child's gate
@@ -578,7 +578,7 @@ m needs i, e, k, h; n (guard rails) needs k; o (repair) needs d, g, l; p (glossa
 | tl-7s2f.6 (e) | AIMD gates in flight, wasted-gate accounting | d |
 | tl-7s2f.7 (f) | flake policy and score log | c |
 | tl-7s2f.8 (g) | durable state + reconcile loop | c |
-| tl-7s2f.9 (h) | metrics, Floor land-lock, Landing strip, Board | g |
+| tl-7s2f.9 (h) | metrics, Slots land-lock, Landing strip, Board | g |
 | tl-7s2f.10 (i) | shadow mode + replay harness | c, g, l |
 | tl-7s2f.11 (j) | bead-dep gate, cycle check, overlap check, path claims | c |
 | tl-7s2f.12 (k) | hotfix, freeze, check-set hash, timeouts | d, g |

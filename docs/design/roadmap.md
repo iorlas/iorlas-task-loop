@@ -5,7 +5,7 @@ Bead ids are the source of truth; this file only orders them. Update it when a w
 
 ## Wave 1: now (streams running in parallel)
 
-| Goal | Beads | Lane |
+| Goal | Beads | Stream |
 |---|---|---|
 | Store on sqlite, files deleted | STORE slices (tl-sqd3.26.*), then STORE 8 (tl-sqd3.26.8, delete legacy file stores) | engine |
 | Fewer tests per change | tl-wz4z AFFECTEDTESTS, tl-7i9k.23 SUITEONCE, tl-wnup.9 | gatespeed |
@@ -17,7 +17,7 @@ Bead ids are the source of truth; this file only orders them. Update it when a w
 ## Wave 2: after STORE run-dir state
 
 - LAYOUT: tl-9un.40, .43, .44 (runs/<run>/ bundle, migrate), then tl-9un.45, .46, .47 (loop id, checkpoints, retention).
-- tl-wnup.4 (255 temp-dir sites to the workdir fixture): wide test edit, run when no other lane has open test PRs.
+- tl-wnup.4 (255 temp-dir sites to the workdir fixture): wide test edit, run when no other stream has open test PRs.
 - tl-wnup.2, .3 (split delegate spawner tests, procsim contract suite).
 - tl-w7lt.11 SHELF-LEASE (after STORE leases settle), tl-w7lt.13, .18, .19, .7.
 

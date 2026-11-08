@@ -1,6 +1,6 @@
 # LOOPBUDGET: a cap on the loop's wall minutes per window (tl-oi1)
 
-Status: proposal, 2026-11-06. Nothing here is built. This is the simplified bead (owner sweep 2026-10-28): one cap, summed wall minutes of bead runs, one config int, a stop with one reason line. Call counting is dropped (no quota reader; delegate lanes report their own limits). The open-asks list is not built: the Decisions view and `tl ask list` already show them.
+Status: proposal, 2026-11-06. Nothing here is built. This is the simplified bead (owner sweep 2026-10-28): one cap, summed wall minutes of bead runs, one config int, a stop with one reason line. Call counting is dropped (no quota reader; delegate accounts report their own limits). The open-asks list is not built: the Decisions view and `tl ask list` already show them.
 
 ## Problem
 
@@ -34,4 +34,4 @@ A night cannot run away only if something bounds it. Today the bounds are per be
 - **Default cap.** Recommend off (0) in code and the owner sets it per repo; with 4 slots a night of 8 h is up to 32 h of summed run minutes, so say which unit the owner thinks in (summed run minutes, as here, or wall hours of the loop). Recommend summed run minutes: it is what a run row records.
 - **Does a retry count?** Recommend yes: repeated failure is the failure mode the cap exists for, and not counting it would let the cap miss exactly that.
 - **Stop or ask?** Recommend a quiet wait with one log line, no owner ask: an ask at 03:00 helps nobody, and the wait clears itself. The owner sees it on the strip in the morning.
-- **Interaction with QUOTA (docs/design/quota.md).** They are separate caps (minutes here, subscription burn there) and can stack. Recommend building this one first: it needs no lane data.
+- **Interaction with QUOTA (docs/design/quota.md).** They are separate caps (minutes here, subscription burn there) and can stack. Recommend building this one first: it needs no account data.

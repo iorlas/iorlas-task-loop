@@ -92,7 +92,7 @@ and includes its sources in every consumer closure. The initial member requires
 and `Layout-allow: node gate workspace member` on the eventual commit.
 
 Unresolved policy conflict: the specified gate Ruff config extends kernel, whose
-threading ban rejects existing imports in attempts, base, host, lanes, linux,
+threading ban rejects existing imports in attempts, base, host, accounts, linux,
 resources and round. Resolving this requires a lint-layer decision; the pure move
 keeps both the imports and requested config.
 

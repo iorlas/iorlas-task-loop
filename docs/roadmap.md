@@ -13,7 +13,7 @@ per-bead dispatch is the bottleneck, not the engine.
 
 | | epic | what | done when |
 |---|---|---|---|
-| M1 | tl-bxk.9 | `tl loop`: one sequential loop. Each pass takes any free slot (waits if none), picks by the queue rule, claims, runs the bead, releases the slot, goes on. An ask parks the bead and the loop moves on; a lane out waits; 2 failures in a row stop it. One summary line per bead | its beads are closed and one live lifesim bead ran through it |
+| M1 | tl-bxk.9 | `tl loop`: one sequential loop. Each pass takes any free slot (waits if none), picks by the queue rule, claims, runs the bead, releases the slot, goes on. An ask parks the bead and the loop moves on; an account out waits; 2 failures in a row stop it. One summary line per bead | its beads are closed and one live lifesim bead ran through it |
 | M2 | tl-bxk.10 | trust run: one loop, one night, no supervisor | >=10 beads; >=7 land with no owner ask; 0 lost work; 0 engine crashes (scored by `tl report`) |
 | M3 | tl-bxk.11 | concurrency: N tasks at once on N slots | one night on 3 slots with no double claims and no broken lands, scored as M2 |
 | M4 | tl-bxk.12 | unattended: budgets, launch and restart without a session, asks pushed to the owner, morning digest, usage feed without a session | a week with no supervisor |
@@ -47,7 +47,7 @@ line; a message between sessions is never the guard. Clashes may happen; they mu
 | a slot | slot bead + `<config>/locks/engine-<worktree key>.lock` (pids with start times) + `tl slot hold`; every claim under one per-repo lock | waits in the slot line, served in ticket order (tl-bxk.11.5); a hand `--slot S` refuses | |
 | the base branch | land lock, rebase, retry; a fetch that loses a ref lock to a sibling worktree's is tried again | waits | |
 | Unity on the machine | the repo's OS counting locks (lifesim `tools/unity_slot.py`) | waits | |
-| a model lane | delegate's leases; busy answers `retry` | waits until `retry_after` | |
+| a model account | delegate's leases; busy answers `retry` | waits until `retry_after` | |
 | files two beads both edit | areas (tl-bxk.11.4): the area check, the claim and its mark under one area lock; files across areas: conflicts show at land as a rebase or fix round | the queue skips it for the next area's bead; a hand run warns (`--exclusive-area`: refuses) | |
 | the repo's `.task-loop.json` | read from the base branch after a fetch (`tl.profile`); the working tree only with no remote | the next fetch reads the new rule | |
 | an engine release | `dev/release.py`: an OS lock, the version from origin/main, the suite, the push under the land lock (a land during the suite: rebase, suite again, push) | waits in line, told who holds it | |

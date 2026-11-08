@@ -1,6 +1,6 @@
 # CKPT: CloseIntent and the stage sections of the checkpoint (tl-e5t0.29, design slice 1)
 
-Design and slicing only; no code moves with it. Follows `stage-isolation.md` section 1.1c and 7, `compat.md` (no backward compatibility: the format changes once, directly, a foreign-version record is refused) and `pipeline-node.md` (slice P3 moves `closer*.py`; this bead does not touch those files while that PR is open). Measured on origin/main, 2026-11-07, by reading `contracts/checkpoint.py`, `app/run/closer.py`, `app/pipeline/ended.py`, `app/run/records.py`, `app/run/crash.py`, `app/workers/lane_acts.py`; nothing was run.
+Design and slicing only; no code moves with it. Follows `stage-isolation.md` section 1.1c and 7, `compat.md` (no backward compatibility: the format changes once, directly, a foreign-version record is refused) and `pipeline-node.md` (slice P3 moves `closer*.py`; this bead does not touch those files while that PR is open). Measured on origin/main, 2026-11-07, by reading `contracts/checkpoint.py`, `app/run/closer.py`, `app/pipeline/ended.py`, `app/run/records.py`, `app/run/crash.py`, `app/workers/account_acts.py`; nothing was run.
 
 ## What a restart reads today
 
@@ -8,7 +8,7 @@ A run that died inside its close leaves a `Checkpoint` with `ended: EndRec` (kin
 
 | read in `Closer.finish` / `pause` | where the dead run set it | on a fresh engine it is |
 |---|---|---|
-| `e.pause_reason`, `e.pause_producer`, `e.pause_permanence` | `workers/lane_acts.py` (167-169, 135-137), `run/crash.py` (15, 26-27) | `""`, `"engine"`, `None`: `parks.paused(...)` files a pause with no reason, and a delegate-typed one becomes the engine outcome kind |
+| `e.pause_reason`, `e.pause_producer`, `e.pause_permanence` | `workers/account_acts.py` (167-169, 135-137), `run/crash.py` (15, 26-27) | `""`, `"engine"`, `None`: `parks.paused(...)` files a pause with no reason, and a delegate-typed one becomes the engine outcome kind |
 | `e.retry_after` | set by `pause` itself from the park, and by the worker stop | `0.0` (unknown) |
 | `e.crash_fingerprint`, `e.crash_site` | `run/crash.py` (21-22) | `""`: a crash pause loses its fingerprint and the `ask_pause` text its site |
 | `e.cost`, `e.t0`, `e.stats`, `e.sessions` | `workers/worker_call.py` (cost), engine start (t0), steps | `0`, now, `{}`, `[]`: the `stats` line of the Reflect comment and the run record says `cost=$0.00; minutes=0` |
@@ -45,7 +45,7 @@ The checkpoint stays one record. Sections keep resumable stage progress only: `R
 
 ## Not verified
 
-The table is read from the code, not exercised: whether a restart really files `cost=$0.00` was not run. `e.sessions` and `e.stats` as defaults are read from `run/fields.py` names only. Whether P3 changes `Closer.finish`'s signature is the pipeline lane's to say.
+The table is read from the code, not exercised: whether a restart really files `cost=$0.00` was not run. `e.sessions` and `e.stats` as defaults are read from `run/fields.py` names only. Whether P3 changes `Closer.finish`'s signature is the pipeline stream's to say.
 
 ## 4. Per-part persistence (C3, tl-e5t0.29; one PR)
 

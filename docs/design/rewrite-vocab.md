@@ -5,8 +5,8 @@ Design note only; no code moves with it. The bead's acceptance: `grep '"(FAULT|P
 ## What is true today (origin/main, 2026-11-06)
 
 - `Kind` (`contracts/kinds.py`) is a plain `enum.Enum` of 27 members with lowercase values (`"fault_infra"`). It is the stored end of a run. `Kind.CUT` has no raiser (the file says so); `ENGINE_CRASH` and `FAULT_CRASHED` are two crash kinds.
-- The app and domain spell a kind by NAME as an uppercase string in **99 literal sites in 34 files**: 75 in app and cli, 24 in domain (`domain/lanes/policy.py` 17, `domain/lanes/says.py` 7, `app/land/pr_land.py` 7, `app/land/tree.py` 6). They travel as `kind: str` (28 parameters in app/run and app/land alone) and are converted late by the single lookup `Kind[kind]` (`app/run/blocked.py:35`). Eight `blocked_for(why, kind: str)` copies sit in host Protocols.
-- Families are read three ways: `kind.name.startswith("FAULT_")` (`app/run/outcomes.py`, `closer_settle.py`, `lane_acts.py`), `record.kind.startswith("ask_")` over stored values (`contracts/attemptrows.py`, `domain/outcome.py`, `app/loop/verdict.py`), and the tuples `ASKS`, `PAUSES`, `FAULTS` built from names in `kinds.py`.
+- The app and domain spell a kind by NAME as an uppercase string in **99 literal sites in 34 files**: 75 in app and cli, 24 in domain (`domain/accounts/policy.py` 17, `domain/accounts/says.py` 7, `app/land/pr_land.py` 7, `app/land/tree.py` 6). They travel as `kind: str` (28 parameters in app/run and app/land alone) and are converted late by the single lookup `Kind[kind]` (`app/run/blocked.py:35`). Eight `blocked_for(why, kind: str)` copies sit in host Protocols.
+- Families are read three ways: `kind.name.startswith("FAULT_")` (`app/run/outcomes.py`, `closer_settle.py`, `account_acts.py`), `record.kind.startswith("ask_")` over stored values (`contracts/attemptrows.py`, `domain/outcome.py`, `app/loop/verdict.py`), and the tuples `ASKS`, `PAUSES`, `FAULTS` built from names in `kinds.py`.
 - The other vocabularies are in three states: `Step`, `Cause`, `CheckStatus`, `WaitWhat` already are `StrEnum` in `contracts/enums.py`; `Cause` is also a `Literal` in `contracts/answers.py` (two definitions of one idea); `SlotState` is a `Literal` in `contracts/slots.py`; `LoopExit` is an event record, not a vocabulary.
 
 ## Target
@@ -25,8 +25,8 @@ Design note only; no code moves with it. The bead's acceptance: `grep '"(FAULT|P
 
 1. **Rule test as a ratchet** at today's count, plus `Kind` to `StrEnum` with identical values. Nothing else moves; every existing `Kind.X.value` and `kind_named` caller still works. The wire/golden tests prove the stored values did not change.
 2. **`blocked_for(kind: Kind)` and the callers in `app/land`** (about 35 sites, the eight Protocols): they are one slice, and the bulk of the 75.
-3. **`app/run`, `app/write`, `app/plan`, `app/review`** (about 30 sites, `lane_acts.py` and `worker_request.py` first: they hold the `startswith("FAULT_")` reads).
-4. **`domain/lanes`** (24 sites, `policy.py` and `says.py`): these return kind names that the app converts; they return `Kind` instead, which removes the last `Kind[...]`.
+3. **`app/run`, `app/write`, `app/plan`, `app/review`** (about 30 sites, `account_acts.py` and `worker_request.py` first: they hold the `startswith("FAULT_")` reads).
+4. **`domain/accounts`** (24 sites, `policy.py` and `says.py`): these return kind names that the app converts; they return `Kind` instead, which removes the last `Kind[...]`.
 5. **Families as data**: `kind.family`, delete `ASKS/PAUSES/FAULTS/ASK_NAME` builders and the `startswith` reads in `contracts/attemptrows.py`, `domain/outcome.py`, `app/loop/verdict.py`.
 6. **The small ones**: `Cause` once, `SlotState` to `StrEnum`, `Kind.CUT` deleted, `classify_crash`. The ratchet is set to zero.
 
@@ -34,8 +34,8 @@ Design note only; no code moves with it. The bead's acceptance: `grep '"(FAULT|P
 
 - **Persisted values.** Stored rows hold lowercase values; the strings being removed are uppercase names that never reach disk. A `StrEnum` with the same values changes no row. A test that round-trips every member through `kind_named` guards it.
 - **Typing that hides a wrong kind.** Today a typo in `"FAULT_SLOTT"` fails at runtime in `Kind[...]`; after step 2 it fails in pyrefly. That is the point, but it means step 2 needs `just types` on the whole tree, not only the changed files.
-- **Domain returning names.** `domain/lanes` is imported by `app`; changing its return type is a contract change within the layers, which `.importlinter` allows (domain does not import app), but every test double of those functions changes in step 4.
-- **Overlap.** LANEPURGE renames `lane` words in `domain/lanes`, `lane_acts.py` and `Cause.LANE_OUT`; run step 4 before LANEPURGE's domain cut or after it, not at the same time, and keep the two PRs on disjoint files.
+- **Domain returning names.** `domain/accounts` is imported by `app`; changing its return type is a contract change within the layers, which `.importlinter` allows (domain does not import app), but every test double of those functions changes in step 4.
+- **Overlap.** LANEPURGE standardizes account names in `domain/accounts`, `account_acts.py` and `Cause.ACCOUNT_OUT`; run step 4 before LANEPURGE's domain cut or after it, not at the same time, and keep the two PRs on disjoint files.
 
 ## Decisions for the owner (a recommendation each)
 

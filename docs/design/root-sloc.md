@@ -21,7 +21,7 @@ What is left after PRs 1-5 is mostly `app/run/entry.py` (42 branches, 3 long fun
 
 | move | PR | root sloc |
 |---|---|---|
-| setup, setup_apply, lanes to app/doctor (route, config dir, host store and slot facts injected; bindings in app/launch) | #603 | -223 net |
+| setup, setup_apply, accounts to app/doctor (route, config dir, host store and slot facts injected; bindings in app/launch) | #603 | -223 net |
 | closeguard rules, preflight admission and entry sequencing to tlpipeline over ports | #606 | -57 (closeguard 78 -> ~35, preflight 62 -> 22, entry admission only -2: those rules already lived in app/asks/admission; entry keeps ~48 slot-take sloc for the slots carve) |
 | run/layout.py to tlkernel.runlayout | #608 | -98 |
 | doctor report, usage validation and setup answer/verdict rules (tl-e5t0.40 PR 3) | uncommitted | 3409 -> 3369 (-40); branches 235 -> 223 (-12); long functions 11 -> 10 (-1) |
@@ -45,7 +45,7 @@ Packages that exist: `kernel`, `gate`, `artifacts`, `pipeline`, `testkit`, `slot
 |---|---|---|---|---|---|
 | `skills/task-loop/tl.py` | 341 | 6 | 10 | v_ask's sweep into app/asks; the rest stays | 172 sloc are argparse parser builders, 50 the VERBS table, 84 about 25 two-line bindings. cli/* is root too, so moving parsers or handlers into cli modules leaves the total unchanged. Option (c): verbs as data (~150 sloc) waits for Denis on whether cli wiring counts as root (bead tl-e5t0.40.6 follow-up) |
 | `app/run/entry.py` | 261 | 45 | 150 | slots package (_slot_taken, run_any_slot decision logic, net ~35; take_area is area policy and stays until an areas carve); pipeline (admission, blocked reopen ~50) | run_in/run_bead/_worktree_of stay. Needs the slots carve (tl-e5t0.17) and a slots port; the pipeline half is free now (packages/pipeline exists) |
-| `app/launch/dash.py` | 191 | 41 | 170 | tldash (its launch module); stays a ~20 sloc binding | dashboard lane work, wait until pix-dash is quiet |
+| `app/launch/dash.py` | 191 | 41 | 170 | tldash (its launch module); stays a ~20 sloc binding | dashboard stream work, wait until pix-dash is quiet |
 | `app/wire/slots.py` | 155 | 19 | 130 | slots package (machine-bound half: slot_table, slot_env, worktrees, take/release) | slots carve (tl-e5t0.17) with a slots port that wire binds; callers: entry, doctor, loop |
 | `app/run/fields.py` | 131 | 0 | 0 | stays | construction: the plain fields of a run; shrinks only when the Engine's 150 attributes fall |
 | `app/launch/loop.py` | 122 | 0 | 0 | stays | builds the LoopEnv: pure binding |
@@ -68,7 +68,7 @@ Packages that exist: `kernel`, `gate`, `artifacts`, `pipeline`, `testkit`, `slot
 | `app/run/plumbing.py` | 64 | 6 | 0 | stays | run construction (stop flag, poster, clock) |
 | `app/launch/check_host.py` | 63 | 0 | 50 | gate package (CliHost) | gate exists; needs its runner/cache/evidence ports |
 | `app/run/preflight.py` | 63 | 14 | 55 | pipeline (read-only admission and plans) | packages/pipeline exists; no blocker |
-| `app/wire/lanes.py` | 60 | 8 | 50 | app/doctor or a new app/lanes slice | files delegate's status as the snapshot; rules, not binding |
+| `app/wire/accounts.py` | 60 | 8 | 50 | app/doctor or a new app/accounts slice | files delegate's status as the snapshot; rules, not binding |
 | `app/run/ask_flow.py` | 0 | 0 | 0 | moved to `tlasks.flow` in asks PR B (tl-e5t0.18) | 59 root sloc removed; injected host and shell-bound helpers |
 | `app/run/context.py` | 54 | 0 | 0 | stays | run construction |
 | `app/run/closer_ports.py` | 50 | 0 | 0 | stays | binding |
@@ -85,11 +85,11 @@ Packages that exist: `kernel`, `gate`, `artifacts`, `pipeline`, `testkit`, `slot
 
 ## Order (lowest blocker first)
 
-1. tl.py handler groups (200 sloc), `app/doctor` (setup, setup_apply, doctor, selftest, lanes: about 320), `app/report` (brief 60), pipeline (closeguard 70, preflight 55, entry admission ~50), kernel (layout 60): about 800 sloc, no carve needed, each its own PR.
+1. tl.py handler groups (200 sloc), `app/doctor` (setup, setup_apply, doctor, selftest, accounts: about 320), `app/report` (brief 60), pipeline (closeguard 70, preflight 55, entry admission ~50), kernel (layout 60): about 800 sloc, no carve needed, each its own PR.
 2. gate (shell 70, check_host 50): the gate package exists; needs ports.
 3. After the slots carve: slots.py 130, entry's slot take ~100, shared 70.
 4. After asks / release / land carves: ask_flow, wire/asks, loop_start, land, land_stack (about 235).
-5. dash.py 170 when the dashboard lane is quiet.
+5. dash.py 170 when the dashboard stream is quiet.
 
 Release R1 (tl-e5t0.19): code carve done in `packages/release/src/tlrelease`, flat modules with no api.py.
 `ReleaseHost` supplies shell effects, bound by `app/launch/release_host.py`; tests stay in `tests/release` until R2.

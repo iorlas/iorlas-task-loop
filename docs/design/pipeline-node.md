@@ -14,7 +14,7 @@ The pipeline is the code that decides **which stage runs next and what a run is 
 |---|---|---|
 | **pipeline** (this bead) | 2,607 | stages 242, run_once 242, closer 161, closer_host 72, closer_notes 93, closer_record 79, closer_branch 65, closer_settle 63, closer_decide 59, resume 130, requests 116, waits 120, reload 104, reflect 67, stage_rounds 79, stage_run 73, decide 85, outcomes 58, done_memo 61, steps 52, budget 42, stage_checks 31, trace 31, summaries 33, ended 38, finish 27, stuck 26, blocked 31, crash, review_glue, state, asked |
 | **workers** (C-WORKERS, tl-e5t0.37, not this bead) | 589 | worker_call, worker_request, worker_identity, worker_recovery, delegation, writer_pin |
-| **root, stays** | 1,854 | entry 336, lane_acts 178, records 168, fields 136, layout 102, engine 97, shell 79, shared 82, calls 82, plumbing 62, preflight 62, parts_* 143, context 54, console 49, host 33, running 34, ask_flow 60, ... |
+| **root, stays** | 1,854 | entry 336, account_acts 178, records 168, fields 136, layout 102, engine 97, shell 79, shared 82, calls 82, plumbing 62, preflight 62, parts_* 143, context 54, console 49, host 33, running 34, ask_flow 60, ... |
 
 C-THIN (a), tl-e5t0.40.1 supersedes the ownership estimate for these run modules:
 
@@ -25,7 +25,7 @@ C-THIN (a), tl-e5t0.40.1 supersedes the ownership estimate for these run modules
 
 The four blocked modules remain source modules in `nobody-imports-a-root`; `stages`, `state` and `target` are unchanged. No file moves or new import exceptions accompany this classification.
 
-So the node is about **2,600 sloc**, not 6,100; after the workers node goes too, `run/` keeps about 1,850, and C-THIN (.40) takes that to construction only. `ask_flow`, `records`, `shared`, `shell`, `lane_acts`, `fields` and `layout` are neither pipeline nor workers: the wiring modules `ask_flow`, `shared` and `shell` are now composition roots; the remaining ownership questions are listed in section 6.
+So the node is about **2,600 sloc**, not 6,100; after the workers node goes too, `run/` keeps about 1,850, and C-THIN (.40) takes that to construction only. `ask_flow`, `records`, `shared`, `shell`, `account_acts`, `fields` and `layout` are neither pipeline nor workers: the wiring modules `ask_flow`, `shared` and `shell` are now composition roots; the remaining ownership questions are listed in section 6.
 
 How much of the node is already free of the Engine:
 
@@ -87,7 +87,7 @@ Rules, all written in the PR that moves the module (the HOSTBAN mechanism of #34
 
 ## 6. Open points (decided by the owner or by the B-* beads, not here)
 
-1. **`ask_flow`, `records`, `shared`, `shell`, `lane_acts`, `fields`, `layout` (about 900 sloc).** They are used by both the pipeline and the stages. `records` (run log, manifest, heartbeat) is pipeline-shaped (it is the run's own journal); `ask_flow` belongs to asks; `shell`/`shared`/`lane_acts` are run facts. The recommendation: `records` moves with the pipeline as `pipeline/journal.py` behind a `RunJournal` port the stages already see as `StepBook`/`Narrate`; the others stay in the root until their owners move them. C-THIN (a) subsequently classified `ask_flow`, `shell` and `shared` as composition roots that stay in run.
+1. **`ask_flow`, `records`, `shared`, `shell`, `account_acts`, `fields`, `layout` (about 900 sloc).** They are used by both the pipeline and the stages. `records` (run log, manifest, heartbeat) is pipeline-shaped (it is the run's own journal); `ask_flow` belongs to asks; `shell`/`shared`/`account_acts` are run facts. The recommendation: `records` moves with the pipeline as `pipeline/journal.py` behind a `RunJournal` port the stages already see as `StepBook`/`Narrate`; the others stay in the root until their owners move them. C-THIN (a) subsequently classified `ask_flow`, `shell` and `shared` as composition roots that stay in run.
 2. **`e.Blocked` as an attribute of the host.** The pipeline can import the exception class itself (`contracts`-level, as `fence.Fenced` is), which removes `e.Blocked` and `e.blocked_for`. The `Blocked`/`FixFailed` classes are in `run/blocked.py` (31 sloc, 0 host attrs) and carry an outcome; they move to `contracts` or `pipeline` in slice P1. Needs the architect's kernel-rename (`tlkernel`) to be settled, so P1 does not move them yet.
 3. **`reload.safe_point`** execs the process into a newer install; `Exec` is control flow. It stays a pipeline port (`Reloading`) so a test can assert "a safe point was offered before land" without exec.
 4. **The checkpoint is not touched.** `CKPT` (.29) is last; the pipeline composes the existing `RunState` from the stage states through `CheckpointsPort`.
@@ -96,7 +96,7 @@ Rules, all written in the PR that moves the module (the HOSTBAN mechanism of #34
 
 | slice | moves | needs | size |
 |---|---|---|---|
-| **P1 leaves** | steps, budget, outcomes, finish, ended, done_memo, summaries, trace, decide, stage_run (0 host attrs, about 450 sloc); `app/pipeline/` and its linter contract appear with them | nothing (touches no file the B-* and delegate lanes edit) | S |
+| **P1 leaves** | steps, budget, outcomes, finish, ended, done_memo, summaries, trace, decide, stage_run (0 host attrs, about 450 sloc); `app/pipeline/` and its linter contract appear with them | nothing (touches no file the B-* and delegate streams edit) | S |
 | **P2 cursor** | `cursor.py` out of stages.py, with table tests of `select_step` on plain values; `stages.py` calls it | P1 | S |
 | **P3 close** | `closer*.py` as `closing`; `CloseHost` already narrow; the Closer's few `e.` reads become `CloseFacts` | P1, FACTS (done) | M |
 | **P4 ports** | `ports.py`, the fakes, and `faults.py`/`RunEnd` replacing the five Engine outcome fields | B-PLAN, B-WRITE, B-REVIEW, B-LOOK, B-LAND (the hand-offs) | M |
@@ -104,7 +104,7 @@ Rules, all written in the PR that moves the module (the HOSTBAN mechanism of #34
 | **P6 waits, requests, reload, reflect, resume** | the wide-attr ones, each with its port | P5 | M |
 | **P7 journal** | `records` per open point 1 | decision | M |
 
-P1 to P3 can run now beside the B-* lanes (they touch files only the pipeline owns); P4 on, the order is forced by the hand-offs. Files that are also in flight elsewhere: `worker_call` family (delegate-hard, C-WORKERS), `contracts/*` renames (architect, tlkernel), the stage files (B-* lanes). Each slice states, in its PR body, which of those it touches.
+P1 to P3 can run now beside the B-* streams (they touch files only the pipeline owns); P4 on, the order is forced by the hand-offs. Files that are also in flight elsewhere: `worker_call` family (delegate-hard, C-WORKERS), `contracts/*` renames (architect, tlkernel), the stage files (B-* streams). Each slice states, in its PR body, which of those it touches.
 
 ## 8. Decisions to record (proposed)
 
@@ -141,7 +141,7 @@ Rules for the slices: a port class lives in the stage that implements it (`app/<
 | **P4b** | `closer_settle`, `closer_decide`, `closer_notes` take the ports; they move to `app/pipeline/` (`closing_settle.py`, `closing_decide.py`, `closing_notes.py`) with tests on the fakes | those three files, `closer_host.py`, `closer.py` imports |
 | **P4c** | `closer_branch` (`LandCleanup`, `Slotting`) and `closer.py` (`AskRules`, `ParkBook`) move; `closer_host.py` shrinks to the binder `run/closer_ports.py`; the pipeline joins no new exception | `closer_branch.py`, `closer.py`, `closer_host.py`, `run/host.py` |
 
-P4a is safe beside the B-* lanes (new files and one-line additions). P4b and P4c edit files only the close family owns, plus `run/host.py`'s `closer` property. The B-LAND bead owns `app/land/record.py`; P4a adds the adapter beside it, not inside it, to avoid a conflict.
+P4a is safe beside the B-* streams (new files and one-line additions). P4b and P4c edit files only the close family owns, plus `run/host.py`'s `closer` property. The B-LAND bead owns `app/land/record.py`; P4a adds the adapter beside it, not inside it, to avoid a conflict.
 
 ## 10. P6: waits, requests, reload, reflect, resume, from today's call sites (added 2026-11-07, after P4)
 
@@ -172,7 +172,7 @@ Rules as in section 9: a port class lives in the stage that implements it; the p
 | `Lifecycle.beat` (called by the lease thread) | runs `records.heartbeat`, emits a `Beat`, calls `StuckTick.tick` and `OwnerRequests.at_beat`; a file that cannot be written must not kill the thread, so every write is suppressed on `OSError` and the thread's death goes to `beat_died` |
 | `StuckTick.tick` | holds its own lock: the lease thread and the close-out may tick at once; it reads the log from its last offset, so a second tick sees nothing twice |
 | `live_now` (the newest delegate call's live file) | a plain string set by `RunParts.live()` on the thread that starts a delegate call and read by the stuck tick without a lock; a stale read only delays a stuck episode by one beat |
-| `ThreadFlag` (`killed`, `wall_hit`) | one value per thread: the lanes of a gate run checks at once, so a shared flag would be the answer of whichever lane wrote last; a port must not move the check onto another thread |
+| `ThreadFlag` (`killed`, `wall_hit`) | one value per thread: the tracks of a gate run checks at once, so a shared flag would be the answer of whichever track wrote last; a port must not move the check onto another thread |
 | `OwnerRequests` | `at_beat` only peeks and sets the stop flag; `at_step` takes the rows, on the main thread, at a step boundary; `drop` sets `closing` first so nothing is taken any more |
 | `Closer` and its ports (`ParkBook`, `BeadClosing`, `LandCleanup`, `Slotting`) | called on the main thread inside `stop_deferred`; none may start a thread or wait for the lease thread |
 | `Reexecs`, `Trail`, `HeadHistory`, `ReviewRestore`, `TrustRefusal`, `AskRules`, `FollowUps` | called on the main thread only; each is a plain function over its own store, with no state of its own |
@@ -213,7 +213,7 @@ Each PR is one bead (child of tl-e5t0.39, label `auto`), lands green, behaviour 
 | **R5** run is construction | a rules test: no `app/run` module outside the composition list defines a class with logic (names from `.importlinter`), no host Protocol in `app/pipeline` over 16 members (ratchet: the list only shrinks), the `run.*` source entries of `nobody-imports-a-root` are gone; docs: `stage-isolation.md` section 2 marks the node done; `dev/root_report.py` numbers recorded | tests/rules, .importlinter, docs | -N | none (a contract entry is removed, not added) | R1 to R4f |
 | **R6** pipeline package | carve to `packages/pipeline/{src/taskloop_pipeline, tests}` per the charter: public surface `api.py`, `contracts/`, `testing.py` (the fakes of `support/pipeline_ports.py`); `git mv`, no code change | packages/pipeline, pyproject, .importlinter | measured by `dev/reach.py`; must not grow | `node pipeline becomes a workspace package` | pix-wspike's layout decision (tl-e5t0.65), R5 |
 
-### Order against the other lanes
+### Order against the other streams
 
 - **B3 (pix-deleg-iso, tl-hwv5.3.1 to .5, and C-b/C-c).** It touches `app/asks/parks.py`, `pipeline/closing*.py`, `pauses.py`, `pause_reasons.py` and the policy rows, and deletes resume, transcript and context machinery in `pipeline/resume.py`, `journal.py`, `trace.py`. R1, R2, R3 and R4a to R4c touch none of these files and run now; **R4d, R4e, R4f wait for B3-4, B3-1/2 and B3-5** (narrowing code that B3 is deleting would only conflict). Sibling PRs share `.importlinter` only in different list lines.
 - **Package split (pix-wspike, tl-e5t0.65).** R6 is the last PR and the only one the layout spike gates; R1 to R5 are layout-neutral (they move code between existing `app/<node>` folders, which a later `git mv` carries). The package's public surface needs R4 first: a package whose ports are the Engine seen through a 47-member Protocol cannot offer `api.py`.
@@ -243,14 +243,14 @@ R6 done: the pipeline is packages/pipeline (tlpipeline)
 |---|---|---|
 | `taskloop.stores` (11 files) | `stores.runlog.RunLog` (7: closing_branch, closing_host, closing_record, stage_run, standalone_roles, steps, waits), `stores.bundle.Stores` (5), `tlkernel.storeapi` `Log` / `Doc` / `AmendDoc` (3; now in kernel), `stores.real.real_stores` (stage_run) | **R6a**: the pipeline owns the Protocols it needs (`RunLog`, `Stores` slices) in `pipeline/ports.py` or the kernel record modules; `stores` implements them; `stage_run` receives `real_stores` from the binder |
 | `taskloop.adapters` | R6b done (#542 and this PR): app/pipeline imports no taskloop.adapters |
-| `taskloop.domain` (24 files) | `domain.outcome` (14 files: the run's outcome vocabulary), `domain.asks.spec/specs` (6), `domain.effects` (4), `domain.lanes` (`caps`, `pauses`, `pin`, `liveness`, `pause_reasons.Producer`), `domain.plan.*` (`brief`, `matchers`), `domain.followups`, `domain.checks`, `domain.interpret`, `domain.stuck`, `domain.work`, `domain.review.kinds`, `domain.land.matchers`, `domain.lifecycle`, `domain.matchers.clip` | **R6c**: the run-end vocabulary (`outcome`, `effects`, `asks.spec`, `pause_reasons`) is shared with stages and the dashboard, so it goes to the kernel by the precedent of WORKKERNEL (tl-e5t0.70, `domain/work`); pipeline-only rules (`stuck`, `interpret`, `lifecycle`) move into the package; the plan/review/land matchers become values passed in |
+| `taskloop.domain` (24 files) | `domain.outcome` (14 files: the run's outcome vocabulary), `domain.asks.spec/specs` (6), `domain.effects` (4), `domain.accounts` (`caps`, `pauses`, `pin`, `liveness`, `pause_reasons.Producer`), `domain.plan.*` (`brief`, `matchers`), `domain.followups`, `domain.checks`, `domain.interpret`, `domain.stuck`, `domain.work`, `domain.review.kinds`, `domain.land.matchers`, `domain.lifecycle`, `domain.matchers.clip` | **R6c**: the run-end vocabulary (`outcome`, `effects`, `asks.spec`, `pause_reasons`) is shared with stages and the dashboard, so it goes to the kernel by the precedent of WORKKERNEL (tl-e5t0.70, `domain/work`); pipeline-only rules (`stuck`, `interpret`, `lifecycle`) move into the package; the plan/review/land matchers become values passed in |
 
 **R6a done (#537 and this PR): app/pipeline imports no taskloop.stores**
 
 Order and collisions:
 
 1. **R6a (stores) and R6b (adapters)** touch import lines and constructor arguments in pipeline files plus the binders in `run/`; they run now, apart from `closing*.py` lines that B3-5 edits (the lead sequences B3 first for those four files; the rest of each PR does not collide).
-2. **R6c (domain)** moves files other stages and the dashboard import; it waits for B3-5 (`domain.lanes.pauses`, `pause_reasons`, policy rows are B3's) and for the kernel-rename lane (`tlkernel`, ENUMS, tl-e5t0.71 landed).
+2. **R6c (domain)** moves files other stages and the dashboard import; it waits for B3-5 (`domain.accounts.pauses`, `pause_reasons`, policy rows are B3's) and for the kernel-rename stream (`tlkernel`, ENUMS, tl-e5t0.71 landed).
 3. **R5** needs R4d to R4f (the 16-member ceiling is real only when no module holds a wide host); only the `.importlinter` cleanup part (the `run.field_ports` source entry) can go earlier.
 4. **R6** is then the pure `git mv` it was planned to be, now with `tlpipeline -> tlkernel` as its only edge, plus the four edits per carve of `workspace.md` bug 6 (host_ban converted list, `arch_invariants.SLICE_IMPORTS`, the layers contract, `test_dash_state_paths`), the test move rule (a pipeline test that imports a sibling stage belongs to the sibling or `tests/e2e`; today 77 test files outside `tests/pipeline` mention the pipeline), and the vendored-shelf `pythonpath` decision (the pipeline imports `atomic_io` through `adapters`, check in R6b).
 
@@ -265,10 +265,10 @@ Pipeline files import 22 `taskloop.domain` modules (section 13). Consumers outsi
 | cluster | modules (consumers outside pipeline) | destination | PR |
 |---|---|---|---|
 | pipeline-only | stuck only; interpret is also imported by app/land/record.py, so it is not pipeline-only and goes with effects in R6c5 | `app/pipeline` (their only deps are `tlkernel`) | **R6c1** |
-| small pure helpers | `lanes.caps` (5), `lanes.liveness` (4), `followups` (5), `work.switch` (4), `checks.trim` (3) + `checks.matchers` (18), `review.kinds` (3) | kernel (no `taskloop` deps beyond each other) | **R6c2** |
+| small pure helpers | `accounts.caps` (5), `accounts.liveness` (4), `followups` (5), `work.switch` (4), `checks.trim` (3) + `checks.matchers` (18), `review.kinds` (3) | kernel (no `taskloop` deps beyond each other) | **R6c2** |
 | the plan/land matchers | `plan.brief` (7), `plan.matchers` (5, needs `domain.checks`), `land.matchers` (9) | kernel, or the pipeline receives the three values it uses (`COMMENTS_ONLY`, `AcceptanceText`, `without_prefix`) as constructor arguments if a move drags more than two further modules | **R6c3** — done: plan.brief (planbrief), land.matchers (landmatchers) and AcceptanceText (acceptancetext) moved to the kernel; plan.matchers stays in the domain (gate_only_criteria needs domain.checks.lint) |
 | the run-end vocabulary | `outcome` (27), `lifecycle.matchers` (11), `asks.spec` (19), `asks.lint`, `asks.text`, `asks.specs` (27) | kernel (the WORKKERNEL precedent, tl-e5t0.70); `outcome` needs `asks.spec`, `lifecycle` and `tlkernel.reconcile`, so they move together | **R6c4** |
-| pause and effect words | `effects` (9), `lanes.pauses` (13), `lanes.pause_reasons` (11), `beads.park` | kernel | **R6c5** — done: pause and effect words moved to the kernel (closeeffects, effectinterpret, lanepauses, pausereasons, beadpark) |
+| pause and effect words | `effects` (9), `accounts.pauses` (13), `accounts.pause_reasons` (11), `beads.park` | kernel | **R6c5** — done: pause and effect words moved to the kernel (closeeffects, effectinterpret, accountpauses, pausereasons, beadpark) |
 
 Order: R6c1 and R6c2 first (small, independent); R6c3 after R6c2 (`plan.matchers` needs `checks`); R6c4 and R6c5 are the large sweeps (27 and 13 consumers) and run one at a time, each as one PR with `Layout-allow: move` and a closure line. Each PR ends with `grep taskloop.domain` of its modules empty in `app/pipeline`. R6c (`tl-e5t0.39.14`) closes when the last of them lands; R6 (`.11`) follows.
 

@@ -16,7 +16,7 @@ The epic was written before two things landed; the design starts from the tree, 
 - What still crosses the line, in order of weight: (a) the pid protocol: `api.Handle` (pid, pgid, start), `WorkerEnd.survivors`,
   `ApiRunner.obs/stop/outer` dicts, `worker_call.survivors/log_kill`, `parts_run.lock_worker(s)`, `EngineLock.route/workers`;
   (b) the live file: engine numbers it, `ApiRunner` polls it for `WorkerStarted`, dashboard tails it; (c) `api.status()` JSON read as a
-  dict (`lane_status`, `role_status`) and the ~60-word pause table over `DelegateResult.stop` facts; (d) context size / resume /
+  dict (`account_status`, `role_status`) and the ~60-word pause table over `DelegateResult.stop` facts; (d) context size / resume /
   transcript knowledge (`context_size.py`, `FRESH_ABOVE_K`, `writer_family`, `TranscriptKind`); (e) `api.history()` rows read by
   `app/report/planner.py`.
 
@@ -25,7 +25,7 @@ The epic was written before two things landed; the design starts from the tree, 
 Two modules, both owned by task-loop's `contracts/` (the Protocol) and implemented by an adapter over `delegate.api`:
 
 ```
-lanes() -> list[Lane]                  # name, usable: yes|no|unknown, why, until   (the one answer to "what is running or available")
+accounts() -> list[Account]                  # name, usable: yes|no|unknown, why, until   (the one answer to "what is running or available")
 start(call: Call) -> Agent             # Call = brief, schema, role, cwd, tools, budget, policy, resume ref
 Agent.id                               # opaque
 Agent.events() -> Iterator[Event]      # message | tool_call | tick | end ; pull, the engine ticks it
@@ -69,13 +69,13 @@ Sizes: S under 200 changed lines, M under 600, L more. "delegate" = a change in 
 | A4 | `events()` replaces live-file polling: `WorkerStarted` poll, `live_path`, `DELEGATE_LIVE_FILE`; engine persists events to its run log; dashboard reads that. `reflect.py` goes through `start`. | L | .2, .4 |
 | B1 | Budget (`usd/min/tokens`), tools, role, policy move into `start(Call)`; delete harness routing and grants from the engine. The profile keeps `writer_exec` and `reviewer_other_family`; bead writer labels travel as opaque `prefer`. Delegate routing Settings own pins, exec grants and read roots. | M, delegate M | .3 |
 | B2 | Retry/reroute/resume/pause words into delegate; outcome becomes `done|needs_owner|failed(retry_after)`. Delete `pauses.py`, `pause_reasons.py`, `retry.py`, `policy.decide`, resume counters, `FRESH_*`. | L, delegate L | .3 |
-| B3 | Context size, compaction, transcripts, `context_size.py`, family/lane names in report and dashboard go. | M | .3 |
-| C1 | `lanes()` replaces `status_json/lane_status/role_status`, `app/wire/lanes.py`, `usage.py`; lane cards render from it; `history()` read in `planner.py` becomes an outcome field. | M | .4 |
+| B3 | Context size, compaction, transcripts, `context_size.py`, family/account names in report and dashboard go. | M | .3 |
+| C1 | `accounts()` replaces `status_json/account_status/role_status`, `app/wire/accounts.py`, `usage.py`; account cards render from it; `history()` read in `planner.py` becomes an outcome field. | M | .4 |
 | C2 | Delete dead vocabulary (`Family`, `LIVE_SECONDS`, `opencode_updated`, `catalog/pins` delegate parts). Final grep. | S | .4 |
 
 Order reason: A1 is pure move (cheapest, no behaviour); A2/A3 remove the only thing the epic calls a bug (two protocols for a pid);
 A4 before B because the engine cannot persist events until it pulls them; B2 is the largest deletion and needs B1's arguments first;
-C last because `lanes()` is the smallest read but its consumers (dashboard) change with A4.
+C last because `accounts()` is the smallest read but its consumers (dashboard) change with A4.
 
 ## What a Fake gives
 
@@ -86,7 +86,7 @@ calls use it; `FakeApi` and `procsim` for AI workers go with A4. Real-process te
 
 - ⚠️ A2 needs delegate to be strictly correct about "proven dead": today `kill_tree` names survivors; moving the protocol into delegate
   must not weaken it. Test: the existing `tests/live/test_stop_tree.py` scenario against `ApiAgent`.
-- ⚠️ `failed(retry_after)` loses "which lane is out". The dashboard lane cards get it from `lanes()` (C1). Between B2 and C1 the card
+- ⚠️ `failed(retry_after)` loses "which account is out". The dashboard account cards get it from `accounts()` (C1). Between B2 and C1 the card
   reads the old status; acceptable, short.
 - ⚠️ The Protocol must not grow a second consumer-shaped method per feature. Rule: a new method needs an owner decision and a row here.
 
@@ -102,7 +102,7 @@ calls use it; `FakeApi` and `procsim` for AI workers go with A4. Real-process te
 
 ## B2b: the behaviour change that needs the owner (written 2026-11-06)
 
-B2a (additive, landed with this note) adds `domain/lanes/outcome.py`: `outcome_of(result)` reads a stop as `Done | NeedsOwner(question) |
+B2a (additive, landed with this note) adds `domain/accounts/outcome.py`: `outcome_of(result)` reads a stop as `Done | NeedsOwner(question) |
 Failed(reason, retry_after)` from the answer's own facts (`permanence`, `retry.at`, `fix`). Nothing uses it yet.
 
 B2b makes the engine act on that outcome alone and deletes `policy.TABLE` (19 rows), `retry.PLAN`, `pauses.py`, `pause_reasons.py`, the
@@ -110,19 +110,19 @@ resume counters and the in-process waits. **Old and new, for a stop the engine s
 
 | Case | Old (engine decides) | New (delegate decides, engine sees the end) |
 |---|---|---|
-| lane busy / blip (`lane transient poll`) | engine polls 3 times, 20 s apart, then reroutes | delegate polls and reroutes inside the call; engine sees Done or Failed |
-| lane out, back at T (`predicted`) | engine waits in-process if T is under 180 s, else pauses the bead with a wake time | delegate waits or fails; engine sees `Failed(retry_after=T)` and re-queues the bead after T (always a pause, never an in-process wait) |
+| account busy / blip (`account transient poll`) | engine polls 3 times, 20 s apart, then reroutes | delegate polls and reroutes inside the call; engine sees Done or Failed |
+| account out, back at T (`predicted`) | engine waits in-process if T is under 180 s, else pauses the bead with a wake time | delegate waits or fails; engine sees `Failed(retry_after=T)` and re-queues the bead after T (always a pause, never an in-process wait) |
 | network down (`machine transient poll`) | engine waits up to 600 s on its own probe, then pauses | delegate waits on its probe; engine sees Failed(retry_after) |
 | delegate crash | engine retries twice (30 s, 120 s), then faults | delegate's concern; engine sees Failed |
-| worker failed / timed out | engine tries another lane once, then asks the owner | delegate reroutes once; then NeedsOwner |
+| worker failed / timed out | engine tries another account once, then asks the owner | delegate reroutes once; then NeedsOwner |
 | needs_owner stops | engine routes to the right ask or pause kind | one NeedsOwner(question) |
 
-What is lost: the engine can no longer say WHICH lane is out or why (the dashboard gets it from `lanes()`, C1), and a short lane-out
+What is lost: the engine can no longer say WHICH account is out or why (the dashboard gets it from `accounts()`, C1), and a short account-out
 under 180 s now pauses the bead instead of waiting in the same run. **Decision for the owner:** is `Failed(retry_after)` enough, with no
-lane name in the engine? Recommended: yes. Accepted by Denis on 2026-11-07: "Protocol then protocol. Accept as written".
+account name in the engine? Recommended: yes. Accepted by Denis on 2026-11-07: "Protocol then protocol. Accept as written".
 
 B2b-1 done (2026-11-07): delegate owns worker network waits and resumes; engine network stops pause immediately.
 
-B2b-2 done (2026-11-07): lane polls and short lane-out waits are delegate's
+B2b-2 done (2026-11-07): account polls and short account-out waits are delegate's
 
-B2b-3a done (2026-11-07): worker_failed retry and the write reroute are delegate's; a delegate crash fails at once (fail fast). B3-1b removes resume_refused and every resumed-call policy branch. Only denied_secret can start a new engine thread; lane/model polls and untimed lane stops retain the ordinary reroute policy. Hurt writes still ask after delegate recovery.
+B2b-3a done (2026-11-07): worker_failed retry and the write reroute are delegate's; a delegate crash fails at once (fail fast). B3-1b removes resume_refused and every resumed-call policy branch. Only denied_secret can start a new engine thread; account/model polls and untimed account stops retain the ordinary reroute policy. Hurt writes still ask after delegate recovery.

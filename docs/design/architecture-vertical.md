@@ -208,7 +208,7 @@ is met in the strong form for every package but the engine and in the weak form 
 
 | option | verdict | why |
 |---|---|---|
-| Big-bang rename `src/taskloop/*` to `packages/*` | ❌ | #189/#190 rewrite paths.py users and 36+16 files; #186/#187 delete 54 files. A move PR touching 600+ files conflicts with every open lane (pix-isolation, pix-dash-3, pix-delegate-hard, pix-lander) and is not reversible per stage |
+| Big-bang rename `src/taskloop/*` to `packages/*` | ❌ | #189/#190 rewrite paths.py users and 36+16 files; #186/#187 delete 54 files. A move PR touching 600+ files conflicts with every open stream (pix-isolation, pix-dash-3, pix-delegate-hard, pix-lander) and is not reversible per stage |
 | Carve the engine (`app/run`) as a stage | ❌ | it imports 14 slices and is imported by launch/prune/cli: it is the composition root with the closer. Stays in the shell; `work` is what splits out of it |
 | Carve contracts by *file move only* (no consumer change) | ❌ | moves the hub without cutting edges; reach numbers identical |
 | Splitting tests/ first, source later | ❌ | the 164 tests are wide because source imports are wide; folders mirror sources (CLAUDE.md rule) |
@@ -230,7 +230,7 @@ pix and the Mac ran a release with #184; delete RowDocs adoption, importers, loo
 | step | PR | size | depends | reversible because |
 |---|---|---|---|---|
 | M0 | `dev/reach.py`: the measurement used here (selected tests per commit, reach per file, stage cycles) as a tool + a rule that prints the median; baseline in the PR | S | none | tool only |
-| P1 | inject the delegate port: the 199→2 measurement deleted the adapter's own import, which cannot be deleted (an adapter is where it belongs); the real cut is passing the port into ~14 importers of `adapters.delegate`/`runner` (`app/run/{call,delegation,worker_call,fields,…}`, `launch/loop.py`, `wire/{lanes,usage,setup}.py`); **re-measure, no promised gain** | M | none (ISOLATION-D Agent Protocol overlaps: take its shape, **do not decide DELEGATEHOME**) | injection point |
+| P1 | inject the delegate port: the 199→2 measurement deleted the adapter's own import, which cannot be deleted (an adapter is where it belongs); the real cut is passing the port into ~14 importers of `adapters.delegate`/`runner` (`app/run/{call,delegation,worker_call,fields,…}`, `launch/loop.py`, `wire/{accounts,usage,setup}.py`); **re-measure, no promised gain** | M | none (ISOLATION-D Agent Protocol overlaps: take its shape, **do not decide DELEGATEHOME**) | injection point |
 | P2 | narrow `closure()` data floor: fixtures a test names, not all of tests/ | S | none | key change only |
 | C1 | `config.py` split: per-stage `*Policy` records move beside their readers; loader keeps names | M | none (profile keys unchanged) | alias re-exports for one release |
 | C2 | `ports.py`: each Protocol to its consumer/provider | M | after #191 (Agent Protocol lands in `contracts/`) | |
@@ -279,7 +279,7 @@ Method: `dev/reach.py` and the same `Repo` graph. "Stages" = distinct stage pack
 | delegate | 66 | 3 | 71 | 413 per delegate-only commit; wide only because 14 app files import `adapters.delegate`/`runner` (the Agent-port work of ISOLATION, #191), not because of its directory |
 | hook | 6 | 0 | 6 | tiny |
 
-A `packages/` move of dash costs S1a (~35 files of mechanics) + ~116 moved files across four live lanes and changes no edge. Dash still imports 44 contract files, 40 of them shared with other stages: its coupling is contract churn, which the contract splits (C2, C3a) address. Verdict: ❌ move now; ✅ after the contracts and test hubs are owned.
+A `packages/` move of dash costs S1a (~35 files of mechanics) + ~116 moved files across four live streams and changes no edge. Dash still imports 44 contract files, 40 of them shared with other stages: its coupling is contract churn, which the contract splits (C2, C3a) address. Verdict: ❌ move now; ✅ after the contracts and test hubs are owned.
 
 **Tests that are still wide** (before T0b; `tests/rules` left out; "within ≤ 3 stages" = own stage + 2):
 
@@ -323,7 +323,7 @@ Decision for Denis: rewrite stage tests (checks, land, review, write, loop) off 
 
 | | before (b-write.md, 2026-11-06) | after slices 1 and 3 + tl-q3ma |
 |---|---|---|
-| write-owned engine attributes (`write_rounds`, `last_summary`, `lane_notes`, `strays`) | 4 on the engine | 0: `engine.write` (`WriteState`, not checkpointed; #376) |
+| write-owned engine attributes (`write_rounds`, `last_summary`, `account_notes`, `strays`) | 4 on the engine | 0: `engine.write` (`WriteState`, not checkpointed; #376) |
 | `host: Any` in `app/write` | 8 classes | 0: `app/write/host.py` Protocols (`WriteHost` and narrow hosts; #396) |
 | engine attributes `app/write` reads or assigns (distinct `e.X`) | ~62 | 58 by grep; now named in `write/host.py` instead of hidden behind `Any` |
 | `app/write` imports of other app slices | | `artifacts`, `asks`, `checks` |

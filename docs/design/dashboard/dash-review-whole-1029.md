@@ -27,7 +27,7 @@ Reviewers: Fable, Sonnet, ChatGPT (Codex), independently, on 1k card + 2b asks +
 
 ## Challenges to owner decisions
 - Tint by share of the bead: old cells change colour as new passes arrive (Sonnet). Fix: absolute token bands (ChatGPT, round 1j).
-- Baseline = median of first 5 landed beads: skewed by small beads, not comparable across model lanes (ChatGPT, Sonnet). Fix: per-lane baseline, show sample size, advisory until enough.
+- Baseline = median of first 5 landed beads: skewed by small beads, not comparable across model accounts (ChatGPT, Sonnet). Fix: per-account baseline, show sample size, advisory until enough.
 - Per-stage marks (corner triangle, burn rate, per-stage limits) need per-stage baselines nobody decided (Fable, ChatGPT). Fix: v1 uses bead-level usual and fixed per-stage silence limits; triangle later.
 - Ask-back cap of 3: cut, keep the count only (Fable, ChatGPT).
 - Send & restart stage: ship (Sonnet) vs defer (Fable, ChatGPT).

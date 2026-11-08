@@ -6,14 +6,14 @@ One server per machine, reading state and taking the owner's commands through it
   (`dash-round-*.html`) show the result; older mocks are history.
 - **The API:** [docs/contracts/dash-api.md](../../contracts/dash-api.md), records in `packages/kernel/src/tlkernel/dash.py`.
 - **What it reads:** run state from `factory.db`; engine and worker logs through `readers/logs.py`; asks, the ask ledger,
-  decisions, loop state and lane status under `~/.config/task-loop`, and bd through the typed `Beads` port.
+  decisions, loop state and account status under `~/.config/task-loop`, and bd through the typed `Beads` port.
   The index thread writes derived state; owner actions write through `Ports`. Every format
   it does not own is in [docs/dev/integrations.md](../../dev/integrations.md).
 
 ## Code
 
 Standalone `tl check` and `tl gate` runs use the engine's run manifests, with modes `stage:check` and `stage:gate`.
-The snapshot includes the ten newest retained stage run headers by start time, even without a bead or log. Both Floor layouts
+The snapshot includes the ten newest retained stage run headers by start time, even without a bead or log. Both Slots layouts
 show them in the Runs panel: mode, project, state, age and a clipped reason, with owner, session and the full reason on hover
 or click. Runs remain accessible when the board is empty. These headers read indexed manifests from factory.db; the verb owns
 heartbeats and terminal states. Check evidence is retained under the run directory after success and failure.
