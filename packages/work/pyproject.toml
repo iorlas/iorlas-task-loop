@@ -10,6 +10,7 @@ tlkernel = { workspace = true }
 tlgate = { workspace = true }
 tlartifacts = { workspace = true }
 tltestkit = { workspace = true }
+tlpipeline = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -19,7 +20,7 @@ build-backend = "hatchling.build"
 packages = ["src/tlwork"]
 
 [dependency-groups]
-dev = ["pytest", "tltestkit", "msgspec"]
+dev = ["pytest", "tltestkit", "msgspec", "tlpipeline"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
