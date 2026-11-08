@@ -147,3 +147,8 @@ def files_named(text: str) -> set[str]:
 def repo_name(value: str) -> str:
     """The folder name a repo URL or path ends in."""
     return GIT_SUFFIX.sub("", value.rstrip("/").replace(":", "/").split("/")[-1])
+
+
+def with_bead_trailer(message: str, bead: str) -> str:
+    """Keep the subject and append the owning bead as a git trailer."""
+    return message + "\n\nBead: " + bead
