@@ -1,8 +1,8 @@
 """The temp-path ratchet's counter: where code names a temp location itself instead of asking packages/kernel/src/tlkernel/scratch.py.
 
 A site is a `tempfile` attribute or import, or a string constant holding /tmp, /var/tmp or TMPDIR, anywhere in src/, dev/, skills/ and
-tests/ but scratch.py itself. Judged on the change (ratchet_change.py): a rise over the files the change touches fails unless a commit
-says `Ratchet-allow: temp +N reason`."""
+tests/, and packages/*/tests/, but scratch.py itself (package src/ files stay unscanned). Judged on the change (ratchet_change.py): a rise
+over the files the change touches fails unless a commit says `Ratchet-allow: temp +N reason`."""
 import ast
 from pathlib import Path
 
@@ -13,6 +13,10 @@ SCAN = ("src", "dev", "skills", "tests")
 RATCHET_FILES = ("temp_ratchet.py", "test_temp_ratchet.py", "test_ratchets.py", "test_ratchets_change.py")  # they quote sites
 # These files bootstrap or exercise system-temp behavior that must be preserved.
 EXCEPTIONS = {
+    "packages/delegate/tests/hermetic.py": "Bootstraps the outer temp directory and moves TMPDIR into a throwaway home.",
+    "packages/delegate/tests/conftest.py": "Preserves outer temp selection while moving TMPDIR into each throwaway home.",
+    "packages/delegate/tests/test_hermetic.py": "Asserts the hermetic harness resets the TMPDIR variable.",
+    "packages/delegate/tests/real/test_run_command_real.py": "Asserts the sandbox allow-list names system temp paths as product behavior.",
     "tests/support/paths.py": "Bootstraps paths before taskloop is importable.",
     "tests/rules/test_tempdir_cache.py": "Exercises the stdlib temporary-directory cache itself.",
     "tests/doctor/test_env_checks.py": "The doctor warning needs a system-temp path as its input.",
@@ -35,9 +39,10 @@ def sites(tree: ast.Module) -> int:
 
 
 def file_counts(rel: str, tree: ast.Module) -> dict[str, int]:
-    """{"site": n} of one file under src/, dev/, skills/ or tests/ that may name a temp location; empty for any other file."""
+    """{"site": n} of one file under src/, dev/, skills/, tests/ or packages/*/tests/ that may name a temp location; else empty."""
     path = Path(rel)
-    if path.parts[0] not in SCAN or SKIP_DIRS & set(path.parts) - {"fixtures"} or "_vendor" in path.parts or rel == HOME_FILE:
+    scanned = path.parts[0] in SCAN or (len(path.parts) > 3 and path.parts[0] == "packages" and path.parts[2] == "tests")
+    if not scanned or SKIP_DIRS & set(path.parts) - {"fixtures"} or "_vendor" in path.parts or rel == HOME_FILE:
         return {}
     if rel in EXCEPTIONS:
         return {}

@@ -128,7 +128,7 @@ class ExecAllow(Case):
     def test_denial_corpus_never_starts_a_child_and_audits_once(self):
         denied = [
             ["dotnet-evil", "test"],
-            ["/tmp/dotnet", "test"],
+            ["/opt/dotnet", "test"],
             ["dotnet", "test-evil"],
             ["dotnet", "exec", "payload"],
             ["dotnet", "--version", "extra"],

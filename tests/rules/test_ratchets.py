@@ -2,6 +2,8 @@
 file, and the rise and the allowance."""
 import ast
 
+import pytest
+
 from rules import layer_ratchet, needs_ratchet, ratchet_change, temp_ratchet
 
 
@@ -50,3 +52,8 @@ def test_temp_exceptions_skip_only_the_documented_paths():
         assert reason
         assert temp_ratchet.file_counts(path, src) == {}
         assert temp_ratchet.file_counts(path + ".other.py", src) == {"site": 1}
+
+
+@pytest.mark.parametrize("path, expected", [("packages/x/tests/test_x.py", {"site": 1}), ("packages/x/src/x.py", {})])
+def test_temp_counts_package_tests_only(path, expected):
+    assert temp_ratchet.file_counts(path, tree("x = tempfile.tempdir")) == expected

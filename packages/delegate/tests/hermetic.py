@@ -18,6 +18,7 @@ FORBIDDEN = tuple(
 )
 STDLIB = tuple(os.path.realpath(d) + os.sep for d in {sys.base_prefix, sys.prefix})  # a uv-managed Python lives under ~/.local/share
 FORBIDDEN_EXACT = tuple(os.path.join(REAL_HOME, d) for d in (".config", ".codex", ".claude", ".opencode"))
+TMPDIR_VAR = "TMPDIR"
 ROOT = tempfile.mkdtemp(prefix="delegate-test-")
 _ENV = ("HOME", "USERPROFILE", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "CODEX_HOME", "DELEGATE_CONFIG_DIR", "TMPDIR")
 

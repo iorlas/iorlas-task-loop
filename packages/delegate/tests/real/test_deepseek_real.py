@@ -47,7 +47,7 @@ class DeepSeekTests:
             "model": "deepseek-v4.1-flash-free",
             "effort": "low",
             "role": "worker",
-            "how": {"kind": "opencode", "model": "opencode/deepseek-v4.1-flash-free", "cwd": "/tmp", "write": False},
+            "how": {"kind": "opencode", "model": "opencode/deepseek-v4.1-flash-free", "cwd": str(Path.home()), "write": False},
         }
         a = SimpleNamespace(resume=None, schema=None, timeout=10)
         for valid in (False, True):
