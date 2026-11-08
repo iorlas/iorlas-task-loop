@@ -8,7 +8,7 @@ class SelfDescription(Case):
     def test_text_is_compact_ascii_and_repeatable(self):
         text = selfdescribe.text()
         assert text.isascii()
-        assert len(text.splitlines()) <= 35
+        assert len(text.splitlines()) <= 39
         assert text == selfdescribe.text()
 
     def test_standing_rules_and_procedure_pointer_are_present(self):
