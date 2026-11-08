@@ -21,7 +21,7 @@ from delegate.contracts.wire import RECIPE_RUNNERS
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 DENIED_BY_OPENCODE = (
     "just slow",
     "just slow --verbose",

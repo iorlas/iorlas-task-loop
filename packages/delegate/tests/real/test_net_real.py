@@ -21,7 +21,7 @@ from tltestkit.case import Case
 from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory
 
-LANES = Path(__file__).resolve().parents[3] / "packages" / "delegate" / "src" / "delegate" / "adapters"
+LANES = Path(__file__).resolve().parents[4] / "packages" / "delegate" / "src" / "delegate" / "adapters"
 
 
 @contextlib.contextmanager

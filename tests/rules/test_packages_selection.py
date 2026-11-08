@@ -70,7 +70,7 @@ def test_a_dev_group_member_reaches_its_users(tmp_path):
     ("src/taskloop/app/write/step.py", False), ("dev/packages.py", False),
     ("uv.lock", False), ("packages/review/src/review/x.py", False),
     ("packages/delegate/src/delegate/run.py", True), ("packages/delegate/tests/real/test_run.py", True),
-    ("tests/delegate/test_run.py", True),
+    ("packages/delegate/tests/test_run.py", True),
     ("skills/task-loop/_vendor/any_agent/procs.py", True), ("dev/vendor.json", True),
     ("packages/testkit/src/tltestkit/plugin.py", True), ("packages/kernel/src/kernel/ids.py", True),
 ])

@@ -1,5 +1,5 @@
 """HealthLedger: the fold, the breaker, the canary and the 24 Oct / 22 Oct incident replays (golden/health_replay.json, taken from the
-pre-D2 fold: every row's admit/refuse decision must be the same). Run: uv run pytest tests/delegate/domain/test_ledger_health.py"""
+pre-D2 fold: every row's admit/refuse decision must be the same). Run: uv run pytest packages/delegate/tests/domain/test_ledger_health.py"""
 
 import json
 from dataclasses import replace
@@ -17,7 +17,7 @@ from delegate.domain.health.matchers import fingerprint
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 
 POL = BreakerPolicy()
 LEDGER = HealthLedger(POL)

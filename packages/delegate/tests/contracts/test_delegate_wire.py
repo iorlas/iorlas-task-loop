@@ -13,7 +13,7 @@ from delegate.contracts import codec, live, schema, wire
 from delegate.contracts.json_types import arr
 from tltestkit.case import Case
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 
 GOLDEN = sorted((Path(__file__).resolve().parent / "golden").glob("*.json"))
 CONTRACT = json.loads((ROOT / "packages" / "delegate" / "src" / "delegate" / "data" / "contract.json").read_text(encoding="utf-8"))

@@ -125,7 +125,7 @@ def isolated_env(home):
     if not env.get("UV_CACHE_DIR") and cache.exists():
         env["UV_CACHE_DIR"] = str(cache)
     env.update(HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), TMPDIR=str(home / "tmp"),
-               TL_SCRATCH=str(home / "tmp"),  # a worker's home beside TMPDIR, not under .config (tests/delegate/hermetic.py)
+               TL_SCRATCH=str(home / "tmp"),  # a worker's home beside TMPDIR, not under .config (packages/delegate/tests/hermetic.py)
                TL_WORKER_MB=str(WORKER_MB),
                TL_TEST_TIMES=str(home / "times-%p.json"), PYTHONPATH=str(Path(__file__).resolve().parent))  # dev/testtimes.py records
     return env
@@ -154,7 +154,7 @@ def pytest(root, env, mark, tests, n):
 
 
 def wide_note(root, n_tests):
-    """'' or one line when the selection holds more than WIDE of all the tests (tests/delegate too)."""
+    """'' or one line when the selection holds more than WIDE of all the tests (packages/delegate/tests too)."""
     tests = Path(root) / "tests"
     files = [p.relative_to(root).as_posix() for p in tests.rglob("test_*.py")]
     total = count_tests(root, files)
