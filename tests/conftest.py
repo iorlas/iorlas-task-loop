@@ -47,7 +47,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 pytest.register_assert_rewrite("support")  # the helpers of tests/support assert too: show the operands, as in a test file
 import support.paths  # noqa: E402, F401  (ROOT/src on sys.path; after the bytecode setup above)
 from support.cpu_rerun import CPU_S, WORK_S, cpu_failure  # noqa: E402
-from support.scope import delegate_wanted  # noqa: E402
 
 from taskloop.adapters import procs  # noqa: E402
 from taskloop.app.parts import STAGE_PARTS  # noqa: E402
@@ -149,13 +148,10 @@ def pytest_runtest_makereport(item, call):
 
 def pytest_ignore_collect(collection_path, config):
     """tests/live (the explicit-only kind) is collected only by a run that selects `-m live` (just test-live): never by the default run,
-    `just test` or the release gate, whose `-m` is something else. tests/delegate is collected only when the change touches delegate
-    (tests/support/scope.py): a change to task-loop or its dashboard runs none of them."""
+    `just test` or the release gate, whose `-m` is something else."""
     if "live" in collection_path.relative_to(Path(__file__).parent).parts[:1]:
         expr = (config.getoption("markexpr", "") or "").split()
         return not ("live" in expr and "not" not in expr)
-    if "delegate" in collection_path.relative_to(Path(__file__).parent).parts[:1]:
-        return not delegate_wanted(config.args, Path(config.invocation_params.dir))
     return None
 
 
@@ -257,9 +253,7 @@ def procs(request):
     with contextlib.ExitStack() as stack:
         world.install(stack)
         yield world
-    # a delegate test reaches its process through a worker CLI it probes (codex, claude, opencode): a host with none has nothing to spawn
-    no_cli = request.node.nodeid.startswith("tests/delegate/") and not any(map(shutil.which, ("codex", "claude", "opencode")))
-    world.check(must_spawn=kind == "real" and not request.node.stash.get(SKIPPED, False) and not no_cli)
+    world.check(must_spawn=kind == "real" and not request.node.stash.get(SKIPPED, False))
 
 
 @pytest.fixture(autouse=True)

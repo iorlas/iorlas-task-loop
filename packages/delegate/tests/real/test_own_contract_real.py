@@ -1,5 +1,5 @@
 """delegate-own, the contract set: REAL processes and signals (a fake agent CLI, no model). The worker is dead when the delegate call ends,
-and a survivor is named. Run with `just test-delegate tests/delegate/test_own_contract.py`; no other run starts these."""
+and a survivor is named. Run with `just test-delegate packages/delegate/tests/test_own_contract.py`; no other run starts these."""
 
 import json
 import os

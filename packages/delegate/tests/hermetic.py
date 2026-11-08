@@ -10,7 +10,7 @@ import tempfile
 import types
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages" / "delegate" / "src"))  # delegate.*: the workspace member
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages" / "delegate" / "src"))  # delegate.*: the workspace member
 
 REAL_HOME = os.path.realpath(os.path.expanduser("~"))
 FORBIDDEN = tuple(

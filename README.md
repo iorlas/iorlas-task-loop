@@ -18,7 +18,7 @@ Then in a repo that uses bd, say "task loop". Requirements: Python 3.15+, uv, gi
 Claude Code. macOS only.
 
 Workers come with the plugin: `packages/delegate/src/delegate` is a library the engine calls ([delegate.api](docs/contracts/delegate-api.md)); it picks account
-and model from live plan limits. `tl accounts` shows which worker accounts are ready and how to fix the rest.
+and model from live plan limits. Its tests live in `packages/delegate/tests` (`just test-delegate`). `tl accounts` shows which worker accounts are ready and how to fix the rest.
 
 ## What the loop does
 

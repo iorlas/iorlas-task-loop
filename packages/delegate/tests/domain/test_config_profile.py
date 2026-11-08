@@ -10,7 +10,7 @@ from delegate.contracts.json_types import obj
 from delegate.contracts.stores import ConfigStore
 from tltestkit.tmpdir import TemporaryDirectory
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 
 
 class ProfileStaysOut:

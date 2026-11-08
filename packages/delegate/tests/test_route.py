@@ -23,7 +23,7 @@ from delegate.domain.lanes.lane import Lane
 from delegate.domain.time import spec
 from tltestkit.tmpdir import TemporaryDirectory, mkdtemp
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 _entry = importlib.util.spec_from_file_location("route", ROOT / "packages" / "delegate" / "src" / "delegate" / "entry.py")
 assert _entry is not None
 assert _entry.loader is not None

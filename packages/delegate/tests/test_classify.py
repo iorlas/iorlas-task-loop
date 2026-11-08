@@ -30,7 +30,7 @@ from delegate.domain.policy.worker import denial, denial_item
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
-FIXTURES = sorted((ROOT / "tests" / "delegate" / "contract" / "fixtures").glob("*.json"))
+FIXTURES = sorted((ROOT / "packages" / "delegate" / "tests" / "contract" / "fixtures").glob("*.json"))
 CONTRACT = json.loads((ROOT / "packages" / "delegate" / "src" / "delegate" / "data" / "contract.json").read_text(encoding="utf-8"))
 def load(path):
     return json.loads(path.read_text(encoding="utf-8"))
@@ -61,11 +61,11 @@ class Fixtures:
 
     def test_the_53_bad_requests_the_grok_batch_and_the_night_are_all_there(self):
         def count(name):
-            return len(load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / name)["rows"])
+            return len(load(ROOT / "packages" / "delegate" / "tests" / "contract" / "fixtures" / name)["rows"])
 
         assert count("bad_request_22oct.json") == 53
         assert count("grok_spending_limit_24oct.json") == 114
-        night = load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / "night_22oct.json")["rows"]
+        night = load(ROOT / "packages" / "delegate" / "tests" / "contract" / "fixtures" / "night_22oct.json")["rows"]
         assert sum(1 for r in night if r["expected_reason"] == "bad_request") == 53
         assert sum(1 for r in night if r["expected_reason"] is None) == (len(night) - 53)
 
@@ -152,7 +152,7 @@ class Stop(Case):
         assert n > 250
 
     def test_golden_the_53_bad_requests_map_to_caller_needs_owner_none(self):
-        f = load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / "bad_request_22oct.json")
+        f = load(ROOT / "packages" / "delegate" / "tests" / "contract" / "fixtures" / "bad_request_22oct.json")
         assert len(f["rows"]) == 53
         for row in f["rows"]:
             assert stop_tuple(self.answer(replay(row, f), "OPENAI_SUBSCRIPTION")) == ("bad_request", "caller", "needs_owner", "none"), row[
@@ -161,7 +161,7 @@ class Stop(Case):
         assert (env.load_state().out or None) is None  # not one of them marks the lane
 
     def test_golden_the_grok_batch_is_a_lane_out_with_no_time_and_marks_the_lane_once_for_all(self):
-        f = load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / "grok_spending_limit_24oct.json")
+        f = load(ROOT / "packages" / "delegate" / "tests" / "contract" / "fixtures" / "grok_spending_limit_24oct.json")
         assert len(f["rows"]) == 114
         for row in f["rows"]:
             r = self.answer(replay(row, f), "GROK_SUBSCRIPTION")
@@ -170,7 +170,7 @@ class Stop(Case):
         assert "GROK_SUBSCRIPTION" in env.load_state().out
 
     def test_golden_the_22_oct_night_has_53_bad_requests_and_every_other_row_is_done(self):
-        f = load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / "night_22oct.json")
+        f = load(ROOT / "packages" / "delegate" / "tests" / "contract" / "fixtures" / "night_22oct.json")
         assert len(f["rows"]) == 268
         tuples = [stop_tuple(self.answer(o, "OPENAI_SUBSCRIPTION")) if (o := replay(row, f)) else None for row in f["rows"]]
         assert tuples.count(("bad_request", "caller", "needs_owner", "none")) == 53
@@ -178,7 +178,7 @@ class Stop(Case):
         assert (env.load_state().out or None) is None
 
     def test_credit_exhausted_marks_the_lane_with_no_retry_time(self):
-        row = load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / "grok_spending_limit_24oct.json")["rows"][0]
+        row = load(ROOT / "packages" / "delegate" / "tests" / "contract" / "fixtures" / "grok_spending_limit_24oct.json")["rows"][0]
         o = replay(row, None)
         r = self.answer(o, "GROK_SUBSCRIPTION")
         out = env.load_state().out["GROK_SUBSCRIPTION"]
@@ -337,7 +337,7 @@ class Launchers(Case):
 
 
     def test_a_bad_request_row_through_the_codex_launcher_leaves_the_lane_alone(self):
-        for row in load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / "bad_request_22oct.json")["rows"][:3]:
+        for row in load(ROOT / "packages" / "delegate" / "tests" / "contract" / "fixtures" / "bad_request_22oct.json")["rows"][:3]:
             res = self.run_cli("codex", [{"type": "turn.failed", "error": {"message": row["evidence"]["vendor_err"]}}], 1)
             assert res["outcome"] == "bad_request"
         assert (env.load_state().out or None) is None

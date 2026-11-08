@@ -22,7 +22,7 @@ from tltestkit.case import Case
 from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory
 
-FIXTURES = sorted((ROOT / "tests" / "delegate" / "contract" / "fixtures").glob("*.json"))
+FIXTURES = sorted((ROOT / "packages" / "delegate" / "tests" / "contract" / "fixtures").glob("*.json"))
 CONTRACT = json.loads((ROOT / "packages" / "delegate" / "src" / "delegate" / "data" / "contract.json").read_text(encoding="utf-8"))
 LAUNCH_ONLY = {
     "duplicate_task",
@@ -129,7 +129,7 @@ class Launchers(Case):
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_grok_row_through_the_opencode_launcher_marks_the_lane_out_without_a_time(self):
-        row = load(ROOT / "tests" / "delegate" / "contract" / "fixtures" / "grok_spending_limit_24oct.json")["rows"][0]
+        row = load(ROOT / "packages" / "delegate" / "tests" / "contract" / "fixtures" / "grok_spending_limit_24oct.json")["rows"][0]
         res = self.opencode([{"type": "error", "error": {"name": "APIError", "data": {"message": row["evidence"]["vendor_err"]}}}])
         assert (res["outcome"], res.get("retry_after")) == ("credit_exhausted", None)
         assert "GROK_SUBSCRIPTION" in env.load_state().out

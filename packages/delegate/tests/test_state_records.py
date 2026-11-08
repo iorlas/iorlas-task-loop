@@ -200,7 +200,7 @@ class TokenBudget(Case):
     """The orchestrator pays for these files and outputs on every session / delegation.
     Budgets are characters (about 4 per token); ratchet them down, never up."""
 
-    ROOT = Path(__file__).resolve().parents[2] / "packages" / "delegate" / "src"
+    ROOT = Path(__file__).resolve().parents[3] / "packages" / "delegate" / "src"
 
     def test_agent_step_answer_is_small(self):
         saved = {k: os.environ.get(k) for k in ("XDG_CONFIG_HOME", "DELEGATE_CONFIG_DIR", "HOME", "CLAUDE_CODE_ENTRYPOINT")}

@@ -17,7 +17,7 @@ from tltestkit.case import Case
 from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 DENIED_BY_OPENCODE = (
     "just slow",
     "just slow --verbose",

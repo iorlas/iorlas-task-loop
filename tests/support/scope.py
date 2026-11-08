@@ -1,6 +1,6 @@
 """Which pieces a run exercises: delegate's tests run only when the change touches delegate (or what it is built on), or when asked for.
 
-`delegate_wanted(args, cwd)`: True when a path argument is inside tests/delegate, when TL_DELEGATE_TESTS=1, or when the change against
+`delegate_wanted(args, cwd)`: True when a path argument is inside packages/delegate/tests, when TL_DELEGATE_TESTS=1, or when the change against
 the merge base with origin/main touches DELEGATE_PATHS. False when it does not. A tree whose base cannot be found (no git, no
 origin/main) cannot say what changed: True, so nothing is skipped by accident."""
 import os
@@ -9,8 +9,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-# tests/conftest.py: tests/delegate/real/test_worker_home.py guards the worker homes it sets up
-DELEGATE_PATHS = ("packages/delegate/", "tests/delegate/", "skills/task-loop/_vendor/", "dev/vendor.json", "tests/conftest.py")
+DELEGATE_PATHS = ("packages/delegate/", "skills/task-loop/_vendor/", "dev/vendor.json", "packages/testkit/")
 
 
 def git(*argv: str) -> subprocess.CompletedProcess[str]:
@@ -30,7 +29,7 @@ def changed_paths() -> set[str] | None:
 
 
 def targets_delegate(args: Sequence[str], cwd: Path) -> bool:
-    inside = ROOT / "tests" / "delegate"
+    inside = ROOT / "packages" / "delegate" / "tests"
     for arg in args:
         path = (cwd / str(arg).split("::")[0]).resolve()
         if path == inside or inside in path.parents:
