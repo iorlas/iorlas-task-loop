@@ -1,7 +1,7 @@
 """ThreadFlag: a bool attribute that each thread has its own copy of, False until the thread sets it.
 
-The engine's `killed` and `wall_hit` say how the last command of the calling thread ended; with the lanes of a gate (several checks
-running at once) one shared value would be the answer of whichever lane wrote last."""
+The engine's `killed` and `wall_hit` say how the last command of the calling thread ended; with the tracks of a gate (several checks
+running at once) one shared value would be the answer of whichever track wrote last."""
 import threading
 
 

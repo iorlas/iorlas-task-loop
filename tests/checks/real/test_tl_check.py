@@ -25,7 +25,7 @@ class TlCheck(Case):
     def test_clean_repo_check_records_the_repo_plans_skip_for_green(self):
         producer = Path(self.tmp.name, "plan.py")
         body = {"version": 1, "base": None, "empty": True, "full": False, "full_reasons": [], "steps": [
-            {"name": "selected", "lane": "tests", "run": False, "argv": ["false"], "pre": [],
+            {"name": "selected", "track": "tests", "run": False, "argv": ["false"], "pre": [],
              "recipe": None, "reason": "no relevant paths"}]}
         producer.write_text(f"print({json.dumps(body)!r})\n")
         profile = {"engine": {"base": "main", "plan_cmd": [sys.executable, str(producer), "steps", "--json"],

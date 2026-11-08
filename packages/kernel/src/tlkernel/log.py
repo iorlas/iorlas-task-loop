@@ -109,7 +109,7 @@ class CheckStart(LogRec, tag="check_start"):
     round: int
     log: str = ""
     timeout_s: float | None = None
-    lane: str = ""
+    track: str = ""
 
 
 @final
@@ -119,9 +119,9 @@ class CheckEnd(LogRec, tag="check_end"):
     status: str
     tries: int = 1
     wall_hit: bool = False  # the engine stopped it at its wall limit (start: the CheckStart of the same id; end: this record's t)
-    lane: str = ""
+    track: str = ""
     at: float = 0.0  # seconds after its block began that it started
-    cancelled: bool = False  # another lane's red stopped it
+    cancelled: bool = False  # another track's red stopped it
 
 
 @final
@@ -184,7 +184,7 @@ class WaitStart(LogRec, tag="wait_start"):
     what: WaitWhat
     holder: str = ""
     until: float | None = None
-    lane: str = ""  # a resource wait: the lane of the waiting check and its id
+    track: str = ""  # a resource wait: the track of the waiting check and its id
     check: str = ""
 
 
@@ -192,7 +192,7 @@ class WaitStart(LogRec, tag="wait_start"):
 class WaitEnd(LogRec, tag="wait_end"):
     id: str
     in_budget: bool = False
-    lane: str = ""
+    track: str = ""
     check: str = ""
 
 

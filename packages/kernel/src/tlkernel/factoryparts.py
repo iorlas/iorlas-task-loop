@@ -99,6 +99,10 @@ def engine_check_requests(con: sqlite3.Connection) -> None:
     """pipeline v5 -> v6: writer answers and stage progress carry engine check requests; older checkpoints remain foreign."""
 
 
+def gate_check_tracks(con: sqlite3.Connection) -> None:
+    """gate v1 -> v2: check results name their track; older pass bodies remain foreign."""
+
+
 PIPELINE = Part(
     name="pipeline", version=6,
     tables=("run", "attempt", "step", "effect", "wait", "checkpoint", CHECKPOINT_SECTIONS, "timed", "signal"),

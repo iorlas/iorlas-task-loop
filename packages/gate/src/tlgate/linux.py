@@ -36,7 +36,7 @@ class ExecutorDown(Exception):
 
 class Remote(NamedTuple):
     """How the run ended: the exit code, the last lines of output, and whether the engine
-    stopped it (a cancelled lane) or its wall limit did."""
+    stopped it (a cancelled track) or its wall limit did."""
 
     rc: int
     tail: str
@@ -93,7 +93,7 @@ class LinuxRun:
                 out.write(line)
                 tail.extend(line.splitlines())
             work = f"{home}/{self.cfg.root}/{repo}/{slot}"
-            # -tt: a pty, so the executor hangs the run up when this ssh is killed (a cancelled lane, the wall limit)
+            # -tt: a pty, so the executor hangs the run up when this ssh is killed (a cancelled track, the wall limit)
             done = self.spawner.stream(self._ssh(["env", "-C", work, f"TL_ARTIFACT_DIR={remote_art}",
                                                   *[f"{k}={v}" for k, v in env.items()], *argv], tty=True),
                                        on_output=on_output, timeout_s=timeout_s, stop=stop)

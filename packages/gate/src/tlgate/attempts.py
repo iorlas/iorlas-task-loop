@@ -50,7 +50,7 @@ class Outcome:
     secs: float  # of the last run
     base_red: bool = False
     wall_hit: bool = False  # stopped at the check's wall limit
-    stopped: bool = False  # stopped by the flag it ran under (its lane was cancelled)
+    stopped: bool = False  # stopped by the flag it ran under (its track was cancelled)
     killed: bool = False  # stopped by the flag or the wall limit
 
 
@@ -60,7 +60,7 @@ class Attempts:
 
     def run(self, c: Check, log: Path, env: Mapping[str, str], stop: threading.Event | None = None) -> Outcome:
         """Run the check; a red one again when that can change the answer: only when the first two failures differ, never for a hang,
-        a timeout or a compile error. `stop` set (the lane is cancelled): the run ends there, `stopped`, with no rerun and no base run."""
+        a timeout or a compile error. `stop` set (the track is cancelled): the run ends there, `stopped`, with no rerun and no base run."""
         tries, prior = 0, ""
         while True:
             tries += 1
@@ -159,7 +159,7 @@ class Attempts:
             wid = self.host.waits.start(WaitWhat.EDITOR_LOCK)
             if stop is None:
                 self.sleep(wait)
-            elif stop.wait(wait):  # the lane was cancelled while it waited
+            elif stop.wait(wait):  # the track was cancelled while it waited
                 return Outcome(rc, tail, seen, out.tries, out.secs, stopped=True, wall_hit=end.wall_hit, killed=end.killed)
             self.host.waits.add(wait, WaitWhat.EDITOR_LOCK, wid)
             end = self._exec(c, log, env, stop)

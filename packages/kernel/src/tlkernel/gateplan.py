@@ -6,7 +6,7 @@ from tlkernel.wire import Rec
 
 @final
 class GatePlanStep(Rec, forbid_unknown_fields=False):
-    lane: str
+    track: str
     run: bool
     argv: list[str]
     pre: list[list[str]]

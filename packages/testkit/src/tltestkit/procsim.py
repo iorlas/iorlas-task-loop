@@ -92,7 +92,7 @@ BLOCKS = -1.0  # the seconds a check that runs until the engine stops it reports
 
 
 def blocks(out: str = "") -> Fake:
-    """A check that runs until the engine stops it (its lane is cancelled, the run is halted): the stream returns "stopped" then, and
+    """A check that runs until the engine stops it (its track is cancelled, the run is halted): the stream returns "stopped" then, and
     with no stop flag in reach it fails the test after 10 s."""
     return takes(BLOCKS, out=out)
 

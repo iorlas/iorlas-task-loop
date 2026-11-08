@@ -63,7 +63,7 @@ def test_launch_refuses_changed_ddl_at_the_same_version():
 def test_launch_refuses_a_changed_record_version_at_the_same_version(monkeypatch):
     c = con()
     dbparts.launch(c, readonly=False, parts=[part(records=(PassRecord,))])
-    monkeypatch.setattr(PassRecord, "V", 2, raising=False)
+    monkeypatch.setattr(PassRecord, "V", PassRecord.V + 1, raising=False)
     with pytest.raises(SchemaError, match="a record changed its V without a version bump"):
         dbparts.launch(c, readonly=False, parts=[part(records=(PassRecord,))])
 

@@ -28,7 +28,7 @@ class CheckLog:
         """A check begins running: its id, which `close` ends."""
         cid = self.log.next_id("k")
         self.log.emit(CheckStart(id=cid, check=c.id, group=c.group, cmd=c.cmd, round=rnd, log=log, timeout_s=c.wall_min * 60,
-                               lane=c.lane))
+                               track=c.track))
         if c.run_in == "slot":
             self.log.note(f"check {c.id}: execution in slot")
         return cid
@@ -37,7 +37,7 @@ class CheckLog:
         """The check's result; `cid` None: it did not run (skipped, cached, reused), so its start is written now."""
         cid = cid or self.start(c, rnd, res.log)
         self.log.emit(CheckEnd(id=cid, exit=res.exit, status=res.word, tries=res.tries, exec_seconds=res.secs, wall_hit=res.wall_hit,
-                               wait_seconds=res.waited, lane=c.lane, at=res.at, cancelled=res.cancelled))
+                               wait_seconds=res.waited, track=c.track, at=res.at, cancelled=res.cancelled))
 
     def round(self, node_id: str, run: CheckRun) -> None:
         self.log.emit(Checks(node_id=node_id, run=run))

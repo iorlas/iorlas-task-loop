@@ -58,7 +58,7 @@ def repo_check(k: CheckSpec, cfg: EngineConfig, phase: Phase = Phase.STAGE) -> C
                  wall_min=wall_limit(k, cfg, phase), cache=k.cache is not False,
                  inputs=inputsets.forced(cfg, k.inputs), inputs_only=k.inputs_only,
                  exclude=inputsets.expand(cfg, k.exclude), env=dict(k.env), repo=True, writer=k.writer,
-                 writer_max_s=k.writer_check_max_s, tail_log=k.tail_log, keep=list(k.keep), needs=list(k.needs), lane=k.lane,
+                 writer_max_s=k.writer_check_max_s, tail_log=k.tail_log, keep=list(k.keep), needs=list(k.needs), track=k.track,
                  network=k.network, pass_files=k.pass_files, run_in=k.run_in, where=k.where,
                  fix=text_of(k.fix) if k.fix else "", reads=list(k.reads), tags=tags_of(k.id, k.cmd, cfg.queued_match))
 

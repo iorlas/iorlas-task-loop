@@ -4,11 +4,11 @@ The part is a plain value; app/parts.py lists it (tests/rules/test_stage_parts.p
 docs/design/stage-isolation.md 3.1."""
 from tlkernel.checks import BaseRedRecord, PassRecord
 from tlkernel.dbparts import Part, Prune
-from tlkernel.factoryparts import ELIGIBLE
+from tlkernel.factoryparts import ELIGIBLE, gate_check_tracks
 
 GATE = Part(
-    name="gate", version=1, tables=("check_pass", "check_round"),
-    records=(PassRecord, BaseRedRecord),
+    name="gate", version=2, tables=("check_pass", "check_round"),
+    records=(PassRecord, BaseRedRecord), steps={1: gate_check_tracks},
     ddl="""
 CREATE TABLE check_pass (repo_key TEXT NOT NULL, check_id TEXT NOT NULL, digest TEXT NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN ('pass','base_red')), tree TEXT, base TEXT, run TEXT, host TEXT, ts REAL NOT NULL,

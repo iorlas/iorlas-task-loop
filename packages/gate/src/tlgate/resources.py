@@ -3,8 +3,8 @@
 A check holds one lease per resource it needs while it runs. A lease is one of `limit` units of the machine's lease table
 (~/.config/task-loop/leases, any_lease), so the limit holds across slots, loops and manual runs (`python3 -m any_lease run
 --root <table> editor N label -- cmd`), and a dead holder frees its unit by itself (a flock). The holder record is the label
-`bead:check` plus its lane; `tl status` and the dashboard read it. The wait is recorded: in the wait log (WaitWhat.RESOURCE, with
-the check, its lane and the holders; outside the run's budget) and per check (`CheckResult.waited`, `CheckEnd.waited`).
+`bead:check` plus its track; `tl status` and the dashboard read it. The wait is recorded: in the wait log (WaitWhat.RESOURCE, with
+the check, its track and the holders; outside the run's budget) and per check (`CheckResult.waited`, `CheckEnd.waited`).
 The check's command gets ANY_LEASE_HELD and ANY_LEASE_ROOT, so a manual-run wrapper inside it does not take a second unit.
 
 Which resources this host has is ~/.config/task-loop/host.json (HostResources); a check that needs one the host lacks is not run here
@@ -27,8 +27,8 @@ POLL_S = 0.5  # how often a waiting check looks for a free lease
 
 
 class ResourceWaits(Protocol):
-    def start(self, what: WaitWhat, holder: str = ..., until: float | None = ..., lane: str = ..., check: str = ...) -> str: ...
-    def add(self, secs: float, what: WaitWhat, wid: str | None = ..., lane: str = ..., check: str = ...) -> None: ...
+    def start(self, what: WaitWhat, holder: str = ..., until: float | None = ..., track: str = ..., check: str = ...) -> str: ...
+    def add(self, secs: float, what: WaitWhat, wid: str | None = ..., track: str = ..., check: str = ...) -> None: ...
 
 
 class ResourceHost(Protocol):
@@ -48,7 +48,7 @@ class ResourceHost(Protocol):
 
 
 class LeaseCancelled(Exception):
-    """The lane of a check that was queuing for a lease went red-elsewhere: it stops waiting (nothing is held)."""
+    """The track of a check that was queuing for a lease went red-elsewhere: it stops waiting (nothing is held)."""
 
 
 @dataclass
@@ -107,16 +107,16 @@ class Resources:
         def waiting(w: Waiting) -> None:
             if not wid:
                 who = ", ".join((o.holder.label or "?") if o.holder else "?" for o in w.occupants)
-                wid.append(host.waits.start(WaitWhat.RESOURCE, who, lane=c.lane, check=c.id))
+                wid.append(host.waits.start(WaitWhat.RESOURCE, who, track=c.track, check=c.id))
                 host.warn(f"waiting for the {name} resource ({limit} at a time on this machine; held by {who})")
             host.halt_point()
 
         try:
             held = host.stores.leases.acquire(name, limit, cancel=cancel, label=f"{host.bead}:{c.id}", on_wait=waiting, poll=POLL_S,
-                                              meta={"bead": host.bead, "check": c.id, "lane": c.lane})
+                                              meta={"bead": host.bead, "check": c.id, "track": c.track})
         except LeaseCancelledError as e:
             raise LeaseCancelled(name) from e
         stack.callback(held.release)
         if wid:
-            host.waits.add(held.waited, WaitWhat.RESOURCE, wid[0], lane=c.lane, check=c.id)
+            host.waits.add(held.waited, WaitWhat.RESOURCE, wid[0], track=c.track, check=c.id)
         return held.waited

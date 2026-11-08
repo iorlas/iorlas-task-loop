@@ -181,10 +181,10 @@ class RecordedWaits:
     def note_slot_waits(self, text: str, wall: float) -> None:
         self.seen.append((text, wall))
 
-    def start(self, what: WaitWhat, holder: str = "", until: float | None = None, lane: str = "", check: str = "") -> str:
+    def start(self, what: WaitWhat, holder: str = "", until: float | None = None, track: str = "", check: str = "") -> str:
         return f"w{len(self.seen)}"
 
-    def add(self, secs: float, what: WaitWhat, wid: str | None = None, lane: str = "", check: str = "") -> None:
+    def add(self, secs: float, what: WaitWhat, wid: str | None = None, track: str = "", check: str = "") -> None:
         self.seen.append((what.value, secs))
 
 

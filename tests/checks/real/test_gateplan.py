@@ -28,7 +28,7 @@ class RealGatePlan(CheckHostCase):
         sh("git", "commit", "-qm", "changed path", cwd=str(self.eng.wt))
         (Path(self.eng.wt) / "ignored.log").write_text("ignored files do not block the plan\n")
         body = {"version": 1, "base": base, "empty": False, "full": False, "full_reasons": [], "steps": [
-            {"name": "coverage", "lane": "tests", "run": False, "argv": ["false"], "pre": [],
+            {"name": "coverage", "track": "tests", "run": False, "argv": ["false"], "pre": [],
              "recipe": None, "reason": "producer selected no coverage", "future_field": True}]}
         script.write_text(
             "import os, sys\n"

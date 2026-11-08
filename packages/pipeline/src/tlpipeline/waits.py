@@ -71,22 +71,22 @@ class Waits:
         self.deadline = deadline
         self.earlier: tuple[int, int] | None = None  # (tokens, runs) of the bead's earlier runs
 
-    def start(self, what: WaitWhat, holder: str = "", until: float | None = None, lane: str = "", check: str = "") -> str:
-        """A wait begins (before the sleep, so a wait still going shows): its id, which add closes. `lane` and `check`: the
+    def start(self, what: WaitWhat, holder: str = "", until: float | None = None, track: str = "", check: str = "") -> str:
+        """A wait begins (before the sleep, so a wait still going shows): its id, which add closes. `track` and `check`: the
         waiting check of a resource wait."""
         wid: str = self.host.log.next_id("w")
-        self.host.log.emit(rec.WaitStart(id=wid, what=what, holder=holder, until=until, lane=lane, check=check))
+        self.host.log.emit(rec.WaitStart(id=wid, what=what, holder=holder, until=until, track=track, check=check))
         return wid
 
-    def add(self, secs: float, what: WaitWhat, wid: str | None = None, lane: str = "", check: str = "") -> None:
+    def add(self, secs: float, what: WaitWhat, wid: str | None = None, track: str = "", check: str = "") -> None:
         """`secs` spent waiting for a shared resource (not the budget's), the end of the wait `wid` (written now when not begun)."""
         secs = self.host.budget.wait(secs)
         if wid or secs > 0:
-            wid = wid or self.start(what, lane=lane, check=check)
+            wid = wid or self.start(what, track=track, check=check)
             if secs > 0:
                 self.host.log.note(
                     "waited {} min for {}: not counted in budget_min".format(int(secs // 60), what.value.replace("_", " ")))
-            self.host.log.emit(rec.WaitEnd(id=wid, wait_seconds=round(secs), in_budget=False, lane=lane, check=check))
+            self.host.log.emit(rec.WaitEnd(id=wid, wait_seconds=round(secs), in_budget=False, track=track, check=check))
 
     @contextlib.contextmanager
     def locked(self, what: str, path: Path | str, holder: str | None = None) -> Generator[Path | str]:
