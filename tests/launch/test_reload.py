@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from unittest import mock
 
+from tlslots import machine
 from tltestkit import fake_route
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -34,7 +35,6 @@ from taskloop.app.launch import loop_start as wstart  # noqa: E402
 from taskloop.app.loop.run import BeadRun, Where  # noqa: E402
 from taskloop.app.run import (  # noqa: E402
     engine,
-    entry,
 )
 from taskloop.app.run import reload_ports as run_reload  # noqa: E402
 from tlkernel import childenv  # noqa: E402
@@ -190,9 +190,9 @@ class Reload(te.EngineTest):
         )
         assert reexec.reexec_args(["loop", "--repo", "."], "", "/wt") is None
         handed = Env({"TL_REEXEC": Reexec(run="x", bead="t-1", pid=os.getpid(), frm="0.1.0", owned="s2").text()})
-        assert entry._handed_slot("s2", handed)
-        assert not entry._handed_slot("s3", handed)
-        assert not entry._handed_slot("s2", Env())
+        assert machine.handed_slot("s2", handed)
+        assert not machine.handed_slot("s3", handed)
+        assert not machine.handed_slot("s2", Env())
 
     def test_a_dry_run_and_a_run_not_started_by_run_task_never_move(self):
         self.install("0.2.0")

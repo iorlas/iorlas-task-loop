@@ -21,15 +21,14 @@ from tlkernel.envvars import EnvVar
 from tlkernel.fence import SLOT_GEN
 from tlkernel.gitport import Git
 from tlkernel.identity import Identity
-from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.procport import Spawner
-from tlkernel.run import Reexec, RunReport
+from tlkernel.run import RunReport
 from tlkernel.run_slot import RUN_SLOT
 from tlpipeline.api import admission as pipeline_admission
 from tlpipeline.api import target
 from tlslots import config as wslots_config
-from tlslots import engine_lock
+from tlslots import engine_lock, machine
 
 from taskloop.adapters import beadtools, gitrepo, ident
 from taskloop.adapters import halt as halting
@@ -90,40 +89,21 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, sp
     if a.dry_run:
         return preview(a, repo, cfg, "", store=store, env=env, git=git, who=who)
     cfg_slots = wslots_config.profile_slots(repo)
-    if why := wslots.uninitialised(repo, cfg_slots, store, spawner=spawner, git=git, who=who):
-        print(f"TAKEN: {why}")
-        return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
-    wait = bool(getattr(a, "wait", False))
-    told: list[int] = []
-
-    def waiting(ahead: int) -> None:
-        if not told:
-            say("no free slot{}; waiting in line".format(f" ({ahead} ahead)" if ahead else ""))
-            told.append(1)
     halt = halting.RUN_HALT["ev"] or threading.Event()
-    got = wslots.wait_slot(repo, cfg_slots, "run-task " + a.id, stop=lambda: not wait or halt.is_set(), sleep=halt.wait,
-                           on_wait=waiting, prio=wslots.bead_priority(repo, a.id, who,
-                               store), store=store, spawner=spawner, git=git, who=who)
-    if not got and halt.is_set():
-        raise Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED)  # run_bead's caller reports it; no slot was taken
-    if not got:
-        why = "no free slot (tl slot list); --wait waits in line for one"
-        print(f"TAKEN: {why}")
-        return RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
-    a.slot, a.worktree, sb = got
-    a.slot_gen = fence.gen_of(beadtools.peek(store or beadtools.bd_store(who.actor, repo), sb), SLOT_GEN)  # the lease this run took
-    RUN_SLOT["owned"] = a.slot  # a re-exec hands the slot on (TL_REEXEC) and its next run-task gives it back
+    got = wslots.any_slot(repo, cfg_slots, a.id, bool(getattr(a, "wait", False)), halt, say=console.say, store=store,
+                          spawner=spawner, git=git, who=who)
+    if isinstance(got, machine.Refused):
+        print(f"TAKEN: {got.why}")
+        return RunReport(outcome=Result.TAKEN, bead=a.id, why=got.why)
+    if isinstance(got, machine.Stopped):
+        raise Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED)
+    a.slot, a.worktree, sb = got.slot, got.worktree, got.bead
+    a.slot_gen = got.gen
+    RUN_SLOT["owned"] = a.slot
     try:  # run_in sees the slot as taken (its Env names the slot's bead); the engine heartbeats it
         return run_in(a, repo, cfg, store, env=env.with_(EnvVar.TASK_LOOP_SLOT_BEAD, sb), spawner=spawner, git=git, who=who)
     finally:
-        with _sigterm_ignored():
-            wslots.release_slot(repo, a.slot, bead=a.id, mine=True, store=store, gen=a.slot_gen, spawner=spawner, git=git, who=who)
-
-
-def _handed_slot(slot: Any, env: Env) -> Any:
-    """True when TL_REEXEC (set by the run-task that exec'd into this one, not yet read by the Engine) says it took `slot` itself."""
-    handed = Reexec.parse(env.get(EnvVar.TL_REEXEC))
-    return handed is not None and handed.owned == slot
+        wslots.give_back(repo, a.slot, a.id, a.slot_gen, store, spawner=spawner, git=git, who=who, guard=_sigterm_ignored)
 
 
 def _worktree_of(a: Any, repo: Any, spawner: Spawner, env: Env, who: Identity) -> tuple[str, Any]:
@@ -143,24 +123,6 @@ def _worktree_of(a: Any, repo: Any, spawner: Spawner, env: Env, who: Identity) -
               file=sys.stderr)
         return "", RunReport(outcome=Result.FAILED, bead=a.id, why=f"failed: {wt} is the main checkout")
     return wt, None
-
-
-def _slot_taken(a: Any, repo: Any, wt: str, slot: str, sb: BeadId | None, store: Any, env: Env,
-                spawner: Spawner, git: Git, who: Identity) -> tuple[BeadId | None, Any]:
-    """(slot bead taken here, taken outcome): a hand run takes its slot's bead as the loop does; one the loop started has it already."""
-    named = sb is not None and env.bead(EnvVar.TASK_LOOP_SLOT_BEAD) == sb
-    if slot and sb and named and _handed_slot(slot, env):
-        RUN_SLOT["owned"] = slot
-        return sb, None  # exec'd by the run-task that took this slot: it is still ours, and this process gives it back
-    if slot and not (sb and named):
-        took, why = wslots.take_named_slot(repo, slot, wslots_config.profile_slots(repo), "run-task " + a.id, store=store, spawner=spawner,
-            git=git, who=who)
-        if not took:
-            print(f"TAKEN: {why}")
-            return None, RunReport(outcome=Result.TAKEN, bead=a.id, why=why)
-        RUN_SLOT["owned"] = slot
-        return took, None
-    return None, None
 
 
 @contextlib.contextmanager
@@ -191,10 +153,14 @@ def run_in(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, spawner:
         slot = a.slot or wslots.slot_of(repo, wt, who, store)
         sb_row = wslots.slot_bead(repo, slot, who, store) if slot else None
         sb = sb_row.id if sb_row else None
-        took, taken = _slot_taken(a, repo, wt, slot, sb, store, env, spawner, git, who)
-        if taken:
-            return taken
+        taken = wslots.named(repo, slot, sb, sb is not None and env.bead(EnvVar.TASK_LOOP_SLOT_BEAD) == sb,
+                             "run-task " + a.id, store, env=env, spawner=spawner, git=git, who=who)
+        took = taken.bead
+        if taken.refused:
+            print(f"TAKEN: {taken.refused}")
+            return RunReport(outcome=Result.TAKEN, bead=a.id, why=taken.refused)
         if took:
+            RUN_SLOT["owned"] = slot
             a.slot_gen = fence.gen_of(beadtools.peek(store or beadtools.bd_store(who.actor, repo), took), SLOT_GEN)
         env = env.with_(EnvVar.TASK_LOOP_SLOT_BEAD, took) if took else env  # the engine's heartbeat keeps it
         lock = engine_lock.EngineLock(who.config, wt, a.id, slot, env, fx=slotfx.FX)
@@ -217,8 +183,8 @@ def run_in(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, spawner:
                 acquired.release()
                 held.clear()
             if took:
-                wslots.release_slot(repo, slot, bead=a.id, mine=True, store=store, gen=getattr(a, "slot_gen", None), spawner=spawner,
-                    git=git, who=who)
+                wslots.give_back(repo, slot, a.id, getattr(a, "slot_gen", None), store, spawner=spawner,
+                    git=git, who=who, guard=_sigterm_ignored)
 
 
 defer_stop = halting.stop_deferred  # no state: also before an Engine exists
