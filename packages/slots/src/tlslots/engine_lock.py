@@ -8,6 +8,8 @@ slots.paths.engine_take, so two runs starting at once cannot both win."""
 import contextlib
 import os
 import time
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager
 from pathlib import Path
 
 from tlkernel.env import Env
@@ -151,3 +153,15 @@ class HeldLock:
     @property
     def slot(self) -> str:
         return self._lock.rec.slot if self._lock else ""
+
+
+@contextlib.contextmanager
+def held(lock: EngineLock, held: HeldLock, guard: Callable[[], AbstractContextManager[None]]) -> Iterator[None]:
+    """Publish an admitted lock and release it before its enclosing slot claim exits."""
+    held.set(lock)
+    try:
+        yield
+    finally:
+        with guard():
+            lock.release()
+            held.clear()

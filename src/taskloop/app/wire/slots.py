@@ -60,5 +60,6 @@ worktree = bound(machine.worktree)
 owned_worktrees = bound(machine.owned_worktrees)
 
 named = bound(machine.named)
+claimed = bound(machine.claimed)
 any_slot = bound(machine.any_slot)
 give_back = bound(machine.give_back)

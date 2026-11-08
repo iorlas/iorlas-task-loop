@@ -7,7 +7,7 @@ import os
 import sys
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,7 +27,7 @@ from tlkernel.ids import BeadId
 from tlkernel.ids import loop_key as repo_key
 from tlkernel.paths import TASK_EXCLUDE
 from tlkernel.procport import Spawner
-from tlkernel.run import Reexec
+from tlkernel.run import RUN_SLOT, Reexec
 from tlkernel.slots import NotARepo, SlotFail, SlotGitError, SlotTable
 from tlkernel.slottable import LiveSlot, build_slot_table
 
@@ -234,6 +234,7 @@ def owned_worktrees(h: SlotsHost, git: Git, who: Identity, op: str) -> int:
 class Taken:
     bead: BeadId | None = None
     refused: str = ""
+    gen: int | None = None
 
 
 @dataclass(frozen=True)
@@ -271,6 +272,24 @@ def named(h: SlotsHost, repo: str, slot: str, sb: BeadId | None, named_in_env: b
             return Taken(refused=refused)
         return Taken(took)
     return Taken()
+
+
+@contextlib.contextmanager
+def claimed(h: SlotsHost, repo: str, slot: str, sb: BeadId | None, named_in_env: bool, why: str,
+            store: Beads | None, *, env: Env, spawner: Spawner, git: Git, who: Identity,
+            guard: Callable[[], AbstractContextManager[None]]) -> Iterator[Taken]:
+    """Pair a named run-task slot take with its fenced give-back (why is `run-task BEAD`)."""
+    taken = named(h, repo, slot, sb, named_in_env, why, store, env=env, spawner=spawner, git=git, who=who)
+    gen = None
+    try:
+        if taken.bead:
+            RUN_SLOT["owned"] = slot
+            gen = fence.gen_of(h.peek(store or h.bd(who.actor, repo), taken.bead), SLOT_GEN)
+        yield Taken(taken.bead, taken.refused, gen)
+    finally:
+        if taken.bead:
+            give_back(h, repo, slot, BeadId(why.removeprefix("run-task ")), gen, store,
+                      spawner=spawner, git=git, who=who, guard=guard)
 
 
 def any_slot(h: SlotsHost, repo: str, cfg_slots: SlotsConfig, bead_id: BeadId, wait: bool,
