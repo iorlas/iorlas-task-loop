@@ -59,3 +59,11 @@ def test_needs_rises_are_grouped_by_capability(monkeypatch, before, after, expec
     monkeypatch.setattr(ratchet_change, "allowed", lambda *args: 0)
     assert ratchet_change.problems("needs", needs_ratchet.file_counts, Path(),
                                   group=needs_ratchet.capability) == expected
+
+
+def test_temp_exceptions_skip_only_the_documented_paths():
+    src = tree("x = tempfile.tempdir\n")
+    for path, reason in temp_ratchet.EXCEPTIONS.items():
+        assert reason
+        assert temp_ratchet.file_counts(path, src) == {}
+        assert temp_ratchet.file_counts(path + ".other.py", src) == {"site": 1}

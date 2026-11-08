@@ -7,6 +7,8 @@ import time
 
 import pytest
 
+from tlkernel import scratch
+
 
 def pytest_collection_modifyitems(items):
     for item in items:
@@ -28,7 +30,7 @@ def world(tmp_path, monkeypatch):
     home = tmp_path / "home"
     (home / ".config").mkdir(parents=True)
     keep = {"UV_CACHE_DIR": os.popen("uv cache dir").read().strip(), "UV_PYTHON_INSTALL_DIR": os.popen("uv python dir").read().strip()}
-    env = {"HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"), "APPDATA": str(home / ".config"), "TMPDIR": str(tmp_path),
+    env = {"HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"), "APPDATA": str(home / ".config"), scratch.TMPDIR_VAR: str(tmp_path),
            "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
            "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull, "CLAUDE_CODE_SESSION_ID": "live-0", **keep}
     for k, v in env.items():

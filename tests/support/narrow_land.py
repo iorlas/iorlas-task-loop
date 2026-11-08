@@ -1,5 +1,4 @@
 """Land-step fake hosts and a Lander composed over those hosts."""
-import tempfile
 import weakref
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
@@ -48,6 +47,7 @@ from tlland.rebase import Commit, LandRebase, Recheck
 from tlland.record import Sync
 from tlpipeline.api import Steps
 from tltestkit.fake_clock import FakeClock
+from tltestkit.tmpdir import TemporaryDirectory
 
 
 class FakeOutboundHost:
@@ -57,7 +57,7 @@ class FakeOutboundHost:
         self.bead = BeadId("t-1")
         self.cfg = EngineConfig(land=["git", "push", "origin", "HEAD:main"])
         self.wt = "."
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         weakref.finalize(self, self.tmp.cleanup)
         self.run_dir = Path(self.tmp.name)
         self.dry = dry
@@ -179,7 +179,7 @@ class FakePushHost:
         self.cfg = cfg or EngineConfig(base="origin/main", land=["git", "push", "-q", "origin", "HEAD:main"])
         self.git, self.sh = git, sh
         self.wt = "/wt"
-        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp = TemporaryDirectory()
         weakref.finalize(self, self.tmp.cleanup)
         self.run_dir = Path(self.tmp.name)
         self.store: Beads = FakeBeads()
