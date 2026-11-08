@@ -1,7 +1,7 @@
 """Which pieces a run exercises: delegate's tests run only when the change touches delegate (or what it is built on), or when asked for.
 
-`delegate_wanted(args, cwd)`: True when a path argument is inside packages/delegate/tests, when TL_DELEGATE_TESTS=1, or when the change against
-the merge base with origin/main touches DELEGATE_PATHS. False when it does not. A tree whose base cannot be found (no git, no
+`delegate_wanted(args, cwd)`: True when a path argument is inside packages/delegate/tests, when TL_DELEGATE_TESTS=1, or when the
+change against the merge base with origin/main touches DELEGATE_PATHS. False when it does not. A tree whose base cannot be found (no git, no
 origin/main) cannot say what changed: True, so nothing is skipped by accident."""
 import os
 import subprocess
