@@ -44,7 +44,7 @@ def stop_of(res: DelegateResult) -> Stop | None:
     if st is None:
         return None
     return Stop(
-        "lane" if st.scope == "account" else st.scope,
+        st.scope,
         st.permanence,
         st.retry.kind,
         float(st.retry.at or 0.0),
@@ -111,7 +111,7 @@ Action = NewThread | Reroute | Yield | Fail
 
 
 def _excluded(stop: Stop) -> str:
-    return stop.lane if stop.scope == "lane" or not stop.model else stop.model
+    return stop.lane if stop.scope == "account" or not stop.model else stop.model
 
 
 def _machine_none(stop: Stop, ctx: Ctx, plan: RetryPlan) -> Action:
@@ -170,13 +170,13 @@ TABLE: Final[dict[tuple[str, str, str], Row]] = {
     ("bead", "transient", "none"): _bead_none,
     ("bead", "transient", "predicted"): _bead_none,  # the bead's own failure after delegate recovery
     ("bead", "transient", "poll"): ("PAUSE_LANE", False),
-    ("lane", "needs_owner", "none"): ("PAUSE_LANE", False),
+    ("account", "needs_owner", "none"): ("PAUSE_LANE", False),
     ("model", "needs_owner", "none"): ("PAUSE_LANE", False),
-    ("lane", "transient", "predicted"): _lane_predicted,
+    ("account", "transient", "predicted"): _lane_predicted,
     ("model", "transient", "predicted"): _lane_predicted,
-    ("lane", "transient", "poll"): _lane_poll,
+    ("account", "transient", "poll"): _lane_poll,
     ("model", "transient", "poll"): _lane_poll,
-    ("lane", "transient", "none"): _lane_none,
+    ("account", "transient", "none"): _lane_none,
     ("model", "transient", "none"): _lane_none,
 }
 
