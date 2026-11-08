@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from taskloop.cli.match import cmd_match
 from taskloop.domain import selfdescribe
 from tlkernel import envvars
+from tlkernel.checkmatchers import cmd_match
 
 ROOT = Path(__file__).resolve().parents[2]
 GOLDEN = Path(__file__).parent / "golden/consumer_api.json"

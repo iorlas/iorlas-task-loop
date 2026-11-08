@@ -441,7 +441,7 @@ VERBS: Final[dict[str, Handler]] = {
     "status": v_status,
     "handoff": v_handoff,
     "wait": v_wait,
-    "match": lazy_args("taskloop.cli.match", "cmd_match"),
+    "match": lazy_args("tlkernel.checkmatchers", "cmd_match"),
     "artifact-server": lambda a, c: cli_factory.serve_artifacts(a, c.who.config, c.now),
     "setup": lambda a, c: cli_setup.cmd_setup(a, c.env, c.here.parents[1], sh=c.spawner),
     "green": lambda a, c: cli_green.cmd_green(a, c.who.config, c.git, env=c.env),
