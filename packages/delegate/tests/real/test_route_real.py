@@ -18,8 +18,8 @@ from delegate.app import decide as dec
 from delegate.app import env, net, usage
 from delegate.contracts.routing import Settings
 from delegate.contracts.state import StateDoc
+from delegate.domain.accounts.account import Account
 from delegate.domain.health import ledger as health_ledger
-from delegate.domain.lanes.lane import Lane
 from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory, mkdtemp
 
@@ -56,8 +56,8 @@ def need[T](x: T | None) -> T:
     return x
 
 
-def no_reader(lane: Lane, S: Settings, st: StateDoc, t: float, ai_usage: object = None) -> None:
-    """A usage reader that reads nothing: the lane keeps the numbers it has."""
+def no_reader(account: Account, S: Settings, st: StateDoc, t: float, ai_usage: object = None) -> None:
+    """A usage reader that reads nothing: the account keeps the numbers it has."""
 
 
 def why(r):
@@ -70,18 +70,18 @@ def at(r):
     return r["stop"]["retry"]["at"]
 
 
-def lanes(openai=None, sub=None):
-    """Build lane states. Each arg is a dict of Lane attributes; None = healthy default."""
+def accounts(openai=None, sub=None):
+    """Build account states. Each arg is a dict of Account attributes; None = healthy default."""
 
     def mk(name, fam, kind, shared=False):
-        return Lane(name, fam, kind, shared)
+        return Account(name, fam, kind, shared)
 
     o, s = mk("OPENAI_SUBSCRIPTION", "openai", "subscription"), mk("CLAUDE_SUBSCRIPTION", "claude", "subscription", True)
     o.five, o.week, o.pace = 10, 5, 0
     s.five, s.week, s.pace = 30, 40, 0
-    for lane, over in ((o, openai), (s, sub)):
+    for account, over in ((o, openai), (s, sub)):
         for k, v in (over or {}).items():
-            setattr(lane, k, v)
+            setattr(account, k, v)
     return {x.name: x for x in (o, s)}
 
 
@@ -117,67 +117,62 @@ def _call(x):
 class Pick:
     @real_proc("delegate: a worker, git or CLI process")
     def test_worker_prefers_codex(self):
-        d = decide("worker", lanes())
-        assert (d["lane"], d["model"], d["pass"]) == ("OPENAI_SUBSCRIPTION", "gpt-6.1-sol", "strict")
+        d = decide("worker", accounts())
+        assert (d["account"], d["model"], d["pass"]) == ("OPENAI_SUBSCRIPTION", "gpt-6.1-sol", "strict")
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_codex_command_handles_non_git_dirs(self):
         with TemporaryDirectory() as d_:
-            d = decide("worker", lanes(), cwd=d_)
+            d = decide("worker", accounts(), cwd=d_)
         assert "--skip-git-repo-check" in d["how"]["cli"]  # not a git work tree
-        d2 = decide("worker", lanes(), cwd=str(Path(__file__).resolve().parents[4]))
+        d2 = decide("worker", accounts(), cwd=str(Path(__file__).resolve().parents[4]))
         assert "--skip-git-repo-check" not in d2["how"]["cli"]  # this repo is one
 
 
-
-
-
-
 class Roles:
-
-
     @real_proc("delegate: a worker, git or CLI process")
     def test_reviewer_prefers_the_other_family_and_authored_by_is_optional(self):
         assert (
-            decide("reviewer", lanes())["model"] == "gpt-6.1-sol"
+            decide("reviewer", accounts())["model"] == "gpt-6.1-sol"
         )  # no author given: Codex first (the most room), no claim of independence
-        d = decide("reviewer", lanes(), authored_by="openai")  # Claude is the last lane tried (delegate-m86): Codex reviews Codex, flagged
-        assert (d["lane"], d["flag"]) == ("OPENAI_SUBSCRIPTION", "same_family")
+        d = decide(
+            "reviewer", accounts(), authored_by="openai"
+        )  # Claude is the last account tried (delegate-m86): Codex reviews Codex, flagged
+        assert (d["account"], d["flag"]) == ("OPENAI_SUBSCRIPTION", "same_family")
         assert "claude is kept as the last resort" in d["warning"]
         out = {"out": True, "out_until": T + 3600}
-        assert decide("reviewer", lanes(openai=out), authored_by="openai")["lane"] == "CLAUDE_SUBSCRIPTION"
-        assert decide("reviewer", lanes(), authored_by="claude")["lane"] == "OPENAI_SUBSCRIPTION"
-        assert decide("reviewer", lanes(), authored_by="gemini")["action"] == "error"
+        assert decide("reviewer", accounts(openai=out), authored_by="openai")["account"] == "CLAUDE_SUBSCRIPTION"
+        assert decide("reviewer", accounts(), authored_by="claude")["account"] == "OPENAI_SUBSCRIPTION"
+        assert decide("reviewer", accounts(), authored_by="gemini")["action"] == "error"
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_same_family_review_is_the_last_resort_and_flagged(self):
         out = {"out": True, "out_until": T + 3600}
-        d = decide("reviewer", lanes(sub=out), authored_by="openai")  # Claude is out: Codex reviews Codex
-        assert (d["action"], d["lane"], d["flag"]) == ("run", "OPENAI_SUBSCRIPTION", "same_family")
-        d = decide("reviewer", lanes(openai=out), authored_by="claude")  # Codex is out: Claude reviews Claude
-        assert (d["action"], d["lane"], d["flag"]) == ("run", "CLAUDE_SUBSCRIPTION", "same_family")
-        d = decide("reviewer", lanes(openai=out, sub=out), authored_by="claude")
+        d = decide("reviewer", accounts(sub=out), authored_by="openai")  # Claude is out: Codex reviews Codex
+        assert (d["action"], d["account"], d["flag"]) == ("run", "OPENAI_SUBSCRIPTION", "same_family")
+        d = decide("reviewer", accounts(openai=out), authored_by="claude")  # Codex is out: Claude reviews Claude
+        assert (d["action"], d["account"], d["flag"]) == ("run", "CLAUDE_SUBSCRIPTION", "same_family")
+        d = decide("reviewer", accounts(openai=out, sub=out), authored_by="claude")
         assert d["action"] == "stop"  # nobody left: stop, not an exception
-
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_only_one_family_up_never_stops_and_warns(self):
         out = {"out": True, "out_until": T + 3600}
-        grok = Lane("GROK_SUBSCRIPTION", "xai", "subscription")
+        grok = Account("GROK_SUBSCRIPTION", "xai", "subscription")
         cases = {
-            "openai": lambda: lanes(sub=out),
-            "claude": lambda: lanes(openai=out),
+            "openai": lambda: accounts(sub=out),
+            "claude": lambda: accounts(openai=out),
         }
         for who, mk in cases.items():
             ls = mk()
             if who != "xai":
                 grok.out, grok.out_until, grok.out_reason = True, T + 7200, "limit"
-            ls["GROK_SUBSCRIPTION"] = grok if who != "xai" else Lane("GROK_SUBSCRIPTION", "xai", "subscription")
+            ls["GROK_SUBSCRIPTION"] = grok if who != "xai" else Account("GROK_SUBSCRIPTION", "xai", "subscription")
             if who != "xai":
                 ls["GROK_SUBSCRIPTION"] = grok
             d = decide("reviewer", ls, authored_by=who)
             assert (d["action"], d["flag"]) == ("run", "same_family"), who
-            assert d["lane"].split("_")[0] == {"openai": "OPENAI", "claude": "CLAUDE"}[who], who
+            assert d["account"].split("_")[0] == {"openai": "OPENAI", "claude": "CLAUDE"}[who], who
             assert f"reviewing {who}'s work with {who}: no other family is up" in d["warning"], who
             ud = decide("reviewer", ls, authored_by=who, unattended=True, allow_degraded=True)  # no consent step exists for review
             assert (ud["action"], ud["flag"]) == ("run", "same_family"), who
@@ -185,29 +180,27 @@ class Roles:
     @real_proc("delegate: a worker, git or CLI process")
     def test_warning_names_why_other_families_are_down(self):
         out = {"out": True, "out_until": T + 3600, "out_reason": "logged_out"}
-        ls = lanes(sub=out)
-        g = Lane("GROK_SUBSCRIPTION", "xai", "subscription")
+        ls = accounts(sub=out)
+        g = Account("GROK_SUBSCRIPTION", "xai", "subscription")
         g.out, g.out_until = True, T + 7200
         ls["GROK_SUBSCRIPTION"] = g
         w = decide("reviewer", ls, authored_by="openai")["warning"]
         assert "xai out until" in w
         assert "claude logged out" in w
-        assert "warning" not in decide("reviewer", lanes(), authored_by="claude")
+        assert "warning" not in decide("reviewer", accounts(), authored_by="claude")
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_premium_only_when_requested(self):
-        assert decide("planner", lanes())["model"] != "fable-5.1"
-        d = decide("worker", lanes(), premium="claude")
+        assert decide("planner", accounts())["model"] != "fable-5.1"
+        d = decide("worker", accounts(), premium="claude")
         assert (d["model"], d["flag"]) == ("fable-5.1", "user_requested_premium")
-        d = decide("worker", lanes(), premium="openai")
+        d = decide("worker", accounts(), premium="openai")
         assert d["action"] == "error"  # no premium model mapped for openai yet
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_light_uses_luna_first(self):
-        d = decide("light", lanes())
+        d = decide("light", accounts())
         assert (d["model"], d["mode"]) == ("gpt-6-luna", "read_only")
-
-
 
 
 class Cli:
@@ -218,18 +211,18 @@ class Cli:
             os.environ["APPDATA"] = d
             os.environ["DELEGATE_NOW"] = str(T)
             try:
-                route.main(["report", "--lane", "OPENAI_SUBSCRIPTION", "--event", "out", "--until", str(T + 3600)])
+                route.main(["report", "--account", "OPENAI_SUBSCRIPTION", "--event", "out", "--until", str(T + 3600)])
                 st = env.load_state()
                 assert "OPENAI_SUBSCRIPTION" in st.out
                 cfg = env.load_routing()
                 real = dict(usage.READERS)
                 usage.READERS.update(dict.fromkeys(real, no_reader))
                 try:
-                    ls = dec.fleet_builder(cfg).build(st, T, check_config=False).lanes
+                    ls = dec.fleet_builder(cfg).build(st, T, check_config=False).accounts
                 finally:
                     usage.READERS.update(real)
                 assert ls["OPENAI_SUBSCRIPTION"].out
-                route.main(["report", "--lane", "OPENAI_SUBSCRIPTION", "--event", "ok"])
+                route.main(["report", "--account", "OPENAI_SUBSCRIPTION", "--event", "ok"])
                 assert "OPENAI_SUBSCRIPTION" not in env.load_state().out
             finally:
                 for k in ("XDG_CONFIG_HOME", "APPDATA", "DELEGATE_NOW", "DELEGATE_CONFIG_DIR"):
@@ -237,7 +230,6 @@ class Cli:
 
 
 class StateLock:
-
     @real_proc("delegate: a worker, git or CLI process")
     def test_parallel_processes_lose_no_update(self):
         code = (

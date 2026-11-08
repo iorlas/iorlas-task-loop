@@ -8,11 +8,11 @@
  "family": null,
  "flag": null,
  "git_violation": [],
- "lane": "OPENAI_SUBSCRIPTION",
+ "account": "OPENAI_SUBSCRIPTION",
  "model": null,
  "ref": null,
  "run_id": null,
- "say": "OPENAI_SUBSCRIPTION is on hold, held: owner until Wed 28 Oct 00:43 (x). Continue with a fresh writer on another lane; existing file changes remain in the working directory.",
+ "say": "OPENAI_SUBSCRIPTION is on hold, held: owner until Wed 28 Oct 00:43 (x). Continue with a fresh writer on another account; existing file changes remain in the working directory.",
  "secs": 0,
  "stop": {
   "permanence": "transient",
@@ -22,7 +22,7 @@
    "at": 1793148230.5133426,
    "kind": "predicted"
   },
-  "scope": "lane"
+  "scope": "account"
  },
  "text": "",
  "tokens": null,

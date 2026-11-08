@@ -80,14 +80,18 @@ def run(request: RunRequest, started: Callable[[Handle], None] | None = None) ->
         state, routing = env.load_state(), env.typed_routing(env.load_routing())
         if request.prefer or request.writer_exec or request.reviewer_other_family:
             request = _product_request(request, state, routing)
-            if request.role == "worker" and request.writer_exec and (
-                request.only_family != ["openai"] or not request.writer_exec_allow
-            ):
-                return codec.from_json(RunResult, answer.result(
-                    "bad_request", call_id=request.call_id,
-                    say=("writer_exec needs the writer pinned to the Codex family and a writer_exec_allow grant "
-                         "in delegate's routing settings"),
-                ))
+            if request.role == "worker" and request.writer_exec and (request.only_family != ["openai"] or not request.writer_exec_allow):
+                return codec.from_json(
+                    RunResult,
+                    answer.result(
+                        "bad_request",
+                        call_id=request.call_id,
+                        say=(
+                            "writer_exec needs the writer pinned to the Codex family and a writer_exec_allow grant "
+                            "in delegate's routing settings"
+                        ),
+                    ),
+                )
         planned = threads.plan(request, state, routing) if request.thread else None
         res = _run(request, started, contract, planned)
         if planned and planned.resume and threads.needs_fresh(res):
@@ -116,14 +120,15 @@ def _product_request(request: RunRequest, state: StateDoc, routing: Routing) -> 
     if request.role == "worker":
         settings = routing.settings
         request = replace(
-            request, only_family=[request.prefer] if request.prefer else list(settings.writer_family),
+            request,
+            only_family=[request.prefer] if request.prefer else list(settings.writer_family),
             read_roots=list(settings.writer_read_roots),
             writer_exec_allow=[list(argv) for argv in settings.writer_exec_allow] if request.writer_exec else request.writer_exec_allow,
         )
     if request.reviewer_other_family and not request.authored_by:
         writer = state.threads.get(f"{request.task}/writer")
-        lane = routing.lanes.get(writer.lane or "") if writer else None
-        request = replace(request, authored_by=lane.family if lane else None)
+        account = routing.accounts.get(writer.account or "") if writer else None
+        request = replace(request, authored_by=account.family if account else None)
     return request
 
 
@@ -149,17 +154,17 @@ def _run(
 
 
 def status(claude_usage: Json = None) -> Status:
-    """The full lane status (probes the fleet and leaves the snapshot). `claude_usage`: the Claude plan's usage windows, when the caller
+    """The full account status (probes the fleet and leaves the snapshot). `claude_usage`: the Claude plan's usage windows, when the caller
     has them (the status line is the only place a headless run can read them from)."""
-    payload, _lanes, _ck = status_app.full_status(env.load_routing(), claude_usage)
+    payload, _accounts, _ck = status_app.full_status(env.load_routing(), claude_usage)
     return codec.from_json(status_wire.Status, payload)
 
 
 @record
 class Account:
-    """One lane of the fleet: whether the router may use it, whether this machine can run it, and what fixes it when it cannot."""
+    """One account of the fleet: whether the router may use it, whether this machine can run it, and what fixes it when it cannot."""
 
-    lane: str
+    name: str
     enabled: bool
     ready: bool
     fix: str
@@ -171,7 +176,7 @@ class AgentRef:
 
     run_id: str
     task: str
-    lane: str
+    account: str
     role: str
 
 
@@ -183,28 +188,28 @@ def agents() -> list[AgentRef]:
         worker = v.worker_pid is not None and bool(v.worker_start) and proc_start(v.worker_pid) == v.worker_start
         route = bool(v.pid_start) and proc_start(v.pid) == v.pid_start
         if worker or route:
-            found.append(AgentRef(run_id=run_id, task=v.task, lane=v.lane, role=v.role or ""))
+            found.append(AgentRef(run_id=run_id, task=v.task, account=v.account, role=v.role or ""))
     return found
 
 
 def history(since: float = 0.0) -> list[dict[str, Json]]:
-    """The finished worker runs after `since` (epoch seconds), oldest first, as wire objects (ts, role, task, lane, model, tokens, ...).
+    """The finished worker runs after `since` (epoch seconds), oldest first, as wire objects (ts, role, task, account, model, tokens, ...).
     The only way to read them: the file is delegate's."""
     return [codec.to_json(r) for r in env.history_store().rows(since) if isinstance(r, RunRow)]
 
 
 def accounts() -> list[Account]:
-    """Every lane with its state: the setup view. `fix` names the one step that makes a lane ready (a login, a CLI)."""
-    rows = doctor.lane_rows(env.load_routing())
-    return [Account(lane=as_str(r["lane"]), enabled=bool(r["enabled"]), ready=bool(r["ready"]), fix=as_str(r["fix"])) for r in rows]
+    """Every account with its state: the setup view. `fix` names the one step that makes an account ready (a login, a CLI)."""
+    rows = doctor.account_rows(env.load_routing())
+    return [Account(name=as_str(r["account"]), enabled=bool(r["enabled"]), ready=bool(r["ready"]), fix=as_str(r["fix"])) for r in rows]
 
 
-def set_account(lane: str, enabled: bool) -> None:
-    """The owner's choice for a lane: enabled or declined. A lane that is not in the fleet raises ValueError."""
-    known = [a.lane for a in accounts()]
-    if lane not in known:
-        raise ValueError(f"unknown lane {lane}; lanes: {', '.join(known)}")
-    doctor.config_set(f"profile.lanes.{lane}", "enabled" if enabled else "declined")
+def set_account(account: str, enabled: bool) -> None:
+    """The owner's choice for an account: enabled or declined. A account that is not in the fleet raises ValueError."""
+    known = [a.name for a in accounts()]
+    if account not in known:
+        raise ValueError(f"unknown account {account}; accounts: {', '.join(known)}")
+    doctor.config_set(f"profile.accounts.{account}", "enabled" if enabled else "declined")
 
 
 def as_json(record: Status | RunResult) -> dict[str, Json]:

@@ -84,7 +84,7 @@ def stop(reason, ref="", **kw):
 
 def full(data, ref="w2", **kw):
     """A done answer with its lane facts spelled out (a test where the lane, the family or the fallback fields differ)."""
-    fields = {"cost": 0.5, "secs": 1, "family": "claude", "lane": "C", "model": "sonnet", "effort": "e",
+    fields = {"cost": 0.5, "secs": 1, "family": "claude", "account": "C", "model": "sonnet", "effort": "e",
                   "tokens": {"in": 1000, "cached": 800, "out": 50}, "context": {"instructions": [], "env_keys": []}}
     fields.update(kw)
     return fake_route.answer(fake_route.contract(), None, ref, False, data, **fields)
@@ -355,8 +355,8 @@ class EngineTest(SlotWorld):
                      "+Dread packs: https://fab.com/s/abc is free.\n+Beards: (unverified) https://sketchfab.com/m/x blocks agents.\n"
                      "+Docs: https://docs.unity3d.com/Manual/index.html\n")
 
-    BAD_SCHEMA = ("codex rejected the request: {\"type\":\"error\",\"error\":{\"message\":\"Invalid schema for response_format "
-                  "'codex_output_schema': Missing 'accept_files'.\",\"code\":\"invalid_json_schema\"},\"status\":400}")
+    BAD_SCHEMA = ('codex rejected the request: {"type":"error","error":{"message":"Invalid schema for response_format '
+        '\'codex_output_schema\': Missing \'accept_files\'.","code":"invalid_json_schema"},"status":400}')
 
     def bad_request(self, **kw):
         return stop("bad_request", family="openai", text=self.BAD_SCHEMA, say=self.BAD_SCHEMA, **kw)
@@ -374,7 +374,7 @@ class EngineTest(SlotWorld):
             for ln in re.findall(r"(?m)^(?:Blocked:|Reflect \(engine\)).*$", (BRIEFS / (name + ".md")).read_text(encoding="utf-8"))
         ]
         return [{"author": a, "text": t} for a, t in comments + last if a.startswith("tl-")] + [
-            {"author": "tl-x", "text": "Engine paused: paused: no lane for write until 10:00 (no_lane: Hold the task)"}], notes
+            {"author": "tl-x", "text": "Engine paused: paused: no lane for write until 10:00 (no_account: Hold the task)"}], notes
 
 
 BRIEFS = ROOT / "packages" / "work" / "tests" / "fixtures" / "briefs"

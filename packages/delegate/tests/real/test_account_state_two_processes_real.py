@@ -28,9 +28,9 @@ for i in range({N}):
     rid = f"{{who}}-{{i}}"
     assert RunLease(rid, "worker", f"task-{{rid}}", "L", "m", None, False, 60).claim() is None
     def keep(s: StateDoc, rid=rid) -> None:
-        s.refs[rid] = RefRecord(lane="L", model="m", effort="e", mode="x")
+        s.refs[rid] = RefRecord(account="L", model="m", effort="e", mode="x")
     env.update_state(keep)
-    env.history_add(hist.CanaryRow(ts=env.now(), run_id=rid, lane="L", model="m"))
+    env.history_add(hist.CanaryRow(ts=env.now(), run_id=rid, account="L", model="m"))
 (done / who).write_text("1")
 while len(list(done.iterdir())) < 2:  # stay alive: a lease of a dead pid is reaped by the next claim
     time.sleep(0.05)
@@ -42,9 +42,15 @@ class TwoProcessState(RunBase):
     def test_both_processes_writes_all_survive(self):
         done = self.base / "done"
         done.mkdir()
-        child_env = dict(os.environ, PYTHONPATH=os.pathsep.join([
-            str(ROOT / "packages" / "delegate" / "src"), str(ROOT / "skills" / "task-loop" / "_vendor"),
-        ]))
+        child_env = dict(
+            os.environ,
+            PYTHONPATH=os.pathsep.join(
+                [
+                    str(ROOT / "packages" / "delegate" / "src"),
+                    str(ROOT / "skills" / "task-loop" / "_vendor"),
+                ]
+            ),
+        )
         procs = [subprocess.Popen([sys.executable, "-c", CHILD, who, str(done)], env=child_env) for who in ("a", "b")]
         end = time.time() + 50
         for p in procs:

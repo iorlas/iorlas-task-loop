@@ -2,7 +2,7 @@
  "fixture": 1,
  "scenario": "codex stream retries that ended the run (n/5), answered worker_failed",
  "cli": "codex",
- "lane": "OPENAI_SUBSCRIPTION",
+ "account": "OPENAI_SUBSCRIPTION",
  "real": "text real; exit code assumed 1 and work_seen true (the old answer was worker_failed, not vendor_prework)",
  "expected_reason": "worker_failed",
  "rows": [

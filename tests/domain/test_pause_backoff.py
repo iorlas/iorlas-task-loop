@@ -78,7 +78,7 @@ class Backoff(Case):
         b = Bead(id=BeadId("t-1"), title="work", status="open")
         rec = pauses.after_pause(None, b, "r1", 100, "rate_limited", lambda: 0, not_before=900, permanence="transient")
         assert rec.retry_at == 900
-        for reason in ("engine_only_unenforced", "logged_out", "new_vendor_reason", "no_lane", "crash"):
+        for reason in ("engine_only_unenforced", "logged_out", "new_vendor_reason", "no_account", "crash"):
             owner = pauses.after_pause(rec, b, "r2", 100, reason, lambda: 1, not_before=900)
             assert (owner.permanence, owner.retry_at) == ("needs_owner", 0)
 

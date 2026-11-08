@@ -1,4 +1,5 @@
-"""The lane cockpit: one row per known lane, an emoji for each state, a plain reason, the unlock time, usage windows with their source."""
+"""The account cockpit: one row per known account, an emoji for each state, a plain reason, the unlock time, usage windows with their
+source."""
 
 import copy
 import io
@@ -13,7 +14,7 @@ import routing_support as support
 from test_route import CFG, T, route
 
 from delegate.app import cockpit, env, harnesses, onboard, status, usage
-from delegate.domain.lanes.lane import Lane
+from delegate.domain.accounts.account import Account
 from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory
 
@@ -25,22 +26,16 @@ def cfg_all():
     return cfg
 
 
-def lane(name, **over):
-    c = CFG["lanes"][name]
-    ln = Lane(name, c["family"], c["kind"], c.get("shared_with_orchestrator", False))
+def account(name, **over):
+    c = CFG["accounts"][name]
+    ln = Account(name, c["family"], c["kind"], c.get("shared_with_orchestrator", False))
     for k, v in over.items():
         setattr(ln, k, v)
     return ln
 
 
 def view(name, ln, st=None, history=(), login=(True, "ok", T), cfg=None, off=None):
-    return cockpit.lane_view(name, cfg or cfg_all(), ln, support.doc_of(st or {}), T, history, 0, login, off)
-
-
-
-
-
-
+    return cockpit.account_view(name, cfg or cfg_all(), ln, support.doc_of(st or {}), T, history, 0, login, off)
 
 
 class LoginCheck:
@@ -67,22 +62,21 @@ class LoginCheck:
             assert harnesses.probe_login("OPENAI_SUBSCRIPTION")[0]
 
 
-
 class Command:
     def run_status(self, *argv, state=None, ready=None):
         cfg = cfg_all()
         with TemporaryDirectory() as d, patch.dict(os.environ, {"DELEGATE_CONFIG_DIR": d, "CLAUDE_CODE_ENTRYPOINT": "cli"}):
-            (Path(d) / "state.json").write_text(json.dumps({"v": 1, **(state or {})}))
-            (Path(d) / "config.json").write_text(json.dumps({"profile": {"lanes": {"DEEPSEEK_FREE": "enabled"}}}))
-            ready = ready or dict.fromkeys(cfg["lanes"], True)
-            noread = {k: (lambda lane_, S, st_, t, *a: None) for k in usage.READERS}
+            (Path(d) / "state.json").write_text(json.dumps({"v": 2, **(state or {})}))
+            (Path(d) / "config.json").write_text(json.dumps({"profile": {"accounts": {"DEEPSEEK_FREE": "enabled"}}}))
+            ready = ready or dict.fromkeys(cfg["accounts"], True)
+            noread = {k: (lambda account_, S, st_, t, *a: None) for k in usage.READERS}
             logins = {"OPENAI_SUBSCRIPTION": (False, "Not logged in"), "GROK_SUBSCRIPTION": (True, "ok")}
             out, sys.stdout = sys.stdout, io.StringIO()
             try:
                 with (
                     patch.object(env, "load_routing", return_value=cfg),
                     patch.dict(usage.READERS, noread),
-                    patch.object(onboard, "configured_lanes", return_value=ready),
+                    patch.object(onboard, "configured_accounts", return_value=ready),
                     patch.object(harnesses, "probe_login", side_effect=lambda n: logins.get(n, (True, "ok"))),
                     patch.object(env, "now", return_value=T),
                 ):
@@ -90,8 +84,6 @@ class Command:
                 return sys.stdout.getvalue()
             finally:
                 sys.stdout = out
-
-
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_stdout_gets_a_safe_encoding_for_emoji(self):

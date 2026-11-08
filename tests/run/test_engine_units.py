@@ -69,8 +69,9 @@ class FailureBriefAndDurations(Case):
     def setup_method(self):
         self.tmp = TemporaryDirectory()
         self.home = Path(self.tmp.name)
-        self.env = mock.patch.dict(os.environ, {"HOME": str(self.home), "XDG_CONFIG_HOME": str(self.home / "cfg"),
-                                                "APPDATA": str(self.home / "cfg")})
+        self.env = mock.patch.dict(
+            os.environ, {"HOME": str(self.home), "XDG_CONFIG_HOME": str(self.home / "cfg"), "APPDATA": str(self.home / "cfg")}
+        )
         self.env.start()
         self.run_dir = self.home / "run"
         (self.run_dir / "checks").mkdir(parents=True)
@@ -105,7 +106,8 @@ class FailureBriefAndDurations(Case):
     def test_the_last_traceback_frame_is_kept(self):
         (self.run_dir / "tb.log").write_text(
             'Traceback (most recent call last):\n  File "a.py", line 1, in <module>\n    f()\n'
-            '  File "b.py", line 9, in f\n    g()\nValueError: bad\n')
+            '  File "b.py", line 9, in f\n    g()\nValueError: bad\n'
+        )
         out = evidence.failure_brief([res(cmd="c", exit=1, log="tb.log")], self.run_dir)
         assert 'File "b.py", line 9, in f\n    g()' in out
 
@@ -129,17 +131,27 @@ class FailureBriefAndDurations(Case):
             assert split.engine_only(cmd), cmd
 
     def test_engine_recipes_are_the_bare_just_recipes_of_checks_and_gate_the_writer_must_not_run(self):
-        cfg = cfg_with(writer_check_max_s=60, gate="just check", checks=[
-            {"id": "slow", "cmd": "just slow", "group": "tests"}, {"id": "fmt", "cmd": "just fmt", "group": "static"},
-            {"id": "u", "cmd": "just unity-tests", "group": "tests", "writer": False},
-            {"id": "w", "cmd": "make test", "group": "tests", "writer": False}])
+        cfg = cfg_with(
+            writer_check_max_s=60,
+            gate="just check",
+            checks=[
+                {"id": "slow", "cmd": "just slow", "group": "tests"},
+                {"id": "fmt", "cmd": "just fmt", "group": "static"},
+                {"id": "u", "cmd": "just unity-tests", "group": "tests", "writer": False},
+                {"id": "w", "cmd": "make test", "group": "tests", "writer": False},
+            ],
+        )
         assert WriterSplit(cfg, {"just slow": 300, "just fmt": 1}).engine_recipes() == ["check", "slow", "unity-tests"]
 
     def test_a_check_says_writer_true_or_its_own_cut_and_that_beats_the_global_one(self):
-        cfg = cfg_with(writer_check_max_s=60, checks=[
-            {"id": "analyzers", "cmd": "just unity-analyzers", "group": "static", "writer": True},
-            {"id": "slow", "cmd": "just slow", "group": "tests", "writer_check_max_s": 500},
-            {"id": "fmt", "cmd": "just fmt", "group": "static", "writer": False}])
+        cfg = cfg_with(
+            writer_check_max_s=60,
+            checks=[
+                {"id": "analyzers", "cmd": "just unity-analyzers", "group": "static", "writer": True},
+                {"id": "slow", "cmd": "just slow", "group": "tests", "writer_check_max_s": 500},
+                {"id": "fmt", "cmd": "just fmt", "group": "static", "writer": False},
+            ],
+        )
         split = WriterSplit(cfg, {"just unity-analyzers": 140, "just slow": 300, "just fmt": 1})
         assert [split.engine_only(c) for c in ("just unity-analyzers", "just slow", "just fmt")] == [False, False, True]
 
@@ -173,8 +185,17 @@ class Outcome(EngineTest):
         assert "boom" in r.why
 
     def main(self, outcome_file, **kw):
-        a = mock.Mock(id="t-1", branch=None, pr=None, worktree=str(Path(self.tmp.name, "slot")), slot=None, dry_run=False, fresh=False,
-                      quiet=True, outcome_file=str(outcome_file))
+        a = mock.Mock(
+            id="t-1",
+            branch=None,
+            pr=None,
+            worktree=str(Path(self.tmp.name, "slot")),
+            slot=None,
+            dry_run=False,
+            fresh=False,
+            quiet=True,
+            outcome_file=str(outcome_file),
+        )
         Path(a.worktree).mkdir(exist_ok=True)
         out = io.StringIO()
         with contextlib.chdir(self.wt), redirect_stdout(out), mock.patch.object(signal, "signal"):  # pyrefly: ignore[missing-attribute]
@@ -196,24 +217,39 @@ class Outcome(EngineTest):
         made = mock.Mock()
         made.return_value.retry_after = due
         made.return_value.run.return_value = 2
-        made.return_value.result.return_value = RunReport(outcome=Result.PAUSED, bead=BeadId("t-1"),
-                                                                  why="paused: no lane for write until 09:36")
-        a = mock.Mock(id="t-1", branch=None, pr=None, worktree=str(Path(self.tmp.name, "slot")), slot=None, dry_run=False, fresh=False,
-                      quiet=True, outcome_file=None)
+        made.return_value.result.return_value = RunReport(
+            outcome=Result.PAUSED, bead=BeadId("t-1"), why="paused: no lane for write until 09:36"
+        )
+        a = mock.Mock(
+            id="t-1",
+            branch=None,
+            pr=None,
+            worktree=str(Path(self.tmp.name, "slot")),
+            slot=None,
+            dry_run=False,
+            fresh=False,
+            quiet=True,
+            outcome_file=None,
+        )
         Path(a.worktree).mkdir(exist_ok=True)
         out = io.StringIO()
-        with mock.patch.object(admission, "admit", return_value=(True, "")), mock.patch.object(entry, "Engine", made), \
-                contextlib.chdir(self.wt), redirect_stdout(out), mock.patch.object(signal, "signal"):  # pyrefly: ignore[missing-attribute]
+        with (
+            mock.patch.object(admission, "admit", return_value=(True, "")),
+            mock.patch.object(entry, "Engine", made),
+            contextlib.chdir(self.wt),
+            redirect_stdout(out),
+            mock.patch.object(signal, "signal"),
+        ):  # pyrefly: ignore[missing-attribute]
             entry.main(a, self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())  # pyrefly: ignore[missing-attribute]
         lines = out.getvalue().strip().splitlines()
         assert json.loads(lines[-1])["outcome"] == "paused"  # the loop reads the last line: still the outcome
         assert any(
-                "PAUSED t-1: the lane is back at {}; rerun then: tl run-task t-1".format(
-                    time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(due))
-                )
-                in ln
-                for ln in lines
-            ), lines
+            "PAUSED t-1: the lane is back at {}; rerun then: tl run-task t-1".format(
+                time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(due))
+            )
+            in ln
+            for ln in lines
+        ), lines
 
     def test_a_pause_with_no_time_says_so(self):
         assert "no time" in outcome_line.pause_line(RunReport(outcome=Result.PAUSED, bead=BeadId("t-1")), 0)
@@ -228,7 +264,6 @@ class Outcome(EngineTest):
 
 
 class DelegateLauncher(EngineTest):
-
     def test_a_review_from_the_writers_family_pauses_the_step_and_is_not_taken(self):  # tl-9un.15
         same = full(CLEAN, "r", family="openai", flag="same_family")
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [same]})
@@ -241,11 +276,10 @@ class DelegateLauncher(EngineTest):
     # switches lanes on a resume, but a fresh call gets the role's next rung (Sonnet on the claude lane) at once
     OUT_LONG = stop("rate_limited", at=time.time() + 3600, say="cannot continue t now")
     # delegate says the writer fell back off its first lane (to xai, so the reviewer, claude, is another family)
-    FRESH = full(WRITE, "w2", fallback=True, first_lane="OPENAI_SUBSCRIPTION", family="xai")
+    FRESH = full(WRITE, "w2", fallback=True, first_account="OPENAI_SUBSCRIPTION", family="xai")
 
     def test_a_resumed_write_whose_lane_is_out_pauses(self):
-        rc, script = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L],
-                                      "review": [review(unmet=["more"])]})
+        rc, script = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_L], "review": [review(unmet=["more"])]})
         assert rc == 2
         assert [r.thread for r in script.requests if r.role == "worker"] == ["writer", "writer"]
         assert [bool(r.delta_file) for r in script.requests if r.role == "worker"] == [False, True]
@@ -253,42 +287,35 @@ class DelegateLauncher(EngineTest):
 
     # tl-bxk.10.5 2026-10-21: after a real outage the Sonnet thread stayed the writer for every later round of
     # lifesim-fld.27.7, d5f.33, 1eg2 and d5f.54 while Codex was usable again
-    BACK = full(WRITE, "w3", family="openai", lane="OPENAI_SUBSCRIPTION", model="gpt")
-    OUT_L: ClassVar[Any] = dict(OUT_LONG, lane="OPENAI_SUBSCRIPTION")
-
-
-
-
-
+    BACK = full(WRITE, "w3", family="openai", account="OPENAI_SUBSCRIPTION", model="gpt")
+    OUT_L: ClassVar[Any] = dict(OUT_LONG, account="OPENAI_SUBSCRIPTION")
 
     def test_the_first_choice_writer_still_resumes_and_no_status_is_read(self):
         with mock.patch.object(lroute, "status_json") as st:
-            rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, WRITE, WRITE],
-                                     "review": [review(unmet=["more"]), review(unmet=["more"]), CLEAN]})
+            rc, s = self.run_engine(
+                {"plan": [PLAN], "write": [WRITE, WRITE, WRITE], "review": [review(unmet=["more"]), review(unmet=["more"]), CLEAN]}
+            )
         assert rc == 0, self.blocked
         assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write", "ref-write"]
         st.assert_not_called()
 
-
     # contract 4: an answer that picked a lane says whether it is a fallback (and from which first lane, when it can)
-    SONNET_FB: ClassVar[Any] = dict(FRESH, rung=1, fallback=True, fallback_reason="ceiling", first_lane="OPENAI_SUBSCRIPTION")
+    SONNET_FB: ClassVar[Any] = dict(FRESH, rung=1, fallback=True, fallback_reason="ceiling", first_account="OPENAI_SUBSCRIPTION")
     CODEX_FIRST: ClassVar[Any] = dict(BACK, rung=0, fallback=False, fallback_reason=None)
     no_checks: ClassVar[Any] = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[])])  # FRESH writes no f.txt
 
-
-
-
     def test_the_answer_a_first_choice_answer_is_resumed(self):
         with mock.patch.object(lroute, "status_json") as st:
-            rc, s = self.run_engine({"plan": [self.no_checks], "write": [self.CODEX_FIRST, self.CODEX_FIRST],
-                                     "review": [review(unmet=["more"]), CLEAN]})
+            rc, s = self.run_engine(
+                {"plan": [self.no_checks], "write": [self.CODEX_FIRST, self.CODEX_FIRST], "review": [review(unmet=["more"]), CLEAN]}
+            )
         assert rc == 0, self.blocked
         assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "w3"]
         st.assert_not_called()
 
     def test_lanes_read_the_status_lanes(self):
         raw = {"OPENAI_SUBSCRIPTION": {"out": True, "reason": "limit", "out_until": 90.0}, "X": {"out": False}, "Y": {}}
-        with mock.patch.object(lroute, "status_json", return_value={"v": 1, "lanes": raw}):
+        with mock.patch.object(lroute, "status_json", return_value={"v": 1, "accounts": raw}):
             want = [lroute.Lane("OPENAI_SUBSCRIPTION", False, "limit", 90.0), lroute.Lane("X", True), lroute.Lane("Y", None)]
             assert lroute.lanes() == want
             assert lroute.lane("X") == lroute.Lane("X", True)
@@ -301,8 +328,7 @@ class DelegateLauncher(EngineTest):
     OUT_OWNER = stop("rate_limited", say="cannot say when OPENAI_SUBSCRIPTION frees")
 
     def test_a_resumed_write_whose_lane_has_no_time_pauses(self):
-        rc, script = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER],
-                                      "review": [review(unmet=["more"])]})
+        rc, script = self.run_engine({"plan": [PLAN], "write": [WRITE, self.OUT_OWNER], "review": [review(unmet=["more"])]})
         assert rc == 2
         assert [r.thread for r in script.requests if r.role == "worker"] == ["writer", "writer"]
         assert self.blocked == []
@@ -348,8 +374,7 @@ class DelegateLauncher(EngineTest):
         assert rc == 2
         assert [c[0] for c in s.calls].count("worker") == 1
         assert (self.blocked, self.ask()) == ([], None)
-        assert any(c[:3] == ("comments", "add", "t-1") and any("run `claude auth login`" in x for x in c)
-                            for c in self.bd_calls)
+        assert any(c[:3] == ("comments", "add", "t-1") and any("run `claude auth login`" in x for x in c) for c in self.bd_calls)
 
     def test_a_resumed_write_on_a_logged_out_lane_pauses_without_an_ask(self):
         out = stop("logged_out", "ref-write", family="openai", say="codex login", fix="run `codex login`")
@@ -357,43 +382,47 @@ class DelegateLauncher(EngineTest):
         assert rc == 2
         assert self.blocked == []
         assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write"]
-        assert any(c[:3] == ("comments", "add", "t-1") and any("run `codex login`" in x for x in c)
-                            for c in self.bd_calls)
+        assert any(c[:3] == ("comments", "add", "t-1") and any("run `codex login`" in x for x in c) for c in self.bd_calls)
 
     def test_every_lane_out_with_no_time_pauses_a_resumed_write_without_an_ask(self):
-        none = stop("no_lane", say="every lane is out")
-        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, none],
-                                 "review": [review(unmet=["more"])]})
+        none = stop("no_account", say="every lane is out")
+        rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE, none], "review": [review(unmet=["more"])]})
         assert rc == 2
         assert [c[1] for c in s.calls if c[0] == "worker"] == [None, "ref-write"]
         assert self.blocked == []
-        assert any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for write" in x for x in c)
-                            for c in self.bd_calls)
+        assert any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for write" in x for x in c) for c in self.bd_calls)
         assert "needs a human" not in self.eng.log_path.read_text()
 
     def test_no_lane_needs_owner_even_with_a_predicted_time(self):
         due = time.time() + 3 * 3600
-        none = stop("no_lane", at=due, say="every lane is out")
-        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE, none],
-                                 "review": [review(unmet=["more"])]})
+        none = stop("no_account", at=due, say="every lane is out")
+        rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE, none], "review": [review(unmet=["more"])]})
         assert rc == 2
         assert self.blocked == []
         assert self.eng.retry_after == 0
 
     def test_close_with_an_empty_reason_still_closes(self):
         c = wslots_config.load_cfg(str(self.wt), port_git())
-        eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
-            git=port_git(), who=who(), lander_factory=real_lander_factory)
+        eng = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            c,
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+            who=who(),
+            lander_factory=real_lander_factory,
+        )
         eng.closer.close(oc.make(Kind.FAULT_ENGINE))
         assert "stopped before a reason was recorded" in self.said()  # a fault: the bead stays open, the comment says why
 
     def test_no_lane_pauses_the_bead_open(self):
-        none = stop("no_lane", say="no adequate model")
+        none = stop("no_account", say="no adequate model")
         rc, _ = self.run_engine({"plan": [none]})
         assert rc == 2
         assert self.blocked == []  # a machine-wide wait is not the bead's fault: it stays open
-        assert any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for plan" in x for x in c)
-                            for c in self.bd_calls)
+        assert any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for plan" in x for x in c) for c in self.bd_calls)
 
     def test_a_lane_out_for_long_pauses_at_once_and_frees_the_slot(self):
         later = stop("rate_limited", at=time.time() + 3 * 3600, say="codex out until 21:00")
@@ -401,8 +430,7 @@ class DelegateLauncher(EngineTest):
         assert rc == 2
         assert [c[0] for c in s.calls].count("worker") == 1  # no hour of sleeping in the slot
         assert self.blocked == []
-        assert any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for write until" in x for x in c)
-                            for c in self.bd_calls)
+        assert any(c[:3] == ("comments", "add", "t-1") and any("paused: no lane for write until" in x for x in c) for c in self.bd_calls)
 
     def test_a_bead_branch_left_in_another_clean_slot_is_resumed_here(self):
         sh("git", "checkout", "-q", "-b", "task/t-1", cwd=self.wt)
@@ -436,8 +464,16 @@ class DelegateLauncher(EngineTest):
         c = wslots_config.load_cfg(str(self.wt), port_git())
         with mock.patch.object(dl, "resolve", return_value=dl.Refusal("not_installed")):
             rc = engine.Engine(
-                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who(),
-            lander_factory=real_lander_factory).run()
+                BeadId("t-1"),
+                str(self.wt),
+                c,
+                store=self.store,
+                env=snapshot(),
+                spawner=real_spawner(),
+                git=port_git(),
+                who=who(),
+                lander_factory=real_lander_factory,
+            ).run()
         assert rc == 2
         assert "delegate refused the call setup (not_installed" in self.said()
 
@@ -474,6 +510,7 @@ class Validate(Case):
     def test_schema_subset(self):
         def ok(node, data):
             return answers.check(node, False, data)
+
         assert ok("review", review(findings=[finding("high")])) == []
         assert ok("review", review(findings=[dict(finding("high"), severity="maybe")]))
         assert ok("review", {"findings": []})
@@ -485,6 +522,7 @@ class Validate(Case):
     def test_every_contract_sent_is_strict_mode_valid(self):
         """Codex (strict structured output) rejects an object whose `required` misses a property: 53 lifesim runs
         stopped on 'Missing source' / 'Missing accept_files' (2026-10-22)."""
+
         def walk(sch, path):
             if sch.get("type") == "object":
                 assert sch.get("additionalProperties") is False, path
@@ -493,6 +531,7 @@ class Validate(Case):
                     walk(v, path + "." + k)
             if sch.get("type") == "array":
                 walk(sch.get("items") or {}, path + "[]")
+
         for node in answers.NODES:
             for visual in (False, True):
                 walk(answers.sent_schema(node, visual), "{}{}".format(node, " (visual)" if visual else ""))
@@ -501,8 +540,7 @@ class Validate(Case):
         s = answers.schema_for("review")
         sent = answers.sent_schema("review")
         assert sent["properties"]["accept_files"]["type"] == ["array", "null"]
-        got = dict(CLEAN, accept_files=None, reject_files=None,
-                   unchecked=[{"what": "x", "kind": "other", "source": None}])
+        got = dict(CLEAN, accept_files=None, reject_files=None, unchecked=[{"what": "x", "kind": "other", "source": None}])
         back = unstrict(got, s)
         assert "accept_files" not in back
         assert "source" not in back["unchecked"][0]

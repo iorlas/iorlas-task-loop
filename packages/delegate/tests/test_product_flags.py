@@ -1,4 +1,5 @@
 """Product requests derive harness policy from delegate's settings and threads."""
+
 from pathlib import Path
 
 import pytest
@@ -12,8 +13,9 @@ from delegate.contracts.wire import RunRequest, RunResult
 from tltestkit.tmpdir import TemporaryDirectory
 
 
-@pytest.mark.parametrize("role,prefer,pin", [("worker", "", ["openai"]), ("worker", "codex-ish", ["codex-ish"]),
-                                            ("reviewer", "xai", []), ("planner", "xai", [])])
+@pytest.mark.parametrize(
+    "role,prefer,pin", [("worker", "", ["openai"]), ("worker", "codex-ish", ["codex-ish"]), ("reviewer", "xai", []), ("planner", "xai", [])]
+)
 def test_api_derives_worker_policy(monkeypatch, role, prefer, pin):
     cfg = env.load_routing()
     obj(cfg["settings"]).update(writer_family=["openai"], writer_exec_allow=[["python"]], writer_read_roots=["/read"])
@@ -23,6 +25,7 @@ def test_api_derives_worker_policy(monkeypatch, role, prefer, pin):
     class Run:
         def __init__(self, args, cfg, **kw):
             calls.append(args)
+
         def call(self):
             return answer.result(None)
 
@@ -49,14 +52,15 @@ def test_writer_exec_refuses_without_codex_pin_and_grant(monkeypatch, pin, grant
 @pytest.mark.parametrize("author,record,expected", [(None, True, "openai"), ("claude", True, "claude"), (None, False, None)])
 def test_reviewer_author_comes_from_writer_thread(monkeypatch, author, record, expected):
     cfg = env.load_routing()
-    lane = next(n for n, spec in obj(cfg["lanes"]).items() if obj(spec)["family"] == "openai")
-    state = StateDoc(threads={"task/writer": ThreadRecord(ref="r", lane=lane, model="m")} if record else {})
+    account = next(n for n, spec in obj(cfg["accounts"]).items() if obj(spec)["family"] == "openai")
+    state = StateDoc(threads={"task/writer": ThreadRecord(ref="r", account=account, model="m")} if record else {})
     monkeypatch.setattr(env, "load_state", lambda: state)
     calls = []
 
     class Run:
         def __init__(self, args, cfg, **kw):
             calls.append(args)
+
         def call(self):
             return answer.result(None)
 
@@ -71,8 +75,10 @@ def test_fallback_retake_uses_active_out_mark(until, fresh):
         whole, delta = Path(folder) / "whole", Path(folder) / "delta"
         whole.write_text("whole")
         delta.write_text("delta")
-        state = StateDoc(threads={"task/writer": ThreadRecord(ref="r", lane="fallback", model="m", fallback=True, first_lane="first")},
-                         out={} if until is None else {"first": OutState(until=until)})
+        state = StateDoc(
+            threads={"task/writer": ThreadRecord(ref="r", account="fallback", model="m", fallback=True, first_account="first")},
+            out={} if until is None else {"first": OutState(until=until)},
+        )
         request = RunRequest(role="worker", task="task", thread="writer", brief_file=str(whole), delta_file=str(delta), cwd=folder)
         plan = threads.plan(request, state, env.typed_routing(env.load_routing()))
         assert plan.resume == (None if fresh else "r")
@@ -82,10 +88,10 @@ def test_fallback_retake_uses_active_out_mark(until, fresh):
 
 def test_settle_stores_fallback():
     state = StateDoc()
-    res = codec.from_json(RunResult, answer.result(None, ref="r", fallback=True, first_lane="first"))
+    res = codec.from_json(RunResult, answer.result(None, ref="r", fallback=True, first_account="first"))
     threads.settle(state, "task/writer", res)
     assert state.threads["task/writer"].fallback is True
-    assert state.threads["task/writer"].first_lane == "first"
+    assert state.threads["task/writer"].first_account == "first"
 
 
 def test_product_schema_and_settings():
@@ -108,8 +114,15 @@ def test_prefer_overrides_settings_for_exec_admission(monkeypatch):
 
 
 def test_direct_delegate_wire_fields_remain_available():
-    req = RunRequest(role="worker", brief_file="whole", cwd="tree", only_family=["openai"],
-                     authored_by="claude", writer_exec_allow=[["python"]], read_roots=["/read"])
+    req = RunRequest(
+        role="worker",
+        brief_file="whole",
+        cwd="tree",
+        only_family=["openai"],
+        authored_by="claude",
+        writer_exec_allow=[["python"]],
+        read_roots=["/read"],
+    )
     argv = req.to_argv("route.py", contract=api.contract())
     for flag, value in (("--only-family", "openai"), ("--authored-by", "claude"), ("--read-root", "/read")):
         assert argv[argv.index(flag) + 1] == value

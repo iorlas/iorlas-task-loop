@@ -25,13 +25,15 @@ from delegate.app import decide as dec
 from delegate.cli import verbs
 from delegate.contracts import stops
 from delegate.contracts.json_types import Json, as_opt_str, obj
-from delegate.domain.lanes import profiles
+from delegate.domain.accounts import profiles
 from delegate.domain.policy.worker import denial, denial_item
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
 FIXTURES = sorted((ROOT / "packages" / "delegate" / "tests" / "contract" / "fixtures").glob("*.json"))
 CONTRACT = json.loads((ROOT / "packages" / "delegate" / "src" / "delegate" / "data" / "contract.json").read_text(encoding="utf-8"))
+
+
 def load(path):
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -110,7 +112,8 @@ def expected_tuple(f, row, reason):
 
 
 class Stop(Case):
-    """settle() + result() turn a classified row into the contract 4 answer; a request or machine fault leaves the lane state as it was."""
+    """settle() + result() turn a classified row into the contract 4 answer; a request or machine fault leaves the account state as it
+    was."""
 
     def setup_method(self):
         self.tmp = TemporaryDirectory()
@@ -119,8 +122,8 @@ class Stop(Case):
         self.addCleanup(self.patch.stop)
         self.addCleanup(self.tmp.cleanup)
 
-    def answer(self, o, lane):
-        res = launch.settler().apply({}, o, {"lane": lane}, T, "cli", SimpleNamespace(timeout=30), 1, "tail", reset=lambda: T + 3600)
+    def answer(self, o, account):
+        res = launch.settler().apply({}, o, {"account": account}, T, "cli", SimpleNamespace(timeout=30), 1, "tail", reset=lambda: T + 3600)
         return answer.result(as_opt_str(res.pop("outcome")), **res)
 
     def test_every_fixture_row_answers_with_its_expected_stop_tuple_and_fits_the_schema(self):
@@ -132,12 +135,12 @@ class Stop(Case):
                 if "evidence" not in row or not want_reason:
                     continue
                 before = env.load_state().out or None
-                lane = f.get("lane", "OPENAI_SUBSCRIPTION")
+                account = f.get("account", "OPENAI_SUBSCRIPTION")
                 o = replay(row, f)
                 assert o is not None
-                r = self.answer(o, lane)
+                r = self.answer(o, account)
                 if (
-                    launch.settler().net_pass(o, {"lane": lane}).reason == "network" and o.reason != "network"
+                    launch.settler().net_pass(o, {"account": account}).reason == "network" and o.reason != "network"
                 ):  # a failure that words a dropped connection is the network's (R17)
                     assert r["stop"]["reason"] == "network", f"{path.name} {row['id']}"
                     continue
@@ -145,7 +148,7 @@ class Stop(Case):
                 assert answer.schema_problem(r, CONTRACT["answer_schema"]) is None, f"{path.name} {row['id']}"
                 if r["stop"]["scope"] in ("bead", "caller", "machine"):
                     assert (env.load_state().out or None) == before, (
-                        f"{path.name} {row['id']}: a {r['stop']['scope']}-scoped fault touched the lane's state"
+                        f"{path.name} {row['id']}: a {r['stop']['scope']}-scoped fault touched the account's state"
                     )
                 env.update_state(lambda s: s.out.clear())
                 n += 1
@@ -158,14 +161,14 @@ class Stop(Case):
             assert stop_tuple(self.answer(replay(row, f), "OPENAI_SUBSCRIPTION")) == ("bad_request", "caller", "needs_owner", "none"), row[
                 "id"
             ]
-        assert (env.load_state().out or None) is None  # not one of them marks the lane
+        assert (env.load_state().out or None) is None  # not one of them marks the account
 
-    def test_golden_the_grok_batch_is_a_lane_out_with_no_time_and_marks_the_lane_once_for_all(self):
+    def test_golden_the_grok_batch_is_a_account_out_with_no_time_and_marks_the_account_once_for_all(self):
         f = load(ROOT / "packages" / "delegate" / "tests" / "contract" / "fixtures" / "grok_spending_limit_24oct.json")
         assert len(f["rows"]) == 114
         for row in f["rows"]:
             r = self.answer(replay(row, f), "GROK_SUBSCRIPTION")
-            assert stop_tuple(r) == ("credit_exhausted", "lane", "needs_owner", "none"), row["id"]
+            assert stop_tuple(r) == ("credit_exhausted", "account", "needs_owner", "none"), row["id"]
             assert r["stop"]["retry"]["at"] is None
         assert "GROK_SUBSCRIPTION" in env.load_state().out
 
@@ -177,13 +180,13 @@ class Stop(Case):
         assert tuples.count(None) == (268 - 53)
         assert (env.load_state().out or None) is None
 
-    def test_credit_exhausted_marks_the_lane_with_no_retry_time(self):
+    def test_credit_exhausted_marks_the_account_with_no_retry_time(self):
         row = load(ROOT / "packages" / "delegate" / "tests" / "contract" / "fixtures" / "grok_spending_limit_24oct.json")["rows"][0]
         o = replay(row, None)
         r = self.answer(o, "GROK_SUBSCRIPTION")
         out = env.load_state().out["GROK_SUBSCRIPTION"]
         assert out.until > T  # hidden from the picker (gather needs a time) and probed again later
-        assert (out.reason, r["stop"]["scope"], r["stop"]["retry"]) == ("credit", "lane", {"kind": "none", "at": None})
+        assert (out.reason, r["stop"]["scope"], r["stop"]["retry"]) == ("credit", "account", {"kind": "none", "at": None})
 
     def test_answers_that_wait_for_a_time_say_when(self):
         r = self.answer(Outcome("rate_limited", "Usage limit reached for 5 hour", "event"), "ZAI_CODING_SUBSCRIPTION")
@@ -192,13 +195,13 @@ class Stop(Case):
         assert (r["stop"]["permanence"], r["stop"]["retry"]["kind"]) == ("needs_owner", "none")
         assert "codex login" in r["stop"]["fix"]
 
-    def test_killed_and_network_carry_resumable_and_partial_and_never_a_lane_mark(self):
+    def test_killed_and_network_carry_resumable_and_partial_and_never_a_account_mark(self):
         for reason in ("killed", "network"):
             res: dict[str, Json] = {"ref": "thread-1", "started": True, "partial": True}
             launch.settler().apply(
                 res,
                 Outcome(reason, "signal 15" if reason == "killed" else "ENOTFOUND", "exit"),
-                {"lane": "OPENAI_SUBSCRIPTION"},
+                {"account": "OPENAI_SUBSCRIPTION"},
                 T,
                 "cli",
                 SimpleNamespace(timeout=30),
@@ -213,10 +216,10 @@ class Stop(Case):
     def test_an_unknown_reason_still_gets_a_row_of_closed_facts(self):
         s = stops.stop_facts("some_new_reason")
         assert (s["scope"], s["permanence"], obj(s["retry"])["kind"]) == ("machine", "needs_owner", "none")
-        assert answer.schema_problem(dict(answer.result("no_lane"), stop=dict(s, ref=None)), CONTRACT["answer_schema"]) is None
+        assert answer.schema_problem(dict(answer.result("no_account"), stop=dict(s, ref=None)), CONTRACT["answer_schema"]) is None
 
     def test_the_schema_refuses_an_answer_with_a_missing_or_wrong_field(self):
-        good = answer.result("no_lane")
+        good = answer.result("no_account")
         assert answer.schema_problem(good, CONTRACT["answer_schema"]) is None
         done = answer.result()
         assert answer.schema_problem(done, CONTRACT["answer_schema"]) is None
@@ -257,7 +260,7 @@ class Stop(Case):
 
     def test_contract_4_has_no_wire_left(self):
         gone = ("v", "status", "reason", "next", "retry_after")
-        for r in (answer.result(), answer.result("no_lane"), answer.result("rate_limited", retry_after=T)):
+        for r in (answer.result(), answer.result("no_account"), answer.result("rate_limited", retry_after=T)):
             assert r["contract"] == 4
             for k in gone:
                 assert k not in r
@@ -274,7 +277,7 @@ class Stop(Case):
             ROOT / "packages" / "delegate" / "src" / "delegate" / "data" / "contract.json",
         ]:
             text = path.read_text(encoding="utf-8")
-            for word in ("to_wire_v2", "vendor_prework", "lane_out", "wire_reasons", "wire_default"):
+            for word in ("to_wire_v2", "vendor_prework", "account_out", "wire_reasons", "wire_default"):
                 assert word not in text, f"{path.name}: {word}"
 
     def test_the_declared_facts_are_closed_lists(self):
@@ -317,9 +320,9 @@ class Launchers(Case):
         self.addCleanup(self.tmp.cleanup)
         self.a = SimpleNamespace(resume=None, schema=None, timeout=30, role="worker")
 
-    def run_cli(self, kind, lines, rc, err="", lane="OPENAI_SUBSCRIPTION", **how):
+    def run_cli(self, kind, lines, rc, err="", account="OPENAI_SUBSCRIPTION", **how):
         d = {
-            "lane": lane,
+            "account": account,
             "model": "m",
             "effort": "high",
             "role": "worker",
@@ -333,15 +336,13 @@ class Launchers(Case):
         return res
 
     def opencode(self, lines, rc=1, **kw):
-        return self.run_cli("opencode", lines, rc, lane=kw.pop("lane", "GROK_SUBSCRIPTION"), **kw)
+        return self.run_cli("opencode", lines, rc, account=kw.pop("account", "GROK_SUBSCRIPTION"), **kw)
 
-
-    def test_a_bad_request_row_through_the_codex_launcher_leaves_the_lane_alone(self):
+    def test_a_bad_request_row_through_the_codex_launcher_leaves_the_account_alone(self):
         for row in load(ROOT / "packages" / "delegate" / "tests" / "contract" / "fixtures" / "bad_request_22oct.json")["rows"][:3]:
             res = self.run_cli("codex", [{"type": "turn.failed", "error": {"message": row["evidence"]["vendor_err"]}}], 1)
             assert res["outcome"] == "bad_request"
         assert (env.load_state().out or None) is None
-
 
     def test_codex_stream_retries_do_not_fail_a_run_that_finished(self):
         res = self.run_cli(
@@ -365,17 +366,14 @@ class Launchers(Case):
         assert res["outcome"] == "worker_failed"
         assert "Reconnecting... 5/5" in res["say"]
 
-
-
-
     def test_a_runner_kind_that_is_not_a_launcher_is_a_setup_error(self):
-        kinds = {obj(c)["runner"] for c in obj(env.load_routing()["lanes"]).values()}
+        kinds = {obj(c)["runner"] for c in obj(env.load_routing()["accounts"]).values()}
         assert set(profiles.REGISTRY) == {"codex", "opencode", "claude_p"}
         assert kinds <= {"codex", "opencode", "claude_p", "agent_tool"}
         d = {
             "action": "run",
             "role": "worker",
-            "lane": "OPENAI_SUBSCRIPTION",
+            "account": "OPENAI_SUBSCRIPTION",
             "model": "m",
             "effort": "high",
             "mode": "write",
@@ -406,9 +404,7 @@ class Launchers(Case):
         assert "codexx" in r["say"]
 
 
-@pytest.mark.parametrize(
-    ("fact", "reason"), [("setup_failed", "setup"), ("crashed", "crash"), ("signal", "killed")]
-)
+@pytest.mark.parametrize(("fact", "reason"), [("setup_failed", "setup"), ("crashed", "crash"), ("signal", "killed")])
 def test_a_stop_the_caller_measured_is_named_by_the_ladder_and_says_its_own_words(fact, reason):
     from delegate.app import settle  # noqa: PLC0415 - the test names the one function under test
 

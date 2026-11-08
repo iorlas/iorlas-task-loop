@@ -27,12 +27,13 @@ class Retry(te.EngineTest):
         assert (paused.reason, paused.permanence, paused.retry_at) == ("plan_noop", "needs_owner", 0)
         bead = self.store.show(self.eng.bead)
         assert bead is not None
-        assert parks.skip_of(asks_wire.host().asks_store(self.eng.home), self.eng.home, bead,
-                             now=paused.t + 1_000_000, store=ParkStore) is not None
+        assert (
+            parks.skip_of(asks_wire.host().asks_store(self.eng.home), self.eng.home, bead, now=paused.t + 1_000_000, store=ParkStore)
+            is not None
+        )
         ask = self.asks().get(self.eng.bead)
         assert ask is not None
-        assert ask.detail.text == (f"The plan finds nothing to implement for {self.eng.bead}: {summary}. "
-                         "Close it, or give it work.")
+        assert ask.detail.text == (f"The plan finds nothing to implement for {self.eng.bead}: {summary}. Close it, or give it work.")
         assert len([a for a in self.asks().rows() if a.bead == self.eng.bead and a.event == "raise"]) == 1
         closes = [row.rec for row in self.eng.stores.run_log(self.eng.run_id).read_from(0).items if isinstance(row.rec, Close)]
         assert [row.outcome for row in closes] == ["noop"]
@@ -58,7 +59,7 @@ class Retry(te.EngineTest):
         assert ParkStore(self.eng.home).get(self.eng.bead) is None
 
     def test_machine_owner_pause_has_no_ask_and_no_timer(self):
-        stopped = te.stop("no_lane")
+        stopped = te.stop("no_account")
         stopped["stop"]["reason"] = "engine_only_unenforced"
         rc, _ = self.run_engine({"plan": [te.PLAN], "write": [stopped]})
         assert rc == 2
@@ -69,7 +70,7 @@ class Retry(te.EngineTest):
         assert not self.eng.asked
 
     def test_no_lane_and_delegate_crash_need_owner_even_with_a_retry_hint(self):
-        for reason in ("no_lane", "crash"):
+        for reason in ("no_account", "crash"):
             with self.subTest(reason=reason):
                 rc, _ = self.run_engine({"plan": [te.PLAN], "write": [te.stop(reason, at=10**12)]}, fresh=True)
                 assert rc == 2

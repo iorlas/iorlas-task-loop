@@ -17,7 +17,7 @@ from tlkernel.pausereasons import Producer
 
 # Literal snapshot of the old TABLE, independent of current enums, backoffs and overrides.
 RELEASED: dict[tuple[Producer, str], PauseRule] = {
-    ("delegate", "no_lane"): PauseRule("needs_owner"),
+    ("delegate", "no_account"): PauseRule("needs_owner"),
     ("delegate", "only_family_unready"): PauseRule("transient", 60, 3600, 3),
     ("engine", "same_family"): PauseRule("transient", 60, 3600, 3),
     ("delegate", "busy"): PauseRule("transient", 30, 1800, 3),
@@ -94,7 +94,7 @@ class ReleasedPolicy(Case):
 
     def test_owner_overrides_ignore_transient_hints_and_predicted_times(self):
         bead = Bead(id=BeadId("t-1"), title="work", status="open")
-        for reason in ("no_lane", "crash"):
+        for reason in ("no_account", "crash"):
             with self.subTest(reason=reason):
                 assert pauses.rule(reason, "delegate", "transient") == PauseRule("needs_owner")
                 rec = pauses.after_pause(None, bead, "r1", 100, reason, lambda: 0.5,
@@ -103,6 +103,6 @@ class ReleasedPolicy(Case):
 
     def test_machine_fixed_reasons_keep_the_released_membership(self):
         assert {
-            "no_lane", "logged_out", "credit_exhausted", "secrets", "setup",
+            "no_account", "logged_out", "credit_exhausted", "secrets", "setup",
             "contract_violation", "engine_only_unenforced",
         } == pauses.MACHINE_FIXED

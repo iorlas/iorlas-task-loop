@@ -38,8 +38,8 @@ class Request(Case):
 
 
 class Advisory(te.EngineTest):
-    def stopped_write(self, reason="no_lane", pinned=True, recipes=True, resumed=False):
-        stopped = te.stop("no_lane", say="CODEX cannot enforce just check", fix="choose an enforcing harness")
+    def stopped_write(self, reason="no_account", pinned=True, recipes=True, resumed=False):
+        stopped = te.stop("no_account", say="CODEX cannot enforce just check", fix="choose an enforcing harness")
         stopped["stop"]["reason"] = reason
         stopped["text"] = "full stop text " + "x" * 500
         stopped["trace"] = ["lane CODEX", "recipes: check"]
@@ -105,7 +105,7 @@ class Advisory(te.EngineTest):
         assert stopped["text"] in json.loads(detail["trace"])["text"]
 
     def test_no_lane_stop_logs_one_typed_note_with_actual_argv_and_full_trace(self):
-        self.assert_stop_log("no_lane")
+        self.assert_stop_log("no_account")
 
     def test_only_family_unready_stop_logs_one_typed_note(self):
         self.assert_stop_log("only_family_unready")

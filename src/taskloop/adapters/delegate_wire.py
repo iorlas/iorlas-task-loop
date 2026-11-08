@@ -62,7 +62,7 @@ def status_of(stop: StopFacts | None) -> str:
         return "failed"
     if stop.reason in _ERROR:
         return "error"
-    return "lane_out" if stop.scope in ("lane", "model") else "stop"
+    return "lane_out" if stop.scope in ("account", "model") else "stop"
 
 
 def next_of(stop: StopFacts | None) -> str | None:
@@ -180,11 +180,11 @@ def result_of(j: Any) -> DelegateResult:
     warnings = j.get("warnings")
     return DelegateResult(
         stop=stop, data=_dict(j.get("data")), text=str(j.get("text") or ""), ref=_opt(j, "ref"),
-        lane=_opt(j, "lane"), model=_opt(j, "model"), effort=_opt(j, "effort"), family=_opt(j, "family"), flag=_opt(j, "flag"),
+        account=_opt(j, "account"), model=_opt(j, "model"), effort=_opt(j, "effort"), family=_opt(j, "family"), flag=_opt(j, "flag"),
         cost=_num(j.get("cost")), tokens=tokens_of(j.get("tokens")), denied=denied_of(j.get("denied")), secs=_num(j.get("secs")),
         run_id=_opt(j, "run_id"), call_id=_opt(j, "call_id"),
         say=str(j.get("say") or ""), git_violation=[str(x) for x in j.get("git_violation") or []], usage=usage_of(j.get("usage")),
         context=_dict(j.get("context")), worker=worker_of(j.get("worker")), exit_code=_oint(j.get("exit_code")),
         first_error=str(j.get("first_error") or ""), fallback=j.get("fallback") if isinstance(j.get("fallback"), bool) else None,
-        first_lane=_opt(j, "first_lane"), warning=str(j.get("warning") or ""), ask_kind=str(j.get("ask_kind") or ""),
+        first_account=_opt(j, "first_account"), warning=str(j.get("warning") or ""), ask_kind=str(j.get("ask_kind") or ""),
         warnings=[str(x) for x in warnings] if isinstance(warnings, list) else [], agent_model=_opt(j, "agent_model"))

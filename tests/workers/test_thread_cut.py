@@ -114,7 +114,7 @@ def test_writer_loop_sends_delta_and_pauses(monkeypatch):
 
     def fake_call(c):
         sent.append((c.thread, c.text, c.delta))
-        stop = StopFacts(reason="rate_limited", scope="lane", permanence="transient", retry=Retry(kind="predicted", at=123))
+        stop = StopFacts(reason="rate_limited", scope="account", permanence="transient", retry=Retry(kind="predicted", at=123))
         return Answer(DelegateResult(stop=stop), {})
 
     monkeypatch.setattr(w, "call_once", fake_call)

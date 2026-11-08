@@ -18,15 +18,15 @@ from any_agent.harnesses.codex import CodexHarness
 from any_agent.protocol import LaunchSpec
 from any_agent.supervisor import RunHooks, Supervisor
 from run_support import short_limits
-from test_route import CFG, T, lanes, need, no_reader, route
+from test_route import CFG, T, accounts, need, no_reader, route
 
 from delegate.app import env, harnesses, launch, usage
 from delegate.app.fleet import apply_health
 from delegate.app.publish import LiveSink
 from delegate.contracts import codec, stores
 from delegate.contracts import history as hist
+from delegate.domain.accounts.account import Account
 from delegate.domain.health import ledger as health_ledger
-from delegate.domain.lanes.lane import Lane
 from tltestkit import fake_worker
 from tltestkit.case import Case
 from tltestkit.fake_clock import SteppingClock
@@ -35,26 +35,26 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 
 class Breaker(Case):
-    """delegate-rdt / -y3f: the pair breaker is wired into the decision for every lane, and DeepSeek/ZAI/Grok run under the watchdog."""
+    """delegate-rdt / -y3f: the pair breaker is wired into the decision for every account, and DeepSeek/ZAI/Grok run under the watchdog."""
 
-    def lanes_with(self, hist_rows):
-        lanes_ = lanes()
-        grok = Lane("GROK_SUBSCRIPTION", "xai", "subscription")
-        lanes_[grok.name] = grok
+    def accounts_with(self, hist_rows):
+        accounts_ = accounts()
+        grok = Account("GROK_SUBSCRIPTION", "xai", "subscription")
+        accounts_[grok.name] = grok
         led = health_ledger.HealthLedger(env.settings_of(CFG).breaker)
         st = led.fold(hist_rows)
-        for lane in lanes_.values():
-            apply_health(lane, env.typed_routing(CFG).models, led, st, T + 1)
-        return lanes_
+        for account in accounts_.values():
+            apply_health(account, env.typed_routing(CFG).models, led, st, T + 1)
+        return accounts_
 
-    def rows(self, lane, model, n=3, outcome="worker_failed") -> list[hist.HistoryRow]:
+    def rows(self, account, model, n=3, outcome="worker_failed") -> list[hist.HistoryRow]:
         return [
             hist.RunRow(
                 ts=T + i,
                 run_id=f"r{i}",
                 task=f"t{i}",
                 role="worker",
-                lane=lane,
+                account=account,
                 model=model,
                 effort="high",
                 done=False,
@@ -67,7 +67,7 @@ class Breaker(Case):
         ]
 
     def test_a_benched_pair_falls_through_to_the_next_step_and_only_that_pair(self):
-        ls = self.lanes_with(self.rows("OPENAI_SUBSCRIPTION", "gpt-6.1-sol"))
+        ls = self.accounts_with(self.rows("OPENAI_SUBSCRIPTION", "gpt-6.1-sol"))
         assert "gpt-6.1-sol" in ls["OPENAI_SUBSCRIPTION"].benched
         d = support.decide("worker", CFG, ls, {}, T + 1, {"authored_by": None, "premium": None, "allow_degraded": False})
         assert d["model"] != "gpt-6.1-sol"
@@ -79,7 +79,7 @@ class Breaker(Case):
         assert ls["OPENAI_SUBSCRIPTION"].usable(S, True)[0]
 
     def test_all_pairs_benched_stops_with_the_bench_ends_listed(self):
-        ls = self.lanes_with(
+        ls = self.accounts_with(
             self.rows("OPENAI_SUBSCRIPTION", "gpt-6.1-sol")
             + self.rows("CLAUDE_SUBSCRIPTION", "sonnet-5.5")
             + self.rows("CLAUDE_SUBSCRIPTION", "opus-5.5")
@@ -89,27 +89,29 @@ class Breaker(Case):
         assert d["action"] == "stop"
         assert "OPENAI_SUBSCRIPTION/gpt-6.1-sol" in d["resets"]
 
-    def test_every_opencode_lane_runs_under_the_watchdog_and_the_breaker(self):
-        lanes_ = [n for n, c in CFG["lanes"].items() if c["runner"] == "opencode"]
-        assert sorted(lanes_) == ["DEEPSEEK_FREE", "GROK_SUBSCRIPTION", "ZAI_CODING_SUBSCRIPTION"]
+    def test_every_opencode_account_runs_under_the_watchdog_and_the_breaker(self):
+        accounts_ = [n for n, c in CFG["accounts"].items() if c["runner"] == "opencode"]
+        assert sorted(accounts_) == ["DEEPSEEK_FREE", "GROK_SUBSCRIPTION", "ZAI_CODING_SUBSCRIPTION"]
         lim = harnesses.LIMITS["opencode"]
         assert (lim.first_event_s, lim.silence_s >= 900) == (120, True)
-        for name in lanes_:
-            fam = CFG["lanes"][name]["family"]
+        for name in accounts_:
+            fam = CFG["accounts"][name]["family"]
             models = [m for m, v in CFG["models"].items() if v["family"] == fam]
             assert models, name
             for model in models:
-                with self.subTest(lane=name, model=model):
-                    lane = Lane(name, fam, "subscription")
+                with self.subTest(account=name, model=model):
+                    account = Account(name, fam, "subscription")
                     led = health_ledger.HealthLedger(env.settings_of(CFG).breaker)
-                    apply_health(lane, env.typed_routing(CFG).models, led, led.fold(self.rows(name, model, outcome="vendor_blip")), T + 1)
-                    assert not lane.usable(env.settings_of(CFG), True, model)[0]
+                    apply_health(
+                        account, env.typed_routing(CFG).models, led, led.fold(self.rows(name, model, outcome="vendor_blip")), T + 1
+                    )
+                    assert not account.usable(env.settings_of(CFG), True, model)[0]
         assert "run_prepared(" in inspect.getsource(launch.launch_worker)  # every prepared harness uses the same supervisor
         assert "Supervisor(" in inspect.getsource(launch.run_prepared)
 
     def test_history_rotation_survives_a_corrupt_line(self):
         def canary(ts, rid):
-            return json.dumps(codec.to_json(hist.CanaryRow(ts=ts, run_id=rid, lane="L", model="m")))
+            return json.dumps(codec.to_json(hist.CanaryRow(ts=ts, run_id=rid, account="L", model="m")))
 
         with (
             TemporaryDirectory() as d,
@@ -120,7 +122,7 @@ class Breaker(Case):
             p.write_text(
                 "{broken\n" + canary(1.0, "old") + "\n" + canary(time.time(), "keep") + "\n" * 1 + "x" * 200 + "\n", encoding="utf-8"
             )
-            env.history_add(hist.CanaryRow(ts=time.time(), run_id="new", lane="L", model="m"))
+            env.history_add(hist.CanaryRow(ts=time.time(), run_id="new", account="L", model="m"))
             ids = [json.loads(x)["run_id"] for x in p.read_text().splitlines()]
             assert ids == ["keep", "new"]
 
@@ -195,7 +197,6 @@ class ResetTimes(Case):
         assert reset_parse.limit_until("rate limited", t, {}, lambda: t + 999)[:2] == (t + 999, "vendor")
 
 
-
 class TokenBudget(Case):
     """The orchestrator pays for these files and outputs on every session / delegation.
     Budgets are characters (about 4 per token); ratchet them down, never up."""
@@ -256,11 +257,11 @@ class ConfigLocation(Case):
         os.environ["HOME"] = self.tmp.name
         old = Path(self.tmp.name) / ".claude" / "plugins" / "data" / env.LEGACY_DATA
         old.mkdir(parents=True)
-        (old / "config.json").write_text('{"profile": {"lanes": {}}}')
+        (old / "config.json").write_text('{"profile": {"accounts": {}}}')
         got = env.config_dir()
-        assert (got / "config.json").read_text() == '{"profile": {"lanes": {}}}'
+        assert (got / "config.json").read_text() == '{"profile": {"accounts": {}}}'
         (old / "config.json").write_text("changed later")
-        assert (env.config_dir() / "config.json").read_text() == '{"profile": {"lanes": {}}}'
+        assert (env.config_dir() / "config.json").read_text() == '{"profile": {"accounts": {}}}'
 
     def test_explicit_override_wins(self):
         os.environ["DELEGATE_CONFIG_DIR"] = str(Path(self.tmp.name) / "mine")

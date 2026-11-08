@@ -48,8 +48,8 @@
    }
   },
   {
-   "id": "21-lane-failures.md:F1",
-   "source": "21-lane-failures.md F1 (quoted; the raw opencode.log line has rotated away)",
+   "id": "21-account-failures.md:F1",
+   "source": "21-account-failures.md F1 (quoted; the raw opencode.log line has rotated away)",
    "synthetic": true,
    "evidence": {
     "rc": -15,
@@ -66,7 +66,7 @@
  ],
  "expected_stop": {
   "reason": "rate_limited",
-  "scope": "lane",
+  "scope": "account",
   "permanence": "transient",
   "retry_kind": "predicted"
  }

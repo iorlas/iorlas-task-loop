@@ -29,9 +29,9 @@ def call(node="write", resume_key=True):
     (DelegateResult(ref="r1"), True, Updates(SessionUpdate(("h",)))),
     (DelegateResult(ref="r1"), False, Updates()),
     (DelegateResult(), True, Updates()),
-    (DelegateResult(ref="r1", fallback=True, first_lane="grok"), True,
+    (DelegateResult(ref="r1", fallback=True, first_account="grok"), True,
      Updates(SessionUpdate(("h",)))),
-    (DelegateResult(ref="r1", fallback=False, first_lane="grok"), True,
+    (DelegateResult(ref="r1", fallback=False, first_account="grok"), True,
      Updates(SessionUpdate(("h",)))),
 ])
 def test_the_writers_thread_comes_from_the_answer(res, resume_key, want):

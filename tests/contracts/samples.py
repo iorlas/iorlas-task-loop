@@ -276,7 +276,7 @@ EVENTS = {
     "install_missing": _ev(events.InstallMissing, who="loop", version="1", running="2", target="3"),
 }
 LIVE = {
-    "start": delegate.LiveStart(t=T, harness="opencode", lane="L", model="m", effort="high", role="worker", pid=69272),
+    "start": delegate.LiveStart(t=T, harness="opencode", account="L", model="m", effort="high", role="worker", pid=69272),
     "cmd_start": delegate.LiveCmdStart(t=T, id="oc:2", text="python3 -m unittest", cwd="/w", prov=True),
     "cmd_end": delegate.LiveCmdEnd(t=T, id="oc:2", exit=1, secs=43.4, out="FAILED"),
     "tool_start": delegate.LiveToolStart(t=T, id="oc:1", text="read x", prov=True),
@@ -357,7 +357,7 @@ OTHERS: dict[str, Rec] = {
         ended=checkpoint.CloseIntent(outcome=checkpoint.EndRec(
             run="r", kind="ask_decision", fingerprint="fp", detail="d", spec='{"ask_class":"decision","decision":"q"}',
                                 fp="fp0", comment=False, escalated=True),
-            pause=checkpoint.PauseFacts(reason="no_lane"), stats="cost=$1.23"),
+            pause=checkpoint.PauseFacts(reason="no_account"), stats="cost=$1.23"),
         notes=checkpoint.Notes(filed=2, unfiled=1),
         state=checkpoint.RunState(
             brief_hash="b0",
@@ -540,7 +540,7 @@ OTHERS: dict[str, Rec] = {
         data={"summary": "s"},
         text="t",
         ref="r",
-        lane="L",
+        account="L",
         model="m",
         effort="high",
         family="zai",
@@ -555,7 +555,7 @@ OTHERS: dict[str, Rec] = {
         git_violation=["g"],
         stop=delegate.StopFacts(
             reason="rate_limited",
-            scope="lane",
+            scope="account",
             permanence="transient",
             retry=delegate.Retry(kind="predicted", at=T),
             ref="r",
@@ -592,7 +592,7 @@ OTHERS: dict[str, Rec] = {
         exit_code=-15,
         first_error="429 rate limited",
         fallback=False,
-        first_lane="L",
+        first_account="L",
         warning="",
         ask_kind="",
         warnings=["w"],

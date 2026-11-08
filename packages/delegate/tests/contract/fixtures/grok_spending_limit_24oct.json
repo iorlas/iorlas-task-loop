@@ -1,8 +1,8 @@
 {
  "fixture": 1,
- "scenario": "Grok out of credits answered as vendor_prework 109 times 24 Oct 16:15-18:48 (114 in the engine logs); lane never marked out",
+ "scenario": "Grok out of credits answered as vendor_prework 109 times 24 Oct 16:15-18:48 (114 in the engine logs); account never marked out",
  "cli": "opencode",
- "lane": "GROK_SUBSCRIPTION",
+ "account": "GROK_SUBSCRIPTION",
  "real": "vendor text real (engine warn lines, cut at 160 chars)",
  "expected_reason": "credit_exhausted",
  "benches_pair": true,
@@ -1720,7 +1720,7 @@
  ],
  "expected_stop": {
   "reason": "credit_exhausted",
-  "scope": "lane",
+  "scope": "account",
   "permanence": "needs_owner",
   "retry_kind": "none"
  }

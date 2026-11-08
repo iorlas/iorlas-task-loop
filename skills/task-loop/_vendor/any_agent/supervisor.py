@@ -109,7 +109,7 @@ class RunOutcome:
     worker: procs.Worker | None = None
 
 
-class LaneGoneWatcher:
+class AccountGoneWatcher:
     """Stops a worker whose lane another process marked out for a limit, credit or login reason: it is burning an exhausted lane."""
 
     def __init__(self, gone: Callable[[], tuple[str, str] | None], every: float = LANE_GONE_EVERY) -> None:
@@ -168,7 +168,7 @@ class Supervisor:
         self.hx, self.hooks, self.live, self.policy, self.net_up, self.clock = harness, hooks, live or NullSink(), policy, net_up, clock
         self.dog = watch.Watchdog(lim.first_event_s, hooks.idle_s or lim.silence_s, clock=clock, beat=hooks.beat)
         self.turn = watch.Turn(lim.grace_s, clock=clock)
-        self.gone = LaneGoneWatcher(gone) if gone else None
+        self.gone = AccountGoneWatcher(gone) if gone else None
         self.log, self.lock, self.out = log, threading.RLock(), RunOutcome()
         self.now = Stop()
         self.asked = False
@@ -290,7 +290,7 @@ class Supervisor:
     def _wait(self, p: subprocess.Popen[bytes], killed: list[int], timeout: float) -> None:
         ppid, end = os.getppid(), time.time() + timeout if timeout else None
 
-        def bye(signum: int, frame: object) -> None:  # noqa: ARG001 - the signal handler signature
+        def bye(signum: int, frame: object) -> None:
             raise SystemExit(128 + signum)
 
         mine = threading.current_thread() is threading.main_thread()  # a library caller runs on any thread; only the main one takes signals

@@ -78,8 +78,8 @@ class LiveSink:
             return True
 
     # -- lifecycle -------------------------------------------------------------------------------------------------------------------------
-    def start(self, lane: str | None = None, model: str | None = None, effort: str | None = None, role: str | None = None) -> None:
-        self.info = {"lane": _opt(lane), "model": _opt(model), "effort": _opt(effort), "role": _opt(role)}
+    def start(self, account: str | None = None, model: str | None = None, effort: str | None = None, role: str | None = None) -> None:
+        self.info = {"account": _opt(account), "model": _opt(model), "effort": _opt(effort), "role": _opt(role)}
 
     def started(self, pid: int) -> None:
         """WORKER_STARTED callback: the process exists. A new file gets the WorkerStarted first; the start event follows, once per

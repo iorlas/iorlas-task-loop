@@ -112,7 +112,7 @@ class Replay(Case):
         self.a = argparse.Namespace(resume=None, schema=None, timeout=0, role="worker")
 
     def d(self, kind) -> dict[str, Json]:
-        lane = {"codex": "OPENAI_SUBSCRIPTION", "claude": "CLAUDE_SUBSCRIPTION", "opencode": "GROK_SUBSCRIPTION"}[kind]
+        account = {"codex": "OPENAI_SUBSCRIPTION", "claude": "CLAUDE_SUBSCRIPTION", "opencode": "GROK_SUBSCRIPTION"}[kind]
         how = {
             "kind": {"codex": "codex", "claude": "claude_p", "opencode": "opencode"}[kind],
             "model": "m",
@@ -124,7 +124,7 @@ class Replay(Case):
             "cli": ["codex", "exec"],
             "isolation": [],
         }
-        return {"lane": lane, "model": "m", "effort": "high", "role": "worker", "how": how}
+        return {"account": account, "model": "m", "effort": "high", "role": "worker", "how": how}
 
     def launch(self, kind, *script, a=None):
         """The worker plays `script` (packages/testkit/src/tltestkit/fake_worker.py); -> the answer and the workers started."""

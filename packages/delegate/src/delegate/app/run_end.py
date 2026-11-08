@@ -10,8 +10,8 @@ from delegate.app.lease import RunLease
 from delegate.contracts import codec
 from delegate.contracts import history as hist
 from delegate.contracts.json_types import Json, arr, as_num, as_opt_int, as_opt_obj, as_opt_str, as_str, as_strs, obj
+from delegate.domain.accounts.account import Account
 from delegate.domain.health import ledger as health_ledger
-from delegate.domain.lanes.lane import Lane
 
 SCHEMA_RAW_BYTES = 20 * 1024
 
@@ -54,7 +54,7 @@ def history_row(
     a: env.Args,
     res: dict[str, Json],
     d: dict[str, Json],
-    lane: Lane,
+    account: Account,
     rid: str,
     lease: RunLease,
     cap: int | None,
@@ -62,7 +62,7 @@ def history_row(
 ) -> None:
     """The run's row in the history ledger: what the health ladder and the cockpit read."""
     ref, transcript, secs, done, detail = seen
-    lane_name = as_str(d["lane"])
+    account_name = as_str(d["account"])
     ff = health_ledger.failure_fields(
         as_opt_str(res.get("outcome")), "", detail or as_opt_str(res.get("say")), as_num(res.get("retry_after"))
     )
@@ -78,7 +78,7 @@ def history_row(
             until=as_num(ff.get("until")),
             role=a.role,
             task=a.task or "",
-            lane=lane_name,
+            account=account_name,
             model=as_str(d["model"]),
             effort=as_str(d["effort"]),
             done=done,
@@ -93,8 +93,8 @@ def history_row(
             cost=as_num(res.get("cost", 0)) or 0,
             tokens=as_opt_obj(res.get("tokens")),
             cumulative=as_opt_obj(res.get("cumulative")),
-            five_before=lane.five,
-            week_before=lane.week,
+            five_before=account.five,
+            week_before=account.week,
             overlap=lease.overlap,
             slots=cap,
             transcript=transcript,

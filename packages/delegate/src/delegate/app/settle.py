@@ -1,8 +1,8 @@
-"""Settler: the one place a classified outcome (the shelf any_agent.classify) is applied to the answer and, for a lane-scoped reason, to
-the lane's state. All three launchers end here. `apply` is the only entry; one method per reason, found by name.
+"""Settler: the one place a classified outcome (the shelf any_agent.classify) is applied to the answer and, for an account-scoped reason, to
+the account's state. All three launchers end here. `apply` is the only entry; one method per reason, found by name.
 
 `reset` is the default end of a limit when the message names no time; `login` the hint stored
-with a logged-out lane and the text of the answer with {why}.
+with a logged-out account and the text of the answer with {why}.
 """
 
 import time
@@ -17,31 +17,33 @@ from delegate.app.env import Args
 from delegate.contracts.json_types import Json, as_str
 from delegate.contracts.state import OutState
 from delegate.contracts.stores import StateStore
-from delegate.domain.lanes.profiles import LOGIN_CMD
+from delegate.domain.accounts.profiles import LOGIN_CMD
 from delegate.domain.policy.matchers import heredoc_only_hit
 from delegate.domain.policy.worker import APPLY_PATCH_HINT
 from delegate.domain.time.spec import local
 
-LOGOUT_OUT = 900  # a lane whose worker found it logged out is skipped this long, then tried again (a login in between is not seen sooner)
-HUNG_OUT_SECS = 1800  # a lane whose worker printed nothing at all rests this long
-CREDIT_PROBE = 6 * 3600  # a lane out of credits with no stated end is looked at again after this long
+LOGOUT_OUT = (
+    900  # an account whose worker found it logged out is skipped this long, then tried again (a login in between is not seen sooner)
+)
+HUNG_OUT_SECS = 1800  # an account whose worker printed nothing at all rests this long
+CREDIT_PROBE = 6 * 3600  # an account out of credits with no stated end is looked at again after this long
 GUESS_WINDOW = 6 * 3600
 
 
 def stop(fact: str, words: str) -> dict[str, Json]:
     """The answer of a stop this process measured itself (`setup_failed`, `crashed`, `signal`): the ladder names the reason, `words` is
-    what it says. No lane state changes."""
+    what it says. No account state changes."""
     o = classify(None, structured={fact: words})
     assert o is not None  # a caller fact always names a reason
     return {"outcome": o.reason, "say": o.detail}
 
 
-def probe_hung(lane: str, model: str, secs: float, t: float) -> dict[str, Json]:
+def probe_hung(account: str, model: str, secs: float, t: float) -> dict[str, Json]:
     """A canary probe that did not answer in time: `timeout` is never counted, `hung` is, and the ladder names it from the watchdog fact.
     Nothing is marked out here; the pair tries again in a minute."""
     o = classify(None, structured={"watchdog": "hung"})
     assert o is not None
-    return {"outcome": o.reason, "retry_after": t + 60, "say": f"canary: {lane}/{model} did not answer within {secs}s"}
+    return {"outcome": o.reason, "retry_after": t + 60, "say": f"canary: {account}/{model} did not answer within {secs}s"}
 
 
 @dataclass(frozen=True)
@@ -70,8 +72,8 @@ class Case:
     hung: Hung | None = None
 
     @property
-    def lane(self) -> str:
-        return as_str(self.d["lane"])
+    def account(self) -> str:
+        return as_str(self.d["account"])
 
     @property
     def why(self) -> str:
@@ -96,7 +98,7 @@ class Settler:
 
     def mark_out(
         self,
-        lane: str,
+        account: str,
         until: float,
         why: str,
         t: float,
@@ -105,18 +107,18 @@ class Settler:
         zone: str | None = None,
         guess_n: int = 0,
     ) -> None:
-        """Record a lane out. source: vendor (the vendor stated the end) | guess | manual (the owner said); zone: the zone the vendor's
+        """Record an account out. source: vendor (the vendor stated the end) | guess | manual (the owner said); zone: the zone the vendor's
         time was in;
-        `set` = wall clock now (workers already running read it: a lane marked out after they started stops them)."""
+        `set` = wall clock now (workers already running read it: an account marked out after they started stops them)."""
         self.states.update(
             lambda s: s.out.__setitem__(
-                lane, OutState(until=until, why=why, at=t, set=time.time(), reason=reason, source=source, zone=zone, guess_n=guess_n)
+                account, OutState(until=until, why=why, at=t, set=time.time(), reason=reason, source=source, zone=zone, guess_n=guess_n)
             )
         )
 
     def net_pass(self, o: Outcome, d: dict[str, Json]) -> Outcome:
-        """The decision is `classify.with_network`; this only supplies the lane's one probe."""
-        return with_network(o, lambda: self.net_up(as_str(d["lane"])))
+        """The decision is `classify.with_network`; this only supplies the account's one probe."""
+        return with_network(o, lambda: self.net_up(as_str(d["account"])))
 
     def apply(
         self,
@@ -156,20 +158,22 @@ class Settler:
         words, kind = (c.hung.words, c.hung.kind) if c.hung else ("printed nothing", "first_event")
         if (
             kind == "first_event"
-        ):  # nothing came at all: the lane is the suspect, it rests; a worker that went quiet mid-run is the pair's (the breaker counts it)
+        # nothing came at all: the account is the suspect, it rests; a worker that went quiet mid-run is the pair's (the breaker counts
+        # it)
+        ):
             until = c.t + HUNG_OUT_SECS
-            self.mark_out(c.lane, until, f"hung: {words}", c.t, "hung")
-            c.res.update(retry_after=until, say=f"{c.who} {words} and was stopped; {c.lane} out until {local(until)}")
+            self.mark_out(c.account, until, f"hung: {words}", c.t, "hung")
+            c.res.update(retry_after=until, say=f"{c.who} {words} and was stopped; {c.account} out until {local(until)}")
         else:
             c.res.update(retry_after=self._soon(), say=f"{c.who} {words} and was stopped (its whole process tree); retry")
 
     def _rate_limited(self, c: Case) -> None:
-        prev = self.states.load().out.get(c.lane)
+        prev = self.states.load().out.get(c.account)
         n = prev.guess_n + 1 if prev and prev.source == "guess" and c.t - prev.at < GUESS_WINDOW else 0
         until, source, zone = reset_parse.limit_until(c.why, c.t, c.d, c.reset, n)
         ours = c.o.source == "ours"
         self.mark_out(
-            c.lane,
+            c.account,
             until,
             ("limit (opencode log): " if ours else "limit refusal: ") + c.why[:120].replace("\n", " "),
             c.t,
@@ -180,33 +184,33 @@ class Settler:
         )
         c.res.update(
             retry_after=until,
-            say=f"{c.lane} hit a limit" + (f" ({c.why[:120]}); worker stopped, lane" if ours else ";") + f" out until {local(until)}",
+            say=f"{c.account} hit a limit" + (f" ({c.why[:120]}); worker stopped, account" if ours else ";") + f" out until {local(until)}",
         )
 
     def _credit_exhausted(self, c: Case) -> None:
         until = c.t + CREDIT_PROBE
-        self.mark_out(c.lane, until, "out of credits: " + c.why[:120].replace("\n", " "), c.t, "credit", "guess")
-        c.res.update(retry_after=None, say=f"{c.lane} is out of credits ({c.why[:120]}); out until {local(until)}")
+        self.mark_out(c.account, until, "out of credits: " + c.why[:120].replace("\n", " "), c.t, "credit", "guess")
+        c.res.update(retry_after=None, say=f"{c.account} is out of credits ({c.why[:120]}); out until {local(until)}")
 
     def _logged_out(self, c: Case) -> None:
-        cmd = LOGIN_CMD.get(c.lane, "route.py doctor")
+        cmd = LOGIN_CMD.get(c.account, "route.py doctor")
         hint, say = c.login or (f"logged out: run `{cmd}`", f"{c.who} is not logged in: {{why}}")
-        self.mark_out(c.lane, c.t + LOGOUT_OUT, hint, c.t, "logged_out", "guess")
+        self.mark_out(c.account, c.t + LOGOUT_OUT, hint, c.t, "logged_out", "guess")
         c.res.update(fix=f"run `{cmd}`", say=say.format(why=c.why[-200:].strip()))
 
     def _bad_request(self, c: Case) -> None:
         c.res.update(
-            fix="the vendor rejected the request itself (schema, flags or arguments): fix the caller, not the lane",
+            fix="the vendor rejected the request itself (schema, flags or arguments): fix the caller, not the account",
             say=f"{c.who} rejected the request: {c.why[:300]}",
         )
 
     def _network(self, c: Case) -> None:
         if c.answered:  # the final answer was captured before the connection dropped: the work is done, say so
-            self.states.update(lambda s: s.out.pop(c.lane, None))
+            self.states.update(lambda s: s.out.pop(c.account, None))
             c.res.update(
                 outcome=None, data=answer.parse_data(as_str(c.res.get("text")), c.a.schema), warnings=["net_after_answer"], detail=""
             )
-        # not a lane fault: nothing is marked out, the pair is not counted, and the caller decides when to resume (`resumable`, `ref`)
+        # not an account fault: nothing is marked out, the pair is not counted, and the caller decides when to resume (`resumable`, `ref`)
         else:
             c.res.update(
                 retry_after=self._soon(),

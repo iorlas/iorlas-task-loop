@@ -9,7 +9,7 @@ import msgspec
 from tlkernel.trace import Tokens
 from tlkernel.wire import Rec, Tagged
 
-Scope = Literal["bead", "caller", "machine", "lane", "model"]
+Scope = Literal["bead", "caller", "machine", "account", "model"]
 Permanence = Literal["transient", "needs_owner"]
 RetryKind = Literal["none", "predicted", "poll"]
 TtlSource = Literal["vendor_default", "observed", "unknown"]
@@ -19,7 +19,7 @@ DenialKind = Literal["policy", "sandbox_limit", "secret"]
 WorkerEndKind = Literal["ok", "error", "timeout", "worker_survived"]
 REASON_TIMEOUT: Final = "timeout"  # the wire id of a worker that did not finish within --timeout
 REASON_ONLY_FAMILY: Final = "only_family_unready"  # a worker call pinned by --only-family found no ready step of those families
-REASON_NO_LANE: Final = "no_lane"
+REASON_NO_LANE: Final = "no_account"
 REASON_ENGINE_ONLY_UNENFORCED: Final = "engine_only_unenforced"
 REASON_OVERRUN: Final = "overrun"  # made by the engine: a reviewer call used its budget
 
@@ -159,7 +159,7 @@ class DelegateResult(Rec):
     data: dict[str, Any] | None = None
     text: str = ""
     ref: str | None = None
-    lane: str | None = None
+    account: str | None = None
     model: str | None = None
     effort: str | None = None
     family: str | None = None
@@ -178,7 +178,7 @@ class DelegateResult(Rec):
     exit_code: int | None = None  # the worker's exit status (negative: killed by that signal)
     first_error: str = ""
     fallback: bool | None = None
-    first_lane: str | None = None
+    first_account: str | None = None
     warning: str = ""
     ask_kind: str = ""
     warnings: list[str] = msgspec.field(default_factory=list)
@@ -204,7 +204,7 @@ class LiveRec(Tagged):
 class LiveStart(LiveRec, tag="start"):
     harness: str
     pid: int
-    lane: str = ""
+    account: str = ""
     model: str = ""
     effort: str = ""
     role: str = ""

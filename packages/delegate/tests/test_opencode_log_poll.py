@@ -1,4 +1,4 @@
-"""The supervisor's log watcher: a limit phrase in a log line quoting the worker's own command must not mark the lane out."""
+"""The supervisor's log watcher: a limit phrase in a log line quoting the worker's own command must not mark the account out."""
 
 from pathlib import Path
 

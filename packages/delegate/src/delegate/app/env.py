@@ -79,12 +79,16 @@ def load_routing() -> dict[str, Json]:
     Retired settings keys are dropped with one stderr line each (stdout carries the answer); any other unknown key fails."""
     with open(DATA_DIR / "routing.json", encoding="utf-8") as f:
         cfg = json.load(f)
-    moved = replaced_settings(cfg["lanes"])
+    try:
+        split_retired(cfg)
+    except ValueError as error:
+        sys.exit(str(error))
+    moved = replaced_settings(cfg["accounts"])
     for k in config_store().overrides():
         if k in moved:
             sys.exit(
-                f"route.py: {config_store().path}: '{k}' is replaced by the lane profile. Fix: delete \"{k}\" from config.json, "
-                f"then run `route.py config set profile.lanes.{moved[k]} enabled`"
+                f"route.py: {config_store().path}: '{k}' is replaced by the account profile. Fix: delete \"{k}\" from config.json, "
+                f"then run `route.py config set profile.accounts.{moved[k]} enabled`"
             )
     cfg["settings"], _ = split_retired(deep_merge(obj(cfg["settings"]), config_store().overrides()))
     for k in retired_keys_present():
@@ -158,12 +162,12 @@ def update_config(fn: Callable[[dict[str, Json]], object]):
     return config_store().update(fn)
 
 
-def profile_lanes() -> dict[str, Json]:
-    return dict(config_store().profile().lanes)
+def profile_accounts() -> dict[str, Json]:
+    return dict(config_store().profile().accounts)
 
 
-def set_profile_lane(name: str, value: str | None) -> None:
-    config_store().set_lane(name, value)
+def set_profile_account(name: str, value: str | None) -> None:
+    config_store().set_account(name, value)
 
 
 def history_add(row: HistoryRow) -> None:
@@ -197,7 +201,7 @@ PUSH_REFUSED = "delegate-push-refused://"  # no such remote helper: git aborts t
 
 def push_bar(env: dict[str, str]) -> dict[str, str]:
     """git's own env config (GIT_CONFIG_COUNT/KEY_n/VALUE_n) added to the existing entries: every push URL is rewritten (the empty
-    prefix matches all) to a scheme git cannot run, whatever the lane and however the command is spelled. Fetch is untouched."""
+    prefix matches all) to a scheme git cannot run, whatever the account and however the command is spelled. Fetch is untouched."""
     n = max(int(env.get("GIT_CONFIG_COUNT") or 0), 0)
     return {
         "GIT_CONFIG_COUNT": str(n + 1),

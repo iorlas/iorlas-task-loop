@@ -9,7 +9,7 @@
   "codex_weekly_used_override": null,
   "codex_resume_after_stall": true,
   "profile": {
-    "lanes": {"CODEX_SUBSCRIPTION": "enabled", "CLAUDE_CREDIT": "declined", "DEEPSEEK_FREE": "enabled"},
+    "accounts": {"CODEX_SUBSCRIPTION": "enabled", "CLAUDE_CREDIT": "declined", "DEEPSEEK_FREE": "enabled"},
     "ack": ["volumes"],
     "offered": ["ZAI_CODING"]
   }

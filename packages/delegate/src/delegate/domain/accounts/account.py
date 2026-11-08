@@ -1,7 +1,8 @@
-"""Lane: what the router knows about one lane right now: its spec, the usage reading, the out record, the breaker's view of its models.
+"""Account: what the router knows about one account right now: its spec, the usage reading, the out record, the breaker's view of its
+models.
 
-A reader fills a Lane in as it builds the fleet; from then on nothing mutates it: a hold is passed to the question that needs it, and a
-lane that is only waiting for a slot is a COPY (`with_busy`).
+A reader fills an Account in as it builds the fleet; from then on nothing mutates it: a hold is passed to the question that needs it, and a
+account that is only waiting for a slot is a COPY (`with_busy`).
 """
 
 from dataclasses import dataclass, field, replace
@@ -17,7 +18,7 @@ from delegate.domain.time.spec import local
 
 
 @dataclass
-class Lane:
+class Account:
     name: str
     family: str
     kind: str  # subscription
@@ -46,16 +47,17 @@ class Lane:
         return self.five is not None or self.week is not None
 
     def limits(self, s: Settings, relaxed: bool) -> tuple[float, float, str]:
-        """-> (weekly %, five-hour %, name): where the router stops using the lane. The strict pass uses the gate (a shared lane keeps the
+        """-> (weekly %, five-hour %, name): where the router stops using the account. The strict pass uses the gate (a shared account
+        keeps the
         orchestrator's reserve), the relaxed pass the ceiling."""
         c = s.relaxed_ceiling
         if self.shared:
             r = s.orchestrator_reserve
             wk, fv = (c.orchestrator_weekly, c.orchestrator_five_hour) if relaxed else (r.weekly, r.five_hour)
             return wk, fv, "hard ceiling" if relaxed else "orchestrator reserve"
-        g = s.worker_lane_gate
+        g = s.worker_account_gate
         wk, fv = (c.weekly, c.five_hour) if relaxed else (g.weekly, g.five_hour)
-        return wk, fv, "hard ceiling" if relaxed else "lane gate"
+        return wk, fv, "hard ceiling" if relaxed else "account gate"
 
     def usable(self, s: Settings, relaxed: bool, model: str | None = None, hold: Hold | None = None) -> tuple[bool, str]:
         """-> (bool, reason). With `model`, a pair the breaker benched is refused too; `hold` is the owner's hold covering this role."""
@@ -74,7 +76,7 @@ class Lane:
         return True, "ok"
 
     def back_at(self, s: Settings, hold: Hold | None = None) -> float | None:
-        """When an unusable lane is expected back: its hold's end, else its out-until, else the reset of the window it is over."""
+        """When an unusable account is expected back: its hold's end, else its out-until, else the reset of the window it is over."""
         ok, why = self.usable(s, True, hold=hold)
         if ok:
             return None
@@ -85,21 +87,21 @@ class Lane:
         return self.week_reset if why.startswith("weekly") else self.five_reset if why.startswith("5h") else None
 
     def slots(self, s: Settings) -> int | None:
-        """How many runs may be in flight: max_parallel (None = unlimited), one when the lane is strained."""
+        """How many runs may be in flight: max_parallel (None = unlimited), one when the account is strained."""
         if s.max_parallel is None:
             return None
         if self.five is not None and self.five >= s.strain.five_hour:
             return 1
         return s.max_parallel
 
-    def with_busy(self, until: float, running: int, cap: int) -> Lane:
-        """A copy that is out only because its slots are taken: it is skipped like a refused lane."""
+    def with_busy(self, until: float, running: int, cap: int) -> Account:
+        """A copy that is out only because its slots are taken: it is skipped like a refused account."""
         return replace(
             self, out=True, out_until=until, busy=True, out_reason="busy", notes=[f"busy: {running} running, {cap} allowed", *self.notes]
         )
 
     def usable_if_free(self, s: Settings) -> bool:
-        """Would the lane be usable (relaxed) if its slots were free?"""
+        """Would the account be usable (relaxed) if its slots were free?"""
         return replace(self, out=False).usable(s, True)[0]
 
     def brief(self, t: float) -> str:
@@ -135,13 +137,13 @@ def window(used: float | None, resets_at: float | None, span_min: float, t: floa
     return float(used), mins, elapsed - float(used)
 
 
-def apply_burn(lane: Lane, s: Settings, week_mins: float | None) -> None:
+def apply_burn(account: Account, s: Settings, week_mins: float | None) -> None:
     """The weekly window is about to reset with allowance left: spend it."""
     b = s.burn
-    lane.burn = (
-        lane.week is not None
+    account.burn = (
+        account.week is not None
         and week_mins is not None
         and 0 < week_mins <= b.minutes
-        and 100 - lane.week >= b.min_left_percent
-        and (lane.five is None or lane.five < 60)
+        and 100 - account.week >= b.min_left_percent
+        and (account.five is None or account.five < 60)
     )

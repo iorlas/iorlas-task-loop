@@ -20,7 +20,7 @@ def test_a_contract_reason_pauses_with_its_recorded_permanence(reason):
 
 
 def test_no_lane_and_crash_stay_with_the_owner_whatever_a_stop_says():
-    for reason in ("no_lane", "crash"):
+    for reason in ("no_account", "crash"):
         assert pauses.rule(reason, "delegate", "transient").permanence == "needs_owner"
 
 

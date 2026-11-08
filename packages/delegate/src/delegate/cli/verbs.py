@@ -17,9 +17,11 @@ from delegate.domain.time.spec import local, to_epoch
 
 def cmd_hold(a: env.Args, cfg: dict[str, Json]):
     try:
-        if a.lane not in obj(cfg["lanes"]):
-            raise ValueError(f"unknown lane {a.lane}; lanes: {', '.join(obj(cfg['lanes']))}")
-        rec = new_hold(uuid.uuid4().hex[:8], a.lane, a.until, a.reason, [x for x in (a.roles or "").split(",") if x], a.set_by, env.now())
+        if a.account not in obj(cfg["accounts"]):
+            raise ValueError(f"unknown account {a.account}; accounts: {', '.join(obj(cfg['accounts']))}")
+        rec = new_hold(
+            uuid.uuid4().hex[:8], a.account, a.until, a.reason, [x for x in (a.roles or "").split(",") if x], a.set_by, env.now()
+        )
     except ValueError as e:
         print(json.dumps({"ok": False, "error": str(e)}))
         return 1
@@ -42,22 +44,22 @@ def cmd_holds(a: env.Args, cfg: dict[str, Json]):
 
 def cmd_report(a: env.Args, cfg: dict[str, Json]):
     t = env.now()
-    if a.lane not in obj(cfg["lanes"]):
-        sys.exit(f"route.py: unknown lane {a.lane}; lanes: {', '.join(obj(cfg['lanes']))}")
+    if a.account not in obj(cfg["accounts"]):
+        sys.exit(f"route.py: unknown account {a.account}; accounts: {', '.join(obj(cfg['accounts']))}")
     if a.event == "ok":
-        env.update_state(lambda s: s.out.pop(a.lane, None))
-        env.history_add(hist.ReleaseRow(ts=env.now(), lane=a.lane))  # the fold forgets the lane's limits
-        print(f"{a.lane}: marked available")
+        env.update_state(lambda s: s.out.pop(a.account, None))
+        env.history_add(hist.ReleaseRow(ts=env.now(), account=a.account))  # the fold forgets the account's limits
+        print(f"{a.account}: marked available")
         return 0
     until = to_epoch(a.until)
     if until is None:
         st = env.load_state()
-        lane = (
-            decide.fleet_builder(cfg).build(st, t, check_config=False).lanes[a.lane]
-        )  # a lane the profile leaves out can still be reported out
-        until = lane.out_until or t + 3600
-    launch.settler().mark_out(a.lane, until, "reported out", t, "limit", "manual" if a.until else "guess")
-    print(f"{a.lane}: out until {local(until)}")
+        account = (
+            decide.fleet_builder(cfg).build(st, t, check_config=False).accounts[a.account]
+        )  # an account the profile leaves out can still be reported out
+        until = account.out_until or t + 3600
+    launch.settler().mark_out(a.account, until, "reported out", t, "limit", "manual" if a.until else "guess")
+    print(f"{a.account}: out until {local(until)}")
     return 0
 
 
@@ -88,14 +90,14 @@ def cmd_contract(a: env.Args, cfg: dict[str, Json]):
 
 
 def cmd_next(a: env.Args, cfg: dict[str, Json]):
-    d, lanes, warnings, t = decide.decision(a, cfg)
-    d["needs_input"] = cockpit.needs_input(lanes)
+    d, accounts, warnings, t = decide.decision(a, cfg)
+    d["needs_input"] = cockpit.needs_input(accounts)
     if warnings:
         d["warnings"] = warnings
-    if not a.verbose:  # the hot path stays small: reasoning and the lane table only on request
+    if not a.verbose:  # the hot path stays small: reasoning and the account table only on request
         d.pop("trace", None)
     else:
-        d["lanes"] = {n: ln.brief(t) for n, ln in lanes.items()}
+        d["accounts"] = {n: ln.brief(t) for n, ln in accounts.items()}
     if d.get("warning"):
         print("warning: " + d["warning"], file=sys.stderr)
     print(json.dumps(d, indent=1))

@@ -107,11 +107,11 @@ class Claude:
 class Opencode:
     STEP: ClassVar = {"input": 10, "output": 3, "reasoning": 2, "cache": {"read": 40, "write": 1}}
 
-    def run_steps(self, lane, cost):
+    def run_steps(self, account, cost):
         a = None
         for _ in range(2):
             a = usage.opencode_step(a, self.STEP, cost)
-        return need(usage.opencode_close(a, lane))
+        return need(usage.opencode_close(a, account))
 
     def test_grok_step_costs_are_summed(self):
         a = self.run_steps("GROK_SUBSCRIPTION", 0.25)

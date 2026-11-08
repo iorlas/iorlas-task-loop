@@ -26,14 +26,14 @@ def network(
     launch_one: Callable[[str, env.Args, str], dict[str, Json]],
     brief: str,
     args: env.Args,
-    lane: str,
+    account: str,
     now: Callable[[], float],
     sleep: Callable[[float], object],
 ) -> dict[str, Json]:
     """Re-ask once after a network stop, waiting at most ten minutes inside this call."""
     if res.get("outcome") != "network":
         return res
-    _, back = net.wait_up(lane, 600, now, sleep)
+    _, back = net.wait_up(account, 600, now, sleep)
     if not back:
         return res
     ref = as_opt_str(res.get("ref")) if res.get("started") else None
@@ -47,7 +47,7 @@ def network(
     return merge(res, again)
 
 
-def lane_wait(
+def account_wait(
     res: dict[str, Json],
     launch_one: Callable[[str, env.Args, str], dict[str, Json]],
     brief: str,
@@ -56,7 +56,7 @@ def lane_wait(
     sleep: Callable[[float], object],
     wall: Callable[[], float],
 ) -> dict[str, Json]:
-    """Poll a transient lane three times; spend at most 180 seconds on predicted recovery."""
+    """Poll a transient account three times; spend at most 180 seconds on predicted recovery."""
     polls, waited, immediate_retried = 0, 0.0, False
     while res.get("outcome"):
         facts = answer.result(as_opt_str(res.get("outcome")), **{k: v for k, v in res.items() if k != "outcome"})
@@ -65,18 +65,18 @@ def lane_wait(
         if stop.get("permanence") != "transient":
             break
         scope, kind, at = stop.get("scope"), retry.get("kind"), as_num(retry.get("at")) or 0
-        if scope in ("lane", "model", "bead") and kind == "poll":
+        if scope in ("account", "model", "bead") and kind == "poll":
             if polls >= 3:
                 break
             gap = at if 0 < at <= 180 else 20
             polls += 1
-            attempt = "lane_poll"
-        elif scope in ("lane", "model") and kind == "predicted":
+            attempt = "account_poll"
+        elif scope in ("account", "model") and kind == "predicted":
             gap = max(0.0, at - wall())
             if gap > 180 - waited or (gap == 0 and immediate_retried):
                 break
             immediate_retried = gap == 0
-            attempt = "lane_wait"
+            attempt = "account_wait"
         else:
             break
         started = now()
@@ -108,9 +108,7 @@ def worker_failure(res: dict[str, Json]) -> bool:
 def hurt_write(res: dict[str, Json], args: env.Args) -> bool:
     """A timed-out or terminated writer must move to another pair."""
     return (
-        getattr(args, "role", None) == "worker"
-        and worker_failure(res)
-        and (res.get("outcome") == "timeout" or res.get("exit_code") == -15)
+        getattr(args, "role", None) == "worker" and worker_failure(res) and (res.get("outcome") == "timeout" or res.get("exit_code") == -15)
     )
 
 

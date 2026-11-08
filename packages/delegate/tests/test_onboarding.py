@@ -18,9 +18,9 @@ from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
 
-def doctor_lanes(cfg: Any) -> list[Any]:
-    lanes: Any = doctor.doctor(cfg)["lanes"]
-    return lanes
+def doctor_accounts(cfg: Any) -> list[Any]:
+    accounts: Any = doctor.doctor(cfg)["accounts"]
+    return accounts
 
 
 class Onboarding(Case):
@@ -51,9 +51,9 @@ class Onboarding(Case):
                 os.environ[k] = v
         self.tmp.cleanup()
 
-    def test_doctor_is_a_plain_lane_table_and_nothing_blocks(self):
-        rows: Any = {r["lane"]: r for r in doctor_lanes(self.cfg)}
-        assert list(rows) == list(self.cfg["lanes"])
+    def test_doctor_is_a_plain_account_table_and_nothing_blocks(self):
+        rows: Any = {r["account"]: r for r in doctor_accounts(self.cfg)}
+        assert list(rows) == list(self.cfg["accounts"])
         assert (rows["CLAUDE_SUBSCRIPTION"]["enabled"], rows["CLAUDE_SUBSCRIPTION"]["ready"], rows["CLAUDE_SUBSCRIPTION"]["fix"]) == (
             True,
             True,
@@ -62,29 +62,29 @@ class Onboarding(Case):
         o = rows["OPENAI_SUBSCRIPTION"]
         assert (o["enabled"], o["ready"]) == (True, False)
         assert "npm install -g @openai/codex" in o["fix"]
-        assert not rows["DEEPSEEK_FREE"]["enabled"]  # an opt-in lane is off until the profile enables it
-        assert "profile.lanes.DEEPSEEK_FREE" in rows["DEEPSEEK_FREE"]["fix"]
+        assert not rows["DEEPSEEK_FREE"]["enabled"]  # an opt-in account is off until the profile enables it
+        assert "profile.accounts.DEEPSEEK_FREE" in rows["DEEPSEEK_FREE"]["fix"]
         self._make_codex_ready()
-        o = {r["lane"]: r for r in doctor_lanes(self.cfg)}["OPENAI_SUBSCRIPTION"]
+        o = {r["account"]: r for r in doctor_accounts(self.cfg)}["OPENAI_SUBSCRIPTION"]
         assert (o["ready"], o["fix"]) == (True, "")
-        env.set_profile_lane("OPENAI_SUBSCRIPTION", "declined")
-        assert not {r["lane"]: r for r in doctor_lanes(self.cfg)}["OPENAI_SUBSCRIPTION"]["enabled"]
+        env.set_profile_account("OPENAI_SUBSCRIPTION", "declined")
+        assert not {r["account"]: r for r in doctor_accounts(self.cfg)}["OPENAI_SUBSCRIPTION"]["enabled"]
 
-    def test_the_table_prints_one_line_per_lane(self):
+    def test_the_table_prints_one_line_per_account(self):
         buf = io.StringIO()
         with redirect_stdout(buf):
             assert route.main(["doctor"]) == 0
             assert route.main(["init"]) == 0
         lines = buf.getvalue().splitlines()
-        assert len(lines) == (2 * (len(self.cfg["lanes"]) + 1))
-        assert lines[0].startswith("lane") and "enabled" in lines[0] and "ready" in lines[0] and "fix" in lines[0]
+        assert len(lines) == (2 * (len(self.cfg["accounts"]) + 1))
+        assert lines[0].startswith("account") and "enabled" in lines[0] and "ready" in lines[0] and "fix" in lines[0]
 
     def _gather(self, st=None):
-        return self._fleet().lanes
+        return self._fleet().accounts
 
     def _fleet(self):
         real = dict(usage.READERS)
-        none_reader: Any = lambda lane, S, st_, t, *a: None  # noqa: E731  a reader that reports nothing
+        none_reader: Any = lambda account, S, st_, t, *a: None  # noqa: E731  a reader that reports nothing
         usage.READERS.update(dict.fromkeys(real, none_reader))
         try:
             return dec.fleet_builder(self.cfg).build(env.load_state(), T)
@@ -100,24 +100,24 @@ class Onboarding(Case):
     def test_fresh_machine_is_sub_agent_only_with_no_nag(self):
         ls = self._gather()
         assert list(ls) == ["CLAUDE_SUBSCRIPTION"]
-        assert env.profile_lanes() == {}
+        assert env.profile_accounts() == {}
         assert fleet.drift_warnings(env.states(), ls, env.load_state(), T) == []
 
-    def test_ready_lane_is_enabled_once_and_remembered(self):
+    def test_ready_account_is_enabled_once_and_remembered(self):
         self._make_codex_ready()
         assert "OPENAI_SUBSCRIPTION" in self._gather()
-        assert "OPENAI_SUBSCRIPTION" not in env.profile_lanes()  # a read writes nothing; `run` applies Fleet.enables
+        assert "OPENAI_SUBSCRIPTION" not in env.profile_accounts()  # a read writes nothing; `run` applies Fleet.enables
         assert self._fleet().enables == ["OPENAI_SUBSCRIPTION"]
-        env.set_profile_lane("OPENAI_SUBSCRIPTION", "enabled")  # what `run` does with Fleet.enables
-        assert env.profile_lanes()["OPENAI_SUBSCRIPTION"] == "enabled"
+        env.set_profile_account("OPENAI_SUBSCRIPTION", "enabled")  # what `run` does with Fleet.enables
+        assert env.profile_accounts()["OPENAI_SUBSCRIPTION"] == "enabled"
 
-    def test_declined_lane_stays_out_even_when_ready(self):
+    def test_declined_account_stays_out_even_when_ready(self):
         self._make_codex_ready()
-        env.set_profile_lane("OPENAI_SUBSCRIPTION", "declined")
+        env.set_profile_account("OPENAI_SUBSCRIPTION", "declined")
         assert "OPENAI_SUBSCRIPTION" not in self._gather()
 
     def test_enabled_but_no_longer_ready_is_out_and_warns_once_a_day(self):
-        env.set_profile_lane("OPENAI_SUBSCRIPTION", "enabled")  # nothing on this fake machine
+        env.set_profile_account("OPENAI_SUBSCRIPTION", "enabled")  # nothing on this fake machine
         ls = self._gather()
         assert ls["OPENAI_SUBSCRIPTION"].out
         assert len(fleet.drift_warnings(env.states(), ls, env.load_state(), T)) == 1
@@ -137,7 +137,7 @@ class Onboarding(Case):
             if saved is not None:
                 os.environ["CLAUDE_CODE_ENTRYPOINT"] = saved
 
-    def test_unset_lanes_are_offered_once_and_never_block(self):
+    def test_unset_accounts_are_offered_once_and_never_block(self):
         a = argparse_ns("worker")
         saved = os.environ.get("CLAUDE_CODE_ENTRYPOINT")
         os.environ["CLAUDE_CODE_ENTRYPOINT"] = "cli"  # a Claude session: the Agent tool is available

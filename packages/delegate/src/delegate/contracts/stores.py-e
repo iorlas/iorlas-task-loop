@@ -175,7 +175,7 @@ class CheckpointStore:
 
 class ConfigStore:
     """`config.json`: the owner's overrides. Top-level keys other than `profile` are settings overrides (deep-merged over routing.json by the
-    caller); `profile` is the owner's lane choices and never leaves this class as a setting."""
+    caller); `profile` is the owner's account choices and never leaves this class as a setting."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -212,11 +212,11 @@ class ConfigStore:
 
         self.update(put)
 
-    def set_lane(self, name: str, value: str | None) -> None:
+    def set_account(self, name: str, value: str | None) -> None:
         """value None removes the entry (back to auto-detect)."""
 
         def put(p: Profile) -> None:
-            p.lanes.pop(name, None) if value is None else p.lanes.__setitem__(name, value)
+            p.accounts.pop(name, None) if value is None else p.accounts.__setitem__(name, value)
 
         self._put_profile(put)
 

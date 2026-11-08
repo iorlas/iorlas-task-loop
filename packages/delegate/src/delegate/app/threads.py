@@ -30,12 +30,12 @@ def plan(request: RunRequest, state: StateDoc, routing: Routing) -> ThreadPlan:
     previous = state.threads.get(key) if key else None
     resume = None
     path = request.brief_file
-    lane = routing.lanes.get(previous.lane or "") if previous else None
-    limit = routing.settings.fresh_above_k.get(lane.family, 0) if lane else 0
+    account = routing.accounts.get(previous.account or "") if previous else None
+    limit = routing.settings.fresh_above_k.get(account.family, 0) if account else 0
     if request.boundary and limit > 0 and routing.settings.fresh_stage_k > 0:
         limit = min(limit, routing.settings.fresh_stage_k)
     oversized = previous is not None and previous.context_k is not None and limit > 0 and previous.context_k > limit
-    mark = state.out.get(previous.first_lane or "") if previous else None
+    mark = state.out.get(previous.first_account or "") if previous else None
     retake = previous is not None and previous.fallback and (mark is None or mark.until <= env.now())
     if previous is not None and request.delta_file is not None and not oversized and not retake:
         resume, path = previous.ref, request.delta_file
@@ -54,8 +54,12 @@ def settle(state: StateDoc, key: str, res: RunResult) -> None:
         return
     state.threads.pop(key, None)
     state.threads[key] = ThreadRecord(
-        ref=res.ref, lane=res.lane, model=res.model, context_k=res.usage.context_k,
-        fallback=res.fallback is True, first_lane=res.first_lane if isinstance(res.first_lane, str) else None,
+        ref=res.ref,
+        account=res.account,
+        model=res.model,
+        context_k=res.usage.context_k,
+        fallback=res.fallback is True,
+        first_account=res.first_account if isinstance(res.first_account, str) else None,
     )
     for old in list(state.threads)[:-200]:
         del state.threads[old]
@@ -70,13 +74,13 @@ def needs_fresh(res: RunResult) -> bool:
     if stop.permanence != "transient":
         return False
     return (stop.scope == "bead" and stop.retry.kind in ("none", "predicted")) or (
-        stop.scope in ("lane", "model") and stop.retry.kind in ("predicted", "poll")
+        stop.scope in ("account", "model") and stop.retry.kind in ("predicted", "poll")
     )
 
 
 def _attempts(res: dict[str, Json], kind: str) -> list[Json]:
     attempts = arr(res.get("attempts")) or [
-        {k: res.get(k) for k in ("lane", "model", "secs", "tokens")}
+        {k: res.get(k) for k in ("account", "model", "secs", "tokens")}
         | {"kind": "first", "outcome": obj(res["stop"]).get("reason") if res["stop"] else None}
     ]
     if kind == "new_thread":

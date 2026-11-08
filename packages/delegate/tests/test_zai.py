@@ -1,4 +1,4 @@
-"""The Z.AI and DeepSeek lanes: priority, backoff, readiness, the opencode watchdog."""
+"""The Z.AI and DeepSeek accounts: priority, backoff, readiness, the opencode watchdog."""
 
 import copy
 import json
@@ -20,8 +20,6 @@ class ZaiTests(Case):
     def choose(self, role, ls, **kwargs):
         cfg = copy.deepcopy(CFG)
         return support.decide(role, cfg, ls, {}, T, dict(authored_by=None, premium=None, allow_degraded=False, **kwargs))
-
-
 
     def test_disabled_does_not_change_original_rungs(self):
         cfg = copy.deepcopy(CFG)

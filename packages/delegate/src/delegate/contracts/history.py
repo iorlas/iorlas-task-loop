@@ -1,4 +1,4 @@
-"""`history.jsonl` (one `HistoryRow` per line, `v` 1, tagged by `kind`), and `health-checkpoint.json`.
+"""`history.jsonl` (one `HistoryRow` per line, `v` 2, tagged by `kind`), and `health-checkpoint.json`.
 
 A row is a fact, appended once and never edited. The health fold (domain/health) reads `run`, `canary` and `release` rows; the rest are for
 calibration and the dashboard. A line of another shape is skipped, never migrated.
@@ -11,7 +11,7 @@ from delegate.contracts.codec import mutable, record, table_of
 from delegate.contracts.json_types import Json
 from delegate.contracts.routing import BreakerPolicy
 
-V = 1
+V = 2
 
 
 @record
@@ -23,7 +23,7 @@ class RunRow:
     ts: float
     run_id: str
     role: str
-    lane: str
+    account: str
     model: str
     effort: str
     done: bool
@@ -66,7 +66,7 @@ class RefusalRow:
     say: str | None = None
     until: float | None = None
     task: str = ""
-    lane: str | None = None
+    account: str | None = None
     model: str | None = None
     resume: bool = False
 
@@ -79,7 +79,7 @@ class CanaryRow:
     V = V
     ts: float
     run_id: str
-    lane: str
+    account: str
     model: str
 
 
@@ -88,7 +88,7 @@ class GapRow:
     KIND: ClassVar[str] = "gap"
     V = V
     ts: float
-    lane: str
+    account: str
     model: str
     gap_s: float
     finished: bool
@@ -96,12 +96,12 @@ class GapRow:
 
 @record
 class ReleaseRow:
-    """`route.py report --event ok`: the owner says the lane is fine, the fold forgets its limits."""
+    """`route.py report --event ok`: the owner says the account is fine, the fold forgets its limits."""
 
     KIND: ClassVar[str] = "release"
     V = V
     ts: float
-    lane: str
+    account: str
 
 
 @record
@@ -110,7 +110,7 @@ class ReapRow:
     V = V
     ts: float
     run_id: str
-    lane: str
+    account: str
     reaped: bool
     role: str | None = None
     task: str = ""

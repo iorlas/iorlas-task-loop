@@ -21,7 +21,7 @@ from tltestkit.case import Case
 from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory
 
-LANES = Path(__file__).resolve().parents[4] / "packages" / "delegate" / "src" / "delegate" / "adapters"
+ACCOUNTS = Path(__file__).resolve().parents[4] / "packages" / "delegate" / "src" / "delegate" / "adapters"
 
 
 @contextlib.contextmanager
@@ -42,16 +42,6 @@ def closed_port():
     port = srv.getsockname()[1]
     srv.close()
     return f"127.0.0.1:{port}"
-
-
-
-
-
-
-
-
-
-
 
 
 class Cheap(Case):

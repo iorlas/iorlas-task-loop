@@ -1,4 +1,5 @@
 """An orphaned worker is stopped with the state lock free, so a stop of seconds blocks no other route.py's claim (tl-sqd3.24, M10)."""
+
 from unittest import mock
 
 import hermetic  # noqa: F401
@@ -10,9 +11,22 @@ from delegate.contracts.state import Lease
 
 
 def seed(rid: str, task: str) -> None:
-    env.update_state(lambda s: s.leases.__setitem__(rid, Lease(
-        lane="L", role="worker", pid=1, pid_start="gone", start=env.now() - 300, expires=env.now() + 60, task=task,
-        worker_pid=4242, worker_start="w")))
+    env.update_state(
+        lambda s: s.leases.__setitem__(
+            rid,
+            Lease(
+                account="L",
+                role="worker",
+                pid=1,
+                pid_start="gone",
+                start=env.now() - 300,
+                expires=env.now() + 60,
+                task=task,
+                worker_pid=4242,
+                worker_start="w",
+            ),
+        )
+    )
 
 
 def claim_with(reap) -> tuple[RunLease, object]:
@@ -24,7 +38,7 @@ def claim_with(reap) -> tuple[RunLease, object]:
         reaped["done"] = True
         return True
 
-    with (mock.patch.object(lease, "orphan", side_effect=lambda v: not reaped["done"]), mock.patch.object(lease, "reap", fake_reap)):
+    with mock.patch.object(lease, "orphan", side_effect=lambda v: not reaped["done"]), mock.patch.object(lease, "reap", fake_reap):
         return mine, mine.claim()
 
 

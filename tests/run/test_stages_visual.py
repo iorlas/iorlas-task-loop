@@ -1,4 +1,5 @@
 """Stage tests, part 2: the visual (look) stages, resume counting and bead claims. Split from test_stages."""
+
 import json
 import subprocess
 import sys
@@ -51,11 +52,13 @@ class VisualWork(StagesTest):
     @staticmethod
     def shot(code):
         """The repo's shot tool as a procsim fake: `shot-tool OUT [NAME]` saves OUT/NAME.png, then exits `code`."""
+
         def run(cwd, env):
             out, name = Path(procsim.argv()[1]), (procsim.argv()[2:3] or ["screen"])[0]
             out.mkdir(parents=True, exist_ok=True)
             (out / (name + ".png")).write_bytes(b"\x89PNG fake " + name.encode())
             return code, ""
+
         return run
 
     TABLE: ClassVar[Any] = {
@@ -95,8 +98,11 @@ class VisualWork(StagesTest):
 
     @staticmethod
     def judged(*defects, summary="the main screen shows"):
-        return {"findings": [{"item": "general", "verdict": "defect", "where": w, "why": y} for w, y in defects] or
-                [{"item": "general", "verdict": "pass", "where": "", "why": "fine"}], "summary": summary}
+        return {
+            "findings": [{"item": "general", "verdict": "defect", "where": w, "why": y} for w, y in defects]
+            or [{"item": "general", "verdict": "pass", "where": "", "why": "fine"}],
+            "summary": summary,
+        }
 
     def write(self, **kw):
         return dict(WRITE, **dict({"shots": self.SHOTS}, **kw))
@@ -105,7 +111,7 @@ class VisualWork(StagesTest):
         return [c[0] for c in s.calls]
 
     def test_a_look_judge_with_no_lane_leaves_the_pictures_unjudged_and_the_bead_unparked(self):
-        late = te.stop("no_lane", at=time.time() + 3600, family="xai", lane="GROK", say="no lane")
+        late = te.stop("no_account", at=time.time() + 3600, family="xai", account="GROK", say="no lane")
         rc, s = self.go({"plan": [PLAN], "write": [self.write()], "look": [late], "review": [CLEAN]})
         assert rc == 0, self.blocked
         assert "the look judge had no lane" in self.eng.log_path.read_text()
@@ -113,13 +119,15 @@ class VisualWork(StagesTest):
         assert [c[0] for c in s.calls] == ["planner", "worker", "reviewer", "reviewer"]  # the judge's one try, then the review
 
     def test_a_login_or_a_crash_is_not_swallowed_by_the_look_judge(self):
-        out = te.stop("logged_out", family="claude", lane="CLAUDE", say="logged out")
+        out = te.stop("logged_out", family="claude", account="CLAUDE", say="logged out")
         _rc, _s = self.go({"plan": [PLAN], "write": [self.write()], "look": [out, out]})
         assert "paused" in self.eng.why
 
     def test_the_judge_from_the_writers_family_is_not_taken(self):
-        rc, _s = self.go({"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]},
-                        j_extra={"look": [{"flag": "same_family"}]})
+        rc, _s = self.go(
+            {"plan": [PLAN], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]},
+            j_extra={"look": [{"flag": "same_family"}]},
+        )
         assert rc == 0, self.blocked
         assert "no lane for the look judge" in " ".join(self.eng.look.notes)
 
@@ -220,20 +228,40 @@ class VisualWork(StagesTest):
     def test_the_table_is_read_from_the_base_branch_not_the_working_copy(self):
         (self.wt / "shots.json").write_text(json.dumps({"v": 1, "methods": [{"method": "Evil", "argv": ["touch", "pwned"]}]}))
         cfg = cfg_with(wslots_config.load_cfg(str(self.wt), port_git()), shot_table="shots.json")
-        e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner(),
-            git=port_git(), who=who(), lander_factory=FakeLandStage)
+        e = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            cfg,
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+            who=who(),
+            lander_factory=FakeLandStage,
+        )
         assert list(e.pictures.shot_methods()) == ["ScreenShots"]
 
     def test_a_missing_table_is_warned_once_and_the_old_way_stands(self):
         cfg = cfg_with(wslots_config.load_cfg(str(self.wt), port_git()), shot_table="nowhere.json")
-        e = engine.Engine(BeadId("t-1"), str(self.wt), cfg, store=self.store, env=snapshot(), spawner=real_spawner(),
-            git=port_git(), who=who(), lander_factory=FakeLandStage)
+        e = engine.Engine(
+            BeadId("t-1"),
+            str(self.wt),
+            cfg,
+            store=self.store,
+            env=snapshot(),
+            spawner=real_spawner(),
+            git=port_git(),
+            who=who(),
+            lander_factory=FakeLandStage,
+        )
         assert e.pictures.shot_methods() == {}
         assert e.pictures.shot_methods() == {}
 
     def test_look_and_taste_cases_have_no_command_and_run_nothing(self):
-        cases = [{"criterion": "the picker shows", "check": "", "class": "look-objective"},
-                 {"criterion": "it reads well", "check": "", "class": "taste"}]
+        cases = [
+            {"criterion": "the picker shows", "check": "", "class": "look-objective"},
+            {"criterion": "it reads well", "check": "", "class": "taste"},
+        ]
         rc, s = self.go({"plan": [dict(PLAN, cases=cases)], "write": [self.write()], "look": [self.judged()], "review": [CLEAN]})
         assert rc == 0, self.blocked
         assert "the picker shows" in s.prompts[2]  # the judge judges the look-objective item
@@ -251,12 +279,16 @@ class VisualWork(StagesTest):
         _rc, s = self.go({"plan": [PLAN], "write": [WRITE, WRITE], "review": [CLEAN, CLEAN]}, table="")
         assert "look-objective:" not in s.prompts[0]
 
-    TWO: ClassVar[Any] = dict(PLAN, stages=[PLAN["stages"][0], dict(PLAN["stages"][0], goal="add g")],
-               cases=[{"criterion": "the picker shows a hue gradient", "check": "", "class": "look-objective"}])
+    TWO: ClassVar[Any] = dict(
+        PLAN,
+        stages=[PLAN["stages"][0], dict(PLAN["stages"][0], goal="add g")],
+        cases=[{"criterion": "the picker shows a hue gradient", "check": "", "class": "look-objective"}],
+    )
 
     def test_the_plans_look_items_are_judged_on_the_last_stage_only(self):
-        rc, s = self.go({"plan": [self.TWO], "write": [self.write(), self.write()], "look": [self.judged(), self.judged()],
-                         "review": [CLEAN, CLEAN]})
+        rc, s = self.go(
+            {"plan": [self.TWO], "write": [self.write(), self.write()], "look": [self.judged(), self.judged()], "review": [CLEAN, CLEAN]}
+        )
         assert rc == 0, self.blocked
         judges = [p for p in s.prompts if p.startswith("You judge how a screen looks")]
         assert len(judges) == 2
@@ -325,7 +357,10 @@ class VisualWork(StagesTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who(), lander_factory=FakeLandStage)
+            git=port_git(),
+            who=who(),
+            lander_factory=FakeLandStage,
+        )
         again.tree.reset(must_bead(BEAD))
         again.resume.point()
         assert (again.look.done, again.look.rendered, again.render_stale) == (1, ["a.png"], True)
@@ -335,20 +370,34 @@ class VisualWork(StagesTest):
         assert "look-objective:" not in s.prompts[0]
 
     def test_the_gallery_data_lands_in_the_owner_look_beads_row(self):
-        e = make_engine(self.wt, store=self.store, attrs={
-            "plan_data": dict(PLAN, cases=[{"criterion": "it reads well", "check": "", "class": "taste"}]),
-            "look_notes": ["the main screen shows"],
-            })
+        e = make_engine(
+            self.wt,
+            store=self.store,
+            attrs={
+                "plan_data": dict(PLAN, cases=[{"criterion": "it reads well", "check": "", "class": "taste"}]),
+                "look_notes": ["the main screen shows"],
+            },
+        )
         png = self.wt / "pic.png"
         png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 32)
         e.artifact_repo = "repo"
-        for t, (name, role, stage) in enumerate((("main-before.png", "before", "write"), ("main.png", "result", "look"),
-                                                 ("half.png", "progress", "write")), 1):
-            store.add(e.home.artifact_store(), ArtifactSlot(repo="repo", bead="t-1", run=e.run_id, stage=stage, attempt=1), png,
-                      name=name, caption="c", role=role, now=float(t))
+        for t, (name, role, stage) in enumerate(
+            (("main-before.png", "before", "write"), ("main.png", "result", "look"), ("half.png", "progress", "write")), 1
+        ):
+            store.add(
+                e.home.artifact_store(),
+                ArtifactSlot(repo="repo", bead="t-1", run=e.run_id, stage=stage, attempt=1),
+                png,
+                name=name,
+                caption="c",
+                role=role,
+                now=float(t),
+            )
         rows = LookRows(e.home)
-        old = [{"id": "t-0#1", "bead": "t-0", "title": "other", "shots": [], "status": "open"},
-               {"id": "t-1#1", "bead": "t-1", "title": "it reads well", "shots": [], "status": "good"}]
+        old = [
+            {"id": "t-0#1", "bead": "t-0", "title": "other", "shots": [], "status": "open"},
+            {"id": "t-1#1", "bead": "t-1", "title": "it reads well", "shots": [], "status": "good"},
+        ]
         rows.modify("lk-1", lambda: old, lambda items: items)  # the row as an earlier filing and the owner left it
         sent = []
         with self.store.stub(bd_fn=lambda *a, **k: sent.append(a) or mock.Mock(returncode=0, stdout="", stderr="")):
@@ -365,7 +414,8 @@ class VisualWork(StagesTest):
         assert entry["note"] == "the main screen shows"
         assert entry["shots"] == [
             {"path": f"artifact:repo/t-1/{e.run_id}/write-1/main-before.png", "role": "before", "label": "main-before"},
-            {"path": f"artifact:repo/t-1/{e.run_id}/look-1/main.png", "role": "after", "label": "main"}]  # no progress picture
+            {"path": f"artifact:repo/t-1/{e.run_id}/look-1/main.png", "role": "after", "label": "main"},
+        ]  # no progress picture
 
 
 class ResumeCount(StagesTest):
@@ -471,7 +521,10 @@ class ResumeCount(StagesTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who(), lander_factory=FakeLandStage)
+            git=port_git(),
+            who=who(),
+            lander_factory=FakeLandStage,
+        )
         e.tree.reset(must_bead(BEAD))
         e.plan_data = plan_of(PLAN)
         e.checkpoints.save(stage=0, rounds=0, n=1, feedback="", step="write")
@@ -490,9 +543,10 @@ class ResumeCount(StagesTest):
         assert "resume_conflict" not in text
         assert not self.last_trace()["salvaged"]
         assert gitq.git("show", "origin/main:a.txt", cwd=str(self.wt)) == "main moved on"
-        assert subprocess.run(
-                ["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True, check=False
-            ).stdout == ""
+        assert (
+            subprocess.run(["git", "branch", "--list", "task/t-1-stale-*"], cwd=self.wt, capture_output=True, text=True, check=False).stdout
+            == ""
+        )
 
     def test_a_resume_conflict_in_more_than_ten_files_starts_again_as_before(self):
         files = [f"c{n}.txt" for n in range(11)]
@@ -520,6 +574,7 @@ class ResumeCount(StagesTest):
                 for f in files:
                     Path(this.cwds[-1], f).write_text("merged\n")
             return r
+
         with mock.patch.object(fake_route.Script, "reply", fix_all):
             rc, s = self.run_engine({"write": [WRITE, WRITE], "review": [CLEAN, CLEAN]})
         assert rc == 0, self.blocked
@@ -592,35 +647,39 @@ class Claims(StagesTest):
             "dependencies": [],
         }
         comments = [{"text": "Blocked: stuck: re-planned 3 times", "created_at": "1", "author": "tl-engine"}]
-        with self.store.stub(show=parked), \
-                self.store.stub(comments=comments), mock.patch.object(wrunning, "running", return_value={}):
-            ok, why = admission.admit(wasks.host(), BeadId("t-1"), str(self.wt), port_git(), who(),
-                store=self.store, running_now=wrunning.running)
+        with self.store.stub(show=parked), self.store.stub(comments=comments), mock.patch.object(wrunning, "running", return_value={}):
+            ok, why = admission.admit(
+                wasks.host(), BeadId("t-1"), str(self.wt), port_git(), who(), store=self.store, running_now=wrunning.running
+            )
         assert ok, why
         assert why == "reopened"
         assert self.store.calls[0] == ("update", "t-1", "--status", "open", "--if-assignee", "tl-2be89f88", "--assignee", "")
 
     def test_a_parked_bead_with_an_engine_still_on_it_is_a_live_claim(self):
         parked = {"id": "t-1", "status": "blocked", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
-        with self.store.stub(show=parked), \
-                mock.patch.object(wrunning, "running", return_value={"t-1": "s2"}):
-            ok, why = admission.admit(wasks.host(), BeadId("t-1"), str(self.wt), port_git(), who(),
-                store=self.store, running_now=wrunning.running)
+        with self.store.stub(show=parked), mock.patch.object(wrunning, "running", return_value={"t-1": "s2"}):
+            ok, why = admission.admit(
+                wasks.host(), BeadId("t-1"), str(self.wt), port_git(), who(), store=self.store, running_now=wrunning.running
+            )
         assert not ok
         assert "a live claim" in why
 
     def test_a_working_bead_that_is_still_claimed_after_the_sweep_is_a_live_claim(self):
         busy = {"id": "t-1", "status": "in_progress", "assignee": "tl-2be89f88", "lease_expires_at": "", "dependencies": []}
         with self.store.stub(show=busy):
-            ok, why = admission.admit(wasks.host(), BeadId("t-1"), str(self.wt), port_git(), who(),
-                store=self.store, running_now=wrunning.running)
+            ok, why = admission.admit(
+                wasks.host(), BeadId("t-1"), str(self.wt), port_git(), who(), store=self.store, running_now=wrunning.running
+            )
         assert not ok
         assert "a live claim" in why
 
     @te.no_repo
     def test_parking_a_bead_lets_go_of_its_claim(self):
-        for holder, expect in (("tl-2be89f88", ("update", "t-1", "--status", "blocked", "--assignee", "")),
-                               ("denis", ("update", "t-1", "--status", "blocked")), ("", ("update", "t-1", "--status", "blocked"))):
+        for holder, expect in (
+            ("tl-2be89f88", ("update", "t-1", "--status", "blocked", "--assignee", "")),
+            ("denis", ("update", "t-1", "--status", "blocked")),
+            ("", ("update", "t-1", "--status", "blocked")),
+        ):
             store = FakeBeadStore().put({"id": "t-1", "assignee": holder})
             assert verbs.block(who(), BeadId("t-1"), "stuck", store) == 0
             assert store.said("update")[0] == expect, holder  # a person's own claim stays theirs
@@ -685,10 +744,15 @@ class Claims(StagesTest):
     def test_no_reflection_for_a_paused_run_or_when_switched_off(self):
         _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})  # reflect off in the harness
         assert [c[0] for c in s.calls] == ["planner", "worker", "reviewer"]
-        e = make_engine(self.wt, cfg={"reflect": True}, store=self.store, attrs={
-            "route": "/fake/route.py",
-            "sessions": [{"node": "plan"}],
-            })
+        e = make_engine(
+            self.wt,
+            cfg={"reflect": True},
+            store=self.store,
+            attrs={
+                "route": "/fake/route.py",
+                "sessions": [{"node": "plan"}],
+            },
+        )
         assert e.reflector.reflect_run("failed", "failed: x") is None  # a run that only planned
         e.sessions = [{"node": "plan"}, {"node": "write"}]
         assert e.reflector.reflect_run("blocked", "paused: no lane for write until 04:00") is None

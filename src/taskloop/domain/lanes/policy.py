@@ -44,12 +44,12 @@ def stop_of(res: DelegateResult) -> Stop | None:
     if st is None:
         return None
     return Stop(
-        st.scope,
+        "lane" if st.scope == "account" else st.scope,
         st.permanence,
         st.retry.kind,
         float(st.retry.at or 0.0),
         st.reason,
-        res.lane or "",
+        res.account or "",
         res.model or "",
         1 if st.reason == "killed" else 0,
         st.fix,

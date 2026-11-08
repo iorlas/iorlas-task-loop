@@ -6,11 +6,11 @@ from typing import Any
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
-from test_route import CFG, T, lanes
+from test_route import CFG, T, accounts
 
 from delegate.app import env, usage
 from delegate.contracts.state import UsageCache
-from delegate.domain.lanes.lane import Lane
+from delegate.domain.accounts.account import Account
 from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory
 
@@ -51,11 +51,11 @@ NOW = 1793000000  # 2026-10-26, before both resets
 
 
 def with_res(res, S=None, st=None, t=NOW):
-    lane = Lane("OPENAI_SUBSCRIPTION", "openai", "subscription")
+    account = Account("OPENAI_SUBSCRIPTION", "openai", "subscription")
     env.update_state(lambda s_: setattr(s_, "codex_limits", UsageCache(at=t, data=res)))
     S = env.settings_of(CFG) if S is None else env.settings_of({**CFG, "settings": S})
-    usage.read_codex(lane, S, st if st is not None else env.load_state(), t)
-    return lane
+    usage.read_codex(account, S, st if st is not None else env.load_state(), t)
+    return account
 
 
 class Fresh:
@@ -72,20 +72,18 @@ class Fresh:
         self.tmp.cleanup()
 
 
-
-
 class ClaudeLast(Fresh):
     def grok(self, **over):
-        g = Lane("GROK_SUBSCRIPTION", "xai", "subscription")
+        g = Account("GROK_SUBSCRIPTION", "xai", "subscription")
         for k, v in over.items():
             setattr(g, k, v)
         return g
 
     def everything(self, **over):
-        ls = lanes()
+        ls = accounts()
         ls["GROK_SUBSCRIPTION"] = self.grok()
         for fam, name in (("deepseek", "DEEPSEEK_FREE"), ("zai", "ZAI_CODING_SUBSCRIPTION")):
-            ls[name] = Lane(name, fam, "subscription")
+            ls[name] = Account(name, fam, "subscription")
         return ls
 
     def cfg(self):
@@ -98,28 +96,26 @@ class ClaudeLast(Fresh):
         return support.decide(role, self.cfg(), ls, {}, T, a)
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_all_lanes_up_a_non_claude_lane_is_picked_for_every_role(self):
+    def test_all_accounts_up_a_non_claude_account_is_picked_for_every_role(self):
         for role in CFG["roles"]:
             for who in [None] if role != "reviewer" else [None, "openai", "claude", "xai", "deepseek", "zai"]:
                 d = self.pick(role, self.everything(), authored_by=who)
                 assert d["action"] == "run", (role, who)
-                assert "CLAUDE" not in d["lane"], (role, who, d["lane"])
-
-
+                assert "CLAUDE" not in d["account"], (role, who, d["account"])
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_a_relaxed_non_claude_lane_beats_a_strict_claude_lane(self):
+    def test_a_relaxed_non_claude_account_beats_a_strict_claude_account(self):
         ls = self.everything()
         for n in ("GROK_SUBSCRIPTION", "DEEPSEEK_FREE", "ZAI_CODING_SUBSCRIPTION"):
             ls[n].out, ls[n].out_until = True, T + 3600
         ls["OPENAI_SUBSCRIPTION"].week = 96  # over the strict gate (95), under the ceiling (98)
         d = self.pick("worker", ls)
-        assert (d["lane"], d["pass"]) == ("OPENAI_SUBSCRIPTION", "relaxed")
+        assert (d["account"], d["pass"]) == ("OPENAI_SUBSCRIPTION", "relaxed")
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_same_family_review_by_a_non_claude_lane_still_precedes_claude(self):
+    def test_same_family_review_by_a_non_claude_account_still_precedes_claude(self):
         ls = self.everything()
         for n in ("GROK_SUBSCRIPTION", "DEEPSEEK_FREE", "ZAI_CODING_SUBSCRIPTION"):
             ls[n].out, ls[n].out_until = True, T + 3600
         d = self.pick("reviewer", ls, authored_by="openai")
-        assert (d["lane"], d["flag"]) == ("OPENAI_SUBSCRIPTION", "same_family")
+        assert (d["account"], d["flag"]) == ("OPENAI_SUBSCRIPTION", "same_family")

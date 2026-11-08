@@ -10,14 +10,14 @@ from delegate.contracts.codec import ABSENT, Absent, record
 
 
 @record
-class LaneRow:
-    """`lanes{}`: the lane's usage reading and out record."""
+class AccountRow:
+    """`accounts{}`: the account's usage reading and out record."""
 
     family: str
     kind: str
     out: bool
     out_until: float | None
-    reason: str | None = field(metadata={"doc": "why the lane is out (limit | logged_out | busy | error | credit | hung), else null"})
+    reason: str | None = field(metadata={"doc": "why the account is out (limit | logged_out | busy | error | credit | hung), else null"})
     five: float | None = field(metadata={"doc": "percent of the 5-hour window used, null = unknown"})
     week: float | None = field(metadata={"doc": "percent of the weekly window used, null = unknown"})
     pace: float | None
@@ -30,7 +30,7 @@ class NextWorker:
     """The pick `next worker` would make now. action `run` carries pass, fallback, why; any other action carries say."""
 
     action: str
-    lane: str | None
+    account: str | None
     model: str | None
     effort: str | None
     pass_: str | Absent = field(default=ABSENT, metadata={"name": "pass"})
@@ -76,7 +76,7 @@ class Login:
 
 
 @record
-class CockpitLane:
+class CockpitAccount:
     id: str
     label: str
     family: str
@@ -101,13 +101,13 @@ class Cockpit:
     at: float
     legend: dict[str, str]
     next_worker: NextWorker
-    lanes: list[CockpitLane]
+    accounts: list[CockpitAccount]
 
 
 @record
 class Running:
     run_id: str
-    lane: str
+    account: str
     role: str | None
     task: str
     started: float
@@ -127,7 +127,7 @@ class NeedInput:
 @record
 class HoldRow:
     id: str
-    lane: str
+    account: str
     roles: list[str]
     set_by: str
     set_at: float
@@ -142,7 +142,7 @@ class HoldRow:
 class Ask:
     kind: str
     id: str
-    lane: str
+    account: str
     raised_at: float | None
     used_pct: float
     say: str
@@ -170,9 +170,9 @@ class HealthUsage:
 
 @record
 class Health:
-    """One row per (lane, model): state up | busy | exhausted | logged_out | held | broken."""
+    """One row per (account, model): state up | busy | exhausted | logged_out | held | broken."""
 
-    lane: str
+    account: str
     model: str
     state: str
     until: float | None
@@ -205,7 +205,7 @@ class Network:
 @record
 class Role:
     usable: bool | None
-    lane: str | None
+    account: str | None
     model: str | None
     why: str | None
     until: float | None
@@ -226,7 +226,7 @@ class Status:
     V = 1
 
     ts: float
-    lanes: dict[str, LaneRow]
+    accounts: dict[str, AccountRow]
     cockpit: Cockpit
     running: list[Running]
     needs_input: list[NeedInput]
@@ -237,4 +237,4 @@ class Status:
     network: Network
     cheap: bool | Absent = ABSENT
     age_s: int | Absent | None = field(default=ABSENT, metadata={"doc": "`status --cheap` only: seconds since the snapshot"})
-    auth: dict[str, CheapAuth] | Absent = field(default=ABSENT, metadata={"doc": "`status --cheap` only: the cached logins by lane"})
+    auth: dict[str, CheapAuth] | Absent = field(default=ABSENT, metadata={"doc": "`status --cheap` only: the cached logins by account"})

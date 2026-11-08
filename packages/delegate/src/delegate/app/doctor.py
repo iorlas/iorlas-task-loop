@@ -1,4 +1,4 @@
-"""`route.py doctor` (and `init`): a plain lane table (lane, enabled, ready, fix) and the notes about retired config keys; and `config
+"""`route.py doctor` (and `init`): a plain account table (account, enabled, ready, fix) and the notes about retired config keys; and `config
 set|show`.
 Nothing here installs, logs in or decides for the owner: the fix column says what to run."""
 
@@ -13,26 +13,27 @@ from delegate.contracts.routing import split_retired
 from delegate.contracts.state import Profile
 
 
-def lane_rows(cfg: dict[str, Json]) -> list[dict[str, Json]]:
-    """One row per lane: {lane, enabled, ready, fix}. enabled = the router may use it (not declined; an opt-in lane only when the profile
+def account_rows(cfg: dict[str, Json]) -> list[dict[str, Json]]:
+    """One row per account: {account, enabled, ready, fix}. enabled = the router may use it (not declined; an opt-in account only when the
+    profile
     enables it); ready = the machine can run it."""
-    ready, chosen = onboard.configured_lanes(cfg), env.profile_lanes()
+    ready, chosen = onboard.configured_accounts(cfg), env.profile_accounts()
     rows: list[dict[str, Json]] = []
-    lanes = obj(cfg["lanes"])
-    for name in lanes:
-        enabled = chosen.get(name) != "declined" and (not obj(lanes[name]).get("opt_in") or chosen.get(name) == "enabled")
+    accounts = obj(cfg["accounts"])
+    for name in accounts:
+        enabled = chosen.get(name) != "declined" and (not obj(accounts[name]).get("opt_in") or chosen.get(name) == "enabled")
         rows.append(
-            {"lane": name, "enabled": enabled, "ready": ready[name], "fix": "" if ready[name] and enabled else onboard.fix_hint(name)}
+            {"account": name, "enabled": enabled, "ready": ready[name], "fix": "" if ready[name] and enabled else onboard.fix_hint(name)}
         )
     return rows
 
 
-LEFTOVER_FILES = ("claude-credit.key", "ledger.jsonl")  # of the deleted CLAUDE_CREDIT lane
+LEFTOVER_FILES = ("claude-credit.key", "ledger.jsonl")  # of the deleted CLAUDE_CREDIT account
 LEFTOVER_ENV = "CLAUDE_CREDIT_WORKER_KEY"
 
 
 def leftovers() -> list[dict[str, str]]:
-    """Notes for what the deleted CLAUDE_CREDIT lane left behind. Nothing reads or deletes them."""
+    """Notes for what the deleted CLAUDE_CREDIT account left behind. Nothing reads or deletes them."""
     out: list[dict[str, str]] = [
         {"id": "unused_file", "file": str(env.config_dir() / n), "say": f"{env.config_dir() / n}: unused, safe to delete."}
         for n in LEFTOVER_FILES
@@ -52,16 +53,27 @@ def history_loss_notes() -> list[dict[str, str]]:
         return []
     if not n:
         return []
-    return [{"id": "history_lost", "file": str(path), "say": f"{n} history rows could not be written (see {path}); the lane health "
-             "may be missing them. Delete the file once read."}]
+    return [
+        {
+            "id": "history_lost",
+            "file": str(path),
+            "say": f"{n} history rows could not be written (see {path}); the account health "
+            "may be missing them. Delete the file once read.",
+        }
+    ]
 
 
 def lock_answer_notes() -> list[dict[str, str]]:
     n = sum(1 for row in env.history_store().rows() if isinstance(row, RefusalRow) and row.outcome == "lock")
     if not n:
         return []
-    return [{"id": "lock_answers", "say": f"{n} calls were answered `lock` (the state lock stayed held 10 s) "
-             "in the last 14 days; with several lanes running, find the holder"}]
+    return [
+        {
+            "id": "lock_answers",
+            "say": f"{n} calls were answered `lock` (the state lock stayed held 10 s) "
+            "in the last 14 days; with several accounts running, find the holder",
+        }
+    ]
 
 
 def notes(cfg: dict[str, Json]) -> list[dict[str, str]]:
@@ -92,14 +104,15 @@ SMOKE_IDS = ("bad_profile", "enabled_not_ready")
 
 
 def smoke_problems(cfg: dict[str, Json]) -> list[dict[str, str]]:
-    """The post-update smoke check: the profile parses and names known lanes with known values, and every lane the owner enabled can run
+    """The post-update smoke check: the profile parses and names known accounts with known values, and every account the owner enabled can
+    run
     here
     (its CLI resolves, its login is there). Each problem is a note (ids in SMOKE_IDS) with the exact fix; `doctor` exits 1 on any."""
     out: list[dict[str, str]] = []
     raw = env.config_store().read().get("profile") or {}
     try:
         codec.from_json(Profile, raw)
-        lanes = obj(obj(raw).get("lanes"))
+        accounts = obj(obj(raw).get("accounts"))
     except codec.CodecError as e:
         return [
             {
@@ -107,35 +120,35 @@ def smoke_problems(cfg: dict[str, Json]) -> list[dict[str, str]]:
                 "say": f'{env.config_store().path}: profile does not parse ({e}). Fix: correct or delete the "profile" key.',
             }
         ]
-    for name, v in lanes.items():
-        if name not in obj(cfg["lanes"]) or v not in PROFILE_VALUES:
+    for name, v in accounts.items():
+        if name not in obj(cfg["accounts"]) or v not in PROFILE_VALUES:
             out.append(
                 {
                     "id": "bad_profile",
-                    "lane": name,
-                    "say": f"profile.lanes.{name} = {v!r}: expected a lane of {sorted(obj(cfg['lanes']))} "
-                    f"set to enabled or declined. Fix: `route.py config set profile.lanes.<LANE> enabled|declined`.",
+                    "account": name,
+                    "say": f"profile.accounts.{name} = {v!r}: expected an account of {sorted(obj(cfg['accounts']))} "
+                    f"set to enabled or declined. Fix: `route.py config set profile.accounts.<ACCOUNT> enabled|declined`.",
                 }
             )
-    ready = onboard.configured_lanes(cfg)
+    ready = onboard.configured_accounts(cfg)
     out += [
-        {"id": "enabled_not_ready", "lane": n, "say": f"{n} is enabled but not ready: {onboard.fix_hint(n)}"}
-        for n, v in lanes.items()
+        {"id": "enabled_not_ready", "account": n, "say": f"{n} is enabled but not ready: {onboard.fix_hint(n)}"}
+        for n, v in accounts.items()
         if v == "enabled" and n in ready and not ready[n]
     ]
     return out
 
 
 def doctor(cfg: dict[str, Json]) -> dict[str, Json]:
-    return {"v": 1, "harness": env.session_host(), "lanes": lane_rows(cfg), "notes": notes(cfg)}
+    return {"v": 1, "harness": env.session_host(), "accounts": account_rows(cfg), "notes": notes(cfg)}
 
 
 def print_doctor(d: dict[str, Json]) -> None:
-    lane_rows_, note_rows = [obj(r) for r in arr(d["lanes"])], [obj(n) for n in arr(d["notes"])]
-    w = max(len(as_str(r["lane"])) for r in lane_rows_)
-    print(f"{'lane':<{w}}  enabled  ready  fix")
-    for r in lane_rows_:
-        print(f"{as_str(r['lane']):<{w}}  {'yes' if r['enabled'] else 'no':<7}  {'yes' if r['ready'] else 'no':<5}  {r['fix']}".rstrip())
+    account_rows_, note_rows = [obj(r) for r in arr(d["accounts"])], [obj(n) for n in arr(d["notes"])]
+    w = max(len(as_str(r["account"])) for r in account_rows_)
+    print(f"{'account':<{w}}  enabled  ready  fix")
+    for r in account_rows_:
+        print(f"{as_str(r['account']):<{w}}  {'yes' if r['enabled'] else 'no':<7}  {'yes' if r['ready'] else 'no':<5}  {r['fix']}".rstrip())
     for n in note_rows:
         print(f"note [{n['id']}]: {n['say']}")
 
@@ -156,8 +169,8 @@ def config_set(key: str, value: str) -> dict[str, Json]:
         val = value
 
     parts = key.split(".")
-    if parts[:2] == ["profile", "lanes"] and (len(parts) != 3 or val not in PROFILE_VALUES):
-        raise SystemExit(f"route.py: config set profile.lanes.<LANE> enabled|declined (got {key} {value})")
+    if parts[:2] == ["profile", "accounts"] and (len(parts) != 3 or val not in PROFILE_VALUES):
+        raise SystemExit(f"route.py: config set profile.accounts.<ACCOUNT> enabled|declined (got {key} {value})")
 
     def put(cur: dict[str, Json]) -> None:
         node = cur

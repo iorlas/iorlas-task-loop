@@ -10,7 +10,7 @@
     "ts": 1792715820.755656,
     "run_id": null,
     "role": "worker",
-    "lane": "OPENAI_SUBSCRIPTION",
+    "account": "OPENAI_SUBSCRIPTION",
     "model": null,
     "secs": null,
     "outcome": "busy"
@@ -18,26 +18,26 @@
    "source": "history.jsonl",
    "expected_stop": {
     "reason": "busy",
-    "scope": "lane",
+    "scope": "account",
     "permanence": "transient",
     "retry_kind": "poll"
    }
   },
   {
-   "id": "no_lane",
-   "expected_reason": "no_lane",
+   "id": "no_account",
+   "expected_reason": "no_account",
    "history": {
     "ts": 1792857735.397677,
     "run_id": null,
     "role": "reviewer",
-    "lane": null,
+    "account": null,
     "model": null,
     "secs": null,
-    "outcome": "no_lane"
+    "outcome": "no_account"
    },
    "source": "history.jsonl",
    "expected_stop": {
-    "reason": "no_lane",
+    "reason": "no_account",
     "scope": "machine",
     "permanence": "needs_owner",
     "retry_kind": "none"
@@ -50,7 +50,7 @@
     "ts": 1792595980.093282,
     "run_id": null,
     "role": "planner",
-    "lane": "CLAUDE_SUBSCRIPTION",
+    "account": "CLAUDE_SUBSCRIPTION",
     "model": "opus-5.5",
     "secs": null,
     "outcome": "duplicate_task"
@@ -70,7 +70,7 @@
     "ts": 1792775341.047137,
     "run_id": null,
     "role": "worker",
-    "lane": null,
+    "account": null,
     "model": null,
     "secs": null,
     "outcome": "caller"
@@ -87,7 +87,7 @@
    "id": "engine_only_unenforced",
    "expected_reason": "engine_only_unenforced",
    "synthetic": true,
-   "source": "tests/test_run_command.py::RunCommand::test_a_pinned_ready_lane_with_an_unsupported_guard_is_not_over_limit",
+   "source": "tests/test_run_command.py::RunCommand::test_a_pinned_ready_account_with_an_unsupported_guard_is_not_over_limit",
    "expected_stop": {
     "reason": "engine_only_unenforced",
     "scope": "caller",
@@ -102,7 +102,7 @@
     "ts": 1792783578.84361,
     "run_id": "df4cb6a1-ed28-40dd-b627-d62b2671c96c",
     "role": "reviewer",
-    "lane": "GROK_SUBSCRIPTION",
+    "account": "GROK_SUBSCRIPTION",
     "model": "grok-4.7",
     "secs": 305.5,
     "outcome": "crash"
@@ -122,7 +122,7 @@
     "ts": 1792890769.822012,
     "run_id": "79c086fa-28e7-4e2f-a993-27e5816a7dd9",
     "role": "worker",
-    "lane": "DEEPSEEK_FREE",
+    "account": "DEEPSEEK_FREE",
     "model": "deepseek-v4.1-flash-free",
     "secs": 988.4,
     "outcome": "schema_invalid"
@@ -166,7 +166,7 @@
    "source": "the 25 Oct 05:36 codex_plan_review_only incident, answered now as a hold",
    "expected_stop": {
     "reason": "held",
-    "scope": "lane",
+    "scope": "account",
     "permanence": "transient",
     "retry_kind": "predicted"
    }
@@ -178,7 +178,7 @@
    "source": "tests/delegate/test_only_family.py",
    "expected_stop": {
     "reason": "only_family_unready",
-    "scope": "lane",
+    "scope": "account",
     "permanence": "transient",
     "retry_kind": "poll"
    }

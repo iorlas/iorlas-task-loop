@@ -158,8 +158,8 @@ class UsageCLI(Base):
 
         def status(reading):
             got.append(reading)
-            return {"ts": 1.0, "lanes": {"CLAUDE_SUBSCRIPTION": {"five": 6.0, "week": 4.0, "out": False}},
-                    "cockpit": {"lanes": [{"id": "CLAUDE_SUBSCRIPTION", "state": "ready"}]}}
+            return {"ts": 1.0, "accounts": {"CLAUDE_SUBSCRIPTION": {"five": 6.0, "week": 4.0, "out": False}},
+                    "cockpit": {"accounts": [{"id": "CLAUDE_SUBSCRIPTION", "state": "ready"}]}}
         with mock.patch.object(dl, "status_json", side_effect=status):
             out = io.StringIO()
             with mock.patch.object(sys, "stdout", out):

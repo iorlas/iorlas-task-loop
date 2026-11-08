@@ -1,4 +1,4 @@
-"""An install from before 0.48 (CLAUDE_CREDIT lane, codex_login_pid) must upgrade with no hand edits"""
+"""Retired entries in current stored formats are filtered without rewriting; stale versions are refused."""
 
 import contextlib
 import io
@@ -32,7 +32,7 @@ class Upgrade(T.RunBase):
         return doc, err.getvalue().splitlines(), path
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_state_drops_retired_keys_and_lane_entries_keeps_live_ones(self):
+    def test_state_drops_retired_keys_and_account_entries_keeps_live_ones(self):
         before = (FIX / "state_pre_0_48.json").read_bytes()
         doc, warned, path = self.load_state()
         assert sorted(doc.out) == ["OPENAI_SUBSCRIPTION"]
@@ -48,12 +48,12 @@ class Upgrade(T.RunBase):
         assert path.read_bytes() == before  # a load alone rewrites nothing
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_state_retired_lane_in_holds_leases_and_refs_goes_too(self):
+    def test_state_retired_account_in_holds_leases_and_refs_goes_too(self):
         path = Path(self.tmp.name, "state.json")
         d = json.loads((FIX / "state_pre_0_48.json").read_text())
-        d["holds"]["h2"] = {**d["holds"]["h1"], "id": "h2", "lane": "CLAUDE_CREDIT"}
-        d["leases"]["r-old"] = {**d["leases"]["r-live"], "lane": "CLAUDE_CREDIT"}
-        d["refs"]["abc"] = {"lane": "CLAUDE_CREDIT", "model": "m", "effort": "e", "mode": "x"}
+        d["holds"]["h2"] = {**d["holds"]["h1"], "id": "h2", "account": "CLAUDE_CREDIT"}
+        d["leases"]["r-old"] = {**d["leases"]["r-live"], "account": "CLAUDE_CREDIT"}
+        d["refs"]["abc"] = {"account": "CLAUDE_CREDIT", "model": "m", "effort": "e", "mode": "x"}
         path.write_text(json.dumps(d))
         with contextlib.redirect_stderr(io.StringIO()):
             doc = StateStore(path).load()
@@ -84,7 +84,7 @@ class Upgrade(T.RunBase):
         assert str(cfg) in w[0]
         assert "safe to delete" in w[0]
         assert cfg.read_bytes() == before
-        assert env.profile_lanes()["CLAUDE_CREDIT"] == "declined"  # a retired lane in the profile is just ignored
+        assert env.profile_accounts()["CLAUDE_CREDIT"] == "declined"  # a retired account in the profile is just ignored
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_leftovers_are_listed_by_doctor_and_never_deleted(self):
@@ -132,5 +132,5 @@ class Upgrade(T.RunBase):
         assert "sk-secret" not in p.stdout + p.stderr
         st = json.loads((d / "state.json").read_text())
         assert "codex_login_pid" not in st
-        assert "h1" in st["holds"]  # the live lane's hold survived the run's own save
+        assert "h1" in st["holds"]  # the live account's hold survived the run's own save
         assert (d / "claude-credit.key").exists() and (d / "ledger.jsonl").exists()

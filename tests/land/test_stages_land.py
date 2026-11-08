@@ -292,7 +292,7 @@ class DeadLane(StagesTest):
 
     def blips(self, n, lane="GROK_SUBSCRIPTION"):
         """vendor_blip (lane / transient / poll): the lane failed to start. Three polls wait for it, the next try goes elsewhere."""
-        return [te.stop("vendor_blip", family="xai", lane=lane, say="opencode failed before any work: spending limit")] * n
+        return [te.stop("vendor_blip", family="xai", account=lane, say="opencode failed before any work: spending limit")] * n
 
     def test_a_reviewer_retry_still_avoids_the_writers_family(self):  # tl-9un.15: the failing family was sent as the writer
         rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [*self.blips(4), CLEAN]})
@@ -326,7 +326,7 @@ class DeadLane(StagesTest):
         assert not self.closed
 
     def test_a_busy_lane_is_waited_for_as_before(self):
-        busy = te.stop("busy", family="openai", lane="OPENAI_SUBSCRIPTION", say="no free slot")
+        busy = te.stop("busy", family="openai", account="OPENAI_SUBSCRIPTION", say="no free slot")
         _rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [busy, CLEAN]})
         reviews = [c for c in s.calls if c[0] == "reviewer"]
         assert reviews[1][2] == reviews[0][2]
@@ -389,7 +389,7 @@ class Contracts(StagesTest):
     def test_a_lane_that_is_out_for_hours_pauses_with_its_reset_time_and_is_not_waited_for(self):
         # lifesim r0yc/rl4s: the dead lane's own reset time is hours away; delegate re-routes inside the call, so a stop is final
         due = time.time() + 3 * 3600
-        out = te.stop("rate_limited", say="lane_out: ZAI", lane="ZAI", at=due)
+        out = te.stop("rate_limited", say="lane_out: ZAI", account="ZAI", at=due)
         rc, s = self.run_engine({"plan": [PLAN], "write": [out, WRITE], "review": [CLEAN]})
         assert rc == 2
         assert [c[0] for c in s.calls] == ["planner", "worker"]
@@ -400,7 +400,7 @@ class Contracts(StagesTest):
             )
 
     def test_a_lane_that_is_out_with_no_reset_time_pauses_at_once(self):
-        out = te.stop("rate_limited", say="lane_out: ZAI", lane="ZAI")
+        out = te.stop("rate_limited", say="lane_out: ZAI", account="ZAI")
         rc, s = self.run_engine({"plan": [PLAN], "write": [out], "review": [CLEAN]})
         assert rc == 2
         assert [c[0] for c in s.calls] == ["planner", "worker"]
@@ -564,7 +564,7 @@ class ClaimPerBead(StagesTest):
         assert "changed hands" in why
 
     def test_a_loop_that_pauses_a_bead_clears_its_assignee(self):
-        late = te.stop("no_lane", at=time.time() + 3600, family="openai", lane="OPENAI", say="no lane")
+        late = te.stop("no_account", at=time.time() + 3600, family="openai", account="OPENAI", say="no lane")
         _rc, _s = self.run_engine({"plan": [late]})
         assert self.eng.why.startswith("paused:"), self.eng.why
         updates = [c for c in self.bd_calls if c[:2] == ("update", "t-1") and "--append-notes" not in c]

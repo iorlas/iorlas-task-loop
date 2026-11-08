@@ -52,7 +52,7 @@ class DelegateWireChoices(Case):
         stop = {"reason": "x", "scope": "galaxy", "permanence": "transient", "retry": {"kind": "none"}}
         with pytest.raises(ValueError):
             delegate_wire.stop_of(stop)
-        stop["scope"] = "lane"
+        stop["scope"] = "account"
         got = delegate_wire.stop_of(stop)
         assert got is not None
-        assert (got.scope if got else None) == "lane"
+        assert (got.scope if got else None) == "account"

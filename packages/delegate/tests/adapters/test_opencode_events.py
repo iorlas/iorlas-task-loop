@@ -154,7 +154,7 @@ class Stream:
         h, clock = OpenCodeHarness(), [100.0]
         with TemporaryDirectory() as d:
             sink = LiveSink("opencode", str(Path(d) / "l.jsonl"), wall=lambda: clock[0], run_id="r")
-            sink.start(lane="ZAI_CODING_SUBSCRIPTION", model="m", effort="high", role="worker")
+            sink.start(account="ZAI_CODING_SUBSCRIPTION", model="m", effort="high", role="worker")
             for e in h.parse_log_line(lines("opencode_session.log")[1]):
                 sink.feed(e)
             clock[0] = 104.5
@@ -219,9 +219,9 @@ class World(Case):
         assert s.env["SHELL"] == (root + "/opencode-shell-rid12345.sh")
         shell.assert_called_once()
         assert json.loads(s.env["OPENCODE_CONFIG_CONTENT"])["permission"]["task"] == "deny"
-        assert "OPENCODE_AUTH_JSON" in s.env  # an unpinned lane keeps the login it runs on
+        assert "OPENCODE_AUTH_JSON" in s.env  # an unpinned account keeps the login it runs on
 
-    def test_a_pinned_lane_drops_credential_overrides_and_enables_one_provider(self):
+    def test_a_pinned_account_drops_credential_overrides_and_enables_one_provider(self):
         _, s, _, root = self.spec(Profile(providers=("zai-coding-plan",), own_data=True))
         assert "OPENCODE_AUTH_JSON" not in s.env
         assert json.loads(s.env["OPENCODE_CONFIG_CONTENT"])["enabled_providers"] == ["zai-coding-plan"]

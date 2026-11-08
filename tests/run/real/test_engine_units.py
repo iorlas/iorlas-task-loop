@@ -59,24 +59,24 @@ class DelegateLauncher(T.EngineTest):
     # switches lanes on a resume, but a fresh call gets the role's next rung (Sonnet on the claude lane) at once
     OUT_LONG = stop("rate_limited", at=time.time() + 3600, say="cannot continue t now")
     # delegate says the writer fell back off its first lane (to xai, so the reviewer, claude, is another family)
-    FRESH = full(WRITE, "w2", fallback=True, first_lane="OPENAI_SUBSCRIPTION", family="xai")
+    FRESH = full(WRITE, "w2", fallback=True, first_account="OPENAI_SUBSCRIPTION", family="xai")
 
 
     # tl-bxk.10.5 2026-10-21: after a real outage the Sonnet thread stayed the writer for every later round of
     # lifesim-fld.27.7, d5f.33, 1eg2 and d5f.54 while Codex was usable again
-    BACK = full(WRITE, "w3", family="openai", lane="OPENAI_SUBSCRIPTION", model="gpt")
-    OUT_L: ClassVar[Any] = dict(OUT_LONG, lane="OPENAI_SUBSCRIPTION")
+    BACK = full(WRITE, "w3", family="openai", account="OPENAI_SUBSCRIPTION", model="gpt")
+    OUT_L: ClassVar[Any] = dict(OUT_LONG, account="OPENAI_SUBSCRIPTION")
 
     def transitions(self):
         return [json.loads(ln) for ln in self.eng.log_path.read_text().splitlines() if '"transition"' in ln]
 
     def lanes(self, **out):
         """`route.py status --json` lanes: name -> {out}."""
-        return mock.patch.object(lroute, "status_json", return_value={"lanes": {k: {"out": v} for k, v in out.items()}})
+        return mock.patch.object(lroute, "status_json", return_value={"accounts": {k: {"out": v} for k, v in out.items()}})
 
 
     # contract 4: an answer that picked a lane says whether it is a fallback (and from which first lane, when it can)
-    SONNET_FB: ClassVar[Any] = dict(FRESH, rung=1, fallback=True, fallback_reason="ceiling", first_lane="OPENAI_SUBSCRIPTION")
+    SONNET_FB: ClassVar[Any] = dict(FRESH, rung=1, fallback=True, fallback_reason="ceiling", first_account="OPENAI_SUBSCRIPTION")
     CODEX_FIRST: ClassVar[Any] = dict(BACK, rung=0, fallback=False, fallback_reason=None)
     no_checks: ClassVar[Any] = dict(PLAN, stages=[dict(PLAN["stages"][0], checks=[])])  # FRESH writes no f.txt
 

@@ -31,7 +31,7 @@ class LiveStart(LiveRec):
     KIND: ClassVar[str] = "start"
     harness: str
     pid: int
-    lane: str | Absent = ABSENT
+    account: str | Absent = ABSENT
     model: str | Absent = ABSENT
     effort: str | Absent = ABSENT
     role: str | Absent = ABSENT

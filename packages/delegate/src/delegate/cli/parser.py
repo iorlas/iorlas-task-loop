@@ -8,7 +8,7 @@ from typing import NoReturn, override
 
 from delegate.app import answer
 
-USAGE = """delegate router: deterministic lane and step selection for an LLM orchestrator.
+USAGE = """delegate router: deterministic account and step selection for an LLM orchestrator.
 
 Python 3.15+, standard library only. macOS.
 The model supplies only what the script cannot read itself; the script decides.
@@ -21,15 +21,15 @@ The model supplies only what the script cannot read itself; the script decides.
                     [--engine-only RECIPE]... [--read-root DIR]... [--engine-only-advisory]\
  [--claude-usage JSON] [--parent SESSION] [--task ID]\
  [--title T]    brief on stdin; one JSON object on stdout, exit 0 (see docs/dev/integrations.md)
-  route.py net [--lane L] [--host H ...]    is the machine online? stdlib sockets, no quota, answers in under 3 s: {up, why, hosts}
-  route.py report --lane LANE --event out|ok [--until EPOCH|ISO]
+  route.py net [--account L] [--host H ...]    is the machine online? stdlib sockets, no quota, answers in under 3 s: {up, why, hosts}
+  route.py report --account ACCOUNT --event out|ok [--until EPOCH|ISO]
   route.py capture-limits [--print]  (status line JSON on stdin)
-  route.py doctor [--json]   (also `init`) a table of every lane: enabled, ready, and what to run to fix it
+  route.py doctor [--json]   (also `init`) a table of every account: enabled, ready, and what to run to fix it
   route.py config set KEY VALUE | show
-  route.py hold LANE --until EPOCH|ISO|+2h|+3d [--roles worker,light] [--reason TEXT] | release ID|LANE | holds   an owner hold\
- stops a lane for some roles; --until is mandatory
+  route.py hold ACCOUNT --until EPOCH|ISO|+2h|+3d [--roles worker,light] [--reason TEXT] | release ID|ACCOUNT | holds   an owner hold\
+ stops an account for some roles; --until is mandatory
 
-Data: routing.json next to this file (lanes, models, roles, thresholds).
+Data: routing.json next to this file (accounts, models, roles, thresholds).
 Per-user settings: <config dir>/config.json (same keys as "settings"); profile and state live in <config dir>:
   $DELEGATE_CONFIG_DIR, else Claude Code's plugin data dir (~/.claude/plugins/data/<plugin>-<marketplace>); a checkout must set\
  the variable.
@@ -79,7 +79,7 @@ def _add_status_verbs(sub: argparse._SubParsersAction[CallParser]) -> None:
     n.add_argument("--cwd")
     n.add_argument("--verbose", action="store_true")
     r = sub.add_parser("report")
-    r.add_argument("--lane", required=True)
+    r.add_argument("--account", required=True)
     r.add_argument("--event", choices=["out", "ok"], required=True)
     r.add_argument("--until")
     cl = sub.add_parser("capture-limits")
@@ -93,7 +93,7 @@ def _add_status_verbs(sub: argparse._SubParsersAction[CallParser]) -> None:
     g.add_argument("--exec-policy", help="the per-call argv grant written by delegate")
     g.add_argument("--exec-allow", nargs=argparse.REMAINDER, help="execute one host.json writer argv through the guard")
     nt = sub.add_parser("net", help="is the machine online? stdlib sockets, no quota")
-    nt.add_argument("--lane")
+    nt.add_argument("--account")
     nt.add_argument("--host", action="append", help="a host or host:port; repeatable")
     sub.add_parser("contract").add_argument("--json", action="store_true")
     cf = sub.add_parser("config")
@@ -127,7 +127,7 @@ def _add_run(sub: argparse._SubParsersAction[CallParser]) -> None:
     ru.add_argument(
         "--engine-only-advisory",
         action="store_true",
-        help="allow write lanes that cannot deny engine-only recipes, with a warning; the brief must say so",
+        help="allow write accounts that cannot deny engine-only recipes, with a warning; the brief must say so",
     )
     ru.add_argument(
         "--instructions-ref",
@@ -149,11 +149,11 @@ def _add_run(sub: argparse._SubParsersAction[CallParser]) -> None:
 
 
 def _add_hold_verbs(sub: argparse._SubParsersAction[CallParser]) -> None:
-    ho = sub.add_parser("hold", help="stop a lane for some roles until a time; --until is mandatory")
-    ho.add_argument("lane")
+    ho = sub.add_parser("hold", help="stop an account for some roles until a time; --until is mandatory")
+    ho.add_argument("account")
     ho.add_argument("--until")
     ho.add_argument("--roles")
     ho.add_argument("--reason", default="")
     ho.add_argument("--set-by", default="owner")
-    sub.add_parser("release", help="end a hold early (by id or lane)").add_argument("target")
+    sub.add_parser("release", help="end a hold early (by id or account)").add_argument("target")
     sub.add_parser("holds", help="every hold in force, with holder and expiry")

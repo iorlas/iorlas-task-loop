@@ -88,7 +88,7 @@ class Fake(Case):
 
     def test_answer_keeps_the_actual_argv_and_unabridged_stdout_and_stderr(self):
         seen = []
-        body = fake_route.stop_answer("no_lane", say="no ready lane")
+        body = fake_route.stop_answer("no_account", say="no ready lane")
         stdout = "routing trace " + "x" * 500 + "\n" + json.dumps(body)
         stderr = "harness trace " + "y" * 500
 

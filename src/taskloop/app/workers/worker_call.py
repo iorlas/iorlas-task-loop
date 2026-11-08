@@ -311,13 +311,13 @@ class WorkerCall:
         if not (wall or (res.stop is not None and res.stop.reason == delegate_wire.REASON_TIMEOUT)):
             return ans
         live = runner.live_start()
-        lane = res.lane or (live.lane if live else "")
+        lane = res.account or (live.account if live else "")
         self.e.log.emit(rec.Overrun(stage=c.step or c.node, budget_s=c.limit_s, elapsed_s=round(max(elapsed, res.secs), 1), lane=lane))
         stop = StopFacts(
-            reason=REASON_OVERRUN, scope="lane", permanence="transient", retry=delegate_wire.Retry(kind="none"), ref=res.ref or ""
+            reason=REASON_OVERRUN, scope="account", permanence="transient", retry=delegate_wire.Retry(kind="none"), ref=res.ref or ""
         )
         said = f"the {c.node} call used its {int(c.limit_s // 60)} min budget"
-        return Answer(res.replace(stop=stop, lane=lane or None, say=said), ans.raw, ans.argv, ans.trace)
+        return Answer(res.replace(stop=stop, account=lane or None, say=said), ans.raw, ans.argv, ans.trace)
 
     def note_result(self, c: Call, ans: Answer, runner: Any) -> None:
         """The records a returned call leaves: the vendor error of a stop, the CallState."""
@@ -330,7 +330,7 @@ class WorkerCall:
                 rec.VendorError(
                     node=e.steps.id,
                     reason=s.reason or res.say or "stopped",
-                    lane=res.lane or "",
+                    lane=res.account or "",
                     model=res.model or "",
                     error=(res.first_error or res.say or "")[:300],
                     error_observed=bool(res.first_error),
@@ -441,7 +441,7 @@ class WorkerCall:
                 e.write.lane_notes.append(note)
                 e.warn(note)
                 e.comment("Lane (engine): " + note)
-        model = f"{res.model} {res.effort} on {res.lane}"
+        model = f"{res.model} {res.effort} on {res.account}"
         (e.run_dir / f"{c.node}-{e.stats['nodes']}.json").write_text(json.dumps(res.data, indent=1))
         shown = self.ops.summarize(c.node, res.data)
         via = f"{res.family or 'delegate'}{(':' + model) if model else ''}"

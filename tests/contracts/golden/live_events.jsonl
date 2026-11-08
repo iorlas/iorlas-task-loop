@@ -1,4 +1,4 @@
-{"v": 1, "kind": "start", "t": 1793050200.5, "harness": "opencode", "pid": 69272, "lane": "L", "model": "m", "effort": "high", "role": "worker"}
+{"v": 1, "kind": "start", "t": 1793050200.5, "harness": "opencode", "pid": 69272, "account": "L", "model": "m", "effort": "high", "role": "worker"}
 {"v": 1, "kind": "cmd_start", "t": 1793050200.5, "id": "oc:2", "text": "python3 -m unittest", "cwd": "/w", "prov": true}
 {"v": 1, "kind": "cmd_end", "t": 1793050200.5, "id": "oc:2", "exit": 1, "secs": 43.4, "out": "FAILED"}
 {"v": 1, "kind": "tool_start", "t": 1793050200.5, "id": "oc:1", "text": "read x", "prov": true}

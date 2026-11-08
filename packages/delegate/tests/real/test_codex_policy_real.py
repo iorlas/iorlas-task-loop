@@ -3,7 +3,7 @@
 import copy
 
 import routing_support as support
-from test_route import CFG, T, lanes
+from test_route import CFG, T, accounts
 
 from tltestkit.procsim import real_proc
 
@@ -20,7 +20,7 @@ class CodexPolicy:
         steps = [s for v in r["by_author"].values() for s in v if s["on"] == "openai"]
         assert steps
         assert {s["effort"] for s in steps} == {"medium"}
-        ls = {"OPENAI_SUBSCRIPTION": lanes()["OPENAI_SUBSCRIPTION"]}
+        ls = {"OPENAI_SUBSCRIPTION": accounts()["OPENAI_SUBSCRIPTION"]}
         d = support.decide("reviewer", self.cfg, ls, {}, T, self.args)
         assert d["effort"] == "medium"
         assert "model_reasoning_effort=medium" in d["how"]["cli"]

@@ -67,7 +67,7 @@ class History(Case):
     def test_filing_an_answer_records_and_prunes(self):
         UsageHistory(self.cfg).record(snap(T - USAGE_KEEP_S - 5))
         window = {"name": "x", "used_pct": 3, "resets_at": T + H}
-        answer = json.dumps({"ts": T, "lanes": {}, "cockpit": {"lanes": [{"id": "A", "state": "ready", "windows": [window]}]}})
+        answer = json.dumps({"ts": T, "accounts": {}, "cockpit": {"accounts": [{"id": "A", "state": "ready", "windows": [window]}]}})
         assert lanes.file_snapshot(snapshot_of(json.loads(answer)), self.cfg) is None
         assert [(r.at, r.used_pct) for r in self.h.rows()] == [(T, 3.0)]
 

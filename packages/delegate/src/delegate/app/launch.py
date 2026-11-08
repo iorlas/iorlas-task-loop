@@ -87,7 +87,7 @@ def ref_problem(kind: str, ref: str) -> str:
 
 
 def repo_instruction_text(cwd: str, cap: int = 32768, ref: str = "") -> str:
-    """--restricted keeps Claude from loading the repo's CLAUDE.md; Codex reads AGENTS.md. Both lanes get the same files
+    """--restricted keeps Claude from loading the repo's CLAUDE.md; Codex reads AGENTS.md. Both accounts get the same files
     (repo_instructions),
     capped like Codex's project_doc_max_bytes."""
     out, left = "", cap
@@ -145,15 +145,15 @@ def how_of(d: dict[str, Json]) -> How:
     )
 
 
-def lane_gone_check(lane: str, since: float) -> Callable[[], tuple[str, str] | None]:
-    """-> a function: (the mark's reason: limit | credit | logged_out, its words) of a mark another process set on `lane` after `since`
+def account_gone_check(account: str, since: float) -> Callable[[], tuple[str, str] | None]:
+    """-> a function: (the mark's reason: limit | credit | logged_out, its words) of a mark another process set on `account` after `since`
     (wall clock), else None. The worker
-    still running there is burning an exhausted lane."""
+    still running there is burning an exhausted account."""
 
     def gone() -> tuple[str, str] | None:
-        o = env.load_state().out.get(lane)
+        o = env.load_state().out.get(account)
         if o and o.set >= since and o.until > env.now() and o.reason in ("limit", "credit", "logged_out"):
-            return o.reason, o.why or "lane marked out"
+            return o.reason, o.why or "account marked out"
         return None
 
     return gone
@@ -182,7 +182,7 @@ def denied_items(hx: Harness, read_only: bool | None, engine_only: tuple[str, ..
 def prepare_codex(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: float, cfg: dict[str, Json]) -> Prep | dict[str, Json]:
     h = how_of(d)
     role = d.get("role", getattr(a, "role", None))
-    hold = HoldBook(env.load_state().holds).covering(as_str(d.get("lane")) or "OPENAI_SUBSCRIPTION", as_opt_str(role), t)
+    hold = HoldBook(env.load_state().holds).covering(as_str(d.get("account")) or "OPENAI_SUBSCRIPTION", as_opt_str(role), t)
     if hold:
         return HoldBook.refusal(hold, "no worker was launched")
     exe = shutil.which("codex")
@@ -257,21 +257,21 @@ def prepare_claude(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: flo
 
 
 def prepare_opencode(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: float, cfg: dict[str, Json]) -> Prep | dict[str, Json]:
-    """OpenCode headless runner for subscription and isolated free-only lanes."""
-    h, lane = how_of(d), as_str(d["lane"])
+    """OpenCode headless runner for subscription and isolated free-only accounts."""
+    h, account = how_of(d), as_str(d["account"])
     exe = OpenCodeHarness.find_exe()
     if not exe or not OpenCodeHarness.supported():
-        return settle.stop("setup_failed", f"{lane} needs macOS and the opencode CLI (route.py doctor)")
+        return settle.stop("setup_failed", f"{account} needs macOS and the opencode CLI (route.py doctor)")
     nested = opencode_sandbox.preflight()
-    if nested:  # before any model token: the lane is out for a while, so the next call routes to the next lane
-        settler().mark_out(lane, t + 3600, f"nested_sandbox: {nested}", t, "limit", "guess")
+    if nested:  # before any model token: the account is out for a while, so the next call routes to the next account
+        settler().mark_out(account, t + 3600, f"nested_sandbox: {nested}", t, "limit", "guess")
         return settle.stop(
             "setup_failed",
-            f"nested_sandbox: {lane} commands cannot run here ({nested}); this process is already inside a sandbox. "
-            "Rerun to use the next lane.",
+            f"nested_sandbox: {account} commands cannot run here ({nested}); this process is already inside a sandbox. "
+            "Rerun to use the next account.",
         )
     if (
-        lane == "ZAI_CODING_SUBSCRIPTION" and h.model not in harnesses.ZAI_MODELS
+        account == "ZAI_CODING_SUBSCRIPTION" and h.model not in harnesses.ZAI_MODELS
     ):  # pin subscription routing; never substitute the pay-as-you-go `zai` provider
         return settle.stop("setup_failed", "Z.ai Coding Plan model must use the subscription provider.")
     rules = " ".join((SECRET_RULE, GIT_RULES, EDIT_RULE, NO_SUBAGENTS_RULE, opencode_sandbox.RULE, DENIED_RULE))
@@ -283,7 +283,7 @@ def prepare_opencode(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: f
         rules += "\n\nYour final message must be only a JSON object matching this JSON Schema:\n" + Path(a.schema).read_text(
             encoding="utf-8"
         )
-    hx = OpenCodeHarness(harnesses.OC_PROFILES.get(lane, Profile()), env.config_dir(), harnesses.sandbox())
+    hx = OpenCodeHarness(harnesses.OC_PROFILES.get(account, Profile()), env.config_dir(), harnesses.sandbox())
     spec = hx.launch_spec(
         LaunchInputs(
             exe=exe,
@@ -299,7 +299,9 @@ def prepare_opencode(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: f
             read_roots=tuple(getattr(a, "read_root", None) or ()),
         )
     )
-    if lane == "DEEPSEEK_FREE" and not hx.free_model_ok(h.model, spec.env):  # fail closed if the exact free model or its zero price is gone
+    if account == "DEEPSEEK_FREE" and not hx.free_model_ok(
+        h.model, spec.env
+    ):  # fail closed if the exact free model or its zero price is gone
         hx.cleanup()
         o = classify(None, structured={"free_model_gone": "exact free model unavailable or zero catalog price unverified"})
         assert o is not None
@@ -310,20 +312,20 @@ def prepare_opencode(d: dict[str, Json], brief: str, a: env.Args, rid: str, t: f
 PREPARE: Final = {"codex": prepare_codex, "claude_p": prepare_claude, "opencode": prepare_opencode}
 
 
-def login_text(kind: str, lane: str) -> tuple[str, str]:
-    """(the hint stored with a lane that is logged out, the text of the answer with {why})."""
+def login_text(kind: str, account: str) -> tuple[str, str]:
+    """(the hint stored with an account that is logged out, the text of the answer with {why})."""
     if kind == "codex":
         return "logged out: run `codex login`", "codex is not logged in: {why} (route.py doctor)"
     if kind == "claude_p":
         return "logged out: run `claude auth login`", "claude is not logged in: {why} (claude auth login)"
     hint = (
         "free OpenCode access refused; no paid credentials will be used"
-        if lane == "DEEPSEEK_FREE"
+        if account == "DEEPSEEK_FREE"
         else "run `opencode auth login` and choose Z.AI Coding Plan; enter your Coding Plan key in your own terminal"
-        if lane == "ZAI_CODING_SUBSCRIPTION"
+        if account == "ZAI_CODING_SUBSCRIPTION"
         else "run `opencode auth login` (xAI, SuperGrok Subscription)"
     )
-    return hint, f"{lane}: {hint}: {{why}}"
+    return hint, f"{account}: {hint}: {{why}}"
 
 
 def codex_usage(res: dict[str, Json], x: dict[str, Json]) -> None:
@@ -339,11 +341,11 @@ def codex_usage(res: dict[str, Json], x: dict[str, Json]) -> None:
     res.update(tokens=tokens, context_k=codex_account.context_k(ref), acct=accounting.codex(tokens))
 
 
-def lane_cleared(lane: str) -> Callable[[StateDoc], object]:
-    """The state change that drops the out-mark of `lane`."""
+def account_cleared(account: str) -> Callable[[StateDoc], object]:
+    """The state change that drops the out-mark of `account`."""
 
     def clear(s: StateDoc) -> object:
-        return s.out.pop(lane, None)
+        return s.out.pop(account, None)
 
     return clear
 
@@ -365,12 +367,10 @@ def launch_worker(
         prep.hx.cleanup()
 
 
-def run_prepared(
-    prep: Prep, d: dict[str, Json], a: env.Args, rid: str, t: float, hooks: RunHooks
-) -> dict[str, Json]:
+def run_prepared(prep: Prep, d: dict[str, Json], a: env.Args, rid: str, t: float, hooks: RunHooks) -> dict[str, Json]:
     """Use an already prepared harness; launch_worker owns cleanup even if publication or supervision raises."""
     h = how_of(d)
-    lane = as_str(d["lane"])
+    account = as_str(d["account"])
     hx, spec, x = prep
 
     def on_ref(ref: str) -> None:
@@ -381,7 +381,7 @@ def run_prepared(
         on_ref(hx.evidence.ref)  # known before the first event: a resume, or claude's own --session-id
     live = LiveSink(hx.kind, run_id=rid)
     live.start(
-        lane=as_opt_str(d.get("lane")),
+        account=as_opt_str(d.get("account")),
         model=as_opt_str(d.get("model")),
         effort=as_opt_str(d.get("effort")),
         role=as_opt_str(d.get("role") or getattr(a, "role", None)),
@@ -393,20 +393,20 @@ def run_prepared(
         live,
         limits=harnesses.LIMITS[harnesses.CLI_OF_KIND[h.kind]],
         clock=harnesses.now,
-        gone=lane_gone_check(lane, time.time()),
+        gone=account_gone_check(account, time.time()),
         log=log,
         policy=secret_in if hx.secret_event else None,
-        net_up=lambda: net.net_up(lane),
+        net_up=lambda: net.net_up(account),
     )
     out = sup.run(spec, a.timeout)
     hx.export(spec.env)
-    gaps.flush(sup.dog, env.history_add, lane, as_str(d["model"]), out.watch.why is None)  # role "gap": the health fold ignores it
+    gaps.flush(sup.dog, env.history_add, account, as_str(d["model"]), out.watch.why is None)  # role "gap": the health fold ignores it
     return finish_run(hx, h, a, d, t, out, x)
 
 
 def finish_run(hx: Harness, h: How, a: env.Args, d: dict[str, Json], t: float, out: RunOutcome, x: dict[str, Json]) -> dict[str, Json]:
-    """The result dict of a finished supervised run: the CLI's own error is classified and applied, a clean run clears its lane."""
-    lane = as_str(d["lane"])
+    """The result dict of a finished supervised run: the CLI's own error is classified and applied, a clean run clears its account."""
+    account = as_str(d["account"])
     sm, w = out.summary, out.watch
     res: dict[str, Json] = dict(sm.res, stderr=out.err, denied=denied_items(hx, h.read_only, tuple(getattr(a, "engine_only", None) or ())))
     if h.kind == "codex":
@@ -434,11 +434,11 @@ def finish_run(hx: Harness, h: How, a: env.Args, d: dict[str, Json], t: float, o
             sm.rc,
             sm.tail,
             reset=(lambda: codex_reset_now(t)) if hx.kind == "codex" else None,
-            login=login_text(h.kind, lane),
+            login=login_text(h.kind, account),
             hung=hung,
         )
     else:
-        env.update_state(lane_cleared(lane))
+        env.update_state(account_cleared(account))
         res.update(data=sm.data if sm.data is not None else answer.parse_data(sm.text, a.schema))
         if sm.warnings:
             res["warnings"] = sm.warnings

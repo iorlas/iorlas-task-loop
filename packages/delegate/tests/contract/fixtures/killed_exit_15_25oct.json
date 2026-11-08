@@ -2,7 +2,7 @@
  "fixture": 1,
  "scenario": "opencode ended by hand with SIGTERM at 05:18:39 25 Oct was answered failed/worker_failed (next: fail); a signal route.py did not send is `killed`",
  "cli": "opencode",
- "lane": "DEEPSEEK_FREE",
+ "account": "DEEPSEEK_FREE",
  "real": "rc and the empty error are real (engine text 'opencode exited -15 without an error:')",
  "expected_reason": "killed",
  "rows": [

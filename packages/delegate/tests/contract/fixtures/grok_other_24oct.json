@@ -2,7 +2,7 @@
  "fixture": 1,
  "scenario": "Grok starts that failed for another reason, 24 Oct: 'Server error.' x3 and a connection failure",
  "cli": "opencode",
- "lane": "GROK_SUBSCRIPTION",
+ "account": "GROK_SUBSCRIPTION",
  "real": "vendor text real",
  "rows": [
   {

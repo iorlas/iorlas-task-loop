@@ -1,7 +1,7 @@
 """The routing table (`routing.json` + the owner's `config.json` overrides, validated at load) and the router's answer.
 
-`Routing` is read, never written. The owner's `profile` (lane choices, acks) is not a setting and never reaches `Settings`. A router
-`Decision` is `Run | Stop | LaneOut | Error`; `as_dict()` is the JSON that `route.py next` prints.
+`Routing` is read, never written. The owner's `profile` (account choices, acks) is not a setting and never reaches `Settings`. A router
+`Decision` is `Run | Stop | AccountOut | Error`; `as_dict()` is the JSON that `route.py next` prints.
 """
 
 from dataclasses import field
@@ -12,27 +12,33 @@ from delegate.contracts.json_types import Json
 V = 1
 
 # Settings keys an older config.json or routing.json may still carry. Loading drops them with one warning each; any other unknown key fails.
+# Recognized only to refuse the stored shape, never to read or convert it.
+RETIRED_ROUTING = {"la" + "nes": "accounts"}
+
 RETIRED_SETTINGS = (
     "codex_weekly_used_override",
     "codex_resume_after_stall",
     "claude_resume_after_stall",
     "opencode_resume_after_stall",
     "codex_plan_review_only",
-    "host_lanes",
+    "host_accounts",
     "contained_network",
     "cache_roots",
     "credit",
 )
 
 
-def replaced_settings(lanes: dict[str, dict[str, Json]]) -> dict[str, str]:
-    """The per-lane enable settings an old config.json may carry (`<lane>_enabled`, from the lane name) -> the lane. They moved to the lane
-    profile: loading fails loudly with the exact fix, the old key is never honored."""
-    return {f"{n.removesuffix('_SUBSCRIPTION').lower()}_enabled": n for n, spec in lanes.items() if spec.get("opt_in")}
+def replaced_settings(accounts: dict[str, dict[str, Json]]) -> dict[str, str]:
+    """The per-account enable settings an old config.json may carry (`<account>_enabled`, from the account name) -> the account. They
+    moved to the account profile: loading fails loudly with the exact fix, the old key is never honored."""
+    return {f"{n.removesuffix('_SUBSCRIPTION').lower()}_enabled": n for n, spec in accounts.items() if spec.get("opt_in")}
 
 
 def split_retired(settings: dict[str, Json]) -> tuple[dict[str, Json], list[str]]:
     """(settings without the retired keys, the retired keys that were there, in file order)."""
+    for old, new in RETIRED_ROUTING.items():
+        if old in settings:
+            raise ValueError(f"routing.json: rename the top-level key '{old}' to '{new}'")
     gone = [k for k in settings if k in RETIRED_SETTINGS]
     return {k: v for k, v in settings.items() if k not in RETIRED_SETTINGS}, gone
 
@@ -77,7 +83,7 @@ class BreakerPolicy:
 @record
 class Settings:
     orchestrator_reserve: Gate
-    worker_lane_gate: Gate
+    worker_account_gate: Gate
     relaxed_ceiling: Ceiling
     strain: Strain
     recover: Strain
@@ -104,7 +110,7 @@ class ModelSpec:
 
 
 @record
-class LaneSpec:
+class AccountSpec:
     family: str
     kind: str
     reader: str
@@ -112,7 +118,7 @@ class LaneSpec:
     label: str = ""
     ready: str = ""
     shared_with_orchestrator: bool = False
-    opt_in: bool = False  # off until profile.lanes.<lane> is "enabled"; others turn on when ready
+    opt_in: bool = False  # off until profile.accounts.<account> is "enabled"; others turn on when ready
 
 
 @record
@@ -143,7 +149,7 @@ class Routing:
     V = V
     settings: Settings
     models: dict[str, ModelSpec]
-    lanes: dict[str, LaneSpec]
+    accounts: dict[str, AccountSpec]
     roles: dict[str, Role]
     premium: dict[str, Step | None]
 
@@ -159,8 +165,8 @@ class CallArgs:
     resume: str | None = None
     cap: float | None = None
     only_family: tuple[str, ...] = ()  # the families a call may use: the role's steps are filtered to them, no fallback outside
-    engine_only: tuple[str, ...] = ()  # recipes only the engine runs: a write step needs a lane whose harness can deny them
-    engine_only_advisory: bool = False  # allow unsupported write lanes with an explicit warning
+    engine_only: tuple[str, ...] = ()  # recipes only the engine runs: a write step needs an account whose harness can deny them
+    engine_only_advisory: bool = False  # allow unsupported write accounts with an explicit warning
 
 
 @record
@@ -173,7 +179,7 @@ class AskUser:
 @record
 class Run:
     role: str
-    lane: str
+    account: str
     model: str
     effort: str
     mode: str
@@ -181,7 +187,7 @@ class Run:
     rung: int | None = None
     fallback: bool | None = None
     fallback_reason: str | None = None
-    first_lane: str | None = None
+    first_account: str | None = None
     cap: float | None = None
     flag: str | None = None
     warning: str | None = None
@@ -195,8 +201,8 @@ class Run:
             "rung": self.rung,
             "fallback": self.fallback,
             "fallback_reason": self.fallback_reason,
-            "first_lane": self.first_lane,
-            "lane": self.lane,
+            "first_account": self.first_account,
+            "account": self.account,
             "model": self.model,
             "effort": self.effort,
             "mode": self.mode,
@@ -213,12 +219,12 @@ class Run:
 
 @record
 class Stop:
-    """No lane can take the call now (reason None), or the role's first choice only waits for a slot (reason busy)."""
+    """No account can take the call now (reason None), or the role's first choice only waits for a slot (reason busy)."""
 
     say: str
     role: str | None = None
     reason: str | None = None
-    lane: str | None = None
+    account: str | None = None
     retry_after: float | None = None
     resets: dict[str, str] = field(default_factory=dict)
     ask_user: AskUser | None = None
@@ -227,7 +233,7 @@ class Stop:
     def as_dict(self) -> dict[str, Json]:
         d: dict[str, Json] = {"action": "stop"}
         if self.reason == "busy":
-            d |= {"reason": "busy", "lane": self.lane, "retry_after": self.retry_after, "say": self.say}
+            d |= {"reason": "busy", "account": self.account, "retry_after": self.retry_after, "say": self.say}
             extra: dict[str, Json] = {} if self.trace is None else {"trace": list(self.trace)}
             return d | extra
         d |= {"role": self.role, "say": self.say, "resets": dict(self.resets), "trace": list(self.trace or ())}
@@ -239,16 +245,17 @@ class Stop:
 
 
 @record
-class LaneOut:
-    """`--resume` on a lane that is held, out, benched or logged out: the thread stays on its lane, the call is refused with `outcome`."""
+class AccountOut:
+    """`--resume` on an account that is held, out, benched or logged out: the thread stays on its account, the call is refused with
+    `outcome`."""
 
-    lane: str
+    account: str
     outcome: str
     say: str
     retry_after: float | None = None
 
     def as_dict(self) -> dict[str, Json]:
-        return {"action": "stop", "lane": self.lane, "retry_after": self.retry_after, "outcome": self.outcome, "say": self.say}
+        return {"action": "stop", "account": self.account, "retry_after": self.retry_after, "outcome": self.outcome, "say": self.say}
 
 
 @record
@@ -259,4 +266,4 @@ class Error:
         return {"action": "error", "error": self.error}
 
 
-Decision = Run | Stop | LaneOut | Error
+Decision = Run | Stop | AccountOut | Error

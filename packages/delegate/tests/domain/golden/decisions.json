@@ -16,9 +16,9 @@
    "effort": "high",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
+   "first_account": null,
    "flag": null,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "mode": "read_only",
    "model": "gpt-6.1-sol",
    "pass": "strict",
@@ -28,7 +28,7 @@
     "OPENAI_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -70,9 +70,9 @@
    "effort": "high",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
+   "first_account": null,
    "flag": null,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "mode": "read_only",
    "model": "gpt-6.1-sol",
    "pass": "strict",
@@ -82,7 +82,7 @@
     "OPENAI_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -124,9 +124,9 @@
    "effort": "medium",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
+   "first_account": null,
    "flag": null,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "mode": "write",
    "model": "gpt-6.1-sol",
    "pass": "strict",
@@ -136,7 +136,7 @@
     "OPENAI_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -178,9 +178,9 @@
    "effort": "medium",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
+   "first_account": null,
    "flag": null,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "mode": "write",
    "model": "gpt-6.1-sol",
    "pass": "strict",
@@ -190,7 +190,7 @@
     "OPENAI_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -232,9 +232,9 @@
    "effort": "medium",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
+   "first_account": null,
    "flag": null,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "mode": "read_only",
    "model": "gpt-6.1-sol",
    "pass": "strict",
@@ -244,7 +244,7 @@
     "OPENAI_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -286,9 +286,9 @@
    "effort": "medium",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
+   "first_account": null,
    "flag": null,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "mode": "read_only",
    "model": "gpt-6.1-sol",
    "pass": "strict",
@@ -298,7 +298,7 @@
     "OPENAI_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -340,9 +340,9 @@
    "effort": "low",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
+   "first_account": null,
    "flag": null,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "mode": "read_only",
    "model": "gpt-6-luna",
    "pass": "strict",
@@ -352,7 +352,7 @@
     "OPENAI_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -394,9 +394,9 @@
    "effort": "low",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
+   "first_account": null,
    "flag": null,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "mode": "read_only",
    "model": "gpt-6-luna",
    "pass": "strict",
@@ -406,7 +406,7 @@
     "OPENAI_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -448,20 +448,20 @@
    "effort": "medium",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
+   "first_account": null,
    "flag": null,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "mode": "write",
    "model": "gpt-6.1-sol",
    "pass": "relaxed",
    "role": "worker",
    "rung": 0,
    "trace": [
-    "OPENAI_SUBSCRIPTION: rejected, weekly 96% >= 95 (lane gate)",
+    "OPENAI_SUBSCRIPTION: rejected, weekly 96% >= 95 (account gate)",
     "OPENAI_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -503,21 +503,21 @@
    "effort": "medium",
    "fallback": true,
    "fallback_reason": "ceiling",
-   "first_lane": "OPENAI_SUBSCRIPTION",
+   "first_account": "OPENAI_SUBSCRIPTION",
    "flag": null,
-   "lane": "CLAUDE_SUBSCRIPTION",
+   "account": "CLAUDE_SUBSCRIPTION",
    "mode": "write",
    "model": "sonnet-5.5",
    "pass": "strict",
    "role": "worker",
    "rung": 2,
    "trace": [
-    "OPENAI_SUBSCRIPTION: rejected, weekly 99% >= 95 (lane gate)",
+    "OPENAI_SUBSCRIPTION: rejected, weekly 99% >= 95 (account gate)",
     "OPENAI_SUBSCRIPTION: rejected, weekly 99% >= 98 (hard ceiling)",
     "CLAUDE_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 99,
@@ -559,9 +559,9 @@
    "effort": "medium",
    "fallback": true,
    "fallback_reason": "out",
-   "first_lane": "OPENAI_SUBSCRIPTION",
+   "first_account": "OPENAI_SUBSCRIPTION",
    "flag": null,
-   "lane": "CLAUDE_SUBSCRIPTION",
+   "account": "CLAUDE_SUBSCRIPTION",
    "mode": "write",
    "model": "sonnet-5.5",
    "pass": "strict",
@@ -573,7 +573,7 @@
     "CLAUDE_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -618,9 +618,9 @@
    "effort": "medium",
    "fallback": true,
    "fallback_reason": "out",
-   "first_lane": "OPENAI_SUBSCRIPTION",
+   "first_account": "OPENAI_SUBSCRIPTION",
    "flag": null,
-   "lane": "CLAUDE_SUBSCRIPTION",
+   "account": "CLAUDE_SUBSCRIPTION",
    "mode": "write",
    "model": "sonnet-5.5",
    "pass": "strict",
@@ -632,7 +632,7 @@
     "CLAUDE_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -677,7 +677,7 @@
     "OPENAI_SUBSCRIPTION": "Sun 09 Sep 03:10"
    },
    "role": "worker",
-   "say": "No worker lane is available. Hold the task; a few lines the orchestrator may write itself.",
+   "say": "No worker account is available. Hold the task; a few lines the orchestrator may write itself.",
    "trace": [
     "OPENAI_SUBSCRIPTION: rejected, out until Sun 09 Sep 03:10",
     "OPENAI_SUBSCRIPTION: rejected, out until Sun 09 Sep 03:10",
@@ -685,7 +685,7 @@
     "CLAUDE_SUBSCRIPTION: rejected, out until Sun 09 Sep 04:16"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -733,9 +733,9 @@
    "effort": "medium",
    "fallback": true,
    "fallback_reason": "out",
-   "first_lane": "OPENAI_SUBSCRIPTION",
+   "first_account": "OPENAI_SUBSCRIPTION",
    "flag": null,
-   "lane": "CLAUDE_SUBSCRIPTION",
+   "account": "CLAUDE_SUBSCRIPTION",
    "mode": "write",
    "model": "sonnet-5.5",
    "pass": "strict",
@@ -747,7 +747,7 @@
     "CLAUDE_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -793,9 +793,9 @@
    "effort": "medium",
    "fallback": true,
    "fallback_reason": "ceiling",
-   "first_lane": "OPENAI_SUBSCRIPTION",
+   "first_account": "OPENAI_SUBSCRIPTION",
    "flag": null,
-   "lane": "CLAUDE_SUBSCRIPTION",
+   "account": "CLAUDE_SUBSCRIPTION",
    "mode": "write",
    "model": "sonnet-5.5",
    "pass": "strict",
@@ -807,7 +807,7 @@
     "CLAUDE_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -833,7 +833,7 @@
    "holds": {
     "h1": {
      "id": "h1",
-     "lane": "OPENAI_SUBSCRIPTION",
+     "account": "OPENAI_SUBSCRIPTION",
      "reason": "why",
      "roles": [],
      "set_at": 999999990.0,
@@ -861,9 +861,9 @@
    "effort": "medium",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
+   "first_account": null,
    "flag": null,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "mode": "write",
    "model": "gpt-6.1-sol",
    "pass": "strict",
@@ -873,7 +873,7 @@
     "OPENAI_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -899,7 +899,7 @@
    "holds": {
     "h1": {
      "id": "h1",
-     "lane": "OPENAI_SUBSCRIPTION",
+     "account": "OPENAI_SUBSCRIPTION",
      "reason": "why",
      "roles": [
       "reviewer"
@@ -929,9 +929,9 @@
    "effort": "medium",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
+   "first_account": null,
    "flag": null,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "mode": "write",
    "model": "gpt-6.1-sol",
    "pass": "strict",
@@ -941,7 +941,7 @@
     "OPENAI_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -967,7 +967,7 @@
    "holds": {
     "h1": {
      "id": "h1",
-     "lane": "OPENAI_SUBSCRIPTION",
+     "account": "OPENAI_SUBSCRIPTION",
      "reason": "why",
      "roles": [],
      "set_at": 999999990.0,
@@ -995,9 +995,9 @@
    "effort": "medium",
    "fallback": true,
    "fallback_reason": "ceiling",
-   "first_lane": "OPENAI_SUBSCRIPTION",
+   "first_account": "OPENAI_SUBSCRIPTION",
    "flag": null,
-   "lane": "CLAUDE_SUBSCRIPTION",
+   "account": "CLAUDE_SUBSCRIPTION",
    "mode": "write",
    "model": "sonnet-5.5",
    "pass": "strict",
@@ -1009,7 +1009,7 @@
     "CLAUDE_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "benched": {
      "gpt-6.1-sol": {
@@ -1058,9 +1058,9 @@
    "effort": "medium",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
+   "first_account": null,
    "flag": null,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "mode": "write",
    "model": "gpt-6.1-sol",
    "pass": "strict",
@@ -1070,7 +1070,7 @@
     "OPENAI_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "canary": {
      "gpt-6.1-sol": true
@@ -1111,13 +1111,13 @@
   },
   "expect": {
    "action": "stop",
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "reason": "busy",
    "retry_after": 1000000090.0,
    "say": "OPENAI_SUBSCRIPTION (the role's first choice) has no free slot: busy: 4 running, 4 allowed",
    "trace": []
   },
-  "lanes": [
+  "accounts": [
    {
     "busy": true,
     "family": "openai",
@@ -1166,9 +1166,9 @@
    "effort": "medium",
    "fallback": true,
    "fallback_reason": "busy",
-   "first_lane": "OPENAI_SUBSCRIPTION",
+   "first_account": "OPENAI_SUBSCRIPTION",
    "flag": null,
-   "lane": "CLAUDE_SUBSCRIPTION",
+   "account": "CLAUDE_SUBSCRIPTION",
    "mode": "write",
    "model": "sonnet-5.5",
    "pass": "strict",
@@ -1180,7 +1180,7 @@
     "CLAUDE_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "busy": true,
     "family": "openai",
@@ -1229,9 +1229,9 @@
    "effort": "medium",
    "fallback": true,
    "fallback_reason": "busy",
-   "first_lane": "OPENAI_SUBSCRIPTION",
+   "first_account": "OPENAI_SUBSCRIPTION",
    "flag": null,
-   "lane": "CLAUDE_SUBSCRIPTION",
+   "account": "CLAUDE_SUBSCRIPTION",
    "mode": "write",
    "model": "sonnet-5.5",
    "pass": "strict",
@@ -1243,7 +1243,7 @@
     "CLAUDE_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -1269,25 +1269,25 @@
    "leases": {
     "r0": {
      "expires": 1000000060.0,
-     "lane": "OPENAI_SUBSCRIPTION",
+     "account": "OPENAI_SUBSCRIPTION",
      "pid": 1,
      "start": 999999995.0
     },
     "r1": {
      "expires": 1000000060.0,
-     "lane": "OPENAI_SUBSCRIPTION",
+     "account": "OPENAI_SUBSCRIPTION",
      "pid": 1,
      "start": 999999995.0
     },
     "r2": {
      "expires": 1000000060.0,
-     "lane": "OPENAI_SUBSCRIPTION",
+     "account": "OPENAI_SUBSCRIPTION",
      "pid": 1,
      "start": 999999995.0
     },
     "r3": {
      "expires": 1000000060.0,
-     "lane": "OPENAI_SUBSCRIPTION",
+     "account": "OPENAI_SUBSCRIPTION",
      "pid": 1,
      "start": 999999995.0
     }
@@ -1312,9 +1312,9 @@
    "effort": "medium",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
+   "first_account": null,
    "flag": "user_requested_premium",
-   "lane": "CLAUDE_SUBSCRIPTION",
+   "account": "CLAUDE_SUBSCRIPTION",
    "mode": "write",
    "model": "fable-5.1",
    "pass": "strict",
@@ -1324,7 +1324,7 @@
     "CLAUDE_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -1364,7 +1364,7 @@
    "action": "error",
    "error": "no premium model configured for family openai; premium: ['claude']"
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -1404,7 +1404,7 @@
    "action": "error",
    "error": "no premium model configured for family nope; premium: ['claude']"
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -1444,7 +1444,7 @@
    "action": "error",
    "error": "unknown role nosuch; roles: planner, worker, reviewer, light"
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -1486,9 +1486,9 @@
    "effort": "medium",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
+   "first_account": null,
    "flag": "same_family",
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "mode": "read_only",
    "model": "gpt-6.1-sol",
    "pass": "strict",
@@ -1499,7 +1499,7 @@
    ],
    "warning": "reviewing openai's work with openai: claude is kept as the last resort (xai not set up; deepseek not set up; zai not set up)"
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -1541,9 +1541,9 @@
    "effort": "medium",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
+   "first_account": null,
    "flag": null,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "mode": "read_only",
    "model": "gpt-6.1-sol",
    "pass": "strict",
@@ -1553,7 +1553,7 @@
     "OPENAI_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -1595,9 +1595,9 @@
    "effort": "medium",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
+   "first_account": null,
    "flag": null,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "mode": "read_only",
    "model": "gpt-6.1-sol",
    "pass": "strict",
@@ -1607,7 +1607,7 @@
     "OPENAI_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -1655,7 +1655,7 @@
    "action": "error",
    "error": "--authored-by must be openai or claude or xai or deepseek or zai (or omitted)"
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -1697,9 +1697,9 @@
    "effort": "medium",
    "fallback": true,
    "fallback_reason": "out",
-   "first_lane": "OPENAI_SUBSCRIPTION",
+   "first_account": "OPENAI_SUBSCRIPTION",
    "flag": null,
-   "lane": "CLAUDE_SUBSCRIPTION",
+   "account": "CLAUDE_SUBSCRIPTION",
    "mode": "read_only",
    "model": "sonnet-5.5",
    "pass": "strict",
@@ -1711,7 +1711,7 @@
     "CLAUDE_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -1756,9 +1756,9 @@
    "effort": "medium",
    "fallback": true,
    "fallback_reason": "out",
-   "first_lane": "OPENAI_SUBSCRIPTION",
+   "first_account": "OPENAI_SUBSCRIPTION",
    "flag": null,
-   "lane": "CLAUDE_SUBSCRIPTION",
+   "account": "CLAUDE_SUBSCRIPTION",
    "mode": "read_only",
    "model": "sonnet-5.5",
    "pass": "strict",
@@ -1770,7 +1770,7 @@
     "CLAUDE_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -1831,7 +1831,7 @@
     "CLAUDE_SUBSCRIPTION: rejected, out until Sun 09 Sep 04:16"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -1890,7 +1890,7 @@
     "CLAUDE_SUBSCRIPTION: rejected, out until Sun 09 Sep 04:16"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -1938,9 +1938,9 @@
    "effort": "high",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
+   "first_account": null,
    "flag": null,
-   "lane": "ZAI_CODING_SUBSCRIPTION",
+   "account": "ZAI_CODING_SUBSCRIPTION",
    "mode": "read_only",
    "model": "glm-5.3",
    "pass": "strict",
@@ -1950,7 +1950,7 @@
     "ZAI_CODING_SUBSCRIPTION: usable"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -2007,7 +2007,7 @@
     "OPENAI_SUBSCRIPTION": "Sun 09 Sep 03:46"
    },
    "role": "worker",
-   "say": "No worker lane is available. Hold the task; a few lines the orchestrator may write itself.",
+   "say": "No worker account is available. Hold the task; a few lines the orchestrator may write itself.",
    "trace": [
     "OPENAI_SUBSCRIPTION: rejected, out until Sun 09 Sep 03:46",
     "OPENAI_SUBSCRIPTION: rejected, out until Sun 09 Sep 03:46",
@@ -2015,7 +2015,7 @@
     "CLAUDE_SUBSCRIPTION: rejected, weekly 96% >= 95 (hard ceiling)"
    ]
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -2058,7 +2058,7 @@
    "action": "error",
    "error": "unknown --resume ref nope"
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -2100,15 +2100,15 @@
    "effort": "high",
    "fallback": false,
    "fallback_reason": null,
-   "first_lane": null,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "first_account": null,
+   "account": "OPENAI_SUBSCRIPTION",
    "mode": "write",
    "model": "gpt-6.1-sol",
    "pass": "resume",
    "role": "worker",
    "rung": 0
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -2137,8 +2137,8 @@
      "effort": "high",
      "fallback": false,
      "fallback_reason": null,
-     "first_lane": null,
-     "lane": "OPENAI_SUBSCRIPTION",
+     "first_account": null,
+     "account": "OPENAI_SUBSCRIPTION",
      "mode": "write",
      "model": "gpt-6.1-sol",
      "rung": 0
@@ -2160,12 +2160,12 @@
   },
   "expect": {
    "action": "stop",
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "outcome": "held",
    "retry_after": 1000003600.0,
-   "say": "OPENAI_SUBSCRIPTION is on hold, held: owner until Sun 09 Sep 02:46 (why). Continue with a fresh writer on another lane; existing file changes remain in the working directory."
+   "say": "OPENAI_SUBSCRIPTION is on hold, held: owner until Sun 09 Sep 02:46 (why). Continue with a fresh writer on another account; existing file changes remain in the working directory."
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -2191,7 +2191,7 @@
    "holds": {
     "h1": {
      "id": "h1",
-     "lane": "OPENAI_SUBSCRIPTION",
+     "account": "OPENAI_SUBSCRIPTION",
      "reason": "why",
      "roles": [],
      "set_at": 999999990.0,
@@ -2205,8 +2205,8 @@
      "effort": "high",
      "fallback": false,
      "fallback_reason": null,
-     "first_lane": null,
-     "lane": "OPENAI_SUBSCRIPTION",
+     "first_account": null,
+     "account": "OPENAI_SUBSCRIPTION",
      "mode": "write",
      "model": "gpt-6.1-sol",
      "rung": 0
@@ -2228,12 +2228,12 @@
   },
   "expect": {
    "action": "stop",
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "outcome": "rate_limited",
    "retry_after": 1000007200.0,
    "say": "OPENAI_SUBSCRIPTION cannot continue ref1 now: out until Sun 09 Sep 03:46"
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -2256,7 +2256,7 @@
     "week": 40
    }
   ],
-  "name": "resume_lane_out",
+  "name": "resume_account_out",
   "settings": {},
   "state": {
    "refs": {
@@ -2265,8 +2265,8 @@
      "effort": "high",
      "fallback": false,
      "fallback_reason": null,
-     "first_lane": null,
-     "lane": "OPENAI_SUBSCRIPTION",
+     "first_account": null,
+     "account": "OPENAI_SUBSCRIPTION",
      "mode": "write",
      "model": "gpt-6.1-sol",
      "rung": 0
@@ -2288,12 +2288,12 @@
   },
   "expect": {
    "action": "stop",
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "outcome": "logged_out",
    "retry_after": null,
    "say": "OPENAI_SUBSCRIPTION cannot continue ref1 now: out"
   },
-  "lanes": [
+  "accounts": [
    {
     "family": "openai",
     "five": 10,
@@ -2315,7 +2315,7 @@
     "week": 40
    }
   ],
-  "name": "resume_lane_logged_out",
+  "name": "resume_account_logged_out",
   "settings": {},
   "state": {
    "refs": {
@@ -2324,8 +2324,8 @@
      "effort": "high",
      "fallback": false,
      "fallback_reason": null,
-     "first_lane": null,
-     "lane": "OPENAI_SUBSCRIPTION",
+     "first_account": null,
+     "account": "OPENAI_SUBSCRIPTION",
      "mode": "write",
      "model": "gpt-6.1-sol",
      "rung": 0
@@ -2347,12 +2347,12 @@
   },
   "expect": {
    "action": "stop",
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "reason": "busy",
    "retry_after": 1000000090.0,
    "say": "OPENAI_SUBSCRIPTION has no free slot to continue ref1: busy: 4 running, 4 allowed"
   },
-  "lanes": [
+  "accounts": [
    {
     "busy": true,
     "family": "openai",
@@ -2388,8 +2388,8 @@
      "effort": "high",
      "fallback": false,
      "fallback_reason": null,
-     "first_lane": null,
-     "lane": "OPENAI_SUBSCRIPTION",
+     "first_account": null,
+     "account": "OPENAI_SUBSCRIPTION",
      "mode": "write",
      "model": "gpt-6.1-sol",
      "rung": 0
@@ -2411,12 +2411,12 @@
   },
   "expect": {
    "action": "stop",
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "outcome": "hung",
    "retry_after": null,
    "say": "OPENAI_SUBSCRIPTION cannot continue ref1 now: gpt-6.1-sol benched (hung, breaker) until Sun 09 Sep 02:01"
   },
-  "lanes": [
+  "accounts": [
    {
     "benched": {
      "gpt-6.1-sol": {
@@ -2452,8 +2452,8 @@
      "effort": "high",
      "fallback": false,
      "fallback_reason": null,
-     "first_lane": null,
-     "lane": "OPENAI_SUBSCRIPTION",
+     "first_account": null,
+     "account": "OPENAI_SUBSCRIPTION",
      "mode": "write",
      "model": "gpt-6.1-sol",
      "rung": 0

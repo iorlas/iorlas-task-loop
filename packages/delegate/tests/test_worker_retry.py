@@ -50,9 +50,8 @@ def test_launch_retries_only_the_real_leg_once(monkeypatch, canary):
         return {"outcome": "worker_failed", "resumable": True, "ref": "session"}
 
     monkeypatch.setattr(run.launch, "launch_worker", launch)
-    worker = run.Run(argparse.Namespace(resume=None, schema=None, role="reviewer"), {},
-                     now=clock.now, sleep=clock.advance, wall=clock.now)
-    result = worker._launch({"lane": "lane", "model": "model"}, "original", "run", 0, RunHooks(), canary)
+    worker = run.Run(argparse.Namespace(resume=None, schema=None, role="reviewer"), {}, now=clock.now, sleep=clock.advance, wall=clock.now)
+    result = worker._launch({"account": "account", "model": "model"}, "original", "run", 0, RunHooks(), canary)
     assert result["outcome"] == "worker_failed"
     assert len(calls) == (1 if canary else 2)
     assert [leg["kind"] for leg in worker.attempts] == (["canary"] if canary else ["first", "worker_retry"])
@@ -62,8 +61,8 @@ def test_launch_retries_only_the_real_leg_once(monkeypatch, canary):
 @pytest.mark.parametrize("reason,exit_code", [("timeout", None), ("worker_failed", -15)])
 def test_hurt_write_reroutes_excluding_failed_pair(monkeypatch, resumed, reason, exit_code):
     args = argparse.Namespace(resume="session" if resumed else None, role="worker", brief=None, writer_exec_allow=[])
-    worker = run.Run(args, {"lanes": {"lane": {"family": "openai"}}}, unattended=True, brief="original")
-    decision: dict[str, Json] = {"action": "run", "lane": "lane", "model": "model"}
+    worker = run.Run(args, {"accounts": {"account": {"family": "openai"}}}, unattended=True, brief="original")
+    decision: dict[str, Json] = {"action": "run", "account": "account", "model": "model"}
     exclusions = []
 
     def decide(*args, **kw):
@@ -77,20 +76,31 @@ def test_hurt_write_reroutes_excluding_failed_pair(monkeypatch, resumed, reason,
     monkeypatch.setattr(run.codex_policy, "require_writer_mode", lambda *a: None)
     decision["how"] = {}
     monkeypatch.setattr(run.git, "state", lambda cwd: {})
-    monkeypatch.setattr(worker, "_run", lambda *a: {
-        "outcome": reason, "exit_code": exit_code, "lane": "lane", "model": "model", "say": "failed",
-    })
+    monkeypatch.setattr(
+        worker,
+        "_run",
+        lambda *a: {
+            "outcome": reason,
+            "exit_code": exit_code,
+            "account": "account",
+            "model": "model",
+            "say": "failed",
+        },
+    )
     worker._go()
-    assert exclusions == ([] if resumed else [frozenset({("lane", "model")})])
+    assert exclusions == ([] if resumed else [frozenset({("account", "model")})])
     assert ("no reroute: none ready" in as_str(worker.out["say"])) is not resumed
 
 
-@pytest.mark.parametrize("first", [
-    {"outcome": None},
-    {"outcome": "network"},
-    {"outcome": "logged_out"},
-    {"outcome": "schema_invalid", "retry_after": 100},
-])
+@pytest.mark.parametrize(
+    "first",
+    [
+        {"outcome": None},
+        {"outcome": "network"},
+        {"outcome": "logged_out"},
+        {"outcome": "schema_invalid", "retry_after": 100},
+    ],
+)
 def test_other_stop_facts_are_untouched(first):
     def launch(*args):
         pytest.fail("must not retry")
@@ -105,7 +115,6 @@ def test_predicted_worker_failure_retries_in_place():
         calls.append((brief, args.resume, kind))
         return {"outcome": None}
 
-    result = retry({"outcome": "worker_failed", "retry_after": 100}, launch,
-                   "original", argparse.Namespace(resume=None, role="worker"))
+    result = retry({"outcome": "worker_failed", "retry_after": 100}, launch, "original", argparse.Namespace(resume=None, role="worker"))
     assert result["outcome"] is None
     assert calls == [("original", None, "worker_retry")]

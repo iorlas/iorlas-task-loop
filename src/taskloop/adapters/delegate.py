@@ -37,7 +37,7 @@ def resolve() -> Resolved:
 def _last_json(text: str) -> object:
     try:
         return json.loads(text.strip().splitlines()[-1]) if text.strip() else None
-    except (ValueError, IndexError):
+    except ValueError, IndexError:
         return None
 
 
@@ -45,7 +45,7 @@ def status_json(claude_usage: Any = None) -> dict[str, Any]:
     """delegate's status answer (the `status --json` object); {} when it cannot be built."""
     try:
         return dict(api.as_json(api.status(claude_usage)))
-    except (Exception, SystemExit):  # a delegate with no config or no login is an empty status, not a crash of the caller
+    except Exception, SystemExit:  # a delegate with no config or no login is an empty status, not a crash of the caller
         return {}
 
 
@@ -59,9 +59,9 @@ def status_snapshot(claude_usage: object = None) -> StatusSnapshot:
 
 def lanes() -> list[Lane]:
     """Every lane delegate knows, in its order. [] when the status cannot be read."""
-    raw = status_json().get("lanes")
+    raw = status_json().get("accounts")
     out: list[Lane] = []
-    for name, row in (raw.items() if isinstance(raw, dict) else []):
+    for name, row in raw.items() if isinstance(raw, dict) else []:
         v = row if isinstance(row, dict) else {}
         usable = None if v.get("out") is None else not v["out"]
         out.append(Lane(str(name), usable, str(v.get("reason") or ""), float(v.get("out_until") or 0.0)))
@@ -75,7 +75,7 @@ def lane(name: str) -> Lane | None:
 
 def accounts() -> list[Account]:
     """Every lane with its state (enabled, ready, the fix). Raises what delegate raises when it has no config dir."""
-    return [Account(a.lane, a.enabled, a.ready, a.fix) for a in api.accounts()]
+    return [Account(a.name, a.enabled, a.ready, a.fix) for a in api.accounts()]
 
 
 def set_account(lane: str, enabled: bool) -> None:
@@ -91,7 +91,7 @@ class RouteProbe:
     def up(self) -> bool | None:
         try:
             return api.network(self.hosts)
-        except (Exception, SystemExit):
+        except Exception, SystemExit:
             return None
 
 
@@ -109,22 +109,43 @@ def synth_for(contract: Mapping[str, Any], reason: str, default: tuple[Scope, Pe
 def api_request(req: RunRequest, env: Mapping[str, str]) -> api.RunRequest:
     """The delegate.api form of the engine's request. `env`: the worker's per-call variables ."""
     return api.RunRequest(
-        role=req.role, brief_file=req.brief_path, cwd=req.cwd, schema_file=req.schema_path,
-        thread=req.thread, delta_file=req.delta_path or None, boundary=req.boundary,
-        timeout_s=req.timeout_s or None, idle_s=req.idle_s or None, unattended=req.unattended,
-        parent=req.parent, task=req.task, title=req.title[:120], call_id=req.call_id or None, live_file=req.live_file or None,
-        engine_only=list(req.engine_only), engine_only_advisory=req.engine_only_advisory,
-        prefer=req.prefer, writer_exec=req.writer_exec, reviewer_other_family=req.reviewer_other_family,
+        role=req.role,
+        brief_file=req.brief_path,
+        cwd=req.cwd,
+        schema_file=req.schema_path,
+        thread=req.thread,
+        delta_file=req.delta_path or None,
+        boundary=req.boundary,
+        timeout_s=req.timeout_s or None,
+        idle_s=req.idle_s or None,
+        unattended=req.unattended,
+        parent=req.parent,
+        task=req.task,
+        title=req.title[:120],
+        call_id=req.call_id or None,
+        live_file=req.live_file or None,
+        engine_only=list(req.engine_only),
+        engine_only_advisory=req.engine_only_advisory,
+        prefer=req.prefer,
+        writer_exec=req.writer_exec,
+        reviewer_other_family=req.reviewer_other_family,
         instructions_ref=req.instructions_ref,
         worker_env=dict(env),
-        tools=[api.ToolServer(name=t.name, command=list(t.command), bead=t.bead, run=t.run, stage=t.stage, attempt=t.attempt)
-               for t in req.tools],
+        tools=[
+            api.ToolServer(name=t.name, command=list(t.command), bead=t.bead, run=t.run, stage=t.stage, attempt=t.attempt)
+            for t in req.tools
+        ],
     )
 
 
 def call(
-    resolved: Resolved, req: RunRequest, brief: str, schema: dict[str, Any], runner: Runner,
-    env: Mapping[str, str], delta: str | None = None
+    resolved: Resolved,
+    req: RunRequest,
+    brief: str,
+    schema: dict[str, Any],
+    runner: Runner,
+    env: Mapping[str, str],
+    delta: str | None = None,
 ) -> Answer:
     """One delegate call. Never raises (but an interruption: BaseException goes on). `runner(argv, cwd=, env=, timeout=)` -> an object
     with `.returncode`, `.stdout`, `.stderr`; it raises Stopped when the engine had to end the call."""
@@ -149,11 +170,11 @@ def call(
         return Answer(
             synth_for(c, REASON_TIMEOUT, ("bead", "transient"), "the engine ended the call: %s" % (why or "its time ran out")),
             {},
-            tuple(argv), str(e),
+            tuple(argv),
+            str(e),
         )
     except (OSError, ValueError) as e:
-        return Answer(synth_for(c, "no_answer", ("machine", "transient"), f"delegate could not run: {e}"), {},
-                      tuple(argv), str(e))
+        return Answer(synth_for(c, "no_answer", ("machine", "transient"), f"delegate could not run: {e}"), {}, tuple(argv), str(e))
     out = (p.stdout or "").strip()
     trace = "\n".join(x for x in (p.stdout, p.stderr) if x)
     j = _last_json(out)
@@ -166,7 +187,8 @@ def call(
                 "delegate exit {}, no answer object: {}".format(p.returncode, out or p.stderr or ""),
             ),
             {},
-            tuple(argv), trace,
+            tuple(argv),
+            trace,
         )
     return Answer(delegate_wire.result_of(j), j, tuple(argv), trace)
 
@@ -180,12 +202,21 @@ class DelegateRoute:
     def resolve(self) -> Resolved | Refusal:
         return resolve()
 
-    def runner(self, log_path: str | Path, wall: float | None = None, live: str = "",
-               on_worker: Callable[[WorkerStarted], None] | None = None) -> Seam | None:
+    def runner(
+        self, log_path: str | Path, wall: float | None = None, live: str = "", on_worker: Callable[[WorkerStarted], None] | None = None
+    ) -> Seam | None:
         return ApiRunner(log_path, wall, live, on_worker)
 
-    def call(self, resolved: Resolved, req: RunRequest, brief: str, schema: dict[str, Any], runner: Runner,
-             env: Mapping[str, str], delta: str | None = None) -> Answer:
+    def call(
+        self,
+        resolved: Resolved,
+        req: RunRequest,
+        brief: str,
+        schema: dict[str, Any],
+        runner: Runner,
+        env: Mapping[str, str],
+        delta: str | None = None,
+    ) -> Answer:
         return call(resolved, req, brief, schema, runner, env=env, delta=delta)
 
     def probe(self, hosts: tuple[str, ...] = ()) -> RouteProbe:
@@ -215,6 +246,7 @@ class FixedRoute(DelegateRoute):
         return self.resolved
 
     @override
-    def runner(self, log_path: str | Path, wall: float | None = None, live: str = "",
-               on_worker: Callable[[WorkerStarted], None] | None = None) -> Seam | None:
+    def runner(
+        self, log_path: str | Path, wall: float | None = None, live: str = "", on_worker: Callable[[WorkerStarted], None] | None = None
+    ) -> Seam | None:
         return self.process

@@ -30,7 +30,7 @@ def facts(reason: str | None) -> dict[str, str] | None:
 
 
 def benches_pair(reason: str | None) -> bool:
-    """True when the reason may count against a (lane, model) pair's health. bad_request is a caller fault: never (61 5.1)."""
+    """True when the reason may count against a (account, model) pair's health. bad_request is a caller fault: never (61 5.1)."""
     row = facts(reason)
     return row is not None and row["health"] in ("breaker", "exhausted")
 
@@ -43,7 +43,7 @@ def stop_facts(reason: str | None, retry_after: float | None = None, fix: str | 
     if retry_after and kind in (
         "none",
         "predicted",
-    ):  # a time the lane ends by itself: transient, whatever the table says for the general case
+    ):  # a time the account ends by itself: transient, whatever the table says for the general case
         perm, kind = "transient", "predicted"
     elif kind == "predicted":  # nothing to wait for: a person must act
         kind, perm = "none", "needs_owner"

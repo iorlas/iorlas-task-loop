@@ -6,7 +6,7 @@ from unittest import mock
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
-from test_route import CFG, T, argparse_ns, lanes
+from test_route import CFG, T, accounts, argparse_ns
 
 from delegate.app import decide as dec
 from delegate.app import env
@@ -15,7 +15,7 @@ from delegate.app import env
 def fleet():
     """The fleet, the clock and `how` (which would ask git about the folder) as fakes."""
     stack = contextlib.ExitStack()
-    stack.enter_context(support.fleet_patches(lanes()))
+    stack.enter_context(support.fleet_patches(accounts()))
     stack.enter_context(mock.patch.object(env, "now", return_value=T))
     stack.enter_context(mock.patch.object(dec, "how", return_value={"kind": "codex", "cwd": "/w"}))
     return stack
@@ -35,8 +35,8 @@ def test_decision_is_decide_then_remember_and_returns_the_same_tuple():
     with fleet():
         decided = dec.decide(a, copy.deepcopy(CFG))
         d, ls, warnings, t = dec.decision(a, copy.deepcopy(CFG))
-    assert (d["lane"], d["model"], warnings, t) == (decided.d["lane"], decided.d["model"], decided.warnings, decided.t)
-    assert set(ls) == set(decided.lanes)
+    assert (d["account"], d["model"], warnings, t) == (decided.d["account"], decided.d["model"], decided.warnings, decided.t)
+    assert set(ls) == set(decided.accounts)
 
 
 def test_only_apply_writes_the_profile_and_remember_writes_the_dwell():
