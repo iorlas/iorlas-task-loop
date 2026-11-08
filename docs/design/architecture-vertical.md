@@ -103,6 +103,12 @@ Remaining cuts (direct src imports, re-counted by the reviewer):
 
 ## 2. Contracts: owner of each, minimal shared kernel
 
+Reach evidence (2026-11-08, graph `ee6afa71a`): the fixed #678 window
+(`--commits 40 --until 16a988bc4`) has median **112.5 raw / 70.5 beyond-rules**;
+the rolling latest-40 window on that graph has **197 raw / 155 beyond-rules**.
+Window composition explains the difference: carve and ratchet commits are wide.
+The target remains **below 150 raw median**. These readings do not close tl-e5t0.22 or tl-e5t0.81.
+
 Measured on `packages/kernel/src/tlkernel` (90 files, 7905 sloc): consumers per file counted over direct imports from other src slices.
 
 | bucket | files | sloc | rule | verdict |
