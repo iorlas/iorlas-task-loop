@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SURFACE = {"tlpipeline": ("api", "testing", "contracts")}
+SURFACE = {"tlareas": ("policy",), "tlpipeline": ("api", "testing", "contracts")}
 PACKAGE_ONLY = {
     # api and the leaf modules tlwork and tlrelease already import (tl-e5t0.84): routing them through api.py would load land's evidence,
     # host and ports into every plan, review, write and release closure (+5 to +27 files per stage), so the guard names the leaves instead

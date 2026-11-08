@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from os import EX_CONFIG
 
+from tlareas.policy import has_areas
 from tlkernel.bdsafe import attempt
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, BeadPatch
@@ -15,7 +16,7 @@ from tlkernel.slots import SlotFail, SlotGitError
 from taskloop.app.loop import verdict as vd
 from taskloop.app.loop.env import LoopEnv
 from taskloop.app.loop.ports import LeaseHandle
-from taskloop.app.loop.queue import QueueRule, has_areas
+from taskloop.app.loop.queue import QueueRule
 from taskloop.app.loop.run import BeadRun, Where
 
 

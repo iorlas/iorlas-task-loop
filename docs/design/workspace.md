@@ -163,3 +163,5 @@ vendored `any_agent` (supervisor/process records), with no shell dependency;
 `any_agent` is an existing shelf dependency, not a kernel module. This preserves
 the pure move but is an explicit exception to a literal stdlib/testkit/kernel
 inventory. No compatibility forwarding module remains in root support.
+
+Areas S1 adds the `tlareas` member with flat `policy.py`, kernel-only imports and isolated memory-bead policy tests.
