@@ -55,6 +55,18 @@ class GitContract(_Base):
     def s(self) -> str:
         return str(self.slot)
 
+    def test_bead_trailers_select_range_and_first_value(self) -> None:
+        r = self.s()
+        base = self.git.rev_parse(r, "HEAD")
+        self.git.try_commit(r, "owned\n\nBead: t-1\nBead: t-2", verify=False, allow_empty=True)
+        owned = self.git.rev_parse(r, "HEAD")
+        self.git.try_commit(r, "plain", verify=False, allow_empty=True)
+        self.git.try_commit(r, "invalid\n\nBead: not a bead", verify=False, allow_empty=True)
+        self.git.try_commit(r, "invalid first\n\nBead: invalid value\nBead: t-2", verify=False, allow_empty=True)
+        assert self.git.bead_trailers(r, ["HEAD"], [base]) == {owned: "t-1"}
+        assert self.git.bead_trailers(r, ["HEAD"], [owned]) == {}
+        assert self.git.bead_trailers(r, [owned]) == {owned: "t-1"}
+
     def test_invalid_checkout_reads_raise_instead_of_reporting_clean_or_absent(self) -> None:
         invalid = self.home / "not-a-checkout"
         invalid.mkdir()

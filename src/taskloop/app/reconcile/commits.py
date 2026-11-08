@@ -72,7 +72,8 @@ def observe_commits(git: Git, repo: str, base: str, since: float | None, status_
     statuses: dict[str, str | None] = {}
     found: list[BranchCommit] = []
     for ref in (r.name.removeprefix("refs/heads/") for r in git.for_each_ref(repo, f"refs/heads/{TASK}", "refs/heads/wip/")):
-        bead, aside = matchers.unstale(ref[len(TASK):]) if ref.startswith(TASK) else (None, False)
+        ref_bead, aside = matchers.unstale(ref[len(TASK):]) if ref.startswith(TASK) else (None, False)
+        trailers = git.bead_trailers(repo, [ref], bases)
         rows = git.log(repo, [ref], bases)
         if not rows:
             continue
@@ -81,6 +82,7 @@ def observe_commits(git: Git, repo: str, base: str, since: float | None, status_
         except SlotGitError:
             upstream = set()
         for row in rows:
+            bead = ref_bead or trailers.get(row.oid)
             if since is not None and row.time < since:
                 continue
             state: str | None = None

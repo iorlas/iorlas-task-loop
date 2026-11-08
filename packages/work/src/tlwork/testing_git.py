@@ -71,6 +71,9 @@ class FakeWorkGit(ScriptedGateGit):
     def symbolic_ref(self, d: str, ref: str) -> str:
         raise AssertionError("unexpected git symbolic_ref")
 
+    def bead_trailers(self, d: str, include: list[str], exclude: list[str] | None = None) -> dict[str, str]:
+        return {}
+
     def log(self, d: str, include: list[str], exclude: list[str] | None=None, limit: int=0, grep: str='') -> list[LogRow]:
         raise AssertionError("unexpected git log")
 

@@ -85,6 +85,10 @@ class Git(SlotGit, Protocol):
         """The commits reachable from `include` and not from `exclude`, newest first; `grep`: only subjects that contain it."""
         ...
 
+    def bead_trailers(self, d: str, include: list[str], exclude: list[str] | None = None) -> dict[str, str]:
+        """Commit oid to the first valid Bead trailer value in the selected range."""
+        ...
+
     def ls_tree(self, d: str, rev: str, *paths: str, recursive: bool = False) -> list[TreeEntry]: ...
     def status(self, d: str, all_untracked: bool = False) -> list[StatusRow]:
         """Every changed and untracked path; untracked folders are listed whole with `all_untracked`, else as the folder."""
