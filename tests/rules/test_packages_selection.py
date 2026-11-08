@@ -1,6 +1,7 @@
 """dev/packages.py: a change reaches the packages under it and those that declare them; a file outside every package reaches all."""
 import pytest
-from packages import reached
+from packages import ROOT, reached
+from surface import PACKAGE_ONLY, SURFACE
 
 
 def workspace(root):
@@ -88,3 +89,30 @@ def test_scoped_member_uses_own_paths_extra_inputs_and_declared_dependencies(tmp
 def workspace_without_delegate(root):
     (root / "packages/delegate/pyproject.toml").unlink()
     return root
+
+
+@pytest.mark.parametrize("leaf", ["evidence", "cache"])
+def test_gate_surface_leaves_reach_real_dependents(leaf):
+    assert leaf in (SURFACE | PACKAGE_ONLY)["tlgate"]
+    assert reached(ROOT, {f"packages/gate/src/tlgate/{leaf}.py"}) == ["gate", "land", "release", "work"]
+
+
+def test_gate_internal_module_does_not_widen_selection():
+    assert "runner" not in (SURFACE | PACKAGE_ONLY)["tlgate"]
+    assert reached(ROOT, {"packages/gate/src/tlgate/runner.py"}) == ["gate"]
+
+
+@pytest.mark.parametrize("module,public", [
+    ("domain/planref.py", True), ("domain/planref/child.py", True),
+    ("domain/planref/__init__.py", True), ("domain/planref_extra.py", False),
+    ("domain/other.py", False),
+])
+def test_dotted_surface_leaf_in_workspace(tmp_path, monkeypatch, module, public):
+    root = workspace(tmp_path)
+    api = root / "packages/kernel/src/kernel/api.py"
+    api.parent.mkdir(parents=True)
+    api.touch()
+    monkeypatch.setitem(PACKAGE_ONLY, "kernel", ("domain.planref",))
+    assert reached(root, {f"packages/kernel/src/kernel/{module}"}) == (
+        ["compose", "kernel", "plan", "review"] if public else ["kernel"]
+    )
