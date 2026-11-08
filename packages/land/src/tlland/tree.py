@@ -8,6 +8,7 @@ from tlkernel.bead import Bead
 from tlkernel.branches import task_branch
 from tlkernel.gitport import Git
 from tlkernel.ids import BeadId
+from tlkernel.lifecyclematchers import with_bead_trailer
 from tlkernel.paths import TASK_EXCLUDE, ConfigDir
 from tlkernel.slots import SlotGitError
 from tlkernel.stagefacts import Narrate
@@ -171,7 +172,7 @@ class Tree:
         e.checkout.stage_all(everything=everything)  # tl-g6a
         # --no-verify: a wip commit saves work, it does not judge it; a pre-commit hook that refused it left staged files in the
         # slot and failed the next bead there
-        done = e.git.try_commit(e.wt, f"wip ({e.bead}): {why}", verify=False)
+        done = e.git.try_commit(e.wt, with_bead_trailer(f"wip ({e.bead}): {why}", e.bead), verify=False)
         if not done.ok:
             e.warn(f"the wip commit ({why}) failed, the work stays uncommitted in {e.wt}: {done.output.strip()}")
             e.log.note(f"wip commit failed: {done.output.strip()}")

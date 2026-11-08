@@ -64,7 +64,10 @@ def cmd_log(c: Ctx) -> int:
         subject = cm.msg.splitlines()[0] if cm.msg else ""
         if fmt is not None:
             body = cm.msg.partition("\n\n")[2]
-            rendered = re.sub(r"%x([0-9a-fA-F]{2})", lambda m: chr(int(m[1], 16)), fmt)
+            trailers = cm.msg.rstrip().rsplit("\n\n", 1)[-1].splitlines() if "\n\n" in cm.msg else []
+            values = [line.partition(":")[2].strip() for line in trailers if line.lower().startswith("bead:")]
+            formatted = fmt.replace("%(trailers:key=Bead,valueonly,separator=%x01)", "\x01".join(values))
+            rendered = re.sub(r"%x([0-9a-fA-F]{2})", lambda m: chr(int(m[1], 16)), formatted)
             c.say(rendered.replace("%H", cm.sha).replace("%ct", str(cm.seq)).replace("%s", subject).replace("%b", body))
         else:
             c.say(f"{cm.sha[:7]} {cm.msg}" if "--oneline" in fl else subject)

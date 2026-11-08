@@ -5,11 +5,12 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from tlkernel import check_files
+from tlkernel import check_files, reponame
 from tlkernel import checkmatchers as matchers
 from tlkernel.argv import argv_of
 from tlkernel.checks import UNVERIFIED_EXIT, Check
 from tlkernel.envvars import EnvVar
+from tlkernel.gitport import GateGit
 from tlkernel.waitenums import WaitWhat
 
 from tlgate.base import BaseCheck
@@ -21,6 +22,15 @@ from tlgate.step_env import step_env
 
 # the run's names that mean the same on the executor
 REMOTE_ENV = frozenset({EnvVar.TL_RUN_ID.value, EnvVar.TL_ATTEMPT.value, EnvVar.TL_ARTIFACT_STEP.value})
+
+
+def executor_repo(git: GateGit, wt: str) -> str:
+    """The repo's directory name on the executor (the mirror rule): the origin's `owner/name`, else the folder name; the cache key when a
+    segment is not a plain name."""
+    common = git.common_dir(wt)
+    name = reponame.repo_name(str(Path(common).parent if common else wt))
+    plain = all(seg.isascii() and seg[:1].isalnum() and all(c.isalnum() or c in "._-" for c in seg) for seg in name.split("/"))
+    return name if plain else str(check_files.repo_key(git, wt))
 
 
 @dataclass
@@ -95,10 +105,10 @@ class Attempts:
         """The committed HEAD of the checkout this check runs in, on the executor: only what the check was told by its profile and
         the run's names go over (the local paths mean nothing there)."""
         wt, git = str(self.host.wt), self.host.git
-        slot = Path(wt).name if c.run_in == "slot" else "clean"
+        slot = Path(wt).name if c.run_in == "slot" else "clean"  # a clean checkout is not a slot
         told = {k: v for k, v in env.items() if k in c.env or k in REMOTE_ENV}
         done = LinuxRun(self.host.cfg.executor, git, self.host.spawner).run(
-            wt=wt, repo=check_files.repo_key(git, wt), slot=slot, sha=git.rev_parse(wt, "HEAD"), run_id=self.host.run_id,
+            wt=wt, repo=executor_repo(git, wt), slot=slot, sha=git.rev_parse(wt, "HEAD"), run_id=self.host.run_id,
             step=c.id, argv=argv, env=told, log=log, artifact_dir=Path(ids[EnvVar.TL_ARTIFACT_DIR.value]),
             timeout_s=c.wall_min * 60, stop=stop)
         self.host.killed, self.host.wall_hit = done.stopped or done.wall_hit, done.wall_hit  # what host.sh says of a stopped command
