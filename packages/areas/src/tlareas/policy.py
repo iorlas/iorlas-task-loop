@@ -115,4 +115,3 @@ def area_busy_text(areas: Areas, bead: Bead) -> tuple[str, str]:
     """Return the area and the existing busy explanation, or an empty explanation."""
     area, skip = areas.area_busy(bead)
     return area, skip.why if skip else ""
-
