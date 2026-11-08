@@ -34,7 +34,7 @@ from delegate.domain.lanes import profiles
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
-LANES = Path(__file__).resolve().parents[2] / "packages" / "delegate" / "src" / "delegate" / "adapters"
+LANES = Path(__file__).resolve().parents[3] / "packages" / "delegate" / "src" / "delegate" / "adapters"
 
 
 @contextlib.contextmanager

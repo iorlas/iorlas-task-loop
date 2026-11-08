@@ -7,8 +7,8 @@ from pathlib import Path
 from delegate.app import answer
 from delegate.contracts import codec, schema, status
 
-ROOT = Path(__file__).resolve().parents[3]
-REAL = ROOT / "tests" / "delegate" / "fixtures" / "delegate_status_0.51.0_real.json"
+ROOT = Path(__file__).resolve().parents[4]
+REAL = ROOT / "packages" / "delegate" / "tests" / "fixtures" / "delegate_status_0.51.0_real.json"
 CONTRACT = json.loads((ROOT / "packages" / "delegate" / "src" / "delegate" / "data" / "contract.json").read_text(encoding="utf-8"))
 
 

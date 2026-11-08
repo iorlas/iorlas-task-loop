@@ -1,5 +1,5 @@
 """delegate-own, the contract set: REAL processes and signals (a fake agent CLI, no model). The worker is dead when the delegate call ends,
-and a survivor is named. Run with `just test-delegate tests/delegate/test_own_contract.py`; no other run starts these."""
+and a survivor is named. Run with `just test-delegate packages/delegate/tests/test_own_contract.py`; no other run starts these."""
 
 import json
 import os
@@ -165,7 +165,7 @@ class RealProcesses(Case):
     @real_proc("delegate: a worker, git or CLI process")
     def test_sigterm_to_the_delegate_stops_the_worker_tree_first(self):
         code = (
-            "import os, sys; sys.path.insert(0, {!r}); from any_agent.protocol import LaunchSpec; "
+            "import os, sys; sys.path.insert(0, {!r}); import delegate; from any_agent.protocol import LaunchSpec; "
             "from any_agent.harnesses.codex import CodexHarness; "
             "from delegate.app.publish import LiveSink; from any_agent.supervisor import RunHooks, Supervisor; "
             "Supervisor(CodexHarness(), RunHooks(), LiveSink('codex', '')).run("

@@ -14,8 +14,8 @@ from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory
 
 LIMIT_S = 30  # a cold interpreter compiles a fresh copy of the tree (no __pycache__) before it prints
-ROOT = Path(__file__).resolve().parents[3]
-FIX = ROOT / "tests" / "delegate" / "fixtures"
+ROOT = Path(__file__).resolve().parents[4]
+FIX = ROOT / "packages" / "delegate" / "tests" / "fixtures"
 
 
 class StatusGolden:

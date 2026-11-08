@@ -75,7 +75,7 @@ just test                      # THE test command: runs only the tests this chan
 uv run pytest tests/land -q    # one slice folder, module or test (tests/land/test_x.py::Class::test) while you edit; the tests are plain pytest classes: `assert`, `setup_method`, fixtures; `tltestkit.case.Case` still gives `addCleanup` and `subTest`; write new tests as pytest functions or classes, never `unittest`
 just check                     # ruff on the changed .py files only (`just lint-all`: whole tree), pyrefly on the whole tree (a signature change breaks unchanged callers), then import-linter (tools pinned in mise.toml; `mise install`)
 just test-pkg <stage>          # stage tests + its dependencies' contract tests; inner loop only, `just test` stays the gate. Workspace members run in their isolated package environment.
-just test-delegate            # tests/delegate (real processes, minutes): collected by no other run unless the change touches packages/delegate, tests/delegate or skills/task-loop/_vendor (tests/support/scope.py); a task-loop or dashboard change never runs them
+just test-delegate            # packages/delegate/tests (real processes, minutes): collected by no other run unless the change touches packages/delegate, skills/task-loop/_vendor or packages/testkit (dev/packages.py); a task-loop or dashboard change never runs them
 ```
 
 Never run pytest over the whole suite; for broad coverage run `just test` (affected-only).

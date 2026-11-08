@@ -24,4 +24,4 @@ python_files = ["test_*.py"]
 python_classes = ["*"]
 addopts = "-p no:cacheprovider"
 # Vendored shelf packages have no manifest (docs/design/workspace.md section 4).
-pythonpath = ["src", "../../skills/task-loop/_vendor"]
+pythonpath = ["src", "tests", "../../skills/task-loop/_vendor"]

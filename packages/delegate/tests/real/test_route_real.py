@@ -23,7 +23,7 @@ from delegate.domain.lanes.lane import Lane
 from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory, mkdtemp
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[4]
 _entry = importlib.util.spec_from_file_location("route", ROOT / "packages" / "delegate" / "src" / "delegate" / "entry.py")
 assert _entry is not None
 assert _entry.loader is not None
@@ -125,7 +125,7 @@ class Pick:
         with TemporaryDirectory() as d_:
             d = decide("worker", lanes(), cwd=d_)
         assert "--skip-git-repo-check" in d["how"]["cli"]  # not a git work tree
-        d2 = decide("worker", lanes(), cwd=str(Path(__file__).resolve().parents[3]))
+        d2 = decide("worker", lanes(), cwd=str(Path(__file__).resolve().parents[4]))
         assert "--skip-git-repo-check" not in d2["how"]["cli"]  # this repo is one
 
 

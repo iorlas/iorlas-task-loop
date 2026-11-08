@@ -15,7 +15,7 @@ test-packages:
 # INNER LOOP ONLY, never the gate: pytest-testmon reruns what the code you edited reaches in the paths you name (docs/dev/test-inner-loop.md). It follows Python imports, not
 # config or data files, so a green run here proves nothing about those: `just test` (dev/affected.py) is the gate. First run per path builds .testmondata.
 test-inner +paths:
-    uv run --with pytest-testmon pytest --testmon -o addopts="-p no:cacheprovider" --ignore=tests/e2e --ignore=tests/delegate --ignore=tests/live {{paths}}
+    uv run --with pytest-testmon pytest --testmon -o addopts="-p no:cacheprovider" --ignore=tests/e2e --ignore=tests/live {{paths}}
 
 # INNER LOOP ONLY developer tool, never the gate: stage tests plus dependencies' contract tests. `just test` stays the gate.
 test-pkg stage:
@@ -34,9 +34,9 @@ test-live *args:
 vendor *args:
     PYTHONPATH=skills/task-loop/_vendor python3 -m shelf_vendor --vendor-dir skills/task-loop/_vendor --manifest dev/vendor.json {{args}}
 
-# The delegate tests (tests/delegate; real processes, several minutes). No other run collects them unless the change touches packages/delegate, tests/delegate or the vendored packages (tests/support/scope.py).
+# The delegate member tests (including real/). Selected only for delegate, vendor or testkit changes (dev/packages.py).
 test-delegate *args:
-    TL_DELEGATE_TESTS=1 uv run pytest -m "" tests/delegate {{args}}
+    uv run --isolated --package tldelegate --group dev pytest -q -c packages/delegate/pyproject.toml --rootdir packages/delegate packages/delegate/tests {{args}}
 
 # Install the exact tool versions recorded in mise.lock.
 tools:
