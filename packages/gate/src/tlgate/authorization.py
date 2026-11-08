@@ -42,6 +42,18 @@ def results(stores: ReceiptStores, git: GateGit, wt: str, cfg: config.EngineConf
     return {c.id: memo.result(c, plan_digest(cfg.plan_cmd)) for c in checks}
 
 
+def red(stores: ReceiptStores, git: GateGit, wt: str, cfg: config.EngineConfig, tree: TreeSha, base: BaseSha,
+        env: Env, step: CheckId | None = None) -> list[CheckId]:
+    """Selected checks without evidence, in configured order."""
+    return [check for check, result in results(stores, git, wt, cfg, tree, base, env, step).items() if result is None]
+
+
+def verdict(stores: ReceiptStores, git: GateGit, wt: str, cfg: config.EngineConfig, tree: TreeSha, base: BaseSha,
+            env: Env, step: CheckId) -> CheckResult | None:
+    """The selected check's evidence, or None when absent or unknown."""
+    return results(stores, git, wt, cfg, tree, base, env, step).get(step)
+
+
 def explain(stores: ReceiptStores, git: GateGit, wt: str, cfg: config.EngineConfig, tree: TreeSha, base: BaseSha, env: Env,
             steps: list[CheckId]) -> dict[CheckId, str]:
     """{step: the first key field where its expected key and its newest receipt on this tree and base part}; display only."""

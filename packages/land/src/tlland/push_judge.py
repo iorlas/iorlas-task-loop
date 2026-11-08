@@ -129,8 +129,7 @@ class PushJudge:
         if not tree or not base:
             self.unproven = [step.id for step in cfg.gate_checks]
             return False
-        found = authorization.results(self.stores, self.git, self.repo, cfg, tree, BaseSha(base), self.env)
-        self.unproven = [step.id for step in cfg.gate_checks if found.get(step.id) is None]
+        self.unproven = authorization.red(self.stores, self.git, self.repo, cfg, tree, BaseSha(base), self.env)
         return not self.unproven
 
     def is_green(self, tip: PushTip, cfg: EngineConfig | None) -> bool:

@@ -40,8 +40,7 @@ class StackGate:
     def red(self, engine: config.EngineConfig, tree: str, base: str, wt: str = "", env: Env | None = None) -> list[CheckId]:
         """The steps with no green receipt under `env` (the plain key by default; `ledger_env` is the key of a ledger-assisted run)."""
         env = env or self.env
-        found = authorization.results(self.stores, self.git, wt or self.repo, engine, TreeSha(tree), BaseSha(base), env)
-        red = [step for step, result in found.items() if result is None]
+        red = authorization.red(self.stores, self.git, wt or self.repo, engine, TreeSha(tree), BaseSha(base), env)
         self.why = (authorization.explain(self.stores, self.git, wt or self.repo, engine, TreeSha(tree), BaseSha(base), env, red)
                     if red else {})
         return red
