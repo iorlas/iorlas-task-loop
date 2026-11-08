@@ -15,8 +15,7 @@ from tlkernel.envvars import EnvVar
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
 from tlkernel.paths import ConfigDir
-from tlkernel.run import NetPause, Reexec, ReexecNote, RunCounters
-from tlkernel.run_slot import RUN_SLOT
+from tlkernel.run import RUN_SLOT, NetPause, Reexec, ReexecNote, RunCounters
 from tlkernel.runrows import RunRows
 from tlkernel.wire import Open
 from tlpipeline.adapter_ports import ChildEnv, Install

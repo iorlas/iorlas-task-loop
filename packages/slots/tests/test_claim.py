@@ -11,9 +11,9 @@ from tlkernel.env import Env
 from tlkernel.envvars import EnvVar
 from tlkernel.identity import Identity
 from tlkernel.ids import BeadId
-from tlkernel.run import Reexec
+from tlkernel.run import RUN_SLOT, Reexec
 
-from tlslots import machine
+from tlslots import engine_lock, machine
 from tlslots.testing import FakeSlotGit, FakeSlotsHost
 
 
@@ -100,6 +100,50 @@ def test_give_back_releases_once_under_guard(rig, monkeypatch):
     assert calls[0][1] == dict(bead=BeadId("b-1"), mine=True, store=host.store, gen=7, **kw)
 
 
+def test_claimed_refusal_gives_nothing_back(rig, monkeypatch):
+    host, kw = rig
+    monkeypatch.setattr(machine, "named", lambda *a, **kw: machine.Taken(refused="busy"))
+    release = Mock()
+    monkeypatch.setattr(machine, "give_back", release)
+    with machine.claimed(host.host, "/repo", "s1", None, False, "run-task b-1", host.store,
+                         env=Env(), guard=contextlib.nullcontext, **kw) as claim:
+        assert claim == machine.Taken(refused="busy")
+    release.assert_not_called()
+
+
+@pytest.mark.parametrize("raises", [False, True])
+def test_claimed_returns_fenced_slot_once_under_guard(rig, monkeypatch, raises):
+    host, kw = rig
+    host.store.put(Bead(id=BeadId("sl-1"), title="slot", status="open", metadata={"held_gen": 7}))
+    monkeypatch.setitem(RUN_SLOT, "owned", "")
+    monkeypatch.setattr(machine, "named", lambda *a, **kw: machine.Taken(BeadId("sl-1")))
+    events = []
+    @contextlib.contextmanager
+    def guard():
+        events.append("enter")
+        try:
+            yield
+        finally:
+            events.append("exit")
+    def release(*a, **kwargs):
+        assert events == ["enter"]
+        assert kwargs["gen"] == 7
+        assert kwargs["bead"] == "b-1"
+        events.append("release")
+    monkeypatch.setattr(machine, "release_slot", release)
+    with (
+        pytest.raises(ValueError) if raises else contextlib.nullcontext(),
+        machine.claimed(host.host, "/repo", "s1", None, False, "run-task b-1", host.store,
+                        env=Env(), guard=guard, **kw) as claim,
+    ):
+        assert claim == machine.Taken(BeadId("sl-1"), gen=7)
+        assert RUN_SLOT["owned"] == "s1"
+        assert events == []
+        if raises:
+            raise ValueError("body")
+    assert events == ["enter", "release", "exit"]
+
+
 @pytest.mark.parametrize("exit_code, output", [(1, "ignored"), (0, ""), (0, "\n")])
 def test_run_worktree_failure_keeps_stderr_and_tail(rig, exit_code, output):
     host, kw = rig
@@ -135,3 +179,37 @@ def test_run_worktree_prefers_named_directory_then_slot(rig, tmp_path, monkeypat
                                    kw["spawner"], kw["who"])
         assert got == machine.Worktree(str(expected))
     kw["spawner"].run.assert_not_called()
+
+
+class Terminated(BaseException):
+    """What a SIGTERM that lands between the two guards raises in the main thread."""
+
+
+def test_a_stop_between_the_lock_release_and_the_slot_give_back_still_gives_the_slot_back(rig, monkeypatch, tmp_path):
+    host, kw = rig
+    host.store.put(Bead(id=BeadId("sl-1"), title="slot", status="open", metadata={"held_gen": 7}))
+    monkeypatch.setitem(RUN_SLOT, "owned", "")
+    monkeypatch.setattr(machine, "named", lambda *a, **kw: machine.Taken(BeadId("sl-1")))
+    order = []
+    monkeypatch.setattr(machine, "release_slot", lambda *a, **kwargs: order.append("slot"))
+    lock = Mock()
+    lock.release.side_effect = lambda: order.append("lock")
+    entered = []
+
+    @contextlib.contextmanager
+    def guard():
+        entered.append(1)
+        try:
+            yield
+        finally:
+            if len(entered) == 1:  # the lock's guard has just closed: the stop arrives before the slot's guard opens
+                raise Terminated
+
+    with (
+        pytest.raises(Terminated),
+        machine.claimed(host.host, "/repo", "s1", None, False, "run-task b-1", host.store, env=Env(), guard=guard, **kw),
+        engine_lock.held(lock, engine_lock.HeldLock(), guard),
+    ):
+        pass
+    assert order == ["lock", "slot"]
+    assert len(entered) == 2
