@@ -5,8 +5,6 @@ from pathlib import Path
 
 import pytest
 
-import pytest
-
 from rules import layer_ratchet, needs_ratchet, ratchet_change, temp_ratchet
 
 
