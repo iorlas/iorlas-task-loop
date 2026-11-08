@@ -18,7 +18,7 @@ from tltestkit.case import Case
 from tltestkit.fake_clock import SteppingClock
 from tltestkit.tmpdir import TemporaryDirectory
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skills" / "delegate"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages" / "delegate" / "src"))
 import shutil
 
 from any_agent import watch

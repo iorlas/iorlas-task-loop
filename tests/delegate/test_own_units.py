@@ -14,7 +14,7 @@ from delegate.contracts import wire
 
 class OsProc:
     def test_no_module_runs_a_process_lister(self):
-        for f in (ROOT / "src" / "delegate").rglob("*.py"):
+        for f in (ROOT / "packages" / "delegate" / "src" / "delegate").rglob("*.py"):
             src = f.read_text(encoding="utf-8")
             for bad in ('["ps"', '"lsof"', '"tasklist"', "pgrep", "pkill"):
                 assert bad not in src, f"{f.name} runs a process lister ({bad}): the worker's own record (adapters/procs.py) is the source"
@@ -38,7 +38,7 @@ class Contract:
             live_file="/l.jsonl",
         )
         flags = {a for a in req.to_argv("route.py") if a.startswith("--")}
-        assert flags <= set(json.loads((ROOT / "src/delegate/data/contract.json").read_text())["run_args"])
+        assert flags <= set(json.loads((ROOT / "packages/delegate/src/delegate/data/contract.json").read_text())["run_args"])
         assert "--idle" in flags
         assert req.env() == {"DELEGATE_LIVE_FILE": "/l.jsonl"}
         assert "--resume" not in wire.RunRequest(role="w", brief_file="b", cwd="/w").to_argv("route.py")
@@ -55,7 +55,7 @@ class WorkerField:
         assert [procs.worker_end(stops, o).end for o in (None, "timeout")] == ["worker_survived"] * 2
 
     def test_reason_worker_survived_is_declared_with_facts(self):
-        r = json.loads((ROOT / "src/delegate/data/contract.json").read_text())["reasons"]["worker_survived"]
+        r = json.loads((ROOT / "packages/delegate/src/delegate/data/contract.json").read_text())["reasons"]["worker_survived"]
         assert (r["scope"], r["permanence"], r["retry"]) == ("machine", "needs_owner", "none")
 
 

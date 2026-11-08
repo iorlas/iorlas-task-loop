@@ -28,11 +28,11 @@ ROUNDS = 20
 CHILD = r"""
 import contextlib, datetime, io, json, runpy, sys, time
 from pathlib import Path
-sys.path.insert(0, str(Path.cwd() / "src"))
+sys.path.insert(0, str(Path.cwd() / "packages" / "delegate" / "src"))
 from delegate.app import env, onboard, usage
 
 mode, lane, rounds = sys.argv[1], sys.argv[2], int(sys.argv[3])
-main = runpy.run_path("src/delegate/entry.py")["main"]
+main = runpy.run_path("packages/delegate/src/delegate/entry.py")["main"]
 def call(args):
     with contextlib.redirect_stdout(io.StringIO()) as out:
         assert main(args) == 0

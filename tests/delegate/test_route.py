@@ -24,7 +24,7 @@ from delegate.domain.time import spec
 from tltestkit.tmpdir import TemporaryDirectory, mkdtemp
 
 ROOT = Path(__file__).resolve().parents[2]
-_entry = importlib.util.spec_from_file_location("route", ROOT / "src" / "delegate" / "entry.py")
+_entry = importlib.util.spec_from_file_location("route", ROOT / "packages" / "delegate" / "src" / "delegate" / "entry.py")
 assert _entry is not None
 assert _entry.loader is not None
 route = importlib.util.module_from_spec(_entry)
@@ -43,7 +43,7 @@ net.net_probe = lambda hosts=None: {
 os.environ["DELEGATE_CONFIG_DIR"] = mkdtemp()  # tests never touch a real config; classes that need their own set one
 T = 1_000_000_000.0  # a fixed "now"
 LIMIT_S = 30  # StateLock starts 8 interpreters that each import delegate
-CFG = json.loads((ROOT / "src" / "delegate" / "data" / "routing.json").read_text(encoding="utf-8"))
+CFG = json.loads((ROOT / "packages" / "delegate" / "src" / "delegate" / "data" / "routing.json").read_text(encoding="utf-8"))
 
 
 def obj(x: object) -> Any:

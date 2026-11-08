@@ -16,7 +16,7 @@ from test_route import ROOT
 
 from tltestkit.case import Case
 
-sys.path.insert(0, str(ROOT / "skills" / "delegate"))
+sys.path.insert(0, str(ROOT / "packages" / "delegate" / "src"))
 import stream_proc
 from any_agent import procs as shelf
 from any_agent.harnesses.codex import CodexHarness
@@ -170,7 +170,7 @@ class RealProcesses(Case):
             "from delegate.app.publish import LiveSink; from any_agent.supervisor import RunHooks, Supervisor; "
             "Supervisor(CodexHarness(), RunHooks(), LiveSink('codex', '')).run("
             "LaunchSpec(argv=[sys.executable, {!r}, 'spawner', {!r}], env=dict(os.environ), cwd='.', stdin='b'), 0)"
-        ).format(str(ROOT / "src"), FAKE, self.pidfile)
+        ).format(str(ROOT / "packages" / "delegate" / "src"), FAKE, self.pidfile)
         h = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.procs.append(h)
         child = wait_pid(self.pidfile)
