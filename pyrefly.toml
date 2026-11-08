@@ -24,7 +24,22 @@ implicit-any-type-argument = "ignore"
 # New code is strict from its first commit (88 D10); A sub-config cannot take
 # `preset`, so the kinds the strict preset adds are spelled out.
 [[sub-config]]
-matches = ["src/**", "packages/delegate/src/**"]
+matches = "src/**"
+[sub-config.errors]
+implicit-any-parameter = "error"
+implicit-any-empty-container = "error"
+implicit-any-lambda = "error"
+implicit-any-attribute = "error"
+missing-override-decorator = "error"
+method-assign = "error"
+non-exhaustive-match = "error"
+unnecessary-type-conversion = "error"
+deprecated = "error"
+implicit-any-type-argument = "error"
+
+# delegate was under src/** and keeps the strict kinds in its member folder.
+[[sub-config]]
+matches = "packages/delegate/src/**"
 [sub-config.errors]
 implicit-any-parameter = "error"
 implicit-any-empty-container = "error"
