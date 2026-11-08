@@ -13,9 +13,10 @@ def test_report_excludes_always_run_rules(monkeypatch):
     rules = {"tests/rules/test_one.py", "tests/rules/test_two.py"}
     own = {"tests/run/test_one.py", "tests/run/test_two.py", "tests/run/test_three.py"}
     selections = {"small.py": rules | {min(own)}, "large.py": rules | own}
-    repo = SimpleNamespace(trees=rules | own | selections.keys(), edges={})
+    repo = SimpleNamespace(trees=dict.fromkeys(rules | own | selections.keys()), edges={})
     monkeypatch.setattr(reach, "Repo", lambda root: repo)
-    monkeypatch.setattr(reach, "commit_files", lambda root, count: [{"small.py"}, {"large.py"}])
+    monkeypatch.setattr(reach, "commits", lambda root, count, until: [("abc", "2026-11-08", "small", {"small.py"}),
+                                                               ("def", "2026-11-07", "large", {"large.py"})])
     monkeypatch.setattr(reach, "select", lambda repo, changed: list(selections[next(iter(changed))] if changed else rules))
 
     lines = reach.report(Path("unused"), 2).splitlines()
