@@ -1,5 +1,7 @@
 """Installed task-loop releases and the version Claude Code records as installed."""
 
+import hashlib
+import json
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -42,3 +44,18 @@ def installed_newer(cfg: ConfigDir, root: Path, claude_dir: Callable[[], Path], 
     """The install selected at a running engine's step boundary."""
     found = installs(cfg, root, claude_dir, now).move_to()
     return (found.version, found.dir) if found else None
+
+
+def running_version(plugin_root: Path) -> str:
+    try:
+        return str(json.loads((plugin_root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")).get("version") or "")
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
+def shim_sha256(config: Path) -> str:
+    """The sha256 of <config>/bin/tl, the shim every session runs; '' when it is not there."""
+    try:
+        return hashlib.sha256((config / "bin" / "tl").read_bytes()).hexdigest()
+    except OSError:
+        return ""

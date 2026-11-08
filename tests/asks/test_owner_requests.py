@@ -133,7 +133,7 @@ class Cli(Case):
 
     def say(self, *argv, now=None):
         ap = argparse.ArgumentParser()
-        cli.add_parsers(ap.add_subparsers(dest="cmd"))
+        ask_verbs.add_parsers(ap.add_subparsers(dest="cmd"))
         when = now or time.time()
         return ask_verbs.run(cli.arguments(ap.parse_args(argv)), fake_stores().asks, lambda _r: self.store, lambda: when,
                              "denis", self.cfg, self.out.append)
