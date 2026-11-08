@@ -1,5 +1,6 @@
 """A check with `in: linux` never runs on this machine: with no executor it is a red result and the host shell is not called."""
 
+from typing import Literal
 from unittest import mock
 
 from tlkernel import check_files
@@ -44,7 +45,7 @@ def test_a_stopped_linux_check_is_reported_as_stopped_by_the_engine(workdir):
     assert (rc, host.killed, host.wall_hit) == (-15, True, False)
 
 
-def _route(workdir, folder, origin, run_in="slot"):
+def _route(workdir, folder, origin, run_in: Literal["clean", "slot"] = "slot"):
     root = workdir / "repo"
     dot = root / ".git"
     dot.mkdir(parents=True, exist_ok=True)

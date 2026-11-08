@@ -5,15 +5,16 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from tlkernel import check_files, reponame
 from tlkernel import checkmatchers as matchers
 from tlkernel.argv import argv_of
 from tlkernel.checks import UNVERIFIED_EXIT, Check
 from tlkernel.envvars import EnvVar
+from tlkernel.gitport import GateGit
 from tlkernel.waitenums import WaitWhat
 
 from tlgate.base import BaseCheck
 from tlgate.domain import retry
-from tlgate.executor_names import executor_repo
 from tlgate.host import CheckHost
 from tlgate.keep import keep
 from tlgate.linux import LinuxRun
@@ -21,6 +22,15 @@ from tlgate.step_env import step_env
 
 # the run's names that mean the same on the executor
 REMOTE_ENV = frozenset({EnvVar.TL_RUN_ID.value, EnvVar.TL_ATTEMPT.value, EnvVar.TL_ARTIFACT_STEP.value})
+
+
+def executor_repo(git: GateGit, wt: str) -> str:
+    """The repo's directory name on the executor (the mirror rule): the origin's `owner/name`, else the folder name; the cache key when a
+    segment is not a plain name."""
+    common = git.common_dir(wt)
+    name = reponame.repo_name(str(Path(common).parent if common else wt))
+    plain = all(seg.isascii() and seg[:1].isalnum() and all(c.isalnum() or c in "._-" for c in seg) for seg in name.split("/"))
+    return name if plain else str(check_files.repo_key(git, wt))
 
 
 @dataclass
