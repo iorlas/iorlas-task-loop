@@ -3,9 +3,9 @@ import hashlib
 from unittest import mock
 
 from taskloop.app.doctor import ops
-from taskloop.app.wire import brief as wire_brief
 from taskloop.domain import versions
 from taskloop.domain.brief import Brief, LoopLine, status_json, status_lines
+from tlrelease import catalog
 
 
 def loop(version):
@@ -41,10 +41,10 @@ def test_the_text_prints_the_shim_prefix_and_a_skew_line_only_when_there_is_skew
 
 
 def test_the_shim_hash_is_the_sha256_of_bin_tl_or_empty(tmp_path):
-    assert wire_brief.shim_sha256(tmp_path) == ""
+    assert catalog.shim_sha256(tmp_path) == ""
     (tmp_path / "bin").mkdir()
     (tmp_path / "bin" / "tl").write_bytes(b"#!/bin/sh\nexec x\n")
-    assert wire_brief.shim_sha256(tmp_path) == hashlib.sha256(b"#!/bin/sh\nexec x\n").hexdigest()
+    assert catalog.shim_sha256(tmp_path) == hashlib.sha256(b"#!/bin/sh\nexec x\n").hexdigest()
 
 
 def test_a_clone_behind_its_origin_is_a_warning_and_a_current_one_is_silent():
