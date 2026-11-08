@@ -90,5 +90,5 @@ def test_lander_keeps_rules_reached_through_the_gate_helper(repo):
     chosen = set(affected.select(repo, {"packages/land/src/tlland/lander.py"}))
     assert chosen & affected.RULES_BY_PATH.keys() == {
         "tests/rules/test_dash_engine_sql.py", "tests/rules/test_kernel_has_no_effects.py",
-        "tests/rules/test_ratchets.py", "tests/rules/test_round_handoffs.py",
+        "tests/rules/test_ratchets.py", "tests/rules/test_round_handoffs.py", "tests/rules/test_shelf_size_agreement.py",
     }
