@@ -4,7 +4,7 @@ import contextlib
 import hashlib
 import os
 import re
-import tempfile
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -97,7 +97,8 @@ def merge_base(a: str, b: str) -> str | None:
 
 def atomic_write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=path.parent)
+    tmp = path.parent / f".{path.name}.{uuid.uuid4().hex}.tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(text)
     os.replace(tmp, path)  # a new inode: the engine's ref memo tells a changed ref by it

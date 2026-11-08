@@ -2,7 +2,6 @@
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -47,7 +46,7 @@ class CapturedProcesses(Case):
         assert (r.exit, r.out) == (0, "x" * 200000 + "y" * 200000)
 
     def test_capture_false_inherits_output_and_still_supplies_input(self):
-        with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        with TemporaryDirectory() as tmp, (Path(tmp) / "out").open("w+b") as out, (Path(tmp) / "err").open("w+b") as err:
             code = ("import os, sys; from taskloop.adapters.spawner import RealSpawner; "
                     "from tlkernel.env import snapshot; "
                     "r = RealSpawner(snapshot()).run([sys.executable, '-c', "

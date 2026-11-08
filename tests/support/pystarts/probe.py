@@ -1,7 +1,7 @@
 """Counts the Python interpreter starts of a suite run: one line per start, appended at once (a killed process counts too) to the file
 `count.sh` names.
 
-    tests/support/pystarts/count.sh /tmp/starts.txt -n 8 -q       # prints the count; the file lists the starts
+    tests/support/pystarts/count.sh starts.txt -n 8 -q       # prints the count; the file lists the starts
 
 `count.sh` drops a .pth into the dev venv (so a child whose env lacks PYTHONPATH or PROBE_OUT is counted too: dashboard servers, nested
 pytest) and removes it when the run ends. Each line is the test that was running (the parent's PYTEST_CURRENT_TEST), a tab, and the

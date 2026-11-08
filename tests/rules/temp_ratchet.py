@@ -11,6 +11,13 @@ from rules.gate_rules import SKIP_DIRS
 HOME_FILE = "packages/kernel/src/tlkernel/scratch.py"
 SCAN = ("src", "dev", "skills", "tests")
 RATCHET_FILES = ("temp_ratchet.py", "test_temp_ratchet.py", "test_ratchets.py", "test_ratchets_change.py")  # they quote sites
+# These files bootstrap or exercise system-temp behavior that must be preserved.
+EXCEPTIONS = {
+    "tests/support/paths.py": "Bootstraps paths before taskloop is importable.",
+    "tests/rules/test_tempdir_cache.py": "Exercises the stdlib temporary-directory cache itself.",
+    "tests/doctor/test_env_checks.py": "The doctor warning needs a system-temp path as its input.",
+    "tests/conftest.py": "Preserves stdlib temp selection at bootstrap and saves, restores and resets its cache for isolation.",
+}
 NEEDLES = ("/tmp", "/var/tmp", "TMPDIR")
 
 
@@ -31,6 +38,8 @@ def file_counts(rel: str, tree: ast.Module) -> dict[str, int]:
     """{"site": n} of one file under src/, dev/, skills/ or tests/ that may name a temp location; empty for any other file."""
     path = Path(rel)
     if path.parts[0] not in SCAN or SKIP_DIRS & set(path.parts) - {"fixtures"} or "_vendor" in path.parts or rel == HOME_FILE:
+        return {}
+    if rel in EXCEPTIONS:
         return {}
     if "rules" in path.parts and path.name in RATCHET_FILES:
         return {}
