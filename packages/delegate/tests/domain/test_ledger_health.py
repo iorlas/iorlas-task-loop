@@ -24,14 +24,14 @@ LEDGER = HealthLedger(POL)
 GOLDEN = json.loads((Path(__file__).resolve().parent / "golden" / "health_replay.json").read_text(encoding="utf-8"))
 
 
-def row(ts, lane="L", model="m", outcome=None, task=None, say="", until=None, **kw):
+def row(ts, account="L", model="m", outcome=None, task=None, say="", until=None, **kw):
     """A history row as verbs.cmd_run writes it."""
     fields = failure_fields(outcome, "event", say, until)
     return RunRow(
         ts=ts,
         run_id=kw.pop("run_id", f"r{ts}"),
         role="worker",
-        lane=lane,
+        account=account,
         model=model,
         effort="high",
         done=outcome is None,
@@ -45,7 +45,8 @@ def row(ts, lane="L", model="m", outcome=None, task=None, say="", until=None, **
 
 
 def pair_keys(state):
-    """The (lane, model) pairs the fold counts: any_breaker keys of the form `lane|model` (a lane out is keyed by the lane alone)."""
+    """The (account, model) pairs the fold counts: any_breaker keys of the form `account|model` (an account out is keyed by the account
+    alone)."""
     return {k: v for k, v in state.keys.items() if "|" in k and not k.endswith("|")}
 
 
@@ -53,8 +54,8 @@ def fold(rows, state=None, pol=POL):
     return HealthLedger(pol).fold(rows, state)
 
 
-def view(state, lane, model, t, pol=POL):
-    return HealthLedger(pol).view(state, lane, model, t)
+def view(state, account, model, t, pol=POL):
+    return HealthLedger(pol).view(state, account, model, t)
 
 
 def golden_row(r):
@@ -62,7 +63,7 @@ def golden_row(r):
         ts=r["ts"],
         run_id=r["run_id"],
         role=r.get("role") or "worker",
-        lane=r["lane"],
+        account=r["account"],
         model=r["model"],
         effort="high",
         done=r.get("done", False),
@@ -82,7 +83,7 @@ class Replay:
         g = GOLDEN[name]
         state, got = State(), []
         for r in g["rows"]:
-            v = view(state, g["lane"], g["model"], r["ts"])
+            v = view(state, g["account"], g["model"], r["ts"])
             got.append([r["ts"], v.usable, v.canary, v.state])
             if v.usable:
                 LEDGER.step(state, golden_row(r))
@@ -94,14 +95,14 @@ class Replay:
         assert len(g["rows"]) == 114
         admitted = sum(1 for d in g["decisions"] if d[1])
         assert admitted < 10
-        assert view(state, g["lane"], g["model"], g["rows"][-1]["ts"] + 1).state == g["final"]
+        assert view(state, g["account"], g["model"], g["rows"][-1]["ts"] + 1).state == g["final"]
         assert g["final"] == "exhausted"
 
     def test_24_oct_grok_server_errors_of_one_task_bench_nothing_and_network_is_never_counted(self):
         state, g = self.replay("grok_other_24oct")
         assert [r["outcome"] for r in g["rows"]] == (["vendor_blip"] * 3 + ["network"])
         assert all(d[1] for d in g["decisions"])
-        assert view(state, g["lane"], g["model"], g["rows"][-1]["ts"] + 1).state == "up"
+        assert view(state, g["account"], g["model"], g["rows"][-1]["ts"] + 1).state == "up"
 
     def test_22_oct_bad_request_never_benches_a_pair(self):
         state, g = self.replay("bad_request_22oct")
@@ -113,11 +114,11 @@ class Replay:
         g = GOLDEN["night_22oct"]
         state, got = State(), []
         for r in sorted(g["rows"], key=lambda r: r["ts"]):
-            got.append([r["ts"], view(state, r["lane"], r["model"], r["ts"]).usable])
+            got.append([r["ts"], view(state, r["account"], r["model"], r["ts"]).usable])
             LEDGER.step(state, golden_row(r))
         assert got == g["decisions"]
         assert {k: p.rung for k, p in pair_keys(state).items()} == g["pairs"]
-        assert sorted(state.outs) == g["lanes"]
+        assert sorted(state.outs) == g["accounts"]
         assert not [k for k, p in pair_keys(state).items() if p.rung]
 
 
@@ -217,7 +218,7 @@ class Breaker(Case):
         assert not (pair_keys(s) or s.outs)
 
     def test_refusals_are_not_facts(self):
-        s = fold([RefusalRow(ts=1000 + i, outcome="vendor_blip", role="worker", lane="L", model="m", say="x") for i in range(9)])
+        s = fold([RefusalRow(ts=1000 + i, outcome="vendor_blip", role="worker", account="L", model="m", say="x") for i in range(9)])
         assert view(s, "L", "m", 1100).usable
 
     def test_pairs_are_independent(self):
@@ -233,17 +234,17 @@ class Breaker(Case):
         assert not view(s, "L", "m", 1002, pol).usable
 
     def test_breaker_applies_to_grok_deepseek_and_zai_pairs(self):
-        for lane, model in (
+        for account, model in (
             ("GROK_SUBSCRIPTION", "grok-4.7"),
             ("DEEPSEEK_FREE", "deepseek-v4.1-flash-free"),
             ("ZAI_CODING_SUBSCRIPTION", "glm-5.3"),
         ):
-            with self.subTest(lane=lane):
-                s = fold([row(1000 + i, lane, model, "vendor_blip", say="Server error.", task=f"t{i}") for i in range(3)])
-                assert not view(s, lane, model, 1010).usable
+            with self.subTest(account=account):
+                s = fold([row(1000 + i, account, model, "vendor_blip", say="Server error.", task=f"t{i}") for i in range(3)])
+                assert not view(s, account, model, 1010).usable
 
 
-class LaneFacts:
+class AccountFacts:
     def test_vendor_time_ends_a_limit_and_then_one_canary(self):
         s = fold([row(1000, outcome="rate_limited", say="limit", until=5000.0)])
         v = view(s, "L", "any-model", 2000)
@@ -258,21 +259,21 @@ class LaneFacts:
     def test_credit_probe_after_6_hours_and_logged_out(self):
         s = fold(
             [
-                row(1000, lane="C", outcome="credit_exhausted", say="out of credits"),
-                row(1000, lane="O", outcome="logged_out", say="not logged in"),
+                row(1000, account="C", outcome="credit_exhausted", say="out of credits"),
+                row(1000, account="O", outcome="logged_out", say="not logged in"),
             ]
         )
         assert view(s, "C", "m", 1000 + 6 * 3600 - 1).state == "exhausted"
         assert view(s, "O", "m", 1001).state == "logged_out"
         assert view(s, "C", "m", 1000 + 6 * 3600 + 1).usable
 
-    def test_a_done_on_the_lane_ends_its_limit_and_a_release_row_too(self):
+    def test_a_done_on_the_account_ends_its_limit_and_a_release_row_too(self):
         s = fold([row(1000, outcome="rate_limited", say="x", until=9e9), row(1100, model="other", outcome=None)])
         assert view(s, "L", "m", 1200).usable
-        s = fold([row(1000, outcome="rate_limited", say="x", until=9e9), ReleaseRow(ts=1100, lane="L")])
+        s = fold([row(1000, outcome="rate_limited", say="x", until=9e9), ReleaseRow(ts=1100, account="L")])
         assert view(s, "L", "m", 1200).usable
 
-    def test_a_lane_limit_and_a_bench_that_both_ended_still_make_the_next_launch_a_canary(self):
+    def test_a_account_limit_and_a_bench_that_both_ended_still_make_the_next_launch_a_canary(self):
         s = fold(
             [row(1000, outcome="rate_limited", say="x", until=1500.0)]
             + [row(1100 + i, outcome="worker_failed", say="y", task=f"t{i}") for i in range(3)]
@@ -348,7 +349,7 @@ class Fold:
             assert store.load(POL) is None
             store.save(s, POL)
             doc = json.loads((Path(d) / "cp.json").read_text(encoding="utf-8"))
-            doc["state"] = {"v": 1, "ts": 99999.0, "pairs": {}, "lanes": {}}  # the shape before any_breaker: absent, never a stale ts
+            doc["state"] = {"v": 2, "ts": 99999.0, "pairs": {}, "accounts": {}}  # the shape before any_breaker: absent, never a stale ts
             (Path(d) / "cp.json").write_text(json.dumps(doc), encoding="utf-8")
             assert store.load(POL) is None
 
@@ -356,5 +357,5 @@ class Fold:
         f = failure_fields("vendor_blip", "event", "Server error. " + "x" * 400, None)
         assert (f["outcome"], len(as_opt_str(f["fingerprint"]) or ""), len(as_opt_str(f["say"]) or "")) == ("vendor_blip", 12, 240)
         assert failure_fields(None, "", "") == {}
-        assert codec.to_json(row(1, outcome="hung", say="x"))["v"] == 1
+        assert codec.to_json(row(1, outcome="hung", say="x"))["v"] == 2
         assert replace(POL, n=2).n == 2

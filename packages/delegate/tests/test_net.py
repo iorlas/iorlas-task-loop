@@ -20,7 +20,7 @@ import routing_support as support
 from any_agent import procs
 from any_agent.classify import Outcome
 from any_agent.drops import looks_dropped
-from test_route import CFG, T, lanes, route
+from test_route import CFG, T, accounts, route
 
 from delegate.adapters import netprobe
 from delegate.app import env, harnesses, launch, net
@@ -29,12 +29,12 @@ from delegate.app.settle import Hung, Settler
 from delegate.contracts import stops
 from delegate.contracts.history import RunRow
 from delegate.contracts.routing import BreakerPolicy
+from delegate.domain.accounts import profiles
 from delegate.domain.health.ledger import HealthLedger, failure_fields
-from delegate.domain.lanes import profiles
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
-LANES = Path(__file__).resolve().parents[3] / "packages" / "delegate" / "src" / "delegate" / "adapters"
+ACCOUNTS = Path(__file__).resolve().parents[3] / "packages" / "delegate" / "src" / "delegate" / "adapters"
 
 
 @contextlib.contextmanager
@@ -88,7 +88,7 @@ class Probe:
         assert r["hosts"]["chatgpt.com"] == "slow"
 
     def test_no_subprocess_and_no_vendor_call(self):
-        src = (LANES / "netprobe.py").read_text(encoding="utf-8")
+        src = (ACCOUNTS / "netprobe.py").read_text(encoding="utf-8")
         assert not re.search(r"(?m)^\s*(import|from)\s+subprocess", src)
         assert "os.system" not in src
 
@@ -178,7 +178,7 @@ class RouteNet(Case):
         assert c["up"]
 
 
-class NotTheLanesFault:
+class NotTheAccountsFault:
     def test_network_never_counts_against_a_pair(self):
         assert not stops.benches_pair("network")
         led = HealthLedger(BreakerPolicy())
@@ -189,7 +189,7 @@ class NotTheLanesFault:
                 run_id=f"r{i}",
                 task=f"t{i}",
                 role="worker",
-                lane="OPENAI_SUBSCRIPTION",
+                account="OPENAI_SUBSCRIPTION",
                 model="m",
                 effort="high",
                 done=False,
@@ -199,10 +199,10 @@ class NotTheLanesFault:
         ]
         st = led.fold(rows)
         v = led.view(st, "OPENAI_SUBSCRIPTION", "m", 1100.0)
-        assert (v.state, v.usable, {k: v for k, v in st.keys.items() if '|' in k}, st.outs) == ("up", True, {}, {})
+        assert (v.state, v.usable, {k: v for k, v in st.keys.items() if "|" in k}, st.outs) == ("up", True, {}, {})
 
     def test_a_failure_that_names_no_cause_becomes_network_only_when_the_net_is_down(self):
-        d: dict[str, Any] = {"lane": "OPENAI_SUBSCRIPTION"}
+        d: dict[str, Any] = {"account": "OPENAI_SUBSCRIPTION"}
         down = {"up": False, "ip_up": False, "why": "offline", "ms": 1, "hosts": {}, "at": 1.0}
         for reason in ("hung", "worker_failed", "vendor_blip"):
             o = Outcome(reason, "", "ours")
@@ -218,12 +218,12 @@ class NotTheLanesFault:
         probe = mock.Mock(side_effect=AssertionError("probed"))
         with mock.patch.object(net, "net_probe", probe):
             o = launch.settler().net_pass(
-                Outcome("worker_failed", "stream disconnected before completion: websocket closed", "event"), {"lane": "X"}
+                Outcome("worker_failed", "stream disconnected before completion: websocket closed", "event"), {"account": "X"}
             )
         assert o.reason == "network"
 
-    def test_a_hung_worker_on_a_dead_net_marks_no_lane_out(self):
-        d: dict[str, Any] = {"lane": "OPENAI_SUBSCRIPTION", "model": "m"}
+    def test_a_hung_worker_on_a_dead_net_marks_no_account_out(self):
+        d: dict[str, Any] = {"account": "OPENAI_SUBSCRIPTION", "model": "m"}
         a = mock.Mock(schema=None, timeout=60)
         down = {"up": False, "ip_up": False, "why": "offline", "ms": 1, "hosts": {}, "at": 1.0}
         res: dict[str, Any] = {"ref": None}
@@ -235,8 +235,8 @@ class NotTheLanesFault:
         assert not {"hung_words", "hung_kind", "hung"} & set(res)
 
     @pytest.mark.parametrize(("kind", "rests"), [("first_event", True), ("mid_run", False)])
-    def test_only_a_worker_silent_from_the_start_rests_its_lane(self, kind, rests):
-        d: dict[str, Any] = {"lane": "OPENAI_SUBSCRIPTION", "model": "m"}
+    def test_only_a_worker_silent_from_the_start_rests_its_account(self, kind, rests):
+        d: dict[str, Any] = {"account": "OPENAI_SUBSCRIPTION", "model": "m"}
         up = {"up": True, "ip_up": True, "why": None, "ms": 1, "hosts": {}, "at": 1.0}
         with mock.patch.object(net, "net_probe", lambda hosts=None: up), mock.patch.object(Settler, "mark_out") as mark:
             hung = Hung("went quiet", kind)
@@ -247,18 +247,18 @@ class NotTheLanesFault:
 
 class Roles:
     def test_roles_say_usable_and_net(self):
-        ls = lanes()
+        ls = accounts()
         cached: dict[str, Any] = {"up": True, "since": T - 50, "at": T - 5, "hosts": {"chatgpt.com": "ok", "api.anthropic.com": "tcp"}}
         roles: Any = role_view.roles_view(CFG, ls, support.router(CFG, T), support.doc_of({}), T, cached)
         assert set(roles) == set(CFG["roles"])
         assert roles["planner"]["usable"]
-        assert roles["planner"]["lane"] == "OPENAI_SUBSCRIPTION"
+        assert roles["planner"]["account"] == "OPENAI_SUBSCRIPTION"
         assert "chatgpt.com" in roles["planner"]["hosts"]
         assert roles["planner"]["net"]["up"]  # one of its vendors answers
         assert roles["planner"]["net"]["age_s"] == 5
 
     def test_an_unusable_role_says_why_and_when(self):
-        ls = lanes(
+        ls = accounts(
             openai={"out": True, "out_until": T + 600, "out_reason": "limit"},
             sub={"out": True, "out_until": T + 900, "out_reason": "limit"},
         )
@@ -267,8 +267,8 @@ class Roles:
         assert roles["planner"]["until"] == (T + 600)
         assert roles["planner"]["net"]["up"] is None
 
-    def test_deciding_roles_leaves_the_lanes_as_it_found_them(self):
-        ls = lanes()
+    def test_deciding_roles_leaves_the_accounts_as_it_found_them(self):
+        ls = accounts()
         role_view.roles_view(CFG, ls, support.router(CFG, T), support.doc_of({}), T, None)
         assert all(not ln.busy and not ln.out for ln in ls.values())
 
@@ -276,7 +276,7 @@ class Roles:
         roles = {
             "worker": {
                 "usable": True,
-                "lane": "OPENAI_SUBSCRIPTION",
+                "account": "OPENAI_SUBSCRIPTION",
                 "model": "m",
                 "why": None,
                 "until": None,
@@ -286,7 +286,7 @@ class Roles:
         }
         cached: dict[str, Any] = {"up": False, "since": T, "at": T, "hosts": {"chatgpt.com": "tcp"}}
         r: Any = role_view.refresh(
-            roles, [{"lane": "OPENAI_SUBSCRIPTION", "roles": ["worker"], "until": T + 100, "reason": "pace"}], cached, T + 1
+            roles, [{"account": "OPENAI_SUBSCRIPTION", "roles": ["worker"], "until": T + 100, "reason": "pace"}], cached, T + 1
         )
         assert (r["worker"]["usable"], r["worker"]["net"]["up"]) == (False, False)
         assert r["worker"]["until"] == (T + 100)
@@ -313,7 +313,6 @@ class Cheap(Case):
             rc = route.main(["status", "--json", "--cheap"])
         return rc, json.loads(out.getvalue())
 
-
     def test_cheap_without_any_snapshot_has_empty_roles(self):
         rc, d = self.cheap()
         assert (rc, d["roles"]) == (0, {})
@@ -330,6 +329,6 @@ class Adapters:
             profiles.REGISTRY
         )  # each runner has one harness preparation, and launch_worker is the only launcher
 
-    def test_every_lane_in_routing_json_has_hosts_to_probe(self):
-        for lane in CFG["lanes"]:
-            assert profiles.hosts_of(lane), lane
+    def test_every_account_in_routing_json_has_hosts_to_probe(self):
+        for account in CFG["accounts"]:
+            assert profiles.hosts_of(account), account

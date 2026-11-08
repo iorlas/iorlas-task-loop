@@ -131,9 +131,9 @@ class RunBase(Case):
     def args_seen(self):
         return Path(os.environ["FAKE_ARGS"]).read_text() if Path(os.environ["FAKE_ARGS"]).exists() else ""
 
-    def lease(self, rid, lane, task="", expires=None):
+    def lease(self, rid, account, task="", expires=None):
         support.put_lease(
-            rid, lane=lane, role="worker", start=env.now(), task=task, expires=expires if expires is not None else env.now() + 600
+            rid, account=account, role="worker", start=env.now(), task=task, expires=expires if expires is not None else env.now() + 600
         )
 
     def play(self, *script):
@@ -193,7 +193,7 @@ class RunBase(Case):
         for r in rows:
             env.history_add(r)
 
-    def failed_rows(self, n, ago, outcome="worker_failed", lane="OPENAI_SUBSCRIPTION", model="gpt-6.1-sol", say="boom"):
+    def failed_rows(self, n, ago, outcome="worker_failed", account="OPENAI_SUBSCRIPTION", model="gpt-6.1-sol", say="boom"):
         t = env.now() - ago
         return [
             hist.RunRow(
@@ -201,7 +201,7 @@ class RunBase(Case):
                 run_id=f"f{i}",
                 task=f"t{i}",
                 role="worker",
-                lane=lane,
+                account=account,
                 model=model,
                 effort="high",
                 done=False,

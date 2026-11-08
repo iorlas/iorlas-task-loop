@@ -56,22 +56,21 @@ class Cheap(Case):
 
     def snapshot_and_logins(self, now):
         status.write_snapshot(
-            {"v": 1, "ts": now - 90, "lanes": {"X": {}}, "cockpit": {"v": 1}, "running": [], "recent": [], "needs_input": []}
+            {"v": 1, "ts": now - 90, "accounts": {"X": {}}, "cockpit": {"v": 1}, "running": [], "recent": [], "needs_input": []}
         )
         usage.auth_cache().remember("CLAUDE_SUBSCRIPTION", False, "not logged in", now - 30)
         rc, d = self.cheap()
         assert rc == 0
         assert d["age_s"] == 90
-        assert d["lanes"] == {"X": {}}
+        assert d["accounts"] == {"X": {}}
         assert d["auth"]["CLAUDE_SUBSCRIPTION"]["ok"] is False
         assert d["auth"]["CLAUDE_SUBSCRIPTION"]["age_s"] == 30
 
     def test_running_comes_from_fresh_leases_without_ps(self):
         now = env.now()
-        env.update_state(lambda s: s.leases.__setitem__("r1", support.lease(lane="L", role="worker", start=now - 5, expires=now + 60)))
+        env.update_state(lambda s: s.leases.__setitem__("r1", support.lease(account="L", role="worker", start=now - 5, expires=now + 60)))
         _rc, d = self.cheap()
         assert [r["run_id"] for r in d["running"]] == ["r1"]
-
 
 
 class AuthCache(Case):

@@ -15,7 +15,7 @@ def answer(lanes: dict[str, Any], **top: Any) -> dict[str, Any]:
     """A typed status answer for these top-level lanes, with one cockpit row each."""
     rows = [{"id": n, "state": "resting" if ln.get("out") else "ready", "model": ln.get("model"),
              "family": ln.get("family"), "kind": ln.get("kind")} for n, ln in lanes.items()]
-    return dict({"v": 1, "ts": time.time(), "lanes": lanes, "cockpit": {"v": 1, "lanes": rows}}, **top)
+    return dict({"v": 1, "ts": time.time(), "accounts": lanes, "cockpit": {"v": 1, "accounts": rows}}, **top)
 
 
 def file_status(dash: Any, j: dict[str, Any]) -> None:

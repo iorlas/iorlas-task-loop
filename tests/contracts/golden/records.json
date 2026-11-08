@@ -483,7 +483,7 @@
     "leftovers": []
    },
    "pause": {
-    "reason": "no_lane",
+    "reason": "no_account",
     "producer": "engine",
     "permanence": null,
     "retry_after": 0.0,
@@ -1861,7 +1861,7 @@
   "contract": 4,
   "stop": {
    "reason": "rate_limited",
-   "scope": "lane",
+   "scope": "account",
    "permanence": "transient",
    "retry": {
     "kind": "predicted",
@@ -1878,7 +1878,7 @@
   },
   "text": "t",
   "ref": "r",
-  "lane": "L",
+  "account": "L",
   "model": "m",
   "effort": "high",
   "family": "zai",
@@ -1950,7 +1950,7 @@
   "exit_code": -15,
   "first_error": "429 rate limited",
   "fallback": false,
-  "first_lane": "L",
+  "first_account": "L",
   "warning": "",
   "ask_kind": "",
   "warnings": [
@@ -2055,7 +2055,7 @@
     "leftovers": []
    },
    "pause": {
-    "reason": "no_lane",
+    "reason": "no_account",
     "producer": "engine",
     "permanence": null,
     "retry_after": 0.0,

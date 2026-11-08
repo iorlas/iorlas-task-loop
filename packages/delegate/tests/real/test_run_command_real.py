@@ -22,8 +22,8 @@ from delegate.app import env, harnesses, status, usage
 from delegate.app.fleet import Fleet
 from delegate.contracts.routing import Settings
 from delegate.contracts.state import StateDoc, UsageCache
-from delegate.domain.lanes import leases
-from delegate.domain.lanes.lane import Lane
+from delegate.domain.accounts import leases
+from delegate.domain.accounts.account import Account
 from tltestkit.procsim import real_proc
 
 
@@ -38,7 +38,7 @@ class RunCommand(RunBase):
         """No second read after the run: the codex app-server spawn cost 1-2 s per run (delegate-2ys)."""
         calls: list[int] = []
 
-        def counting(lane: Lane, S: Settings, st: StateDoc, t: float, ai_usage: object = None) -> None:
+        def counting(account: Account, S: Settings, st: StateDoc, t: float, ai_usage: object = None) -> None:
             calls.append(1)
 
         usage.READERS["codex_app_server"] = counting
@@ -60,17 +60,17 @@ class RunCommand(RunBase):
         d["rate_limits"]["seven_day"]["used_percentage"] = 97
         f.write_text(json.dumps(d))
         _, r = self.run_it()
-        assert why(r) == "no_lane"
+        assert why(r) == "no_account"
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_interactive_session_gets_the_agent_step_and_the_consent_question(self):
         self.codex_out()  # Codex plans first, Claude only when it is down
         _, r = self.run_it(role="planner", unattended=False)
-        assert (r["stop"], r["lane"], r["agent_model"]) == (None, "CLAUDE_SUBSCRIPTION", "sonnet")
+        assert (r["stop"], r["account"], r["agent_model"]) == (None, "CLAUDE_SUBSCRIPTION", "sonnet")
         assert "coordinator" in r["brief_prefix"]
         [support.put_out(n, env.now() + 3600) for n in ("OPENAI_SUBSCRIPTION", "CLAUDE_SUBSCRIPTION")]
         _, r = self.run_it(role="planner", unattended=False)
-        assert why(r) == "no_lane"
+        assert why(r) == "no_account"
         assert "ask_user" in r
 
     @real_proc("delegate: a worker, git or CLI process")
@@ -79,35 +79,41 @@ class RunCommand(RunBase):
             self.lease(f"r{i}", "OPENAI_SUBSCRIPTION")  # Codex, the worker's first choice, has 4 of 4 slots taken
         before = time.time()
         _, r = self.run_it()
-        assert (why(r), r["stop"]["permanence"], r["lane"]) == ("busy", "transient", "OPENAI_SUBSCRIPTION")
+        assert (why(r), r["stop"]["permanence"], r["account"]) == ("busy", "transient", "OPENAI_SUBSCRIPTION")
         assert before + 50 < at(r) < time.time() + 130  # anchored before the run: the margin does not shrink with the load
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_the_first_choice_is_rung_0_and_no_fallback(self):
         _, r = self.run_it()
-        assert (r["lane"], r["rung"], r["fallback"], r["fallback_reason"], r["first_lane"]) == ("OPENAI_SUBSCRIPTION", 0, False, None, None)
+        assert (r["account"], r["rung"], r["fallback"], r["fallback_reason"], r["first_account"]) == (
+            "OPENAI_SUBSCRIPTION",
+            0,
+            False,
+            None,
+            None,
+        )
         _, r = self.run_it("--resume", "thread-123")
         assert (r["rung"], r["fallback"]) == (0, False)
         self.codex_out()
         _, r = self.run_it()
-        assert (r["lane"], r["fallback"], r["fallback_reason"]) == ("CLAUDE_SUBSCRIPTION", True, "out")
+        assert (r["account"], r["fallback"], r["fallback_reason"]) == ("CLAUDE_SUBSCRIPTION", True, "out")
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_three_running_leave_room_for_a_fourth(self):
         for i in range(3):
             self.lease(f"r{i}", "OPENAI_SUBSCRIPTION")
         _, r = self.run_it()
-        assert r["lane"] == "OPENAI_SUBSCRIPTION"
+        assert r["account"] == "OPENAI_SUBSCRIPTION"
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_expired_leases_do_not_count(self):
         for i in range(4):
             self.lease(f"r{i}", "OPENAI_SUBSCRIPTION", expires=env.now() - 1)
         _, r = self.run_it()
-        assert r["lane"] == "OPENAI_SUBSCRIPTION"
+        assert r["account"] == "OPENAI_SUBSCRIPTION"
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_a_strained_lane_allows_one(self):
+    def test_a_strained_account_allows_one(self):
         f = Path(self.tmp.name) / ".claude" / "state" / "max-limits.json"
         d = json.loads(f.read_text())
         d["rate_limits"]["five_hour"]["used_percentage"] = 85
@@ -115,23 +121,23 @@ class RunCommand(RunBase):
         support.put_out("OPENAI_SUBSCRIPTION", env.now() + 3600)
         self.lease("c0", "CLAUDE_SUBSCRIPTION")
         _, r = self.run_it()
-        assert why(r) == "no_lane"  # one slot, taken: the first choice is out, so nothing waits for a slot
+        assert why(r) == "no_account"  # one slot, taken: the first choice is out, so nothing waits for a slot
 
     def strain_openai(self, five=85, week=8):
-        def read(lane: Lane, S: Settings, st: StateDoc, t: float, ai_usage: object = None) -> None:
-            lane.five, lane.week = five, week
+        def read(account: Account, S: Settings, st: StateDoc, t: float, ai_usage: object = None) -> None:
+            account.five, account.week = five, week
 
         usage.READERS["codex_app_server"] = read
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_a_pinned_strained_lane_retries_when_its_one_slot_is_taken(self):
+    def test_a_pinned_strained_account_retries_when_its_one_slot_is_taken(self):
         self.strain_openai()
         self.lease("r0", "OPENAI_SUBSCRIPTION", task="T-busy")
         for unattended in (False, True):
             with self.subTest(unattended=unattended):
                 before = time.time()
                 code, r = self.run_it("--only-family", "openai", unattended=unattended)
-                assert (code, why(r), r["lane"]) == (0, "busy", "OPENAI_SUBSCRIPTION")
+                assert (code, why(r), r["account"]) == (0, "busy", "OPENAI_SUBSCRIPTION")
                 assert (r["stop"]["permanence"], r["stop"]["retry"]["kind"]) == ("transient", "poll")
                 assert before + 60 <= at(r) <= time.time() + 120
                 assert "openai busy: 1 running, 1 allowed" in r["say"]
@@ -147,15 +153,15 @@ class RunCommand(RunBase):
         assert [(r["run_id"], r["task"]) for r in running] == [("r0", "T-busy")]
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_a_pinned_family_uses_a_free_lane_or_waits_for_a_busy_one(self):
+    def test_a_pinned_family_uses_a_free_account_or_waits_for_a_busy_one(self):
         cfg = obj(env.load_routing())
-        cfg["lanes"]["OPENAI_OTHER"] = dict(cfg["lanes"]["OPENAI_SUBSCRIPTION"])
+        cfg["accounts"]["OPENAI_OTHER"] = dict(cfg["accounts"]["OPENAI_SUBSCRIPTION"])
         self.lease("r0", "OPENAI_SUBSCRIPTION")
         for other_out in (True, False):
             with self.subTest(other_out=other_out):
                 fleet = {
-                    "OPENAI_OTHER": Lane("OPENAI_OTHER", "openai", "subscription", out=other_out),
-                    "OPENAI_SUBSCRIPTION": Lane("OPENAI_SUBSCRIPTION", "openai", "subscription", five=85, week=8),
+                    "OPENAI_OTHER": Account("OPENAI_OTHER", "openai", "subscription", out=other_out),
+                    "OPENAI_SUBSCRIPTION": Account("OPENAI_SUBSCRIPTION", "openai", "subscription", five=85, week=8),
                 }
                 builder = mock.Mock()
                 builder.build.return_value = Fleet(fleet)
@@ -165,7 +171,7 @@ class RunCommand(RunBase):
                 ):
                     _, r = self.run_it("--only-family", "openai")
                 assert why(r) == ("busy" if other_out else None)
-                assert r["lane"] == ("OPENAI_SUBSCRIPTION" if other_out else "OPENAI_OTHER")
+                assert r["account"] == ("OPENAI_SUBSCRIPTION" if other_out else "OPENAI_OTHER")
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_pinned_family_really_out_or_over_ceiling_does_not_poll(self):
@@ -176,22 +182,22 @@ class RunCommand(RunBase):
                 if out:
                     self.codex_out()
                 _, r = self.run_it("--only-family", "openai")
-                assert why(r) == "no_lane"
+                assert why(r) == "no_account"
                 assert r["stop"]["retry"]["kind"] != "poll"
                 assert ("openai out" if out else "openai over its limit") in r["say"]
                 assert "openai busy" not in r["say"]
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_a_pinned_busy_lane_on_hold_does_not_poll_for_a_slot(self):
+    def test_a_pinned_busy_account_on_hold_does_not_poll_for_a_slot(self):
         self.strain_openai()
         self.lease("r0", "OPENAI_SUBSCRIPTION")
         support.add_hold("OPENAI_SUBSCRIPTION", env.now() + 3600, "owner hold")
         _, r = self.run_it("--only-family", "openai")
-        assert why(r) == "no_lane"
+        assert why(r) == "no_account"
         assert r["stop"]["retry"]["kind"] != "poll"
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_a_pinned_ready_lane_with_an_unsupported_guard_is_not_over_limit(self):
+    def test_a_pinned_ready_account_with_an_unsupported_guard_is_not_over_limit(self):
         _, r = self.run_it("--only-family", "openai", "--engine-only", "release-check")
         assert why(r) == "engine_only_unenforced"
         for text in ("OPENAI_SUBSCRIPTION", "--engine-only release-check", "--engine-only-advisory"):
@@ -204,22 +210,22 @@ class RunCommand(RunBase):
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_pinned_codex_writer_can_run_with_engine_only_advisory(self):
         code, r = self.run_it("--only-family", "openai", "--engine-only", "release-check", "--engine-only", "e2e", "--engine-only-advisory")
-        assert (code, r["stop"], r["lane"], r["flag"]) == (0, None, "OPENAI_SUBSCRIPTION", "engine_only_advisory")
+        assert (code, r["stop"], r["account"], r["flag"]) == (0, None, "OPENAI_SUBSCRIPTION", "engine_only_advisory")
         assert r["warning"] == "OPENAI_SUBSCRIPTION cannot deny --engine-only release-check, e2e: advisory only, the brief must say so"
         assert self.args_seen()
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_unpinned_engine_only_still_uses_an_enforcing_lane(self):
+    def test_unpinned_engine_only_still_uses_an_enforcing_account(self):
         _, r = self.run_it("--engine-only", "release-check")
-        assert (r["stop"], r["lane"]) == (None, "CLAUDE_SUBSCRIPTION")
+        assert (r["stop"], r["account"]) == (None, "CLAUDE_SUBSCRIPTION")
         assert r["flag"] != "engine_only_advisory"
         assert "warning" not in r
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_unpinned_engine_only_without_an_enforcing_lane_keeps_no_lane(self):
+    def test_unpinned_engine_only_without_an_enforcing_account_keeps_no_account(self):
         support.put_out("CLAUDE_SUBSCRIPTION", env.now() + 3600)
         _, r = self.run_it("--engine-only", "release-check")
-        assert why(r) == "no_lane"
+        assert why(r) == "no_account"
         assert self.args_seen() == ""
 
     @real_proc("delegate: a worker, git or CLI process")
@@ -269,7 +275,7 @@ class RunCommand(RunBase):
         assert run("cat ~/.ssh/id_rsa").returncode != 0
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_external_directory_lets_read_only_lanes_read_runs_and_temp_only(self):
+    def test_external_directory_lets_read_only_accounts_read_runs_and_temp_only(self):
         with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": "/x/cfg"}):
             ext = obj(box.permissions(harnesses.sandbox(), False))["external_directory"]
         assert ext["*"] == "deny"
@@ -304,7 +310,7 @@ class RunCommand(RunBase):
         assert [r["run_id"] for r in out["running"]] == ["run-1"]
         assert out["running"][0]["task"] == "T-5"
         assert "recent" not in out
-        assert "OPENAI_SUBSCRIPTION" in out["lanes"]
+        assert "OPENAI_SUBSCRIPTION" in out["accounts"]
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_timeout_kills_the_whole_process_group(self):
@@ -330,25 +336,25 @@ class RunCommand(RunBase):
             payload = json.loads(sys.stdout.getvalue())
         finally:
             sys.stdout = real
-        row = next(x for x in payload["health"] if (x["lane"], x["model"]) == ("OPENAI_SUBSCRIPTION", "gpt-6.1-sol"))
+        row = next(x for x in payload["health"] if (x["account"], x["model"]) == ("OPENAI_SUBSCRIPTION", "gpt-6.1-sol"))
         assert (row["state"], row["source"], row["kind"], row["rung"]) == ("broken", "breaker", "worker_failed", 1)
         assert row["leases"] == {"live": 0, "suspect": 0}
         assert len(row["last_failures"]) == 3
         assert row["until"] > env.now() and row["evidence"] == "boom"
-        other = next(x for x in payload["health"] if (x["lane"], x["model"]) == ("OPENAI_SUBSCRIPTION", "gpt-6-luna"))
+        other = next(x for x in payload["health"] if (x["account"], x["model"]) == ("OPENAI_SUBSCRIPTION", "gpt-6-luna"))
         assert other["state"] == "up"
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_a_suspect_lease_does_not_count_against_the_lane_cap(self):
+    def test_a_suspect_lease_does_not_count_against_the_account_cap(self):
         now = env.now()
         quiet = support.lease(
-            lane="OPENAI_SUBSCRIPTION", role="worker", start=now - 3000, expires=now + 100, silence_s=2400, last_event=now - 2500
+            account="OPENAI_SUBSCRIPTION", role="worker", start=now - 3000, expires=now + 100, silence_s=2400, last_event=now - 2500
         )
         live = dataclasses.replace(quiet, last_event=now - 10)
         assert leases.suspect(quiet, now)
         assert not leases.suspect(live, now)
         assert not leases.suspect(
-            support.lease(lane="x", start=now - 99999, expires=now + 1), now
+            support.lease(account="x", start=now - 99999, expires=now + 1), now
         )  # an old lease without a limit is not guessed at
         st = support.doc_of({})
         st.leases = {"a": quiet, "b": live}
@@ -375,7 +381,7 @@ class RunCommand(RunBase):
             start = proc_start(orphan.pid)
             support.put_lease(
                 "old-run",
-                lane="OPENAI_SUBSCRIPTION",
+                account="OPENAI_SUBSCRIPTION",
                 role="worker",
                 pid=dead.pid,
                 pid_start="Mon Jan  1 00:00:00 2001",
@@ -399,7 +405,7 @@ class RunCommand(RunBase):
         try:
             support.put_lease(
                 "old-run",
-                lane="OPENAI_SUBSCRIPTION",
+                account="OPENAI_SUBSCRIPTION",
                 role="worker",
                 pid=os.getpid(),
                 pid_start=proc_start(os.getpid()),
@@ -424,7 +430,7 @@ class RunCommand(RunBase):
         try:
             support.put_lease(
                 "old-run",
-                lane="OPENAI_SUBSCRIPTION",
+                account="OPENAI_SUBSCRIPTION",
                 role="worker",
                 pid=dead.pid,
                 pid_start="x",
@@ -442,13 +448,13 @@ class RunCommand(RunBase):
             other.wait()
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_a_resume_on_a_lane_with_all_slots_taken_waits_for_a_slot(self):
+    def test_a_resume_on_a_account_with_all_slots_taken_waits_for_a_slot(self):
         self.run_it()
         for i in range(4):
             self.lease(f"run-{i}", "OPENAI_SUBSCRIPTION")
         before = time.time()
         _, r = self.run_it("--resume", "thread-123")
-        assert (why(r), r["stop"]["permanence"], r["lane"]) == ("busy", "transient", "OPENAI_SUBSCRIPTION")
+        assert (why(r), r["stop"]["permanence"], r["account"]) == ("busy", "transient", "OPENAI_SUBSCRIPTION")
         assert before + 50 < at(r) < time.time() + 130
         last = json.loads(env.history_path().read_text().splitlines()[-1])  # refusals are in history too
         assert (last["outcome"], last["resume"], last["kind"]) == ("busy", True, "refusal")
@@ -464,23 +470,23 @@ class RunCommand(RunBase):
             },
         }
         env.update_state(lambda s: setattr(s, "codex_limits", UsageCache(at=env.now(), data=res)))
-        lane = Lane("OPENAI_SUBSCRIPTION", "openai", "subscription")
-        self.real["codex_app_server"](lane, env.settings_of(env.load_routing()), env.load_state(), env.now())
-        assert (lane.five, lane.week) == (None, 40.0)
-        assert lane.pace is not None
+        account = Account("OPENAI_SUBSCRIPTION", "openai", "subscription")
+        self.real["codex_app_server"](account, env.settings_of(env.load_routing()), env.load_state(), env.now())
+        assert (account.five, account.week) == (None, 40.0)
+        assert account.pace is not None
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_resume_continues_on_the_same_lane_and_never_switches(self):
+    def test_resume_continues_on_the_same_account_and_never_switches(self):
         _, first = self.run_it()
         assert first["ref"] == "thread-123"
         _, r = self.run_it("--resume", "thread-123")
-        assert (r["stop"], r["lane"]) == (None, "OPENAI_SUBSCRIPTION")
+        assert (r["stop"], r["account"]) == (None, "OPENAI_SUBSCRIPTION")
         assert "exec resume" in self.args_seen()
         assert 'sandbox_mode="workspace-write"' in self.args_seen()
         support.put_out("OPENAI_SUBSCRIPTION", env.now() + 3600)
         n = len(self.args_seen().splitlines())
         _, r = self.run_it("--resume", "thread-123")
-        assert (why(r), r["lane"], r["stop"]["permanence"]) == ("rate_limited", "OPENAI_SUBSCRIPTION", "transient")
+        assert (why(r), r["account"], r["stop"]["permanence"]) == ("rate_limited", "OPENAI_SUBSCRIPTION", "transient")
         assert at(r) > time.time()
         assert "out until" in r["say"]
         assert len(self.args_seen().splitlines()) == n  # nothing was launched

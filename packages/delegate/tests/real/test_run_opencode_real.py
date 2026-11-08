@@ -1,4 +1,4 @@
-"""`route.py run` on the OpenCode lanes: watchdog, sandboxed shell, Grok answers and cost."""
+"""`route.py run` on the OpenCode accounts: watchdog, sandboxed shell, Grok answers and cost."""
 
 import json
 import os
@@ -20,14 +20,14 @@ from tltestkit.procsim import real_proc
 
 class RunOpenCode(RunBase):
     @real_proc("delegate: a worker, git or CLI process")
-    @pytest.mark.skipif(sys.platform != "darwin", reason="the Grok lane runs commands under sandbox-exec: macOS only")
-    def test_opencode_limit_in_its_log_stops_the_child_and_marks_the_lane_out_once(self):
+    @pytest.mark.skipif(sys.platform != "darwin", reason="the Grok account runs commands under sandbox-exec: macOS only")
+    def test_opencode_limit_in_its_log_stops_the_child_and_marks_the_account_out_once(self):
         log = Path(self.tmp.name) / ".local" / "share" / "opencode" / "log"
         log.mkdir(parents=True, exist_ok=True)
         pid = self.watchdog_fake(f'echo "ERROR Free usage limit reached" >> "{log}/opencode.log"; sleep 60')
         time.time()
         _, r = self.run_it(timeout=0)
-        assert (why(r), r["stop"]["permanence"], r["lane"]) == ("rate_limited", "transient", "GROK_SUBSCRIPTION")
+        assert (why(r), r["stop"]["permanence"], r["account"]) == ("rate_limited", "transient", "GROK_SUBSCRIPTION")
         out = env.load_state().out["GROK_SUBSCRIPTION"]
         assert "Free usage limit reached" in out.why
         assert out.until > time.time()
@@ -35,8 +35,8 @@ class RunOpenCode(RunBase):
         self.assert_child_gone(pid)
 
     @real_proc("delegate: a worker, git or CLI process")
-    @pytest.mark.skipif(sys.platform != "darwin", reason="the Grok lane runs commands under sandbox-exec: macOS only")
-    def test_opencode_with_no_first_event_is_stopped_and_the_lane_marked_hung(self):
+    @pytest.mark.skipif(sys.platform != "darwin", reason="the Grok account runs commands under sandbox-exec: macOS only")
+    def test_opencode_with_no_first_event_is_stopped_and_the_account_marked_hung(self):
         pid = self.watchdog_fake("sleep 60")
         with short_limits("opencode", first_event_s=1):
             time.time()
@@ -46,7 +46,7 @@ class RunOpenCode(RunBase):
         self.assert_child_gone(pid)
 
     @real_proc("delegate: a worker, git or CLI process")
-    @pytest.mark.skipif(sys.platform != "darwin", reason="the Grok lane runs commands under sandbox-exec: macOS only")
+    @pytest.mark.skipif(sys.platform != "darwin", reason="the Grok account runs commands under sandbox-exec: macOS only")
     def test_opencode_normal_run_is_not_touched_by_the_watchdog(self):
         log = Path(self.tmp.name) / ".local" / "share" / "opencode" / "log"
         log.mkdir(parents=True, exist_ok=True)
@@ -59,12 +59,12 @@ class RunOpenCode(RunBase):
         assert "GROK_SUBSCRIPTION" not in env.load_state().out
 
     @real_proc("delegate: a worker, git or CLI process")
-    @pytest.mark.skipif(sys.platform != "darwin", reason="the Grok lane runs commands under sandbox-exec: macOS only")
+    @pytest.mark.skipif(sys.platform != "darwin", reason="the Grok account runs commands under sandbox-exec: macOS only")
     def test_grok_is_the_worker_after_codex_in_a_sandboxed_shell_without_user_config(self):
         self.grok_ready()
         self.codex_out()
         _, r = self.run_it()
-        assert (r["stop"], r["lane"], r["family"], r["text"], r["ref"]) == (None, "GROK_SUBSCRIPTION", "xai", "grok did it", "ses_1")
+        assert (r["stop"], r["account"], r["family"], r["text"], r["ref"]) == (None, "GROK_SUBSCRIPTION", "xai", "grok did it", "ses_1")
         assert r["tokens"] == {"in": 50, "cached": 40, "out": 5}
         assert r["transcript"].endswith("opencode-sessions/ses_1.json") and Path(r["transcript"]).is_file()
         args, env = self.args_seen().splitlines()[-1], Path(os.environ["FAKE_ENV"]).read_text()
@@ -80,7 +80,7 @@ class RunOpenCode(RunBase):
         assert "Every command runs in a sandbox" in Path(os.environ["FAKE_ARGS"] + ".brief").read_text()
         for who in ("openai", "xai"):  # Grok never reviews (delegate-qjw): with only Grok up the reviewer is Claude Sonnet
             _, r = self.run_it("--authored-by", who, role="reviewer")
-            assert r["lane"] != "GROK_SUBSCRIPTION", who
+            assert r["account"] != "GROK_SUBSCRIPTION", who
 
     @real_proc("delegate: a worker, git or CLI process")
     @pytest.mark.skipif(sys.platform != "darwin", reason="macOS only")
@@ -114,7 +114,7 @@ class RunOpenCode(RunBase):
         self.grok_ready()
         self.codex_out()
         _, r = self.run_it(mode="limit")
-        assert (why(r), r["lane"]) == ("rate_limited", "GROK_SUBSCRIPTION")
+        assert (why(r), r["account"]) == ("rate_limited", "GROK_SUBSCRIPTION")
         assert time.strftime("%H:%M", time.localtime(env.load_state().out["GROK_SUBSCRIPTION"].until)) == "05:50"
         env.update_state(lambda s: s.out.pop("GROK_SUBSCRIPTION"))
         _, r = self.run_it(mode="silent")
@@ -130,7 +130,7 @@ class RunOpenCode(RunBase):
         self.codex_out()
         _, r = self.run_it()
         u = r["usage"]
-        assert (r["lane"], r["cost"]) == ("GROK_SUBSCRIPTION", 0.25)
+        assert (r["account"], r["cost"]) == ("GROK_SUBSCRIPTION", 0.25)
         assert (u["cost_usd"], u["cost_source"], u["accounting"]) == (0.25, "harness", "estimated")
         assert {k: u["tokens"][k] for k in ("in_fresh", "cache_read", "cache_write", "out")} == {
             "in_fresh": 10,

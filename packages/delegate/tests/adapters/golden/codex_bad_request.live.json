@@ -10,7 +10,7 @@
   "t": 101.0,
   "harness": "codex",
   "pid": 4242,
-  "lane": "OPENAI_SUBSCRIPTION",
+  "account": "OPENAI_SUBSCRIPTION",
   "model": "m",
   "effort": "high",
   "role": "worker"

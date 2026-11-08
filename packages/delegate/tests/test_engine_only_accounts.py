@@ -1,4 +1,5 @@
-"""delegate-81g: `--engine-only RECIPE` is enforced by the harness of every lane that can write, or the lane is not routed a write step.
+"""delegate-81g: `--engine-only RECIPE` is enforced by the harness of every account that can write, or the account is not routed a write
+step.
 Claude: the PreToolUse hook. OpenCode: the bash deny rules of its permission config. Codex: no enforcement point, refused at route time."""
 
 import copy
@@ -12,7 +13,7 @@ import routing_support as support
 from any_agent.harnesses import opencode_sandbox as box
 from any_agent.harnesses.opencode import OpenCodeHarness
 from any_agent.protocol import LaunchInputs
-from test_review_order import CFG, T, lanes
+from test_review_order import CFG, T, accounts
 
 from delegate.app import harnesses, launch
 from delegate.contracts.routing import CallArgs
@@ -113,12 +114,9 @@ class OpenCodeRulesTest:
         assert launch.denied_items(hx, False, ("slow",)) == want
 
 
-
-
 class RoutingTest(Case):
     def decide(self, *up, role="worker", **kw):
-        return support.decide(role, copy.deepcopy(CFG), lanes(*up), {}, T, dict({"authored_by": None, "unattended": True}, **kw))
-
+        return support.decide(role, copy.deepcopy(CFG), accounts(*up), {}, T, dict({"authored_by": None, "unattended": True}, **kw))
 
     def test_with_only_codex_up_the_call_is_refused_with_a_typed_reason(self):
         d = self.decide("openai", engine_only=["slow", "e2e"])
@@ -127,7 +125,7 @@ class RoutingTest(Case):
         assert any(x.startswith("OPENAI_SUBSCRIPTION: rejected") for x in d["trace"]), d["trace"]
 
     def test_claude_runs_as_claude_p_when_unattended_and_is_refused_as_an_agent_tool_when_not(self):
-        assert self.decide("claude", engine_only=["slow"])["lane"] == "CLAUDE_SUBSCRIPTION"
+        assert self.decide("claude", engine_only=["slow"])["account"] == "CLAUDE_SUBSCRIPTION"
         d = self.decide("claude", engine_only=["slow"], unattended=False)
         assert (d["action"], d["reason"]) == ("stop", "engine_only_unenforced")
 
@@ -138,19 +136,16 @@ class RoutingTest(Case):
             assert text in d["say"]
         assert "over its limit" not in d["say"]
 
-
-
-
     def test_a_resume_of_a_codex_writer_with_the_list_is_refused(self):
-        rec = RefRecord(lane="OPENAI_SUBSCRIPTION", model="gpt-6.1-sol", effort="high", mode="write")
-        d = support.router(copy.deepcopy(CFG), T).route("worker", CallArgs(resume="r1", engine_only=("slow",)), lanes("openai"), rec)
+        rec = RefRecord(account="OPENAI_SUBSCRIPTION", model="gpt-6.1-sol", effort="high", mode="write")
+        d = support.router(copy.deepcopy(CFG), T).route("worker", CallArgs(resume="r1", engine_only=("slow",)), accounts("openai"), rec)
         assert (d.as_dict()["action"], d.as_dict()["reason"]) == ("stop", "engine_only_unenforced")
 
-    def test_advisory_resume_keeps_its_lane_and_warns(self):
-        rec = RefRecord(lane="OPENAI_SUBSCRIPTION", model="gpt-6.1-sol", effort="high", mode="write")
+    def test_advisory_resume_keeps_its_account_and_warns(self):
+        rec = RefRecord(account="OPENAI_SUBSCRIPTION", model="gpt-6.1-sol", effort="high", mode="write")
         args = CallArgs(resume="r1", engine_only=("slow",), engine_only_advisory=True)
-        d: Any = support.router(copy.deepcopy(CFG), T).route("worker", args, lanes("openai"), rec).as_dict()
-        assert (d["action"], d["lane"], d["flag"]) == ("run", rec.lane, "engine_only_advisory")
+        d: Any = support.router(copy.deepcopy(CFG), T).route("worker", args, accounts("openai"), rec).as_dict()
+        assert (d["action"], d["account"], d["flag"]) == ("run", rec.account, "engine_only_advisory")
         assert "advisory only, the brief must say so" in d["warning"]
 
 

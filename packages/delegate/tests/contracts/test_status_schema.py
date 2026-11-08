@@ -21,7 +21,7 @@ class StatusSchema:
 
     def test_the_schema_refuses_an_answer_missing_a_key(self):
         bad = json.loads(REAL.read_text(encoding="utf-8"))
-        del bad["cockpit"]["lanes"][0]["state"]
+        del bad["cockpit"]["accounts"][0]["state"]
         assert answer.schema_problem(bad, CONTRACT["status_schema"]) is not None
 
     def test_the_records_write_the_real_answer_back_byte_for_byte(self):

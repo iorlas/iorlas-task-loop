@@ -75,14 +75,14 @@ def opencode_step(acct: Acct | None, tokens: Mapping[str, Json], cost: Json) -> 
     return a
 
 
-def opencode_close(acct: Acct | None, lane: str) -> Acct | None:
+def opencode_close(acct: Acct | None, account: str) -> Acct | None:
     """Name the cost's source once the steps are in. Grok: opencode's catalog price per step. zai: its steps carry 0 and study 81 found
     that unverifiable, so unknown. Free DeepSeek: free."""
     if not acct:
         return None
-    if lane == "ZAI_CODING_SUBSCRIPTION":
+    if account == "ZAI_CODING_SUBSCRIPTION":
         acct.update(cost_usd=None, cost_source="unknown", accounting="unknown")
-    elif lane == "DEEPSEEK_FREE":
+    elif account == "DEEPSEEK_FREE":
         acct.update(cost_usd=0.0, cost_source="free", accounting="estimated")
     elif acct["cost_usd"] is None:
         acct.update(cost_source="unknown", accounting="unknown")

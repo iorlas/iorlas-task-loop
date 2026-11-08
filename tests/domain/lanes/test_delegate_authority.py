@@ -86,7 +86,7 @@ class DelegatePauses(Case):
                                          producer="delegate", permanence="needs_owner", not_before=900)
                 assert (rec.permanence, rec.retry_at) == ("needs_owner", 0)
         # Released no_lane/crash owner wakes override even a transient delegate hint.
-        for reason in ("no_lane", "crash"):
+        for reason in ("no_account", "crash"):
             with self.subTest(reason=reason):
                 assert reason in pauses.OVERRIDES
                 assert pauses.rule(reason, "delegate", "transient") == pauses.PauseRule("needs_owner")
@@ -117,5 +117,5 @@ class DelegatePauses(Case):
         expected["network"] = pauses.Backoff(30, 1800, 0)
         assert {reason: backoff for reason, backoff in pauses.BACKOFF.items() if backoff is not None} == expected
         assert {
-            "no_lane", "logged_out", "credit_exhausted", "secrets", "setup", "contract_violation", "engine_only_unenforced",
+            "no_account", "logged_out", "credit_exhausted", "secrets", "setup", "contract_violation", "engine_only_unenforced",
         } == pauses.MACHINE_FIXED

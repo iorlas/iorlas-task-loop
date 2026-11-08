@@ -1,4 +1,5 @@
-"""Run: the single entry of `route.py run`. One call, end to end: decide the lane (decide.py), refuse without launching when the answer is
+"""Run: the single entry of `route.py run`. One call, end to end: decide the account (decide.py), refuse without launching when the answer
+is
 a stop, claim a lease (lease.py), launch the worker (launch.py) behind the canary, the network retry and the schema re-ask, record
 history, and print one
 JSON answer. Every outcome, including a crash, is an answer; exit 0 whenever it was printed."""
@@ -24,16 +25,16 @@ from delegate.contracts import history as hist
 from delegate.contracts.json_types import Json, arr, as_num, as_opt_bool, as_opt_int, as_opt_obj, as_opt_str, as_str, obj
 from delegate.contracts.state import RefRecord, StateDoc
 from delegate.contracts.stores import StateUnreadable
+from delegate.domain.accounts import profiles
+from delegate.domain.accounts.account import Account
 from delegate.domain.cost import accounting
 from delegate.domain.health import ledger as health_ledger
 from delegate.domain.holds.book import HoldBook
-from delegate.domain.lanes import profiles
-from delegate.domain.lanes.lane import Lane
 from delegate.domain.policy.worker import GIT_RULES, SECRET_RULE
 
 CANARY_BRIEF = "Reply with exactly: OK"
 CANARY_TIMEOUT_S = 30
-IDENTITY = ("lane", "model", "effort", "family", "flag", "rung", "fallback", "fallback_reason", "first_lane")
+IDENTITY = ("account", "model", "effort", "family", "flag", "rung", "fallback", "fallback_reason", "first_account")
 
 
 class Run:
@@ -63,7 +64,7 @@ class Run:
         self.keep_ref: Callable[[str], None] = lambda ref: None  # replaced by _hooks, before any launch
 
     def _family(self, d: dict[str, Json]) -> Json:
-        return obj(obj(self.cfg["lanes"])[as_str(d["lane"])])["family"]
+        return obj(obj(self.cfg["accounts"])[as_str(d["account"])])["family"]
 
     # -- the answer ----------------------------------------------------------------------------------------------------------------------
     def emit(self, outcome: str | None, **kw: Json) -> int:
@@ -89,7 +90,7 @@ class Run:
                 until=as_num(ff.get("until")),
                 role=a.role,
                 task=getattr(a, "task", None) or "",
-                lane=as_opt_str(who.get("lane")),
+                account=as_opt_str(who.get("account")),
                 model=as_opt_str(who.get("model")),
                 resume=bool(getattr(a, "resume", None)),
             )
@@ -114,7 +115,7 @@ class Run:
             return self.refuse("lock", str(e), env.now() + decide.busy_jitter())
 
     def _go(self) -> int:
-        d, lanes, warnings, t = decide.decision(self.a, self.cfg, self.unattended, apply=True)
+        d, accounts, warnings, t = decide.decision(self.a, self.cfg, self.unattended, apply=True)
         if warnings:
             self.extra["warnings"] = warnings
         for key in ("notice", "warning"):
@@ -123,13 +124,13 @@ class Run:
         if d.get("warning"):
             self.log("warning: " + as_str(d["warning"]))
         if d["action"] in ("error", "stop"):
-            return self._stopped(d, lanes, t)
+            return self._stopped(d, accounts, t)
         h = how_of(d)
         codex_policy.require_writer_mode(obj(d["how"]), getattr(self.a, "writer_exec_allow", []))
         who = {k: d.get(k) for k in IDENTITY}
         who["family"] = self._family(d)
         if not self.unattended:
-            ni = [n["what"] for n in cockpit.needs_input(lanes)]
+            ni = [n["what"] for n in cockpit.needs_input(accounts)]
             if ni:
                 self.extra["needs_input"] = ni
         call_id = getattr(self.a, "call_id", None)
@@ -150,12 +151,8 @@ class Run:
         if not brief.strip():
             return self.emit("caller", **who, call_id=call_id, say="empty brief: pass it on stdin or with --brief FILE", **self.extra)
         self.git_before = git.state(h.cwd)
-        res = self._run(d, lanes, t, who, brief)
-        if (
-            isinstance(res, dict)
-            and not self.a.resume
-            and (res.get("outcome") == "schema_invalid" or run_legs.hurt_write(res, self.a))
-        ):
+        res = self._run(d, accounts, t, who, brief)
+        if isinstance(res, dict) and not self.a.resume and (res.get("outcome") == "schema_invalid" or run_legs.hurt_write(res, self.a)):
             res = self._reroute(res, brief)
         return self._emit_res(res)
 
@@ -173,18 +170,20 @@ class Run:
 
     def _reroute(self, res: dict[str, Json], brief: str) -> dict[str, Json] | int:
         """One fresh attempt on another pair; each attempt has already kept its own history and usage."""
-        pair = (as_str(res["lane"]), as_str(res["model"]))
+        pair = (as_str(res["account"]), as_str(res["model"]))
         if res.get("outcome") == "schema_invalid" and self.attempts and self.attempts[-1]["outcome"] is None:
             self.attempts[-1]["outcome"] = "schema_invalid"  # the re-ask launched fine too; its answer is what failed
-        d, lanes, warnings, t = decide.decision(self.a, self.cfg, self.unattended, frozenset((pair,)), apply=True)
+        d, accounts, warnings, t = decide.decision(self.a, self.cfg, self.unattended, frozenset((pair,)), apply=True)
         if (
             d["action"] != "run"
-            or (d["lane"], d["model"]) == pair
+            or (d["account"], d["model"]) == pair
             or how_of(d).kind == "agent_tool"
             or (getattr(self.a, "writer_exec_allow", []) and how_of(d).kind != "codex")
         ):
             res["say"] = (
-                as_str(res["say"]) + "; no reroute: " + as_str(d.get("warning") or d.get("say") or "no other executable lane/model ready")
+                as_str(res["say"])
+                + "; no reroute: "
+                + as_str(d.get("warning") or d.get("say") or "no other executable account/model ready")
             )
             return res
         if warnings:
@@ -196,43 +195,43 @@ class Run:
         who = {k: d.get(k) for k in IDENTITY}
         who["family"] = self._family(d)
         self.rerouted = True
-        return self._run(d, lanes, t, who, brief)
+        return self._run(d, accounts, t, who, brief)
 
-    def _stopped(self, d: dict[str, Json], lanes: dict[str, Lane], t: float) -> int:
+    def _stopped(self, d: dict[str, Json], accounts: dict[str, Account], t: float) -> int:
         a = self.a
         if d["action"] == "error":
             return self.refuse("caller", as_str(d["error"]), None)
-        if d.get("outcome"):  # --resume on a lane that is out, benched or held
-            return self.refuse(as_str(d["outcome"]), as_str(d["say"]), as_num(d.get("retry_after")), lane=d["lane"])
+        if d.get("outcome"):  # --resume on an account that is out, benched or held
+            return self.refuse(as_str(d["outcome"]), as_str(d["say"]), as_num(d.get("retry_after")), account=d["account"])
         holds, S = HoldBook(env.load_state().holds), env.settings_of(self.cfg)
         backs = [
             x
-            for x in [ln.back_at(S, holds.covering(ln.name, a.role, t)) for ln in lanes.values()]
-            + [b.until for ln in lanes.values() for b in ln.benched.values()]
+            for x in [ln.back_at(S, holds.covering(ln.name, a.role, t)) for ln in accounts.values()]
+            + [b.until for ln in accounts.values() for b in ln.benched.values()]
             if x
         ]
         retry = min(backs) if backs else None
         if not self.unattended and d.get("ask_user"):
             self.extra.update(ask_user=d["ask_user"], ask_kind="decision")
         if d.get("reason") == "busy":
-            return self.refuse("busy", as_str(d["say"]), as_num(d["retry_after"]), lane=d.get("lane"))
+            return self.refuse("busy", as_str(d["say"]), as_num(d["retry_after"]), account=d.get("account"))
         if d.get("reason") == "engine_only_unenforced" and getattr(a, "only_family", None):
             return self.refuse("engine_only_unenforced", as_str(d["say"]), None)
-        return self.refuse("no_lane", as_str(d["say"]), retry)
+        return self.refuse("no_account", as_str(d["say"]), retry)
 
-    def _run(self, d: dict[str, Json], lanes: dict[str, Lane], t: float, who: dict[str, Json], brief: str) -> dict[str, Json] | int:
+    def _run(self, d: dict[str, Json], accounts: dict[str, Account], t: float, who: dict[str, Json], brief: str) -> dict[str, Json] | int:
         a, h = self.a, how_of(d)
         rid = str(uuid.uuid4())
-        lane = lanes[as_str(d["lane"])]
+        account = accounts[as_str(d["account"])]
         # A limit refusal mid-run lasts until the time its message names, else the soonest window reset (else an hour).
-        resets = [(lane.week or 0, lane.week_reset), (lane.five or 0, lane.five_reset)]
+        resets = [(account.week or 0, account.week_reset), (account.five or 0, account.five_reset)]
         d["limit_reset"] = min(
             (r for _, r in resets if r and r > t), default=None
         )  # a guess: the soonest reset (too early costs one refused call, too late days)
-        cap = lane.slots(env.settings_of(self.cfg))
-        canary_due = bool(lane.canary.get(as_str(d["model"]))) and h.kind in profiles.REGISTRY
+        cap = account.slots(env.settings_of(self.cfg))
+        canary_due = bool(account.canary.get(as_str(d["model"]))) and h.kind in profiles.REGISTRY
         silence_s = self.idle_s or harnesses.LIMITS[harnesses.CLI_OF_KIND[h.kind]].silence_s
-        lease = RunLease(rid, a.role, a.task, as_str(d["lane"]), as_str(d["model"]), cap, canary_due, silence_s)
+        lease = RunLease(rid, a.role, a.task, as_str(d["account"]), as_str(d["model"]), cap, canary_due, silence_s)
         no = lease.claim()
         if no:
             return self.refuse(no[0], no[1], env.now() + decide.busy_jitter(), **who)
@@ -257,13 +256,13 @@ class Run:
             lease.finish(hooks.stops if hooks else [])
         if hooks is None:  # the setup failed: nothing was launched, so there is no run to settle
             return res
-        return self._finish(res, d, lane, who, rid, lease, hooks, launched, cap, (t0, t_from, git_before))
+        return self._finish(res, d, account, who, rid, lease, hooks, launched, cap, (t0, t_from, git_before))
 
     def _hooks(self, rid: str, lease: RunLease, d: dict[str, Json]) -> tuple[RunHooks, dict[str, Json]]:
         launched: dict[str, Json] = {}
         hooks = RunHooks(idle_s=self.idle_s, unattended=self.unattended)
         ref_rec = RefRecord(
-            lane=as_str(d["lane"]),
+            account=as_str(d["account"]),
             model=as_str(d["model"]),
             effort=as_str(d["effort"]),
             mode=as_str(d["mode"]),
@@ -271,7 +270,7 @@ class Run:
             rung=as_opt_int(d.get("rung")),
             fallback=as_opt_bool(d.get("fallback")),
             fallback_reason=as_opt_str(d.get("fallback_reason")),
-            first_lane=as_opt_str(d.get("first_lane")),
+            first_account=as_opt_str(d.get("first_account")),
         )
 
         def worker_started(w: procs.Worker) -> None:
@@ -308,9 +307,7 @@ class Run:
 
     # -- the launch ladder: canary, network retry, schema re-ask
     # ------------------------------------------------------------------------------
-    def _launch(
-        self, d: dict[str, Json], brief: str, rid: str, t: float, hooks: RunHooks, canary_due: bool
-    ) -> dict[str, Json]:
+    def _launch(self, d: dict[str, Json], brief: str, rid: str, t: float, hooks: RunHooks, canary_due: bool) -> dict[str, Json]:
         a = self.a
 
         def launch_one(b: str, a_: env.Args, kind: str) -> dict[str, Json]:
@@ -319,7 +316,7 @@ class Run:
             self.attempts.append(
                 {
                     "kind": kind,
-                    "lane": as_str(d["lane"]),
+                    "account": as_str(d["account"]),
                     "model": as_str(d["model"]),
                     "outcome": as_opt_str(leg.get("outcome")),
                     "secs": round(time.time() - t_leg, 1),
@@ -331,8 +328,8 @@ class Run:
         res = self._canary(launch_one, d, a) if canary_due else None  # the one probe before full traffic; None = it passed
         if res is None:  # a failed canary is the answer (the next rung starts from it): the waits are for the real leg only
             res = launch_one(brief, a, "reroute" if self.rerouted else "first")
-            res = run_legs.network(res, launch_one, brief, a, as_str(d["lane"]), self.now, self.sleep)
-            res = run_legs.lane_wait(res, launch_one, brief, a, self.now, self.sleep, self.wall)
+            res = run_legs.network(res, launch_one, brief, a, as_str(d["account"]), self.now, self.sleep)
+            res = run_legs.account_wait(res, launch_one, brief, a, self.now, self.sleep, self.wall)
             res = run_legs.retry(res, launch_one, brief, a)
         if res.get("outcome") is None and a.schema:
             res = self._schema(res, launch_one)
@@ -343,17 +340,16 @@ class Run:
     def _canary(
         self, launch_one: Callable[[str, env.Args, str], dict[str, Json]], d: dict[str, Json], a: env.Args
     ) -> dict[str, Json] | None:
-        """The pair's bench ended (or its lane's limit did): one 30 s probe before full traffic. -> None when it answered (a `done` row in
+        """The pair's bench ended (or its account's limit did): one 30 s probe before full traffic. -> None when it answered (a `done` row
+        in
         history ends
         the ladder), else the failed result, which is the answer to the caller: the run's own history row then starts the next rung."""
-        res = launch_one(
-            CANARY_BRIEF, argparse.Namespace(**dict(vars(a), resume=None, schema=None, timeout=CANARY_TIMEOUT_S)), "canary"
-        )
+        res = launch_one(CANARY_BRIEF, argparse.Namespace(**dict(vars(a), resume=None, schema=None, timeout=CANARY_TIMEOUT_S)), "canary")
         if res.get("outcome") is None:
-            env.history_add(hist.CanaryRow(ts=env.now(), run_id=str(uuid.uuid4()), lane=as_str(d["lane"]), model=as_str(d["model"])))
+            env.history_add(hist.CanaryRow(ts=env.now(), run_id=str(uuid.uuid4()), account=as_str(d["account"]), model=as_str(d["model"])))
             return None
         if res["outcome"] == "timeout":  # a probe that did not answer in time is hung: `timeout` is never counted, `hung` is
-            res.update(settle.probe_hung(as_str(d["lane"]), as_str(d["model"]), CANARY_TIMEOUT_S, env.now()))
+            res.update(settle.probe_hung(as_str(d["account"]), as_str(d["model"]), CANARY_TIMEOUT_S, env.now()))
         else:
             res["say"] = "canary failed: " + as_str(res.get("say"))
         return res
@@ -389,7 +385,7 @@ class Run:
         self,
         res: dict[str, Json],
         d: dict[str, Json],
-        lane: Lane,
+        account: Account,
         who: dict[str, Json],
         rid: str,
         lease: RunLease,
@@ -405,9 +401,9 @@ class Run:
         if err:
             self.log(err[-2000:])
         done = res.get("outcome") is None
-        lane_name, ref = as_str(d["lane"]), as_opt_str(res.get("ref"))
-        if done and lane_name in ("CLAUDE_SUBSCRIPTION", "OPENAI_SUBSCRIPTION"):
-            usage.auth_cache().remember(lane_name, True, "a worker run succeeded", env.now())
+        account_name, ref = as_str(d["account"]), as_opt_str(res.get("ref"))
+        if done and account_name in ("CLAUDE_SUBSCRIPTION", "OPENAI_SUBSCRIPTION"):
+            usage.auth_cache().remember(account_name, True, "a worker run succeeded", env.now())
         if ref:  # every outcome: a stop, a failure and a timeout can all be resumed
             with contextlib.suppress(Exception):
                 self.keep_ref(ref)
@@ -416,7 +412,7 @@ class Run:
         detail = as_str(res.pop("detail", ""))
         if detail:
             res["first_error"] = detail
-        history_row(self.a, res, d, lane, rid, lease, cap, (ref, transcript, secs, done, detail))
+        history_row(self.a, res, d, account, rid, lease, cap, (ref, transcript, secs, done, detail))
         info = transcript_info(transcript, fam, t_from)
         ac = as_opt_obj(res.pop("acct", None))
         res.pop("cumulative", None)

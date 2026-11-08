@@ -97,7 +97,7 @@ class LegacyConfig:
     def test_a_state_file_of_another_version_is_refused_and_left_untouched(self):
         self.put_config()
         state = Path(self.tmp.name, "state.json")
-        old = json.dumps({"out": {"OPENAI_SUBSCRIPTION": {"until": 1, "why": "old"}}, "holds": {"keep": "me"}})
+        old = json.dumps({"v": 1, "out": {"OPENAI_SUBSCRIPTION": {"until": 1, "why": "old"}}, "holds": {"keep": "me"}})
         state.write_text(old, encoding="utf-8")
         p = self.run_worker()
         assert p.returncode == 0, p.stderr

@@ -64,7 +64,7 @@ class WriterFamily(Case):
         gap = {"what": "f.txt exists on a clean checkout", "kind": "checkable"}
         bead = dict(BEAD, labels=["ui"])
         return self.go({"plan": [COVERED], "write": [dict(WRITE, unchecked=[gap])], "review": [dict(CLEAN, unchecked=[gap])],
-                        "verify": [{"items": [verdict(1, "settled", evidence="\"x\"")]}]},
+                        "verify": [{"items": [verdict(1, "settled", evidence='"x"')]}]},
                        bead=bead, **cfg)
 
     def test_a_visual_bead_with_the_review_off_skips_verify_and_look_and_the_close_names_it(self):
@@ -86,9 +86,9 @@ class WriterFamily(Case):
         assert s.nodes == ["plan", "write", "review", "verify"]
 
     def test_a_pin_delegate_cannot_place_pauses_the_bead_and_says_the_reason(self):
-        none = fake_route.stop_answer("no_lane", say="openai logged out")
+        none = fake_route.stop_answer("no_account", say="openai logged out")
         rc, _ = self.go({"plan": [COVERED], "write": [none]}, bead=dict(BEAD, labels=["writer-family:openai"]))
         assert rc == 2
         said = [c[3] for c in self.store.said("comments", "add") if "paused" in c[3]]
         assert said
-        assert all("no ready lane of the pinned writer family (openai) for write (no_lane): openai logged out" in x for x in said)
+        assert all("no ready lane of the pinned writer family (openai) for write (no_account): openai logged out" in x for x in said)

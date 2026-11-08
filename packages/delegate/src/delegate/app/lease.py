@@ -1,4 +1,5 @@
-"""The lease a run holds on its lane: claimed inside the state lock (the authoritative slot count), renewed by a heartbeat thread, stamped
+"""The lease a run holds on its account: claimed inside the state lock (the authoritative slot count), renewed by a heartbeat thread,
+stamped
 with the
 worker's pid and the vendor ref as they appear, released when the run ends. Orphans of a SIGKILLed route.py are reaped at the claim."""
 
@@ -15,7 +16,7 @@ from delegate.adapters import procs
 from delegate.app import env
 from delegate.contracts import history as hist
 from delegate.contracts.state import Lease, StateDoc
-from delegate.domain.lanes.leases import LEASE_RENEW, LEASE_TTL, LeaseBook, suspect
+from delegate.domain.accounts.leases import LEASE_RENEW, LEASE_TTL, LeaseBook, suspect
 
 
 def orphan(v: Lease):
@@ -44,8 +45,10 @@ def _set(**fields: object) -> Callable[[Lease], None]:
 
 
 class RunLease:
-    def __init__(self, rid: str, role: str, task: str | None, lane: str, model: str, slots: int | None, canary_due: bool, silence_s: float):
-        self.rid, self.role, self.task, self.lane, self.model = rid, role, task, lane, model
+    def __init__(
+        self, rid: str, role: str, task: str | None, account: str, model: str, slots: int | None, canary_due: bool, silence_s: float
+    ):
+        self.rid, self.role, self.task, self.account, self.model = rid, role, task, account, model
         self.slots, self.canary_due, self.silence_s = slots, canary_due, silence_s
         self.peers: list[str] = []
         self.ended_peers: list[str] = []
@@ -64,16 +67,17 @@ class RunLease:
             st.leases = live
             if self.task and any(v.task == self.task for v in live.values()):
                 taken["no"] = ("duplicate_task", f"task {self.task} already has a running worker")
-            elif self.canary_due and any(v.canary == self.model and v.lane == self.lane for v in live.values()):
-                taken["no"] = ("busy", f"{self.lane}/{self.model} has its canary running; wait for it")
+            elif self.canary_due and any(v.canary == self.model and v.account == self.account for v in live.values()):
+                taken["no"] = ("busy", f"{self.account}/{self.model} has its canary running; wait for it")
             elif (
-                self.slots is not None and sum(1 for v in live.values() if v.lane == self.lane and not suspect(v, env.now())) >= self.slots
+                self.slots is not None
+                and sum(1 for v in live.values() if v.account == self.account and not suspect(v, env.now())) >= self.slots
             ):
-                taken["no"] = ("busy", f"{self.lane} has all {self.slots} slots taken")
+                taken["no"] = ("busy", f"{self.account} has all {self.slots} slots taken")
             else:
                 self.peers = sorted(live)
                 live[self.rid] = Lease(
-                    lane=self.lane,
+                    account=self.account,
                     role=self.role,
                     pid=os.getpid(),
                     pid_start=me_start,
@@ -94,7 +98,7 @@ class RunLease:
                 gone = reap(v)
                 self.reaped[k] = gone
                 env.history_add(
-                    hist.ReapRow(ts=env.now(), run_id=k, role=v.role, task=v.task, lane=v.lane, reaped=gone, worker_pid=v.worker_pid)
+                    hist.ReapRow(ts=env.now(), run_id=k, role=v.role, task=v.task, account=v.account, reaped=gone, worker_pid=v.worker_pid)
                 )
 
     def _live_after_reaping(self, st: StateDoc):
@@ -144,7 +148,8 @@ class RunLease:
             env.update_state(release)
 
     def finish(self, stops: list[StopReport]):
-        """The run ended. A worker tree that outlived its stops keeps its lease (heartbeat off): the lane's slot is not free while it edits
+        """The run ended. A worker tree that outlived its stops keeps its lease (heartbeat off): the account's slot is not free while it
+        edits
         the tree, and the next claim's reaper ends it. Otherwise `release`."""
         if any(s.survivors for s in stops):
             self.beat.set()

@@ -4,7 +4,7 @@ import copy
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
-from test_review_order import CFG, T, lanes
+from test_review_order import CFG, T, accounts
 
 from delegate.contracts.routing import CallArgs
 from delegate.domain.routing.tiers import TierPlan
@@ -12,8 +12,7 @@ from delegate.domain.routing.tiers import TierPlan
 
 class OnlyFamilyTest:
     def decide(self, *up, role="worker", **kw):
-        return support.decide(role, copy.deepcopy(CFG), lanes(*up), {}, T, dict({"authored_by": None, "unattended": True}, **kw))
-
+        return support.decide(role, copy.deepcopy(CFG), accounts(*up), {}, T, dict({"authored_by": None, "unattended": True}, **kw))
 
     def test_no_step_of_another_family_is_ever_planned(self):
         plan = TierPlan(support.env.typed_routing(copy.deepcopy(CFG)))
@@ -29,7 +28,7 @@ class OnlyFamilyTest:
     def test_when_the_family_is_not_ready_the_answer_is_a_stop_with_the_reason(self):
         d = self.decide("xai", "claude", only_family=["openai"])
         assert (d["action"], d["reason"]) == ("stop", "only_family_unready")
-        assert "lane" not in d
+        assert "account" not in d
         assert d.get("ask_user") is None
         assert "--only-family openai" in d["say"]
         assert "no other family is used" in d["say"]

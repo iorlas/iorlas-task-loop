@@ -1,5 +1,6 @@
-"""The cockpit: one row per known lane (state, reason, unlock time, windows, model), the pick `next worker` would make, and the text of it.
-`lane_view` is pure given its inputs."""
+"""The cockpit: one row per known account (state, reason, unlock time, windows, model), the pick `next worker` would make, and the text of
+it.
+`account_view` is pure given its inputs."""
 
 from collections.abc import Sequence
 from typing import Final, NamedTuple
@@ -14,20 +15,20 @@ from delegate.app.fleet import mark_busy
 from delegate.contracts.json_types import Json, arr, as_num, as_str, obj
 from delegate.contracts.routing import CallArgs, Settings
 from delegate.contracts.state import OutState, StateDoc
+from delegate.domain.accounts.account import Account
+from delegate.domain.accounts.leases import LeaseBook
+from delegate.domain.accounts.profiles import LOGIN_CMD
 from delegate.domain.holds.book import HoldBook
-from delegate.domain.lanes.lane import Lane
-from delegate.domain.lanes.leases import LeaseBook
-from delegate.domain.lanes.profiles import LOGIN_CMD
 from delegate.domain.routing.router import Router
 from delegate.domain.time.spec import fmt_in, local, when
 
 Login = tuple[bool | None, str, float | None]  # (ok, why, checked_at)
-NO_SANDBOX = "unavailable (no sandbox): opencode lanes need macOS sandbox-exec"
+NO_SANDBOX = "unavailable (no sandbox): opencode accounts need macOS sandbox-exec"
 
 
-def needs_input(lanes: dict[str, Lane]) -> list[dict[str, Json]]:
+def needs_input(accounts: dict[str, Account]) -> list[dict[str, Json]]:
     need: list[dict[str, Json]] = []
-    cs = lanes.get("CLAUDE_SUBSCRIPTION")
+    cs = accounts.get("CLAUDE_SUBSCRIPTION")
     if cs and not cs.usage_known and env.session_host() == "desktop":
         need.append(
             {
@@ -37,13 +38,13 @@ def needs_input(lanes: dict[str, Lane]) -> list[dict[str, Json]]:
                 "({five_hour:{used,resets_at},weekly:{used,resets_at}})",
             }
         )
-    ox = lanes.get("OPENAI_SUBSCRIPTION")
+    ox = accounts.get("OPENAI_SUBSCRIPTION")
     if ox and not ox.usage_known and not ox.out:
         need.append(
             {
                 "what": "codex_login",
                 "why": ox.notes[0] if ox.notes else "codex limits unreadable",
-                "how": "ask the user to run `codex login`, or report the lane out with `route.py report`",
+                "how": "ask the user to run `codex login`, or report the account out with `route.py report`",
             }
         )
     return need
@@ -51,7 +52,7 @@ def needs_input(lanes: dict[str, Lane]) -> list[dict[str, Json]]:
 
 def finished_runs(n: int) -> list[dict[str, Json]]:
     """The last n finished runs, newest last: the dashboard's view of history.jsonl (the file itself stays private)."""
-    keys = ("run_id", "ts", "role", "task", "lane", "model", "done", "outcome", "secs", "cost", "tokens", "denials")
+    keys = ("run_id", "ts", "role", "task", "account", "model", "done", "outcome", "secs", "cost", "tokens", "denials")
     return [{k: getattr(r, k) for k in keys} for r in env.history_store().runs(n)]
 
 
@@ -72,12 +73,12 @@ LABELS: Final = {
     "DEEPSEEK_FREE": "DeepSeek / OpenCode Free",
     "ZAI_CODING_SUBSCRIPTION": "Z.ai GLM Coding Plan",
 }
-SLOW_WINDOW = 2 * 3600  # a hang or timeout this recent, with no good run on the lane since, keeps it marked slow
+SLOW_WINDOW = 2 * 3600  # a hang or timeout this recent, with no good run on the account since, keeps it marked slow
 SLOW_KINDS = ("hung", "timeout")
 
 
 def login_state(name: str, st: StateDoc, t: float) -> Login:
-    """-> (ok, why, checked_at): probe_login cached a few minutes in state, so a status call costs one process per lane at most."""
+    """-> (ok, why, checked_at): probe_login cached a few minutes in state, so a status call costs one process per account at most."""
     c = usage.auth_cache().fresh(name, t, usage.AUTH_TTL, st)
     if c:
         return c.ok, c.why, c.at
@@ -86,9 +87,9 @@ def login_state(name: str, st: StateDoc, t: float) -> Login:
     return ok, why, t
 
 
-def lane_model(cfg: dict[str, Json], name: str) -> str | None:
-    """'model effort' the lane's family gets in the worker role (else the first role that uses the family, else its first model)."""
-    fam = obj(obj(cfg["lanes"])[name])["family"]
+def account_model(cfg: dict[str, Json], name: str) -> str | None:
+    """'model effort' the account's family gets in the worker role (else the first role that uses the family, else its first model)."""
+    fam = obj(obj(cfg["accounts"])[name])["family"]
     roles = obj(cfg["roles"])
     for role in [roles.get("worker"), *roles.values()]:
         for raw_step in arr(obj(role).get("steps", [])):
@@ -99,41 +100,41 @@ def lane_model(cfg: dict[str, Json], name: str) -> str | None:
 
 
 def off_reason(name: str, cfg: dict[str, Json], login: Login) -> str:
-    if obj(obj(cfg["lanes"])[name]).get("opt_in") and env.profile_lanes().get(name) != "enabled":
-        return f"disabled: `route.py config set profile.lanes.{name} enabled` turns it on"
-    if env.profile_lanes().get(name) == "declined":
+    if obj(obj(cfg["accounts"])[name]).get("opt_in") and env.profile_accounts().get(name) != "enabled":
+        return f"disabled: `route.py config set profile.accounts.{name} enabled` turns it on"
+    if env.profile_accounts().get(name) == "declined":
         return "declined: remove it from the profile in config.json to bring it back"
-    if name in onboard.OPENCODE_LANES and not OpenCodeHarness.supported():
+    if name in onboard.OPENCODE_ACCOUNTS and not OpenCodeHarness.supported():
         return NO_SANDBOX
     if login[0] is False:
         return f"not configured: logged out, run `{LOGIN_CMD[name]}`"
     return "not configured: `route.py doctor` says what it needs" + (f" ({login[1]})" if login[0] is None and login[1] else "")
 
 
-def classify_out(lane: Lane, rec: OutState | None) -> str:
-    """Why a lane that is out is out -> logged_out | spend | slow | resting. rec is its state.json entry (older ones have no typed
+def classify_out(account: Account, rec: OutState | None) -> str:
+    """Why an account that is out is out -> logged_out | spend | slow | resting. rec is its state.json entry (older ones have no typed
     reason)."""
-    r = lane.out_reason
-    text = " ".join([rec.why if rec else "", *lane.notes])
+    r = account.out_reason
+    text = " ".join([rec.why if rec else "", *account.notes])
     if r == "logged_out" or (r in (None, "error") and says_login(text)):
         return "logged_out"
-    if lane.spend_blocked or says_spend(text):
+    if account.spend_blocked or says_spend(text):
         return "spend"
     if r == "hung":
         return "slow"
     return "resting"
 
 
-def limit_words(text: str, lane: Lane) -> str:
-    scored = [(u, w) for w in lane.windows if (u := as_num(w["used"])) is not None]
+def limit_words(text: str, account: Account) -> str:
+    scored = [(u, w) for w in account.windows if (u := as_num(w["used"])) is not None]
     top = max(scored, key=lambda p: p[0], default=None)
     return window_words(text, as_str(top[1]["name"]) if top and top[0] >= 95 else None)
 
 
-def window_rows(lane: Lane, S: Settings, t: float) -> tuple[list[dict[str, Json]], list[dict[str, Json]]]:
+def window_rows(account: Account, S: Settings, t: float) -> tuple[list[dict[str, Json]], list[dict[str, Json]]]:
     rows: list[dict[str, Json]] = []
     low: list[dict[str, Json]] = []
-    for w in lane.windows:
+    for w in account.windows:
         used, resets_at, at = as_num(w["used"]), as_num(w["resets_at"]), as_num(w["at"])
         rows.append(
             {
@@ -147,7 +148,7 @@ def window_rows(lane: Lane, S: Settings, t: float) -> tuple[list[dict[str, Json]
         )
         if used is None:
             continue
-        (gwk, gfv, gname), (cwk, cfv, _) = lane.limits(S, False), lane.limits(S, True)
+        (gwk, gfv, gname), (cwk, cfv, _) = account.limits(S, False), account.limits(S, True)
         gate, ceil = (gwk, cwk) if (as_num(w["span"]) or 0) > 1440 else (gfv, cfv)
         if used >= gate:
             low.append(
@@ -163,7 +164,7 @@ def window_rows(lane: Lane, S: Settings, t: float) -> tuple[list[dict[str, Json]
 
 
 class Verdict(NamedTuple):
-    """What a lane in use is: its state, the sentence for it, when it unlocks and why not."""
+    """What an account in use is: its state, the sentence for it, when it unlocks and why not."""
 
     state: str
     note: str
@@ -173,11 +174,11 @@ class Verdict(NamedTuple):
     detail: str | None
 
 
-def _out_verdict(name: str, lane: Lane, rec: OutState | None, login: Login) -> Verdict:
-    kind = classify_out(lane, rec)
-    text = (rec.why if rec else "") or (lane.notes[0] if lane.notes else "")
+def _out_verdict(name: str, account: Account, rec: OutState | None, login: Login) -> Verdict:
+    kind = classify_out(account, rec)
+    text = (rec.why if rec else "") or (account.notes[0] if account.notes else "")
     detail = text[:160] or None
-    until = lane.out_until
+    until = account.out_until
     if kind == "logged_out" or login[0] is False:
         why = f"waits for you to log in (`{LOGIN_CMD[name]}`); re-checked every {usage.AUTH_TTL // 60} min"
         return Verdict("logged_out", f"logged out: run `{LOGIN_CMD[name]}`", why, None, True, detail)
@@ -187,19 +188,21 @@ def _out_verdict(name: str, lane: Lane, rec: OutState | None, login: Login) -> V
     if kind == "slow":
         note = "hung: no output inside the watchdog window, benched for a while"
         return Verdict(kind, note, "the watchdog gave no end time", until, True, detail)
-    return Verdict(kind, limit_words(text, lane), "the vendor gave no reset time", until, True, detail)
+    return Verdict(kind, limit_words(text, account), "the vendor gave no reset time", until, True, detail)
 
 
 def _idle_verdict(
-    name: str, lane: Lane, t: float, history: Sequence[dict[str, Json]], login: Login, meter: bool, low: list[dict[str, Json]]
+    name: str, account: Account, t: float, history: Sequence[dict[str, Json]], login: Login, meter: bool, low: list[dict[str, Json]]
 ) -> Verdict:
-    last = next((h for h in reversed(history) if h.get("lane") == name), None)
+    last = next((h for h in reversed(history) if h.get("account") == name), None)
     last_ts = as_num(last.get("ts")) if last else None
     if last and last.get("outcome") in SLOW_KINDS and t - (last_ts or 0) <= SLOW_WINDOW:
         note = f"hung {fmt_in(t - (last_ts or 0))} ago ({last['outcome']}), no good run since"
         return Verdict("slow", note, "not locked: it clears with its next good run", None, False, None)
-    if login[0] is None or (meter and not lane.usage_known):
-        note = "no read yet: " + (login[1] if login[0] is None and login[1] else (lane.notes[0] if lane.notes else "no usage reading"))
+    if login[0] is None or (meter and not account.usage_known):
+        note = "no read yet: " + (
+            login[1] if login[0] is None and login[1] else (account.notes[0] if account.notes else "no usage reading")
+        )
         return Verdict("unknown", note, "not locked", None, False, None)
     note = "ready" + ("" if meter else ", vendor shows no usage (a limit appears only when hit)")
     if low:
@@ -210,7 +213,7 @@ def _idle_verdict(
 
 def _verdict(
     name: str,
-    lane: Lane,
+    account: Account,
     S: Settings,
     st: StateDoc,
     t: float,
@@ -219,20 +222,20 @@ def _verdict(
     meter: bool,
     low: list[dict[str, Json]],
 ) -> Verdict:
-    if lane.out:
-        return _out_verdict(name, lane, st.out.get(name), login)
+    if account.out:
+        return _out_verdict(name, account, st.out.get(name), login)
     if login[0] is False:
         why = f"waits for you to log in (`{LOGIN_CMD[name]}`); re-checked every {usage.AUTH_TTL // 60} min"
         return Verdict("logged_out", f"logged out: run `{LOGIN_CMD[name]}`", why, None, True, None)
-    if not lane.usable(S, True)[0]:  # over the hard ceiling with nothing recorded: resting until that window resets
-        return Verdict("resting", lane.usable(S, True)[1], "no reset time for the window it is over", lane.back_at(S), True, None)
-    return _idle_verdict(name, lane, t, history, login, meter, low)
+    if not account.usable(S, True)[0]:  # over the hard ceiling with nothing recorded: resting until that window resets
+        return Verdict("resting", account.usable(S, True)[1], "no reset time for the window it is over", account.back_at(S), True, None)
+    return _idle_verdict(name, account, t, history, login, meter, low)
 
 
-def lane_view(
+def account_view(
     name: str,
     cfg: dict[str, Json],
-    lane: Lane | None,
+    account: Account | None,
     st: StateDoc,
     t: float,
     history: Sequence[dict[str, Json]] = (),
@@ -240,16 +243,17 @@ def lane_view(
     login: Login = (None, "", None),
     off_why: str | None = None,
 ) -> dict[str, Json]:
-    """One lane's cockpit row. Pure given its inputs: lane is what gather built (None = disabled or not configured), history the recent
+    """One account's cockpit row. Pure given its inputs: account is what gather built (None = disabled or not configured), history the
+    recent
     finished runs."""
-    S, c = env.settings_of(cfg), obj(obj(cfg["lanes"])[name])
+    S, c = env.settings_of(cfg), obj(obj(cfg["accounts"])[name])
     meter = c["reader"] != "none"
     v: dict[str, Json] = {
         "id": name,
         "label": c.get("label") or LABELS.get(name, name),
         "family": c["family"],
         "kind": c["kind"],
-        "model": lane_model(cfg, name),
+        "model": account_model(cfg, name),
         "state": "off",
         "emoji": EMOJI["off"],
         "reason": off_why or "disabled or not configured",
@@ -257,16 +261,16 @@ def lane_view(
         "unlock": {"locked": False, "known": False, "at": None, "in_s": None, "text": None, "why": "not in use"},
         "windows": [],
         "low_tokens": [],
-        "warnings": list(lane.warn) if lane else [],
+        "warnings": list(account.warn) if account else [],
         "meter": meter,
         "login": {"ok": login[0], "why": login[1], "checked_at": login[2]},
         "running": running,
     }
-    if lane is None:
+    if account is None:
         return v
-    windows, low = window_rows(lane, S, t)
+    windows, low = window_rows(account, S, t)
     v["windows"], v["low_tokens"] = windows, low
-    verdict = _verdict(name, lane, S, st, t, history, login, meter, low)
+    verdict = _verdict(name, account, S, st, t, history, login, meter, low)
     v["detail"] = verdict.detail
     v["state"], v["emoji"], v["reason"] = verdict.state, EMOJI[verdict.state], verdict.note
     if verdict.until and verdict.until > t and verdict.state != "logged_out":
@@ -283,64 +287,73 @@ def lane_view(
     return v
 
 
-def claude_why(cfg: dict[str, Json], lanes: dict[str, Lane]) -> str:
-    """Why no non-Claude worker lane was usable when a Claude lane got the pick: 'OPENAI_SUBSCRIPTION out until ..; ZAI_CODING_SUBSCRIPTION
+def claude_why(cfg: dict[str, Json], accounts: dict[str, Account]) -> str:
+    """Why no non-Claude worker account was usable when a Claude account got the pick: 'OPENAI_SUBSCRIPTION out until ..;
+    ZAI_CODING_SUBSCRIPTION
     not set up'."""
     S = env.settings_of(cfg)
     fams = {on for s in arr(obj(obj(cfg["roles"])["worker"])["steps"]) if (on := obj(s)["on"]) != "claude"}
     parts = []
-    for name, c in obj(cfg["lanes"]).items():
+    for name, c in obj(cfg["accounts"]).items():
         if obj(c)["family"] not in fams:
             continue
-        ln = lanes.get(name)
+        ln = accounts.get(name)
         parts.append(f"{name} " + ("not set up" if ln is None else ln.usable(S, True)[1]))
-    return "; ".join(parts) or "no other lane exists"
+    return "; ".join(parts) or "no other account exists"
 
 
-def next_worker(cfg: dict[str, Json], lanes: dict[str, Lane], st: StateDoc, t: float) -> dict[str, Json]:
-    """The lane `next worker` would pick now: decide() on a copy, nothing written."""
+def next_worker(cfg: dict[str, Json], accounts: dict[str, Account], st: StateDoc, t: float) -> dict[str, Json]:
+    """The account `next worker` would pick now: decide() on a copy, nothing written."""
     routing = env.typed_routing(cfg)
-    cur = mark_busy(lanes, st, routing.settings, t, busy_jitter)
+    cur = mark_busy(accounts, st, routing.settings, t, busy_jitter)
     d = Router(routing, HoldBook(st.holds), st.prev, t).route("worker", CallArgs(), cur).as_dict()
     if d["action"] == "run":
         r: dict[str, Json] = {
             "action": "run",
-            "lane": d["lane"],
+            "account": d["account"],
             "model": d["model"],
             "effort": d["effort"],
             "pass": d["pass"],
             "fallback": d["fallback"],
             "why": None,
         }
-        if obj(obj(cfg["lanes"])[as_str(d["lane"])])["family"] == "claude":
+        if obj(obj(cfg["accounts"])[as_str(d["account"])])["family"] == "claude":
             r["why"] = claude_why(cfg, cur)
         return r
-    return {"action": d["action"], "lane": d.get("lane"), "model": None, "effort": None, "say": d.get("say") or d.get("error")}
+    return {"action": d["action"], "account": d.get("account"), "model": None, "effort": None, "say": d.get("say") or d.get("error")}
 
 
-def cockpit(cfg: dict[str, Json], lanes: dict[str, Lane], st: StateDoc, t: float) -> dict[str, Json]:
-    """The cockpit dict: one row per known lane, configured or not, plus the pick `next worker` would make."""
+def cockpit(cfg: dict[str, Json], accounts: dict[str, Account], st: StateDoc, t: float) -> dict[str, Json]:
+    """The cockpit dict: one row per known account, configured or not, plus the pick `next worker` would make."""
     hist = finished_runs(60)
     book = LeaseBook(st.leases)
     rows: list[Json] = []
-    for name in obj(cfg["lanes"]):
-        lane = lanes.get(name)
+    for name in obj(cfg["accounts"]):
+        account = accounts.get(name)
         login = login_state(name, st, t)
-        off = off_reason(name, cfg, login) if lane is None else None
-        rows.append(lane_view(name, cfg, lane, st, t, hist, book.counts(name, t)["live"], login, off))
-    return {"v": 1, "at": t, "legend": {EMOJI[k]: LEGEND[k] for k in EMOJI}, "next_worker": next_worker(cfg, lanes, st, t), "lanes": rows}
+        off = off_reason(name, cfg, login) if account is None else None
+        rows.append(account_view(name, cfg, account, st, t, hist, book.counts(name, t)["live"], login, off))
+    return {
+        "v": 1,
+        "at": t,
+        "legend": {EMOJI[k]: LEGEND[k] for k in EMOJI},
+        "next_worker": next_worker(cfg, accounts, st, t),
+        "accounts": rows,
+    }
 
 
 def cockpit_text(ck: dict[str, Json]) -> list[str]:
     t, nw = as_num(ck["at"]) or 0.0, obj(ck["next_worker"])
-    rows = [obj(r) for r in arr(ck["lanes"])]
-    pick = f"{nw['lane']} {nw['model']} {nw['effort']}" if nw["action"] == "run" else f"none ({as_str(nw.get('say') or nw['action'])[:60]})"
+    rows = [obj(r) for r in arr(ck["accounts"])]
+    pick = (
+        f"{nw['account']} {nw['model']} {nw['effort']}" if nw["action"] == "run" else f"none ({as_str(nw.get('say') or nw['action'])[:60]})"
+    )
     width = max(len(as_str(r["id"])) for r in rows)
     mw = max(len(as_str(r["model"]) or "-") for r in rows)
     if nw.get("why"):
         pick += f" (Claude because {nw['why']})"
     nw_ = max([6] + [len(as_str(obj(w)["name"])) for r in rows for w in arr(r["windows"])])
-    out = [f"delegate lanes, {local(t)}   next worker: {pick}"]
+    out = [f"delegate accounts, {local(t)}   next worker: {pick}"]
     for r in rows:
         out.append(f"{r['emoji']} {as_str(r['id']):<{width}}  {(as_str(r['model']) or '-'):<{mw}}  {r['reason']}")
         u = obj(r["unlock"])

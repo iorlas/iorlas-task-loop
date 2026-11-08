@@ -44,12 +44,6 @@ class ResetTimes(Case):
         (at, zone), t = self.at(text, t)
         return (need(at), zone or ""), t
 
-
-
-
-
-
-
     @real_proc("delegate: a worker, git or CLI process")
     def test_out_rows_record_source_and_zone_and_report_is_manual(self):
         with TemporaryDirectory() as d, mock.patch.object(env, "config_dir", return_value=Path(d)):
@@ -59,7 +53,7 @@ class ResetTimes(Case):
             launch.settler().apply(
                 {},
                 Outcome("rate_limited", f"will reset at {end:%Y-%m-%d %H:%M:%S} UTC", "event"),
-                {"lane": "L1", "limit_reset": None},
+                {"account": "L1", "limit_reset": None},
                 time.time(),
                 "codex",
                 argparse_ns("worker", timeout=0),
@@ -71,12 +65,12 @@ class ResetTimes(Case):
                 launch.settler().apply(
                     {},
                     Outcome("rate_limited", "slow down", "event"),
-                    {"lane": "L2"},
+                    {"account": "L2"},
                     1_800_000_000.0,
                     "codex",
                     argparse_ns("worker", timeout=0),
                 )
                 rec = env.load_state().out["L2"]
                 assert (rec.source, rec.guess_n, round((rec.until - 1_800_000_000.0) / 60)) == ("guess", want_n, (15, 30, 60)[want_n])
-            route.main(["report", "--lane", "OPENAI_SUBSCRIPTION", "--event", "out", "--until", str(int(time.time()) + 600)])
+            route.main(["report", "--account", "OPENAI_SUBSCRIPTION", "--event", "out", "--until", str(int(time.time()) + 600)])
             assert env.load_state().out["OPENAI_SUBSCRIPTION"].source == "manual"

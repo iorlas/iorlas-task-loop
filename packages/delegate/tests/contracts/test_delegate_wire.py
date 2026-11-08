@@ -41,7 +41,7 @@ class Goldens(Case):
             "stop_bad_request",
             "stop_schema_invalid",
             "stop_worker_failed",
-            "stop_no_lane_ask_user",
+            "stop_no_account_ask_user",
             "stop_busy_not_launched",
         ):
             assert want in names
@@ -63,7 +63,7 @@ class Goldens(Case):
         for p in GOLDEN:
             gold = json.loads(p.read_text())
             stop = gold["stop"]
-            if gold.get("agent_model") or "stop_no_lane" in p.stem:  # built by decision(), not by result() alone
+            if gold.get("agent_model") or "stop_no_account" in p.stem:  # built by decision(), not by result() alone
                 continue
             kw = {k: v for k, v in gold.items() if k not in ("stop", "contract")}
             if stop:
@@ -125,7 +125,7 @@ class Generated:
 class LiveRecords(Case):
     def test_every_kind_round_trips_with_its_kind(self):
         recs = [
-            live.LiveStart(t=1.0, harness="codex", pid=3, lane="L"),
+            live.LiveStart(t=1.0, harness="codex", pid=3, account="L"),
             live.LiveCmdStart(t=1.0, id="a", text="ls", cwd="/w"),
             live.LiveCmdEnd(t=2.0, id="a", exit=None, secs=1.0, out="x"),
             live.LiveToolStart(t=1.0, id="b", text="edit f", prov=True),

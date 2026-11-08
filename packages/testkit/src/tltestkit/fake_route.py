@@ -95,13 +95,13 @@ def answer(c, reason, ref="", resumed=False, data=None, text="ok", **kw):
         "text": text if reason is None else "",
         "say": "",
         "ref": ref,
-        "lane": "FAKE",
+        "account": "FAKE",
         "model": "fake-1",
         "effort": "e",
         "family": "openai",
         "flag": None,
         "fallback": False,
-        "first_lane": "FAKE",
+        "first_account": "FAKE",
         "rung": 0,
         "tokens": None,
         "cost": 0,
@@ -263,7 +263,7 @@ class Script:
         # like the real route, a reader comes from another family than the last writer's (tl-9un.15); j_extra may say otherwise
         family = "openai" if node == "write" else ("xai" if (writer or getattr(self, "writer_family", "")) == "claude" else "claude")
         j = answer(self.c, None, "ref-" + node, bool(resume), a, cost=0.5, secs=1, family=family,
-                   lane="L", model="m", tokens={"in": 1000, "cached": 800, "out": 50},
+                   account="L", model="m", tokens={"in": 1000, "cached": 800, "out": 50},
                    context={"instructions": ["/repo/AGENTS.md"], "env_keys": ["PATH"]})
         if self.j_extra.get(node):
             j.update(self.j_extra[node].pop(0))

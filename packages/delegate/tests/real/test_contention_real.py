@@ -19,8 +19,8 @@ from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory
 
 T = 1_800_000_000
-LANES = ("OPENAI_SUBSCRIPTION", "GROK_SUBSCRIPTION", "DEEPSEEK_FREE", "ZAI_CODING_SUBSCRIPTION")
-N = len(LANES)
+ACCOUNTS = ("OPENAI_SUBSCRIPTION", "GROK_SUBSCRIPTION", "DEEPSEEK_FREE", "ZAI_CODING_SUBSCRIPTION")
+N = len(ACCOUNTS)
 ROUNDS = 20
 
 # A fresh interpreter calls the real launcher/CLI and the real file writers. Pipes
@@ -31,7 +31,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path.cwd() / "packages" / "delegate" / "src"))
 from delegate.app import env, onboard, usage
 
-mode, lane, rounds = sys.argv[1], sys.argv[2], int(sys.argv[3])
+mode, account, rounds = sys.argv[1], sys.argv[2], int(sys.argv[3])
 main = runpy.run_path("packages/delegate/src/delegate/entry.py")["main"]
 def call(args):
     with contextlib.redirect_stdout(io.StringIO()) as out:
@@ -44,10 +44,10 @@ if mode == "route":
     load = env.load_routing
     def routing():
         cfg = load()
-        cfg["lanes"]["CLAUDE_SECONDARY"] = dict(cfg["lanes"]["CLAUDE_SUBSCRIPTION"])
+        cfg["accounts"]["CLAUDE_SECONDARY"] = dict(cfg["accounts"]["CLAUDE_SUBSCRIPTION"])
         return cfg
     env.load_routing = routing
-    onboard.configured_lanes = lambda cfg: dict.fromkeys(cfg["lanes"], True)
+    onboard.configured_accounts = lambda cfg: dict.fromkeys(cfg["accounts"], True)
     usage.READERS.update({k: lambda *a: None for k in usage.READERS})
     update = env.update_state
     waiting = True
@@ -62,11 +62,11 @@ gate()
 for i in range(rounds):
     if mode == "route":
         until = datetime.datetime.fromtimestamp(env.now() + 3600, datetime.timezone.utc).isoformat()
-        call(["report", "--lane", lane, "--event", "out", "--until", until])
+        call(["report", "--account", account, "--event", "out", "--until", until])
         d = json.loads(call(["next", "worker"]))
-        assert (d["action"], d["lane"]) == ("run", "CLAUDE_SUBSCRIPTION"), d
+        assert (d["action"], d["account"]) == ("run", "CLAUDE_SUBSCRIPTION"), d
     else:
-        call(["config", "set", "profile.lanes." + lane, "enabled"])
+        call(["config", "set", "profile.accounts." + account, "enabled"])
         def increment(cur):
             n = cur["min_dwell_minutes"]
             time.sleep(0.003)  # widen the read/write window while holding the existing lock
@@ -87,7 +87,7 @@ class Contention(Case):
         self.cfg = self.base / "cfg"
         self.cfg.mkdir()
         self.config = self.cfg / "config.json"
-        self.config.write_text(json.dumps({"min_dwell_minutes": 30, "profile": {"lanes": dict.fromkeys(LANES, "declined")}}))
+        self.config.write_text(json.dumps({"min_dwell_minutes": 30, "profile": {"accounts": dict.fromkeys(ACCOUNTS, "declined")}}))
         self.children: list[subprocess.Popen[bytes]] = []
         self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=N)
         self.addCleanup(self.pool.shutdown, wait=True)
@@ -114,9 +114,9 @@ class Contention(Case):
             DELEGATE_CONFIG_DIR=str(self.cfg),
             DELEGATE_NOW=str(T),
         )
-        for lane in LANES:
+        for account in ACCOUNTS:
             p = subprocess.Popen(
-                [sys.executable, "-c", CHILD, mode, lane, str(ROUNDS)],
+                [sys.executable, "-c", CHILD, mode, account, str(ROUNDS)],
                 env=child_env,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
@@ -184,15 +184,15 @@ class Contention(Case):
             self.release()
             self.ready()  # all four routed using a snapshot without prev.claude
             store = StateStore(state)
-            store.update(lambda s: s.prev.__setitem__("claude", Dwell(lane="CLAUDE_SUBSCRIPTION", since=T - 1)))
+            store.update(lambda s: s.prev.__setitem__("claude", Dwell(account="CLAUDE_SUBSCRIPTION", since=T - 1)))
             self.release()
             self.finish()
         assert state in seen
         doc = json.loads(state.read_text())
-        assert set(doc["out"]) == set(LANES)
+        assert set(doc["out"]) == set(ACCOUNTS)
         for mark in doc["out"].values():
             assert (mark["until"], mark["at"], mark["source"]) == (T + 3600, T, "manual")
-        assert doc["prev"] == {"claude": {"lane": "CLAUDE_SUBSCRIPTION", "since": T - 1}}
+        assert doc["prev"] == {"claude": {"account": "CLAUDE_SUBSCRIPTION", "since": T - 1}}
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_parallel_config_cli_and_update_config_lose_no_updates(self):
@@ -203,4 +203,4 @@ class Contention(Case):
         assert self.config in seen
         doc = json.loads(self.config.read_text())
         assert doc["min_dwell_minutes"] == (30 + N * ROUNDS)
-        assert doc["profile"]["lanes"] == dict.fromkeys(LANES, "enabled")
+        assert doc["profile"]["accounts"] == dict.fromkeys(ACCOUNTS, "enabled")

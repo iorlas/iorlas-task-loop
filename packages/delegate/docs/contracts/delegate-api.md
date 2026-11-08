@@ -9,11 +9,11 @@ subprocess and its JSON wire): there is no process boundary to the router any mo
 | Call | In | Out |
 |---|---|---|
 | `run(request, started=None)` | `RunRequest`; `started(Handle)` fires when the worker exists | `RunResult` (contract 4 answer) |
-| `status(claude_usage=None)` | the Claude plan's usage windows, when the caller has them | `Status` (lanes, cockpit, running, holds, roles, network) |
+| `status(claude_usage=None)` | the Claude plan's usage windows, when the caller has them | `Status` (accounts, cockpit, running, holds, roles, network) |
 | `cancel(handle)` | the `Handle` from `started` | `WorkerEnd` (SIGTERM, SIGKILL after the grace; survivors named) |
-| `accounts()` / `set_account(lane, enabled)` | | `list[Account]` (lane, enabled, ready, fix) / the owner's choice stored |
+| `accounts()` / `set_account(account, enabled)` | | `list[Account]` (name, enabled, ready, fix) / the owner's choice stored |
 | `network(hosts=())` | vendor hosts, else all | reachable now (sockets only) |
-| `history(since=0.0)` | epoch seconds | the finished runs after it, oldest first, as wire objects (`ts`, `role`, `task`, `lane`, `model`, `tokens`, ...): the only read of delegate's history |
+| `history(since=0.0)` | epoch seconds | the finished runs after it, oldest first, as wire objects (`ts`, `role`, `task`, `account`, `model`, `tokens`, ...): the only read of delegate's history |
 | `live_files(live_dir)` | live folder | `list[LiveFile]` (`name` without suffix, `mtime`), sorted by name; missing folder is empty |
 | `live_read(live_dir, name, cursor=0, ident=0)` | folder, stream name, byte cursor and opaque identity | `LiveRead` (`lines`: `LiveLine(offset, event)`, next `cursor`, `ident`, `reset`); complete event lines only, at most 1 MiB; replacement or shrink resets, missing file clears the cursor |
 | `contract()` | | contract.json: reasons with scope/permanence/retry, capabilities |
@@ -42,14 +42,14 @@ subprocess and its JSON wire): there is no process boundary to the router any mo
 
 ## State
 
-Settings, the account profile, lane state and history live in `<XDG_CONFIG_HOME or ~/.config>/task-loop/delegate` (`DELEGATE_CONFIG_DIR`
+Settings, the account profile, account state and history live in `<XDG_CONFIG_HOME or ~/.config>/task-loop/delegate` (`DELEGATE_CONFIG_DIR`
 overrides). The first use copies the retired plugin's data dir (`~/.claude/plugins/data/iorlas-delegate-iorlas-marketplace`) there, once.
 The state is shared by every process that calls the API: a two-process test (leases, resume refs, history) holds it to that.
 
 ## Consumers
 
 `src/taskloop/adapters/delegate.py` (`call`, `status_json`, `run_history`, `accounts`, `RouteProbe`), `adapters/runner.py` (`ApiRunner`: the thread, the
-live file, `cancel` at the wall limit or a stop of the run), `domain/lanes/policy.py` (`stop_of`, `decide`). Setup and status of accounts:
+live file, `cancel` at the wall limit or a stop of the run), the engine policy (`stop_of`, `decide`). Setup and status of accounts:
 `tl accounts`, `tl setup`.
 
 ## Live-file format
@@ -59,3 +59,7 @@ untagged `WorkerStarted` (`v`, `pid`, `pgid`, `run_id`); subsequent
 events carry `t` (epoch seconds) and the codec's default `kind` tag, plus
 the event's fields. A line tagged only with `k` is refused; old live files
 are discarded under [the compatibility policy](../../../../docs/design/compat.md).
+
+Account identifiers are unchanged. Run, stop, live-start, history and thread fields use `account` and `first_account`.
+Status uses `accounts` and `cockpit.accounts`; routing uses top-level `accounts`, and config uses `profile.accounts`.
+State and history records use version 2. Old state versions and old routing/config account keys are refused without rewriting them.

@@ -1,4 +1,5 @@
 """Engine tests: the run, its resume, stop, budget and log."""
+
 import re
 import signal as sig
 import sys
@@ -65,14 +66,22 @@ from tlwork.write.matchers import count_tests
 class EngineRunTest(EngineTest):
     @no_repo
     def test_brief_is_a_digest_without_engine_comments(self):
-        bead = {"id": "t-1", "title": "Add f", "metadata": {}, "description": "Add the file f.",
-                "acceptance_criteria": "f.txt exists", "notes": "owner: keep it short",
-                "dependencies": [{"id": "t-0", "title": "The epic", "description": "x" * 3000}]}
-        comments = [{"author": "tl-a", "text": "Plan (engine): " + "p" * 6000},
-                    {"author": "tl-a", "text": "Review (engine, stage 1/1): " + "r" * 2000},
-                    {"author": "tl-a", "text": "Reflect (engine): outcome=failed; minutes=26"},
-                    {"author": "tl-a", "text": "Blocked: failed: stopped (SIGTERM)"},
-                    {"author": "denis", "text": "Use the old format, not the new one."}]
+        bead = {
+            "id": "t-1",
+            "title": "Add f",
+            "metadata": {},
+            "description": "Add the file f.",
+            "acceptance_criteria": "f.txt exists",
+            "notes": "owner: keep it short",
+            "dependencies": [{"id": "t-0", "title": "The epic", "description": "x" * 3000}],
+        }
+        comments = [
+            {"author": "tl-a", "text": "Plan (engine): " + "p" * 6000},
+            {"author": "tl-a", "text": "Review (engine, stage 1/1): " + "r" * 2000},
+            {"author": "tl-a", "text": "Reflect (engine): outcome=failed; minutes=26"},
+            {"author": "tl-a", "text": "Blocked: failed: stopped (SIGTERM)"},
+            {"author": "denis", "text": "Use the old format, not the new one."},
+        ]
         brief = brief_digest(must_bead(bead), [as_comment(c) for c in comments])
         for kept in ("Add the file f.", "f.txt exists", "owner: keep it short", "Use the old format", "t-0 The epic"):
             assert kept in brief
@@ -118,9 +127,11 @@ class EngineRunTest(EngineTest):
             eng.waits.budget_check()
         assert "8 min waiting for shared resources not counted" in str(e.value)
 
-    COMPILE: ClassVar[Any] = ["Assets/Foo.cs(180,32): error CS0246: The type or namespace name 'X' could not be found",
-               "Assets/Foo.cs(1,1): error CS1002: ; expected",
-               "  File \"a.py\", line 1\nSyntaxError: invalid syntax"]
+    COMPILE: ClassVar[Any] = [
+        "Assets/Foo.cs(180,32): error CS0246: The type or namespace name 'X' could not be found",
+        "Assets/Foo.cs(1,1): error CS1002: ; expected",
+        '  File "a.py", line 1\nSyntaxError: invalid syntax',
+    ]
 
     ECHO = "an editor holds client/; compiling in it"  # lifesim unity-check's normal path (justfile:342)
 
@@ -130,12 +141,19 @@ class EngineRunTest(EngineTest):
             assert check_matchers.failure_kind(line) == "deterministic", line
         for line in self.LOCK:
             assert check_matchers.failure_kind(line, PROFILE_PATTERNS["lock_fail"]) == "lock", line
-        for line in ("AssertionError: 1 != 2", "Curl error 42", "Connection reset by peer", "", self.ECHO,
-                     "error NU1301: Unable to load the service index",
-                     "error MSB3021: Unable to copy file",
-                     "CSC : error CS0006: Metadata file 'X.dll' could not be found",
-                     "CSC : error CS2001: Source file 'A.cs' could not be found",
-                     "ModuleNotFoundError: No module named 'foo'", "No such file or directory"):
+        for line in (
+            "AssertionError: 1 != 2",
+            "Curl error 42",
+            "Connection reset by peer",
+            "",
+            self.ECHO,
+            "error NU1301: Unable to load the service index",
+            "error MSB3021: Unable to copy file",
+            "CSC : error CS0006: Metadata file 'X.dll' could not be found",
+            "CSC : error CS2001: Source file 'A.cs' could not be found",
+            "ModuleNotFoundError: No module named 'foo'",
+            "No such file or directory",
+        ):
             assert check_matchers.failure_kind(line) == "flaky", line
 
     @no_repo
@@ -161,6 +179,7 @@ class EngineRunTest(EngineTest):
             k = (int(n.read_text()) if n.exists() else 0) + 1
             n.write_text(str(k))
             return 1, f"AssertionError: {k} != 2"
+
         eng = self.checks_engine(checks=[{"id": "u", "cmd": procsim.fake("differ", differ), "group": "tests", "retry": 2}])
         res = eng.run_checks({"checks": [], "files": []}, "s")
         assert (res[0].tries, n.read_text()) == (3, "3")  # each failure says something else: the retry may change the answer
@@ -172,15 +191,18 @@ class EngineRunTest(EngineTest):
         assert (res[0].tries, n.read_text()) == (2, "2")
 
     def test_tests_added_and_removed_come_from_the_diff(self):
-        diff = ("+++ b/tests/test_a.py\n+def test_one():\n+    pass\n+def test_two():\n-def test_old():\n"
-                "+++ b/T.cs\n+    [Fact]\n+    [Test]\n")
+        diff = (
+            "+++ b/tests/test_a.py\n+def test_one():\n+    pass\n+def test_two():\n-def test_old():\n+++ b/T.cs\n+    [Fact]\n+    [Test]\n"
+        )
         assert count_tests(diff, EngineConfig().test_pattern) == (4, 1)
 
     def test_gherkin_scenarios_count_in_feature_files_only(self):  # lifesim-fld.26.10: four scenarios read as 0
-        diff = ("+++ b/specs/Build.feature\n+  Scenario: a wall is painted\n+    Given a room\n"
-                "+  Scenario Outline: <tint> paint\n-  Scenario: an old one\n"
-                "+++ b/docs/notes.md\n+Scenario: prose, not a test\n"
-                "+++ b/T.cs\n+    [Test]\n")
+        diff = (
+            "+++ b/specs/Build.feature\n+  Scenario: a wall is painted\n+    Given a room\n"
+            "+  Scenario Outline: <tint> paint\n-  Scenario: an old one\n"
+            "+++ b/docs/notes.md\n+Scenario: prose, not a test\n"
+            "+++ b/T.cs\n+    [Test]\n"
+        )
         assert count_tests(diff, EngineConfig().test_pattern) == (3, 1)
 
     def test_sigterm_still_closes(self):
@@ -188,9 +210,7 @@ class EngineRunTest(EngineTest):
             pytest.skip("POSIX signal")
         with mock.patch.object(Planner, "plan", side_effect=lambda *a, **k: os.kill(os.getpid(), sig.SIGTERM)):
             old = sig.getsignal(sig.SIGTERM)
-            sig.signal(
-                sig.SIGTERM, lambda *_: (_ for _ in ()).throw(engine.Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED))
-            )
+            sig.signal(sig.SIGTERM, lambda *_: (_ for _ in ()).throw(engine.Blocked("failed: stopped (SIGTERM)", kind=Kind.PAUSE_KILLED)))
             try:
                 rc, _ = self.run_engine({})
             finally:
@@ -236,17 +256,23 @@ class EngineRunTest(EngineTest):
             said.append(text)
             if where == "report" and text.startswith("{"):
                 os.kill(os.getpid(), sig.SIGTERM)
+
         a = mock.Mock(id="t-1", branch=None, pr=None, slot=None, dry_run=False, fresh=False, quiet=True, outcome_file=None)
         made = mock.Mock()
         made.return_value.run.return_value = 2
         made.return_value.result.return_value = RunReport(outcome=Result.FAILED, bead=BeadId("t-1"), why="failed: stopped (SIGTERM)")
         made.return_value.stop_pending = False
-        with self.stoppable(), mock.patch.object(entry, "Engine", made), \
-                mock.patch.object(admission, "admit", return_value=(True, "")), \
-                self.store.stub(bd_fn=claim), mock.patch.object(entry, "say", side_effect=say), \
-                mock.patch.object(outcome_line, "say", side_effect=say):
-            rc = entry.run_bead(a, str(self.wt), cfg_with(), str(self.wt), self.store, env=snapshot(), spawner=real_spawner(),
-                git=port_git(), who=who())
+        with (
+            self.stoppable(),
+            mock.patch.object(entry, "Engine", made),
+            mock.patch.object(admission, "admit", return_value=(True, "")),
+            self.store.stub(bd_fn=claim),
+            mock.patch.object(entry, "say", side_effect=say),
+            mock.patch.object(outcome_line, "say", side_effect=say),
+        ):
+            rc = entry.run_bead(
+                a, str(self.wt), cfg_with(), str(self.wt), self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()
+            )
         return rc, made, said
 
     def test_a_stop_during_the_claim_waits_and_the_engine_closes_it(self):
@@ -296,8 +322,7 @@ class EngineRunTest(EngineTest):
         assert [c[0] for c in s.calls] == ["reviewer"]  # its write and checks were green (tl-q3ma)
 
     def test_admit_refuses_a_live_claim_and_a_persons_claim(self):
-        ok, why, up = self.admit({"status": "in_progress", "assignee": "tl-61ba34e7",
-                                    "lease_expires_at": "2999-01-01T00:00:00Z"})
+        ok, why, up = self.admit({"status": "in_progress", "assignee": "tl-61ba34e7", "lease_expires_at": "2999-01-01T00:00:00Z"})
         assert not ok
         assert "tl-61ba34e7" in why
         ok, why, up = self.admit({"status": "in_progress", "assignee": "denis"})
@@ -340,7 +365,7 @@ class EngineRunTest(EngineTest):
             assert fix.count(f"src/F.cs:{i}:1: error CS{int(i):04d}: analyzer says no") == 1, i
         assert "Build FAILED" in fix
         assert re.search(r"log: \S+checks[\\/]\d\d-.*\.r1\.log", fix)
-        assert len(fix[fix.index("These checks fail"):]) > 500
+        assert len(fix[fix.index("These checks fail") :]) > 500
 
     def test_context_size_does_not_remove_the_delta(self):
         _rc, s = self.two_writes(family="openai", ctx_k=500)
@@ -364,6 +389,7 @@ class EngineRunTest(EngineTest):
             if t == "d2":
                 brief.write_text("tampered")
             return (0 if t == "d3" else 1), ""
+
         red = procsim.fake("tamper-until-d3", tamper)
         with self.store.stub(show=dict(BEAD, description=self.MARK)):
             rc, s = self.run_engine({"plan": [self.plan_with(red)], "write": [WRITE, WRITE], "review": [CLEAN]})
@@ -393,6 +419,7 @@ class EngineRunTest(EngineTest):
                 ev.mkdir(parents=True, exist_ok=True)
                 (ev / "traits.png").write_bytes(b"\x89PNG fake")
             return real(this, role, prompt, schema, cwd, *a, **kw)
+
         with mock.patch.object(fake_route.Script, "reply", shoot):
             rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         assert rc == 0
@@ -434,14 +461,20 @@ class EngineRunTest(EngineTest):
         assert "Boot() calls" not in q
 
     def test_a_verify_fix_round_that_pauses_verifies_its_items_again_on_resume_never_lands_them(self):
-        answer = {"items": [verdict(1, "wrong", why="the guid is also in Old.cs.meta"), verdict(2, "settled", "Boot.cs:14"),
-                            verdict(3, "open", why="taste")]}
+        answer = {
+            "items": [
+                verdict(1, "wrong", why="the guid is also in Old.cs.meta"),
+                verdict(2, "settled", "Boot.cs:14"),
+                verdict(3, "open", why="taste"),
+            ]
+        }
         busy = stop("rate_limited", at=time.time() + 7200, say="lane out")
         rc, _ = self.verified(answer, write=[WRITE, busy])
         assert rc == 2
         assert self.blocked == [] and self.ask() is None  # paused: the bead stays open, nothing asked
-        rc, s = self.run_engine({"verify": [{"items": [verdict(1, "settled", "rg guid → 1 match"),
-                                                       verdict(2, "settled", "evidence/menu.png")]}]})
+        rc, s = self.run_engine(
+            {"verify": [{"items": [verdict(1, "settled", "rg guid → 1 match"), verdict(2, "settled", "evidence/menu.png")]}]}
+        )
         assert rc == 0, self.blocked
         assert [c[0] for c in s.calls] == ["reviewer"]
         assert "the hand-written .meta matches" in s.prompts[0]
@@ -450,8 +483,12 @@ class EngineRunTest(EngineTest):
 
     @no_repo
     def test_criteria_in_a_description_section_count(self):
-        bead = {"id": "t-1", "title": "Add f", "metadata": {},
-                "description": "Add f.\n\n## Acceptance Criteria\n\nf.txt exists.\n\n## Touches\n\nf.txt"}
+        bead = {
+            "id": "t-1",
+            "title": "Add f",
+            "metadata": {},
+            "description": "Add f.\n\n## Acceptance Criteria\n\nf.txt exists.\n\n## Touches\n\nf.txt",
+        }
         assert AcceptanceText.present(must_bead(bead))
 
     def test_invalid_output_retries_once_then_fails_and_still_closes(self):
@@ -461,8 +498,7 @@ class EngineRunTest(EngineTest):
         assert "plan node" in self.said()
 
     def test_rounds_are_bounded(self):
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE] * 2, "review": [review(unmet=["x"])] * 2},
-                                max_rounds=2, max_replans=0)
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [WRITE] * 2, "review": [review(unmet=["x"])] * 2}, max_rounds=2, max_replans=0)
         assert rc == 2
         assert "stuck after 2 rounds" in self.blocked[0]
 
@@ -502,8 +538,13 @@ class EngineRunTest(EngineTest):
 
     def test_a_refused_read_only_command_gets_one_retry_on_a_fresh_thread_with_a_note(self):
         """tl-bxk.10.21 (lifesim-6dq0): a guard refused an rg read, no answer: one retry, told what was refused."""
-        refused = full(None, "w1", family="openai", text="",
-                       denied=[{"kind": "policy", "tool": "shell", "path": "", "input": {"command": "/bin/zsh -lc \"rg -n 'x' b\""}}])
+        refused = full(
+            None,
+            "w1",
+            family="openai",
+            text="",
+            denied=[{"kind": "policy", "tool": "shell", "path": "", "input": {"command": "/bin/zsh -lc \"rg -n 'x' b\""}}],
+        )
         rc, s = self.run_engine({"plan": [PLAN], "write": [refused, WRITE], "review": [CLEAN]})
         assert rc == 0, self.blocked
         workers = [c for c in s.calls if c[0] == "worker"]
@@ -549,9 +590,19 @@ class EngineRunTest(EngineTest):
 
     @no_repo
     def test_read_only_commands_are_told_from_the_rest(self):
-        for c in ("rg -n foo src", "git log --oneline -5", "git diff main...HEAD -- a", "find . -name '*.cs'",
-                  "sed -n '1,5p' f", "git branch", "rg -o x f", "sort -u f", "sort -n -r f", "rg -n --glob '!**/.env*' '^<<<<<<<' .",
-                  "/bin/zsh -lc \"rg -n 'x' b\""):
+        for c in (
+            "rg -n foo src",
+            "git log --oneline -5",
+            "git diff main...HEAD -- a",
+            "find . -name '*.cs'",
+            "sed -n '1,5p' f",
+            "git branch",
+            "rg -o x f",
+            "sort -u f",
+            "sort -n -r f",
+            "rg -n --glob '!**/.env*' '^<<<<<<<' .",
+            "/bin/zsh -lc \"rg -n 'x' b\"",
+        ):
             assert read_only_command(c), c
         for c in (
             "ls\nrm x",
@@ -650,6 +701,7 @@ class EngineRunTest(EngineTest):
                 seen.append(cmd)
                 return subprocess.CompletedProcess(cmd, 1, "", "route.py exit 1, no answer object")
             return real(this, cmd, **kw)
+
         with mock.patch.object(fake_route.Script, "__call__", crash):
             rc, _s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         assert rc == 2
@@ -665,8 +717,7 @@ class EngineRunTest(EngineTest):
         assert any(c[:1] == ("update",) and "open" in c for c in self.bd_calls)
 
     def test_the_trace_records_reason_context_and_the_lanes(self):
-        rc, _ = self.run_engine({"plan": [PLAN], "write": [stop("worker_failed"), WRITE],
-                                 "review": [CLEAN]})
+        rc, _ = self.run_engine({"plan": [PLAN], "write": [stop("worker_failed"), WRITE], "review": [CLEAN]})
         assert rc == 2
         assert self.eng.kind.value == "fault_infra"
         assert self.eng.sessions[-1]["reason"] == "worker_failed"
@@ -683,8 +734,16 @@ class EngineRunTest(EngineTest):
             mock.patch.object(dl.DelegateRoute, "runner", lambda self, *a, **k: script),
         ):
             rc = engine.Engine(
-                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who(),
-            lander_factory=real_lander_factory).run()
+                BeadId("t-1"),
+                str(self.wt),
+                c,
+                store=self.store,
+                env=snapshot(),
+                spawner=real_spawner(),
+                git=port_git(),
+                who=who(),
+                lander_factory=real_lander_factory,
+            ).run()
         assert rc == 2
         assert script.calls == []
         assert "delegate refused the call setup (skew_delegate_older" in self.said()
@@ -693,6 +752,7 @@ class EngineRunTest(EngineTest):
     def test_the_brief_hash_ignores_engine_comments_and_notes_lines(self):
         def h(bead, cs):
             return hashlib.sha1(brief_digest(must_bead(bead), [as_comment(c) for c in cs], owner_only=True).encode()).hexdigest()
+
         people = [{"author": "denis", "text": "Keep it small."}]
         base = h(BEAD, people)
         for name in CAP_PARKS:
@@ -709,15 +769,19 @@ class EngineRunTest(EngineTest):
             {"author": "tl-x", "text": "Lane (engine): the look step ran on the writer's own family", "created_at": "2026-10-25T10:01:00Z"},
         ]
         calls = []
-        with self.store.stub(show=blocked), self.store.stub(comments=cs), \
-                self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
-            ok, why = admission.admit(wasks.host(), BeadId("t-1"), str(self.wt), port_git(), who(),
-                store=self.store, running_now=running.running)
+        with (
+            self.store.stub(show=blocked),
+            self.store.stub(comments=cs),
+            self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)),
+        ):
+            ok, why = admission.admit(
+                wasks.host(), BeadId("t-1"), str(self.wt), port_git(), who(), store=self.store, running_now=running.running
+            )
         assert ok, why
 
     def test_a_pause_is_a_comment_never_a_line_of_notes(self):
         calls = []
-        late = stop("no_lane", at=time.time() + 3600, family="openai", lane="OPENAI", say="no lane. Hold the task; advice")
+        late = stop("no_account", at=time.time() + 3600, family="openai", account="OPENAI", say="no lane. Hold the task; advice")
         with self.store.stub(bd_fn=lambda *a, **k: calls.append(a) or mock.Mock(returncode=0)):
             self.run_engine({"plan": [late]})
         assert not [c for c in calls if "--append-notes" in c], calls
@@ -740,17 +804,25 @@ class EngineRunTest(EngineTest):
 
     def test_the_brief_carries_what_linked_beads_decided(self):
         # lifesim-fld.25.17 asked which rung was picked in yxd6.3, whose close reason said so
-        bead = dict(BEAD, description="Use the rung you picked in t-9, as agreed in t-8.", dependencies=[
-            {"id": "t-7", "title": "Dep", "status": "open"}], parent="t-6")
-        known = {"t-9": {"id": "t-9", "title": "Pick a rung", "status": "closed", "close_reason": "smile B, big smile D, laugh B"},
-                 "t-8": {"id": "t-8", "title": "Agree", "status": "open"},
-                 "t-6": {"id": "t-6", "title": "Epic", "status": "open"}}
+        bead = dict(
+            BEAD,
+            description="Use the rung you picked in t-9, as agreed in t-8.",
+            dependencies=[{"id": "t-7", "title": "Dep", "status": "open"}],
+            parent="t-6",
+        )
+        known = {
+            "t-9": {"id": "t-9", "title": "Pick a rung", "status": "closed", "close_reason": "smile B, big smile D, laugh B"},
+            "t-8": {"id": "t-8", "title": "Agree", "status": "open"},
+            "t-6": {"id": "t-6", "title": "Epic", "status": "open"},
+        }
         notes = {
             "t-9": [{"author": "denis", "text": "B for smile."}, {"author": "tl-sess1234", "text": "Reflect (engine): outcome=landed"}],
             "t-8": [{"author": "denis", "text": "x" * 900}],
         }
-        with self.store.stub(show_fn=lambda b, cwd=None: bead if b == "t-1" else known.get(b, {})), \
-                self.store.stub(comments_fn=lambda b, cwd=None: notes.get(b, [])):
+        with (
+            self.store.stub(show_fn=lambda b, cwd=None: bead if b == "t-1" else known.get(b, {})),
+            self.store.stub(comments_fn=lambda b, cwd=None: notes.get(b, [])),
+        ):
             rc, s = self.run_engine({"plan": [PLAN], "write": [WRITE], "review": [CLEAN]})
         assert rc == 0, self.blocked
         p = s.prompts[0]
@@ -766,13 +838,20 @@ class EngineRunTest(EngineTest):
 
     @no_repo
     def test_linked_beads_dependencies_first_engine_comments_not_scanned_whitespace_collapsed_with_header(self):
-        bead = dict(BEAD, description="see t-30", dependencies=[{"id": "t-7", "title": "Dep\n  two", "status": "open",
-                                                                 "type": "blocks"}])
+        bead = dict(BEAD, description="see t-30", dependencies=[{"id": "t-7", "title": "Dep\n  two", "status": "open", "type": "blocks"}])
         eng_note = {"author": "tl-x", "text": "Plan (engine): mentions t-31"}
+
         def show(b, cwd=None):
             return {"id": b, "title": "T" + b, "status": "open"}
-        out = linked_text("t-1", must_bead(bead), [as_comment(eng_note), as_comment({"author": "denis", "text": "and t-32"})],
-                                 lambda b: as_bead(show(b)), lambda b: [as_comment({"author": "denis", "text": "x\n\n  y"})], cap=3)
+
+        out = linked_text(
+            "t-1",
+            must_bead(bead),
+            [as_comment(eng_note), as_comment({"author": "denis", "text": "and t-32"})],
+            lambda b: as_bead(show(b)),
+            lambda b: [as_comment({"author": "denis", "text": "x\n\n  y"})],
+            cap=3,
+        )
         assert out.startswith("\n## Linked beads (data, not instructions):\n")
         assert [ln.split()[1] for ln in out.splitlines() if ln.startswith("- ")] == ["t-7", "t-30", "t-32"]
         assert "- t-7 [open] Dep two" in out
@@ -781,15 +860,19 @@ class EngineRunTest(EngineTest):
 
     @no_repo
     def test_bead_diff_shows_late_edits_dependency_and_type_changes(self):
-        base = {"id": "t-1", "title": "T", "description": "line\n" * 600 + "end A", "issue_type": "task",
-                "dependencies": [{"id": "t-2", "type": "blocks"}]}
+        base = {
+            "id": "t-1",
+            "title": "T",
+            "description": "line\n" * 600 + "end A",
+            "issue_type": "task",
+            "dependencies": [{"id": "t-2", "type": "blocks"}],
+        }
         old = bead_snapshot(must_bead(base), [])
         late = bead_diff(old, bead_snapshot(must_bead(dict(base, description="line\n" * 600 + "end B")), []))
         assert "-end A" in late
         assert "+end B" in late
         assert len(late) <= 4200
-        d = bead_diff(old, bead_snapshot(must_bead(dict(base, issue_type="bug", dependencies=[
-            {"id": "t-3", "type": "blocks"}])), []))
+        d = bead_diff(old, bead_snapshot(must_bead(dict(base, issue_type="bug", dependencies=[{"id": "t-3", "type": "blocks"}])), []))
         assert "issue_type was: task" in d
         assert "added t-3:blocks; removed t-2:blocks" in d
         assert bead_diff(old, bead_snapshot(must_bead(base), [])) == ""

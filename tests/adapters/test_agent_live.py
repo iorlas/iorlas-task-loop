@@ -22,13 +22,13 @@ def test_no_file_no_worker_and_no_events(workdir):
 
 def test_the_first_line_is_the_worker_and_the_start_event_says_where_it_ran(workdir):
     live = Path(workdir) / "live.jsonl"
-    started = {"kind": "start", "t": 1.0, "harness": "h", "pid": 7, "lane": "L", "model": "m", "effort": "e"}
+    started = {"kind": "start", "t": 1.0, "harness": "h", "pid": 7, "account": "L", "model": "m", "effort": "e"}
     lines(live, {"v": 1, "pid": 7, "pgid": 7, "run_id": "r1"}, started, {"kind": "nope", "t": 2.0})
     a = agent(live)
     worker = a.worker()
     assert worker is not None and worker.pid == 7
     start = a.start_event()
-    assert isinstance(start, LiveStart) and start.lane == "L"
+    assert isinstance(start, LiveStart) and start.account == "L"
     assert [type(e).__name__ for e in a.events()] == ["LiveStart"]  # the unknown kind is passed over
 
 

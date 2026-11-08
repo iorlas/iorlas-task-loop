@@ -1,4 +1,5 @@
 """Transient retry scheduling must not change existing owner, ask or infrastructure closes."""
+
 from random import random
 from unittest import mock
 
@@ -27,7 +28,7 @@ class PauseCompatibility(Case):
 
     def test_machine_pauses_keep_owner_parks_without_an_ask(self):
         for reason in (
-            "no_lane",
+            "no_account",
             "logged_out",
             "secrets",
             "credit_exhausted",
@@ -38,16 +39,24 @@ class PauseCompatibility(Case):
             with self.subTest(reason=reason), mock.patch("tlasks.closing.ParkStore") as store:
                 through_change(store)
                 host = mock.Mock(
-                    dry=False, home=self.cfg, bead=self.bead.id, run_id="r1", pause_reason=reason,
-                    pause_producer="delegate", pause_permanence="needs_owner", retry_after=0.0, asked=False
+                    dry=False,
+                    home=self.cfg,
+                    bead=self.bead.id,
+                    run_id="r1",
+                    pause_reason=reason,
+                    pause_producer="delegate",
+                    pause_permanence="needs_owner",
+                    retry_after=0.0,
+                    asked=False,
                 )
                 store.return_value.get.return_value = None
                 host.clock.now.return_value = 100
                 for n in range(4):
                     host.run_id = f"r{n}"
                     with mock.patch("taskloop.adapters.beadtools.peek", return_value=self.bead):
-                        Closer(host, host, host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home),
-                            beadtools.peek).pause(oc.make(Kind.PAUSE_LANE, "paused"))
+                        Closer(host, host, host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home), beadtools.peek).pause(
+                            oc.make(Kind.PAUSE_LANE, "paused")
+                        )
                     assert (host.retry_after, host.asked, host.pause_reason) == (0, False, reason)
                     host.ask_flow.raise_ask.assert_not_called()
                     rec = store.return_value.put.call_args.args[0]
@@ -59,16 +68,24 @@ class PauseCompatibility(Case):
             with self.subTest(reason=reason), mock.patch("tlasks.closing.ParkStore") as store:
                 through_change(store)
                 host = mock.Mock(
-                    dry=False, home=self.cfg, bead=self.bead.id, run_id="r1", pause_reason=reason,
-                    pause_producer=producer, pause_permanence="needs_owner", retry_after=0.0, asked=False
+                    dry=False,
+                    home=self.cfg,
+                    bead=self.bead.id,
+                    run_id="r1",
+                    pause_reason=reason,
+                    pause_producer=producer,
+                    pause_permanence="needs_owner",
+                    retry_after=0.0,
+                    asked=False,
                 )
                 store.return_value.get.return_value = None
                 host.clock.now.return_value = 100
                 host.ask_flow.raise_ask.return_value = True
                 assert pauses.rule(reason, producer).max_attempts == 0
                 with mock.patch("taskloop.adapters.beadtools.peek", return_value=self.bead):
-                    Closer(host, host, host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home),
-                        beadtools.peek).pause(oc.make(Kind.PAUSE_LANE, "paused"))
+                    Closer(host, host, host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home), beadtools.peek).pause(
+                        oc.make(Kind.PAUSE_LANE, "paused")
+                    )
                 assert (host.retry_after, host.asked) == (0, True)
                 host.ask_flow.raise_ask.assert_called_once()
                 rec = store.return_value.put.call_args.args[0]
@@ -88,13 +105,21 @@ class PauseCompatibility(Case):
                 store.return_value.get.return_value = None
                 for n in range(policy.max_attempts + 1):
                     host = mock.Mock(
-                        dry=False, home=self.cfg, bead=self.bead.id, run_id=f"r{n}", pause_reason=reason,
-                        pause_producer=producer, pause_permanence=policy.permanence, retry_after=0.0, asked=False
+                        dry=False,
+                        home=self.cfg,
+                        bead=self.bead.id,
+                        run_id=f"r{n}",
+                        pause_reason=reason,
+                        pause_producer=producer,
+                        pause_permanence=policy.permanence,
+                        retry_after=0.0,
+                        asked=False,
                     )
                     host.clock.now.return_value = 100
                     with mock.patch("taskloop.adapters.beadtools.peek", return_value=self.bead):
-                        Closer(host, host, host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home),
-                            beadtools.peek).pause(oc.make(Kind.PAUSE_LANE, "paused"))
+                        Closer(host, host, host, mock.Mock(), ClosingAsks(host.home), ClosingAsks(host.home), beadtools.peek).pause(
+                            oc.make(Kind.PAUSE_LANE, "paused")
+                        )
                     rec = store.return_value.put.call_args.args[0]
                     assert rec.attempts == {pauses.attempt_key(reason, producer): n + 1}
                     assert rec.permanence == ("transient" if n < policy.max_attempts else "needs_owner")
@@ -121,12 +146,24 @@ class PauseCompatibility(Case):
         with mock.patch("tlasks.closing.ParkStore") as store:
             through_change(store)
             store.return_value.get.return_value = None
-            rec = parks.paused(self.cfg, self.bead, Kind.PAUSE_LANE, "r1", 100, reason="rate_limited",
-                               not_before=900, draw=lambda: 0.5, permanence="transient", store=store)
+            rec = parks.paused(
+                self.cfg,
+                self.bead,
+                Kind.PAUSE_LANE,
+                "r1",
+                100,
+                reason="rate_limited",
+                not_before=900,
+                draw=lambda: 0.5,
+                permanence="transient",
+                store=store,
+            )
             assert rec is not None
-            assert (
-                (rec.reason, rec.permanence, rec.retry_at, rec.attempts)
-                == ("rate_limited", "transient", 900, {"delegate:rate_limited": 1})
+            assert (rec.reason, rec.permanence, rec.retry_at, rec.attempts) == (
+                "rate_limited",
+                "transient",
+                900,
+                {"delegate:rate_limited": 1},
             )
             store.return_value.put.assert_called_once_with(rec)
 

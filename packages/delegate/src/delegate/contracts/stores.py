@@ -19,8 +19,8 @@ from process_lock import LockHeldError, ProcessLock
 
 from delegate.contracts import codec
 from delegate.contracts.history import ROWS, HealthCheckpoint, HistoryRow, RunRow
-from delegate.contracts.json_types import Json
-from delegate.contracts.routing import BreakerPolicy
+from delegate.contracts.json_types import Json, obj
+from delegate.contracts.routing import BreakerPolicy, split_retired
 from delegate.contracts.state import Profile, StateDoc, split_retired_state
 
 HISTORY_MAX, HISTORY_DAYS = 1_000_000, 14
@@ -197,7 +197,7 @@ class CheckpointStore:
         try:
             cp = codec.from_json(HealthCheckpoint, read_json(self.path))
             return State.from_dict(cp.state) if cp.policy == policy and cp.state.keys() == {"ts", "keys", "outs"} else None
-        except (codec.CodecError, TypeError, ValueError, KeyError):
+        except codec.CodecError, TypeError, ValueError, KeyError:
             return None
 
     def save(self, state: State, policy: BreakerPolicy) -> None:
@@ -208,7 +208,7 @@ class CheckpointStore:
 class ConfigStore:
     """`config.json`: the owner's overrides. Top-level keys other than `profile` are settings overrides (deep-merged over routing.json by
     the
-    caller); `profile` is the owner's lane choices and never leaves this class as a setting."""
+    caller); `profile` is the owner's account choices and never leaves this class as a setting."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -229,27 +229,32 @@ class ConfigStore:
         return cur
 
     def profile(self) -> Profile:
+        return self._profile(self.read().get("profile"))
+
+    @staticmethod
+    def _profile(raw: Json) -> Profile:
         try:
-            return codec.from_json(Profile, self.read().get("profile") or {})
+            split_retired(obj(raw))
+        except ValueError as error:
+            sys.exit(str(error).replace("routing.json", "config.json profile"))
+        try:
+            return codec.from_json(Profile, raw or {})
         except codec.CodecError:
             return Profile()
 
     def _put_profile(self, fn: Callable[[Profile], object]) -> None:
         def put(cur: dict[str, Json]) -> None:
-            try:
-                p = codec.from_json(Profile, cur.get("profile") or {})
-            except codec.CodecError:
-                p = Profile()
+            p = self._profile(cur.get("profile"))
             fn(p)
             cur["profile"] = codec.to_json(p)
 
         self.update(put)
 
-    def set_lane(self, name: str, value: str | None) -> None:
+    def set_account(self, name: str, value: str | None) -> None:
         """value None removes the entry (back to auto-detect)."""
 
         def put(p: Profile) -> None:
-            p.lanes.pop(name, None) if value is None else p.lanes.__setitem__(name, value)
+            p.accounts.pop(name, None) if value is None else p.accounts.__setitem__(name, value)
 
         self._put_profile(put)
 

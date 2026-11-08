@@ -5,7 +5,7 @@
       "weekly": 90,
       "five_hour": 85
     },
-    "worker_lane_gate": {
+    "worker_account_gate": {
       "five_hour": 90,
       "weekly": 95
     },
@@ -98,7 +98,7 @@
       "cost": 2
     }
   },
-  "lanes": {
+  "accounts": {
     "CLAUDE_SUBSCRIPTION": {
       "family": "claude",
       "kind": "subscription",
@@ -203,7 +203,7 @@
           "cap": 2
         }
       ],
-      "stop": "No worker lane is available. Hold the task; a few lines the orchestrator may write itself."
+      "stop": "No worker account is available. Hold the task; a few lines the orchestrator may write itself."
     },
     "reviewer": {
       "about": "verify, review a diff. Prefer a different family than the author (--authored-by openai|claude|xai|deepseek|zai, optional); order: Codex, then the other non-Claude families (cheapest configured model cost first), then the author's own non-Claude family (flagged same_family, never blocks), then Claude Sonnet last. Grok/opencode never reviews (study 81: 74% of review tokens, same send-back rate as Sonnet, ~10x wall time); it stays on for other roles. Claude Opus never runs in the loop. Always rerun the acceptance check.",
@@ -467,7 +467,7 @@
           "cap": 1
         }
       ],
-      "stop": "No light lane is available. Do it directly if it is tiny."
+      "stop": "No light account is available. Do it directly if it is tiny."
     }
   },
   "premium": {

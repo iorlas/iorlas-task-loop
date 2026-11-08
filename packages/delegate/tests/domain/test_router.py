@@ -11,11 +11,11 @@ from unittest import mock
 
 from delegate.app.fleet import mark_busy
 from delegate.contracts import codec
-from delegate.contracts.routing import CallArgs, Error, LaneOut, Routing, Run, Stop
+from delegate.contracts.routing import AccountOut, CallArgs, Error, Routing, Run, Stop
 from delegate.contracts.state import StateDoc
+from delegate.domain.accounts.account import Account
 from delegate.domain.health.ledger import PairView
 from delegate.domain.holds.book import HoldBook
-from delegate.domain.lanes.lane import Lane
 from delegate.domain.routing.router import Router
 from tltestkit.case import Case
 
@@ -33,13 +33,13 @@ def broken(b: dict[str, Any]) -> PairView:
     return PairView(**kw)
 
 
-def lane_of(spec):
-    lane = Lane(spec["name"], spec["family"], spec["kind"], spec["shared"])
+def account_of(spec):
+    account = Account(spec["name"], spec["family"], spec["kind"], spec["shared"])
     for k, v in spec.items():
         val = {m: broken(b) for m, b in v.items()} if k in ("benched", "hview") else v
         if k not in ("name", "family", "kind", "shared"):
-            setattr(lane, k, val)
-    return lane
+            setattr(account, k, val)
+    return account
 
 
 def routing(overrides):
@@ -61,11 +61,11 @@ def call_args(a, unattended):
 
 def run_scenario(sc):
     r = routing(sc["settings"])
-    doc = codec.from_json(StateDoc, dict(sc["state"], v=1))
-    lanes = mark_busy({s["name"]: lane_of(s) for s in sc["lanes"]}, doc, r.settings, T, lambda: 77)
+    doc = codec.from_json(StateDoc, dict(sc["state"], v=2))
+    accounts = mark_busy({s["name"]: account_of(s) for s in sc["accounts"]}, doc, r.settings, T, lambda: 77)
     router = Router(r, HoldBook(doc.holds), doc.prev, T)
     a = sc["args"]
-    return router.route(a["role"], call_args(a, sc["unattended"]), lanes, doc.refs.get(a["resume"] or ""))
+    return router.route(a["role"], call_args(a, sc["unattended"]), accounts, doc.refs.get(a["resume"] or ""))
 
 
 class Replay(Case):
@@ -85,7 +85,7 @@ class Replay(Case):
 class Purity:
     def test_decide_touches_no_filesystem_socket_or_env(self):
         r = routing({})
-        lanes = {"OPENAI_SUBSCRIPTION": Lane("OPENAI_SUBSCRIPTION", "openai", "subscription", five=10, week=5)}
+        accounts = {"OPENAI_SUBSCRIPTION": Account("OPENAI_SUBSCRIPTION", "openai", "subscription", five=10, week=5)}
         router = Router(r, HoldBook({}), {}, T)
 
         def boom(*a, **k):
@@ -97,16 +97,18 @@ class Purity:
             mock.patch.object(os, "listdir", boom),
             mock.patch.object(socket, "socket", boom),
         ):
-            d = router.decide("worker", CallArgs(), lanes)
+            d = router.decide("worker", CallArgs(), accounts)
         assert isinstance(d, Run)
-        assert (d.lane, d.model) == ("OPENAI_SUBSCRIPTION", "gpt-6.1-sol")
+        assert (d.account, d.model) == ("OPENAI_SUBSCRIPTION", "gpt-6.1-sol")
 
-    def test_decide_does_not_change_the_lanes_it_is_given(self):
+    def test_decide_does_not_change_the_accounts_it_is_given(self):
         r = routing({})
-        lanes = {"OPENAI_SUBSCRIPTION": Lane("OPENAI_SUBSCRIPTION", "openai", "subscription", five=10, week=5, out=True, out_until=T + 5)}
-        before = repr(lanes)
-        Router(r, HoldBook({}), {}, T).decide("worker", CallArgs(), lanes)
-        assert repr(lanes) == before
+        accounts = {
+            "OPENAI_SUBSCRIPTION": Account("OPENAI_SUBSCRIPTION", "openai", "subscription", five=10, week=5, out=True, out_until=T + 5)
+        }
+        before = repr(accounts)
+        Router(r, HoldBook({}), {}, T).decide("worker", CallArgs(), accounts)
+        assert repr(accounts) == before
 
     def test_the_decision_kinds(self):
         r = routing({})
@@ -114,6 +116,6 @@ class Purity:
         assert isinstance(router.decide("nope", CallArgs(), {}), Error)
         assert isinstance(router.decide("worker", CallArgs(), {}), Stop)
         assert isinstance(router.resume("worker", CallArgs(resume="x"), None, {}), Error)
-        assert isinstance(Lane("L", "f", "subscription").with_busy(T, 1, 1), Lane)
-        assert not hasattr(Lane("L", "f", "subscription"), "held")
-        assert LaneOut
+        assert isinstance(Account("L", "f", "subscription").with_busy(T, 1, 1), Account)
+        assert not hasattr(Account("L", "f", "subscription"), "held")
+        assert AccountOut

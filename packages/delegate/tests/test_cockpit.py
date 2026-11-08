@@ -1,4 +1,5 @@
-"""The lane cockpit: one row per known lane, an emoji for each state, a plain reason, the unlock time, usage windows with their source."""
+"""The account cockpit: one row per known account, an emoji for each state, a plain reason, the unlock time, usage windows with their
+source."""
 
 import copy
 import io
@@ -14,7 +15,7 @@ from any_agent.harnesses.opencode import OpenCodeHarness
 from test_route import CFG, T, route
 
 from delegate.app import cockpit, env, harnesses, onboard, usage
-from delegate.domain.lanes.lane import Lane
+from delegate.domain.accounts.account import Account
 from delegate.domain.time import spec
 from tltestkit.tmpdir import TemporaryDirectory
 
@@ -26,21 +27,21 @@ def cfg_all():
     return cfg
 
 
-def lane(name, **over):
-    c = CFG["lanes"][name]
-    ln = Lane(name, c["family"], c["kind"], c.get("shared_with_orchestrator", False))
+def account(name, **over):
+    c = CFG["accounts"][name]
+    ln = Account(name, c["family"], c["kind"], c.get("shared_with_orchestrator", False))
     for k, v in over.items():
         setattr(ln, k, v)
     return ln
 
 
 def view(name, ln, st=None, history=(), login=(True, "ok", T), cfg=None, off=None):
-    return cockpit.lane_view(name, cfg or cfg_all(), ln, support.doc_of(st or {}), T, history, 0, login, off)
+    return cockpit.account_view(name, cfg or cfg_all(), ln, support.doc_of(st or {}), T, history, 0, login, off)
 
 
 class Emoji:
     def test_ready_with_a_live_window(self):
-        ln = lane("OPENAI_SUBSCRIPTION", week=3.0, week_reset=T + 6 * 86400)
+        ln = account("OPENAI_SUBSCRIPTION", week=3.0, week_reset=T + 6 * 86400)
         usage.add_window(ln, 3.0, T + 6 * 86400, 10080, "live read (codex app-server)", T - 120)
         v = view("OPENAI_SUBSCRIPTION", ln)
         assert (v["state"], v["emoji"], v["reason"]) == ("ready", "✅", "ready")
@@ -55,7 +56,7 @@ class Emoji:
         assert not v["unlock"]["locked"]
 
     def test_resting_on_a_limit_names_the_unlock_in_local_time_and_duration(self):
-        ln = lane("OPENAI_SUBSCRIPTION", out=True, out_until=T + 2 * HOUR + 10 * 60, out_reason="limit", week=99.0)
+        ln = account("OPENAI_SUBSCRIPTION", out=True, out_until=T + 2 * HOUR + 10 * 60, out_reason="limit", week=99.0)
         v = view("OPENAI_SUBSCRIPTION", ln, {"out": {"OPENAI_SUBSCRIPTION": {"until": ln.out_until, "why": "weekly limit", "at": T}}})
         assert (v["state"], v["emoji"], v["reason"]) == ("resting", "⏳", "weekly limit hit")
         assert v["unlock"]["known"]
@@ -69,25 +70,25 @@ class Emoji:
             "why": "free usage limit still reached at 18:45; opencode hangs 47 min instead of exiting",
             "at": T - HOUR,
         }
-        ln = lane("DEEPSEEK_FREE", out=True, out_until=rec["until"], out_reason="error", notes=[rec["why"]])
+        ln = account("DEEPSEEK_FREE", out=True, out_until=rec["until"], out_reason="error", notes=[rec["why"]])
         v = view("DEEPSEEK_FREE", ln, {"out": {"DEEPSEEK_FREE": rec}})
         assert (v["state"], v["reason"]) == ("resting", "free usage limit reached")
         assert v["unlock"]["at"] == rec["until"]
 
     def test_limit_without_a_reset_time_says_unknown_and_why(self):
-        ln = lane("OPENAI_SUBSCRIPTION", out=True, out_until=None, out_reason="limit")
+        ln = account("OPENAI_SUBSCRIPTION", out=True, out_until=None, out_reason="limit")
         v = view("OPENAI_SUBSCRIPTION", ln)
         assert v["state"] == "resting"
         assert (v["unlock"]["locked"], v["unlock"]["known"], v["unlock"]["why"]) == (True, False, "the vendor gave no reset time")
 
     def test_logged_out_by_the_real_check_even_with_no_limit_recorded(self):
-        v = view("OPENAI_SUBSCRIPTION", lane("OPENAI_SUBSCRIPTION", week=1.0), login=(False, "Not logged in", T))
+        v = view("OPENAI_SUBSCRIPTION", account("OPENAI_SUBSCRIPTION", week=1.0), login=(False, "Not logged in", T))
         assert (v["state"], v["emoji"], v["reason"]) == ("logged_out", "🔑", "logged out: run `codex login`")
         assert not v["unlock"]["known"]
         assert "log in" in v["unlock"]["why"]
 
-    def test_logged_out_from_a_drifted_lane(self):
-        ln = lane("GROK_SUBSCRIPTION", out=True, out_reason="logged_out", notes=["enabled but not ready (login or key gone?)"])
+    def test_logged_out_from_a_drifted_account(self):
+        ln = account("GROK_SUBSCRIPTION", out=True, out_reason="logged_out", notes=["enabled but not ready (login or key gone?)"])
         v = view("GROK_SUBSCRIPTION", ln, login=(None, "", None))
         assert (v["state"], v["emoji"]) == ("logged_out", "🔑")
 
@@ -97,19 +98,19 @@ class Emoji:
             "why": "spending-limit: out of credits (personal-team-blocked); top up then report --event ok",
             "at": T - 60,
         }
-        ln = lane("GROK_SUBSCRIPTION", out=True, out_until=rec["until"], out_reason="error", notes=[rec["why"]])
+        ln = account("GROK_SUBSCRIPTION", out=True, out_until=rec["until"], out_reason="error", notes=[rec["why"]])
         v = view("GROK_SUBSCRIPTION", ln, {"out": {"GROK_SUBSCRIPTION": {"until": rec["until"], "why": rec["why"], "at": rec["at"]}}})
         assert (v["state"], v["emoji"]) == ("spend", "💸")
         assert v["unlock"]["known"]
 
     def test_codex_spend_control_is_a_spend_limit_without_a_timer(self):
-        ln = lane("OPENAI_SUBSCRIPTION", out=True, out_until=None, out_reason="limit", spend_blocked=True)
+        ln = account("OPENAI_SUBSCRIPTION", out=True, out_until=None, out_reason="limit", spend_blocked=True)
         v = view("OPENAI_SUBSCRIPTION", ln)
         assert v["state"] == "spend"
         assert "no timer" in v["unlock"]["why"]
 
     def test_hung_and_benched_is_slow_with_its_end_time(self):
-        ln = lane("GROK_SUBSCRIPTION", out=True, out_until=T + 1800, out_reason="hung")
+        ln = account("GROK_SUBSCRIPTION", out=True, out_until=T + 1800, out_reason="hung")
         v = view(
             "GROK_SUBSCRIPTION",
             ln,
@@ -120,21 +121,21 @@ class Emoji:
 
     def test_a_recent_hang_with_no_good_run_since_is_slow_but_not_locked(self):
         hist = [
-            {"lane": "GROK_SUBSCRIPTION", "done": True, "outcome": None, "ts": T - 5 * HOUR},
-            {"lane": "GROK_SUBSCRIPTION", "outcome": "hung", "ts": T - 600},
+            {"account": "GROK_SUBSCRIPTION", "done": True, "outcome": None, "ts": T - 5 * HOUR},
+            {"account": "GROK_SUBSCRIPTION", "outcome": "hung", "ts": T - 600},
         ]
-        v = view("GROK_SUBSCRIPTION", lane("GROK_SUBSCRIPTION"), history=hist)
+        v = view("GROK_SUBSCRIPTION", account("GROK_SUBSCRIPTION"), history=hist)
         assert (v["state"], v["emoji"], v["unlock"]["locked"]) == ("slow", "🐢", False)
-        hist.append({"lane": "GROK_SUBSCRIPTION", "done": True, "outcome": None, "ts": T - 60})
-        assert view("GROK_SUBSCRIPTION", lane("GROK_SUBSCRIPTION"), history=hist)["state"] == "ready"
+        hist.append({"account": "GROK_SUBSCRIPTION", "done": True, "outcome": None, "ts": T - 60})
+        assert view("GROK_SUBSCRIPTION", account("GROK_SUBSCRIPTION"), history=hist)["state"] == "ready"
 
     def test_disabled_and_not_configured(self):
         cfg = copy.deepcopy(CFG)
-        for name, text in (("DEEPSEEK_FREE", "disabled: `route.py config set profile.lanes.DEEPSEEK_FREE enabled` turns it on"),):
+        for name, text in (("DEEPSEEK_FREE", "disabled: `route.py config set profile.accounts.DEEPSEEK_FREE enabled` turns it on"),):
             v = view(name, None, cfg=cfg, off=cockpit.off_reason(name, cfg, (True, "", T)))
             assert (v["state"], v["emoji"], v["reason"]) == ("off", "⛔", text)
             assert v["model"] == "deepseek-v4.1-flash-free high"  # still shows what it would use
-        with patch.object(env, "profile_lanes", return_value={}):
+        with patch.object(env, "profile_accounts", return_value={}):
             assert (
                 cockpit.off_reason("OPENAI_SUBSCRIPTION", cfg_all(), (None, "", None))
                 == "not configured: `route.py doctor` says what it needs"
@@ -142,34 +143,34 @@ class Emoji:
             assert (
                 cockpit.off_reason("OPENAI_SUBSCRIPTION", cfg_all(), (False, "", None)) == "not configured: logged out, run `codex login`"
             )
-        with patch.object(env, "profile_lanes", return_value={"GROK_SUBSCRIPTION": "declined"}):
+        with patch.object(env, "profile_accounts", return_value={"GROK_SUBSCRIPTION": "declined"}):
             assert "declined" in cockpit.off_reason("GROK_SUBSCRIPTION", cfg_all(), (True, "", None))
 
-    def test_unknown_when_a_metered_lane_has_no_reading(self):
-        v = view("CLAUDE_SUBSCRIPTION", lane("CLAUDE_SUBSCRIPTION", shared=True))
+    def test_unknown_when_a_metered_account_has_no_reading(self):
+        v = view("CLAUDE_SUBSCRIPTION", account("CLAUDE_SUBSCRIPTION", shared=True))
         assert (v["state"], v["emoji"]) == ("unknown", "❓")
         assert (
-            view("CLAUDE_SUBSCRIPTION", lane("CLAUDE_SUBSCRIPTION", week=1.0, shared=True), login=(None, "claude CLI not installed", None))[
-                "state"
-            ]
+            view(
+                "CLAUDE_SUBSCRIPTION", account("CLAUDE_SUBSCRIPTION", week=1.0, shared=True), login=(None, "claude CLI not installed", None)
+            )["state"]
             == "unknown"
         )
 
     def test_a_vendor_without_a_meter_is_ready_not_unknown(self):
-        v = view("GROK_SUBSCRIPTION", lane("GROK_SUBSCRIPTION"))
+        v = view("GROK_SUBSCRIPTION", account("GROK_SUBSCRIPTION"))
         assert v["state"] == "ready"
         assert not v["meter"]
 
     def test_low_tokens_over_the_gate_but_under_the_ceiling_stays_ready_with_a_warning(self):
-        ln = lane("OPENAI_SUBSCRIPTION", week=96.0)
+        ln = account("OPENAI_SUBSCRIPTION", week=96.0)
         usage.add_window(ln, 96.0, T + 86400, 10080, "live read", T)
         v = view("OPENAI_SUBSCRIPTION", ln)
         assert v["state"] == "ready"
         assert v["low_tokens"][0]["over"] == "gate"
-        assert "low tokens: weekly 96% is over the lane gate 95%" in v["reason"]
+        assert "low tokens: weekly 96% is over the account gate 95%" in v["reason"]
 
     def test_over_the_hard_ceiling_rests_until_that_window_resets(self):
-        ln = lane("OPENAI_SUBSCRIPTION", week=99.0, week_reset=T + 3 * HOUR)
+        ln = account("OPENAI_SUBSCRIPTION", week=99.0, week_reset=T + 3 * HOUR)
         usage.add_window(ln, 99.0, T + 3 * HOUR, 10080, "live read", T)
         v = view("OPENAI_SUBSCRIPTION", ln)
         assert (v["state"], v["low_tokens"][0]["over"]) == ("resting", "ceiling")
@@ -188,7 +189,7 @@ class Fmt:
 class Readers:
     def test_the_claude_reader_marks_its_source(self):
         with TemporaryDirectory() as d, patch.dict(os.environ, {"DELEGATE_CONFIG_DIR": d}):
-            c = lane("CLAUDE_SUBSCRIPTION", shared=True)
+            c = account("CLAUDE_SUBSCRIPTION", shared=True)
             with patch.object(usage, "claude_logged_out", return_value=False), patch.object(env, "update_state"):
                 usage.read_claude_subscription(
                     c,
@@ -216,7 +217,6 @@ class LoginCheck:
         p.write_text("#!/bin/sh\n" + body + "\n")
         p.chmod(p.stat().st_mode | stat.S_IEXEC)
 
-
     def test_opencode_logins_are_read_from_its_auth_file(self):
         with (
             TemporaryDirectory() as d,
@@ -237,17 +237,17 @@ class Command:
     def run_status(self, *argv, state=None, ready=None):
         cfg = cfg_all()
         with TemporaryDirectory() as d, patch.dict(os.environ, {"DELEGATE_CONFIG_DIR": d, "CLAUDE_CODE_ENTRYPOINT": "cli"}):
-            (Path(d) / "state.json").write_text(json.dumps({"v": 1, **(state or {})}))
-            (Path(d) / "config.json").write_text(json.dumps({"profile": {"lanes": {"DEEPSEEK_FREE": "enabled"}}}))
-            ready = ready or dict.fromkeys(cfg["lanes"], True)
-            noread = {k: (lambda lane_, S, st_, t, *a: None) for k in usage.READERS}
+            (Path(d) / "state.json").write_text(json.dumps({"v": 2, **(state or {})}))
+            (Path(d) / "config.json").write_text(json.dumps({"profile": {"accounts": {"DEEPSEEK_FREE": "enabled"}}}))
+            ready = ready or dict.fromkeys(cfg["accounts"], True)
+            noread = {k: (lambda account_, S, st_, t, *a: None) for k in usage.READERS}
             logins = {"OPENAI_SUBSCRIPTION": (False, "Not logged in"), "GROK_SUBSCRIPTION": (True, "ok")}
             out, sys.stdout = sys.stdout, io.StringIO()
             try:
                 with (
                     patch.object(env, "load_routing", return_value=cfg),
                     patch.dict(usage.READERS, noread),
-                    patch.object(onboard, "configured_lanes", return_value=ready),
+                    patch.object(onboard, "configured_accounts", return_value=ready),
                     patch.object(harnesses, "probe_login", side_effect=lambda n: logins.get(n, (True, "ok"))),
                     patch.object(env, "now", return_value=T),
                 ):
@@ -256,11 +256,11 @@ class Command:
             finally:
                 sys.stdout = out
 
-    def test_text_is_short_and_names_every_known_lane_even_a_logged_out_one(self):
-        text = self.run_status(ready={n: n != "ZAI_CODING_SUBSCRIPTION" for n in CFG["lanes"]})
+    def test_text_is_short_and_names_every_known_account_even_a_logged_out_one(self):
+        text = self.run_status(ready={n: n != "ZAI_CODING_SUBSCRIPTION" for n in CFG["accounts"]})
         lines = text.splitlines()
         assert len(lines) <= 25, text
-        for n in CFG["lanes"]:
+        for n in CFG["accounts"]:
             assert n in text
         assert "🔑 OPENAI_SUBSCRIPTION" in text  # the real check says logged out although the file is there
         assert "logged out: run `codex login`" in text
@@ -268,18 +268,18 @@ class Command:
         assert "⛔ ZAI_CODING_SUBSCRIPTION" in text
         assert "next worker:" in lines[0]
 
-    def test_json_has_the_same_lanes_and_keeps_the_dashboard_keys(self):
+    def test_json_has_the_same_accounts_and_keeps_the_dashboard_keys(self):
         state = {"out": {"DEEPSEEK_FREE": {"until": T + 3 * HOUR, "why": "free usage limit still reached", "at": T - 60}}}
         text = self.run_status(state=state)
         data = json.loads(self.run_status("--json", state=state))
         ck = data["cockpit"]
-        ids = [r["id"] for r in ck["lanes"]]
-        assert ids == list(CFG["lanes"])
+        ids = [r["id"] for r in ck["accounts"]]
+        assert ids == list(CFG["accounts"])
         for n in ids:
             assert n in text
-        row = next(r for r in ck["lanes"] if r["id"] == "DEEPSEEK_FREE")
+        row = next(r for r in ck["accounts"] if r["id"] == "DEEPSEEK_FREE")
         assert (row["state"], row["unlock"]["in_s"]) == ("resting", 3 * HOUR)
         assert ("unlocks " + row["unlock"]["text"]) in text
-        for k in ("lanes", "running", "needs_input"):
+        for k in ("accounts", "running", "needs_input"):
             assert k in data
         assert ck["next_worker"]["action"] in ("run", "stop")

@@ -1,7 +1,7 @@
 """TierPlan: a role's steps for one call, in the order they are tried.
 
 A tier is a list of steps tried strict, then relaxed, before the next tier. Order: a requested premium step, then every non-Claude step,
-then every Claude step; within each, unflagged steps before LATE_FLAGS ones. Claude lanes come last for every role (delegate-m86).
+then every Claude step; within each, unflagged steps before LATE_FLAGS ones. Claude accounts come last for every role (delegate-m86).
 """
 
 from dataclasses import replace
@@ -35,7 +35,7 @@ class TierPlan:
         return not args.only_family or step.on in args.only_family
 
     def steps_for(self, role: Role, args: CallArgs, off: frozenset[str] = frozenset()) -> list[Step] | None:
-        """`off`: families of opt-in lanes the owner has not enabled; their steps are not in the ladder.
+        """`off`: families of opt-in accounts the owner has not enabled; their steps are not in the ladder.
         None when the call names an author or a premium family the role/table does not know."""
         steps = list(role.steps)
         if role.by_author is not None:

@@ -1,5 +1,5 @@
 """Test helpers for the tests that drive route.py's callers of the domain Router: a `decide` with the shape the old route.decide had
-(role, cfg, lanes, state, t, args -> the JSON answer of `next`, `how` included) and writers for state sections."""
+(role, cfg, accounts, state, t, args -> the JSON answer of `next`, `how` included) and writers for state sections."""
 
 import contextlib
 import copy
@@ -21,7 +21,7 @@ from delegate.domain.routing.tiers import TierPlan
 
 def doc_of(st):
     """A StateDoc from a StateDoc, or from a dict of sections in their state.json shape."""
-    return st if isinstance(st, StateDoc) else codec.from_json(StateDoc, dict(st or {}, v=1))
+    return st if isinstance(st, StateDoc) else codec.from_json(StateDoc, dict(st or {}, v=2))
 
 
 def decide(role, cfg, ls, st, t, args):
@@ -42,7 +42,7 @@ def decide(role, cfg, ls, st, t, args):
         step: dict[str, Json] = {"model": d.model, "effort": d.effort, "mode": d.mode}
         if d.cap is not None:
             step["cap"] = d.cap
-        out["how"] = dec.how(ls[d.lane], step, cfg, args.get("cwd"), args.get("unattended", False))
+        out["how"] = dec.how(ls[d.account], step, cfg, args.get("cwd"), args.get("unattended", False))
     return out
 
 
@@ -59,8 +59,8 @@ def build_tiers(role_name, cfg, args, off=frozenset()):
     return [[codec.to_json(s) for s in t] for t in tiers or []]
 
 
-def put_out(lane, until, why="t", **kw):
-    env.update_state(lambda s: s.out.__setitem__(lane, OutState(until=until, why=why, **kw)))
+def put_out(account, until, why="t", **kw):
+    env.update_state(lambda s: s.out.__setitem__(account, OutState(until=until, why=why, **kw)))
 
 
 def put_lease(rid, **kw):
@@ -105,19 +105,19 @@ __all__ = [
 ]
 
 
-def add_hold(lane, until, reason, roles=None, set_by="owner", t=None):
+def add_hold(account, until, reason, roles=None, set_by="owner", t=None):
     """Record an owner hold the way `route.py hold` does; ValueError for an end that is missing or past."""
-    h = new_hold(uuid.uuid4().hex[:8], lane, until, reason, list(roles or []), set_by, env.now() if t is None else t)
+    h = new_hold(uuid.uuid4().hex[:8], account, until, reason, list(roles or []), set_by, env.now() if t is None else t)
     env.update_state(lambda s: s.holds.__setitem__(h.id, h))
     return h
 
 
 @contextlib.contextmanager
 def fleet_patches(ls):
-    """The fleet is `ls`: no reader, no profile, no health fold, busy marking and lane publishing off."""
+    """The fleet is `ls`: no reader, no profile, no health fold, busy marking and account publishing off."""
     builder = types.SimpleNamespace(build=lambda *a, **k: Fleet(ls))
     with contextlib.ExitStack() as stack:
         stack.enter_context(mock.patch.object(dec, "fleet_builder", return_value=builder))
         for m in (dec, cockpit):
-            stack.enter_context(mock.patch.object(m, "mark_busy", side_effect=lambda lanes, *a, **k: lanes))
+            stack.enter_context(mock.patch.object(m, "mark_busy", side_effect=lambda accounts, *a, **k: accounts))
         yield

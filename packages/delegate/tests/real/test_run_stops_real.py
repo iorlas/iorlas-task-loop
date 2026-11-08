@@ -15,7 +15,7 @@ import pytest
 import routing_support as support
 from any_agent import reset_parse, watch
 from any_agent.classify import classify
-from any_agent.supervisor import LaneGoneWatcher
+from any_agent.supervisor import LaneGoneWatcher  # the vendored tree keeps its own words
 from run_support import RunBase, short_limits
 from test_route import CFG, at, need, no_reader, obj, route, why
 
@@ -25,8 +25,8 @@ from delegate.contracts import history as hist
 from delegate.contracts import stops
 from delegate.contracts.routing import Settings
 from delegate.contracts.state import StateDoc
+from delegate.domain.accounts.account import Account
 from delegate.domain.health import ledger as health_ledger
-from delegate.domain.lanes.lane import Lane
 from tltestkit.fake_worker import Err, Exit, Jump
 from tltestkit.procsim import real_proc
 
@@ -41,17 +41,17 @@ class RunStops(RunBase):
     def test_unattended_never_answers_agent_ask_user_or_needs_input(self):
         [support.put_out(n, env.now() + 3600) for n in ("OPENAI_SUBSCRIPTION", "CLAUDE_SUBSCRIPTION")]
         code, r = self.run_it(role="planner")
-        assert (code, why(r)) == (0, "no_lane")
+        assert (code, why(r)) == (0, "no_account")
         assert "ask_user" not in r
         assert "needs_input" not in r
         support.clear_out()
         self.codex_out()
         _, r = self.run_it(role="planner")  # no Agent tool here: the subscription runs claude -p (Sonnet; Opus never plans in the loop)
         assert r.get("agent_model") is None
-        assert (r["stop"], r["lane"]) == (None, "CLAUDE_SUBSCRIPTION")
+        assert (r["stop"], r["account"]) == (None, "CLAUDE_SUBSCRIPTION")
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_every_lane_full_stops_with_a_retry_after_in_one_to_two_minutes(self):
+    def test_every_account_full_stops_with_a_retry_after_in_one_to_two_minutes(self):
         for i in range(4):
             self.lease(f"o{i}", "OPENAI_SUBSCRIPTION")
             self.lease(f"c{i}", "CLAUDE_SUBSCRIPTION")
@@ -65,7 +65,7 @@ class RunStops(RunBase):
         _, r = self.run_it("--task", "T-9")
         assert env.load_state().leases == {}
         line = json.loads(env.history_path().read_text().splitlines()[-1])
-        assert (line["run_id"], line["task"], line["lane"], line["done"]) == (r["run_id"], "T-9", "OPENAI_SUBSCRIPTION", True)
+        assert (line["run_id"], line["task"], line["account"], line["done"]) == (r["run_id"], "T-9", "OPENAI_SUBSCRIPTION", True)
         assert line["tokens"] == {"in": 100, "cached": 40, "out": 7}
         assert "brief" not in json.dumps(line)
         assert line["overlap"] == []
@@ -77,7 +77,7 @@ class RunStops(RunBase):
         self.enterContext(short_limits("codex", grace_s=1))
         started = self.play(THREAD, ANSWER, TURN_DONE)
         _, r = self.run_it(timeout=0)
-        assert (r["stop"], r["text"], r["lane"]) == (None, '{"findings": []}', "OPENAI_SUBSCRIPTION")
+        assert (r["stop"], r["text"], r["account"]) == (None, '{"findings": []}', "OPENAI_SUBSCRIPTION")
         assert r["warnings"] == ["answer_done_process_alive"]
         assert r["stop"] is None
         assert json.loads(env.history_path().read_text().splitlines()[-1])["warnings"] == ["answer_done_process_alive"]
@@ -159,7 +159,7 @@ class RunStops(RunBase):
                 ts=env.now(),
                 run_id="kept",
                 role="worker",
-                lane="OPENAI_SUBSCRIPTION",
+                account="OPENAI_SUBSCRIPTION",
                 model="m",
                 effort="high",
                 done=True,
@@ -175,11 +175,11 @@ class RunStops(RunBase):
     def test_every_answer_carries_the_stop_facts(self):
         r: dict = {}
         cases = {
-            "early_error": ("vendor_blip", "lane", "transient"),
+            "early_error": ("vendor_blip", "account", "transient"),
             "bad_request": ("bad_request", "caller", "needs_owner"),
             "late_error": ("network", "machine", "transient"),
             "secret": ("secrets", "bead", "needs_owner"),
-            "logout": ("logged_out", "lane", "needs_owner"),
+            "logout": ("logged_out", "account", "needs_owner"),
             "net": ("network", "machine", "transient"),
             "ok": None,
         }
@@ -208,7 +208,7 @@ class RunStops(RunBase):
         assert self.launches() == 2
         assert not r["stop"]["resumable"]
         assert not r["stop"]["partial"]
-        assert "OPENAI_SUBSCRIPTION" not in env.load_state().out  # the network is not the lane's fault
+        assert "OPENAI_SUBSCRIPTION" not in env.load_state().out  # the network is not the account's fault
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_drop_with_the_net_still_down_is_not_relaunched_in_the_call(self):
@@ -223,7 +223,7 @@ class RunStops(RunBase):
     def test_a_dropped_stream_keeps_the_ref_in_the_answer_the_stop_and_the_refs_table(self):
         _, r = self.run_it(mode="late_error")
         assert (r["ref"], r["stop"]["ref"]) == ("thread-123", "thread-123")
-        assert "thread-123" in env.load_state().refs  # a later --resume finds the lane that made it
+        assert "thread-123" in env.load_state().refs  # a later --resume finds the account that made it
         assert (why(r), r["stop"]["resumable"], r["data"]) == ("network", True, None)  # DELRESUME: ref present, resumable, no data
         row = json.loads(Path(env.history_path()).read_text().splitlines()[-1])
         assert (row["outcome"], row["ref"]) == ("network", "thread-123")
@@ -244,14 +244,14 @@ class RunStops(RunBase):
         led = health_ledger.HealthLedger(env.typed_routing(CFG).settings.breaker)
         st = led.fold(env.history_store().rows())
         assert led.view(st, "OPENAI_SUBSCRIPTION", r["model"], time.time()).usable
-        assert {k: v for k, v in st.keys.items() if '|' in k} == {}
+        assert {k: v for k, v in st.keys.items() if "|" in k} == {}
         _, r = self.run_it()
         assert r["stop"] is None
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_stop_with_nothing_to_wait_for_is_for_the_owner(self):
-        assert obj(answer.result("no_lane"))["stop"]["permanence"] == "needs_owner"
-        assert obj(answer.result("no_lane", retry_after=5))["stop"]["permanence"] == "transient"
+        assert obj(answer.result("no_account"))["stop"]["permanence"] == "needs_owner"
+        assert obj(answer.result("no_account", retry_after=5))["stop"]["permanence"] == "transient"
         assert answer.result()["stop"] is None
 
     @real_proc("delegate: a worker, git or CLI process")
@@ -267,7 +267,7 @@ class RunStops(RunBase):
         assert "$.a is missing" in r["say"]
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_contract_json_names_every_reason_and_lane(self):
+    def test_contract_json_names_every_reason_and_account(self):
         real, sys.stdout = sys.stdout, io.StringIO()
         try:
             route.main(["contract", "--json"])
@@ -282,7 +282,7 @@ class RunStops(RunBase):
             assert {"scope", "permanence", "retry", "health", "wording"} <= set(row)
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_a_request_fault_leaves_the_lane_in_state_json_alone(self):
+    def test_a_request_fault_leaves_the_account_in_state_json_alone(self):
         before = env.load_state().out
         self.run_it(mode="bad_request")
         assert env.load_state().out == before
@@ -314,21 +314,21 @@ class RunStops(RunBase):
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_gap_over_1800s_is_written_to_history_through_the_watchdog_and_the_fold_ignores_it(self):
         t = [0.0]
-        d = {"lane": "OPENAI_SUBSCRIPTION", "model": "gpt-6.1-sol"}
+        d = {"account": "OPENAI_SUBSCRIPTION", "model": "gpt-6.1-sol"}
         dog = watch.Watchdog(120, 3600, clock=lambda: t[0])
         for tick in (5, 1805, 4005):  # gaps of 1800 s (not logged) and 2200 s (logged)
             t[0] = tick
             dog.touch()
         assert not dog.poll()
-        gaps.flush(dog, env.history_add, d["lane"], d["model"], True)
+        gaps.flush(dog, env.history_add, d["account"], d["model"], True)
         rows = env.history_store().rows()
         got = [r for r in rows if isinstance(r, hist.GapRow)]
         assert len(got) == len(rows)
-        assert [(type(r).__name__, r.lane, r.model, r.gap_s, r.finished) for r in got] == [
+        assert [(type(r).__name__, r.account, r.model, r.gap_s, r.finished) for r in got] == [
             ("GapRow", "OPENAI_SUBSCRIPTION", "gpt-6.1-sol", 2200.0, True)
         ]
         assert health_ledger.HealthLedger(env.typed_routing(CFG).settings.breaker).fold(rows).keys == {}
-        gaps.flush(dog, obj(None), d["lane"], d["model"], True)  # never raises
+        gaps.flush(dog, obj(None), d["account"], d["model"], True)  # never raises
 
     @real_proc("delegate: stderr chatter keeps a run alive on a real git work tree")
     def test_any_stream_line_counts_as_activity_even_on_stderr(self):
@@ -342,13 +342,13 @@ class RunStops(RunBase):
         self.hist(self.failed_rows(3, 60))
         _, r = self.run_it(unattended=True)
         assert r.get("model") != "gpt-6.1-sol"
-        assert r.get("lane") != "OPENAI_SUBSCRIPTION"
+        assert r.get("account") != "OPENAI_SUBSCRIPTION"
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_pair_whose_bench_ended_gets_one_canary_before_the_real_call(self):
         self.hist(self.failed_rows(3, 1500))  # benched 15 min from the third failure: over 8 min ago
         _, r = self.run_it()
-        assert (r["stop"], r["lane"]) == (None, "OPENAI_SUBSCRIPTION")
+        assert (r["stop"], r["account"]) == (None, "OPENAI_SUBSCRIPTION")
         calls = self.args_seen().strip().splitlines()
         assert len(calls) == 2
         assert Path(os.environ["FAKE_ARGS"] + ".brief").read_text().strip().splitlines()[-1] == "the brief"
@@ -375,12 +375,12 @@ class RunStops(RunBase):
             _, r = self.run_it(mode="bad_request")
             assert (why(r), r["stop"]["permanence"]) == ("bad_request", "needs_owner")
         _, r = self.run_it()
-        assert (r["stop"], r["lane"], r["model"]) == (None, "OPENAI_SUBSCRIPTION", "gpt-6.1-sol")
+        assert (r["stop"], r["account"], r["model"]) == (None, "OPENAI_SUBSCRIPTION", "gpt-6.1-sol")
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_workers_of_a_lane_marked_out_by_someone_else_are_stopped_within_the_poll_interval(self):
+    def test_workers_of_a_account_marked_out_by_someone_else_are_stopped_within_the_poll_interval(self):
         started = time.time()
-        w = LaneGoneWatcher(launch.lane_gone_check("OPENAI_SUBSCRIPTION", started), every=0)
+        w = LaneGoneWatcher(launch.account_gone_check("OPENAI_SUBSCRIPTION", started), every=0)
         assert w.poll() is None
         launch.settler().mark_out("OPENAI_SUBSCRIPTION", env.now() + 3600, "limit refusal: usage limit", env.now())
         stop = need(w.poll())
@@ -394,7 +394,7 @@ class RunStops(RunBase):
             assert stop.why == reason
             assert need(classify(None, structured={"watchdog": stop.why, "msg": stop.msg})).reason == want
         late = LaneGoneWatcher(
-            launch.lane_gone_check("OPENAI_SUBSCRIPTION", time.time() + 5), every=0
+            launch.account_gone_check("OPENAI_SUBSCRIPTION", time.time() + 5), every=0
         )  # a worker that started after the mark is not affected
         assert late.poll() is None
 
@@ -410,9 +410,9 @@ class RunStops(RunBase):
     def test_a_limit_refusal_lasts_until_the_known_reset(self):
         soon = env.now() + 500
 
-        def reading(lane: Lane, S: Settings, st: StateDoc, t: float, ai_usage: object = None) -> None:
-            if lane.family == "openai":
-                lane.five, lane.five_reset, lane.week, lane.week_reset = 50, soon, 10, soon + 99999
+        def reading(account: Account, S: Settings, st: StateDoc, t: float, ai_usage: object = None) -> None:
+            if account.family == "openai":
+                account.five, account.five_reset, account.week, account.week_reset = 50, soon, 10, soon + 99999
 
         usage.READERS["codex_app_server"] = reading
         self.run_it(mode="limit")
@@ -428,12 +428,12 @@ class RunStops(RunBase):
     def test_a_reading_with_room_after_the_refusal_clears_the_out(self):
         support.put_out("OPENAI_SUBSCRIPTION", env.now() + 5 * 86400, "limit refusal: x", at=env.now() - 60)
 
-        def reading(lane: Lane, S: Settings, st: StateDoc, t: float, ai_usage: object = None) -> None:
-            lane.five, lane.week, lane.read_at = 0, 0, t
+        def reading(account: Account, S: Settings, st: StateDoc, t: float, ai_usage: object = None) -> None:
+            account.five, account.week, account.read_at = 0, 0, t
 
         usage.READERS["codex_app_server"] = reading
         _, r = self.run_it()
-        assert (r["stop"], r["lane"]) == (None, "OPENAI_SUBSCRIPTION")
+        assert (r["stop"], r["account"]) == (None, "OPENAI_SUBSCRIPTION")
         assert "OPENAI_SUBSCRIPTION" not in env.load_state().out
 
     @real_proc("delegate: a worker, git or CLI process")

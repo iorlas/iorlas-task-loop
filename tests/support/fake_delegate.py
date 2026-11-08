@@ -22,14 +22,14 @@ class Call:
 
 
 def done(data: dict[str, Any] | None = None, text: str = "ok", *events: LiveEvent, **fields: Any) -> Step:
-    return Step(DelegateResult(data=data, text=text, lane="FAKE", model="fake-1", **fields), events)
+    return Step(DelegateResult(data=data, text=text, account="FAKE", model="fake-1", **fields), events)
 
 
 def stopped(reason: str, scope: str = "machine", permanence: str = "transient", retry: str = "none", at: float | None = None,
             *events: LiveEvent, **facts: Any) -> Step:
     """A non-done answer from its stop facts; `facts` are the other StopFacts fields (ref, fix, resumable, partial)."""
     stop = StopFacts(reason=reason, scope=scope, permanence=permanence, retry=Retry(kind=retry, at=at), **facts)  # type: ignore[arg-type]
-    res = DelegateResult(say=reason, lane="FAKE", model="fake-1", stop=stop)
+    res = DelegateResult(say=reason, account="FAKE", model="fake-1", stop=stop)
     return Step(res, events)
 
 

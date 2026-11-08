@@ -9,7 +9,7 @@ Producer = Literal["delegate", "engine"]
 
 
 class Reason(StrEnum):
-    NO_LANE = "no_lane"
+    NO_LANE = "no_account"
     ONLY_FAMILY_UNREADY = "only_family_unready"
     LOOP_EXCLUDED = "loop_excluded"
     SAME_FAMILY = "same_family"

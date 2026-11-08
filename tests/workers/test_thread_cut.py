@@ -45,14 +45,14 @@ def test_request_has_thread_and_never_resume(monkeypatch):
         wire.load(RunRequest, dict(req.to_dict(), v=0))
 
 
-@pytest.mark.parametrize("scope", ["lane", "model"])
+@pytest.mark.parametrize("scope", ["account", "model"])
 @pytest.mark.parametrize("attempt", [0, 1, 5])
 def test_lane_stops_do_not_restart_threads(scope, attempt):
     ctx = lp.Ctx(attempt=attempt)
-    predicted = lp.Stop(scope, "transient", "predicted", retry_at=123, lane="lane", model="model")
+    predicted = lp.Stop(scope, "transient", "predicted", retry_at=123, lane="acct", model="model")
     assert lp.decide(predicted, ctx) == lp.Yield("PAUSE_LANE", 123)
-    poll = lp.Stop(scope, "transient", "poll", lane="lane", model="model")
-    assert lp.decide(poll, ctx) == lp.Reroute(scope)
+    poll = lp.Stop(scope, "transient", "poll", lane="acct", model="model")
+    assert lp.decide(poll, ctx) == lp.Reroute("acct" if scope == "account" else "model")
 
 
 @pytest.mark.parametrize("retry", ["none", "predicted"])
@@ -114,7 +114,7 @@ def test_writer_loop_sends_delta_and_pauses(monkeypatch):
 
     def fake_call(c):
         sent.append((c.thread, c.text, c.delta))
-        stop = StopFacts(reason="rate_limited", scope="lane", permanence="transient", retry=Retry(kind="predicted", at=123))
+        stop = StopFacts(reason="rate_limited", scope="account", permanence="transient", retry=Retry(kind="predicted", at=123))
         return Answer(DelegateResult(stop=stop), {})
 
     monkeypatch.setattr(w, "call_once", fake_call)

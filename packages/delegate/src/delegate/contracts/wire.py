@@ -17,7 +17,7 @@ from delegate.contracts.json_types import Json
 CONTRACT = 4
 CAPABILITIES = ("writer_exec_allow", "instructions_ref", "attempts", "thread")
 END_OK, END_ERROR, END_TIMEOUT, END_SURVIVED = "ok", "error", "timeout", "worker_survived"
-Scope = Literal["bead", "caller", "machine", "lane", "model"]
+Scope = Literal["bead", "caller", "machine", "account", "model"]
 Permanence = Literal["transient", "needs_owner"]
 RetryKind = Literal["none", "predicted", "poll"]
 TranscriptStatus = Literal["ok", "ref_unresolvable", "died_before_session_id", "not_launched", "unsupported"]
@@ -162,7 +162,9 @@ class Tokens:
     out: int | None
 
 
-AttemptKind = Literal["first", "canary", "network_rerun", "lane_poll", "lane_wait", "new_thread", "worker_retry", "schema_reask", "reroute"]
+AttemptKind = Literal[
+    "first", "canary", "network_rerun", "account_poll", "account_wait", "new_thread", "worker_retry", "schema_reask", "reroute"
+]
 
 
 @record
@@ -171,7 +173,7 @@ class Attempt:
     it cost, so the caller sees what in-call retries it paid for and need not retry on top of them."""
 
     kind: AttemptKind
-    lane: str | None
+    account: str | None
     model: str | None
     outcome: str | None  # the contract.json reason this launch ended with; None = it answered
     secs: float
@@ -266,7 +268,7 @@ class RunResult:
     data: Json
     text: str
     ref: str | None
-    lane: str | None
+    account: str | None
     model: str | None
     effort: str | None
     family: str | None
@@ -287,7 +289,7 @@ class RunResult:
     rung: int | Absent | None = ABSENT
     fallback: bool | Absent | None = ABSENT
     fallback_reason: str | Absent | None = ABSENT
-    first_lane: str | Absent | None = ABSENT
+    first_account: str | Absent | None = ABSENT
     warnings: list[str] | Absent = ABSENT
     notice: str | Absent = ABSENT
     warning: str | Absent = ABSENT

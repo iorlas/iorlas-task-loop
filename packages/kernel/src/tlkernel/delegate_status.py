@@ -21,15 +21,15 @@ def _strings(v: object) -> list[str]:
 
 
 def snapshot_of(j: object) -> StatusSnapshot:
-    """Raises ValueError when the answer lacks `ts`, `lanes`, `cockpit.lanes` (each row with `id`, `state`) or a lane's `out`."""
+    """Raises ValueError when the answer lacks `ts`, `accounts`, `cockpit.accounts` (each row with `id`, `state`) or a lane's `out`."""
     top = _dict(j, "the answer")
     at = _num(top.get("ts"))
     if at is None:
         raise ValueError("delegate status: no ts")
-    flat = _dict(top.get("lanes"), "lanes")
-    rows = _dict(top.get("cockpit"), "cockpit").get("lanes")
+    flat = _dict(top.get("accounts"), "accounts")
+    rows = _dict(top.get("cockpit"), "cockpit").get("accounts")
     if not isinstance(rows, list):
-        raise ValueError("delegate status: cockpit.lanes is not a list")
+        raise ValueError("delegate status: cockpit.accounts is not a list")
     lanes: list[LaneStatus] = []
     for row in rows:
         r = _dict(row, "a cockpit lane")

@@ -19,7 +19,7 @@ import routing_support as support
 
 from delegate.app import decide as dec
 from delegate.cli import verbs
-from delegate.domain.lanes.lane import Lane
+from delegate.domain.accounts.account import Account
 from tltestkit.tmpdir import mkdtemp
 
 LIMIT_S = 10  # the Opus sweep decides about 7000 routes in process
@@ -44,22 +44,22 @@ NAMES = {
 }
 
 
-def lanes(*up):
+def accounts(*up):
     """Only the families in `up` are healthy; every other family is out."""
     out = {}
     for fam, (name, _kind) in NAMES.items():
-        lane = Lane(name, fam, CFG["lanes"][name]["kind"], fam == "claude")
-        lane.five, lane.week, lane.pace = 10, 5, 0
+        account = Account(name, fam, CFG["accounts"][name]["kind"], fam == "claude")
+        account.five, account.week, account.pace = 10, 5, 0
         if fam not in up:
-            lane.out, lane.out_until, lane.out_reason = True, T + 3600, "limit"
-        out[name] = lane
+            account.out, account.out_until, account.out_reason = True, T + 3600, "limit"
+        out[name] = account
     return out
 
 
 def review(writer, *up, role="reviewer", **kw):
     a = {"authored_by": writer, "failed": [], "premium": None, "allow_degraded": False}
     a.update(kw)
-    return support.decide(role, copy.deepcopy(CFG), lanes(*up), {}, T, a)
+    return support.decide(role, copy.deepcopy(CFG), accounts(*up), {}, T, a)
 
 
 ALL = tuple(NAMES)
@@ -74,7 +74,7 @@ def no_git(monkeypatch):
 
 class ReviewOrder:
     def fam(self, d):
-        return CFG["lanes"][d["lane"]]["family"]
+        return CFG["accounts"][d["account"]]["family"]
 
     def test_codex_writer_gets_another_non_claude_family_first(self):
         for others in (("zai",), ("deepseek",), ("zai", "deepseek")):
@@ -85,7 +85,7 @@ class ReviewOrder:
 
     def test_codex_writer_with_only_codex_non_claude_reviews_itself_before_claude(self):
         d = review("openai", "openai", "claude")
-        assert (d["lane"], d["flag"]) == ("OPENAI_SUBSCRIPTION", "same_family")
+        assert (d["account"], d["flag"]) == ("OPENAI_SUBSCRIPTION", "same_family")
         assert d["warning"].startswith("reviewing openai's work with openai")
 
     def test_codex_writer_with_no_non_claude_up_goes_to_claude(self):
@@ -107,13 +107,13 @@ class ReviewOrder:
         d = review("zai", *ALL)
         assert self.fam(d) in ("deepseek", "openai")
         d = review("zai", "zai", "claude")
-        assert (d["lane"], d["flag"]) == ("ZAI_CODING_SUBSCRIPTION", "same_family")
+        assert (d["account"], d["flag"]) == ("ZAI_CODING_SUBSCRIPTION", "same_family")
         d = review("zai", "claude")
         assert (self.fam(d), d["flag"]) == ("claude", None)
 
     def test_deepseek_and_xai_writers_follow_the_same_rule(self):
         d = review("deepseek", "deepseek", "claude")
-        assert (d["lane"], d["flag"]) == ("DEEPSEEK_FREE", "same_family")
+        assert (d["account"], d["flag"]) == ("DEEPSEEK_FREE", "same_family")
         assert self.fam(review("deepseek", "claude")) == "claude"
         d = review("xai", "xai", "claude")  # a Grok writer is never reviewed by Grok: next rung
         assert (self.fam(d), d["model"]) == ("claude", "sonnet-5.5")
@@ -124,7 +124,7 @@ class ReviewOrder:
             assert (d["action"], d["flag"]) == ("run", "same_family"), who
             assert f"reviewing {who}'s work with {who}" in d["warning"], who
         assert review("openai")["action"] == "stop"
-        assert review("xai", "xai")["action"] == "stop"  # only Grok up: no review lane at all
+        assert review("xai", "xai")["action"] == "stop"  # only Grok up: no review account at all
 
     def test_claude_stays_last_for_other_roles(self):
         for role in ("worker", "planner"):
@@ -134,7 +134,7 @@ class ReviewOrder:
         assert self.fam(d) == "xai"
 
     def order(self, writer, *up):
-        """Lanes the reviewer would use, in order, as each is taken down in turn."""
+        """Accounts the reviewer would use, in order, as each is taken down in turn."""
         up, out = list(up), []
         while True:
             d = review(writer, *up)
@@ -143,7 +143,7 @@ class ReviewOrder:
             out.append((self.fam(d), d["model"], d["flag"]))
             up.remove(self.fam(d)) if (self.fam(d) != "claude" or d["flag"] != "degraded") else up.remove("claude")
 
-    def test_grok_never_reviews_even_when_it_is_the_only_lane_up(self):
+    def test_grok_never_reviews_even_when_it_is_the_only_account_up(self):
         for writer in (None, "openai", "claude", "zai", "deepseek", "xai"):
             assert review(writer, "xai")["action"] == "stop", writer
             d = review(writer, "xai", "claude")
@@ -152,7 +152,7 @@ class ReviewOrder:
                 assert self.fam(review(writer, *fams)) != "xai", (writer, fams)
 
     def test_grok_still_routes_for_the_worker_role(self):
-        assert review(None, "xai", role="worker")["lane"] == "GROK_SUBSCRIPTION"
+        assert review(None, "xai", role="worker")["account"] == "GROK_SUBSCRIPTION"
         assert review(None, "xai", "claude", role="worker")["model"] == "grok-4.7"
 
     def test_order_writer_codex(self):
@@ -162,7 +162,7 @@ class ReviewOrder:
 
     def test_order_writer_claude(self):
         d = review("claude", *ALL)
-        assert d["lane"] == "OPENAI_SUBSCRIPTION"
+        assert d["account"] == "OPENAI_SUBSCRIPTION"
         assert [x[:2] for x in self.order("claude", *ALL)][:3] == [
             ("openai", "gpt-6.1-sol"),
             ("zai", "glm-5.3"),
@@ -182,14 +182,14 @@ class ReviewOrder:
             for m, v in cost.items():
                 cfg["models"][m]["cost"] = v
             a = {"authored_by": "claude", "failed": [], "premium": None, "allow_degraded": False}
-            return support.decide("reviewer", cfg, lanes("zai", "deepseek", "claude"), {}, T, a)["model"]
+            return support.decide("reviewer", cfg, accounts("zai", "deepseek", "claude"), {}, T, a)["model"]
 
         assert first({"glm-5.3": 1, "deepseek-v4.1-flash-free": 2}) == "glm-5.3"
         assert first({"glm-5.3": 5, "deepseek-v4.1-flash-free": 2}) == "deepseek-v4.1-flash-free"
         cfg = copy.deepcopy(CFG)
         cfg["models"]["gpt-6.1-sol"]["cost"] = 99  # Codex only goes first because it is configured cheapest
         a = {"authored_by": "claude", "failed": [], "premium": None, "allow_degraded": False}
-        assert support.decide("reviewer", cfg, lanes(*ALL), {}, T, a)["model"] == "glm-5.3"
+        assert support.decide("reviewer", cfg, accounts(*ALL), {}, T, a)["model"] == "glm-5.3"
 
     def test_opus_is_never_returned_for_any_loop_role(self):
         fams = ("openai", "xai", "deepseek", "zai", "claude")
@@ -208,7 +208,7 @@ class ReviewOrder:
             d = review("openai", "claude", role=role)
             assert (d["action"], d["model"]) == ("run", "sonnet-5.5"), role
 
-    def test_opus_only_config_returns_no_lane_with_a_reason(self):
+    def test_opus_only_config_returns_no_account_with_a_reason(self):
         cfg = copy.deepcopy(CFG)
         for name in ("reviewer", "planner"):
             role = cfg["roles"][name]
@@ -218,7 +218,9 @@ class ReviewOrder:
                 role["by_author"] = {k: [dict(opus)] for k in role["by_author"]}
             else:
                 role["steps"] = [dict(opus)]
-            d = support.decide(name, cfg, lanes(*ALL), {}, T, {"authored_by": None, "failed": [], "premium": None, "allow_degraded": True})
+            d = support.decide(
+                name, cfg, accounts(*ALL), {}, T, {"authored_by": None, "failed": [], "premium": None, "allow_degraded": True}
+            )
             assert (d["action"], d.get("reason")) == ("stop", "loop_excluded"), name
             assert "opus-5.5 is never routed in the loop" in d["say"]
 
@@ -232,7 +234,7 @@ class ReviewOrder:
         err, out = io.StringIO(), io.StringIO()
         ns = type("A", (), {"verbose": False})()
         with (
-            mock.patch.object(dec, "decision", side_effect=lambda a, cfg: (copy.deepcopy(d), lanes("openai", "claude"), [], T)),
+            mock.patch.object(dec, "decision", side_effect=lambda a, cfg: (copy.deepcopy(d), accounts("openai", "claude"), [], T)),
             contextlib.redirect_stderr(err),
             contextlib.redirect_stdout(out),
         ):

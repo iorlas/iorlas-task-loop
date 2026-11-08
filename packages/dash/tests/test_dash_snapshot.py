@@ -72,10 +72,10 @@ class Case(Case):
                     runs=0,
                     run="r",
                     t=NOW,
-                    reason="no_lane",
+                    reason="no_account",
                     permanence="transient",
                     retry_at=NOW + 60,
-                    attempts={"no_lane": 1},
+                    attempts={"no_account": 1},
                 )
             },
         )
@@ -151,8 +151,14 @@ class Case(Case):
                 )
             ],
         )
-        return World(now=now, host="box", version="v1", projects=[p], runs={(p.id, b): rs for b, rs in runs.items()},
-                     asks={(p.id, "b-ask"): ask("b-ask")})
+        return World(
+            now=now,
+            host="box",
+            version="v1",
+            projects=[p],
+            runs={(p.id, b): rs for b, rs in runs.items()},
+            asks={(p.id, "b-ask"): ask("b-ask")},
+        )
 
     def snap(self, **kw):
         return snapshot.build(self.world(**kw))
@@ -175,14 +181,14 @@ class Cards(Case):
         s = self.snap()
         got = {c.id: (c.column, c.marker) for c in s.beads}
         assert got == {
-                "b-run": (Column.WORKING, Marker.RUN),
-                "b-ask": (Column.QUESTIONS, Marker.ASK),
-                "b-parked": (Column.BACKLOG, Marker.PARKED),
-                "b-ready": (Column.BACKLOG, Marker.READY),
-                "b-blocked": (Column.BACKLOG, Marker.BLOCKED),
-                "b-done": (Column.DONE, Marker.DONE),
-                "b-look": (Column.LOOK, Marker.LOOK),
-            }
+            "b-run": (Column.WORKING, Marker.RUN),
+            "b-ask": (Column.QUESTIONS, Marker.ASK),
+            "b-parked": (Column.BACKLOG, Marker.PARKED),
+            "b-ready": (Column.BACKLOG, Marker.READY),
+            "b-blocked": (Column.BACKLOG, Marker.BLOCKED),
+            "b-done": (Column.DONE, Marker.DONE),
+            "b-look": (Column.LOOK, Marker.LOOK),
+        }
 
     def test_what_the_loop_runs_and_the_trims_leave_out(self):
         s = self.snap()
@@ -243,10 +249,16 @@ class Cards(Case):
 
 class Parts(Case):
     def test_only_typed_epics_include_childless_epics_and_exclude_task_parents(self):
-        p = ProjectIn(id="p", name="p", beads=[
-            bead("task-parent", issue_type="task"), bead("task-child", parent="task-parent"),
-            bead("epic-empty", issue_type="epic"), bead("epic-closed", issue_type="epic", status="closed"),
-        ])
+        p = ProjectIn(
+            id="p",
+            name="p",
+            beads=[
+                bead("task-parent", issue_type="task"),
+                bead("task-child", parent="task-parent"),
+                bead("epic-empty", issue_type="epic"),
+                bead("epic-closed", issue_type="epic", status="closed"),
+            ],
+        )
         assert [(e.id, e.open, e.total) for e in snapshot.epics_of(p)] == [("epic-empty", True, 0), ("epic-closed", False, 0)]
 
     def test_only_an_open_epic_with_an_open_child_is_open(self):
@@ -280,14 +292,16 @@ class Parts(Case):
         assert {p.bead for p in s.pieces} == {"b-run", "b-ask", "b-parked", "b-done", "b-look"}
         assert {(a.bead, a.source) for a in s.asks} == {("b-ask", "ask"), ("b-look", "look")}
         a = next(x for x in s.asks if x.source == "ask")
-        assert (
-            ([o.label for o in a.options], a.options[0].recommended, a.tried, a.why)
-            == (["Rent weekly", "All weekly"], True, ["read the design doc"], "the bead and the doc disagree")
+        assert ([o.label for o in a.options], a.options[0].recommended, a.tried, a.why) == (
+            ["Rent weekly", "All weekly"],
+            True,
+            ["read the design doc"],
+            "the bead and the doc disagree",
         )
-        assert (
-            next(x for x in s.asks if x.source == "look").artifacts
-            == ["/api/look-shot?repo=lifesim&path=a.png", "/api/look-shot?repo=lifesim&path=b.png"]
-        )
+        assert next(x for x in s.asks if x.source == "look").artifacts == [
+            "/api/look-shot?repo=lifesim&path=a.png",
+            "/api/look-shot?repo=lifesim&path=b.png",
+        ]
         assert (s.server.version, s.server.host, s.projects[0].id) == ("v1", "box", "lifesim")
         assert (s.ledger, s.adrs, s.lanes) == ([], [], [])  # no source yet
 

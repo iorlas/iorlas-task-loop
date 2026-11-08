@@ -43,17 +43,13 @@ def as_json(h, per_line):
 def live_lines(per_line, path):
     tick = itertools.count(100)
     sink = LiveSink("codex", str(path), wall=lambda: float(next(tick)), run_id="rid")
-    sink.start(lane="OPENAI_SUBSCRIPTION", model="m", effort="high", role="worker")
+    sink.start(account="OPENAI_SUBSCRIPTION", model="m", effort="high", role="worker")
     sink.started(4242)
     for evs in per_line:
         for e in evs:
             sink.feed(e)
     sink.end("done")
     return [json.loads(x) for x in Path(path).read_text().splitlines()]
-
-
-
-
 
 
 INPUTS = {
@@ -72,9 +68,6 @@ INPUTS = {
 
 
 class World:
-
-
-
     @real_proc("delegate: a worker, git or CLI process")
     def test_the_login_probe_runs_the_status_command(self):
         with TemporaryDirectory() as d:

@@ -2,7 +2,7 @@
  "fixture": 1,
  "scenario": "claude -p with an expired OAuth session, 21 Oct and 24 Oct",
  "cli": "claude",
- "lane": "CLAUDE_SUBSCRIPTION",
+ "account": "CLAUDE_SUBSCRIPTION",
  "real": "text real (engine copy of delegate's say); the channel (stderr) follows the fake claude of tests/test_route.py",
  "expected_reason": "logged_out",
  "rows": [
@@ -99,7 +99,7 @@
  ],
  "expected_stop": {
   "reason": "logged_out",
-  "scope": "lane",
+  "scope": "account",
   "permanence": "needs_owner",
   "retry_kind": "none"
  }

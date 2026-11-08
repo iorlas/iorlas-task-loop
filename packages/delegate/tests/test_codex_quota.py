@@ -6,11 +6,11 @@ from typing import Any
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
-from test_route import CFG, T, lanes
+from test_route import CFG, T, accounts
 
 from delegate.app import cockpit, env, usage
 from delegate.contracts.state import UsageCache
-from delegate.domain.lanes.lane import Lane
+from delegate.domain.accounts.account import Account
 from tltestkit.tmpdir import TemporaryDirectory
 
 # `account/rateLimits/read` as recorded: Pro Lite, one weekly window sent as `primary`, no `secondary`, no other bucket, no credits.
@@ -50,11 +50,11 @@ NOW = 1793000000  # 2026-10-26, before both resets
 
 
 def with_res(res, S=None, st=None, t=NOW):
-    lane = Lane("OPENAI_SUBSCRIPTION", "openai", "subscription")
+    account = Account("OPENAI_SUBSCRIPTION", "openai", "subscription")
     env.update_state(lambda s_: setattr(s_, "codex_limits", UsageCache(at=t, data=res)))
     S = env.settings_of(CFG) if S is None else env.settings_of({**CFG, "settings": S})
-    usage.read_codex(lane, S, st if st is not None else env.load_state(), t)
-    return lane
+    usage.read_codex(account, S, st if st is not None else env.load_state(), t)
+    return account
 
 
 class Fresh:
@@ -73,10 +73,12 @@ class Fresh:
 
 class CodexRead(Fresh):
     def test_recorded_response_is_the_weekly_window(self):
-        lane = with_res(RECORDED)
-        assert (lane.five, lane.week, lane.week_reset) == (None, 6.0, NEW_RESET)
-        assert [(w["name"], w["used"]) for w in lane.windows] == [("weekly", 6.0)]  # one bucket, one window: the API shows no other limit
-        assert lane.warn == []
+        account = with_res(RECORDED)
+        assert (account.five, account.week, account.week_reset) == (None, 6.0, NEW_RESET)
+        assert [(w["name"], w["used"]) for w in account.windows] == [
+            ("weekly", 6.0)
+        ]  # one bucket, one window: the API shows no other limit
+        assert account.warn == []
 
     def test_every_bucket_and_window_is_shown_and_the_fullest_one_binds(self):
         res = copy.deepcopy(RECORDED)
@@ -87,10 +89,10 @@ class CodexRead(Fresh):
             "primary": {"usedPercent": 85, "windowDurationMins": 10080, "resetsAt": NOW + 4 * 86400},
             "secondary": None,
         }
-        lane = with_res(res)
-        windows: Any = lane.windows
+        account = with_res(res)
+        windows: Any = account.windows
         assert sorted(w["name"] for w in windows) == ["5-hour", "spark weekly", "weekly"]
-        assert (lane.five, lane.week, lane.week_reset) == (30.0, 85.0, NOW + 4 * 86400)
+        assert (account.five, account.week, account.week_reset) == (30.0, 85.0, NOW + 4 * 86400)
 
     def test_cockpit_prints_every_window_and_the_warning(self):
         res = copy.deepcopy(RECORDED)
@@ -100,10 +102,10 @@ class CodexRead(Fresh):
             "primary": {"usedPercent": 10, "windowDurationMins": 10080, "resetsAt": NOW + 86400},
             "secondary": None,
         }
-        lane = with_res(res)
+        account = with_res(res)
         cfg = copy.deepcopy(CFG)
-        v = cockpit.lane_view("OPENAI_SUBSCRIPTION", cfg, lane, support.doc_of({}), NOW, (), 0, (True, "ok", NOW), None)
-        ck: dict[str, Any] = {"at": NOW, "next_worker": {"action": "stop", "say": "x"}, "legend": {}, "lanes": [v]}
+        v = cockpit.account_view("OPENAI_SUBSCRIPTION", cfg, account, support.doc_of({}), NOW, (), 0, (True, "ok", NOW), None)
+        ck: dict[str, Any] = {"at": NOW, "next_worker": {"action": "stop", "say": "x"}, "legend": {}, "accounts": [v]}
         text = "\n".join(cockpit.cockpit_text(ck))
         assert "spark weekly" in text
         assert "6% used, resets Sun 01 Nov" in text
@@ -111,16 +113,16 @@ class CodexRead(Fresh):
 
 class ClaudeLast(Fresh):
     def grok(self, **over):
-        g = Lane("GROK_SUBSCRIPTION", "xai", "subscription")
+        g = Account("GROK_SUBSCRIPTION", "xai", "subscription")
         for k, v in over.items():
             setattr(g, k, v)
         return g
 
     def everything(self, **over):
-        ls = lanes()
+        ls = accounts()
         ls["GROK_SUBSCRIPTION"] = self.grok()
         for fam, name in (("deepseek", "DEEPSEEK_FREE"), ("zai", "ZAI_CODING_SUBSCRIPTION")):
-            ls[name] = Lane(name, fam, "subscription")
+            ls[name] = Account(name, fam, "subscription")
         return ls
 
     def cfg(self):
@@ -132,7 +134,6 @@ class ClaudeLast(Fresh):
         a.update(args)
         return support.decide(role, self.cfg(), ls, {}, T, a)
 
-
     def test_the_chain_never_puts_a_claude_step_before_a_non_claude_one(self):
         for role_name, role in CFG["roles"].items():
             for who in [None] if role_name != "reviewer" else list(role["by_author"]):
@@ -140,17 +141,15 @@ class ClaudeLast(Fresh):
                 flat = [s["on"] == "claude" for t in tiers for s in t]
                 assert flat == sorted(flat), (role_name, who)
 
-    def test_claude_is_picked_only_when_every_other_lane_is_unusable(self):
+    def test_claude_is_picked_only_when_every_other_account_is_unusable(self):
         ls = self.everything()
         for n in ("OPENAI_SUBSCRIPTION", "GROK_SUBSCRIPTION", "DEEPSEEK_FREE", "ZAI_CODING_SUBSCRIPTION"):
             ls[n].out, ls[n].out_until, ls[n].out_reason = True, T + 3600, "limit"
         for role in ("worker", "light", "planner"):
             d = self.pick(role, copy.deepcopy(ls))
-            assert (d["action"], d["lane"].startswith("CLAUDE")) == ("run", True), role
-        ls["ZAI_CODING_SUBSCRIPTION"].out = False  # one non-Claude lane back: it wins again
-        assert self.pick("worker", ls)["lane"] == "ZAI_CODING_SUBSCRIPTION"
-
-
+            assert (d["action"], d["account"].startswith("CLAUDE")) == ("run", True), role
+        ls["ZAI_CODING_SUBSCRIPTION"].out = False  # one non-Claude account back: it wins again
+        assert self.pick("worker", ls)["account"] == "ZAI_CODING_SUBSCRIPTION"
 
     def test_premium_claude_still_goes_first_when_asked(self):
         assert self.pick("worker", self.everything(), premium="claude")["model"] == "fable-5.1"
@@ -162,7 +161,7 @@ class ClaudeLast(Fresh):
             ls[n].out, ls[n].out_until = True, T + 3600
         del ls["ZAI_CODING_SUBSCRIPTION"]
         nw: Any = cockpit.next_worker(cfg, ls, support.doc_of({}), T)
-        assert nw["lane"].startswith("CLAUDE")
+        assert nw["account"].startswith("CLAUDE")
         for part in (
             "OPENAI_SUBSCRIPTION out until",
             "GROK_SUBSCRIPTION out until",
@@ -170,10 +169,10 @@ class ClaudeLast(Fresh):
             "ZAI_CODING_SUBSCRIPTION not set up",
         ):
             assert part in nw["why"]
-        v = cockpit.lane_view("OPENAI_SUBSCRIPTION", cfg, None, support.doc_of({}), T)
-        text = cockpit.cockpit_text({"at": T, "next_worker": nw, "legend": {}, "lanes": [v]})[0]
+        v = cockpit.account_view("OPENAI_SUBSCRIPTION", cfg, None, support.doc_of({}), T)
+        text = cockpit.cockpit_text({"at": T, "next_worker": nw, "legend": {}, "accounts": [v]})[0]
         assert "(Claude because OPENAI_SUBSCRIPTION out until" in text
 
-    def test_cockpit_next_line_has_no_reason_when_a_non_claude_lane_is_picked(self):
+    def test_cockpit_next_line_has_no_reason_when_a_non_claude_account_is_picked(self):
         nw = cockpit.next_worker(self.cfg(), self.everything(), support.doc_of({}), T)
-        assert (nw["lane"], nw["why"]) == ("DEEPSEEK_FREE", None)
+        assert (nw["account"], nw["why"]) == ("DEEPSEEK_FREE", None)

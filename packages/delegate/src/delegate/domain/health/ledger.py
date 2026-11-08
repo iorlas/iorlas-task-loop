@@ -1,13 +1,14 @@
-"""HealthLedger: lane health as a replayable fold over history rows (delegate-rdt, delegate-a9x).
+"""HealthLedger: account health as a replayable fold over history rows (delegate-rdt, delegate-a9x).
 
 Pure: no clock, no I/O. `fold(rows, state)` turns finished-run rows into an `any_breaker.State`;
-`view(state, lane, model, t)` answers "may this
-(lane, model) pair launch at time t, and if not why". The same rows replayed in time order give the same answer, so a past incident is a
+`view(state, account, model, t)` answers "may this
+(account, model) pair launch at time t, and if not why". The same rows replayed in time order give the same answer, so a past incident is a
 regression fixture (tests/domain/test_health.py, golden/health_replay.json).
 
 Two kinds of fact, both read from the run's outcome:
-  lane facts   rate_limited, credit_exhausted, logged_out: the whole lane is out until a time (the vendor's, else a probe time).
-  pair facts   vendor_blip, worker_failed, hung: counted per fingerprint per (lane, model) inside a window; enough of them bench the pair on
+  account facts   rate_limited, credit_exhausted, logged_out: the whole account is out until a time (the vendor's, else a probe time).
+  pair facts   vendor_blip, worker_failed, hung: counted per fingerprint per (account, model) inside a window; enough of them bench the
+  pair on
                a 15/30/60 min ladder. A launch after a bench ends is the canary: it passes (a `done`) and the ladder resets, or it fails and
                the next rung starts at once.
 Never counted: bad_request (the caller's fault), network, killed, timeout, secrets, schema_invalid, refusals.
@@ -23,7 +24,7 @@ from delegate.contracts.json_types import Json
 from delegate.contracts.routing import BreakerPolicy
 from delegate.domain.health.matchers import fingerprint
 
-LANE_KINDS = ("rate_limited", "credit_exhausted", "logged_out")
+ACCOUNT_KINDS = ("rate_limited", "credit_exhausted", "logged_out")
 BREAKER = MappingProxyType({"vendor_blip": {"tasks": 2}, "worker_failed": {"tasks": 3}, "hung": {"n": 2, "window_min": 30, "tasks": 1}})
 STATES = ("up", "busy", "exhausted", "logged_out", "held", "broken")
 
@@ -37,7 +38,8 @@ def failure_fields(outcome: str | None, source: str, say: str | None, until: flo
 
 @dataclass(frozen=True)
 class PairView:
-    """One (lane, model) pair at one time. `usable` is False while a bench or a lane-level out is running; once it ends the pair is `up`
+    """One (account, model) pair at one time. `usable` is False while a bench or an account-level out is running; once it ends the pair is
+    `up`
     with canary True: the next launch is the one probe before full traffic."""
 
     state: str = "up"
@@ -65,20 +67,21 @@ class PairView:
 
 
 def fact_of(row: HistoryRow) -> list[Fact]:
-    """The facts a history row is: the lane is a key of its own and `lane|model` another; a run that worked proves both. [] when the row
+    """The facts a history row is: the account is a key of its own and `account|model` another; a run that worked proves both. [] when the
+    row
     is not a fact: a refusal, a gap, a reap, a caller fault, network, killed, timeout..."""
-    if isinstance(row, ReleaseRow):  # `route.py report --event ok`: the owner says the lane is fine
-        return [Fact(RELEASE, row.ts, row.lane), Fact(RELEASE, row.ts, row.lane + "|", prefix=True)]
+    if isinstance(row, ReleaseRow):  # `route.py report --event ok`: the owner says the account is fine
+        return [Fact(RELEASE, row.ts, row.account), Fact(RELEASE, row.ts, row.account + "|", prefix=True)]
     if isinstance(row, CanaryRow) or (isinstance(row, RunRow) and row.done):
-        return [Fact(OK, row.ts, row.lane), Fact(OK, row.ts, f"{row.lane}|{row.model}")]
+        return [Fact(OK, row.ts, row.account), Fact(OK, row.ts, f"{row.account}|{row.model}")]
     if not isinstance(row, RunRow):
         return []
     o, say = row.outcome, row.say or ""
-    if o in LANE_KINDS:  # a spending limit and a logout have no vendor timer: the probe time rules
-        return [Fact(o, row.ts, row.lane, until=row.until if o == "rate_limited" else None, note=say)]
+    if o in ACCOUNT_KINDS:  # a spending limit and a logout have no vendor timer: the probe time rules
+        return [Fact(o, row.ts, row.account, until=row.until if o == "rate_limited" else None, note=say)]
     if o in BREAKER:
         fp = row.fingerprint or fingerprint(o, "", say)
-        return [Fact(o, row.ts, f"{row.lane}|{row.model}", fp=fp, source=row.task or row.run_id, note=say)]
+        return [Fact(o, row.ts, f"{row.account}|{row.model}", fp=fp, source=row.task or row.run_id, note=say)]
     return []
 
 
@@ -115,8 +118,8 @@ class HealthLedger:
         """The state after `rows` on top of `state` (a checkpoint, else empty): fold(all) == fold(tail, fold(head))."""
         return self.breaker.fold((f for r in rows for f in fact_of(r)), state)
 
-    def view(self, state: State, lane: str, model: str, t: float) -> PairView:
-        lv, pv = self.breaker.view(state, lane, t), self.breaker.view(state, f"{lane}|{model}", t)
+    def view(self, state: State, account: str, model: str, t: float) -> PairView:
+        lv, pv = self.breaker.view(state, account, t), self.breaker.view(state, f"{account}|{model}", t)
         last = tuple(Failure(ts=f.ts, outcome=f.kind, say=f.note) for f in pv.recent)
         if lv.state == OUT:
             state_word = "logged_out" if lv.kind == "logged_out" else "exhausted"

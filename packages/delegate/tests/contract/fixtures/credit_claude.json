@@ -1,8 +1,8 @@
 {
  "fixture": 1,
- "scenario": "claude API credit lane out of credits (state.json out[CLAUDE_CREDIT], until the cycle reset)",
+ "scenario": "claude API credit account out of credits (state.json out[CLAUDE_CREDIT], until the cycle reset)",
  "cli": "claude",
- "lane": "CLAUDE_CREDIT",
+ "account": "CLAUDE_CREDIT",
  "real": "reconstructed: state.json keeps delegate's why ('credit balance too low'), the CLI's own wording is 'Credit balance is too low'",
  "expected_reason": "credit_exhausted",
  "rows": [
@@ -21,7 +21,7 @@
  ],
  "expected_stop": {
   "reason": "credit_exhausted",
-  "scope": "lane",
+  "scope": "account",
   "permanence": "needs_owner",
   "retry_kind": "none"
  }

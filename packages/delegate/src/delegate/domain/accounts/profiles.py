@@ -3,7 +3,7 @@ app/harnesses.LIMITS), the executable to look for, and whether resume was tested
 harness class (the shelf's any_agent).
 (the shelf's any_agent).
 
-Lane facts that are data, not code, live here too (`LANE_HOSTS`: the API hosts a lane needs, for adapters/netprobe).
+Account facts that are data, not code, live here too (`ACCOUNT_HOSTS`: the API hosts an account needs, for adapters/netprobe).
 """
 
 from collections import namedtuple
@@ -20,7 +20,7 @@ REGISTRY = MappingProxyType(
     }
 )
 
-LANE_HOSTS = MappingProxyType(
+ACCOUNT_HOSTS = MappingProxyType(
     {
         "CLAUDE_SUBSCRIPTION": ("api.anthropic.com",),
         "OPENAI_SUBSCRIPTION": ("chatgpt.com",),
@@ -40,8 +40,8 @@ FAMILY_HOSTS = MappingProxyType(
 )
 
 
-def hosts_of(lane: str | None):
-    return LANE_HOSTS.get(lane or "", ())
+def hosts_of(account: str | None):
+    return ACCOUNT_HOSTS.get(account or "", ())
 
 
 def hosts_for_family(family: str | None):
@@ -49,7 +49,7 @@ def hosts_for_family(family: str | None):
 
 
 def all_hosts():
-    return tuple(dict.fromkeys(h for hs in LANE_HOSTS.values() for h in hs))
+    return tuple(dict.fromkeys(h for hs in ACCOUNT_HOSTS.values() for h in hs))
 
 
 LOGIN_CMD = MappingProxyType(
@@ -58,6 +58,6 @@ LOGIN_CMD = MappingProxyType(
         "CLAUDE_SUBSCRIPTION": "claude auth login",
         "GROK_SUBSCRIPTION": "opencode auth login",
         "ZAI_CODING_SUBSCRIPTION": "opencode auth login, choose Z.AI Coding Plan",
-        "DEEPSEEK_FREE": "route.py config set profile.lanes.DEEPSEEK_FREE enabled",
+        "DEEPSEEK_FREE": "route.py config set profile.accounts.DEEPSEEK_FREE enabled",
     }
 )

@@ -1,4 +1,4 @@
-"""The Z.AI and DeepSeek lanes: priority, backoff, readiness, the opencode watchdog."""
+"""The Z.AI and DeepSeek accounts: priority, backoff, readiness, the opencode watchdog."""
 
 import copy
 import json
@@ -13,11 +13,11 @@ from any_agent.harnesses import opencode_sandbox
 from any_agent.harnesses.opencode import OpenCodeHarness
 from any_agent.supervisor import RunHooks
 from delegate_fakes.fake_run import replay
-from test_route import CFG, T, lanes, obj
+from test_route import CFG, T, accounts, obj
 
 from delegate.app import env, harnesses, launch
 from delegate.contracts.json_types import Json
-from delegate.domain.lanes.lane import Lane
+from delegate.domain.accounts.account import Account
 from tltestkit.case import Case
 from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory
@@ -30,34 +30,32 @@ class ZaiTests(Case):
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_worker_priority_and_backoff(self):
-        ls = lanes()
-        ls["DEEPSEEK_FREE"] = Lane("DEEPSEEK_FREE", "deepseek", "subscription")
-        ls["ZAI_CODING_SUBSCRIPTION"] = Lane("ZAI_CODING_SUBSCRIPTION", "zai", "subscription")
-        assert self.choose("worker", ls)["lane"] == "DEEPSEEK_FREE"
+        ls = accounts()
+        ls["DEEPSEEK_FREE"] = Account("DEEPSEEK_FREE", "deepseek", "subscription")
+        ls["ZAI_CODING_SUBSCRIPTION"] = Account("ZAI_CODING_SUBSCRIPTION", "zai", "subscription")
+        assert self.choose("worker", ls)["account"] == "DEEPSEEK_FREE"
         ls["DEEPSEEK_FREE"].out = True
         d = self.choose("worker", ls)
-        assert d["lane"] == "ZAI_CODING_SUBSCRIPTION"
+        assert d["account"] == "ZAI_CODING_SUBSCRIPTION"
         assert d["how"]["model"] == "zai-coding-plan/glm-5.3"
         assert self.choose("light", ls)["model"] == "glm-5.3-flash"
         ls["ZAI_CODING_SUBSCRIPTION"].out = True
-        assert self.choose("worker", ls)["lane"] == "OPENAI_SUBSCRIPTION"
+        assert self.choose("worker", ls)["account"] == "OPENAI_SUBSCRIPTION"
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_zai_author_gets_other_family(self):
         cfg = copy.deepcopy(CFG)
         args = {"authored_by": "zai", "premium": None, "allow_degraded": False}
-        d = support.decide("reviewer", cfg, lanes(), {}, T, args)
-        assert d["lane"] == "OPENAI_SUBSCRIPTION"
-        ls = {"ZAI_CODING_SUBSCRIPTION": Lane("ZAI_CODING_SUBSCRIPTION", "zai", "subscription")}
+        d = support.decide("reviewer", cfg, accounts(), {}, T, args)
+        assert d["account"] == "OPENAI_SUBSCRIPTION"
+        ls = {"ZAI_CODING_SUBSCRIPTION": Account("ZAI_CODING_SUBSCRIPTION", "zai", "subscription")}
         d = support.decide("reviewer", cfg, ls, {}, T, args)
         assert d["flag"] == "same_family"
-
-
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_launch_pins_provider_and_removes_override(self):
         d: dict[str, Json] = {
-            "lane": "ZAI_CODING_SUBSCRIPTION",
+            "account": "ZAI_CODING_SUBSCRIPTION",
             "model": "glm-5.3",
             "effort": "high",
             "role": "worker",
@@ -88,11 +86,14 @@ class ZaiTests(Case):
             assert obj(run).specs == []
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_both_ported_lanes_run_under_the_opencode_watchdog(self):
+    def test_both_ported_accounts_run_under_the_opencode_watchdog(self):
         a = SimpleNamespace(resume=None, schema=None, timeout=10)
-        for lane, model in (("ZAI_CODING_SUBSCRIPTION", "zai-coding-plan/glm-5.3"), ("DEEPSEEK_FREE", "opencode/deepseek-v4.1-flash-free")):
+        for account, model in (
+            ("ZAI_CODING_SUBSCRIPTION", "zai-coding-plan/glm-5.3"),
+            ("DEEPSEEK_FREE", "opencode/deepseek-v4.1-flash-free"),
+        ):
             d: dict[str, Json] = {
-                "lane": lane,
+                "account": account,
                 "model": "m",
                 "effort": "high",
                 "role": "worker",
@@ -105,7 +106,7 @@ class ZaiTests(Case):
                 seen.append(self)
 
             with (
-                self.subTest(lane=lane),
+                self.subTest(account=account),
                 TemporaryDirectory() as tmp,
                 patch.object(env, "config_dir", return_value=Path(tmp)),
                 patch.object(OpenCodeHarness, "find_exe", return_value="opencode"),

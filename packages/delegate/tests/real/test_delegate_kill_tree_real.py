@@ -96,7 +96,7 @@ class RealTrees(Case):
         p = subprocess.Popen([sys.executable, "-c", SHIM, self.pidfile], start_new_session=True)
         self.addCleanup(lambda: (p.kill(), p.wait()))
         child = wait_for(self.pidfile)
-        v = Lease(lane="L", pid=1, start=0.0, expires=0.0, worker_pid=p.pid, worker_start=proc_start(p.pid))
+        v = Lease(account="L", pid=1, start=0.0, expires=0.0, worker_pid=p.pid, worker_start=proc_start(p.pid))
         cstart = proc_start(child)
         assert v.worker_start and cstart
         time.time()

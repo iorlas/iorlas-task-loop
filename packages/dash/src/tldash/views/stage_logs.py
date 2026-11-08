@@ -48,7 +48,7 @@ def worker_attempt(start: log.CallStart, rows: Sequence[log.EngineLog], events: 
         lines.append(TermLine(t=end.t, text=end.reason))
     return StageAttempt(id=start.id, t=start.t, secs=end.secs if end else max(0.0, run.last_t - start.t),
                         outcome=end.status if end else "running" if run.life is Liveness.LIVE else "interrupted",
-                        lane=end.lane if end and end.lane else info.lane if info else "",
+                        lane=end.lane if end and end.lane else info.account if info else "",
                         model=end.model if end and end.model else info.model if info else "",
                         live=end is None and run.life is Liveness.LIVE, lines=lines)
 

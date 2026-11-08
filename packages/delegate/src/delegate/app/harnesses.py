@@ -1,4 +1,4 @@
-"""Which harness serves which lane: the OpenCode profiles per lane, the login probe per lane, the transcript finder per family."""
+"""Which harness serves which account: the OpenCode profiles per account, the login probe per account, the transcript finder per family."""
 
 import time
 from collections.abc import Callable
@@ -43,14 +43,14 @@ def sandbox() -> Sandbox:
 
 
 def probe_login(name: str):
-    """-> (True | False | None, why): is the lane's login really there? A status command or a file, never a model call."""
+    """-> (True | False | None, why): is the account's login really there? A status command or a file, never a model call."""
     if name == "OPENAI_SUBSCRIPTION":
         return CodexHarness().login_probe(AUTH_TIMEOUT)
     if name == "CLAUDE_SUBSCRIPTION":
         return ClaudeHarness().login_probe(AUTH_TIMEOUT)
     if name in OC_PROFILES:
         return OpenCodeHarness(OC_PROFILES[name]).login_probe(AUTH_TIMEOUT)
-    return None, "no check for this lane"
+    return None, "no check for this account"
 
 
 def find_transcript(ref: str | None, family: str):

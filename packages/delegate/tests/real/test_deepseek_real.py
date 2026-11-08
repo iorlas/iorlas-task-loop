@@ -1,4 +1,4 @@
-"""Free lane must fail closed and keep the actual author family."""
+"""Free account must fail closed and keep the actual author family."""
 
 import json
 import sys
@@ -12,7 +12,7 @@ from any_agent.harnesses import opencode_sandbox
 from any_agent.harnesses.opencode import OpenCodeHarness
 from any_agent.supervisor import RunHooks
 from delegate_fakes.fake_run import replay
-from test_route import CFG, decide, lanes
+from test_route import CFG, accounts, decide
 
 from delegate.app import env, launch
 from delegate.app.settle import Settler
@@ -31,19 +31,17 @@ class DeepSeekTests:
         obj.update(changes)
         return "opencode/deepseek-v4.1-flash-free\n" + json.dumps(obj)
 
-
     @real_proc("delegate: a worker, git or CLI process")
     def test_deepseek_author_gets_other_family_review(self):
-        assert decide("reviewer", lanes(), authored_by="deepseek")["lane"] == "OPENAI_SUBSCRIPTION"
+        assert decide("reviewer", accounts(), authored_by="deepseek")["account"] == "OPENAI_SUBSCRIPTION"
         steps = CFG["roles"]["reviewer"]["by_author"]["deepseek"]
         assert steps[-1]["flag"] == "same_family"
         assert all(s["on"] != "deepseek" for s in steps[:-1])
 
-
     @real_proc("delegate: a worker, git or CLI process")
     def test_launch_isolates_credentials_and_refuses_unverified_model(self):
         d: dict[str, Any] = {
-            "lane": "DEEPSEEK_FREE",
+            "account": "DEEPSEEK_FREE",
             "model": "deepseek-v4.1-flash-free",
             "effort": "low",
             "role": "worker",

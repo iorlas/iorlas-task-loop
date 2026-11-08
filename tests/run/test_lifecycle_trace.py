@@ -80,11 +80,9 @@ class Fingerprint(Case):
         two = lifecycle.fingerprint(
             "failed in thread-9999fff from C:\\repo\\thread-cafebabe\\Assets\\Enemy.cs")
         uuid_one = lifecycle.fingerprint(
-            "failed in thread-123e4567-e89b-12d3-a456-426614174000 from /repo/"
-            "123e4567-e89b-12d3-a456-426614174000/Assets/Player.cs")
+            "failed in thread-123e4567-e89b-12d3-a456-426614174000 from /repo/123e4567-e89b-12d3-a456-426614174000/Assets/Player.cs")
         uuid_two = lifecycle.fingerprint(
-            "failed in thread-00000000-0000-0000-0000-000000000000 from C:\\repo\\"
-            "00000000-0000-0000-0000-000000000000\\Assets\\Enemy.cs")
+            "failed in thread-00000000-0000-0000-0000-000000000000 from C:\\repo\\00000000-0000-0000-0000-000000000000\\Assets\\Enemy.cs")
         assert one == two
         assert uuid_one == uuid_two
         assert one == uuid_one
@@ -158,7 +156,7 @@ class TraceTelemetry(EngineTest):
     def test_a_paused_run_has_a_vendor_error_record_and_a_fingerprint(self):
         due = time.time() + 3 * 3600
         rc, _ = self.run_engine({"plan": [PLAN], "write": [
-            stop("rate_limited", at=due, say="out", lane="OPENAI_SUBSCRIPTION")]})
+            stop("rate_limited", at=due, say="out", account="OPENAI_SUBSCRIPTION")]})
         assert rc == 2
         self.assert_row("blocked")
         errors = self.records("vendor_error")

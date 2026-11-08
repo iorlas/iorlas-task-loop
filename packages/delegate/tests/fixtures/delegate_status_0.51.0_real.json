@@ -1,7 +1,7 @@
 {
  "v": 1,
  "ts": 1793189325.6771207,
- "lanes": {
+ "accounts": {
   "CLAUDE_SUBSCRIPTION": {
    "family": "claude",
    "kind": "subscription",
@@ -41,14 +41,14 @@
   },
   "next_worker": {
    "action": "run",
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "model": "gpt-6.1-sol",
    "effort": "medium",
    "pass": "strict",
    "fallback": false,
    "why": null
   },
-  "lanes": [
+  "accounts": [
    {
     "id": "CLAUDE_SUBSCRIPTION",
     "label": "Claude subscription",
@@ -124,7 +124,7 @@
     "model": "grok-4.7 medium",
     "state": "off",
     "emoji": "\u26d4",
-    "reason": "unavailable (no sandbox): opencode lanes need macOS sandbox-exec",
+    "reason": "unavailable (no sandbox): opencode accounts need macOS sandbox-exec",
     "detail": null,
     "unlock": {
      "locked": false,
@@ -153,7 +153,7 @@
     "model": "deepseek-v4.1-flash-free high",
     "state": "off",
     "emoji": "\u26d4",
-    "reason": "disabled: `route.py config set profile.lanes.DEEPSEEK_FREE enabled` turns it on",
+    "reason": "disabled: `route.py config set profile.accounts.DEEPSEEK_FREE enabled` turns it on",
     "detail": null,
     "unlock": {
      "locked": false,
@@ -182,7 +182,7 @@
     "model": "glm-5.3 high",
     "state": "off",
     "emoji": "\u26d4",
-    "reason": "disabled: `route.py config set profile.lanes.ZAI_CODING_SUBSCRIPTION enabled` turns it on",
+    "reason": "disabled: `route.py config set profile.accounts.ZAI_CODING_SUBSCRIPTION enabled` turns it on",
     "detail": null,
     "unlock": {
      "locked": false,
@@ -217,7 +217,7 @@
  "asks": [],
  "health": [
   {
-   "lane": "CLAUDE_SUBSCRIPTION",
+   "account": "CLAUDE_SUBSCRIPTION",
    "model": "opus-5.5",
    "state": "up",
    "until": null,
@@ -238,7 +238,7 @@
    }
   },
   {
-   "lane": "CLAUDE_SUBSCRIPTION",
+   "account": "CLAUDE_SUBSCRIPTION",
    "model": "sonnet-5.5",
    "state": "up",
    "until": null,
@@ -259,7 +259,7 @@
    }
   },
   {
-   "lane": "CLAUDE_SUBSCRIPTION",
+   "account": "CLAUDE_SUBSCRIPTION",
    "model": "haiku-5.5",
    "state": "up",
    "until": null,
@@ -280,7 +280,7 @@
    }
   },
   {
-   "lane": "CLAUDE_SUBSCRIPTION",
+   "account": "CLAUDE_SUBSCRIPTION",
    "model": "fable-5.1",
    "state": "up",
    "until": null,
@@ -301,7 +301,7 @@
    }
   },
   {
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "model": "gpt-6.1-sol",
    "state": "up",
    "until": null,
@@ -322,7 +322,7 @@
    }
   },
   {
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "model": "gpt-6-luna",
    "state": "up",
    "until": null,
@@ -346,7 +346,7 @@
  "roles": {
   "planner": {
    "usable": true,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "model": "gpt-6.1-sol",
    "why": null,
    "until": null,
@@ -362,7 +362,7 @@
   },
   "worker": {
    "usable": true,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "model": "gpt-6.1-sol",
    "why": null,
    "until": null,
@@ -381,7 +381,7 @@
   },
   "reviewer": {
    "usable": true,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "model": "gpt-6.1-sol",
    "why": null,
    "until": null,
@@ -399,7 +399,7 @@
   },
   "light": {
    "usable": true,
-   "lane": "OPENAI_SUBSCRIPTION",
+   "account": "OPENAI_SUBSCRIPTION",
    "model": "gpt-6-luna",
    "why": null,
    "until": null,

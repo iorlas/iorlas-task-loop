@@ -152,7 +152,7 @@ class TraceRecords(EngineTest):
 
     def test_a_long_lane_out_pauses_with_the_time_the_lane_is_back(self):
         due = time.time() + 3 * 3600
-        self.run_engine({"plan": [PLAN], "write": [stop("rate_limited", at=due, say="out", lane="OPENAI_SUBSCRIPTION")]})
+        self.run_engine({"plan": [PLAN], "write": [stop("rate_limited", at=due, say="out", account="OPENAI_SUBSCRIPTION")]})
         t = next(r for r in records(self.eng, rec.Transition) if r.cause == "paused")
         assert (num(t.from_id), t.to) == (3, "pause")
         assert {num(r.id): r for r in records(self.eng, rec.StepEnd)}[3].outcome == "paused"

@@ -27,7 +27,7 @@ CONTRACT = json.loads((ROOT / "packages" / "delegate" / "src" / "delegate" / "da
 LAUNCH_ONLY = {
     "duplicate_task",
     "busy",
-    "no_lane",
+    "no_account",
     "caller",
     "engine_only_unenforced",
     "crash",
@@ -67,8 +67,6 @@ def all_rows():
             yield path.name, f, row, row.get("expected_reason", f.get("expected_reason"))
 
 
-
-
 def stop_tuple(r):
     s = r["stop"]
     return (s["reason"], s["scope"], s["permanence"], s["retry"]["kind"]) if s else None
@@ -83,10 +81,6 @@ def expected_tuple(f, row, reason):
         return None
     c = CONTRACT["reasons"][reason]
     return (reason, c["scope"], c["permanence"], c["retry"])
-
-
-
-
 
 
 class Launchers(Case):
@@ -109,9 +103,9 @@ class Launchers(Case):
         self.addCleanup(self.tmp.cleanup)
         self.a = SimpleNamespace(resume=None, schema=None, timeout=30, role="worker")
 
-    def run_cli(self, kind, lines, rc, err="", lane="OPENAI_SUBSCRIPTION", **how):
+    def run_cli(self, kind, lines, rc, err="", account="OPENAI_SUBSCRIPTION", **how):
         d = {
-            "lane": lane,
+            "account": account,
             "model": "m",
             "effort": "high",
             "role": "worker",
@@ -125,15 +119,14 @@ class Launchers(Case):
         return res
 
     def opencode(self, lines, rc=1, **kw):
-        return self.run_cli("opencode", lines, rc, lane=kw.pop("lane", "GROK_SUBSCRIPTION"), **kw)
+        return self.run_cli("opencode", lines, rc, account=kw.pop("account", "GROK_SUBSCRIPTION"), **kw)
 
     @real_proc("delegate: a worker, git or CLI process")
-    def test_a_grok_row_through_the_opencode_launcher_marks_the_lane_out_without_a_time(self):
+    def test_a_grok_row_through_the_opencode_launcher_marks_the_account_out_without_a_time(self):
         row = load(ROOT / "packages" / "delegate" / "tests" / "contract" / "fixtures" / "grok_spending_limit_24oct.json")["rows"][0]
         res = self.opencode([{"type": "error", "error": {"name": "APIError", "data": {"message": row["evidence"]["vendor_err"]}}}])
         assert (res["outcome"], res.get("retry_after")) == ("credit_exhausted", None)
         assert "GROK_SUBSCRIPTION" in env.load_state().out
-
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_sigterm_with_no_error_is_killed_and_retried_not_failed(self):
@@ -142,9 +135,8 @@ class Launchers(Case):
         assert "retry_after" not in res
         assert (env.load_state().out or None) is None
 
-
     @real_proc("delegate: a worker, git or CLI process")
-    def test_a_workers_own_words_about_a_rate_limit_never_take_a_lane_out(self):
+    def test_a_workers_own_words_about_a_rate_limit_never_take_a_account_out(self):
         words = "The batch is queued behind a rate limit on the Unity side; quota 429 seen in the log."
         res = self.run_cli("codex", [{"type": "item.completed", "item": {"type": "agent_message", "text": words}}], 1)
         assert res["outcome"] == "worker_failed"
@@ -152,7 +144,7 @@ class Launchers(Case):
             "claude_p",
             [{"type": "result", "is_error": True, "result": words, "num_turns": 6, "session_id": "s1"}],
             1,
-            lane="CLAUDE_SUBSCRIPTION",
+            account="CLAUDE_SUBSCRIPTION",
             cap=1,
             read_only=False,
         )
@@ -167,7 +159,7 @@ class Launchers(Case):
             "claude_p",
             [{"type": "result", "is_error": True, "result": "API Error: 429 rate limit exceeded", "num_turns": 1}],
             1,
-            lane="CLAUDE_SUBSCRIPTION",
+            account="CLAUDE_SUBSCRIPTION",
             cap=1,
             read_only=False,
         )

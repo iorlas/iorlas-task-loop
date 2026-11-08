@@ -64,7 +64,7 @@ ENGINE_LINES: Final[dict[type, Callable[[Any], list[TermLine]]]] = {
     log.Close: lambda r: line(r, f"run closed: {r.outcome}"),
 }
 WORKER_LINES: Final[dict[type, Callable[[Any], list[TermLine]]]] = {
-    delegate.LiveStart: lambda r: line(r, f"worker {r.harness} {r.lane} {r.model}".rstrip(), "dim"),
+    delegate.LiveStart: lambda r: line(r, f"worker {r.harness} {r.account} {r.model}".rstrip(), "dim"),
     delegate.LiveCmdStart: lambda r: line(r, f"$ {r.text}"),
     delegate.LiveCmdEnd: lambda r: exited(r.t, r.exit, r.secs, r.out),
     delegate.LiveToolStart: lambda r: line(r, f"tool {r.text}", "dim"),

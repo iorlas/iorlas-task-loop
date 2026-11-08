@@ -1,6 +1,6 @@
-"""The decision a call starts with: build the fleet, route, remember the lane choice (`decision`, shared by `next` and `run`), and what a
+"""The decision a call starts with: build the fleet, route, remember the account choice (`decision`, shared by `next` and `run`), and what a
 chosen
-step runs on (`how`). The codex access flags and the repo's instruction files, which both lanes get the same, are here too."""
+step runs on (`how`). The codex access flags and the repo's instruction files, which both accounts get the same, are here too."""
 
 import json
 import os
@@ -19,8 +19,8 @@ from delegate.contracts.json_types import Json, as_str, obj
 from delegate.contracts.routing import CallArgs, Run
 from delegate.contracts.state import StateDoc
 from delegate.contracts.stores import CheckpointStore
+from delegate.domain.accounts.account import Account
 from delegate.domain.holds.book import HoldBook
-from delegate.domain.lanes.lane import Lane
 from delegate.domain.routing.dwell import DwellMemory
 from delegate.domain.routing.router import Router
 
@@ -71,7 +71,8 @@ def repo_dirs(cwd: str) -> list[Path]:
 
 
 def repo_instructions(cwd: str) -> list[Path]:
-    """The repo's instruction files, the same for both lanes (Codex's own rule): in each folder from the root down to cwd, AGENTS.md, else
+    """The repo's instruction files, the same for both accounts (Codex's own rule): in each folder from the root down to cwd, AGENTS.md,
+    else
     CLAUDE.md."""
     found = []
     for d in repo_dirs(cwd):
@@ -120,10 +121,10 @@ def codex_isolation(cwd: str) -> list[str]:
     ]
 
 
-def how(lane: Lane, step: dict[str, Json], cfg: dict[str, Json], cwd: str | None = None, unattended: bool = False) -> dict[str, Json]:
-    """What a step runs on. Unattended callers have no Agent tool, so the subscription lane runs `claude -p` on the logged-in account."""
+def how(account: Account, step: dict[str, Json], cfg: dict[str, Json], cwd: str | None = None, unattended: bool = False) -> dict[str, Json]:
+    """What a step runs on. Unattended callers have no Agent tool, so the subscription account runs `claude -p` on the logged-in account."""
     m = obj(obj(cfg["models"])[as_str(step["model"])])
-    runner = obj(obj(cfg["lanes"])[lane.name])["runner"]
+    runner = obj(obj(cfg["accounts"])[account.name])["runner"]
     wd = os.path.abspath(cwd) if cwd else os.getcwd()
     write = step.get("mode") == "write"
     if runner == "agent_tool" and unattended:
@@ -180,7 +181,7 @@ def fleet_builder(cfg: dict[str, Json]):
         CheckpointStore(env.config_dir() / "health-checkpoint.json"),
         env.config_store(),
         READERS,
-        lambda: onboard.configured_lanes(cfg),
+        lambda: onboard.configured_accounts(cfg),
     )
 
 
@@ -206,59 +207,59 @@ class Decided:
     """What `decide` chose, and the two writes that would follow it (`remember`, `apply_profile`): nothing here has been written."""
 
     d: dict[str, Json]
-    lanes: dict[str, Lane]
+    accounts: dict[str, Account]
     warnings: list[str]
     t: float
     fleet: Fleet
-    dwell: tuple[str, str, float] | None  # (family, lane, min minutes) to remember: the pick is a run, fresh, in a family of several lanes
+    dwell: (
+        tuple[str, str, float] | None
+    )  # (family, account, min minutes) to remember: the pick is a run, fresh, in a family of several accounts
 
 
-def decide(
-    a: env.Args, cfg: dict[str, Json], unattended: bool = False, avoid: frozenset[tuple[str, str]] = frozenset()
-) -> Decided:
+def decide(a: env.Args, cfg: dict[str, Json], unattended: bool = False, avoid: frozenset[tuple[str, str]] = frozenset()) -> Decided:
     """Build the fleet and route: the answer of `next`, as a record. Writes no state and no profile (`remember`, `apply_profile`)."""
     t = env.now()
     st = env.load_state()
     routing = env.typed_routing(cfg)
     fleet = fleet_builder(cfg).build(st, t, parse_json_arg(a.claude_usage))
-    warnings = drift_warnings(env.states(), fleet.lanes, st, t)
-    _, st = settle_holds(env.states(), fleet.lanes, st, t)
-    lanes = mark_busy(fleet.lanes, st, routing.settings, t, busy_jitter)
+    warnings = drift_warnings(env.states(), fleet.accounts, st, t)
+    _, st = settle_holds(env.states(), fleet.accounts, st, t)
+    accounts = mark_busy(fleet.accounts, st, routing.settings, t, busy_jitter)
     args = call_args(a, unattended)
     if getattr(a, "task", None) and not args.resume:
         avoid |= frozenset(
-            (r.lane, r.model)
+            (r.account, r.model)
             for r in env.history_store().rows(t - RETRY_LOOKBACK_S)
             if isinstance(r, RunRow) and r.ts <= t and r.task == a.task and r.role == a.role and r.outcome in ("timeout", "schema_invalid")
         )
     router = Router(routing, HoldBook(st.holds), st.prev, t)
-    pick = router.route(a.role, args, lanes, st.refs.get(args.resume or ""), avoid)
+    pick = router.route(a.role, args, accounts, st.refs.get(args.resume or ""), avoid)
     d = pick.as_dict()
     dwell: tuple[str, str, float] | None = None
     if isinstance(pick, Run):
         step: dict[str, Json] = {"model": pick.model, "effort": pick.effort, "mode": pick.mode}
         if pick.cap is not None or pick.pass_ == "resume":
             step["cap"] = pick.cap
-        hw = d["how"] = how(lanes[pick.lane], step, cfg, a.cwd, unattended)
+        hw = d["how"] = how(accounts[pick.account], step, cfg, a.cwd, unattended)
         if pick.pass_ != "resume":
-            fam = lanes[pick.lane].family
+            fam = accounts[pick.account].family
             if args.cap:
                 d["cap"] = hw["cap"] = args.cap if hw["kind"] == "claude_p" else hw.get("cap")
-            if sum(1 for lane in lanes.values() if lane.family == fam) > 1:
-                dwell = (fam, pick.lane, routing.settings.min_dwell_minutes)
+            if sum(1 for account in accounts.values() if account.family == fam) > 1:
+                dwell = (fam, pick.account, routing.settings.min_dwell_minutes)
     if fleet.offers:
         d["notice"] = "not set up: " + ", ".join(fleet.offers) + " (route.py doctor)"
-    return Decided(d, lanes, warnings, t, fleet, dwell)
+    return Decided(d, accounts, warnings, t, fleet, dwell)
 
 
 def remember(decided: Decided) -> None:
-    """The lane choice joins the family's dwell memory, so the next pick stays on it for a while."""
+    """The account choice joins the family's dwell memory, so the next pick stays on it for a while."""
     if decided.dwell is None:
         return
-    fam, lane, minutes = decided.dwell
+    fam, account, minutes = decided.dwell
 
     def mark(s: StateDoc) -> None:
-        new = DwellMemory(s.prev, minutes).note(fam, lane, decided.t)
+        new = DwellMemory(s.prev, minutes).note(fam, account, decided.t)
         if new:
             s.prev[fam] = new
 
@@ -268,18 +269,19 @@ def remember(decided: Decided) -> None:
 def decision(
     a: env.Args, cfg: dict[str, Json], unattended: bool = False, avoid: frozenset[tuple[str, str]] = frozenset(), apply: bool = False
 ):
-    """next and run share this: `decide`, remember the lane choice. -> (d, lanes, warnings, t); d is the JSON answer of `next`. Only `run`
+    """next and run share this: `decide`, remember the account choice. -> (d, accounts, warnings, t); d is the JSON answer of `next`. Only
+    `run`
     passes apply=True and writes the profile (`apply_profile`); `next` and `status` write none."""
     decided = decide(a, cfg, unattended, avoid)
     remember(decided)
     if apply:
         apply_profile(decided.fleet)
-    return decided.d, decided.lanes, decided.warnings, decided.t
+    return decided.d, decided.accounts, decided.warnings, decided.t
 
 
 def apply_profile(fleet: Fleet) -> None:
-    """What a call that launches writes into the owner's profile: the ready lanes turned on, the not-ready ones remembered as offered."""
+    """What a call that launches writes into the owner's profile: the ready accounts turned on, the not-ready ones remembered as offered."""
     for name in fleet.enables:
-        env.config_store().set_lane(name, "enabled")
+        env.config_store().set_account(name, "enabled")
     if fleet.offers:
         env.config_store().mark_offered(fleet.offers)

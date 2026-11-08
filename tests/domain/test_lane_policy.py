@@ -44,7 +44,7 @@ class Exhaustive(Case):
                 assert isinstance(a, actions), (scope, perm, retry)
 
     def test_the_unknown_tuple_row_pauses_the_lane_and_never_fails_or_asks(self):
-        for facts in (("bead", "needs_owner", "predicted"), ("lane", "needs_owner", "poll"), ("request", "transient", "none"),
+        for facts in (("bead", "needs_owner", "predicted"), ("account", "needs_owner", "poll"), ("request", "transient", "none"),
                       ("machine", "forever", "none"), ("machine", "transient", "later")):
             a = lp.decide(stop(*facts), ctx())
             assert isinstance(a, lp.Yield), facts
@@ -88,7 +88,7 @@ def test_network_stop_pauses_immediately():
 class Incidents(Case):
     def test_logged_out_twice_pauses_the_lane_with_the_login_fix_and_no_ask(self):
         for _ in range(2):
-            s = stop("lane", "needs_owner", "none", reason="logged_out", fix="claude /login", lane="CLAUDE")
+            s = stop("account", "needs_owner", "none", reason="logged_out", fix="claude /login", lane="CLAUDE")
             a = only(lp.Yield, lp.decide(s, ctx()))
             assert (kind_of(a), out(a).rule.makes_ask) == (Kind.PAUSE_LANE, False)
             assert "claude /login" in stop_why("write", a.kind, s, "", now=NOW)
@@ -100,7 +100,7 @@ class Incidents(Case):
 
 
     def test_spending_limit_pauses_the_lane_and_does_not_ask(self):
-        a = lp.decide(stop("lane", "needs_owner", "none", reason="credit_exhausted"), ctx())
+        a = lp.decide(stop("account", "needs_owner", "none", reason="credit_exhausted"), ctx())
         assert (kind_of(a), out(a).rule.makes_ask) == (Kind.PAUSE_LANE, False)
 
     def test_bad_request_is_a_fault_with_no_ask(self):
@@ -111,7 +111,7 @@ class Incidents(Case):
     def test_hung_reroutes_away_from_the_model_then_pauses(self):
         s = stop("model", "transient", "none", model="grok-4", lane="GROK")
         assert lp.decide(s, ctx()) == lp.Reroute("grok-4")
-        assert lp.decide(stop("lane", "transient", "none", lane="GROK"), ctx()) == lp.Reroute("GROK")
+        assert lp.decide(stop("account", "transient", "none", lane="GROK"), ctx()) == lp.Reroute("GROK")
         assert kind_of(lp.decide(s, ctx(attempt=2))) == Kind.PAUSE_LANE
 
     def test_secrets_get_one_apply_patch_thread_then_a_fault(self):
@@ -127,7 +127,7 @@ class Incidents(Case):
 
 
 def test_lane_poll_moves_on_and_bead_poll_pauses():
-    s = stop("lane", "transient", "poll", lane="OPENAI")
+    s = stop("account", "transient", "poll", lane="OPENAI")
     assert lp.decide(s, ctx()) == lp.Reroute("OPENAI")
     assert lp.decide(s, ctx()) == lp.Reroute("OPENAI")
     assert kind_of(lp.decide(stop("bead", "transient", "poll"), ctx())) == Kind.PAUSE_LANE
@@ -135,7 +135,7 @@ def test_lane_poll_moves_on_and_bead_poll_pauses():
 
 def test_predicted_lane_always_parks():
     for gap in (120, 5000):
-        s = stop("lane", "transient", "predicted", retry_at=NOW + gap)
+        s = stop("account", "transient", "predicted", retry_at=NOW + gap)
         a = only(lp.Yield, lp.decide(s, ctx()))
         assert (a.kind, a.retry_after) == ("PAUSE_LANE", NOW + gap)
         assert lp.decide(s, ctx()) == lp.Yield("PAUSE_LANE", NOW + gap)

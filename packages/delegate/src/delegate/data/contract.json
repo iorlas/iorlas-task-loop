@@ -5,7 +5,7 @@
     "bead",
     "caller",
     "machine",
-    "lane",
+    "account",
     "model"
   ],
   "permanences": [
@@ -36,21 +36,21 @@
       "wording": "the worker ran a command on a secret path and was stopped"
     },
     "rate_limited": {
-      "scope": "lane",
+      "scope": "account",
       "permanence": "transient",
       "retry": "predicted",
       "health": "exhausted",
-      "wording": "the lane hit a usage limit"
+      "wording": "the account hit a usage limit"
     },
     "credit_exhausted": {
-      "scope": "lane",
+      "scope": "account",
       "permanence": "needs_owner",
       "retry": "none",
       "health": "exhausted",
-      "wording": "the lane is out of credits or hit a spending limit"
+      "wording": "the account is out of credits or hit a spending limit"
     },
     "logged_out": {
-      "scope": "lane",
+      "scope": "account",
       "permanence": "needs_owner",
       "retry": "none",
       "health": "exhausted",
@@ -99,7 +99,7 @@
       "wording": "the vendor could not be reached"
     },
     "vendor_blip": {
-      "scope": "lane",
+      "scope": "account",
       "permanence": "transient",
       "retry": "poll",
       "health": "breaker",
@@ -120,32 +120,32 @@
       "wording": "the answer does not match the schema, after one re-ask"
     },
     "held": {
-      "scope": "lane",
+      "scope": "account",
       "permanence": "transient",
       "retry": "predicted",
       "health": "none",
-      "wording": "the owner holds the lane for this role until a stated time"
+      "wording": "the owner holds the account for this role until a stated time"
     },
     "busy": {
-      "scope": "lane",
+      "scope": "account",
       "permanence": "transient",
       "retry": "poll",
       "health": "none",
-      "wording": "every slot of an otherwise usable lane is taken, including a pinned --only-family"
+      "wording": "every slot of an otherwise usable account is taken, including a pinned --only-family"
     },
-    "no_lane": {
+    "no_account": {
       "scope": "machine",
       "permanence": "needs_owner",
       "retry": "none",
       "health": "none",
-      "wording": "no lane can take this role now"
+      "wording": "no account can take this role now"
     },
     "engine_only_unenforced": {
       "scope": "caller",
       "permanence": "needs_owner",
       "retry": "none",
       "health": "none",
-      "wording": "a write lane cannot deny the engine-only recipes, including with --only-family; use --engine-only-advisory and state it in the brief to proceed"
+      "wording": "a write account cannot deny the engine-only recipes, including with --only-family; use --engine-only-advisory and state it in the brief to proceed"
     },
     "duplicate_task": {
       "scope": "bead",
@@ -183,7 +183,7 @@
       "wording": "route.py itself failed"
     },
     "only_family_unready": {
-      "scope": "lane",
+      "scope": "account",
       "permanence": "transient",
       "retry": "poll",
       "health": "none",
@@ -229,7 +229,7 @@
     "ref": "the vendor session or thread id the call ran in (same as the top-level ref)",
     "last_activity_at": "ISO 8601 UTC time the call ended; null without a ref",
     "warm_until": "last_activity_at + ttl_s: when the vendor prompt cache probably expires. Telemetry only; no routing uses it. null = unknown",
-    "ttl_s": "cache lifetime assumed: claude subscription 3600, codex 3600; null for opencode lanes",
+    "ttl_s": "cache lifetime assumed: claude subscription 3600, codex 3600; null for opencode accounts",
     "ttl_source": "vendor_default | observed | unknown",
     "cost_usd": "what the harness returned for this call (claude total_cost_usd, opencode step cost summed); null when it returns none (codex, zai)",
     "cost_source": "harness | unknown | free",
@@ -243,7 +243,7 @@
       "data",
       "text",
       "ref",
-      "lane",
+      "account",
       "model",
       "effort",
       "family",
@@ -278,7 +278,7 @@
           "null"
         ]
       },
-      "lane": {
+      "account": {
         "type": [
           "string",
           "null"
@@ -491,7 +491,7 @@
               "bead",
               "caller",
               "machine",
-              "lane",
+              "account",
               "model"
             ]
           },
@@ -750,7 +750,7 @@
           "null"
         ]
       },
-      "first_lane": {
+      "first_account": {
         "type": [
           "string",
           "null"
@@ -916,7 +916,7 @@
           "additionalProperties": false,
           "required": [
             "kind",
-            "lane",
+            "account",
             "model",
             "outcome",
             "secs",
@@ -929,15 +929,15 @@
                 "first",
                 "canary",
                 "network_rerun",
-                "lane_poll",
-                "lane_wait",
+                "account_poll",
+                "account_wait",
                 "new_thread",
                 "worker_retry",
                 "schema_reask",
                 "reroute"
               ]
             },
-            "lane": {
+            "account": {
               "type": [
                 "string",
                 "null"
@@ -1002,7 +1002,7 @@
     "required": [
       "v",
       "ts",
-      "lanes",
+      "accounts",
       "cockpit",
       "running",
       "needs_input",
@@ -1022,7 +1022,7 @@
       "ts": {
         "type": "number"
       },
-      "lanes": {
+      "accounts": {
         "type": "object",
         "additionalProperties": {
           "type": "object",
@@ -1060,7 +1060,7 @@
                 "string",
                 "null"
               ],
-              "description": "why the lane is out (limit | logged_out | busy | error | credit | hung), else null"
+              "description": "why the account is out (limit | logged_out | busy | error | credit | hung), else null"
             },
             "five": {
               "type": [
@@ -1102,7 +1102,7 @@
           "at",
           "legend",
           "next_worker",
-          "lanes"
+          "accounts"
         ],
         "properties": {
           "v": {
@@ -1124,7 +1124,7 @@
             "additionalProperties": false,
             "required": [
               "action",
-              "lane",
+              "account",
               "model",
               "effort"
             ],
@@ -1132,7 +1132,7 @@
               "action": {
                 "type": "string"
               },
-              "lane": {
+              "account": {
                 "type": [
                   "string",
                   "null"
@@ -1170,7 +1170,7 @@
               }
             }
           },
-          "lanes": {
+          "accounts": {
             "type": "array",
             "items": {
               "type": "object",
@@ -1415,7 +1415,7 @@
           "additionalProperties": false,
           "required": [
             "run_id",
-            "lane",
+            "account",
             "role",
             "task",
             "started",
@@ -1428,7 +1428,7 @@
             "run_id": {
               "type": "string"
             },
-            "lane": {
+            "account": {
               "type": "string"
             },
             "role": {
@@ -1491,7 +1491,7 @@
           "additionalProperties": false,
           "required": [
             "id",
-            "lane",
+            "account",
             "roles",
             "set_by",
             "set_at",
@@ -1505,7 +1505,7 @@
             "id": {
               "type": "string"
             },
-            "lane": {
+            "account": {
               "type": "string"
             },
             "roles": {
@@ -1549,7 +1549,7 @@
           "required": [
             "kind",
             "id",
-            "lane",
+            "account",
             "raised_at",
             "used_pct",
             "say",
@@ -1562,7 +1562,7 @@
             "id": {
               "type": "string"
             },
-            "lane": {
+            "account": {
               "type": "string"
             },
             "raised_at": {
@@ -1589,7 +1589,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "lane",
+            "account",
             "model",
             "state",
             "until",
@@ -1604,7 +1604,7 @@
             "usage"
           ],
           "properties": {
-            "lane": {
+            "account": {
               "type": "string"
             },
             "model": {
@@ -1711,7 +1711,7 @@
           "additionalProperties": false,
           "required": [
             "usable",
-            "lane",
+            "account",
             "model",
             "why",
             "until",
@@ -1725,7 +1725,7 @@
                 "null"
               ]
             },
-            "lane": {
+            "account": {
               "type": [
                 "string",
                 "null"
@@ -1859,7 +1859,7 @@
             }
           }
         },
-        "description": "`status --cheap` only: the cached logins by lane"
+        "description": "`status --cheap` only: the cached logins by account"
       }
     }
   },

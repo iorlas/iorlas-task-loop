@@ -1,6 +1,7 @@
-"""The usage readers: each fills a Lane's windows, five-hour and weekly use, and out mark from what its vendor lets us read. FleetBuilder
+"""The usage readers: each fills an Account's windows, five-hour and weekly use, and out mark from what its vendor lets us read.
+FleetBuilder
 calls them
-by the `reader` key of the lane in routing.json (READERS). Also the login cache that `status`, `next` and a run share."""
+by the `reader` key of the account in routing.json (READERS). Also the login cache that `status`, `next` and a run share."""
 
 import os
 from collections.abc import Callable
@@ -16,7 +17,7 @@ from delegate.app.fleet import AuthCache
 from delegate.contracts.json_types import Json, as_num, as_str, obj
 from delegate.contracts.routing import Settings
 from delegate.contracts.state import StateDoc, UsageCache
-from delegate.domain.lanes.lane import Lane, apply_burn, window
+from delegate.domain.accounts.account import Account, apply_burn, window
 from delegate.domain.time.spec import WEEK_MIN, local, next_weekly, to_epoch
 
 
@@ -39,10 +40,10 @@ def span_name(mins: float) -> str:
 
 
 def add_window(
-    lane: Lane, used: float | None, resets_at: float | None, span: float, source: str, at: float | None, bucket: str | None = None
+    account: Account, used: float | None, resets_at: float | None, span: float, source: str, at: float | None, bucket: str | None = None
 ) -> None:
     if used is not None or resets_at is not None:
-        lane.windows.append(
+        account.windows.append(
             {
                 "name": (bucket + " " if bucket else "") + span_name(span),
                 "used": used,
@@ -67,7 +68,7 @@ def _mins(w: dict[str, Json]) -> float:
     return as_num(w.get("windowDurationMins")) or 300
 
 
-def read_codex(lane: Lane, S: Settings, st: StateDoc, t: float, ai_usage: Json = None) -> None:
+def read_codex(account: Account, S: Settings, st: StateDoc, t: float, ai_usage: Json = None) -> None:
     cached = st.codex_limits
     if cached and t - cached.at <= 60 and not os.environ.get("DELEGATE_NOCACHE"):
         res, err = (cached.data if isinstance(cached.data, dict) else None), None
@@ -76,9 +77,9 @@ def read_codex(lane: Lane, S: Settings, st: StateDoc, t: float, ai_usage: Json =
         if res is not None:
             env.update_state(remembering("codex_limits", UsageCache(at=t, data=res)))
     if res is None:
-        lane.notes.append(err or "")
+        account.notes.append(err or "")
         return
-    lane.read_at = cached.at if cached and res is cached.data else t
+    account.read_at = cached.at if cached and res is cached.data else t
     rl = obj(res.get("rateLimits"))
     # (bucket label, window): every window of every bucket, by length not by slot (Pro Lite sends its only, weekly, window as primary)
     ws: list[tuple[str | None, dict[str, Json]]] = []
@@ -89,22 +90,22 @@ def read_codex(lane: Lane, S: Settings, st: StateDoc, t: float, ai_usage: Json =
     for label, w in ws:
         span = _mins(w)
         used, resets = as_num(w.get("usedPercent")), as_num(w.get("resetsAt"))
-        add_window(lane, window(used, resets, span, t)[0], resets, span, "live read (codex app-server)", lane.read_at, label)
-    lane.spend_blocked = bool(rl.get("spendControlReached")) or any(
+        add_window(account, window(used, resets, span, t)[0], resets, span, "live read (codex app-server)", account.read_at, label)
+    account.spend_blocked = bool(rl.get("spendControlReached")) or any(
         w in str(rl.get("rateLimitReachedType") or "").lower() for w in ("credit", "spend")
     )
     pr = binding([w for _, w in ws if _mins(w) <= 1440])
     se = binding([w for _, w in ws if _mins(w) > 1440])
-    lane.five_reset, lane.week_reset = as_num(pr.get("resetsAt")), as_num(se.get("resetsAt"))
-    lane.five, _, _ = window(as_num(pr.get("usedPercent")), lane.five_reset, _mins(pr), t)
-    lane.week, wmins, lane.pace = window(
-        as_num(se.get("usedPercent")), lane.week_reset, as_num(se.get("windowDurationMins")) or WEEK_MIN, t
+    account.five_reset, account.week_reset = as_num(pr.get("resetsAt")), as_num(se.get("resetsAt"))
+    account.five, _, _ = window(as_num(pr.get("usedPercent")), account.five_reset, _mins(pr), t)
+    account.week, wmins, account.pace = window(
+        as_num(se.get("usedPercent")), account.week_reset, as_num(se.get("windowDurationMins")) or WEEK_MIN, t
     )
-    apply_burn(lane, S, wmins)
-    if rl.get("rateLimitReachedType") or res.get("ordinaryUsageAllowed") is False or (lane.five or 0) >= 98 or (lane.week or 0) >= 98:
-        lane.out, lane.out_reason = True, "limit"
-        resets = [x for x, u in ((lane.five_reset, lane.five), (lane.week_reset, lane.week)) if x and u is not None and u >= 95]
-        lane.out_until = max(resets) if resets else t + 3600
+    apply_burn(account, S, wmins)
+    if rl.get("rateLimitReachedType") or res.get("ordinaryUsageAllowed") is False or (account.five or 0) >= 98 or (account.week or 0) >= 98:
+        account.out, account.out_reason = True, "limit"
+        resets = [x for x, u in ((account.five_reset, account.five), (account.week_reset, account.week)) if x and u is not None and u >= 95]
+        account.out_until = max(resets) if resets else t + 3600
 
 
 Windows = dict[str, dict[str, Json]]  # {five_hour, weekly, fable}: each {used, resets_at}
@@ -165,7 +166,7 @@ def _windows_of(data: Json) -> Windows | None:
 
 
 def _claude_windows(
-    lane: Lane, st: StateDoc, t: float, stale: float, ai_usage: Json
+    account: Account, st: StateDoc, t: float, stale: float, ai_usage: Json
 ) -> tuple[Windows | None, tuple[str, float | None] | None]:
     """-> (the usage windows, (where the numbers came from, when they were taken)): the caller's get_usage, else the saved one, else the
     status line."""
@@ -181,51 +182,51 @@ def _claude_windows(
         if saved and t - saved.at <= stale:
             usage = _windows_of(saved.data)
             src = ("manual mark (get_usage passed in)", saved.at)
-            lane.notes.append(f"usage from {fmt_span(t - saved.at)} ago")
+            account.notes.append(f"usage from {fmt_span(t - saved.at)} ago")
     if usage is None:
         read = statusline.read(t, stale)
         if read:
             usage, updated = read
-            lane.notes.append("usage from the status-line file")
+            account.notes.append("usage from the status-line file")
             src = ("live read (status line)", updated)
     return usage, src
 
 
-def _apply_claude_windows(lane: Lane, S: Settings, usage: Windows, src: tuple[str, float | None], t: float) -> None:
+def _apply_claude_windows(account: Account, S: Settings, usage: Windows, src: tuple[str, float | None], t: float) -> None:
     f5, wk = usage.get("five_hour") or {}, usage.get("weekly") or {}
-    lane.five_reset, lane.week_reset = as_num(f5.get("resets_at")), as_num(wk.get("resets_at"))
-    lane.five, _, _ = window(as_num(f5.get("used")), lane.five_reset, 300, t)
-    lane.week, wmins, lane.pace = window(as_num(wk.get("used")), lane.week_reset, WEEK_MIN, t)
+    account.five_reset, account.week_reset = as_num(f5.get("resets_at")), as_num(wk.get("resets_at"))
+    account.five, _, _ = window(as_num(f5.get("used")), account.five_reset, 300, t)
+    account.week, wmins, account.pace = window(as_num(wk.get("used")), account.week_reset, WEEK_MIN, t)
     if f5:
-        add_window(lane, lane.five, lane.five_reset, 300, src[0], src[1])
+        add_window(account, account.five, account.five_reset, 300, src[0], src[1])
     if wk:
-        add_window(lane, lane.week, lane.week_reset, WEEK_MIN, src[0], src[1])
-    apply_burn(lane, S, wmins)
-    if (lane.five or 0) >= 98 or (lane.week or 0) >= 98:
-        lane.out, lane.out_reason = True, "limit"
-        lane.out_until = (lane.week_reset if (lane.week or 0) >= 98 else lane.five_reset) or t + 3600
+        add_window(account, account.week, account.week_reset, WEEK_MIN, src[0], src[1])
+    apply_burn(account, S, wmins)
+    if (account.five or 0) >= 98 or (account.week or 0) >= 98:
+        account.out, account.out_reason = True, "limit"
+        account.out_until = (account.week_reset if (account.week or 0) >= 98 else account.five_reset) or t + 3600
 
 
-def read_claude_subscription(lane: Lane, S: Settings, st: StateDoc, t: float, ai_usage: Json = None) -> None:
+def read_claude_subscription(account: Account, S: Settings, st: StateDoc, t: float, ai_usage: Json = None) -> None:
     stale = S.usage_stale_minutes * 60
-    usage, src = _claude_windows(lane, st, t, stale, ai_usage)
+    usage, src = _claude_windows(account, st, t, stale, ai_usage)
     if claude_logged_out():
-        lane.out, lane.out_reason = True, "logged_out"
-        lane.notes.append("claude is logged out: run `claude auth login`")
+        account.out, account.out_reason = True, "logged_out"
+        account.notes.append("claude is logged out: run `claude auth login`")
     weekly_spec = S.claude_weekly_reset
     if usage:
         assert src is not None  # every way `usage` got a value set `src`
-        _apply_claude_windows(lane, S, usage, src, t)
+        _apply_claude_windows(account, S, usage, src, t)
     elif weekly_spec:
         nxt = next_weekly(weekly_spec, t)
         if nxt:
-            lane.week_reset = nxt
-            add_window(lane, None, nxt, WEEK_MIN, "manual mark (claude_weekly_reset in config)", None)
-            lane.notes.append(f"weekly reset {local(nxt)} (config); use unknown")
+            account.week_reset = nxt
+            add_window(account, None, nxt, WEEK_MIN, "manual mark (claude_weekly_reset in config)", None)
+            account.notes.append(f"weekly reset {local(nxt)} (config); use unknown")
 
 
-def read_none(lane: Lane, S: Settings, st: StateDoc, t: float, ai_usage: Json = None) -> None:
-    """No usage reading (Grok): only refusals mark the lane out."""
+def read_none(account: Account, S: Settings, st: StateDoc, t: float, ai_usage: Json = None) -> None:
+    """No usage reading (Grok): only refusals mark the account out."""
 
 
 READERS: Final = {"codex_app_server": read_codex, "claude_subscription": read_claude_subscription, "none": read_none}

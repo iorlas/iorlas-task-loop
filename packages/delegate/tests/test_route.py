@@ -19,7 +19,7 @@ from delegate.app import net, usage
 from delegate.contracts.routing import Settings
 from delegate.contracts.state import StateDoc
 from delegate.contracts.stores import locked
-from delegate.domain.lanes.lane import Lane
+from delegate.domain.accounts.account import Account
 from delegate.domain.time import spec
 from tltestkit.tmpdir import TemporaryDirectory, mkdtemp
 
@@ -56,8 +56,8 @@ def need[T](x: T | None) -> T:
     return x
 
 
-def no_reader(lane: Lane, S: Settings, st: StateDoc, t: float, ai_usage: object = None) -> None:
-    """A usage reader that reads nothing: the lane keeps the numbers it has."""
+def no_reader(account: Account, S: Settings, st: StateDoc, t: float, ai_usage: object = None) -> None:
+    """A usage reader that reads nothing: the account keeps the numbers it has."""
 
 
 def why(r):
@@ -70,18 +70,18 @@ def at(r):
     return r["stop"]["retry"]["at"]
 
 
-def lanes(openai=None, sub=None):
-    """Build lane states. Each arg is a dict of Lane attributes; None = healthy default."""
+def accounts(openai=None, sub=None):
+    """Build account states. Each arg is a dict of Account attributes; None = healthy default."""
 
     def mk(name, fam, kind, shared=False):
-        return Lane(name, fam, kind, shared)
+        return Account(name, fam, kind, shared)
 
     o, s = mk("OPENAI_SUBSCRIPTION", "openai", "subscription"), mk("CLAUDE_SUBSCRIPTION", "claude", "subscription", True)
     o.five, o.week, o.pace = 10, 5, 0
     s.five, s.week, s.pace = 30, 40, 0
-    for lane, over in ((o, openai), (s, sub)):
+    for account, over in ((o, openai), (s, sub)):
         for k, v in (over or {}).items():
-            setattr(lane, k, v)
+            setattr(account, k, v)
     return {x.name: x for x in (o, s)}
 
 
@@ -111,30 +111,28 @@ def _call(x):
 
 
 class Pick:
-
-
     def test_codex_out_falls_to_claude_subscription_when_healthy(self):
-        d = decide("worker", lanes(openai={"out": True, "out_until": T + 3600}))
-        assert (d["lane"], d["model"]) == ("CLAUDE_SUBSCRIPTION", "sonnet-5.5")
+        d = decide("worker", accounts(openai={"out": True, "out_until": T + 3600}))
+        assert (d["account"], d["model"]) == ("CLAUDE_SUBSCRIPTION", "sonnet-5.5")
 
     def test_burn_prefers_subscription(self):
-        d = decide("worker", lanes(openai={"out": True, "out_until": T + 1}, sub={"burn": True, "five": 30}))
-        assert d["lane"] == "CLAUDE_SUBSCRIPTION"
+        d = decide("worker", accounts(openai={"out": True, "out_until": T + 1}, sub={"burn": True, "five": 30}))
+        assert d["account"] == "CLAUDE_SUBSCRIPTION"
 
 
 class SecondPass:
     def test_relaxed_pass_uses_reserved_subscription_same_step(self):
-        ls = lanes(openai={"out": True, "out_until": T + 1}, sub={"week": 92, "five": 40})
+        ls = accounts(openai={"out": True, "out_until": T + 1}, sub={"week": 92, "five": 40})
         d = decide("worker", ls)
-        assert (d["lane"], d["model"], d["effort"], d["pass"]) == ("CLAUDE_SUBSCRIPTION", "sonnet-5.5", "medium", "relaxed")
+        assert (d["account"], d["model"], d["effort"], d["pass"]) == ("CLAUDE_SUBSCRIPTION", "sonnet-5.5", "medium", "relaxed")
 
     def test_relaxed_has_a_ceiling(self):
-        ls = lanes(openai={"out": True, "out_until": T + 1}, sub={"week": 96})
+        ls = accounts(openai={"out": True, "out_until": T + 1}, sub={"week": 96})
         d = decide("worker", ls)
         assert d["action"] == "stop"
 
     def test_relaxed_never_changes_model_floor(self):
-        ls = lanes(openai={"out": True, "out_until": T + 1}, sub={"week": 92})
+        ls = accounts(openai={"out": True, "out_until": T + 1}, sub={"week": 92})
         d = decide("planner", ls)
         assert (d["model"], d["effort"]) == (
             "sonnet-5.5",
@@ -142,26 +140,24 @@ class SecondPass:
         )  # Opus never runs in the loop (delegate-pnz): Sonnet is the planner's Claude rung
 
     def test_normal_relaxed_beats_degraded_strict(self):
-        ls = lanes(openai={"out": True, "out_until": T + 1}, sub={"week": 92})
+        ls = accounts(openai={"out": True, "out_until": T + 1}, sub={"week": 92})
         d = decide("reviewer", ls, authored_by="openai")
         assert (d["model"], d["effort"], d["pass"]) == ("sonnet-5.5", "medium", "relaxed")
 
 
 class Roles:
     def test_planner_stop_asks_consent(self):
-        ls = lanes(openai={"out": True, "out_until": T + 5000}, sub={"out": True, "out_until": T + 7000})
+        ls = accounts(openai={"out": True, "out_until": T + 5000}, sub={"out": True, "out_until": T + 7000})
         d = decide("planner", ls)
         assert d["action"] == "stop"
         assert "ask_user" in d
         assert len(d["resets"]) == 2
 
     def test_planner_degraded_only_with_consent(self):
-        ls = lanes(openai={"out": True, "out_until": T + 5000}, sub={"week": 96, "five": 10})
+        ls = accounts(openai={"out": True, "out_until": T + 5000}, sub={"week": 96, "five": 10})
         assert decide("planner", ls)["action"] == "stop"
-        ls2 = lanes(openai={"out": True, "out_until": T + 5000}, sub={"week": 96, "five": 10})
+        ls2 = accounts(openai={"out": True, "out_until": T + 5000}, sub={"week": 96, "five": 10})
         assert decide("planner", ls2, allow_degraded=True)["action"] == "stop"  # ceiling still binds
-
-
 
     def test_every_reviewer_list_reaches_every_family(self):
         for who, steps in CFG["roles"]["reviewer"]["by_author"].items():
@@ -170,10 +166,6 @@ class Roles:
                 fam = who
                 assert steps[-1]["flag"] == "same_family", who
                 assert steps[-1]["on"] == fam, who
-
-
-
-
 
 
 class Helpers:
@@ -207,8 +199,6 @@ class Helpers:
         t = dt.datetime(2026, 10, 18, 17, 1).timestamp()  # Sunday just after 17:00
         n = dt.datetime.fromtimestamp(need(spec.next_weekly("Sun 17:00", t)))
         assert (n.weekday(), n.hour, n.day) == (6, 17, 25)
-
-
 
 
 class StateLock:

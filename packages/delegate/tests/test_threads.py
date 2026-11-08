@@ -9,7 +9,7 @@ from delegate import api
 from delegate.app import answer, env, threads
 from delegate.contracts import codec, schema, wire
 from delegate.contracts.json_types import obj
-from delegate.contracts.routing import LaneSpec
+from delegate.contracts.routing import AccountSpec
 from delegate.contracts.state import StateDoc, ThreadRecord, V, split_retired_state
 from delegate.contracts.wire import Attempt, Retry, RunRequest, RunResult, StopFacts, Tokens, UsageTokens
 from tltestkit.case import Case
@@ -17,7 +17,7 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 
 def result(reason=None, ref="session", **kw):
-    return codec.from_json(RunResult, answer.result(reason, ref=ref, lane="L", model="M", **kw))
+    return codec.from_json(RunResult, answer.result(reason, ref=ref, account="L", model="M", **kw))
 
 
 class TestThreads(Case):
@@ -46,11 +46,11 @@ class TestThreads(Case):
         assert (plan.key, plan.resume, plan.brief_text, plan.takeover) == expected
 
     def test_task_namespaces_the_thread(self):
-        state = StateDoc(threads={"other/write": ThreadRecord(ref="other", lane="L", model="M")})
+        state = StateDoc(threads={"other/write": ThreadRecord(ref="other", account="L", model="M")})
         assert threads.plan(replace(self.request, delta_file=str(self.delta)), state, env.typed_routing(env.load_routing())).resume is None
 
     def test_planner_fresh_prompt_has_no_writer_takeover_note(self):
-        state = StateDoc(threads={"bead/planner": ThreadRecord(ref="session", lane="L", model="M")})
+        state = StateDoc(threads={"bead/planner": ThreadRecord(ref="session", account="L", model="M")})
         planned = threads.plan(replace(self.request, role="planner", thread="planner"), state, env.typed_routing(env.load_routing()))
         assert (planned.resume, planned.brief_text, planned.takeover) == (None, "whole", False)
 
@@ -124,7 +124,7 @@ class TestThreads(Case):
 def test_settle_keeps_refs_on_every_outcome(reason):
     state = StateDoc()
     threads.settle(state, "task/write", result(reason))
-    assert state.threads == {"task/write": ThreadRecord(ref="session", lane="L", model="M")}
+    assert state.threads == {"task/write": ThreadRecord(ref="session", account="L", model="M")}
     threads.settle(state, "task/write", result(reason, ref=None))
     assert state.threads["task/write"].ref == "session"
     threads.settle(state, "", result())
@@ -142,8 +142,8 @@ def test_settle_caps_by_most_recent_update():
     assert state.threads["0"].ref == "updated"
 
 
-def test_thread_state_round_trip_refuses_the_old_version_and_filters_retired_lanes():
-    state = StateDoc(threads={"task/write": ThreadRecord(ref="r", lane="L", model="M")})
+def test_thread_state_round_trip_refuses_the_old_version_and_filters_retired_accounts():
+    state = StateDoc(threads={"task/write": ThreadRecord(ref="r", account="L", model="M")})
     data = codec.to_json(state)
     assert codec.from_json(StateDoc, data) == state
     with pytest.raises(codec.StaleRecord):
@@ -151,8 +151,8 @@ def test_thread_state_round_trip_refuses_the_old_version_and_filters_retired_lan
     kept, gone = split_retired_state(
         {
             "threads": {
-                "task/old": {"ref": "old", "lane": "CLAUDE_CREDIT", "model": "M"},
-                "task/write": {"ref": "r", "lane": "L", "model": "M"},
+                "task/old": {"ref": "old", "account": "CLAUDE_CREDIT", "model": "M"},
+                "task/write": {"ref": "r", "account": "L", "model": "M"},
             }
         }
     )
@@ -177,8 +177,8 @@ def test_fresh_merge_keeps_usage_accounting_and_existing_attempts():
             accounting="exact",
         ),
         attempts=[
-            Attempt(kind="first", lane="L", model="M", outcome="busy", secs=1, tokens=Tokens(in_=5, cached=1, out=1)),
-            Attempt(kind="lane_poll", lane="L", model="M", outcome="busy", secs=2, tokens=Tokens(in_=5, cached=2, out=1)),
+            Attempt(kind="first", account="L", model="M", outcome="busy", secs=1, tokens=Tokens(in_=5, cached=1, out=1)),
+            Attempt(kind="account_poll", account="L", model="M", outcome="busy", secs=2, tokens=Tokens(in_=5, cached=2, out=1)),
         ],
     )
     last = replace(
@@ -206,10 +206,10 @@ def test_fresh_merge_keeps_usage_accounting_and_existing_attempts():
     assert merged.usage.ref == "new"
     assert (merged.usage.tokens.in_fresh, merged.usage.tokens.cache_read, merged.usage.tokens.cache_write) == (23, 7, 3)
     assert isinstance(merged.attempts, list)
-    assert [a.kind for a in merged.attempts] == ["first", "lane_poll", "new_thread"]
+    assert [a.kind for a in merged.attempts] == ["first", "account_poll", "new_thread"]
 
 
-@pytest.mark.parametrize("scope", ["caller", "bead", "lane", "model", "machine"])
+@pytest.mark.parametrize("scope", ["caller", "bead", "account", "model", "machine"])
 @pytest.mark.parametrize("permanence", ["transient", "needs_owner"])
 @pytest.mark.parametrize("kind", ["none", "predicted", "poll"])
 def test_fresh_recovery_stop_classes(scope, permanence, kind):
@@ -225,7 +225,7 @@ def test_fresh_recovery_stop_classes(scope, permanence, kind):
     )
     expected = (scope == "caller" and permanence == "needs_owner") or (
         permanence == "transient"
-        and ((scope == "bead" and kind in ("none", "predicted")) or (scope in ("lane", "model") and kind in ("predicted", "poll")))
+        and ((scope == "bead" and kind in ("none", "predicted")) or (scope in ("account", "model") and kind in ("predicted", "poll")))
     )
     assert threads.needs_fresh(res) is expected
 
@@ -242,30 +242,36 @@ def test_thread_wire_fields_and_capabilities_match_the_published_contract():
     assert "new_thread" in str(attempts)
 
 
-@pytest.mark.parametrize("context,limit,boundary,stage,family,fresh", [
-    (151, 150, False, 100, "claude", True),
-    (150, 150, False, 100, "claude", False),
-    (120, 150, True, 100, "claude", True),
-    (120, 150, True, 0, "claude", False),
-    (500, 0, True, 100, "claude", False),
-    (None, 150, True, 100, "claude", False),
-    (0, 150, True, 100, "claude", False),
-    (500, 150, True, 100, "unknown", False),
-    (101, 100, False, 100, "openai", True),
-    (101, 100, False, 100, "xai", True),
-])
+@pytest.mark.parametrize(
+    "context,limit,boundary,stage,family,fresh",
+    [
+        (151, 150, False, 100, "claude", True),
+        (150, 150, False, 100, "claude", False),
+        (120, 150, True, 100, "claude", True),
+        (120, 150, True, 0, "claude", False),
+        (500, 0, True, 100, "claude", False),
+        (None, 150, True, 100, "claude", False),
+        (0, 150, True, 100, "claude", False),
+        (500, 150, True, 100, "unknown", False),
+        (101, 100, False, 100, "openai", True),
+        (101, 100, False, 100, "xai", True),
+    ],
+)
 def test_context_selects_whole_or_delta(context, limit, boundary, stage, family, fresh):
     with TemporaryDirectory() as folder:
         whole, delta = Path(folder) / "whole", Path(folder) / "delta"
         whole.write_text("whole")
         delta.write_text("delta")
         routing = env.typed_routing(env.load_routing())
-        routing = replace(routing, settings=replace(routing.settings,
-            fresh_above_k={"claude": limit, "openai": limit, "xai": limit}, fresh_stage_k=stage),
-            lanes={"L": LaneSpec(family=family, kind="subscription", reader="", runner="")})
-        state = StateDoc(threads={"task/write": ThreadRecord(ref="r", lane="L", model="M", context_k=context)})
-        request = RunRequest(role="worker", task="task", thread="write", brief_file=str(whole),
-                             delta_file=str(delta), cwd=folder, boundary=boundary)
+        routing = replace(
+            routing,
+            settings=replace(routing.settings, fresh_above_k={"claude": limit, "openai": limit, "xai": limit}, fresh_stage_k=stage),
+            accounts={"L": AccountSpec(family=family, kind="subscription", reader="", runner="")},
+        )
+        state = StateDoc(threads={"task/write": ThreadRecord(ref="r", account="L", model="M", context_k=context)})
+        request = RunRequest(
+            role="worker", task="task", thread="write", brief_file=str(whole), delta_file=str(delta), cwd=folder, boundary=boundary
+        )
         planned = threads.plan(request, state, routing)
         assert planned.resume == (None if fresh else "r")
         assert planned.brief_text == ("whole" + threads.TAKEOVER_NOTE if fresh else "delta")
@@ -293,18 +299,19 @@ def test_context_limits_load_from_routing_and_owner_overrides():
 
 def test_api_uses_context_and_boundary_when_selecting_prompt(monkeypatch):
     routing = env.typed_routing(env.load_routing())
-    routing = replace(routing, lanes={"L": LaneSpec(family="claude", kind="subscription", reader="", runner="")})
+    routing = replace(routing, accounts={"L": AccountSpec(family="claude", kind="subscription", reader="", runner="")})
     monkeypatch.setattr(env, "load_routing", lambda: codec.to_json(routing))
     res = result()
     env.update_state(lambda state: threads.settle(state, "task/write", replace(res, usage=replace(res.usage, context_k=120))))
     plans = []
-    monkeypatch.setattr(api, "_run", lambda request, started, contract, planned: (plans.append(planned) or res))
+    monkeypatch.setattr(api, "_run", lambda request, started, contract, planned: plans.append(planned) or res)
     with TemporaryDirectory() as folder:
         whole, delta = Path(folder) / "whole", Path(folder) / "delta"
         whole.write_text("whole")
         delta.write_text("delta")
-        request = RunRequest(role="worker", task="task", thread="write", cwd=folder,
-                             brief_file=str(whole), delta_file=str(delta), boundary=True)
+        request = RunRequest(
+            role="worker", task="task", thread="write", cwd=folder, brief_file=str(whole), delta_file=str(delta), boundary=True
+        )
         assert api.run(request).ref == "session"
         assert plans[0].resume is None
         assert plans[0].brief_text == "whole" + threads.TAKEOVER_NOTE

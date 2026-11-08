@@ -161,7 +161,7 @@ class Pause(NetBase):
         assert self.eng.log_path.parent.name != run
 
     def test_a_lane_pause_names_the_role_the_loop_waits_for(self):
-        out = stop("rate_limited", at=time.time() + 3 * 3600, lane="OPENAI_SUBSCRIPTION")
+        out = stop("rate_limited", at=time.time() + 3 * 3600, account="OPENAI_SUBSCRIPTION")
         self.run_engine({"plan": [PLAN], "write": [out]})
         r = self.eng.result()
         assert (r.outcome, r.kind) == ("paused", "pause_lane")

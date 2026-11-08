@@ -1,4 +1,5 @@
 """A history row that cannot be written is counted and said, never silently dropped (tl-sqd3.24, Z20)."""
+
 import io
 import json
 import time
@@ -15,7 +16,7 @@ from tltestkit.tmpdir import TemporaryDirectory
 
 
 def row(run_id: str) -> hist.CanaryRow:
-    return hist.CanaryRow(ts=time.time(), run_id=run_id, lane="L", model="m")
+    return hist.CanaryRow(ts=time.time(), run_id=run_id, account="L", model="m")
 
 
 def test_a_lock_timeout_loses_the_row_loudly_and_the_loss_is_counted():
@@ -49,11 +50,13 @@ def test_doctor_shows_the_count_of_lock_answers():
         for outcome in ("lock", "lock", "busy"):
             env.history_add(hist.RefusalRow(ts=time.time(), outcome=outcome, role="worker"))
         env.history_add(row("fine"))
-        assert doctor.lock_answer_notes() == [{
-            "id": "lock_answers",
-            "say": "2 calls were answered `lock` (the state lock stayed held 10 s) "
-                   "in the last 14 days; with several lanes running, find the holder",
-        }]
+        assert doctor.lock_answer_notes() == [
+            {
+                "id": "lock_answers",
+                "say": "2 calls were answered `lock` (the state lock stayed held 10 s) "
+                "in the last 14 days; with several accounts running, find the holder",
+            }
+        ]
 
 
 def test_doctor_has_no_lock_answer_note_when_none():

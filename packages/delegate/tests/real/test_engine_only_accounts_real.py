@@ -1,4 +1,5 @@
-"""delegate-81g: `--engine-only RECIPE` is enforced by the harness of every lane that can write, or the lane is not routed a write step.
+"""delegate-81g: `--engine-only RECIPE` is enforced by the harness of every account that can write, or the account is not routed a write
+step.
 Claude: the PreToolUse hook. OpenCode: the bash deny rules of its permission config. Codex: no enforcement point, refused at route time."""
 
 import copy
@@ -10,7 +11,7 @@ from unittest import mock
 
 import hermetic  # noqa: F401  (a home of its own for every test)
 import routing_support as support
-from test_review_order import CFG, T, lanes
+from test_review_order import CFG, T, accounts
 
 from delegate.app import launch
 from tltestkit.case import Case
@@ -57,8 +58,6 @@ def opencode_verdict(rules: dict[str, str], command: str) -> str:
     return verdict
 
 
-
-
 class ClaudeHookTest:
     def hook(self, command: str, engine_only=("slow",), read_only=False):
         call = {"tool_name": "Bash", "tool_input": {"command": command}}
@@ -94,25 +93,22 @@ class ClaudeHookTest:
 
 class RoutingTest(Case):
     def decide(self, *up, role="worker", **kw):
-        return support.decide(role, copy.deepcopy(CFG), lanes(*up), {}, T, dict({"authored_by": None, "unattended": True}, **kw))
+        return support.decide(role, copy.deepcopy(CFG), accounts(*up), {}, T, dict({"authored_by": None, "unattended": True}, **kw))
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_a_write_step_with_the_list_skips_codex_and_says_why(self):
         free = self.decide("openai", "xai", "claude")
-        assert free["lane"] == "OPENAI_SUBSCRIPTION"
+        assert free["account"] == "OPENAI_SUBSCRIPTION"
         d = self.decide("openai", "xai", "claude", engine_only=["slow"])
-        assert (d["action"], d["lane"]) == ("run", "GROK_SUBSCRIPTION")
+        assert (d["action"], d["account"]) == ("run", "GROK_SUBSCRIPTION")
         assert "OPENAI_SUBSCRIPTION: rejected, its harness cannot deny the engine-only recipes slow to a write step" in d["trace"]
-
-
-
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_advisory_runs_codex_with_or_without_a_family_pin(self):
         for pin in ([], ["openai"]):
             with self.subTest(pin=pin):
                 d = self.decide("openai", "xai", "claude", only_family=pin, engine_only=["slow", "e2e"], engine_only_advisory=True)
-                assert (d["action"], d["lane"], d["flag"]) == ("run", "OPENAI_SUBSCRIPTION", "engine_only_advisory")
+                assert (d["action"], d["account"], d["flag"]) == ("run", "OPENAI_SUBSCRIPTION", "engine_only_advisory")
                 assert d["warning"] == "OPENAI_SUBSCRIPTION cannot deny --engine-only slow, e2e: advisory only, the brief must say so"
                 assert not any("OPENAI_SUBSCRIPTION: rejected" in x for x in d["trace"])
 
@@ -127,4 +123,4 @@ class RoutingTest(Case):
 
     @real_proc("delegate: a worker, git or CLI process")
     def test_read_only_steps_ignore_the_list(self):
-        assert self.decide("openai", role="reviewer", engine_only=["slow"])["lane"] == "OPENAI_SUBSCRIPTION"
+        assert self.decide("openai", role="reviewer", engine_only=["slow"])["account"] == "OPENAI_SUBSCRIPTION"

@@ -1,5 +1,6 @@
 """`RunResult.attempts`: the launches one call made, so the caller can see in-call retries (tl-7i9k.45, M-259). Additive: absent when the
 call made a single launch."""
+
 from pathlib import Path
 
 from delegate import api
@@ -9,8 +10,8 @@ from delegate.contracts.json_types import Json
 from delegate.contracts.wire import Attempt, RunResult
 
 TWO: Json = [
-    {"kind": "first", "lane": "L", "model": "m", "outcome": "schema_invalid", "secs": 3.5, "tokens": {"in": 10, "cached": 0, "out": 2}},
-    {"kind": "schema_reask", "lane": "L", "model": "m", "outcome": None, "secs": 1.0, "tokens": None},
+    {"kind": "first", "account": "L", "model": "m", "outcome": "schema_invalid", "secs": 3.5, "tokens": {"in": 10, "cached": 0, "out": 2}},
+    {"kind": "schema_reask", "account": "L", "model": "m", "outcome": None, "secs": 1.0, "tokens": None},
 ]
 
 
