@@ -10,6 +10,7 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
+from tlareas.policy import has_areas
 from tlasks import admission, sweeps
 from tlkernel import childenv, fence
 from tlkernel.bead import Bead
@@ -33,7 +34,6 @@ from tlslots import engine_lock
 
 from taskloop.adapters import beadtools, gitrepo, ident
 from taskloop.adapters import halt as halting
-from taskloop.app.loop.queue import has_areas
 from taskloop.app.reconcile import leases
 from taskloop.app.run import preflight, running
 from taskloop.app.run.engine import Blocked, Engine

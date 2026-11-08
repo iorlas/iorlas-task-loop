@@ -60,3 +60,10 @@ def say(text: str) -> None:
     except UnicodeEncodeError:
         enc = getattr(sys.stdout, "encoding", None) or "ascii"
         print(text.encode(enc, "replace").decode(enc), flush=True)
+
+
+def detail(lines: list[str], verbose: bool) -> None:
+    """The facts behind a step, indented under it, when verbose; empty lines are left out and long ones cut."""
+    if verbose:
+        for ln in filter(None, lines):
+            say(f"           {ln[:400]}")

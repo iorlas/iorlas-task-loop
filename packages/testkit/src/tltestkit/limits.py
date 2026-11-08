@@ -31,3 +31,15 @@ def limit_for(kind: str, *, rules: bool = False, module_limit: float = 0.0) -> f
 def hang_s(limit: float, scale: float = 1.0) -> float:
     """The wall seconds after which a test counts as hung, whatever it worked."""
     return max(HANG_S * scale, limit * WALL_FACTOR)
+
+
+def verdict(first: float, second: float | None, limit: float) -> tuple[bool, str | None]:
+    """Return (retry, failure): only two over-budget measurements fail a test."""
+    if first <= limit:
+        return False, None
+    if second is None:
+        return True, None
+    if second <= limit:
+        return False, None
+    return False, (f"took {first:.2f} s and {second:.2f} s of work on two runs, "
+                   f"both over its {limit:.2f} s limit")

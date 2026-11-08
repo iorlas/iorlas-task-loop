@@ -46,6 +46,7 @@ os.environ["TMPDIR"] = tempfile.tempdir = os.path.realpath(tempfile.gettempdir()
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 pytest.register_assert_rewrite("support")  # the helpers of tests/support assert too: show the operands, as in a test file
 import support.paths  # noqa: E402, F401  (ROOT/src on sys.path; after the bytecode setup above)
+from support.cpu_rerun import CPU_S, WORK_S, cpu_failure  # noqa: E402
 from support.scope import delegate_wanted  # noqa: E402
 
 from taskloop.adapters import procs  # noqa: E402
@@ -53,6 +54,8 @@ from taskloop.app.parts import STAGE_PARTS  # noqa: E402
 from tlkernel import factorydb, scratch  # noqa: E402
 from tltestkit import procsim, work  # noqa: E402
 from tltestkit.limits import hang_s, kind_of_parts, limit_for  # noqa: E402
+
+pytest_plugins = ["support.cpu_rerun"]
 
 procsim.SHELL_PROCESS_ADAPTERS.append(procs)
 factorydb.declare_parts(STAGE_PARTS, complete=True)
@@ -131,11 +134,17 @@ def pytest_runtest_makereport(item, call):
         return
     used = item.stash.get(WORK_S, item.stash[CPU_S]) if kind == "logic" else item.stash[CPU_S]
     hang = hang_s(limit, float(os.environ.get("TL_TIME_SCALE") or 1))
-    if call.when == "call" and report.passed and (used > limit or wall > hang):
+    if call.when != "call" or not report.passed:
+        return
+    message = (f"{item.nodeid}: a {kind} test took {used:.2f} s of work "
+               f"({item.stash[CPU_S]:.2f} s of CPU, {wall:.2f} s wall)")
+    if wall > hang:
         report.outcome = "failed"
-        why = f"over its {limit:.2f} s limit" if used > limit else f"over the {hang:.0f} s a test may take before it counts as hung"
-        report.longrepr = (f"{item.nodeid}: a {kind} test took {used:.2f} s of work ({item.stash[CPU_S]:.2f} s of CPU, {wall:.2f} s wall),"
-                           f" {why}")
+        report.longrepr = f"{message}, over the {hang:.0f} s a test may take before it counts as hung"
+    else:
+        failure = cpu_failure(item.stash, used, limit, message)
+        if failure:
+            report.outcome, report.longrepr = "failed", failure
 
 
 def pytest_ignore_collect(collection_path, config):
@@ -204,8 +213,6 @@ def cpu_s() -> float:
 
 
 _SETUP_STD = pytest.StashKey[tuple]()
-CPU_S = pytest.StashKey[float]()
-WORK_S = pytest.StashKey[float]()
 
 
 @pytest.fixture(autouse=True)

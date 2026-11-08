@@ -6,6 +6,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
+from tlareas import policy as area_policy
 from tlkernel import holds as hold
 from tlkernel import pickset
 from tlkernel.bead import Bead
@@ -19,7 +20,6 @@ from taskloop.app.loop.env import LoopEnv
 
 Key = tuple[int, int, list[tuple[int, int | str]], Bead]  # (priority, epic rank, natural id, bead)
 ORDERED = "ordered"  # the label of an epic whose children must name what they follow
-ANY_AREA = "*"  # busy_areas key for a running bead that could not be read: every area waits
 
 
 def natural(bead_id: BeadId) -> list[tuple[int, int | str]]:
@@ -29,10 +29,6 @@ def natural(bead_id: BeadId) -> list[tuple[int, int | str]]:
 
 def ordinal(n: int) -> str:
     return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
-
-
-def has_areas(cfg: EngineConfig) -> bool:
-    return bool(cfg.areas or cfg.area_label_prefix)
 
 
 @dataclass(frozen=True)
@@ -57,10 +53,6 @@ class Queue:
         return [s for s in self.skipped if s.skip.kind == "area"]
 
 
-def area_skip(area: str, holder: str, where: str) -> Skip:
-    return Skip(why=f"area {area} busy: {holder} in {where}", kind="area", area=area, holder=holder, where=where)
-
-
 class QueueRule:
     def __init__(self, store: Beads, cfg: EngineConfig, running: dict[BeadId, str], lint: Callable[[Bead], str],
                  say: Callable[[str], None] = print, now: Callable[[], float] = time.time,
@@ -69,73 +61,27 @@ class QueueRule:
         self.store, self.cfg, self.running, self.lint, self.say, self.now = store, cfg, running, lint, say, now
         self.parked = parked  # a bead whose last run ended on a question and whose text is the same (tl-7y6.7.3)
         self.hosted = hosted  # a bead whose needs label names a resource this host lacks (tl-7k8.8)
-        self.parents: dict[BeadId, BeadId | None] = {}
+        self.areas = area_policy.Areas(store, cfg.areas, cfg.area_label_prefix, running, say)
         self.ordered: dict[str, bool] = {}  # epic -> carries the `ordered` label
         self.umbrellas: set[str] = set()
         self.chosen: list[BeadId] = []  # the pick set (contracts/pickset.py); [] = every ready bead
         self.only = False
 
     def parent_of(self, bead_id: BeadId) -> BeadId | None:
-        if bead_id not in self.parents:
-            try:
-                found = self.store.show(bead_id)
-            except BdFailure:
-                found = None
-            self.parents[bead_id] = found.parent if found and is_bead_id(found.parent) else None
-        return self.parents[bead_id]
+        return self.areas.parent_of(bead_id)
 
     def epics_of(self, b: Bead) -> list[BeadId]:
-        """Every ancestor of a bead, nearest first; `parent` in bd's JSON is the direct one only."""
-        out: list[BeadId] = []
-        pid = b.parent if is_bead_id(b.parent) else None
-        while pid and pid not in out:
-            out.append(pid)
-            pid = self.parent_of(pid)
-        return out
+        return self.areas.epics_of(b)
 
     def area_of(self, b: Bead) -> str:
-        """The bead's area, "" for none. engine.areas {area: [epic id or label, ...]} first, in its order: the bead, any of its
-        ancestors or one of its labels named; then the first label with engine.area_label_prefix (lane:live is area live)."""
-        ups: list[str] | None = None
-        for name, members in self.cfg.areas.items():
-            if ups is None:
-                ups = [b.id, *self.epics_of(b)]
-            if any(m in ups or m in b.labels for m in members or []):
-                return name
-        prefix = self.cfg.area_label_prefix
-        if prefix:
-            for x in b.labels:
-                if x.startswith(prefix) and len(x) > len(prefix):
-                    return x[len(prefix):]
-        return ""
+        return self.areas.area_of(b)
 
     def busy_areas(self, but: str = "") -> dict[str, tuple[str, str]]:
-        """{area: (bead, where)} of the areas a running bead (other than `but`) works in."""
-        out: dict[str, tuple[str, str]] = {}
-        for bid, where in sorted(self.running.items()):
-            if bid == but or not is_bead_id(bid):
-                continue
-            try:
-                held = self.store.show(bid)
-            except BdFailure:
-                held = None
-            if held is None:  # its area is unknown: it may be any, so every area waits
-                self.say(f"running bead {bid} in {where} is unreadable (bd show failed): every area counts as busy")
-                out.setdefault(ANY_AREA, (bid, where))
-                continue
-            area = self.area_of(held)
-            if area:
-                out.setdefault(area, (bid, where))
-        return out
+        self.areas.running = self.running  # take refreshes this after waiting for a slot
+        return self.areas.busy_areas(but)
 
     def area_busy(self, b: Bead) -> tuple[str, Skip | None]:
-        """(area, the skip) of a bead whose area runs elsewhere; (area, None) when it is free; ("", None) for no area."""
-        area = self.area_of(b)
-        if not area:
-            return "", None
-        busy = self.busy_areas(but=b.id)
-        hit = busy.get(area) or busy.get(ANY_AREA)
-        return area, area_skip(area, *hit) if hit else None
+        return self.areas.area_busy(b, self.busy_areas)
 
     def why_not(self, b: Bead) -> Skip | None:
         skip_labels = self.cfg.skip_labels
@@ -200,7 +146,7 @@ class QueueRule:
             else:
                 keep.append((b.priority if b.priority is not None else 2, rank, natural(b.id), b))
         keep.sort(key=lambda k: (self.chosen.index(k[3].id), *k[:3]) if self.chosen else k[:3])
-        if has_areas(self.cfg) and keep:
+        if area_policy.has_areas(self.cfg) and keep:
             keep = self.drop_busy(keep, q)
         q.ranked = [Ranked(k[3], f"{ordinal(self.chosen.index(k[3].id) + 1)} of {len(self.chosen)} chosen" if self.chosen
                            else self.reason(keep, i, order)) for i, k in enumerate(keep)]
@@ -219,15 +165,8 @@ class QueueRule:
                 q.skipped.append(Skipped(BeadId(bid), pickset.unready(held, bid)))
 
     def drop_busy(self, keep: list[Key], q: Queue) -> list[Key]:
-        busy = self.busy_areas()
-        free: list[Key] = []
-        for k in keep:
-            area = self.area_of(k[3])
-            hit = busy.get(area) or (busy.get(ANY_AREA) if area else None)
-            if hit:
-                q.skipped.append(Skipped(k[3].id, area_skip(area, *hit)))
-            else:
-                free.append(k)
+        free, skipped = self.areas.drop_busy(keep, lambda k: k[3], self.busy_areas())
+        q.skipped.extend(Skipped(bead, skip) for bead, skip in skipped)
         return free
 
     @staticmethod
@@ -241,12 +180,6 @@ class QueueRule:
         if k[1] != nxt[1]:
             return f"epic {order[k[1]]} ({ordinal(k[1] + 1)} in epic_order)"
         return "lowest id"
-
-
-def area_busy_text(rule: QueueRule, bead: Bead) -> tuple[str, str]:
-    """(area, "area A busy: B in S") for a bead whose area runs elsewhere, (area, "") when it is free, ("", "") for no area."""
-    area, skip = rule.area_busy(bead)
-    return area, skip.why if skip else ""
 
 
 def rank_ready(env: LoopEnv, cfg: EngineConfig, say: Callable[[str], None] = print,

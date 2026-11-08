@@ -17,7 +17,7 @@ from taskloop.adapters import beadtools
 from taskloop.adapters import halt as halting
 from taskloop.app.run.fields import RunFields
 from taskloop.app.track import trail
-from taskloop.app.track.console import say
+from taskloop.app.track.console import detail
 
 
 class Plumbing(RunFields):
@@ -67,10 +67,7 @@ class Plumbing(RunFields):
 
     def detail(self, lines: list[str]) -> None:
         """Verbose mode (the default): the facts behind a step, indented under it."""
-        if self.verbose:
-            for ln in lines:
-                if ln:
-                    say(f"           {ln[:400]}")
+        detail(lines, self.verbose)
 
     def comment(self, text: str) -> None:
         """The one poster of the engine's comments on the bead: each is also a Said record, tied to the open step (or the last)."""
