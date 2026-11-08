@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from rules import layer_ratchet, needs_ratchet, ratchet_change, root_ratchet, temp_ratchet
 from rules.gate_rules import ROOT
 
-RATCHETS = {"layer": layer_ratchet.file_counts, "temp": temp_ratchet.file_counts, "needs": needs_ratchet.file_counts,
+RATCHETS = {"layer": layer_ratchet.file_counts, "temp": temp_ratchet.file_counts,
             "root": root_ratchet.file_counts}
 
 
@@ -28,6 +28,7 @@ def test_this_change_raises_no_ratchet():
         name: ratchet_change.problems(name, counter, ROOT, counter_at=root_ratchet.counter_for if name == "root" else None)
         for name, counter in RATCHETS.items()
     }
+    bad["needs"] = needs_ratchet.problems(ROOT)
     assert {k: v for k, v in bad.items() if v} == {}, "fix it, or say it in a commit: `Ratchet-allow: <name> +N <reason in words>`"
 
 
@@ -124,3 +125,29 @@ def test_a_new_root_in_the_contract_counts_as_a_rise(workdir, monkeypatch):
     (root / "src/new.py").write_text("x = 1\ny = 2\nz = 3\n", encoding="utf-8")
     assert ratchet_change.problems("root", root_ratchet.file_counts, root,
                                   counter_at=root_ratchet.counter_for) == ["sloc: +3"]
+
+
+def needs_repo(workdir):
+    root = repo(workdir)
+    (root / "tests").mkdir()
+    (root / "tests/test_sample.py").write_text(
+        "@needs('process', 'the child process receives a signal')\ndef test_a(): pass\n", encoding="utf-8")
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "base needs")
+    git(root, "update-ref", "refs/remotes/origin/main", "HEAD")
+    return root
+
+
+@pytest.mark.parametrize(("source", "expected"), [
+    ("@needs('process', 'a child exits after receiving termination')\ndef test_a(): pass\n", []),
+    ("@needs('process', 'the child process receives a signal')\ndef test_a(): pass\n"
+     "@needs('process', 'a child exits after receiving termination')\ndef test_b(): pass\n", ["process: +1"]),
+    ("@needs('process', 'short reason')\ndef test_a(): pass\n", ["'process: short reason' is under 5 words"]),
+    ("@needs('process', 'a child exits after receiving termination')\ndef test_a(): pass\n"
+     "@needs('process', 'a child exits after receiving termination')\ndef test_b(): pass\n",
+     ["process: +1", "'process: a child exits after receiving termination' is on 2 tests"]),
+])
+def test_needs_totals_and_new_reasons(workdir, source, expected):
+    root = needs_repo(workdir)
+    (root / "tests/test_sample.py").write_text(source, encoding="utf-8")
+    assert needs_ratchet.problems(root) == expected

@@ -3,7 +3,8 @@
 Design. layer_ratchet, temp_ratchet and needs_ratchet used to compare today's counts with a JSON file every PR rewrote, so two PRs in
 different areas conflicted on it and one landing turned the others red. Now nothing is stored (as tests/rules/type_counts.py already
 works): a ratchet counts its offenders in the .py files the change touches, at the merge base with origin/main (`git show`) and in the
-working tree, per key (offender kind, or capability and reason), and fails when a key's count went up. A move is net zero; a cleanup
+working tree, per key (offender kind, or capability total for needs), and fails when a key's count went up. New needs reasons must
+have at least five words and sit on one test. A move is net zero; a cleanup
 needs no `--write`; two PRs that touch different files share no file. No origin/main (a bare checkout): skipped, said so.
 A deliberate rise is a line in a commit message of the change: `Ratchet-allow: <temp|layer|needs|closure> +N <a reason in words>`.
 """
@@ -94,13 +95,25 @@ def allowed(root: Path, base: str, ratchet: str) -> int:
     return sum(int(n) for name, n, reason in ALLOW.findall(log) if name == ratchet and len(reason.split()) >= MIN_REASON_WORDS)
 
 
+def grouped(counts: dict[str, int], group: Callable[[str], str]) -> dict[str, int]:
+    """Sum counts under the keys supplied by group."""
+    out: dict[str, int] = {}
+    for key, n in counts.items():
+        name = group(key)
+        out[name] = out.get(name, 0) + n
+    return out
+
+
 def problems(ratchet: str, counter: Counter, root: Path, *,
-             counter_at: Callable[[str | None], Counter] | None = None) -> list[str] | None:
+             counter_at: Callable[[str | None], Counter] | None = None,
+             group: Callable[[str], str] | None = None) -> list[str] | None:
     """The keys that rose beyond what the change allows, or None when there is no origin/main to compare with."""
     base = merge_base(root)
     if base is None:
         return None
     before, after = net(counter, root, base, changed_py(root, base), counter_at=counter_at)
+    if group is not None:
+        before, after = grouped(before, group), grouped(after, group)
     up = rises(before, after)
     if sum(up.values()) <= allowed(root, base, ratchet):
         return []
