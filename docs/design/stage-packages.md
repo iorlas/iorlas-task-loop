@@ -84,6 +84,10 @@ During the move, each stage's remaining hosts are listed in the bead and shrink 
 
 ## 5. Tests and selection
 
+The import rule and package selector share the public surface declaration in `dev/surface.py`. Changes to `api.py`, `contracts/`,
+`testing.py` or declared surface leaves (including dotted modules and their descendants) reach dependents; internal changes select only
+the owning package. Packages without `api.py` retain the conservative rule that every file is public.
+
 - **Per package, in isolation**: `uv run --isolated --package P --group dev pytest packages/P`. A package's tests may import only P, `kernel`
   and `testkit`. A test that needs two stages belongs to `compose` (the wiring test) or to e2e (at most 10).
 - **Which packages**: the reverse closure of the changed packages over the declared graph (spike F). A kernel change reaches every package; a
