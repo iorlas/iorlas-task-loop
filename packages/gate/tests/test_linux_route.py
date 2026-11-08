@@ -5,7 +5,6 @@ from typing import Literal
 from unittest import mock
 
 import pytest
-
 from tlkernel import check_files
 from tlkernel.checks import Check
 from tlkernel.config import ExecutorConfig
