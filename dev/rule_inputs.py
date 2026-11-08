@@ -21,6 +21,7 @@ ALWAYS_RULES = {
     "tests/rules/test_gatepass_rule.py",
     "tests/rules/test_git_ratchet.py",
     "tests/rules/test_locks_rule.py",
+    "tests/rules/test_purged_names.py",
     "tests/rules/test_no_branch_literals.py",
     "tests/rules/test_no_consumer_names.py",
     "tests/rules/test_no_cross_module_assignment.py",

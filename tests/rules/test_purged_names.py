@@ -19,7 +19,7 @@ EXCLUDED_TREES = {
 }
 # Files that describe the purge itself and so must name the old word.
 PURGE_RECORDS = {
-    "tests/rules/test_no_lane_word.py": "this rule names the word it forbids",
+    "tests/rules/test_purged_names.py": "this rule names the word it forbids",
     "docs/design/naming-audit.md": "the audit that fixed the three meanings and their new names",
     "docs/design/lanepurge.md": "the file count and the cut order of the purge",
     "docs/glossary.md": "the lane row and the avoid-lists name the purged word as the word not to use",
@@ -85,7 +85,7 @@ def test_the_word_lane_appears_only_where_it_is_named():
         except UnicodeDecodeError:
             continue
         bad += [f"{rel}:{hit}" for hit in stray(rel, text)]
-    why = "the word lane is purged (account, track, loop; Slots); name the file in tests/rules/test_no_lane_word.py with a reason:\n"
+    why = "the word lane is purged (account, track, loop; Slots); name the file in tests/rules/test_purged_names.py with a reason:\n"
     assert not bad, why + "\n".join(bad[:40])
 
 
