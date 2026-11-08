@@ -172,3 +172,25 @@ def test_spawner_captures_text_stdin_and_bytes(tmp_path: Path, commands):
     assert fake.spawner.run([command], input="paths\0").out == "green"
     assert fake.spawner.run_bytes([command]).out == b"green"
     assert commands.ran(command) == 2
+
+
+def test_delivery_accessors_preserve_selection_order_and_missing_steps(tmp_path: Path):
+    cfg = EngineConfig(checks=[
+        CheckSpec(id=CheckId("second"), argv=["second"], run="gate"),
+        CheckSpec(id=CheckId("local"), argv=["local"], run="stage"),
+        CheckSpec(id=CheckId("first"), argv=["first"], run="both"),
+    ])
+    git, stores, env = ScriptedGateGit(common_dir="", ls_tree=()), FakeGateStores(), Env()
+    args = (stores, git, str(tmp_path), cfg, TreeSha("tree"), BaseSha("base"), env)
+    assert authorization.red(*args) == ["second", "first"]
+    assert authorization.red(*args, CheckId("local")) == ["local"]
+    assert authorization.red(*args, CheckId("missing")) == []
+    assert authorization.verdict(*args, CheckId("missing")) is None
+    m = authorization.memo_for(*args)
+    c = m.checks[CheckId("second")]
+    key = m.key(c)
+    assert key is not None
+    result = CheckResult(id=c.id, cmd=c.cmd, group=c.group, exit=0, status="passed")
+    m.remember(key, result, 1, "")
+    assert authorization.red(*args) == ["first"]
+    assert authorization.verdict(*args, c.id) == result

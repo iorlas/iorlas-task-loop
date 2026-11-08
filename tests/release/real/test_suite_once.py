@@ -68,8 +68,8 @@ class Verify(Case):
         """What the pre-push judge reads for this tree: the suite check's result under the judged profile."""
         d, tree, base = str(self.repo), self.git("rev-parse", "HEAD^{tree}"), self.git("rev-parse", "origin/main")
         cfg = authorization.profile(self.port, d, TreeSha(base))
-        return authorization.results(real_stores(ConfigDir(self.env.get("XDG_CONFIG_HOME") + "/task-loop")), self.port, d, cfg,
-                                     TreeSha(tree), BaseSha(base), self.env)[CheckId("suite")]
+        return authorization.verdict(real_stores(ConfigDir(self.env.get("XDG_CONFIG_HOME") + "/task-loop")), self.port, d, cfg,
+                                     TreeSha(tree), BaseSha(base), self.env, CheckId("suite"))
 
     def test_the_same_tree_under_the_same_command_runs_once(self):
         assert not gate.verify(self.repo, self.sh, self.checks, host=release_host())

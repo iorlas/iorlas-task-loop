@@ -42,7 +42,7 @@ class KeyedEnv(CheckHostCase):
         check = gate_items(eng.cfg)[0]
         memo = authorization.memo_for(eng.stores, eng.git, str(eng.wt), eng.cfg, tree, base, eng.env)
         assert memo.result(check) == result
-        assert authorization.results(eng.stores, eng.git, str(eng.wt), eng.cfg, tree, base, eng.env) == {check.id: result}
+        assert authorization.verdict(eng.stores, eng.git, str(eng.wt), eng.cfg, tree, base, eng.env, check.id) == result
         cli = self.cli(eng)
         assert cli.bead_env == check_env()
         assert Checker(cli)._memo(tree, base).result(check) == result
