@@ -4,10 +4,11 @@ from collections.abc import Callable
 from typing import Concatenate
 
 from tlkernel.beadsport import Beads
+from tlkernel.gitport import Git
 from tlkernel.ids import loop_key
 from tlkernel.paths import ConfigDir
 from tlkernel.storeapi import Tickets
-from tlslots import machine
+from tlslots import config, machine
 from tlslots.host import SlotsHost
 
 from taskloop.adapters.beadtools import bd_store, peek
@@ -17,6 +18,10 @@ from taskloop.adapters.landlock import os_lock
 from taskloop.app.track import trail
 from taskloop.app.wire import slotfx
 from taskloop.stores.real import real_stores
+
+
+def base_of(repo: str, git: Git) -> str:
+    return config.load_cfg(repo, git).base
 
 
 def bd(actor: str, repo: str) -> Beads:

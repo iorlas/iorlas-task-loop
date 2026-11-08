@@ -6,6 +6,7 @@ A land on record is a LANDED row in traces.jsonl (the engine writes one per land
 hand). Typed reasons: duplicate, wontfix, superseded, epic, manual-landed-with-sha:<sha> (the sha must be an ancestor of the base; it is
 then recorded as the land, exactly as `tl land` records one)."""
 import time
+from collections.abc import Callable
 from typing import Final
 
 from tlkernel.beadsport import BdFailure, Beads
@@ -21,7 +22,6 @@ from tlkernel.locator import RunLocator
 from tlkernel.run import RunFinish, RunState
 from tlkernel.slots import git_probe
 from tlpipeline.api import closeguard
-from tlslots import config as wslots_config
 
 from taskloop.app.track import verbs
 from taskloop.app.track.verbs import Guard
@@ -58,7 +58,7 @@ def record_land(who: Identity, store: Beads, git: Git, repo: str, base: str, bea
 
 
 
-def refusal(who: Identity, store: Beads, git: Git, repo: str, bead: BeadId, reason: str) -> str:
+def refusal(who: Identity, store: Beads, git: Git, repo: str, bead: BeadId, reason: str, *, base_of: Callable[[str, Git], str]) -> str:
     """"" when the close may go on; else the refusal, naming the fix. A manual-landed-with-sha reason is checked and recorded here."""
     try:
         found = store.show(bead)
@@ -66,28 +66,29 @@ def refusal(who: Identity, store: Beads, git: Git, repo: str, bead: BeadId, reas
         return ""  # bd itself will say what is wrong with the close
     return closeguard.refusal(bead, reason, found.issue_type if found else None,
                               has_land=lambda: has_land(who, bead), has_work=lambda: has_work(who, git, repo, bead),
-                              manual=lambda sha: manual(who, store, git, repo, bead, sha))
+                              manual=lambda sha: manual(who, store, git, repo, bead, sha, base_of=base_of))
 
 
-def manual(who: Identity, store: Beads, git: Git, repo: str, bead: BeadId, sha: str) -> str:
+def manual(who: Identity, store: Beads, git: Git, repo: str, bead: BeadId, sha: str, *, base_of: Callable[[str, Git], str]) -> str:
     """manual-landed-with-sha: the sha must be on the base; it is then recorded as the land."""
-    base = wslots_config.load_cfg(repo, git).base
+    base = base_of(repo, git)
     if record_land(who, store, git, repo, base, bead, sha, f"manual-landed-with-sha: {sha[:12]} is on {base}") == 0:
         return ""
     return f"{bead}: {sha[:12]} is not an ancestor of {base}: not a land. Fix: tl land {bead} --sha SHA with a sha that is."
 
 
-def guard_for(who: Identity, store: Beads, git: Git, repo: str) -> Guard:
-    return lambda bead, reason: refusal(who, store, git, repo, bead, reason)
+def guard_for(who: Identity, store: Beads, git: Git, repo: str, *, base_of: Callable[[str, Git], str]) -> Guard:
+    return lambda bead, reason: refusal(who, store, git, repo, bead, reason, base_of=base_of)
 
 
-def close_released(who: Identity, store: Beads, git: Git, where: str, bead: BeadId, reason: str, version: str) -> str:
+def close_released(who: Identity, store: Beads, git: Git, where: str, bead: BeadId, reason: str, version: str,
+                   *, base_of: Callable[[str, Git], str]) -> str:
     """A release closes its bead: the pushed commit (HEAD of the release clone `where`, on its origin/main) is recorded as the land, then
     the close goes through the guard. -> "" when the bead is closed, else why not."""
     sha = git.rev_parse(where, "HEAD")
     if record_land(who, store, git, where, "origin/main", bead, sha, f"release {version}") != 0:
         return f"the release of {bead} is not on origin/main: land not recorded"
-    if why := guard_for(who, store, git, where)(bead, reason):
+    if why := guard_for(who, store, git, where, base_of=base_of)(bead, reason):
         return why
     try:
         store.close(bead, reason)
