@@ -1,5 +1,5 @@
-"""One reader per fact (tl-sqd3.30, RCA R-A): the repo profile and the delivery verdict each have one reader module (profile_at, authorization);
-a second reader fails here. The stop reason is still open (tl-sqd3.30.2). The accessors authorization offers (`red`, `verdict`) are
+"""One reader per fact (tl-sqd3.30, RCA R-A): the repo profile and the delivery verdict each have one reader module (profile_at,
+authorization); a second reader fails here. The stop reason is still open (tl-sqd3.30.2). The accessors authorization offers (`red`, `verdict`) are
 answers, not the raw per-check mapping, so calling them is not reading the fact: do not widen the rule to them. The repo key's single
 definition site is tests/rules/test_one_repo_key.py."""
 import ast
