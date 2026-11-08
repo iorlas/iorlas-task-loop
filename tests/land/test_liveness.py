@@ -23,7 +23,7 @@ class Liveness(Case):
         kit = self.kit()
         stale = Problem(ProblemKind.STALE, "moved")
         with mock.patch.object(kit.lander, "optimistic", return_value=False), \
-                mock.patch.object(kit.lander, "tries", side_effect=[("", stale)] * LIVENESS.stale_retries +
+                mock.patch.object(kit.lander.inside, "run", side_effect=[("", stale)] * LIVENESS.stale_retries +
                                   [AssertionError("unbounded stale retry")]) as tries, pytest.raises(Stopped) as stopped:
             kit.lander.land()
         assert stopped.value.kind == "OWNER_PARK"
@@ -46,10 +46,10 @@ class Liveness(Case):
         kit = self.kit()
         caps = LivenessCaps(judge_s=0.02)
         timer = FakeDeadline()
-        kit.lander.deadline = deadline
-        with timer.patched(), mock.patch("tlland.lander.LIVENESS", caps), \
+        kit.lander.inside.deadline = deadline
+        with timer.patched(), mock.patch("tlland.tries.LIVENESS", caps), \
                 mock.patch.object(kit.lander, "optimistic", return_value=False), \
-                mock.patch.object(kit.lander, "placing", return_value=Placing.INSIDE), \
+                mock.patch.object(kit.lander.inside, "placing", return_value=Placing.INSIDE), \
                 mock.patch.object(kit.lander.gate, "run", side_effect=lambda: timer.wait(0.5)), \
                 pytest.raises(Stopped) as stopped:
             kit.lander.land()

@@ -8,22 +8,27 @@ file's first line (`WorkerStarted`) and the answer's `worker`, and stops a call 
 
 import json
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
+from typing import Any, Protocol
 
 from tlgate.step_env import step_env
 from tlkernel import answers, childenv
 from tlkernel import log as rec
 from tlkernel.asked import Asked, Updates
 from tlkernel.delegate import REASON_OVERRUN, DelegateResult, RunRequest, StopFacts
-from tlkernel.delegateport import Answer
+from tlkernel.delegateport import Answer, Resolved, Seam, StopFlag
+from tlkernel.paths import ConfigDir
+from tlkernel.wire import Open
 
 from taskloop.adapters import delegate_wire
 from taskloop.app.workers import asked, strays, worker_identity, worker_recovery, worker_request
 from taskloop.app.workers import call_state as callstate
 from taskloop.app.workers.call import Call
-from taskloop.app.workers.calls import timing
-from taskloop.app.workers.lane_acts import LaneActs
+from taskloop.app.workers.calls import Calls, timing
+from taskloop.app.workers.delegation import DelegationRoute
+from taskloop.app.workers.lane_acts import LaneActs, LaneHost
 from taskloop.domain.lanes import policy as lp
 from taskloop.domain.lanes.denials import command_of, secret_false_positive
 from taskloop.domain.lanes.retry import PLAN
@@ -44,8 +49,57 @@ class Ops:
     after: Any  # (call, result): the node's detail lines and anomalies
 
 
+class WorkerHand(Protocol):
+    def seen_now(self) -> list[str]: ...
+
+
+class WorkerWrite(Protocol):
+    @property
+    def lane_notes(self) -> list[str]: ...
+
+
+class WorkerRoute(DelegationRoute, Protocol):
+    def runner(self, log_path: Path, wall: float | None, live: str) -> Seam: ...
+    def call(self, resolved: Resolved | None, req: RunRequest, brief: str, schema: Open, runner: Seam,
+             env: Mapping[str, str], delta: str | None = None) -> Answer: ...
+
+
+class WorkerHost(worker_request.RequestHost, worker_request.ToolHost, LaneHost, asked.Settling, Protocol):
+    stats: dict[str, int]
+    planner_ref: str
+    run_id: str
+    err_path: Path
+    live_n: int
+    @property
+    def cost(self) -> float: ...
+    @cost.setter
+    def cost(self, value: float) -> None: ...
+    denials: list[str]
+    @property
+    def bead_env(self) -> dict[str, str]: ...
+    resolved: Resolved | None
+    @property
+    def write(self) -> WorkerWrite: ...
+
+    home: ConfigDir
+
+    @property
+    def router(self) -> WorkerRoute: ...
+    @property
+    def calls(self) -> Calls: ...
+    @property
+    def hand(self) -> WorkerHand: ...
+    @property
+    def halt(self) -> StopFlag: ...
+    def publish_plan(self) -> None: ...
+    def call_dir(self) -> Path: ...
+    def live(self, step: str) -> str: ...
+    def warn(self, text: str) -> None: ...
+    def comment(self, text: str) -> None: ...
+
+
 class WorkerCall:
-    def __init__(self, host: Any, ops: Ops) -> None:
+    def __init__(self, host: WorkerHost, ops: Ops) -> None:
         self.e, self.ops = host, ops
         self.acts = LaneActs(host, self)
         self.active: Call | None = None
@@ -169,14 +223,14 @@ class WorkerCall:
         req = self.request(c, "", *self.limits(c))
         return worker_recovery.prepare_call(
             worker_identity.NodeInput(c.node, c.full, c.schema, req),
-            worker_identity.context(self.e.git, str(self.e.wt), str(c.cwd)),
+            worker_identity.context(self.e.git, self.e.wt, str(c.cwd)),
         )
 
     def saved(self) -> None:
         """Rebind an interrupted thread to the close's saved WIP tree and commit."""
         c = self.active
         if c is not None and c.prepared is not None and c.state is not None and c.state.phase == "calling" and c.state.ref:
-            current = worker_identity.context(self.e.git, str(self.e.wt), str(c.cwd))
+            current = worker_identity.context(self.e.git, self.e.wt, str(c.cwd))
             c.prepared = worker_recovery.saved(c.prepared, c.state, current)
             c.sha = c.prepared.execution_id
 

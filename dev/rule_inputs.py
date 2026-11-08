@@ -34,7 +34,9 @@ ALWAYS_RULES = {
     "tests/rules/test_package_surface.py",
     "tests/rules/test_package_tests.py",
     "tests/rules/test_pause_reasons.py",
+    "tests/rules/test_ports_only.py",
     "tests/rules/test_root_ratchet.py",
+    "tests/rules/test_root_target.py",
     "tests/rules/test_root_totals.py",
     "tests/rules/test_runstate_rule.py",
     "tests/rules/test_selection_mutations.py",
@@ -83,6 +85,9 @@ RULES_BY_PATH = {
         "packages/delegate/docs/contracts/delegate-api.md",
         "README.md",
         "CLAUDE.md",
+    ),
+    # tests/rules/effects_ratchet.py
+    "tests/rules/test_effects_ratchet.py": (
     ),
     # dev/flakes.py
     "tests/rules/test_flakes.py": (

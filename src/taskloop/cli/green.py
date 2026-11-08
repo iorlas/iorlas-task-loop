@@ -21,7 +21,7 @@ def cmd_green(a: argparse.Namespace, cfg: ConfigDir, git: Git, out: Callable[[st
     wt, tree, base, step = str(Path(a.repo).resolve()), TreeSha(a.tree), BaseSha(a.base), CheckId(a.step)
     try:
         engine = authorization.profile(git, wt, tree)
-        res = authorization.results(real_stores(cfg), git, wt, engine, tree, base, env or Env(), step).get(step)
+        res = authorization.verdict(real_stores(cfg), git, wt, engine, tree, base, env or Env(), step)
     except (OSError, ValueError, SlotGitError):
         res = None
     ok = res is not None

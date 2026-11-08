@@ -304,6 +304,28 @@ forbidden_modules =
     delegate
 allow_indirect_imports = True
 
+[importlinter:contract:engine-only-at-entry]
+name = Only composition entries import the Engine
+type = forbidden
+source_modules =
+    taskloop.**
+    tlpipeline
+    tlland
+    tlwork
+    tlkernel
+    tlartifacts
+    tlgate
+    tlslots
+    tlasks
+    tlrelease
+    tlareas
+    tldash
+forbidden_modules = taskloop.app.run.engine
+allow_indirect_imports = True
+ignore_imports =
+    taskloop.app.run.entry -> taskloop.app.run.engine
+    taskloop.app.launch.selftest -> taskloop.app.run.engine
+
 [importlinter:contract:nobody-imports-a-root]
 name = Nobody imports a root: nodes, run's logic modules and the layers below never import launch, wire or run's composition files
 type = forbidden

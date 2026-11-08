@@ -1,5 +1,6 @@
-"""The layer, temp and needs ratchets judge the change against its merge base with origin/main (tests/rules/ratchet_change.py): nothing
-stored, so two PRs in different areas never share a file. The first test runs them on this very change; the others build a small repo."""
+"""The effects, layer, temp and needs ratchets judge the change against its merge base with origin/main (tests/rules/ratchet_change.py):
+nothing stored, so two PRs in different areas never share a file. The first test runs them on this very change;
+the others build a small repo."""
 import subprocess
 import sys
 from pathlib import Path
@@ -10,10 +11,10 @@ from tltestkit.procsim import CAPABILITIES
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from rules import layer_ratchet, needs_ratchet, ratchet_change, root_ratchet, temp_ratchet
+from rules import effects_ratchet, layer_ratchet, needs_ratchet, ratchet_change, root_ratchet, temp_ratchet
 from rules.gate_rules import ROOT
 
-RATCHETS = {"layer": layer_ratchet.file_counts, "temp": temp_ratchet.file_counts,
+RATCHETS = {"effects": effects_ratchet.file_counts, "layer": layer_ratchet.file_counts, "temp": temp_ratchet.file_counts,
             "root": root_ratchet.file_counts}
 
 
@@ -151,3 +152,33 @@ def test_needs_totals_and_new_reasons(workdir, source, expected):
     root = needs_repo(workdir)
     (root / "tests/test_sample.py").write_text(source, encoding="utf-8")
     assert needs_ratchet.problems(root) == expected
+
+
+def effects_repo(workdir):
+    root = repo(workdir)
+    kernel = root / "packages/kernel/src/tlkernel"
+    kernel.mkdir(parents=True)
+    (kernel / "old.py").write_text("import sqlite3\n", encoding="utf-8")
+    git(root, "add", "-A")
+    git(root, "commit", "-qm", "old kernel effect")
+    git(root, "update-ref", "refs/remotes/origin/main", "HEAD")
+    return root, kernel
+
+
+def test_a_new_kernel_effect_fails_an_unchanged_old_one_does_not(workdir):
+    root, kernel = effects_repo(workdir)
+    assert ratchet_change.problems("effects", effects_ratchet.file_counts, root) == []
+    (kernel / "new.py").write_text("import sqlite3\n", encoding="utf-8")
+    assert ratchet_change.problems("effects", effects_ratchet.file_counts, root) == ["sqlite: +1"]
+
+
+def test_kernel_str_replace_is_noise(workdir):
+    root, kernel = effects_repo(workdir)
+    (kernel / "new.py").write_text("value = 'a'.replace('a', 'b')\n", encoding="utf-8")
+    assert ratchet_change.problems("effects", effects_ratchet.file_counts, root) == []
+
+
+def test_moving_a_kernel_effect_is_net_zero(workdir):
+    root, kernel = effects_repo(workdir)
+    (kernel / "old.py").rename(kernel / "moved.py")
+    assert ratchet_change.problems("effects", effects_ratchet.file_counts, root) == []
