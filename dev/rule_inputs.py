@@ -35,6 +35,7 @@ ALWAYS_RULES = {
     "tests/rules/test_package_tests.py",
     "tests/rules/test_pause_reasons.py",
     "tests/rules/test_root_ratchet.py",
+    "tests/rules/test_root_target.py",
     "tests/rules/test_root_totals.py",
     "tests/rules/test_runstate_rule.py",
     "tests/rules/test_selection_mutations.py",
