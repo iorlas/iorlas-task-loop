@@ -34,6 +34,7 @@ engine runs from stays.
 """
 
 import sys
+from functools import partial
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -45,12 +46,15 @@ from taskloop.app.launch.release_host import release_host  # noqa: E402  (import
 # the old flow called the new tidy.drop_branch and failed). Load the whole release now, from the tree it started on.
 if hasattr(sys, "set_lazy_imports"):
     sys.set_lazy_imports("normal")  # only explicit `lazy import` statements stay lazy; we write none
-from taskloop.app.wire import closeguard, real  # noqa: E402
+from taskloop.app.track import closeguard  # noqa: E402
+from taskloop.app.wire import real  # noqa: E402
+from taskloop.app.wire.slots import base_of  # noqa: E402
 from tlkernel.env import snapshot  # noqa: E402
 from tlrelease import flow  # noqa: E402
 
 if __name__ == "__main__":
     process = snapshot()  # the one place this script takes the process environment
     doc = __doc__.split("\n\n")[0]
-    sys.exit(flow.main(None, HERE.parent, real.spawner(process), real.git(process), process, closeguard.close_released, doc,
+    sys.exit(flow.main(None, HERE.parent, real.spawner(process), real.git(process), process,
+                       partial(closeguard.close_released, base_of=base_of), doc,
                        host=release_host()))

@@ -11,6 +11,7 @@ import os
 import subprocess
 import threading
 from contextlib import ExitStack, contextmanager
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -24,7 +25,8 @@ from support.fakes import FakeBeadStore
 from taskloop.adapters import beadtools
 from taskloop.adapters.git import RealGit
 from taskloop.app.launch.release_host import release_host
-from taskloop.app.wire import closeguard
+from taskloop.app.track import closeguard
+from taskloop.app.wire.slots import base_of
 from tlkernel.env import snapshot
 from tlkernel.procport import Ran, Spawner
 from tlrelease import flow, gate, shell
@@ -153,7 +155,7 @@ class World:
         self.stderr.start(args[0])
         try:
             code = flow.main([*args, "--repo", str(self.repo), "--marketplace", str(self.market)], Path(__file__).resolve().parents[2],
-                             self.spawner, self.port, snapshot(), closeguard.close_released, host=release_host())
+                             self.spawner, self.port, snapshot(), partial(closeguard.close_released, base_of=base_of), host=release_host())
         except SystemExit as e:
             code = e.code
         return Result(returncode=code, stdout=self.stdout.text(), stderr=self.stderr.text())
