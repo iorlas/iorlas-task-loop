@@ -5,7 +5,7 @@ from pathlib import Path
 from tltestkit.case import Case
 
 ROOT = Path(__file__).resolve().parents[2]
-DOCS = ("docs/dev/integrations.md", "docs/contracts/delegate-api.md", "README.md", "CLAUDE.md")
+DOCS = ("docs/dev/integrations.md", "packages/delegate/docs/contracts/delegate-api.md", "README.md", "CLAUDE.md")
 NAMED = re.compile(r"\bcontract (\d+)\b")
 
 
