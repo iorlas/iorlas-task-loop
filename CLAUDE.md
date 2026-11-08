@@ -1,7 +1,5 @@
 # Project Instructions for AI Agents
 
-This file provides instructions and context for AI coding agents working on this project.
-
 > ## ⚠️ NO BACKWARD COMPATIBILITY ⚠️
 >
 > **WE DO NOT KEEP OLD RUNS, OLD STORED FORMATS, OLD CONFIG SHAPES OR OLD LOG LAYOUTS WORKING.**
@@ -127,6 +125,7 @@ reader, and how delegate connects (`delegate.api`, one table in SKILL.md).
 
 ## Conventions & Patterns
 
+- Every module with state, time or IO takes it through a narrow port passed in (store, clock, spawner, forge, tasks). Adapters implement ports; only adapters (and the kernel's DB modules) import sqlite3, open paths or sleep; domain code takes values and returns values. A new durable thing = a port + adapters (in-memory, file, SQLite). Enforced for sqlite3 and time.sleep by tests/rules/test_ports_only.py (its table of known exceptions only shrinks); subprocess is covered elsewhere and time.time is deferred.
 - Decisions live in docs (the design note's Decisions recorded table or the repo's ADR); beads are work only; a decision bead is closed the moment it is decided.
 
 - "We need to use only our database": factory.db is for state, with no file fallback. Logs (engine, worker console, transcripts) stay files behind a log reader, rotated by age.
