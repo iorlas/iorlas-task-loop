@@ -10,7 +10,7 @@ Run the task-loop on `~/Workspaces/shelf` so ready shelf beads are claimed, buil
 
 | Item | State | Evidence |
 |---|---|---|
-| task-loop 0.23.403 installed; `engine.land_mode: "push"\|"pr"` | shipped | session; read `contracts/config.py:171` |
+| task-loop 0.23.403 installed; `engine.land_mode: "push"\|"pr"`; `engine.merge: "wait"\|"auto"` (default wait; auto requires PR and merges after the gate at the unchanged head) | shipped | session; read `contracts/config.py:171` |
 | profile with `land_mode: "pr"` loads in the installed loader | shipped | session: `tl setup --plan --repo` printed `ok profile ... loads` (a positive run only) |
 | PR land: opens a PR, waits, never merges; merge detected, bead closed with merge sha | unverified | only the config line was read, not the land code |
 | shelf profile draft | drafted | branch `shelf-profile`, sha b0f4632 in `/Users/iorlas/Workspaces/shelf-profile`, not pushed |

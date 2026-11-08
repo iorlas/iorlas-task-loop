@@ -1,5 +1,5 @@
 """The PR-mode land (`land_mode: pr`): the branch goes up, a PR is opened, the bead waits as a typed ask; merged -> the PR's merge commit is
-the landing; closed unmerged -> a typed ask. The engine never merges: the forge fake fails the test on `gh pr merge`."""
+the landing; closed unmerged -> a typed ask. Wait mode never merges; auto mode pins the gated head and falls back to waiting."""
 import os
 import shutil
 import sys
@@ -34,7 +34,6 @@ from tlkernel.gitfacts import GitOutcome, LogRow
 from tlkernel.ids import BeadId, TreeSha
 from tlkernel.kinds import Kind
 from tlkernel.runkey import BaseSha
-from tlland import pr_land
 from tlland.forge import peek
 from tlland.gate import Problem, ProblemKind, mint
 from tlland.host import Land
@@ -62,8 +61,15 @@ class NeverMerges(ForgeSim):
         self.prs[number]["state"] = "CLOSED"
 
 
+class AutoMerges(NeverMerges):
+    """Enable the existing forge simulation, which enforces --match-head-commit."""
+
+    def run(self, argv, **kw):
+        return ForgeSim.run(self, argv, **kw)
+
+
 class Git(ScriptedGit):
-    def __init__(self, sim: NeverMerges) -> None:
+    def __init__(self, sim: ForgeSim) -> None:
         super().__init__()
         self.sim, self.head = sim, HEAD
 
@@ -105,7 +111,7 @@ class World(Case):
         run_dir = scratch.scratch_dir(os.environ)
         self.addCleanup(shutil.rmtree, run_dir, True)
         self.host = SimpleNamespace(
-            bead=BEAD, cfg=SimpleNamespace(base="origin/main", land=["git", "push", "origin", "HEAD:main"]), spawner=self.sim,
+            bead=BEAD, cfg=SimpleNamespace(base="origin/main", land=["git", "push", "origin", "HEAD:main"], merge="wait"), spawner=self.sim,
             log=RunLog(fake_stores().run_log("r"), run_id="r", host="h"), run_dir=Path(run_dir), git=self.git, wt="/wt",
             store=self.store, claim=fence.offline(BEAD), steps=Steps(), checkout=Checkout(), task_branch=BRANCH, landed_sha="",
             blocked_for=blocked_for)
@@ -202,9 +208,49 @@ class Settling(World):
         assert PR_NUMBER not in self.meta()
         assert self.pr.settled() == ""  # the next run lands again with a new PR
 
-    def test_the_engine_never_calls_the_forge_merge(self):
-        source = Path(pr_land.__file__).read_text()
-        assert not any(word in source for word in (".merge(", '"merge"', "--auto"))
+    def test_wait_never_calls_the_forge_merge(self):
+        self.opened()
+        assert self.sim.ran("gh pr merge") == []
+
+
+class AutoMerging(World):
+    def setup_method(self):
+        super().setup_method()
+        self.sim = AutoMerges()
+        self.git.sim = self.sim
+        self.host.spawner = self.sim
+        self.host.cfg.merge = "auto"
+
+    def test_green_merges_only_the_pushed_head_and_records_the_merge_commit(self):
+        got = self.pr.push(Land(), mint(TreeSha("tree"), BaseSha("base")))
+        assert self.sim.ran("gh pr merge") == [f"gh pr merge 1 --squash --match-head-commit {HEAD}"]
+        assert isinstance(got, str)
+        assert got == self.sim.prs[1]["mergeCommit"]["oid"]
+        assert self.host.landed_sha == got
+        assert self.host.steps.outcomes == [("landed", got[:12])]
+        assert PR_NUMBER in self.meta()
+        assert "merged by task-loop after the gate (engine.merge: auto)" in self.pr.body()
+        self.pr.done()
+        assert PR_NUMBER not in self.meta()
+        assert PR_URL not in self.meta()
+
+    @pytest.mark.parametrize("refused", [True, False])
+    def test_refused_or_unfinished_merge_waits_for_the_owner(self, refused):
+        if refused:
+            self.sim.fail["gh pr merge"] = 1
+        else:
+            self.sim.say["gh pr merge"] = "queued"
+        notes = []
+        self.host.log.echo = notes.append
+        stop = self.opened()
+        assert any("auto merge deferred" in note for note in notes)
+        assert any(("boom: gh pr merge" if refused else "forge reports OPEN") in note for note in notes)
+        assert stop.kind is Kind.ASK_DECISION
+        assert must(stop.spec).ask_class is AskClass.PR_OPEN
+        assert self.host.landed_sha == ""
+        assert self.host.steps.outcomes == []
+        assert self.meta()[PR_NUMBER] == "1"
+        assert self.sim.prs[1]["state"] == "OPEN"
 
 
 def asking(sim_state: str):
