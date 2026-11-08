@@ -58,4 +58,4 @@ live file, `cancel` at the wall limit or a stop of the run), `domain/lanes/polic
 untagged `WorkerStarted` (`v`, `pid`, `pgid`, `run_id`); subsequent
 events carry `t` (epoch seconds) and the codec's default `kind` tag, plus
 the event's fields. A line tagged only with `k` is refused; old live files
-are discarded under [the compatibility policy](../design/compat.md).
+are discarded under [the compatibility policy](../../../../docs/design/compat.md).

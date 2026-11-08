@@ -12,7 +12,7 @@ from tlkernel.runlayout import repo_of
 from tlpipeline.api import admission, read_checkpoint
 
 from taskloop.app.track import console
-from taskloop.app.wire.closeguard import has_land
+from taskloop.app.track.closeguard import has_land
 from taskloop.stores.real import real_stores
 
 

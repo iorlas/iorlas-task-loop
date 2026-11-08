@@ -107,7 +107,7 @@ Closer = Callable[[Identity, Beads, Git, str, BeadId, str, str], str]  # (who, b
 def close_bead(req: Request, repo: Path, who: Identity, store: Beads | None, where: Path, sh: Shell, version: str,
                closer: Closer, *, bd_store: Callable[[str, Path], Beads]) -> None:
     """The release is the bead's land: `closer` records the pushed commit as the land, then closes the bead through the close guard
-    (app/wire/closeguard.py close_released; the edge hands it in)."""
+    (app/track/closeguard.py close_released; the edge hands it in)."""
     if not req.bead:
         return
     try:

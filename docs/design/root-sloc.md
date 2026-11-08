@@ -60,7 +60,7 @@ Packages that exist: `kernel`, `gate`, `artifacts`, `pipeline`, `testkit`, `slot
 | `app/run/parts_run.py` | 82 | 3 | 0 | stays | run construction |
 | `packages/slots/src/tlslots/shared.py` | 82 | 10 | 70 | moved to tlslots in S3a (notes shared by the tasks of one repo) | done: tlslots/shared.py over SharedHost |
 | `app/checks/shell.py` | 80 | 10 | 70 | gate package (a command of the run recorded in the engine log) or kernel proc helper | gate package exists; the engine-log recording needs the log port |
-| `app/wire/closeguard.py` | 78 | 10 | 70 | pipeline (closing) | one function `refusal` decides every close; packages/pipeline exists; callers are tl close, tl task close |
+| `app/track/closeguard.py` | 78 | 10 | 70 | moved to app/track | one function `refusal` decides every close; packages/pipeline exists; callers are tl close, tl task close |
 | `app/launch/loop_ops.py` | 77 | 0 | 0 | stays | binding; pix-dataown's PRs in flight |
 | `app/launch/loop_start.py` | 75 | 9 | 60 | release package (installs on the machine, loop identity) | release carve (tl-e5t0.19) |
 | `app/wire/brief.py` | 73 | 5 | 0 | stays | imports app.loop (above report) and the wire roots, so it cannot sit in app/report (corrected) |
