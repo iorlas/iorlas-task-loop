@@ -1,7 +1,8 @@
 """Slot claim outcomes and the run-task ownership hand-over."""
 import contextlib
 import threading
-from unittest.mock import Mock
+from io import StringIO
+from unittest.mock import Mock, patch
 
 import pytest
 from tlkernel.bead import Bead
@@ -141,3 +142,40 @@ def test_claimed_returns_fenced_slot_once_under_guard(rig, monkeypatch, raises):
         if raises:
             raise ValueError("body")
     assert events == ["enter", "release", "exit"]
+
+
+@pytest.mark.parametrize("exit_code, output", [(1, "ignored"), (0, ""), (0, "\n")])
+def test_run_worktree_failure_keeps_stderr_and_tail(rig, exit_code, output):
+    host, kw = rig
+    err = "x" * 350 + "\n"
+    kw["spawner"].run.return_value = Mock(exit=exit_code, out=output, err=err)
+    with patch("sys.stderr", new_callable=StringIO) as stderr:
+        got = machine.run_worktree(host.host, "", "", BeadId("b-1"), "/repo", ["python", "tl.py"],
+                                   kw["spawner"], kw["who"])
+    assert got == machine.Worktree("", "failed: no worktree: " + err[-300:])
+    assert stderr.getvalue() == "tl: no worktree: " + err + "\n"
+
+
+def test_run_worktree_uses_last_line_and_refuses_main_checkout(rig, tmp_path):
+    host, kw = rig
+    (tmp_path / ".git").mkdir()
+    kw["spawner"].run.return_value = Mock(exit=0, out=f"setup output\n{tmp_path}\n", err="")
+    with patch("sys.stderr", new_callable=StringIO) as stderr:
+        got = machine.run_worktree(host.host, "", "", BeadId("b-1"), "/repo", ["python", "tl.py"],
+                                   kw["spawner"], kw["who"])
+    assert got == machine.Worktree("", f"failed: {tmp_path} is the main checkout")
+    assert stderr.getvalue() == (
+        f"tl: {tmp_path} is the main checkout; run a task in a slot or a worktree (tl slot / tl worktree start)\n")
+    assert kw["spawner"].run.call_args.args == (["python", "tl.py", "worktree", "start"],)
+    assert kw["spawner"].run.call_args.kwargs == {"extra": {"TASK_LOOP_ACTOR": "test"}}
+
+
+def test_run_worktree_prefers_named_directory_then_slot(rig, tmp_path, monkeypatch):
+    host, kw = rig
+    monkeypatch.setattr(machine, "profile_slots", lambda repo: SlotsConfig())
+    monkeypatch.setattr(machine, "slot_dir", lambda repo, slot, cfg: str(tmp_path / slot))
+    for requested, expected in [(str(tmp_path), tmp_path), ("", tmp_path / "s1")]:
+        got = machine.run_worktree(host.host, requested, "s1", BeadId("b-1"), "/repo", [],
+                                   kw["spawner"], kw["who"])
+        assert got == machine.Worktree(str(expected))
+    kw["spawner"].run.assert_not_called()

@@ -104,25 +104,6 @@ def run_any_slot(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, sp
         wslots.give_back(repo, a.slot, a.id, a.slot_gen, store, spawner=spawner, git=git, who=who, guard=_sigterm_ignored)
 
 
-def _worktree_of(a: Any, repo: Any, spawner: Spawner, env: Env, who: Identity) -> tuple[str, Any]:
-    """(worktree, failure): the directory the run works in (the slot's, the named one, or a new one), or the outcome that says why none."""
-    wt = a.worktree
-    if not wt and a.slot:  # the slot is the worktree
-        wt = wslots_config.slot_dir(repo, a.slot, wslots_config.profile_slots(repo))
-    if not wt:
-        r = spawner.run([*childenv.script_argv(TL_PY, env), "worktree", "start"], extra=childenv.identity_env(who))
-        wt = r.out.strip().splitlines()[-1] if r.exit == 0 and r.out.strip() else ""
-        if not wt:
-            print("tl: no worktree: " + r.err, file=sys.stderr)
-            return "", RunReport(outcome=Result.FAILED, bead=a.id, why="failed: no worktree: " + r.err[-300:])
-    wt = str(Path(wt).resolve())
-    if (Path(wt) / ".git").is_dir():  # the main checkout holds the bead database and the config: never a worker's cwd
-        print(f"tl: {wt} is the main checkout; run a task in a slot or a worktree (tl slot / tl worktree start)",
-              file=sys.stderr)
-        return "", RunReport(outcome=Result.FAILED, bead=a.id, why=f"failed: {wt} is the main checkout")
-    return wt, None
-
-
 @contextlib.contextmanager
 def _sigterm_ignored() -> Generator[None]:
     """A give-back in a finally block is not cut short by a SIGTERM (only the main thread can set the handler)."""
@@ -139,9 +120,10 @@ def run_in(a: Any, repo: Any, cfg: Any, store: Any = None, *, env: Env, spawner:
     if a.dry_run:
         wt = a.worktree or (wslots_config.slot_dir(repo, a.slot, wslots_config.profile_slots(repo)) if a.slot else "")
         return preview(a, repo, cfg, str(Path(wt).resolve()) if wt else "", store=store, env=env, git=git, who=who)
-    wt, failed = _worktree_of(a, repo, spawner, env, who)
-    if failed:
-        return failed
+    worktree = wslots.run_worktree(a.worktree, a.slot, a.id, repo, childenv.script_argv(TL_PY, env), spawner, who)
+    if worktree.failed:
+        return RunReport(outcome=Result.FAILED, bead=a.id, why=worktree.failed)
+    wt = worktree.path
     held = engine_lock.HeldLock()
     # A loop-started run already has the slot; a hand run takes its slot's bead here.
     slot = a.slot or wslots.slot_of(repo, wt, who, store)
