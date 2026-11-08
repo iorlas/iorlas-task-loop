@@ -1,5 +1,6 @@
 """Area membership, ancestor lookup and running-bead exclusion policy."""
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from pathlib import Path
 from typing import Literal, NamedTuple, Protocol
 
 from tlkernel.bead import Bead
@@ -8,6 +9,30 @@ from tlkernel.ids import BeadId, is_bead_id
 from tlkernel.loop import Skip
 
 ANY_AREA = "*"  # An unreadable running bead makes every area busy.
+
+
+class LockLike(Protocol):
+    @property
+    def bead(self) -> str: ...
+
+    @property
+    def slot(self) -> str: ...
+
+
+def occupancy[L: LockLike](slot_beads: Sequence[Bead], worktrees: Iterable[str],
+                           peek_lock: Callable[[str], L | None], live: Callable[[L], bool],
+                           now_stamp: str) -> dict[BeadId, str]:
+    """Running beads, with held slot beads taking precedence over live engine locks."""
+    out: dict[BeadId, str] = {}
+    for b in slot_beads:
+        bid = b.metadata.get("held_bead")
+        if is_bead_id(bid) and b.status == "in_progress" and not (b.lease_expires_at and b.lease_expires_at < now_stamp):
+            out[bid] = b.title.split()[-1]
+    for wt in worktrees:
+        lock = peek_lock(wt)
+        if lock is not None and is_bead_id(lock.bead) and live(lock):
+            out.setdefault(lock.bead, lock.slot or Path(wt).name)
+    return out
 
 
 class AreaConfig(Protocol):
