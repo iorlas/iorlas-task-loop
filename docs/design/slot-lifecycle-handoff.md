@@ -8,7 +8,7 @@ You continue a design review of the task-loop repo with its owner (Denis). Read 
 
 WHERE (moved to another PC)
 - The review started in this worktree on the previous PC: /home/iorlas/Workspaces/iorlas-task-loop-b83c5d9a3f13cb9d/adapter-justifications-73e7b1, branch claude/adapter-justifications-73e7b1, based on origin/main d9c56c4a (2026-11-07).
-- On the new PC, make a worktree from the current origin/main (a new branch is fine) and put docs/design/slot-lifecycle.md (and this file) in it. The doc is the only product of the session; it was an UNTRACKED, UNCOMMITTED file. Do not commit or push unless the owner asks.
+- The two files are committed and pushed on origin/claude/adapter-justifications-73e7b1 (commit ef7f31cf, docs only, no PR opened). On the new PC: `git fetch origin && git worktree add <dir> -b <new-branch> origin/claude/adapter-justifications-73e7b1`, and work there. Do not open a PR or merge unless the owner asks.
 - Scan transcripts were not saved; the doc holds their condensed results only. Every file:line in the doc comes from grep or Haiku scans and will move as open beads land, and origin/main has moved since. Re-verify a claim against the tree before building on it. Claims marked "checked" were read by hand.
 - Do not file beads unless asked. One bead was filed, tl-eip4 "remove storm"; bd showed it CLOSED at the end (another session may have done it). Check origin/main before trusting any storm statement.
 
