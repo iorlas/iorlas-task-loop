@@ -1,16 +1,24 @@
 """Area membership, ancestor lookup and running-bead exclusion policy."""
 from collections.abc import Callable, Mapping, Sequence
+from typing import Protocol
 
 from tlkernel.bead import Bead
 from tlkernel.beadsport import BdFailure, Beads
-from tlkernel.config import EngineConfig
 from tlkernel.ids import BeadId, is_bead_id
 from tlkernel.loop import Skip
 
 ANY_AREA = "*"  # An unreadable running bead makes every area busy.
 
 
-def has_areas(cfg: EngineConfig) -> bool:
+class AreaConfig(Protocol):
+    @property
+    def areas(self) -> Mapping[str, object]: ...
+
+    @property
+    def area_label_prefix(self) -> str: ...
+
+
+def has_areas(cfg: AreaConfig) -> bool:
     return bool(cfg.areas or cfg.area_label_prefix)
 
 
