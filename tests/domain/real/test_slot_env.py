@@ -7,8 +7,8 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from support import engine_case as te
 from support.engine_case import real_git
+from support.engine_land import EngineTest
 
 from tlkernel import scratch
 from tltestkit import fake_route, procsim
@@ -30,7 +30,7 @@ def push(cwd):
     return done.returncode, done.stdout + done.stderr
 
 
-class EverySpawnPath(te.EngineTest):
+class EverySpawnPath(EngineTest):
     def dumps(self, name):
         return json.loads((Path(self.tmp.name) / name).read_text())
 

@@ -5,6 +5,7 @@ from argparse import Namespace
 from pathlib import Path
 from unittest import mock
 
+from tlland.testing import FakeLandStage
 from tltestkit.case import Case
 from tltestkit.tmpdir import TemporaryDirectory
 
@@ -218,7 +219,8 @@ class StagePreflight(Case):
 
     def test_engine_manifest_is_identified_before_stage_dispatch_and_gate_keeps_identity(self):
         e = Engine(self.a.id, str(self.wt), self.cfg, store=self.store, route=FakeRouter(), clock=FakeClock(),
-                   stores=fake_stores(), env=self.env, spawner=self.spawner, git=self.git, who=self.who, mode="stage:gate")
+                   stores=fake_stores(), env=self.env, spawner=self.spawner, git=self.git, who=self.who, mode="stage:gate",
+                        lander_factory=FakeLandStage)
         opened = self.locator.get(e.run_id)
         assert opened is not None
         assert (opened.manifest.mode, opened.manifest.owner, opened.manifest.session) == ("stage:gate", "mac-owner", "mac-session")

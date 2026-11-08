@@ -15,6 +15,7 @@ from unittest import mock
 import pytest
 
 from delegate import api
+from tlland.testing import FakeLandStage
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -93,8 +94,8 @@ class SurvivorBlocksTheRetry(te.EngineTest):
         c = wslots_config.load_cfg(str(self.wt), port_git())
         with te.delegate_stack(script):
             self.eng = engine.Engine(
-                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()
-            )
+                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who(),
+            lander_factory=FakeLandStage)
             rc = self.eng.run()
         return rc, script
 
@@ -126,7 +127,7 @@ class SurvivorBlocksTheRetry(te.EngineTest):
 
         with te.delegate_stack(script), mock.patch.object(api.RunRequest, "to_argv", spy):
             engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
-                git=port_git(), who=who()).run()
+                git=port_git(), who=who(), lander_factory=FakeLandStage).run()
         by_role = {a[a.index("run") + 1]: a for a in argvs}
         w = by_role["worker"]
         want = (str(int(c.write_idle_min * 60)), str(int(c.write_cap_min * 60)))
@@ -143,7 +144,7 @@ class SurvivorBlocksTheRetry(te.EngineTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=FakeLandStage)
         r = DelegateResult(data=te.CLEAN, secs=40 * 60)
         eng.records.anomalies("write", r, 1)
         eng.records.anomalies("review", r, 1)

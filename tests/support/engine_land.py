@@ -1,25 +1,45 @@
 """LAND-stage engine test helpers and review fixtures."""
 import copy
 import types
+from functools import partial
 from pathlib import Path
 from typing import Any, ClassVar
 from unittest import mock
 
 from support import gitq
-from support.builders import make_engine
-from support.engine_case import EngineTest, delegate_stack
+from support.builders import make_engine as fake_engine
+from support.engine_case import EngineTest as ConstructionEngineTest
+from support.engine_case import delegate_stack
 from support.push_race import PushRace
 from support.spawn import port_git, real_spawner
 from support.who import who
+from taskloop.adapters.deadline import deadline
 from taskloop.app.run import engine
 from tlkernel.checks import CheckRun
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
+from tlland.lander import Lander, lander_over
 from tlslots import config as wslots_config
 from tltestkit import fake_route
 from tltestkit.checks import res
 from tltestkit.plans import CLEAN, PLAN, WRITE, finding, review
 from tlwork.write.newfiles import NewFiles
+
+real_lander_factory = partial(lander_over, deadline=deadline)
+
+
+def real_lander(eng: engine.Engine) -> Lander:
+    assert isinstance(eng.lander, Lander)
+    return eng.lander
+
+
+class EngineTest(ConstructionEngineTest):
+    lander_factory = staticmethod(real_lander_factory)
+
+
+def make_engine(*args, **kwargs):
+    kwargs.setdefault("lander_factory", real_lander_factory)
+    return fake_engine(*args, **kwargs)
 
 
 class EngineLandMixin:
@@ -68,7 +88,7 @@ class LandReviewBase(EngineLandMixin, EngineTest):
                 store=self.store,
                 env=snapshot(),
                 spawner=real_spawner(),
-                git=port_git(), who=who())
+                git=port_git(), who=who(), lander_factory=real_lander_factory)
             return self.eng.run()
 
     def landed(self):

@@ -1,8 +1,8 @@
 """A terminal invalid review leaves an unavailable review while the stage continues."""
 from unittest import mock
 
-from support.builders import make_engine
-from support.engine_case import EngineTest, stop
+from support.engine_case import stop
+from support.engine_land import EngineTest, make_engine
 from support.fakes import FakeClock
 
 from tlkernel.enums import Outcome

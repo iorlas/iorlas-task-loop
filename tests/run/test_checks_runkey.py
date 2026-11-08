@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from support.engine_case import EngineTest
+from support.engine_land import EngineTest
 
 from tltestkit import procsim
 from tltestkit.logs import records

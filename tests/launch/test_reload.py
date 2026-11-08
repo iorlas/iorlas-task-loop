@@ -10,6 +10,8 @@ import time
 from pathlib import Path
 from unittest import mock
 
+from support.engine_land import EngineTest, real_lander_factory
+
 from tlslots import machine
 from tltestkit import fake_route
 
@@ -54,11 +56,11 @@ PLAN_DEF = "    def plan(self, again: bool = False) -> Planned:\n"
 BREAK_PLAN = (PLAN_DEF, PLAN_DEF + "        raise RuntimeError('planted: cannot plan')\n", "packages/work/src/tlwork/plan/planner.py")
 
 
-class Reload(te.EngineTest):
+class Reload(EngineTest):
     # the engine fixture of test_engine (a repo with an origin, bd and the landing faked), without its tests
 
     def setup_method(self):
-        te.EngineTest.setup_method(self)
+        EngineTest.setup_method(self)
         self.cache = Path(self.tmp.name, "cache")
         here = self.install("0.1.0", fake=True)
         self.here = here  # the install the engine under test runs from (wloop.newer / build take it)
@@ -108,7 +110,7 @@ class Reload(te.EngineTest):
         c = wslots_config.load_cfg(str(self.wt), port_git())
         c = cfg_with(c, **{"reflect": False, **cfg})
         eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=env or snapshot(), spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=real_lander_factory)
         eng.argv = ["run-task", "t-1", "--worktree", str(self.wt), "--fresh", "--outcome-file", "/x/out.json"]
 
         def fake_exec(argv, environ):
@@ -276,7 +278,7 @@ class Reload(te.EngineTest):
             dl, "resolve", side_effect=[self.res("/a/route.py"), self.res("/b/route.py"), self.res("/b/route.py")]
         ) as fr:
             eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
-                git=port_git(), who=who())
+                git=port_git(), who=who(), lander_factory=real_lander_factory)
             assert eng.delegation.route() == "/b/route.py"
             assert eng.delegation.route() == "/b/route.py"
             assert fr.call_count == 3

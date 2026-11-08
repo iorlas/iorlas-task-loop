@@ -23,6 +23,7 @@ from tlkernel import runoutcome as oc
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
+from tlland.testing import FakeLandStage
 from tlpipeline.api import Closer
 from tlslots import config as wslots_config
 
@@ -56,7 +57,7 @@ def main(argv: list[str]) -> None:
         store=store,
         env=snapshot(),
         spawner=real_spawner(),
-        git=port_git(), who=who())
+        git=port_git(), who=who(), lander_factory=FakeLandStage)
     real = Closer.apply
 
     def apply(self, eff, *a):

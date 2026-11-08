@@ -5,7 +5,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from support import gitq, homes
-from support.engine_case import EngineTest, real_git
+from support.engine_case import real_git
+from support.engine_land import EngineTest
 from support.spawn import port_git
 from support.who import who
 

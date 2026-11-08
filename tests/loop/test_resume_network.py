@@ -11,9 +11,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import homes
 
 # isort: split
-from support import engine_case as te
 from support import netgate
 from support.engine_case import stop
+from support.engine_land import EngineTest
 
 from tlkernel.kinds import Kind
 from tlkernel.locator import RunLocator
@@ -40,7 +40,7 @@ class Cycling:
         return self.calls > self.down
 
 
-class NetBase(te.EngineTest):
+class NetBase(EngineTest):
     def log(self, eng=None):
         return [json.loads(x) for x in (eng or self.eng).log_path.read_text().splitlines()]
 

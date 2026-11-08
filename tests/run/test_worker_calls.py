@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from tlland.testing import FakeLandStage
 from tltestkit.case import Case
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -50,8 +51,8 @@ class Calls(te.EngineTest):
         nap = mock.Mock()
         with te.delegate_stack(script), mock.patch("taskloop.app.workers.lane_acts.time", napper(nap)):
             self.eng = engine.Engine(
-                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()
-            )
+                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who(),
+            lander_factory=FakeLandStage)
             rc = self.eng.run()
         return rc, nap
 

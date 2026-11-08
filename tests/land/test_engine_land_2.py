@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 from support import gitq, homes
-from support.engine_case import EngineTest
+from support.engine_land import EngineTest, real_lander
 
 from taskloop.adapters import (
     landlock,
@@ -45,7 +45,7 @@ class EngineLand2Test(EngineTest):
         # The holder lets go only once the engine has logged that it waits (a fixed delay raced a loaded machine: the holder could let
         # go before the engine asked, and no wait was ever recorded).
         threading.Thread(target=lambda: until(lambda: records(eng, "wait_start")) and go.set()).start()
-        with eng.lander.lock():
+        with real_lander(eng).lock():
             pass
         t.join()
         (start,), (w,) = records(eng, "wait_start"), records(eng, "wait_end")
@@ -61,7 +61,7 @@ class EngineLand2Test(EngineTest):
 
     def test_a_free_land_lock_logs_no_wait(self):
         eng = self.checks_engine()
-        with eng.lander.lock():
+        with real_lander(eng).lock():
             pass
         assert self.wait_records(eng) == []
 

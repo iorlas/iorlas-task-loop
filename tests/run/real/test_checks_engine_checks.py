@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from tlland.testing import FakeLandStage
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from support import gitq
 from support.engine_case import EngineTest
@@ -48,7 +50,7 @@ class EngineChecksTest(EngineTest):
                 store=self.store,
                 env=snapshot(),
                 spawner=real_spawner(),
-                git=port_git(), who=who())
+                git=port_git(), who=who(), lander_factory=FakeLandStage)
             halt = halting.RUN_HALT["ev"]
             assert halt is not None
 

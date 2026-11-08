@@ -19,13 +19,15 @@ from taskloop.app.run import engine
 from taskloop.cli.ctx import declare_stage_parts
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
+from tlland.testing import FakeLandStage
 from tlslots import config as wslots_config
 
 
 def main(marker: str) -> None:
     declare_stage_parts()
     eng = engine.Engine(BeadId("t-1"), os.environ["STATE_WT"], wslots_config.load_cfg(os.environ["STATE_WT"], port_git()),
-                        store=FakeBeadStore(), env=snapshot(), spawner=real_spawner(), git=port_git(), who=who())
+                        store=FakeBeadStore(), env=snapshot(), spawner=real_spawner(), git=port_git(), who=who(),
+                        lander_factory=FakeLandStage)
     eng.log.note("run started")
     eng.records.heartbeat()
     Path(marker + ".tmp").write_text(f"{os.getpid()} {eng.run_id}")

@@ -15,6 +15,7 @@ from typing import Any, ClassVar
 from unittest import mock
 
 import pytest
+from support.engine_land import EngineTest, real_lander_factory
 
 from tlasks import admission
 from tltestkit.case import Case
@@ -37,7 +38,6 @@ from tlslots import config as wslots_config  # noqa: E402
 from tlwork.plan.planner import Planner  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from support import engine_case as T  # noqa: E402
 from support.briefs import brief_digest  # noqa: E402
 from support.engine_case import BRIEFS, full, stop, stored_brief  # noqa: E402
 from support.fakes import as_bead, as_comment  # noqa: E402
@@ -144,7 +144,7 @@ class FailureBriefAndDurations(Case):
         assert [split.engine_only(c) for c in ("just unity-analyzers", "just slow", "just fmt")] == [False, False, True]
 
 
-class Outcome(T.EngineTest):
+class Outcome(EngineTest):
     """What run-task tells the loop (tl loop): landed, parked, paused, failed or taken, as one JSON record."""
 
     def test_an_owner_ask_is_parked(self):
@@ -227,7 +227,7 @@ class Outcome(T.EngineTest):
         assert "denis" in rec["why"]
 
 
-class DelegateLauncher(T.EngineTest):
+class DelegateLauncher(EngineTest):
 
     def test_a_review_from_the_writers_family_pauses_the_step_and_is_not_taken(self):  # tl-9un.15
         same = full(CLEAN, "r", family="openai", flag="same_family")
@@ -383,7 +383,7 @@ class DelegateLauncher(T.EngineTest):
     def test_close_with_an_empty_reason_still_closes(self):
         c = wslots_config.load_cfg(str(self.wt), port_git())
         eng = engine.Engine(BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=real_lander_factory)
         eng.closer.close(oc.make(Kind.FAULT_ENGINE))
         assert "stopped before a reason was recorded" in self.said()  # a fault: the bead stays open, the comment says why
 
@@ -436,8 +436,8 @@ class DelegateLauncher(T.EngineTest):
         c = wslots_config.load_cfg(str(self.wt), port_git())
         with mock.patch.object(dl, "resolve", return_value=dl.Refusal("not_installed")):
             rc = engine.Engine(
-                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who()
-            ).run()
+                BeadId("t-1"), str(self.wt), c, store=self.store, env=snapshot(), spawner=real_spawner(), git=port_git(), who=who(),
+            lander_factory=real_lander_factory).run()
         assert rc == 2
         assert "delegate refused the call setup (not_installed" in self.said()
 

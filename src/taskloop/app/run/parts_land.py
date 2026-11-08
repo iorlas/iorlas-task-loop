@@ -1,7 +1,8 @@
 """The land side of a run: the tree, the rebase and its salvage, the fixer, the lander, and the receipt a land leaves."""
+from collections.abc import Callable
 from functools import cached_property, partial
 from pathlib import Path
-from typing import override
+from typing import Protocol, override
 
 from tlkernel.checks import CheckRun
 from tlkernel.repourl import repo_url
@@ -9,16 +10,15 @@ from tlkernel.storeapi import Doc
 from tlland import cleanup
 from tlland.checkout import Checkout
 from tlland.fix import Fixer
-from tlland.lander import Lander, lander_over
 from tlland.lander_host import LanderHost
 from tlland.push import target
 from tlland.rebase import Rebase
 from tlland.record import Restart, Salvage
 from tlland.tree import Tree, TreeHost
+from tlpipeline.api import run_roles, standalone_roles
 from tlwork.api import NewFiles
 
 from taskloop.adapters import landlock
-from taskloop.adapters.deadline import deadline
 from taskloop.adapters.ignored import ignored_by
 from taskloop.app.run.plumbing import Plumbing
 from taskloop.app.track import verbs
@@ -29,8 +29,12 @@ def tree_over(host: TreeHost) -> Tree:
     return Tree(host, fx=slotfx.FX)
 
 
-def lander_bound(host: LanderHost) -> Lander:
-    return lander_over(host, deadline=deadline)
+class LandStage(run_roles.Lander, standalone_roles.Landing, Protocol):
+    """The landing capabilities used by the run and standalone pipelines."""
+
+
+class LandingHost(LanderHost, Protocol):
+    lander_factory: Callable[[LanderHost], LandStage]
 
 
 class LandParts(Plumbing):
@@ -43,7 +47,9 @@ class LandParts(Plumbing):
     restart = cached_property(Restart)
     fixer = cached_property(Fixer)
 
-    lander = cached_property(lander_bound)
+    @cached_property
+    def lander(self: LandingHost) -> LandStage:
+        return self.lander_factory(self)
 
     @cached_property
     @override

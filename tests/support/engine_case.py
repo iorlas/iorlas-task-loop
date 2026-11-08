@@ -45,6 +45,7 @@ from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
 from tlkernel.kinds import Kind
 from tlkernel.plancheck import adhoc
+from tlland.testing import FakeLandStage
 from tlslots import config as wslots_config
 from tltestkit import fake_route, procsim
 from tltestkit.cfgs import argv_cfg, cfg_with
@@ -149,6 +150,7 @@ class Recorded(collections.abc.Sequence):
 
 
 class EngineTest(SlotWorld):
+    lander_factory: ClassVar[collections.abc.Callable] = staticmethod(FakeLandStage)
     def setup_method(self):
         SlotWorld.setup_method(self)  # not super(): tests borrow this method onto classes that are not EngineTests
         procsim.fake(f"{shlex.quote(sys.executable)} /fake/route.py net", procsim.exits(2, "no such file"))  # the network probe: no answer
@@ -201,7 +203,7 @@ class EngineTest(SlotWorld):
         with delegate_stack(script, route):
             self.eng = engine.Engine(
                 BeadId(bead), str(self.wt), c, store=self.store, fresh=fresh, env=snapshot(), spawner=real_spawner(),
-                    git=port_git(), who=who()
+                    git=port_git(), who=who(), lander_factory=getattr(self, "lander_factory", FakeLandStage)
             )
             if probe is not None:
                 self.eng.probe = probe
@@ -211,7 +213,7 @@ class EngineTest(SlotWorld):
         return rc, script
 
     def checks_engine(self, attrs=None, **cfg):
-        return make_engine(self.wt, cfg=cfg, store=self.store, attrs=attrs)
+        return make_engine(self.wt, cfg=cfg, store=self.store, attrs=attrs, lander_factory=getattr(self, "lander_factory", FakeLandStage))
 
     LOCK: ClassVar[Any] = ["Unable to create project: It looks like another Unity instance is running with this project open.",
             "Multiple Unity instances: Temp/UnityLockfile in use", "another Unity instance has the project open"]

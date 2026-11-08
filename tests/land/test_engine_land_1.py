@@ -9,8 +9,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from support import gitq, homes
-from support.engine_case import EngineTest, _cells, no_repo, stop
-from support.engine_land import EngineLandMixin
+from support.engine_case import _cells, no_repo, stop
+from support.engine_land import EngineLandMixin, EngineTest, real_lander
 from support.gitsim import verbs
 
 from tltestkit.checks import typed
@@ -644,7 +644,7 @@ class EngineLand1Test(EngineLandMixin, EngineTest):
                 except OSError:
                     return "held"
                 return "free"
-        with eng.lander.lock() as path:
+        with real_lander(eng).lock() as path:
             held = probe(path)
         assert (held, probe(path)) == ("held", "free")
 

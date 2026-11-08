@@ -10,6 +10,7 @@ import pytest
 from support import engine_case as te
 from support import homes
 from support.engine_case import stop
+from support.engine_land import EngineTest, real_lander_factory
 
 from taskloop.adapters import delegate as dl
 from taskloop.app.run import engine
@@ -121,7 +122,7 @@ class Fingerprint(Case):
         assert lifecycle.normalize_started_because("  ANSWER ", "") == "answer"
 
 
-class TraceTelemetry(te.EngineTest):
+class TraceTelemetry(EngineTest):
 
     def traces(self):
         path = homes.config_dir() / "traces.jsonl"
@@ -240,7 +241,7 @@ class TraceTelemetry(te.EngineTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=real_lander_factory)
         procsim.fake("sleep 5", procsim.takes(5))
         rc, _ = eng.sh(["sleep", "5"], timeout=0.05)
         assert rc == 124
@@ -261,7 +262,7 @@ class TraceTelemetry(te.EngineTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=real_lander_factory)
         rc, _ = eng.sh([procsim.fake("exits-124", procsim.exits(124))], timeout=10)
         assert rc == 124
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()
@@ -278,7 +279,7 @@ class TraceTelemetry(te.EngineTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=real_lander_factory)
 
         class Survivor(fake_route.Script):  # the engine ended the call, and the worker outlived every signal
             def reply(this, *a, **kw):
@@ -308,7 +309,7 @@ class TraceTelemetry(te.EngineTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=real_lander_factory)
         with te.delegate_stack(Interrupted({})), pytest.raises(KeyboardInterrupt):
             eng.ai("plan", "title", "prompt")
         kills = [json.loads(line) for line in eng.log_path.read_text().splitlines()

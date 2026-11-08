@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Any, ClassVar
 from unittest import mock
 
+from support.engine_land import real_lander_factory
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from run.test_stages import StagesTest
 from support.engine_case import engine, real_git
@@ -52,7 +54,7 @@ class SlotHygiene(StagesTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=real_lander_factory)
         assert e.checkout.dirty_status() == ""
 
 

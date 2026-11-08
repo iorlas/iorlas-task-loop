@@ -32,7 +32,7 @@ class Verifier(Protocol):
 
 
 class Outbound(Protocol):
-    def wip_push(self, i: int) -> None: ...
+    def wip_push(self, i: int, /) -> None: ...
 
 
 class Lander(Protocol):

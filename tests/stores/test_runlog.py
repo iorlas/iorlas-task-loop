@@ -6,6 +6,7 @@ from pathlib import Path
 
 from support import engine_case as te
 from support import homes
+from support.engine_land import EngineTest
 
 from tltestkit import procsim
 from tltestkit.logs import pairs, records
@@ -20,7 +21,7 @@ from tlkernel import log as rec  # noqa: E402
 engine = te.engine
 
 
-class RunLog(te.EngineTest):
+class RunLog(EngineTest):
 
     def test_engine_has_no_untyped_log_call(self):
         assert (ROOT / "src" / "taskloop" / "app" / "run" / "engine.py").read_text().count("self.log(") == 0

@@ -15,6 +15,7 @@ from taskloop.app.run import engine
 from tlkernel import lifecyclematchers as lifecycle
 from tlkernel.env import snapshot
 from tlkernel.ids import BeadId
+from tlland.testing import FakeLandStage
 from tlslots import config as wslots_config
 
 ROOT = te.ROOT
@@ -62,7 +63,7 @@ class TraceTelemetry(te.EngineTest):
             store=self.store,
             env=snapshot(),
             spawner=real_spawner(),
-            git=port_git(), who=who())
+            git=port_git(), who=who(), lander_factory=FakeLandStage)
         started = self.wt / "child-started"
         stop_waiting, delivered = threading.Event(), threading.Event()
 
