@@ -3,10 +3,11 @@ name = "tldash"
 version = "0"
 description = "Dashboard server, views and static assets. Imports only the kernel."
 requires-python = ">=3.15"
-dependencies = ["tlkernel"]
+dependencies = ["tlkernel", "tldelegate"]
 
 [tool.uv.sources]
 tlkernel = { workspace = true }
+tldelegate = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -24,5 +25,4 @@ python_files = ["test_*.py"]
 python_classes = ["*"]
 addopts = "-p no:cacheprovider"
 # atomic_io is a vendored shelf directory with no manifest, so it cannot be declared: the vendor dir is the one undeclared path (docs/design/workspace.md section 4)
-# delegate is the library in this repo (src/delegate): the console reader imports delegate.api, the one import of it
-pythonpath = ["../../skills/task-loop/_vendor", "../../src"]
+pythonpath = ["../../skills/task-loop/_vendor"]

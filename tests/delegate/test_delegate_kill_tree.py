@@ -57,7 +57,8 @@ class KillPaths(Case):
 
 
     def test_no_pattern_kills_and_no_bare_kill_in_router(self):
-        src = "".join((ROOT / "src" / "delegate" / f).read_text(encoding="utf-8") for f in ("entry.py", "adapters/procs.py"))
+        src = "".join((ROOT / "packages/delegate/src/delegate" / f).read_text(encoding="utf-8")
+                      for f in ("entry.py", "adapters/procs.py"))
         assert re.search(r"pkill|killall|pgrep", src) is None
         assert re.search(r"\.kill\(\)|os\.kill", src) is None  # every stop goes through stream_proc
         assert len(re.findall(r"\.terminate\(\)", src)) == 0

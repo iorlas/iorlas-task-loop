@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 # These members opt out of the root-file fanout. Their own paths and declared
 # dependencies still propagate normally; extra inputs are explicit prefixes.
-SCOPED = {"delegate": ("src/delegate/", "tests/delegate/", "skills/task-loop/_vendor/", "dev/vendor.json", "packages/testkit/")}
+SCOPED = {"delegate": ("packages/delegate/", "tests/delegate/", "skills/task-loop/_vendor/", "dev/vendor.json", "packages/testkit/")}
 
 
 def members(root: Path) -> dict[str, tuple[str, set[str]]]:

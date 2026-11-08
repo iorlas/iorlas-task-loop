@@ -75,7 +75,7 @@ just test                      # THE test command: runs only the tests this chan
 uv run pytest tests/land -q    # one slice folder, module or test (tests/land/test_x.py::Class::test) while you edit; the tests are plain pytest classes: `assert`, `setup_method`, fixtures; `tltestkit.case.Case` still gives `addCleanup` and `subTest`; write new tests as pytest functions or classes, never `unittest`
 just check                     # ruff on the changed .py files only (`just lint-all`: whole tree), pyrefly on the whole tree (a signature change breaks unchanged callers), then import-linter (tools pinned in mise.toml; `mise install`)
 just test-pkg <stage>          # stage tests + its dependencies' contract tests; inner loop only, `just test` stays the gate. Workspace members run in their isolated package environment.
-just test-delegate            # tests/delegate (real processes, minutes): collected by no other run unless the change touches src/delegate, tests/delegate or skills/task-loop/_vendor (tests/support/scope.py); a task-loop or dashboard change never runs them
+just test-delegate            # tests/delegate (real processes, minutes): collected by no other run unless the change touches packages/delegate, tests/delegate or skills/task-loop/_vendor (tests/support/scope.py); a task-loop or dashboard change never runs them
 ```
 
 Never run pytest over the whole suite; for broad coverage run `just test` (affected-only).
@@ -136,7 +136,7 @@ reader, and how delegate connects (`delegate.api`, one table in SKILL.md).
   `tl` shim, the loop's own spawns, and dev/release.py. Dev and test tools live in pyproject.toml's `dev` group. The
   PreToolUse hook (every Bash call) stays on plain `python3` and imports no msgspec and no record (.importlinter, tests/hook/test_hook.py).
 - The page is one HTML file, no build, no CDN.
-- delegate is a library in this repo (`src/delegate`). The engine imports `delegate.api` and nothing else of it, and has no launcher of
+- delegate is a library in this repo (`packages/delegate/src/delegate`). The engine imports `delegate.api` and nothing else of it, and has no launcher of
   its own; never add one back. Never read delegate's state files: ask the API (`docs/contracts/delegate-api.md`).
 - Never touch a transcript or another tool's state: the dashboard reads, `tl.py` writes only `~/.config/task-loop` and bd.
 - Release only through `uv run --script dev/release.py "message" [--bead ID --reason R] [--from-branch B]`: it takes the

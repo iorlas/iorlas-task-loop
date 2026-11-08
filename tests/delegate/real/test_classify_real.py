@@ -23,7 +23,7 @@ from tltestkit.procsim import real_proc
 from tltestkit.tmpdir import TemporaryDirectory
 
 FIXTURES = sorted((ROOT / "tests" / "delegate" / "contract" / "fixtures").glob("*.json"))
-CONTRACT = json.loads((ROOT / "src" / "delegate" / "data" / "contract.json").read_text(encoding="utf-8"))
+CONTRACT = json.loads((ROOT / "packages" / "delegate" / "src" / "delegate" / "data" / "contract.json").read_text(encoding="utf-8"))
 LAUNCH_ONLY = {
     "duplicate_task",
     "busy",

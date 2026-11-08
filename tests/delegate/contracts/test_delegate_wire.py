@@ -16,7 +16,7 @@ from tltestkit.case import Case
 ROOT = Path(__file__).resolve().parents[3]
 
 GOLDEN = sorted((Path(__file__).resolve().parent / "golden").glob("*.json"))
-CONTRACT = json.loads((ROOT / "src" / "delegate" / "data" / "contract.json").read_text(encoding="utf-8"))
+CONTRACT = json.loads((ROOT / "packages" / "delegate" / "src" / "delegate" / "data" / "contract.json").read_text(encoding="utf-8"))
 
 
 def canon(x):
