@@ -3,19 +3,25 @@ the step; a pause or a fault ends the step as a `Blocked` (built by the host's o
 timeout and the exit it was made on. The lander's git push network wait lives here too."""
 
 import time
-from typing import Any, Final
+from collections.abc import Sequence
+from typing import Any, Final, Protocol
 
 from tlkernel import log as rec
-from tlkernel.delegate import DelegateResult
+from tlkernel.delegate import DelegateResult, Denial, Permanence
 from tlkernel.netretry import NET_BACKOFF
+from tlkernel.pausereasons import Producer
 from tlkernel.reviewunavailable import ReviewUnavailable
 from tlkernel.waitenums import WaitWhat
 
 from taskloop.app.workers import writer_pin
+from taskloop.app.workers.call import Call
+from taskloop.app.workers.delegation import Delegation
+from taskloop.app.workers.worker_request import Labelled
 from taskloop.domain.lanes import pin
 from taskloop.domain.lanes import policy as lp
 from taskloop.domain.lanes.notes import NOTES
 from taskloop.domain.lanes.roles import READ_ONLY_NODES
+from taskloop.stores.runlog import RunLog
 
 ASK_KINDS: Final = ("ASK_STUCK",)
 VERBS: Final = {
@@ -25,8 +31,60 @@ VERBS: Final = {
 }
 
 
+class LaneClock(Protocol):
+    def now(self) -> float: ...
+
+
+class LaneSteps(Protocol):
+    @property
+    def id(self) -> str: ...
+    def begin(self, step: str, text: str, **meta: object) -> object: ...
+    def move(self, to: str, cause: str, detail: str = "") -> object: ...
+    def outcome(self, outcome: str, detail: str = "") -> object: ...
+
+
+class LaneWaits(Protocol):
+    def budget_check(self) -> None: ...
+    def start(self, what: WaitWhat) -> str: ...
+    def add(self, secs: float, what: WaitWhat, wid: str) -> None: ...
+
+
+class LaneHost(Protocol):
+    retry_after: float
+    pause_reason: str
+    pause_producer: Producer
+    pause_permanence: Permanence | None
+
+    @property
+    def delegation(self) -> Delegation: ...
+    @property
+    def waits(self) -> LaneWaits: ...
+    @property
+    def steps(self) -> LaneSteps: ...
+    @property
+    def budget(self) -> Labelled: ...
+    @property
+    def log(self) -> RunLog: ...
+    @property
+    def clock(self) -> LaneClock: ...
+    def halt_point(self, when: bool = True, wait: float = 0) -> None: ...
+
+
+class LaneOps(Protocol):
+    def blocked(self, why: str, kind: str, stop: object = None) -> BaseException: ...
+    def stop_why(self, node: str, kind: str, stop: lp.Stop, said: str, until: float, crashes: int,
+                 denied: Sequence[Denial], *, now: float) -> str: ...
+
+
+class LaneCall(Protocol):
+    @property
+    def ops(self) -> LaneOps: ...
+    def charge(self, c: Call, name: str) -> None: ...
+    def again(self, c: Call, note: str = "") -> None: ...
+
+
 class LaneActs:
-    def __init__(self, host: Any, call: Any) -> None:
+    def __init__(self, host: LaneHost, call: LaneCall) -> None:
         self.e, self.wc = host, call
 
     # -- the network gate

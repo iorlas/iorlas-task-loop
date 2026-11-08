@@ -97,7 +97,7 @@ class Resume(Protocol):
 
 
 class Delegation(Protocol):
-    def route(self) -> None: ...
+    def route(self) -> object: ...
 
 
 class Router(Protocol):
@@ -106,7 +106,7 @@ class Router(Protocol):
 
 
 class Tree(Protocol):
-    def reset(self, bead: Bead) -> None: ...
+    def reset(self, bead: Bead) -> object: ...
 
 
 class AskFlow(Protocol):
@@ -162,7 +162,7 @@ class Delegating(Protocol):
     @property
     def refusal(self) -> Refusal | None: ...
     @property
-    def contract(self) -> Open: ...
+    def contract(self) -> Open | None: ...
     @property
     def router(self) -> Router: ...
 
