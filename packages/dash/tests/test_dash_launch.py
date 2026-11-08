@@ -1,6 +1,7 @@
 """Dashboard launch compatibility and development binding rules."""
 from pathlib import Path
 
+import pytest
 from tlkernel.dash import READ_PROTOCOL
 from tlkernel.env import Env as ProcessEnv
 from tlkernel.factoryparts import PIPELINE
@@ -113,3 +114,56 @@ class DevCheckout(Case):
         assert bind.plan(None, None, dev=False, process=ProcessEnv()) == (["127.0.0.1"], 7878)  # the server runs no network tool
         assert dash_server.default_binds(ProcessEnv(), tailscale=lambda: "100.1.2.3") == ["127.0.0.1", "100.1.2.3"]
         assert dash_server.inet_addrs("2: eth0 inet 100.64.0.5/32 scope global\n inet6 fe80::1/64 inet bogus") == ["100.64.0.5"]
+
+
+def test_tailscale_binary_returns_first_line():
+    calls = []
+
+    def ask(argv: list[str]) -> tuple[int, str]:
+        calls.append(argv)
+        return 0, " 100.64.0.5\n100.64.0.6\n"
+
+    assert dash_server.tailscale_ip("/tailscale", ask) == "100.64.0.5"
+    assert calls == [["/tailscale", "ip", "-4"]]
+
+
+@pytest.mark.parametrize("response", [(1, "100.64.0.9"), (0, " \n")])
+def test_tailscale_failed_or_empty_binary_falls_back_to_ip(response):
+    calls = []
+
+    def ask(argv: list[str]) -> tuple[int, str]:
+        calls.append(argv)
+        return response if argv[0] == "/tailscale" else (0, "inet 192.168.1.2/24 inet 100.64.0.5/32")
+
+    assert dash_server.tailscale_ip("/tailscale", ask) == "100.64.0.5"
+    assert calls == [["/tailscale", "ip", "-4"], ["ip", "-4", "-o", "addr"]]
+
+
+def test_tailscale_falls_back_to_ifconfig():
+    calls = []
+
+    def ask(argv: list[str]) -> tuple[int, str]:
+        calls.append(argv)
+        return 0, "inet 192.168.1.2/24" if argv[0] == "ip" else "inet 100.127.0.5 netmask 0xffffffff"
+
+    assert dash_server.tailscale_ip(None, ask) == "100.127.0.5"
+    assert calls == [["ip", "-4", "-o", "addr"], ["ifconfig"]]
+
+
+def test_tailscale_missing_program_returns_none():
+    def ask(argv: list[str]) -> tuple[int, str]:
+        raise OSError("missing program")
+
+    assert dash_server.tailscale_ip("/tailscale", ask) is None
+    assert dash_server.tailscale_ip(None, ask) is None
+
+
+def test_tailscale_without_exe_or_cgnat_address_returns_none():
+    calls = []
+
+    def ask(argv: list[str]) -> tuple[int, str]:
+        calls.append(argv)
+        return 0, "inet 192.168.1.2/24 inet 100.128.0.1/32"
+
+    assert dash_server.tailscale_ip(None, ask) is None
+    assert calls == [["ip", "-4", "-o", "addr"], ["ifconfig"]]
