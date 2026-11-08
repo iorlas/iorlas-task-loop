@@ -10,6 +10,7 @@ from tlgate.cache import RunMemo
 from tlgate.domain.specs import gate_items
 from tlgate.execution import check_env
 from tlgate.runner import Checker, cached_gate
+from tlkernel import scratch
 from tlkernel.runkey import BaseSha
 from tlslots.slot_env import slot_env
 from tltestkit import procsim
@@ -35,7 +36,7 @@ class KeyedEnv(CheckHostCase):
         assert not result.cached
         assert len(seen) == 1
         assert seen[0]["TL_SLOT"] == "slot-a"
-        assert seen[0]["TMPDIR"] == eng.bead_env["TMPDIR"]
+        assert seen[0][scratch.TMPDIR_VAR] == eng.bead_env[scratch.TMPDIR_VAR]
         tree = eng.checkout.tree_hash()
         base = BaseSha(eng.git.rev_parse(str(eng.wt), eng.cfg.base))
         check = gate_items(eng.cfg)[0]

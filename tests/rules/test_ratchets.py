@@ -42,3 +42,11 @@ def test_rises_names_only_increases_and_a_move_is_net_zero():
 def test_declared_reads_the_three_spellings():
     src = tree("@needs('long_run', 'a worker waits out its grace')\n@real_proc('r1')\n@te.real_git(why)\ndef test_x(): pass\n")
     assert needs_ratchet.declared(src) == [("long_run", "a worker waits out its grace"), ("process", "r1"), ("git", needs_ratchet.DYNAMIC)]
+
+
+def test_temp_exceptions_skip_only_the_documented_paths():
+    src = tree("x = tempfile.tempdir\n")
+    for path, reason in temp_ratchet.EXCEPTIONS.items():
+        assert reason
+        assert temp_ratchet.file_counts(path, src) == {}
+        assert temp_ratchet.file_counts(path + ".other.py", src) == {"site": 1}

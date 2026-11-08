@@ -73,7 +73,7 @@ class Refused(Case):
 
     def test_a_mention_a_longer_recipe_and_a_declared_log_read_are_not_refused(self):
         for c in ("echo 'just unity-tests'", "echo just unity-tests-extra", "just unity-tests-extra", "just fmt",
-                  "grep -q passed /tmp/unity-tests.log"):
+                  "grep -q passed /logs/unity-tests.log"):
             assert refusals(adhoc(c)) == [], c
         read = adhoc("python3 tools/assert_log.py TL_CHECK_LOG_UNITY_TESTS Passed", (UNITY,))
         assert refusals(read, Ref(check=UNITY)) == []

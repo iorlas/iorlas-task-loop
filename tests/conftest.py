@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pytest
 
+from tlkernel import scratch
 from tltestkit.case import install_case_helpers
 from tltestkit.wall import wall_guard
 
@@ -41,7 +42,7 @@ os.environ["PYTHONPYCACHEPREFIX"] = str(PYCACHE)
 
 # The temp dir by its real path: macOS's $TMPDIR is under /var, a symlink to /private/var, and code that resolves a path (tl does, for the
 # repo and the lock names; a child's getcwd does) would otherwise name the same directory differently from the test that made it.
-os.environ["TMPDIR"] = tempfile.tempdir = os.path.realpath(tempfile.gettempdir())
+os.environ[scratch.TMPDIR_VAR] = tempfile.tempdir = os.path.realpath(tempfile.gettempdir())
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 pytest.register_assert_rewrite("support")  # the helpers of tests/support assert too: show the operands, as in a test file
@@ -50,7 +51,7 @@ from support.cpu_rerun import CPU_S, WORK_S, cpu_failure  # noqa: E402
 
 from taskloop.adapters import procs  # noqa: E402
 from taskloop.app.parts import STAGE_PARTS  # noqa: E402
-from tlkernel import factorydb, scratch  # noqa: E402
+from tlkernel import factorydb  # noqa: E402
 from tltestkit import procsim, work  # noqa: E402
 from tltestkit.limits import hang_s, kind_of_parts, limit_for  # noqa: E402
 
@@ -286,7 +287,7 @@ def isolate(home):
     for sub in ("tmp", ".config"):
         (home / sub).mkdir(parents=True, exist_ok=True)
     scratch.write_git_config(home)
-    os.environ.update(HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), TMPDIR=str(home / "tmp"))
+    os.environ.update({"HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config"), scratch.TMPDIR_VAR: str(home / "tmp")})
     tempfile.tempdir = None
 
 

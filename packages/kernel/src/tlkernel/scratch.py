@@ -17,6 +17,8 @@ import tempfile
 from collections.abc import Generator, Mapping
 from pathlib import Path
 
+# The name of the environment variable used by stdlib temporary-file selection.
+TMPDIR_VAR = "TMPDIR"
 SCRATCH_VAR = "TL_SCRATCH"
 IDENTITY = {"GIT_AUTHOR_NAME": "tl test", "GIT_AUTHOR_EMAIL": "test@tl.invalid",
             "GIT_COMMITTER_NAME": "tl test", "GIT_COMMITTER_EMAIL": "test@tl.invalid"}
