@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from unittest import mock
 
-import hermetic  # noqa: F401
+import hermetic
 from run_support import short_limits
 from test_route import ROOT
 
@@ -56,7 +56,7 @@ class RealProcesses(Case):
     pid: int
 
     def setup_method(self):
-        self.pidfile = os.path.join(os.environ["TMPDIR"], "child.pid")
+        self.pidfile = os.path.join(os.environ[hermetic.TMPDIR_VAR], "child.pid")
         self.procs = []
         self.addCleanup(self.reap_leftovers)
 
@@ -126,7 +126,7 @@ class RealProcesses(Case):
         with short_limits("codex", **limits):
             sup = Supervisor(CodexHarness(), hooks, LiveSink("codex", ""), limits=harnesses.LIMITS["codex"])
         spec = LaunchSpec(
-            argv=[sys.executable, FAKE, scenario, self.pidfile], env=dict(os.environ), cwd=os.environ["TMPDIR"], stdin="brief"
+            argv=[sys.executable, FAKE, scenario, self.pidfile], env=dict(os.environ), cwd=os.environ[hermetic.TMPDIR_VAR], stdin="brief"
         )
         return sup.run(spec, timeout), hooks
 

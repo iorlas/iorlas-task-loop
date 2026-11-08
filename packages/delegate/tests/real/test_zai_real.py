@@ -61,7 +61,7 @@ class ZaiTests(Case):
             "model": "glm-5.3",
             "effort": "high",
             "role": "worker",
-            "how": {"kind": "opencode", "model": "zai-coding-plan/glm-5.3", "cwd": "/tmp", "write": False},
+            "how": {"kind": "opencode", "model": "zai-coding-plan/glm-5.3", "cwd": str(Path.home()), "write": False},
         }
         a = SimpleNamespace(resume=None, schema=None, timeout=10)
         env_in = {"OPENCODE_AUTH_JSON": "override", "OPENCODE_CONFIG": "override", "ZHIPU_API_KEY": "override"}
@@ -96,7 +96,7 @@ class ZaiTests(Case):
                 "model": "m",
                 "effort": "high",
                 "role": "worker",
-                "how": {"kind": "opencode", "model": model, "cwd": "/tmp", "write": False},
+                "how": {"kind": "opencode", "model": model, "cwd": str(Path.home()), "write": False},
             }
             seen = []
 
